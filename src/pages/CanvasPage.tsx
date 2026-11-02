@@ -141,6 +141,7 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
       position: { x: point.x - 110, y: point.y - 40 },
       data: { kind: 'asset', label: asset.tag, title: asset.name, description: asset.detail, status: 'ready', meta: `来自资产库 · ${asset.type}`, icon: asset.type === '文本' ? 'text' : 'image', accent: accentByTone[asset.tone] ?? '#c77d5a' },
     }])
+    setReferences((current) => ({ ...current, [id]: [asset.id] }))
     setSelectedId(id)
     onToast(`已把「${asset.name}」拖入画布`)
   }
@@ -149,6 +150,7 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
     if (!selectedNode) return
     pushHistory()
     setNodes((current) => current.filter((node) => node.id !== selectedId))
+    setReferences((current) => { const next = { ...current }; delete next[selectedId]; return next })
     setEdges((current) => current.filter((edge) => edge.source !== selectedId && edge.target !== selectedId))
     setSelectedId('')
     onToast('已删除节点及其连接')
@@ -160,6 +162,8 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
     counter.current += 1
     const id = `copy-${Date.now()}-${counter.current}`
     setNodes((current) => [...current, { ...selectedNode, id, selected: false, position: { x: selectedNode.position.x + 36, y: selectedNode.position.y + 36 }, data: { ...selectedNode.data, title: `${selectedNode.data.title} 副本` } }])
+    const sourceRefs = references[selectedNode.id] ?? []
+    if (sourceRefs.length) setReferences((current) => ({ ...current, [id]: [...sourceRefs] }))
     setSelectedId(id)
     onToast('已复制节点')
   }
