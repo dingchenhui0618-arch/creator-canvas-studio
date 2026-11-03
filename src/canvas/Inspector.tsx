@@ -5,7 +5,6 @@ import {
   CONTENT_TYPE_OPTIONS,
   MODEL_OPTIONS,
   NODE_META,
-  REVIEW_PROFILE_OPTIONS,
   STATUS_TEXT,
   TOOL_OPTIONS,
 } from './catalog'
@@ -187,29 +186,7 @@ export function Inspector({ node, onPatch, onConfig, onDuplicate, onDelete }: In
             </Field>
           )}
 
-          {node.data.kind === 'review' && (
-            <>
-              <Field label="评审 profile">
-                <select
-                  className="cv-select"
-                  value={config.profile ?? 'brand'}
-                  onChange={(event) => onConfig({ profile: event.target.value }, 'profile')}
-                >
-                  {REVIEW_PROFILE_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
-                </select>
-              </Field>
-              <Field label="评审图片" hint="data/ 下的帧路径（frames/tpl_xxx/frame-01.jpg）或图片 URL；留空会明确报错，不会伪造结论。">
-                <input
-                  className="cv-input cv-input--mono"
-                  value={config.image ?? ''}
-                  placeholder="frames/tpl_1f748225/frame-01.jpg"
-                  onChange={(event) => onConfig({ image: event.target.value }, 'image')}
-                />
-              </Field>
-            </>
-          )}
-
-          {node.data.kind === 'output' && (
+                    {node.data.kind === 'output' && (
             <Field label="汇总格式">
               <select
                 className="cv-select"

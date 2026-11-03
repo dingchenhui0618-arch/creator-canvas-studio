@@ -3,7 +3,6 @@ import {
   BookOpen,
   Cpu,
   GitBranch,
-  ScanEye,
   TextCursorInput,
   Wrench,
   type LucideIcon,
@@ -97,18 +96,6 @@ export const NODE_META: Record<FlowNodeKind, NodeMeta> = {
     defaultDescription: '用简单表达式判断是否进入下一步',
     defaultConfig: { expression: 'contains(upstream, "杯")' },
   },
-  review: {
-    kind: 'review',
-    label: '视觉评审',
-    mono: 'REVIEW',
-    hint: '调用 VisionQA 评审服务或本地视觉模型',
-    icon: ScanEye,
-    targets: [{ id: 'in', label: 'in' }],
-    sources: [{ id: 'out', label: 'out' }],
-    defaultTitle: '品牌一致性评审',
-    defaultDescription: '对一帧画面给出 verdict / 观察 / 修正建议',
-    defaultConfig: { profile: 'brand', image: '' },
-  },
   output: {
     kind: 'output',
     label: '输出',
@@ -126,7 +113,7 @@ export const NODE_META: Record<FlowNodeKind, NodeMeta> = {
 export const PALETTE_GROUPS: { label: string; kinds: FlowNodeKind[] }[] = [
   { label: '输入', kinds: ['input', 'kb'] },
   { label: '处理', kinds: ['llm', 'tool', 'condition'] },
-  { label: '输出与评审', kinds: ['review', 'output'] },
+  { label: '输出', kinds: ['output'] },
 ]
 
 export const MODEL_OPTIONS = ['gpt-6.1-sol', 'gpt-6-luna', 'gpt-6.1-terra', 'tokenrouter-agent/grok-4.6']
@@ -135,13 +122,6 @@ export const TOOL_OPTIONS = [
   { id: 'templates.stats', label: '模板库统计' },
   { id: 'templates.search', label: '模板检索' },
   { id: 'clock', label: '当前时间' },
-]
-
-export const REVIEW_PROFILE_OPTIONS = [
-  { id: 'brand', label: '品牌一致性' },
-  { id: 'composition', label: '构图与主体' },
-  { id: 'copy', label: '文案与卖点' },
-  { id: 'a11y', label: '可读性与无障碍' },
 ]
 
 export const CONTENT_TYPE_OPTIONS = ['口播干货', '剧情演绎', '种草分享', '混剪卡点']

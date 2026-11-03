@@ -46,7 +46,7 @@ function Start-Api {
 
 function Start-Dev {
   Write-Log 'restart vite dev on 5191'
-  Start-Process -FilePath 'cmd.exe' -ArgumentList '/c', 'npm run dev -- --port 5191 --strictPort' -WorkingDirectory $root -WindowStyle Hidden
+  Start-Process -FilePath 'cmd.exe' -ArgumentList '/c', 'npm run dev -- --host 127.0.0.1 --port 5191 --strictPort' -WorkingDirectory $root -WindowStyle Hidden
 }
 
 # 单实例：已有存活 keeper 就退出

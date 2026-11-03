@@ -26,8 +26,11 @@ export function toFlowEdges(edges: Edge[]): ApiFlowEdge[] {
   }))
 }
 
+const KNOWN_KINDS = new Set(['input', 'llm', 'kb', 'tool', 'condition', 'output'])
+
+/** 老流程里如果还有已移除的节点类型（例如 review），加载时直接丢弃，不让它把画布弄脏。 */
 export function fromFlowNodes(nodes: ApiFlowNode[]): Node<FlowNodeData>[] {
-  return nodes.map((node) => ({
+  return nodes.filter((node) => KNOWN_KINDS.has(node.data.kind)).map((node) => ({
     id: node.id,
     type: node.type,
     position: { ...node.position },
@@ -41,8 +44,8 @@ export function fromFlowNodes(nodes: ApiFlowNode[]): Node<FlowNodeData>[] {
   }))
 }
 
-export function fromFlowEdges(edges: ApiFlowEdge[]): Edge[] {
-  return edges.map((edge) => ({
+export function fromFlowEdges(edges: ApiFlowEdge[], keepIds?: Set<string>): Edge[] {
+  return edges.filter((edge) => (keepIds ? keepIds.has(edge.source) && keepIds.has(edge.target) : true)).map((edge) => ({
     id: edge.id,
     source: edge.source,
     target: edge.target,

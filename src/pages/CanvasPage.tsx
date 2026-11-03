@@ -25,6 +25,7 @@ import {
   type RunNodeResult,
   type RunRecord,
 } from '../api/flows'
+import { getBdcStatus, type BdcStatus } from '../api/bdc'
 import { NODE_META } from '../canvas/catalog'
 import { FlowNodeCard } from '../canvas/FlowNode'
 import { Inspector } from '../canvas/Inspector'
@@ -41,7 +42,6 @@ const nodeTypes = {
   kb: FlowNodeCard,
   tool: FlowNodeCard,
   condition: FlowNodeCard,
-  review: FlowNodeCard,
   output: FlowNodeCard,
 }
 
@@ -78,6 +78,9 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
   const [runMeta, setRunMeta] = useState<{ id: string; total: number }>({ id: '', total: 0 })
   const [runError, setRunError] = useState('')
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const [bdc, setBdc] = useState<BdcStatus | null>(null)
+  const [bdcView, setBdcView] = useState(false)
   const [zoom, setZoom] = useState(1)
   const [historyCount, setHistoryCount] = useState(0)
   const [futureCount, setFutureCount] = useState(0)
@@ -195,7 +198,7 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
     const first = nextNodes[0]
     if (first) first.selected = true
     setNodes(nextNodes)
-    setEdges(fromFlowEdges(flow.edges))
+    setEdges(fromFlowEdges(flow.edges, new Set(nextNodes.map((node) => node.id))))
     setSelectedId(first?.id ?? '')
     history.current = []
     future.current = []
@@ -584,6 +587,11 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
         void saveNow().then((ok) => toast(ok ? '已保存' : '保存失败：' + saveError))
         return
       }
+      if (event.key === 'Escape') {
+        setPaletteOpen(false)
+        setDrawerOpen(false)
+        return
+      }
       if (!typing && selectedIdRef.current && (event.key === 'Delete' || event.key === 'Backspace')) {
         event.preventDefault()
         deleteSelected()
@@ -592,6 +600,13 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [deleteSelected, redo, saveError, saveNow, toast, undo])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void getBdcStatus().then(setBdc).catch(() => undefined)
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [])
 
   const saveLabel = saveState === 'saving'
     ? '保存中…'
@@ -651,7 +666,20 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
         </div>
       </div>
 
-      {loadState === 'error' ? (
+      {bdc?.deployed ? (
+        <div className="cv-bdc-bar">
+          <span className="vq-mono">BD CANVAS · 本机已部署</span>
+          <p>画布由 BD Canvas 接管（{bdc.web.url}）；这里的流程编排保留作备选，数据各存各的。</p>
+          <button className="cv-btn" type="button" onClick={() => setBdcView((value) => !value)}>
+            {bdcView ? '回到内置编排' : '在这里打开'}
+          </button>
+          <a className="cv-btn" href={bdc.web.url} target="_blank" rel="noreferrer">新窗口</a>
+        </div>
+      ) : null}
+
+      {bdcView && bdc?.deployed ? (
+        <iframe className="cv-bdc-frame" src={bdc.web.url} title="BD Canvas" />
+      ) : loadState === 'error' ? (
         <div className="cv-state">
           <CircleAlert size={18} strokeWidth={1.5} />
           <div>
@@ -663,7 +691,9 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
         </div>
       ) : (
         <div className="cv-workspace">
-          <Palette onAdd={addFromPalette} disabled={loadState !== 'ready'} />
+          {paletteOpen ? (
+            <Palette onAdd={addFromPalette} onClose={() => setPaletteOpen(false)} disabled={loadState !== 'ready'} />
+          ) : null}
 
           <section className="cv-stage" aria-label="流程画布">
             <div className="cv-toolbar">
@@ -684,6 +714,15 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
                 </span>
               </div>
               <div className="cv-toolbar-group">
+                <button
+                  className={`cv-tool ${paletteOpen ? 'is-active' : ''}`}
+                  type="button"
+                  onClick={() => setPaletteOpen((value) => !value)}
+                  title="双击画布也可唤出节点面板"
+                >
+                  <Plus size={14} />节点
+                </button>
+                <span className="cv-divider" />
                 <button className="cv-tool" type="button" onClick={() => rf.fitView({ padding: 0.12, duration: 200 })}>
                   <Maximize2 size={14} />适应画布
                 </button>
@@ -706,6 +745,11 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
                 deleteKeyCode={null}
                 fitView
                 fitViewOptions={{ padding: 0.12 }}
+                zoomOnDoubleClick={false}
+                onDoubleClick={(event) => {
+                  if ((event.target as HTMLElement).closest('.react-flow__node')) return
+                  setPaletteOpen(true)
+                }}
                 minZoom={0.25}
                 maxZoom={1.8}
                 proOptions={{ hideAttribution: true }}

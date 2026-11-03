@@ -7,6 +7,9 @@ const apiTarget = process.env.API_TARGET || 'http://127.0.0.1:8787'
 export default defineConfig({
   plugins: [react()],
   server: {
+    host: '127.0.0.1',
+    port: 5191,
+    strictPort: true,
     proxy: {
       '/api': { target: apiTarget, changeOrigin: true },
       '/media': { target: apiTarget, changeOrigin: true },

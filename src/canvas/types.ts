@@ -1,4 +1,4 @@
-export type FlowNodeKind = 'input' | 'llm' | 'kb' | 'tool' | 'condition' | 'output' | 'review'
+export type FlowNodeKind = 'input' | 'llm' | 'kb' | 'tool' | 'condition' | 'output'
 
 /** 节点在运行中的状态；idle 表示本轮还没跑。 */
 export type RunNodeStatus = 'idle' | 'pending' | 'running' | 'done' | 'error' | 'skipped' | 'unsupported'
@@ -15,8 +15,6 @@ export type NodeConfig = {
   toolName?: string
   expression?: string
   format?: 'markdown' | 'text'
-  profile?: string
-  image?: string
 }
 
 export type FlowNodeData = {

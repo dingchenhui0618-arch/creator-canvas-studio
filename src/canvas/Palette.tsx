@@ -1,18 +1,24 @@
-import { Plus } from 'lucide-react'
+import { Plus, X } from 'lucide-react'
 import { NODE_META, PALETTE_GROUPS } from './catalog'
 import type { FlowNodeKind } from './types'
 
 type PaletteProps = {
   onAdd: (kind: FlowNodeKind) => void
+  onClose: () => void
   disabled?: boolean
 }
 
-export function Palette({ onAdd, disabled }: PaletteProps) {
+export function Palette({ onAdd, onClose, disabled }: PaletteProps) {
   return (
     <aside className="cv-palette" aria-label="节点面板">
       <header className="cv-palette-head">
-        <span className="cv-kicker">节点</span>
-        <p>拖入画布，或点击添加</p>
+        <div>
+          <span className="cv-kicker">节点</span>
+          <p>拖入画布，或点击添加</p>
+        </div>
+        <button className="cv-palette-close" type="button" onClick={onClose} aria-label="收起节点面板" title="收起（Esc）">
+          <X size={13} strokeWidth={1.5} />
+        </button>
       </header>
       <div className="cv-palette-body">
         {PALETTE_GROUPS.map((group) => (

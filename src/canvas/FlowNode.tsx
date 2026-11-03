@@ -16,8 +16,6 @@ function summary(data: FlowNodeData): string {
       return data.config.toolName ?? '未选工具'
     case 'condition':
       return data.config.expression ?? '未设置表达式'
-    case 'review':
-      return data.config.profile ?? 'brand'
     case 'output':
       return data.config.format === 'text' ? '纯文本' : 'Markdown'
     default:

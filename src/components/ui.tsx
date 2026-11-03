@@ -22,11 +22,11 @@ export function MonoTag({ children }: { children: ReactNode }) {
   return <span className="vq-tag">{children}</span>
 }
 
-export function NavItem({ icon: Icon, label, active, compact, badge, onClick }: { icon: IconComponent; label: string; active?: boolean; compact?: boolean; badge?: string; onClick: () => void }) {
+export function NavItem({ icon: Icon, label, active, compact, utility, badge, onClick }: { icon: IconComponent; label: string; active?: boolean; compact?: boolean; utility?: boolean; badge?: string; onClick: () => void }) {
   return (
     <button
       type="button"
-      className={`vq-nav-item${active ? ' is-active' : ''}${compact ? ' vq-nav-item--compact' : ''}`}
+      className={`vq-nav-item${active ? ' is-active' : ''}${compact ? ' vq-nav-item--compact' : ''}${utility ? ' vq-nav-item--utility' : ''}`}
       onClick={onClick}
       title={compact ? label : undefined}
       aria-current={active ? 'page' : undefined}

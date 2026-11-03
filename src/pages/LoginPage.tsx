@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { ArrowRight, Eye, EyeOff, Loader2, Lock, Mail, ScanSearch, ShieldCheck } from 'lucide-react'
-import { VisionQaMark } from '../brand/VisionQaMark'
 import {
   AuthError,
   DEMO_EMAIL,
@@ -72,12 +71,10 @@ export function LoginPage({ notice, onSignIn, onGuest }: Props) {
   return (
     <div className="vq-scope vq-login">
       <section className="vq-login-brand" aria-label="VisionQA 品牌介绍">
-        <VisionQaMark size={440} className="vq-login-watermark" />
+        <span className="vq-login-watermark-text" aria-hidden="true">VisionQA</span>
         <header className="vq-login-brand-head">
-          <VisionQaMark size={24} />
+          <span className="vq-login-brand-dot" aria-hidden="true" />
           <span className="vq-login-wordmark">VisionQA</span>
-          <span className="vq-login-divider" aria-hidden="true" />
-          <span className="vq-mono">Workbench</span>
         </header>
 
         <div className="vq-login-brand-body">

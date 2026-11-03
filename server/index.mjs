@@ -9,6 +9,7 @@ import { listTemplates, getTemplate, reuseTemplate, deleteTemplate, templateStat
 import { createAgentsRouter } from './routes/agents.mjs'
 import { createFlowsRouter } from './routes/flows.mjs'
 import { createReviewRouter } from './routes/review.mjs'
+import { bdcStatus } from './bdc.mjs'
 
 // 功能路由：每个模块自己处理 /api/<prefix> 下的请求，index.mjs 只管分发
 const featureRoutes = [createAgentsRouter(), createFlowsRouter(), createReviewRouter()]
@@ -77,6 +78,11 @@ const server = http.createServer(async (req, res) => {
         const handled = await route.handle(req, res, url, pathname)
         if (handled !== false) return
       }
+    }
+
+    if (pathname === '/api/bdc/status') {
+      sendJson(res, 200, await bdcStatus())
+      return
     }
 
     if (pathname === '/api/health') {

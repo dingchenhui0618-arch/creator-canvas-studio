@@ -222,10 +222,19 @@
   width: 236px;
   height: 100%;
   padding: 18px 12px 14px;
-  overflow-y: auto;
+  overflow: visible;
   background: var(--surface);
   border-right: 1px solid var(--line);
   transition: width 0.18s ease, flex-basis 0.18s ease, padding 0.18s ease;
+}
+
+.vq-sidebar-scroll {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
 
 .vq-sidebar--collapsed {
@@ -238,13 +247,34 @@
 .vq-brand {
   display: flex;
   align-items: center;
+  gap: 8px;
   min-height: 38px;
   padding: 0 6px;
 }
 
+.vq-brand-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 1px;
+  background: var(--ink);
+}
+
+.vq-brand-text {
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
 .vq-sidebar--collapsed .vq-brand {
   justify-content: center;
+  gap: 0;
   padding: 0;
+}
+
+.vq-sidebar--collapsed .vq-brand-text {
+  display: none;
 }
 
 .vq-lockup {
@@ -414,27 +444,203 @@
   display: none;
 }
 
-.vq-sidebar-foot {
+.vq-sidebar-bottom {
   display: grid;
-  gap: 6px;
-  margin-top: auto;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
+  gap: 4px;
+  margin-top: 10px;
+  padding-top: 10px;
 }
 
-.vq-sidebar-foot .vq-nav-item {
+.vq-nav-divider {
+  height: 1px;
+  margin: 2px 10px 8px;
+  background: var(--line);
+}
+
+.vq-nav--utility .vq-nav-item,
+.vq-nav-item--utility {
+  min-height: 29px;
   color: var(--faint);
+  font-size: 11.5px;
 }
 
-.vq-sidebar-version {
+.vq-nav--utility .vq-nav-item:hover,
+.vq-nav-item--utility:hover {
+  color: var(--ink);
+}
+
+.vq-nav--utility .vq-nav-item.is-active,
+.vq-nav-item--utility.is-active {
+  font-weight: 500;
+}
+
+.vq-nav--utility .vq-nav-item.is-active::before,
+.vq-nav-item--utility.is-active::before {
+  top: 7px;
+  bottom: 7px;
+}
+
+.vq-sidebar-account {
+  position: relative;
+  margin-top: 6px;
+}
+
+.vq-sidebar-account-row {
   display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 6px 10px 0;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 40px;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+
+.vq-sidebar-account-row:hover,
+.vq-sidebar-account-row[aria-expanded='true'] {
+  border-color: var(--line);
+  background: var(--surface-raised);
+}
+
+.vq-sidebar-account-avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--ink);
+  color: #ffffff;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.vq-sidebar-account-copy {
+  display: grid;
+  flex: 1;
+  gap: 1px;
+  min-width: 0;
+}
+
+.vq-sidebar-account-copy strong,
+.vq-sidebar-account-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vq-sidebar-account-copy strong {
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.vq-sidebar-account-copy small {
   color: var(--faint);
   font-family: var(--font-mono);
   font-size: 9px;
+  letter-spacing: 0.02em;
+}
+
+.vq-sidebar-account-more {
+  flex: none;
+  color: var(--faint);
+}
+
+.vq-sidebar-account-action {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.vq-sidebar-account-row--guest:hover .vq-sidebar-account-action {
+  color: var(--ink);
+}
+
+.vq-menu.vq-sidebar-account-menu {
+  top: auto;
+  right: auto;
+  bottom: calc(100% + 6px);
+  left: 0;
+  width: 216px;
+}
+
+.vq-sidebar-account-menu-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+  padding: 7px 9px;
+  border-bottom: 1px solid var(--line);
+  color: var(--faint);
+}
+
+.vq-version {
+  margin-top: 2px;
+}
+
+.vq-version-trigger {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
   letter-spacing: 0.04em;
+  text-align: left;
+}
+
+.vq-version-trigger:hover {
+  background: var(--line-faint);
+  color: var(--ink);
+}
+
+.vq-version-dot {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--faint);
+  box-shadow: 0 0 0 2px var(--line-faint);
+}
+
+.vq-version-label {
+  letter-spacing: 0.02em;
+}
+
+.vq-version-action {
+  margin-left: auto;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+.vq-sidebar--collapsed .vq-sidebar-account-row {
+  justify-content: center;
+  padding: 0;
+}
+
+.vq-sidebar--collapsed .vq-sidebar-account-copy,
+.vq-sidebar--collapsed .vq-sidebar-account-more,
+.vq-sidebar--collapsed .vq-sidebar-account-action span,
+.vq-sidebar--collapsed .vq-version-label,
+.vq-sidebar--collapsed .vq-version-action {
+  display: none;
+}
+
+.vq-sidebar--collapsed .vq-version-trigger {
+  justify-content: center;
+  padding: 0;
 }
 
 .vq-main {
@@ -737,20 +943,32 @@
   color: #ffffff;
 }
 
-.vq-login-watermark {
+.vq-login-watermark-text {
   position: absolute;
-  right: -96px;
-  bottom: -128px;
+  right: -22px;
+  bottom: -46px;
   color: #ffffff;
-  opacity: 0.045;
+  font-size: clamp(120px, 16vw, 232px);
+  font-weight: 600;
+  letter-spacing: -0.05em;
+  line-height: 0.8;
+  opacity: 0.06;
   pointer-events: none;
+  user-select: none;
 }
 
 .vq-login-brand-head {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+}
+
+.vq-login-brand-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 1px;
+  background: #ffffff;
 }
 
 .vq-login-wordmark {
@@ -1309,6 +1527,108 @@
 
 /* ---------- 窄屏 ---------- */
 
+/* ---------- 版本与更新 ---------- */
+
+.vq-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  padding: 24px;
+  place-items: center;
+  background: rgba(17, 17, 17, 0.34);
+}
+
+.vq-update-modal {
+  width: min(440px, 100%);
+  padding: 18px 20px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-raise);
+}
+
+.vq-update-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.vq-update-head h2 {
+  margin-top: 4px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.vq-update-rows {
+  display: grid;
+  margin: 14px 0 12px;
+  border-top: 1px solid var(--line);
+}
+
+.vq-update-rows > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+}
+
+.vq-update-rows span {
+  color: var(--faint);
+}
+
+.vq-update-rows strong {
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.vq-update-rows strong.vq-mono {
+  text-transform: none;
+}
+
+.vq-update-note {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.65;
+}
+
+.vq-update-note code {
+  padding: 1px 4px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.vq-update-message {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--line-faint);
+  color: var(--ink);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.vq-update-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.vq-update-foot {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  color: var(--faint);
+  font-size: 9.5px;
+}
+
 @media (max-width: 1180px) {
   .vq-settings-grid {
     grid-template-columns: 1fr;
@@ -1381,11 +1701,26 @@
 
   .vq-workspace,
   .vq-workspace-meta,
+  .vq-brand-text,
   .vq-lockup-text,
   .vq-nav-item span,
   .vq-nav-item em,
-  .vq-sidebar-version {
+  .vq-sidebar-account-copy,
+  .vq-sidebar-account-more,
+  .vq-sidebar-account-action span,
+  .vq-version-label,
+  .vq-version-action {
     display: none;
+  }
+
+  .vq-sidebar-account-row {
+    justify-content: center;
+    padding: 0;
+  }
+
+  .vq-version-trigger {
+    justify-content: center;
+    padding: 0;
   }
 
   .vq-search {
@@ -1398,9 +1733,6 @@
     display: none;
   }
 
-  .vq-user-trigger-text {
-    display: none;
-  }
 }
 
 @media (max-width: 640px) {
