@@ -156,7 +156,7 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
         </div>
       ) : sorted.length ? (
         <div className="radar-grid">
-          {sorted.map((item, index) => (
+          {sorted.map((item) => (
             <article className="radar-card" key={item.id}>
               <div className="radar-cover">
                 {item.cover ? (
