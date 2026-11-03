@@ -36,6 +36,7 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
   const [items, setItems] = useState<MediaItem[]>([])
   const [mode, setMode] = useState<'live' | 'mock'>('mock')
   const [note, setNote] = useState('')
+  const [quota, setQuota] = useState<{ code: string; message: string; rechargeUrl?: string; goodsName?: string } | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [hasKey, setHasKey] = useState(false)
@@ -50,6 +51,7 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
       setItems(result.items)
       setMode(result.mode)
       setNote(result.note || '')
+      setQuota(result.quota ? { code: result.quota.code, message: result.quota.message, rechargeUrl: result.quota.rechargeUrl, goodsName: result.quota.goodsName } : null)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
     } finally {
@@ -83,9 +85,9 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
           <p>按关键词检索抖音与小红书的内容与互动数据，挑一条直接拆成可复用的脚本与分镜模板。</p>
         </div>
         <div className="heading-actions">
-          <span className={`status-pill ${hasKey ? 'is-live' : 'is-mock'}`}>
+          <span className={`status-pill ${hasKey ? (quota ? 'is-error' : 'is-live') : 'is-mock'}`}>
             <span className="status-dot" />
-            {hasKey ? '红狐接口已连接' : '示例数据模式'}
+            {hasKey ? (quota ? '红狐接口异常' : '红狐接口已连接') : '示例数据模式'}
           </span>
           <button className="button button--ghost" onClick={onOpenTemplates}>模板库</button>
         </div>
@@ -118,12 +120,21 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
         </button>
       </div>
 
-      {!hasKey && (
+      {quota ? (
+        <div className="radar-banner radar-banner--quota">
+          <AlertCircle size={15} />
+          <span>
+            红狐接口已连通，但<strong>{quota.code === 'REDFOX_DISABLED' ? 'Key 已被禁用' : '账号积分不足'}</strong>：{quota.message}。当前显示的是示例数据，不是真实平台数据。
+            {quota.goodsName ? '（充值商品：' + quota.goodsName + '）' : ''}
+            {quota.rechargeUrl ? <a href={quota.rechargeUrl} target="_blank" rel="noreferrer">{quota.code === 'REDFOX_DISABLED' ? '去红狐后台查看 Key' : '去红狐后台充值'}</a> : null}
+          </span>
+        </div>
+      ) : !hasKey ? (
         <div className="radar-banner">
           <AlertCircle size={15} />
           <span>{note || '未配置红狐 API Key，当前展示的是示例数据（标题与互动数都不是真实平台数据）。接入 Key 后，这一屏会直接显示真实检索结果。'}</span>
         </div>
-      )}
+      ) : null}
 
       {error && (
         <div className="radar-banner radar-banner--error">
@@ -135,7 +146,7 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
       <div className="radar-summary">
         <span><strong>{sorted.length}</strong> 条内容</span>
         <span><strong>{formatCount(totalLikes)}</strong> 累计点赞</span>
-        <span className="radar-summary-note">{mode === 'live' ? '数据来自红狐接口' : '示例数据 · 未连接红狐'}</span>
+        <span className="radar-summary-note">{mode === 'live' ? '数据来自红狐接口' : hasKey ? '示例数据 · 接口不可用' : '示例数据 · 未连接红狐'}</span>
       </div>
 
       {loading && !sorted.length ? (

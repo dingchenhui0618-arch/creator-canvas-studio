@@ -3,6 +3,26 @@ import os from 'node:os'
 import path from 'node:path'
 
 const root = process.cwd()
+
+// 极简 .env 读取：只支持 KEY=VALUE 与 # 注释，不覆盖已存在的环境变量
+function loadDotEnv() {
+  try {
+    const text = fs.readFileSync(path.join(root, '.env'), 'utf8')
+    for (const line of text.split(/\r?\n/)) {
+      const trimmed = line.trim()
+      if (!trimmed || trimmed.startsWith('#')) continue
+      const index = trimmed.indexOf('=')
+      if (index < 1) continue
+      const key = trimmed.slice(0, index).trim()
+      const value = trimmed.slice(index + 1).trim().replace(/^["']|["']$/g, '')
+      if (process.env[key] === undefined) process.env[key] = value
+    }
+  } catch {
+    // 没有 .env 就走真实环境变量
+  }
+}
+
+loadDotEnv()
 const dataDir = process.env.DATA_DIR || path.join(root, 'data')
 
 function readLocalToken() {

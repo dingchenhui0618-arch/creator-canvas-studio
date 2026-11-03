@@ -15,11 +15,19 @@ export type MediaItem = {
   mock?: boolean
 }
 
+export type QuotaNotice = {
+  code: string
+  message: string
+  rechargeUrl?: string
+  goodsName?: string
+}
+
 export type SearchResult = {
   mode: 'live' | 'mock'
   items: MediaItem[]
   total: number
   note?: string
+  quota?: QuotaNotice
 }
 
 export type ScriptBeat = {

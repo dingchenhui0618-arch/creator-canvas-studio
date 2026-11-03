@@ -79,17 +79,137 @@ export function normalizeXhs(raw, index = 0) {
   }
 }
 
-async function postJson(pathname, payload, headers = {}) {
+
+// ── 限流 / 去重 / 缓存 ──────────────────────────────────────
+// 红狐官方限制：抖音 10 次/秒、小红书 20 次/秒。超限会返回「接口调用过于频繁」，
+// 这里在客户端排队，避免把上游打到 429。
+// 实测：贴到上限（10/20 次/秒）连续打，Key 会被直接禁用（3105）。这里留足余量。
+const RATE_LIMIT = { douyin: 4, xiaohongshu: 8, default: 4 }
+const MAX_INFLIGHT = 2
+const windows = new Map()
+const inflightCount = new Map()
+const blockedUntil = new Map()
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+async function takeToken(platform) {
+  const limit = RATE_LIMIT[platform] || RATE_LIMIT.default
+  for (;;) {
+    const now = Date.now()
+    const hits = (windows.get(platform) || []).filter((time) => now - time < 1000)
+    windows.set(platform, hits)
+    const active = inflightCount.get(platform) || 0
+    if (hits.length < limit && active < MAX_INFLIGHT) {
+      hits.push(now)
+      inflightCount.set(platform, active + 1)
+      return () => inflightCount.set(platform, Math.max(0, (inflightCount.get(platform) || 1) - 1))
+    }
+    await sleep(120 + Math.random() * 120)
+  }
+}
+
+const isBlocked = (error) => error?.redfoxCode === 3105 || /禁用|disabled/i.test(String(error?.message || ''))
+
+const isRateLimit = (error) => error?.redfoxRate === true || /过于频繁|频繁|限流|too many|rate limit/i.test(String(error?.message || ''))
+
+const CACHE_TTL = Number(process.env.REDFOX_CACHE_TTL_MS || 300000)
+const cache = new Map()
+const inflight = new Map()
+
+function cacheKey(pathname, payload) {
+  return pathname + '|' + JSON.stringify(payload)
+}
+
+async function withCache(key, producer) {
+  const hit = cache.get(key)
+  if (hit && hit.expires > Date.now()) return hit.value
+  if (inflight.has(key)) return inflight.get(key)
+  const task = producer()
+    .then((value) => {
+      cache.set(key, { value, expires: Date.now() + CACHE_TTL })
+      if (cache.size > 300) {
+        for (const [staleKey, entry] of cache) {
+          if (entry.expires <= Date.now()) cache.delete(staleKey)
+        }
+      }
+      return value
+    })
+    .finally(() => inflight.delete(key))
+  inflight.set(key, task)
+  return task
+}
+
+export async function postJson(pathname, payload, headers = {}, options = {}) {
+  const platform = options.platform || 'default'
+  const blocked = blockedUntil.get(platform)
+  if (blocked && blocked > Date.now()) {
+    throw Object.assign(new Error('API Key 已被红狐禁用（3105），暂停调用 ' + Math.ceil((blocked - Date.now()) / 1000) + ' 秒'), { redfoxCode: 3105, code: 'REDFOX_DISABLED' })
+  }
+  const key = cacheKey(pathname, payload)
+  return withCache(key, async () => {
+    let lastError
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const release = await takeToken(platform)
+      try {
+        return await requestOnce(pathname, payload, headers)
+      } catch (error) {
+        lastError = error
+        // 永久错误：不重试，直接把状态记下来
+        if (error?.code === 'REDFOX_QUOTA' || isBlocked(error)) {
+          if (isBlocked(error)) blockedUntil.set(platform, Date.now() + 5 * 60 * 1000)
+          error.code = isBlocked(error) ? 'REDFOX_DISABLED' : 'REDFOX_QUOTA'
+          throw error
+        }
+        if (!isRateLimit(error) && !(error?.status >= 500)) throw error
+        if (attempt === 1) break
+        // 触限后长退避，避免把上游继续打爆
+        await sleep(1500 + Math.random() * 700)
+      } finally {
+        release()
+      }
+    }
+    throw lastError
+  })
+}
+
+async function requestOnce(pathname, payload, headers) {
   const response = await fetch(config.redfox.baseUrl + pathname, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(30000),
   })
   const text = await response.text()
-  let json = null
-  try { json = JSON.parse(text) } catch { json = { raw: text.slice(0, 400) } }
-  if (!response.ok) throw new Error('红狐接口 HTTP ' + response.status + '：' + (json?.msg || text.slice(0, 200)))
-  if (json?.code !== 2000 && Number(json?.code) !== 200) throw new Error('红狐接口返回 code=' + json?.code + '：' + (json?.msg || '未知错误'))
+  if (!response.ok) {
+    const error = new Error('红狐接口 HTTP ' + response.status + '：' + text.slice(0, 160))
+    error.status = response.status
+    error.redfoxRate = response.status === 429
+    throw error
+  }
+  let json
+  try {
+    json = JSON.parse(text)
+  } catch {
+    throw new Error('红狐接口返回的不是 JSON：' + text.slice(0, 120))
+  }
+  const code = json?.code
+  const okCode = code === 2000 || code === 200 || code === undefined
+  if (!okCode) {
+    const message = json?.msg || json?.message || ('红狐接口返回码 ' + code)
+    const error = new Error(message)
+    error.redfoxCode = code
+    error.redfoxRate = /过于频繁|限流/.test(message)
+    if (code === 3210) {
+      error.code = 'REDFOX_QUOTA'
+      error.rechargeUrl = 'https://redfox.hk/dashboard/recharge'
+      error.quota = {
+        amount: json?.data?.amount ?? null,
+        goodsName: json?.data?.goodsName ?? '',
+        cashierUrl: json?.data?.cashierUrl ?? '',
+      }
+    }
+    throw error
+  }
   return json
 }
 
@@ -100,7 +220,7 @@ export async function searchMedia({ platform, keyword, startDate, endDate, pageN
     tasks.push(postJson(DOUYIN_SEARCH, {
       keyword: keyword || '', source: config.redfox.source, pageNum, pageSize,
       ...(startDate ? { startDate } : {}), ...(endDate ? { endDate } : {}),
-    }, { REDFOX_API_KEY: config.redfox.key }).then((json) => {
+    }, { REDFOX_API_KEY: config.redfox.key }, { platform: 'douyin' }).then((json) => {
       const list = json?.data?.list || json?.data?.articles || []
       return { platform: 'douyin', items: list.map(normalizeDouyin), total: json?.data?.total ?? list.length }
     }))
@@ -108,7 +228,7 @@ export async function searchMedia({ platform, keyword, startDate, endDate, pageN
   if (platform === 'xiaohongshu' || platform === 'all') {
     tasks.push(postJson(XHS_SEARCH, {
       keyword: keyword || '', pageNum, pageSize, startDate: startDate || '', endDate: endDate || '', source: config.redfox.source,
-    }, { 'X-API-KEY': config.redfox.key }).then((json) => {
+    }, { 'X-API-KEY': config.redfox.key }, { platform: 'xiaohongshu' }).then((json) => {
       const list = json?.data?.articles || json?.data?.list || []
       return { platform: 'xiaohongshu', items: list.map(normalizeXhs), total: json?.data?.total ?? list.length }
     }))
@@ -117,11 +237,22 @@ export async function searchMedia({ platform, keyword, startDate, endDate, pageN
   const items = []
   const errors = []
   let total = 0
+  let quota = null
   settled.forEach((entry) => {
     if (entry.status === 'fulfilled') { items.push(...entry.value.items); total += Number(entry.value.total) || 0 }
-    else errors.push(String(entry.reason?.message || entry.reason))
+    else {
+      errors.push(String(entry.reason?.message || entry.reason))
+      if (entry.reason?.code === 'REDFOX_QUOTA') quota = entry.reason
+    }
   })
-  if (!items.length && errors.length) throw new Error(errors.join('；'))
+  if (!items.length && quota) throw Object.assign(new Error(quota.message), { code: 'REDFOX_QUOTA', quota: quota.quota, rechargeUrl: quota.rechargeUrl })
+  if (!items.length && errors.length) {
+    if (errors.some((message) => /禁用|disabled/.test(message))) {
+      throw Object.assign(new Error('红狐 API Key 已被禁用（3105），请到红狐后台确认 Key 状态'), { code: 'REDFOX_DISABLED' })
+    }
+    const rateLimited = errors.some((message) => /过于频繁|限流/.test(message))
+    throw Object.assign(new Error(errors.join('；')), { code: rateLimited ? 'REDFOX_RATE' : 'REDFOX_ERROR' })
+  }
   items.sort((a, b) => b.stats.likes - a.stats.likes)
   return { mode: 'live', items, total, errors }
 }
@@ -132,7 +263,7 @@ export async function resolveVideoUrl(platform, pageUrl) {
   if (!endpoint) throw new Error('暂不支持的平台：' + platform)
   const json = await postJson(endpoint, { url: pageUrl, source: config.redfox.source }, {
     REDFOX_API_KEY: config.redfox.key, 'X-API-KEY': config.redfox.key,
-  })
+  }, { platform })
   const data = json?.data || {}
   const resources = Array.isArray(data.resources) ? data.resources : []
   let downloadUrl = data.downloadUrl || data.videoUrl || ''

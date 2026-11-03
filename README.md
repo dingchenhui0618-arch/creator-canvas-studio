@@ -2,9 +2,13 @@
 
 面向通用创作者与电商运营的智能体创作工作台。这一版新增了**「检索 → 一键复刻 → 模板库复用」**的真实闭环：从抖音/小红书挑一条内容，FFmpeg 拆帧 + 逐帧视觉分析，拆出脚本结构、分镜表和原视频链接，存成可按内容类型检索的模板。
 
-> 诚实边界：**红狐 API Key 还没配**，所以检索走的是示例数据（界面上有明确黄条提示，不会伪装成真实平台数据）；**视频解析、拆帧、逐帧分析、模板入库这条链路是真的跑通的**（用公开测试视频验证，截图就是真实运行结果）。智能体生成环节按需求暂缓。
+> 诚实边界（2026-11-03 实测）：**红狐接口已连通，但账号积分不足（3210），随后 Key 被红狐侧禁用（3105）**，所以检索仍返回示例数据（界面红条明示，不伪装真实数据）。**视频解析、拆帧、逐帧分析、模板入库这条链路是真的跑通的**（公开测试视频 + 5 并发压测，截图都是真实运行结果）。智能体生成环节按需求暂缓。
 
 ![爆款雷达](docs/screenshot-radar.png)
+
+红狐账号不可用时的状态（Key 被禁用 / 积分不足 / 限流），界面会明确说明并给后台链接，不会假装成真实数据：
+
+![接口异常状态](docs/screenshot-radar-quota.png)
 
 ## 检索 → 复刻 → 模板库（本次主线）
 
@@ -106,6 +110,15 @@ npm run dev:all
 npm run build     # tsc -b && vite build
 npm run lint      # oxlint（当前 0 warning）
 npm start         # 生产模式：node server/index.mjs，直接托管 dist/ + API（http://127.0.0.1:8787）
+
+npm run test:redfox   # 用本地假红狐服务验证限流/缓存/重试/禁用短路（7 项，不耗真实额度）
+npm run stress -- --test=search --n=40    # 压力测试：search / reuse / replicate / edge
+```
+
+`.env` 放服务端密钥（已 gitignore，模板见 `.env.example`）：
+
+```bash
+echo "REDFOX_API_KEY=你的key" > .env
 ```
 
 环境变量（都只需配服务端，前端拿不到 Key）：
@@ -114,6 +127,7 @@ npm start         # 生产模式：node server/index.mjs，直接托管 dist/ + 
 | --- | --- | --- |
 | `REDFOX_API_KEY` | 红狐接口 Key，启用真实抖音/小红书检索 | 未配置 → 检索返回示例数据并提示 |
 | `REDFOX_BASE_URL` | 红狐域名 | `https://redfox.hk` |
+| `REDFOX_CACHE_TTL_MS` | 检索结果缓存时长（同参数去重） | 300000（5 分钟） |
 | `VISION_BASE_URL` / `VISION_API_KEY` | 逐帧分析的视觉模型通道 | 默认本机 `http://127.0.0.1:10100/v1`，凭证回落到 `~/.codex/auth.json` |
 | `VISION_MODEL` / `VISION_FALLBACKS` | 主模型与降级链 | `gpt-6.1-sol` → `gpt-6-luna` → `tokenrouter-agent/grok-4.6` → `gpt-6.1-terra` → `gpt-6-sol` |
 | `MAX_FRAMES` / `MAX_VIDEO_MB` | 抽帧上限、视频体积上限 | 18 帧 / 160 MB |

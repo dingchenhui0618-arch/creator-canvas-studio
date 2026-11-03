@@ -27,7 +27,10 @@ async function serveFile(res, file) {
   try {
     const stat = await fsp.stat(file)
     if (!stat.isFile()) return false
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream', 'Content-Length': stat.size, 'Cache-Control': 'public, max-age=3600' })
+    const ext = path.extname(file).toLowerCase()
+    // 入口 HTML 不缓存，避免用户拿到旧 bundle；带 hash 的静态资源长缓存
+    const cache = ext === '.html' ? 'no-cache, no-store, must-revalidate' : 'public, max-age=604800, immutable'
+    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Content-Length': stat.size, 'Cache-Control': cache })
     res.end(await fsp.readFile(file))
     return true
   } catch {
@@ -76,8 +79,36 @@ const server = http.createServer(async (req, res) => {
         const items = searchFixtures(keyword)
         return sendJson(res, 200, { mode: 'mock', items, total: items.length, note: '未配置 REDFOX_API_KEY，当前展示示例数据（非真实平台数据）' })
       }
-      const result = await searchMedia({ platform, keyword, startDate, endDate, pageNum: Number(url.searchParams.get('page') || 1), pageSize: 24 })
-      return sendJson(res, 200, { ...result, note: result.errors?.length ? result.errors.join('；') : '' })
+      try {
+        const result = await searchMedia({ platform, keyword, startDate, endDate, pageNum: Number(url.searchParams.get('page') || 1), pageSize: 24 })
+        return sendJson(res, 200, { ...result, note: result.errors?.length ? result.errors.join('；') : '' })
+      } catch (error) {
+        if (error?.code === 'REDFOX_RATE') {
+          return sendJson(res, 429, { error: '红狐接口触发频率限制（抖音 10 次/秒、小红书 20 次/秒），请稍后重试', code: 'REDFOX_RATE' })
+        }
+        if (error?.code === 'REDFOX_DISABLED') {
+          const items = searchFixtures(keyword)
+          return sendJson(res, 200, {
+            mode: 'mock',
+            items,
+            total: items.length,
+            note: '红狐 API Key 已被禁用（3105），当前显示的是示例数据：请到红狐后台确认 Key 状态后再试。',
+            quota: { code: 'REDFOX_DISABLED', message: error.message, rechargeUrl: 'https://redfox.hk/dashboard' },
+          })
+        }
+        if (error?.code === 'REDFOX_QUOTA') {
+          // 有 Key 但积分不足：不伪装成真实数据，明确说明并给示例数据兜底
+          const items = searchFixtures(keyword)
+          return sendJson(res, 200, {
+            mode: 'mock',
+            items,
+            total: items.length,
+            note: '红狐接口已连通，但账号积分不足（' + (error.quota?.amount ?? 0) + ' 元起充 / ' + (error.quota?.goodsName || '见红狐后台') + '），当前显示的是示例数据。',
+            quota: { code: 'REDFOX_QUOTA', message: error.message, rechargeUrl: error.rechargeUrl, goodsName: error.quota?.goodsName || '' },
+          })
+        }
+        throw error
+      }
     }
 
     if (pathname === '/api/replicate' && req.method === 'POST') {

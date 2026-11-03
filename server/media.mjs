@@ -35,9 +35,15 @@ export async function acquireVideo({ url, platform }, jobDir, onProgress) {
   const target = path.join(jobDir, 'source.mp4')
   let resolvedFrom = 'direct'
 
+  if (!url) throw new Error('没有可用的视频地址：请粘贴 mp4 直链')
+
   if (DIRECT_MEDIA.test(url)) {
     await downloadToFile(url, target, onProgress)
     return { file: target, resolvedFrom, resolvedUrl: url }
+  }
+
+  if (platform !== 'douyin' && platform !== 'xiaohongshu') {
+    throw new Error('无法识别的链接：既不是可直接下载的视频（.mp4/.m4v/.mov/.webm），也不是抖音/小红书内容链接')
   }
 
   const resolved = await resolveVideoUrl(platform, url)

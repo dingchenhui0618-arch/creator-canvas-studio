@@ -283,6 +283,8 @@ button { cursor:pointer; }
 .status-pill .status-dot { width:6px; height:6px; border-radius:50%; background:var(--ink-faint); }
 .status-pill.is-live .status-dot { background:#4b7959; box-shadow:0 0 0 3px rgba(75,121,89,.14); }
 .status-pill.is-mock .status-dot { background:var(--gold); box-shadow:0 0 0 3px rgba(212,164,71,.16); }
+.status-pill.is-error { color:#a5544f; border-color:#e8cfcc; background:#fcf2ee; }
+.status-pill.is-error .status-dot { background:var(--danger); box-shadow:0 0 0 3px rgba(200,109,104,.16); }
 .select--compact { height:34px; padding:0 26px 0 10px; border:1px solid var(--line-strong); border-radius:9px; background:var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%239d978b' stroke-width='1.4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 10px center; appearance:none; font-size:11px; color:var(--ink-soft); }
 
 .radar-toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 12px; margin-bottom:14px; background:rgba(255,254,250,.72); border:1px solid var(--line); border-radius:14px; }
@@ -291,6 +293,9 @@ button { cursor:pointer; }
 .radar-banner { display:flex; align-items:flex-start; gap:8px; padding:10px 13px; margin-bottom:14px; border:1px solid #efe0c2; border-radius:11px; background:#fdf5e6; color:#8a6a2f; font-size:10.5px; line-height:1.6; }
 .radar-banner svg { flex:0 0 auto; margin-top:1px; }
 .radar-banner--error { border-color:#e8c9c6; background:#fbeeed; color:#a5544f; }
+.radar-banner--quota { border-color:#e8cfcc; background:#fcf2ee; color:#8f4b45; }
+.radar-banner--quota a { margin-left:6px; color:var(--violet); font-weight:700; text-decoration:underline; }
+.radar-banner--quota strong { font-weight:800; }
 .radar-summary { display:flex; align-items:center; gap:20px; margin-bottom:14px; font-size:10px; color:var(--ink-faint); }
 .radar-summary strong { margin-right:4px; font-family:'DM Mono',monospace; font-size:14px; color:var(--ink); }
 .radar-summary-note { margin-left:auto; }

@@ -10,7 +10,10 @@
     "preview": "vite preview",
     "dev:api": "node server/index.mjs",
     "dev:all": "concurrently -k \"npm:dev:api\" \"npm:dev\"",
-    "start": "node server/index.mjs"
+    "start": "node server/index.mjs",
+    "test:redfox": "node scripts/test-redfox.mjs",
+    "stress": "node scripts/stress.mjs",
+    "mock:redfox": "node scripts/mock-redfox.mjs"
   },
   "dependencies": {
     "@xyflow/react": "^12.12.0",
