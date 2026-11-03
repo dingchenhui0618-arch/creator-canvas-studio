@@ -14,18 +14,22 @@ $http = New-Object System.Net.Http.HttpClient
 $http.Timeout = [TimeSpan]::FromSeconds(3)
 
 function Test-Http($port) {
-  try {
-    $response = $http.GetAsync('http://localhost:' + $port + '/').GetAwaiter().GetResult()
-    return $response.IsSuccessStatusCode
-  } catch { return $false }
+  foreach ($base in @('http://127.0.0.1:', 'http://localhost:')) {
+    try {
+      $response = $http.GetAsync($base + $port + '/').GetAwaiter().GetResult()
+      if ($response.IsSuccessStatusCode) { return $true }
+    } catch { }
+  }
+  return $false
 }
 
 # 端口上已有监听（含 IPv6）也算活着，避免重复拉起
 function Test-Port($port) {
-  foreach ($host in @('127.0.0.1', '::1')) {
+  # 注意：变量名不能叫 $host —— PowerShell 里 $host 是自动变量 $Host（大小写不敏感），赋值会让探测永远失败
+  foreach ($addr in @('127.0.0.1', '::1')) {
     try {
       $client = New-Object System.Net.Sockets.TcpClient
-      $async = $client.BeginConnect($host, $port, $null, $null)
+      $async = $client.BeginConnect($addr, $port, $null, $null)
       $ok = $async.AsyncWaitHandle.WaitOne(800)
       if ($ok -and $client.Connected) { $client.Close(); return $true }
       $client.Close()
