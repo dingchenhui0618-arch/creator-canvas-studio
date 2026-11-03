@@ -60,6 +60,7 @@ export type TemplateAnalysis = {
 }
 
 export type ReplicaTemplate = {
+  thumb?: string
   id: string
   title: string
   contentType: string

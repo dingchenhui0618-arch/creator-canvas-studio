@@ -1,5 +1,176 @@
-import { ArrowUpRight, Bot, Plus, Search, Sparkles, Upload, Workflow } from 'lucide-react'
+import { useState } from 'react'
+import { ArrowRight, ArrowUpRight, Info, Plus } from 'lucide-react'
 import type { Page } from '../domain/types'
-import { ProjectCard, QuickAction } from '../components/ui'
+import { MonoTag, StatusPill } from '../components/ui'
+import { recentReplications, reviewQueue, workbenchTasks } from '../data/mock'
+import '../styles/overview.css'
 
-export function OverviewPage({ onCreate, onNavigate }: { onCreate: () => void; onNavigate: (page: Page) => void }) { return <div className="page"><div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-dot" />Aurora Studio / 个人工作区</div><h1>把灵感整理成可继续的创作</h1><p>从一个资产开始，让 Agent 帮你把下一步变清楚。</p></div><div className="heading-actions"><button className="button button--ghost"><Search size={16} />搜索工作区</button><button className="button button--primary" onClick={onCreate}><Plus size={16} />新建</button></div></div><div className="overview-grid"><div className="overview-main"><div className="hero-card"><div><span className="hero-label">本周创作进度</span><h2>3 个项目正在向前</h2><p>最近一次运行已经为「春日上新」生成了可引用资产。</p><button className="text-button" onClick={() => onNavigate('canvas')}>打开资产画布 <ArrowUpRight size={15} /></button></div><div className="hero-orbit"><span className="orbit orbit--one" /><span className="orbit orbit--two" /><span className="orbit-dot orbit-dot--one" /><span className="orbit-dot orbit-dot--two" /><span className="hero-spark">✦</span></div></div><div className="section-heading"><div><span className="section-kicker">最近项目</span><h2>继续你的创作</h2></div><button className="text-button" onClick={() => onNavigate('canvas')}>查看全部 <ArrowUpRight size={14} /></button></div><div className="project-grid"><ProjectCard title="春日上新 · 视觉资产画布" detail="资产画布 · 4 个节点" tone="warm" onClick={() => onNavigate('canvas')} /><ProjectCard title="品牌内容导演" detail="智能体 · 草稿" tone="cool" onClick={() => onNavigate('agents')} /><ProjectCard title="商品详情页素材" detail="资产集合 · 12 个文件" tone="sage" onClick={() => onNavigate('assets')} /></div></div><aside className="overview-side"><div className="side-card"><div className="side-card-head"><div><span className="section-kicker">快速开始</span><h3>从一个动作开始</h3></div><Sparkles size={17} /></div><QuickAction icon={Bot} title="创建智能体" detail="定义你的创作搭档" onClick={onCreate} /><QuickAction icon={Workflow} title="新建资产画布" detail="整理并引用生成资产" onClick={() => onNavigate('canvas')} /><QuickAction icon={Upload} title="导入第一份资产" detail="图片、文本或脚本" onClick={() => onNavigate('assets')} /></div><div className="side-card side-card--adapter"><div className="side-card-head"><div><span className="section-kicker">运行适配器</span><h3>DSH Adapter</h3></div><span className="connection-state">已连接</span></div><p>前端只依赖统一能力接口，后续可替换为真实运行时。</p><div className="adapter-metrics"><span><strong>3</strong> 可用能力</span><span><strong>Mock</strong> 当前模式</span></div></div></aside></div></div> }
+function greeting(date: Date): string {
+  const hour = date.getHours()
+  if (hour < 6) return '凌晨好'
+  if (hour < 11) return '早上好'
+  if (hour < 13) return '中午好'
+  if (hour < 18) return '下午好'
+  return '晚上好'
+}
+
+function todayLabel(date: Date): string {
+  const parts = new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    weekday: 'long',
+  }).formatToParts(date)
+  const pick = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? ''
+  return `${pick('year')} 年 ${pick('month')} 月 ${pick('day')} 日 · ${pick('weekday')}`
+}
+
+function verdictLabel(verdict: 'pass' | 'warn' | 'fail'): string {
+  if (verdict === 'pass') return '通过'
+  if (verdict === 'fail') return '问题'
+  return '待确认'
+}
+
+type Props = {
+  userName: string
+  onCreate: () => void
+  onNavigate: (page: Page) => void
+}
+
+export function OverviewPage({ userName, onCreate, onNavigate }: Props) {
+  const [now] = useState(() => new Date())
+
+  return (
+    <div className="vq-page">
+      <header className="vq-page-head">
+        <div>
+          <span className="vq-mono">{todayLabel(now)}</span>
+          <h1>
+            {greeting(now)}，{userName}
+          </h1>
+          <p>今天先做三件事：复刻一条爆款、核对三张待确认帧、把一条口播模板接进画布。</p>
+        </div>
+        <div className="vq-page-actions">
+          <button type="button" className="vq-button vq-button--ghost" onClick={() => onNavigate('runs')}>
+            运行记录
+          </button>
+          <button type="button" className="vq-button vq-button--primary" onClick={onCreate}>
+            <Plus size={14} />
+            新建
+          </button>
+        </div>
+      </header>
+
+      <section className="vq-section">
+        <div className="vq-section-head">
+          <div>
+            <span className="vq-mono">01 / 今天要做什么</span>
+            <h2>先做这三件事</h2>
+          </div>
+          <span className="vq-mono">按优先级排序</span>
+        </div>
+        <div className="vq-task-grid">
+          {workbenchTasks.map((task) => (
+            <button type="button" className="vq-task" key={task.id} onClick={() => onNavigate(task.page)}>
+              <span className="vq-task-index">{task.index}</span>
+              <strong>{task.title}</strong>
+              <p>{task.detail}</p>
+              <span className="vq-task-foot">
+                <span className="vq-mono">{task.meta}</span>
+                <span className="vq-task-go">
+                  {task.action}
+                  <ArrowRight size={12} />
+                </span>
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <div className="vq-overview-grid">
+        <section className="vq-section">
+          <div className="vq-section-head">
+            <div>
+              <span className="vq-mono">02 / 最近复刻</span>
+              <h2>刚入库的脚本结构</h2>
+            </div>
+            <button type="button" className="vq-link" onClick={() => onNavigate('templates')}>
+              打开模板库
+              <ArrowUpRight size={13} />
+            </button>
+          </div>
+          <div className="vq-table" role="table" aria-label="最近复刻">
+            <div className="vq-table-head" role="row">
+              <span role="columnheader">标题</span>
+              <span role="columnheader">来源</span>
+              <span role="columnheader">镜头</span>
+              <span role="columnheader">时长</span>
+              <span role="columnheader">入库</span>
+              <span role="columnheader">状态</span>
+            </div>
+            {recentReplications.map((item) => (
+              <div className="vq-table-row" role="row" key={item.id}>
+                <div className="vq-table-name" role="cell">
+                  <strong>{item.title}</strong>
+                  <span className="vq-mono">{item.id}</span>
+                </div>
+                <span role="cell">
+                  {item.platform} · {item.contentType}
+                </span>
+                <span className="vq-mono" role="cell">
+                  {item.shots} 镜
+                </span>
+                <span className="vq-mono" role="cell">
+                  {item.duration}
+                </span>
+                <span className="vq-mono" role="cell">
+                  {item.time}
+                </span>
+                <span role="cell">
+                  <MonoTag>{item.status === 'pass' ? '已入库' : '待核对'}</MonoTag>
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <aside className="vq-section">
+          <div className="vq-section-head">
+            <div>
+              <span className="vq-mono">03 / 待评审</span>
+              <h2>结论待定</h2>
+            </div>
+            <button type="button" className="vq-link" onClick={() => onNavigate('review')}>
+              整理队列
+              <ArrowRight size={13} />
+            </button>
+          </div>
+          {reviewQueue.map((item) => (
+            <button type="button" className="vq-review" key={item.id} onClick={() => onNavigate('review')}>
+              <span className="vq-frame vq-review-frame">
+                <img src={item.frameUrl} alt="" loading="lazy" />
+              </span>
+              <span className="vq-review-body">
+                <span className="vq-review-top">
+                  <span className="vq-mono">{item.meta}</span>
+                  <StatusPill tone={item.verdict}>{verdictLabel(item.verdict)}</StatusPill>
+                </span>
+                <strong>{item.title}</strong>
+                <span className="vq-review-note">{item.note}</span>
+              </span>
+            </button>
+          ))}
+          <p className="vq-note">
+            <Info size={12} />
+            <span>评审服务尚未接入，以上为示例队列；结论不会写入任何地方。</span>
+          </p>
+        </aside>
+      </div>
+
+      <footer className="vq-overview-foot">
+        <span>工作台数据来自本地模板库与演示队列，不连接真实账号体系。</span>
+        <span className="vq-mono">VisionQA Workbench · 本地演示</span>
+      </footer>
+    </div>
+  )
+}

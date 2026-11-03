@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertCircle, Copy, ExternalLink, Film, Layers, RefreshCw, Search, Trash2, X } from 'lucide-react'
+import { AlertCircle, Copy, ExternalLink, Film, Layers, RefreshCw, ScanEye, Search, Trash2, X } from 'lucide-react'
 import { deleteTemplate, formatCount, formatDuration, getTemplate, listTemplates, reuseTemplate } from '../api/radar'
 import type { ReplicaTemplate } from '../domain/radar'
+import { requestReview } from '../state/review'
 
 const TYPES = ['全部', '口播干货', '剧情演绎', '教程拆解', '产品测评', '种草分享', '开箱体验', '探店vlog', '混剪卡点']
 
@@ -203,6 +204,18 @@ export function TemplateLibraryPage({ onToast, onBack }: { onToast: (message: st
                 </div>
 
                 <footer className="drawer-foot">
+                  <button className="button button--ghost" onClick={() => {
+                    const firstFrame = detail.frames?.[0]?.url || ''
+                    const media = firstFrame.replace(/^\/media\//, '')
+                    requestReview({
+                      media: media || undefined,
+                      imageUrl: media ? undefined : detail.cover || undefined,
+                      label: detail.title,
+                      intent: '评审这条模板的首帧是否适合作为封面/开场',
+                    })
+                  }}>
+                    <ScanEye size={14} />送去评审
+                  </button>
                   <button className="button button--ghost" onClick={() => {
                     const list = [detail.hook, ...detail.structure.map((beat) => beat.beat + '：' + beat.voiceover), 'CTA：' + (detail.structure.at(-1)?.purpose || '')].join('\n')
                     void navigator.clipboard?.writeText(list).then(() => onToast('脚本已复制到剪贴板')).catch(() => onToast('复制失败'))

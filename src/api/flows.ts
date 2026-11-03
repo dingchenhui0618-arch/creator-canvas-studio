@@ -1,0 +1,149 @@
+import { request } from './client'
+import type { FlowNodeKind, NodeConfig } from '../canvas/types'
+
+// 与 server/flows.mjs 的字段保持一一对应；服务端会丢弃 status / ms 等运行态字段。
+
+export type ApiFlowNode = {
+  id: string
+  type: FlowNodeKind
+  position: { x: number; y: number }
+  data: { kind: FlowNodeKind; title: string; description: string; config: NodeConfig }
+}
+
+export type ApiFlowEdge = {
+  id: string
+  source: string
+  target: string
+  sourceHandle: string | null
+  targetHandle: string | null
+}
+
+export type ApiFlow = {
+  id: string
+  name: string
+  description: string
+  nodes: ApiFlowNode[]
+  edges: ApiFlowEdge[]
+  runCount: number
+  lastRunId: string | null
+  lastRunAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type FlowPayload = {
+  name?: string
+  description?: string
+  nodes?: ApiFlowNode[]
+  edges?: ApiFlowEdge[]
+}
+
+export type RunNodeResult = {
+  id: string
+  kind: FlowNodeKind
+  title: string
+  status: 'success' | 'error' | 'skipped' | 'unsupported'
+  ms: number
+  output: Record<string, unknown> | null
+  error: string | null
+  message: string | null
+}
+
+export type RunRecord = {
+  id: string
+  flowId: string
+  flowName: string
+  status: 'success' | 'error' | 'running'
+  startedAt: string
+  finishedAt: string | null
+  durationMs: number
+  total: number
+  nodes: RunNodeResult[]
+  output: string
+  error?: string | null
+}
+
+export type RunEventMessage =
+  | { type: 'run-start'; run: { id: string; flowId: string; flowName: string; total: number } }
+  | { type: 'node-start'; nodeId: string; index: number; total: number }
+  | { type: 'node-end'; node: RunNodeResult; index: number; total: number }
+  | { type: 'run-end'; run: RunRecord }
+  | { type: 'run-error'; error: string; code?: string }
+
+export async function listFlows(): Promise<ApiFlow[]> {
+  const body = await request<{ items: ApiFlow[]; total: number }>('/api/flows')
+  return body.items
+}
+
+export async function getFlow(id: string): Promise<ApiFlow> {
+  return request<ApiFlow>('/api/flows/' + id)
+}
+
+export async function createFlow(payload: FlowPayload): Promise<ApiFlow> {
+  return request<ApiFlow>('/api/flows', { method: 'POST', body: JSON.stringify(payload) })
+}
+
+export async function updateFlow(id: string, payload: FlowPayload): Promise<ApiFlow> {
+  return request<ApiFlow>('/api/flows/' + id, { method: 'PATCH', body: JSON.stringify(payload) })
+}
+
+export async function deleteFlow(id: string): Promise<{ ok: boolean }> {
+  return request<{ ok: boolean }>('/api/flows/' + id, { method: 'DELETE' })
+}
+
+/**
+ * 流式运行：POST /api/flows/:id/run { stream: true }，服务端按 NDJSON 逐节点推送。
+ * 这里直接用 fetch 读 body 流，request<T>() 只处理整段 JSON，不适用于流式响应。
+ */
+export async function runFlowStream(
+  id: string,
+  onEvent: (event: RunEventMessage) => void,
+): Promise<RunRecord> {
+  const response = await fetch('/api/flows/' + id + '/run', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ stream: true }),
+  })
+  if (!response.ok) {
+    const text = await response.text()
+    let message = 'HTTP ' + response.status
+    try {
+      const body = JSON.parse(text) as { error?: string }
+      if (body?.error) message = body.error
+    } catch {
+      if (text) message = text.slice(0, 200)
+    }
+    throw new Error(message)
+  }
+  if (!response.body) throw new Error('浏览器不支持流式响应')
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let finalRun: RunRecord | null = null
+
+  const consume = (line: string) => {
+    const trimmed = line.trim()
+    if (!trimmed) return
+    const event = JSON.parse(trimmed) as RunEventMessage
+    if (event.type === 'run-error') throw new Error(event.error || '运行失败')
+    onEvent(event)
+    if (event.type === 'run-end') finalRun = event.run
+  }
+
+  for (;;) {
+    const { value, done } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    let index = buffer.indexOf('\n')
+    while (index >= 0) {
+      consume(buffer.slice(0, index))
+      buffer = buffer.slice(index + 1)
+      index = buffer.indexOf('\n')
+    }
+  }
+  buffer += decoder.decode()
+  if (buffer.trim()) consume(buffer)
+  if (!finalRun) throw new Error('运行流意外中断，没有收到 run-end')
+  return finalRun
+}

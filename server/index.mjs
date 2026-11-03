@@ -6,6 +6,12 @@ import { searchMedia } from './redfox.mjs'
 import { searchFixtures } from './fixtures.mjs'
 import { startReplicate, getJob } from './jobs.mjs'
 import { listTemplates, getTemplate, reuseTemplate, deleteTemplate, templateStats } from './templates.mjs'
+import { createAgentsRouter } from './routes/agents.mjs'
+import { createFlowsRouter } from './routes/flows.mjs'
+import { createReviewRouter } from './routes/review.mjs'
+
+// 功能路由：每个模块自己处理 /api/<prefix> 下的请求，index.mjs 只管分发
+const featureRoutes = [createAgentsRouter(), createFlowsRouter(), createReviewRouter()]
 
 const MIME = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.json': 'application/json' }
 
@@ -65,6 +71,14 @@ const server = http.createServer(async (req, res) => {
   const pathname = decodeURIComponent(url.pathname)
 
   try {
+    for (const route of featureRoutes) {
+      const prefixes = [route.prefix, ...(route.extraPrefixes || [])]
+      if (prefixes.some((prefix) => pathname === prefix || pathname.startsWith(prefix + '/'))) {
+        const handled = await route.handle(req, res, url, pathname)
+        if (handled !== false) return
+      }
+    }
+
     if (pathname === '/api/health') {
       const stats = await templateStats()
       return sendJson(res, 200, { ok: true, redfox: redfoxEnabled(), vision: visionEnabled(), visionModel: config.vision.model, templates: stats.total })

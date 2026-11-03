@@ -3,6 +3,7 @@ import { AlertCircle, ExternalLink, Film, Heart, MessageCircle, Play, RefreshCw,
 import { coverSrc, formatCount, formatDuration, getHealth, searchMedia } from '../api/radar'
 import type { MediaItem } from '../domain/radar'
 import { ReplicateModal } from '../components/ReplicateModal'
+import '../styles/radar.css'
 
 const PLATFORMS = [
   { value: 'all', label: '全部平台' },
@@ -157,8 +158,14 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
         <div className="radar-grid">
           {sorted.map((item, index) => (
             <article className="radar-card" key={item.id}>
-              <div className={`radar-cover radar-cover--tone${index % 4}`}>
-                {item.cover ? <img src={coverSrc(item.cover)} alt="" loading="lazy" /> : <span className="radar-cover-fallback">{item.platformLabel}</span>}
+              <div className="radar-cover">
+                {item.cover ? (
+                  <img src={coverSrc(item.cover)} alt="" loading="lazy" />
+                ) : (
+                  <span className="radar-cover-empty">
+                    <span className="vq-mono">示例数据 · 无封面</span>
+                  </span>
+                )}
                 <span className="radar-badge">{item.platformLabel}</span>
                 <span className="radar-duration"><Film size={11} />{formatDuration(item.durationSec)}</span>
                 <button className="radar-hover" onClick={() => setModalItem(item)} aria-label={`一键复刻 ${item.title}`}>

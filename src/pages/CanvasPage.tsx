@@ -1,22 +1,55 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDownToLine, Check, ChevronDown, Clock3, Copy, FileImage, Film, Grid2X2, Layers3, Link2, Move, Play, Plus, RotateCcw, RotateCw, Search, Sparkles, Trash2, X, Zap } from 'lucide-react'
-import { Background, Controls, MiniMap, ReactFlow, ReactFlowProvider, addEdge, useEdgesState, useNodesState, useReactFlow, type Connection, type Edge, type Node } from '@xyflow/react'
-import type { Artifact, CanvasNodeData, NodeStatus, RunEvent } from '../domain/types'
-import { dshAdapter } from '../runtime/mockAdapter'
-import { assets, initialEdges, initialNodes } from '../data/mock'
-import { nodeTypes } from '../components/nodeTypes'
-import { StatusDot } from '../components/ui'
+import { ChevronDown, CircleAlert, Copy, LayoutGrid, Maximize2, Play, Plus, RotateCcw, RotateCw, Save, Trash } from 'lucide-react'
+import {
+  Background,
+  Controls,
+  MarkerType,
+  MiniMap,
+  ReactFlow,
+  ReactFlowProvider,
+  addEdge,
+  useEdgesState,
+  useNodesState,
+  useReactFlow,
+  type Connection,
+  type Edge,
+  type Node,
+} from '@xyflow/react'
+import {
+  createFlow,
+  deleteFlow,
+  listFlows,
+  runFlowStream,
+  updateFlow,
+  type ApiFlow,
+  type RunNodeResult,
+  type RunRecord,
+} from '../api/flows'
+import { NODE_META } from '../canvas/catalog'
+import { FlowNodeCard } from '../canvas/FlowNode'
+import { Inspector } from '../canvas/Inspector'
+import { Palette } from '../canvas/Palette'
+import { RunDrawer } from '../canvas/RunDrawer'
+import { autoLayout } from '../canvas/layout'
+import { fromFlowEdges, fromFlowNodes, toFlowEdges, toFlowNodes, validateConnection } from '../canvas/serialize'
+import type { FlowNodeData, FlowNodeKind, RunNodeStatus } from '../canvas/types'
+import '../styles/canvas.css'
 
-const accentByTone: Record<string, string> = {
-  terracotta: '#c77d5a',
-  indigo: '#7b88b8',
-  sage: '#7d9b7b',
-  gold: '#d9a952',
-  blue: '#5f6b92',
-  rose: '#c98b8b',
+const nodeTypes = {
+  input: FlowNodeCard,
+  llm: FlowNodeCard,
+  kb: FlowNodeCard,
+  tool: FlowNodeCard,
+  condition: FlowNodeCard,
+  review: FlowNodeCard,
+  output: FlowNodeCard,
 }
 
-type CanvasPageProps = { onToast: (message: string) => void }
+type CanvasPageProps = { onToast?: (message: string) => void }
+
+type Snapshot = { nodes: Node<FlowNodeData>[]; edges: Edge[] }
+
+type SaveState = 'saved' | 'saving' | 'dirty' | 'error'
 
 export default function CanvasPage({ onToast }: CanvasPageProps) {
   return (
@@ -27,368 +60,708 @@ export default function CanvasPage({ onToast }: CanvasPageProps) {
 }
 
 function CanvasWorkspace({ onToast }: CanvasPageProps) {
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node<CanvasNodeData>>(initialNodes)
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
-  const [selectedId, setSelectedId] = useState('agent-layout')
-  const [tab, setTab] = useState<'props' | 'refs'>('props')
-  const [runStatus, setRunStatus] = useState<'idle' | 'running' | 'success'>('idle')
-  const [events, setEvents] = useState<RunEvent[]>([])
-  const [artifacts, setArtifacts] = useState<Artifact[]>([])
-  const [addMenuOpen, setAddMenuOpen] = useState(false)
-  const [railOpen, setRailOpen] = useState(true)
-  const [zoom, setZoom] = useState(1)
-  const [references, setReferences] = useState<Record<string, string[]>>({
-    'agent-layout': ['asset-1', 'asset-2'],
-    'output-board': ['asset-3'],
-  })
-  const [history, setHistory] = useState<{ nodes: Node<CanvasNodeData>[]; edges: Edge[] }[]>([])
-  const [future, setFuture] = useState<{ nodes: Node<CanvasNodeData>[]; edges: Edge[] }[]>([])
   const rf = useReactFlow()
-  const counter = useRef(0)
-  const version = 'v3'
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node<FlowNodeData>>([])
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
+  const [flows, setFlows] = useState<ApiFlow[]>([])
+  const [flowId, setFlowId] = useState('')
+  const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
+  const [selectedId, setSelectedId] = useState('')
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [loadError, setLoadError] = useState('')
+  const [saveState, setSaveState] = useState<SaveState>('saved')
+  const [saveError, setSaveError] = useState('')
+  const [running, setRunning] = useState(false)
+  const [runNodes, setRunNodes] = useState<RunNodeResult[]>([])
+  const [runRecord, setRunRecord] = useState<RunRecord | null>(null)
+  const [runMeta, setRunMeta] = useState<{ id: string; total: number }>({ id: '', total: 0 })
+  const [runError, setRunError] = useState('')
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [zoom, setZoom] = useState(1)
+  const [historyCount, setHistoryCount] = useState(0)
+  const [futureCount, setFutureCount] = useState(0)
 
+  const nodesRef = useRef(nodes)
+  const edgesRef = useRef(edges)
+  const flowIdRef = useRef(flowId)
+  const nameRef = useRef(name)
+  const descriptionRef = useRef(description)
+  const selectedIdRef = useRef(selectedId)
+  const flowsRef = useRef(flows)
+
+  const history = useRef<Snapshot[]>([])
+  const future = useRef<Snapshot[]>([])
+  const lastEdit = useRef<{ key: string; at: number }>({ key: '', at: 0 })
+  const counter = useRef(0)
+  const skipSave = useRef(true)
+  const savedSignature = useRef('')
+  const stageRef = useRef<HTMLDivElement>(null)
+
+  const toast = useCallback((message: string) => onToast?.(message), [onToast])
+
+  const graphSignature = useMemo(
+    () =>
+      JSON.stringify({
+        name,
+        nodes: nodes.map((node) => ({
+          id: node.id,
+          type: node.type,
+          position: { x: Math.round(node.position.x), y: Math.round(node.position.y) },
+          data: {
+            kind: node.data.kind,
+            title: node.data.title,
+            description: node.data.description,
+            config: node.data.config,
+          },
+        })),
+        edges: edges.map((edge) => ({
+          id: edge.id,
+          source: edge.source,
+          target: edge.target,
+          sourceHandle: edge.sourceHandle ?? null,
+          targetHandle: edge.targetHandle ?? null,
+        })),
+      }),
+    [nodes, edges, name],
+  )
+  const signatureRef = useRef(graphSignature)
+
+  // 把最新 state 同步到 ref，供事件处理与自动保存读取；放在 effect 里避免渲染期写 ref
   useEffect(() => {
-    const query = window.matchMedia('(max-width: 1440px)')
-    const sync = () => { if (query.matches) setRailOpen(false) }
-    sync()
-    query.addEventListener('change', sync)
-    return () => query.removeEventListener('change', sync)
+    nodesRef.current = nodes
+    edgesRef.current = edges
+    flowIdRef.current = flowId
+    nameRef.current = name
+    descriptionRef.current = description
+    selectedIdRef.current = selectedId
+    flowsRef.current = flows
+    signatureRef.current = graphSignature
+  }, [nodes, edges, flowId, name, description, selectedId, flows, graphSignature])
+
+  const snapshot = useCallback((): Snapshot => ({
+    nodes: nodesRef.current.map((node) => ({ ...node })),
+    edges: edgesRef.current.map((edge) => ({ ...edge })),
+  }), [])
+
+  const pushHistory = useCallback((key = '') => {
+    const now = Date.now()
+    // 连续输入同一个字段时合并成一步，避免每敲一个字都压栈
+    if (key && lastEdit.current.key === key && now - lastEdit.current.at < 1200) {
+      lastEdit.current.at = now
+      return
+    }
+    lastEdit.current = { key, at: now }
+    history.current = [...history.current.slice(-29), snapshot()]
+    future.current = []
+    setHistoryCount(history.current.length)
+    setFutureCount(0)
+  }, [snapshot])
+
+  const undo = useCallback(() => {
+    const previous = history.current[history.current.length - 1]
+    if (!previous) {
+      toast('没有可撤销的操作')
+      return
+    }
+    future.current = [...future.current, snapshot()]
+    history.current = history.current.slice(0, -1)
+    setNodes(previous.nodes.map((node) => ({ ...node, selected: node.id === selectedIdRef.current })))
+    setEdges(previous.edges)
+    setHistoryCount(history.current.length)
+    setFutureCount(future.current.length)
+  }, [snapshot, setNodes, setEdges, toast])
+
+  const redo = useCallback(() => {
+    const next = future.current[future.current.length - 1]
+    if (!next) {
+      toast('没有可重做的操作')
+      return
+    }
+    history.current = [...history.current, snapshot()]
+    future.current = future.current.slice(0, -1)
+    setNodes(next.nodes.map((node) => ({ ...node, selected: node.id === selectedIdRef.current })))
+    setEdges(next.edges)
+    setHistoryCount(history.current.length)
+    setFutureCount(future.current.length)
+  }, [snapshot, setNodes, setEdges, toast])
+
+  const applyFlow = useCallback((flow: ApiFlow) => {
+    skipSave.current = true
+    setFlowId(flow.id)
+    setName(flow.name)
+    setDescription(flow.description ?? '')
+    const nextNodes = fromFlowNodes(flow.nodes)
+    const first = nextNodes[0]
+    if (first) first.selected = true
+    setNodes(nextNodes)
+    setEdges(fromFlowEdges(flow.edges))
+    setSelectedId(first?.id ?? '')
+    history.current = []
+    future.current = []
+    setHistoryCount(0)
+    setFutureCount(0)
+    setRunRecord(null)
+    setRunNodes([])
+    setRunMeta({ id: '', total: 0 })
+    setRunError('')
+    setSaveState('saved')
+    setSaveError('')
+  }, [setNodes, setEdges])
+
+  const saveNow = useCallback(async (): Promise<boolean> => {
+    const id = flowIdRef.current
+    if (!id) return false
+    const sentSignature = signatureRef.current
+    setSaveState('saving')
+    try {
+      const updated = await updateFlow(id, {
+        name: nameRef.current,
+        description: descriptionRef.current,
+        nodes: toFlowNodes(nodesRef.current),
+        edges: toFlowEdges(edgesRef.current),
+      })
+      setFlows((current) => current.map((flow) => (flow.id === updated.id ? updated : flow)))
+      savedSignature.current = sentSignature
+      if (signatureRef.current === sentSignature) setSaveState('saved')
+      setSaveError('')
+      return true
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setSaveState('error')
+      setSaveError(message)
+      return false
+    }
   }, [])
 
-  const selectedNode = useMemo(() => nodes.find((node) => node.id === selectedId), [nodes, selectedId])
-  const selectedRefs = selectedId ? references[selectedId] ?? [] : []
-  const activeEvents = events.slice(-4)
+  // 初次加载：列出流程；没有流程时创建一个空流程，保证画布可用
+  useEffect(() => {
+    let alive = true
+    const load = async () => {
+      setLoadState('loading')
+      try {
+        let list = await listFlows()
+        if (!alive) return
+        if (!list.length) {
+          const created = await createFlow({ name: '未命名流程', description: '', nodes: [], edges: [] })
+          list = [created]
+        }
+        setFlows(list)
+        applyFlow(list[0])
+        setLoadState('ready')
+        window.setTimeout(() => rf.fitView({ padding: 0.12 }), 80)
+      } catch (error) {
+        if (!alive) return
+        setLoadError(error instanceof Error ? error.message : String(error))
+        setLoadState('error')
+      }
+    }
+    void load()
+    return () => {
+      alive = false
+    }
+  }, [applyFlow, rf])
 
-  const pushHistory = useCallback(() => {
-    setHistory((current) => [...current.slice(-9), { nodes, edges }])
-    setFuture([])
-  }, [nodes, edges])
+  // 自动保存：只比较节点/连线/流程名的投影，选中态变化不会触发保存
+  useEffect(() => {
+    if (loadState !== 'ready') return
+    if (skipSave.current) {
+      skipSave.current = false
+      savedSignature.current = graphSignature
+      setSaveState('saved')
+      return
+    }
+    if (graphSignature === savedSignature.current) return
+    setSaveState('dirty')
+    const timer = window.setTimeout(() => {
+      void saveNow()
+    }, 900)
+    return () => window.clearTimeout(timer)
+  }, [graphSignature, loadState, saveNow])
+
+  const selectedNode = useMemo(() => nodes.find((node) => node.id === selectedId) ?? null, [nodes, selectedId])
+
+  // 选中状态同时写进 node.selected，React Flow 的选中样式才会跟着走
+  const selectNode = useCallback((id: string) => {
+    setSelectedId(id)
+    setNodes((current) => current.map((node) => {
+      const next = node.id === id
+      return (node.selected ?? false) === next ? node : { ...node, selected: next }
+    }))
+  }, [setNodes])
+
+  const addNodeAt = useCallback((kind: FlowNodeKind, position: { x: number; y: number }) => {
+    const meta = NODE_META[kind]
+    pushHistory()
+    counter.current += 1
+    const id = kind + '-' + Date.now().toString(36) + '-' + counter.current
+    const node: Node<FlowNodeData> = {
+      id,
+      type: kind,
+      position,
+      selected: true,
+      data: {
+        kind,
+        title: meta.defaultTitle,
+        description: meta.defaultDescription,
+        config: { ...meta.defaultConfig },
+        status: 'idle',
+      },
+    }
+    setNodes((current) => [...current, node])
+    selectNode(id)
+    toast('已添加' + meta.label + '节点')
+  }, [pushHistory, selectNode, setNodes, toast])
+
+  const addFromPalette = useCallback((kind: FlowNodeKind) => {
+    const rect = stageRef.current?.getBoundingClientRect()
+    const fallback = { x: window.innerWidth / 2, y: window.innerHeight / 2 }
+    const point = rf.screenToFlowPosition({
+      x: rect ? rect.left + rect.width / 2 : fallback.x,
+      y: rect ? rect.top + rect.height / 2 : fallback.y,
+    })
+    const jitter = (counter.current % 5) * 24
+    const base = { x: Math.round(point.x - 120 + jitter), y: Math.round(point.y - 60 + jitter) }
+    const offsets = [[0, 0], [0, 152], [280, 0], [-280, 0], [280, 152], [-280, 152], [0, 304], [0, -152], [280, -152], [-280, -152]]
+    // 找一个不和已有节点重叠的落点，避免点一下面板就盖住现有卡片
+    const free = offsets
+      .map(([dx, dy]) => ({ x: base.x + dx, y: base.y + dy }))
+      .find((spot) => !nodesRef.current.some((node) => Math.abs(node.position.x - spot.x) < 264 && Math.abs(node.position.y - spot.y) < 150))
+    addNodeAt(kind, free ?? base)
+  }, [addNodeAt, rf])
+
+  const onDrop = useCallback((event: React.DragEvent) => {
+    event.preventDefault()
+    const kind = event.dataTransfer.getData('application/x-flow-node') as FlowNodeKind
+    if (!kind || !NODE_META[kind]) return
+    const point = rf.screenToFlowPosition({ x: event.clientX, y: event.clientY })
+    addNodeAt(kind, { x: Math.round(point.x - 116), y: Math.round(point.y - 52) })
+  }, [addNodeAt, rf])
+
+  const onDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+  }, [])
 
   const onConnect = useCallback((connection: Connection) => {
-    pushHistory()
-    setEdges((current) => addEdge({ ...connection, animated: true }, current))
-    onToast('已连接两个节点')
-  }, [pushHistory, setEdges, onToast])
-
-  const applyStatus = (nodeId: string, status: NodeStatus) => {
-    setNodes((current) => current.map((node) => (node.id === nodeId ? { ...node, data: { ...node.data, status } } : node)))
-  }
-
-  const runCanvas = async () => {
-    if (runStatus === 'running') return
-    setRunStatus('running')
-    setEvents([])
-    setArtifacts([])
-    setNodes((current) => current.map((node) => ({ ...node, data: { ...node.data, status: node.data.kind === 'output' ? 'ready' : 'running' } })))
-    try {
-      const result = await dshAdapter.runCanvas(
-        {
-          versionId: `canvas-${version}`,
-          nodes: nodes.map((node) => ({ id: node.id, kind: node.data.kind, title: node.data.title, data: node.data })),
-          edges: edges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target })),
-        },
-        (event) => {
-          setEvents((current) => [...current, event])
-          if (event.nodeId && event.type === 'node-started') applyStatus(event.nodeId, 'running')
-          if (event.nodeId && event.type === 'node-completed') applyStatus(event.nodeId, 'success')
-        },
-      )
-      setArtifacts(result.artifacts)
-      setRunStatus('success')
-      setNodes((current) => current.map((node) => ({ ...node, data: { ...node.data, status: 'success' } })))
-      if (result.artifacts.length) {
-        setReferences((current) => {
-          const outputNode = nodes.find((node) => node.data.kind === 'output')
-          if (!outputNode) return current
-          return { ...current, [outputNode.id]: Array.from(new Set([...(current[outputNode.id] ?? []), 'asset-1'])) }
-        })
-      }
-      onToast(`运行完成，生成 ${result.artifacts.length} 个可引用资产`)
-    } catch {
-      setRunStatus('idle')
-      onToast('运行已取消')
+    const error = validateConnection(edgesRef.current, connection)
+    if (error) {
+      toast(error)
+      return
     }
-  }
+    const source = nodesRef.current.find((node) => node.id === connection.source)
+    const branch = source?.data.kind === 'condition'
+      ? connection.sourceHandle === 'false' ? 'false' : 'true'
+      : undefined
+    pushHistory()
+    setEdges((current) => addEdge({
+      ...connection,
+      id: 'e-' + connection.source + '-' + connection.target + '-' + Date.now().toString(36),
+      label: branch,
+      className: branch ? 'cv-edge cv-edge--branch' : 'cv-edge',
+    }, current))
+    toast(branch ? '已连接（' + branch + ' 分支）' : '已连接两个节点')
+  }, [pushHistory, setEdges, toast])
 
-  const addNode = (kind: CanvasNodeData['kind']) => {
+  const deleteSelected = useCallback(() => {
+    const id = selectedIdRef.current
+    if (!id) {
+      toast('先选中一个节点')
+      return
+    }
+    pushHistory()
+    setNodes((current) => current.filter((node) => node.id !== id))
+    setEdges((current) => current.filter((edge) => edge.source !== id && edge.target !== id))
+    selectNode('')
+    toast('已删除节点及其连线')
+  }, [pushHistory, selectNode, setNodes, setEdges, toast])
+
+  const duplicateSelected = useCallback(() => {
+    const node = nodesRef.current.find((item) => item.id === selectedIdRef.current)
+    if (!node) return
     pushHistory()
     counter.current += 1
-    const id = `node-${Date.now()}-${counter.current}`
-    const center = rf.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 })
-    const preset: Record<string, CanvasNodeData> = {
-      asset: { kind: 'asset', label: '参考资产', title: '新的参考资产', description: '等待选择文件或从资产库拖入', status: 'ready', meta: '未关联文件', icon: 'image', accent: '#c77d5a' },
-      agent: { kind: 'agent', label: '创作智能体', title: '商品视觉编辑', description: '整理输入资产，输出详情页视觉方向', status: 'ready', meta: 'DSH Adapter · Mock', icon: 'bot', accent: '#6b62d9' },
-      output: { kind: 'output', label: '生成资产', title: '新的生成资产', description: '运行后生成可视化结果', status: 'ready', meta: 'PNG · 1:1', icon: 'image', accent: '#d9a952' },
-    }
-    setNodes((current) => [...current, { id, type: kind, position: { x: center.x - 110, y: center.y - 60 }, data: preset[kind] }])
-    setSelectedId(id)
-    setAddMenuOpen(false)
-    onToast(`已添加${preset[kind].label}节点`)
-  }
-
-  const onDrop = (event: React.DragEvent) => {
-    event.preventDefault()
-    const assetId = event.dataTransfer.getData('application/x-asset')
-    const asset = assets.find((item) => item.id === assetId)
-    if (!asset) return
-    pushHistory()
-    counter.current += 1
-    const point = rf.screenToFlowPosition({ x: event.clientX, y: event.clientY })
-    const id = `asset-${Date.now()}-${counter.current}`
+    const id = node.data.kind + '-' + Date.now().toString(36) + '-' + counter.current
     setNodes((current) => [...current, {
+      ...node,
       id,
-      type: 'asset',
-      position: { x: point.x - 110, y: point.y - 40 },
-      data: { kind: 'asset', label: asset.tag, title: asset.name, description: asset.detail, status: 'ready', meta: `来自资产库 · ${asset.type}`, icon: asset.type === '文本' ? 'text' : 'image', accent: accentByTone[asset.tone] ?? '#c77d5a' },
+      selected: true,
+      position: { x: node.position.x + 32, y: node.position.y + 32 },
+      data: { ...node.data, title: node.data.title + ' 副本', status: 'idle', ms: undefined, output: undefined, error: undefined },
     }])
-    setReferences((current) => ({ ...current, [id]: [asset.id] }))
-    setSelectedId(id)
-    onToast(`已把「${asset.name}」拖入画布`)
-  }
+    selectNode(id)
+    toast('已复制节点')
+  }, [pushHistory, selectNode, setNodes, toast])
 
-  const deleteSelected = () => {
-    if (!selectedNode) return
+  const patchSelected = useCallback((patch: Partial<FlowNodeData>, key: string) => {
+    const id = selectedIdRef.current
+    if (!id) return
+    pushHistory('node:' + id + ':' + key)
+    setNodes((current) => current.map((node) => (node.id === id ? { ...node, data: { ...node.data, ...patch } } : node)))
+  }, [pushHistory, setNodes])
+
+  const patchConfig = useCallback((patch: FlowNodeData['config'], key: string) => {
+    const id = selectedIdRef.current
+    if (!id) return
+    pushHistory('cfg:' + id + ':' + key)
+    setNodes((current) => current.map((node) => (
+      node.id === id ? { ...node, data: { ...node.data, config: { ...node.data.config, ...patch } } } : node
+    )))
+  }, [pushHistory, setNodes])
+
+  const relayout = useCallback(() => {
     pushHistory()
-    setNodes((current) => current.filter((node) => node.id !== selectedId))
-    setReferences((current) => { const next = { ...current }; delete next[selectedId]; return next })
-    setEdges((current) => current.filter((edge) => edge.source !== selectedId && edge.target !== selectedId))
-    setSelectedId('')
-    onToast('已删除节点及其连接')
-  }
+    setNodes((current) => autoLayout(current, edgesRef.current))
+    window.setTimeout(() => rf.fitView({ padding: 0.12, duration: 200 }), 60)
+    toast('已按依赖层级重新布局')
+  }, [pushHistory, setNodes, rf, toast])
 
-  const duplicateSelected = () => {
-    if (!selectedNode) return
-    pushHistory()
-    counter.current += 1
-    const id = `copy-${Date.now()}-${counter.current}`
-    setNodes((current) => [...current, { ...selectedNode, id, selected: false, position: { x: selectedNode.position.x + 36, y: selectedNode.position.y + 36 }, data: { ...selectedNode.data, title: `${selectedNode.data.title} 副本` } }])
-    const sourceRefs = references[selectedNode.id] ?? []
-    if (sourceRefs.length) setReferences((current) => ({ ...current, [id]: [...sourceRefs] }))
-    setSelectedId(id)
-    onToast('已复制节点')
-  }
+  const focusNode = useCallback((id: string) => {
+    selectNode(id)
+    const node = nodesRef.current.find((item) => item.id === id)
+    if (node) rf.setCenter(node.position.x + 116, node.position.y + 70, { zoom: Math.max(zoom, 0.75), duration: 280 })
+  }, [rf, selectNode, zoom])
 
-  const undo = () => {
-    const previous = history[history.length - 1]
-    if (!previous) return onToast('没有可撤销的操作')
-    setFuture((current) => [...current, { nodes, edges }])
-    setNodes(previous.nodes)
-    setEdges(previous.edges)
-    setHistory((current) => current.slice(0, -1))
-  }
+  const switchFlow = useCallback(async (nextId: string) => {
+    if (nextId === flowIdRef.current) return
+    if (running) {
+      toast('运行中不能切换流程')
+      return
+    }
+    await saveNow()
+    const target = flowsRef.current.find((flow) => flow.id === nextId)
+    if (!target) return
+    applyFlow(target)
+    window.setTimeout(() => rf.fitView({ padding: 0.12 }), 80)
+  }, [applyFlow, running, saveNow, rf, toast])
 
-  const redo = () => {
-    const next = future[future.length - 1]
-    if (!next) return onToast('没有可重做的操作')
-    setHistory((current) => [...current, { nodes, edges }])
-    setNodes(next.nodes)
-    setEdges(next.edges)
-    setFuture((current) => current.slice(0, -1))
-  }
+  const createNewFlow = useCallback(async () => {
+    if (running) return
+    await saveNow()
+    try {
+      const created = await createFlow({ name: '未命名流程', description: '', nodes: [], edges: [] })
+      setFlows((current) => [created, ...current])
+      applyFlow(created)
+      toast('已新建流程')
+    } catch (error) {
+      toast('新建失败：' + (error instanceof Error ? error.message : String(error)))
+    }
+  }, [applyFlow, running, saveNow, toast])
 
-  const addReference = () => {
-    if (!selectedId) return onToast('先选择一个节点')
-    const pool = assets.filter((asset) => !selectedRefs.includes(asset.id))
-    if (!pool.length) return onToast('所有资产都已引用')
-    const next = pool[0]
-    setReferences((current) => ({ ...current, [selectedId]: [...(current[selectedId] ?? []), next.id] }))
-    onToast(`已引用「${next.name}」`)
-  }
+  const saveAsTemplate = useCallback(async () => {
+    if (running) return
+    await saveNow()
+    try {
+      const copy = await createFlow({
+        name: nameRef.current + ' · 模板',
+        description: descriptionRef.current,
+        nodes: toFlowNodes(nodesRef.current),
+        edges: toFlowEdges(edgesRef.current),
+      })
+      setFlows((current) => [copy, ...current])
+      toast('已另存为模板流程：' + copy.name)
+    } catch (error) {
+      toast('另存失败：' + (error instanceof Error ? error.message : String(error)))
+    }
+  }, [running, saveNow, toast])
 
-  const removeReference = (assetId: string) => {
-    setReferences((current) => ({ ...current, [selectedId]: (current[selectedId] ?? []).filter((id) => id !== assetId) }))
-  }
+  const removeFlow = useCallback(async () => {
+    const id = flowIdRef.current
+    if (!id || running) return
+    if (!window.confirm('删除整个流程？节点和连线会一起删除，已产生的运行记录保留。')) return
+    try {
+      const result = await deleteFlow(id)
+      if (!result.ok) {
+        toast('删除失败：流程不存在')
+        return
+      }
+      const rest = flowsRef.current.filter((flow) => flow.id !== id)
+      if (!rest.length) {
+        const created = await createFlow({ name: '未命名流程', description: '', nodes: [], edges: [] })
+        setFlows([created])
+        applyFlow(created)
+      } else {
+        setFlows(rest)
+        applyFlow(rest[0])
+      }
+      toast('流程已删除')
+    } catch (error) {
+      toast('删除失败：' + (error instanceof Error ? error.message : String(error)))
+    }
+  }, [applyFlow, running, toast])
+
+  const handleRun = useCallback(async () => {
+    if (running) return
+    if (!nodesRef.current.length) {
+      toast('画布还没有节点，先从左侧拖入一个')
+      return
+    }
+    const saved = await saveNow()
+    if (!saved) {
+      toast('保存失败，未发起运行：' + saveError)
+      return
+    }
+    setRunning(true)
+    setDrawerOpen(true)
+    setRunNodes([])
+    setRunRecord(null)
+    setRunMeta({ id: '', total: 0 })
+    setRunError('')
+    setNodes((current) => current.map((node) => ({
+      ...node,
+      data: { ...node.data, status: 'pending', ms: undefined, output: undefined, error: undefined },
+    })))
+
+    try {
+      const record = await runFlowStream(flowIdRef.current, (event) => {
+        if (event.type === 'run-start') {
+          setRunMeta({ id: event.run.id, total: event.run.total })
+          return
+        }
+        if (event.type === 'node-start') {
+          setNodes((current) => current.map((node) => (
+            node.id === event.nodeId ? { ...node, data: { ...node.data, status: 'running' } } : node
+          )))
+          return
+        }
+        if (event.type === 'node-end') {
+          const node = event.node
+          const status: RunNodeStatus = node.status === 'success' ? 'done' : node.status
+          setRunNodes((current) => [...current, node])
+          setNodes((current) => current.map((item) => (
+            item.id === node.id
+              ? {
+                  ...item,
+                  data: {
+                    ...item.data,
+                    status,
+                    ms: node.ms,
+                    error: node.error ?? undefined,
+                    output: typeof node.output?.text === 'string' ? node.output.text : '',
+                  },
+                }
+              : item
+          )))
+        }
+      })
+      setRunRecord(record)
+      toast(record.status === 'success'
+        ? '运行完成 · ' + (record.durationMs / 1000).toFixed(1) + 's'
+        : '运行结束，有节点失败 · ' + (record.durationMs / 1000).toFixed(1) + 's')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setRunError(message)
+      setNodes((current) => current.map((node) => (
+        node.data.status === 'running' || node.data.status === 'pending'
+          ? { ...node, data: { ...node.data, status: 'error', error: message } }
+          : node
+      )))
+      toast('运行失败：' + message)
+    } finally {
+      setRunning(false)
+    }
+  }, [running, saveError, saveNow, setNodes, toast])
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+      const typing = Boolean(target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable))
+      const modifier = event.ctrlKey || event.metaKey
+      const key = event.key.toLowerCase()
+      if (modifier && key === 'z' && !typing) {
+        event.preventDefault()
+        if (event.shiftKey) redo()
+        else undo()
+        return
+      }
+      if (modifier && key === 'y' && !typing) {
+        event.preventDefault()
+        redo()
+        return
+      }
+      if (modifier && key === 's') {
+        event.preventDefault()
+        void saveNow().then((ok) => toast(ok ? '已保存' : '保存失败：' + saveError))
+        return
+      }
+      if (!typing && selectedIdRef.current && (event.key === 'Delete' || event.key === 'Backspace')) {
+        event.preventDefault()
+        deleteSelected()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [deleteSelected, redo, saveError, saveNow, toast, undo])
+
+  const saveLabel = saveState === 'saving'
+    ? '保存中…'
+    : saveState === 'dirty'
+      ? '有未保存修改'
+      : saveState === 'error'
+        ? '保存失败'
+        : '已保存'
 
   return (
-    <div className="page page--canvas">
-      <div className="page-heading page-heading--canvas">
-        <div>
-          <div className="eyebrow"><span className="eyebrow-dot" />项目 / 内容创作</div>
-          <h1>春日上新 · 视觉资产画布</h1>
-          <p>把参考素材整理成可以继续创作、复用和引用的视觉资产。</p>
+    <div className="page cv-page">
+      <div className="cv-head">
+        <div className="cv-head-main">
+          <div className="cv-eyebrow">画布 / 流程编排</div>
+          <div className="cv-title-row">
+            <input
+              className="cv-flow-name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              aria-label="流程名称"
+              spellCheck={false}
+              disabled={loadState !== 'ready'}
+            />
+            <span className={`cv-save is-${saveState}`} title={saveError || saveLabel}>
+              <span className="cv-save-dot" />{saveLabel}
+            </span>
+          </div>
+          <p className="cv-sub">服务端按拓扑序执行 · 模型调用走本地端点 · 运行记录写入 data/runs.json</p>
         </div>
-        <div className="heading-actions">
-          <span className="save-state"><span className="save-dot" />{version} · 已保存</span>
-          <button className="button button--ghost"><ArrowDownToLine size={16} />导出</button>
-          <button className="button button--primary" onClick={runCanvas} disabled={runStatus === 'running'}>
-            <Play size={15} fill="currentColor" />{runStatus === 'running' ? '运行中…' : '运行画布'}
+        <div className="cv-head-actions">
+          <label className="cv-flow-select">
+            <span className="cv-sr-only">切换流程</span>
+            <select
+              value={flowId}
+              onChange={(event) => { void switchFlow(event.target.value) }}
+              disabled={running || loadState !== 'ready'}
+            >
+              {flows.map((flow) => <option key={flow.id} value={flow.id}>{flow.name}</option>)}
+            </select>
+            <ChevronDown size={14} />
+          </label>
+          <button className="cv-btn" type="button" onClick={() => { void createNewFlow() }} disabled={running} title="新建流程">
+            <Plus size={14} />新建
+          </button>
+          <button className="cv-btn" type="button" onClick={() => { void saveAsTemplate() }} disabled={running} title="把当前画布另存为一个新流程">
+            <Copy size={14} />另存为模板
+          </button>
+          <button className="cv-btn" type="button" onClick={() => { void saveNow().then((ok) => toast(ok ? '已保存到 data/flows.json' : '保存失败：' + saveError)) }} disabled={running || saveState === 'saving'} title="Ctrl+S">
+            <Save size={14} />保存
+          </button>
+          <button className="cv-btn cv-btn--primary" type="button" onClick={() => { void handleRun() }} disabled={running || loadState !== 'ready'}>
+            <Play size={14} fill="currentColor" />{running ? '运行中…' : '运行流程'}
+          </button>
+          <button className="cv-icon-btn" type="button" onClick={() => { void removeFlow() }} disabled={running || loadState !== 'ready'} aria-label="删除流程" title="删除流程">
+            <Trash size={14} />
           </button>
         </div>
       </div>
 
-      <div className={`canvas-workspace ${railOpen ? '' : 'no-rail'}`}>
-        <aside className="asset-rail" aria-label="资产库">
-          <div className="asset-rail-head">
-            <div>
-              <span className="panel-kicker">可引用资产</span>
-              <strong>{assets.length} 个</strong>
-            </div>
-            <button className="tool-icon" onClick={() => setRailOpen(false)} aria-label="收起资产栏"><X size={14} /></button>
+      {loadState === 'error' ? (
+        <div className="cv-state">
+          <CircleAlert size={18} strokeWidth={1.5} />
+          <div>
+            <strong>画布加载失败</strong>
+            <p>{loadError}</p>
+            <p className="cv-muted">确认 API 服务（127.0.0.1:8787）已启动，然后重新加载页面。</p>
           </div>
-          <label className="rail-search"><Search size={13} /><input placeholder="筛选资产" /></label>
-          <div className="asset-rail-list">
-            {assets.map((asset) => (
-              <div
-                key={asset.id}
-                className={`rail-item ${selectedRefs.includes(asset.id) ? 'is-referenced' : ''}`}
-                draggable
-                onDragStart={(event) => event.dataTransfer.setData('application/x-asset', asset.id)}
-                onDoubleClick={() => setSelectedId(selectedNode?.id ?? '')}
+          <button className="cv-btn" type="button" onClick={() => window.location.reload()}>重新加载</button>
+        </div>
+      ) : (
+        <div className="cv-workspace">
+          <Palette onAdd={addFromPalette} disabled={loadState !== 'ready'} />
+
+          <section className="cv-stage" aria-label="流程画布">
+            <div className="cv-toolbar">
+              <div className="cv-toolbar-group">
+                <button className="cv-tool" type="button" onClick={relayout} disabled={!nodes.length}>
+                  <LayoutGrid size={14} />自动布局
+                </button>
+                <span className="cv-divider" />
+                <button className="cv-tool" type="button" onClick={undo} disabled={!historyCount} title="Ctrl+Z">
+                  <RotateCcw size={14} />撤销
+                </button>
+                <button className="cv-tool" type="button" onClick={redo} disabled={!futureCount} title="Ctrl+Shift+Z / Ctrl+Y">
+                  <RotateCw size={14} />重做
+                </button>
+                <span className="cv-divider" />
+                <span className="cv-toolbar-count" title={historyCount ? '已记录 ' + historyCount + ' 步可撤销操作' : ''}>
+                  {nodes.length} 节点 · {edges.length} 连线
+                </span>
+              </div>
+              <div className="cv-toolbar-group">
+                <button className="cv-tool" type="button" onClick={() => rf.fitView({ padding: 0.12, duration: 200 })}>
+                  <Maximize2 size={14} />适应画布
+                </button>
+                <span className="cv-zoom">{Math.round(zoom * 100)}%</span>
+              </div>
+            </div>
+
+            <div className="cv-canvas" ref={stageRef} onDrop={onDrop} onDragOver={onDragOver}>
+              <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                nodeTypes={nodeTypes}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
+                onConnect={onConnect}
+                onNodeClick={(_, node) => selectNode(node.id)}
+                onNodeDragStart={() => pushHistory()}
+                onPaneClick={() => selectNode('')}
+                onMoveEnd={(_, viewport) => setZoom(viewport.zoom)}
+                deleteKeyCode={null}
+                fitView
+                fitViewOptions={{ padding: 0.12 }}
+                minZoom={0.25}
+                maxZoom={1.8}
+                proOptions={{ hideAttribution: true }}
+                defaultEdgeOptions={{
+                  className: 'cv-edge',
+                  style: { stroke: 'rgba(17,17,17,.34)', strokeWidth: 1 },
+                  markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: 'rgba(17,17,17,.5)' },
+                }}
+                connectionLineStyle={{ stroke: 'rgba(17,17,17,.55)', strokeWidth: 1 }}
               >
-                <div className={`rail-thumb rail-thumb--${asset.tone}`}>{asset.type === '文本' ? 'Aa' : <FileImage size={14} />}</div>
-                <div className="rail-copy">
-                  <strong>{asset.name}</strong>
-                  <span>{asset.type} · {asset.detail.split(' · ')[0]}</span>
-                </div>
-                {selectedRefs.includes(asset.id) ? <Check size={13} className="rail-check" /> : <button className="rail-add" onClick={addReference} aria-label={`引用 ${asset.name}`}><Plus size={13} /></button>}
-              </div>
-            ))}
-          </div>
-          <div className="asset-rail-foot"><Move size={12} />拖到画布即可引用</div>
-        </aside>
+                <Background color="rgba(17,17,17,.12)" gap={22} size={1} />
+                <Controls showInteractive={false} />
+                <MiniMap
+                  pannable
+                  zoomable={false}
+                  nodeColor={(node) => (node.id === selectedId ? '#111111' : '#d5d5d5')}
+                  maskColor="rgba(244,244,244,.78)"
+                />
+              </ReactFlow>
 
-        <section className="canvas-stage" aria-label="资产画布编辑器">
-          <div className="canvas-toolbar">
-            <div className="tool-group">
-              <button className="tool-button is-active"><Move size={15} />选择</button>
-              <button className="tool-button" onClick={() => onToast('拖动节点右侧圆点到另一个节点即可连接')}><Link2 size={15} />连接</button>
-              <button className="tool-button" onClick={() => setRailOpen((value) => !value)}><Layers3 size={15} />资产库</button>
-              <div className="add-node">
-                <button className="tool-button" onClick={() => setAddMenuOpen((value) => !value)}><Plus size={15} />添加节点</button>
-                {addMenuOpen && (
-                  <div className="add-node-menu">
-                    <button onClick={() => addNode('asset')}><FileImage size={14} />参考资产</button>
-                    <button onClick={() => addNode('agent')}><Sparkles size={14} />智能体</button>
-                    <button onClick={() => addNode('output')}><Film size={14} />生成资产</button>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="tool-group">
-              <button className="tool-icon" onClick={undo} aria-label="撤销"><RotateCcw size={15} /></button>
-              <button className="tool-icon" onClick={redo} aria-label="重做"><RotateCw size={15} /></button>
-              <span className="tool-divider" />
-              <button className="zoom-label" onClick={() => rf.fitView({ padding: 0.2 })}>{Math.round(zoom * 100)}%</button>
-              <button className="tool-icon" onClick={() => rf.fitView({ padding: 0.2 })} aria-label="适应画布"><Grid2X2 size={15} /></button>
-            </div>
-          </div>
-          <div className="canvas-viewport" onDrop={onDrop} onDragOver={(event) => event.preventDefault()}>
-            <ReactFlow
-              nodes={nodes}
-              edges={edges}
-              nodeTypes={nodeTypes}
-              onNodesChange={onNodesChange}
-              onEdgesChange={onEdgesChange}
-              onConnect={onConnect}
-              onNodeClick={(_, node) => { setSelectedId(node.id); setTab('props') }}
-              onPaneClick={() => setSelectedId('')}
-              onMoveEnd={(_, viewport) => setZoom(viewport.zoom)}
-              fitView
-              fitViewOptions={{ padding: 0.2 }}
-              proOptions={{ hideAttribution: true }}
-              defaultEdgeOptions={{ style: { stroke: '#7c70d8', strokeWidth: 1.8 }, animated: true }}
-            >
-              <Background color="#ddd9d0" gap={24} size={1} />
-              <Controls showInteractive={false} />
-              <MiniMap pannable zoomable nodeColor={(node) => (node.id === selectedId ? '#7c70d8' : '#d6d1c7')} />
-            </ReactFlow>
-            <div className="canvas-note"><span className="live-pulse" />从左侧拖入资产，或点击节点查看引用</div>
-          </div>
-          {runStatus !== 'idle' && (
-            <div className="run-dock">
-              <div className="run-dock-head">
-                <div>
-                  <span className="run-kicker">最近一次运行 · 绑定 {version}</span>
-                  <strong>{runStatus === 'running' ? '正在整理输入资产…' : `运行完成 · ${artifacts.length} 个 Artifact`}</strong>
+              {loadState === 'loading' && <div className="cv-overlay">正在读取 data/flows.json…</div>}
+              {loadState === 'ready' && !nodes.length && (
+                <div className="cv-overlay cv-overlay--empty">
+                  <strong>画布还没有节点</strong>
+                  <p>从左侧面板拖入输入、大模型或评审节点，再用右侧的圆点连线。</p>
                 </div>
-                <span className={`run-status run-status--${runStatus}`}>{runStatus === 'running' ? 'RUNNING' : 'SUCCEEDED'}</span>
-              </div>
-              <div className="run-progress"><span style={{ width: `${events[events.length - 1]?.progress ?? 0}%` }} /></div>
-              <div className="run-events">
-                {activeEvents.map((event) => (
-                  <div className={`run-event run-event--${event.type}`} key={event.id}>
-                    <span className="run-event-icon"><StatusDot status={event.type === 'completed' ? 'success' : event.type === 'node-completed' ? 'success' : 'running'} /></span>
-                    <div><strong>{event.label}</strong>{event.detail && <span>{event.detail}</span>}</div>
-                  </div>
-                ))}
-              </div>
-              <div className="run-dock-foot">
-                <span><Clock3 size={13} />{runStatus === 'running' ? '进行中' : '00:00:03'}</span>
-                <span><Zap size={13} />DSH Adapter · Mock</span>
-                <button>查看运行详情 <span aria-hidden>→</span></button>
+              )}
+              <div className="cv-hint">
+                <span className="cv-hint-dot" data-running={running} />
+                {running ? '运行中：节点会按拓扑序逐个点亮' : '拖动节点右侧圆点连线；每个输入端口只接一根线'}
               </div>
             </div>
-          )}
-        </section>
+          </section>
 
-        <aside className="inspector-panel">
-          <div className="inspector-head">
-            <div>
-              <span className="panel-kicker">节点检查器</span>
-              <h2>{selectedNode?.data?.title ?? '选择一个节点'}</h2>
-            </div>
-            <button className="icon-button" aria-label="更多"><ChevronDown size={17} /></button>
-          </div>
-          <div className="inspector-tabs">
-            <button className={tab === 'props' ? 'is-active' : ''} onClick={() => setTab('props')}>属性</button>
-            <button className={tab === 'refs' ? 'is-active' : ''} onClick={() => setTab('refs')}>引用资产 <span>{selectedRefs.length}</span></button>
-          </div>
-          <div className="inspector-body">
-          {!selectedNode ? (
-            <div className="inspector-empty"><FileImage size={24} /><p>点击画布节点查看资产、参数和引用关系。</p></div>
-          ) : tab === 'props' ? (
-            <>
-              <div className="inspector-section">
-                <div className="field-label">节点类型</div>
-                <div className="type-pill">
-                  <span className="type-pill-icon">{selectedNode.data.icon === 'bot' ? <Sparkles size={13} /> : <FileImage size={13} />}</span>
-                  <div><strong>{selectedNode.data.label}</strong><span>{selectedNode.data.kind === 'agent' ? '负责整理输入并生成下一步建议' : '可被智能体引用的项目资产'}</span></div>
-                  <StatusDot status={selectedNode.data.status} />
-                </div>
-              </div>
-              <div className="inspector-section">
-                <div className="field-label">节点参数</div>
-                <div className="param-row"><span>描述</span><strong>{selectedNode.data.description}</strong></div>
-                <div className="param-row"><span>来源</span><strong>{selectedNode.data.meta ?? '—'}</strong></div>
-                <div className="param-row"><span>状态</span><strong>{selectedNode.data.status === 'running' ? '执行中' : selectedNode.data.status === 'success' ? '已完成' : '待运行'}</strong></div>
-              </div>
-              <div className="inspector-section">
-                <div className="field-label">执行设置</div>
-                <div className="setting-row"><span>保存生成结果</span><button className="switch is-on"><span /></button></div>
-                <div className="setting-row"><span>需要人工确认</span><button className="switch"><span /></button></div>
-              </div>
-              <div className="inspector-section inspector-section--quiet">
-                <div className="field-label">适配器</div>
-                <div className="adapter-row"><span className="adapter-mark">D</span><div><strong>DSH Adapter</strong><span>当前为演示连接</span></div><span className="connection-state">已连接</span></div>
-              </div>
-            </>
-          ) : (
-            <div className="inspector-section inspector-section--grow">
-              <div className="field-label">该节点引用的资产</div>
-              <div className="reference-list">
-                {selectedRefs.length === 0 && <p className="empty-hint">还没有引用资产。从左侧拖入，或点击下方按钮添加。</p>}
-                {selectedRefs.map((assetId) => {
-                  const asset = assets.find((item) => item.id === assetId)
-                  if (!asset) return null
-                  return (
-                    <div className="reference-row" key={assetId}>
-                      <div className={`mini-thumb mini-thumb--${asset.tone}`}>{asset.type === '文本' ? 'Aa' : <FileImage size={12} />}</div>
-                      <div><strong>{asset.name}</strong><span>{asset.type} · 当前版本</span></div>
-                      <button className="reference-remove" onClick={() => removeReference(assetId)} aria-label={`移除 ${asset.name}`}><X size={13} /></button>
-                    </div>
-                  )
-                })}
-              </div>
-              <button className="reference-button" onClick={addReference}><Plus size={15} />添加资产引用</button>
-            </div>
-          )}
-          </div>
-          <div className="inspector-footer">
-            <button className="button button--ghost" onClick={duplicateSelected}><Copy size={14} />复制节点</button>
-            <button className="button button--danger" onClick={deleteSelected}><Trash2 size={14} />删除</button>
-          </div>
-        </aside>
-      </div>
+          <Inspector
+            node={selectedNode}
+            onPatch={patchSelected}
+            onConfig={patchConfig}
+            onDuplicate={duplicateSelected}
+            onDelete={deleteSelected}
+          />
+        </div>
+      )}
+
+      <RunDrawer
+        open={drawerOpen}
+        running={running}
+        flowName={name}
+        runId={runMeta.id}
+        total={runMeta.total}
+        nodes={runNodes}
+        record={runRecord}
+        error={runError}
+        onClose={() => setDrawerOpen(false)}
+        onSelectNode={focusNode}
+      />
     </div>
   )
 }

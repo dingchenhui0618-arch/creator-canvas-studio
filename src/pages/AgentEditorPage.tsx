@@ -1,61 +1,9 @@
-import { useMemo, useState } from 'react'
-import { ArrowLeft, ArrowUpRight, Check, ChevronDown, CircleAlert, Layers3, Plus, Send, Sparkles, Tag, Trash2, Workflow, X } from 'lucide-react'
-import type { AgentDefinition, AgentIOField, AgentTestEvent, Page, SkillDefinition, ToolDefinition } from '../domain/types'
-import { dshAdapter } from '../runtime/mockAdapter'
-
-const skillCatalog: SkillDefinition[] = [
-  { id: 'ecom-visual', name: '电商平台图片基础', category: '图片', description: '按平台规范产出主图、场景图与细节图。', output: '图片 · 1:1 / 3:4' },
-  { id: 'layout-edit', name: '排版图片精修', category: '画布', description: '把生成结果整理成可引用的版式画布。', output: '画布 · 节点引用' },
-  { id: 'beauty', name: '自然美颜精修', category: '图片', description: '轻量修复人像与产品质感，保留材质细节。', output: '图片 · 原尺寸' },
-  { id: 'character', name: '角色设定', category: '文本', description: '统一角色外观、语气与出场方式。', output: '文本 · 结构化设定' },
-  { id: 'motion', name: '图片动效', category: '视频', description: '把一张静帧扩写为 3 秒动效。', output: '视频 · 9:16' },
-  { id: 'storyboard', name: '短剧策划', category: '文本', description: '拆分镜、台词和节奏。', output: '文本 · 分镜表' },
-]
-
-const toolCatalog: ToolDefinition[] = [
-  { id: 'assets-read', name: '读取资产库', description: '只读工作区已整理的资产与引用。', adapter: 'DSH Adapter', scope: '只读', state: 'ready' },
-  { id: 'canvas-write', name: '写入画布节点', description: '把结果写回画布并建立引用关系。', adapter: 'DSH Adapter', scope: '读写', state: 'ready' },
-  { id: 'image-gen', name: '图片生成', description: '调用图像通道生成或编辑图片。', adapter: 'Image Channel', scope: '读写', state: 'planned' },
-  { id: 'export-json', name: '导出结构化 JSON', description: '把运行结果导出为可复用配置。', adapter: 'Built-in', scope: '读写', state: 'ready' },
-  { id: 'web-read', name: '网页读取', description: '读取公开页面作为创作参考。', adapter: 'Browser', scope: '只读', state: 'planned' },
-]
-
-let idSeq = 0
-const nextId = (prefix: string) => `${prefix}-${(idSeq += 1)}`
-
-const defaultAgent: AgentDefinition = {
-  id: 'agent-visual',
-  name: '商品视觉编辑',
-  role: '把产品素材整理成详情页视觉方向',
-  description: '面向电商运营的视觉编辑智能体：读取商品主图与品牌语气，输出可直接放进画布的首屏构图与延展建议。',
-  systemPrompt: '你是一位电商视觉编辑。先阅读引用的商品主图与品牌语气，总结 3 个可执行的视觉方向，再选出最适合春季上新的一条，输出首屏构图说明。\n\n约束：\n- 只使用引用资产中出现的产品信息；\n- 画面描述包含主体、光线、背景与文案位置；\n- 未知信息标记为「待确认」，不要编造卖点。',
-  model: 'DSH Adapter · mock',
-  temperature: 0.4,
-  skills: ['ecom-visual', 'layout-edit'],
-  tools: ['assets-read', 'canvas-write', 'export-json'],
-  inputs: [
-    { id: 'in-1', name: '产品主图', type: 'image', required: true },
-    { id: 'in-2', name: '品牌语气', type: 'text', required: true },
-  ],
-  outputs: [
-    { id: 'out-1', name: '首屏构图', type: 'image', required: true },
-    { id: 'out-2', name: '视觉方向说明', type: 'text', required: false },
-  ],
-  status: 'draft',
-  version: 'v0.3',
-  updatedAt: '刚刚',
-  tone: 'violet',
-}
-
-type StepId = 'identity' | 'prompt' | 'skills' | 'tools' | 'io'
-
-const steps: { id: StepId; title: string; hint: string }[] = [
-  { id: 'identity', title: '基本信息', hint: '名称、角色与语气' },
-  { id: 'prompt', title: '系统提示词', hint: '行为边界与输出约束' },
-  { id: 'skills', title: '技能', hint: '可复用的场景步骤' },
-  { id: 'tools', title: '工具', hint: '适配器暴露的能力' },
-  { id: 'io', title: '输入输出', hint: '运行契约' },
-]
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { AlertCircle, ArrowLeft, BookOpen, Check, ChevronDown, MessageSquareText, Trash2, Wrench } from 'lucide-react'
+import { AGENT_CATEGORIES, createAgent, deleteAgent, listAgents, setPendingSelectAgent, updateAgent } from '../api/agents'
+import type { AgentCategory, AgentInput, AgentRecord, AgentsList } from '../api/agents'
+import type { Page } from '../domain/types'
+import '../styles/agents.css'
 
 type AgentEditorPageProps = {
   onBack: () => void
@@ -64,301 +12,452 @@ type AgentEditorPageProps = {
   agent?: { name: string; description: string }
 }
 
+type AgentForm = {
+  name: string
+  category: AgentCategory
+  role: string
+  systemPrompt: string
+  model: string
+  temperature: number
+  knowledge: string
+  tools: string[]
+}
+
+const blankForm = (model = ''): AgentForm => ({
+  name: '',
+  category: '内容复刻',
+  role: '',
+  systemPrompt: '',
+  model,
+  temperature: 0.4,
+  knowledge: '',
+  tools: ['assets-read'],
+})
+
+const hydrate = (record: AgentRecord): AgentForm => ({
+  name: record.name,
+  category: record.category,
+  role: record.role,
+  systemPrompt: record.systemPrompt,
+  model: record.model,
+  temperature: record.temperature,
+  knowledge: record.knowledge.join('\n'),
+  tools: record.tools,
+})
+
 export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: seed }: AgentEditorPageProps) {
-  const [agent, setAgent] = useState<AgentDefinition>(seed ? { ...defaultAgent, name: seed.name, description: seed.description, role: seed.description } : defaultAgent)
-  const [step, setStep] = useState<StepId>('identity')
-  const [messages, setMessages] = useState<AgentTestEvent[]>([])
-  const [draft, setDraft] = useState('帮我用主图做一版春日上新首屏')
-  const [busy, setBusy] = useState(false)
-  const [savedAt, setSavedAt] = useState('未保存')
+  const [meta, setMeta] = useState<AgentsList | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  const [editingId, setEditingId] = useState('')
+  const [form, setForm] = useState<AgentForm>(() => blankForm())
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
+  const [armedDelete, setArmedDelete] = useState(false)
+  const pageRef = useRef<HTMLDivElement>(null)
 
-  const patch = (value: Partial<AgentDefinition>) => setAgent((current) => ({ ...current, ...value }))
+  // 从列表或对话进来时，先把外壳滚动容器复位，避免继承上一页的滚动位置。
+  useEffect(() => {
+    pageRef.current?.scrollIntoView({ block: 'start' })
+  }, [])
 
-  const checks = useMemo(() => {
-    const selectedSkills = skillCatalog.filter((skill) => agent.skills.includes(skill.id))
-    return [
-      { label: '名称与角色已填写', pass: Boolean(agent.name.trim() && agent.role.trim()) },
-      { label: '系统提示词 ≥ 40 字', pass: agent.systemPrompt.trim().length >= 40 },
-      { label: '已选择至少 1 个技能', pass: selectedSkills.length > 0 },
-      { label: '输出定义包含图片或文本', pass: agent.outputs.length > 0 },
-      { label: '输入定义完整', pass: agent.inputs.length > 0 && agent.inputs.every((field) => field.name.trim()) },
-    ]
-  }, [agent])
-  const ready = checks.every((check) => check.pass)
-  const selectedSkills = skillCatalog.filter((skill) => agent.skills.includes(skill.id))
+  useEffect(() => {
+    let alive = true
+    const load = async () => {
+      setLoading(true)
+      setLoadError('')
+      try {
+        const data = await listAgents()
+        if (!alive) return
+        setMeta(data)
+        const record: AgentRecord | undefined = seed ? data.items.find((item) => item.name === seed.name) : undefined
+        if (record) {
+          setEditingId(record.id)
+          setForm(hydrate(record))
+          return
+        }
+        const next = blankForm(data.defaultModel)
+        if (seed) {
+          next.name = seed.name
+          next.role = seed.description
+        }
+        setForm(next)
+      } catch (caught) {
+        if (!alive) return
+        setLoadError(caught instanceof Error ? caught.message : '智能体列表加载失败')
+      } finally {
+        if (alive) setLoading(false)
+      }
+    }
+    void load()
+    return () => {
+      alive = false
+    }
+  }, [seed])
 
-  const toggleSkill = (id: string) => {
-    patch({ skills: agent.skills.includes(id) ? agent.skills.filter((item) => item !== id) : [...agent.skills, id] })
-  }
+  const patch = useCallback((value: Partial<AgentForm>) => {
+    setForm((current) => ({ ...current, ...value }))
+  }, [])
 
-  const toggleTool = (id: string) => {
-    patch({ tools: agent.tools.includes(id) ? agent.tools.filter((item) => item !== id) : [...agent.tools, id] })
-  }
+  const checks = useMemo(
+    () => [
+      { label: '名称至少 2 个字', pass: form.name.trim().length >= 2 },
+      { label: '一句话职责已填写', pass: form.role.trim().length >= 2 },
+      { label: '系统提示词 ≥ 10 字', pass: form.systemPrompt.trim().length >= 10 },
+      { label: '系统提示词 ≥ 40 字（建议）', pass: form.systemPrompt.trim().length >= 40 },
+      { label: '至少一条知识（建议）', pass: form.knowledge.split('\n').some((line) => line.trim()) },
+    ],
+    [form.knowledge, form.name, form.role, form.systemPrompt],
+  )
+  const ready = checks.slice(0, 3).every((check) => check.pass)
 
-  const updateField = (group: 'inputs' | 'outputs', id: string, value: Partial<AgentIOField>) => {
-    patch({ [group]: agent[group].map((field) => (field.id === id ? { ...field, ...value } : field)) } as Partial<AgentDefinition>)
-  }
+  const modelOptions = useMemo(() => {
+    const values = new Set(meta?.models ?? [])
+    if (form.model) values.add(form.model)
+    return [{ value: '', label: '默认（服务端配置）' }, ...[...values].map((value) => ({ value, label: value }))]
+  }, [form.model, meta?.models])
 
-  const addField = (group: 'inputs' | 'outputs') => {
-    const field: AgentIOField = { id: nextId(group), name: group === 'inputs' ? '新的输入' : '新的输出', type: 'text', required: false }
-    patch({ [group]: [...agent[group], field] } as Partial<AgentDefinition>)
-  }
+  const toggleTool = useCallback((id: string) => {
+    setForm((current) => ({
+      ...current,
+      tools: current.tools.includes(id) ? current.tools.filter((item) => item !== id) : [...current.tools, id],
+    }))
+  }, [])
 
-  const removeField = (group: 'inputs' | 'outputs', id: string) => {
-    patch({ [group]: agent[group].filter((field) => field.id !== id) } as Partial<AgentDefinition>)
-  }
-
-  const saveDraft = () => {
-    setSavedAt('刚刚')
-    onToast('草稿已保存到本地演示状态')
-  }
-
-  const publish = () => {
+  const save = useCallback(async () => {
+    if (saving) return
     if (!ready) {
-      onToast('还有检查项没有完成，先补齐再发布')
+      setSaveError('名称、一句话职责和系统提示词（≥ 10 字）都需要填写')
       return
     }
-    patch({ status: 'published', version: agent.version.replace(/v(\d+)\.(\d+)/, (_, major, minor) => `v${major}.${Number(minor) + 1}`) })
-    onToast('已发布新版本，可以被画布引用')
-  }
-
-  const runTest = async () => {
-    if (busy || !draft.trim()) return
-    setBusy(true)
-    const text = draft.trim()
-    setMessages((current) => [...current, { id: nextId('user'), kind: 'user', label: text }])
-    try {
-      await dshAdapter.testAgent(agent, text, (event) => setMessages((current) => [...current, event]))
-    } finally {
-      setBusy(false)
+    setSaving(true)
+    setSaveError('')
+    const input: AgentInput = {
+      name: form.name.trim(),
+      category: form.category,
+      role: form.role.trim(),
+      systemPrompt: form.systemPrompt.trim(),
+      model: form.model,
+      temperature: form.temperature,
+      knowledge: form.knowledge
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .slice(0, 20),
+      tools: form.tools,
     }
-  }
+    try {
+      const saved = editingId ? await updateAgent(editingId, input) : await createAgent(input)
+      onToast(editingId ? '已更新「' + saved.name + '」' : '已创建「' + saved.name + '」，回到列表即可对话')
+      onNavigate('agents')
+    } catch (caught) {
+      setSaveError(caught instanceof Error ? caught.message : '保存失败')
+    } finally {
+      setSaving(false)
+    }
+  }, [editingId, form, onNavigate, onToast, ready, saving])
+
+  const remove = useCallback(async () => {
+    if (!editingId) return
+    if (!armedDelete) {
+      setArmedDelete(true)
+      window.setTimeout(() => setArmedDelete(false), 3200)
+      return
+    }
+    setArmedDelete(false)
+    setSaveError('')
+    try {
+      await deleteAgent(editingId)
+      onToast('已删除该智能体')
+      onNavigate('agents')
+    } catch (caught) {
+      setSaveError(caught instanceof Error ? caught.message : '删除失败')
+    }
+  }, [armedDelete, editingId, onNavigate, onToast])
+
+  const startChat = useCallback(() => {
+    if (!editingId) return
+    setPendingSelectAgent(editingId)
+    onNavigate('agents')
+  }, [editingId, onNavigate])
+
+  const knowledgeCount = form.knowledge.split('\n').filter((line) => line.trim()).length
 
   return (
-    <div className="page page--editor">
-      <div className="page-heading page-heading--editor">
+    <div ref={pageRef} className="page agx-page agx-editor">
+      <header className="agx-head">
         <div>
-          <div className="eyebrow"><span className="eyebrow-dot" />创作能力 / 智能体编辑器</div>
-          <h1>{agent.name || '未命名智能体'}</h1>
-          <p>{agent.role || '给这个智能体一个清晰的角色，它才能在画布里稳定复用。'}</p>
+          <button className="agx-btn agx-btn--quiet agx-back" onClick={onBack}>
+            <ArrowLeft size={13} />
+            返回智能体
+          </button>
+          <div className="agx-eyebrow">创作能力 / 智能体</div>
+          <h1>{editingId ? form.name || '编辑智能体' : '新建智能体'}</h1>
+          <p>保存即写入 data/agents.json，回到列表就能直接对话。</p>
         </div>
-        <div className="heading-actions">
-          <button className="button button--ghost" onClick={onBack}><ArrowLeft size={16} />返回列表</button>
-          <button className="button button--ghost" onClick={saveDraft}><Check size={15} />保存草稿</button>
-          <button className="button button--primary" onClick={publish} disabled={!ready}>{agent.status === 'published' ? '发布新版本' : '发布版本'}</button>
+        <div className="agx-head-actions">
+          {editingId && (
+            <button className={'agx-btn ' + (armedDelete ? 'agx-btn--danger' : 'agx-btn--quiet')} onClick={() => void remove()}>
+              <Trash2 size={14} />
+              {armedDelete ? '确认删除' : '删除'}
+            </button>
+          )}
+          <button className="agx-btn" onClick={onBack}>
+            取消
+          </button>
+          <button className="agx-btn agx-btn--ink" onClick={() => void save()} disabled={saving || !ready}>
+            <Check size={14} />
+            {saving ? '保存中…' : editingId ? '保存修改' : '创建智能体'}
+          </button>
         </div>
-      </div>
+      </header>
 
-      <div className="editor-layout">
-        <aside className="editor-steps">
-          <div className="editor-steps-head">
-            <span className="panel-kicker">配置步骤</span>
-            <span className={`agent-status agent-status--${agent.status === 'published' ? 'published' : 'draft'}`}>{agent.status === 'published' ? '已发布' : '草稿'}</span>
-          </div>
-          <nav aria-label="配置步骤">
-            {steps.map((item, index) => {
-              const done = item.id === 'identity' ? Boolean(agent.name.trim()) : item.id === 'prompt' ? agent.systemPrompt.trim().length >= 40 : item.id === 'skills' ? selectedSkills.length > 0 : item.id === 'tools' ? agent.tools.length > 0 : agent.inputs.length > 0 && agent.outputs.length > 0
-              return (
-                <button key={item.id} className={`editor-step ${step === item.id ? 'is-active' : ''} ${done ? 'is-done' : ''}`} onClick={() => setStep(item.id)}>
-                  <span className="editor-step-index">{done ? <Check size={11} /> : String(index + 1).padStart(2, '0')}</span>
-                  <span><strong>{item.title}</strong><small>{item.hint}</small></span>
-                </button>
-              )
-            })}
-          </nav>
-          <div className="adapter-card">
-            <div className="adapter-card-head"><span className="adapter-mark">D</span><div><strong>DSH Adapter</strong><span>演示模式 · 可替换</span></div></div>
-            <p>运行时通过适配器接入，画布与智能体定义不绑定具体实现。</p>
-            <span className="connection-state">已连接</span>
-          </div>
-        </aside>
+      {loadError && (
+        <div className="agx-alert">
+          <AlertCircle size={14} />
+          <span>读取智能体列表失败：{loadError}。你仍然可以尝试保存，失败原因会显示在按钮下方。</span>
+        </div>
+      )}
 
-        <section className="editor-main" aria-label="智能体配置">
-          <header className="editor-panel-head">
-            <div>
-              <span className="panel-kicker">第 {steps.findIndex((item) => item.id === step) + 1} / {steps.length} 步</span>
-              <h2>{steps.find((item) => item.id === step)?.title}</h2>
-            </div>
-            <span className="mono">{agent.version} · 更新于 {savedAt === '未保存' ? agent.updatedAt : savedAt}</span>
-          </header>
-
-          {step === 'identity' && (
-            <div className="editor-form">
-              <label className="field">
-                <span>智能体名称</span>
-                <input value={agent.name} onChange={(event) => patch({ name: event.target.value })} placeholder="例如：商品视觉编辑" />
+      <div className="agx-editor-layout">
+        <main className="agx-editor-main" aria-busy={loading}>
+          <section className="agx-form-section">
+            <header>
+              <span className="agx-kicker">01 / 身份</span>
+              <h2>它叫什么，负责什么</h2>
+            </header>
+            <div className="agx-field-grid">
+              <label className="agx-field">
+                <span>名称</span>
+                <input
+                  value={form.name}
+                  maxLength={40}
+                  onChange={(event) => patch({ name: event.target.value })}
+                  placeholder="例如：爆款结构复刻"
+                />
               </label>
-              <label className="field">
-                <span>一句话角色</span>
-                <input value={agent.role} onChange={(event) => patch({ role: event.target.value })} placeholder="它替你做的判断是什么" />
-              </label>
-              <label className="field">
-                <span>详细描述</span>
-                <textarea rows={3} value={agent.description} onChange={(event) => patch({ description: event.target.value })} />
-              </label>
-              <div className="field">
-                <span>标识色调</span>
-                <div className="tone-row">
-                  {(['violet', 'blue', 'sage'] as const).map((tone) => (
-                    <button key={tone} className={`tone-swatch tone-swatch--${tone} ${agent.tone === tone ? 'is-active' : ''}`} onClick={() => patch({ tone })} aria-label={`色调 ${tone}`}><Check size={13} /></button>
-                  ))}
+              <label className="agx-field">
+                <span>分类</span>
+                <div className="agx-select-wrap">
+                  <select value={form.category} onChange={(event) => patch({ category: event.target.value as AgentCategory })}>
+                    {AGENT_CATEGORIES.map((item) => (
+                      <option value={item} key={item}>
+                        {item}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown size={13} />
                 </div>
-              </div>
-              <div className="field-grid">
-                <label className="field">
-                  <span>运行适配器</span>
-                  <button className="select-like is-wide">{agent.model}<ChevronDown size={14} /></button>
-                  <small>只有 mock 适配器可用，真实端点接入后替换 </small>
-                </label>
-                <label className="field">
-                  <span>温度</span>
-                  <div className="slider-row">
-                    <input type="range" min={0} max={1} step={0.1} value={agent.temperature} onChange={(event) => patch({ temperature: Number(event.target.value) })} />
-                    <strong className="mono">{agent.temperature.toFixed(1)}</strong>
-                  </div>
-                  <small>越高越发散，视觉类建议 0.3–0.5</small>
-                </label>
-              </div>
-            </div>
-          )}
-
-          {step === 'prompt' && (
-            <div className="editor-form">
-              <label className="field">
-                <span>系统提示词</span>
-                <textarea className="prompt-area" rows={12} value={agent.systemPrompt} onChange={(event) => patch({ systemPrompt: event.target.value })} />
-                <small>{agent.systemPrompt.trim().length} 字 · 建议写清目标、禁止事项和未知信息的处理方式</small>
               </label>
-              <div className="field">
-                <span>可插入变量</span>
-                <div className="chip-row">
-                  {['{{product_image}}', '{{brand_tone}}', '{{canvas_refs}}', '{{last_run}}'].map((token) => (
-                    <button key={token} className="chip chip--mono" onClick={() => patch({ systemPrompt: `${agent.systemPrompt}${agent.systemPrompt.endsWith('\n') ? '' : '\n'}${token}` })}>{token}</button>
-                  ))}
-                </div>
-                <small>变量在运行时由适配器注入；当前版本只做演示替换。</small>
-              </div>
             </div>
-          )}
+            <label className="agx-field">
+              <span>一句话职责</span>
+              <input
+                value={form.role}
+                maxLength={120}
+                onChange={(event) => patch({ role: event.target.value })}
+                placeholder="它替你做的判断是什么，例如：把一条爆款拆成可复用的结构骨架"
+              />
+              <small>会显示在列表卡片上，写清楚产出物，而不是「很懂内容」。</small>
+            </label>
+          </section>
 
-          {step === 'skills' && (
-            <div className="editor-form">
-              <div className="field-label">已选 {selectedSkills.length} 个技能</div>
-              <div className="skill-grid">
-                {skillCatalog.map((skill) => {
-                  const active = agent.skills.includes(skill.id)
+          <section className="agx-form-section">
+            <header>
+              <span className="agx-kicker">02 / 行为</span>
+              <h2>系统提示词</h2>
+              <span className="agx-mono">{form.systemPrompt.trim().length} 字</span>
+            </header>
+            <label className="agx-field">
+              <textarea
+                rows={12}
+                value={form.systemPrompt}
+                onChange={(event) => patch({ systemPrompt: event.target.value })}
+                placeholder={'你是一位……\n\n工作方式：\n1. ……\n2. ……\n\n约束：\n- 只使用用户给出的信息，缺什么写「待确认」；\n- 不要编造数据、案例或效果承诺。'}
+              />
+              <small>写清目标、步骤、禁止事项，以及未知信息怎么处理；对话时会作为 system 消息发给模型。</small>
+            </label>
+          </section>
+
+          <section className="agx-form-section">
+            <header>
+              <span className="agx-kicker">03 / 上下文</span>
+              <h2>知识与工具</h2>
+            </header>
+            <label className="agx-field">
+              <span>
+                知识
+                <b className="agx-mono">{knowledgeCount} 条</b>
+              </span>
+              <textarea
+                rows={6}
+                value={form.knowledge}
+                onChange={(event) => patch({ knowledge: event.target.value })}
+                placeholder={'每行一条，例如：\n镜头切换按 3-4 秒一个节拍。\n评审结论只用 通过 / 待确认 / 问题 三档。'}
+              />
+              <small>每行一条事实或规则，最多 20 条；会拼进 system 消息，优先级高于模型常识。</small>
+            </label>
+            <div className="agx-field">
+              <span>
+                工具
+                <b className="agx-mono">仅声明</b>
+              </span>
+              <div className="agx-tool-grid">
+                {(meta?.tools ?? []).map((tool) => {
+                  const active = form.tools.includes(tool.id)
                   return (
-                    <button key={skill.id} className={`skill-option ${active ? 'is-active' : ''}`} onClick={() => toggleSkill(skill.id)}>
-                      <div className="skill-option-head"><span className="skill-category">{skill.category}</span>{active && <Check size={14} />}</div>
-                      <strong>{skill.name}</strong>
-                      <p>{skill.description}</p>
-                      <span className="skill-output"><Tag size={11} />{skill.output}</span>
+                    <button
+                      type="button"
+                      key={tool.id}
+                      className={'agx-tool' + (active ? ' is-active' : '')}
+                      onClick={() => toggleTool(tool.id)}
+                      aria-pressed={active}
+                    >
+                      <span className="agx-tool-check">{active && <Check size={10} />}</span>
+                      <span>
+                        <strong>
+                          {tool.label}
+                          {tool.state === 'planned' ? ' · 待接入' : ''}
+                        </strong>
+                        <span>{tool.description}</span>
+                      </span>
                     </button>
                   )
                 })}
               </div>
-            </div>
-          )}
-
-          {step === 'tools' && (
-            <div className="editor-form">
-              <div className="field-label">当前工作区可用的工具</div>
-              <div className="tool-table">
-                {toolCatalog.map((tool) => {
-                  const active = agent.tools.includes(tool.id)
-                  const planned = tool.state === 'planned'
-                  return (
-                    <div className={`tool-row-item ${active ? 'is-active' : ''} ${planned ? 'is-planned' : ''}`} key={tool.id}>
-                      <div className="tool-row-main">
-                        <strong>{tool.name}</strong>
-                        <span>{tool.description}</span>
-                      </div>
-                      <span className="tool-scope">{tool.scope}</span>
-                      <span className="tool-adapter">{tool.adapter}</span>
-                      {planned ? <span className="tool-planned">待接入</span> : <button className={`switch ${active ? 'is-on' : ''}`} onClick={() => toggleTool(tool.id)} aria-label={`切换 ${tool.name}`}><span /></button>}
-                    </div>
-                  )
-                })}
-              </div>
-              <p className="form-note"><CircleAlert size={13} />工具权限属于运行时配置，前端只声明意向，不持有密钥。</p>
-            </div>
-          )}
-
-          {step === 'io' && (
-            <div className="editor-form">
-              {(['inputs', 'outputs'] as const).map((group) => (
-                <div className="io-block" key={group}>
-                  <div className="io-block-head">
-                    <div><span className="field-label">{group === 'inputs' ? '输入定义' : '输出定义'}</span><small>{group === 'inputs' ? '运行时从画布节点注入' : '运行结束后写回画布'}</small></div>
-                    <button className="button button--ghost" onClick={() => addField(group)}><Plus size={14} />添加</button>
-                  </div>
-                  <div className="io-table">
-                    <div className="io-row io-row--head"><span>字段名</span><span>类型</span><span>必填</span><span /></div>
-                    {agent[group].map((field) => (
-                      <div className="io-row" key={field.id}>
-                        <input value={field.name} onChange={(event) => updateField(group, field.id, { name: event.target.value })} />
-                        <button className="select-like" onClick={() => updateField(group, field.id, { type: field.type === 'image' ? 'text' : field.type === 'text' ? 'json' : field.type === 'json' ? 'url' : 'image' })}>{field.type}<ChevronDown size={12} /></button>
-                        <button className={`switch ${field.required ? 'is-on' : ''}`} onClick={() => updateField(group, field.id, { required: !field.required })} aria-label="切换必填"><span /></button>
-                        <button className="icon-button" onClick={() => removeField(group, field.id)} aria-label="删除字段"><Trash2 size={13} /></button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <footer className="editor-main-foot">
-            <button className="button button--ghost" onClick={() => setStep(step === 'identity' ? 'identity' : steps[Math.max(0, steps.findIndex((item) => item.id === step) - 1)].id)}>上一步</button>
-            <button className="button button--primary" onClick={() => setStep(steps[Math.min(steps.length - 1, steps.findIndex((item) => item.id === step) + 1)].id)}>下一步 <ArrowUpRight size={14} /></button>
-          </footer>
-        </section>
-
-        <aside className="editor-side">
-          <section className="test-panel">
-            <div className="test-panel-head">
-              <div><span className="panel-kicker">试运行</span><h3>对话中验证</h3></div>
-              <span className="run-status run-status--success">MOCK</span>
-            </div>
-            <div className="test-messages">
-              {messages.length === 0 && (
-                <div className="test-empty">
-                  <Sparkles size={18} />
-                  <p>用一句话描述任务，看看它是否按你的方式工作。</p>
-                  <div className="suggest-row">
-                    {['用主图做一版首屏', '这组素材适合什么语气', '给我三个方向'].map((text) => <button key={text} className="chip" onClick={() => setDraft(text)}>{text}</button>)}
-                  </div>
-                </div>
-              )}
-              {messages.map((message) => (
-                <div className={`test-message ${message.kind === 'user' ? 'test-message--user' : message.kind === 'reply' ? 'test-message--assistant' : 'test-message--step'}`} key={message.id}>
-                  {message.kind === 'step' ? <span className="test-step-dot" /> : null}
-                  <div>
-                    <p>{message.label}</p>
-                    {message.detail && <small>{message.detail}</small>}
-                  </div>
-                </div>
-              ))}
-              {busy && <div className="test-message test-message--step"><span className="test-step-dot is-live" /><div><p>运行时执行中…</p></div></div>}
-            </div>
-            <div className="test-input">
-              <textarea rows={2} value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="描述一个任务，按 ⌘/Ctrl + Enter 发送" />
-              <button className="button button--primary" onClick={runTest} disabled={busy}><Send size={14} />发送</button>
+              <small>工具只做能力声明，本次对话不会自动执行；真实工具接入后再打开执行开关。</small>
             </div>
           </section>
 
-          <section className="readiness-panel">
-            <div className="readiness-head"><span className="panel-kicker">就绪检查</span><strong>{checks.filter((check) => check.pass).length}/{checks.length}</strong></div>
-            <div className="readiness-list">
-              {checks.map((check) => (
-                <div className={`readiness-row ${check.pass ? 'is-pass' : ''}`} key={check.label}>
-                  <span className="readiness-mark">{check.pass ? <Check size={11} /> : <X size={11} />}</span>
-                  {check.label}
+          <section className="agx-form-section">
+            <header>
+              <span className="agx-kicker">04 / 运行</span>
+              <h2>模型与参数</h2>
+            </header>
+            <div className="agx-field-grid">
+              <label className="agx-field">
+                <span>模型</span>
+                <div className="agx-select-wrap">
+                  <select value={form.model} onChange={(event) => patch({ model: event.target.value })}>
+                    {modelOptions.map((option) => (
+                      <option value={option.value} key={option.value || 'default'}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown size={13} />
                 </div>
-              ))}
+                <small>{loading ? '读取服务端模型列表…' : '来自服务端 VISION_MODEL / VISION_FALLBACKS，失败时会自动降级。'}</small>
+              </label>
+              <label className="agx-field">
+                <span>
+                  温度
+                  <b className="agx-mono">{form.temperature.toFixed(1)}</b>
+                </span>
+                <div className="agx-slider-row">
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.1}
+                    value={form.temperature}
+                    onChange={(event) => patch({ temperature: Number(event.target.value) })}
+                  />
+                </div>
+                <small>结构化评审建议 0.2–0.4，发散创作 0.6–0.8。</small>
+              </label>
             </div>
-            <button className="button button--ghost is-block" onClick={() => onNavigate('canvas')} disabled={!ready}><Workflow size={15} />放入画布</button>
-            <p className="form-note"><Layers3 size={13} />放入画布后，这个版本会作为一个智能体节点出现。</p>
+          </section>
+
+          {saveError && (
+            <div className="agx-alert" role="alert">
+              <AlertCircle size={14} />
+              <span>{saveError}</span>
+            </div>
+          )}
+
+          <footer className="agx-editor-foot">
+            <span className="agx-mono">
+              {editingId ? 'PATCH /api/agents/' + editingId : 'POST /api/agents'}
+            </span>
+            <div>
+              <button className="agx-btn" onClick={onBack}>
+                取消
+              </button>
+              <button className="agx-btn agx-btn--ink" onClick={() => void save()} disabled={saving || !ready}>
+                <Check size={14} />
+                {saving ? '保存中…' : editingId ? '保存修改' : '创建智能体'}
+              </button>
+            </div>
+          </footer>
+        </main>
+
+        <aside className="agx-editor-side">
+          <section className="agx-side-panel">
+            <span className="agx-kicker">列表预览</span>
+            <div className="agx-preview">
+              <div className="agx-card-top">
+                <span className="agx-card-name">{form.name || '未命名智能体'}</span>
+                <span className="agx-tag">{form.category}</span>
+              </div>
+              <p className="agx-card-role">{form.role || '一句话职责会显示在这里。'}</p>
+              <div className="agx-card-meta">
+                <span>
+                  <span>模型</span>
+                  <span className="agx-mono">{form.model || '服务端默认'}</span>
+                </span>
+                <span>
+                  <span>最近运行</span>
+                  <span className="agx-mono">未运行</span>
+                </span>
+                <span>
+                  <span>使用次数</span>
+                  <span className="agx-mono">0 次</span>
+                </span>
+              </div>
+            </div>
+          </section>
+
+          <section className="agx-side-panel">
+            <div className="agx-side-head">
+              <span className="agx-kicker">就绪检查</span>
+              <strong className="agx-mono">
+                {checks.filter((check) => check.pass).length}/{checks.length}
+              </strong>
+            </div>
+            {checks.map((check) => (
+              <div className={'agx-check-row' + (check.pass ? ' is-pass' : '')} key={check.label}>
+                <span className="agx-check-mark">{check.pass && <Check size={10} />}</span>
+                {check.label}
+              </div>
+            ))}
+          </section>
+
+          <section className="agx-side-panel">
+            <div className="agx-side-head">
+              <span className="agx-kicker">下一步</span>
+              <MessageSquareText size={14} />
+            </div>
+            <p className="agx-side-copy">
+              保存后回到列表，在顶部选择这个智能体、描述任务，就会真实调用本地模型。模型不可用时会显示具体原因。
+            </p>
+            <button className="agx-btn" onClick={startChat} disabled={!editingId}>
+              <MessageSquareText size={14} />
+              用它开始对话
+            </button>
+            {!editingId && <small className="agx-side-note">先保存一次，才能开始对话。</small>}
+          </section>
+
+          <section className="agx-side-panel agx-side-panel--quiet">
+            <span className="agx-kicker">落盘与接口</span>
+            <p className="agx-side-copy">
+              存储 <code>data/agents.json</code>（临时文件 + rename 原子写）。字段：名称 / 分类 / 职责 / 系统提示词 / 模型 / 温度 / 知识 / 工具。
+            </p>
+            <p className="agx-side-note">
+              <BookOpen size={12} /> 知识会进入 system 消息
+              <br />
+              <Wrench size={12} /> 工具只做能力声明
+            </p>
           </section>
         </aside>
       </div>

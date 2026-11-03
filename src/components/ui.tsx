@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { ArrowUpRight, Bot, Check, FileImage, FileText, Sparkles, Workflow, X } from 'lucide-react'
 import type { IconComponent } from '../domain/types'
 
@@ -11,7 +12,31 @@ export function NodeIcon({ icon }: { icon?: 'image' | 'text' | 'bot' }) {
   return <FileImage size={15} />
 }
 
-export function NavItem({ icon: Icon, label, active, compact, badge, onClick }: { icon: IconComponent; label: string; active?: boolean; compact?: boolean; badge?: string; onClick: () => void }) { return <button className={`nav-item ${active ? 'is-active' : ''} ${compact ? 'nav-item--compact' : ''}`} onClick={onClick} title={compact ? label : undefined}><Icon size={18} /><span>{!compact && label}</span>{!compact && badge && <em>{badge}</em>}</button> }
+/** 评审结论徽标：只允许 pass / warn / fail 三种语义，不用装饰色。 */
+export function StatusPill({ tone, children }: { tone: 'pass' | 'warn' | 'fail'; children: ReactNode }) {
+  return <span className={`vq-pill vq-pill--${tone}`}>{children}</span>
+}
+
+/** 中性状态标签：流程状态（已入库 / 演示账号 / 演示模式）不用语义色。 */
+export function MonoTag({ children }: { children: ReactNode }) {
+  return <span className="vq-tag">{children}</span>
+}
+
+export function NavItem({ icon: Icon, label, active, compact, badge, onClick }: { icon: IconComponent; label: string; active?: boolean; compact?: boolean; badge?: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      className={`vq-nav-item${active ? ' is-active' : ''}${compact ? ' vq-nav-item--compact' : ''}`}
+      onClick={onClick}
+      title={compact ? label : undefined}
+      aria-current={active ? 'page' : undefined}
+    >
+      <Icon size={16} strokeWidth={1.5} />
+      {!compact && <span>{label}</span>}
+      {!compact && badge && <em>{badge}</em>}
+    </button>
+  )
+}
 
 export function ReferenceRow({ label, type, tone }: { label: string; type: string; tone: string }) { return <div className="reference-row"><div className={`mini-thumb mini-thumb--${tone}`}>{type === '文本' ? 'Aa' : '杯'}</div><div><strong>{label}</strong><span>{type} · 当前版本</span></div><Check size={14} className="reference-check" /></div> }
 

@@ -3,15 +3,17 @@ import type { Edge, Node } from '@xyflow/react'
 import type { CanvasNodeData, Page } from '../domain/types'
 
 export const pageLabels: Record<Page, string> = {
+  login: '登录',
   overview: '工作台',
   agents: '智能体',
   'agent-editor': '智能体编辑器',
-  canvas: '资产画布',
+  canvas: '画布',
   assets: '资产库',
   runs: '运行记录',
   settings: '设置',
   radar: '爆款雷达',
   templates: '模板库',
+  review: '视觉评审',
 }
 
 export const initialNodes: Node<CanvasNodeData>[] = [
@@ -65,3 +67,57 @@ export const runs = [
 ]
 
 export type AssetItem = (typeof assets)[number]
+
+/** 工作台「今天要做什么」：只放真实存在的入口，不写未实现的承诺。 */
+export type WorkbenchTask = {
+  id: string
+  index: string
+  title: string
+  detail: string
+  meta: string
+  action: string
+  page: Page
+}
+
+export const workbenchTasks: WorkbenchTask[] = [
+  { id: 'task-replicate', index: '01', title: '复刻一条爆款', detail: '检索 → 拆帧 → 脚本结构入库，全程有运行日志。', meta: '爆款雷达 · 示例数据', action: '去检索', page: 'radar' },
+  { id: 'task-review', index: '02', title: '核对 3 张待确认帧', detail: '看标题安全区与商品主体位置，给出通过 / 待确认 / 问题。', meta: '视觉评审 · 待接入', action: '打开评审', page: 'review' },
+  { id: 'task-template', index: '03', title: '把口播模板接进画布', detail: '「十秒一镜口播钩子」已入库，5 个镜头可被画布引用。', meta: '模板库 · 已就绪', action: '打开模板库', page: 'templates' },
+]
+
+/** 最近复刻：数据来自本地模板库 data/templates.json 的 4 条真实条目。 */
+export type ReplicationItem = {
+  id: string
+  title: string
+  platform: string
+  contentType: string
+  duration: string
+  shots: number
+  time: string
+  status: 'pass' | 'warn'
+}
+
+export const recentReplications: ReplicationItem[] = [
+  { id: 'tpl_7685d0b2', title: '雾中强敌绝境对峙', platform: '抖音', contentType: '混剪卡点', duration: '00:10', shots: 8, time: '今天 11:13', status: 'pass' },
+  { id: 'tpl_1f748225', title: '森林深处的神秘树洞', platform: '抖音', contentType: '剧情演绎', duration: '00:10', shots: 5, time: '今天 11:13', status: 'pass' },
+  { id: 'tpl_236f3476', title: '十秒一镜口播钩子', platform: '抖音', contentType: '口播干货', duration: '00:10', shots: 5, time: '今天 11:13', status: 'pass' },
+  { id: 'tpl_58fdb12c', title: '紫边红蕾微距特写', platform: '抖音', contentType: '种草分享', duration: '00:05', shots: 4, time: '今天 11:12', status: 'warn' },
+]
+
+/** 待评审队列：当前只是示例，评审服务尚未接入（server/routes/review.mjs 为占位）。 */
+export type ReviewVerdict = 'pass' | 'warn' | 'fail'
+
+export type ReviewItem = {
+  id: string
+  title: string
+  note: string
+  verdict: ReviewVerdict
+  frameUrl: string
+  meta: string
+}
+
+export const reviewQueue: ReviewItem[] = [
+  { id: 'vq-0042', title: '雾中强敌 · 封面主体裁切', note: '人物头部进入安全区外，缩略图下缘被裁掉约 12px。', verdict: 'warn', frameUrl: '/media/frames/tpl_7685d0b2/frame-01.jpg', meta: 'VQ-0042 · 待确认' },
+  { id: 'vq-0043', title: '口播钩子 · 字幕对比度', note: '字幕与背景明度差 3.1:1，低于 4.5:1 的可读阈值。', verdict: 'fail', frameUrl: '/media/frames/tpl_236f3476/frame-02.jpg', meta: 'VQ-0043 · 问题' },
+  { id: 'vq-0044', title: '微距特写 · 色彩还原', note: '紫边与背景色相一致，本次评审通过。', verdict: 'pass', frameUrl: '/media/frames/tpl_58fdb12c/frame-01.jpg', meta: 'VQ-0044 · 通过' },
+]

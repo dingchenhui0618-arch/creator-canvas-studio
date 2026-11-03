@@ -1,138 +1,148 @@
-# 纸飞机 Creative Workbench
+# VisionQA Workbench
 
-面向通用创作者与电商运营的智能体创作工作台。这一版新增了**「检索 → 一键复刻 → 模板库复用」**的真实闭环：从抖音/小红书挑一条内容，FFmpeg 拆帧 + 逐帧视觉分析，拆出脚本结构、分镜表和原视频链接，存成可按内容类型检索的模板。
+VisionQA 是给画面做**有证据的视觉评审**的工具：结论只有「通过 / 需人工确认 / 不通过」三种，每条判断都必须指向画面里的具体区域（像素锚点），定位不到证据的一律写进「无法判断」，不给模糊结论。
 
-> 诚实边界（2026-11-03 实测）：**红狐接口已连通，但账号积分不足（3210），随后 Key 被红狐侧禁用（3105）**，所以检索仍返回示例数据（界面红条明示，不伪装真实数据）。**视频解析、拆帧、逐帧分析、模板入库这条链路是真的跑通的**（公开测试视频 + 5 并发压测，截图都是真实运行结果）。智能体生成环节按需求暂缓。
+这个仓库是 VisionQA 的**创作与检索工作台**：把「找一条爆款 → 拆它的结构 → 换个产品复刻 → 评审产出画面 → 沉淀成可复用模板」串成一条能跑通的链路，评审语言与 VisionQA 插件共用同一套 visual-baseline 契约。
+
+> 诚实边界（2026-11-03 实测）：**红狐检索接口已连通，但账号积分不足（3210），随后 Key 被红狐侧禁用（3105）**，所以爆款雷达现在返回示例数据，界面用红条明示 REDFOX_DISABLED 并给充值入口，不伪装成真实数据。**拆帧、逐帧分析、模板入库、智能体对话、画布执行、视觉评审都是真实调用**（本机 OpenCodex 通道 + gpt-6.1-sol，截图与耗时都是实测）。
+
+![工作台](docs/screenshot-workbench.png)
+
+登录是本地演示会话：邮箱 + 密码（6 位以上）、记住我、以访客身份进入，右上角可切换账号或退出。页脚写明「本地演示登录，不连接真实账号体系」。
+
+![登录](docs/screenshot-login.png)
+
+## 一、这一版做了什么
+
+| 模块 | 真实能力 | 事实边界 |
+| --- | --- | --- |
+| 登录 | 全屏登录页、记住我、访客进入、会话持久化、右上角账号菜单 | **本地演示登录**，不连真实账号体系（页脚与设置页都这么写） |
+| 爆款雷达 | 平台/关键词/时间范围检索、卡片互动数据、悬停一键复刻、排序 | 红狐 Key 被禁用期间返回示例数据 + 明确红条 |
+| 一键复刻 | 视频解析 → ffprobe → FFmpeg 拆帧 → 逐帧视觉分析 → 入库，五步进度与实时日志 | 平台链接解析依赖红狐 Key；直链兜底可用 |
+| 模板库 | 脚本结构、分镜表、原链接、可复用规则入库；类型/关键词检索；详情抽屉；送去评审 | 每条模板都带真实抽帧 |
+| 智能体 | 对话框式入口、参数行（智能体/输出类型/模型/数量）、已自建智能体分类卡片、新建/编辑/删除 | 对话真调本地模型；数量本期固定 1 |
+| 画布 | React Flow 节点编排（input/llm/kb/tool/condition/output/review）、检查器、连线校验、保存、逐节点运行 | 运行是真执行，耗时真实；review 节点接视觉评审 |
+| 视觉评审 | 选画面 → visual-baseline 七维评审 → verdict + 像素锚点 + 有界修正建议 | 未启动 VisionQA 插件服务时由本地模型出一份同契约结果，provider 会写清 |
+| 运行记录 | 读 data/runs.json，逐节点状态、耗时、输出 | 只有画布执行会产生记录 |
+
+导航 9 项：工作台 / 爆款雷达 / 模板库 / 智能体 / 画布 / 视觉评审 / 资产库 / 运行记录 / 设置。
+
+## 二、检索 → 复刻 → 模板库
+
+爆款雷达按平台（抖音 / 小红书）、关键词、时间范围检索，卡片直接给点赞 / 收藏 / 评论 / 分享与时长；鼠标移到封面出「一键复刻」。
 
 ![爆款雷达](docs/screenshot-radar.png)
 
-红狐账号不可用时的状态（Key 被禁用 / 积分不足 / 限流），界面会明确说明并给后台链接，不会假装成真实数据：
+红狐账号不可用时（Key 禁用 / 积分不足 / 限流），界面明确说清并给后台链接：
 
 ![接口异常状态](docs/screenshot-radar-quota.png)
 
-## 检索 → 复刻 → 模板库（本次主线）
+一键复刻跑五个可观测步骤：解析视频地址 → 读视频信息（ffprobe + 场景切镜）→ FFmpeg 抽帧 → 逐帧分析脚本与分镜 → 写入模板库。进度、每步状态、实时日志都在弹窗里。
 
-**1. 爆款雷达**：按平台（抖音 / 小红书 / 全部）、关键词、时间范围检索，卡片展示点赞 / 收藏 / 评论 / 分享与时长；鼠标移到封面直接出「一键复刻」，卡片底部也有常驻入口。
-
-![一键复刻](docs/screenshot-replicate-idle.png)
-
-**2. 一键复刻**：弹窗里选来源（平台原链接，或直接粘 mp4 直链兜底），跑五个可观测步骤：解析视频地址 → 读取视频信息（ffprobe + 场景切镜检测）→ FFmpeg 抽帧 → 逐帧分析脚本与分镜 → 写入模板库。进度条百分比、每步状态、实时日志都在弹窗里。
-
-![复刻进度](docs/screenshot-replicate-progress.png)
-
-![复刻完成](docs/screenshot-replicate.png)
-
-**3. 模板库**：每条模板保存脚本结构（钩子 + 段落 beats + 口播 + 建议屏幕字 + 目的）、分镜表（画面 / 机位 / 字幕 / 声音 / 叙事作用 + 对应帧图）、爆款分析与可复用规则、**原视频链接**和来源统计，可以按内容类型 + 关键词检索，点开抽屉查看，或标记复用。
+![一键复刻](docs/screenshot-replicate.png)
 
 ![模板库](docs/screenshot-templates.png)
 
+模板详情里有脚本结构（钩子 + beats + 口播 + 屏幕字）、分镜表（画面 / 机位 / 字幕 / 声音 / 叙事作用 + 对应帧图）、爆款分析、可复用规则、原视频链接，以及「送去评审」——把这条模板的首帧直接交给视觉评审。
+
 ![模板详情](docs/screenshot-template-detail.png)
 
-模板 JSON 结构、API 契约、真实数据怎么接见 [docs/replication-pipeline.md](docs/replication-pipeline.md)。
+## 三、智能体：对话框入口 + 已自建智能体
 
-## 资产画布与智能体编辑器
+进入「智能体」先看到的是一个 composer：描述你要它做的事，同一行选智能体、输出类型、模型、数量，Ctrl+Enter 发送。发送后进入对话，用户消息靠右、智能体消息靠左，运行中有计时，失败显示模型名 + 状态码 + 原因并可重试。
 
-主链路仍是「资产进画布 → 智能体加工 → 运行事件 → Artifact 回填」这一套，DeepSeek Harness 只作为**可替换的运行时适配器**，不进入产品模型。
+![智能体入口](docs/screenshot-agents.png)
 
-![资产画布](docs/screenshot-canvas.png)
+底部不是「精选作品」，而是**已自建智能体**：分类标签（全部 / 内容复刻 / 视觉评审 / 脚本分镜 / 投放素材）+ 卡片（名称、职责、模型、最近运行、使用次数），可编辑、可删除、可新建。
 
-**资产画布**：左侧可引用资产栏（拖入画布）、中间节点图、右侧节点检查器。连线、添加节点、复制删除、撤销重做、适应画布都在这一屏。
+![智能体对话](docs/screenshot-agent-chat.png)
 
-![引用资产](docs/screenshot-canvas-references.png)
-![运行事件](docs/screenshot-canvas-run.png)
+![智能体编辑](docs/screenshot-agent-editor.png)
 
-**智能体编辑器**：5 步配置（基本信息 / 系统提示词 / 技能 / 工具 / 输入输出），右侧常驻试运行与就绪检查；就绪检查通过才允许发布版本。
+真实链路：POST /api/agents/:id/chat 把智能体的 systemPrompt、知识条目、本次输出类型和用户消息拼成 messages，调用本机模型（gpt-6.1-sol，失败按降级链换模型），返回真实回复并把 runCount 加一。实测一次口播分镜回复 44–52 秒，主模型过载时会降级到 grok-4.6 并在界面上标出实际用的模型。
 
-![智能体编辑器](docs/screenshot-agent-editor.png)
-![技能选择](docs/screenshot-agent-editor-skills.png)
+## 四、画布：节点编排与真实执行
 
-其余入口：工作台、智能体列表、资产库、运行记录、设置。
+画布用 @xyflow/react 12 实现，左侧节点面板（输入 / 大模型 / 知识库 / 工具 / 条件 / 视觉评审 / 输出），中间画布，右侧检查器。连线校验（不允许自环、输入只接一根），节点可删，Ctrl+Z 撤销，画布状态存 data/flows.json。
 
-![工作台](docs/screenshot-overview.png)
-![智能体列表](docs/screenshot-agents.png)
-![资产库](docs/screenshot-assets.png)
+![画布](docs/screenshot-canvas.png)
 
-## 已实现（可在界面上点通）
+点「运行流程」由服务端按拓扑序执行：llm 节点调本地模型、kb 节点读模板库做上下文、condition 按表达式分支、review 节点走视觉评审、output 汇总；每个节点返回 status / ms / output，节点在画布上逐个点亮。
 
-| 模块 | 能做什么 | 事实边界 |
-| --- | --- | --- |
-| 爆款雷达 | 平台切换、关键词检索、时间范围、按点赞/收藏/评论排序、结果卡片与互动数据、悬停复刻 | **未配红狐 Key 时返回示例数据**（黄条提示），不是真实平台数据 |
-| 一键复刻 | 平台链接解析（需 Key）或 mp4 直链、5 步流水线、实时日志、失败可重试、完成回显模板摘要 | 平台链接解析依赖红狐 Key；无 Key 时只能用直链 |
-| 拆帧与分析 | ffprobe 读时长/分辨率/帧率、场景切镜检测、均匀 + 切镜补帧（4–18 帧）、逐帧结构化分析 | 视觉模型是本机 OpenCodex 通道，上游过载时会自动降级到备用模型 |
-| 模板库 | 脚本结构、分镜表、原链接与统计入库；按内容类型/关键词检索；详情抽屉；复制脚本；复用计数；删除 | 生成内容（接内置智能体）按需求暂缓，字段已预留 |
-| 资产画布 | 资产栏拖入成节点、连线、检查器、复制删除、撤销重做、适应画布、小地图 | 无持久化，刷新回到初始节点 |
-| 运行 Dock | 适配器事件流、进度条、节点状态、Artifact 数量 | Artifact 不回填节点字段 |
-| 智能体编辑器 | 5 步配置、技能多选、工具开关、输入输出增删改、试运行、就绪检查、发布版本号 | 试运行是 mock 回复 |
+![画布运行](docs/screenshot-canvas-run.png)
 
-## 未实现
+实测一条 7 节点流程（input → kb → llm → condition → review/tool → output）跑完 99–115 秒，llm 节点 55 秒，GET /api/runs 能查到逐节点结果。
 
-真实账号与工作区、资产上传/导出、画布持久化、多人协作、计费额度、⌘K 绑定；平台自动发布（不做，只输出模板）；接内置智能体生成新内容（等检索与复刻验收后再接）。
+![运行记录](docs/screenshot-runs.png)
 
-## 目录结构
+画布的参考来源与许可证（Langflow / Flowise / n8n / Dify / React Flow，未复制任何源码）写在 [docs/canvas-source-attribution.md](docs/canvas-source-attribution.md)。
 
-```
-src/
-  App.tsx                       应用外壳：侧栏、顶栏、页面切换、toast
-  domain/types.ts               产品域模型（画布 / 智能体 / 运行事件）
-  domain/radar.ts               内容检索与模板类型
-  api/radar.ts                  调本地 API 的轻客户端 + 数字格式化
-  pages/RadarPage.tsx           爆款雷达：检索、结果卡片、悬停复刻
-  pages/TemplateLibraryPage.tsx 模板库：类型检索、详情抽屉、复用
-  components/ReplicateModal.tsx 一键复刻弹窗：来源选择、进度、日志、结果
-  pages/CanvasPage.tsx          资产画布 + 检查器 + 运行 Dock
-  pages/AgentEditorPage.tsx     智能体编辑器
-  runtime/mockAdapter.ts        运行时演示实现（可替换）
-server/
-  index.mjs                     HTTP API：/api/search /api/replicate /api/jobs /api/templates /api/cover /media/frames
-  redfox.mjs                    红狐检索适配（抖音 searchWork / 小红书 search、视频解析）
-  media.mjs                     视频获取：直链下载或红狐解析后下载，带大小上限
-  frames.mjs                    ffprobe 探测、场景切镜、抽帧计划与 ffmpeg 抽帧
-  vision.mjs                    逐帧分析：结构化 JSON、模型降级链、失败重试
-  templates.mjs                 模板库存储（data/templates.json + data/frames/<id>/）
-  jobs.mjs                      复刻任务编排与进度日志
-  config.mjs                    端口、数据目录、红狐与视觉模型配置
-docs/
-  replication-pipeline.md       检索 → 复刻 → 模板库：流程、API、模板字段
-  canvas-contract.md            画布数据契约 v0
-  adapter-contract.md           运行时适配器契约
-  ROADMAP.md                    M1/M2/M3 进度
-```
+## 五、视觉评审：VisionQA 的视觉能力怎么放进工作台
 
-## 本地运行
+VisionQA 的定位不是「帮你想文案」，而是「给已经产出的画面下判断」。放进工作台后它有三个落点：
 
-```bash
-npm install
-npm run dev:api   # 本地 API http://127.0.0.1:8787（拆帧 / 模板 / 检索）
-npm run dev       # 前端 http://localhost:5173，/api 与 /media 已代理到 8787
-# 或者一条命令同时起：
-npm run dev:all
+1. **独立页面**：选一张画面（模板首帧或图片地址）→ 出 verdict、逐条 observation（维度 / 严重度 / 像素锚点 / 置信度）、有界修正建议、无法判断清单。
+2. **模板库出口**：模板详情里「送去评审」，把首帧直接带进评审页。
+3. **画布节点**：流程里插一个 review 节点，评审结果作为下游节点可引用的证据。
 
-npm run build     # tsc -b && vite build
-npm run lint      # oxlint（当前 0 warning）
-npm start         # 生产模式：node server/index.mjs，直接托管 dist/ + API（http://127.0.0.1:8787）
+![视觉评审](docs/screenshot-review.png)
 
-npm run test:redfox   # 用本地假红狐服务验证限流/缓存/重试/禁用短路（7 项，不耗真实额度）
-npm run stress -- --test=search --n=40    # 压力测试：search / reuse / replicate / edge
-```
+评审按 visual-baseline 七维（层级 / 对比 / 间距 / 字体 / 色彩 / 构图 / 可识别性）出结论，**每条判断必须给 bbox 锚点**，给不出锚点的降级为 info 或进「无法判断」。服务端实现见 server/review.mjs：优先调 VisionQA 插件服务（127.0.0.1:6300 的 /api/visual-review，同一套 v0.1 契约），服务没起来就退到本地模型的同口径评审，并把实际 provider 写进结果（截图里是 local-model:gpt-6.1-sol · 72.9s）。
 
-`.env` 放服务端密钥（已 gitignore，模板见 `.env.example`）：
+契约映射、证据锚点格式与降级行为见 [docs/review-integration.md](docs/review-integration.md)。
 
-```bash
-echo "REDFOX_API_KEY=你的key" > .env
-```
+## 六、怎么跑
 
-环境变量（都只需配服务端，前端拿不到 Key）：
+依赖安装后起两个服务：后端 8787（同时托管 dist），前端开发 5191。守护脚本 keep-services.ps1 是单实例，掉了自动拉起，日志在 data/keeper.log。
 
-| 变量 | 作用 | 缺省行为 |
-| --- | --- | --- |
-| `REDFOX_API_KEY` | 红狐接口 Key，启用真实抖音/小红书检索 | 未配置 → 检索返回示例数据并提示 |
-| `REDFOX_BASE_URL` | 红狐域名 | `https://redfox.hk` |
-| `REDFOX_CACHE_TTL_MS` | 检索结果缓存时长（同参数去重） | 300000（5 分钟） |
-| `VISION_BASE_URL` / `VISION_API_KEY` | 逐帧分析的视觉模型通道 | 默认本机 `http://127.0.0.1:10100/v1`，凭证回落到 `~/.codex/auth.json` |
-| `VISION_MODEL` / `VISION_FALLBACKS` | 主模型与降级链 | `gpt-6.1-sol` → `gpt-6-luna` → `tokenrouter-agent/grok-4.6` → `gpt-6.1-terra` → `gpt-6-sol` |
-| `MAX_FRAMES` / `MAX_VIDEO_MB` | 抽帧上限、视频体积上限 | 18 帧 / 160 MB |
-| `DATA_DIR` | 模板与帧图目录 | `./data`（已 gitignore） |
+| 命令 | 作用 |
+| --- | --- |
+| npm install | 装依赖 |
+| node server/index.mjs | 后端 8787 |
+| npm run dev -- --port 5191 --strictPort | 前端开发服务器 |
+| powershell -ExecutionPolicy Bypass -File scripts/keep-services.ps1 | 常驻守护 |
 
-## 设计方向
+环境变量放 .env（已 gitignore，模板见 .env.example）：
 
-「纸飞机工作台」：纸白底、深墨工具感、单一紫色强调智能体与运行状态，资产引用关系是视觉主线。详见 [DESIGN.md](./DESIGN.md)，产品边界见 [PRODUCT.md](./PRODUCT.md)。
+| 变量 | 用途 |
+| --- | --- |
+| REDFOX_API_KEY | 红狐检索 / 视频解析 Key（当前账号积分不足且 Key 被禁用） |
+| PORT | 后端端口，默认 8787 |
+| VISION_BASE_URL / VISION_API_KEY / VISION_MODEL | 本地模型通道，默认 http://127.0.0.1:10100/v1 + gpt-6.1-sol |
+| VISIONQA_SERVICE_URL | VisionQA 插件服务地址，默认 http://127.0.0.1:6300 |
+
+## 七、接口
+
+| 接口 | 说明 |
+| --- | --- |
+| GET /api/health | 服务与三个外部依赖的可用性（红狐 / 模型 / 模板数） |
+| GET /api/search | 红狐检索；不可用时返回 mode:'mock' + quota.code + 充值链接 |
+| POST /api/replicate, GET /api/jobs/:id | 一键复刻流水线（五步进度） |
+| GET /api/templates, GET /api/templates/:id, POST /api/templates/:id/reuse, DELETE /api/templates/:id | 模板库 |
+| GET/POST /api/agents, GET/PATCH/DELETE /api/agents/:id, POST /api/agents/:id/chat | 智能体与真实对话 |
+| GET/POST /api/flows, PATCH/DELETE /api/flows/:id, POST /api/flows/:id/run, GET /api/runs | 画布与运行记录 |
+| POST /api/review, GET /api/review/health | 视觉评审（service / local-model 两种 provider） |
+| GET /media/frames/:id/:file | 抽帧静态文件 |
+
+## 八、目录
+
+前端在 src/：App.tsx 是外壳（侧栏、顶栏、登录门、vq:navigate 事件）；auth/ 是本地演示会话；brand/ 是 VisionQA 标记；styles/tokens.css 是设计 token；api/ 是各模块轻客户端；pages/ 下是 10 个页面（登录、工作台、雷达、模板库、智能体、编辑器、画布、视觉评审、资产库、运行记录、设置）。
+
+后端在 server/：index.mjs 做路由分发与静态托管；routes/ 下 agents、flows、review 三个路由模块；llm.mjs 统一模型调用（重试 + 降级链）；review.mjs 是评审适配；redfox.mjs 是红狐客户端（限流、缓存、单飞、错误映射）；media.mjs 与 frames.mjs 负责视频解析与抽帧；templates.mjs、agents.mjs、flows.mjs 是 JSON 原子写存储。
+
+文档在 docs/：design-direction-v2.md（视觉方向与去 AI 味清单）、review-integration.md（评审契约）、replication-pipeline.md（复刻链路与红狐实测）、canvas-source-attribution.md（画布开源调研）。
+
+## 九、已知限制
+
+- 红狐账号积分不足且 Key 被禁用：雷达只能给示例数据；重新充值并换 Key 后无需改代码。
+- 视觉评审在插件服务未启动时走本地模型，结论可信度取决于模型；界面始终标出 provider，不冒充插件结果。
+- 资产库仍是演示数据；智能体「数量」固定 1；工具只声明不自动执行。
+- 登录是本地演示会话，不接真实账号体系，也没有权限与多租户。
+
+## 十、验证记录
+
+- npx tsc -p tsconfig.app.json --noEmit 通过；npx oxlint src 0 error / 0 warning（39 个文件）。
+- 智能体对话实测 44.2s（gpt-6.1-sol）、52.7s（降级链生效）、123.6s（grok-4.6）。
+- 画布 7 节点流程实测 99.0s / 115.5s，/api/runs 可回放逐节点输出。
+- 视觉评审实测 72.9s（gpt-6.1-sol）、84.2s（gpt-6-luna），5–7 条 observation，锚点渲染与图片对齐。
+- 复刻压测：5 并发 5/5 完成（163s 墙钟）、25 并发复用无丢失更新、40 并发检索 40/40 HTTP 200（p50 3.7s）。

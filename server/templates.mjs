@@ -33,6 +33,7 @@ export async function listTemplates({ q = '', contentType = '', platform = '' } 
     .filter((item) => (platform ? item.platform === platform : true))
     .filter((item) => (keyword ? (item.title + item.hook + item.tags.join(' ') + item.analysis.reusableRules.join(' ')).includes(keyword) : true))
     .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+    .map((item) => ({ ...item, thumb: item.frames?.[0]?.url || '' }))
 }
 
 export async function getTemplate(id) {

@@ -1,0 +1,14 @@
+/* 旧页面配色收口：把遗留的粉紫/米黄块统一成 VisionQA 的单色底板。
+   App.css 在 App.tsx 里后加载，这里用同等选择器 + !important 覆盖颜色，不动旧结构。 */
+.asset-summary>div,
+.asset-summary>div:nth-child(2),
+.asset-summary>div:nth-child(3) {
+  background: var(--surface) !important;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.asset-summary strong { font-weight: 600; letter-spacing: -.02em; color: var(--ink) !important; }
+.asset-summary .section-kicker, .asset-summary span:last-child { color: var(--faint) !important; }
+.tab-count { background: rgba(17,17,17,.06) !important; color: var(--muted) !important; }
+.filter-tabs button.is-active .tab-count { background: rgba(255,255,255,.2) !important; color: #fff !important; }
+.template-card:hover { border-color: var(--line-strong); box-shadow: 0 1px 0 var(--line); }

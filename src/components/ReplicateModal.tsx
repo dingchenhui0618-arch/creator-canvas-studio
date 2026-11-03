@@ -109,7 +109,7 @@ export function ReplicateModal({ item, hasKey, visionReady, onClose, onDone, onO
               />
             </div>
             <div className="replicate-checks">
-              <span className={hasKey ? 'is-ok' : 'is-warn'}>{hasKey ? '红狐 Key 已配置，可按平台链接解析' : '未配置红狐 Key：只能用直链视频'}</span>
+              <span className={hasKey ? 'is-ok' : 'is-warn'}>{hasKey ? '红狐 Key 已配置；解析失败时用直链兜底' : '未配置红狐 Key：只能用直链视频'}</span>
               <span className={visionReady ? 'is-ok' : 'is-warn'}>{visionReady ? '视觉模型就绪，逐帧分析可运行' : '视觉模型未就绪，需要在服务端配置凭证'}</span>
             </div>
             <div className="replicate-foot">

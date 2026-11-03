@@ -1,6 +1,6 @@
 import { Grid2X2 } from 'lucide-react'
 
-export type Page = 'overview' | 'agents' | 'agent-editor' | 'canvas' | 'assets' | 'runs' | 'settings' | 'radar' | 'templates'
+export type Page = 'login' | 'overview' | 'agents' | 'agent-editor' | 'canvas' | 'assets' | 'runs' | 'settings' | 'radar' | 'templates' | 'review'
 
 export type NodeKind = 'asset' | 'agent' | 'output'
 

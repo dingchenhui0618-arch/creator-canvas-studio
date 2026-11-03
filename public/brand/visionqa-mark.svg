@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">VisionQA C3 optimized icon</title>
+  <desc id="desc">Monochrome VQ monogram inside a partial inspection frame.</desc>
+  <style>:root { --ring:#5d5d5d; }</style>
+  <g style="color:#111111; --ring:#5d5d5d">
+    <g id="visionqa-c3-mark">
+  <path d="M38 78V38h40v16H54v24Z" fill="currentColor"/>
+  <path d="M178 178h24v-24h16v40h-40Z" fill="currentColor"/>
+  <circle cx="136" cy="116" r="49" fill="none" stroke="var(--ring, #5d5d5d)" stroke-width="20"/>
+  <path d="M48 82h27l37 59 37-59h27l-52 90h-24Z" fill="currentColor"/>
+  <path d="M151 149l39 39-15 15-39-39Z" fill="currentColor"/>
+</g>
+  </g>
+</svg>

@@ -1,0 +1,12 @@
+/* 雷达封面：示例数据时不用渐变占位，改成单色检视底板 */
+.radar-cover { background:var(--surface-raised); border-bottom:1px solid var(--line); }
+.radar-cover::before {
+  content:'';
+  position:absolute; inset:0;
+  background-image:linear-gradient(var(--line-faint) 1px, transparent 1px), linear-gradient(90deg, var(--line-faint) 1px, transparent 1px);
+  background-size:32px 32px;
+  opacity:.55;
+}
+.radar-cover-empty { position:relative; color:var(--faint); }
+.radar-cover-empty .vq-mono { font-size:9.5px; letter-spacing:.14em; }
+.radar-cover .radar-badge, .radar-cover .radar-duration, .radar-cover .radar-hover { z-index:1; }
