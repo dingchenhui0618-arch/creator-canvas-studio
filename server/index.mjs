@@ -14,6 +14,8 @@ import { bdcStatus } from './bdc.mjs'
 // 功能路由：每个模块自己处理 /api/<prefix> 下的请求，index.mjs 只管分发
 const featureRoutes = [createAgentsRouter(), createFlowsRouter(), createReviewRouter()]
 
+const STARTED_AT = new Date().toISOString()
+
 const MIME = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.json': 'application/json' }
 
 function sendJson(res, status, body) {
@@ -78,6 +80,13 @@ const server = http.createServer(async (req, res) => {
         const handled = await route.handle(req, res, url, pathname)
         if (handled !== false) return
       }
+    }
+
+    if (pathname === '/api/version') {
+      // 真实的版本号：读本仓库 package.json；客户端拿它和自己的构建版本比对，用来发现「页面是旧的」
+      const pkg = JSON.parse(await fsp.readFile(path.join(process.cwd(), 'package.json'), 'utf8'))
+      sendJson(res, 200, { version: pkg.version, name: pkg.name, startedAt: STARTED_AT })
+      return
     }
 
     if (pathname === '/api/bdc/status') {
