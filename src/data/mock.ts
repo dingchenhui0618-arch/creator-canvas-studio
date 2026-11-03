@@ -10,6 +10,8 @@ export const pageLabels: Record<Page, string> = {
   assets: '资产库',
   runs: '运行记录',
   settings: '设置',
+  radar: '爆款雷达',
+  templates: '模板库',
 }
 
 export const initialNodes: Node<CanvasNodeData>[] = [

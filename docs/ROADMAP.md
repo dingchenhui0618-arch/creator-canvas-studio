@@ -3,6 +3,19 @@
 > 事实基线：2026-11 的 `src/` 当前 HEAD。M1 只列**真实存在**的能力；凡界面上看起来有、但代码没接的，都写在「未实现」里。
 > 相关：[画布数据契约](./canvas-contract.md) · [运行时适配器契约](./adapter-contract.md)
 
+## M1.5 · 已完成：检索 → 一键复刻 → 模板库
+
+| 能力 | 位置 | 现在能做什么 | 事实边界 |
+| --- | --- | --- | --- |
+| 爆款雷达 | `src/pages/RadarPage.tsx` | 平台/关键词/时间范围检索，卡片展示互动数据，悬停「一键复刻」 | 未配 `REDFOX_API_KEY` 时是示例数据（界面黄条说明） |
+| 一键复刻 | `src/components/ReplicateModal.tsx` | 来源选择、5 步进度、实时日志、完成摘要、失败重试 | 平台链接解析要红狐 Key，无 Key 时用 mp4 直链 |
+| 拆帧流水线 | `server/media.mjs`、`frames.mjs` | ffprobe 探测 + 场景切镜 + 均匀补帧 + ffmpeg 抽帧 | 上限 18 帧 / 160 MB |
+| 逐帧分析 | `server/vision.mjs` | 严格 JSON 的脚本结构、分镜表、爆款分析；模型降级链 | 只听不到声音，无配音视频给「建议口播」 |
+| 模板库 | `src/pages/TemplateLibraryPage.tsx`、`server/templates.mjs` | 按内容类型/关键词检索、详情抽屉、复制脚本、复用计数、删除 | 单机 JSON 存储，无账号隔离 |
+| API | `server/index.mjs` | `/api/search`、`/api/replicate`、`/api/jobs/:id`、`/api/templates`、`/media/frames`、`/api/cover` | 任务状态在内存，重启丢失 |
+
+**M1.5 验收标准**：`npm run build` 与 `npm run lint` 通过；用一条公开测试视频能跑完整条链路，模板库里能看到脚本结构、分镜表、原视频链接；按内容类型筛选能命中；截图见 `docs/screenshot-radar.png`、`screenshot-replicate.png`、`screenshot-templates.png`、`screenshot-template-detail.png`。
+
 ## M1 · 已完成：前端框架（演示数据）
 
 | 能力 | 位置 | 现在能做什么 |

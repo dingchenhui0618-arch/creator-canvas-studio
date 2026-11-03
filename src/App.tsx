@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
-import { Activity, Bot, Check, ChevronDown, CircleHelp, Cloud, FolderOpen, Grid2X2, Layers3, MessageSquareText, PanelLeftClose, PanelLeftOpen, Search, Settings2, Workflow } from 'lucide-react'
+import { Activity, Bot, Check, ChevronDown, CircleHelp, Cloud, FolderOpen, Grid2X2, Layers3, LayoutTemplate, MessageSquareText, PanelLeftClose, PanelLeftOpen, Radar, Search, Settings2, Workflow } from 'lucide-react'
 import type { Page } from './domain/types'
 import './App.css'
 import { agents, assets, pageLabels } from './data/mock'
@@ -11,6 +11,8 @@ import { AgentsPage } from './pages/AgentsPage'
 import { AssetsPage } from './pages/AssetsPage'
 import { RunsPage } from './pages/RunsPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { RadarPage } from './pages/RadarPage'
+import { TemplateLibraryPage } from './pages/TemplateLibraryPage'
 
 function App() {
   const [activePage, setActivePage] = useState<Page>('canvas')
@@ -47,6 +49,8 @@ function App() {
         {sidebarOpen && <div className="workspace-switcher"><div className="workspace-avatar">A</div><div className="workspace-meta"><strong>Aurora Studio</strong><span>个人工作区</span></div><ChevronDown size={14} /></div>}
         <nav className="primary-nav" aria-label="主导航">
           <NavItem icon={Grid2X2} label="工作台" active={activePage === 'overview'} compact={!sidebarOpen} onClick={() => setActivePage('overview')} />
+          <NavItem icon={Radar} label="爆款雷达" active={activePage === 'radar'} compact={!sidebarOpen} onClick={() => setActivePage('radar')} />
+          <NavItem icon={LayoutTemplate} label="模板库" active={activePage === 'templates'} compact={!sidebarOpen} onClick={() => setActivePage('templates')} />
           <NavItem icon={Bot} label="智能体" active={activePage === 'agents' || activePage === 'agent-editor'} compact={!sidebarOpen} onClick={() => setActivePage('agents')} badge="3" />
           <NavItem icon={Workflow} label="资产画布" active={activePage === 'canvas'} compact={!sidebarOpen} onClick={() => setActivePage('canvas')} />
           <NavItem icon={Layers3} label="资产库" active={activePage === 'assets'} compact={!sidebarOpen} onClick={() => setActivePage('assets')} />
@@ -79,6 +83,8 @@ function App() {
         </header>
         <div className="content-wrap">
           {activePage === 'canvas' && <CanvasPage onToast={notify} />}
+          {activePage === 'radar' && <RadarPage onToast={notify} onOpenTemplates={() => setActivePage('templates')} />}
+          {activePage === 'templates' && <TemplateLibraryPage onToast={notify} onBack={() => setActivePage('radar')} />}
           {activePage === 'overview' && <OverviewPage onCreate={() => setShowCreate(true)} onNavigate={setActivePage} />}
           {activePage === 'agents' && <AgentsPage onCreate={() => { setEditorAgent(null); setActivePage('agent-editor') }} onOpenAgent={openAgent} />}
           {activePage === 'agent-editor' && <AgentEditorPage key={editorAgent?.name ?? 'new'} agent={editorAgent ?? undefined} onBack={() => setActivePage('agents')} onNavigate={setActivePage} onToast={notify} />}

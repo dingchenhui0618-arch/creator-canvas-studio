@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# 运行时数据：模板库、抽帧、下载的视频都不入库
+data/
+_req*.json
+_probe_*.mjs
