@@ -56,6 +56,22 @@ export const config = {
     maxVideoMb: Number(process.env.MAX_VIDEO_MB || 160),
     maxFrames: Number(process.env.MAX_FRAMES || 18),
   },
+  auth: {
+    dbFile: path.join(dataDir, 'auth.db'),
+    cookieName: 'vq_session',
+    // 记住我 30 天，否则 7 天；服务端一律存哈希，cookie 只放随机 token
+    rememberDays: Number(process.env.VQ_REMEMBER_DAYS || 30),
+    sessionDays: Number(process.env.VQ_SESSION_DAYS || 7),
+    // 生产必须为 1：走 HTTPS 时 cookie 带 Secure
+    secureCookies: process.env.VQ_SECURE_COOKIES === '1',
+    // 生产必须为 1：除 /api/auth/* 与健康检查外，所有 API 都要求登录
+    requireAuth: process.env.VQ_REQUIRE_AUTH === '1',
+    registrationEnabled: process.env.VQ_REGISTRATION !== '0',
+    // 演示账号默认开启（本地评审用），生产用 VQ_DEMO_ACCOUNT=0 关掉
+    demoAccount: process.env.VQ_DEMO_ACCOUNT !== '0',
+    demoEmail: process.env.VQ_DEMO_EMAIL || 'demo@visionqa.studio',
+    demoPassword: process.env.VQ_DEMO_PASSWORD || 'demo123456',
+  },
 }
 
 export const redfoxEnabled = () => Boolean(config.redfox.key)

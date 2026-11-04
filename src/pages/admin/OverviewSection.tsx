@@ -1,8 +1,6 @@
-import { DEMO_EMAIL, DEMO_NAME } from '../../auth/session'
+import { DEMO_NAME } from '../../auth/session'
 import { useApi, type Health, type RunsResponse, type TemplatesResponse } from './data'
 import { AdminHead, Badge, ErrorBanner, LoadingLine, RefreshButton, SourceTag } from './ui'
-
-const DEMO_ACCOUNTS = [DEMO_EMAIL]
 
 export default function OverviewSection() {
   const health = useApi<Health>('/api/health')
@@ -38,11 +36,12 @@ export default function OverviewSection() {
         <article className="admin-card admin-stat">
           <div className="admin-stat-top">
             <span className="admin-label">用户数</span>
-            <SourceTag kind="local" source="src/auth/session.ts 里的本地演示账号" />
+            <SourceTag kind="local" source="data/auth.db（SQLite 用户表）" />
           </div>
-          <p className="admin-value">{DEMO_ACCOUNTS.length}</p>
+          <p className="admin-value">—</p>
           <p className="admin-foot">
-            本地演示账号：{DEMO_NAME}。尚未接后端用户表，数量来自代码常量。
+            账号已落库（data/auth.db，SQLite），但还没有管理员用户列表接口，所以这里不给数字。演示账号
+            {DEMO_NAME} 由后端 seed，是库里真实存在的一条记录。
           </p>
         </article>
 
@@ -131,7 +130,7 @@ export default function OverviewSection() {
       <section className="admin-note">
         <p>说明</p>
         <ul>
-          <li>用户数来自 <code>src/auth/session.ts</code> 的本地演示账号常量，不是接口数据。</li>
+          <li>账号已落库到 <code>data/auth.db</code>，但本页还没接用户列表接口，所以只展示当前会话。</li>
           <li>模板数、运行数、依赖状态分别来自 <code>/api/templates</code>、<code>/api/runs</code>、<code>/api/health</code>。</li>
           <li>红狐 3105 是服务端已知的禁用状态，health 接口只暴露「是否配置」，本页如实分开展示。</li>
         </ul>

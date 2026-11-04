@@ -1,39 +1,87 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { ArrowRight, Eye, EyeOff, Loader2, Lock, Mail, ScanSearch, ShieldCheck } from 'lucide-react'
+import { ArrowRight, Eye, EyeOff, Loader2, Lock, Mail, ScanSearch, ShieldCheck, User } from 'lucide-react'
 import {
   AuthError,
-  DEMO_EMAIL,
-  DEMO_NAME,
+  DEFAULT_MIN_PASSWORD_LENGTH,
   EXAMPLE_EMAIL,
-  MIN_PASSWORD_LENGTH,
+  NAME_MAX_LENGTH,
+  register as registerAccount,
 } from '../auth/session'
-import type { Session, SignInInput } from '../auth/session'
+import type { RegisterInput, Session, SignInInput } from '../auth/session'
+import { getAuthConfig } from '../api/auth'
+import type { DemoAccount } from '../api/auth'
 import '../styles/shell.css'
 
-type FormErrors = { email?: string; password?: string; form?: string }
+type Mode = 'signin' | 'signup'
+
+type FormErrors = { email?: string; password?: string; name?: string; form?: string }
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 type Props = {
   notice?: string
   onSignIn: (input: SignInInput) => Promise<Session>
+  /**
+   * 宿主的注册入口（useSession().register）。未接线时回退成「注册 + 登录」两次请求：
+   * 后端注册已下发 cookie，回退路径只是为了让页面在宿主补齐之前也能用。
+   */
+  onRegister?: (input: RegisterInput) => Promise<Session>
   onGuest: () => void
 }
 
-export function LoginPage({ notice, onSignIn, onGuest }: Props) {
+export function LoginPage({ notice, onSignIn, onRegister, onGuest }: Props) {
+  const [mode, setMode] = useState<Mode>('signin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [name, setName] = useState('')
   const [remember, setRemember] = useState(true)
   const [showPassword, setShowPassword] = useState(false)
   const [busy, setBusy] = useState(false)
   const [errors, setErrors] = useState<FormErrors>({})
   const [info, setInfo] = useState('')
+  // 演示账号与注册开关都由后端下发：生产关掉演示账号时这一块整个不出现。
+  const [demoAccount, setDemoAccount] = useState<DemoAccount | null>(null)
+  const [registrationEnabled, setRegistrationEnabled] = useState(true)
+  // 密码长度以后端配置为准，这里只放一个兜底值；登录不校验长度。
+  const [minPasswordLength, setMinPasswordLength] = useState(DEFAULT_MIN_PASSWORD_LENGTH)
   const passwordRef = useRef<HTMLInputElement>(null)
+  const isSignup = mode === 'signup'
+
+  useEffect(() => {
+    const controller = new AbortController()
+    let active = true
+    getAuthConfig(controller.signal)
+      .then((config) => {
+        if (!active) return
+        setRegistrationEnabled(config.registrationEnabled)
+        setDemoAccount(config.demoAccount ?? null)
+        if (config.minPasswordLength > 0) setMinPasswordLength(config.minPasswordLength)
+      })
+      .catch(() => {
+        // 后端没起来或接口不可用：保持保守，不显示无法兑现的演示入口。
+        if (active) setDemoAccount(null)
+      })
+    return () => {
+      active = false
+      controller.abort()
+    }
+  }, [])
+
+  const switchMode = (next: Mode) => {
+    if (busy || next === mode) return
+    setMode(next)
+    setErrors({})
+    setInfo('')
+  }
 
   const fillDemo = () => {
-    setEmail(DEMO_EMAIL)
-    setPassword('')
+    if (!demoAccount) return
+    setMode('signin')
+    setEmail(demoAccount.email)
+    setPassword(demoAccount.password)
     setErrors({})
-    setInfo(`已填入演示邮箱；密码输入任意 ${MIN_PASSWORD_LENGTH} 位以上即可。`)
+    setInfo('已填入演示账号，直接登录即可。')
     passwordRef.current?.focus()
   }
 
@@ -41,30 +89,58 @@ export function LoginPage({ notice, onSignIn, onGuest }: Props) {
     event.preventDefault()
     if (busy) return
 
-    setErrors({})
-    setInfo('')
     const trimmedEmail = email.trim()
+    const trimmedName = name.trim()
     const nextErrors: FormErrors = {}
     if (!trimmedEmail) nextErrors.email = '请输入邮箱'
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) nextErrors.email = '邮箱格式看起来不太对'
-    if (password.length < MIN_PASSWORD_LENGTH) nextErrors.password = `密码至少 ${MIN_PASSWORD_LENGTH} 位`
-    if (nextErrors.email || nextErrors.password) {
+    else if (!EMAIL_PATTERN.test(trimmedEmail)) nextErrors.email = '邮箱格式看起来不太对'
+    if (isSignup) {
+      // 只有注册校验密码长度，长度取后端下发的 minPasswordLength。
+      if (!password) nextErrors.password = '请设置密码'
+      else if (password.length < minPasswordLength) nextErrors.password = `密码至少 ${minPasswordLength} 位`
+      if (trimmedName.length > NAME_MAX_LENGTH) nextErrors.name = `昵称最多 ${NAME_MAX_LENGTH} 字`
+    } else if (!password) {
+      nextErrors.password = '请输入密码'
+    }
+
+    setInfo('')
+    if (nextErrors.email || nextErrors.password || nextErrors.name) {
       setErrors(nextErrors)
       return
     }
 
+    setErrors({})
     setBusy(true)
+    let created = false
     try {
-      await onSignIn({ email: trimmedEmail, password, remember })
+      if (mode === 'signup') {
+        if (onRegister) {
+          await onRegister({ email: trimmedEmail, password, name: trimmedName || undefined })
+        } else {
+          await registerAccount({ email: trimmedEmail, password, name: trimmedName || undefined })
+          created = true
+          setInfo('账号已创建，正在建立会话…')
+          await onSignIn({ email: trimmedEmail, password, remember })
+        }
+      } else {
+        await onSignIn({ email: trimmedEmail, password, remember })
+      }
     } catch (error) {
+      setBusy(false)
+      const detail = error instanceof AuthError ? error.message : ''
+      // 账号已经建好、只是自动登录没走通：必须让用户知道「别再注册一次」。
+      if (created) {
+        setErrors({ form: `账号已创建，但自动登录没有完成${detail ? `（${detail}）` : ''}，请直接用该邮箱登录。` })
+        return
+      }
       if (error instanceof AuthError) {
         if (error.field === 'email') setErrors({ email: error.message })
         else if (error.field === 'password') setErrors({ password: error.message })
+        else if (error.field === 'name') setErrors({ name: error.message })
         else setErrors({ form: error.message })
       } else {
-        setErrors({ form: '登录没有完成，请稍后重试。' })
+        setErrors({ form: isSignup ? '注册没有完成，请稍后重试。' : '登录没有完成，请稍后重试。' })
       }
-      setBusy(false)
     }
   }
 
@@ -125,7 +201,7 @@ export function LoginPage({ notice, onSignIn, onGuest }: Props) {
         </div>
 
         <footer className="vq-login-brand-foot">
-          <span className="vq-mono">本地演示登录，不连接真实账号体系。</span>
+          <span className="vq-mono">账号与会话由服务端校验。</span>
           <span className="vq-mono">© 2026 VisionQA</span>
         </footer>
       </section>
@@ -133,10 +209,37 @@ export function LoginPage({ notice, onSignIn, onGuest }: Props) {
       <main className="vq-login-panel">
         <div className="vq-login-form-wrap">
           <div className="vq-login-form-head">
-            <span className="vq-mono">Sign in</span>
-            <h2>登录 Workbench</h2>
-            <p>使用工作邮箱继续。没有账号的话，直接填入演示账号即可。</p>
+            <span className="vq-mono">{isSignup ? 'Create account' : 'Sign in'}</span>
+            <h2>{isSignup ? '创建账号' : '登录 Workbench'}</h2>
+            <p>
+              {isSignup
+                ? '注册完直接进入工作台。昵称只是显示名，可以稍后再补。'
+                : '使用工作邮箱继续。会话由服务端校验，凭据不进浏览器存储。'}
+            </p>
           </div>
+
+          {registrationEnabled && (
+            <div className="vq-login-modes" role="group" aria-label="登录或注册">
+              <button
+                type="button"
+                className="vq-login-mode"
+                aria-pressed={!isSignup}
+                onClick={() => switchMode('signin')}
+                disabled={busy}
+              >
+                登录
+              </button>
+              <button
+                type="button"
+                className="vq-login-mode"
+                aria-pressed={isSignup}
+                onClick={() => switchMode('signup')}
+                disabled={busy}
+              >
+                注册
+              </button>
+            </div>
+          )}
 
           {notice && (
             <div className="vq-banner vq-banner--info" role="status">
@@ -185,6 +288,35 @@ export function LoginPage({ notice, onSignIn, onGuest }: Props) {
               )}
             </div>
 
+            {isSignup && (
+              <div className="vq-field">
+                <label className="vq-field-label" htmlFor="vq-name">
+                  昵称 <em className="vq-mono">name · 可选</em>
+                </label>
+                <span className={`vq-input${errors.name ? ' is-invalid' : ''}`}>
+                  <User size={15} />
+                  <input
+                    id="vq-name"
+                    type="text"
+                    name="name"
+                    autoComplete="nickname"
+                    placeholder="例如：林可"
+                    maxLength={NAME_MAX_LENGTH}
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                    aria-invalid={Boolean(errors.name)}
+                    aria-describedby={errors.name ? 'vq-name-error' : undefined}
+                    disabled={busy}
+                  />
+                </span>
+                {errors.name && (
+                  <span className="vq-field-error" id="vq-name-error">
+                    {errors.name}
+                  </span>
+                )}
+              </div>
+            )}
+
             <div className="vq-field">
               <label className="vq-field-label" htmlFor="vq-password">
                 密码 <em className="vq-mono">password</em>
@@ -196,8 +328,8 @@ export function LoginPage({ notice, onSignIn, onGuest }: Props) {
                   ref={passwordRef}
                   type={showPassword ? 'text' : 'password'}
                   name="password"
-                  autoComplete="current-password"
-                  placeholder={`至少 ${MIN_PASSWORD_LENGTH} 位`}
+                  autoComplete={isSignup ? 'new-password' : 'current-password'}
+                  placeholder={isSignup ? `至少 ${minPasswordLength} 位` : '账户密码'}
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   aria-invalid={Boolean(errors.password)}
@@ -221,34 +353,36 @@ export function LoginPage({ notice, onSignIn, onGuest }: Props) {
               )}
             </div>
 
-            <div className="vq-login-row">
-              <label className="vq-check">
-                <input
-                  type="checkbox"
-                  checked={remember}
-                  onChange={(event) => setRemember(event.target.checked)}
-                  disabled={busy}
-                />
-                <span>记住我</span>
-              </label>
-              <button
-                type="button"
-                className="vq-link"
-                onClick={() => setInfo('本地演示环境不提供密码找回，请使用演示账号或以访客身份进入。')}
-              >
-                忘记密码？
-              </button>
-            </div>
+            {!isSignup && (
+              <div className="vq-login-row">
+                <label className="vq-check">
+                  <input
+                    type="checkbox"
+                    checked={remember}
+                    onChange={(event) => setRemember(event.target.checked)}
+                    disabled={busy}
+                  />
+                  <span>记住我</span>
+                </label>
+                <button
+                  type="button"
+                  className="vq-link"
+                  onClick={() => setInfo('密码重置还没接入；需要重置请联系工作区管理员，或先用访客身份进入。')}
+                >
+                  忘记密码？
+                </button>
+              </div>
+            )}
 
             <button className="vq-button vq-button--primary vq-button--block" type="submit" disabled={busy}>
               {busy ? (
                 <>
                   <Loader2 size={15} className="vq-spin" />
-                  正在验证会话…
+                  {isSignup ? '正在创建账号…' : '正在验证凭据…'}
                 </>
               ) : (
                 <>
-                  登录
+                  {isSignup ? '创建账号' : '登录'}
                   <ArrowRight size={15} />
                 </>
               )}
@@ -263,22 +397,23 @@ export function LoginPage({ notice, onSignIn, onGuest }: Props) {
             以访客身份进入
           </button>
 
-          <div className="vq-demo">
-            <div>
-              <span className="vq-mono">演示账号</span>
-              <strong>{DEMO_EMAIL}</strong>
-              <span className="vq-demo-sub">
-                {DEMO_NAME} · 任意 {MIN_PASSWORD_LENGTH} 位以上密码
-              </span>
+          {/* 演示账号是「登录」用的快捷入口；注册模式下没有意义（拿演示邮箱去注册只会撞 409）。 */}
+          {demoAccount && !isSignup && (
+            <div className="vq-demo">
+              <div>
+                <span className="vq-mono">演示账号</span>
+                <strong>{demoAccount.email}</strong>
+                <span className="vq-demo-sub">后端 seed 的演示账号，一键填入邮箱与密码</span>
+              </div>
+              <button type="button" className="vq-button vq-button--quiet" onClick={fillDemo} disabled={busy}>
+                填入
+              </button>
             </div>
-            <button type="button" className="vq-button vq-button--quiet" onClick={fillDemo} disabled={busy}>
-              填入
-            </button>
-          </div>
+          )}
 
           <p className="vq-login-foot">
             <Lock size={12} />
-            <span>本地演示登录，不连接真实账号体系。会话只保存在这个浏览器里。</span>
+            <span>会话保存在服务端下发的 HttpOnly cookie 里；浏览器只缓存用户名与邮箱，用于首屏渲染。</span>
           </p>
         </div>
       </main>

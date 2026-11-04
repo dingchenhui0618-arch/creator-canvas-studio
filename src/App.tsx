@@ -43,7 +43,7 @@ import AdminConsolePage from './pages/admin/AdminConsolePage'
 import LabConsolePage from './pages/lab/LabConsolePage'
 import { RequireSession } from './auth/RequireSession'
 import { useSession } from './auth/useSession'
-import { initialsFor, sessionKindLabel, type Session, type SignInInput } from './auth/session'
+import { initialsFor, sessionKindLabel, type RegisterInput, type Session, type SignInInput } from './auth/session'
 import packageJsonRaw from '../package.json?raw'
 import {
   EDITION_BY_ID,
@@ -274,12 +274,12 @@ function Workbench({
             <button
               type="button"
               className="vq-workspace"
-              onClick={() => notify('工作区切换会在接入真实账号体系后开放')}
+              onClick={() => notify('当前只有一个个人工作区，多工作区切换还没开放')}
             >
               <span className="vq-workspace-avatar">{initials}</span>
               <span className="vq-workspace-meta">
                 <strong>{session.user.workspace}</strong>
-                <span>Local session</span>
+                <span>{session.user.kind === 'guest' ? '访客会话' : '服务端会话'}</span>
               </span>
               <ChevronDown size={13} />
             </button>
@@ -419,7 +419,7 @@ function Workbench({
                   <div className="vq-menu vq-sidebar-account-menu" role="menu">
                     <div className="vq-sidebar-account-menu-meta">
                       <span className="vq-mono">{sessionKindLabel(session.user.kind)}</span>
-                      <span className="vq-mono">本地会话</span>
+                      <span className="vq-mono">{session.user.kind === 'guest' ? '访客会话' : '服务端会话'}</span>
                     </div>
                     <button type="button" role="menuitem" onClick={() => go('settings')}>
                       <Settings2 size={15} />
@@ -582,7 +582,7 @@ function Workbench({
               </button>
             </div>
 
-            <p className="vq-update-foot">本地演示登录，不连接真实账号体系。© 2026 VisionQA</p>
+            <p className="vq-update-foot">账号与会话由服务端校验；模板库与队列仍在本机。© 2026 VisionQA</p>
           </div>
         </div>
       )}
@@ -614,7 +614,7 @@ function Workbench({
 }
 
 function App() {
-  const { session, signIn, continueAsGuest, signOut } = useSession()
+  const { session, loading: sessionLoading, signIn, register, continueAsGuest, signOut } = useSession()
   const [authNotice, setAuthNotice] = useState('')
 
   const handleSignIn = useCallback(
@@ -624,6 +624,15 @@ function App() {
       return next
     },
     [signIn],
+  )
+
+  const handleRegister = useCallback(
+    async (input: RegisterInput) => {
+      const next = await register(input)
+      setAuthNotice('')
+      return next
+    },
+    [register],
   )
 
   const handleGuest = useCallback(() => {
@@ -646,7 +655,14 @@ function App() {
   )
 
   return (
-    <RequireSession session={session} notice={authNotice} onSignIn={handleSignIn} onGuest={handleGuest}>
+    <RequireSession
+      session={session}
+      loading={sessionLoading}
+      notice={authNotice}
+      onSignIn={handleSignIn}
+      onRegister={handleRegister}
+      onGuest={handleGuest}
+    >
       {(activeSession) => (
         <Workbench
           session={activeSession}

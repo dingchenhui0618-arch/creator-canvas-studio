@@ -9,10 +9,22 @@ import { listTemplates, getTemplate, reuseTemplate, deleteTemplate, templateStat
 import { createAgentsRouter } from './routes/agents.mjs'
 import { createFlowsRouter } from './routes/flows.mjs'
 import { createReviewRouter } from './routes/review.mjs'
+import { createAuthRouter } from './routes/auth.mjs'
+import { currentUser } from './auth.mjs'
 import { bdcStatus } from './bdc.mjs'
 
 // 功能路由：每个模块自己处理 /api/<prefix> 下的请求，index.mjs 只管分发
-const featureRoutes = [createAgentsRouter(), createFlowsRouter(), createReviewRouter()]
+// auth 放最前面：/api/auth/* 永远不需要登录就能访问
+const featureRoutes = [createAuthRouter(), createAgentsRouter(), createFlowsRouter(), createReviewRouter()]
+
+// VQ_REQUIRE_AUTH=1 时，除少数公开端点外所有 /api/* 都要登录。
+// 默认关闭，本地演示不受影响；生产必须打开。
+const PUBLIC_API = ['/api/auth', '/api/health', '/api/version']
+function needsLogin(pathname) {
+  if (!config.auth.requireAuth) return false
+  if (!pathname.startsWith('/api/')) return false
+  return !PUBLIC_API.some((prefix) => pathname === prefix || pathname.startsWith(prefix + '/'))
+}
 
 const STARTED_AT = new Date().toISOString()
 
@@ -80,6 +92,10 @@ const server = http.createServer(async (req, res) => {
         const handled = await route.handle(req, res, url, pathname)
         if (handled !== false) return
       }
+    }
+
+    if (needsLogin(pathname) && !currentUser(req)) {
+      return sendJson(res, 401, { error: '未登录', loginRequired: true })
     }
 
     if (pathname === '/api/version') {

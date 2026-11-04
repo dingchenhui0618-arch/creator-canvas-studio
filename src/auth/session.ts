@@ -1,5 +1,12 @@
-// 本地演示会话：纯前端 mock，不连接任何真实账号体系，也不校验真实密码。
-// 任何邮箱 + 任意 6 位以上密码都能登录；演示账号只是给评审人一个可复现的入口。
+// 账号会话：真实请求走后端 /api/auth/*，凭据是服务端下发的 HttpOnly cookie。
+// 前端既不保存密码也不保存 token；本地只缓存 user（加 signedInAt / remember 这类非机密元数据）
+// 供首屏渲染，任何「当前是谁」的判断都以 /api/auth/me 为准。
+import {
+  login as requestLogin,
+  logout as requestLogout,
+  register as requestRegister,
+} from '../api/auth'
+
 export type SessionKind = 'demo' | 'account' | 'guest'
 
 export type SessionUser = {
@@ -23,7 +30,13 @@ export type SignInInput = {
   remember: boolean
 }
 
-export type AuthField = 'email' | 'password' | 'form'
+export type RegisterInput = {
+  email: string
+  password: string
+  name?: string
+}
+
+export type AuthField = 'email' | 'password' | 'name' | 'form'
 
 export class AuthError extends Error {
   field: AuthField
@@ -37,29 +50,39 @@ export class AuthError extends Error {
 
 export const SESSION_KEY = 'visionqa.session.v1'
 
-// 用拼接写出演示邮箱，避免源码里出现完整的邮箱字面量。
+// 用拼接写出邮箱，避免源码里出现完整字面量；这两个常量只给后台展示用，登录页以 /api/auth/config 为准。
 const AT = String.fromCharCode(64)
 export const DEMO_EMAIL = ['demo', 'visionqa.studio'].join(AT)
 export const EXAMPLE_EMAIL = ['name', 'studio.com'].join(AT)
 export const DEMO_NAME = '演示用户'
-export const MIN_PASSWORD_LENGTH = 6
-export const LOGIN_LATENCY_MS = 700
+// 后端只在注册时校验密码长度，且真值由 GET /api/auth/config 下发；这里只是接口不可用时的兜底。
+export const DEFAULT_MIN_PASSWORD_LENGTH = 8
+export const NAME_MAX_LENGTH = 40
 
 const GUEST_EMAIL = ['guest', 'visionqa.local'].join(AT)
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const SESSION_KINDS: readonly SessionKind[] = ['account', 'demo', 'guest']
+
+function isSessionUser(value: unknown): value is SessionUser {
+  if (typeof value !== 'object' || value === null) return false
+  const user = value as Partial<SessionUser>
+  return (
+    typeof user.id === 'string' &&
+    typeof user.name === 'string' &&
+    typeof user.email === 'string' &&
+    typeof user.workspace === 'string' &&
+    SESSION_KINDS.includes(user.kind as SessionKind)
+  )
+}
 
 function isSession(value: unknown): value is Session {
   if (typeof value !== 'object' || value === null) return false
   const candidate = value as Partial<Session>
-  const user = candidate.user as Partial<SessionUser> | undefined
   return (
     candidate.version === 1 &&
     typeof candidate.signedInAt === 'string' &&
     typeof candidate.remember === 'boolean' &&
-    typeof user === 'object' &&
-    user !== null &&
-    typeof user.name === 'string' &&
-    typeof user.email === 'string'
+    isSessionUser(candidate.user)
   )
 }
 
@@ -79,7 +102,8 @@ function storageCandidates(): Storage[] {
   return storages
 }
 
-function clearStoredSession(): void {
+/** 清掉本地用户缓存（不涉及后端会话）。 */
+export function clearStoredSession(): void {
   for (const storage of storageCandidates()) {
     try {
       storage.removeItem(SESSION_KEY)
@@ -89,29 +113,20 @@ function clearStoredSession(): void {
   }
 }
 
-function persist(session: Session): void {
+/**
+ * 写入本地用户缓存：勾了「记住我」放 localStorage，否则只放当前标签页的 sessionStorage。
+ * 这里存的是 user 档案，不是凭据；cookie 由服务端管理，前端读不到。
+ */
+export function persistSession(session: Session): void {
   clearStoredSession()
-  const target = session.remember ? storageCandidates()[0] : storageCandidates()[1]
+  const [persistent, tabOnly] = storageCandidates()
+  const target = session.remember ? persistent : tabOnly
   if (!target) return
   try {
     target.setItem(SESSION_KEY, JSON.stringify(session))
   } catch {
     // 存储写满或被禁用时，会话只在当前内存里生效。
   }
-}
-
-function hashEmail(email: string): string {
-  let hash = 5381
-  for (let index = 0; index < email.length; index += 1) {
-    hash = (hash * 33) ^ email.charCodeAt(index)
-  }
-  return (hash >>> 0).toString(36)
-}
-
-function displayNameFor(email: string): string {
-  const local = email.split('@')[0]?.replace(/[._-]+/g, ' ').trim()
-  if (!local) return 'VisionQA 用户'
-  return local.replace(/(^|\s)(\S)/g, (_match, prefix: string, char: string) => `${prefix}${char.toUpperCase()}`)
 }
 
 export function readSession(): Session | null {
@@ -123,62 +138,124 @@ export function readSession(): Session | null {
       if (isSession(parsed)) return parsed
       storage.removeItem(SESSION_KEY)
     } catch {
-      // 损坏的会话直接跳过，下一次登录会覆盖它。
+      // 损坏的缓存直接跳过，下一次登录会覆盖它。
     }
   }
   return null
 }
 
-export async function signIn(input: SignInInput): Promise<Session> {
-  const email = input.email.trim().toLowerCase()
+function normalizeEmail(value: string): string {
+  return value.trim().toLowerCase()
+}
+
+function assertEmail(email: string): void {
   if (!EMAIL_PATTERN.test(email)) {
     throw new AuthError('email', `请输入有效的邮箱地址，例如 ${EXAMPLE_EMAIL}`)
   }
-  if (input.password.length < MIN_PASSWORD_LENGTH) {
-    throw new AuthError('password', `密码至少 ${MIN_PASSWORD_LENGTH} 位`)
-  }
-
-  // 演示用的固定延迟：让加载态在真实点击后能被看见，不做网络请求。
-  await new Promise((resolve) => {
-    setTimeout(resolve, LOGIN_LATENCY_MS)
-  })
-
-  const isDemo = email === DEMO_EMAIL
-  const session: Session = {
-    version: 1,
-    remember: input.remember,
-    signedInAt: new Date().toISOString(),
-    user: {
-      id: isDemo ? 'user-demo' : `user-${hashEmail(email)}`,
-      name: isDemo ? DEMO_NAME : displayNameFor(email),
-      email,
-      workspace: '个人工作区',
-      kind: isDemo ? 'demo' : 'account',
-    },
-  }
-  persist(session)
-  return session
 }
 
-export function signInAsGuest(): Session {
-  const session: Session = {
+// 只挡空密码：长度规则归后端（登录不校验长度，老密码不受影响）。
+function assertPasswordPresent(password: string): void {
+  if (!password) {
+    throw new AuthError('password', '请输入密码')
+  }
+}
+
+function assertName(name: string): void {
+  if (name.length > NAME_MAX_LENGTH) {
+    throw new AuthError('name', `昵称最多 ${NAME_MAX_LENGTH} 字`)
+  }
+}
+
+/** 后端错误 → 页面可直接展示的 AuthError：401/429 归到表单级，400/409 保留字段。 */
+function toAuthError(caught: unknown, fallback: string): AuthError {
+  if (caught instanceof AuthError) return caught
+  if (!(caught instanceof Error)) return new AuthError('form', fallback)
+
+  const status = (caught as { status?: number }).status
+  const field = (caught as { field?: AuthField }).field
+  const message = caught.message || fallback
+
+  // 没有 status 说明请求根本没发出去（后端没起来 / 断网），提示要指向环境而不是密码。
+  if (typeof status !== 'number') {
+    return new AuthError('form', '连不上账号服务，请确认后端已启动后重试。')
+  }
+  if (status === 401) return new AuthError('form', message || '邮箱或密码不正确。')
+  if (status === 429) return new AuthError('form', message || '尝试次数过多，请稍后再试。')
+  if (status >= 500) return new AuthError('form', fallback)
+  return new AuthError(field ?? 'form', message)
+}
+
+function createSession(user: SessionUser, remember: boolean): Session {
+  return {
     version: 1,
-    remember: false,
+    user,
+    remember,
     signedInAt: new Date().toISOString(),
-    user: {
+  }
+}
+
+/** 登录：先做本地格式校验，再交给后端；成功会后端已下发 cookie，这里只缓存 user。 */
+export async function signIn(input: SignInInput): Promise<Session> {
+  const email = normalizeEmail(input.email)
+  assertEmail(email)
+  assertPasswordPresent(input.password)
+
+  try {
+    const user = await requestLogin({ email, password: input.password, remember: input.remember })
+    const session = createSession(user, input.remember)
+    persistSession(session)
+    return session
+  } catch (error) {
+    throw toAuthError(error, '登录没有完成，请稍后重试。')
+  }
+}
+
+/** 注册：后端 201 同时下发会话 cookie，注册完即为登录态，不再补一次 login。 */
+export async function register(input: RegisterInput): Promise<Session> {
+  const email = normalizeEmail(input.email)
+  assertEmail(email)
+  assertPasswordPresent(input.password)
+
+  // 昵称可以留空：后端会用邮箱前缀补一个显示名。
+  const name = input.name?.trim() ?? ''
+  assertName(name)
+  try {
+    const user = await requestRegister({ email, password: input.password, name: name || undefined })
+    const session = createSession(user, true)
+    persistSession(session)
+    return session
+  } catch (error) {
+    throw toAuthError(error, '注册没有完成，请稍后重试。')
+  }
+}
+
+/** 访客：纯本地会话，不写后端，只放当前标签页，浏览器重开即失效。 */
+export function signInAsGuest(): Session {
+  const session = createSession(
+    {
       id: 'user-guest',
       name: '访客',
       email: GUEST_EMAIL,
       workspace: '个人工作区',
       kind: 'guest',
     },
-  }
-  persist(session)
+    false,
+  )
+  persistSession(session)
   return session
 }
 
-export function signOut(): void {
-  clearStoredSession()
+/** 退出：先让后端清 cookie，再清本地缓存；后端不可达时也要清干净本地。 */
+export async function signOut(): Promise<void> {
+  const current = readSession()
+  try {
+    if (current?.user.kind !== 'guest') await requestLogout()
+  } catch {
+    // 退出失败不能把用户留在本地的「已登录」假象里。
+  } finally {
+    clearStoredSession()
+  }
 }
 
 export function sessionKindLabel(kind: SessionKind): string {

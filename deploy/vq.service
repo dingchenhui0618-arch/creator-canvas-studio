@@ -1,0 +1,78 @@
+# =============================================================================
+# VisionQA Workbench —— systemd unit
+#
+# 安装：
+#   sudo install -m 0644 deploy/vq.service /etc/systemd/system/vq.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now vq
+#   systemctl status vq --no-pager
+#   journalctl -u vq -f
+#
+# 前提（顺序不要反）：
+#   1. /opt/visionqa 里已有 server/、dist/、node_modules/、package.json
+#   2. /etc/visionqa/env 已存在，且只有 root:visionqa 可读（0640）
+#   3. useradd -r -s /usr/sbin/nologin visionqa 已建好服务账号
+# =============================================================================
+
+[Unit]
+Description=VisionQA Workbench (node server/index.mjs: API + dist)
+Documentation=file:///opt/visionqa/docs/deploy-production.md
+After=network-online.target
+Wants=network-online.target
+# BD Canvas 同机部署时让它先起来（unit 名按你的实际部署改）
+# After=bd-canvas.service
+# Wants=bd-canvas.service
+# 崩溃循环时无限重试；想「试 5 次就停下来等人看」就把下面这行删掉
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=visionqa
+Group=visionqa
+# config.mjs 用 process.cwd() 定位 .env / package.json / dist，这里必须指向应用根目录
+WorkingDirectory=/opt/visionqa
+# 唯一的密钥来源。文件本身不在仓库里，由 deploy/env.production.example 复制而来
+EnvironmentFile=/etc/visionqa/env
+Environment=NODE_ENV=production
+# Environment=TZ=Asia/Shanghai
+
+# 启动前先确认构建产物在，避免起一个只有 API、页面 404 的半成品
+ExecStartPre=/usr/bin/test -f /opt/visionqa/dist/index.html
+# 监听端口来自 env 里的 API_PORT（默认 8787）；监听地址在 index.mjs 里写死 127.0.0.1
+# --max-old-space-size 是 Node 堆上限（1536MB），不是整进程内存
+ExecStart=/usr/bin/node --max-old-space-size=1536 server/index.mjs
+
+# ---- 守护 ----
+Restart=always
+RestartSec=3
+
+# ---- 资源上限 ----
+# 整个 cgroup 的硬上限。ffmpeg / ffprobe 是 execFile 起的子进程，也算在这个 cgroup 里，
+# 所以要比 Node 堆再留 400–500MB 余量，否则一次全片解码就可能撞 MemoryMax 被重启。
+MemoryHigh=1600M
+MemoryMax=2G
+# 一次复刻的镜头检测会吃满 1 核。4 核机给 300% 比较稳，按机器核数改。
+CPUQuota=300%
+TasksMax=256
+LimitNOFILE=65535
+
+# ---- 最小权限 ----
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+# ProtectHome=true 的副作用（有意为之）：config.mjs 的 readLocalToken() 读不到
+# ~/.codex/auth.json，VISION_API_KEY 必须在 /etc/visionqa/env 里显式给，不会静默回落到本机凭证。
+ProtectHome=true
+# 只允许写数据目录与日志目录，其余系统目录只读。
+# 注意：这两个路径必须先存在，否则 systemd 建立 mount namespace 会直接失败（服务起不来）。
+# 改了 /etc/visionqa/env 里的 DATA_DIR，这里要同步改。
+ReadWritePaths=/var/lib/visionqa /var/log/visionqa
+
+# ---- 日志 ----
+# 默认走 journald：journalctl -u vq -f，轮转由 journald 负责（见 docs 的日志一节）。
+# 想落文件并自己轮转时才打开下面两行——append: 不自动轮转，必须同时配 logrotate：
+# StandardOutput=append:/var/log/visionqa/vq.log
+# StandardError=append:/var/log/visionqa/vq.err.log
+
+[Install]
+WantedBy=multi-user.target

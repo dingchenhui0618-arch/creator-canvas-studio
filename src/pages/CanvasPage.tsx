@@ -59,6 +59,18 @@ export default function CanvasPage({ onToast }: CanvasPageProps) {
   )
 }
 
+// BD Canvas 的默认地址是本机回环。访客浏览器里的 127.0.0.1 指的是「他自己那台电脑」，
+// 所以这种地址只能在自己机器上内嵌；对外必须换成独立子域，否则只能给提示卡而不是白屏 iframe。
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]'])
+
+function hostOf(value: string): string {
+  try {
+    return new URL(value).hostname.toLowerCase()
+  } catch {
+    return ''
+  }
+}
+
 function CanvasWorkspace({ onToast }: CanvasPageProps) {
   const rf = useReactFlow()
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<FlowNodeData>>([])
@@ -84,6 +96,11 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
   const [zoom, setZoom] = useState(1)
   const [historyCount, setHistoryCount] = useState(0)
   const [futureCount, setFutureCount] = useState(0)
+
+  const bdcLocalOnly =
+    Boolean(bdc?.web.url) &&
+    LOOPBACK_HOSTS.has(hostOf(bdc?.web.url || '')) &&
+    !LOOPBACK_HOSTS.has(typeof window === 'undefined' ? '' : window.location.hostname.toLowerCase())
 
   const nodesRef = useRef(nodes)
   const edgesRef = useRef(edges)
@@ -702,7 +719,20 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
       ) : null}
 
       {bdcView && bdc?.deployed ? (
-        <iframe className="cv-bdc-frame" src={bdc.web.url} title="BD Canvas" />
+        // 本机地址不能嵌给外部访客：客户浏览器会把 127.0.0.1 解析成他自己的电脑，只会看到白屏。
+        bdcLocalOnly ? (
+          <div className="cv-state">
+            <CircleAlert size={18} strokeWidth={1.5} />
+            <div>
+              <strong>画布还没对外发布</strong>
+              <p>BD Canvas 现在只监听本机（{bdc.web.url}），从别的电脑打开会连到访客自己的机器。</p>
+              <p className="cv-muted">把它部署到独立子域并把 BDC_WEB_URL 指过去，这里就会直接显示画布。</p>
+            </div>
+            <button className="cv-btn" type="button" onClick={() => setBdcView(false)}>用内置编排</button>
+          </div>
+        ) : (
+          <iframe className="cv-bdc-frame" src={bdc.web.url} title="BD Canvas" />
+        )
       ) : loadState === 'error' ? (
         <div className="cv-state">
           <CircleAlert size={18} strokeWidth={1.5} />

@@ -168,8 +168,8 @@ export function OverviewPage({ userName, onCreate, onNavigate }: Props) {
       </div>
 
       <footer className="vq-overview-foot">
-        <span>工作台数据来自本地模板库与演示队列，不连接真实账号体系。</span>
-        <span className="vq-mono">VisionQA · 本地演示</span>
+        <span>账号与会话由服务端校验；模板库与运行队列仍是本机数据。</span>
+        <span className="vq-mono">VisionQA · 本机部署</span>
       </footer>
     </div>
   )

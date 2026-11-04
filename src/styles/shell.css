@@ -1344,6 +1344,50 @@
   }
 }
 
+/* 登录 / 注册切换：沿用形态分段的墨色与发丝线，不引入新颜色 */
+.vq-login-modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 7px;
+  background: rgba(17, 17, 17, 0.04);
+}
+
+.vq-login-mode {
+  padding: 7px 8px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.vq-login-mode:hover:not(:disabled) {
+  background: rgba(17, 17, 17, 0.04);
+  color: var(--ink);
+}
+
+.vq-login-mode[aria-pressed='true'] {
+  border-color: var(--line-strong);
+  background: var(--surface-raised);
+  color: var(--ink);
+}
+
+.vq-login-mode:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(17, 17, 17, 0.14);
+}
+
+.vq-login-mode:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .vq-spin {
     animation: none;
@@ -1854,3 +1898,27 @@
   font-size: 11px;
 }
 .vq-console-card li.is-active { border-color: var(--ink); color: var(--ink); }
+
+/* 会话校验期间的全屏占位（RequireSession 的 BootScreen）：与登录页同一套墨色，不引入新色。 */
+.vq-boot {
+  display: flex;
+  min-height: 100vh;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: var(--paper, #faf9f7);
+  color: var(--ink, #14120f);
+}
+
+.vq-boot-mark {
+  font-family: var(--font-display, var(--font-ui, inherit));
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.vq-boot-text {
+  font-size: 13px;
+  color: var(--muted, #7a746b);
+}

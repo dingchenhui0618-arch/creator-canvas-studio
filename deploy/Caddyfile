@@ -1,0 +1,98 @@
+# =============================================================================
+# VisionQA Workbench —— Caddy 2 生产反代（自动 HTTPS）
+#
+# 放置：/etc/caddy/Caddyfile（Debian/Ubuntu 整文件替换即可，内容就是本文件）
+# 改域名：把下面 vq.example.com 换成自己的域名，ACME 邮箱换成真人邮箱
+# 校验：sudo caddy validate --config /etc/caddy/Caddyfile
+# 生效：sudo systemctl reload caddy
+#
+# 前提：DNS 的 A 记录（有 IPv6 就再加 AAAA）已指向本机，安全组/防火墙放行 80 与 443。
+#      Caddy 会自动申请并续期 Let's Encrypt 证书，不需要另装 certbot。
+#
+# 为什么反代而不是让 Node 直接对公网：
+#   server/index.mjs 里写死 listen(config.port, '127.0.0.1')，本就不接受外网直连。
+#   TLS 终止、安全头、压缩、日志、限流全部放在这里，Node 只处理业务请求。
+#
+# 本文件不含任何密钥。密钥只放在 /etc/visionqa/env（见 deploy/env.production.example）。
+# =============================================================================
+
+{
+	# ACME 账号邮箱（可选但强烈建议）：把下面这行取消注释、换成自己的邮箱，
+	# 证书到期/吊销通知会发到那里。不写也能正常签发，只是收不到提醒。
+	# email 改成你自己的邮箱地址
+
+	# 生产不要开 debug；排查 TLS/上游问题时临时打开再 reload
+	# debug
+}
+
+vq.example.com {
+	# ---- 压缩：zstd 优先，客户端不支持时退 gzip ----
+	# 前端产物是 635KB 的 index-*.js 与 189KB 的 index-*.css（实测），压缩收益明显
+	encode zstd gzip
+
+	# ---- 安全头 ----
+	header {
+		# HSTS：只在确认全站永久 HTTPS 后再开 includeSubDomains。
+		# max-age 先给 1 年；将来若要回退到 HTTP，得先把 max-age 降到 0 并等它过期。
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		# 禁止浏览器猜测 MIME 类型（防止把文本当脚本执行）
+		X-Content-Type-Options "nosniff"
+		# 跨站跳转只带 origin，不带完整路径（模板/画布 ID 会出现在 URL 里）
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# 画布页用 iframe 内嵌 BD Canvas（同源），只允许同源嵌套
+		X-Frame-Options "SAMEORIGIN"
+		# 这个产品不需要摄像头/麦克风/定位
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		# 不暴露 Caddy 版本
+		-Server
+	}
+
+	# ---- 请求体上限 ----
+	# 复刻接口要接收原始视频，后端 MAX_VIDEO_MB 默认 160，这里给 200MB 留余量。
+	# 调得比后端还小会在上传阶段直接 413，界面只显示「请求失败」，很难排查。
+	# request_body 需要 Caddy >= 2.7；更老的版本删掉这一段。
+	request_body {
+		max_size 200MB
+	}
+
+	# ---- 反代到本机 VisionQA（API 与 dist 静态资源同一个进程）----
+	reverse_proxy 127.0.0.1:8787 {
+		# 复刻 90–180s、视觉评审 60–85s、智能体 20–50s 都是上游接口延迟叠加（实测）。
+		# 读超时给 300s，否则长任务会在中间被掐断，前端只看到 502。
+		transport http {
+			dial_timeout 5s
+			response_header_timeout 300s
+		}
+		# X-Forwarded-For / X-Forwarded-Proto Caddy 会自动设置并追加，这里只补 X-Real-IP
+		header_up X-Real-IP {remote_host}
+	}
+
+	# ---- 访问日志：JSON，按体积轮转，落盘而不是只进 journald ----
+	log {
+		output file /var/log/caddy/vq-access.log {
+			roll_size 50MiB
+			roll_keep 10
+			roll_keep_for 14d
+		}
+		format json
+	}
+
+	# ---- 可选：只允许团队出口 IP（内测阶段最省事的访问控制）----
+	# 启用后其余来源一律 403；记得把运维自己的家庭宽带 IP 也加进去。
+	# @notAllowed not remote_ip 203.0.113.0/24 198.51.100.7
+	# respond @notAllowed "forbidden" 403
+
+	# ---- 可选：健康检查不挂公网（要接云监控就保持注释）----
+	# @health path /api/health
+	# handle @health {
+	# 	@internal remote_ip 127.0.0.1 10.0.0.0/8
+	# 	respond @internal "ok" 200
+	# 	respond "forbidden" 403
+	# }
+
+	# ---- 可选：Basic Auth 兜底（真实账号体系上线前的临时门锁）----
+	# 生成口令：caddy hash-password --plaintext '换成你的密码'
+	# basic_auth {
+	# 	team $2a$14$替换成上一条命令输出的哈希
+	# }
+}

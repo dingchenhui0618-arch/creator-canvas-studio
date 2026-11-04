@@ -12,7 +12,7 @@ export default function UsersSection() {
       <AdminHead
         kicker="ADMIN / USERS"
         title="演示账号"
-        description="本地演示账号，尚未接后端用户表。列表直接读取 src/auth/session.ts 的常量与当前会话，不虚构用户。"
+        description="账号已写入服务端数据库（data/auth.db），但这页还没接管理员用户列表接口：下面只展示当前会话，不虚构其他用户。"
         actions={<SourceTag kind="local" source="src/auth/session.ts" />}
       />
 

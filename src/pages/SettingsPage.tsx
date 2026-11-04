@@ -37,7 +37,7 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
             <div>
               <span className="vq-mono">账号 / Account</span>
               <h2>当前会话</h2>
-              <p>本地演示会话，刷新后保持；不会连接真实账号体系。</p>
+              <p>会话保存在服务端，凭据是 HttpOnly cookie；关掉浏览器再打开仍是登录状态。</p>
             </div>
             <MonoTag>{sessionKindLabel(session.user.kind)}</MonoTag>
           </div>
@@ -168,7 +168,7 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
       </div>
 
       <footer className="vq-settings-foot">
-        <span>本地演示登录，不连接真实账号体系。设置只保存在当前会话内。</span>
+        <span>账号会话由服务端校验；设置项只保存在当前浏览器。</span>
         <span className="vq-mono">VisionQA · v0.1.0</span>
       </footer>
     </div>

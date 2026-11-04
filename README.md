@@ -8,9 +8,11 @@ VisionQA 是给画面做**有证据的视觉评审**的工具：结论只有「�
 
 ![工作台](docs/screenshot-workbench.png)
 
-登录是本地演示会话：邮箱 + 密码（6 位以上）、记住我、以访客身份进入。登录状态收在**侧栏左下角**，点开可切换账号或退出；它下面是版本号与在线更新入口，页脚写明「本地演示登录，不连接真实账号体系」。
+登录是**真实的服务端账号**：密码用 scrypt 存哈希，账号落在 `data/auth.db`（SQLite），会话是服务端随机 token + HttpOnly cookie，浏览器里读不到 token 也读不到密码。支持注册、登录、记住我、以访客身份进入；登录失败统一提示「邮箱或密码不正确」，不泄露邮箱是否注册过。登录状态收在**侧栏左下角**，点开可切换账号或退出。
 
 ![登录](docs/screenshot-login.png)
+
+![注册](docs/screenshot-signup.png)
 
 左下角是账号与版本：点账号行可设置 / 切换账号 / 退出；点版本行打开「版本与在线更新」——只读服务端 /api/version 的真实版本号，接口没接入时如实显示「未接入」，不伪造下载进度。
 
@@ -20,7 +22,7 @@ VisionQA 是给画面做**有证据的视觉评审**的工具：结论只有「�
 
 | 模块 | 真实能力 | 事实边界 |
 | --- | --- | --- |
-| 登录 | 全屏登录页、记住我、访客进入、会话持久化、右上角账号菜单 | **本地演示登录**，不连真实账号体系（页脚与设置页都这么写） |
+| 登录 | 注册 / 登录 / 登出 / 记住我 / 访客进入 / 会话持久化，密码 scrypt 存哈希，会话服务端校验 | **没有找回密码、邮箱验证与角色权限**，见 [docs/accounts.md](docs/accounts.md) |
 | 爆款雷达 | 平台/关键词/时间范围检索、卡片互动数据、悬停一键复刻、排序 | 红狐 Key 被禁用期间返回示例数据 + 明确红条 |
 | 一键复刻 | 视频解析 → ffprobe → FFmpeg 拆帧 → 逐帧视觉分析 → 入库，五步进度与实时日志 | 平台链接解析依赖红狐 Key；直链兜底可用 |
 | 模板库 | 脚本结构、分镜表、原链接、可复用规则入库；类型/关键词检索；详情抽屉；送去评审 | 每条模板都带真实抽帧 |
@@ -129,11 +131,31 @@ VisionQA 的定位不是「帮你想文案」，而是「给已经产出的画�
 
 ![画布由 BD Canvas 接管](docs/screenshot-canvas-bdc.png)
 
-## 七、服务器配置
+## 七、账号与会话（真实服务端）
+
+登录不再是前端 mock。后端 `server/auth.mjs` + `server/routes/auth.mjs` 提供五个端点：`GET /api/auth/config`、`POST /api/auth/{register,login,logout}`、`GET /api/auth/me`。要点：
+
+- **口令**：scrypt(N=16384, r=8, p=1) + 每用户随机盐，格式 `scrypt$N$r$p$salt$key`；库里没有明文密码。
+- **会话**：32 字节随机 token，库里只存 `sha256(token)`；cookie 是 `HttpOnly; SameSite=Lax`，生产加 `Secure`。
+- **不泄露账号存在性**：邮箱不存在时也跑一次 scrypt，登录失败统一 `field:'form'` + 「邮箱或密码不正确」。
+- **限流**：同 IP + 邮箱 10 分钟失败 8 次锁；写请求校验 `Origin` 与 `Host` 一致，挡最省事的 CSRF。
+- **受保护接口**：`VQ_REQUIRE_AUTH=1` 时除 `/api/auth/*`、`/api/health`、`/api/version` 外全部要登录，未登录返回 `{error:'未登录', loginRequired:true}`，前端收到就在 `src/api/client.ts` 派发 `vq:auth-required` 统一切回登录页。
+
+**四个开关的默认值都在「不安全」一侧**（这是为了让本机演示不受影响），生产必须显式写：`VQ_REQUIRE_AUTH=1`、`VQ_SECURE_COOKIES=1`、`VQ_DEMO_ACCOUNT=0`、`VQ_REGISTRATION=0`（按需）。演示账号由后端 seed，密码通过 `/api/auth/config` 下发给登录页，**前端源码里没有任何密码**；关掉演示账号后登录页那块入口整体消失。
+
+验收：`node scripts/test-auth.mjs` 起临时实例跑 16 项端到端断言（含「库里查不到明文 token / 明文密码」），全过；界面侧另做过一次真实点击：注册新账号 → 直接进工作台 → 退出 → 回登录页 → 错误密码给出统一提示 → 演示账号登录 → 进工作台。
+
+没做的部分（别当成已经有了）：找回密码、邮箱验证、角色权限、多工作区、第三方登录。细节与接口契约见 [docs/accounts.md](docs/accounts.md)。
+
+![登录失败：统一提示，不区分邮箱与密码](docs/screenshot-login-error.png)
+
+## 八、服务器配置
 
 内测起步一台 **4C 8G / 100G ESSD / 5M 带宽**、视觉模型继续走 API、BD Canvas 同机部署即可；**不需要 GPU**——评审 60–85s、智能体 20–50s 都是接口延迟。逐档配置、存储/带宽估算、以及上线前必须做的三件事（Windows 脚本换 systemd、JSON 换 SQLite、视频转对象存储）见 [docs/server-sizing.md](docs/server-sizing.md)。
 
-## 八、怎么跑
+**要真正对外上线**时看 [docs/deploy-production.md](docs/deploy-production.md)：域名与 DNS、Caddy 自动 HTTPS（`deploy/Caddyfile`）或 Nginx（`deploy/nginx.conf`）、systemd 守护（`deploy/vq.service`）、环境变量清单（`deploy/env.production.example`）、健康检查、备份恢复与日志轮转，都有可直接复制的命令和验收步骤。三条硬结论：node 只监听 127.0.0.1、公网只走反代；四个 `VQ_` 开关不写就等于裸奔；单机同时复刻不超过 2 路。
+
+## 九、怎么跑
 
 依赖安装后起两个服务：后端 8787（同时托管 dist），前端开发 5191。守护脚本 keep-services.ps1 是单实例，掉了自动拉起，日志在 data/keeper.log。
 
@@ -149,15 +171,16 @@ VisionQA 的定位不是「帮你想文案」，而是「给已经产出的画�
 | 变量 | 用途 |
 | --- | --- |
 | REDFOX_API_KEY | 红狐检索 / 视频解析 Key（当前账号积分不足且 Key 被禁用） |
-| PORT | 后端端口，默认 8787 |
+| API_PORT | 后端端口，默认 8787（监听地址写死 127.0.0.1，公网只走反向代理） |
 | VISION_BASE_URL / VISION_API_KEY / VISION_MODEL | 本地模型通道，默认 http://127.0.0.1:10100/v1 + gpt-6.1-sol |
 | VISIONQA_SERVICE_URL | VisionQA 插件服务地址，默认 http://127.0.0.1:6300 |
 
-## 九、接口
+## 十、接口
 
 | 接口 | 说明 |
 | --- | --- |
 | GET /api/health | 服务与三个外部依赖的可用性（红狐 / 模型 / 模板数） |
+| GET /api/auth/config, POST /api/auth/{register,login,logout}, GET /api/auth/me | 账号与会话（scrypt + HttpOnly cookie），契约见 [docs/accounts.md](docs/accounts.md) |
 | GET /api/search | 红狐检索；不可用时返回 mode:'mock' + quota.code + 充值链接 |
 | POST /api/replicate, GET /api/jobs/:id | 一键复刻流水线（五步进度） |
 | GET /api/templates, GET /api/templates/:id, POST /api/templates/:id/reuse, DELETE /api/templates/:id | 模板库 |
@@ -166,24 +189,26 @@ VisionQA 的定位不是「帮你想文案」，而是「给已经产出的画�
 | POST /api/review, GET /api/review/health | 视觉评审（service / local-model 两种 provider） |
 | GET /media/frames/:id/:file | 抽帧静态文件 |
 
-## 八、目录
+## 十一、目录
 
-前端在 src/：App.tsx 是外壳（侧栏、顶栏、登录门、vq:navigate 事件）；auth/ 是本地演示会话；brand/ 是 VisionQA 标记；styles/tokens.css 是设计 token；api/ 是各模块轻客户端；pages/ 下是 10 个页面（登录、工作台、雷达、模板库、智能体、编辑器、画布、视觉评审、资产库、运行记录、设置）。
+前端在 src/：App.tsx 是外壳（侧栏、顶栏、登录门、vq:navigate 事件）；auth/ 是会话状态（服务端真实校验，含 RequireSession 与 useSession）；brand/ 是 VisionQA 标记；styles/tokens.css 是设计 token；api/ 是各模块轻客户端；pages/ 下是 10 个页面（登录、工作台、雷达、模板库、智能体、编辑器、画布、视觉评审、资产库、运行记录、设置）。
 
 后端在 server/：index.mjs 做路由分发与静态托管；routes/ 下 agents、flows、review 三个路由模块；llm.mjs 统一模型调用（重试 + 降级链）；review.mjs 是评审适配；redfox.mjs 是红狐客户端（限流、缓存、单飞、错误映射）；media.mjs 与 frames.mjs 负责视频解析与抽帧；templates.mjs、agents.mjs、flows.mjs 是 JSON 原子写存储。
 
 文档在 docs/：design-direction-v2.md（视觉方向与去 AI 味清单）、review-integration.md（评审契约）、replication-pipeline.md（复刻链路与红狐实测）、canvas-source-attribution.md（画布开源调研）。
 
-## 九、已知限制
+## 十二、已知限制
 
 - 红狐账号积分不足且 Key 被禁用：雷达只能给示例数据；重新充值并换 Key 后无需改代码。
 - 视觉评审在插件服务未启动时走本地模型，结论可信度取决于模型；界面始终标出 provider，不冒充插件结果。
 - 资产库仍是演示数据；智能体「数量」固定 1；工具只声明不自动执行。
-- 登录是本地演示会话，不接真实账号体系，也没有权限与多租户。
+- 账号是真的（SQLite + scrypt + 服务端会话），但没有找回密码、邮箱验证、角色权限与多租户；后台管理版的用户列表页因此只展示当前会话。
+- 单机部署：复刻任务没有队列（`startReplicate` 直接起 ffmpeg），多人同时复刻会叠加 CPU；4C8G 单机建议同时复刻 ≤2。
 
-## 十、验证记录
+## 十三、验证记录
 
-- npx tsc -p tsconfig.app.json --noEmit 通过；npx oxlint src 0 error / 0 warning（39 个文件）。
+- npx tsc -p tsconfig.app.json --noEmit 通过；npx oxlint src 0 error / 0 warning（59 个文件）。
+- 账号体系端到端 16 项全过（`node scripts/test-auth.mjs`）：未登录受保护接口 401、注册即登录、重复注册 409、弱密码 400、登出后旧 cookie 失效、库中无明文 token 与明文密码。
 - 智能体对话实测 44.2s（gpt-6.1-sol）、52.7s（降级链生效）、123.6s（grok-4.6）。
 - 画布 7 节点流程实测 99.0s / 115.5s，/api/runs 可回放逐节点输出。
 - 视觉评审实测 72.9s（gpt-6.1-sol）、84.2s（gpt-6-luna），5–7 条 observation，锚点渲染与图片对齐。
