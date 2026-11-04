@@ -169,7 +169,7 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
 
       <footer className="vq-settings-foot">
         <span>本地演示登录，不连接真实账号体系。设置只保存在当前会话内。</span>
-        <span className="vq-mono">VisionQA Workbench · v0.1.0</span>
+        <span className="vq-mono">VisionQA · v0.1.0</span>
       </footer>
     </div>
   )

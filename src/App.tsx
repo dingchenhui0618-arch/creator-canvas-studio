@@ -39,12 +39,29 @@ import { RunsPage } from './pages/RunsPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { RadarPage } from './pages/RadarPage'
 import { TemplateLibraryPage } from './pages/TemplateLibraryPage'
+import AdminConsolePage from './pages/admin/AdminConsolePage'
+import LabConsolePage from './pages/lab/LabConsolePage'
 import { RequireSession } from './auth/RequireSession'
 import { useSession } from './auth/useSession'
 import { initialsFor, sessionKindLabel, type Session, type SignInInput } from './auth/session'
 import packageJsonRaw from '../package.json?raw'
+import {
+  EDITION_BY_ID,
+  EDITION_ICON,
+  EDITIONS,
+  readStoredEdition,
+  EDITION_STORAGE_KEY,
+  type AdminSection,
+  type EditionId,
+  type LabSection,
+} from './editions'
 
 const APP_VERSION = (JSON.parse(packageJsonRaw) as { version?: string }).version ?? '0.0.0'
+
+function sectionLabel(edition: EditionId, section: string): string {
+  const found = EDITION_BY_ID[edition].nav.find((item) => item.section === section)
+  return found?.label ?? EDITION_BY_ID[edition].nav[0]?.label ?? ''
+}
 
 function Workbench({
   session,
@@ -58,6 +75,11 @@ function Workbench({
   onRequestLogin: () => void
 }) {
   const [activePage, setActivePage] = useState<Page>('overview')
+  const [edition, setEdition] = useState<EditionId>(() => readStoredEdition())
+  const [consoleSection, setConsoleSection] = useState<string>(() => {
+    const stored = readStoredEdition()
+    return EDITION_BY_ID[stored].nav[0]?.section ?? 'overview'
+  })
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [search, setSearch] = useState('')
   const [assetFilter, setAssetFilter] = useState('全部')
@@ -103,6 +125,19 @@ function Workbench({
     } finally {
       setUpdateChecking(false)
     }
+  }, [])
+
+  const switchEdition = useCallback((next: EditionId) => {
+    setEdition(next)
+    try {
+      window.localStorage.setItem(EDITION_STORAGE_KEY, next)
+    } catch {
+      // 隐私模式下写不进去，本次会话仍然生效
+    }
+    setAccountMenuOpen(false)
+    const firstSection = EDITION_BY_ID[next].nav[0]?.section
+    if (firstSection) setConsoleSection(firstSection)
+    if (next === 'user') setActivePage('overview')
   }, [])
 
   const go = useCallback((page: Page) => {
@@ -170,6 +205,8 @@ function Workbench({
   }
 
   const renderPage = () => {
+    if (edition === 'admin') return <AdminConsolePage section={consoleSection as AdminSection} />
+    if (edition === 'lab') return <LabConsolePage section={consoleSection as LabSection} />
     switch (activePage) {
       case 'canvas':
         return <CanvasPage onToast={notify} />
@@ -248,30 +285,99 @@ function Workbench({
             </button>
           )}
 
-          <nav className="vq-nav" aria-label="主导航">
-            <NavItem icon={Grid2X2} label="工作台" active={activePage === 'overview'} compact={!sidebarOpen} onClick={() => go('overview')} />
-            <NavItem icon={Radar} label="爆款雷达" active={activePage === 'radar'} compact={!sidebarOpen} onClick={() => go('radar')} />
-            <NavItem icon={LayoutTemplate} label="模板库" active={activePage === 'templates'} compact={!sidebarOpen} onClick={() => go('templates')} />
-            <NavItem
-              icon={Bot}
-              label="智能体"
-              active={activePage === 'agents' || activePage === 'agent-editor'}
-              compact={!sidebarOpen}
-              badge={String(agents.length)}
-              onClick={() => go('agents')}
-            />
-            <NavItem icon={Workflow} label="画布" active={activePage === 'canvas'} compact={!sidebarOpen} onClick={() => go('canvas')} />
-            <NavItem icon={ScanEye} label="视觉评审" active={activePage === 'review'} compact={!sidebarOpen} onClick={() => go('review')} />
-          </nav>
+          {sidebarOpen ? (
+            <div className="vq-edition" aria-label="形态切换">
+              <div className="vq-edition-head">
+                <span className="vq-edition-kicker">形态</span>
+                <span className="vq-edition-mono">{EDITION_BY_ID[edition].mono}</span>
+              </div>
+              <div className="vq-edition-track" role="tablist" aria-label="切换形态">
+                {EDITIONS.map((item) => {
+                  const Icon = EDITION_ICON[item.id]
+                  const active = edition === item.id
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      className={`vq-edition-option${active ? ' is-active' : ''}`}
+                      onClick={() => switchEdition(item.id)}
+                      title={item.hint}
+                    >
+                      <Icon size={13} strokeWidth={1.5} />
+                      <span>{item.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="vq-edition-hint">{EDITION_BY_ID[edition].hint}</p>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="vq-edition-compact"
+              onClick={() => {
+                const order: EditionId[] = ['user', 'admin', 'lab']
+                const next = order[(order.indexOf(edition) + 1) % order.length]
+                switchEdition(next)
+              }}
+              title={'当前：' + EDITION_BY_ID[edition].label}
+              aria-label={'切换形态，当前 ' + EDITION_BY_ID[edition].label}
+            >
+              {(() => {
+                const Icon = EDITION_ICON[edition]
+                return <Icon size={14} strokeWidth={1.5} />
+              })()}
+            </button>
+          )}
+
+          {edition === 'user' ? (
+            <nav className="vq-nav" aria-label="主导航">
+              <NavItem icon={Grid2X2} label="工作台" active={activePage === 'overview'} compact={!sidebarOpen} onClick={() => go('overview')} />
+              <NavItem icon={Radar} label="爆款雷达" active={activePage === 'radar'} compact={!sidebarOpen} onClick={() => go('radar')} />
+              <NavItem icon={LayoutTemplate} label="模板库" active={activePage === 'templates'} compact={!sidebarOpen} onClick={() => go('templates')} />
+              <NavItem
+                icon={Bot}
+                label="智能体"
+                active={activePage === 'agents' || activePage === 'agent-editor'}
+                compact={!sidebarOpen}
+                badge={String(agents.length)}
+                onClick={() => go('agents')}
+              />
+              <NavItem icon={Workflow} label="画布" active={activePage === 'canvas'} compact={!sidebarOpen} onClick={() => go('canvas')} />
+              <NavItem icon={ScanEye} label="视觉评审" active={activePage === 'review'} compact={!sidebarOpen} onClick={() => go('review')} />
+            </nav>
+          ) : (
+            <nav className="vq-nav" aria-label={EDITION_BY_ID[edition].label + '导航'}>
+              {EDITION_BY_ID[edition].nav.map((item) => {
+                const Icon = item.icon
+                return (
+                  <NavItem
+                    key={item.id}
+                    icon={Icon}
+                    label={item.label}
+                    active={consoleSection === item.section}
+                    compact={!sidebarOpen}
+                    onClick={() => setConsoleSection(item.section ?? item.id)}
+                  />
+                )
+              })}
+            </nav>
+          )}
         </div>
 
         <div className="vq-sidebar-bottom">
-          <div className="vq-nav-divider" role="presentation" />
-          <nav className="vq-nav vq-nav--utility" aria-label="设置层">
-            <NavItem utility icon={Layers3} label="资产库" active={activePage === 'assets'} compact={!sidebarOpen} onClick={() => go('assets')} />
-            <NavItem utility icon={Activity} label="运行记录" active={activePage === 'runs'} compact={!sidebarOpen} onClick={() => go('runs')} />
-            <NavItem utility icon={Settings2} label="设置" active={activePage === 'settings'} compact={!sidebarOpen} onClick={() => go('settings')} />
-          </nav>
+                    {edition === 'user' ? (
+            <>
+  <div className="vq-nav-divider" role="presentation" />
+            <nav className="vq-nav vq-nav--utility" aria-label="设置层">
+              <NavItem utility icon={Layers3} label="资产库" active={activePage === 'assets'} compact={!sidebarOpen} onClick={() => go('assets')} />
+              <NavItem utility icon={Activity} label="运行记录" active={activePage === 'runs'} compact={!sidebarOpen} onClick={() => go('runs')} />
+              <NavItem utility icon={Settings2} label="设置" active={activePage === 'settings'} compact={!sidebarOpen} onClick={() => go('settings')} />
+            </nav>
+            </>
+          ) : null}
 
           <div className="vq-sidebar-account" ref={accountRef}>
             {isGuest ? (
@@ -383,7 +489,11 @@ function Workbench({
             <div className="vq-breadcrumb">
               <span>{session.user.workspace}</span>
               <ChevronRight size={11} />
-              <strong>{pageLabels[activePage]}</strong>
+              <strong>
+                {edition === 'user'
+                  ? pageLabels[activePage]
+                  : EDITION_BY_ID[edition].label + ' · ' + sectionLabel(edition, consoleSection)}
+              </strong>
             </div>
           </div>
 
@@ -472,7 +582,7 @@ function Workbench({
               </button>
             </div>
 
-            <p className="vq-update-foot">本地演示登录，不连接真实账号体系。© 2026 VisionQA · Workbench</p>
+            <p className="vq-update-foot">本地演示登录，不连接真实账号体系。© 2026 VisionQA</p>
           </div>
         </div>
       )}

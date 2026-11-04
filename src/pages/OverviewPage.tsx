@@ -169,7 +169,7 @@ export function OverviewPage({ userName, onCreate, onNavigate }: Props) {
 
       <footer className="vq-overview-foot">
         <span>工作台数据来自本地模板库与演示队列，不连接真实账号体系。</span>
-        <span className="vq-mono">VisionQA Workbench · 本地演示</span>
+        <span className="vq-mono">VisionQA · 本地演示</span>
       </footer>
     </div>
   )

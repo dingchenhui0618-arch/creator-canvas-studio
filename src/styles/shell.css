@@ -1753,3 +1753,104 @@
     align-items: flex-start;
   }
 }
+
+/* ---------- 形态切换（三个版本形态） ---------- */
+.vq-edition {
+  margin: 10px 10px 4px;
+  padding: 9px 10px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.vq-edition-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 7px;
+}
+.vq-edition-kicker {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.vq-edition-mono {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: .12em;
+  color: var(--ink);
+  padding: 1px 5px;
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
+}
+.vq-edition-track {
+  display: grid;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 7px;
+  background: rgba(17, 17, 17, .04);
+}
+.vq-edition-option {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: background .12s ease, color .12s ease;
+}
+.vq-edition-option:hover { color: var(--ink); background: rgba(17, 17, 17, .04); }
+.vq-edition-option.is-active {
+  background: var(--surface-raised);
+  border-color: var(--line-strong);
+  color: var(--ink);
+  font-weight: 500;
+}
+.vq-edition-hint {
+  margin: 8px 0 0;
+  color: var(--faint);
+  font-size: 10px;
+  line-height: 1.5;
+}
+.vq-edition-compact {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin: 10px auto 4px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+}
+.vq-edition-compact:hover { border-color: var(--line-strong); color: var(--ink); }
+
+/* 形态占位页 */
+.vq-console { display: flex; flex-direction: column; gap: 18px; }
+.vq-console-head .vq-mono { color: var(--faint); letter-spacing: .14em; }
+.vq-console-head h1 { margin: 8px 0 6px; font-size: 26px; letter-spacing: -.02em; }
+.vq-console-head p { margin: 0; color: var(--muted); font-size: 12.5px; }
+.vq-console-card {
+  padding: 20px 22px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.vq-console-card strong { display: block; font-size: 14px; }
+.vq-console-card p { margin: 6px 0 12px; color: var(--muted); font-size: 12px; }
+.vq-console-card ul { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
+.vq-console-card li {
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--faint);
+  font-size: 11px;
+}
+.vq-console-card li.is-active { border-color: var(--ink); color: var(--ink); }
