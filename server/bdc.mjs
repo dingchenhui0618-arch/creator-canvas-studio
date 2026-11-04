@@ -14,7 +14,13 @@ async function probe(url, timeout = 1200) {
 }
 
 export async function bdcStatus() {
-  const [web, admin, api] = await Promise.all([probe(WEB_URL), probe(ADMIN_URL + '/admin/'), probe(API_URL)])
+  // Vite 开发服务器首次响应通常要 1~5s（要转译 index.html 与依赖），探活给足 5s；
+  // 正式构建后这一步是毫秒级。
+  const [web, admin, api] = await Promise.all([
+    probe(WEB_URL, 5000),
+    probe(ADMIN_URL + '/admin/'),
+    probe(API_URL),
+  ])
   return {
     web: { url: WEB_URL, ...web },
     admin: { url: ADMIN_URL + '/admin/', ...admin },

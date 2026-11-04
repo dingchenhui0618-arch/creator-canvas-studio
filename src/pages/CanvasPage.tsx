@@ -603,7 +603,14 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      void getBdcStatus().then(setBdc).catch(() => undefined)
+      void getBdcStatus()
+        .then((status) => {
+          setBdc(status)
+          // BD Canvas 部署后它就是画布本体，默认直接进 BD Canvas；
+          // 用户点「回到内置编排」才切回本仓库那套节点编排。
+          if (status.deployed) setBdcView(true)
+        })
+        .catch(() => undefined)
     }, 0)
     return () => window.clearTimeout(timer)
   }, [])
@@ -618,6 +625,24 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
 
   return (
     <div className="page cv-page">
+      {bdcView && bdc?.deployed ? (
+        <div className="cv-head cv-head--bdc">
+          <div className="cv-head-main">
+            <div className="cv-eyebrow">画布 / BD CANVAS</div>
+            <div className="cv-title-row">
+              <span className="cv-bdc-name">BD Canvas</span>
+              <span className="cv-save is-saved" title={bdc.web.url}>
+                <span className="cv-save-dot" />本机已连接
+              </span>
+            </div>
+            <p className="cv-sub">画布与生成链路都在 BD Canvas（{bdc.web.url}），账号与额度在它自己的后台。</p>
+          </div>
+          <div className="cv-head-actions">
+            <button className="cv-btn" type="button" onClick={() => setBdcView(false)}>回到内置编排</button>
+            <a className="cv-btn" href={bdc.web.url} target="_blank" rel="noreferrer">新窗口</a>
+          </div>
+        </div>
+      ) : (
       <div className="cv-head">
         <div className="cv-head-main">
           <div className="cv-eyebrow">画布 / 流程编排</div>
@@ -665,14 +690,13 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
           </button>
         </div>
       </div>
+      )}
 
-      {bdc?.deployed ? (
+      {bdc?.deployed && !bdcView ? (
         <div className="cv-bdc-bar">
           <span className="vq-mono">BD CANVAS · 本机已部署</span>
           <p>画布由 BD Canvas 接管（{bdc.web.url}）；这里的流程编排保留作备选，数据各存各的。</p>
-          <button className="cv-btn" type="button" onClick={() => setBdcView((value) => !value)}>
-            {bdcView ? '回到内置编排' : '在这里打开'}
-          </button>
+          <button className="cv-btn" type="button" onClick={() => setBdcView(true)}>在这里打开</button>
           <a className="cv-btn" href={bdc.web.url} target="_blank" rel="noreferrer">新窗口</a>
         </div>
       ) : null}

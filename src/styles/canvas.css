@@ -635,3 +635,14 @@
   border-radius: 10px;
   background: var(--surface);
 }
+
+/* BD Canvas 为画布本体时的紧凑页头 */
+.cv-head--bdc { padding-bottom: 14px; }
+.cv-bdc-name {
+  font-family: var(--font-display, inherit);
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+.cv-head--bdc + .cv-bdc-frame { height: calc(100vh - 214px); }

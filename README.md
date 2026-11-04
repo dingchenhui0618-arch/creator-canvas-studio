@@ -121,11 +121,13 @@ VisionQA 的定位不是「帮你想文案」，而是「给已经产出的画�
 
 - **不 vendor、不提交** BD Canvas 的任何源码或构建产物（公开仓库提交就等于分发）；
 - BD Canvas 单独部署在本机，跑它自己的 5312（后端）/ 5313（后台管理）/ 6677（网页入口）；
-- 工作台只做探活与跳转：GET /api/bdc/status 探测这三个地址，画布页检测到它在跑就出现「BD CANVAS · 本机已部署」接入条，可内嵌 6677 或新窗口打开；内置编排保留作为备选，两套数据互不影响。
+- 工作台只做探活与内嵌：GET /api/bdc/status 探测这三个地址，画布页拿到 `deployed=true` 就**默认直接进 BD Canvas 本体**（全宽 iframe），页头换成「画布 / BD CANVAS + 本机已连接 + 回到内置编排 / 新窗口」；没有部署时仍是本仓库那套节点编排。
 
-部署步骤、环境变量、管理员初始账号与验收清单见 [docs/bd-canvas-integration.md](docs/bd-canvas-integration.md)，自检用 node scripts/check-bdc.mjs。
+部署记录、三个必踩的坑（Python 不在 PATH、requirements 少两个包、根 .env 没有代码读）与验收清单见 [docs/bd-canvas-integration.md](docs/bd-canvas-integration.md)，自检用 node scripts/check-bdc.mjs，重启用 `scripts/start-bdc.ps1`。
 
-**当前状态**：本机还没找到源码压缩包，三端口都是 [MISS]，所以画布仍跑内置编排；源码落到 D:\\Projects\\bd-canvas 后按文档第二节执行即可接管。
+**当前状态（2026-11-04 实测）**：已解压到 `D:\Projects\bd-canvas`，5312 / 5313 / 6677 三端口都返回 200，`/api/bdc/status` 的 `deployed` 为 true，画布页由 BD Canvas 接管；后台 `bdadmin` 初始密码已改。**还差模型 Key**——后台「Key 管理」为空，出图链路没通。
+
+![画布由 BD Canvas 接管](docs/screenshot-canvas-bdc.png)
 
 ## 七、服务器配置
 
