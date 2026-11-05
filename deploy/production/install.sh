@@ -64,7 +64,9 @@ fi
 cd "$APP_DIR"
 # 国内机器直接走 npmmirror，快一个数量级
 /usr/local/bin/npm config set registry https://registry.npmmirror.com || true
-npm ci --no-audit --no-fund
+# --ignore-scripts：跳过 ffmpeg-static / ffprobe-static 的安装期下载（每个 80MB+，国内常常卡住）。
+# 生产按「远端算力」抽帧时本来就不需要本地 ffmpeg；真要在服务器抽帧再单独 npm rebuild ffmpeg-static。
+npm ci --no-audit --no-fund --ignore-scripts
 npm run build
 chown -R "$APP_USER":"$APP_USER" "$APP_DIR"
 
