@@ -5,15 +5,6 @@ import { MonoTag, StatusPill } from '../components/ui'
 import { recentReplications, reviewQueue, workbenchTasks } from '../data/mock'
 import '../styles/overview.css'
 
-function greeting(date: Date): string {
-  const hour = date.getHours()
-  if (hour < 6) return '凌晨好'
-  if (hour < 11) return '早上好'
-  if (hour < 13) return '中午好'
-  if (hour < 18) return '下午好'
-  return '晚上好'
-}
-
 function todayLabel(date: Date): string {
   const parts = new Intl.DateTimeFormat('zh-CN', {
     year: 'numeric',
@@ -44,11 +35,12 @@ export function OverviewPage({ userName, onCreate, onNavigate }: Props) {
     <div className="vq-page">
       <header className="vq-page-head">
         <div>
-          <span className="vq-mono">{todayLabel(now)}</span>
+          {/* 不给问候语：这一屏的价值是「有几件事、各是什么」，不是寒暄 */}
+          <span className="vq-mono">工作台 · {userName} · {todayLabel(now)}</span>
           <h1>
-            {greeting(now)}，{userName}
+            {workbenchTasks.length} 项待办 · {reviewQueue.length} 条待评审 · {recentReplications.length} 条今日入库
           </h1>
-          <p>今天先做三件事：复刻一条爆款、核对三张待确认帧、把一条口播模板接进画布。</p>
+          <p>按优先级排好了三件事；下面左右两侧分别是最近入库的脚本结构与待评审队列。</p>
         </div>
         <div className="vq-page-actions">
           <button type="button" className="vq-button vq-button--ghost" onClick={() => onNavigate('runs')}>

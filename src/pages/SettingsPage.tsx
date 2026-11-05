@@ -15,7 +15,8 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
   const [autoSave, setAutoSave] = useState(true)
   const [runNotify, setRunNotify] = useState(true)
 
-  const storage = session.remember ? 'localStorage' : 'sessionStorage'
+  const guest = session.user.kind === 'guest'
+  const credentialRow = guest ? '访客 · 不发凭据' : 'vq_session · HttpOnly cookie'
   const signedInAt = new Intl.DateTimeFormat('zh-CN', {
     dateStyle: 'medium',
     timeStyle: 'short',
@@ -62,23 +63,21 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
             <div className="vq-row">
               <div className="vq-row-copy">
                 <strong>会话存储</strong>
-                <span>退出登录或切换账号会清空这处记录</span>
+                <span>{guest ? '访客模式不落任何凭据，刷新即回到登录页' : '客户端只持 cookie；服务端只存 token 的 sha256'}</span>
               </div>
-              <span className="vq-row-value vq-mono">
-                {storage} · visionqa.session.v1
-              </span>
+              <span className="vq-row-value vq-mono">{credentialRow}</span>
             </div>
             <div className="vq-row">
               <div className="vq-row-copy">
                 <strong>登录方式</strong>
-                <span>演示账号 / 工作邮箱 / 访客，密码不校验真伪</span>
+                <span>{guest ? '跳过鉴权，直接用示例数据浏览' : '邮箱 + 口令，服务端 scrypt 比对；密码不存明文'}</span>
               </div>
               <span className="vq-row-value">{sessionKindLabel(session.user.kind)}</span>
             </div>
             <div className="vq-row">
               <div className="vq-row-copy">
                 <strong>本次登录时间</strong>
-                <span>只用于展示，不参与权限判断</span>
+                <span>服务端会话的创建时间，用于会话过期判断</span>
               </div>
               <span className="vq-row-value vq-mono">{signedInAt}</span>
             </div>

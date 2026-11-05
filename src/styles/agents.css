@@ -22,7 +22,7 @@
   --pass-soft: #eef4f0;
   max-width: 1200px;
   min-height: 100%;
-  padding: 30px 36px 64px;
+  padding: 32px 32px 64px;
   color: var(--ink);
   font-family: var(--font-ui);
   letter-spacing: -0.005em;
@@ -41,22 +41,22 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 28px;
-  padding-bottom: 22px;
+  gap: 32px;
+  padding-bottom: 24px;
   border-bottom: 1px solid var(--line);
 }
 .agx-head h1 {
-  margin: 10px 0 8px;
-  font-size: 30px;
+  margin: 12px 0 8px;
+  font-size: 28px;
   line-height: 1.04;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: -0.035em;
 }
 .agx-head p {
   max-width: 520px;
   margin: 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.7;
 }
 .agx-eyebrow {
@@ -83,7 +83,7 @@
   padding-top: 4px;
 }
 .agx-back {
-  margin-bottom: 14px;
+  margin-bottom: 16px;
   padding-left: 0;
 }
 
@@ -93,7 +93,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 8px;
   padding: 0 12px;
   color: var(--ink);
   background: var(--surface-raised);
@@ -142,7 +142,7 @@
   background: var(--line-faint);
   border-radius: 3px;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   font-style: normal;
 }
 .agx-mono {
@@ -189,17 +189,17 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 4px 6px 8px;
+  padding: 4px 8px 8px;
   border-bottom: 1px solid var(--line-faint);
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 .agx-popover-empty {
   margin: 0;
-  padding: 18px 8px;
+  padding: 16px 8px;
   color: var(--faint);
   font-size: 12px;
   text-align: center;
@@ -207,7 +207,7 @@
 .agx-history-item {
   display: block;
   width: 100%;
-  padding: 9px 6px;
+  padding: 8px 8px;
   color: var(--ink);
   background: none;
   border: 0;
@@ -230,12 +230,12 @@
   margin-top: 3px;
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: 10px;
 }
 
 /* ---------- 对话框 ---------- */
 .agx-stage {
-  padding: 26px 0 8px;
+  padding: 24px 0 8px;
 }
 .agx-composer-wrap {
   width: min(900px, 100%);
@@ -247,24 +247,24 @@
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 12px;
-  padding-bottom: 10px;
+  padding-bottom: 12px;
   border-bottom: 1px solid var(--line-faint);
 }
 .agx-thread-head .agx-btn {
   height: 28px;
   padding: 0 8px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .agx-thread {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  margin-bottom: 22px;
+  gap: 16px;
+  margin-bottom: 24px;
 }
 .agx-msg {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   max-width: 84%;
 }
 .agx-msg--user {
@@ -276,12 +276,12 @@
   align-items: flex-start;
 }
 .agx-bubble {
-  padding: 11px 14px;
+  padding: 12px 16px;
   color: var(--ink);
   background: var(--surface-raised);
   border: 1px solid var(--line);
   border-radius: 10px 10px 10px 3px;
-  font-size: 13.5px;
+  font-size: 14px;
   line-height: 1.75;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
@@ -302,7 +302,7 @@
   gap: 8px;
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: 10px;
   letter-spacing: 0.02em;
 }
 .agx-msg-meta button {
@@ -314,7 +314,7 @@
   background: none;
   border: 0;
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: 10px;
 }
 .agx-msg-meta button:hover {
   color: var(--ink);
@@ -345,7 +345,7 @@
 .agx-skeleton {
   display: grid;
   gap: 8px;
-  margin-top: 10px;
+  margin-top: 12px;
 }
 .agx-skeleton span {
   height: 7px;
@@ -364,9 +364,9 @@
 .agx-failure {
   display: grid;
   width: min(640px, 100%);
-  gap: 6px;
+  gap: 8px;
   align-self: flex-start;
-  padding: 12px 14px;
+  padding: 12px 16px;
   background: var(--fail-soft);
   border: 1px solid rgba(163, 56, 56, 0.26);
   border-left: 2px solid var(--fail);
@@ -379,7 +379,7 @@
 .agx-failure p {
   margin: 0;
   color: #5d2b2b;
-  font-size: 12.5px;
+  font-size: 12px;
   line-height: 1.7;
 }
 .agx-failure-suggestion {
@@ -388,22 +388,22 @@
 .agx-failure small {
   color: var(--fail);
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: 10px;
 }
 .agx-failure > div {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   margin-top: 4px;
 }
 .agx-failure .agx-btn {
   height: 28px;
   color: var(--fail);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 /* composer */
 .agx-composer {
-  padding: 15px 16px 12px;
+  padding: 16px 16px 12px;
   background: var(--surface-raised);
   border: 1px solid var(--line-strong);
   border-radius: 12px;
@@ -441,7 +441,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid var(--line-faint);
@@ -450,9 +450,9 @@
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   height: 28px;
-  padding: 0 9px;
+  padding: 0 8px;
   color: var(--muted);
   background: var(--surface);
   border: 1px solid var(--line);
@@ -461,13 +461,13 @@
 .agx-capsule > span {
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 .agx-capsule select {
   max-width: 168px;
-  padding: 0 14px 0 0;
+  padding: 0 16px 0 0;
   overflow: hidden;
   color: var(--ink);
   background: transparent;
@@ -483,7 +483,7 @@
 }
 .agx-capsule svg {
   position: absolute;
-  right: 6px;
+  right: 8px;
   color: var(--faint);
   pointer-events: none;
 }
@@ -493,7 +493,7 @@
 }
 .agx-capsule--static b {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
 }
 .agx-composer-foot {
@@ -501,12 +501,12 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 10px;
+  margin-top: 12px;
 }
 .agx-hint {
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: 10px;
   letter-spacing: 0.02em;
 }
 .agx-send {
@@ -531,8 +531,8 @@
 
 /* ---------- 已自建智能体 ---------- */
 .agx-library {
-  margin-top: 38px;
-  padding-top: 26px;
+  margin-top: 32px;
+  padding-top: 24px;
   border-top: 1px solid var(--line);
 }
 .agx-library-head {
@@ -543,20 +543,20 @@
 }
 .agx-library-head h2 {
   margin: 8px 0 0;
-  font-size: 17px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 500;
   letter-spacing: -0.025em;
 }
 .agx-tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: 20px;
-  margin: 18px 0 16px;
+  gap: 24px;
+  margin: 16px 0 16px;
   border-bottom: 1px solid var(--line-faint);
 }
 .agx-tabs button {
   position: relative;
-  padding: 0 0 10px;
+  padding: 0 0 12px;
   color: var(--faint);
   background: none;
   border: 0;
@@ -580,10 +580,10 @@
   background: var(--ink);
 }
 .agx-tabs em {
-  margin-left: 5px;
+  margin-left: 4px;
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: 10px;
   font-style: normal;
   font-weight: 400;
 }
@@ -609,7 +609,7 @@
   display: block;
   width: 100%;
   flex: 1;
-  padding: 15px 15px 12px;
+  padding: 16px 16px 12px;
   color: inherit;
   background: none;
   border: 0;
@@ -623,27 +623,27 @@
   gap: 8px;
 }
 .agx-card-name {
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
 .agx-tag {
   flex: 0 0 auto;
-  padding: 2px 6px;
+  padding: 2px 8px;
   color: var(--faint);
   border: 1px solid var(--line);
   border-radius: 4px;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 0.04em;
 }
 .agx-card-role {
   display: -webkit-box;
   min-height: 40px;
-  margin: 8px 0 14px;
+  margin: 8px 0 16px;
   overflow: hidden;
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: 12px;
   line-height: 1.6;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -656,9 +656,9 @@
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 10px;
+  gap: 12px;
   color: var(--faint);
-  font-size: 10px;
+  font-size: 12px;
 }
 .agx-card-meta .agx-mono {
   display: inline-flex;
@@ -674,7 +674,7 @@
   display: flex;
   justify-content: flex-end;
   gap: 2px;
-  padding: 6px 8px 8px;
+  padding: 8px 8px 8px;
   border-top: 1px solid var(--line-faint);
 }
 .agx-icon-btn {
@@ -699,15 +699,15 @@
 .agx-empty {
   display: grid;
   justify-items: center;
-  gap: 10px;
-  padding: 46px 20px;
+  gap: 12px;
+  padding: 48px 24px;
   background: rgba(255, 255, 255, 0.5);
   border: 1px dashed var(--line-strong);
   border-radius: 10px;
   text-align: center;
 }
 .agx-empty strong {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
 }
 .agx-empty p {
@@ -740,8 +740,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 14px 0;
-  padding: 10px 12px;
+  margin: 16px 0;
+  padding: 12px 12px;
   color: var(--fail);
   background: var(--fail-soft);
   border: 1px solid rgba(163, 56, 56, 0.24);
@@ -756,7 +756,7 @@
   height: 26px;
   padding: 0 8px;
   color: var(--fail);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 /* ---------- 编辑器 ---------- */
@@ -765,7 +765,7 @@
   grid-template-columns: minmax(0, 1fr) 318px;
   gap: 32px;
   align-items: start;
-  margin-top: 26px;
+  margin-top: 24px;
 }
 .agx-editor-main {
   display: grid;
@@ -773,8 +773,8 @@
 }
 .agx-form-section {
   display: grid;
-  gap: 14px;
-  padding: 22px 0 24px;
+  gap: 16px;
+  padding: 24px 0 24px;
   border-bottom: 1px solid var(--line);
 }
 .agx-form-section header {
@@ -787,22 +787,22 @@
 }
 .agx-form-section h2 {
   margin: 0;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 500;
   letter-spacing: -0.01em;
 }
 .agx-field {
   display: grid;
-  gap: 6px;
+  gap: 8px;
 }
 .agx-field > span {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 10px;
+  gap: 12px;
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -815,7 +815,7 @@
 .agx-field textarea,
 .agx-field select {
   width: 100%;
-  padding: 9px 10px;
+  padding: 8px 12px;
   color: var(--ink);
   background: var(--surface-raised);
   border: 1px solid var(--line);
@@ -840,7 +840,7 @@
 }
 .agx-field small {
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 .agx-field-grid {
@@ -853,13 +853,13 @@
 }
 .agx-select-wrap select {
   appearance: none;
-  padding-right: 28px;
+  padding-right: 32px;
   cursor: pointer;
 }
 .agx-select-wrap svg {
   position: absolute;
   top: 50%;
-  right: 9px;
+  right: 8px;
   color: var(--faint);
   pointer-events: none;
   transform: translateY(-50%);
@@ -883,7 +883,7 @@
   display: flex;
   gap: 8px;
   align-items: flex-start;
-  padding: 10px;
+  padding: 12px;
   color: var(--ink);
   background: var(--surface-raised);
   border: 1px solid var(--line);
@@ -916,14 +916,14 @@
 }
 .agx-tool strong {
   display: block;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 600;
 }
 .agx-tool span span {
   display: block;
   margin-top: 2px;
   color: var(--faint);
-  font-size: 10.5px;
+  font-size: 12px;
   line-height: 1.5;
 }
 .agx-editor-foot {
@@ -931,7 +931,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding-top: 20px;
+  padding-top: 24px;
 }
 .agx-editor-foot > div {
   display: flex;
@@ -945,8 +945,8 @@
 }
 .agx-side-panel {
   display: grid;
-  gap: 10px;
-  padding: 15px;
+  gap: 12px;
+  padding: 16px;
   background: var(--surface-raised);
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -958,11 +958,11 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 12px;
   color: var(--faint);
 }
 .agx-side-head .agx-mono {
-  font-size: 10px;
+  font-size: 12px;
 }
 .agx-preview {
   padding: 12px;
@@ -976,10 +976,10 @@
 }
 .agx-check-row {
   display: flex;
-  gap: 7px;
+  gap: 8px;
   align-items: flex-start;
   color: var(--faint);
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.5;
 }
 .agx-check-row.is-pass {
@@ -1013,17 +1013,17 @@
   border: 1px solid var(--line-faint);
   border-radius: 4px;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 10px;
 }
 .agx-side-note {
   display: block;
   color: var(--faint);
-  font-size: 10.5px;
+  font-size: 12px;
   line-height: 1.7;
 }
 .agx-side-panel .agx-btn {
   height: 30px;
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 /* ---------- 响应式 ---------- */
@@ -1041,7 +1041,7 @@
 }
 @media (max-width: 760px) {
   .agx-page {
-    padding: 24px 18px 48px;
+    padding: 24px 16px 48px;
   }
   .agx-head {
     flex-direction: column;
@@ -1083,11 +1083,11 @@
   white-space: normal;
 }
 .agx-md {
-  font-size: 13.5px;
+  font-size: 14px;
   line-height: 1.75;
 }
 .agx-md p {
-  margin: 0 0 10px;
+  margin: 0 0 12px;
 }
 .agx-md p:last-child,
 .agx-md ul:last-child,
@@ -1099,7 +1099,7 @@
 .agx-md-heading {
   margin: 16px 0 8px;
   color: var(--ink);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
@@ -1107,21 +1107,21 @@
   margin-top: 0;
 }
 .agx-md-list {
-  margin: 0 0 10px;
-  padding-left: 18px;
+  margin: 0 0 12px;
+  padding-left: 16px;
 }
 .agx-md-list li {
   margin: 3px 0;
 }
 .agx-md-code {
-  margin: 0 0 10px;
-  padding: 10px 12px;
+  margin: 0 0 12px;
+  padding: 12px 12px;
   overflow: auto;
   background: var(--surface-soft);
   border: 1px solid var(--line-faint);
   border-radius: 6px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 .agx-md code {
@@ -1130,7 +1130,7 @@
   border: 1px solid var(--line-faint);
   border-radius: 3px;
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 .agx-md-code code {
   padding: 0;
@@ -1146,16 +1146,16 @@
 .agx-md-table table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.6;
 }
 .agx-md-table th {
-  padding: 7px 9px;
+  padding: 8px 8px;
   color: var(--faint);
   background: var(--surface);
   border-bottom: 1px solid var(--line);
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: 10px;
   font-weight: 500;
   letter-spacing: 0.06em;
   text-align: left;
@@ -1163,7 +1163,7 @@
   white-space: nowrap;
 }
 .agx-md-table td {
-  padding: 7px 9px;
+  padding: 8px 8px;
   border-top: 1px solid var(--line-faint);
   vertical-align: top;
 }

@@ -8,5 +8,5 @@
   opacity:.55;
 }
 .radar-cover-empty { position:relative; color:var(--faint); }
-.radar-cover-empty .vq-mono { font-size:9.5px; letter-spacing:.14em; }
+.radar-cover-empty .vq-mono { font-size:12px; letter-spacing:.14em; }
 .radar-cover .radar-badge, .radar-cover .radar-duration, .radar-cover .radar-hover { z-index:1; }

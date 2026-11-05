@@ -289,7 +289,10 @@ function Workbench({
             // 形态是低频设置，不是导航。收成一行：图标分段 + 当前形态名，说明留在 tooltip 里。
             // 之前这块占 150px 高、比主导航还显眼，属于层级错位。
             <div className="vq-edition-bar" aria-label="形态切换">
-              <span className="vq-edition-kicker">形态</span>
+              {/* 侧栏只有 222px：左侧写形态名（可省略号），右侧是三个图标分段 */}
+              <span className="vq-edition-kicker" title={EDITION_BY_ID[edition].hint}>
+                {EDITION_BY_ID[edition].label}
+              </span>
               <div className="vq-edition-seg" role="tablist" aria-label="切换形态">
                 {EDITIONS.map((item) => {
                   const Icon = EDITION_ICON[item.id]
@@ -310,9 +313,6 @@ function Workbench({
                   )
                 })}
               </div>
-              <span className="vq-edition-current" title={EDITION_BY_ID[edition].hint}>
-                {EDITION_BY_ID[edition].label}
-              </span>
             </div>
           ) : (
             <button

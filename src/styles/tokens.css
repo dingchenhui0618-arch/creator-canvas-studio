@@ -22,6 +22,31 @@
   --warn-soft: #f7f2e8;
   --fail-soft: #f6eeee;
 
+  
+  /* ---------- 间距：只走 4/8pt 栅格（4 8 12 16 24 32 48 64） ---------- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* ---------- 字阶：10 只给等宽微标签，正文 14 起 ---------- */
+  --text-mono: 10px;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-body: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+  --text-3xl: 40px;
+  --weight-light: 300;
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;

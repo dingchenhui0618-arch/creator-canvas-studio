@@ -66,14 +66,14 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 8px;
   height: 30px;
   padding: 0 12px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--ink);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 500;
   line-height: 1;
   white-space: nowrap;
@@ -121,7 +121,7 @@
 .vq-button--block {
   width: 100%;
   height: 38px;
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 .vq-button:disabled {
@@ -136,7 +136,7 @@
   border: 0;
   background: transparent;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .vq-link:hover {
@@ -150,10 +150,10 @@
   align-items: center;
   gap: 4px;
   height: 17px;
-  padding: 0 6px;
+  padding: 0 8px;
   border-radius: 3px;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -178,12 +178,12 @@
   display: inline-flex;
   align-items: center;
   height: 17px;
-  padding: 0 6px;
+  padding: 0 8px;
   border: 1px solid var(--line);
   border-radius: 3px;
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -192,12 +192,12 @@
 .vq-note {
   display: flex;
   align-items: flex-start;
-  gap: 6px;
-  margin: 14px 0 0;
-  padding-top: 14px;
+  gap: 8px;
+  margin: 16px 0 0;
+  padding-top: 16px;
   border-top: 1px solid var(--line-faint);
   color: var(--faint);
-  font-size: 10.5px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
@@ -221,7 +221,7 @@
   flex-direction: column;
   width: 236px;
   height: 100%;
-  padding: 18px 12px 14px;
+  padding: 16px 12px 16px;
   overflow: visible;
   background: var(--surface);
   border-right: 1px solid var(--line);
@@ -240,8 +240,8 @@
 .vq-sidebar--collapsed {
   flex-basis: 68px;
   width: 68px;
-  padding-right: 10px;
-  padding-left: 10px;
+  padding-right: 12px;
+  padding-left: 12px;
 }
 
 .vq-brand {
@@ -249,7 +249,7 @@
   align-items: center;
   gap: 8px;
   min-height: 38px;
-  padding: 0 6px;
+  padding: 0 8px;
 }
 
 .vq-brand-dot {
@@ -261,7 +261,7 @@
 }
 
 .vq-brand-text {
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: 0.01em;
   white-space: nowrap;
@@ -280,7 +280,7 @@
 .vq-lockup {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
   color: var(--ink);
 }
 
@@ -290,7 +290,7 @@
 }
 
 .vq-lockup-text strong {
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: 0.01em;
   line-height: 1.1;
@@ -299,7 +299,7 @@
 .vq-lockup-text small {
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 0.14em;
   line-height: 1.1;
   text-transform: uppercase;
@@ -308,10 +308,10 @@
 .vq-workspace {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
   width: 100%;
-  margin: 18px 0 16px;
-  padding: 8px 9px;
+  margin: 16px 0 16px;
+  padding: 8px 8px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: transparent;
@@ -333,7 +333,7 @@
   border-radius: 5px;
   background: var(--ink);
   color: #ffffff;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -346,7 +346,7 @@
 
 .vq-workspace-meta strong {
   overflow: hidden;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -356,7 +356,7 @@
   overflow: hidden;
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 0.06em;
   text-overflow: ellipsis;
   text-transform: uppercase;
@@ -377,15 +377,15 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
   min-height: 34px;
-  padding: 0 10px;
+  padding: 0 12px;
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: 12px;
   text-align: left;
   transition: background 0.14s ease, color 0.14s ease;
 }
@@ -425,12 +425,12 @@
 
 .vq-nav-item em {
   min-width: 18px;
-  padding: 1px 5px;
+  padding: 1px 4px;
   border: 1px solid var(--line);
   border-radius: 3px;
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   font-style: normal;
   text-align: center;
 }
@@ -447,13 +447,13 @@
 .vq-sidebar-bottom {
   display: grid;
   gap: 4px;
-  margin-top: 10px;
-  padding-top: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
 }
 
 .vq-nav-divider {
   height: 1px;
-  margin: 2px 10px 8px;
+  margin: 2px 12px 8px;
   background: var(--line);
 }
 
@@ -461,7 +461,7 @@
 .vq-nav-item--utility {
   min-height: 29px;
   color: var(--faint);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .vq-nav--utility .vq-nav-item:hover,
@@ -476,22 +476,22 @@
 
 .vq-nav--utility .vq-nav-item.is-active::before,
 .vq-nav-item--utility.is-active::before {
-  top: 7px;
-  bottom: 7px;
+  top: 8px;
+  bottom: 8px;
 }
 
 .vq-sidebar-account {
   position: relative;
-  margin-top: 6px;
+  margin-top: 8px;
 }
 
 .vq-sidebar-account-row {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
   width: 100%;
   min-height: 40px;
-  padding: 5px 8px;
+  padding: 4px 8px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -514,7 +514,7 @@
   border-radius: 50%;
   background: var(--ink);
   color: #ffffff;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -533,14 +533,14 @@
 }
 
 .vq-sidebar-account-copy strong {
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 500;
 }
 
 .vq-sidebar-account-copy small {
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 0.02em;
 }
 
@@ -555,7 +555,7 @@
   align-items: center;
   gap: 4px;
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: 12px;
 }
 
 .vq-sidebar-account-row--guest:hover .vq-sidebar-account-action {
@@ -575,7 +575,7 @@
   justify-content: space-between;
   gap: 8px;
   margin-bottom: 4px;
-  padding: 7px 9px;
+  padding: 8px 8px;
   border-bottom: 1px solid var(--line);
   color: var(--faint);
 }
@@ -587,16 +587,16 @@
 .vq-version-trigger {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   width: 100%;
   min-height: 28px;
-  padding: 0 10px;
+  padding: 0 12px;
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: 10px;
   letter-spacing: 0.04em;
   text-align: left;
 }
@@ -621,7 +621,7 @@
 
 .vq-version-action {
   margin-left: auto;
-  font-size: 9px;
+  font-size: 12px;
   letter-spacing: 0.08em;
 }
 
@@ -658,7 +658,7 @@
   justify-content: space-between;
   gap: 16px;
   height: 56px;
-  padding: 0 20px;
+  padding: 0 24px;
   background: var(--canvas);
   border-bottom: 1px solid var(--line);
 }
@@ -674,9 +674,9 @@
 .vq-breadcrumb {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   color: var(--faint);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .vq-breadcrumb strong {
@@ -707,8 +707,8 @@
 
 .vq-has-dot::after {
   position: absolute;
-  top: 7px;
-  right: 7px;
+  top: 8px;
+  right: 8px;
   width: 5px;
   height: 5px;
   border: 1px solid var(--canvas);
@@ -720,7 +720,7 @@
 .vq-search {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   width: min(280px, 28vw);
   height: 30px;
   padding: 0 8px;
@@ -743,7 +743,7 @@
   outline: 0;
   background: transparent;
   color: var(--ink);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .vq-search input::placeholder {
@@ -756,7 +756,7 @@
   border-radius: 3px;
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .vq-user-menu {
@@ -767,7 +767,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 3px 6px 3px 3px;
+  padding: 3px 8px 3px 3px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -789,7 +789,7 @@
   border-radius: 50%;
   background: var(--ink);
   color: #ffffff;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -802,7 +802,7 @@
 
 .vq-user-trigger-text strong {
   overflow: hidden;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -812,7 +812,7 @@
   overflow: hidden;
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 0.02em;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -829,7 +829,7 @@
   right: 0;
   z-index: 40;
   width: 236px;
-  padding: 5px;
+  padding: 4px;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   background: var(--surface-raised);
@@ -839,9 +839,9 @@
 .vq-menu-head {
   display: flex;
   align-items: flex-start;
-  gap: 9px;
-  margin-bottom: 5px;
-  padding: 9px;
+  gap: 8px;
+  margin-bottom: 4px;
+  padding: 8px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -859,13 +859,13 @@
 .vq-menu-head span {
   overflow: hidden;
   color: var(--faint);
-  font-size: 10.5px;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .vq-menu-head .vq-mono {
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .vq-menu button {
@@ -873,7 +873,7 @@
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 7px 9px;
+  padding: 8px 8px;
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -910,17 +910,17 @@
 
 .vq-toast {
   position: fixed;
-  right: 22px;
-  bottom: 22px;
+  right: 24px;
+  bottom: 24px;
   z-index: 60;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 9px 13px;
+  padding: 8px 12px;
   border-radius: var(--radius-sm);
   background: var(--ink);
   color: #ffffff;
-  font-size: 11.5px;
+  font-size: 12px;
   box-shadow: var(--shadow-raise);
 }
 
@@ -937,7 +937,7 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  padding: 34px 44px 26px;
+  padding: 32px 48px 24px;
   overflow: hidden;
   background: var(--ink);
   color: #ffffff;
@@ -998,8 +998,8 @@
 
 .vq-login-brand-body h1 {
   margin: 0;
-  font-size: 38px;
-  font-weight: 600;
+  font-size: 40px;
+  font-weight: 500;
   letter-spacing: -0.02em;
   line-height: 1.22;
 }
@@ -1008,40 +1008,40 @@
   max-width: 46ch;
   margin: 0;
   color: rgba(255, 255, 255, 0.64);
-  font-size: 12.5px;
+  font-size: 12px;
   line-height: 1.8;
 }
 
 .vq-login-facts {
   display: grid;
-  gap: 14px;
+  gap: 16px;
   margin: 4px 0 0;
-  padding: 20px 0 0;
+  padding: 24px 0 0;
   border-top: 1px solid rgba(255, 255, 255, 0.14);
   list-style: none;
 }
 
 .vq-login-facts li {
   display: flex;
-  gap: 14px;
+  gap: 16px;
   align-items: baseline;
 }
 
 .vq-login-facts .vq-mono {
   color: rgba(255, 255, 255, 0.38);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .vq-login-facts strong {
   display: block;
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 500;
 }
 
 .vq-login-facts p {
   margin: 3px 0 0;
   color: rgba(255, 255, 255, 0.52);
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.65;
 }
 
@@ -1049,7 +1049,7 @@
   position: relative;
   max-width: 470px;
   margin-top: auto;
-  padding: 13px 16px;
+  padding: 12px 16px;
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.03);
@@ -1063,12 +1063,12 @@
 }
 
 .vq-login-verdict {
-  padding: 1px 6px;
+  padding: 1px 8px;
   border: 1px solid rgba(224, 183, 118, 0.42);
   border-radius: 3px;
   color: #e3bd7e;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 0.06em;
 }
 
@@ -1082,13 +1082,13 @@
 .vq-login-evidence-meta {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   color: rgba(255, 255, 255, 0.42);
 }
 
 .vq-login-evidence-meta .vq-mono {
   color: rgba(255, 255, 255, 0.42);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .vq-login-brand-foot {
@@ -1096,40 +1096,40 @@
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 22px;
-  padding-top: 15px;
+  margin-top: 24px;
+  padding-top: 16px;
   border-top: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .vq-login-brand-foot .vq-mono {
   color: rgba(255, 255, 255, 0.36);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .vq-login-panel {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 40px 32px;
+  padding: 48px 32px;
 }
 
 .vq-login-form-wrap {
   display: grid;
-  gap: 14px;
+  gap: 16px;
   width: 100%;
   max-width: 356px;
 }
 
 .vq-login-form-head {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   margin-bottom: 2px;
 }
 
 .vq-login-form-head h2 {
   margin: 0;
-  font-size: 24px;
-  font-weight: 600;
+  font-size: 28px;
+  font-weight: 500;
   letter-spacing: -0.015em;
 }
 
@@ -1144,12 +1144,12 @@
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  padding: 9px 11px;
+  padding: 8px 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--surface-raised);
   color: var(--muted);
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.55;
 }
 
@@ -1166,22 +1166,22 @@
 
 .vq-field {
   display: grid;
-  gap: 6px;
-  margin-bottom: 13px;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 
 .vq-field-label {
   display: flex;
   align-items: baseline;
-  gap: 6px;
+  gap: 8px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
 }
 
 .vq-field-label .vq-mono {
   color: var(--faint);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .vq-input {
@@ -1189,7 +1189,7 @@
   align-items: center;
   gap: 8px;
   height: 38px;
-  padding: 0 11px;
+  padding: 0 12px;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
   background: var(--surface-raised);
@@ -1215,7 +1215,7 @@
   background: transparent;
   color: var(--ink);
   font-family: var(--font-ui);
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 .vq-input input::placeholder {
@@ -1240,7 +1240,7 @@
 
 .vq-field-error {
   color: var(--fail);
-  font-size: 10.5px;
+  font-size: 12px;
 }
 
 .vq-login-row {
@@ -1254,9 +1254,9 @@
 .vq-check {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   color: var(--muted);
-  font-size: 11.5px;
+  font-size: 12px;
   cursor: pointer;
 }
 
@@ -1270,10 +1270,10 @@
 .vq-or {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   margin: 2px 0;
   color: var(--faint);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .vq-or::before,
@@ -1288,8 +1288,8 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 10px;
-  padding: 11px 12px;
+  gap: 12px;
+  padding: 12px 12px;
   border: 1px dashed var(--line-strong);
   border-radius: var(--radius-sm);
   background: var(--surface);
@@ -1305,14 +1305,14 @@
   overflow: hidden;
   color: var(--ink);
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 10px;
   letter-spacing: 0.02em;
   text-overflow: ellipsis;
 }
 
 .vq-demo-sub {
   color: var(--faint);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .vq-demo .vq-button {
@@ -1322,10 +1322,10 @@
 .vq-login-foot {
   display: flex;
   align-items: flex-start;
-  gap: 6px;
+  gap: 8px;
   margin: 0;
   color: var(--faint);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.55;
 }
 
@@ -1355,13 +1355,13 @@
 }
 
 .vq-login-mode {
-  padding: 7px 8px;
+  padding: 8px 8px;
   border: 1px solid transparent;
   border-radius: 5px;
   background: transparent;
   color: var(--muted);
   font-family: var(--font-ui);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
@@ -1418,32 +1418,32 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  padding: 16px 18px 12px;
+  padding: 16px 16px 12px;
   border-bottom: 1px solid var(--line-faint);
 }
 
 .vq-card-head h2 {
   margin: 3px 0 0;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: -0.01em;
 }
 
 .vq-card-head p {
   margin: 4px 0 0;
   color: var(--faint);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .vq-card-body {
-  padding: 4px 18px 12px;
+  padding: 4px 16px 12px;
 }
 
 .vq-account {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 16px 18px 14px;
+  padding: 16px 16px 16px;
 }
 
 .vq-account-avatar {
@@ -1455,7 +1455,7 @@
   border-radius: 50%;
   background: var(--ink);
   color: #ffffff;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -1467,14 +1467,14 @@
 }
 
 .vq-account-meta strong {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
 }
 
 .vq-account-meta span {
   overflow: hidden;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1490,7 +1490,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 11px 0;
+  padding: 12px 0;
   border-bottom: 1px solid var(--line-faint);
 }
 
@@ -1508,19 +1508,19 @@
   display: block;
   margin-top: 2px;
   color: var(--faint);
-  font-size: 10.5px;
+  font-size: 12px;
 }
 
 .vq-row-value {
   flex: none;
   color: var(--muted);
-  font-size: 11.5px;
+  font-size: 12px;
   text-align: right;
 }
 
 .vq-row-value.vq-mono {
   color: var(--faint);
-  font-size: 9.5px;
+  font-size: 12px;
   text-transform: none;
 }
 
@@ -1561,12 +1561,12 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
-  margin-top: 20px;
-  padding-top: 14px;
+  gap: 16px;
+  margin-top: 24px;
+  padding-top: 16px;
   border-top: 1px solid var(--line);
   color: var(--faint);
-  font-size: 10.5px;
+  font-size: 12px;
 }
 
 /* ---------- 窄屏 ---------- */
@@ -1585,7 +1585,7 @@
 
 .vq-update-modal {
   width: min(440px, 100%);
-  padding: 18px 20px 16px;
+  padding: 16px 24px 16px;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   background: var(--surface-raised);
@@ -1602,12 +1602,12 @@
 .vq-update-head h2 {
   margin-top: 4px;
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .vq-update-rows {
   display: grid;
-  margin: 14px 0 12px;
+  margin: 16px 0 12px;
   border-top: 1px solid var(--line);
 }
 
@@ -1618,7 +1618,7 @@
   gap: 12px;
   padding: 8px 0;
   border-bottom: 1px solid var(--line);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .vq-update-rows span {
@@ -1636,7 +1636,7 @@
 
 .vq-update-note {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.65;
 }
 
@@ -1649,28 +1649,28 @@
 }
 
 .vq-update-message {
-  margin-top: 10px;
-  padding: 8px 10px;
+  margin-top: 12px;
+  padding: 8px 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--line-faint);
   color: var(--ink);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.55;
 }
 
 .vq-update-actions {
   display: flex;
   gap: 8px;
-  margin-top: 14px;
+  margin-top: 16px;
 }
 
 .vq-update-foot {
-  margin-top: 14px;
-  padding-top: 10px;
+  margin-top: 16px;
+  padding-top: 12px;
   border-top: 1px solid var(--line);
   color: var(--faint);
-  font-size: 9.5px;
+  font-size: 12px;
 }
 
 @media (max-width: 1180px) {
@@ -1685,11 +1685,11 @@
   }
 
   .vq-login-brand {
-    padding: 24px 24px 20px;
+    padding: 24px 24px 24px;
   }
 
   .vq-login-brand-body {
-    margin-top: 26px;
+    margin-top: 24px;
   }
 
   .vq-login-brand-body h1 {
@@ -1703,7 +1703,7 @@
 
   .vq-login-facts li {
     display: grid;
-    gap: 6px;
+    gap: 8px;
   }
 
   .vq-login-evidence {
@@ -1712,7 +1712,7 @@
 
   .vq-login-panel {
     align-items: flex-start;
-    padding: 30px 20px 44px;
+    padding: 32px 24px 48px;
   }
 
   .vq-login-form-wrap {
@@ -1734,8 +1734,8 @@
     flex-basis: 68px;
     width: 68px;
     height: 100vh;
-    padding-right: 10px;
-    padding-left: 10px;
+    padding-right: 12px;
+    padding-left: 12px;
   }
 
   .vq-brand,
@@ -1769,7 +1769,7 @@
 
   .vq-search {
     width: 30px;
-    padding: 0 7px;
+    padding: 0 8px;
   }
 
   .vq-search input,
@@ -1800,8 +1800,8 @@
 
 /* ---------- 形态切换（三个版本形态） ---------- */
 .vq-edition {
-  margin: 10px 10px 4px;
-  padding: 9px 10px 10px;
+  margin: 12px 12px 4px;
+  padding: 8px 12px 12px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--surface);
@@ -1810,21 +1810,21 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 7px;
+  margin-bottom: 8px;
 }
 .vq-edition-kicker {
   font-family: var(--font-mono);
-  font-size: 8.5px;
+  font-size: 10px;
   letter-spacing: .16em;
   text-transform: uppercase;
   color: var(--faint);
 }
 .vq-edition-mono {
   font-family: var(--font-mono);
-  font-size: 8.5px;
+  font-size: 10px;
   letter-spacing: .12em;
   color: var(--ink);
-  padding: 1px 5px;
+  padding: 1px 4px;
   border: 1px solid var(--line-strong);
   border-radius: 3px;
 }
@@ -1838,13 +1838,13 @@
 .vq-edition-option {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 6px 8px;
+  gap: 8px;
+  padding: 8px 8px;
   border: 1px solid transparent;
   border-radius: 5px;
   background: transparent;
   color: var(--muted);
-  font-size: 11.5px;
+  font-size: 12px;
   text-align: left;
   cursor: pointer;
   transition: background .12s ease, color .12s ease;
@@ -1859,7 +1859,7 @@
 .vq-edition-hint {
   margin: 8px 0 0;
   color: var(--faint);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.5;
 }
 .vq-edition-compact {
@@ -1867,7 +1867,7 @@
   place-items: center;
   width: 34px;
   height: 34px;
-  margin: 10px auto 4px;
+  margin: 12px auto 4px;
   border: 1px solid var(--line);
   border-radius: 9px;
   background: var(--surface);
@@ -1877,25 +1877,25 @@
 .vq-edition-compact:hover { border-color: var(--line-strong); color: var(--ink); }
 
 /* 形态占位页 */
-.vq-console { display: flex; flex-direction: column; gap: 18px; }
+.vq-console { display: flex; flex-direction: column; gap: 16px; }
 .vq-console-head .vq-mono { color: var(--faint); letter-spacing: .14em; }
-.vq-console-head h1 { margin: 8px 0 6px; font-size: 26px; letter-spacing: -.02em; }
-.vq-console-head p { margin: 0; color: var(--muted); font-size: 12.5px; }
+.vq-console-head h1 { margin: 8px 0 8px; font-size: 28px; letter-spacing: -.02em; }
+.vq-console-head p { margin: 0; color: var(--muted); font-size: 12px; }
 .vq-console-card {
-  padding: 20px 22px;
+  padding: 24px 24px;
   border: 1px dashed var(--line-strong);
   border-radius: 10px;
   background: var(--surface);
 }
 .vq-console-card strong { display: block; font-size: 14px; }
-.vq-console-card p { margin: 6px 0 12px; color: var(--muted); font-size: 12px; }
-.vq-console-card ul { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
+.vq-console-card p { margin: 8px 0 12px; color: var(--muted); font-size: 12px; }
+.vq-console-card ul { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 8px; }
 .vq-console-card li {
-  padding: 3px 9px;
+  padding: 3px 8px;
   border: 1px solid var(--line);
   border-radius: 999px;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
 }
 .vq-console-card li.is-active { border-color: var(--ink); color: var(--ink); }
 
@@ -1906,20 +1906,20 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 12px;
   background: var(--paper, #faf9f7);
   color: var(--ink, #14120f);
 }
 
 .vq-boot-mark {
   font-family: var(--font-display, var(--font-ui, inherit));
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
 
 .vq-boot-text {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--muted, #7a746b);
 }
 
@@ -1929,8 +1929,8 @@
   align-items: center;
   gap: 8px;
   height: 34px;
-  margin: 10px 10px 6px;
-  padding: 0 9px 0 10px;
+  margin: 12px 12px 8px;
+  padding: 0 8px 0 12px;
   border: 1px solid var(--line);
   border-radius: 9px;
   background: var(--surface);
@@ -1965,7 +1965,26 @@
   margin-left: auto;
   overflow: hidden;
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: 12px;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+
+/* 侧栏形态条：左边形态名，右边三个图标，任何宽度都不换行 */
+.vq-edition-bar {
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.vq-edition-bar .vq-edition-kicker {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--muted);
+}
+.vq-edition-bar .vq-edition-seg { flex: none; }

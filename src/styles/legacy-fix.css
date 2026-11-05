@@ -12,3 +12,37 @@
 .tab-count { background: rgba(17,17,17,.06) !important; color: var(--muted) !important; }
 .filter-tabs button.is-active .tab-count { background: rgba(255,255,255,.2) !important; color: #fff !important; }
 .template-card:hover { border-color: var(--line-strong); box-shadow: 0 1px 0 var(--line); }
+
+/* ---------- 工具条：搜索一行、类型一行（之前两者挤在一行换行，边界是糊的） ---------- */
+.asset-toolbar {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-3);
+}
+.inline-search { width: 100%; max-width: 560px; }
+.filter-tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: var(--space-1);
+  overflow-x: auto;
+  padding: 0 0 var(--space-1);
+  border-bottom: 1px solid var(--line);
+  scrollbar-width: none;
+}
+.filter-tabs::-webkit-scrollbar { display: none; }
+.filter-tabs button {
+  flex: none;
+  white-space: nowrap;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  padding: var(--space-2) var(--space-2);
+}
+.filter-tabs button.is-active {
+  border-bottom-color: var(--ink);
+  background: transparent;
+}
+
+.inline-search { margin: 0; }
