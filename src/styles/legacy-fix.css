@@ -20,7 +20,7 @@
   align-items: stretch;
   gap: var(--space-3);
 }
-.inline-search { width: 100%; max-width: 560px; }
+.asset-toolbar .inline-search { align-self: stretch; width: 100% !important; max-width: 560px; margin: 0 !important; }
 .filter-tabs {
   display: flex;
   flex-wrap: nowrap;
@@ -45,4 +45,3 @@
   background: transparent;
 }
 
-.inline-search { margin: 0; }
