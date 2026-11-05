@@ -1,0 +1,126 @@
+#!/bin/bash
+# VisionQA 生产部署（幂等，可重复执行）
+# 用法（root）：
+#   DOMAIN=VisionQA.wavisionai.cn bash deploy/production/install.sh
+# 可选环境变量：APP_DIR / APP_USER / API_PORT / NODE_VERSION / REPO / VISION_* / REDFOX_API_KEY
+set -euo pipefail
+
+APP_DIR=${APP_DIR:-/opt/visionqa}
+APP_USER=${APP_USER:-visionqa}
+API_PORT=${API_PORT:-8787}
+NODE_VERSION=${NODE_VERSION:-22.12.0}
+DOMAIN=${DOMAIN:-VisionQA.wavisionai.cn}
+REPO=${REPO:-https://github.com/dingchenhui0618-arch/creator-canvas-studio.git}
+DATA_DIR=${DATA_DIR:-/var/lib/visionqa}
+
+log() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
+
+[ "$(id -u)" = "0" ] || { echo "请用 root 执行"; exit 1; }
+
+log "1/7 系统依赖"
+if command -v apt-get >/dev/null; then
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -qq
+  apt-get install -y -qq curl xz-utils git ca-certificates >/dev/null
+elif command -v yum >/dev/null; then
+  yum install -y -q curl xz git ca-certificates >/dev/null
+fi
+
+log "2/7 Node ${NODE_VERSION}"
+if ! /usr/local/node/bin/node -v 2>/dev/null | grep -q "^v${NODE_VERSION%%\..*}"; then
+  ARCH=$(uname -m); case "$ARCH" in x86_64) NARCH=x64 ;; aarch64) NARCH=arm64 ;; *) echo "不支持的架构 $ARCH"; exit 1 ;; esac
+  TARBALL="node-v${NODE_VERSION}-linux-${NARCH}.tar.xz"
+  mkdir -p /usr/local/node
+  # 国内直连 npmmirror，官方源做兜底
+  curl -fsSL -o /tmp/${TARBALL} "https://npmmirror.com/mirrors/node/v${NODE_VERSION}/${TARBALL}" \
+    || curl -fsSL -o /tmp/${TARBALL} "https://nodejs.org/dist/v${NODE_VERSION}/${TARBALL}"
+  tar -xJf /tmp/${TARBALL} -C /usr/local/node --strip-components=1
+  rm -f /tmp/${TARBALL}
+  ln -sf /usr/local/node/bin/node /usr/local/bin/node
+  ln -sf /usr/local/node/bin/npm /usr/local/bin/npm
+fi
+node -v; npm -v
+
+log "3/7 账号与目录"
+id -u "$APP_USER" >/dev/null 2>&1 || useradd -r -m -d /home/$APP_USER -s /bin/bash "$APP_USER"
+mkdir -p "$APP_DIR" "$DATA_DIR"
+chown -R "$APP_USER":"$APP_USER" "$DATA_DIR"
+
+log "4/7 拉取代码与构建"
+if [ -d "$APP_DIR/.git" ]; then
+  git -C "$APP_DIR" fetch --depth=1 origin master
+  git -C "$APP_DIR" reset --hard origin/master
+else
+  git clone --depth=1 "$REPO" "$APP_DIR"
+fi
+cd "$APP_DIR"
+npm ci --no-audit --no-fund
+npm run build
+chown -R "$APP_USER":"$APP_USER" "$APP_DIR"
+
+log "5/7 环境变量"
+if [ ! -f "$APP_DIR/.env" ]; then
+  cat > "$APP_DIR/.env" <<EOF
+# 生产配置（由 install.sh 生成，请按需修改后 systemctl restart visionqa）
+API_PORT=${API_PORT}
+DATA_DIR=${DATA_DIR}
+VQ_REQUIRE_AUTH=1
+VQ_SECURE_COOKIES=1
+VQ_DEMO_ACCOUNT=0
+VQ_REGISTRATION=0
+# 视觉模型：必须是这台服务器能访问到的地址
+VISION_BASE_URL=${VISION_BASE_URL:-}
+VISION_MODEL=${VISION_MODEL:-}
+VISION_API_KEY=${VISION_API_KEY:-}
+# 远端算力（抽帧）：留空则用服务器本地 ffmpeg
+REPLICATE_REMOTE_URL=${REPLICATE_REMOTE_URL:-}
+REPLICATE_REMOTE_TOKEN=${REPLICATE_REMOTE_TOKEN:-}
+EOF
+  chown "$APP_USER":"$APP_USER" "$APP_DIR/.env"
+  chmod 600 "$APP_DIR/.env"
+  echo "已生成 $APP_DIR/.env（模型 Key 仍是空的，填好再启动）"
+else
+  echo "保留已有 $APP_DIR/.env"
+fi
+
+log "6/7 systemd"
+cat > /etc/systemd/system/visionqa.service <<EOF
+[Unit]
+Description=VisionQA Workbench
+After=network.target
+
+[Service]
+Type=simple
+User=${APP_USER}
+WorkingDirectory=${APP_DIR}
+EnvironmentFile=-${APP_DIR}/.env
+ExecStart=/usr/local/bin/node server/index.mjs
+Restart=always
+RestartSec=3
+# 2GB 机器上给 Node 留足余量，别让它把系统拖死
+Environment=NODE_OPTIONS=--max-old-space-size=384
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload
+systemctl enable visionqa >/dev/null
+systemctl restart visionqa
+sleep 2
+systemctl --no-pager --lines=5 status visionqa || true
+curl -fsS "http://127.0.0.1:${API_PORT}/api/health" && echo " <- 本地健康检查通过"
+
+log "7/7 nginx 站点"
+NET_CONF="deploy/production/nginx-visionqa.conf"
+if [ -d /www/server/panel/vhost/nginx ]; then
+  CONF=/www/server/panel/vhost/nginx/${DOMAIN}.conf
+  NGINX_BIN=/www/server/nginx/sbin/nginx
+else
+  CONF=/etc/nginx/conf.d/${DOMAIN}.conf
+  NGINX_BIN=$(command -v nginx || echo /usr/sbin/nginx)
+fi
+cp "$NET_CONF" "$CONF"
+sed -i "s|__DOMAIN__|${DOMAIN}|g; s|__APP_DIR__|${APP_DIR}|g; s|__API_PORT__|${API_PORT}|g" "$CONF"
+echo "已写入 $CONF"
+"$NGINX_BIN" -t && "$NGINX_BIN" -s reload
+echo "完成。HTTP 已可访问 http://${DOMAIN}/ ，HTTPS 证书见 deploy/production/README.md"
