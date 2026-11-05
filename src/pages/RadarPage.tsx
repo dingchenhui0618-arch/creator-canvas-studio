@@ -170,7 +170,7 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
                 <span className="radar-duration"><Film size={11} />{formatDuration(item.durationSec)}</span>
                 <button className="radar-hover" onClick={() => setModalItem(item)} aria-label={`一键复刻 ${item.title}`}>
                   <span className="radar-hover-pill"><Sparkles size={14} />一键复刻</span>
-                  <span className="radar-hover-hint">FFmpeg 拆帧 · 逐帧分析 · 存成模板</span>
+                  <span className="radar-hover-hint">抽帧 · 逐帧分析 · 存成模板</span>
                 </button>
               </div>
               <div className="radar-copy">

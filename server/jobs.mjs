@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { config } from './config.mjs'
 import { acquireVideo } from './media.mjs'
 import { probeVideo, detectSceneCuts, planTimestamps, extractFrames } from './frames.mjs'
+import { replicateRemote } from './remote.mjs'
 import { analyzeFrames } from './vision.mjs'
 import { createTemplate } from './templates.mjs'
 
@@ -66,37 +67,70 @@ export async function startReplicate(item, overrideUrl) {
 }
 
 async function runPipeline(job, jobDir, item, targets) {
-  let acquired = null
-  let lastError = null
-  for (const target of targets) {
-    try {
-      step(job, 'resolve', 8, '解析视频地址（' + target.label + '）')
-      acquired = await acquireVideo({ url: target.url, platform: item.platform }, jobDir, (ratio) => {
-        job.progress = 10 + ratio * 20
-      })
-      break
-    } catch (error) {
-      lastError = error
-      job.logs.push({ at: new Date().toISOString(), text: target.label + ' 获取失败：' + String(error?.message || error) })
+  const log = (text) => job.logs.push({ at: new Date().toISOString(), text })
+  let meta = null
+  let sceneCuts = []
+  let frames = []
+
+  if (config.remote.enabled) {
+    // 远端算力：解析 + 下载 + 探测 + 抽帧都在对方机器上完成，本地只收帧
+    let lastError = null
+    for (const target of targets) {
+      try {
+        step(job, 'remote', 8, '调用远端算力（' + config.remote.label + ' · ' + target.label + '）')
+        const result = await replicateRemote({
+          url: target.url,
+          maxFrames: config.limits.maxFrames,
+          jobDir,
+          log,
+        })
+        meta = result.meta
+        sceneCuts = result.sceneCuts
+        frames = result.frames
+        step(job, 'remote', 62, '远端算力返回 ' + frames.length + ' 帧')
+        break
+      } catch (error) {
+        lastError = error
+        log(target.label + ' 远端算力失败：' + String(error?.message || error))
+      }
     }
+    if (!frames.length) throw lastError || new Error('远端算力没有返回任何帧')
+  } else {
+    let acquired = null
+    let lastError = null
+    for (const target of targets) {
+      try {
+        step(job, 'resolve', 8, '解析视频地址（' + target.label + '）')
+        acquired = await acquireVideo({ url: target.url, platform: item.platform }, jobDir, (ratio) => {
+          job.progress = 10 + ratio * 20
+        })
+        break
+      } catch (error) {
+        lastError = error
+        log(target.label + ' 获取失败：' + String(error?.message || error))
+      }
+    }
+    if (!acquired) throw lastError || new Error('无法获取视频')
+
+    step(job, 'probe', 34, '读取视频信息')
+    meta = await probeVideo(acquired.file)
+    if (!meta.duration) throw new Error('视频时长读取失败，可能不是有效的视频文件')
+    log('视频 ' + meta.duration.toFixed(1) + 's · ' + meta.width + 'x' + meta.height + ' · ' + meta.fps + 'fps')
+
+    step(job, 'scene', 42, '检测镜头切换')
+    sceneCuts = await detectSceneCuts(acquired.file)
+    log(sceneCuts.length ? ('检测到 ' + sceneCuts.length + ' 个切镜点') : '未检测到明显硬切')
+
+    const timestamps = planTimestamps(meta.duration, sceneCuts, config.limits.maxFrames)
+    step(job, 'frames', 48, 'FFmpeg 抽帧（' + timestamps.length + ' 帧）')
+    frames = await extractFrames(acquired.file, path.join(jobDir, 'frames'), timestamps, (ratio) => {
+      job.progress = 48 + ratio * 20
+    })
+    log('抽取 ' + frames.length + ' 帧：' + frames.map((f) => f.t.toFixed(1) + 's').join(', '))
   }
-  if (!acquired) throw lastError || new Error('无法获取视频')
 
-  step(job, 'probe', 34, '读取视频信息')
-  const meta = await probeVideo(acquired.file)
-  if (!meta.duration) throw new Error('视频时长读取失败，可能不是有效的视频文件')
-  job.logs.push({ at: new Date().toISOString(), text: '视频 ' + meta.duration.toFixed(1) + 's · ' + meta.width + 'x' + meta.height + ' · ' + meta.fps + 'fps' })
-
-  step(job, 'scene', 42, '检测镜头切换')
-  const sceneCuts = await detectSceneCuts(acquired.file)
-  job.logs.push({ at: new Date().toISOString(), text: sceneCuts.length ? ('检测到 ' + sceneCuts.length + ' 个切镜点') : '未检测到明显硬切' })
-
-  const timestamps = planTimestamps(meta.duration, sceneCuts, config.limits.maxFrames)
-  step(job, 'frames', 48, 'FFmpeg 抽帧（' + timestamps.length + ' 帧）')
-  const frames = await extractFrames(acquired.file, path.join(jobDir, 'frames'), timestamps, (ratio) => {
-    job.progress = 48 + ratio * 20
-  })
-  job.logs.push({ at: new Date().toISOString(), text: '抽取 ' + frames.length + ' 帧：' + frames.map((f) => f.t.toFixed(1) + 's').join(', ') })
+  if (!meta?.duration) throw new Error('视频时长读取失败，可能不是有效的视频文件')
+  log('来源：' + (config.remote.enabled ? ('远端算力 ' + config.remote.label) : '本机 ffmpeg') + ' · ' + frames.length + ' 帧 · ' + meta.width + 'x' + meta.height)
 
   step(job, 'vision', 70, '逐帧分析脚本与分镜')
   const analysis = await analyzeFrames({ frames, meta, sceneCuts, log: (text) => job.logs.push({ at: new Date().toISOString(), text }) })

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700&display=swap');
+﻿@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700&display=swap');
 
 :root { --ink:#25231f; --ink-soft:#6f6a61; --ink-faint:#9d978b; --paper:#f5f3ee; --surface:#fffefa; --surface-soft:#f0eee8; --line:#e6e2da; --line-strong:#d9d4ca; --violet:#6b62d9; --violet-dark:#4f49b7; --violet-soft:#eceaff; --gold:#d4a447; --danger:#c86d68; --shadow:0 18px 42px rgba(52,43,28,.08); }
 * { box-sizing:border-box; }
@@ -466,3 +466,22 @@ button { cursor:pointer; }
   .template-drawer { width:100%; }
   .shot-row { grid-template-columns:92px minmax(0,1fr); }
 }
+
+
+/* ---------- 视觉基线补丁：去掉遗留的紫蓝渐变与彩色光晕 ----------
+   这些是 App.css 里的旧规则，追加在文件末尾按顺序覆盖，不动上面的结构。 */
+.replicate-progress-bar { background: rgba(17, 17, 17, .08); }
+.replicate-progress-bar span { background: var(--ink); }
+.field input[type='range'] { background: rgba(17, 17, 17, .12) !important; }
+.field input[type='range']::-webkit-slider-thumb { background: var(--ink); box-shadow: none; }
+.radar-cover--tone0,
+.radar-cover--tone1,
+.radar-cover--tone2,
+.radar-cover--tone3 { background: #efeeea; }
+.radar-cover::after { background: none; }
+.rail-thumb--terracotta,
+.rail-thumb--indigo,
+.rail-thumb--sage,
+.rail-thumb--gold,
+.rail-thumb--blue,
+.rail-thumb--rose { background: #efeeea; }

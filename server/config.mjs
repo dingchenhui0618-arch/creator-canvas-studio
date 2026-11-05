@@ -56,6 +56,16 @@ export const config = {
     maxVideoMb: Number(process.env.MAX_VIDEO_MB || 160),
     maxFrames: Number(process.env.MAX_FRAMES || 18),
   },
+  // 远端算力：给了 REPLICATE_REMOTE_URL 就把「解析/下载/抽帧」交给它，本地不跑 ffmpeg
+  remote: {
+    url: (process.env.REPLICATE_REMOTE_URL || '').trim(),
+    get enabled() {
+      return Boolean(this.url)
+    },
+    token: (process.env.REPLICATE_REMOTE_TOKEN || '').trim(),
+    label: process.env.REPLICATE_REMOTE_LABEL || 'remote-worker',
+    timeoutMs: Number(process.env.REPLICATE_REMOTE_TIMEOUT_MS || 180000),
+  },
   auth: {
     dbFile: path.join(dataDir, 'auth.db'),
     cookieName: 'vq_session',

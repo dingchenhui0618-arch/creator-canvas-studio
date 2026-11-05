@@ -4,14 +4,16 @@ import { getJob, getTemplate, formatDuration, startReplicate } from '../api/rada
 import type { MediaItem, ReplicaTemplate, ReplicateJob } from '../domain/radar'
 
 const STEPS = [
-  { key: 'resolve', label: '解析视频地址', hint: '红狐解析或直链下载' },
+  { key: 'resolve', label: '获取视频与抽帧', hint: '远端算力服务，或本地 FFmpeg' },
   { key: 'probe', label: '读取视频信息', hint: '时长 / 分辨率 / 切镜点' },
-  { key: 'frames', label: 'FFmpeg 抽帧', hint: '按时间轴均匀 + 切镜补帧' },
+  { key: 'frames', label: '抽帧', hint: '按时间轴均匀 + 切镜补帧' },
   { key: 'vision', label: '逐帧分析脚本与分镜', hint: '视觉模型输出结构化 JSON' },
   { key: 'save', label: '写入模板库', hint: '脚本结构 + 分镜 + 原链接' },
 ]
 
+// 远端算力一次覆盖了「解析 / 探测 / 抽帧」三步，落到第一条；done 视为全部完成
 const stepIndex = (step: string) => {
+  if (step === 'remote') return 0
   if (step === 'scene') return 1
   if (step === 'done') return 5
   return STEPS.findIndex((item) => item.key === step)
@@ -145,7 +147,7 @@ export function ReplicateModal({ item, hasKey, visionReady, onClose, onDone, onO
                 <div className="replicate-log" key={log.at + index}><span>{log.at.slice(11, 19)}</span>{log.text}</div>
               ))}
             </div>
-            <p className="replicate-note">拆帧与逐帧分析需要 30–120 秒，关闭弹窗会中止等待（后台任务仍会继续）。</p>
+            <p className="replicate-note">抽帧与逐帧分析需要 30–120 秒，关闭弹窗会中止等待（后台任务仍会继续）。</p>
           </div>
         )}
 
