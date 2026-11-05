@@ -128,13 +128,13 @@ VisionQA 的定位不是「帮你想文案」，而是「给已经产出的画�
 
 部署记录、三个必踩的坑（Python 不在 PATH、requirements 少两个包、根 .env 没有代码读）与验收清单见 [docs/bd-canvas-integration.md](docs/bd-canvas-integration.md)，自检用 node scripts/check-bdc.mjs，重启用 `scripts/start-bdc.ps1`。
 
-**当前状态（2026-11-05 实测）**：已解压到 `D:\Projects\bd-canvas`，5312 / 5313 / 6677 三端口都返回 200，`/api/bdc/status` 的 `deployed` 为 true，画布页由 BD Canvas 接管，墨色主题已覆盖；后台 `bdadmin` 初始密码已改。**还差模型 Key**——后台「Key 管理」为空，出图链路没通。
+**当前状态（2026-11-05 实测）**：已解压到 `D:\Projects\bd-canvas`，5312 / 5313 / 6677 三端口都返回 200，`/api/bdc/status` 的 `deployed` 为 true，画布页由 BD Canvas 接管，浅色纸面主题已覆盖；后台 `bdadmin` 初始密码已改。**还差模型 Key**——后台「Key 管理」为空，出图链路没通。
 
-### 把它收进我们这套墨色语言
+### 把它收进我们这套白纸墨线的语言
 
 BD Canvas 线上是 `#101113` + 蓝 `#6f9cff` + 青 `#22d3ee` 的霓虹调性，直接嵌进浅色工作台会读成「里面装了个别家的 App」。所以做了一层**只改配色、不改布局**的主题覆盖：
 
-- `deploy/bd-canvas/vq-theme.css`：它真正的色板在 `src/ui/styles/` 里分三层——`palette.css` → `themes.css`（`--ui-*` 语义层）→ `legacyAliases.css`（把旧 `--bg-*` / `--text-*` / `--border-*` 全部桥接上去）。所以只重定义**上游两层**（`--palette-*` 与 `--ui-*`）就能一次收口：中性墨色 `#0e0e0e / #141414 / #1c1c1c`、发丝线 `rgba(255,255,255,.08–.22)`、强调色降到近白 `#eaeaea`、发光全关、只留投影。index.html 内联 CSS 里硬编码的彩色（顶栏状态绿、节点类型胶囊四色、生成中的紫蓝流体、各类彩色发光）再用最小作用域逐条收敛，**没有加任何布局规则**。
+- `deploy/bd-canvas/vq-theme.css`：它真正的色板在 `src/ui/styles/` 里分三层——`palette.css` → `themes.css`（`--ui-*` 语义层）→ `legacyAliases.css`（把旧 `--bg-*` / `--text-*` / `--border-*` 全部桥接上去）。所以只重定义**上游两层**（`--palette-*` 与 `--ui-*`）就能一次收口，并且是**往我们自己的浅色画布上靠**，不是另起一套深色皮肤：画布 `#f4f4f4`、卡片 `#ffffff`、次级 `#f0f0f0`、三级发丝线 `rgba(17,17,17,.06/.10/.20)`、文字 `#111 / #3f3f3f / #5d5d5d / #9a9a9a`、强调近黑、发光全 `transparent` 只留墨投影、点阵 `rgba(17,17,17,.10)`、语义色直接用我们 tokens.css 的 `#176b43 / #8a5b08 / #a33838`。
 - `scripts/apply-bdc-theme.mjs`：幂等地把 css 复制进 `bd-canvas/public/`，并在 `index.html` 的 `</head>` 前插入/校正一行 `<link id="vq-bdc-theme" rel="stylesheet" href="/vq-theme.css">`（371121 → 371187 字节，去掉这一行可完整还原）。BD Canvas 升级后重跑一次即可；`--check` 只校验不改。
 
 **许可证边界**：LICENSE §3.2 允许为自用修改源码，§4.3 / §5.1 禁止删除、隐藏、篡改版权声明、水印与归属标识。所以只加了一行 link，BD Canvas 的 logo、「BD Canvas Beta 0.7.5.7」与水印原样保留；`vq-theme.css` 与脚本是我们自己写的、进本仓库，**BD Canvas 的源码一个字节都没进仓库**。
@@ -143,9 +143,13 @@ BD Canvas 线上是 `#101113` + 蓝 `#6f9cff` + 青 `#22d3ee` 的霓虹调性，
 
 ![BD Canvas 改色前](docs/screenshot-canvas-bdc-before.png)
 
-改色后，并且按沉浸模式内嵌进工作台：
+改色后（白纸 + 墨线 + 发丝节点卡，节点选中是 1.5px 近黑环）：
 
-![BD Canvas 改色后](docs/screenshot-canvas-bdc.png)
+![BD Canvas 改色后 · 节点与参数面板](docs/screenshot-canvas-bdc-nodes.png)
+
+同一个画布按沉浸模式内嵌进工作台——两边现在是一套语言，不再像「里面装了个别家的 App」：
+
+![BD Canvas 内嵌在工作台](docs/screenshot-canvas-bdc.png)
 
 ## 七、账号与会话（真实服务端）
 

@@ -1,155 +1,154 @@
 /*!
- * VisionQA × BD Canvas —— 墨色主题覆盖层（vq-theme.css）
+ * VisionQA × BD Canvas —— 浅色纸面主题覆盖层（vq-theme.css）
  * ---------------------------------------------------------------------------
- * 本文件由 VisionQA 自研，仅包含 CSS 自定义属性的重定义与极少量的「硬编码色」
- * 收敛规则；不含任何 BD Canvas 源码、不复制其样式表、不删除或隐藏其任何版权声明、
- * 水印、署名与版本标识。依据 BD Canvas Source-Available License 3.2（为自用修改）
- * 使用；不对外分发。BD Canvas 升级后重新执行 scripts/apply-bdc-theme.mjs 即可恢复。
+ * 本文件由 VisionQA 自研，只包含 CSS 自定义属性重定义与少量「硬编码色」收敛规则；
+ * 不含任何 BD Canvas 源码、不复制其样式表、不删除或隐藏其版权声明、水印、署名与
+ * 版本标识。依据 BD Canvas Source-Available License 3.2（为自用修改）使用，不对外分发。
+ * BD Canvas 升级后重新执行 scripts/apply-bdc-theme.mjs 即可恢复。
  *
- * 设计语言（对齐 VisionQA tokens.css）：
- *   近黑白 · 中性墨色层级 · 发丝线边框 · 无发光 · 语义色只用于「成功 / 警告 / 问题」
- *   主按钮＝浅色实底 + 深色字（--ui-text-on-accent: #111）
+ * 设计语言（对齐 VisionQA tokens.css / docs/screenshot-canvas.png）：
+ *   浅色纸面 #f4f4f4 画布 · 白色节点卡 · 发丝线 rgba(17,17,17,.10)
+ *   近黑字 #111111 · 中性灰强调（无蓝紫）· 无发光只留投影 · 等宽元数据
+ *   语义色仅在「通过 #176b43 / 待确认 #8a5b08 / 问题 #a33838」出现
  *
- * 分层策略：BD Canvas 的旧 token（--bg-* / --text-* / --border-* / --shadow-*
- * / --surface-* / --tx-*）在 legacyAliases.css 里已经全部桥接到 --ui-* 语义层，
- * 所以这里只重定义「调色板 + --ui-* 语义层 + 少数未桥接的旧 token」，
- * 靠 CSS 变量继承一次性收口，不写新的布局规则。选择器用 :root:root 提高
- * 特异性，确保在 Vite 运行时后注入的 <style> 之后仍然生效。
+ * 分层：BD Canvas 的旧 token（--bg-* / --text-* / --border-* / --shadow-*
+ * / --surface-* / --tx-*）在 legacyAliases.css 里已全部桥接到 --ui-* 语义层，
+ * 因此这里只重定义「调色板 + --ui-* 语义层 + 少数未桥接的旧 token」，
+ * 靠 CSS 变量继承一次性收口，不写新的布局规则。
+ * 选择器用 :root:root 提高特异性：Vite 在运行时注入 <style>，普通 :root 会被其覆盖。
  */
 
 /* ========================================================================== */
-/* 1. 调色板：去掉全部蓝/青/紫，换成中性墨阶                                    */
+/* 1. 调色板：白纸 + 墨线，去掉全部蓝 / 青 / 紫                                  */
 /* ========================================================================== */
 :root:root,
+html[data-theme="light"],
+body[data-theme="light"],
+.theme-light,
 html[data-theme="dark"],
 body[data-theme="dark"],
 .theme-dark {
-  --palette-graphite-950: #0e0e0e;
-  --palette-graphite-900: #141414;
-  --palette-graphite-850: #181818;
-  --palette-graphite-800: #1c1c1c;
-  --palette-graphite-750: #232323;
-  --palette-graphite-700: #333333;
-  --palette-graphite-600: #4a4a4a;
-  --palette-graphite-400: #8a8a8a;
-  --palette-graphite-300: #b8b8b8;
-  --palette-graphite-100: #f2f2f2;
-  --palette-graphite-050: #fafafa;
+  color-scheme: light;
 
-  /* 冷色阶同样去色，避免任何残留的蓝调灰 */
-  --palette-cool-050: #f7f7f7;
-  --palette-cool-100: #f1f1f1;
-  --palette-cool-200: #e6e6e6;
-  --palette-cool-300: #d6d6d6;
-  --palette-cool-400: #b4b4b4;
-  --palette-cool-500: #7a7a7a;
-  --palette-cool-650: #565656;
-  --palette-cool-900: #1a1a1a;
+  --palette-graphite-950: #f4f4f4;
+  --palette-graphite-900: #fbfbfb;
+  --palette-graphite-850: #f7f7f7;
+  --palette-graphite-800: #ffffff;
+  --palette-graphite-750: #f0f0f0;
+  --palette-graphite-700: #d8d8d8;
+  --palette-graphite-600: #b4b4b4;
+  --palette-graphite-400: #9a9a9a;
+  --palette-graphite-300: #5d5d5d;
+  --palette-graphite-100: #111111;
+  --palette-graphite-050: #ffffff;
 
-  /* 强调色：过去的 #6f9cff / #28c3d4 全部换成近白 */
-  --palette-blue-050: #f5f5f5;
-  --palette-blue-200: #ffffff;
-  --palette-blue-400: #eaeaea;
-  --palette-blue-600: #2b2b2b;
-  --palette-blue-700: #1f1f1f;
-  --palette-cyan-100: #f2f2f2;
-  --palette-cyan-400: #cfcfcf;
-  --palette-cyan-600: #7a7a7a;
+  --palette-cool-050: #fbfbfb;
+  --palette-cool-100: #f6f6f6;
+  --palette-cool-200: #ececec;
+  --palette-cool-300: #dcdcdc;
+  --palette-cool-400: #c4c4c4;
+  --palette-cool-500: #8a8a8a;
+  --palette-cool-650: #5d5d5d;
+  --palette-cool-900: #111111;
 
-  /* 语义色保留色相，但降饱和（只在 通过 / 待确认 / 问题 出现） */
-  --palette-green-400: #4f9d78;
-  --palette-green-600: #3d7b5e;
-  --palette-yellow-400: #b08a46;
-  --palette-yellow-600: #8a6b34;
-  --palette-red-400: #d46767;
-  --palette-red-600: #b85c5c;
+  --palette-blue-050: #f6f6f6;
+  --palette-blue-200: #000000;
+  --palette-blue-400: #111111;
+  --palette-blue-600: #111111;
+  --palette-blue-700: #000000;
+  --palette-cyan-100: #f6f6f6;
+  --palette-cyan-400: #5d5d5d;
+  --palette-cyan-600: #3f3f3f;
 
-  /* 透明色阶：所有「蓝色激活底 / 蓝色发光」→ 中性白灰，发光一律取消 */
-  --palette-alpha-white-04: rgb(255 255 255 / 4%);
-  --palette-alpha-white-07: rgb(255 255 255 / 7%);
-  --palette-alpha-white-10: rgb(255 255 255 / 9%);
-  --palette-alpha-black-05: rgb(0 0 0 / 22%);
-  --palette-alpha-black-10: rgb(0 0 0 / 34%);
-  --palette-alpha-black-22: rgb(0 0 0 / 48%);
-  --palette-alpha-blue-dark: rgb(255 255 255 / 7%);
+  --palette-green-400: #176b43;
+  --palette-green-600: #125636;
+  --palette-yellow-400: #8a5b08;
+  --palette-yellow-600: #744c07;
+  --palette-red-400: #a33838;
+  --palette-red-600: #8a2f2f;
+
+  --palette-alpha-white-04: rgb(17 17 17 / 4%);
+  --palette-alpha-white-07: rgb(17 17 17 / 5%);
+  --palette-alpha-white-10: rgb(17 17 17 / 10%);
+  --palette-alpha-black-05: rgb(17 17 17 / 6%);
+  --palette-alpha-black-10: rgb(17 17 17 / 10%);
+  --palette-alpha-black-22: rgb(17 17 17 / 14%);
+  --palette-alpha-blue-dark: rgb(17 17 17 / 6%);
   --palette-alpha-blue-glow-dark: transparent;
-  --palette-alpha-blue-light: rgb(17 17 17 / 7%);
-  --palette-alpha-blue-glow-light: rgb(17 17 17 / 12%);
-  --palette-alpha-cyan-dark: rgb(255 255 255 / 6%);
+  --palette-alpha-blue-light: rgb(17 17 17 / 6%);
+  --palette-alpha-blue-glow-light: transparent;
+  --palette-alpha-cyan-dark: rgb(17 17 17 / 5%);
   --palette-alpha-cyan-glow-dark: transparent;
-  --palette-alpha-cyan-light: rgb(17 17 17 / 6%);
-  --palette-alpha-cyan-glow-light: rgb(17 17 17 / 10%);
-  --palette-alpha-green-dark: rgb(79 157 120 / 14%);
+  --palette-alpha-cyan-light: rgb(17 17 17 / 5%);
+  --palette-alpha-cyan-glow-light: transparent;
+  --palette-alpha-green-dark: rgb(23 107 67 / 10%);
   --palette-alpha-green-glow-dark: transparent;
-  --palette-alpha-green-light: rgb(23 107 67 / 8%);
-  --palette-alpha-green-glow-light: rgb(23 107 67 / 16%);
-  --palette-alpha-yellow-dark: rgb(176 138 70 / 14%);
+  --palette-alpha-green-light: rgb(23 107 67 / 9%);
+  --palette-alpha-green-glow-light: transparent;
+  --palette-alpha-yellow-dark: rgb(138 91 8 / 10%);
   --palette-alpha-yellow-light: rgb(138 91 8 / 9%);
-  --palette-alpha-red-dark: rgb(212 103 103 / 14%);
+  --palette-alpha-red-dark: rgb(163 56 56 / 10%);
   --palette-alpha-red-glow-dark: transparent;
-  --palette-alpha-red-light: rgb(163 56 56 / 7%);
-  --palette-alpha-red-glow-light: rgb(163 56 56 / 14%);
+  --palette-alpha-red-light: rgb(163 56 56 / 9%);
+  --palette-alpha-red-glow-light: transparent;
 }
 
 /* ========================================================================== */
-/* 2. 语义层 --ui-*：墨色表面 / 发丝线 / 纯投影 / 无发光                        */
+/* 2. 语义层 --ui-*：纸面表面 / 发丝线 / 纯投影 / 无发光                          */
 /* ========================================================================== */
 :root:root,
+html[data-theme="light"],
+body[data-theme="light"],
+.theme-light,
 html[data-theme="dark"],
 body[data-theme="dark"],
 .theme-dark {
-  color-scheme: dark;
+  --ui-canvas: #f4f4f4;
+  --ui-canvas-dot: rgb(17 17 17 / 10%);
+  --ui-surface-panel: #fbfbfb;
+  --ui-surface-raised: #ffffff;
+  --ui-surface-node: #ffffff;
+  --ui-surface-control: #f0f0f0;
+  --ui-surface-hover: rgb(17 17 17 / 5%);
+  --ui-surface-active: rgb(17 17 17 / 6%);
+  --ui-surface-scrim: rgb(17 17 17 / 8%);
 
-  --ui-canvas: #0e0e0e;
-  --ui-canvas-dot: rgb(255 255 255 / 5%);
-  --ui-surface-panel: #141414;
-  --ui-surface-raised: #1c1c1c;
-  --ui-surface-node: #1c1c1c;
-  --ui-surface-control: #232323;
-  --ui-surface-hover: rgb(255 255 255 / 6%);
-  --ui-surface-active: rgb(255 255 255 / 7%);
-  --ui-surface-scrim: rgb(0 0 0 / 72%);
+  --ui-border-subtle: rgb(17 17 17 / 6%);
+  --ui-border-default: rgb(17 17 17 / 10%);
+  --ui-border-strong: rgb(17 17 17 / 20%);
 
-  --ui-border-subtle: rgb(255 255 255 / 8%);
-  --ui-border-default: rgb(255 255 255 / 12%);
-  --ui-border-strong: rgb(255 255 255 / 22%);
-
-  --ui-text-primary: #ffffff;
-  --ui-text-secondary: rgb(255 255 255 / 72%);
-  --ui-text-muted: rgb(255 255 255 / 50%);
-  --ui-text-placeholder: rgb(255 255 255 / 32%);
-  --ui-text-on-accent: #111111;
+  --ui-text-primary: #111111;
+  --ui-text-secondary: #3f3f3f;
+  --ui-text-muted: #5d5d5d;
+  --ui-text-placeholder: #9a9a9a;
+  --ui-text-on-accent: #ffffff;
   --ui-text-on-danger: #ffffff;
 
-  /* 强调＝近白，不再有蓝紫；激活底＝极淡白 */
-  --ui-accent: #eaeaea;
-  --ui-accent-hover: #ffffff;
-  --ui-accent-soft: rgb(255 255 255 / 7%);
+  --ui-accent: #111111;
+  --ui-accent-hover: #000000;
+  --ui-accent-soft: rgb(17 17 17 / 6%);
   --ui-accent-glow: transparent;
-  --ui-focus-ring: rgb(255 255 255 / 85%);
+  --ui-focus-ring: #111111;
 
-  /* 「生成中」原本是青色光效，现在改为中性灰，只保留状态可辨识度 */
-  --ui-ai: #cfcfcf;
-  --ui-ai-soft: rgb(255 255 255 / 6%);
+  --ui-ai: #5d5d5d;
+  --ui-ai-soft: rgb(17 17 17 / 6%);
   --ui-ai-glow: transparent;
 
-  --ui-success: #4f9d78;
-  --ui-success-soft: rgb(79 157 120 / 14%);
+  --ui-success: #176b43;
+  --ui-success-soft: rgb(23 107 67 / 10%);
   --ui-success-glow: transparent;
-  --ui-warning: #b08a46;
-  --ui-warning-soft: rgb(176 138 70 / 14%);
-  --ui-danger: #d46767;
-  --ui-danger-strong: #b85c5c;
-  --ui-danger-soft: rgb(212 103 103 / 14%);
+  --ui-warning: #8a5b08;
+  --ui-warning-soft: rgb(138 91 8 / 10%);
+  --ui-danger: #a33838;
+  --ui-danger-strong: #8a2f2f;
+  --ui-danger-soft: rgb(163 56 56 / 10%);
   --ui-danger-glow: transparent;
 
-  /* 阴影只做投影，不做发光 */
-  --ui-shadow-panel: 0 1px 2px rgb(0 0 0 / 50%), 0 12px 28px rgb(0 0 0 / 45%);
-  --ui-shadow-popover: 0 2px 4px rgb(0 0 0 / 50%), 0 18px 44px rgb(0 0 0 / 50%);
-  --ui-shadow-node: 0 1px 2px rgb(0 0 0 / 50%), 0 8px 20px rgb(0 0 0 / 40%);
-  --ui-shadow-node-hover: 0 2px 6px rgb(0 0 0 / 50%), 0 14px 30px rgb(0 0 0 / 45%);
+  --ui-shadow-panel: 0 1px 2px rgb(17 17 17 / 6%), 0 10px 24px rgb(17 17 17 / 6%);
+  --ui-shadow-popover: 0 2px 4px rgb(17 17 17 / 6%), 0 16px 32px rgb(17 17 17 / 8%);
+  --ui-shadow-node: 0 1px 2px rgb(17 17 17 / 6%), 0 10px 24px rgb(17 17 17 / 6%);
+  --ui-shadow-node-hover: 0 2px 4px rgb(17 17 17 / 8%), 0 14px 28px rgb(17 17 17 / 8%);
 
-  /* 圆角与字体：收敛到 6 / 8 / 10，字体跟随 VisionQA（本地无 Geist 时回退） */
   --ui-radius-control: 6px;
   --ui-radius-menu: 8px;
   --ui-radius-panel: 10px;
@@ -158,70 +157,69 @@ body[data-theme="dark"],
   --ui-font-mono: 'Geist Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
 }
 
-/* 亮色主题无法切换成墨色底，但同样不允许蓝紫强调色残留 */
-html[data-theme="light"],
-body[data-theme="light"],
-.theme-light {
-  --palette-blue-400: #111111;
-  --palette-blue-200: #000000;
-  --palette-blue-600: #111111;
-  --palette-blue-700: #000000;
-  --palette-cyan-400: #6f6f6f;
-  --palette-cyan-600: #6f6f6f;
-  --palette-alpha-blue-light: rgb(17 17 17 / 6%);
-  --palette-alpha-blue-glow-light: rgb(17 17 17 / 12%);
-  --palette-alpha-cyan-light: rgb(17 17 17 / 5%);
-  --palette-alpha-cyan-glow-light: rgb(17 17 17 / 10%);
-  --ui-accent: #111111;
-  --ui-accent-hover: #000000;
-  --ui-text-on-accent: #ffffff;
-  --ui-focus-ring: #111111;
-}
-
 /* ========================================================================== */
-/* 3. index.html 里未桥接到 --ui-* 的旧 token（端口 / 连线 / 滑块 / 生成按钮等）  */
+/* 3. index.html 里未桥接到 --ui-* 的旧 token                                    */
 /* ========================================================================== */
 :root:root {
-  --stroke-connection: #6f6f6f;
-  --highlight-color: #eaeaea;
-  --port-bg: #eaeaea;
-  --port-bg-hover: #4f9d78;
-  --port-bg-input: #4f9d78;
-  --group-port-bg: #eaeaea;
-  --slider-thumb: #eaeaea;
-  --border-slider: rgb(255 255 255 / 90%);
-  --bg-slider: rgb(255 255 255 / 15%);
-  --outline-selection: 2px solid rgb(255 255 255 / 85%);
-  --generate-btn: #eaeaea;
-  --generate-btn-hover: #ffffff;
-  --node-status-generating-a: rgb(255 255 255 / 4%);
-  --node-status-generating-b: rgb(255 255 255 / 3%);
-  --node-status-generating-c: rgb(255 255 255 / 2%);
+  --stroke-connection: rgb(17 17 17 / 55%);
+  --highlight-color: #111111;
+  --port-bg: #ffffff;
+  --port-bg-hover: #111111;
+  --port-bg-input: #ffffff;
+  --group-port-bg: #ffffff;
+  --border-port: #111111;
+  --slider-thumb: #111111;
+  --border-slider: #ffffff;
+  --bg-slider: rgb(17 17 17 / 14%);
+  --outline-selection: 1.5px solid #111111;
+  --generate-btn: #111111;
+  --generate-btn-hover: #000000;
+  --bg-progress-fill: #111111;
+  --node-status-generating-a: rgb(17 17 17 / 0%);
+  --node-status-generating-b: rgb(17 17 17 / 0%);
+  --node-status-generating-c: rgb(17 17 17 / 0%);
   --node-status-generating-glow: transparent;
-  --node-status-done: rgb(79 157 120 / 50%);
-  --node-status-done-soft: rgb(79 157 120 / 18%);
-  --node-status-error: rgb(212 103 103 / 52%);
-  --node-status-error-soft: rgb(212 103 103 / 20%);
+  --node-status-done: rgb(23 107 67 / 55%);
+  --node-status-done-soft: rgb(23 107 67 / 12%);
+  --node-status-error: rgb(163 56 56 / 55%);
+  --node-status-error-soft: rgb(163 56 56 / 12%);
+  --task-type-image-bg: #3f3f3f;
+  --task-type-video-bg: #3f3f3f;
+  --task-type-audio-bg: #3f3f3f;
+  --task-type-chat-bg: #3f3f3f;
 }
 
-/* 连接线 / 高亮色由脚本从设置写入 <html style>，必需用 !important 压过内联值 */
+/* 连接线颜色 / 走线动画色由脚本写进 <html style>，必需 !important 才压得住 */
 html:root {
-  --stroke-connection: #6f6f6f !important;
-  --highlight-color: #eaeaea !important;
+  --stroke-connection: rgb(17 17 17 / 55%) !important;
+  --highlight-color: #111111 !important;
+  --connection-flow-color: #8a8a8a !important;
 }
-/* 连接线走线动画的颜色也属于装饰性光效，收敛为中性灰绿 */
-html:root { --connection-flow-color: #6f6f6f !important; }
 
-/* 字体：index.html 把 Inter 写死在 html/body 上，这里显式接回 VisionQA 字族 */
+/* 字体：index.html 把 Inter 写死在 html/body 上，这里接回 VisionQA 字族 */
 body {
   font-family: Geist, 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
+/* 端口：白底 + 1.5px 深描边（源码是 2px 白边 + 绿/灰填充，这里整组翻转） */
+.connection-port,
+.v2-node > .connection-port,
+.v2-node > .input-port,
+.v2-node > .output-port {
+  background: #ffffff !important;
+  border-color: #111111 !important;
+  border-width: 1.5px !important;
+}
+.connection-port:hover,
+.v2-node > .connection-port:hover,
+.v2-node > .connection-port.is-hover,
+.connection-port.is-hover,
+.v2-node .input-port:hover { background: #111111 !important; border-color: #111111 !important; }
+
 /* ========================================================================== */
-/* 4. 浅色底按钮的文字：源码把 color:#fff / var(--text-primary) 写死在规则或  */
-/*    内联 style 上，换成浅色实底后必须补深色字（否则白字白底）                 */
+/* 4. 主按钮文字：强调色现在是近黑，按钮必须是白字                              */
 /* ========================================================================== */
 .agent-send-btn,
 .agent-actions .agent-primary,
@@ -234,137 +232,202 @@ body {
 .face-blur-btn.primary,
 .face-blur-mode-btn.active,
 .bd-dialog-btn.confirm,
+.bd-dialog-btn.danger,
+.save-asset-confirm,
+.bd-popup-btn-ok,
+.asset-cat-tab.active,
+.task-tab.active,
+.enterprise-dialog-primary,
+.enterprise-budget-recharge,
 button[style*="background:var(--primary-btn)"],
-button[style*="background: var(--primary-btn)"] {
-  color: #111111 !important;
+button[style*="background: var(--primary-btn)"],
+button[style*="var(--generate-btn)"] {
+  color: #ffffff !important;
 }
 
 /* ========================================================================== */
-/* 5. 「硬编码色」补丁：源码没用 token、直接写死蓝紫的少量规则，逐条收敛        */
-/*    原则：只改颜色/光晕，不改尺寸与布局；作用域尽量贴着原选择器               */
+/* 5. 深色假设逐条翻转：白 alpha 的描边 / 悬浮 / 分隔 → 墨 alpha                  */
 /* ========================================================================== */
+input[type="range"]::-webkit-slider-thumb,
+input[type="range"]::-moz-range-thumb { border-color: #ffffff !important; }
+.bd-dialog-input { background: var(--ui-surface-raised) !important; }
+.bd-dialog-btn.cancel:hover { background: rgb(17 17 17 / 5%) !important; }
+.canvas-tab-close:hover { background: rgb(17 17 17 / 8%) !important; color: #111111 !important; }
+.pp-cost-preview,
+.pp-task-status button { background: rgb(17 17 17 / 5%) !important; }
+.pp-task-status button:hover { background: rgb(17 17 17 / 10%) !important; }
+.pp-audio-source { background: rgb(17 17 17 / 3%) !important; }
+.pp-ref-video-preview,
+.pp-ref-upload-mode-badge {
+  background: rgb(255 255 255 / 92%) !important;
+  color: #111111 !important;
+  border-color: rgb(17 17 17 / 14%) !important;
+}
+.seedream-edit-header button:hover { background: rgb(17 17 17 / 6%) !important; color: #111111 !important; }
+.enterprise-budget-indicator { background: rgb(17 17 17 / 3%) !important; }
+.enterprise-budget-refresh { background: rgb(17 17 17 / 6%) !important; }
+.enterprise-budget-refresh:hover { background: rgb(17 17 17 / 12%) !important; color: #111111 !important; }
+.enterprise-dialog-secondary { background: rgb(17 17 17 / 4%) !important; }
+.enterprise-dialog-secondary:hover { background: rgb(17 17 17 / 8%) !important; }
+.enterprise-dialog-secondary:focus-visible { outline-color: #111111 !important; }
+.enterprise-avatar-gesture-hint { background: rgb(17 17 17 / 3%) !important; }
+.enterprise-dialog-backdrop { background: rgb(17 17 17 / 10%) !important; }
+.grid-container.cut-mode .grid-cell.filled { border-color: rgb(17 17 17 / 28%) !important; }
+.seedream-grid-cell {
+  border-color: rgb(17 17 17 / 12%) !important;
+  background: rgb(17 17 17 / 2%) !important;
+}
+.seedream-grid-cell.is-empty {
+  background:
+    linear-gradient(135deg, rgb(17 17 17 / 5%) 25%, transparent 25%) 0 0 / 12px 12px,
+    rgb(17 17 17 / 2%) !important;
+}
+.seedream-grid-cell.is-selected,
+.seedream-grid-cell.is-selected:hover,
+.grid-cell.selected,
+.grid-cell.selected:hover { box-shadow: inset 0 0 0 2px #111111 !important; }
+.seedream-grid-cell.filled:hover { box-shadow: 0 4px 12px rgb(17 17 17 / 10%) !important; }
+.workflow-card-folded-generation-flow::before {
+  background: linear-gradient(90deg, transparent 36%, rgb(17 17 17 / 3%) 45%, rgb(17 17 17 / 14%) 50%, rgb(17 17 17 / 3%) 55%, transparent 64%) !important;
+}
+.enterprise-avatar-edit-mask {
+  box-shadow: 0 0 0 999px rgb(17 17 17 / 28%), inset 0 0 0 1px rgb(255 255 255 / 85%) !important;
+}
 
-/* 生成中遮罩：紫/蓝流体渐变 + 紫色锥形光环 → 中性微光 */
+/* tooltip：深色气泡 → 白卡 + 发丝线 + 墨字 */
+.annotation-tool::after,
+.annotation-toggle::after {
+  background: #ffffff !important;
+  color: #111111 !important;
+  border-color: rgb(17 17 17 / 12%) !important;
+  box-shadow: 0 6px 18px rgb(17 17 17 / 10%) !important;
+}
+
+/* 全屏预览是媒体灯箱，保留深底；控制件前景维持浅色 */
+#fullscreen-preview .fp-play-btn,
+#fullscreen-preview .fp-play-btn:hover,
+.chat-img-fs-close,
+.chat-img-fs-close:hover { color: #ffffff !important; }
+#fullscreen-preview .fp-progress { background: rgb(255 255 255 / 25%) !important; }
+
+/* ========================================================================== */
+/* 6. 硬编码的蓝 / 紫 / 荧光：全部改中性（浅色取值）                              */
+/* ========================================================================== */
+.node-type-pill {
+  background: rgb(255 255 255 / 88%) !important;
+  border-color: rgb(17 17 17 / 12%) !important;
+  box-shadow: 0 2px 8px rgb(17 17 17 / 8%) !important;
+  backdrop-filter: blur(6px) !important;
+}
+.node-type-pill[class*="node-type-pill--"] {
+  color: #3f3f3f !important;
+  border-color: rgb(17 17 17 / 14%) !important;
+}
+.local-depth-node { border-color: var(--ui-border-default) !important; }
+.local-depth-node:hover { border-color: var(--ui-border-strong) !important; }
+.depth-slider-row output { color: #111111 !important; }
+.seedream-node-cost-badge {
+  background: rgb(255 255 255 / 92%) !important;
+  border-color: rgb(17 17 17 / 12%) !important;
+  color: #111111 !important;
+  box-shadow: 0 2px 8px rgb(17 17 17 / 8%) !important;
+  backdrop-filter: blur(6px) !important;
+}
+.seedream-node-cost-badge span { color: #5d5d5d !important; }
+.seedream-node-cost-badge b { color: #111111 !important; }
+
+/* 生成中遮罩：紫蓝流体 + 紫色锥环 → 极淡墨色呼吸 */
 .gen-fluid {
   background:
-    radial-gradient(ellipse 50% 40% at 65% 30%, rgb(255 255 255 / 4%), transparent 70%),
-    radial-gradient(ellipse 45% 55% at 25% 70%, rgb(255 255 255 / 3%), transparent 70%),
-    radial-gradient(ellipse 55% 45% at 75% 65%, rgb(255 255 255 / 3%), transparent 70%) !important;
+    radial-gradient(ellipse 50% 40% at 65% 30%, rgb(17 17 17 / 3%), transparent 70%),
+    radial-gradient(ellipse 45% 55% at 25% 70%, rgb(17 17 17 / 2%), transparent 70%),
+    radial-gradient(ellipse 55% 45% at 75% 65%, rgb(17 17 17 / 2%), transparent 70%) !important;
 }
 .gen-spinner-ring {
   background: conic-gradient(
     from 0deg,
     transparent 0deg,
-    rgb(255 255 255 / 10%) 90deg,
-    rgb(255 255 255 / 55%) 270deg,
-    #f2f2f2 340deg,
+    rgb(17 17 17 / 8%) 90deg,
+    rgb(17 17 17 / 45%) 270deg,
+    #111111 340deg,
     transparent 360deg
   ) !important;
 }
 
-/* 选中 / 悬停态：原来的蓝色描边 + 外发光 → 发丝白线 + 纯投影 */
+/* 选中 / 悬停：蓝描边 + 外发光 → 墨色发丝线 + 纯投影 */
 .asset-card:hover,
-.qa-card:hover { box-shadow: 0 8px 20px rgb(0 0 0 / 45%) !important; }
-.asset-card.selected { box-shadow: 0 0 0 1px rgb(255 255 255 / 65%) !important; }
-.grid-cell.selected,
-.seedream-grid-cell.is-selected { box-shadow: inset 0 0 0 2px rgb(255 255 255 / 80%) !important; }
-.grid-cell.selected:hover,
-.seedream-grid-cell.is-selected:hover { box-shadow: inset 0 0 0 2px rgb(255 255 255 / 85%) !important; }
-.annotation-toggle { box-shadow: 0 4px 12px rgb(0 0 0 / 45%) !important; }
-.pp-bar-item.changing { border-color: rgb(255 255 255 / 45%) !important; }
-.reverse-output-option.is-active { border-color: rgb(255 255 255 / 60%) !important; }
+.qa-card:hover { box-shadow: 0 8px 20px rgb(17 17 17 / 10%) !important; }
+.asset-card.selected { box-shadow: 0 0 0 1.5px #111111 !important; }
+.annotation-toggle { box-shadow: 0 4px 12px rgb(17 17 17 / 10%) !important; }
+.pp-bar-item.changing { border-color: rgb(17 17 17 / 45%) !important; }
+.reverse-output-option.is-active { border-color: #111111 !important; background: rgb(17 17 17 / 6%) !important; }
 .sb-btn.active,
 .pp-clone-card.selected,
-.reverse-preset-chip:hover { border-color: rgb(255 255 255 / 35%) !important; }
-.pp-inline-clone-card.selected { border-color: rgb(255 255 255 / 45%) !important; }
+.reverse-preset-chip:hover { border-color: rgb(17 17 17 / 22%) !important; }
+.pp-inline-clone-card.selected { border-color: #111111 !important; }
+.pp-bar-item:hover,
+.pp-inline-clone-card:hover { border-color: rgb(17 17 17 / 18%) !important; }
 
-/* 输入聚焦环：蓝色 2px 光晕 → 发丝白环 */
+/* 输入聚焦环：蓝色光晕 → 墨色发丝环 */
 .agent-input-row textarea:focus,
 .agent-field input:focus,
 .agent-field select:focus,
 .asset-search-bar input:focus,
 .save-asset-field input:focus,
 .bd-popup-input:focus,
-.enterprise-dialog-field input:focus { box-shadow: 0 0 0 2px rgb(255 255 255 / 12%) !important; }
+.enterprise-dialog-field input:focus,
+.vc-input:focus,
+.vc-select:focus { box-shadow: 0 0 0 2px rgb(17 17 17 / 10%) !important; border-color: #111111 !important; }
+.vc-file-btn:hover { border-color: #111111 !important; }
+.vc-demo-link { color: #111111 !important; }
 
-/* 其余零散写死的蓝：链接、选区框、追踪框、聊天状态点、分镜首帧标签 */
+/* 零散写死的蓝：链接、选区框、追踪框、聊天状态点、分镜首帧标签 */
 .chat-msg a,
-.chat-code-rendered a { color: #eaeaea !important; text-decoration-color: rgb(255 255 255 / 40%); }
-.annotation-selection-box { stroke: rgb(255 255 255 / 70%) !important; }
-.video-face-blur-node.video-face-blur-tracking { border-color: rgb(255 255 255 / 70%) !important; box-shadow: none !important; }
-.chat-status-dot.is-streaming { background: #d0d0d0 !important; }
-.pp-ref-thumb.frame-first { border-color: rgb(255 255 255 / 60%) !important; }
-.pp-ref-thumb.frame-first .pp-ref-thumb-label { background: rgb(255 255 255 / 75%) !important; color: #111111 !important; }
-.storyboard-custom-gap-handle::after { background: rgb(255 255 255 / 60%) !important; }
-.enterprise-avatar-pick { border-color: rgb(255 255 255 / 22%) !important; background: rgb(255 255 255 / 6%) !important; }
-.enterprise-avatar-pick:hover { border-color: rgb(255 255 255 / 40%) !important; background: rgb(255 255 255 / 10%) !important; }
-.enterprise-api-lock-notice { border-color: rgb(255 255 255 / 16%) !important; background: rgb(255 255 255 / 4%) !important; }
+.chat-code-rendered a { color: #111111 !important; text-decoration-color: rgb(17 17 17 / 35%); }
+.annotation-selection-box { stroke: rgb(17 17 17 / 55%) !important; }
+.video-face-blur-node.video-face-blur-tracking { border-color: #111111 !important; box-shadow: none !important; }
+.chat-status-dot.is-streaming { background: #5d5d5d !important; }
+.pp-ref-thumb.frame-first { border-color: #111111 !important; }
+.pp-ref-thumb.frame-first .pp-ref-thumb-label { background: #111111 !important; color: #ffffff !important; }
+.storyboard-custom-gap-handle::after { background: rgb(17 17 17 / 45%) !important; }
+.enterprise-avatar-pick {
+  border-color: rgb(17 17 17 / 14%) !important;
+  background: rgb(17 17 17 / 3%) !important;
+}
+.enterprise-avatar-pick:hover { border-color: rgb(17 17 17 / 26%) !important; background: rgb(17 17 17 / 6%) !important; }
+.enterprise-api-lock-notice { border-color: rgb(17 17 17 / 12%) !important; background: rgb(17 17 17 / 3%) !important; }
 .chat-new-btn:hover,
-.chat-load-more:hover { background: rgb(255 255 255 / 8%) !important; }
+.chat-load-more:hover { background: rgb(17 17 17 / 6%) !important; }
 .chat-msg blockquote,
-.chat-code-rendered blockquote { border-left-color: rgb(255 255 255 / 28%) !important; }
-.chat-bubble.is-user { background: rgb(255 255 255 / 7%) !important; border-color: rgb(255 255 255 / 12%) !important; }
+.chat-code-rendered blockquote { border-left-color: rgb(17 17 17 / 20%) !important; }
+.chat-bubble.is-user { background: rgb(17 17 17 / 4%) !important; border-color: rgb(17 17 17 / 10%) !important; }
 
-/* 节点类型标签：原本 绿 / 蓝 / 青 / 紫 四色轮换，统一为「发丝线 + 近白字」 */
-.node-type-pill {
-  background: rgb(0 0 0 / 55%) !important;
-  border-color: rgb(255 255 255 / 22%) !important;
-  backdrop-filter: none !important;
-  box-shadow: 0 5px 14px rgb(0 0 0 / 30%) !important;
-}
-.node-type-pill[class*="node-type-pill--"] {
-  color: rgb(255 255 255 / 82%) !important;
-  border-color: rgb(255 255 255 / 22%) !important;
-}
-.local-depth-node { border-color: var(--ui-border-default) !important; }
-.local-depth-node:hover { border-color: var(--ui-border-strong) !important; }
-.depth-slider-row output { color: #eaeaea !important; }
-
-/* 额度 / 成本徽章：黑蓝底 + 薄荷绿数字 → 中性半透明底 + 近白数字 */
-.seedream-node-cost-badge {
-  background: rgb(0 0 0 / 55%) !important;
-  border-color: rgb(255 255 255 / 16%) !important;
-  box-shadow: 0 6px 18px rgb(0 0 0 / 30%) !important;
-  backdrop-filter: none !important;
-}
-.seedream-node-cost-badge span { color: rgb(255 255 255 / 50%) !important; }
-.seedream-node-cost-badge b { color: #eaeaea !important; }
-
-/* 工作流运行状态：只保留 进行中 / 成功 / 失败 三态，且用降饱和语义色 */
-.workflow-card-run-status.is-running { color: rgb(255 255 255 / 72%) !important; }
-.workflow-card-run-status.is-succeeded { color: #4f9d78 !important; }
-.workflow-card-run-status.is-failed { color: #d46767 !important; }
-
-/* 上游文本接入提示：靛蓝 / 翠绿混用 → 中性芯片 + 语义成功色 */
+/* 状态类：三档语义色只用于 成功 / 待确认 / 问题 */
+.workflow-card-run-status.is-running { color: #5d5d5d !important; }
+.workflow-card-run-status.is-succeeded { color: #176b43 !important; }
+.workflow-card-run-status.is-failed { color: #a33838 !important; }
 .pp-connected-prompt-divider::after {
   border-color: var(--ui-border-default) !important;
   background: var(--ui-surface-control) !important;
   color: var(--ui-text-secondary) !important;
 }
-.pp-connected-prompt-module { border-color: rgb(79 157 120 / 32%) !important; background: rgb(79 157 120 / 8%) !important; }
-.pp-connected-prompt-badge { background: rgb(79 157 120 / 16%) !important; color: #88c2a8 !important; }
-
-/* 顶栏状态：源码写死的 slate 与亮绿 → 语义 token */
+.pp-connected-prompt-module { border-color: rgb(23 107 67 / 28%) !important; background: rgb(23 107 67 / 6%) !important; }
+.pp-connected-prompt-badge { background: rgb(23 107 67 / 10%) !important; color: #176b43 !important; }
 .enterprise-budget-indicator,
 .enterprise-budget-dot,
 .enterprise-budget-text { color: var(--ui-text-muted) !important; }
 .enterprise-budget-dot { background: var(--ui-text-muted) !important; }
 .enterprise-budget-track { background: var(--ui-border-default) !important; }
+.enterprise-budget-indicator { box-shadow: none !important; }
 .enterprise-connection-pill { color: var(--ui-text-muted) !important; background: var(--ui-surface-control) !important; }
 .local-backend-status { color: var(--ui-text-muted) !important; background: transparent !important; }
 .local-backend-status[data-status="online"] {
-  color: #4f9d78 !important;
-  border-color: rgb(79 157 120 / 28%) !important;
-  background: rgb(79 157 120 / 10%) !important;
+  color: #176b43 !important;
+  border-color: rgb(23 107 67 / 28%) !important;
+  background: rgb(23 107 67 / 9%) !important;
 }
 .local-backend-status[data-status="offline"] {
-  color: #d46767 !important;
-  border-color: rgb(212 103 103 / 32%) !important;
-  background: rgb(212 103 103 / 12%) !important;
-}
-
-/* 等待/呼吸光晕类动画：保留动效节奏，去掉彩色发光 */
-@keyframes vqNoGlowBreath {
-  0%, 100% { box-shadow: var(--ui-shadow-panel); }
-  50% { box-shadow: 0 0 0 1px rgb(255 255 255 / 18%), var(--ui-shadow-panel); }
+  color: #a33838 !important;
+  border-color: rgb(163 56 56 / 30%) !important;
+  background: rgb(163 56 56 / 9%) !important;
 }
