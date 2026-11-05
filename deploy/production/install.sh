@@ -17,13 +17,21 @@ log() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 
 [ "$(id -u)" = "0" ] || { echo "请用 root 执行"; exit 1; }
 
-log "1/7 系统依赖"
-if command -v apt-get >/dev/null; then
-  export DEBIAN_FRONTEND=noninteractive
-  apt-get update -qq
-  apt-get install -y -qq curl xz-utils git ca-certificates >/dev/null
-elif command -v yum >/dev/null; then
-  yum install -y -q curl xz git ca-certificates >/dev/null
+log "1/7 系统依赖（已装则跳过；源不可用不影响后续）"
+need_pkg=0
+for bin in git curl xz; do command -v "$bin" >/dev/null 2>&1 || need_pkg=1; done
+if [ "$need_pkg" = "1" ]; then
+  if command -v apt-get >/dev/null 2>&1; then
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -qq || true
+    apt-get install -y -qq curl xz-utils git ca-certificates >/dev/null || true
+  elif command -v dnf >/dev/null 2>&1; then
+    dnf install -y -q --setopt=*.skip_if_unavailable=true curl xz git ca-certificates >/dev/null || true
+  elif command -v yum >/dev/null 2>&1; then
+    yum install -y -q --disablerepo=docker-ce-stable curl xz git ca-certificates >/dev/null || true
+  fi
+else
+  echo "git/curl/xz 已存在，跳过装包"
 fi
 
 log "2/7 Node ${NODE_VERSION}"
@@ -54,6 +62,8 @@ else
   git clone --depth=1 "$REPO" "$APP_DIR"
 fi
 cd "$APP_DIR"
+# 国内机器直接走 npmmirror，快一个数量级
+/usr/local/bin/npm config set registry https://registry.npmmirror.com || true
 npm ci --no-audit --no-fund
 npm run build
 chown -R "$APP_USER":"$APP_USER" "$APP_DIR"
