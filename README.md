@@ -35,7 +35,7 @@ VisionQA 是给画面做**有证据的视觉评审**的工具：结论只有「�
 
 ### 三个形态
 
-侧栏顶部有「形态」开关，同一套设计语言切三份工作面，选择记在浏览器里（刷新保持）：
+侧栏顶部有「形态」开关——一行分段控件（三个图标 + 当前形态名，说明放在 tooltip 里），同一套设计语言切三份工作面，选择记在浏览器里（刷新保持）：
 
 | 形态 | 给谁 | 导航 |
 | --- | --- | --- |
@@ -123,13 +123,29 @@ VisionQA 的定位不是「帮你想文案」，而是「给已经产出的画�
 
 - **不 vendor、不提交** BD Canvas 的任何源码或构建产物（公开仓库提交就等于分发）；
 - BD Canvas 单独部署在本机，跑它自己的 5312（后端）/ 5313（后台管理）/ 6677（网页入口）；
-- 工作台只做探活与内嵌：GET /api/bdc/status 探测这三个地址，画布页拿到 `deployed=true` 就**默认直接进 BD Canvas 本体**（全宽 iframe），页头换成「画布 / BD CANVAS + 本机已连接 + 回到内置编排 / 新窗口」；没有部署时仍是本仓库那套节点编排。
+- 工作台只做探活与内嵌：GET /api/bdc/status 探测这三个地址，画布页拿到 `deployed=true` 就**默认直接进 BD Canvas 本体**；没有部署时仍是本仓库那套节点编排。
+- 画布页是**沉浸模式**：第三方画布自带完整的顶栏与工具条，所以这一层不再叠标题和说明，只留一条 42px 状态条（署名 BD CANVAS / 连接状态 / 当前地址 / 新窗口 / 回到内置编排），画布铺满内容区、不套卡片不套圆角。画布页的主角是画布，壳让位。
 
 部署记录、三个必踩的坑（Python 不在 PATH、requirements 少两个包、根 .env 没有代码读）与验收清单见 [docs/bd-canvas-integration.md](docs/bd-canvas-integration.md)，自检用 node scripts/check-bdc.mjs，重启用 `scripts/start-bdc.ps1`。
 
-**当前状态（2026-11-04 实测）**：已解压到 `D:\Projects\bd-canvas`，5312 / 5313 / 6677 三端口都返回 200，`/api/bdc/status` 的 `deployed` 为 true，画布页由 BD Canvas 接管；后台 `bdadmin` 初始密码已改。**还差模型 Key**——后台「Key 管理」为空，出图链路没通。
+**当前状态（2026-11-05 实测）**：已解压到 `D:\Projects\bd-canvas`，5312 / 5313 / 6677 三端口都返回 200，`/api/bdc/status` 的 `deployed` 为 true，画布页由 BD Canvas 接管，墨色主题已覆盖；后台 `bdadmin` 初始密码已改。**还差模型 Key**——后台「Key 管理」为空，出图链路没通。
 
-![画布由 BD Canvas 接管](docs/screenshot-canvas-bdc.png)
+### 把它收进我们这套墨色语言
+
+BD Canvas 线上是 `#101113` + 蓝 `#6f9cff` + 青 `#22d3ee` 的霓虹调性，直接嵌进浅色工作台会读成「里面装了个别家的 App」。所以做了一层**只改配色、不改布局**的主题覆盖：
+
+- `deploy/bd-canvas/vq-theme.css`：它真正的色板在 `src/ui/styles/` 里分三层——`palette.css` → `themes.css`（`--ui-*` 语义层）→ `legacyAliases.css`（把旧 `--bg-*` / `--text-*` / `--border-*` 全部桥接上去）。所以只重定义**上游两层**（`--palette-*` 与 `--ui-*`）就能一次收口：中性墨色 `#0e0e0e / #141414 / #1c1c1c`、发丝线 `rgba(255,255,255,.08–.22)`、强调色降到近白 `#eaeaea`、发光全关、只留投影。index.html 内联 CSS 里硬编码的彩色（顶栏状态绿、节点类型胶囊四色、生成中的紫蓝流体、各类彩色发光）再用最小作用域逐条收敛，**没有加任何布局规则**。
+- `scripts/apply-bdc-theme.mjs`：幂等地把 css 复制进 `bd-canvas/public/`，并在 `index.html` 的 `</head>` 前插入/校正一行 `<link id="vq-bdc-theme" rel="stylesheet" href="/vq-theme.css">`（371121 → 371187 字节，去掉这一行可完整还原）。BD Canvas 升级后重跑一次即可；`--check` 只校验不改。
+
+**许可证边界**：LICENSE §3.2 允许为自用修改源码，§4.3 / §5.1 禁止删除、隐藏、篡改版权声明、水印与归属标识。所以只加了一行 link，BD Canvas 的 logo、「BD Canvas Beta 0.7.5.7」与水印原样保留；`vq-theme.css` 与脚本是我们自己写的、进本仓库，**BD Canvas 的源码一个字节都没进仓库**。
+
+改色前（蓝青霓虹）：
+
+![BD Canvas 改色前](docs/screenshot-canvas-bdc-before.png)
+
+改色后，并且按沉浸模式内嵌进工作台：
+
+![BD Canvas 改色后](docs/screenshot-canvas-bdc.png)
 
 ## 七、账号与会话（真实服务端）
 

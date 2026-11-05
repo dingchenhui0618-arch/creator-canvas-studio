@@ -84,3 +84,42 @@
   .review-body { grid-template-columns:1fr; }
   .review-grid { grid-template-columns:repeat(3, 1fr); }
 }
+
+/* 视觉评审：页面留白与其它页对齐；空态从「三条说明堆在左上」改成「一个焦点 + 三段并列事实」 */
+.review-page {
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 28px 32px 48px;
+}
+.review-empty-state {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 26px;
+  min-height: 440px;
+  padding: 34px 30px;
+}
+.review-empty-head { align-items: center; gap: 14px; }
+.review-empty-head strong { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+.review-empty-head span { margin-top: 5px; max-width: 48ch; font-size: 12px; }
+.review-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 22px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.review-steps li {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 15px 0 0;
+  border-top: 1px solid var(--line-faint);
+}
+.review-steps li:first-child { padding-top: 15px; border-top: 1px solid var(--line-faint); }
+.review-steps strong { font-size: 12.5px; }
+.review-steps p { margin: 0; font-size: 11.5px; line-height: 1.62; }
+
+.review-empty-state { max-width: 780px; margin: 0 auto; }

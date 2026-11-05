@@ -1922,3 +1922,50 @@
   font-size: 13px;
   color: var(--muted, #7a746b);
 }
+
+/* 形态：一行分段控件（低频设置不该占主视觉） */
+.vq-edition-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  margin: 10px 10px 6px;
+  padding: 0 9px 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+}
+.vq-edition-seg {
+  display: inline-flex;
+  gap: 1px;
+  padding: 2px;
+  border-radius: 6px;
+  background: rgba(17, 17, 17, .05);
+}
+.vq-edition-seg-btn {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 20px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+  transition: background .12s ease, color .12s ease;
+}
+.vq-edition-seg-btn:hover { color: var(--ink); }
+.vq-edition-seg-btn.is-active {
+  background: var(--surface-raised);
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+.vq-edition-current {
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}

@@ -646,3 +646,83 @@
   color: var(--ink);
 }
 .cv-head--bdc + .cv-bdc-frame { height: calc(100vh - 214px); }
+
+/* ---------- BD Canvas 沉浸模式 ----------
+   第三方画布自带顶栏与工具条，我们这一层只保留一条状态条：
+   在哪里（画布 · BD CANVAS）/ 通没通（本机已连接）/ 两个出口（新窗口、回内置编排）。
+   画布本身铺满内容区，不做卡片、不加圆角与阴影 —— 让它看起来是产品的「画布模式」，而不是嵌了个别家应用。 */
+.page.cv-page.is-bdc {
+  display: flex;
+  flex-direction: column;
+  max-width: none;
+  height: calc(100dvh - 56px);
+  padding: 0;
+}
+.cv-bdc-strip {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  height: 42px;
+  padding: 0 12px 0 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--canvas);
+}
+.cv-bdc-label {
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.cv-bdc-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: .04em;
+  white-space: nowrap;
+}
+.cv-bdc-state .cv-save-dot { background: var(--ink); }
+.cv-bdc-spacer { flex: 1 1 auto; }
+.cv-bdc-url {
+  margin-right: 4px;
+  color: var(--line-strong);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: .02em;
+  white-space: nowrap;
+}
+.is-bdc .cv-bdc-frame {
+  display: block;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  height: auto;
+  border: 0;
+  border-radius: 0;
+  background: #0e0e0e;
+}
+.is-bdc .cv-state { margin: 28px; }
+
+/* 变体：画布模式整体进入深色 —— 顶部状态条跟随画布，读起来像「进入了画布」而不是「嵌了个黑盒子」 */
+.page.cv-page.is-bdc .cv-bdc-strip {
+  background: #0e0e0e;
+  border-bottom-color: rgba(255, 255, 255, .08);
+}
+.page.cv-page.is-bdc .cv-bdc-label { color: rgba(255, 255, 255, .5); }
+.page.cv-page.is-bdc .cv-bdc-state { color: rgba(255, 255, 255, .55); }
+.page.cv-page.is-bdc .cv-bdc-state .cv-save-dot { background: #ffffff; }
+.page.cv-page.is-bdc .cv-bdc-url { color: rgba(255, 255, 255, .28); }
+.page.cv-page.is-bdc .cv-icon-btn {
+  color: rgba(255, 255, 255, .55);
+  border-color: rgba(255, 255, 255, .12);
+}
+.page.cv-page.is-bdc .cv-icon-btn:hover {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, .3);
+  background: rgba(255, 255, 255, .06);
+}

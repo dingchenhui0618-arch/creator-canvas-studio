@@ -641,23 +641,38 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
         : '已保存'
 
   return (
-    <div className="page cv-page">
+    <div className={`page cv-page${bdcView && bdc?.deployed ? ' is-bdc' : ''}`}>
       {bdcView && bdc?.deployed ? (
-        <div className="cv-head cv-head--bdc">
-          <div className="cv-head-main">
-            <div className="cv-eyebrow">画布 / BD CANVAS</div>
-            <div className="cv-title-row">
-              <span className="cv-bdc-name">BD Canvas</span>
-              <span className="cv-save is-saved" title={bdc.web.url}>
-                <span className="cv-save-dot" />本机已连接
-              </span>
-            </div>
-            <p className="cv-sub">画布与生成链路都在 BD Canvas（{bdc.web.url}），账号与额度在它自己的后台。</p>
-          </div>
-          <div className="cv-head-actions">
-            <button className="cv-btn" type="button" onClick={() => setBdcView(false)}>回到内置编排</button>
-            <a className="cv-btn" href={bdc.web.url} target="_blank" rel="noreferrer">新窗口</a>
-          </div>
+        // 画布页的主角是画布本身：第三方画布自带完整的顶栏与工具条，
+        // 我们这层不该再叠一遍标题和说明，只留一条 42px 的状态条（在哪 / 通没通 / 两个出口）。
+        <div className="cv-bdc-strip">
+          {/* 上一层的面包屑已经说了「画布」，这里只留第三方署名与连接状态，不重复 */}
+          <span className="cv-bdc-label">BD CANVAS</span>
+          <span className="cv-bdc-state" title={bdc.web.url}>
+            <span className="cv-save-dot" />
+            本机已连接
+          </span>
+          <span className="cv-bdc-spacer" />
+          <span className="cv-bdc-url">{bdc.web.url.replace(/^https?:\/\//, '').replace(/\/$/, '')}</span>
+          <a
+            className="cv-icon-btn"
+            href={bdc.web.url}
+            target="_blank"
+            rel="noreferrer"
+            title="在新窗口打开"
+            aria-label="在新窗口打开"
+          >
+            <Maximize2 size={14} />
+          </a>
+          <button
+            className="cv-icon-btn"
+            type="button"
+            onClick={() => setBdcView(false)}
+            title="回到内置编排"
+            aria-label="回到内置编排"
+          >
+            <LayoutGrid size={14} />
+          </button>
         </div>
       ) : (
       <div className="cv-head">

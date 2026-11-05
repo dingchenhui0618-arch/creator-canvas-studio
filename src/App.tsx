@@ -286,12 +286,11 @@ function Workbench({
           )}
 
           {sidebarOpen ? (
-            <div className="vq-edition" aria-label="形态切换">
-              <div className="vq-edition-head">
-                <span className="vq-edition-kicker">形态</span>
-                <span className="vq-edition-mono">{EDITION_BY_ID[edition].mono}</span>
-              </div>
-              <div className="vq-edition-track" role="tablist" aria-label="切换形态">
+            // 形态是低频设置，不是导航。收成一行：图标分段 + 当前形态名，说明留在 tooltip 里。
+            // 之前这块占 150px 高、比主导航还显眼，属于层级错位。
+            <div className="vq-edition-bar" aria-label="形态切换">
+              <span className="vq-edition-kicker">形态</span>
+              <div className="vq-edition-seg" role="tablist" aria-label="切换形态">
                 {EDITIONS.map((item) => {
                   const Icon = EDITION_ICON[item.id]
                   const active = edition === item.id
@@ -301,17 +300,19 @@ function Workbench({
                       type="button"
                       role="tab"
                       aria-selected={active}
-                      className={`vq-edition-option${active ? ' is-active' : ''}`}
+                      className={`vq-edition-seg-btn${active ? ' is-active' : ''}`}
                       onClick={() => switchEdition(item.id)}
-                      title={item.hint}
+                      title={`${item.label} · ${item.hint}`}
+                      aria-label={item.label}
                     >
                       <Icon size={13} strokeWidth={1.5} />
-                      <span>{item.label}</span>
                     </button>
                   )
                 })}
               </div>
-              <p className="vq-edition-hint">{EDITION_BY_ID[edition].hint}</p>
+              <span className="vq-edition-current" title={EDITION_BY_ID[edition].hint}>
+                {EDITION_BY_ID[edition].label}
+              </span>
             </div>
           ) : (
             <button
