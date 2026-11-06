@@ -707,4 +707,101 @@
   background: var(--canvas);
 }
 .is-bdc .cv-state { margin: 32px; }
-
+/* 状态条里的画布项目控件：和宿主同一套发丝线 + 等宽微标签 */
+.cv-bdc-strip { position: relative; }
+.cv-bdc-sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  background: var(--line);
+}
+.cv-bdc-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.cv-bdc-picker-label {
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.cv-bdc-select {
+  max-width: 240px;
+  height: 24px;
+  padding: 0 8px;
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  outline: none;
+}
+.cv-bdc-select:focus-visible { border-color: var(--ink); }
+.cv-bdc-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 8px;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.cv-bdc-action:hover { color: var(--ink); border-color: var(--line-strong); }
+.cv-bdc-action:disabled { color: var(--faint); cursor: not-allowed; opacity: .6; }
+.cv-bdc-action.is-primary {
+  color: var(--surface-raised);
+  background: var(--ink);
+  border-color: var(--ink);
+}
+.cv-bdc-action.is-primary:hover { background: #000; }
+.cv-bdc-note {
+  position: absolute;
+  top: 38px;
+  left: 200px;
+  z-index: 30;
+  display: grid;
+  gap: 8px;
+  width: 340px;
+  padding: 12px;
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow-raise);
+}
+.cv-bdc-note-title {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 500;
+}
+.cv-bdc-note-input {
+  width: 100%;
+  padding: 8px;
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.5;
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  outline: none;
+  resize: vertical;
+}
+.cv-bdc-note-input:focus-visible { border-color: var(--ink); }
+.cv-bdc-note-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cv-bdc-note-hint {
+  flex: 1 1 auto;
+  color: var(--faint);
+  font-size: 11px;
+}

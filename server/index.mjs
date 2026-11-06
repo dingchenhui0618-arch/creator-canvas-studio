@@ -11,7 +11,7 @@ import { createFlowsRouter } from './routes/flows.mjs'
 import { createReviewRouter } from './routes/review.mjs'
 import { createAuthRouter } from './routes/auth.mjs'
 import { currentUser } from './auth.mjs'
-import { bdcStatus } from './bdc.mjs'
+import { bdcStatus, listCanvases, createCanvas, appendCanvasNote } from './bdc.mjs'
 import { modelCatalog } from './models.mjs'
 
 // 功能路由：每个模块自己处理 /api/<prefix> 下的请求，index.mjs 只管分发
@@ -109,6 +109,29 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/bdc/status') {
       sendJson(res, 200, await bdcStatus())
       return
+    }
+
+    // 画布 ↔ 工作台：列画布、建画布、往画布里落评审笔记（都走画布自己的 HTTP 接口，不碰它的文件）
+    if (pathname === '/api/bdc/canvases' && req.method === 'GET') {
+      return sendJson(res, 200, await listCanvases())
+    }
+
+    if (pathname === '/api/bdc/canvases' && req.method === 'POST') {
+      const body = await readBody(req)
+      try {
+        return sendJson(res, 200, await createCanvas(body.name))
+      } catch (error) {
+        return sendJson(res, 502, { ok: false, error: String(error?.message || error).slice(0, 160) })
+      }
+    }
+
+    if (pathname === '/api/bdc/canvases/note' && req.method === 'POST') {
+      const body = await readBody(req)
+      try {
+        return sendJson(res, 200, await appendCanvasNote(body.canvasId, body.text, body.title))
+      } catch (error) {
+        return sendJson(res, 502, { ok: false, error: String(error?.message || error).slice(0, 160) })
+      }
     }
 
     if (pathname === '/api/models') {

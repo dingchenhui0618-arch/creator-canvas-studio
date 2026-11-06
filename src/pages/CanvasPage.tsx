@@ -25,7 +25,14 @@ import {
   type RunNodeResult,
   type RunRecord,
 } from '../api/flows'
-import { getBdcStatus, type BdcStatus } from '../api/bdc'
+import {
+  createBdcCanvas,
+  getBdcStatus,
+  listBdcCanvases,
+  writeBdcNote,
+  type BdcCanvas,
+  type BdcStatus,
+} from '../api/bdc'
 import { NODE_META } from '../canvas/catalog'
 import { FlowNodeCard } from '../canvas/FlowNode'
 import { Inspector } from '../canvas/Inspector'
@@ -93,6 +100,12 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [bdc, setBdc] = useState<BdcStatus | null>(null)
   const [bdcView, setBdcView] = useState(false)
+  // 画布 ↔ 工作台：画布列表、当前画布、把评审笔记写回画布
+  const [canvases, setCanvases] = useState<BdcCanvas[]>([])
+  const [canvasId, setCanvasId] = useState('')
+  const [noteOpen, setNoteOpen] = useState(false)
+  const [noteText, setNoteText] = useState('')
+  const [noteBusy, setNoteBusy] = useState(false)
   const [zoom, setZoom] = useState(1)
   const [historyCount, setHistoryCount] = useState(0)
   const [futureCount, setFutureCount] = useState(0)
@@ -632,6 +645,63 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
     return () => window.clearTimeout(timer)
   }, [])
 
+  const reloadCanvases = useCallback(async () => {
+    try {
+      const res = await listBdcCanvases()
+      setCanvases(res.canvases || [])
+      return res
+    } catch {
+      return null
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!bdc?.deployed) return
+    void reloadCanvases()
+  }, [bdc?.deployed, reloadCanvases])
+
+  // iframe 地址：一次性入口（种 cookie）+ 画布 id（画布自己用 ?loadCanvas= 认）
+  const bdcFrameSrc = useMemo(() => {
+    const base = bdc?.web.embedUrl || bdc?.web.url || ''
+    if (!base || !canvasId) return base
+    return base + (base.includes('?') ? '&' : '?') + 'loadCanvas=' + encodeURIComponent(canvasId)
+  }, [bdc?.web.embedUrl, bdc?.web.url, canvasId])
+
+  const handleCreateCanvas = useCallback(async () => {
+    const stamp = new Date().toLocaleString('zh-CN', { hour12: false }).replace(/[^0-9]/g, '').slice(4, 12)
+    try {
+      const res = await createBdcCanvas(`评审画布-${stamp}`)
+      if (res?.canvas) {
+        setCanvases((list) => [res.canvas, ...list])
+        setCanvasId(res.canvas.id)
+        toast?.(`已新建画布：${res.canvas.name}`)
+      }
+    } catch (error) {
+      toast?.(error instanceof Error ? error.message : '新建画布失败')
+    }
+  }, [toast])
+
+  const handleWriteNote = useCallback(async () => {
+    const text = noteText.trim()
+    if (!text) return
+    if (!canvasId) {
+      toast?.('先选一个画布，再写笔记')
+      return
+    }
+    setNoteBusy(true)
+    try {
+      await writeBdcNote(canvasId, text, 'VisionQA 评审笔记')
+      setNoteText('')
+      setNoteOpen(false)
+      await reloadCanvases()
+      toast?.('已写进画布，刷新画布即可看到那条文本节点')
+    } catch (error) {
+      toast?.(error instanceof Error ? error.message : '写入画布失败')
+    } finally {
+      setNoteBusy(false)
+    }
+  }, [canvasId, noteText, reloadCanvases, toast])
+
   const saveLabel = saveState === 'saving'
     ? '保存中…'
     : saveState === 'dirty'
@@ -652,6 +722,60 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
             <span className="cv-save-dot" />
             {bdcLocalOnly ? '本机已连接' : '已连接'}
           </span>
+          <span className="cv-bdc-sep" aria-hidden="true" />
+          <label className="cv-bdc-picker">
+            <span className="cv-bdc-picker-label">画布项目</span>
+            <select
+              className="cv-bdc-select"
+              value={canvasId}
+              onChange={(event) => setCanvasId(event.target.value)}
+              aria-label="选择画布项目"
+            >
+              <option value="">{canvases.length ? '未指定（默认画布）' : '暂无已保存的画布'}</option>
+              {canvases.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name} · {item.nodeCount} 节点
+                </option>
+              ))}
+            </select>
+          </label>
+          <button className="cv-bdc-action" type="button" onClick={handleCreateCanvas} title="新建一块画布并绑定到工作台">
+            <Plus size={12} />新建
+          </button>
+          <button
+            className="cv-bdc-action"
+            type="button"
+            onClick={() => setNoteOpen((open) => !open)}
+            aria-expanded={noteOpen}
+            title="把评审结论作为文本节点写进画布"
+          >
+            <Save size={12} />写笔记
+          </button>
+          {noteOpen ? (
+            <div className="cv-bdc-note" role="dialog" aria-label="写进画布">
+              <div className="cv-bdc-note-title">写进画布 · {canvases.find((item) => item.id === canvasId)?.name || '未指定画布'}</div>
+              <textarea
+                className="cv-bdc-note-input"
+                value={noteText}
+                onChange={(event) => setNoteText(event.target.value)}
+                placeholder="评审结论、待确认项、返工点…"
+                rows={4}
+                spellCheck={false}
+              />
+              <div className="cv-bdc-note-foot">
+                <span className="cv-bdc-note-hint">会以文本节点落在画布左上角</span>
+                <button className="cv-bdc-action" type="button" onClick={() => setNoteOpen(false)}>取消</button>
+                <button
+                  className="cv-bdc-action is-primary"
+                  type="button"
+                  onClick={handleWriteNote}
+                  disabled={noteBusy || !noteText.trim() || !canvasId}
+                >
+                  {noteBusy ? '写入中…' : '写入画布'}
+                </button>
+              </div>
+            </div>
+          ) : null}
           <span className="cv-bdc-spacer" />
           <span className="cv-bdc-url">{bdc.web.url.replace(/^https?:\/\//, '').split('/')[0]}</span>
           <a
@@ -746,7 +870,7 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
             <button className="cv-btn" type="button" onClick={() => setBdcView(false)}>用内置编排</button>
           </div>
         ) : (
-          <iframe className="cv-bdc-frame" src={bdc.web.embedUrl || bdc.web.url} title="VisionQA Canvas" />
+          <iframe className="cv-bdc-frame" src={bdcFrameSrc} title="VisionQA Canvas" />
         )
       ) : loadState === 'error' ? (
         <div className="cv-state">
