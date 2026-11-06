@@ -13,7 +13,7 @@
 | 80 / 443 | 已被 nginx 占用，`wavisionai.cn` 官网在线 |
 | 带宽 | 峰值 200 Mbps 型（流量包计费，不是 1Mbps 固定） |
 
-本工作台常驻内存约 **120 MB**（Node 单进程 + 384 MB 堆上限），BD Canvas 三个进程另算（Python 两个共 120 MB，
+本工作台常驻内存约 **120 MB**（Node 单进程 + 384 MB 堆上限），VisionQA Canvas 三个进程另算（Python 两个共 120 MB，
 网页入口不要再起 Vite，交给 nginx 发静态）。2 GiB 内存够用，但**必须分页（swap）兜底**，见下。
 
 ## 一次性准备

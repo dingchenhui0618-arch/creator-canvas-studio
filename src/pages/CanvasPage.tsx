@@ -59,7 +59,7 @@ export default function CanvasPage({ onToast }: CanvasPageProps) {
   )
 }
 
-// BD Canvas 的默认地址是本机回环。访客浏览器里的 127.0.0.1 指的是「他自己那台电脑」，
+// VisionQA Canvas 的默认地址是本机回环。访客浏览器里的 127.0.0.1 指的是「他自己那台电脑」，
 // 所以这种地址只能在自己机器上内嵌；对外必须换成独立子域，否则只能给提示卡而不是白屏 iframe。
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]'])
 
@@ -623,7 +623,7 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
       void getBdcStatus()
         .then((status) => {
           setBdc(status)
-          // BD Canvas 部署后它就是画布本体，默认直接进 BD Canvas；
+          // VisionQA Canvas 部署后它就是画布本体，默认直接进 VisionQA Canvas；
           // 用户点「回到内置编排」才切回本仓库那套节点编排。
           if (status.deployed) setBdcView(true)
         })
@@ -647,7 +647,7 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
         // 我们这层不该再叠一遍标题和说明，只留一条 42px 的状态条（在哪 / 通没通 / 两个出口）。
         <div className="cv-bdc-strip">
           {/* 上一层的面包屑已经说了「画布」，这里只留第三方署名与连接状态，不重复 */}
-          <span className="cv-bdc-label">BD CANVAS</span>
+          <span className="cv-bdc-label">VisionQA Canvas</span>
           <span className="cv-bdc-state" title={bdc.web.url}>
             <span className="cv-save-dot" />
             {bdcLocalOnly ? '本机已连接' : '已连接'}
@@ -727,7 +727,7 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
       {bdc?.deployed && !bdcView ? (
         <div className="cv-bdc-bar">
           <span className="vq-mono">BD CANVAS · {bdcLocalOnly ? '本机已部署' : '已部署'}</span>
-          <p>画布由 BD Canvas 接管（{bdc.web.url}）；这里的流程编排保留作备选，数据各存各的。</p>
+          <p>画布由 VisionQA Canvas 接管（{bdc.web.url}）；这里的流程编排保留作备选，数据各存各的。</p>
           <button className="cv-btn" type="button" onClick={() => setBdcView(true)}>在这里打开</button>
           <a className="cv-btn" href={bdc.web.url} target="_blank" rel="noreferrer">新窗口</a>
         </div>
@@ -740,13 +740,13 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
             <CircleAlert size={18} strokeWidth={1.5} />
             <div>
               <strong>画布还没对外发布</strong>
-              <p>BD Canvas 现在只监听本机（{bdc.web.url}），从别的电脑打开会连到访客自己的机器。</p>
+              <p>VisionQA Canvas 现在只监听本机（{bdc.web.url}），从别的电脑打开会连到访客自己的机器。</p>
               <p className="cv-muted">把它部署到独立子域并把 BDC_WEB_URL 指过去，这里就会直接显示画布。</p>
             </div>
             <button className="cv-btn" type="button" onClick={() => setBdcView(false)}>用内置编排</button>
           </div>
         ) : (
-          <iframe className="cv-bdc-frame" src={bdc.web.embedUrl || bdc.web.url} title="BD Canvas" />
+          <iframe className="cv-bdc-frame" src={bdc.web.embedUrl || bdc.web.url} title="VisionQA Canvas" />
         )
       ) : loadState === 'error' ? (
         <div className="cv-state">

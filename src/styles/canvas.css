@@ -614,7 +614,7 @@
   .cv-head-actions .cv-btn { flex: 1; justify-content: center; }
 }
 
-/* ---------- BD Canvas 接入条 ---------- */
+/* ---------- VisionQA Canvas 接入条 ---------- */
 .cv-bdc-bar {
   display: flex;
   align-items: center;
@@ -636,7 +636,7 @@
   background: var(--surface);
 }
 
-/* BD Canvas 为画布本体时的紧凑页头 */
+/* VisionQA Canvas 为画布本体时的紧凑页头 */
 .cv-head--bdc { padding-bottom: 16px; }
 .cv-bdc-name {
   font-family: var(--font-display, inherit);
@@ -647,7 +647,7 @@
 }
 .cv-head--bdc + .cv-bdc-frame { height: calc(100vh - 214px); }
 
-/* ---------- BD Canvas 沉浸模式 ----------
+/* ---------- VisionQA Canvas 沉浸模式 ----------
    第三方画布自带顶栏与工具条，我们这一层只保留一条状态条：
    在哪里（画布 · BD CANVAS）/ 通没通（本机已连接）/ 两个出口（新窗口、回内置编排）。
    画布本身铺满内容区，不做卡片、不加圆角与阴影 —— 让它看起来是产品的「画布模式」，而不是嵌了个别家应用。 */

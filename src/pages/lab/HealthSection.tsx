@@ -27,9 +27,9 @@ const ENDPOINTS: Endpoint[] = [
   },
   {
     id: 'bdc',
-    name: 'BD Canvas 探活',
+    name: 'VisionQA Canvas 探活',
     path: '/api/bdc/status',
-    hint: 'BD Canvas 三个本机入口',
+    hint: 'VisionQA Canvas 三个本机入口',
     fields: [
       { label: 'deployed', path: 'deployed' },
       { label: 'web', path: 'web.status' },

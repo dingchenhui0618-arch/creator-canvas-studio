@@ -27,7 +27,7 @@ VisionQA 是给画面做**有证据的视觉评审**的工具：结论只有「�
 | 一键复刻 | 视频解析 → ffprobe → FFmpeg 拆帧 → 逐帧视觉分析 → 入库，五步进度与实时日志 | 平台链接解析依赖红狐 Key；直链兜底可用 |
 | 模板库 | 脚本结构、分镜表、原链接、可复用规则入库；类型/关键词检索；详情抽屉；送去评审 | 每条模板都带真实抽帧 |
 | 智能体 | 对话框式入口、参数行（智能体/输出类型/模型/数量）、已自建智能体分类卡片、新建/编辑/删除 | 对话真调本地模型；数量本期固定 1 |
-| 画布 | React Flow 节点编排（input/llm/kb/tool/condition/output）、检查器、连线校验、保存、逐节点运行；节点面板默认收起，双击画布或点「节点」唤出 | 运行是真执行，耗时真实；BD Canvas 部署后画布交给它接管（见第六节） |
+| 画布 | React Flow 节点编排（input/llm/kb/tool/condition/output）、检查器、连线校验、保存、逐节点运行；节点面板默认收起，双击画布或点「节点」唤出 | 运行是真执行，耗时真实；VisionQA Canvas 部署后画布交给它接管（见第六节） |
 | 视觉评审 | 选画面 → visual-baseline 七维评审 → verdict + 像素锚点 + 有界修正建议 | 未启动 VisionQA 插件服务时由本地模型出一份同契约结果，provider 会写清 |
 | 运行记录 | 读 data/runs.json，逐节点状态、耗时、输出 | 只有画布执行会产生记录 |
 
@@ -144,39 +144,45 @@ VisionQA 的定位不是「帮你想文案」，而是「给已经产出的画�
 
 契约映射、证据锚点格式与降级行为见 [docs/review-integration.md](docs/review-integration.md)。
 
-## 六、BD Canvas 接入（Source-Available，不入仓）
+## 六、VisionQA Canvas 接入（上游 BD Canvas 源码，Source-Available，不入仓）
 
-画布这一块的长远归属是 **BD Canvas**（Source-Available License v1.0，不是开源协议）。它的条款禁止把源码或修改版以任何形式分发，也禁止把软件本身当产品卖，所以本仓库：
+画布这一块跑的是 **VisionQA Canvas**：源码来自 **BD Canvas**（Source-Available License v1.0，不是开源协议）的授权副本，本产品对外统一叫 VisionQA Canvas。上游条款禁止把源码或修改版以任何形式分发，也禁止把软件本身当产品卖，所以本仓库：
 
 - **不 vendor、不提交** BD Canvas 的任何源码或构建产物（公开仓库提交就等于分发）；
-- BD Canvas 单独部署在本机，跑它自己的 5312（后端）/ 5313（后台管理）/ 6677（网页入口）；
-- 工作台只做探活与内嵌：GET /api/bdc/status 探测这三个地址，画布页拿到 `deployed=true` 就**默认直接进 BD Canvas 本体**；没有部署时仍是本仓库那套节点编排。
+- VisionQA Canvas 单独部署在本机，跑它自己的 5312（后端）/ 5313（后台管理）/ 6677（网页入口）；
+- 工作台只做探活与内嵌：GET /api/bdc/status 探测这三个地址，画布页拿到 `deployed=true` 就**默认直接进 VisionQA Canvas 本体**；没有部署时仍是本仓库那套节点编排。
 - 画布页是**沉浸模式**：第三方画布自带完整的顶栏与工具条，所以这一层不再叠标题和说明，只留一条 42px 状态条（署名 BD CANVAS / 连接状态 / 当前地址 / 新窗口 / 回到内置编排），画布铺满内容区、不套卡片不套圆角。画布页的主角是画布，壳让位。
 
-部署记录、三个必踩的坑（Python 不在 PATH、requirements 少两个包、根 .env 没有代码读）与验收清单见 [docs/bd-canvas-integration.md](docs/bd-canvas-integration.md)，自检用 node scripts/check-bdc.mjs，重启用 `scripts/start-bdc.ps1`。
+部署记录、三个必踩的坑（Python 不在 PATH、requirements 少两个包、根 .env 没有代码读）与验收清单见 [docs/visionqa-canvas-integration.md](docs/visionqa-canvas-integration.md)，自检用 node scripts/check-bdc.mjs，重启用 `scripts/start-bdc.ps1`。
 
-**当前状态（2026-11-05 实测）**：已解压到 `D:\Projects\bd-canvas`，5312 / 5313 / 6677 三端口都返回 200，`/api/bdc/status` 的 `deployed` 为 true，画布页由 BD Canvas 接管，浅色纸面主题已覆盖；后台 `bdadmin` 初始密码已改。**还差模型 Key**——后台「Key 管理」为空，出图链路没通。
+**当前状态（2026-11-05 实测）**：已解压到 `D:\Projects\bd-canvas`，5312 / 5313 / 6677 三端口都返回 200，`/api/bdc/status` 的 `deployed` 为 true，画布页由 VisionQA Canvas 接管，浅色纸面主题已覆盖；后台 `bdadmin` 初始密码已改。**还差模型 Key**——后台「Key 管理」为空，出图链路没通。
+
+### 改名与顶栏对齐（2026-11-06）
+
+产品名统一成 **VisionQA Canvas**，只改**用户看得见**的地方：网页 `<title>`、顶栏品牌、管理员登录页、新手教程页、桌面端画布标题、设置面板里的应用名、AI 人设前缀、`document.title` 动态标题。上游的版权声明（`copyrightBanner.ts` 归属串）、各文件头部的 `Source-Available License v1.0` 与 `LICENSE` 原文**一个字符都没动**——那是 §4.3 / §5.1 要求保留的署名。
+
+顶栏几何也并进 `deploy/bd-canvas/vq-theme.css` 第 9 节，口径直接抄宿主 42px 状态条（`.cv-bdc-strip`）：**42px 高、底色 `#f4f4f4` 与宿主状态条连成一条、底边 `1px rgba(17,17,17,.10)`、页签 26px / 6px 圆角 / 12px 字、「后端未检测」做成 20px 等宽微标签**。于是「宿主状态条 + 画布顶栏」读起来是一条，而不是两层壳。
 
 ### 把它收进我们这套白纸墨线的语言
 
-BD Canvas 线上是 `#101113` + 蓝 `#6f9cff` + 青 `#22d3ee` 的霓虹调性，直接嵌进浅色工作台会读成「里面装了个别家的 App」。所以做了一层**只改配色、不改布局**的主题覆盖：
+上游默认是 `#101113` + 蓝 `#6f9cff` + 青 `#22d3ee` 的深色霓虹调性，直接嵌进浅色工作台会读成「里面装了个别家的 App」。所以做了一层**只改配色与顶栏几何、不改组件结构**的主题覆盖：
 
 - `deploy/bd-canvas/vq-theme.css`：它真正的色板在 `src/ui/styles/` 里分三层——`palette.css` → `themes.css`（`--ui-*` 语义层）→ `legacyAliases.css`（把旧 `--bg-*` / `--text-*` / `--border-*` 全部桥接上去）。所以只重定义**上游两层**（`--palette-*` 与 `--ui-*`）就能一次收口，并且是**往我们自己的浅色画布上靠**，不是另起一套深色皮肤：画布 `#f4f4f4`、卡片 `#ffffff`、次级 `#f0f0f0`、三级发丝线 `rgba(17,17,17,.06/.10/.20)`、文字 `#111 / #3f3f3f / #5d5d5d / #9a9a9a`、强调近黑、发光全 `transparent` 只留墨投影、点阵 `rgba(17,17,17,.10)`、语义色直接用我们 tokens.css 的 `#176b43 / #8a5b08 / #a33838`。
-- `scripts/apply-bdc-theme.mjs`：幂等地把 css 复制进 `bd-canvas/public/`，并在 `index.html` 的 `</head>` 前插入/校正一行 `<link id="vq-bdc-theme" rel="stylesheet" href="/vq-theme.css">`（371121 → 371187 字节，去掉这一行可完整还原）。BD Canvas 升级后重跑一次即可；`--check` 只校验不改。
+- `scripts/apply-bdc-theme.mjs`：幂等地把 css 复制进 `bd-canvas/public/`，并在 `index.html` 的 `</head>` 前插入/校正一行 `<link id="vq-bdc-theme" rel="stylesheet" href="/vq-theme.css">`（371121 → 371187 字节，去掉这一行可完整还原）。上游升级后重跑一次即可；`--check` 只校验不改。
 
-**许可证边界**：LICENSE §3.2 允许为自用修改源码，§4.3 / §5.1 禁止删除、隐藏、篡改版权声明、水印与归属标识。所以只加了一行 link，BD Canvas 的 logo、「BD Canvas Beta 0.7.5.7」与水印原样保留；`vq-theme.css` 与脚本是我们自己写的、进本仓库，**BD Canvas 的源码一个字节都没进仓库**。
+**许可证边界**：LICENSE §3.2 允许为自用修改源码，§4.3 / §5.1 禁止删除、隐藏、篡改版权声明、水印与归属标识。所以：`src/features/license/copyrightBanner.ts` 的归属串、各文件头部的 `Source-Available License v1.0` 声明、`LICENSE` 原文**全部原样保留**；改动只限于**可见产品名**（标题、顶栏品牌、登录页、教程页、桌面端标题、AI 人设、`document.title`）与配色/顶栏几何（`deploy/bd-canvas/vq-theme.css`）。`vq-theme.css` 与脚本是我们自己写的、进本仓库，**上游源码一个字节都没进仓库**。
 
 改色前（蓝青霓虹）：
 
-![BD Canvas 改色前](docs/screenshot-canvas-bdc-before.png)
+![VisionQA Canvas 改色前](docs/screenshot-canvas-bdc-before.png)
 
 改色后（白纸 + 墨线 + 发丝节点卡，节点选中是 1.5px 近黑环）：
 
-![BD Canvas 改色后 · 节点与参数面板](docs/screenshot-canvas-bdc-nodes.png)
+![VisionQA Canvas 改色后 · 节点与参数面板](docs/screenshot-canvas-bdc-nodes.png)
 
 同一个画布按沉浸模式内嵌进工作台——两边现在是一套语言，不再像「里面装了个别家的 App」：
 
-![BD Canvas 内嵌在工作台](docs/screenshot-canvas-bdc.png)
+![VisionQA Canvas 内嵌在工作台](docs/screenshot-canvas-bdc.png)
 
 ## 七、账号与会话（真实服务端）
 
@@ -198,7 +204,7 @@ BD Canvas 线上是 `#101113` + 蓝 `#6f9cff` + 青 `#22d3ee` 的霓虹调性，
 
 ## 八、服务器配置
 
-内测起步一台 **4C 8G / 100G ESSD / 5M 带宽**、视觉模型继续走 API、BD Canvas 同机部署即可；**不需要 GPU**——评审 60–85s、智能体 20–50s 都是接口延迟。逐档配置、存储/带宽估算、以及上线前必须做的三件事（Windows 脚本换 systemd、JSON 换 SQLite、视频转对象存储）见 [docs/server-sizing.md](docs/server-sizing.md)。
+内测起步一台 **4C 8G / 100G ESSD / 5M 带宽**、视觉模型继续走 API、VisionQA Canvas 同机部署即可；**不需要 GPU**——评审 60–85s、智能体 20–50s 都是接口延迟。逐档配置、存储/带宽估算、以及上线前必须做的三件事（Windows 脚本换 systemd、JSON 换 SQLite、视频转对象存储）见 [docs/server-sizing.md](docs/server-sizing.md)。
 
 **要真正对外上线**时看 [docs/deploy-production.md](docs/deploy-production.md)：域名与 DNS、Caddy 自动 HTTPS（`deploy/Caddyfile`）或 Nginx（`deploy/nginx.conf`）、systemd 守护（`deploy/vq.service`）、环境变量清单（`deploy/env.production.example`）、健康检查、备份恢复与日志轮转，都有可直接复制的命令和验收步骤。三条硬结论：node 只监听 127.0.0.1、公网只走反代；四个 `VQ_` 开关不写就等于裸奔；单机同时复刻不超过 2 路。
 
@@ -230,7 +236,7 @@ DOMAIN=visionqa.wavisionai.cn bash deploy/production/enable-https.sh            
 
 **模型切换的口子怎么用**：右上角模型下拉读 `GET /api/models`，目录来自服务器 `.env` 的 `VISION_MODELS`（逗号分隔，每项可写 `id|显示名`），没配就退回 `VISION_MODEL` + `VISION_FALLBACKS`；改完重启服务、刷新页面即可，**前端不用改一行**。真正要发起调用时，把 `VISION_BASE_URL` / `VISION_API_KEY` 填进同一个 `.env`，`configured` 会变 true，下拉里的「凭证未配置」提示自动消失。
 
-### BD Canvas 同机部署（2026-11-06）
+### VisionQA Canvas 同机部署（2026-11-06）
 
 线上「画布」页里嵌的就是 BD Canvas 本体（真源码那套），不再是内置编排的替身。
 
@@ -250,9 +256,9 @@ DOMAIN=visionqa.wavisionai.cn bash deploy/production/enable-https.sh            
 
 **画布已加 Basic Auth**（2026-11-06 追加）：`canvas.wavisionai.cn` 默认 401，用户 `canvas`；iframe 走一次性入口 `/__auth?k=<token>` —— nginx 种 30 天 cookie 后所有资源请求免登录，所以嵌在 VisionQA 里不会弹登录框。`/admin`、`/api/admin`、`/enterprise/admin` 仍然只放行 127.0.0.1。VisionQA 侧新增两个环境变量：`BDC_EMBED_URL`（iframe 用，带 token）与 `BDC_WEB_PROBE_URL`（探活用本机 6677，避免 401 把 `deployed` 误判成 false）。
 
-**外壳对齐（2026-11-06）**：BD Canvas 用 token 覆盖层 `src/ui/styles/visionqa-align.css`（部署方自用，不改它的组件结构）把 `--ui-*` 映射到 VisionQA 的 `tokens.css`：字体栈、6/10px 圆角、4/8pt 间距、`#f4f4f4` 画布 + 发丝线、单层轻阴影、等宽微标签。顶栏 44px、页签 28px、状态胶囊 20px，跟宿主 42px 状态条同一套比例。
+**外壳对齐（2026-11-06）**：VisionQA Canvas 用 token 覆盖层 `src/ui/styles/visionqa-align.css`（部署方自用，不改它的组件结构）把 `--ui-*` 映射到 VisionQA 的 `tokens.css`：字体栈、6/10px 圆角、4/8pt 间距、`#f4f4f4` 画布 + 发丝线、单层轻阴影、等宽微标签。顶栏 44px、页签 28px、状态胶囊 20px，跟宿主 42px 状态条同一套比例。
 
-![线上画布：VisionQA 外壳里嵌的 BD Canvas 本体](docs/bdc-live.png)
+![线上画布：VisionQA 外壳里嵌的 VisionQA Canvas 本体](docs/bdc-live.png)
 
 ![对齐后：顶栏、页签、状态胶囊与宿主同一套配色与比例](docs/bdc-aligned.png)
 

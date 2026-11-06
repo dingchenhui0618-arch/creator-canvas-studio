@@ -1,11 +1,11 @@
-# BD Canvas 部署与接入记录（Source-Available，不入仓）
+# VisionQA Canvas 部署与接入记录（上游 BD Canvas 源码，不入仓）
 
 日期：2026-11-04 · 状态：**已在本机部署并接入画布页**；生成链路还差模型 Key
 
 ## 一、结论先行
 
-1. BD Canvas 已解压到 `D:\Projects\bd-canvas`（仓库外），三个端口都在跑：5312 后端 / 5313 后台 / 6677 网页入口，实测都返回 200。
-2. 工作台画布页已改成 **BD Canvas 本体**：进「画布」直接是 BD Canvas，本仓库那套节点编排退成「回到内置编排」的备选。
+1. VisionQA Canvas 已解压到 `D:\Projects\bd-canvas`（仓库外），三个端口都在跑：5312 后端 / 5313 后台 / 6677 网页入口，实测都返回 200。
+2. 工作台画布页已改成 **VisionQA Canvas 本体**：进「画布」直接是 VisionQA Canvas，本仓库那套节点编排退成「回到内置编排」的备选。
 3. `bdadmin` 初始密码已按手册要求改掉（新密码不入任何文件、不入仓库）。
 4. **还差一步**：后台「Key 管理」里没有任何渠道 Key，所以出图 / 出视频还没通。需要你给一个上游 Key（可选渠道：CGCM、火山方舟、火山语音、百炼）。
 
@@ -22,7 +22,7 @@
 | `npm install` | 239 个包，约 2 分钟 |
 | 后台仪表盘 | 「管理服务正常」，2 个用户，今日调用 0 |
 
-![BD Canvas 后台管理](screenshot-bdc-admin.png)
+![VisionQA Canvas 后台管理](screenshot-bdc-admin.png)
 
 ## 三、执行时踩到的三个坑（复现必看）
 
@@ -62,10 +62,10 @@ BD Canvas 是 Source-Available License v1.0：可自用、可改、可商用，�
 ## 五、工作台这边的改动
 
 - `GET /api/bdc/status` 探活超时：网页入口给 **5s**（Vite 开发服务器冷启动就要几秒，原来 1.2s 会把已部署误判成未部署），后台与后端仍 1.2s。
-- 画布页：`deployed=true` 时**默认直接进 BD Canvas**（全宽 iframe），页头换成紧凑版「画布 / BD CANVAS + 本机已连接 + 回到内置编排 / 新窗口」；未部署时仍是原来那套节点编排。
+- 画布页：`deployed=true` 时**默认直接进 VisionQA Canvas**（全宽 iframe），页头换成 42px 紧凑状态条「画布 / VISIONQA CANVAS + 连接状态 + 当前地址 / 新窗口 / 回到内置编排」；未部署时仍是原来那套节点编排。
 - 环境变量可覆盖默认地址：`BDC_WEB_URL` / `BDC_ADMIN_URL` / `BDC_API_URL`。
 
-![画布由 BD Canvas 接管](screenshot-canvas-bdc.png)
+![画布由 VisionQA Canvas 接管](screenshot-canvas-bdc.png)
 
 ## 六、重启方式
 
@@ -88,5 +88,5 @@ node .\node_modules\vite\bin\vite.js --host 127.0.0.1 --port 6677
 
 1. **模型 Key**：后台「Key 管理 → 新建 Key」三字段 `name` / `provider` / `key`，provider 下拉是 CGCM（全部视频/图像模型）、火山方舟、火山语音、百炼。给一个 Key 我就能配完并跑出图验收。
 2. **能力分配（assignment）**：`provider + model + feature` 三者必须匹配（generate / chat / tts / voice-clone / reverse-prompt），配错返回 400。
-3. **常驻**：要不要把 BD Canvas 三个端口也加进看门狗（现有 `DSH Services` 只托管 dsh-web 与 image-shim），掉线自动拉起。
+3. **常驻**：要不要把 VisionQA Canvas 三个端口也加进看门狗（现有 `DSH Services` 只托管 dsh-web 与 image-shim），掉线自动拉起。
 4. **公网暴露**：现在三个端口都只监听 `127.0.0.1`，符合手册要求。要对外就得上反向代理 + IP 限制，别直接映射 5313。

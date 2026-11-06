@@ -431,3 +431,63 @@ input[type="range"]::-moz-range-thumb { border-color: #ffffff !important; }
   border-color: rgb(163 56 56 / 30%) !important;
   background: rgb(163 56 56 / 9%) !important;
 }
+
+/* ========================================================================== */
+/* 9. 顶栏几何：与 VisionQA 的 42px 状态条同一套高度 / 底色 / 发丝线 / 等宽标签   */
+/*    口径取自 VisionQA src/styles/canvas.css 的 .cv-bdc-strip：               */
+/*    42px 高 · 底色 #f4f4f4 · 底边 1px rgba(17,17,17,.10) · 微标签等宽 10px    */
+/* ========================================================================== */
+.header {
+  min-height: 42px !important;
+  padding: 0 16px !important;
+  gap: 8px !important;
+  background: var(--ui-canvas) !important;
+  border-bottom: 1px solid var(--ui-border-default) !important;
+  box-shadow: none !important;
+}
+.logo { gap: 8px !important; }
+.logo > span[data-product-brand] {
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0 !important;
+  color: var(--ui-text-primary) !important;
+}
+.header-divider {
+  width: 1px !important;
+  height: 18px !important;
+  margin: 0 12px !important;
+  background: var(--ui-border-default) !important;
+}
+.canvas-tabs { gap: 4px !important; }
+.canvas-tab,
+.canvas-tab-add {
+  height: 26px !important;
+  padding: 0 8px !important;
+  border-radius: 6px !important;
+  font-size: 12px !important;
+}
+.canvas-tab.active {
+  background: var(--ui-surface-raised) !important;
+  border: 1px solid var(--ui-border-default) !important;
+}
+.local-backend-status {
+  height: 20px !important;
+  padding: 0 8px !important;
+  border: 1px solid var(--ui-border-subtle) !important;
+  border-radius: 6px !important;
+  font-family: var(--ui-font-mono) !important;
+  font-size: 10px !important;
+  letter-spacing: 0.04em !important;
+  text-transform: uppercase !important;
+}
+/* 底部控制条与标注工具条：白面 + 发丝线 + 10px 圆角，和宿主卡片同款 */
+.canvas-controls,
+.annotation-toggle,
+.annotation-tools-popover {
+  border-radius: 10px !important;
+  box-shadow: 0 1px 2px rgb(17 17 17 / 4%), 0 10px 24px rgb(17 17 17 / 5%) !important;
+}
+.control-btn,
+.annotation-tool {
+  border-radius: 6px !important;
+}

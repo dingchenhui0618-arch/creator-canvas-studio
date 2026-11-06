@@ -31,7 +31,7 @@ export default function SystemSection() {
       <AdminHead
         kicker="ADMIN / SYSTEM"
         title="系统与版本"
-        description="版本、BD Canvas 三端口与数据目录说明。所有状态来自真实接口；未部署就如实写未部署。"
+        description="版本、VisionQA Canvas 三端口与数据目录说明。所有状态来自真实接口；未部署就如实写未部署。"
         actions={<RefreshButton onClick={reload} busy={version.loading || bdc.loading} />}
       />
 
@@ -70,7 +70,7 @@ export default function SystemSection() {
         <section className="admin-card admin-block">
           <div className="admin-block-head">
             <div>
-              <p className="admin-label">BD Canvas</p>
+              <p className="admin-label">VisionQA Canvas</p>
               <p className="admin-sub">三端口状态，不启动、不探测额外地址。</p>
             </div>
             <SourceTag kind="api" source="GET /api/bdc/status" />

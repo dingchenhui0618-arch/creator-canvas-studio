@@ -40,7 +40,7 @@
 - [ ] **单机限并发 ≤ 2 个同时复刻**（不是代码限制，是资源现实，见第 14 节第 1 条）。
 - [ ] **备份跑通，并做过一次恢复演练**（第 9 节）。只备份没演练过 = 没有备份。
 - [ ] **日志有轮转**（journald 或 logrotate，第 10 节），确认磁盘不会被日志吃满。
-- [ ] **BD Canvas 未被塞进镜像/安装包**，只以反代方式对外（第 11 节）。
+- [ ] **VisionQA Canvas 未被塞进镜像/安装包**，只以反代方式对外（第 11 节）。
 - [ ] **发布记录**：`/api/version` 返回的 `version` 与 `dist` 里 `index-*.js` 的 hash 与发布单一致。
 - [ ] **生产密钥只存在于 `/etc/visionqa/env`**（0640 root:visionqa），仓库里、聊天记录里、镜像里都没有。
 
@@ -60,7 +60,7 @@
 | 账号体系 | cookie 名固定 `vq_session`；接口 `/api/auth/{register,login,logout,me}` | `server/config.mjs` 的 `config.auth` |
 | 数据 | `templates.json` / `flows.json` / `agents.json` / `runs.json` + `frames/` + `jobs/` + 账号库 `auth.db` | `data/` 实测 |
 | 数据目录键 | `DATA_DIR`（默认 `<应用根>/data`） | `server/config.mjs` |
-| BD Canvas | 5312 后端 / 5313 后台 / 6677 网页入口，均只监听 `127.0.0.1` | `docs/bd-canvas-integration.md` |
+| VisionQA Canvas | 5312 后端 / 5313 后台 / 6677 网页入口，均只监听 `127.0.0.1` | `docs/visionqa-canvas-integration.md` |
 | 依赖外部 | ffmpeg/ffprobe 用 `ffmpeg-static` / `ffprobe-static` 自带的二进制（82.8MB），**不需要系统装 ffmpeg** | `node_modules/ffmpeg-static` 实测 |
 | 内存现状（开发机） | 总 15.8G，可用 **0.5G** | 2026-11-04 实测 |
 
@@ -88,7 +88,7 @@ curl -s https://api.ipify.org; echo
 
 **规格**：4C8G / 100G SSD 起（依据见 `docs/server-sizing.md`：Node 常驻内存只有几十 MB，真正的开销是 ffmpeg 解码瞬间吃满单核 + 磁盘 IO）。**独立机器，不与其它生产服务混部**——一次复刻会吃满 1 核。
 
-**系统**：Ubuntu 22.04 LTS。若 BD Canvas 只能在 Windows 上跑，才考虑 Windows Server 2022（见 `docs/server-sizing.md` 第 5 节）。
+**系统**：Ubuntu 22.04 LTS。若 VisionQA Canvas 只能在 Windows 上跑，才考虑 Windows Server 2022（见 `docs/server-sizing.md` 第 5 节）。
 
 一、建服务账号与目录：
 
@@ -446,7 +446,7 @@ sudo apt-get install -y sqlite3          # 脚本依赖 sqlite3 命令
 sudo /usr/local/bin/vq-backup.sh         # 先手工跑一次，确认没报错（脚本以 root 跑）
 ```
 
-每天 03:30 跑（夜间低峰；注意别和 BD Canvas 的清理任务撞）：
+每天 03:30 跑（夜间低峰；注意别和 VisionQA Canvas 的清理任务撞）：
 
 ```bash
 sudo tee /etc/cron.d/vq-backup >/dev/null <<'EOF'
@@ -544,7 +544,7 @@ sudo jq -r 'select(.status >= 500) | "\(.ts) \(.status) \(.request.uri)"' /var/l
 
 ---
 
-## 11. BD Canvas：独立进程与许可证边界（最容易踩线的一节）
+## 11. VisionQA Canvas：独立进程与许可证边界（最容易踩线的一节）
 
 ### 11.1 事实
 
@@ -562,7 +562,7 @@ sudo jq -r 'select(.status >= 500) | "\(.ts) \(.status) \(.request.uri)"' /var/l
 
 **落地成三条操作规则**：
 1. 客户只会拿到**浏览器里的一个地址**，永远不接触源码、安装包、后台管理端口。
-2. 镜像与发布包里不得出现 BD Canvas 的任何文件；发布流程里加一步 `git status --short` + 目录扫描确认没混进去。
+2. 镜像与发布包里不得出现 VisionQA Canvas 的任何文件；发布流程里加一步 `git status --short` + 目录扫描确认没混进去。
 3. 合同/报价里写「服务提供，不含源码交付」，不要写「提供 BD Canvas」。
 
 ### 11.3 要对外时的反代方式
@@ -584,7 +584,7 @@ bdc.example.com {
 	}
 
 	request_body {
-		max_size 500MB          # BD Canvas 出视频，给大一点
+		max_size 500MB          # VisionQA Canvas 出视频，给大一点
 	}
 
 	reverse_proxy 127.0.0.1:6677 {
@@ -602,7 +602,7 @@ bdc.example.com {
 
 ```caddyfile
 bdc.example.com {
-	# 允许主站用 iframe 嵌入。BD Canvas 自己若发 X-Frame-Options: SAMEORIGIN，
+	# 允许主站用 iframe 嵌入。VisionQA Canvas 自己若发 X-Frame-Options: SAMEORIGIN，
 	# 必须用 -X-Frame-Options 删掉，否则跨域 iframe 一定被拦（改 CSP 不够）。
 	header {
 		Content-Security-Policy "frame-ancestors https://vq.example.com"
@@ -612,7 +612,7 @@ bdc.example.com {
 }
 ```
 
-> 另一个选择是让 BD Canvas 开在独立标签页（页面里已经有「新窗口」按钮，指向同一个 `bdc.web.url`），主站不做 iframe 内嵌。内测阶段这样最省事，也顺带绕开所有跨域头问题。
+> 另一个选择是让 VisionQA Canvas 开在独立标签页（页面里已经有「新窗口」按钮，指向同一个 `bdc.web.url`），主站不做 iframe 内嵌。内测阶段这样最省事，也顺带绕开所有跨域头问题。
 
 ---
 
@@ -684,7 +684,7 @@ curl -s http://127.0.0.1:8787/api/health
    → 4C8G 机器上**同时复刻控制在 2 个以内**（依据：解码占 1 核 + Node/视觉调用往返，留 1 核给系统和反代），超出的请求靠人约定或反代 `limit_req` 挡住。要根治得加任务队列。
 2. **JSON 存储不是事务**。`templates.json` / `runs.json` / `flows.json` / `agents.json` 每写一次全量读写，多人并发写会互相覆盖。
    → 内测（<5 人同时操作）够用；**写入频率 > 5 req/s 或单文件 > 50MB 时换 SQLite + WAL**（账号库已经是 SQLite）。
-3. **单机无冗余**。工作台 + BD Canvas 同机，机器挂了一锅端；没有健康检查自动摘流量的能力。
+3. **单机无冗余**。工作台 + VisionQA Canvas 同机，机器挂了一锅端；没有健康检查自动摘流量的能力。
    → 对外承诺可用性前，先接受「单机维护窗口」；要谈 SLA 就得上第二台 + 负载均衡 + 共享存储。
 4. **原始视频留在本地盘**。`MAX_VIDEO_MB=160`，1000 条就是 160GB。
    → 视频转对象存储 + 签名 URL，本机只留帧图（帧图 22KB/张，1000 条模板约 0.7GB）。

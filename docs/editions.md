@@ -24,7 +24,7 @@
 | 模型 Key | 红狐 Key 状态、视觉模型、只会显示「已配置」不显示值 | `/api/health` |
 | 模板治理 | 模板列表、关键词过滤、删除 | `/api/templates`（DELETE 真实生效） |
 | 运行审计 | 运行记录倒序、逐节点输出 | `/api/runs` |
-| 系统 | 版本、启动时间、BD Canvas 三端口、危险操作占位 | `/api/version` `/api/bdc/status` |
+| 系统 | 版本、启动时间、VisionQA Canvas 三端口、危险操作占位 | `/api/version` `/api/bdc/status` |
 
 ## 内测测试版 / LAB
 
@@ -47,4 +47,4 @@
 
 - 三个形态目前共用一个登录会话；真正的角色权限（管理员/普通用户）要等后端用户表。
 - 后台版的「账号与配额」只能读本地演示账号，新建/禁用是占位按钮并写明未实现。
-- BD Canvas 同机部署后，用户生产版的画布会切到 BD Canvas（见 `docs/bd-canvas-integration.md`），后台版的系统页会显示三端口状态。
+- VisionQA Canvas 同机部署后，用户生产版的画布会切到 VisionQA Canvas（见 `docs/visionqa-canvas-integration.md`），后台版的系统页会显示三端口状态。

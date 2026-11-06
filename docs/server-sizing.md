@@ -1,6 +1,6 @@
 # VisionQA 服务器配置建议（内测起步 → 逐步扩大）
 
-日期：2026-11-04 · 决策前提：先内测、视觉模型走 API、BD Canvas 与工作台同机。
+日期：2026-11-04 · 决策前提：先内测、视觉模型走 API、VisionQA Canvas 与工作台同机。
 
 ## 一、结论
 
@@ -8,7 +8,7 @@
 
 | 阶段 | 配置 | 用途 | 月成本区间（以云厂商官网为准） |
 | --- | --- | --- | --- |
-| 内测（现在） | 4C 8G / 100G ESSD / 5M 带宽 | 8787 API + 静态站 + BD Canvas 三端口 + ffmpeg | 约 250–400 元 |
+| 内测（现在） | 4C 8G / 100G ESSD / 5M 带宽 | 8787 API + 静态站 + VisionQA Canvas 三端口 + ffmpeg | 约 250–400 元 |
 | 扩大（10–30 人） | 同机纵向扩到 8C 16G，素材转对象存储 | 并发 3–5 个解码任务 | 约 600–900 元 + 存储 |
 | 对外服务（客户） | 8C 16G × 2 + Postgres + Redis 队列 + 对象存储 | 拆任务队列，画布/复刻分队列 | 1500 元起 |
 
@@ -41,17 +41,17 @@
 | --- | --- | --- |
 | 8787 | VisionQA API（同时托管前端 dist） | 是 |
 | 5191 | Vite dev（只在开发机用，生产不需要） | 否 |
-| 5312 | BD Canvas 后端 | 是 |
-| 5313 | BD Canvas 后台管理 | 是 |
-| 6677 | BD Canvas 网页入口（画布接入条内嵌的地址） | 是 |
+| 5312 | VisionQA Canvas 后端 | 是 |
+| 5313 | VisionQA Canvas 后台管理 | 是 |
+| 6677 | VisionQA Canvas 网页入口（画布接入条内嵌的地址） | 是 |
 
-同机跑 5 个进程 + 偶发 ffmpeg，4C 8G 的余量足够；BD Canvas 要求 Python 3.10+ 与 Node 18+，和我们的 Node 可以共存。
+同机跑 5 个进程 + 偶发 ffmpeg，4C 8G 的余量足够；VisionQA Canvas 要求 Python 3.10+ 与 Node 18+，和我们的 Node 可以共存。
 
 ## 五、系统选择（上服务器前必须先验证的一件事）
 
-我们现在是 Windows 形态：`启动.vbs`、`keep-services.ps1`。BD Canvas 的手册同样只写 Windows（`启动.vbs` + 三端口）。
+我们现在是 Windows 形态：`启动.vbs`、`keep-services.ps1`。VisionQA Canvas 的手册同样只写 Windows（`启动.vbs` + 三端口）。
 
-- 若 BD Canvas 能在 Linux 跑（Python+Node 理论可行，但作者只测过 Windows）→ **Ubuntu 22.04 LTS**，用 systemd + Caddy，最省运维。
+- 若 VisionQA Canvas 能在 Linux 跑（Python+Node 理论可行，但作者只测过 Windows）→ **Ubuntu 22.04 LTS**，用 systemd + Caddy，最省运维。
 - 若只能在 Windows 跑 → **Windows Server 2022**，但同配置贵 30–50%，且要自己处理自动启动与日志轮转。
 
 **验证方法**：拿到源码包后先在 Linux 试 `npm install` + `python` 起 5312/5313，能起就走 Linux；起不来再考虑 Windows。这一步没验证就买服务器，容易买错系统。
