@@ -79,6 +79,10 @@ BD Canvas 是 Source-Available License v1.0：可自用、可改、可商用，�
 | POST | /api/bdc/canvases | `{name}`，先在本地生成 `vq-<时间戳36进制>` 的 id，再 `POST /api/canvas/save` 存一份空文档 |
 | POST | /api/bdc/canvases/note | `{canvasId, text, title?}`：读出画布 → 追加一个文本节点 → 带 `expected_revision` 回存（画布返回 409 `CANVAS_STALE` 时工作台报错而不是覆盖） |
 
+![工作台里写评审笔记](bdc-bridge-note.png)
+
+![写完自动重载并记住绑定](bdc-bridge-bound.png)
+
 代码在 `server/bdc.mjs`（`listCanvases` / `createCanvas` / `appendCanvasNote`）与 `server/index.mjs` 的三个路由分支；前端 `src/api/bdc.ts` + `src/pages/CanvasPage.tsx` 状态条里的 `画布项目` 下拉、`新建`、`写笔记`。
 
 ### 三个硬点（都实测踩过）

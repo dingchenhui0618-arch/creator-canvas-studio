@@ -102,7 +102,9 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
   const [bdcView, setBdcView] = useState(false)
   // 画布 ↔ 工作台：画布列表、当前画布、把评审笔记写回画布
   const [canvases, setCanvases] = useState<BdcCanvas[]>([])
-  const [canvasId, setCanvasId] = useState('')
+  const [canvasId, setCanvasId] = useState(() => {
+    try { return window.localStorage.getItem('vq:bdcCanvas') || '' } catch { return '' }
+  })
   const [noteOpen, setNoteOpen] = useState(false)
   const [noteText, setNoteText] = useState('')
   const [noteBusy, setNoteBusy] = useState(false)
@@ -659,8 +661,26 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
 
   useEffect(() => {
     if (!bdc?.deployed) return
-    void reloadCanvases()
-  }, [bdc?.deployed, reloadCanvases])
+    let cancelled = false
+    void listBdcCanvases()
+      .then((res) => {
+        if (cancelled) return
+        const list = res.canvases || []
+        setCanvases(list)
+        setCanvasId((current) => (list.some((item) => item.id === current) ? current : list[0]?.id || ''))
+      })
+      .catch(() => undefined)
+    return () => { cancelled = true }
+  }, [bdc?.deployed])
+
+  useEffect(() => {
+    try {
+      if (canvasId) window.localStorage.setItem('vq:bdcCanvas', canvasId)
+      else window.localStorage.removeItem('vq:bdcCanvas')
+    } catch {
+      /* 隐私模式忽略 */
+    }
+  }, [canvasId])
 
   // iframe 地址：一次性入口（种 cookie）+ 画布 id（画布自己用 ?loadCanvas= 认）
   const bdcFrameSrc = useMemo(() => {

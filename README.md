@@ -272,11 +272,11 @@ DOMAIN=visionqa.wavisionai.cn bash deploy/production/enable-https.sh            
 | `POST /api/bdc/canvases` | 建一块空画布（id 形如 `vq-*`） | `POST /api/canvas/save` |
 | `POST /api/bdc/canvases/note` | 把评审结论落成画布里的一个文本节点 | `GET /api/canvas/load/:id` + `POST /api/canvas/save`（带 `expected_revision` 乐观锁，别人同时改了返回冲突而不是覆盖） |
 
-界面就在 42px 状态条里：`画布项目` 下拉（选中即用 `&loadCanvas=<id>` 深链换画布）、`新建`、`写笔记`（写完 iframe 自动重挂载，立刻能看到那条文本节点）。
+界面就在 42px 状态条里：`画布项目` 下拉（选中即用 `&loadCanvas=<id>` 深链换画布，选中项记在 `localStorage`，刷新后仍然绑着同一块）、`新建`（建完自动绑定）、`写笔记`（写完 iframe 自动重挂载，立刻能看到那条文本节点）。
 
 ![工作台里写评审笔记：状态条多了画布项目、新建与写笔记](docs/bdc-bridge-note.png)
 
-![写完自动重载：评审结论成了画布左上角的文本节点，节点数同步成 1](docs/bdc-bridge-workbench.png)
+![写完自动重载、刷新也还记得：评审结论成了画布左上角的文本节点，节点数同步成 1](docs/bdc-bridge-bound.png)
 
 打通时踩到的三个硬点（都是上游行为，记住能省一天）：
 
