@@ -650,7 +650,7 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
           <span className="cv-bdc-label">BD CANVAS</span>
           <span className="cv-bdc-state" title={bdc.web.url}>
             <span className="cv-save-dot" />
-            本机已连接
+            {bdcLocalOnly ? '本机已连接' : '已连接'}
           </span>
           <span className="cv-bdc-spacer" />
           <span className="cv-bdc-url">{bdc.web.url.replace(/^https?:\/\//, '').replace(/\/$/, '')}</span>
@@ -726,7 +726,7 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
 
       {bdc?.deployed && !bdcView ? (
         <div className="cv-bdc-bar">
-          <span className="vq-mono">BD CANVAS · 本机已部署</span>
+          <span className="vq-mono">BD CANVAS · {bdcLocalOnly ? '本机已部署' : '已部署'}</span>
           <p>画布由 BD Canvas 接管（{bdc.web.url}）；这里的流程编排保留作备选，数据各存各的。</p>
           <button className="cv-btn" type="button" onClick={() => setBdcView(true)}>在这里打开</button>
           <a className="cv-btn" href={bdc.web.url} target="_blank" rel="noreferrer">新窗口</a>
