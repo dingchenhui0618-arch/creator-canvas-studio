@@ -250,7 +250,11 @@ DOMAIN=visionqa.wavisionai.cn bash deploy/production/enable-https.sh            
 
 **画布已加 Basic Auth**（2026-11-06 追加）：`canvas.wavisionai.cn` 默认 401，用户 `canvas`；iframe 走一次性入口 `/__auth?k=<token>` —— nginx 种 30 天 cookie 后所有资源请求免登录，所以嵌在 VisionQA 里不会弹登录框。`/admin`、`/api/admin`、`/enterprise/admin` 仍然只放行 127.0.0.1。VisionQA 侧新增两个环境变量：`BDC_EMBED_URL`（iframe 用，带 token）与 `BDC_WEB_PROBE_URL`（探活用本机 6677，避免 401 把 `deployed` 误判成 false）。
 
+**外壳对齐（2026-11-06）**：BD Canvas 用 token 覆盖层 `src/ui/styles/visionqa-align.css`（部署方自用，不改它的组件结构）把 `--ui-*` 映射到 VisionQA 的 `tokens.css`：字体栈、6/10px 圆角、4/8pt 间距、`#f4f4f4` 画布 + 发丝线、单层轻阴影、等宽微标签。顶栏 44px、页签 28px、状态胶囊 20px，跟宿主 42px 状态条同一套比例。
+
 ![线上画布：VisionQA 外壳里嵌的 BD Canvas 本体](docs/bdc-live.png)
+
+![对齐后：顶栏、页签、状态胶囊与宿主同一套配色与比例](docs/bdc-aligned.png)
 
 
 ## 九、怎么跑
