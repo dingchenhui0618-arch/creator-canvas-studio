@@ -124,7 +124,8 @@ Type=simple
 User=${APP_USER}
 WorkingDirectory=${APP_DIR}
 EnvironmentFile=-${APP_DIR}/.env
-ExecStart=/usr/local/bin/node server/index.mjs
+# node:sqlite 在 Node 22 里要显式开；Node 24 起默认可用
+ExecStart=/usr/local/bin/node --experimental-sqlite server/index.mjs
 Restart=always
 RestartSec=3
 # 2GB 机器上给 Node 留足余量，别让它把系统拖死
@@ -142,12 +143,14 @@ curl -fsS "http://127.0.0.1:${API_PORT}/api/health" && echo " <- 本地健康检
 
 log "7/7 nginx 站点"
 NET_CONF="deploy/production/nginx-visionqa.conf"
-if [ -d /www/server/panel/vhost/nginx ]; then
+# 按「真正在跑的 nginx」选配置目录：宝塔 / 系统 nginx 两套路径
+if [ -x /www/server/nginx/sbin/nginx ]; then
   CONF=/www/server/panel/vhost/nginx/${DOMAIN}.conf
   NGINX_BIN=/www/server/nginx/sbin/nginx
 else
   CONF=/etc/nginx/conf.d/${DOMAIN}.conf
-  NGINX_BIN=$(command -v nginx || echo /usr/sbin/nginx)
+  NGINX_BIN=/usr/sbin/nginx
+  [ -x "$NGINX_BIN" ] || NGINX_BIN=$(command -v nginx)
 fi
 cp "$NET_CONF" "$CONF"
 mkdir -p "$ACME_DIR"
