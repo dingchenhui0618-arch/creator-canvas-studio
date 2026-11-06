@@ -67,7 +67,37 @@ BD Canvas 是 Source-Available License v1.0：可自用、可改、可商用，�
 
 ![画布由 VisionQA Canvas 接管](screenshot-canvas-bdc.png)
 
-## 六、重启方式
+## 六、画布与工作台数据打通（2026-11-06）
+
+工作台不再只是「嵌一个 iframe」：左边是工作台，右边那块画布的数据也在同一台机器上，两边读写同一批画布。
+
+### 接口（工作台服务端代理，不直接暴露画布端口）
+
+| 方法 | 路径 | 行为 |
+| --- | --- | --- |
+| GET | /api/bdc/canvases | 代理 `GET /api/canvas/list`，返回 `{ok, canvases:[{id,name,nodeCount,revision,updatedAt}]}` |
+| POST | /api/bdc/canvases | `{name}`，先在本地生成 `vq-<时间戳36进制>` 的 id，再 `POST /api/canvas/save` 存一份空文档 |
+| POST | /api/bdc/canvases/note | `{canvasId, text, title?}`：读出画布 → 追加一个文本节点 → 带 `expected_revision` 回存（画布返回 409 `CANVAS_STALE` 时工作台报错而不是覆盖） |
+
+代码在 `server/bdc.mjs`（`listCanvases` / `createCanvas` / `appendCanvasNote`）与 `server/index.mjs` 的三个路由分支；前端 `src/api/bdc.ts` + `src/pages/CanvasPage.tsx` 状态条里的 `画布项目` 下拉、`新建`、`写笔记`。
+
+### 三个硬点（都实测踩过）
+
+1. **公网访客模式只读 localStorage。** 上游 `src/features/startup/runtimeMode.ts` 的 `isPublicWebClient()` 把任何非内网 Host 判成公网访客，`loadCanvasFromServer()` 直接改读 `_loadProjectData()`——服务端存的画布永远加载不出来，深链名字会变成 `Load failed: <id>`。修法：`runtimeMode.ts` 里加 `TRUSTED_HOSTS`（默认 `canvas.wavisionai.cn`，可用 `VITE_TRUSTED_HOSTS` 覆盖），命中就走服务端 workspace。
+2. **一次性入口会吃掉查询串。** `/__auth?k=…&loadCanvas=<id>` 一律 `return 302 /`，深链参数丢失。nginx 补两行：
+
+   ```nginx
+   if ($arg_loadCanvas) { return 302 /?loadCanvas=$arg_loadCanvas; }
+   return 302 /;
+   ```
+
+3. **文本节点正文在 `prompt`，不在 `params.text`。** 照上游 `createTextNode`：`{ type:'text', prompt: 正文, model:'text', params:{ _width:360, _height:220, _agentTextNode:true }, refs:[], status:'idle' }`。写进 `params.text` 的节点能创建、能保存，但卡片上显示「0 字」。
+
+### 空文档的形状（新建画布用）
+
+`{ id, name, createdAt, updatedAt, thumbnail: null, nodes: [], connections: [], groups: [], annotations: [], annotationTool: 'node-select', viewport: { x:0, y:0, zoom:1 }, nodeCounter: 0 }` —— 注意 viewport 的字段是 `zoom` 不是 `scale`。
+
+## 七、重启方式
 
 三个进程都是本次部署拉起的，重启机器要再起。手工起步：
 
@@ -84,7 +114,7 @@ node .\node_modules\vite\bin\vite.js --host 127.0.0.1 --port 6677
 
 也可以双击 `启动.vbs` 开图形启动器，但它的面板**需要手动点「全部启动」**（不会自动起服务）；上面三条已经在跑时再点会撞端口。
 
-## 七、还没做 / 需要你决定
+## 八、还没做 / 需要你决定
 
 1. **模型 Key**：后台「Key 管理 → 新建 Key」三字段 `name` / `provider` / `key`，provider 下拉是 CGCM（全部视频/图像模型）、火山方舟、火山语音、百炼。给一个 Key 我就能配完并跑出图验收。
 2. **能力分配（assignment）**：`provider + model + feature` 三者必须匹配（generate / chat / tts / voice-clone / reverse-prompt），配错返回 400。

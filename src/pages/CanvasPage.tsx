@@ -106,6 +106,8 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
   const [noteOpen, setNoteOpen] = useState(false)
   const [noteText, setNoteText] = useState('')
   const [noteBusy, setNoteBusy] = useState(false)
+  // 写完笔记让 iframe 重新挂载一次，画布直接重载出那条文本节点
+  const [frameKey, setFrameKey] = useState(0)
   const [zoom, setZoom] = useState(1)
   const [historyCount, setHistoryCount] = useState(0)
   const [futureCount, setFutureCount] = useState(0)
@@ -694,7 +696,8 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
       setNoteText('')
       setNoteOpen(false)
       await reloadCanvases()
-      toast?.('已写进画布，刷新画布即可看到那条文本节点')
+      setFrameKey((key) => key + 1)
+      toast?.('已写进画布，画布正在重载')
     } catch (error) {
       toast?.(error instanceof Error ? error.message : '写入画布失败')
     } finally {
@@ -870,7 +873,7 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
             <button className="cv-btn" type="button" onClick={() => setBdcView(false)}>用内置编排</button>
           </div>
         ) : (
-          <iframe className="cv-bdc-frame" src={bdcFrameSrc} title="VisionQA Canvas" />
+          <iframe key={frameKey} className="cv-bdc-frame" src={bdcFrameSrc} title="VisionQA Canvas" />
         )
       ) : loadState === 'error' ? (
         <div className="cv-state">

@@ -88,7 +88,7 @@ function emptyCanvas(id, name) {
     groups: [],
     annotations: [],
     annotationTool: 'node-select',
-    viewport: { x: 0, y: 0, scale: 1 },
+    viewport: { x: 0, y: 0, zoom: 1 },
     nodeCounter: 0,
   }
 }
@@ -118,15 +118,17 @@ export async function appendCanvasNote(canvasId, rawText, rawTitle) {
   const counter = Number(data.nodeCounter || nodes.length || 0)
   const seq = counter + 1
 
+  // 字段形状对齐画布自己的 createTextNode：正文放 prompt，params 只放卡片尺寸与来源标记
+  const nodeId = 'node-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8)
   nodes.push({
-    id: 'vq-note-' + seq,
+    id: nodeId,
     type: 'text',
     x: 120,
     y: 120 + Math.min(nodes.length, 12) * 40,
     title: String(rawTitle || 'VisionQA 评审笔记').slice(0, 40),
-    prompt: '',
-    model: '',
-    params: { text },
+    prompt: text,
+    model: 'text',
+    params: { _width: 360, _height: 220, _agentTextNode: true, _source: 'visionqa-workbench' },
     refs: [],
     status: 'idle',
   })
@@ -144,5 +146,5 @@ export async function appendCanvasNote(canvasId, rawText, rawTitle) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ canvas_id: id, data: next, expected_revision: revision }),
   })
-  return { ok: true, canvasId: id, nodeId: 'vq-note-' + seq, revision: Number(saved.revision || revision + 1) }
+  return { ok: true, canvasId: id, nodeId, revision: Number(saved.revision || revision + 1) }
 }
