@@ -8,7 +8,7 @@ DOMAIN=${DOMAIN:-visionqa.wavisionai.cn}
 APP_DIR=${APP_DIR:-/opt/visionqa}
 API_PORT=${API_PORT:-8799}
 ACME_DIR=${ACME_DIR:-/www/wwwroot/wavisionai.cn/acme}
-# 邮箱可留空：已有 Let's Encrypt 账号时会直接复用；带邮箱只是收续期提醒
+# 邮箱可留空：机器上已有 Let's Encrypt 账号时直接复用，带邮箱只是收续期提醒
 EMAIL=${EMAIL:-}
 NGINX_BIN=${NGINX_BIN:-/usr/sbin/nginx}
 CONF=${CONF:-/etc/nginx/conf.d/${DOMAIN}.conf}
@@ -27,14 +27,15 @@ else
 fi
 
 log "2/4 重写 vhost：80 只做 ACME + 跳转，443 跑应用"
-cat > "$CONF" <<NGINX
+TMP=$(mktemp)
+cat > "$TMP" <<'NGINX'
 server {
     listen 80;
-    server_name ${DOMAIN};
+    server_name __DOMAIN__;
 
-    # 续期：certbot webroot 走这里，别被跳转吃掉
+    # 续期走这里，别被跳转吃掉
     location /.well-known/acme-challenge/ {
-        root ${ACME_DIR};
+        root __ACME_DIR__;
     }
 
     location / {
@@ -44,19 +45,19 @@ server {
 
 server {
     listen 443 ssl;
-    server_name ${DOMAIN};
+    server_name __DOMAIN__;
 
-    root ${APP_DIR}/dist;
+    root __APP_DIR__/dist;
     client_max_body_size 64m;
     index index.html;
 
-    ssl_certificate     ${CERT_DIR}/fullchain.pem;
-    ssl_certificate_key ${CERT_DIR}/privkey.pem;
+    ssl_certificate     /etc/letsencrypt/live/__DOMAIN__/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/__DOMAIN__/privkey.pem;
     include /etc/letsencrypt/options-ssl-nginx.conf;
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 
     location /api/ {
-        proxy_pass http://127.0.0.1:${API_PORT};
+        proxy_pass http://127.0.0.1:__API_PORT__;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -67,13 +68,13 @@ server {
     }
 
     location /media/ {
-        proxy_pass http://127.0.0.1:${API_PORT};
+        proxy_pass http://127.0.0.1:__API_PORT__;
         proxy_set_header Host $host;
         add_header Cache-Control "public, max-age=604800";
     }
 
     location / {
-        try_files \$uri \$uri/ /index.html;
+        try_files $uri $uri/ /index.html;
     }
 
     gzip on;
@@ -81,6 +82,10 @@ server {
     gzip_min_length 1024;
 }
 NGINX
+
+sed -e "s|__DOMAIN__|${DOMAIN}|g" -e "s|__APP_DIR__|${APP_DIR}|g" \
+    -e "s|__API_PORT__|${API_PORT}|g" -e "s|__ACME_DIR__|${ACME_DIR}|g" "$TMP" > "$CONF"
+rm -f "$TMP"
 
 log "3/4 nginx 校验并重载"
 "$NGINX_BIN" -t
