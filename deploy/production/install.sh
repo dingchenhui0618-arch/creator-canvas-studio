@@ -64,8 +64,9 @@ chown -R "$APP_USER":"$APP_USER" "$DATA_DIR"
 log "4/7 拉取代码与构建"
 if [ -d "$APP_DIR/.git" ]; then
   # 目录已 chown 给运行用户，root 执行 git 需要显式信任，否则报 dubious ownership
+  # 浅克隆下 fetch 只更新 FETCH_HEAD，origin/master 可能是旧的，必须 reset 到 FETCH_HEAD
   git -c safe.directory="$APP_DIR" -C "$APP_DIR" fetch --depth=1 origin master
-  git -c safe.directory="$APP_DIR" -C "$APP_DIR" reset --hard origin/master
+  git -c safe.directory="$APP_DIR" -C "$APP_DIR" reset --hard FETCH_HEAD
 else
   git clone --depth=1 "$REPO" "$APP_DIR"
 fi
