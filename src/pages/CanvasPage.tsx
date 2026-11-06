@@ -653,10 +653,10 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
             {bdcLocalOnly ? '本机已连接' : '已连接'}
           </span>
           <span className="cv-bdc-spacer" />
-          <span className="cv-bdc-url">{bdc.web.url.replace(/^https?:\/\//, '').replace(/\/$/, '')}</span>
+          <span className="cv-bdc-url">{bdc.web.url.replace(/^https?:\/\//, '').split('/')[0]}</span>
           <a
             className="cv-icon-btn"
-            href={bdc.web.url}
+            href={bdc.web.embedUrl || bdc.web.url}
             target="_blank"
             rel="noreferrer"
             title="在新窗口打开"
@@ -746,7 +746,7 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
             <button className="cv-btn" type="button" onClick={() => setBdcView(false)}>用内置编排</button>
           </div>
         ) : (
-          <iframe className="cv-bdc-frame" src={bdc.web.url} title="BD Canvas" />
+          <iframe className="cv-bdc-frame" src={bdc.web.embedUrl || bdc.web.url} title="BD Canvas" />
         )
       ) : loadState === 'error' ? (
         <div className="cv-state">

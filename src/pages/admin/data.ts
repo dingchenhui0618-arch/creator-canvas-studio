@@ -62,6 +62,7 @@ export type VersionInfo = {
 
 export type BdcPort = {
   url: string
+  embedUrl?: string
   up: boolean
   status: number
   error?: string
