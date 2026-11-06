@@ -8,7 +8,8 @@ DOMAIN=${DOMAIN:-visionqa.wavisionai.cn}
 APP_DIR=${APP_DIR:-/opt/visionqa}
 API_PORT=${API_PORT:-8799}
 ACME_DIR=${ACME_DIR:-/www/wwwroot/wavisionai.cn/acme}
-EMAIL=${EMAIL:--qiye@wavisionai.cn}
+# 邮箱可留空：已有 Let's Encrypt 账号时会直接复用；带邮箱只是收续期提醒
+EMAIL=${EMAIL:-}
 NGINX_BIN=${NGINX_BIN:-/usr/sbin/nginx}
 CONF=${CONF:-/etc/nginx/conf.d/${DOMAIN}.conf}
 CERT_DIR=/etc/letsencrypt/live/${DOMAIN}
@@ -20,8 +21,9 @@ mkdir -p "$ACME_DIR"
 if [ -d "$CERT_DIR" ]; then
   echo "证书已存在，跳过申请"
 else
-  certbot certonly --webroot -w "$ACME_DIR" -d "$DOMAIN" \
-    --non-interactive --agree-tos -m "$EMAIL" --keep-until-expiring
+  CERT_ARGS=(certonly --webroot -w "$ACME_DIR" -d "$DOMAIN" --non-interactive --agree-tos --keep-until-expiring)
+  if [ -n "$EMAIL" ]; then CERT_ARGS+=(-m "$EMAIL"); else CERT_ARGS+=(--register-unsafely-without-email); fi
+  certbot "${CERT_ARGS[@]}"
 fi
 
 log "2/4 重写 vhost：80 只做 ACME + 跳转，443 跑应用"
