@@ -626,3 +626,177 @@ input[type="range"]::-moz-range-thumb { border-color: #ffffff !important; }
 #blank-context-menu button:disabled {
   opacity: 0.42 !important;
 }
+
+/* ========================================================================== */
+/* 11. 通用外壳：左轨 / 底部控制条 / 节点卡 / 悬浮工具条 / 面板 / 控件            */
+/*     全部走 4pt 栅格（4 / 8 / 12 / 16）与同一套发丝线，先去整齐再谈细节         */
+/* ========================================================================== */
+/* 左侧功能轨：白色浮片，8px 内边距，方形 8px 圆角按钮，不再用圆形填充 */
+#float-sidebar.float-sidebar {
+  padding: 8px !important;
+  gap: 4px !important;
+  border-radius: 12px !important;
+  background: var(--ui-surface-raised) !important;
+  border: 1px solid var(--ui-border-default) !important;
+  box-shadow: 0 1px 2px rgb(17 17 17 / 6%) !important;
+}
+#float-sidebar button,
+#float-sidebar .float-btn {
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  padding: 0 !important;
+  border-radius: 8px !important;
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  color: var(--ui-text-secondary) !important;
+  font-size: 18px !important;
+  font-weight: 400 !important;
+  transition: background .12s ease, color .12s ease, border-color .12s ease !important;
+}
+#float-sidebar button:hover,
+#float-sidebar .float-btn:hover {
+  background: rgb(17 17 17 / 5%) !important;
+  border-color: transparent !important;
+  color: var(--ui-text-primary) !important;
+}
+#float-sidebar button.is-active,
+#float-sidebar .float-btn.is-active {
+  background: rgb(17 17 17 / 6%) !important;
+  color: var(--ui-text-primary) !important;
+}
+
+/* 底部控制条：40px 高、4px 内边距、32px 方形按钮，缩放数字走等宽 */
+.canvas-controls {
+  height: 40px !important;
+  padding: 4px !important;
+  gap: 2px !important;
+  border-radius: 10px !important;
+  background: var(--ui-surface-raised) !important;
+  border: 1px solid var(--ui-border-default) !important;
+  box-shadow: 0 1px 2px rgb(17 17 17 / 6%) !important;
+}
+.canvas-controls .control-btn {
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 6px !important;
+  color: var(--ui-text-secondary) !important;
+}
+.canvas-controls .control-btn:hover {
+  background: rgb(17 17 17 / 5%) !important;
+  color: var(--ui-text-primary) !important;
+}
+.canvas-controls .zoom-level,
+.canvas-controls .control-btn[id*="zoom"] {
+  font-family: var(--ui-font-mono) !important;
+  font-size: 10px !important;
+  letter-spacing: .04em !important;
+}
+
+/* 节点卡：白面 + 发丝线 + 10px 圆角，标题 12/500，正文 13/1.6，页脚等宽 10px */
+.v2-node {
+  border-radius: 10px !important;
+  border: 1px solid var(--ui-border-default) !important;
+  box-shadow: 0 1px 2px rgb(17 17 17 / 6%) !important;
+}
+.v2-node.text-node .text-node-header {
+  padding: 8px 12px !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0 !important;
+  color: var(--ui-text-primary) !important;
+}
+.v2-node.text-node .text-node-editor {
+  padding: 10px 12px !important;
+  font-size: 13px !important;
+  line-height: 1.6 !important;
+  color: var(--ui-text-secondary) !important;
+}
+.v2-node.text-node .text-node-footer {
+  padding: 6px 12px !important;
+  border-top: 1px solid var(--ui-border-subtle) !important;
+  font-family: var(--ui-font-mono) !important;
+  font-size: 10px !important;
+  letter-spacing: .04em !important;
+  color: var(--ui-text-muted) !important;
+}
+.v2-node.selected,
+.v2-node.is-selected {
+  border-color: var(--ui-text-primary) !important;
+  box-shadow: 0 0 0 1px var(--ui-text-primary) !important;
+}
+
+/* 节点悬浮工具条：28px 行高，跟右键菜单同一套密度 */
+.node-float-toolbar {
+  height: 28px !important;
+  padding: 2px 4px !important;
+  border-radius: 8px !important;
+  border: 1px solid var(--ui-border-default) !important;
+  background: var(--ui-surface-raised) !important;
+  box-shadow: 0 1px 2px rgb(17 17 17 / 6%) !important;
+}
+.node-float-toolbar button {
+  width: 24px !important;
+  height: 24px !important;
+  border-radius: 4px !important;
+  color: var(--ui-text-secondary) !important;
+}
+.node-float-toolbar button:hover { background: rgb(17 17 17 / 5%) !important; }
+
+/* 右侧参数面板 / 通用浮层：12px 内边距、10–12px 圆角、字段标签等宽 10px */
+.param-panel {
+  border-radius: 12px !important;
+  border: 1px solid var(--ui-border-default) !important;
+  background: var(--ui-surface-raised) !important;
+  box-shadow: 0 1px 2px rgb(17 17 17 / 6%) !important;
+  padding: 12px !important;
+}
+.param-panel .param-label,
+.param-panel .param-group-title {
+  font-family: var(--ui-font-mono) !important;
+  font-size: 10px !important;
+  letter-spacing: .12em !important;
+  text-transform: uppercase !important;
+  color: var(--ui-text-muted) !important;
+}
+
+/* 通用控件：输入 / 下拉 / 文本域统一 6px 圆角、发丝线、聚焦转墨线 */
+.param-panel input[type="text"],
+.param-panel input[type="number"],
+.param-panel select,
+.param-panel textarea,
+.settings-panel input[type="text"],
+.settings-panel select,
+.settings-panel textarea {
+  border-radius: 6px !important;
+  border: 1px solid var(--ui-border-default) !important;
+  background: var(--ui-surface-raised) !important;
+  color: var(--ui-text-primary) !important;
+  font-size: 13px !important;
+  padding: 6px 8px !important;
+}
+.param-panel input:focus,
+.param-panel select:focus,
+.param-panel textarea:focus,
+.settings-panel input:focus,
+.settings-panel select:focus,
+.settings-panel textarea:focus {
+  outline: none !important;
+  border-color: var(--ui-text-primary) !important;
+  box-shadow: none !important;
+}
+
+/* 滚动条：细、灰、无轨道装饰 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(17 17 17 / 20%) transparent;
+}
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb {
+  background: rgb(17 17 17 / 18%);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background: rgb(17 17 17 / 30%); background-clip: content-box; }
+::-webkit-scrollbar-track { background: transparent; }

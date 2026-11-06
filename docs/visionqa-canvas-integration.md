@@ -118,7 +118,30 @@ node .\node_modules\vite\bin\vite.js --host 127.0.0.1 --port 6677
 
 也可以双击 `启动.vbs` 开图形启动器，但它的面板**需要手动点「全部启动」**（不会自动起服务）；上面三条已经在跑时再点会撞端口。
 
-## 八、还没做 / 需要你决定
+## 八、部署载荷、主题清理与仓库归属（2026-11-06）
+
+### 8.1 顶栏的「后端」状态要报真话
+
+- 品牌旁边那颗小胶囊（`#local-backend-status`）探的是 `/api/health`（5312 画布数据后端），5s 超时，30s 一轮，标题里带真实状态码与耗时。
+- 顶栏右侧那颗「连接」胶囊属于管理服务（`/enterprise/api`）状态。没登录管理账号时它一直是 `unknown`，于是永远显示「后端未检测」——现在由宿主把手探到的数据后端状态写进 `EnterpriseSessionManager.setConnectionProbe()`，未登录时显示真实结果（后端正常 / 后端断连），不再是永久「未检测」。
+
+### 8.2 部署载荷走 ntfy 公有主题：规则与收尾
+
+服务器上没有 SSH，无法 git pull（GitHub 在该机器上时通时不通，实测 `Failure when receiving data from the peer`），所以改用「ntfy 公有主题 + base64 分片 + `setsid nohup`」把文件送上去：
+
+- 主题名每次随机（`vqck+序号` 这类），消息默认 **12 小时**过期，过点即清；
+- 载荷里**不放凭据**——这一点踩过：一次为了 clone 私有仓库，把带 token 的部署脚本塞进了主题，等于把 token 公开了 12 小时。之后所有载荷只装源码/样式，不再带 token，`data/tok.txt` 也已删除；
+- 载荷体积控制：单个 `.mjs`/`.ts` 文件打包 ~250KB 要拆 100 片，ntfy 免费档有速率限制，必须分片**限速**（约 1.2s 一片），否则会静默丢片；只改几个文件时优先只传这几个文件，不要整包传。
+
+### 8.3 私有仓库保留决定
+
+`dingchenhui0618-arch/bd-canvas-deploy`（private）**保留**，定位是「上游源码快照 + 我们改过的那几个文件」：
+
+- 上游 BD Canvas 是 Source-Available License v1.0，禁止再分发，因此**不能**进公开仓库；
+- 公开仓库只放我们自己的东西：`deploy/bd-canvas/vq-theme.css`（主题覆盖层，纯 CSS，本地编写）、`docs/` 文档与截图、`server/` 代理代码；
+- 判定口径：凡是「从上游拷来的文件」一律只进 private 仓库；「我们自己写的文件」才可以公开。
+
+## 九、还没做 / 需要你决定
 
 1. **模型 Key**：后台「Key 管理 → 新建 Key」三字段 `name` / `provider` / `key`，provider 下拉是 CGCM（全部视频/图像模型）、火山方舟、火山语音、百炼。给一个 Key 我就能配完并跑出图验收。
 2. **能力分配（assignment）**：`provider + model + feature` 三者必须匹配（generate / chat / tts / voice-clone / reverse-prompt），配错返回 400。
