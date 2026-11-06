@@ -260,7 +260,7 @@ DOMAIN=visionqa.wavisionai.cn bash deploy/production/enable-https.sh            
 
 ![线上画布：VisionQA 外壳里嵌的 VisionQA Canvas 本体](docs/bdc-live.png)
 
-![对齐后：顶栏、页签、状态胶囊与宿主同一套配色与比例](docs/bdc-aligned.png)
+![线上实拍：42px 状态条与画布顶栏同高同色，品牌已统一为 VisionQA Canvas](docs/bdc-aligned.png)
 
 
 ## 九、怎么跑

@@ -438,6 +438,7 @@ input[type="range"]::-moz-range-thumb { border-color: #ffffff !important; }
 /*    42px 高 · 底色 #f4f4f4 · 底边 1px rgba(17,17,17,.10) · 微标签等宽 10px    */
 /* ========================================================================== */
 .header {
+  height: 42px !important;
   min-height: 42px !important;
   padding: 0 16px !important;
   gap: 8px !important;
