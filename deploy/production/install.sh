@@ -7,11 +7,18 @@ set -euo pipefail
 
 APP_DIR=${APP_DIR:-/opt/visionqa}
 APP_USER=${APP_USER:-visionqa}
-API_PORT=${API_PORT:-8787}
+API_PORT=${API_PORT:-8799}
 NODE_VERSION=${NODE_VERSION:-22.12.0}
 DOMAIN=${DOMAIN:-VisionQA.wavisionai.cn}
 REPO=${REPO:-https://github.com/dingchenhui0618-arch/creator-canvas-studio.git}
 DATA_DIR=${DATA_DIR:-/var/lib/visionqa}
+# 站点走法：0 = 先跑 HTTP（证书没签下来之前必须是 0，否则登录 cookie 带 Secure 会掉）
+SECURE_COOKIES=${SECURE_COOKIES:-0}
+# ACME 续期目录：这台机器上 wavisionai.cn 用的就是它
+ACME_DIR=${ACME_DIR:-/www/wwwroot/wavisionai.cn/acme}
+# 唯一可登录账号（种子化，不写入日志）
+DEMO_EMAIL=${DEMO_EMAIL:-qiye@wavisionai.cn}
+DEMO_PASSWORD=${DEMO_PASSWORD:-Changes-Me-2026}
 
 log() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 
@@ -66,7 +73,12 @@ cd "$APP_DIR"
 /usr/local/bin/npm config set registry https://registry.npmmirror.com || true
 # --ignore-scripts：跳过 ffmpeg-static / ffprobe-static 的安装期下载（每个 80MB+，国内常常卡住）。
 # 生产按「远端算力」抽帧时本来就不需要本地 ffmpeg；真要在服务器抽帧再单独 npm rebuild ffmpeg-static。
-npm ci --no-audit --no-fund --ignore-scripts
+# 依赖已装且 lock 没变就跳过，方便重复执行时只重建
+if [ ! -d node_modules ] || [ package-lock.json -nt node_modules/.package-lock.json ]; then
+  npm ci --no-audit --no-fund --ignore-scripts
+else
+  echo "node_modules 已是最新，跳过 npm ci"
+fi
 npm run build
 chown -R "$APP_USER":"$APP_USER" "$APP_DIR"
 
@@ -77,12 +89,18 @@ if [ ! -f "$APP_DIR/.env" ]; then
 API_PORT=${API_PORT}
 DATA_DIR=${DATA_DIR}
 VQ_REQUIRE_AUTH=1
-VQ_SECURE_COOKIES=1
-VQ_DEMO_ACCOUNT=0
+VQ_SECURE_COOKIES=${SECURE_COOKIES}
+# 只有这一个账号能进：注册关闭，演示账号由下面的邮箱/密码种子化
+VQ_DEMO_ACCOUNT=1
+VQ_DEMO_EMAIL=${DEMO_EMAIL}
+VQ_DEMO_PASSWORD=${DEMO_PASSWORD}
 VQ_REGISTRATION=0
 # 视觉模型：必须是这台服务器能访问到的地址
 VISION_BASE_URL=${VISION_BASE_URL:-}
 VISION_MODEL=${VISION_MODEL:-}
+# 界面上「模型」下拉框的选项就来自这一行（逗号分隔，首选在前）；加模型只需改这里再重启
+VISION_MODELS=${VISION_MODELS:-}
+VISION_FALLBACKS=${VISION_FALLBACKS:-}
 VISION_API_KEY=${VISION_API_KEY:-}
 # 远端算力（抽帧）：留空则用服务器本地 ffmpeg
 REPLICATE_REMOTE_URL=${REPLICATE_REMOTE_URL:-}
@@ -132,7 +150,8 @@ else
   NGINX_BIN=$(command -v nginx || echo /usr/sbin/nginx)
 fi
 cp "$NET_CONF" "$CONF"
-sed -i "s|__DOMAIN__|${DOMAIN}|g; s|__APP_DIR__|${APP_DIR}|g; s|__API_PORT__|${API_PORT}|g" "$CONF"
+mkdir -p "$ACME_DIR"
+sed -i "s|__DOMAIN__|${DOMAIN}|g; s|__APP_DIR__|${APP_DIR}|g; s|__API_PORT__|${API_PORT}|g; s|__ACME_DIR__|${ACME_DIR}|g" "$CONF"
 echo "已写入 $CONF"
 "$NGINX_BIN" -t && "$NGINX_BIN" -s reload
 echo "完成。HTTP 已可访问 http://${DOMAIN}/ ，HTTPS 证书见 deploy/production/README.md"

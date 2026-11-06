@@ -29,6 +29,7 @@ import './styles/shell.css'
 import './styles/overview.css'
 import { agents, assets, pageLabels } from './data/mock'
 import { CreateModal, NavItem } from './components/ui'
+import { ModelSwitch } from './components/ModelSwitch'
 import CanvasPage from './pages/CanvasPage'
 import AgentEditorPage from './pages/AgentEditorPage'
 import ReviewPage from './pages/ReviewPage'
@@ -510,6 +511,7 @@ function Workbench({
               />
               <kbd>⌘ K</kbd>
             </label>
+            <ModelSwitch />
             <button type="button" className="vq-icon-button vq-has-dot" aria-label="通知" onClick={() => notify('没有新的评审提醒')}>
               <Bell size={16} />
             </button>

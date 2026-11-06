@@ -1988,3 +1988,153 @@
   color: var(--muted);
 }
 .vq-edition-bar .vq-edition-seg { flex: none; }
+
+/* 模型切换：顶栏一个口子，列表来自服务端 /api/models（不硬编码模型名） */
+.vq-model {
+  position: relative;
+}
+
+.vq-model-trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
+  height: 30px;
+  max-width: 208px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.vq-model-trigger:hover {
+  border-color: var(--line-strong);
+}
+
+.vq-model-trigger.is-empty {
+  border-style: dashed;
+  color: var(--faint);
+}
+
+.vq-model-name {
+  max-width: 148px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.vq-model-trigger.is-empty .vq-model-name {
+  font-family: var(--font-ui);
+  font-size: 12px;
+}
+
+.vq-model-pop {
+  position: absolute;
+  top: 36px;
+  right: 0;
+  z-index: 30;
+  width: 288px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-raised);
+  box-shadow: 0 8px 24px rgba(17, 17, 17, 0.08);
+}
+
+.vq-model-pop-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px 8px;
+  border-bottom: 1px solid var(--line);
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.vq-model-source {
+  color: var(--muted);
+  letter-spacing: 0;
+  text-transform: none;
+  font-size: 11px;
+}
+
+.vq-model-list {
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+}
+
+.vq-model-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+
+.vq-model-item:hover {
+  background: rgba(17, 17, 17, 0.04);
+}
+
+.vq-model-item.is-active {
+  background: rgba(17, 17, 17, 0.06);
+}
+
+.vq-model-item-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.vq-model-item-main strong {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.vq-model-item-main small {
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.vq-model-empty {
+  margin: 0;
+  padding: 12px 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.vq-model-hint {
+  margin: 0;
+  padding: 8px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.vq-model-warn {
+  margin: 0;
+  padding: 0 8px 8px;
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.6;
+}
+

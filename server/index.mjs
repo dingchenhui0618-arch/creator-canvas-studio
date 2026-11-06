@@ -12,6 +12,7 @@ import { createReviewRouter } from './routes/review.mjs'
 import { createAuthRouter } from './routes/auth.mjs'
 import { currentUser } from './auth.mjs'
 import { bdcStatus } from './bdc.mjs'
+import { modelCatalog } from './models.mjs'
 
 // 功能路由：每个模块自己处理 /api/<prefix> 下的请求，index.mjs 只管分发
 // auth 放最前面：/api/auth/* 永远不需要登录就能访问
@@ -19,7 +20,7 @@ const featureRoutes = [createAuthRouter(), createAgentsRouter(), createFlowsRout
 
 // VQ_REQUIRE_AUTH=1 时，除少数公开端点外所有 /api/* 都要登录。
 // 默认关闭，本地演示不受影响；生产必须打开。
-const PUBLIC_API = ['/api/auth', '/api/health', '/api/version']
+const PUBLIC_API = ['/api/auth', '/api/health', '/api/version', '/api/models']
 function needsLogin(pathname) {
   if (!config.auth.requireAuth) return false
   if (!pathname.startsWith('/api/')) return false
@@ -108,6 +109,11 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/bdc/status') {
       sendJson(res, 200, await bdcStatus())
       return
+    }
+
+    if (pathname === '/api/models') {
+      // 模型清单只读：给界面提供「切换模型」的下拉选项，模型本体在服务端 .env 里配
+      return sendJson(res, 200, { ok: true, ...modelCatalog() })
     }
 
     if (pathname === '/api/health') {
