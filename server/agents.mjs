@@ -141,12 +141,28 @@ function seedAgents() {
   ]
 }
 
+// 旧数据里可能写着已经不存在的模型名（早期示例里的 gpt-* 之类）：
+// 读的时候统一折成服务端当前配置的模型，否则智能体每次对话都会先打一次不存在的模型再降级，
+// 界面上也会显示一个假名字。
+function knownModels() {
+  return [
+    ...new Set(
+      [config.llm.model, ...config.llm.fallbacks, config.vision.model, ...config.vision.fallbacks].filter(Boolean),
+    ),
+  ]
+}
+
+function withKnownModel(agent) {
+  const model = String(agent.model || '').trim()
+  return knownModels().includes(model) ? agent : { ...agent, model: config.vision.model }
+}
+
 async function loadAll() {
   if (cache) return cache
   try {
     const raw = await fsp.readFile(agentsFile, 'utf8')
     const parsed = JSON.parse(raw)
-    cache = Array.isArray(parsed) ? parsed : []
+    cache = (Array.isArray(parsed) ? parsed : []).map(withKnownModel)
   } catch (error) {
     if (error?.code === 'ENOENT') {
       cache = seedAgents()

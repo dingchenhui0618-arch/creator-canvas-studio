@@ -1,5 +1,6 @@
 import fsp from 'node:fs/promises'
 import { config, visionEnabled } from './config.mjs'
+import { chatCompletion } from './chatcall.mjs'
 
 const SYSTEM_PROMPT = [
   '你是短视频拆解专家。用户会给你一条短视频的抽帧画面（按时间顺序，每帧带时间戳）和检测到的镜头切换点。',
@@ -30,34 +31,19 @@ function extractJson(text) {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 async function callModel(messages, model) {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), config.vision.timeoutMs)
-  try {
-    const response = await fetch(config.vision.baseUrl + '/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + config.vision.apiKey },
-      body: JSON.stringify({ model, messages, temperature: 0.3, max_tokens: 4000 }),
-      signal: controller.signal,
-    })
-    const text = await response.text()
-    if (!response.ok) {
-      const busy = response.status === 429 || response.status >= 500 || /overloaded/i.test(text)
-      const reason = busy ? '上游繁忙（HTTP ' + response.status + '）' : ('HTTP ' + response.status + '：' + text.slice(0, 120))
-      const error = new Error('视觉模型 ' + model + ' ' + reason)
-      error.retryable = busy
-      console.error('[vision] ' + model + ' ' + response.status + ' ' + text.slice(0, 400))
-      throw error
-    }
-    const json = JSON.parse(text)
-    const message = json?.choices?.[0]?.message || {}
-    // 推理型多模态模型可能把 JSON 写进 reasoning_content（content 为空），
-    // 这里兜住；真正的解析失败会由外层追加修复指令重试。
-    const content = String(message.content || '').trim() || String(message.reasoning_content || '').trim()
-    if (!content) throw Object.assign(new Error('视觉模型 ' + model + ' 没有返回内容'), { retryable: true })
-    return content
-  } finally {
-    clearTimeout(timer)
-  }
+  // 18 帧的逐帧 JSON 实测 4800 token 上下（含推理 token），给 4000 会被截断成半截 JSON；
+  // 走 response_format=json_object 让推理型模型直接吐纯 JSON，省掉一次修复重试。
+  const { message } = await chatCompletion({
+    model,
+    messages,
+    temperature: 0.3,
+    maxTokens: 8000,
+    json: true,
+  })
+  // 推理型多模态模型可能把 JSON 写进 reasoning_content（content 为空），这里兜住
+  const content = String(message.content || '').trim() || String(message.reasoning_content || '').trim()
+  if (!content) throw Object.assign(new Error('视觉模型 ' + model + ' 没有返回内容'), { retryable: true })
+  return content
 }
 
 // 同一个模型最多试 2 次（上游 overloaded 属于瞬时故障），再换下一个候选模型

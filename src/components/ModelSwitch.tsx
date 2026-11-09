@@ -13,6 +13,34 @@ type Catalog = {
 
 const STORAGE_KEY = 'vq.model'
 
+// 一个进程只打一次 /api/models：顶栏与检查器的模型候选共用同一份
+let catalogPromise: Promise<Catalog | null> | null = null
+
+function loadCatalog(): Promise<Catalog | null> {
+  if (!catalogPromise) {
+    catalogPromise = fetch('/api/models')
+      .then((res) => (res.ok ? res.json() : null))
+      .catch(() => null)
+  }
+  return catalogPromise
+}
+
+/** 检查器里 llm 节点的模型候选：服务端清单，前端不写死任何模型名。 */
+export function useModelIds(): string[] {
+  const [ids, setIds] = useState<string[]>([])
+  useEffect(() => {
+    let alive = true
+    loadCatalog().then((json) => {
+      if (!alive || !json) return
+      setIds((json.models ?? []).map((item) => item.id))
+    })
+    return () => {
+      alive = false
+    }
+  }, [])
+  return ids
+}
+
 /** 当前选中的模型。调用方拿它拼请求参数，切换后立刻生效。 */
 export function selectedModel(): string {
   try {
@@ -35,12 +63,9 @@ export function ModelSwitch() {
 
   useEffect(() => {
     let alive = true
-    fetch('/api/models')
-      .then((res) => (res.ok ? res.json() : null))
-      .then((json) => {
-        if (alive && json) setCatalog(json)
-      })
-      .catch(() => {})
+    loadCatalog().then((json) => {
+      if (alive && json) setCatalog(json)
+    })
     return () => {
       alive = false
     }

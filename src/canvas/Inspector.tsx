@@ -3,11 +3,11 @@ import type { ReactNode } from 'react'
 import type { Node } from '@xyflow/react'
 import {
   CONTENT_TYPE_OPTIONS,
-  MODEL_OPTIONS,
   NODE_META,
   STATUS_TEXT,
   TOOL_OPTIONS,
 } from './catalog'
+import { useModelIds } from '../components/ModelSwitch'
 import type { FlowNodeData, NodeConfig } from './types'
 
 type InspectorProps = {
@@ -29,6 +29,9 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 }
 
 export function Inspector({ node, onPatch, onConfig, onDuplicate, onDelete }: InspectorProps) {
+  // 模型候选来自服务端 /api/models；hook 必须在提前 return 之前调用
+  const modelIds = useModelIds()
+
   if (!node) {
     return (
       <aside className="cv-inspector cv-inspector--empty" aria-label="节点检查器">
@@ -103,7 +106,7 @@ export function Inspector({ node, onPatch, onConfig, onDuplicate, onDelete }: In
                   onChange={(event) => onConfig({ model: event.target.value }, 'model')}
                 />
                 <datalist id="cv-model-options">
-                  {MODEL_OPTIONS.map((model) => <option key={model} value={model} />)}
+                  {modelIds.map((model) => <option key={model} value={model} />)}
                 </datalist>
               </Field>
               <Field label="温度">

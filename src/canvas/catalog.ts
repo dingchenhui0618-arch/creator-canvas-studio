@@ -52,7 +52,8 @@ export const NODE_META: Record<FlowNodeKind, NodeMeta> = {
     defaultTitle: '创作建议生成',
     defaultDescription: '结合上游输入和知识库上下文，生成可执行建议',
     defaultConfig: {
-      model: 'gpt-6.1-sol',
+      // 留空 = 跟随服务端 /api/models 的当前模型；前端不写死任何模型名
+      model: '',
       temperature: 0.4,
       systemPrompt: '你是 VisionQA 的内容与视觉编导。结合上游素材与知识库上下文，给出具体、可执行的视觉与文案建议，分条列出，不要空泛。',
     },
@@ -115,8 +116,6 @@ export const PALETTE_GROUPS: { label: string; kinds: FlowNodeKind[] }[] = [
   { label: '处理', kinds: ['llm', 'tool', 'condition'] },
   { label: '输出', kinds: ['output'] },
 ]
-
-export const MODEL_OPTIONS = ['gpt-6.1-sol', 'gpt-6-luna', 'gpt-6.1-terra', 'tokenrouter-agent/grok-4.6']
 
 export const TOOL_OPTIONS = [
   { id: 'templates.stats', label: '模板库统计' },

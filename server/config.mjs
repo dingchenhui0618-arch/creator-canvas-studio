@@ -64,9 +64,11 @@ export const config = {
   },
   // 多模态：抽帧评审必须能读图。文本模型和视觉模型分开配——
   // 便宜的快模型能聊天但看不了图，混用会静默失败。
+  // 现在默认走官方 DeepSeek：deepseek-flash 的 input_modalities 是 text+image，
+  // 一个模型同时能聊天和看帧；deepseek-v4-pro 只吃文本，只能当文本 fallback。
   vision: {
     baseUrl: visionBaseUrl,
-    model: (process.env.VISION_MODEL || '').trim() || 'deepseek-v4-flash-vision-exp',
+    model: (process.env.VISION_MODEL || '').trim() || 'deepseek-flash',
     models: splitList(process.env.VISION_MODELS),
     fallbacks: splitList(process.env.VISION_FALLBACKS),
     timeoutMs: Number(process.env.VISION_TIMEOUT_MS || 300000),

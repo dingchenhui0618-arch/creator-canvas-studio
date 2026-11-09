@@ -19,7 +19,10 @@ export function availableModels() {
 export function modelCandidates(requested) {
   const chain = availableModels()
   const wanted = String(requested || '').trim()
-  return [...new Set((wanted ? [wanted, ...chain] : chain).filter(Boolean))]
+  // 只接受服务端清单里真实存在的模型：旧数据里写死的模型名不再进链路，
+  // 否则每次对话都先打一次不存在的模型、多一次失败与延迟。
+  const known = wanted && chain.includes(wanted) ? [wanted] : []
+  return [...new Set([...known, ...chain])]
 }
 
 function chatError(code, httpStatus, message, extra = {}) {

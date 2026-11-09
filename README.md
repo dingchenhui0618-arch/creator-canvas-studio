@@ -4,13 +4,15 @@ VisionQA 是给画面做**有证据的视觉评审**的工具：结论只有「�
 
 这个仓库是 VisionQA 的**创作与检索工作台**：把「找一条爆款 → 拆它的结构 → 换个产品复刻 → 评审产出画面 → 沉淀成可复用模板」串成一条能跑通的链路，评审语言与 VisionQA 插件共用同一套 visual-baseline 契约。
 
-> 诚实边界（2026-11-09 16:49 线上实测）：**红狐检索已用真实 Key 连通**——`/api/search` 返回 `mode:"live"`，24 条真实小红书内容、封面真实加载。**视觉评审与智能体对话在这台服务器上仍跑不通**：给的模型地址 `rk3576-dev.dev.tokenrouter.host` 在服务器上解析到内网 `10.0.51.120`，`curl` 15 秒超时；凭证与配置都在，但链路不通，后台「连通性自检」会如实报 `fetch failed`。换一个公网可达的 OpenAI 兼容地址即可，不用改代码。
+> 诚实边界（2026-11-09 17:20 线上实测）：模型链路换成**官方 DeepSeek**（`https://api.deepseek.com/v1`）后真正通了。`deepseek-flash` 自报的 `input_modalities` 是 `["text","image"]`，所以智能体对话和抽帧评审共用同一个模型，不再需要假想一个「视觉专用模型」。实测：后台「连通性自检」`可用 · 上游 2 个模型`；智能体对话 6.0 秒出成品文案；`/api/review` 本地模型路径 16.6 秒给出 verdict + 像素锚点；`analyzeFrames` 在服务器上用生产代码跑 3 帧得到合法分镜 JSON。**仍然缺**：模板库 0 条（「一键复刻」还没跑过一条真实视频）、没有队列/配额/找回密码/用户列表接口。
 
 ![工作台](docs/screenshot-workbench-2026-11-09.png)
 
+![智能体 · deepseek-flash 真实回复](docs/screenshot-agents-live-2026-11-09.png)
+
 ![爆款雷达（红狐真实数据）](docs/screenshot-radar-live-2026-11-09.png)
 
-![后台 · 模型与密钥](docs/screenshot-admin-keys-2026-11-09.png)
+![后台 · 模型与密钥（连通性自检通过）](docs/screenshot-admin-keys-2026-11-09.png)
 
 登录是**真实的服务端账号**：密码用 scrypt 存哈希，账号落在 `data/auth.db`（SQLite），会话是服务端随机 token + HttpOnly cookie，浏览器里读不到 token 也读不到密码。支持注册、登录、记住我；登录失败统一提示「邮箱或密码不正确」，不泄露邮箱是否注册过。登录状态收在**侧栏左下角**，点开可切换账号或退出。
 

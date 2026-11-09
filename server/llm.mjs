@@ -1,7 +1,7 @@
 import { config, visionEnabled } from './config.mjs'
+import { chatCompletion, sleep } from './chatcall.mjs'
 
 // 纯文本模型调用：与 vision.mjs 共用同一套「重试 + 降级链」，供评审、智能体对话、画布节点使用
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 export function modelChain() {
   // 文本模型优先；LLM_* 没配时退回视觉链（很多多模态模型聊天一样好用）
@@ -13,38 +13,19 @@ export function llmEnabled() {
   return visionEnabled()
 }
 
-async function callOnce(messages, model, { temperature = 0.3, maxTokens = 2000 } = {}) {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), config.vision.timeoutMs)
-  try {
-    const response = await fetch(config.vision.baseUrl + '/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + config.vision.apiKey },
-      body: JSON.stringify({ model, messages, temperature, max_tokens: maxTokens }),
-      signal: controller.signal,
-    })
-    const text = await response.text()
-    if (!response.ok) {
-      const busy = response.status === 429 || response.status >= 500 || /overloaded/i.test(text)
-      const error = new Error('模型 ' + model + (busy ? ' 上游繁忙（HTTP ' + response.status + '）' : ' HTTP ' + response.status + '：' + text.slice(0, 140)))
-      error.retryable = busy
-      throw error
-    }
-    const json = JSON.parse(text)
-    const message = json?.choices?.[0]?.message || {}
-    const content = String(message.content || '').trim()
-    // 推理型模型偶发把整段输出塞进 reasoning_content、content 为空：
-    // 换下一个候选模型，绝不把思考过程当答案返回。
-    if (!content) {
-      throw Object.assign(
-        new Error('模型 ' + model + (message.reasoning_content ? ' 只返回了推理过程（content 为空）' : ' 没有返回内容')),
-        { retryable: true },
-      )
-    }
-    return { text: content, model }
-  } finally {
-    clearTimeout(timer)
+async function callOnce(messages, model, { temperature = 0.3, maxTokens = 2000, json = false } = {}) {
+  // max_tokens 包含推理 token：推理型模型给太小会把正文截断，chatCompletion 会按可重试错误抛出
+  const { message } = await chatCompletion({ model, messages, temperature, maxTokens, json })
+  const content = String(message.content || '').trim()
+  // 推理型模型偶发把整段输出塞进 reasoning_content、content 为空：
+  // 换下一个候选模型，绝不把思考过程当答案返回。
+  if (!content) {
+    throw Object.assign(
+      new Error('模型 ' + model + (message.reasoning_content ? ' 只返回了推理过程（content 为空）' : ' 没有返回内容')),
+      { retryable: true },
+    )
   }
+  return { text: content, model }
 }
 
 export async function callTextModel(messages, options = {}) {

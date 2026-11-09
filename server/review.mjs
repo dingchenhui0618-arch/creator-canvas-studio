@@ -135,7 +135,7 @@ export async function reviewVisual({ imageUrl, imageBytes, mime = 'image/jpeg', 
         { type: 'image_url', image_url: { url: dataUrl, detail: 'low' } },
       ],
     },
-  ], { temperature: 0.2, maxTokens: 1600, log })
+  ], { temperature: 0.2, maxTokens: 3000, json: true, log })
 
   const parsed = extractJson(result.text)
   const mapped = normalize(parsed, 'local-model:' + result.model, requestId)

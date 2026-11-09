@@ -79,7 +79,7 @@
 
 ### P0 —— 不补就是空壳
 
-1. **视觉模型凭证**（`VISION_API_KEY` / `VISION_BASE_URL` / `VISION_MODEL`）：一次填好，评审与智能体对话同时活过来。这是产品名里「Vision」的唯一支撑。
+1. ~~**视觉模型凭证**（`VISION_API_KEY` / `VISION_BASE_URL` / `VISION_MODEL`）~~ —— **2026-11-09 17:20 已接上官方 DeepSeek**（`deepseek-flash` 自带图片输入），评审与智能体对话同时在真实数据上跑通，见三点六。
 2. **检索凭证**（`REDFOX_API_KEY`）：雷达从「示例数据」变成真实检索。
 3. **至少一次真实复刻入库**：模板库非空，工作台才有内容可看；现在 0 条。
 4. **账号发放路径**：`npm run adduser` 已补，但还得定「谁能拿到账号、口令怎么给」。注册是关的。
@@ -116,16 +116,39 @@
 `bash /tmp/vq-deploy2.sh`（备份 dist → 解包 → 重启 → 验 health）。以后不要再跟控制台的
 「命令助手 / 画布转存」较劲：那两条路一条区域配额满、一条要手点 UI。
 
-**仍然挡在上线前面的新发现（P0 里的第 1 条）**：给的模型地址
-`rk3576-dev.dev.tokenrouter.host` 在服务器上解析到 **10.0.51.120（内网）**，
-`curl` 15 秒超时——也就是说：
+~~上一轮给的模型地址解析到内网 10.0.51.120，链路不通~~ —— 这条已在三点六解决。
 
-- 配置写进去了、`/api/health` 的 `vision` 为 true（它只代表「有凭证」）；
-- **真正调用会失败**，智能体对话与视觉评审在服务器上仍然跑不起来；
-- 管理后台「连通性自检」按钮现在会如实报 `fetch failed`，这是它存在的意义。
+## 三点六、模型接入换成官方 DeepSeek（2026-11-09 17:20 已上线）
 
-要真正跑起来，需要一个**公网可达**的 OpenAI 兼容地址 + key（官方 DeepSeek / 火山方舟 / 阿里百炼都行），
-换 `VISION_BASE_URL` `VISION_API_KEY` 两行 + 重启即可，不用改代码。
+**结论：模型这条链路通了，智能体对话与视觉评审都能在真实数据上跑出结果。**
+
+| 项目 | 结果 |
+| --- | --- |
+| 接口 | `VISION_BASE_URL=https://api.deepseek.com/v1`（文本与视觉共用） |
+| 模型 | `deepseek-flash` 同时承担对话与抽帧；自报 `input_modalities=["text","image"]`、`context_window 1048576` |
+| 文本降级 | `LLM_FALLBACKS=deepseek-v4-pro`（该模型只吃文本，只能当文本兜底） |
+| 线上 bundle | `index-sR4ooPeo.js` |
+| `/api/config` | `baseUrl=https://api.deepseek.com/v1` · `apiKeyMasked=****9709 · 35 位` · `vision.models=["deepseek-flash"]` |
+| 连通性自检（`POST /api/config/probe`） | `{"ok":true,"status":200,"count":2,"models":["deepseek-flash","deepseek-v4-pro"]}` |
+| 智能体对话 | `POST /api/agents/agt_ads01/chat` → 200 · 6.0 秒 · 真实文案（模型写 `deepseek-flash`） |
+| 视觉评审 | `POST /api/review` → 200 · 16.6 秒 · verdict + 带像素锚点的 observations（provider `local-model:deepseek-flash`） |
+| 抽帧分析 | 生产函数 `analyzeFrames()` 在服务器上跑 3 帧 → 合法分镜 JSON（15 秒） |
+
+**顺手修掉的四个真实问题**（都是「换个模型才暴露」的）：
+
+1. **`max_tokens` 被推理 token 吃满**：`deepseek-flash` 先产 `reasoning_content`，
+   18 帧的逐帧 JSON 实测 4800 token 上下，原来给 4000 会被截断成半截 JSON，
+   每次复刻都白白多跑一次「修复指令」重试。现在 8000，并按 `finish_reason=length` 判可重试。
+2. **正文被 markdown 代码块包裹**：改走 `response_format={"type":"json_object"}` 直接拿纯 JSON；
+   网关不认这个字段时（400）自动退回不带它的请求，不让整条链路判死。
+3. **前端还写着 4 个不存在的模型名**（`gpt-6.1-sol` 之类）：检查器的模型候选与 llm 节点默认值
+   都改成读 `/api/models`，前端不再硬编码任何模型名；库里旧智能体存的假模型名在读取时折成当前模型，
+   否则每次对话都要先打一次不存在的模型再降级。
+4. **两个调用点各写一份 fetch**：抽成 `server/chatcall.mjs`，文本与多模态共用同一套
+   「json 模式 / 截断判定 / 400 兼容回退」。
+
+**这一轮之后仍然挡在上线前面的**：模板库 0 条（「一键复刻」还没跑过一条真实视频，
+跑通它才算整条链路闭环）、没有队列与配额、没有找回密码与用户列表接口。
 
 红狐这条是真的通了：`/api/search` 返回 `mode:"live"`，封面经 `/api/cover` 代理加载（小红书封面
 是 http 且只认 https + 站点 Referer，代理里已做协议升级与重试）。
