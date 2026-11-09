@@ -802,3 +802,25 @@ input[type="range"]::-moz-range-thumb { border-color: #ffffff !important; }
 }
 ::-webkit-scrollbar-thumb:hover { background: rgb(17 17 17 / 30%); background-clip: content-box; }
 ::-webkit-scrollbar-track { background: transparent; }
+
+/* ========================================================================== */
+/* 12. 空白画布引导：没有节点时告诉人怎么开始，有节点自动消失                      */
+/* ========================================================================== */
+#v2-canvas:not(:has(.v2-node))::after {
+  content: "空白画布 · 左侧 + 新建节点，或把素材拖进来（Ctrl+V 粘贴）";
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  transform: translate(-50%, -50%);
+  max-width: 420px;
+  padding: 16px 20px;
+  text-align: center;
+  font-family: var(--ui-font-ui);
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--ui-text-muted);
+  background: rgb(255 255 255 / 70%);
+  border: 1px dashed rgb(17 17 17 / 18%);
+  border-radius: 10px;
+  pointer-events: none;
+}

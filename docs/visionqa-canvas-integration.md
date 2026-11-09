@@ -133,6 +133,15 @@ node .\node_modules\vite\bin\vite.js --host 127.0.0.1 --port 6677
 - 品牌旁边那颗小胶囊（`#local-backend-status`）探的是 `/api/health`（5312 画布数据后端），5s 超时，30s 一轮，标题里带真实状态码与耗时。
 - 顶栏右侧那颗「连接」胶囊属于管理服务（`/enterprise/api`）状态。没登录管理账号时它一直是 `unknown`，于是永远显示「后端未检测」——现在由宿主把手探到的数据后端状态写进 `EnterpriseSessionManager.setConnectionProbe()`，未登录时显示真实结果（后端正常 / 后端断连），不再是永久「未检测」。
 
+### 8.1c 细节第一轮（2026-11-09）
+
+- `getNodeBaseSize()` 给 `text` 单独开了分支：旧逻辑最后落到 `RATIO_MAP[aspectRatio || '1:1']`，文本节点就成了方卡，长结论三行出滚动条。现在按节点自己的 `_width/_height` 取值，写笔记用 420×300 + `_cardScale: 1`。
+- 空白画布引导走纯 CSS：`#v2-canvas:not(:has(.v2-node))::after` 输出虚线提示卡，有节点自动消失，不改上游 DOM。
+
+![线上实拍：420×300 的评审笔记卡](bdc-note-card.png)
+
+![线上实拍：空白画布引导](bdc-empty-state.png)
+
 ### 8.2 部署载荷走 ntfy 公有主题：规则与收尾
 
 服务器上没有 SSH，无法 git pull（GitHub 在该机器上时通时不通，实测 `Failure when receiving data from the peer`），所以改用「ntfy 公有主题 + base64 分片 + `setsid nohup`」把文件送上去：

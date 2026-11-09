@@ -128,8 +128,8 @@ export async function appendCanvasNote(canvasId, rawText, rawTitle) {
     title: String(rawTitle || 'VisionQA 评审笔记').slice(0, 40),
     prompt: text,
     model: 'text',
-    // 卡片默认尺寸按「评审结论要能读」定：460×300，比画布默认的 360×220 大一档
-    params: { _width: 460, _height: 300, _agentTextNode: true, _source: 'visionqa-workbench' },
+    // 420×300 + 缩放 1.0 = 一页纸大小的笔记卡（画布默认 360×220，结论三行就出滚动条）
+    params: { _width: 420, _height: 300, _cardScale: 1, _agentTextNode: true, _source: 'visionqa-workbench' },
     refs: [],
     status: 'idle',
   })
