@@ -728,21 +728,35 @@ input[type="range"]::-moz-range-thumb { border-color: #ffffff !important; }
   box-shadow: 0 0 0 1px var(--ui-text-primary) !important;
 }
 
-/* 节点悬浮工具条：28px 行高，跟右键菜单同一套密度 */
+/* 节点悬浮工具条：只改视觉（边线、圆角、底色、字色），不改画布自己算好的尺寸。
+   曾经按「纯图标 24px」写死 width/height，上游给按钮加了文字标签（还原尺寸 / 下载 / 替换素材）后，
+   标签宽度 48px 被压在 34px 的按钮里溢出，两个按钮叠在一起——顶部那条看起来像糊了一团字。
+   现在跟随上游的 40px 行高 + 32px 文字按钮，标签不截断、不重叠。 */
 .node-float-toolbar {
-  height: 28px !important;
-  padding: 2px 4px !important;
-  border-radius: 8px !important;
+  height: auto !important;
+  min-height: 40px !important;
+  width: max-content !important;
+  max-width: min(720px, calc(100vw - 32px)) !important;
+  padding: 4px 6px !important;
+  gap: 3px !important;
+  border-radius: 10px !important;
   border: 1px solid var(--ui-border-default) !important;
   background: var(--ui-surface-raised) !important;
   box-shadow: 0 1px 2px rgb(17 17 17 / 6%) !important;
 }
 .node-float-toolbar button {
-  width: 24px !important;
-  height: 24px !important;
-  border-radius: 4px !important;
+  width: auto !important;
+  min-width: 34px !important;
+  height: 32px !important;
+  padding: 0 10px !important;
+  gap: 7px !important;
+  border-radius: 6px !important;
   color: var(--ui-text-secondary) !important;
+  font-size: 12px !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
 }
+.node-float-toolbar .node-float-label { white-space: nowrap !important; }
 .node-float-toolbar button:hover { background: rgb(17 17 17 / 5%) !important; }
 
 /* 右侧参数面板 / 通用浮层：12px 内边距、10–12px 圆角、字段标签等宽 10px */

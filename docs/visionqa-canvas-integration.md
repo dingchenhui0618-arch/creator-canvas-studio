@@ -152,6 +152,29 @@ node .\node_modules\vite\bin\vite.js --host 127.0.0.1 --port 6677
 
 同时记一条部署教训：`git apply` 报 ok 不等于代码能编译——一次 46 行的 hunk 把 `forEach` 开头吞掉，Vite 直接 500。**部署后必须验 `/src/main.ts` 返回 200**，不能只看 `systemctl is-active`。
 
+### 8.1d-2 主题层不要再给画布写死尺寸（2026-11-09 修）
+
+节点悬浮工具条（`.node-float-toolbar`）顶部糊成一团字，是主题层的锅，不是画布的锅：
+
+| | 画布自带（nodeFloatToolbar.css） | 我们早先的覆盖 | 结果 |
+| --- | --- | --- | --- |
+| 容器高度 | `height/min-height: 40px` | `height: 28px !important` | `min-height` 赢，容器仍是 40px |
+| 按钮宽度 | `width: auto; min-width: 34px; padding: 0 10px` | `width: 24px !important` | `min-width` 赢，按钮 34px |
+| 按钮高度 | `height: 32px` | `height: 24px !important` | 24px |
+| 标签 | 图标 + `.node-float-label` 文字 | — | 48px 的字塞进 34px 按钮 → 溢出、两个按钮叠在一起 |
+
+上游给按钮加了文字标签后（「还原尺寸 / 下载 / 替换素材」），任何写死成图标尺寸的覆盖都会把标签挤爆。
+现在的规则：**主题层只改视觉（边线 / 圆角 / 底色 / 字色 / 阴影），尺寸交给画布自己算**。
+对应 CSS：容器 `height: auto; min-height: 40px; width: max-content`，按钮 `width: auto; min-width: 34px; height: 32px; padding: 0 10px`，
+标签 `white-space: nowrap`。
+
+实测（无头 Chrome，1440×900，真实节点悬停）：
+
+- 修复前：工具条 `81×40`，两个按钮各 `34×24`，标签 48px 溢出；
+- 修复后：工具条 `183×42`，按钮 `95×32` / `71×32`，无裁切、无重叠。
+
+![节点悬浮工具条：修复前 / 修复后](screenshot-canvas-toolbar-fix-2026-11-09.png)
+
 ### 8.1e 服务器传输通道（2026-11-09 实测）
 
 GitHub 从这台机器时常拉不动（`Failure when receiving data from the peer`），ntfy 分片一多又会静默丢片（98 片那次 gz 只有 200KB/241KB）。现在固定用这条通道：
