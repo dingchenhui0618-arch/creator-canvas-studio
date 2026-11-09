@@ -824,3 +824,89 @@ input[type="range"]::-moz-range-thumb { border-color: #ffffff !important; }
   border-radius: 10px;
   pointer-events: none;
 }
+
+/* ========================================================================== */
+/* 13. 参数面板：字段密度统一（A）+ 文本节点样式面板（B）                        */
+/* ========================================================================== */
+.param-panel {
+  border-radius: 12px !important;
+  border: 1px solid var(--ui-border-default) !important;
+  background: var(--ui-surface-raised) !important;
+  box-shadow: 0 1px 2px rgb(17 17 17 / 6%), 0 8px 24px rgb(17 17 17 / 8%) !important;
+}
+.param-panel .pp-header {
+  height: 40px !important;
+  padding: 0 8px 0 12px !important;
+  border-bottom: 1px solid var(--ui-border-subtle) !important;
+}
+.param-panel .pp-header > span {
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0 !important;
+  color: var(--ui-text-primary) !important;
+}
+.param-panel .pp-body { padding: 12px !important; }
+.param-panel .pp-bar-item {
+  height: 24px !important;
+  padding: 0 8px !important;
+  border-radius: 6px !important;
+  border: 1px solid var(--ui-border-default) !important;
+  background: var(--ui-surface-raised) !important;
+  font-family: var(--ui-font-mono) !important;
+  font-size: 10px !important;
+  letter-spacing: .04em !important;
+  color: var(--ui-text-secondary) !important;
+}
+.param-panel .pp-bar-item:hover {
+  background: rgb(17 17 17 / 5%) !important;
+  color: var(--ui-text-primary) !important;
+}
+.param-panel .pp-bar-item.active {
+  background: rgb(17 17 17 / 6%) !important;
+  border-color: var(--ui-text-primary) !important;
+  color: var(--ui-text-primary) !important;
+}
+
+/* 文本编辑器吃面板写下的 CSS 变量（字号 / 行高 / 字族） */
+.v2-node.text-node .text-node-editor {
+  font-size: var(--vq-text-size, 13px) !important;
+  line-height: var(--vq-text-leading, 1.6) !important;
+  font-family: var(--vq-text-font, inherit) !important;
+}
+
+/* 文本节点页脚的内联样式控件：18px 方形、等宽 9px，低调到只在需要时出现 */
+.v2-node.text-node .text-node-footer {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+.v2-node.text-node .vqt-inline {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+  opacity: .55;
+  transition: opacity .12s ease;
+}
+.v2-node.text-node:hover .vqt-inline,
+.v2-node.text-node.is-selected .vqt-inline { opacity: 1; }
+.v2-node.text-node .vqt-inline button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 4px;
+  border: 1px solid var(--ui-border-default);
+  border-radius: 4px;
+  background: var(--ui-surface-raised);
+  color: var(--ui-text-muted);
+  font-family: var(--ui-font-mono);
+  font-size: 9px;
+  letter-spacing: .02em;
+  line-height: 1;
+  cursor: pointer;
+}
+.v2-node.text-node .vqt-inline button:hover {
+  border-color: var(--ui-text-primary);
+  color: var(--ui-text-primary);
+}

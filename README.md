@@ -284,6 +284,16 @@ DOMAIN=visionqa.wavisionai.cn bash deploy/production/enable-https.sh            
 
 ![线上实拍：空白画布的引导卡](docs/bdc-empty-state.png)
 
+**细节第二轮：文本卡的内联样式控件（2026-11-09）** 文本节点没有模型参数面板（上游把它当「原地编辑」节点），所以样式控件直接做在卡片页脚，右对齐四颗 18px 小按钮：
+
+- `A-` / `A+`：字号 10–22px，每次 1px；
+- `LH`：行高在 1.4 / 1.6 / 1.8 之间循环；
+- `M`：等宽字族开关（Geist Mono）。
+
+样式写进 `node.params._vqText`，渲染时翻译成三支 CSS 变量（`--vq-text-size/-leading/-font`）由主题层消费；点按钮不整卡重渲染（文本框要保光标），直接把变量写到现有 textarea 上。线上实测：`13px → 16px` 时行高跟着到 `25.6px`，`M` 切到 `Geist Mono`。
+
+![线上实拍：评审笔记卡页脚的四颗样式按钮](docs/bdc-text-style.png)
+
 **画布与工作台数据打通（2026-11-06）**：工作台不再只是「嵌一个 iframe」，它和后端共用同一批画布。
 
 | 工作台接口 | 干什么 | 打到的画布接口 |

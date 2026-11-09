@@ -142,6 +142,26 @@ node .\node_modules\vite\bin\vite.js --host 127.0.0.1 --port 6677
 
 ![线上实拍：空白画布引导](bdc-empty-state.png)
 
+### 8.1d 细节第二轮：文本卡内联样式（2026-11-09）
+
+文本节点在上游被当成「原地编辑」节点（`showParamPanel` 里直接 `hideParamPanel()` 后返回），没有参数面板可挂。方案改为把控件做进卡片页脚：
+
+- 页脚右对齐四颗 18px 按钮：`A-` / `A+` / `LH` / `M`；
+- 值写进 `node.params._vqText = { size, leading, mono }`，渲染时翻译成 `--vq-text-size/-leading/-font` 三支 CSS 变量，主题层消费；
+- 点按钮不能整卡重渲染（textarea 保光标会丢焦点），直接把变量 set 到现有编辑器元素上。
+
+同时记一条部署教训：`git apply` 报 ok 不等于代码能编译——一次 46 行的 hunk 把 `forEach` 开头吞掉，Vite 直接 500。**部署后必须验 `/src/main.ts` 返回 200**，不能只看 `systemctl is-active`。
+
+### 8.1e 服务器传输通道（2026-11-09 实测）
+
+GitHub 从这台机器时常拉不动（`Failure when receiving data from the peer`），ntfy 分片一多又会静默丢片（98 片那次 gz 只有 200KB/241KB）。现在固定用这条通道：
+
+1. 浏览器（canvas 源）把文件切块写进一块画布：`POST /api/canvas/save`，每块作为文本节点的 `prompt`；
+2. 服务器：`curl http://127.0.0.1:5312/api/canvas/load/<id>` + 一段 python 把各节点 prompt 拼起来 base64 解码落盘；
+3. 传完删掉那块画布。
+
+一条 `/api/canvas/save` 走完 240KB gz 只要一次请求，不丢片、不走公网。
+
 ### 8.2 部署载荷走 ntfy 公有主题：规则与收尾
 
 服务器上没有 SSH，无法 git pull（GitHub 在该机器上时通时不通，实测 `Failure when receiving data from the peer`），所以改用「ntfy 公有主题 + base64 分片 + `setsid nohup`」把文件送上去：
