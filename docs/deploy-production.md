@@ -7,7 +7,7 @@
 
 - **形态**：一台 **4C8G / 100G SSD 的专用 Linux 机**（Ubuntu 22.04 LTS），跑**一个进程** `node server/index.mjs`（同时提供 API 与 dist 静态资源），前面挂 **Caddy**（自动 HTTPS）反代到 `127.0.0.1:8787`，用 **systemd** 守护。
 - **数据只有一处**：`DATA_DIR`（默认 `<应用根>/data`，生产建议 `/var/lib/visionqa/data`）。备份就备它，恢复也只恢复它。
-- **三件套必须同时打开**：`VQ_REQUIRE_AUTH=1`、`VQ_SECURE_COOKIES=1`、`VQ_DEMO_ACCOUNT=0`。少任何一个都不算「能对外」——不强制登录 / cookie 明文走 http / 公开演示入口，都是事故。
+- **两件套必须同时打开**：`VQ_REQUIRE_AUTH=1`、`VQ_SECURE_COOKIES=1`。少任何一个都不算「能对外」——不强制登录 / cookie 明文走 http，都是事故。
 - **Node 只监听回环**：`server/index.mjs` 里写死 `listen(config.port, '127.0.0.1')`，这是**故意**的：公网流量只能经反代进来。不要为了「省一层」去改它监听 `0.0.0.0`。
 - **BD Canvas 是另一个进程、另一份许可证**：只在本机 5312/5313/6677 跑，要对外只能反代 **网页入口**；源码与安装包永远不发给客户（详见第 11 节）。
 - **不要在开发机上跑生产**：本机 15.8G 内存当前只剩 0.5G（2026-11-04 实测），一次复刻的 ffmpeg 全片解码就会被系统 OOM 杀掉，表现为「服务莫名其妙消失」。
@@ -27,7 +27,7 @@
 
 一条都不能跳过。左边是勾选框，右边是「怎么验」——验收不看决心，看命令输出。
 
-- [ ] **账号三件套同时到位**：`VQ_REQUIRE_AUTH=1` + `VQ_SECURE_COOKIES=1` + `VQ_DEMO_ACCOUNT=0`（建议再加 `VQ_REGISTRATION=0`）。
+- [ ] **鉴权两件套同时到位**：`VQ_REQUIRE_AUTH=1` + `VQ_SECURE_COOKIES=1`（建议再加 `VQ_REGISTRATION=0`，账号用 `npm run adduser` 加）。
       **这四个键的代码默认值全在「不安全」那一侧**（`server/config.mjs` 实测）：`VQ_REQUIRE_AUTH` 只有等于 `1` 才鉴权，不写 = 不鉴权；`VQ_SECURE_COOKIES` 只有等于 `1` 才加 Secure，不写 = 明文 cookie；`VQ_DEMO_ACCOUNT` 只有等于 `0` 才关闭，不写 = 自动种一个演示账号；`VQ_REGISTRATION` 只有等于 `0` 才关闭注册，不写 = 任何人都能注册。
       所以它们不是「可选优化」，是**必须显式写进 /etc/visionqa/env** 的开关。
       怎么验：`curl -s https://<域名>/api/templates` 未登录必须返回 401；`grep -c '^VQ_' /etc/visionqa/env` 至少 4。
@@ -214,8 +214,8 @@ sudo chown root:visionqa /etc/visionqa/env && sudo chmod 0640 /etc/visionqa/env
 | `DATA_DIR` | `/var/lib/visionqa/data` | 数据 + 账号库落点，备份就备它 |
 | `VQ_REQUIRE_AUTH` | `1` | `/api/*` 强制登录（`/api/auth/*`、`/api/health`、`/api/version` 除外） |
 | `VQ_SECURE_COOKIES` | `1` | 会话 cookie 带 `Secure`，只在 HTTPS 下回传 |
-| `VQ_DEMO_ACCOUNT` | `0` | 关闭演示账号种子，避免公开入口 |
-| `VQ_DEMO_PASSWORD` | 留空 | 仅演示账号开启时读取；**永远不填真密码** |
+| `VQ_SEED_EMAIL` / `VQ_SEED_PASSWORD` | 填一次 | 库里没有该邮箱时建一条普通账号（部署后能登录）；口令不会下发给访客 |
+| `VQ_SEED_ACCOUNT` | `1` | 设为 0 完全关闭 seed；之后加账号用 `npm run adduser` |
 | `VQ_REGISTRATION` | `0` | 关闭自助注册，先只给已有账号 |
 | `VQ_SESSION_DAYS` / `VQ_REMEMBER_DAYS` | `7` / `30` | 会话有效期 / 记住我有效期（天） |
 | `VISION_API_KEY` | 生产 key | 为空时开发版会回落读 `~/.codex/auth.json`，生产被 `ProtectHome=true` 掐断，所以必须显式给 |
@@ -228,7 +228,7 @@ sudo chown root:visionqa /etc/visionqa/env && sudo chmod 0640 /etc/visionqa/env
 | `MAX_FRAMES` | `18` | 每视频最多抽帧数 |
 | `BDC_WEB_URL` / `BDC_ADMIN_URL` / `BDC_API_URL` | 对外时 `BDC_WEB_URL=https://bdc.example.com`，另两个留 `127.0.0.1` | 画布探活与 iframe 内嵌地址；**浏览器会直接用 `BDC_WEB_URL`**，写 127.0.0.1 客户就打不开（见 11.3） |
 
-`VQ_REQUIRE_AUTH` / `VQ_SECURE_COOKIES` / `VQ_DEMO_ACCOUNT` / `VQ_REGISTRATION` 这四个开关不写就是「不安全」的那一侧（见第 0 节），所以这张表不是可选配置，是必须逐条落实的清单。
+`VQ_REQUIRE_AUTH` / `VQ_SECURE_COOKIES` / `VQ_REGISTRATION` 这三个开关不写就是「不安全」的那一侧（见第 0 节），所以这张表不是可选配置，是必须逐条落实的清单。
 
 改完 `/etc/visionqa/env` 必须 `sudo systemctl restart vq`——`EnvironmentFile` 只在进程启动时读一次。
 

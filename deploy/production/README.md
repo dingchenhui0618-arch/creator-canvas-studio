@@ -68,7 +68,7 @@ VISION_API_KEY=<key>
 curl -fsS http://127.0.0.1:8787/api/health        # 本机
 curl -I https://VisionQA.wavisionai.cn/           # 外网 200
 ```
-再用浏览器登录一次（`VQ_REQUIRE_AUTH=1` 时没有演示账号，需要先在服务器上建号，见 `server/auth.mjs` 的 CLI）。
+再用浏览器登录一次（`VQ_REQUIRE_AUTH=1` 时只有一个引导账号；加人用 `npm run adduser -- --email … --password …`）。
 
 ## 回滚
 

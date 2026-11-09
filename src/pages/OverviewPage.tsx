@@ -1,9 +1,32 @@
-import { useState } from 'react'
-import { ArrowRight, ArrowUpRight, Info, Plus } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { ArrowRight, ArrowUpRight, Plus, RefreshCw } from 'lucide-react'
 import type { Page } from '../domain/types'
-import { MonoTag, StatusPill } from '../components/ui'
-import { recentReplications, reviewQueue, workbenchTasks } from '../data/mock'
+import { MonoTag } from '../components/ui'
+import { request } from '../api/client'
+import { listBdcCanvases, type BdcCanvas } from '../api/bdc'
 import '../styles/overview.css'
+
+type RunRow = {
+  id: string
+  flowName: string
+  status: string
+  startedAt: string
+  durationMs: number
+}
+
+type TemplateRow = {
+  id: string
+  title: string
+  contentType?: string
+  createdAt?: string
+  durationSec?: number
+}
+
+type Props = {
+  userName: string
+  onCreate: () => void
+  onNavigate: (page: Page) => void
+}
 
 function todayLabel(date: Date): string {
   const parts = new Intl.DateTimeFormat('zh-CN', {
@@ -16,35 +39,84 @@ function todayLabel(date: Date): string {
   return `${pick('year')} 年 ${pick('month')} 月 ${pick('day')} 日 · ${pick('weekday')}`
 }
 
-function verdictLabel(verdict: 'pass' | 'warn' | 'fail'): string {
-  if (verdict === 'pass') return '通过'
-  if (verdict === 'fail') return '问题'
-  return '待确认'
+function clockOf(input?: string | number): string {
+  const date = typeof input === 'number' ? new Date(input) : new Date(String(input ?? ''))
+  if (Number.isNaN(date.getTime())) return '—'
+  return new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(date)
 }
 
-type Props = {
-  userName: string
-  onCreate: () => void
-  onNavigate: (page: Page) => void
+function secondsOf(ms?: number): string {
+  if (typeof ms !== 'number' || !Number.isFinite(ms)) return '—'
+  return (ms / 1000).toFixed(1) + 's'
 }
 
+/**
+ * 工作台只看真实数据：画布来自画布服务，运行与模板来自工作台 API。
+ * 任何一块没有数据就写空状态并给出下一步，不用示例行填充——上线后的首页不能靠假数据撑版面。
+ */
 export function OverviewPage({ userName, onCreate, onNavigate }: Props) {
   const [now] = useState(() => new Date())
+  const [canvases, setCanvases] = useState<BdcCanvas[]>([])
+  const [runs, setRuns] = useState<RunRow[]>([])
+  const [templates, setTemplates] = useState<TemplateRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [errors, setErrors] = useState<string[]>([])
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    const problems: string[] = []
+    const [canvasResult, runResult, templateResult] = await Promise.allSettled([
+      listBdcCanvases(),
+      request<{ items: RunRow[] }>('/api/runs'),
+      request<{ items: TemplateRow[] }>('/api/templates'),
+    ])
+    if (canvasResult.status === 'fulfilled' && canvasResult.value.ok) {
+      setCanvases(canvasResult.value.canvases ?? [])
+    } else {
+      setCanvases([])
+      problems.push('画布列表：' + (canvasResult.status === 'rejected' ? String((canvasResult.reason as Error)?.message || canvasResult.reason) : canvasResult.value.error || '画布服务无响应'))
+    }
+    if (runResult.status === 'fulfilled') {
+      setRuns(runResult.value.items ?? [])
+    } else {
+      setRuns([])
+      problems.push('运行记录：' + String((runResult.reason as Error)?.message || runResult.reason))
+    }
+    if (templateResult.status === 'fulfilled') {
+      setTemplates(templateResult.value.items ?? [])
+    } else {
+      setTemplates([])
+      problems.push('模板库：' + String((templateResult.reason as Error)?.message || templateResult.reason))
+    }
+    setErrors(problems)
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void load()
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [load])
+
+  const recentRuns = runs.slice(0, 6)
+  const recentTemplates = templates.slice(0, 4)
 
   return (
     <div className="vq-page">
       <header className="vq-page-head">
         <div>
-          {/* 不给问候语：这一屏的价值是「有几件事、各是什么」，不是寒暄 */}
+          {/* 不给问候语：这一屏的价值是「有什么、各多少」，不是寒暄 */}
           <span className="vq-mono">工作台 · {userName} · {todayLabel(now)}</span>
           <h1>
-            {workbenchTasks.length} 项待办 · {reviewQueue.length} 条待评审 · {recentReplications.length} 条今日入库
+            {loading ? '正在读取…' : `${canvases.length} 块画布 · ${runs.length} 条运行 · ${templates.length} 个模板`}
           </h1>
-          <p>按优先级排好了三件事；下面左右两侧分别是最近入库的脚本结构与待评审队列。</p>
+          <p>三个数字分别来自画布服务、/api/runs 与 /api/templates；没有数据的区块写空状态，不放示例数据。</p>
         </div>
         <div className="vq-page-actions">
-          <button type="button" className="vq-button vq-button--ghost" onClick={() => onNavigate('runs')}>
-            运行记录
+          <button type="button" className="vq-button vq-button--ghost" onClick={() => void load()} disabled={loading}>
+            <RefreshCw size={14} />
+            刷新
           </button>
           <button type="button" className="vq-button vq-button--primary" onClick={onCreate}>
             <Plus size={14} />
@@ -53,115 +125,143 @@ export function OverviewPage({ userName, onCreate, onNavigate }: Props) {
         </div>
       </header>
 
+      {errors.length ? (
+        <p className="vq-note vq-note--error" role="status">
+          {errors.join('；')}
+        </p>
+      ) : null}
+
       <section className="vq-section">
         <div className="vq-section-head">
           <div>
-            <span className="vq-mono">01 / 今天要做什么</span>
-            <h2>先做这三件事</h2>
+            <span className="vq-mono">01 / 画布</span>
+            <h2>继续上次的画布</h2>
           </div>
-          <span className="vq-mono">按优先级排序</span>
+          <span className="vq-mono">{canvases.length} 块</span>
         </div>
-        <div className="vq-task-grid">
-          {workbenchTasks.map((task) => (
-            <button type="button" className="vq-task" key={task.id} onClick={() => onNavigate(task.page)}>
-              <span className="vq-task-index">{task.index}</span>
-              <strong>{task.title}</strong>
-              <p>{task.detail}</p>
-              <span className="vq-task-foot">
-                <span className="vq-mono">{task.meta}</span>
-                <span className="vq-task-go">
-                  {task.action}
-                  <ArrowRight size={12} />
+
+        {canvases.length ? (
+          <div className="vq-task-grid">
+            {canvases.slice(0, 3).map((canvas, index) => (
+              <button type="button" className="vq-task" key={canvas.id} onClick={() => onNavigate('canvas')}>
+                <span className="vq-task-index">{String(index + 1).padStart(2, '0')}</span>
+                <strong>{canvas.name}</strong>
+                <p>
+                  {canvas.nodeCount} 个节点 · 版本 r{canvas.revision}
+                </p>
+                <span className="vq-task-foot">
+                  <span className="vq-mono">{clockOf(canvas.updatedAt)}</span>
+                  <span className="vq-task-go">
+                    打开画布
+                    <ArrowRight size={12} />
+                  </span>
                 </span>
-              </span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="vq-empty">
+            <strong>还没有画布</strong>
+            <span>画布与工作台共用同一批数据：在画布页新建一块，这里立刻会出现。</span>
+            <button type="button" className="vq-button vq-button--ghost" onClick={() => onNavigate('canvas')}>
+              去画布
+              <ArrowRight size={13} />
             </button>
-          ))}
-        </div>
+          </div>
+        )}
       </section>
 
       <div className="vq-overview-grid">
         <section className="vq-section">
           <div className="vq-section-head">
             <div>
-              <span className="vq-mono">02 / 最近复刻</span>
-              <h2>刚入库的脚本结构</h2>
+              <span className="vq-mono">02 / 最近运行</span>
+              <h2>逐节点执行记录</h2>
             </div>
-            <button type="button" className="vq-link" onClick={() => onNavigate('templates')}>
-              打开模板库
+            <button type="button" className="vq-link" onClick={() => onNavigate('runs')}>
+              全部运行
               <ArrowUpRight size={13} />
             </button>
           </div>
-          <div className="vq-table" role="table" aria-label="最近复刻">
-            <div className="vq-table-head" role="row">
-              <span role="columnheader">标题</span>
-              <span role="columnheader">来源</span>
-              <span role="columnheader">镜头</span>
-              <span role="columnheader">时长</span>
-              <span role="columnheader">入库</span>
-              <span role="columnheader">状态</span>
-            </div>
-            {recentReplications.map((item) => (
-              <div className="vq-table-row" role="row" key={item.id}>
-                <div className="vq-table-name" role="cell">
-                  <strong>{item.title}</strong>
-                  <span className="vq-mono">{item.id}</span>
-                </div>
-                <span role="cell">
-                  {item.platform} · {item.contentType}
-                </span>
-                <span className="vq-mono" role="cell">
-                  {item.shots} 镜
-                </span>
-                <span className="vq-mono" role="cell">
-                  {item.duration}
-                </span>
-                <span className="vq-mono" role="cell">
-                  {item.time}
-                </span>
-                <span role="cell">
-                  <MonoTag>{item.status === 'pass' ? '已入库' : '待核对'}</MonoTag>
-                </span>
+
+          {recentRuns.length ? (
+            <div className="vq-table" role="table" aria-label="最近运行">
+              <div className="vq-table-head" role="row">
+                <span role="columnheader">流程</span>
+                <span role="columnheader">状态</span>
+                <span role="columnheader">耗时</span>
+                <span role="columnheader">开始</span>
               </div>
-            ))}
-          </div>
+              {recentRuns.map((run) => (
+                <div className="vq-table-row" role="row" key={run.id}>
+                  <div className="vq-table-name" role="cell">
+                    <strong>{run.flowName}</strong>
+                    <span className="vq-mono">{run.id}</span>
+                  </div>
+                  <span role="cell">
+                    <MonoTag>{run.status === 'success' ? '成功' : '失败'}</MonoTag>
+                  </span>
+                  <span className="vq-mono" role="cell">
+                    {secondsOf(run.durationMs)}
+                  </span>
+                  <span className="vq-mono" role="cell">
+                    {clockOf(run.startedAt)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="vq-empty vq-empty--inline">
+              <strong>还没有运行记录</strong>
+              <span>去画布点一次运行，这里会按节点列出耗时与返回。</span>
+            </div>
+          )}
         </section>
 
         <aside className="vq-section">
           <div className="vq-section-head">
             <div>
-              <span className="vq-mono">03 / 待评审</span>
-              <h2>结论待定</h2>
+              <span className="vq-mono">03 / 模板库</span>
+              <h2>可复用的脚本结构</h2>
             </div>
-            <button type="button" className="vq-link" onClick={() => onNavigate('review')}>
-              整理队列
+            <button type="button" className="vq-link" onClick={() => onNavigate('templates')}>
+              打开模板库
               <ArrowRight size={13} />
             </button>
           </div>
-          {reviewQueue.map((item) => (
-            <button type="button" className="vq-review" key={item.id} onClick={() => onNavigate('review')}>
-              <span className="vq-frame vq-review-frame">
-                <img src={item.frameUrl} alt="" loading="lazy" />
-              </span>
-              <span className="vq-review-body">
-                <span className="vq-review-top">
-                  <span className="vq-mono">{item.meta}</span>
-                  <StatusPill tone={item.verdict}>{verdictLabel(item.verdict)}</StatusPill>
+
+          {recentTemplates.length ? (
+            recentTemplates.map((template) => (
+              <button type="button" className="vq-template-row" key={template.id} onClick={() => onNavigate('templates')}>
+                <span className="vq-template-copy">
+                  <strong>{template.title}</strong>
+                  <span className="vq-mono">
+                    {template.contentType || '脚本'} · {(template.durationSec ?? 0).toFixed(0)}s
+                  </span>
                 </span>
-                <strong>{item.title}</strong>
-                <span className="vq-review-note">{item.note}</span>
-              </span>
-            </button>
-          ))}
+                <ArrowRight size={13} />
+              </button>
+            ))
+          ) : (
+            <div className="vq-empty vq-empty--inline">
+              <strong>模板库还是空的</strong>
+              <span>在爆款雷达里复刻一条内容，拆出来的脚本结构会落到这里。</span>
+              <button type="button" className="vq-button vq-button--ghost" onClick={() => onNavigate('radar')}>
+                去检索
+                <ArrowRight size={13} />
+              </button>
+            </div>
+          )}
+
           <p className="vq-note">
-            <Info size={12} />
-            <span>评审服务尚未接入，以上为示例队列；结论不会写入任何地方。</span>
+            <span>模板、运行与画布都存服务端，换浏览器登录同一账号即可看到。</span>
           </p>
         </aside>
       </div>
 
       <footer className="vq-overview-foot">
-        <span>账号与会话由服务端校验；模板库与运行队列仍是本机数据。</span>
-        <span className="vq-mono">VisionQA · 本机部署</span>
+        <span>画布数据来自画布服务；运行与模板来自工作台 API。</span>
+        <span className="vq-mono">VisionQA · 生产站点</span>
       </footer>
     </div>
   )

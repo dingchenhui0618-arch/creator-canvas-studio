@@ -42,7 +42,7 @@ function openDb() {
     CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
   `)
-  seedDemoAccount()
+  seedFirstAccount()
   pruneSessions()
   return db
 }
@@ -205,11 +205,12 @@ export function clientIp(req) {
   return forwarded || req.socket?.remoteAddress || 'unknown'
 }
 
-// ---- 演示账号：本地默认 seed，生产用 VQ_DEMO_ACCOUNT=0 关掉 ----
-export function seedDemoAccount() {
-  if (!config.auth.demoAccount) return
-  const email = config.auth.demoEmail
+// ---- 首个账号：库里没有账号时按 VQ_SEED_* 建一个普通账号 ----
+// 它只是「部署后能登录」的引导账号，不是演示入口：kind 是 account，界面上也没有任何地方
+// 会把它标成演示账号，更不会把口令发给访客。
+export function seedFirstAccount() {
+  if (!config.auth.seedAccount || !config.auth.seedEmail) return
+  const email = config.auth.seedEmail
   if (findUserByEmail(email)) return
-  createUser({ email, password: config.auth.demoPassword, name: '演示用户' })
-  openDb().prepare("UPDATE users SET kind = 'demo' WHERE email = ?").run(email)
+  createUser({ email, password: config.auth.seedPassword, name: config.auth.seedName })
 }

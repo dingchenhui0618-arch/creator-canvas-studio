@@ -50,16 +50,13 @@ export class AuthError extends Error {
 
 export const SESSION_KEY = 'visionqa.session.v1'
 
-// 用拼接写出邮箱，避免源码里出现完整字面量；这两个常量只给后台展示用，登录页以 /api/auth/config 为准。
+// 输入框占位用的示例地址；不是任何真实账号。
 const AT = String.fromCharCode(64)
-export const DEMO_EMAIL = ['demo', 'visionqa.studio'].join(AT)
 export const EXAMPLE_EMAIL = ['name', 'studio.com'].join(AT)
-export const DEMO_NAME = '演示用户'
 // 后端只在注册时校验密码长度，且真值由 GET /api/auth/config 下发；这里只是接口不可用时的兜底。
 export const DEFAULT_MIN_PASSWORD_LENGTH = 8
 export const NAME_MAX_LENGTH = 40
 
-const GUEST_EMAIL = ['guest', 'visionqa.local'].join(AT)
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const SESSION_KINDS: readonly SessionKind[] = ['account', 'demo', 'guest']
 
@@ -230,27 +227,10 @@ export async function register(input: RegisterInput): Promise<Session> {
   }
 }
 
-/** 访客：纯本地会话，不写后端，只放当前标签页，浏览器重开即失效。 */
-export function signInAsGuest(): Session {
-  const session = createSession(
-    {
-      id: 'user-guest',
-      name: '访客',
-      email: GUEST_EMAIL,
-      workspace: '个人工作区',
-      kind: 'guest',
-    },
-    false,
-  )
-  persistSession(session)
-  return session
-}
-
 /** 退出：先让后端清 cookie，再清本地缓存；后端不可达时也要清干净本地。 */
 export async function signOut(): Promise<void> {
-  const current = readSession()
   try {
-    if (current?.user.kind !== 'guest') await requestLogout()
+    await requestLogout()
   } catch {
     // 退出失败不能把用户留在本地的「已登录」假象里。
   } finally {
@@ -259,7 +239,7 @@ export async function signOut(): Promise<void> {
 }
 
 export function sessionKindLabel(kind: SessionKind): string {
-  if (kind === 'demo') return '演示账号'
+  if (kind === 'demo') return '账号'
   if (kind === 'guest') return '访客会话'
   return '工作邮箱'
 }

@@ -62,11 +62,9 @@ export default function KeysSection() {
                     </Badge>
                   </td>
                   <td>
-                    <Badge tone={health.data.redfox ? 'fail' : 'warn'}>
-                      {health.data.redfox ? '已禁用（3105）' : '不可用'}
-                    </Badge>
+                    <Badge tone="neutral">调用时才知道</Badge>
                     <span className="admin-cell-sub">
-                      同一 Key 触达频控上限会被 3105 禁用；服务端已做退避保护。
+                      配额、频控与 Key 状态由红狐侧决定；调用失败会回退示例数据并标注。
                     </span>
                   </td>
                   <td className="admin-mono">/api/health → redfox={String(health.data.redfox)}</td>
@@ -107,7 +105,7 @@ export default function KeysSection() {
           </div>
 
           <p className="admin-hint">
-            红狐当前为「已配置但被禁用（3105）」：health 只暴露是否配置，禁用状态来自服务端对 3105 错误的保护逻辑与既有运行事实；恢复需到红狐后台确认 Key 状态。
+            health 只回答「有没有配置」，不回答「调用是否成功」。红狐 Key 被禁用（3105）或积分不足时，检索接口会返回示例数据并在界面上标注，不冒充真实结果。
           </p>
         </section>
       ) : null}

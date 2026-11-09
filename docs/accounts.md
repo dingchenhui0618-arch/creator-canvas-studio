@@ -46,10 +46,13 @@ token + HttpOnly cookie，浏览器里拿不到 token，也拿不到密码。没
 | --- | --- | --- | --- |
 | `VQ_REQUIRE_AUTH` | 关 | **1** | 受保护接口要求登录，未登录返回 `{error:'未登录', loginRequired:true}` |
 | `VQ_SECURE_COOKIES` | 关 | **1** | 会话 cookie 加 Secure（必须走 HTTPS） |
-| `VQ_DEMO_ACCOUNT` | 开 | **0** | 关掉演示账号 seed，`/api/auth/config` 的 `demoAccount` 返回 null，登录页整块隐藏 |
-| `VQ_REGISTRATION` | 开 | 按需 | 内部系统建议 0，由管理员建号 |
+| `VQ_REGISTRATION` | 开 | 按需 | 内部系统建议 0，由管理员建号（`npm run adduser`） |
 | `VQ_SESSION_DAYS` / `VQ_REMEMBER_DAYS` | 7 / 30 | 7 / 30 | 会话时长 / 勾「记住我」后的时长 |
-| `VQ_DEMO_EMAIL` / `VQ_DEMO_PASSWORD` | 后端常量 | 不填 | 只在演示账号开启时生效 |
+| `VQ_SEED_EMAIL` / `VQ_SEED_PASSWORD` | 空（不 seed） | 填一次 | 库里没有这个邮箱时建一条**普通账号**，只为「部署完能登录」；口令不会下发给任何访客 |
+| `VQ_SEED_ACCOUNT` | 有口令即开 | 1 | 设为 0 可完全关闭 seed |
+
+> 2026-11-09 起不再有「演示账号」：`/api/auth/config` 只下发 `registrationEnabled` / `minPasswordLength`。
+> 旧 .env 里的 `VQ_DEMO_EMAIL` / `VQ_DEMO_PASSWORD` 仍然被当作 `VQ_SEED_*` 读取，不用改键名也能用。
 
 cookie 名固定 `vq_session`，不开放配置。
 
@@ -59,9 +62,9 @@ cookie 名固定 `vq_session`，不开放配置。
 
 ```
 PASS  服务启动 /api/health
-PASS  GET /api/auth/config 200 且带演示账号
+PASS  GET /api/auth/config 200 且不下发口令
 PASS  未登录访问 /api/templates 返回 401
-PASS  演示账号能真登录
+PASS  引导账号能真登录
 PASS  错误密码返回 401 且 field=form
 PASS  不存在的邮箱与密码错同样 401
 PASS  注册返回 201 并直接下发会话
@@ -78,7 +81,7 @@ PASS  口令用 scrypt 存储
 ```
 
 界面侧另有一次真实点击验收：注册新账号 → 直接进工作台（`下午好，试用账号`）→ 退出登录 → 回登录页 →
-错误密码给出「邮箱或密码不正确」→ 演示账号登录 → 进工作台。截图见 README 第六节。
+错误密码给出「邮箱或密码不正确」→ 用 `npm run adduser` 建的账号登录 → 进工作台。
 
 ## 6. 没做的部分（别当成已经有了）
 
@@ -86,7 +89,9 @@ PASS  口令用 scrypt 存储
 - **邮箱验证**：注册即生效，不收验证码，也不校验邮箱归属。
 - **角色与权限**：只有「登录 / 未登录」两个状态，没有管理员角色。所以后台管理版的用户列表页还没接
   真实用户接口，只展示当前会话，页面上写明了这一点。
-- **多工作区**：`workspace` 字段是固定的「个人工作区」，切换入口点了只提示还没开放。
+- **多工作区**：`workspace` 字段是固定的「个人工作区」，侧栏只展示、不提供切换。
+- **加账号**：注册关闭时用 `npm run adduser -- --email … --password …`（`scripts/adduser.mjs`）。
+- **早期 seed 的演示账号**：`node scripts/migrate-account.mjs` 把它改成普通账号。
 - **第三方登录**：没有微信 / 邮箱 OAuth。
 - **密码明文风险**：VisionQA Canvas（第三方，不在本仓库）的用户表存了 `password_plaintext`，与本仓库无关，
   但同一台机器上跑时要心里有数。

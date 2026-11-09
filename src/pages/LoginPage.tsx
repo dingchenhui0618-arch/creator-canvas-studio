@@ -10,7 +10,6 @@ import {
 } from '../auth/session'
 import type { RegisterInput, Session, SignInInput } from '../auth/session'
 import { getAuthConfig } from '../api/auth'
-import type { DemoAccount } from '../api/auth'
 import '../styles/shell.css'
 
 type Mode = 'signin' | 'signup'
@@ -27,10 +26,9 @@ type Props = {
    * 后端注册已下发 cookie，回退路径只是为了让页面在宿主补齐之前也能用。
    */
   onRegister?: (input: RegisterInput) => Promise<Session>
-  onGuest: () => void
 }
 
-export function LoginPage({ notice, onSignIn, onRegister, onGuest }: Props) {
+export function LoginPage({ notice, onSignIn, onRegister }: Props) {
   const [mode, setMode] = useState<Mode>('signin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -40,8 +38,7 @@ export function LoginPage({ notice, onSignIn, onRegister, onGuest }: Props) {
   const [busy, setBusy] = useState(false)
   const [errors, setErrors] = useState<FormErrors>({})
   const [info, setInfo] = useState('')
-  // 演示账号与注册开关都由后端下发：生产关掉演示账号时这一块整个不出现。
-  const [demoAccount, setDemoAccount] = useState<DemoAccount | null>(null)
+  // 注册开关与密码长度由后端下发；登录页不再展示任何演示账号或口令。
   const [registrationEnabled, setRegistrationEnabled] = useState(true)
   // 密码长度以后端配置为准，这里只放一个兜底值；登录不校验长度。
   const [minPasswordLength, setMinPasswordLength] = useState(DEFAULT_MIN_PASSWORD_LENGTH)
@@ -55,12 +52,11 @@ export function LoginPage({ notice, onSignIn, onRegister, onGuest }: Props) {
       .then((config) => {
         if (!active) return
         setRegistrationEnabled(config.registrationEnabled)
-        setDemoAccount(config.demoAccount ?? null)
         if (config.minPasswordLength > 0) setMinPasswordLength(config.minPasswordLength)
       })
       .catch(() => {
-        // 后端没起来或接口不可用：保持保守，不显示无法兑现的演示入口。
-        if (active) setDemoAccount(null)
+        // 后端没起来：注册入口按最保守处理（不显示），登录照常可填。
+        if (active) setRegistrationEnabled(false)
       })
     return () => {
       active = false
@@ -73,16 +69,6 @@ export function LoginPage({ notice, onSignIn, onRegister, onGuest }: Props) {
     setMode(next)
     setErrors({})
     setInfo('')
-  }
-
-  const fillDemo = () => {
-    if (!demoAccount) return
-    setMode('signin')
-    setEmail(demoAccount.email)
-    setPassword(demoAccount.password)
-    setErrors({})
-    setInfo('已填入演示账号，直接登录即可。')
-    passwordRef.current?.focus()
   }
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -388,28 +374,6 @@ export function LoginPage({ notice, onSignIn, onRegister, onGuest }: Props) {
               )}
             </button>
           </form>
-
-          <div className="vq-or">
-            <span>或</span>
-          </div>
-
-          <button type="button" className="vq-button vq-button--ghost vq-button--block" onClick={onGuest} disabled={busy}>
-            以访客身份进入
-          </button>
-
-          {/* 演示账号是「登录」用的快捷入口；注册模式下没有意义（拿演示邮箱去注册只会撞 409）。 */}
-          {demoAccount && !isSignup && (
-            <div className="vq-demo">
-              <div>
-                <span className="vq-mono">演示账号</span>
-                <strong>{demoAccount.email}</strong>
-                <span className="vq-demo-sub">后端 seed 的演示账号，一键填入邮箱与密码</span>
-              </div>
-              <button type="button" className="vq-button vq-button--quiet" onClick={fillDemo} disabled={busy}>
-                填入
-              </button>
-            </div>
-          )}
 
           <p className="vq-login-foot">
             <Lock size={12} />

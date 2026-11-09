@@ -1,26 +1,20 @@
 import {
   Activity,
-  FlaskConical,
   Gauge,
-  HeartPulse,
   KeyRound,
   LayoutTemplate,
   ScrollText,
   Settings2,
-  ToggleLeft,
-  Terminal,
   Users,
   type LucideIcon,
 } from 'lucide-react'
 
-// VisionQA 的三个形态：同一套设计语言，三份不同的导航与工作面。
-// - user  用户生产版：检索 → 复刻 → 模板 → 智能体 → 画布 → 评审
-// - admin 后台管理版：账号与配额、模型 Key、模板治理、运行审计、系统
-// - lab   内测测试版：接口体检、样例对照、功能开关、诊断导出
-export type EditionId = 'user' | 'admin' | 'lab'
+// 两个形态：用户生产版是唯一对外形态；后台管理版只给运维用，从 URL 进入，不在用户导航里露出。
+// 之前的「内测测试版」（接口体检 / 样例对照 / 功能开关 / 诊断导出）整块删除：
+// 那一整个人面全是未接线的开关和示例数据，对外发布时属于演示残留。
+export type EditionId = 'user' | 'admin'
 
 export type AdminSection = 'overview' | 'users' | 'keys' | 'templates' | 'audit' | 'system'
-export type LabSection = 'health' | 'fixtures' | 'flags' | 'diagnostics'
 
 export type EditionNavItem = {
   id: string
@@ -42,33 +36,21 @@ export const EDITIONS: EditionMeta[] = [
     id: 'user',
     label: '用户生产版',
     mono: 'PRODUCTION',
-    hint: '给内容团队用：检索、复刻、模板、智能体、画布、评审',
+    hint: '检索、复刻、模板、智能体、画布、评审',
     nav: [],
   },
   {
     id: 'admin',
     label: '后台管理版',
     mono: 'ADMIN',
-    hint: '账号与配额、模型 Key、模板治理、运行审计、系统状态',
+    hint: '模板治理、运行审计、系统状态',
     nav: [
       { id: 'overview', label: '总览', icon: Gauge, section: 'overview' },
-      { id: 'users', label: '账号与配额', icon: Users, section: 'users' },
+      { id: 'users', label: '账号', icon: Users, section: 'users' },
       { id: 'keys', label: '模型 Key', icon: KeyRound, section: 'keys' },
       { id: 'templates', label: '模板治理', icon: LayoutTemplate, section: 'templates' },
       { id: 'audit', label: '运行审计', icon: ScrollText, section: 'audit' },
       { id: 'system', label: '系统', icon: Settings2, section: 'system' },
-    ],
-  },
-  {
-    id: 'lab',
-    label: '内测测试版',
-    mono: 'LAB',
-    hint: '接口体检、样例对照、功能开关、诊断导出',
-    nav: [
-      { id: 'health', label: '接口体检', icon: HeartPulse, section: 'health' },
-      { id: 'fixtures', label: '样例对照', icon: FlaskConical, section: 'fixtures' },
-      { id: 'flags', label: '功能开关', icon: ToggleLeft, section: 'flags' },
-      { id: 'diagnostics', label: '诊断导出', icon: Terminal, section: 'diagnostics' },
     ],
   },
 ]
@@ -82,14 +64,23 @@ export const DEFAULT_EDITION: EditionId = 'user'
 
 export const EDITION_STORAGE_KEY = 'vq.edition'
 
-export function readStoredEdition(): EditionId {
+/**
+ * 对外默认永远是用户生产版。后台只有一个入口：地址栏加 ?edition=admin。
+ * 这样普通用户不会在自己的侧栏里发现「形态切换」，运维也不必记 localStorage 键。
+ */
+export function readInitialEdition(): EditionId {
   try {
+    const param = new URLSearchParams(window.location.search).get('edition')
+    if (param === 'admin' || param === 'user') {
+      window.localStorage.setItem(EDITION_STORAGE_KEY, param)
+      return param
+    }
     const stored = window.localStorage.getItem(EDITION_STORAGE_KEY)
-    if (stored === 'user' || stored === 'admin' || stored === 'lab') return stored
+    if (stored === 'admin' || stored === 'user') return stored
   } catch {
     // localStorage 不可用（隐私模式）时回到默认形态
   }
   return DEFAULT_EDITION
 }
 
-export const EDITION_ICON = { user: Activity, admin: Gauge, lab: FlaskConical } as const
+export const EDITION_ICON = { user: Activity, admin: Gauge } as const

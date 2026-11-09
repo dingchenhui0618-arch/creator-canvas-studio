@@ -5,7 +5,6 @@ import {
   readSession,
   register as requestRegister,
   signIn as requestSignIn,
-  signInAsGuest,
   signOut as requestSignOut,
   type RegisterInput,
   type Session,
@@ -19,7 +18,6 @@ export type SessionController = {
   loading: boolean
   signIn: (input: SignInInput) => Promise<Session>
   register: (input: RegisterInput) => Promise<Session>
-  continueAsGuest: () => void
   signOut: () => void
 }
 
@@ -100,11 +98,6 @@ export function useSession(): SessionController {
     return next
   }, [])
 
-  const continueAsGuest = useCallback(() => {
-    epoch.current += 1
-    setState({ session: signInAsGuest(), loading: false })
-  }, [])
-
   const signOut = useCallback(() => {
     // 宿主只关心「立刻回到登录页」，后端清 cookie 与清缓存放到异步里完成。
     epoch.current += 1
@@ -112,5 +105,5 @@ export function useSession(): SessionController {
     void requestSignOut()
   }, [])
 
-  return { session: state.session, loading: state.loading, signIn, register, continueAsGuest, signOut }
+  return { session: state.session, loading: state.loading, signIn, register, signOut }
 }

@@ -1,16 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Activity,
-  Bell,
   Bot,
   Check,
-  ChevronDown,
   ChevronRight,
   Grid2X2,
-  Layers3,
   LayoutTemplate,
   Loader2,
-  LogIn,
   LogOut,
   MoreHorizontal,
   PanelLeftClose,
@@ -18,16 +14,14 @@ import {
   Radar,
   RefreshCw,
   ScanEye,
-  Search,
   Settings2,
   Workflow,
   X,
 } from 'lucide-react'
-import type { Page } from './domain/types'
+import { pageLabels, type Page } from './domain/types'
 import './App.css'
 import './styles/shell.css'
 import './styles/overview.css'
-import { agents, assets, pageLabels } from './data/mock'
 import { CreateModal, NavItem } from './components/ui'
 import { ModelSwitch } from './components/ModelSwitch'
 import CanvasPage from './pages/CanvasPage'
@@ -35,27 +29,16 @@ import AgentEditorPage from './pages/AgentEditorPage'
 import ReviewPage from './pages/ReviewPage'
 import { OverviewPage } from './pages/OverviewPage'
 import { AgentsPage } from './pages/AgentsPage'
-import { AssetsPage } from './pages/AssetsPage'
 import { RunsPage } from './pages/RunsPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { RadarPage } from './pages/RadarPage'
 import { TemplateLibraryPage } from './pages/TemplateLibraryPage'
 import AdminConsolePage from './pages/admin/AdminConsolePage'
-import LabConsolePage from './pages/lab/LabConsolePage'
 import { RequireSession } from './auth/RequireSession'
 import { useSession } from './auth/useSession'
 import { initialsFor, sessionKindLabel, type RegisterInput, type Session, type SignInInput } from './auth/session'
 import packageJsonRaw from '../package.json?raw'
-import {
-  EDITION_BY_ID,
-  EDITION_ICON,
-  EDITIONS,
-  readStoredEdition,
-  EDITION_STORAGE_KEY,
-  type AdminSection,
-  type EditionId,
-  type LabSection,
-} from './editions'
+import { EDITION_BY_ID, readInitialEdition, EDITION_STORAGE_KEY, type AdminSection, type EditionId } from './editions'
 
 const APP_VERSION = (JSON.parse(packageJsonRaw) as { version?: string }).version ?? '0.0.0'
 
@@ -68,22 +51,18 @@ function Workbench({
   session,
   onSignOut,
   onSwitchAccount,
-  onRequestLogin,
 }: {
   session: Session
   onSignOut: () => void
   onSwitchAccount: () => void
-  onRequestLogin: () => void
 }) {
   const [activePage, setActivePage] = useState<Page>('overview')
-  const [edition, setEdition] = useState<EditionId>(() => readStoredEdition())
+  const [edition, setEdition] = useState<EditionId>(() => readInitialEdition())
   const [consoleSection, setConsoleSection] = useState<string>(() => {
-    const stored = readStoredEdition()
-    return EDITION_BY_ID[stored].nav[0]?.section ?? 'overview'
+    const initial = readInitialEdition()
+    return EDITION_BY_ID[initial].nav[0]?.section ?? 'overview'
   })
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [search, setSearch] = useState('')
-  const [assetFilter, setAssetFilter] = useState('全部')
   const [showCreate, setShowCreate] = useState(false)
   const [toast, setToast] = useState('')
   const [editorAgent, setEditorAgent] = useState<{ name: string; description: string } | null>(null)
@@ -93,7 +72,6 @@ function Workbench({
   const [updateMessage, setUpdateMessage] = useState('')
   const toastTimer = useRef<number | undefined>(undefined)
   const accountRef = useRef<HTMLDivElement>(null)
-  const searchRef = useRef<HTMLInputElement>(null)
 
   const notify = useCallback((message: string) => {
     setToast(message)
@@ -181,33 +159,14 @@ function Workbench({
     }
   }, [accountMenuOpen, updateOpen])
 
-  // ⌘K / Ctrl+K 聚焦搜索框。
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
-        event.preventDefault()
-        searchRef.current?.focus()
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
-
-  const filteredAssets = assets.filter((asset) => {
-    const matchesFilter = assetFilter === '全部' || asset.type === assetFilter
-    const matchesSearch = !search || `${asset.name} ${asset.tag}`.toLowerCase().includes(search.toLowerCase())
-    return matchesFilter && matchesSearch
-  })
-
+  // 智能体编辑器只认服务端返回的条目，前端不再缓存一份假列表。
   const openAgent = (name: string) => {
-    const found = agents.find((item) => item.name === name)
-    setEditorAgent(found ? { name: found.name, description: found.description } : { name, description: '' })
+    setEditorAgent({ name, description: '' })
     setActivePage('agent-editor')
   }
 
   const renderPage = () => {
     if (edition === 'admin') return <AdminConsolePage section={consoleSection as AdminSection} />
-    if (edition === 'lab') return <LabConsolePage section={consoleSection as LabSection} />
     switch (activePage) {
       case 'canvas':
         return <CanvasPage onToast={notify} />
@@ -237,17 +196,6 @@ function Workbench({
             onToast={notify}
           />
         )
-      case 'assets':
-        return (
-          <AssetsPage
-            assets={filteredAssets}
-            filter={assetFilter}
-            setFilter={setAssetFilter}
-            search={search}
-            setSearch={setSearch}
-            onReference={(name) => notify(`已将「${name}」加入当前节点引用`)}
-          />
-        )
       case 'runs':
         return <RunsPage />
       case 'review':
@@ -260,7 +208,6 @@ function Workbench({
   }
 
   const initials = initialsFor(session.user.name)
-  const isGuest = session.user.kind === 'guest'
 
   return (
     <div className="vq-scope vq-shell">
@@ -272,66 +219,25 @@ function Workbench({
           </div>
 
           {sidebarOpen && (
-            <button
-              type="button"
-              className="vq-workspace"
-              onClick={() => notify('当前只有一个个人工作区，多工作区切换还没开放')}
-            >
+            <div className="vq-workspace">
               <span className="vq-workspace-avatar">{initials}</span>
               <span className="vq-workspace-meta">
                 <strong>{session.user.workspace}</strong>
                 <span>{session.user.kind === 'guest' ? '访客会话' : '服务端会话'}</span>
               </span>
-              <ChevronDown size={13} />
-            </button>
+            </div>
           )}
 
-          {sidebarOpen ? (
-            // 形态是低频设置，不是导航。收成一行：图标分段 + 当前形态名，说明留在 tooltip 里。
-            // 之前这块占 150px 高、比主导航还显眼，属于层级错位。
-            <div className="vq-edition-bar" aria-label="形态切换">
-              {/* 侧栏只有 222px：左侧写形态名（可省略号），右侧是三个图标分段 */}
-              <span className="vq-edition-kicker" title={EDITION_BY_ID[edition].hint}>
-                {EDITION_BY_ID[edition].label}
+          {edition === 'admin' && (
+            // 后台只从地址栏 ?edition=admin 进来；普通用户侧栏里没有任何形态切换。
+            <div className="vq-edition-bar" aria-label="当前形态">
+              <span className="vq-edition-kicker" title={EDITION_BY_ID.admin.hint}>
+                后台管理版
               </span>
-              <div className="vq-edition-seg" role="tablist" aria-label="切换形态">
-                {EDITIONS.map((item) => {
-                  const Icon = EDITION_ICON[item.id]
-                  const active = edition === item.id
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      role="tab"
-                      aria-selected={active}
-                      className={`vq-edition-seg-btn${active ? ' is-active' : ''}`}
-                      onClick={() => switchEdition(item.id)}
-                      title={`${item.label} · ${item.hint}`}
-                      aria-label={item.label}
-                    >
-                      <Icon size={13} strokeWidth={1.5} />
-                    </button>
-                  )
-                })}
-              </div>
+              <button type="button" className="vq-edition-exit" onClick={() => switchEdition('user')}>
+                返回生产版
+              </button>
             </div>
-          ) : (
-            <button
-              type="button"
-              className="vq-edition-compact"
-              onClick={() => {
-                const order: EditionId[] = ['user', 'admin', 'lab']
-                const next = order[(order.indexOf(edition) + 1) % order.length]
-                switchEdition(next)
-              }}
-              title={'当前：' + EDITION_BY_ID[edition].label}
-              aria-label={'切换形态，当前 ' + EDITION_BY_ID[edition].label}
-            >
-              {(() => {
-                const Icon = EDITION_ICON[edition]
-                return <Icon size={14} strokeWidth={1.5} />
-              })()}
-            </button>
           )}
 
           {edition === 'user' ? (
@@ -344,7 +250,6 @@ function Workbench({
                 label="智能体"
                 active={activePage === 'agents' || activePage === 'agent-editor'}
                 compact={!sidebarOpen}
-                badge={String(agents.length)}
                 onClick={() => go('agents')}
               />
               <NavItem icon={Workflow} label="画布" active={activePage === 'canvas'} compact={!sidebarOpen} onClick={() => go('canvas')} />
@@ -374,7 +279,6 @@ function Workbench({
             <>
   <div className="vq-nav-divider" role="presentation" />
             <nav className="vq-nav vq-nav--utility" aria-label="设置层">
-              <NavItem utility icon={Layers3} label="资产库" active={activePage === 'assets'} compact={!sidebarOpen} onClick={() => go('assets')} />
               <NavItem utility icon={Activity} label="运行记录" active={activePage === 'runs'} compact={!sidebarOpen} onClick={() => go('runs')} />
               <NavItem utility icon={Settings2} label="设置" active={activePage === 'settings'} compact={!sidebarOpen} onClick={() => go('settings')} />
             </nav>
@@ -382,25 +286,7 @@ function Workbench({
           ) : null}
 
           <div className="vq-sidebar-account" ref={accountRef}>
-            {isGuest ? (
-              <button
-                type="button"
-                className="vq-sidebar-account-row vq-sidebar-account-row--guest"
-                onClick={onRequestLogin}
-                title="去登录"
-              >
-                <span className="vq-sidebar-account-avatar">{initials}</span>
-                <span className="vq-sidebar-account-copy">
-                  <strong>访客</strong>
-                  <small>未登录</small>
-                </span>
-                <span className="vq-sidebar-account-action">
-                  <LogIn size={14} />
-                  <span>去登录</span>
-                </span>
-              </button>
-            ) : (
-              <>
+            <>
                 <button
                   type="button"
                   className="vq-sidebar-account-row"
@@ -421,7 +307,7 @@ function Workbench({
                   <div className="vq-menu vq-sidebar-account-menu" role="menu">
                     <div className="vq-sidebar-account-menu-meta">
                       <span className="vq-mono">{sessionKindLabel(session.user.kind)}</span>
-                      <span className="vq-mono">{session.user.kind === 'guest' ? '访客会话' : '服务端会话'}</span>
+                      <span className="vq-mono">服务端会话</span>
                     </div>
                     <button type="button" role="menuitem" onClick={() => go('settings')}>
                       <Settings2 size={15} />
@@ -454,7 +340,6 @@ function Workbench({
                   </div>
                 )}
               </>
-            )}
           </div>
 
           <div className="vq-version">
@@ -500,22 +385,7 @@ function Workbench({
           </div>
 
           <div className="vq-topbar-right">
-            <label className="vq-search">
-              <Search size={14} />
-              <input
-                ref={searchRef}
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="搜索项目、资产或运行记录"
-                aria-label="搜索"
-              />
-              <kbd>⌘ K</kbd>
-            </label>
             <ModelSwitch />
-            <button type="button" className="vq-icon-button vq-has-dot" aria-label="通知" onClick={() => notify('没有新的评审提醒')}>
-              <Bell size={16} />
-            </button>
-
           </div>
         </header>
 
@@ -547,8 +417,8 @@ function Workbench({
                 <strong className="vq-mono">v{APP_VERSION}</strong>
               </div>
               <div>
-                <span>更新渠道</span>
-                <strong>本地开发 · dev</strong>
+                <span>站点</span>
+                <strong className="vq-mono">{window.location.host}</strong>
               </div>
               <div>
                 <span>检查接口</span>
@@ -585,7 +455,7 @@ function Workbench({
               </button>
             </div>
 
-            <p className="vq-update-foot">账号与会话由服务端校验；模板库与队列仍在本机。© 2026 VisionQA</p>
+            <p className="vq-update-foot">账号与会话由服务端校验，数据落在服务端数据目录。© 2026 VisionQA</p>
           </div>
         </div>
       )}
@@ -606,8 +476,8 @@ function Workbench({
               setEditorAgent(null)
               go('agent-editor')
             } else {
+              // 画布的新建在画布页里做（那里才有画布服务端接口），这里只负责把人送过去。
               go('canvas')
-              notify('已创建新的资产画布草稿')
             }
           }}
         />
@@ -617,7 +487,7 @@ function Workbench({
 }
 
 function App() {
-  const { session, loading: sessionLoading, signIn, register, continueAsGuest, signOut } = useSession()
+  const { session, loading: sessionLoading, signIn, register, signOut } = useSession()
   const [authNotice, setAuthNotice] = useState('')
 
   const handleSignIn = useCallback(
@@ -638,20 +508,9 @@ function App() {
     [register],
   )
 
-  const handleGuest = useCallback(() => {
-    setAuthNotice('')
-    continueAsGuest()
-  }, [continueAsGuest])
-
   const handleExit = useCallback(
-    (mode: 'signout' | 'switch' | 'guest') => {
-      setAuthNotice(
-        mode === 'switch'
-          ? '已退出当前会话，请使用另一个账号登录。'
-          : mode === 'guest'
-            ? '已退出访客会话，请登录后继续。'
-            : '已退出登录。',
-      )
+    (mode: 'signout' | 'switch') => {
+      setAuthNotice(mode === 'switch' ? '已退出当前会话，请使用另一个账号登录。' : '已退出登录。')
       signOut()
     },
     [signOut],
@@ -664,14 +523,12 @@ function App() {
       notice={authNotice}
       onSignIn={handleSignIn}
       onRegister={handleRegister}
-      onGuest={handleGuest}
     >
       {(activeSession) => (
         <Workbench
           session={activeSession}
           onSignOut={() => handleExit('signout')}
           onSwitchAccount={() => handleExit('switch')}
-          onRequestLogin={() => handleExit('guest')}
         />
       )}
     </RequireSession>

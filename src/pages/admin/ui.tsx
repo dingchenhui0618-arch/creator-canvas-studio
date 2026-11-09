@@ -27,7 +27,7 @@ export function SourceTag({ kind, source }: { kind: 'api' | 'local'; source: str
   return (
     <span className={`admin-tag admin-tag--${kind}`} title={source}>
       <span className="admin-tag-dot" aria-hidden="true" />
-      {kind === 'api' ? '真实接口' : '本地演示'}
+      {kind === 'api' ? '真实接口' : '本地会话'}
     </span>
   )
 }

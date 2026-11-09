@@ -54,7 +54,8 @@ async function main() {
       API_PORT: String(PORT),
       DATA_DIR: dataDir,
       VQ_REQUIRE_AUTH: '1',
-      VQ_DEMO_ACCOUNT: '1',
+      VQ_SEED_EMAIL: 'seed@test.local',
+      VQ_SEED_PASSWORD: 'seed-test-pass-9',
       VQ_REGISTRATION: '1',
       VQ_SECURE_COOKIES: '0',
     },
@@ -66,19 +67,24 @@ async function main() {
   if (!up) throw new Error('服务没起来')
 
   const cfg = await call('/api/auth/config')
-  record('GET /api/auth/config 200 且带演示账号', cfg.status === 200 && cfg.json?.demoAccount?.email, JSON.stringify(cfg.json?.demoAccount?.email || ''))
+  // 公开配置里不能出现任何账号或口令：早期版本把演示邮箱和口令直接发给每个访客。
+  record(
+    'GET /api/auth/config 200 且不下发口令',
+    cfg.status === 200 && cfg.json?.demoAccount === undefined && cfg.json?.registrationEnabled === true,
+    JSON.stringify(cfg.json),
+  )
 
   // 未登录访问受保护接口
   const gated = await call('/api/templates')
   record('未登录访问 /api/templates 返回 401', gated.status === 401 && gated.json?.loginRequired === true, 'status=' + gated.status)
 
-  // 演示账号真登录
-  const demo = cfg.json.demoAccount
-  const demoLogin = await call('/api/auth/login', { method: 'POST', body: { email: demo.email, password: demo.password, remember: false } })
-  record('演示账号能真登录', demoLogin.status === 200 && !!demoLogin.cookie, 'status=' + demoLogin.status)
+  // 引导账号真登录（口令来自测试环境变量，不是接口下发）
+  const seed = { email: 'seed@test.local', password: 'seed-test-pass-9' }
+  const demoLogin = await call('/api/auth/login', { method: 'POST', body: { email: seed.email, password: seed.password, remember: false } })
+  record('引导账号能真登录', demoLogin.status === 200 && !!demoLogin.cookie, 'status=' + demoLogin.status)
 
   // 错误密码
-  const bad = await call('/api/auth/login', { method: 'POST', body: { email: demo.email, password: 'wrong-password-1' } })
+  const bad = await call('/api/auth/login', { method: 'POST', body: { email: seed.email, password: 'wrong-password-1' } })
   record('错误密码返回 401 且 field=form', bad.status === 401 && bad.json?.field === 'form', 'status=' + bad.status + ' field=' + bad.json?.field)
 
   // 邮箱不存在不泄露

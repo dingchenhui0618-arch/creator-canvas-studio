@@ -110,28 +110,6 @@ export default function SystemSection() {
           目录占用需要在文件系统查看；当前 API 没有返回磁盘用量的字段，因此这里不编造数字。
         </p>
       </section>
-
-      <section className="admin-card admin-block admin-danger">
-        <div className="admin-block-head">
-          <div>
-            <p className="admin-label">危险操作</p>
-            <p className="admin-sub">全部为占位按钮，点击不会删除任何数据。</p>
-          </div>
-          <Badge tone="warn">未实现</Badge>
-        </div>
-        <div className="admin-danger-actions">
-          <button type="button" className="admin-btn admin-btn--danger" disabled title="未实现：需要后端删除接口与二次确认。">
-            清空模板库
-          </button>
-          <button type="button" className="admin-btn admin-btn--danger" disabled title="未实现：运行记录只读，不提供删除。">
-            清空运行记录
-          </button>
-          <button type="button" className="admin-btn admin-btn--danger" disabled title="未实现：演示账号由代码常量提供。">
-            重置演示账号
-          </button>
-        </div>
-        <p className="admin-hint">这些按钮没有绑定任何请求，只用于标明后台将来的危险操作区。</p>
-      </section>
     </>
   )
 }

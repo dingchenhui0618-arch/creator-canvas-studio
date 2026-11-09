@@ -67,11 +67,10 @@ export function createAuthRouter() {
     prefix: '/api/auth',
     async handle(req, res, url, pathname) {
       if (pathname === '/api/auth/config') {
+        // 只下发界面需要的开关。任何口令都不出现在未鉴权的响应里——
+        // 之前的演示账号把邮箱和口令直接发给每个访客，等于公开后门。
         sendJson(res, 200, {
           registrationEnabled: config.auth.registrationEnabled,
-          demoAccount: config.auth.demoAccount
-            ? { email: config.auth.demoEmail, password: config.auth.demoPassword }
-            : null,
           minPasswordLength: MIN_PASSWORD,
         })
         return true

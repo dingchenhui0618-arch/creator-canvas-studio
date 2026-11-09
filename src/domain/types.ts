@@ -1,6 +1,30 @@
 import { Grid2X2 } from 'lucide-react'
 
-export type Page = 'login' | 'overview' | 'agents' | 'agent-editor' | 'canvas' | 'assets' | 'runs' | 'settings' | 'radar' | 'templates' | 'review'
+export type Page =
+  | 'login'
+  | 'overview'
+  | 'agents'
+  | 'agent-editor'
+  | 'canvas'
+  | 'runs'
+  | 'settings'
+  | 'radar'
+  | 'templates'
+  | 'review'
+
+/** 面包屑用的页面名。只有真实存在的页面才在这里，删掉的入口不留空标签。 */
+export const pageLabels: Record<Page, string> = {
+  login: '登录',
+  overview: '工作台',
+  agents: '智能体',
+  'agent-editor': '智能体编辑器',
+  canvas: '画布',
+  runs: '运行记录',
+  settings: '设置',
+  radar: '爆款雷达',
+  templates: '模板库',
+  review: '视觉评审',
+}
 
 export type NodeKind = 'asset' | 'agent' | 'output'
 

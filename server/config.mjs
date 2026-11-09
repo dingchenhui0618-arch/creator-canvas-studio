@@ -77,10 +77,13 @@ export const config = {
     // 生产必须为 1：除 /api/auth/* 与健康检查外，所有 API 都要求登录
     requireAuth: process.env.VQ_REQUIRE_AUTH === '1',
     registrationEnabled: process.env.VQ_REGISTRATION !== '0',
-    // 演示账号默认开启（本地评审用），生产用 VQ_DEMO_ACCOUNT=0 关掉
-    demoAccount: process.env.VQ_DEMO_ACCOUNT !== '0',
-    demoEmail: process.env.VQ_DEMO_EMAIL || 'demo@visionqa.studio',
-    demoPassword: process.env.VQ_DEMO_PASSWORD || 'demo123456',
+    // 部署引导账号：库里没有这个邮箱时建一条普通账号（kind=account），只为「部署完能登录」。
+    // 不叫演示账号了：口令不再下发给访客，界面上也没有任何演示标识。
+    // 兼容旧键名 VQ_DEMO_*：老 .env 不用改也能继续用。
+    seedAccount: Boolean((process.env.VQ_SEED_PASSWORD || process.env.VQ_DEMO_PASSWORD || '').trim()),
+    seedEmail: (process.env.VQ_SEED_EMAIL || process.env.VQ_DEMO_EMAIL || '').trim().toLowerCase(),
+    seedPassword: (process.env.VQ_SEED_PASSWORD || process.env.VQ_DEMO_PASSWORD || '').trim(),
+    seedName: process.env.VQ_SEED_NAME || 'VisionQA 管理员',
   },
 }
 

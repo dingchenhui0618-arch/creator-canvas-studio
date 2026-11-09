@@ -1,4 +1,3 @@
-import { DEMO_NAME } from '../../auth/session'
 import { useApi, type Health, type RunsResponse, type TemplatesResponse } from './data'
 import { AdminHead, Badge, ErrorBanner, LoadingLine, RefreshButton, SourceTag } from './ui'
 
@@ -40,8 +39,7 @@ export default function OverviewSection() {
           </div>
           <p className="admin-value">—</p>
           <p className="admin-foot">
-            账号已落库（data/auth.db，SQLite），但还没有管理员用户列表接口，所以这里不给数字。演示账号
-            {DEMO_NAME} 由后端 seed，是库里真实存在的一条记录。
+            账号已落库（data/auth.db，SQLite），但还没有管理员用户列表接口，所以这里不给数字。
           </p>
         </article>
 
@@ -95,9 +93,10 @@ export default function OverviewSection() {
             <div>
               <dt>红狐检索</dt>
               <dd>
-                <Badge tone="ok">已配置</Badge>
-                <Badge tone="fail">已禁用（3105）</Badge>
-                <span>health.redfox = true；调用侧仍会被 3105 拦截，详见「模型与密钥」。</span>
+                <Badge tone={health.data.redfox ? 'ok' : 'warn'}>
+                  {health.data.redfox ? '已配置' : '未配置'}
+                </Badge>
+                <span className="admin-mono">health.redfox = {String(health.data.redfox)}</span>
               </dd>
             </div>
             <div>
@@ -132,7 +131,7 @@ export default function OverviewSection() {
         <ul>
           <li>账号已落库到 <code>data/auth.db</code>，但本页还没接用户列表接口，所以只展示当前会话。</li>
           <li>模板数、运行数、依赖状态分别来自 <code>/api/templates</code>、<code>/api/runs</code>、<code>/api/health</code>。</li>
-          <li>红狐 3105 是服务端已知的禁用状态，health 接口只暴露「是否配置」，本页如实分开展示。</li>
+          <li>health 接口只暴露「是否配置」布尔值；红狐未配置时检索会回退示例数据，界面上会明确标注。</li>
         </ul>
       </section>
     </>

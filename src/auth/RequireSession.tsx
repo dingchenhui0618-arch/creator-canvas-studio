@@ -11,7 +11,6 @@ type Props = {
   onSignIn: (input: SignInInput) => Promise<Session>
   /** 全屏登录页的注册入口；不传时登录页回退成「注册 + 登录」两次请求。 */
   onRegister?: (input: RegisterInput) => Promise<Session>
-  onGuest: () => void
   children: (session: Session) => ReactNode
 }
 
@@ -26,10 +25,10 @@ function BootScreen() {
 }
 
 /** 受保护渲染：没有会话就只给全屏登录页，登录后把会话交给工作台外壳。 */
-export function RequireSession({ session, loading = false, notice, onSignIn, onRegister, onGuest, children }: Props) {
+export function RequireSession({ session, loading = false, notice, onSignIn, onRegister, children }: Props) {
   if (!session) {
     if (loading) return <BootScreen />
-    return <LoginPage notice={notice} onSignIn={onSignIn} onRegister={onRegister} onGuest={onGuest} />
+    return <LoginPage notice={notice} onSignIn={onSignIn} onRegister={onRegister} />
   }
   return <>{children(session)}</>
 }

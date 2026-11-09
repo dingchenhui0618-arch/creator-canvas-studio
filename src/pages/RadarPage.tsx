@@ -168,7 +168,13 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
                 )}
                 <span className="radar-badge">{item.platformLabel}</span>
                 <span className="radar-duration"><Film size={11} />{formatDuration(item.durationSec)}</span>
-                <button className="radar-hover" onClick={() => setModalItem(item)} aria-label={`一键复刻 ${item.title}`}>
+                <button
+                  className="radar-hover"
+                  disabled={mode === 'mock'}
+                  onClick={() => setModalItem(item)}
+                  aria-label={`一键复刻 ${item.title}`}
+                  title={mode === 'mock' ? '示例数据没有原视频，无法复刻' : undefined}
+                >
                   <span className="radar-hover-pill"><Sparkles size={14} />一键复刻</span>
                   <span className="radar-hover-hint">抽帧 · 逐帧分析 · 存成模板</span>
                 </button>
@@ -187,7 +193,12 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
                 <button className="button button--ghost button--tiny" disabled={!item.url} onClick={() => item.url && window.open(item.url, '_blank', 'noopener')}>
                   <ExternalLink size={13} />原视频
                 </button>
-                <button className="button button--primary button--tiny" onClick={() => setModalItem(item)}>
+                <button
+                  className="button button--primary button--tiny"
+                  disabled={mode === 'mock'}
+                  title={mode === 'mock' ? '示例数据没有原视频，无法复刻' : undefined}
+                  onClick={() => setModalItem(item)}
+                >
                   <Play size={13} />一键复刻
                 </button>
               </div>

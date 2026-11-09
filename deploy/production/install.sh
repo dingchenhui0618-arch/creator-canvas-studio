@@ -16,9 +16,9 @@ DATA_DIR=${DATA_DIR:-/var/lib/visionqa}
 SECURE_COOKIES=${SECURE_COOKIES:-0}
 # ACME 续期目录：这台机器上 wavisionai.cn 用的就是它
 ACME_DIR=${ACME_DIR:-/www/wwwroot/wavisionai.cn/acme}
-# 唯一可登录账号（种子化，不写入日志）
-DEMO_EMAIL=${DEMO_EMAIL:-qiye@wavisionai.cn}
-DEMO_PASSWORD=${DEMO_PASSWORD:-Changes-Me-2026}
+# 部署引导账号（库里没有该邮箱时建一条普通账号；口令不写入日志、不下发给访客）
+SEED_EMAIL=${SEED_EMAIL:-admin@visionqa.local}
+SEED_PASSWORD=${SEED_PASSWORD:-Changes-Me-2026}
 
 log() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 
@@ -92,10 +92,10 @@ API_PORT=${API_PORT}
 DATA_DIR=${DATA_DIR}
 VQ_REQUIRE_AUTH=1
 VQ_SECURE_COOKIES=${SECURE_COOKIES}
-# 只有这一个账号能进：注册关闭，演示账号由下面的邮箱/密码种子化
-VQ_DEMO_ACCOUNT=1
-VQ_DEMO_EMAIL=${DEMO_EMAIL}
-VQ_DEMO_PASSWORD=${DEMO_PASSWORD}
+# 注册关闭；首个账号由下面的邮箱/口令种子化（普通账号，不是演示入口）
+VQ_SEED_ACCOUNT=1
+VQ_SEED_EMAIL=${SEED_EMAIL}
+VQ_SEED_PASSWORD=${SEED_PASSWORD}
 VQ_REGISTRATION=0
 # 视觉模型：必须是这台服务器能访问到的地址
 VISION_BASE_URL=${VISION_BASE_URL:-}

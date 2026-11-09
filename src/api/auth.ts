@@ -19,14 +19,10 @@ export type LoginPayload = { email: string; password: string; remember: boolean 
 
 export type RegisterPayload = { email: string; password: string; name?: string }
 
-/** 演示账号由后端 seed 并在这里下发，前端源码里不出现密码。 */
-export type DemoAccount = { email: string; password: string }
-
 export type AuthConfig = {
   registrationEnabled: boolean
   /** 注册密码最小长度由后端下发（login 不校验长度，老密码不受影响）。 */
   minPasswordLength: number
-  demoAccount: DemoAccount | null
 }
 
 type AuthErrorBody = { error?: string; field?: unknown }
@@ -51,7 +47,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 }
 
-/** 登录页需要的公开配置：是否开放注册、演示账号能否一键填入。 */
+/** 登录页需要的公开配置：是否开放注册、口令长度下限。不下发任何账号或口令。 */
 export function getAuthConfig(signal?: AbortSignal): Promise<AuthConfig> {
   return request<AuthConfig>('/api/auth/config', { signal })
 }
