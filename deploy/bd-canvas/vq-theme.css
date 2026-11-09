@@ -669,6 +669,8 @@ input[type="range"]::-moz-range-thumb { border-color: #ffffff !important; }
 /* 底部控制条：40px 高、4px 内边距、32px 方形按钮，缩放数字走等宽 */
 .canvas-controls {
   height: 40px !important;
+  min-height: 40px !important;
+  max-height: 40px !important;
   padding: 4px !important;
   gap: 2px !important;
   border-radius: 10px !important;

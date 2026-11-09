@@ -122,6 +122,14 @@ node .\node_modules\vite\bin\vite.js --host 127.0.0.1 --port 6677
 
 ### 8.1 顶栏的「后端」状态要报真话
 
+品牌旁那颗（`#local-backend-status`）探 `/api/health`（5312 画布数据后端），5s 超时、30s 一轮，title 里带真实状态码与耗时。右侧那颗「连接」胶囊原本归管理服务（`/enterprise/api`）状态管，未登录管理账号时恒为 `unknown`，于是永远显示「后端未检测」；现在由宿主把手探到的数据后端状态写进 `EnterpriseSessionManager.setConnectionProbe()`，未登录也报真话。
+
+### 8.1b 第三轮主题（2026-11-09）
+
+第 11 节统一外壳：左轨 8px 内边距 + 32px 方形 8px 圆角按钮、底部控制条 40px（必须同时压 `min-height`，它自己写死 44px）、节点卡 12/500 标题 + 13px/1.6 正文 + 等宽页脚、悬浮工具条 28px、参数面板与控件（6px 圆角、聚焦转墨线）、滚动条 8px。
+
+![线上实拍：左轨方形按钮、节点卡与底部 40px 控制条](bdc-chrome-after.png)
+
 - 品牌旁边那颗小胶囊（`#local-backend-status`）探的是 `/api/health`（5312 画布数据后端），5s 超时，30s 一轮，标题里带真实状态码与耗时。
 - 顶栏右侧那颗「连接」胶囊属于管理服务（`/enterprise/api`）状态。没登录管理账号时它一直是 `unknown`，于是永远显示「后端未检测」——现在由宿主把手探到的数据后端状态写进 `EnterpriseSessionManager.setConnectionProbe()`，未登录时显示真实结果（后端正常 / 后端断连），不再是永久「未检测」。
 
