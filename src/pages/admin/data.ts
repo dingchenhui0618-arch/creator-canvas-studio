@@ -6,6 +6,8 @@ export type Health = {
   redfox: boolean
   vision: boolean
   visionModel: string
+  llm?: boolean
+  llmModel?: string
   templates: number
 }
 

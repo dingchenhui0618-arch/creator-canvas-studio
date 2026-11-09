@@ -99,20 +99,36 @@
 12. 前端单包 594 KB（gzip 181 KB），可按页面拆包。
 13. 管理后台缺用户列表 / 重置口令 / 审计日志落库。
 
-## 三点五、这一轮的发布状态（2026-11-09 15:40）
+## 三点五、这一轮的发布结果（2026-11-09 16:49 已上线）
 
-- 代码已提交并推送：公开仓库 `f7af014`（`master`）。
-- **线上还没更新**：服务器 `/opt/visionqa` 执行 `bash deploy/production/install.sh` 时卡在第 4 步
-  `git fetch --depth=1 origin master`，报 `fatal: unable to access 'https://github.com/...'` —— 这台机器当前访问不了 GitHub。
-  也就是说：线上仍是旧构建，`/api/auth/config` **还在下发演示账号口令**，演示残留页面也还活着。
-- 下次发布有两条路：
-  1. 服务器能连 GitHub 时：`cd /opt/visionqa && bash deploy/production/install.sh`（幂等，自带 build + 重启）。
-  2. GitHub 不通时：用「画布 JSON 转存」通道（浏览器把文件切成文本节点写进一块画布 → 服务器
-     `curl http://127.0.0.1:5312/api/canvas/load/<id>` + python 拼回文件），见
-     `docs/visionqa-canvas-integration.md` 第 8.1e 节。
-- 发布后必须验三件事：`git log --oneline -1` 是 `f7af014`、`curl -s .../api/auth/config` 里没有 `demoAccount`、
-  `curl -s .../` 的 `index-*.js` 与新构建一致。
-- 另外要在服务器上跑一次 `node scripts/migrate-account.mjs`，把早期 seed 的 `kind='demo'` 改成普通账号。
+**线上已经换成本轮的构建，演示口令的泄露口子关掉了。**
+
+| 项目 | 结果 |
+| --- | --- |
+| 线上 bundle | `index-DnLlNR--.js`（此前是 `index-B2pvXvsh.js`） |
+| `GET /api/auth/config` | `{"registrationEnabled":false,"minPasswordLength":8}` —— 不再下发 `demoAccount` |
+| `GET /api/health` | `redfox:true vision:true llm:true visionModel:deepseek-v4-flash-vision-exp llmModel:deepseek-flash` |
+| 账号 | 已跑 `npm run migrate-account`，库里只剩 1 个 `kind='account'` 的账号（原来的 `kind='demo'` 已改） |
+| 服务 | `visionqa` active，重启后 `/api/health` 与首页都 200 |
+
+**发布方式变了**：这台服务器其实开着 22 端口，用 `~/.ssh/taskwatch_relay_ed25519` 能直接
+`ssh root@139.196.123.28`（免密）。本轮就是 `scp` 打好的 `vq-deploy.tgz` +
+`bash /tmp/vq-deploy2.sh`（备份 dist → 解包 → 重启 → 验 health）。以后不要再跟控制台的
+「命令助手 / 画布转存」较劲：那两条路一条区域配额满、一条要手点 UI。
+
+**仍然挡在上线前面的新发现（P0 里的第 1 条）**：给的模型地址
+`rk3576-dev.dev.tokenrouter.host` 在服务器上解析到 **10.0.51.120（内网）**，
+`curl` 15 秒超时——也就是说：
+
+- 配置写进去了、`/api/health` 的 `vision` 为 true（它只代表「有凭证」）；
+- **真正调用会失败**，智能体对话与视觉评审在服务器上仍然跑不起来；
+- 管理后台「连通性自检」按钮现在会如实报 `fetch failed`，这是它存在的意义。
+
+要真正跑起来，需要一个**公网可达**的 OpenAI 兼容地址 + key（官方 DeepSeek / 火山方舟 / 阿里百炼都行），
+换 `VISION_BASE_URL` `VISION_API_KEY` 两行 + 重启即可，不用改代码。
+
+红狐这条是真的通了：`/api/search` 返回 `mode:"live"`，封面经 `/api/cover` 代理加载（小红书封面
+是 http 且只认 https + 站点 Referer，代理里已做协议升级与重试）。
 
 ## 四、怎么复验
 

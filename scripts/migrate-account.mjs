@@ -1,6 +1,7 @@
 // 一次性迁移：把早期 seed 出来的「演示账号」改成普通账号。
 // 早期版本 seed 的账号 kind='demo'，界面上会显示成「演示账号」；上线后不应再出现这个词。
-// 用法（在 /opt/visionqa 下）：node scripts/migrate-account.mjs [新显示名]
+// 用法（在 /opt/visionqa 下）：npm run migrate-account [-- 新显示名]
+// Node 22 的 node:sqlite 还是要带 --experimental-sqlite，所以走 package.json 里的这条命令。
 import fs from 'node:fs'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'

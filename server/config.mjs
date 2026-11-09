@@ -34,6 +34,18 @@ function readLocalToken() {
   }
 }
 
+const splitList = (value) =>
+  String(value || '')
+    .split(/[\n,]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+
+// 文本与视觉共用同一个 OpenAI 兼容 baseUrl，换供应商只改环境变量
+const visionBaseUrl = (process.env.VISION_BASE_URL || 'http://127.0.0.1:10100/v1').trim().replace(/\/+$/, '')
+// 只有本机 OpenCodex 才允许拿 ~/.codex/auth.json 的 token 兜底；
+// 换成远端 baseUrl 时绝不把本机凭证发出去。
+const visionBaseIsLocal = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?(\/|$)/.test(visionBaseUrl)
+
 export const config = {
   port: Number(process.env.API_PORT || 8787),
   dataDir,
@@ -45,12 +57,20 @@ export const config = {
     baseUrl: process.env.REDFOX_BASE_URL || 'https://redfox.hk',
     source: 'paperplane-radar/0.1',
   },
+  // 纯文本：智能体对话、模板标题、画布节点这类只用文字的调用
+  llm: {
+    model: (process.env.LLM_MODEL || '').trim() || 'deepseek-flash',
+    fallbacks: splitList(process.env.LLM_FALLBACKS),
+  },
+  // 多模态：抽帧评审必须能读图。文本模型和视觉模型分开配——
+  // 便宜的快模型能聊天但看不了图，混用会静默失败。
   vision: {
-    baseUrl: process.env.VISION_BASE_URL || 'http://127.0.0.1:10100/v1',
-    model: process.env.VISION_MODEL || 'gpt-6.1-sol',
-    fallbacks: (process.env.VISION_FALLBACKS || 'gpt-6-luna,tokenrouter-agent/grok-4.6,gpt-6.1-terra,gpt-6-sol').split(',').map((item) => item.trim()).filter(Boolean),
+    baseUrl: visionBaseUrl,
+    model: (process.env.VISION_MODEL || '').trim() || 'deepseek-v4-flash-vision-exp',
+    models: splitList(process.env.VISION_MODELS),
+    fallbacks: splitList(process.env.VISION_FALLBACKS),
     timeoutMs: Number(process.env.VISION_TIMEOUT_MS || 300000),
-    apiKey: (process.env.VISION_API_KEY || '').trim() || readLocalToken(),
+    apiKey: (process.env.VISION_API_KEY || '').trim() || (visionBaseIsLocal ? readLocalToken() : ''),
   },
   limits: {
     maxVideoMb: Number(process.env.MAX_VIDEO_MB || 160),

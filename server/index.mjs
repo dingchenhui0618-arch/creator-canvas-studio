@@ -60,17 +60,48 @@ async function serveFile(res, file) {
   }
 }
 
+const IMAGE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122 Safari/537.36'
+
+// 小红书 / 抖音的封面常以 http 下发，而 CDN 只认 https + 对应站点的 Referer（实测 http 直连 403、https 200）。
+// 所以先按原样试，失败再把协议升到 https 重试，都失败才返回 404。
+async function fetchCoverImage(url) {
+  const referer = /xhscdn|xiaohongshu/.test(url.host)
+    ? 'https://www.xiaohongshu.com'
+    : /douyinpic|douyin/.test(url.host)
+      ? 'https://www.douyin.com'
+      : url.origin
+  const attempt = async (target) => {
+    const response = await fetch(target, {
+      headers: { Referer: referer, 'User-Agent': IMAGE_UA },
+      signal: AbortSignal.timeout(15000),
+    })
+    const type = response.headers.get('content-type') || ''
+    if (!response.ok || !type.startsWith('image/')) return null
+    const buffer = Buffer.from(await response.arrayBuffer())
+    if (buffer.length > 8 * 1024 * 1024) return null
+    return { type, buffer }
+  }
+  const candidates = [url]
+  if (url.protocol === 'http:') candidates.push(new URL('https://' + url.host + url.pathname + url.search))
+  for (const candidate of candidates) {
+    try {
+      const hit = await attempt(candidate)
+      if (hit) return hit
+    } catch {
+      // 换下一个候选
+    }
+  }
+  return null
+}
+
 async function proxyImage(res, target) {
   try {
     const url = new URL(target)
     if (!/^https?:$/.test(url.protocol)) throw new Error('bad protocol')
-    const response = await fetch(url, { headers: { Referer: url.origin, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122 Safari/537.36' } })
-    const type = response.headers.get('content-type') || ''
-    if (!response.ok || !type.startsWith('image/')) throw new Error('not an image')
-    const buffer = Buffer.from(await response.arrayBuffer())
-    if (buffer.length > 8 * 1024 * 1024) throw new Error('too large')
-    res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'public, max-age=86400' })
-    res.end(buffer)
+    const hit = await fetchCoverImage(url)
+    if (!hit) throw new Error('not an image')
+    res.writeHead(200, { 'Content-Type': hit.type, 'Cache-Control': 'public, max-age=86400' })
+    res.end(hit.buffer)
   } catch {
     res.writeHead(404, { 'Content-Type': 'text/plain' })
     res.end('image unavailable')
@@ -139,9 +170,90 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true, ...modelCatalog() })
     }
 
+    if (pathname === '/api/config') {
+      // 只在登录后可见：凭证一律脱敏，只回答「配了什么、几位、末四位」
+      const mask = (key) => {
+        const value = String(key || '')
+        if (!value) return ''
+        if (value.length <= 8) return '****'
+        return '****' + value.slice(-4) + ' · ' + value.length + ' 位'
+      }
+      return sendJson(res, 200, {
+        ok: true,
+        vision: {
+          enabled: visionEnabled(),
+          baseUrl: config.vision.baseUrl,
+          model: config.vision.model,
+          models: config.vision.models,
+          fallbacks: config.vision.fallbacks,
+          apiKeyMasked: mask(config.vision.apiKey),
+          timeoutMs: config.vision.timeoutMs,
+        },
+        llm: { enabled: visionEnabled(), model: config.llm.model, fallbacks: config.llm.fallbacks },
+        redfox: {
+          enabled: redfoxEnabled(),
+          baseUrl: config.redfox.baseUrl,
+          apiKeyMasked: mask(config.redfox.key),
+          source: config.redfox.source,
+        },
+        remote: { enabled: config.remote.enabled, label: config.remote.label },
+        limits: { maxVideoMb: config.limits.maxVideoMb, maxFrames: config.limits.maxFrames },
+        // 「再接一个 key」只动这些环境变量，改完重启服务即可，代码里没有第二处要改
+        envKeys: [
+          { key: 'VISION_BASE_URL', purpose: '模型接口地址（OpenAI 兼容 /v1）', current: config.vision.baseUrl },
+          { key: 'VISION_API_KEY', purpose: '模型密钥（文本与视觉共用）', current: mask(config.vision.apiKey) },
+          { key: 'LLM_MODEL', purpose: '文本模型（智能体对话、模板标题）', current: config.llm.model },
+          { key: 'VISION_MODEL', purpose: '多模态模型（抽帧评审，必须能读图）', current: config.vision.model },
+          { key: 'VISION_MODELS', purpose: '界面上可选的模型清单（逗号分隔）', current: config.vision.models.join(',') },
+          { key: 'VISION_FALLBACKS', purpose: '视觉调用失败时的降级链', current: config.vision.fallbacks.join(',') },
+          { key: 'LLM_FALLBACKS', purpose: '文本调用失败时的降级链', current: config.llm.fallbacks.join(',') },
+          { key: 'REDFOX_API_KEY', purpose: '红狐检索密钥（抖音 / 小红书）', current: mask(config.redfox.key) },
+          { key: 'REDFOX_BASE_URL', purpose: '红狐接口地址', current: config.redfox.baseUrl },
+          { key: 'REPLICATE_REMOTE_URL', purpose: '远端算力地址，不填就走本机 ffmpeg', current: config.remote.enabled ? '已配置' : '' },
+          { key: 'MAX_VIDEO_MB', purpose: '单条视频体积上限', current: String(config.limits.maxVideoMb) },
+          { key: 'MAX_FRAMES', purpose: '每条视频抽帧数上限', current: String(config.limits.maxFrames) },
+        ],
+      })
+    }
+
+    if (pathname === '/api/config/probe' && req.method === 'POST') {
+      // 真实探活：拿当前 key 打一次上游 /models，回答「这个 key 现在能不能用」。只列模型，不产生推理费用。
+      if (!visionEnabled()) return sendJson(res, 400, { ok: false, error: '未配置 VISION_API_KEY' })
+      try {
+        const response = await fetch(config.vision.baseUrl + '/models', {
+          headers: { Authorization: 'Bearer ' + config.vision.apiKey },
+          signal: AbortSignal.timeout(12000),
+        })
+        const text = await response.text()
+        let ids = []
+        try {
+          ids = (JSON.parse(text).data || []).map((item) => item.id).filter(Boolean)
+        } catch {
+          ids = []
+        }
+        return sendJson(res, 200, {
+          ok: response.ok,
+          status: response.status,
+          count: ids.length,
+          models: ids.slice(0, 40),
+          body: response.ok ? undefined : text.slice(0, 200),
+        })
+      } catch (error) {
+        return sendJson(res, 502, { ok: false, error: String(error?.message || error).slice(0, 200) })
+      }
+    }
+
     if (pathname === '/api/health') {
       const stats = await templateStats()
-      return sendJson(res, 200, { ok: true, redfox: redfoxEnabled(), vision: visionEnabled(), visionModel: config.vision.model, templates: stats.total })
+      return sendJson(res, 200, {
+        ok: true,
+        redfox: redfoxEnabled(),
+        vision: visionEnabled(),
+        visionModel: config.vision.model,
+        llm: visionEnabled(),
+        llmModel: config.llm.model,
+        templates: stats.total,
+      })
     }
 
     if (pathname === '/api/search') {

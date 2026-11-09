@@ -4,7 +4,9 @@ import { config, visionEnabled } from './config.mjs'
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 export function modelChain() {
-  return [config.vision.model, ...config.vision.fallbacks].filter(Boolean)
+  // 文本模型优先；LLM_* 没配时退回视觉链（很多多模态模型聊天一样好用）
+  const text = [config.llm.model, ...config.llm.fallbacks].filter(Boolean)
+  return text.length ? text : [config.vision.model, ...config.vision.fallbacks].filter(Boolean)
 }
 
 export function llmEnabled() {
@@ -29,9 +31,17 @@ async function callOnce(messages, model, { temperature = 0.3, maxTokens = 2000 }
       throw error
     }
     const json = JSON.parse(text)
-    const content = json?.choices?.[0]?.message?.content
-    if (!content) throw new Error('模型 ' + model + ' 没有返回内容')
-    return { text: String(content), model }
+    const message = json?.choices?.[0]?.message || {}
+    const content = String(message.content || '').trim()
+    // 推理型模型偶发把整段输出塞进 reasoning_content、content 为空：
+    // 换下一个候选模型，绝不把思考过程当答案返回。
+    if (!content) {
+      throw Object.assign(
+        new Error('模型 ' + model + (message.reasoning_content ? ' 只返回了推理过程（content 为空）' : ' 没有返回内容')),
+        { retryable: true },
+      )
+    }
+    return { text: content, model }
   } finally {
     clearTimeout(timer)
   }

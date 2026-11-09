@@ -32,6 +32,8 @@ _probe_*.mjs
 .env
 .env.*
 !.env.example
+# 合并到服务器的密钥文件（本轮接入生成，含真实 key）
+deploy/env.applied
 
 # 协作过程中的临时截图
 docs/_wip/

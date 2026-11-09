@@ -7,6 +7,9 @@ const DOWNLOAD_ENDPOINTS = {
   xiaohongshu: '/story/api/parseWork/videoDownload/xiaohongshu',
 }
 
+// 红狐返回的封面常是 http，前端是 https 页面；这里先升级协议，代理层不再走一次 403
+const httpsify = (value) => String(value || '').replace(/^http:\/\//i, 'https://')
+
 const pick = (obj, keys, fallback = '') => {
   for (const key of keys) {
     const value = obj?.[key]
@@ -35,17 +38,22 @@ const slug = (text, index) => {
 
 export function normalizeDouyin(raw, index = 0) {
   const url = pick(raw, ['opusUrl', 'workUrl', 'shareUrl', 'url'])
+  // 红狐的 duration 是毫秒（68568 = 68.6 秒），统一折成秒
+  const seconds = toNumber(pick(raw, ['duration', 'durationSec'], 0))
   return {
-    id: pick(raw, ['awemeId', 'itemId', 'id']) || slug(url, index),
+    id: pick(raw, ['awemeId', 'videoId', 'itemId', 'id']) || slug(url, index),
     platform: 'douyin',
     platformLabel: '抖音',
     title: pick(raw, ['content', 'title', 'desc']).trim(),
     author: pick(raw, ['authorName', 'nickname', 'author']),
-    authorId: pick(raw, ['authorId', 'secUid', 'uid']),
-    cover: pick(raw, ['cover', 'coverUrl', 'imageUrl', 'cover_url']),
+    authorId: pick(raw, ['authorId', 'secUid', 'uid', 'authorUid']),
+    authorFans: toNumber(pick(raw, ['authorFansCount', 'fansCount'], 0)) || null,
+    avatar: pick(raw, ['authorAvatarUrl', 'avatar']),
+    tags: Array.isArray(raw?.tagList) ? raw.tagList.map((tag) => String(tag?.tagName || tag?.name || tag)).filter(Boolean).slice(0, 8) : [],
+    cover: httpsify(pick(raw, ['cover', 'coverUrl', 'imageUrl', 'cover_url'])),
     url,
     publishedAt: pick(raw, ['publishTime', 'createTime', 'publish_time']),
-    durationSec: toNumber(pick(raw, ['duration', 'durationSec'], 0)) || null,
+    durationSec: seconds > 1000 ? Math.round(seconds / 1000) : seconds || null,
     stats: {
       likes: toNumber(pick(raw, ['likeCount', 'diggCount', 'likes'], 0)),
       comments: toNumber(pick(raw, ['commentCount', 'comments'], 0)),
@@ -57,23 +65,28 @@ export function normalizeDouyin(raw, index = 0) {
 }
 
 export function normalizeXhs(raw, index = 0) {
-  const url = pick(raw, ['noteUrl', 'url', 'link', 'shareUrl'])
+  // 红狐小红书的原文链接字段叫 shareInfoLink；评论/转发是复数形式（commentsCount / sharedCount）
+  const url = pick(raw, ['noteUrl', 'shareInfoLink', 'url', 'link', 'shareUrl'])
   return {
     id: pick(raw, ['noteId', 'id']) || slug(url, index),
     platform: 'xiaohongshu',
     platformLabel: '小红书',
-    title: pick(raw, ['title', 'displayTitle', 'content', 'desc']).trim(),
-    author: pick(raw, ['authorName', 'nickname', 'userName', 'author']),
+    title: pick(raw, ['title', 'displayTitle', 'desc', 'content']).trim(),
+    author: pick(raw, ['authorNickname', 'authorName', 'nickname', 'userName', 'author']),
     authorId: pick(raw, ['authorId', 'userId', 'uid']),
-    cover: pick(raw, ['cover', 'coverUrl', 'image', 'imageUrl']),
+    authorFans: toNumber(pick(raw, ['authorFans', 'fansCount'], 0)) || null,
+    avatar: pick(raw, ['authorAvatar', 'avatar']),
+    tags: [],
+    cover: httpsify(pick(raw, ['cover', 'coverUrl', 'image', 'imageUrl'])),
     url,
     publishedAt: pick(raw, ['publishTime', 'createTime', 'publish_time']),
     durationSec: toNumber(pick(raw, ['duration', 'videoDuration'], 0)) || null,
     stats: {
-      likes: toNumber(pick(raw, ['likeCount', 'likedCount', 'likes'], 0)),
-      comments: toNumber(pick(raw, ['commentCount', 'comments'], 0)),
-      shares: toNumber(pick(raw, ['shareCount', 'shareCount'], 0)),
-      collects: toNumber(pick(raw, ['collectCount', 'collectedCount', 'collects'], 0)),
+      likes: toNumber(pick(raw, ['likedCount', 'likeCount', 'likes'], 0)),
+      comments: toNumber(pick(raw, ['commentsCount', 'commentCount', 'comments'], 0)),
+      shares: toNumber(pick(raw, ['sharedCount', 'shareCount', 'shares'], 0)),
+      collects: toNumber(pick(raw, ['collectedCount', 'collectCount', 'collects'], 0)),
+      interactions: toNumber(pick(raw, ['interactiveCount'], 0)) || null,
     },
     mock: false,
   }

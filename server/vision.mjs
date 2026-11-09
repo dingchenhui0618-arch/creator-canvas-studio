@@ -49,9 +49,12 @@ async function callModel(messages, model) {
       throw error
     }
     const json = JSON.parse(text)
-    const content = json?.choices?.[0]?.message?.content
-    if (!content) throw new Error('视觉模型没有返回内容')
-    return String(content)
+    const message = json?.choices?.[0]?.message || {}
+    // 推理型多模态模型可能把 JSON 写进 reasoning_content（content 为空），
+    // 这里兜住；真正的解析失败会由外层追加修复指令重试。
+    const content = String(message.content || '').trim() || String(message.reasoning_content || '').trim()
+    if (!content) throw Object.assign(new Error('视觉模型 ' + model + ' 没有返回内容'), { retryable: true })
+    return content
   } finally {
     clearTimeout(timer)
   }

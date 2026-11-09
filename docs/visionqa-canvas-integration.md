@@ -162,6 +162,28 @@ GitHub 从这台机器时常拉不动（`Failure when receiving data from the pe
 
 一条 `/api/canvas/save` 走完 240KB gz 只要一次请求，不丢片、不走公网。
 
+### 8.1f 现在最快的部署通道：SSH + scp（2026-11-09 16:49 实测）
+
+折腾完「命令助手」和「画布转存」才发现最简单的路一直在：**这台服务器的 22 端口是开的**，
+`~/.ssh/taskwatch_relay_ed25519` 就是当年那条 `taskwatch-relay` 命令装上去的免密钥。
+
+```bash
+# 本机打包（只要 dist / server / scripts / package.json / 两个 deploy 文件）
+tar -czf vq-deploy.tgz dist server scripts package.json deploy/env.applied deploy/production/apply-env.sh
+scp -i ~/.ssh/taskwatch_relay_ed25519 vq-deploy.tgz root@139.196.123.28:/tmp/vq.tgz
+ssh -i ~/.ssh/taskwatch_relay_ed25519 root@139.196.123.28 'bash /tmp/vq-deploy2.sh'
+```
+
+服务器上的 `vq-deploy2.sh` 做四件事：`cp -a dist dist.bak-<时间戳>` → `tar xzf` → `systemctl restart visionqa`
+→ 打 `/api/health` 与首页 `index-*.js`。**先备份再解包再重启**，任何一步失败都不会把服务停在半截。
+
+密钥合并走 `bash deploy/production/apply-env.sh`：把 `deploy/env.applied` 里的键写进 `.env`，
+同名旧行先删掉，并留 `.env.bak-<时间戳>`。`deploy/env.applied` 已在 `.gitignore` 里，永远不入库。
+
+顺带两条踩坑：`node:sqlite` 在 Node 22 要 `--experimental-sqlite`（`npm run adduser` /
+`npm run migrate-account` 已带上）；控制台的「命令助手」在这台实例上**根本没装 agent**，
+新建命令还会被区域配额挡住，别再把时间花在那里。
+
 ### 8.2 部署载荷走 ntfy 公有主题：规则与收尾
 
 服务器上没有 SSH，无法 git pull（GitHub 在该机器上时通时不通，实测 `Failure when receiving data from the peer`），所以改用「ntfy 公有主题 + base64 分片 + `setsid nohup`」把文件送上去：

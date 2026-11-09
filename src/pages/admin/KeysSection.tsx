@@ -1,12 +1,35 @@
 import { useState } from 'react'
 import docUrl from '../../../docs/replication-pipeline.md?url'
-import { useApi, type Health } from './data'
+import { request } from '../../api/client'
+import { useApi } from './data'
 import { AdminHead, Badge, ErrorBanner, LoadingLine, RefreshButton, SourceTag } from './ui'
 
 const DOC_PATH = 'docs/replication-pipeline.md'
 
+type ProviderConfig = {
+  ok: boolean
+  vision: {
+    enabled: boolean
+    baseUrl: string
+    model: string
+    models: string[]
+    fallbacks: string[]
+    apiKeyMasked: string
+    timeoutMs: number
+  }
+  llm: { enabled: boolean; model: string; fallbacks: string[] }
+  redfox: { enabled: boolean; baseUrl: string; apiKeyMasked: string; source: string }
+  remote: { enabled: boolean; label: string }
+  limits: { maxVideoMb: number; maxFrames: number }
+  envKeys: { key: string; purpose: string; current: string }[]
+}
+
+type Probe = { ok: boolean; status?: number; count?: number; models?: string[]; error?: string }
+
 export default function KeysSection() {
-  const health = useApi<Health>('/api/health')
+  const config = useApi<ProviderConfig>('/api/config')
+  const [probe, setProbe] = useState<Probe | null>(null)
+  const [probing, setProbing] = useState(false)
   const [copied, setCopied] = useState('')
 
   const copyDocPath = async () => {
@@ -18,132 +41,174 @@ export default function KeysSection() {
     }
   }
 
+  const runProbe = async () => {
+    setProbing(true)
+    setProbe(null)
+    try {
+      const result = await request<Probe>('/api/config/probe', { method: 'POST' })
+      setProbe(result)
+    } catch (cause) {
+      setProbe({ ok: false, error: cause instanceof Error ? cause.message : '探测失败' })
+    } finally {
+      setProbing(false)
+    }
+  }
+
+  const data = config.data
+
   return (
     <>
       <AdminHead
         kicker="ADMIN / KEYS"
         title="模型与密钥"
-        description="只读状态视图：只发起 /api/health 请求，不读取、不展示任何密钥值，也不向外部模型发起调用。"
-        actions={<RefreshButton onClick={health.reload} busy={health.loading} />}
+        description="读服务端当前生效的配置：模型、地址、凭证末四位。凭证值本身永不下发，只回答「配了没有、几位」。"
+        actions={<RefreshButton onClick={config.reload} busy={config.loading} />}
       />
 
-      {health.error ? <ErrorBanner message={`GET /api/health：${health.error}`} onRetry={health.reload} /> : null}
-      {health.loading && !health.data ? <LoadingLine label="/api/health" /> : null}
+      {config.error ? <ErrorBanner message={`GET /api/config：${config.error}`} onRetry={config.reload} /> : null}
+      {config.loading && !data ? <LoadingLine label="/api/config" /> : null}
 
-      {health.data ? (
-        <section className="admin-card admin-block">
-          <div className="admin-block-head">
-            <div>
-              <p className="admin-label">配置状态</p>
-              <p className="admin-sub">服务端只返回布尔值；本页不接触 .env 内容。</p>
+      {data ? (
+        <>
+          <section className="admin-card admin-block">
+            <div className="admin-block-head">
+              <div>
+                <p className="admin-label">当前生效的接入</p>
+                <p className="admin-sub">
+                  文本与视觉分开配置：便宜的快模型能聊天，但它看不了图，抽帧评审必须走多模态模型。
+                  「已配置」只说明服务端拿到了凭证，能不能通信要看下面的自检。
+                </p>
+              </div>
+              <SourceTag kind="api" source="GET /api/config" />
             </div>
-            <SourceTag kind="api" source="GET /api/health" />
-          </div>
 
-          <div className="admin-table-wrap">
-            <table className="admin-table">
-              <thead>
-                <tr>
-                  <th>能力</th>
-                  <th>配置</th>
-                  <th>可用状态</th>
-                  <th>来源</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>
-                    <strong>红狐检索</strong>
-                    <span className="admin-cell-sub">RedFox · 抖音 / 小红书素材</span>
-                  </td>
-                  <td>
-                    <Badge tone={health.data.redfox ? 'ok' : 'warn'}>
-                      {health.data.redfox ? '已配置' : '未配置'}
-                    </Badge>
-                  </td>
-                  <td>
-                    <Badge tone="neutral">调用时才知道</Badge>
-                    <span className="admin-cell-sub">
-                      配额、频控与 Key 状态由红狐侧决定；调用失败会回退示例数据并标注。
-                    </span>
-                  </td>
-                  <td className="admin-mono">/api/health → redfox={String(health.data.redfox)}</td>
-                </tr>
-                <tr>
-                  <td>
-                    <strong>视觉模型</strong>
-                    <span className="admin-cell-sub">Vision · 截图评审与模板解析</span>
-                  </td>
-                  <td>
-                    <Badge tone={health.data.vision ? 'ok' : 'warn'}>
-                      {health.data.vision ? '已配置' : '未配置'}
-                    </Badge>
-                  </td>
-                  <td>
-                    <Badge tone="neutral">已配置 · 未调用验证</Badge>
-                    <span className="admin-cell-sub">health 只证明配置存在，本页不发起模型请求。</span>
-                  </td>
-                  <td className="admin-mono">
-                    /api/health → vision={String(health.data.vision)} · {health.data.visionModel || '—'}
-                  </td>
-                </tr>
-                <tr>
-                  <td>
-                    <strong>模板库</strong>
-                    <span className="admin-cell-sub">本地 JSON + 抽帧目录</span>
-                  </td>
-                  <td>
-                    <Badge tone="ok">可用</Badge>
-                  </td>
-                  <td>
-                    <span className="admin-mono">{health.data.templates} 条</span>
-                  </td>
-                  <td className="admin-mono">/api/health → templates</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+            <div className="admin-table-wrap">
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>能力</th>
+                    <th>状态</th>
+                    <th>当前配置</th>
+                    <th>凭证</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>
+                      <strong>文本模型</strong>
+                      <span className="admin-cell-sub">智能体对话、模板标题、画布节点</span>
+                    </td>
+                    <td>
+                      <Badge tone={data.llm.enabled ? 'ok' : 'warn'}>{data.llm.enabled ? '已配置' : '未配置'}</Badge>
+                    </td>
+                    <td className="admin-mono">{data.llm.model}</td>
+                    <td className="admin-mono">与视觉共用同一把 key</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <strong>多模态模型</strong>
+                      <span className="admin-cell-sub">抽帧评审 / 模板解析（要能读图）</span>
+                    </td>
+                    <td>
+                      <Badge tone={data.vision.enabled ? 'ok' : 'warn'}>{data.vision.enabled ? '已配置' : '未配置'}</Badge>
+                    </td>
+                    <td className="admin-mono">
+                      {data.vision.model}
+                      <span className="admin-cell-sub">{data.vision.baseUrl}</span>
+                    </td>
+                    <td className="admin-mono">{data.vision.apiKeyMasked || '—'}</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <strong>红狐检索</strong>
+                      <span className="admin-cell-sub">抖音 / 小红书真实素材</span>
+                    </td>
+                    <td>
+                      <Badge tone={data.redfox.enabled ? 'ok' : 'warn'}>{data.redfox.enabled ? '已配置' : '未配置'}</Badge>
+                    </td>
+                    <td className="admin-mono">{data.redfox.baseUrl}</td>
+                    <td className="admin-mono">{data.redfox.apiKeyMasked || '—'}</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <strong>远端算力</strong>
+                      <span className="admin-cell-sub">解析 / 抽帧是否交给远端</span>
+                    </td>
+                    <td>
+                      <Badge tone={data.remote.enabled ? 'ok' : 'neutral'}>{data.remote.enabled ? '已接入' : '本机执行'}</Badge>
+                    </td>
+                    <td className="admin-mono">{data.remote.enabled ? data.remote.label : '本机 ffmpeg'}</td>
+                    <td className="admin-mono">上限 {data.limits.maxVideoMb} MB / {data.limits.maxFrames} 帧</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
 
-          <p className="admin-hint">
-            health 只回答「有没有配置」，不回答「调用是否成功」。红狐 Key 被禁用（3105）或积分不足时，检索接口会返回示例数据并在界面上标注，不冒充真实结果。
-          </p>
-        </section>
+            <div className="admin-doc-actions">
+              <button type="button" className="admin-btn admin-btn--ghost" onClick={runProbe} disabled={probing || !data.vision.enabled}>
+                {probing ? '探测中…' : '连通性自检'}
+              </button>
+              {probe ? (
+                <Badge tone={probe.ok ? 'ok' : 'fail'}>
+                  {probe.ok
+                    ? `可用 · 上游 ${probe.count ?? 0} 个模型`
+                    : `不可用${probe.status ? ' · HTTP ' + probe.status : ''}${probe.error ? ' · ' + probe.error : ''}`}
+                </Badge>
+              ) : null}
+            </div>
+            <p className="admin-hint">
+              自检只请求上游 <code>/models</code>（列模型，不产生推理费用），用真实 key 判断「现在通不通」，不把配置存在当成可用。
+            </p>
+          </section>
+
+          <section className="admin-card admin-block">
+            <div className="admin-block-head">
+              <div>
+                <p className="admin-label">接入清单</p>
+                <p className="admin-sub">再接一把 key 就是改这里的一行，重启服务生效，代码里没有第二处要改。</p>
+              </div>
+              <SourceTag kind="local" source={DOC_PATH} />
+            </div>
+
+            <div className="admin-table-wrap">
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>环境变量</th>
+                    <th>用途</th>
+                    <th>当前值</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.envKeys.map((item) => (
+                    <tr key={item.key}>
+                      <td className="admin-mono">{item.key}</td>
+                      <td>{item.purpose}</td>
+                      <td className="admin-mono">{item.current || <span className="admin-cell-sub">未设置</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="admin-doc-row">
+              <code>{DOC_PATH}</code>
+              <div className="admin-doc-actions">
+                <button type="button" className="admin-btn admin-btn--ghost" onClick={copyDocPath}>
+                  复制路径
+                </button>
+                <a className="admin-btn admin-btn--ghost" href={docUrl} target="_blank" rel="noreferrer">
+                  打开文档
+                </a>
+              </div>
+            </div>
+            {copied ? <p className="admin-hint">{copied}</p> : null}
+            <p className="admin-hint">
+              改完 .env 执行 <code>sudo systemctl restart visionqa</code>；模型下拉框读 <code>/api/models</code>，清单变化会自动出现。
+            </p>
+          </section>
+        </>
       ) : null}
-
-      <section className="admin-card admin-block">
-        <div className="admin-block-head">
-          <div>
-            <p className="admin-label">配置文档</p>
-            <p className="admin-sub">环境变量、频控与 3105 的说明都在仓库文档里；页面只给路径，不展示值。</p>
-          </div>
-          <SourceTag kind="local" source="docs/replication-pipeline.md" />
-        </div>
-
-        <div className="admin-doc-row">
-          <code>{DOC_PATH}</code>
-          <div className="admin-doc-actions">
-            <button type="button" className="admin-btn admin-btn--ghost" onClick={copyDocPath}>
-              复制路径
-            </button>
-            <a className="admin-btn admin-btn--ghost" href={docUrl} target="_blank" rel="noreferrer">
-              打开文档
-            </a>
-          </div>
-        </div>
-        {copied ? <p className="admin-hint">{copied}</p> : null}
-        <p className="admin-hint">
-          文档对应 <code>.env</code> 里的红狐与视觉模型配置；链接指向构建时的文档副本，修改文档后需重新构建才会更新。
-        </p>
-      </section>
-
-      <section className="admin-note">
-        <p>边界</p>
-        <ul>
-          <li>不请求红狐接口、不调用视觉模型，避免用一次真实调用去「证明」状态。</li>
-          <li>不展示任何 key 值，也不展示脱敏片段；只显示「已配置 / 未配置」。</li>
-          <li>3105 与频控说明以服务端实现为准，页面不把它包装成「已是最新」之类的假状态。</li>
-        </ul>
-      </section>
     </>
   )
 }
