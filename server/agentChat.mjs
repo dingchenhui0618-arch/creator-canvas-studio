@@ -87,7 +87,30 @@ function translateUpstreamError(error, attempted) {
   })
 }
 
-function buildMessages(agent, message, outputType) {
+// 会话记忆：只带最近几轮，换算成字符预算，避免多轮对话把上下文顶爆。
+// 只接受 user / assistant 两种角色，system 永远只有服务端这一条。
+const MEMORY_MAX_ITEMS = 8
+const MEMORY_MAX_ITEM_CHARS = 1500
+const MEMORY_MAX_TOTAL_CHARS = 6000
+
+export function normalizeMemory(history) {
+  if (!Array.isArray(history)) return []
+  const items = []
+  let total = 0
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    const entry = history[index]
+    const role = entry?.role === 'assistant' ? 'assistant' : entry?.role === 'user' ? 'user' : ''
+    const content = String(entry?.content || '').trim().slice(0, MEMORY_MAX_ITEM_CHARS)
+    if (!role || !content) continue
+    if (items.length >= MEMORY_MAX_ITEMS) break
+    if (total + content.length > MEMORY_MAX_TOTAL_CHARS) break
+    items.unshift({ role, content })
+    total += content.length
+  }
+  return items
+}
+
+function buildMessages(agent, message, outputType, memory = []) {
   const type = OUTPUT_TYPES.find((item) => item.id === outputType) || OUTPUT_TYPES[0]
   const knowledge = (agent.knowledge || [])
     .map((item) => String(item || '').trim())
@@ -120,11 +143,12 @@ function buildMessages(agent, message, outputType) {
     .join('\n')
   return [
     { role: 'system', content: system },
+    ...memory,
     { role: 'user', content: message },
   ]
 }
 
-export async function chatWithAgent({ agent, message, outputType, model, log }) {
+export async function chatWithAgent({ agent, message, outputType, model, history, log }) {
   if (!llmEnabled() || !visionEnabled()) {
     throw chatError('NO_MODEL', 503, '服务端没有可用的模型凭证，无法调用本地模型', {
       suggestion: '在项目 .env 里配置 VISION_API_KEY，或确认本机 ~/.codex/auth.json 存在；配置后需要重启 API。',
@@ -136,7 +160,8 @@ export async function chatWithAgent({ agent, message, outputType, model, log }) 
       suggestion: '在 .env 里设置 VISION_MODEL 与 VISION_FALLBACKS 后重启 API。',
     })
   }
-  const messages = buildMessages(agent, message, outputType)
+  const memory = normalizeMemory(history)
+  const messages = buildMessages(agent, message, outputType, memory)
   const temperature = Math.max(0, Math.min(1, Number(agent.temperature ?? 0.4)))
   const startedAt = Date.now()
   try {
@@ -154,6 +179,7 @@ export async function chatWithAgent({ agent, message, outputType, model, log }) 
       usage: null,
       attempted: candidates,
       temperature,
+      memory: { turns: Math.ceil(memory.length / 2), messages: memory.length },
     }
   } catch (error) {
     log?.('对话失败：' + String(error?.message || error).slice(0, 200))

@@ -97,7 +97,7 @@
 .vq-task-index {
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.08em;
 }
 
@@ -170,7 +170,7 @@
   background: var(--surface);
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -285,7 +285,7 @@
 
 .vq-template-copy .vq-mono {
   color: var(--faint);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .vq-overview-foot {

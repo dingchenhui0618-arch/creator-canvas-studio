@@ -421,6 +421,12 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
       const activeConversationId = conversationId || nextId()
       const userMessage: ChatMessage = { id: nextId(), role: 'user', content, at: Date.now() }
       const nextMessages = appendUser ? [...messages, userMessage] : messages
+      // 会话记忆：把这一轮之前的对话按 user / assistant 交给服务端，服务端只保留最近几轮
+      const history = nextMessages
+        .slice(0, appendUser ? -1 : undefined)
+        .filter((item) => item.role === 'user' || item.role === 'agent')
+        .slice(-8)
+        .map((item) => ({ role: item.role === 'user' ? ('user' as const) : ('assistant' as const), content: item.content }))
       if (appendUser) {
         setMessages(nextMessages)
         if (!conversationId) setConversationId(activeConversationId)
@@ -434,6 +440,7 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
           message: content,
           outputType,
           model: model || agent.model,
+          history,
         })
         const replyMessage: ChatMessage = {
           id: nextId(),
@@ -676,7 +683,7 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
             <textarea
               ref={draftRef}
               className="agx-textarea"
-              rows={2}
+              rows={3}
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={(event) => {
@@ -694,26 +701,24 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
               }
               disabled={!selectedAgent || loading}
             />
-            <div className="agx-params">
-              <Capsule label="智能体" value={selectedId} options={agentOptions} onChange={selectAgent} disabled={Boolean(pending)} />
-              <Capsule
-                label="输出"
-                value={outputType}
-                options={OUTPUT_TYPES.map((item) => ({ value: item, label: item }))}
-                onChange={(value) => setOutputType(value as OutputType)}
-                disabled={Boolean(pending)}
-              />
-              <Capsule label="模型" value={model} options={modelOptions} onChange={setModel} disabled={Boolean(pending)} title="来自服务端 VISION_MODEL / VISION_FALLBACKS" />
-              <span className="agx-capsule agx-capsule--static" title="对话每次生成 1 条回复">
-                <span>数量</span>
-                <b>1</b>
-              </span>
-            </div>
-            <div className="agx-composer-foot">
-              <span className="agx-hint">Ctrl + Enter 发送 · 真实调用本地模型，失败会显示原因</span>
-              <button className="agx-send" onClick={() => void submit()} disabled={!canSend} aria-label="发送">
-                <ArrowUp size={18} />
-              </button>
+            <div className="agx-composer-bar">
+              <div className="agx-params">
+                <Capsule label="智能体" value={selectedId} options={agentOptions} onChange={selectAgent} disabled={Boolean(pending)} />
+                <Capsule
+                  label="输出"
+                  value={outputType}
+                  options={OUTPUT_TYPES.map((item) => ({ value: item, label: item }))}
+                  onChange={(value) => setOutputType(value as OutputType)}
+                  disabled={Boolean(pending)}
+                />
+                <Capsule label="模型" value={model} options={modelOptions} onChange={setModel} disabled={Boolean(pending)} />
+              </div>
+              <div className="agx-composer-actions">
+                <span className="agx-shortcut">Ctrl + Enter</span>
+                <button className="agx-send" onClick={() => void submit()} disabled={!canSend} aria-label="发送" title="发送（Ctrl + Enter）">
+                  <ArrowUp size={18} />
+                </button>
+              </div>
             </div>
           </div>
         </div>

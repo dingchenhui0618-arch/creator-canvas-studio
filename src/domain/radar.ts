@@ -11,7 +11,8 @@ export type MediaItem = {
   url: string
   publishedAt: string
   durationSec: number | null
-  stats: { likes: number; comments: number; shares: number; collects: number }
+  // plays 只有抖音有；interactions 是小红书自带的互动量。取不到就是 0，不做估算。
+  stats: { plays?: number; likes: number; comments: number; shares: number; collects: number; interactions?: number | null }
   mock?: boolean
 }
 
@@ -62,6 +63,9 @@ export type TemplateAnalysis = {
 export type ReplicaTemplate = {
   thumb?: string
   id: string
+  /** saved：只存了链接与互动数据，还没解析；replica：跑过一键复刻，有脚本与分镜 */
+  kind: 'saved' | 'replica'
+  savedAt?: string
   title: string
   contentType: string
   tags: string[]
@@ -99,4 +103,10 @@ export type ReplicateJob = {
   createdAt: string
 }
 
-export type TemplateList = { items: ReplicaTemplate[]; total: number; byType: Record<string, number> }
+export type TemplateList = {
+  items: ReplicaTemplate[]
+  total: number
+  parsed: number
+  saved: number
+  byType: Record<string, number>
+}

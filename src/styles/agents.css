@@ -65,7 +65,7 @@
   gap: 8px;
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
@@ -142,20 +142,20 @@
   background: var(--line-faint);
   border-radius: 3px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   font-style: normal;
 }
 .agx-mono {
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.03em;
 }
 .agx-kicker {
   display: block;
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -193,7 +193,7 @@
   border-bottom: 1px solid var(--line-faint);
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -230,7 +230,7 @@
   margin-top: 3px;
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 /* ---------- 对话框 ---------- */
@@ -302,7 +302,7 @@
   gap: 8px;
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.02em;
 }
 .agx-msg-meta button {
@@ -314,7 +314,7 @@
   background: none;
   border: 0;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
 }
 .agx-msg-meta button:hover {
   color: var(--ink);
@@ -388,7 +388,7 @@
 .agx-failure small {
   color: var(--fail);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
 }
 .agx-failure > div {
   display: flex;
@@ -401,9 +401,9 @@
   font-size: 12px;
 }
 
-/* composer */
+/* composer：一块卡片，输入区在上，参数与发送收在底部同一行 */
 .agx-composer {
-  padding: 16px 16px 12px;
+  padding: 12px 16px 8px;
   background: var(--surface-raised);
   border: 1px solid var(--line-strong);
   border-radius: 12px;
@@ -420,16 +420,15 @@
 .agx-textarea {
   display: block;
   width: 100%;
-  min-height: 78px;
-  max-height: 220px;
-  padding: 2px 0;
+  min-height: 84px;
+  max-height: 240px;
+  padding: 2px 0 10px;
   color: var(--ink);
   background: transparent;
   border: 0;
   outline: 0;
   resize: none;
-  font: 400 14.5px/1.7 var(--font-ui);
-  letter-spacing: -0.01em;
+  font: 400 15px/1.7 var(--font-ui);
 }
 .agx-textarea::placeholder {
   color: #9b9b9b;
@@ -437,43 +436,48 @@
 .agx-textarea:disabled {
   cursor: not-allowed;
 }
+.agx-composer-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-faint);
+}
 .agx-params {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line-faint);
+  min-width: 0;
 }
 .agx-capsule {
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  height: 28px;
-  padding: 0 8px;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
   color: var(--muted);
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 7px;
+  border-radius: 8px;
 }
 .agx-capsule > span {
   color: var(--faint);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-family: var(--font-ui);
+  font-size: 11.5px;
 }
 .agx-capsule select {
-  max-width: 168px;
-  padding: 0 16px 0 0;
+  max-width: 190px;
+  padding: 0 18px 0 0;
   overflow: hidden;
   color: var(--ink);
   background: transparent;
   border: 0;
   outline: 0;
-  font: 500 11.5px var(--font-ui);
+  font: 500 12.5px var(--font-ui);
   text-overflow: ellipsis;
   cursor: pointer;
 }
@@ -483,31 +487,21 @@
 }
 .agx-capsule svg {
   position: absolute;
-  right: 8px;
+  right: 10px;
   color: var(--faint);
   pointer-events: none;
 }
-.agx-capsule--static {
-  gap: 8px;
-  color: var(--ink);
-}
-.agx-capsule--static b {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 500;
-}
-.agx-composer-foot {
+.agx-composer-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 12px;
+  gap: 10px;
+  margin-left: auto;
 }
-.agx-hint {
+.agx-shortcut {
   color: var(--faint);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.02em;
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  white-space: nowrap;
 }
 .agx-send {
   width: 36px;
@@ -517,7 +511,7 @@
   color: #fff;
   background: var(--ink);
   border: 0;
-  border-radius: 9px;
+  border-radius: 10px;
   transition: background 0.15s ease, opacity 0.15s ease;
 }
 .agx-send:hover:not(:disabled) {
@@ -583,7 +577,7 @@
   margin-left: 4px;
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   font-style: normal;
   font-weight: 400;
 }
@@ -634,7 +628,7 @@
   border: 1px solid var(--line);
   border-radius: 4px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.04em;
 }
 .agx-card-role {
@@ -802,7 +796,7 @@
   gap: 12px;
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -1013,7 +1007,7 @@
   border: 1px solid var(--line-faint);
   border-radius: 4px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
 }
 .agx-side-note {
   display: block;
@@ -1155,7 +1149,7 @@
   background: var(--surface);
   border-bottom: 1px solid var(--line);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.06em;
   text-align: left;

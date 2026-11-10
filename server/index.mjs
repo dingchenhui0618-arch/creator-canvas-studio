@@ -5,7 +5,8 @@ import { config, redfoxEnabled, visionEnabled } from './config.mjs'
 import { searchMedia } from './redfox.mjs'
 import { searchFixtures } from './fixtures.mjs'
 import { startReplicate, getJob } from './jobs.mjs'
-import { listTemplates, getTemplate, reuseTemplate, deleteTemplate, templateStats } from './templates.mjs'
+import { listTemplates, getTemplate, reuseTemplate, deleteTemplate, templateStats, saveTemplateFromItem } from './templates.mjs'
+import { createBillingRouter } from './routes/billing.mjs'
 import { createAgentsRouter } from './routes/agents.mjs'
 import { createFlowsRouter } from './routes/flows.mjs'
 import { createReviewRouter } from './routes/review.mjs'
@@ -16,7 +17,7 @@ import { modelCatalog } from './models.mjs'
 
 // 功能路由：每个模块自己处理 /api/<prefix> 下的请求，index.mjs 只管分发
 // auth 放最前面：/api/auth/* 永远不需要登录就能访问
-const featureRoutes = [createAuthRouter(), createAgentsRouter(), createFlowsRouter(), createReviewRouter()]
+const featureRoutes = [createAuthRouter(), createAgentsRouter(), createFlowsRouter(), createReviewRouter(), createBillingRouter()]
 
 // VQ_REQUIRE_AUTH=1 时，除少数公开端点外所有 /api/* 都要登录。
 // 默认关闭，本地演示不受影响；生产必须打开。
@@ -29,7 +30,8 @@ function needsLogin(pathname) {
 
 const STARTED_AT = new Date().toISOString()
 
-const MIME = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.json': 'application/json' }
+// woff2/woff 必须给字体 MIME，否则浏览器按 octet-stream 直接拒绝加载
+const MIME = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.json': 'application/json', '.woff2': 'font/woff2', '.woff': 'font/woff', '.txt': 'text/plain; charset=utf-8' }
 
 function sendJson(res, status, body) {
   const payload = JSON.stringify(body)
@@ -118,16 +120,19 @@ const server = http.createServer(async (req, res) => {
   const pathname = decodeURIComponent(url.pathname)
 
   try {
+    // 登录门必须排在功能路由前面：featureRoutes 以前放在门之前，VQ_REQUIRE_AUTH=1 时
+    // /api/agents、/api/flows、/api/billing 仍然匿名可读（实测线上 200），等于把智能体提示词和画布流程公开了。
+    // /api/auth/* 已在 PUBLIC_API 里豁免，登录接口不受影响。
+    if (needsLogin(pathname) && !currentUser(req)) {
+      return sendJson(res, 401, { error: '未登录', loginRequired: true })
+    }
+
     for (const route of featureRoutes) {
       const prefixes = [route.prefix, ...(route.extraPrefixes || [])]
       if (prefixes.some((prefix) => pathname === prefix || pathname.startsWith(prefix + '/'))) {
         const handled = await route.handle(req, res, url, pathname)
         if (handled !== false) return
       }
-    }
-
-    if (needsLogin(pathname) && !currentUser(req)) {
-      return sendJson(res, 401, { error: '未登录', loginRequired: true })
     }
 
     if (pathname === '/api/version') {
@@ -310,9 +315,23 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, job)
     }
 
+    // 爆款雷达 → 模板库：只落「链接 + 互动数据」，不下载视频、不抽帧（解析靠一键复刻）
+    if (pathname === '/api/templates/from-radar' && req.method === 'POST') {
+      const body = await readBody(req)
+      const item = body.item || {}
+      if (!item.url) return sendJson(res, 400, { error: '这条内容没有原链接，无法加入模板库' })
+      const result = await saveTemplateFromItem({ item })
+      return sendJson(res, result.created ? 201 : 200, { ...result, ...(await templateStats()) })
+    }
+
     if (pathname === '/api/templates') {
       const stats = await templateStats()
-      const list = await listTemplates({ q: url.searchParams.get('q') || '', contentType: url.searchParams.get('type') || '', platform: url.searchParams.get('platform') || '' })
+      const list = await listTemplates({
+        q: url.searchParams.get('q') || '',
+        contentType: url.searchParams.get('type') || '',
+        platform: url.searchParams.get('platform') || '',
+        kind: url.searchParams.get('kind') || '',
+      })
       return sendJson(res, 200, { items: list, ...stats })
     }
 

@@ -64,6 +64,7 @@ export type AgentChatReply = {
   latencyMs: number
   usage: unknown
   attempted: string[]
+  memory: { turns: number; messages: number }
   outputType: OutputType
   agent: { id: string; name: string; runCount: number; lastRunAt: string | null }
 }
@@ -134,7 +135,12 @@ export const updateAgent = (id: string, input: Partial<AgentInput>) =>
 export const deleteAgent = (id: string) =>
   request<{ ok: boolean; id: string }>('/api/agents/' + id, { method: 'DELETE' })
 
-export const chatWithAgent = (id: string, input: { message: string; outputType: OutputType; model?: string }) =>
+export type ChatMemoryItem = { role: 'user' | 'assistant'; content: string }
+
+export const chatWithAgent = (
+  id: string,
+  input: { message: string; outputType: OutputType; model?: string; history?: ChatMemoryItem[] },
+) =>
   request<AgentChatReply>('/api/agents/' + id + '/chat', {
     method: 'POST',
     body: JSON.stringify({ ...input, count: 1 }),

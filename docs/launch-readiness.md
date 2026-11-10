@@ -153,6 +153,27 @@
 红狐这条是真的通了：`/api/search` 返回 `mode:"live"`，封面经 `/api/cover` 代理加载（小红书封面
 是 http 且只认 https + 站点 Referer，代理里已做协议升级与重试）。
 
+## 三点七、2026-11-10：雷达计费、模板库契约、会话记忆、字体与充值占位（已上线）
+
+这一轮按用户提的五条改，逐条给实测结论：
+
+| 需求 | 做法 | 实测（线上） |
+| --- | --- | --- |
+| 不要在切到爆款雷达时自动检索 | 去掉挂载时的 `runSearch()`，改为 `searched` 状态 + 空状态引导；平台/时间/排序变更也不再触发请求 | 进页面 `performance` 里 `/api/search` 请求数 0；点「检索」后返回 74 条真实小红书数据 |
+| 补点赞 / 收藏 / 转发等重要信息 | `normalizeDouyin/Xhs` 加 `plays`；卡片展示 播放 / 赞 / 藏 / 评 / 转 + 互动率，排序加「按播放 / 按转发」 | 小红书没有播放量 → 该项直接不渲染（不留 0）；抖音有 `playCount` 才显示 |
+| 雷达可加入模板库，模板库不存原视频 | 新增 `POST /api/templates/from-radar`：只落 url、作者、互动数据；`kind:'saved'` 与 `kind:'replica'` 两态；复刻同一条时按 sourceId 升级，不重复占格 | 线上点「加入模板库」→ `/api/templates` 返回 `saved:1`；详情显示「待解析 / 去解析这条」；测试条目已删除，现回到 0 条 |
+| 智能体输入框与发送按钮布局 | 合成一张卡片：textarea 在上，参数胶囊 + 「Ctrl + Enter」+ 发送键收进底部同一行；删掉「数量 1」与「真实调用本地模型」等内部文案 | 卡片高度 209 → 156px，发送键 36×36 与胶囊同排；无 `agx-capsule--static` |
+| 会话记忆 | 前端把最近 8 条对话随请求发出；服务端 `normalizeMemory` 按 8 条 / 6000 字截断后插入 system 之后 | `POST /api/agents/:id/chat` 带 history 实测 1.4s 返回，响应 `memory:{turns:1,messages:2}`，模型能接住上文 |
+| 字体模糊 | 去掉两处 `fonts.googleapis.com` @import；Geist / Geist Mono 拉丁子集自托管（52KB，`font/woff2`）；中文改用系统黑体；10px 微标签统一 11px；删掉 App.css 里那套会覆盖 tokens 的旧 `:root`（`--ink-faint:#9d978b` 只有 2.9:1） | `document.fonts` 只剩 Geist / Geist Mono 两套；首屏不再有外部字体请求 |
+| 充值接口与按钮 | `GET /api/billing/overview`（enabled:false）、`GET /api/billing/orders`（空列表）、`POST /api/billing/orders`（501 BILLING_NOT_CONFIGURED）；设置页新增「充值」卡片与按钮 | overview 200 / 下单 501；按钮 disabled + 文案「充值通道未开通，按钮暂不可用」；**没有任何价格、余额、订单是编的** |
+
+**顺手修掉的线上漏洞**：登录门（`needsLogin`）原来排在功能路由之后，`VQ_REQUIRE_AUTH=1` 时
+`/api/agents`、`/api/flows` 匿名就能 200（智能体系统提示词、画布流程全暴露）。现在门前置，
+匿名一律 401，`/api/auth/*`、`/api/health`、`/api/models` 仍公开。已实测四个端点。
+
+**这一轮之后仍然挡在上线前面的**：模板库 0 条（「一键复刻」仍未跑过一条真实视频，跑通才算闭环）、
+没有队列与配额、没有找回密码与用户列表接口、充值只有空壳接口。
+
 ## 四、怎么复验
 
 ```bash

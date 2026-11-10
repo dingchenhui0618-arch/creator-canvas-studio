@@ -25,16 +25,64 @@ async function persist(list) {
   await fsp.rename(tmp, config.templatesFile)
 }
 
-export async function listTemplates({ q = '', contentType = '', platform = '' } = {}) {
+export async function listTemplates({ q = '', contentType = '', platform = '', kind = '' } = {}) {
   const list = await loadAll()
   const keyword = q.trim()
   return list
+    .filter((item) => (kind ? item.kind === kind : true))
     .filter((item) => (contentType ? item.contentType === contentType : true))
     .filter((item) => (platform ? item.platform === platform : true))
-    .filter((item) => (keyword ? (item.title + item.hook + item.tags.join(' ') + item.analysis.reusableRules.join(' ')).includes(keyword) : true))
+    .filter((item) =>
+      keyword
+        ? (item.title + item.hook + (item.tags || []).join(' ') + (item.analysis?.reusableRules || []).join(' ')).includes(keyword)
+        : true,
+    )
     .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
-    .map((item) => ({ ...item, thumb: item.frames?.[0]?.url || '' }))
+    // 缩略图：解析过的模板用第一帧，只存链接的用平台封面（走 /api/cover 代理）
+    .map((item) => ({ ...item, thumb: item.frames?.[0]?.url || item.cover || '' }))
 }
+
+// 只存「链接 + 互动数据」的条目：在爆款雷达点「加入模板库」立刻落库，
+// 不下载视频、不抽帧、不建本地目录；解析（脚本/分镜）仍然靠「一键复刻」补上。
+export async function saveTemplateFromItem({ item }) {
+  const list = await loadAll()
+  const sourceId = String(item?.id || '')
+  const existing = list.find((entry) => entry.kind === 'saved' && entry.sourceId && entry.sourceId === sourceId)
+  if (existing) return { template: existing, created: false }
+  const now = new Date().toISOString()
+  const template = {
+    id: 'tpl_' + randomUUID().slice(0, 8),
+    kind: 'saved',
+    title: String(item?.title || '未命名条目'),
+    contentType: '待解析',
+    tags: [],
+    platform: item?.platform || 'douyin',
+    platformLabel: item?.platformLabel || '',
+    sourceUrl: String(item?.url || ''),
+    sourceId,
+    author: String(item?.author || ''),
+    publishedAt: String(item?.publishedAt || ''),
+    stats: item?.stats || { plays: 0, likes: 0, comments: 0, shares: 0, collects: 0 },
+    durationSec: Number(item?.durationSec) || 0,
+    hook: '',
+    hookType: '',
+    structure: [],
+    storyboard: [],
+    analysis: { pacing: '', viralPoints: [], reusableRules: [], targetAudience: '' },
+    frames: [],
+    cover: String(item?.cover || ''),
+    video: { width: 0, height: 0, fps: 0, duration: Number(item?.durationSec) || 0 },
+    origin: 'manual',
+    reuseCount: 0,
+    createdAt: now,
+    savedAt: now,
+  }
+  list.unshift(template)
+  await persist(list)
+  return { template, created: true }
+}
+
+
 
 export async function getTemplate(id) {
   const list = await loadAll()
@@ -49,8 +97,12 @@ export async function createTemplate({ item, meta, analysis, frames, jobId }) {
   const sourceDir = path.dirname(frames[0].file)
   await fsp.cp(sourceDir, targetDir, { recursive: true })
 
+  // 雷达里先「加入模板库」、后来才复刻的同一条内容：升级成已解析模板，不重复占两格
+  const savedIndex = list.findIndex((entry) => entry.kind === 'saved' && entry.sourceId && entry.sourceId === item?.id)
+  const saved = savedIndex >= 0 ? list.splice(savedIndex, 1)[0] : null
   const template = {
     id,
+    kind: 'replica',
     jobId,
     title: analysis.title || item.title || '未命名模板',
     contentType: analysis.contentType,
@@ -72,8 +124,8 @@ export async function createTemplate({ item, meta, analysis, frames, jobId }) {
     cover: frames[0] ? '/media/frames/' + id + '/' + frames[0].name : '',
     video: { width: meta.width, height: meta.height, fps: meta.fps, duration: meta.duration },
     origin: 'ai',
-    reuseCount: 0,
-    createdAt: new Date().toISOString(),
+    reuseCount: saved?.reuseCount || 0,
+    createdAt: saved?.createdAt || new Date().toISOString(),
   }
   list.unshift(template)
   await persist(list)
@@ -102,6 +154,14 @@ export async function deleteTemplate(id) {
 export async function templateStats() {
   const list = await loadAll()
   const byType = {}
-  for (const item of list) byType[item.contentType] = (byType[item.contentType] || 0) + 1
-  return { total: list.length, byType }
+  for (const item of list) {
+    if (item.kind === 'saved') continue
+    byType[item.contentType] = (byType[item.contentType] || 0) + 1
+  }
+  return {
+    total: list.length,
+    parsed: list.filter((item) => item.kind !== 'saved').length,
+    saved: list.filter((item) => item.kind === 'saved').length,
+    byType,
+  }
 }

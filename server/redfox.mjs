@@ -55,6 +55,8 @@ export function normalizeDouyin(raw, index = 0) {
     publishedAt: pick(raw, ['publishTime', 'createTime', 'publish_time']),
     durationSec: seconds > 1000 ? Math.round(seconds / 1000) : seconds || null,
     stats: {
+      // 播放量只有抖音有；收藏、转发、评论三个都取，缺的按 0 显示，不做估算
+      plays: toNumber(pick(raw, ['playCount', 'play_count', 'videoPlayCount', 'statistics.play_count'], 0)),
       likes: toNumber(pick(raw, ['likeCount', 'diggCount', 'likes'], 0)),
       comments: toNumber(pick(raw, ['commentCount', 'comments'], 0)),
       shares: toNumber(pick(raw, ['shareCount', 'shares'], 0)),
@@ -82,6 +84,8 @@ export function normalizeXhs(raw, index = 0) {
     publishedAt: pick(raw, ['publishTime', 'createTime', 'publish_time']),
     durationSec: toNumber(pick(raw, ['duration', 'videoDuration'], 0)) || null,
     stats: {
+      // 小红书没有播放量，互动量用平台自己的 interactiveCount（点赞+收藏+评论+分享）
+      plays: 0,
       likes: toNumber(pick(raw, ['likedCount', 'likeCount', 'likes'], 0)),
       comments: toNumber(pick(raw, ['commentsCount', 'commentCount', 'comments'], 0)),
       shares: toNumber(pick(raw, ['sharedCount', 'shareCount', 'shares'], 0)),

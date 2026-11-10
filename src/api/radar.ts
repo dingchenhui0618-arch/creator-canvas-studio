@@ -33,6 +33,13 @@ export function listTemplates(params: { q?: string; type?: string } = {}) {
   return request<TemplateList>('/api/templates?' + query.toString())
 }
 
+// 只在雷达里点「加入模板库」时才落库：只存链接与互动数据，不下载视频、不抽帧
+export const saveTemplate = (item: MediaItem) =>
+  request<{ template: ReplicaTemplate; created: boolean; total: number; parsed: number; saved: number }>(
+    '/api/templates/from-radar',
+    { method: 'POST', body: JSON.stringify({ item }) },
+  )
+
 export const getTemplate = (id: string) => request<ReplicaTemplate>('/api/templates/' + id)
 export const reuseTemplate = (id: string) => request<ReplicaTemplate>('/api/templates/' + id + '/reuse', { method: 'POST' })
 export const deleteTemplate = (id: string) => request<{ ok: boolean }>('/api/templates/' + id, { method: 'DELETE' })

@@ -42,7 +42,7 @@ export const NODE_META: Record<FlowNodeKind, NodeMeta> = {
     kind: 'llm',
     label: '大模型',
     mono: 'LLM',
-    hint: '调用本地模型，prompt 与 context 分开接入',
+    hint: 'prompt 与 context 分开接入',
     icon: Cpu,
     targets: [
       { id: 'prompt', label: 'prompt · 主体文本' },

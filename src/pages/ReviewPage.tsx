@@ -102,7 +102,7 @@ export default function ReviewPage() {
           <span className={`vq-chip ${status?.service ? 'is-pass' : 'is-warn'}`}>
             <ScanEye size={13} /> 插件服务 {status?.service ? '已连接' : '未启动'}
           </span>
-          <span className={`vq-chip ${status?.model ? 'is-pass' : 'is-fail'}`}>本地模型 {status?.model ? '可用' : '未配置'}</span>
+          <span className={`vq-chip ${status?.model ? 'is-pass' : 'is-fail'}`}>评审模型 {status?.model ? '可用' : '未配置'}</span>
         </div>
       </header>
 

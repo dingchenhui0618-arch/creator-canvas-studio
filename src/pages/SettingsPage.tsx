@@ -1,5 +1,7 @@
-import { LogOut, RefreshCw } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { CreditCard, LogOut, RefreshCw } from 'lucide-react'
 import { MonoTag } from '../components/ui'
+import { getBillingOverview, type BillingOverview } from '../api/billing'
 import { initialsFor, sessionKindLabel, type Session } from '../auth/session'
 import '../styles/shell.css'
 
@@ -11,6 +13,15 @@ type Props = {
 
 /** 设置页只放能兑现的东西：会话是服务端真的、凭据是 cookie 真的；没有运行适配器可配。 */
 export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
+  const [billing, setBilling] = useState<BillingOverview | null>(null)
+  const [billingError, setBillingError] = useState('')
+
+  useEffect(() => {
+    getBillingOverview()
+      .then(setBilling)
+      .catch((caught) => setBillingError(caught instanceof Error ? caught.message : '充值状态读取失败'))
+  }, [])
+
   const signedInAt = new Intl.DateTimeFormat('zh-CN', {
     dateStyle: 'medium',
     timeStyle: 'short',
@@ -81,6 +92,51 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
                 <span>单工作区部署；多工作区切换还没有后端</span>
               </div>
               <span className="vq-row-value">{session.user.workspace}</span>
+            </div>
+          </div>
+        </section>
+
+        <section className="vq-card vq-card--wide">
+          <div className="vq-card-head">
+            <div>
+              <span className="vq-mono">充值 / Billing</span>
+              <h2>余额与充值</h2>
+              <p>计费方式与价格还没定，暂时不能下单，也不显示额度。开通后这里会出现档位与支付入口。</p>
+            </div>
+            <MonoTag>{billing?.enabled ? '已开通' : '未开通'}</MonoTag>
+          </div>
+          <div className="vq-card-body">
+            <div className="vq-row">
+              <div className="vq-row-copy">
+                <strong>当前余额</strong>
+                <span>{billing?.message || billingError || '读取中…'}</span>
+              </div>
+              <span className="vq-row-value vq-mono">
+                {billing?.balance?.credits == null ? '—' : billing.balance.credits + ' ' + (billing.balance.unit || '次')}
+              </span>
+            </div>
+            <div className="vq-row">
+              <div className="vq-row-copy">
+                <strong>充值档位</strong>
+                <span>{billing?.plans?.length ? '价格以下单页为准' : '档位与价格待定，暂不开放购买'}</span>
+              </div>
+              <span className="vq-row-value">{billing?.plans?.length ?? 0} 个档位</span>
+            </div>
+            <div className="vq-row">
+              <div className="vq-row-copy">
+                <strong>支付通道</strong>
+                <span>开通后可扫码或跳转支付</span>
+              </div>
+              <span className="vq-row-value">{billing?.provider || '未接入'}</span>
+            </div>
+            <div className="vq-billing-actions">
+              <button type="button" className="vq-button vq-button--primary" disabled={!billing?.enabled || !billing?.plans?.length}>
+                <CreditCard size={14} />
+                充值
+              </button>
+              <span className="vq-billing-note">
+                {billing?.enabled ? '选择一个档位后进入支付' : '充值通道未开通，按钮暂不可用'}
+              </span>
             </div>
           </div>
         </section>

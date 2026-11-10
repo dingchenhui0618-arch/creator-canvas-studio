@@ -1,6 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertCircle, ExternalLink, Film, Heart, MessageCircle, Play, RefreshCw, Search, Share2, Sparkles, Star } from 'lucide-react'
-import { coverSrc, formatCount, formatDuration, getHealth, searchMedia } from '../api/radar'
+import {
+  AlertCircle,
+  BookmarkPlus,
+  Check,
+  ExternalLink,
+  Film,
+  Heart,
+  MessageCircle,
+  Play,
+  RefreshCw,
+  Search,
+  Share2,
+  Sparkles,
+  Star,
+} from 'lucide-react'
+import { coverSrc, formatCount, formatDuration, getHealth, saveTemplate, searchMedia } from '../api/radar'
 import type { MediaItem } from '../domain/radar'
 import { ReplicateModal } from '../components/ReplicateModal'
 import '../styles/radar.css'
@@ -21,6 +35,8 @@ const SORTS = [
   { value: 'likes', label: '按点赞' },
   { value: 'collects', label: '按收藏' },
   { value: 'comments', label: '按评论' },
+  { value: 'shares', label: '按转发' },
+  { value: 'plays', label: '按播放' },
 ]
 
 const dayOffset = (days: number) => {
@@ -28,6 +44,16 @@ const dayOffset = (days: number) => {
   date.setDate(date.getDate() - days)
   return date.toISOString().slice(0, 10)
 }
+
+// 互动率 =（点赞 + 收藏 + 评论 + 转发）/ 播放，播放量缺失时不显示，别拿点赞去凑分母
+function interactionRate(item: MediaItem) {
+  const plays = item.stats.plays || 0
+  if (!plays) return 0
+  const sum = item.stats.likes + item.stats.collects + item.stats.comments + item.stats.shares
+  return (sum / plays) * 100
+}
+
+const statValue = (value: number | undefined) => formatCount(value || 0)
 
 export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: string) => void; onOpenTemplates: () => void }) {
   const [platform, setPlatform] = useState('all')
@@ -39,10 +65,14 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
   const [note, setNote] = useState('')
   const [quota, setQuota] = useState<{ code: string; message: string; rechargeUrl?: string; goodsName?: string } | null>(null)
   const [loading, setLoading] = useState(false)
+  // 进页面不自动检索：红狐按次计费，必须由用户点「检索」才发请求
+  const [searched, setSearched] = useState(false)
   const [error, setError] = useState('')
   const [hasKey, setHasKey] = useState(false)
   const [visionReady, setVisionReady] = useState(false)
   const [modalItem, setModalItem] = useState<MediaItem | null>(null)
+  const [savedIds, setSavedIds] = useState<string[]>([])
+  const [savingId, setSavingId] = useState('')
 
   const runSearch = useCallback(async () => {
     setLoading(true)
@@ -53,8 +83,10 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
       setMode(result.mode)
       setNote(result.note || '')
       setQuota(result.quota ? { code: result.quota.code, message: result.quota.message, rechargeUrl: result.quota.rechargeUrl, goodsName: result.quota.goodsName } : null)
+      setSearched(true)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
+      setSearched(true)
     } finally {
       setLoading(false)
     }
@@ -64,18 +96,33 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
     getHealth()
       .then((health) => { setHasKey(health.redfox); setVisionReady(health.vision) })
       .catch(() => { setHasKey(false); setVisionReady(false) })
-    void runSearch()
-    // 首屏只检索一次
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // 首屏只读健康状态，不检索：检索必须由用户点按钮触发
   }, [])
 
   const sorted = useMemo(() => {
     const copy = [...items]
-    copy.sort((a, b) => (b.stats as Record<string, number>)[sort] - (a.stats as Record<string, number>)[sort])
+    copy.sort((a, b) => ((b.stats as Record<string, number>)[sort] || 0) - ((a.stats as Record<string, number>)[sort] || 0))
     return copy
   }, [items, sort])
 
   const totalLikes = sorted.reduce((sum, item) => sum + item.stats.likes, 0)
+  const totalPlays = sorted.reduce((sum, item) => sum + (item.stats.plays || 0), 0)
+
+  const addToLibrary = useCallback(
+    async (item: MediaItem) => {
+      setSavingId(item.id)
+      try {
+        const result = await saveTemplate(item)
+        setSavedIds((current) => (current.includes(item.id) ? current : [...current, item.id]))
+        onToast(result.created ? '已加入模板库：只存了原链接与互动数据' : '这条已经在模板库里了')
+      } catch (caught) {
+        onToast(caught instanceof Error ? caught.message : '加入模板库失败')
+      } finally {
+        setSavingId('')
+      }
+    },
+    [onToast],
+  )
 
   return (
     <div className="page page--radar">
@@ -83,7 +130,7 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
         <div>
           <div className="eyebrow"><span className="eyebrow-dot" />内容雷达</div>
           <h1>爆款雷达</h1>
-          <p>按关键词检索抖音与小红书的内容与互动数据，挑一条直接拆成可复用的脚本与分镜模板。</p>
+          <p>按关键词检索抖音与小红书的内容与互动数据：点赞、收藏、评论、转发、播放都取原始值。挑一条加进模板库只存链接，或者直接拆成脚本与分镜。</p>
         </div>
         <div className="heading-actions">
           <span className={`status-pill ${hasKey ? (quota ? 'is-error' : 'is-live') : 'is-mock'}`}>
@@ -117,7 +164,7 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
         </select>
         <button className="button button--primary" onClick={() => void runSearch()} disabled={loading}>
           {loading ? <RefreshCw size={15} className="spin" /> : <Search size={15} />}
-          {loading ? '检索中' : '检索'}
+          {loading ? '检索中' : searched ? '重新检索' : '检索'}
         </button>
       </div>
 
@@ -144,11 +191,14 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
         </div>
       )}
 
-      <div className="radar-summary">
-        <span><strong>{sorted.length}</strong> 条内容</span>
-        <span><strong>{formatCount(totalLikes)}</strong> 累计点赞</span>
-        <span className="radar-summary-note">{mode === 'live' ? '数据来自红狐接口' : hasKey ? '示例数据 · 接口不可用' : '示例数据 · 未连接红狐'}</span>
-      </div>
+      {searched && (
+        <div className="radar-summary">
+          <span><strong>{sorted.length}</strong> 条内容</span>
+          {totalPlays > 0 && <span><strong>{formatCount(totalPlays)}</strong> 累计播放</span>}
+          <span><strong>{formatCount(totalLikes)}</strong> 累计点赞</span>
+          <span className="radar-summary-note">{mode === 'live' ? '数据来自红狐接口' : hasKey ? '示例数据 · 接口不可用' : '示例数据 · 未连接红狐'}</span>
+        </div>
+      )}
 
       {loading && !sorted.length ? (
         <div className="radar-grid">
@@ -156,60 +206,92 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
         </div>
       ) : sorted.length ? (
         <div className="radar-grid">
-          {sorted.map((item) => (
-            <article className="radar-card" key={item.id}>
-              <div className="radar-cover">
-                {item.cover ? (
-                  <img src={coverSrc(item.cover)} alt="" loading="lazy" />
-                ) : (
-                  <span className="radar-cover-empty">
-                    <span className="vq-mono">示例数据 · 无封面</span>
-                  </span>
-                )}
-                <span className="radar-badge">{item.platformLabel}</span>
-                <span className="radar-duration"><Film size={11} />{formatDuration(item.durationSec)}</span>
-                <button
-                  className="radar-hover"
-                  disabled={mode === 'mock'}
-                  onClick={() => setModalItem(item)}
-                  aria-label={`一键复刻 ${item.title}`}
-                  title={mode === 'mock' ? '示例数据没有原视频，无法复刻' : undefined}
-                >
-                  <span className="radar-hover-pill"><Sparkles size={14} />一键复刻</span>
-                  <span className="radar-hover-hint">抽帧 · 逐帧分析 · 存成模板</span>
-                </button>
-              </div>
-              <div className="radar-copy">
-                <strong className="radar-title">{item.title || '（无标题）'}</strong>
-                <span className="radar-author">{item.author || '未知作者'}{item.publishedAt ? ' · ' + item.publishedAt : ''}</span>
-                <div className="radar-stats">
-                  <span><Heart size={12} />{formatCount(item.stats.likes)}</span>
-                  <span><Star size={12} />{formatCount(item.stats.collects)}</span>
-                  <span><MessageCircle size={12} />{formatCount(item.stats.comments)}</span>
-                  <span><Share2 size={12} />{formatCount(item.stats.shares)}</span>
+          {sorted.map((item) => {
+            const rate = interactionRate(item)
+            const saved = savedIds.includes(item.id)
+            return (
+              <article className="radar-card" key={item.id}>
+                <div className="radar-cover">
+                  {item.cover ? (
+                    <img src={coverSrc(item.cover)} alt="" loading="lazy" />
+                  ) : (
+                    <span className="radar-cover-empty">
+                      <span className="vq-mono">示例数据 · 无封面</span>
+                    </span>
+                  )}
+                  <span className="radar-badge">{item.platformLabel}</span>
+                  <span className="radar-duration"><Film size={11} />{formatDuration(item.durationSec)}</span>
+                  <button
+                    className="radar-hover"
+                    disabled={mode === 'mock'}
+                    onClick={() => setModalItem(item)}
+                    aria-label={`一键复刻 ${item.title}`}
+                    title={mode === 'mock' ? '示例数据没有原视频，无法复刻' : undefined}
+                  >
+                    <span className="radar-hover-pill"><Sparkles size={14} />一键复刻</span>
+                    <span className="radar-hover-hint">抽帧 · 逐帧分析 · 存成模板</span>
+                  </button>
                 </div>
-              </div>
-              <div className="radar-actions">
-                <button className="button button--ghost button--tiny" disabled={!item.url} onClick={() => item.url && window.open(item.url, '_blank', 'noopener')}>
-                  <ExternalLink size={13} />原视频
-                </button>
-                <button
-                  className="button button--primary button--tiny"
-                  disabled={mode === 'mock'}
-                  title={mode === 'mock' ? '示例数据没有原视频，无法复刻' : undefined}
-                  onClick={() => setModalItem(item)}
-                >
-                  <Play size={13} />一键复刻
-                </button>
-              </div>
-            </article>
-          ))}
+                <div className="radar-copy">
+                  <strong className="radar-title">{item.title || '（无标题）'}</strong>
+                  <span className="radar-author">{item.author || '未知作者'}{item.publishedAt ? ' · ' + item.publishedAt : ''}</span>
+                  <div className="radar-stats">
+                    {(item.stats.plays || 0) > 0 && (
+                      <span title={'播放 ' + statValue(item.stats.plays)}><Play size={12} />{statValue(item.stats.plays)}</span>
+                    )}
+                    <span title={'点赞 ' + statValue(item.stats.likes)}><Heart size={12} />{statValue(item.stats.likes)}</span>
+                    <span title={'收藏 ' + statValue(item.stats.collects)}><Star size={12} />{statValue(item.stats.collects)}</span>
+                    <span title={'评论 ' + statValue(item.stats.comments)}><MessageCircle size={12} />{statValue(item.stats.comments)}</span>
+                    <span title={'转发 ' + statValue(item.stats.shares)}><Share2 size={12} />{statValue(item.stats.shares)}</span>
+                    {rate > 0 && <em className="radar-rate" title="互动率 =（点赞 + 收藏 + 评论 + 转发）/ 播放">互动率 {rate.toFixed(1)}%</em>}
+                  </div>
+                </div>
+                <div className="radar-actions">
+                  <button className="button button--ghost button--tiny" disabled={!item.url} onClick={() => item.url && window.open(item.url, '_blank', 'noopener')}>
+                    <ExternalLink size={13} />原视频
+                  </button>
+                  <button
+                    className="button button--ghost button--tiny"
+                    disabled={!item.url || savingId === item.id || saved}
+                    title={!item.url ? '示例数据没有原链接，无法加入模板库' : '只存原链接与互动数据，不下载视频'}
+                    onClick={() => void addToLibrary(item)}
+                  >
+                    {saved ? <Check size={13} /> : <BookmarkPlus size={13} />}
+                    {saved ? '已加入' : savingId === item.id ? '加入中' : '加入模板库'}
+                  </button>
+                  <button
+                    className="button button--primary button--tiny"
+                    disabled={mode === 'mock'}
+                    title={mode === 'mock' ? '示例数据没有原视频，无法复刻' : undefined}
+                    onClick={() => setModalItem(item)}
+                  >
+                    <Play size={13} />一键复刻
+                  </button>
+                </div>
+              </article>
+            )
+          })}
         </div>
-      ) : (
+      ) : searched ? (
         <div className="radar-empty">
           <Sparkles size={22} />
           <strong>没有检索到内容</strong>
           <span>换一个更细的关键词（例如「通勤穿搭」而不是「穿搭」），或放宽时间范围。</span>
+        </div>
+      ) : (
+        <div className="radar-idle">
+          <Search size={20} />
+          <strong>先输入关键词，再点「检索」</strong>
+          <span>
+            {hasKey
+              ? '红狐按次计费，进页面不会自动检索；点一次检索才发一次请求。'
+              : '还没有配置红狐 Key：检索会返回明确标注的示例数据。'}
+          </span>
+          <div className="radar-idle-tags">
+            {['春季通勤穿搭', '咖啡开箱', '租房改造', '护肤台收纳'].map((value) => (
+              <button key={value} className="radar-idle-tag" onClick={() => { setKeyword(value); void runSearch() }}>{value}</button>
+            ))}
+          </div>
         </div>
       )}
 

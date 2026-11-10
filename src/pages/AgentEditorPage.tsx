@@ -439,7 +439,7 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
               <MessageSquareText size={14} />
             </div>
             <p className="agx-side-copy">
-              保存后回到列表，在顶部选择这个智能体、描述任务，就会真实调用本地模型。模型不可用时会显示具体原因。
+              保存后回到列表，选中这个智能体，写清要做的事就能开始。
             </p>
             <button className="agx-btn" onClick={startChat} disabled={!editingId}>
               <MessageSquareText size={14} />

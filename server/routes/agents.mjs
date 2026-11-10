@@ -116,6 +116,7 @@ export function createAgentsRouter() {
             message,
             outputType,
             model: requested || agent.model,
+            history: Array.isArray(body.history) ? body.history : [],
             log: (line) => console.log('[agents] ' + line),
           })
           const updated = await recordRun(agent.id, { model: result.model })
@@ -125,6 +126,7 @@ export function createAgentsRouter() {
             latencyMs: result.latencyMs,
             usage: result.usage || null,
             attempted: result.attempted,
+            memory: result.memory || { turns: 0, messages: 0 },
             outputType,
             agent: updated
               ? { id: updated.id, name: updated.name, runCount: updated.runCount, lastRunAt: updated.lastRunAt }

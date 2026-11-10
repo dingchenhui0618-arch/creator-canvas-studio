@@ -1,4 +1,24 @@
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600;700&display=swap');
+/* 字体策略（2026-11-10）：
+   1. 拉丁字母自托管 Geist / Geist Mono（只带拉丁子集，共 52KB），不再 @import fonts.googleapis.com
+      —— 那个请求在国内网络会阻塞首屏，失败了回退到字重不全的系统字体，12px 正文就发虚。
+   2. 中文不再走 webfont，直接用系统黑体（微软雅黑 / 苹方）。Windows 上系统字体带 hinting，
+      小字号比无 hinting 的 Noto Sans SC 网页字体清楚。 */
+@font-face {
+  font-family: 'Geist';
+  src: url('/fonts/geist.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('/fonts/geist-mono.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
 
 /* VisionQA design tokens v2
    来源：D:\Projects\VisionQA\web\app\globals.css（产品既有品牌）
@@ -33,8 +53,8 @@
   --space-12: 48px;
   --space-16: 64px;
 
-  /* ---------- 字阶：10 只给等宽微标签，正文 14 起 ---------- */
-  --text-mono: 10px;
+  /* ---------- 字阶：微标签 11 起（10px 在 1x 屏上必糊），正文 14 ---------- */
+  --text-mono: 11px;
   --text-xs: 12px;
   --text-sm: 14px;
   --text-body: 14px;
@@ -50,8 +70,9 @@
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
-  --font-ui: 'Geist', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  --font-mono: 'Geist Mono', 'SFMono-Regular', ui-monospace, monospace;
+  --font-ui: 'Geist', 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'Microsoft YaHei', 'Noto Sans SC', 'Source Han Sans SC', system-ui, sans-serif;
+  --font-mono: 'Geist Mono', 'Cascadia Mono', 'Consolas', 'SFMono-Regular', ui-monospace, monospace;
+  --font-display: var(--font-ui);
   --shadow-raise: 0 1px 2px rgba(17, 17, 17, 0.04), 0 10px 24px rgba(17, 17, 17, 0.05);
   --focus: 0 0 0 2px #111111;
 
@@ -69,7 +90,8 @@
 }
 
 html, body { font-family: var(--font-ui); }
-body { -webkit-font-smoothing: antialiased; }
+body { -webkit-font-smoothing: antialiased; text-rendering: auto; }
+button, input, select, textarea { font-family: inherit; }
 
 /* 通用原子：检视框四角（来自 VisionQA logo 的局部取景框） */
 .vq-frame { position: relative; }
@@ -85,4 +107,4 @@ body { -webkit-font-smoothing: antialiased; }
 .vq-frame::before { top: -1px; left: -1px; border-width: 1px 0 0 1px; }
 .vq-frame::after { right: -1px; bottom: -1px; border-width: 0 1px 1px 0; }
 
-.vq-mono { font-family: var(--font-mono); letter-spacing: 0.04em; font-size: 10px; text-transform: uppercase; color: var(--faint); }
+.vq-mono { font-family: var(--font-mono); letter-spacing: 0.04em; font-size: 11px; text-transform: uppercase; color: var(--faint); }

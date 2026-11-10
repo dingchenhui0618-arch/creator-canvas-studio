@@ -2138,3 +2138,16 @@
   line-height: 1.6;
 }
 
+
+/* ---------- 充值占位：按钮 + 状态行（通道未开通时只读） ---------- */
+.vq-billing-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line-faint);
+}
+.vq-billing-note {
+  color: var(--muted);
+  font-size: 12px;
+}
