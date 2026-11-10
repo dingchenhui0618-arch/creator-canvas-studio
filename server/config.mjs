@@ -81,6 +81,13 @@ export const config = {
     downloadTimeoutMs: Number(process.env.DOWNLOAD_TIMEOUT_MS || 120000),
     probeTimeoutMs: Number(process.env.PROBE_TIMEOUT_MS || 3000),
   },
+  // 智能体「网页读取」：只抓用户贴出来的公开网页，限制超时、体积与正文长度，
+  // 避免一个超长页面把上下文顶爆或把请求挂住。
+  webread: {
+    timeoutMs: Number(process.env.WEB_READ_TIMEOUT_MS || 8000),
+    maxBytes: Number(process.env.WEB_READ_MAX_BYTES || 400 * 1024),
+    maxChars: Number(process.env.WEB_READ_MAX_CHARS || 6000),
+  },
   // 积分制：检索 / 一键复刻 / 视觉评审 / 智能体对话按次扣积分。
   // 单价是「内部积分」不是钱，改价只改环境变量；充值通道与支付档位仍未接入（只留占位卡）。
   credits: {

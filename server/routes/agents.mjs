@@ -171,6 +171,7 @@ export function createAgentsRouter() {
                 latencyMs: Date.now() - startedAt,
                 error: publicError(error, '智能体暂时不可用，请稍后重试'),
                 credits: { cost: paid.cost, balance: paid.balance, refunded: paid.cost > 0 },
+                tools: error.tools || null,
               })
             } catch {
               // 历史写入失败不影响把上游错误返回给界面

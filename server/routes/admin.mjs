@@ -12,6 +12,8 @@ import { deepHealth } from '../health.mjs'
 import { diagnosticsLogs, logEvent } from '../log.mjs'
 import { listAudit, recordAudit } from '../audit.mjs'
 import { removePreference } from '../preferences.mjs'
+import { AGENT_TOOLS } from '../agents.mjs'
+import { lastWebRead, readWebPage } from '../webread.mjs'
 
 const USER_CREDITS = /^\/api\/admin\/users\/([\w-]+)\/credits$/
 const USER_PASSWORD = /^\/api\/admin\/users\/([\w-]+)\/password$/
@@ -344,13 +346,54 @@ export function createAdminRouter() {
             },
             auth: { requireAuth: config.auth.requireAuth, registrationEnabled: config.auth.registrationEnabled },
             limits: { ...config.limits },
+            webRead: { timeoutMs: config.webread.timeoutMs, maxBytes: config.webread.maxBytes, maxChars: config.webread.maxChars },
             credits: {
               prices: { ...config.credits.prices },
               concurrency: { ...config.credits.concurrency },
             },
           },
+          tools: {
+            list: AGENT_TOOLS.map((tool) => ({ id: tool.id, label: tool.label, state: tool.state })),
+            webRead: { enabled: true, last: lastWebRead() },
+          },
           logs: diagnosticsLogs({ access: 120, errors: 30 }),
         })
+        return true
+      }
+
+      // 内部环境的工具自检：直接跑一次「网页读取」，不经过模型，用来区分
+      // 「页面抓不到」和「模型答不上来」。生产环境同样 404。
+      if (pathname === '/api/admin/tools/web-read' && req.method === 'POST') {
+        if (config.ui.mode !== 'internal') {
+          sendJson(res, 404, { error: '接口不存在', code: 'NOT_FOUND' })
+          return true
+        }
+        const body = await readBody(req)
+        const target = String(body.url || '').trim()
+        if (!target) {
+          sendJson(res, 400, { ok: false, code: 'WEB_READ_EMPTY', error: '请提供要读取的链接' })
+          return true
+        }
+        try {
+          const page = await readWebPage(target)
+          sendJson(res, 200, {
+            ok: true,
+            url: page.url,
+            title: page.title,
+            chars: page.chars,
+            bytes: page.bytes,
+            truncated: page.truncated,
+            contentType: page.contentType,
+            elapsedMs: page.elapsedMs,
+            excerpt: page.text.slice(0, 600),
+          })
+        } catch (error) {
+          sendJson(res, error?.status || 400, {
+            ok: false,
+            code: error?.code || 'WEB_READ_FAILED',
+            error: String(error?.message || '页面读取失败'),
+          })
+        }
         return true
       }
 

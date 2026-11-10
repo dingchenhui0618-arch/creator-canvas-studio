@@ -18,8 +18,8 @@ export const AGENT_TOOLS = [
   { id: 'templates-read', label: '读取模板库', description: '把模板库最近的标题与类型带进本次对话', scope: '只读', state: 'ready' },
   { id: 'canvas-read', label: '读取画布流程', description: '读取你已有的画布流程标题与节点数', scope: '只读', state: 'ready' },
   { id: 'export-json', label: '导出 JSON', description: '把回复里的 JSON 块整理成可下载文件', scope: '产出文件', state: 'ready' },
-  { id: 'image-gen', label: '图片生成', description: '调用图像通道生成素材', scope: '读写', state: 'planned' },
-  { id: 'web-read', label: '网页读取', description: '读取公开页面作为创作参考', scope: '只读', state: 'planned' },
+  { id: 'image-gen', label: '图片生成', description: '调用图像通道生成素材（需要图像通道）', scope: '读写', state: 'planned' },
+  { id: 'web-read', label: '网页读取', description: '读取对话里链接的公开网页，作为本次创作的参考', scope: '只读', state: 'ready' },
 ]
 
 const CATEGORY_IDS = AGENT_CATEGORIES.map((item) => item.id)

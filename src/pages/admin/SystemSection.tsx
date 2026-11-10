@@ -39,7 +39,15 @@ type DiagnosticsInfo = {
     }
     auth: { requireAuth: boolean; registrationEnabled: boolean }
     limits: Record<string, number>
+    webRead: { timeoutMs: number; maxBytes: number; maxChars: number }
     credits: { prices: Record<string, number>; concurrency: Record<string, number> }
+  }
+  tools: {
+    list: { id: string; label: string; state: string }[]
+    webRead: {
+      enabled: boolean
+      last: { at: string; ok: boolean; host: string; chars: number; ms: number; title: string; code: string } | null
+    }
   }
   logs: {
     access: { at: string; id: string; m: string; p: string; s: number; ms: number; u: string; ip: string }[]
@@ -331,6 +339,32 @@ function DiagnosticsCard() {
               </dd>
             </div>
             <div>
+              <dt>网页读取</dt>
+              <dd>
+                <span>
+                  {data.tools.webRead.last
+                    ? data.tools.webRead.last.ok
+                      ? '最近一次成功 · ' + data.tools.webRead.last.host + ' · ' + data.tools.webRead.last.chars + ' 字'
+                      : '最近一次失败 · ' + (data.tools.webRead.last.host || '无来源') + ' · ' + data.tools.webRead.last.code
+                    : '本次启动还没有读取记录'}
+                </span>
+                <span className="admin-cell-sub">
+                  {data.tools.webRead.last ? formatDateTime(data.tools.webRead.last.at) : '超时 ' + Math.round(data.config.webRead.timeoutMs / 1000) + ' 秒'}
+                </span>
+              </dd>
+            </div>
+            <div>
+              <dt>智能体工具</dt>
+              <dd>
+                <span className="admin-mono">
+                  {data.tools.list.filter((tool) => tool.state === 'ready').map((tool) => tool.label).join(' · ')}
+                </span>
+                <span className="admin-cell-sub">
+                  待接入：{data.tools.list.filter((tool) => tool.state !== 'ready').map((tool) => tool.label).join(' / ') || '无'}
+                </span>
+              </dd>
+            </div>
+            <div>
               <dt>数据目录</dt>
               <dd className="admin-mono">{data.config.dataDir}</dd>
             </div>
@@ -406,6 +440,7 @@ function DiagnosticsCard() {
 
           <p className="admin-hint">
             内存里只保留最近 {data.logs.limits.access} 条请求 / {data.logs.limits.errors} 条错误，进程重启即清空；完整访问日志仍在服务器的系统日志里。
+            网页读取可用 <span className="admin-mono">POST /api/admin/tools/web-read</span> 单独自检，不经过模型。
           </p>
         </>
       ) : null}

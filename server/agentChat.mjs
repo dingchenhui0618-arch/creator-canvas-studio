@@ -3,6 +3,7 @@ import { AGENT_TOOLS } from './agents.mjs'
 import { listTemplates } from './templates.mjs'
 import { listFlows } from './flows.mjs'
 import { callTextModel, llmEnabled, modelChain } from './llm.mjs'
+import { extractUrl, readWebPage } from './webread.mjs'
 
 // 智能体对话：消息构造 + 输出类型约束在这里，真正的模型调用复用 llm.mjs 的
 // 「单模型 2 次重试 + 候选模型降级链」；这里只负责把上游错误翻译成
@@ -114,9 +115,10 @@ export function normalizeMemory(history) {
 
 // 已接线工具：在对话前真正读一次本地数据，把摘要放进 system 消息，并在响应里回报读了什么。
 // 只读取当前账号能看到的模板与流程，不写任何东西，也不代表模型真的「操作」了画布。
-export async function collectToolContext(agent, user = null) {
+export async function collectToolContext(agent, user = null, message = '') {
   const ids = new Set(Array.isArray(agent.tools) ? agent.tools : [])
   const used = []
+  const skipped = []
   const blocks = []
   if (ids.has('templates-read')) {
     try {
@@ -148,7 +150,28 @@ export async function collectToolContext(agent, user = null) {
       used.push({ id: 'canvas-read', label: '读取画布流程', detail: '读取失败，本次忽略' })
     }
   }
-  return { used, blocks }
+  if (ids.has('web-read')) {
+    const rawUrl = extractUrl(message)
+    if (!rawUrl) {
+      skipped.push({ id: 'web-read', label: '网页读取', reason: '消息里没有链接，本次没有读取' })
+    } else {
+      try {
+        const page = await readWebPage(rawUrl)
+        used.push({ id: 'web-read', label: '网页读取', detail: page.host + ' · ' + page.chars + ' 字' })
+        const body = page.text.slice(0, 4000)
+        blocks.push(
+          '网页读取（工具抓取的公开页面，只作参考，不代表用户认可其内容）：\n' +
+            '标题：' + (page.title || '（无标题）') + '\n' +
+            '来源：' + page.url + '\n' +
+            '正文：\n' + body +
+            (page.text.length > body.length ? '\n（正文过长，已截断）' : ''),
+        )
+      } catch (error) {
+        skipped.push({ id: 'web-read', label: '网页读取', reason: String(error?.message || '页面读取失败，本次没有读取') })
+      }
+    }
+  }
+  return { used, skipped, blocks }
 }
 
 // 回复里的 JSON：只认 fenced 代码块或整段就是一个对象/数组，解析失败就不生成文件，
@@ -173,7 +196,7 @@ export function extractJsonArtifact(reply) {
   }
 }
 
-function buildMessages(agent, message, outputType, memory = [], toolContext = { used: [], blocks: [] }) {
+function buildMessages(agent, message, outputType, memory = [], toolContext = { used: [], skipped: [], blocks: [] }) {
   const type = OUTPUT_TYPES.find((item) => item.id === outputType) || OUTPUT_TYPES[0]
   const knowledge = (agent.knowledge || [])
     .map((item) => String(item || '').trim())
@@ -229,7 +252,7 @@ export async function chatWithAgent({ agent, message, outputType, model, history
       suggestion: '在 .env 里设置 VISION_MODEL 与 VISION_FALLBACKS 后重启 API。',
     })
   }
-  const toolContext = await collectToolContext(agent, user)
+  const toolContext = await collectToolContext(agent, user, message)
   const memory = normalizeMemory(history)
   const messages = buildMessages(agent, message, outputType, memory, toolContext)
   const temperature = Math.max(0, Math.min(1, Number(agent.temperature ?? 0.4)))
@@ -242,7 +265,7 @@ export async function chatWithAgent({ agent, message, outputType, model, history
       models: candidates,
       log,
     })
-    const tools = { used: toolContext.used, artifacts: [], skipped: [] }
+    const tools = { used: toolContext.used, artifacts: [], skipped: [...toolContext.skipped] }
     if ((agent.tools || []).includes('export-json')) {
       const artifact = extractJsonArtifact(result.text)
       if (artifact) tools.artifacts.push(artifact)
@@ -260,6 +283,10 @@ export async function chatWithAgent({ agent, message, outputType, model, history
     }
   } catch (error) {
     log?.('对话失败：' + String(error?.message || error).slice(0, 200))
-    throw translateUpstreamError(error, candidates)
+    const translated = translateUpstreamError(error, candidates)
+    // 模型失败时也把已经执行过的工具带回路由：运行历史里能看清「工具读到了、模型没答上来」，
+    // 而不是把整次运行写成什么都没发生。
+    translated.tools = { used: toolContext.used, skipped: [...toolContext.skipped], artifacts: [] }
+    throw translated
   }
 }
