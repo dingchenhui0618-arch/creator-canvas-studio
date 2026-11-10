@@ -1,0 +1,10 @@
+[Unit]
+Description=VisionQA data backup
+After=visionqa.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/visionqa-backup.sh
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

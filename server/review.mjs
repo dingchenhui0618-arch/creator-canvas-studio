@@ -1,4 +1,3 @@
-import fsp from 'node:fs/promises'
 import { callTextModel, extractJson, llmEnabled } from './llm.mjs'
 
 // VisionQA 视觉评审：优先接 VisionQA 插件服务（同一套 VisualReview 契约），

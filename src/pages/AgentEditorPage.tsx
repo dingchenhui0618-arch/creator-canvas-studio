@@ -191,7 +191,6 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
             <ArrowLeft size={13} />
             返回智能体
           </button>
-          <div className="agx-eyebrow">创作能力 / 智能体</div>
           <h1>{editingId ? form.name || '编辑智能体' : '新建智能体'}</h1>
           <p>保存即写入 data/agents.json，回到列表就能直接对话。</p>
         </div>

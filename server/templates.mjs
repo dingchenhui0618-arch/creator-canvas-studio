@@ -17,12 +17,24 @@ async function loadAll() {
   return cache
 }
 
+// 所有写盘走一条队列：模板库是整文件读改写，两个请求同时下发时共用一个 .tmp
+// 会互相 rename 掉对方（实测 30 并发有 26 次 ENOENT），并且后写覆盖先写、丢条目。
+let writeChain = Promise.resolve()
+
+function enqueueWrite(task) {
+  const next = writeChain.then(task, task)
+  writeChain = next.catch(() => {})
+  return next
+}
+
 async function persist(list) {
   cache = list
-  await fsp.mkdir(config.dataDir, { recursive: true })
-  const tmp = config.templatesFile + '.tmp'
-  await fsp.writeFile(tmp, JSON.stringify(list, null, 2), 'utf8')
-  await fsp.rename(tmp, config.templatesFile)
+  return enqueueWrite(async () => {
+    await fsp.mkdir(config.dataDir, { recursive: true })
+    const tmp = config.templatesFile + '.' + process.pid + '.' + Math.random().toString(36).slice(2) + '.tmp'
+    await fsp.writeFile(tmp, JSON.stringify(list, null, 2), 'utf8')
+    await fsp.rename(tmp, config.templatesFile)
+  })
 }
 
 export async function listTemplates({ q = '', contentType = '', platform = '', kind = '' } = {}) {

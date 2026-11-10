@@ -2,14 +2,15 @@ import { sendJson, readBody } from './_shared.mjs'
 import { reviewVisual, reviewStatus } from '../review.mjs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
+import { config } from '../config.mjs'
 
 const MEDIA_MIME = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' }
 
 // 本地媒体文件（模板库帧图）→ 字节
 async function readLocalMedia(mediaPath) {
-  const absolute = path.join(process.cwd(), 'data', mediaPath.replace(/^\/+/, ''))
+  const absolute = path.join(config.dataDir, mediaPath.replace(/^\/+/, ''))
   const normalized = path.normalize(absolute)
-  if (!normalized.startsWith(path.join(process.cwd(), 'data'))) throw new Error('非法路径')
+  if (!normalized.startsWith(path.normalize(config.dataDir))) throw new Error('非法路径')
   const bytes = await fsp.readFile(normalized)
   return { bytes, mime: MEDIA_MIME[path.extname(normalized).toLowerCase()] || 'image/jpeg' }
 }

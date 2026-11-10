@@ -1,4 +1,13 @@
-.runs-page { display:flex; flex-direction:column; gap:24px; }
+.runs-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  /* 页面内边距必须与工作台/智能体一致：不写 padding 时内容会贴到侧栏和窗口边缘 */
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 32px 32px 48px;
+}
 .runs-head { display:flex; align-items:flex-start; justify-content:space-between; gap:24px; }
 .runs-head h1 { margin:8px 0 8px; font-size:28px; font-weight: 500; letter-spacing:-.02em; }
 .runs-head p { margin:0; max-width:70ch; color:var(--muted); font-size:12px; line-height:1.7; }

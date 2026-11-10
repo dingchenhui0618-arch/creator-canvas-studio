@@ -201,8 +201,15 @@ export function clearFailures(key) {
 }
 
 export function clientIp(req) {
-  const forwarded = String(req.headers?.['x-forwarded-for'] || '').split(',')[0].trim()
-  return forwarded || req.socket?.remoteAddress || 'unknown'
+  // 只信反代补的那一跳：X-Real-IP 由 nginx 用 $remote_addr 覆写；XFF 取最后一段，
+  // 因为客户端自己带的 X-Forwarded-For 会被拼在前面（取第一段等于让攻击者随便换 IP 绕登录限流）。
+  const real = String(req.headers?.['x-real-ip'] || '').trim()
+  if (real) return real
+  const chain = String(req.headers?.['x-forwarded-for'] || '')
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean)
+  return chain.length ? chain[chain.length - 1] : req.socket?.remoteAddress || 'unknown'
 }
 
 // ---- 首个账号：库里没有账号时按 VQ_SEED_* 建一个普通账号 ----

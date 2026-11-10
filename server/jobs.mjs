@@ -58,11 +58,16 @@ export async function startReplicate(item, overrideUrl) {
     return job
   }
 
-  runPipeline(job, jobDir, item || {}, targets).catch((error) => {
-    job.status = 'error'
-    job.error = String(error?.message || error)
-    job.logs.push({ at: new Date().toISOString(), text: '失败：' + job.error })
-  })
+  runPipeline(job, jobDir, item || {}, targets)
+    .catch((error) => {
+      job.status = 'error'
+      job.error = String(error?.message || error)
+      job.logs.push({ at: new Date().toISOString(), text: '失败：' + job.error })
+    })
+    // 成功和失败都要清：以前只在成功分支里删，失败一次就在盘上留一份最多 160MB 的源视频
+    .finally(() => {
+      fsp.rm(jobDir, { recursive: true, force: true }).catch(() => {})
+    })
   return job
 }
 

@@ -174,6 +174,57 @@
 **这一轮之后仍然挡在上线前面的**：模板库 0 条（「一键复刻」仍未跑过一条真实视频，跑通才算闭环）、
 没有队列与配额、没有找回密码与用户列表接口、充值只有空壳接口。
 
+## 三点八、2026-11-10 追加：页头/运行记录溢出/入口缓存，以及上线前审计与六处加固（已上线）
+
+### 界面三处
+
+| 反馈 | 原因 | 改法 |
+| --- | --- | --- |
+| 智能体页顶部红圈 | 顶栏已有「个人工作区 › 智能体」，页内又写了一遍虚构层级「创作能力 / 智能体」；「自建库 · N 次运行」和「已自建智能体」说的是同一件事；右上角还有第二个「新建」 | 删页内眉标（编辑页同改）；列表头收成「已自建智能体 + N 个 · 累计 M 次运行」；新建只留页头一个 |
+| 参数胶囊下拉 | 原生 `<select>` 弹出层盖住输入框底部，样式与发丝线不搭 | 自绘下拉：点外部 / Esc 关闭，选中项加粗，展开时箭头翻转 |
+| 运行记录明显溢出 | `.runs-page` 漏写页面内边距，内容贴到侧栏与窗口边缘 | 与工作台统一 32px 内边距 + 1280 居中 |
+| 工作台页头字体 | 整行等宽 + 中文混排，被 0.04em 字距拉散；「2026 年 11 月 10 日」又多占了 8 个字 | 「工作台 · 用户 · 2026-11-10 周二」，只有日期用等宽等宽数字；标题数字 tabular-nums、分隔点降为 1px 灰 |
+
+截图见 README「2026-11-10 追加」小节那四张。
+
+### 发版后仍看到旧界面（真事故）
+
+nginx 直接托管 `/opt/visionqa/dist`，`index.html` 没有 `Cache-Control`，浏览器按 ETag 启发式缓存，
+发版后继续用旧 HTML 里的旧 bundle——用户看到的就是上一版界面。nginx 里补：
+
+```nginx
+location = /index.html { add_header Cache-Control "no-store, no-cache, must-revalidate" always; expires off; }
+location /assets/      { add_header Cache-Control "public, max-age=31536000, immutable" always; }
+```
+
+实测：`curl -I /` 现在带 `no-store`，`/assets/index-*.css` 带 `immutable`。
+另外发版后 `dist/assets` 会堆 6 个历史 bundle（已清理到只剩当前两个），下次发版顺手 prune。
+
+### 审计后当场修掉的六处
+
+| 问题 | 证据 | 改法 | 实测 |
+| --- | --- | --- | --- |
+| 登录暴破限流可绕（P0） | nginx `X-Forwarded-For $proxy_add_x_forwarded_for` + `auth.mjs:204` 取第一段 → 客户端自带 XFF 排最前 | nginx 改 `$remote_addr`；`clientIp` 优先 X-Real-IP、XFF 取最后一段 | 轮换 XFF 连打 12 次：改前 12×401 永不 429；改后 8×401 → 4×429 |
+| 模板库并发写丢条目（P1） | `templates.mjs` 整文件读改写、共用 `.tmp`、无写队列 | 抽出 `enqueueWrite` 串行化（对齐 flows.mjs），tmp 文件名带 pid + 随机串 | 30 并发「加入模板库」：改后 30/30 成功（201），条目数 1 → 31 |
+| 失败任务临时目录永久残留（P1） | `jobs.mjs` 只在成功分支 `rm jobDir` | 改 `.finally()`，成功失败都清 | 代码路径统一，失败不再留 ≤160MB 源视频 |
+| 模板帧图送评审必失败（P1） | `routes/review.mjs` 写死 `process.cwd()/data`，生产 `DATA_DIR=/var/lib/visionqa` | 改用 `config.dataDir`（同 flows.mjs） | 生产数据目录与代码路径一致 |
+| 安全响应头缺失（P2） | 线上只有 `Server: nginx/1.30.2` | 补 HSTS / nosniff / X-Frame-Options / Referrer-Policy / Permissions-Policy，`server_tokens off` | `curl -I` 六项头齐全，`Server: nginx` |
+| 数据零备份（P1） | 全仓无备份脚本，`/var/lib/visionqa` 只有在线文件 | 新增 `deploy/production/backup.sh` + `visionqa-backup.timer`（每天 04:10，留 7 份，整目录打包含 WAL） | 已装并跑过：`/var/backups/visionqa/data-20261110-114423.tar.gz`，`tar -tzf` 列出 5 个数据文件；timer `enabled/active` |
+
+### 审计里**没有**动、但上线前必须做的（按优先级）
+
+1. **P0 配额与并发闸门**：`/api/search` 按次计费、`/api/replicate` 每次 = 付费解析 + ffmpeg + 18 帧视觉模型、
+   `/api/agents/:id/chat` 无限刷 token，三者现在都没有按用户配额/并发上限；`billing.mjs` 的 PLANS 还是空数组。
+2. **P0 多用户归属**：templates / agents / flows / runs 全是全局数据，改删无 ownerId 校验。
+   现在只有一个管理员账号，还不流血；**发第二个账号之前必须先并 ownerId 补丁**。
+3. **P1 SSRF 与无超时下载**：`media.mjs` 的直链下载没有私网/回环校验、没有 `AbortSignal` 超时、整段读进内存。
+4. **P1 全局异常兜底与访问日志**：没有 `unhandledRejection` / `uncaughtException`，也没有每请求一行日志。
+5. **P1 健康检查只报「配了没配」**：key 过期、余额为 0、上游 DNS 挂了，`/api/health` 仍是 `ok:true`。
+6. **P1 前端无 ErrorBoundary、无路由**：任一页渲染抛错整树白屏；在模板库按 F5 会回工作台。
+7. **P2 注册开关默认 fail-open**：`VQ_REGISTRATION !== '0'` 才是关，换机重装漏一行就静默开放注册。
+8. **P2 密码策略 / 找回 / 备案与协议**：8 位即可、无找回接口、页脚无备案号与隐私政策。
+9. **P2 首屏 604KB 单 chunk、移动端表格宽度 720–880px 不可用**。
+
 ## 四、怎么复验
 
 ```bash

@@ -28,15 +28,14 @@ type Props = {
   onNavigate: (page: Page) => void
 }
 
+const pad2 = (value: number) => String(value).padStart(2, '0')
+
+// 页头日期用「2026-11-10 周二」：等宽数字对齐，比「2026 年 11 月 10 日 · 星期二」短一半，
+// 也不会因为中文和数字混排被拉出一段虚的字距。
 function todayLabel(date: Date): string {
-  const parts = new Intl.DateTimeFormat('zh-CN', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    weekday: 'long',
-  }).formatToParts(date)
-  const pick = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? ''
-  return `${pick('year')} 年 ${pick('month')} 月 ${pick('day')} 日 · ${pick('weekday')}`
+  const iso = `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`
+  const weekday = new Intl.DateTimeFormat('zh-CN', { weekday: 'short' }).format(date)
+  return `${iso} ${weekday}`
 }
 
 function clockOf(input?: string | number): string {
@@ -107,9 +106,25 @@ export function OverviewPage({ userName, onCreate, onNavigate }: Props) {
       <header className="vq-page-head">
         <div>
           {/* 不给问候语：这一屏的价值是「有什么、各多少」，不是寒暄 */}
-          <span className="vq-mono">工作台 · {userName} · {todayLabel(now)}</span>
+          <div className="vq-kicker">
+            <span className="vq-kicker-word">工作台</span>
+            <span className="vq-kicker-dot" aria-hidden="true" />
+            <span>{userName}</span>
+            <span className="vq-kicker-dot" aria-hidden="true" />
+            <time dateTime={now.toISOString().slice(0, 10)}>{todayLabel(now)}</time>
+          </div>
           <h1>
-            {loading ? '正在读取…' : `${canvases.length} 块画布 · ${runs.length} 条运行 · ${templates.length} 个模板`}
+            {loading ? (
+              '正在读取…'
+            ) : (
+              <>
+                <b>{canvases.length}</b> 块画布
+                <span className="vq-head-sep" aria-hidden="true">·</span>
+                <b>{runs.length}</b> 条运行
+                <span className="vq-head-sep" aria-hidden="true">·</span>
+                <b>{templates.length}</b> 个模板
+              </>
+            )}
           </h1>
           <p>三个数字分别来自画布服务、/api/runs 与 /api/templates；没有数据的区块写空状态，不放示例数据。</p>
         </div>

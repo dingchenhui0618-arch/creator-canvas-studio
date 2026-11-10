@@ -277,18 +277,61 @@ function Capsule({
   disabled?: boolean
   title?: string
 }) {
+  const [open, setOpen] = useState(false)
+  const boxRef = useRef<HTMLDivElement | null>(null)
+  const current = options.find((option) => option.value === value) ?? options[0]
+
+  // 参数胶囊用自绘下拉：系统 select 的弹出层会盖住输入框底部，也没法和整页的发丝线风格对齐。
+  useEffect(() => {
+    if (!open) return
+    const onPointerDown = (event: MouseEvent) => {
+      if (!boxRef.current?.contains(event.target as Node)) setOpen(false)
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [open])
+
   return (
-    <label className="agx-capsule" title={title}>
+    <div className="agx-capsule" title={title} ref={boxRef}>
       <span>{label}</span>
-      <select value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled}>
-        {options.map((option) => (
-          <option value={option.value} key={option.value || option.label}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-      <ChevronDown size={12} />
-    </label>
+      <button
+        type="button"
+        className="agx-capsule-trigger"
+        onClick={() => setOpen((value) => !value)}
+        disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        <em>{current?.label ?? '未选择'}</em>
+        <ChevronDown size={12} />
+      </button>
+      {open && (
+        <div className="agx-capsule-menu" role="listbox" aria-label={label}>
+          {options.map((option) => (
+            <button
+              type="button"
+              role="option"
+              aria-selected={option.value === value}
+              className={option.value === value ? 'is-active' : ''}
+              key={option.value || option.label}
+              onClick={() => {
+                onChange(option.value)
+                setOpen(false)
+              }}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -568,7 +611,6 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
     <div className="page agx-page">
       <header className="agx-head">
         <div>
-          <div className="agx-eyebrow">创作能力 / 智能体</div>
           <h1>智能体</h1>
           <p>选择一个智能体，描述你要它做的事。</p>
         </div>
@@ -726,14 +768,10 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
 
       <section className="agx-library">
         <div className="agx-library-head">
-          <div>
-            <span className="agx-kicker">自建库 · {data?.runs ?? 0} 次运行</span>
-            <h2>已自建智能体</h2>
-          </div>
-          <button className="agx-btn" onClick={onCreate}>
-            <Plus size={14} />
-            新建
-          </button>
+          <h2>已自建智能体</h2>
+          <span className="agx-library-meta">
+            {agents.length} 个 · 累计 {data?.runs ?? 0} 次运行
+          </span>
         </div>
 
         {actionError && (
