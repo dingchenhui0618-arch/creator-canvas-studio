@@ -7,6 +7,7 @@ import { config } from '../config.mjs'
 import { currentUser } from '../auth.mjs'
 import { charge, refund } from '../credits.mjs'
 import { enter, leave } from '../gate.mjs'
+import { publicError } from '../public-error.mjs'
 
 const MEDIA_MIME = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' }
 
@@ -96,7 +97,8 @@ export function createReviewRouter() {
           sendJson(res, 200, { ...result, reviewId: saved.id, credits: { cost: paid.cost, balance: paid.balance } })
         } catch (error) {
           if (user?.id && paid.cost > 0) refund(user.id, 'review', { amount: paid.cost, ref: '评审失败退款' })
-          sendJson(res, 500, { error: String(error?.message || error) })
+          console.error('[review] ' + (error?.stack || error?.message || error))
+          sendJson(res, 500, { error: publicError(error, '评审服务暂时不可用，积分已退回') })
         } finally {
           if (user?.id) leave(user.id, 'review')
         }

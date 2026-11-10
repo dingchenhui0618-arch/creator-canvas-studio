@@ -13,10 +13,11 @@ import {
   updateTemplate,
   templateStats,
   saveTemplateFromItem,
+  createTemplateFromFlow,
   adoptUnowned as adoptUnownedTemplates,
 } from './templates.mjs'
 import { adoptUnowned as adoptUnownedAgents } from './agents.mjs'
-import { adoptUnownedFlows, createFlow } from './flows.mjs'
+import { adoptUnownedFlows, createFlow, getFlow } from './flows.mjs'
 import { adoptUnowned as adoptUnownedReviews } from './reviews.mjs'
 import { createBillingRouter } from './routes/billing.mjs'
 import { createAgentsRouter } from './routes/agents.mjs'
@@ -479,6 +480,20 @@ const server = http.createServer(async (req, res) => {
       const template = await getTemplate(applyMatch[1], user)
       if (!template) return sendJson(res, 404, { error: '模板不存在' })
       const body = await readBody(req)
+      // 画布模板：blueprint 里存的是真节点与连线，原样建回一张新画布
+      if (template.kind === 'flow' && Array.isArray(template.blueprint?.nodes) && template.blueprint.nodes.length) {
+        const flow = await createFlow(
+          {
+            name: String(body.name || template.title || '工作流').slice(0, 60),
+            description: ('来自模板库 · 工作流 · ' + template.blueprint.nodes.length + ' 个节点').slice(0, 240),
+            nodes: template.blueprint.nodes,
+            edges: template.blueprint.edges || [],
+          },
+          user,
+        )
+        const updated = await reuseTemplate(template.id)
+        return sendJson(res, 201, { ok: true, flow, template: updated })
+      }
       const rules = (template.analysis?.reusableRules || []).join('；')
       const structureText = (template.structure || [])
         .map((item) => (typeof item === 'string' ? item : item?.title || ''))
@@ -525,6 +540,26 @@ const server = http.createServer(async (req, res) => {
       if (!item.url) return sendJson(res, 400, { error: '这条内容没有原链接，无法加入模板库' })
       const result = await saveTemplateFromItem({ item, user })
       return sendJson(res, result.created ? 201 : 200, { ...result, ...(await templateStats(user)) })
+    }
+
+    if (pathname === '/api/templates' && req.method === 'POST') {
+      // 画布「另存为模板」：把当前流程存成工作流模板（带 blueprint，可在模板库套用回画布）
+      const body = await readBody(req)
+      const flowId = String(body.flowId || '')
+      if (body.from !== 'flow' || !flowId) {
+        return sendJson(res, 400, { error: '缺少来源：POST /api/templates 需要 { from: "flow", flowId }' })
+      }
+      const flow = await getFlow(flowId, user)
+      if (!flow) return sendJson(res, 404, { error: '流程不存在' })
+      if (!flow.nodes.length) return sendJson(res, 400, { error: '流程里没有节点，先拖入节点再存为模板' })
+      const template = await createTemplateFromFlow({
+        flow,
+        title: body.title,
+        contentType: body.contentType,
+        tags: body.tags,
+        user,
+      })
+      return sendJson(res, 201, { ok: true, template })
     }
 
     if (pathname === '/api/templates') {

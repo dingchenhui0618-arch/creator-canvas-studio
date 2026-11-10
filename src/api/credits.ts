@@ -1,8 +1,8 @@
 // 积分与系统状态：都是本轮新加的真实接口，没有就如实报错，不假装有数据。
 import { request } from './client'
 
-export type CreditPrices = { search: number; replicate: number; review: number; chat: number }
-export type CreditConcurrency = { search: number; replicate: number; review: number; chat: number }
+export type CreditPrices = { search: number; replicate: number; review: number; chat: number; flow_run: number }
+export type CreditConcurrency = { search: number; replicate: number; review: number; chat: number; flow_run: number }
 
 export type CreditEntry = {
   id: string
@@ -78,6 +78,8 @@ export const CREDIT_KIND_LABEL: Record<string, string> = {
   'review-refund': '评审退款',
   chat: '智能体对话',
   'chat-refund': '对话退款',
+  flow_run: '画布运行',
+  'flow_run-refund': '画布运行退款',
   grant: '管理员发放',
   deduct: '管理员扣减',
   welcome: '初始额度',

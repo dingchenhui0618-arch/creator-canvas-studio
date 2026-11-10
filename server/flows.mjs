@@ -6,6 +6,7 @@ import { canAccess } from './owner.mjs'
 import { callTextModel } from './llm.mjs'
 import { reviewVisual } from './review.mjs'
 import { listTemplates, templateStats } from './templates.mjs'
+import { publicError } from './public-error.mjs'
 
 // 画布流程：存储（data/flows.json）+ 运行记录（data/runs.json）+ 拓扑执行引擎。
 // 原子写范式与 server/templates.mjs 一致：先写 .tmp，再 rename 覆盖。
@@ -296,11 +297,17 @@ export async function deleteFlow(id) {
 
 // ---------- 运行记录 ----------
 
-export async function listRuns({ flowId = '', limit = 20 } = {}, user = null) {
+export async function listRuns({ flowId = '', status = '', q = '', limit = 20, offset = 0 } = {}, user = null) {
   const list = (await loadRuns()).filter((run) => canAccess(run, user))
+  const keyword = String(q || '').trim()
+  let filtered = list
+  if (flowId) filtered = filtered.filter((run) => run.flowId === flowId)
+  // 运行状态只有 success / error 两种落库值，running 只在流式过程中出现
+  if (status === 'success' || status === 'error') filtered = filtered.filter((run) => run.status === status)
+  if (keyword) filtered = filtered.filter((run) => run.flowName.includes(keyword) || run.id.includes(keyword) || String(run.error || '').includes(keyword))
   const count = Math.min(50, Math.max(1, Number(limit) || 20))
-  const filtered = flowId ? list.filter((run) => run.flowId === flowId) : list
-  return { items: filtered.slice(0, count), total: filtered.length }
+  const start = Math.min(filtered.length, Math.max(0, Math.round(Number(offset) || 0)))
+  return { items: filtered.slice(start, start + count), total: filtered.length, offset: start, limit: count }
 }
 
 export async function getRun(id, user = null) {
@@ -589,7 +596,7 @@ async function touchFlowRun(flowId, run) {
  * 按拓扑序执行整张画布。
  * onEvent 用于流式输出：run-start / node-start / node-end / run-end / run-error。
  */
-export async function runFlow(flow, { onEvent } = {}) {
+export async function runFlow(flow, { onEvent, credits = null } = {}) {
   const emit = typeof onEvent === 'function' ? onEvent : () => {}
   const order = topoSort(flow.nodes, flow.edges)
   const nodesById = new Map(flow.nodes.map((node) => [node.id, node]))
@@ -613,6 +620,8 @@ export async function runFlow(flow, { onEvent } = {}) {
     nodes: [],
     output: '',
     ownerId: flow.ownerId || '',
+    // 本次运行实际扣了多少积分；失败会由路由层退回，refunded 在结束时标真
+    credits: credits ? { cost: Math.round(Number(credits.cost) || 0), refunded: false } : null,
   }
   emit({ type: 'run-start', run: { id: run.id, flowId: run.flowId, flowName: run.flowName, total: order.length } })
 
@@ -669,7 +678,8 @@ export async function runFlow(flow, { onEvent } = {}) {
         status: 'error',
         ms: Date.now() - nodeStartedAt,
         output: null,
-        error: clip(String(error?.message || error), 500),
+        // 这里会原样显示在画布、运行记录和后台审计里：只放产品语言
+        error: clip(publicError(error, '这个节点执行失败，请稍后重试'), 500),
         message: null,
       }
       errorCount += 1
@@ -690,6 +700,7 @@ export async function runFlow(flow, { onEvent } = {}) {
   }
 
   run.status = errorCount > 0 ? 'error' : 'success'
+  if (run.credits) run.credits.refunded = run.status === 'error'
   run.finishedAt = new Date().toISOString()
   run.durationMs = Date.now() - startedAt
   const outputResults = run.nodes.filter((item) => item.kind === 'output' && item.output)

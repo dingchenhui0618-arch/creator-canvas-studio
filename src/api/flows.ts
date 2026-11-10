@@ -49,6 +49,8 @@ export type RunNodeResult = {
   message: string | null
 }
 
+export type RunCredits = { cost: number; balance: number | null; refunded: boolean }
+
 export type RunRecord = {
   id: string
   flowId: string
@@ -61,6 +63,18 @@ export type RunRecord = {
   nodes: RunNodeResult[]
   output: string
   error?: string | null
+  /** 本次运行扣的积分；失败会退回，refunded=true */
+  credits?: RunCredits | null
+}
+
+export type RunList = { items: RunRecord[]; total: number; offset: number; limit: number }
+
+export type RunQuery = {
+  flowId?: string
+  status?: '' | 'success' | 'error'
+  q?: string
+  limit?: number
+  offset?: number
 }
 
 export type RunEventMessage =
@@ -69,6 +83,23 @@ export type RunEventMessage =
   | { type: 'node-end'; node: RunNodeResult; index: number; total: number }
   | { type: 'run-end'; run: RunRecord }
   | { type: 'run-error'; error: string; code?: string }
+
+export async function listRuns(query: RunQuery = {}): Promise<RunList> {
+  const params = new URLSearchParams()
+  if (query.flowId) params.set('flowId', query.flowId)
+  if (query.status) params.set('status', query.status)
+  if (query.q) params.set('q', query.q)
+  params.set('limit', String(query.limit ?? 20))
+  params.set('offset', String(query.offset ?? 0))
+  return request<RunList>('/api/runs?' + params.toString())
+}
+
+// 画布「另存为模板」：落到模板库的工作流条目，带 blueprint，之后能原样开回一张画布
+export const saveFlowAsTemplate = (flowId: string, title?: string) =>
+  request<{ ok: boolean; template: { id: string; title: string } }>('/api/templates', {
+    method: 'POST',
+    body: JSON.stringify({ from: 'flow', flowId, title }),
+  })
 
 export async function listFlows(): Promise<ApiFlow[]> {
   const body = await request<{ items: ApiFlow[]; total: number }>('/api/flows')

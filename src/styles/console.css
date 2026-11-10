@@ -725,6 +725,34 @@
   gap: 8px;
 }
 
+/* 运行审计：状态筛选 + 导出当前结果 */
+.admin-run-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 0 0 12px;
+}
+
+.admin-run-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted, #5f5b54);
+}
+
+.admin-run-filter select {
+  height: 30px;
+  padding: 0 24px 0 8px;
+  border: 1px solid var(--line, #e5e2db);
+  border-radius: 6px;
+  background: var(--surface, #ffffff);
+  color: var(--ink, #111111);
+  font-family: inherit;
+  font-size: 12px;
+}
+
 @media (max-width: 1120px) {
   .admin-grid--stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));

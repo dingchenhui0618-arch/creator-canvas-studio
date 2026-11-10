@@ -65,6 +65,9 @@ export function RunDrawer({ open, running, flowName, runId, total, nodes, record
         <span className="cv-mono">{runId || '尚未运行'}</span>
         <span>{formatMs(duration)}</span>
         <span>{nodes.length} / {total || nodes.length} 节点</span>
+        {record?.credits && record.credits.cost > 0 ? (
+          <span>{record.credits.refunded ? '已退回 ' + record.credits.cost + ' 积分' : '消耗 ' + record.credits.cost + ' 积分'}</span>
+        ) : null}
       </div>
       <div className="cv-drawer-progress"><span style={{ width: progress + '%' }} /></div>
 

@@ -7,7 +7,7 @@ import { ReplicateModal } from '../components/ReplicateModal'
 import PageHead from '../components/PageHead'
 import '../styles/radar.css'
 
-const TYPES = ['全部', '口播干货', '剧情演绎', '教程拆解', '产品测评', '种草分享', '开箱体验', '探店vlog', '混剪卡点', '待解析']
+const TYPES = ['全部', '工作流', '口播干货', '剧情演绎', '教程拆解', '产品测评', '种草分享', '开箱体验', '探店vlog', '混剪卡点', '待解析']
 
 // 模板详情里需要 MediaItem 才能跑复刻：这里把模板还原成检索卡片
 function asMedia(template: ReplicaTemplate): MediaItem {
@@ -34,11 +34,12 @@ const coverFor = (template: ReplicaTemplate) => {
   return url.startsWith('/media/') || url.startsWith('/api/') ? url : coverSrc(url)
 }
 
-export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast: (message: string) => void; onBack: () => void; onOpenCanvas: () => void }) {
+export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast: (message: string) => void; onBack: () => void; onOpenCanvas: (flowId?: string) => void }) {
   const [items, setItems] = useState<ReplicaTemplate[]>([])
   const [byType, setByType] = useState<Record<string, number>>({})
   const [parsed, setParsed] = useState(0)
   const [saved, setSaved] = useState(0)
+  const [flowTemplates, setFlowTemplates] = useState(0)
   const [type, setType] = useState('全部')
   const [keyword, setKeyword] = useState('')
   const [loading, setLoading] = useState(true)
@@ -57,6 +58,7 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
       setByType(result.byType || {})
       setParsed(result.parsed || 0)
       setSaved(result.saved || 0)
+      setFlowTemplates(result.flows || 0)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
     } finally {
@@ -107,6 +109,7 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
         <div><span className="section-kicker">模板总数</span><strong>{items.length}</strong><span>条</span></div>
         <div><span className="section-kicker">已解析</span><strong>{parsed}</strong><span>有脚本与分镜</span></div>
         <div><span className="section-kicker">待解析</span><strong>{saved}</strong><span>只有链接</span></div>
+        <div><span className="section-kicker">画布工作流</span><strong>{flowTemplates}</strong><span>个</span></div>
         <div><span className="section-kicker">累计复用</span><strong>{totalReuse}</strong><span>次</span></div>
       </div>
 
@@ -141,20 +144,30 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
               <div className="template-cover">
                 {coverFor(item) ? <img src={coverFor(item)} alt="" loading="lazy" /> : <span className="template-cover-empty">{item.platformLabel}</span>}
                 <span className={'template-type' + (isParsed(item) ? '' : ' is-pending')}>{isParsed(item) ? item.contentType : '待解析'}</span>
-                <span className="radar-duration"><Film size={11} />{formatDuration(item.durationSec)}</span>
+                <span className="radar-duration"><Film size={11} />{item.kind === 'flow' ? (item.flowNodes?.length ?? 0) + ' 节点' : formatDuration(item.durationSec)}</span>
               </div>
               <div className="template-copy">
                 <strong>{item.title}</strong>
-                <span className="template-hook">{isParsed(item) ? item.hook : item.author ? item.author + ' · 只有原链接，还没解析' : '只有原链接，还没解析'}</span>
-                <div className="template-stats">
-                  {(item.stats?.plays || 0) > 0 && <span><Play size={11} />{formatCount(item.stats.plays || 0)}</span>}
-                  <span><Heart size={11} />{formatCount(item.stats?.likes || 0)}</span>
-                  <span><Star size={11} />{formatCount(item.stats?.collects || 0)}</span>
-                  <span><MessageCircle size={11} />{formatCount(item.stats?.comments || 0)}</span>
-                  <span><Share2 size={11} />{formatCount(item.stats?.shares || 0)}</span>
-                </div>
+                <span className="template-hook">
+                  {item.kind === 'flow'
+                    ? '来自画布 · 套用后原样开回一张新画布'
+                    : isParsed(item) ? item.hook : item.author ? item.author + ' · 只有原链接，还没解析' : '只有原链接，还没解析'}
+                </span>
+                {item.kind === 'flow' ? null : (
+                  <div className="template-stats">
+                    {(item.stats?.plays || 0) > 0 && <span><Play size={11} />{formatCount(item.stats.plays || 0)}</span>}
+                    <span><Heart size={11} />{formatCount(item.stats?.likes || 0)}</span>
+                    <span><Star size={11} />{formatCount(item.stats?.collects || 0)}</span>
+                    <span><MessageCircle size={11} />{formatCount(item.stats?.comments || 0)}</span>
+                    <span><Share2 size={11} />{formatCount(item.stats?.shares || 0)}</span>
+                  </div>
+                )}
                 <div className="template-meta">
-                  {isParsed(item) ? (
+                  {item.kind === 'flow' ? (
+                    <>
+                      <span>{(item.flowNodes || []).slice(0, 3).map((node) => node.title).join(' · ') || '流程节点'}</span>
+                    </>
+                  ) : isParsed(item) ? (
                     <>
                       <span>{item.structure.length} 段脚本</span>
                       <span>{item.storyboard.length} 个分镜</span>
@@ -182,14 +195,38 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
               <>
                 <header className="drawer-head">
                   <div>
-                    <span className="section-kicker">{isParsed(detail) ? detail.contentType : '待解析'} · {detail.platformLabel}</span>
+                    <span className="section-kicker">{detail.kind === 'flow' ? '工作流' : (isParsed(detail) ? detail.contentType : '待解析') + ' · ' + detail.platformLabel}</span>
                     <strong>{detail.title}</strong>
-                    <span className="drawer-sub">{detail.author || '未知作者'} · {formatDuration(detail.durationSec)} · 模板 {detail.id}</span>
+                    <span className="drawer-sub">
+                      {detail.kind === 'flow'
+                        ? '来自画布 · 套用后开回一张新画布 · ' + (detail.flowNodes?.length || 0) + ' 个节点'
+                        : (detail.author || '未知作者') + ' · ' + formatDuration(detail.durationSec)}
+                      {' · 模板 ' + detail.id}
+                    </span>
                   </div>
                   <button className="icon-button" onClick={() => setDetail(null)} aria-label="关闭"><X size={16} /></button>
                 </header>
 
                 <div className="drawer-body">
+                  {detail.kind === 'flow' ? (
+                    <section className="drawer-section">
+                      <div className="drawer-section-head"><h3>流程节点</h3><span>{detail.flowNodes?.length || 0} 个</span></div>
+                      <ul className="drawer-list drawer-list--flow">
+                        {(detail.flowNodes || []).map((node, index) => (
+                          <li key={index}><span className="vq-mono">{String(index + 1).padStart(2, '0')}</span>{node.title}<em>{node.kind}</em></li>
+                        ))}
+                      </ul>
+                      {(detail.analysis?.reusableRules || []).length ? (
+                        <>
+                          <div className="drawer-section-head drawer-section-head--tight"><h4>节点提示词</h4></div>
+                          <ul className="drawer-list drawer-list--rules">
+                            {detail.analysis.reusableRules.map((rule, index) => <li key={index}>{rule}</li>)}
+                          </ul>
+                        </>
+                      ) : null}
+                    </section>
+                  ) : (
+                  <>
                   <section className="drawer-section">
                     <div className="drawer-section-head"><h3>互动数据</h3><span>来自检索结果</span></div>
                     <div className="drawer-stats">
@@ -283,41 +320,47 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
                       {detail.sourceUrl ? <a href={detail.sourceUrl} target="_blank" rel="noreferrer"><ExternalLink size={13} />打开原视频</a> : <span className="is-muted">原链接缺失（示例数据或直链测试）</span>}
                     </div>
                   </section>
+                  </>
+                  )}
                 </div>
 
                 <footer className="drawer-foot">
-                  <button className="button button--ghost" onClick={() => {
-                    const firstFrame = detail.frames?.[0]?.url || ''
-                    const media = firstFrame.replace(/^\/media\//, '')
-                    requestReview({
-                      media: media || undefined,
-                      imageUrl: media ? undefined : detail.cover || undefined,
-                      label: detail.title,
-                      intent: '评审这条模板的首帧是否适合作为封面/开场',
-                    })
-                  }}>
-                    <ScanEye size={14} />送去评审
-                  </button>
-                  <button className="button button--ghost" disabled={!isParsed(detail)} onClick={() => {
-                    const list = [detail.hook, ...detail.structure.map((beat) => beat.beat + '：' + beat.voiceover), 'CTA：' + (detail.structure.at(-1)?.purpose || '')].join('\n')
-                    void navigator.clipboard?.writeText(list).then(() => onToast('脚本已复制到剪贴板')).catch(() => onToast('复制失败'))
-                  }}>
-                    <Copy size={14} />复制脚本
-                  </button>
+                  {detail.kind === 'flow' ? null : (
+                    <>
+                      <button className="button button--ghost" onClick={() => {
+                        const firstFrame = detail.frames?.[0]?.url || ''
+                        const media = firstFrame.replace(/^\/media\//, '')
+                        requestReview({
+                          media: media || undefined,
+                          imageUrl: media ? undefined : detail.cover || undefined,
+                          label: detail.title,
+                          intent: '评审这条模板的首帧是否适合作为封面/开场',
+                        })
+                      }}>
+                        <ScanEye size={14} />送去评审
+                      </button>
+                      <button className="button button--ghost" disabled={!isParsed(detail)} onClick={() => {
+                        const list = [detail.hook, ...detail.structure.map((beat) => beat.beat + '：' + beat.voiceover), 'CTA：' + (detail.structure.at(-1)?.purpose || '')].join('\n')
+                        void navigator.clipboard?.writeText(list).then(() => onToast('脚本已复制到剪贴板')).catch(() => onToast('复制失败'))
+                      }}>
+                        <Copy size={14} />复制脚本
+                      </button>
+                    </>
+                  )}
                   <button
                     className="button button--primary"
-                    disabled={!isParsed(detail)}
+                    disabled={detail.kind !== 'flow' && !isParsed(detail)}
                     onClick={() => {
                       void applyTemplate(detail.id)
                         .then((result) => {
                           setDetail({ ...detail, reuseCount: result.template.reuseCount })
-                          onToast('已生成画布草稿：' + result.flow.name)
-                          onOpenCanvas()
+                          onToast(detail.kind === 'flow' ? '已打开画布：' + result.flow.name : '已生成画布草稿：' + result.flow.name)
+                          onOpenCanvas(result.flow.id)
                         })
                         .catch((caught) => onToast(caught instanceof Error ? caught.message : '套用模板失败'))
                     }}
                   >
-                    <Layers size={14} />套用到画布
+                    <Layers size={14} />{detail.kind === 'flow' ? '在画布打开' : '套用到画布'}
                   </button>
                   <button className="button button--danger button--tiny" onClick={() => { void deleteTemplate(detail.id).then(() => { setDetail(null); onToast('模板已删除'); void load() }) }}>
                     <Trash2 size={13} />删除

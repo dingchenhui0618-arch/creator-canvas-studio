@@ -271,17 +271,23 @@ function Workbench({
     }
     switch (route.page) {
       case 'canvas':
-        return <CanvasPage onToast={notify} />
+        return <CanvasPage flowId={route.flowId} onToast={notify} />
       case 'radar':
         return <RadarPage onToast={notify} onOpenTemplates={() => go('templates')} />
       case 'templates':
-        return <TemplateLibraryPage onToast={notify} onBack={() => go('radar')} onOpenCanvas={() => go('canvas')} />
+        return (
+          <TemplateLibraryPage
+            onToast={notify}
+            onBack={() => go('radar')}
+            onOpenCanvas={(flowId) => navigate({ kind: 'page', page: 'canvas', flowId })}
+          />
+        )
       case 'overview':
         return <OverviewPage userName={session.user.name} onCreate={() => setShowCreate(true)} onNavigate={go} />
       case 'agents':
         return <AgentsPage onCreate={openNewAgent} onOpenAgent={openAgent} />
       case 'runs':
-        return <RunsPage />
+        return <RunsPage onOpenFlow={(flowId) => navigate({ kind: 'page', page: 'canvas', flowId })} />
       case 'review':
         return <ReviewPage />
       case 'settings':

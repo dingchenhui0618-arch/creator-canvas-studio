@@ -18,13 +18,17 @@ import {
 import {
   createFlow,
   deleteFlow,
+  getFlow,
   listFlows,
   runFlowStream,
+  saveFlowAsTemplate,
   updateFlow,
   type ApiFlow,
   type RunNodeResult,
   type RunRecord,
 } from '../api/flows'
+import { getCredits } from '../api/credits'
+import { replaceRoute } from '../router'
 import {
   createBdcCanvas,
   getBdcStatus,
@@ -53,16 +57,17 @@ const nodeTypes = {
   output: FlowNodeCard,
 }
 
-type CanvasPageProps = { onToast?: (message: string) => void }
+// flowId 来自地址栏 #/canvas/<flowId>：从模板库、运行记录或刷新页面都能直接落到指定流程
+type CanvasPageProps = { onToast?: (message: string) => void; flowId?: string }
 
 type Snapshot = { nodes: Node<FlowNodeData>[]; edges: Edge[] }
 
 type SaveState = 'saved' | 'saving' | 'dirty' | 'error'
 
-export default function CanvasPage({ onToast }: CanvasPageProps) {
+export default function CanvasPage({ onToast, flowId }: CanvasPageProps) {
   return (
     <ReactFlowProvider>
-      <CanvasWorkspace onToast={onToast} />
+      <CanvasWorkspace onToast={onToast} flowId={flowId} />
     </ReactFlowProvider>
   )
 }
@@ -79,7 +84,7 @@ function hostOf(value: string): string {
   }
 }
 
-function CanvasWorkspace({ onToast }: CanvasPageProps) {
+function CanvasWorkspace({ onToast, flowId: initialFlowId }: CanvasPageProps) {
   const rf = useReactFlow()
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<FlowNodeData>>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
@@ -114,6 +119,8 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
   const [zoom, setZoom] = useState(1)
   const [historyCount, setHistoryCount] = useState(0)
   const [futureCount, setFutureCount] = useState(0)
+  // 画布运行按次扣积分：运行前就把单价和余额摆出来，402 时不用去猜
+  const [runCredit, setRunCredit] = useState<{ price: number; balance: number | null } | null>(null)
 
   const bdcLocalOnly =
     Boolean(bdc?.web.url) &&
@@ -137,6 +144,16 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
   const stageRef = useRef<HTMLDivElement>(null)
 
   const toast = useCallback((message: string) => onToast?.(message), [onToast])
+
+  const refreshRunCredit = useCallback(() => {
+    void getCredits(1)
+      .then((data) => setRunCredit({ price: Number(data.prices.flow_run) || 0, balance: data.balance }))
+      .catch(() => setRunCredit(null))
+  }, [])
+
+  useEffect(() => {
+    refreshRunCredit()
+  }, [refreshRunCredit])
 
   const graphSignature = useMemo(
     () =>
@@ -245,6 +262,8 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
     setRunError('')
     setSaveState('saved')
     setSaveError('')
+    // 地址栏跟着当前流程走：刷新、复制链接、从其它页面跳回来都能落到同一张画布
+    if (flow.id) replaceRoute({ kind: 'page', page: 'canvas', flowId: flow.id })
   }, [setNodes, setEdges])
 
   const saveNow = useCallback(async (): Promise<boolean> => {
@@ -280,12 +299,23 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
       try {
         let list = await listFlows()
         if (!alive) return
+        // 地址里有 #/canvas/<flowId>：优先打开指定流程；找不到就退回列表第一条
+        let target: ApiFlow | null = initialFlowId ? list.find((flow) => flow.id === initialFlowId) || null : null
+        if (initialFlowId && !target) {
+          try {
+            target = await getFlow(initialFlowId)
+            if (target) list = [target, ...list]
+          } catch {
+            target = null
+          }
+        }
+        if (!alive) return
         if (!list.length) {
           const created = await createFlow({ name: '未命名流程', description: '', nodes: [], edges: [] })
           list = [created]
         }
         setFlows(list)
-        applyFlow(list[0])
+        applyFlow(target || list[0])
         setLoadState('ready')
         window.setTimeout(() => rf.fitView({ padding: 0.12 }), 80)
       } catch (error) {
@@ -298,7 +328,7 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
     return () => {
       alive = false
     }
-  }, [applyFlow, rf])
+  }, [applyFlow, initialFlowId, rf])
 
   // 自动保存：只比较节点/连线/流程名的投影，选中态变化不会触发保存
   useEffect(() => {
@@ -486,18 +516,19 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
     }
   }, [applyFlow, running, saveNow, toast])
 
+  // 另存为模板 = 写进模板库的工作流条目（带 blueprint），不是再复制一张流程
   const saveAsTemplate = useCallback(async () => {
     if (running) return
+    const id = flowIdRef.current
+    if (!id) return
+    if (!nodesRef.current.length) {
+      toast('画布还是空的，先拖入节点再存为模板')
+      return
+    }
     await saveNow()
     try {
-      const copy = await createFlow({
-        name: nameRef.current + ' · 模板',
-        description: descriptionRef.current,
-        nodes: toFlowNodes(nodesRef.current),
-        edges: toFlowEdges(edgesRef.current),
-      })
-      setFlows((current) => [copy, ...current])
-      toast('已另存为模板流程：' + copy.name)
+      const result = await saveFlowAsTemplate(id, nameRef.current)
+      toast('已存为模板：' + result.template.title + '（可在模板库套用回画布）')
     } catch (error) {
       toast('另存失败：' + (error instanceof Error ? error.message : String(error)))
     }
@@ -597,8 +628,10 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
       toast('运行失败：' + message)
     } finally {
       setRunning(false)
+      // 运行结束（含失败退款）后余额会变，重新读一次，别让按钮旁的余额停在旧值
+      refreshRunCredit()
     }
-  }, [running, saveError, saveNow, setNodes, toast])
+  }, [refreshRunCredit, running, saveError, saveNow, setNodes, toast])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -840,7 +873,7 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
             </span>
           </span>
         }
-        desc="服务端按拓扑序执行 · 模型调用走本地端点 · 运行记录写入 data/runs.json"
+        desc="按依赖顺序逐个节点执行 · 每次运行记录耗时、输出与失败原因，失败自动退回积分"
         actions={
           <div className="cv-head-actions">
           <label className="cv-flow-select">
@@ -863,7 +896,18 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
           <button className="cv-btn" type="button" onClick={() => { void saveNow().then((ok) => toast(ok ? '已保存到 data/flows.json' : '保存失败：' + saveError)) }} disabled={running || saveState === 'saving'} title="Ctrl+S">
             <Save size={14} />保存
           </button>
-          <button className="cv-btn cv-btn--primary" type="button" onClick={() => { void handleRun() }} disabled={running || loadState !== 'ready'}>
+          {runCredit && runCredit.price > 0 ? (
+            <span className="cv-run-credit" title="画布按次扣积分；有节点失败会全额退回">
+              运行 {runCredit.price} 积分 · 余额 {runCredit.balance ?? '—'}
+            </span>
+          ) : null}
+          <button
+            className="cv-btn cv-btn--primary"
+            type="button"
+            onClick={() => { void handleRun() }}
+            disabled={running || loadState !== 'ready' || (runCredit != null && runCredit.balance != null && runCredit.balance < runCredit.price)}
+            title={runCredit && runCredit.balance != null && runCredit.balance < runCredit.price ? '积分不足，先让管理员发放' : '按拓扑序执行整张画布'}
+          >
             <Play size={14} fill="currentColor" />{running ? '运行中…' : '运行流程'}
           </button>
           <button className="cv-icon-btn" type="button" onClick={() => { void removeFlow() }} disabled={running || loadState !== 'ready'} aria-label="删除流程" title="删除流程">

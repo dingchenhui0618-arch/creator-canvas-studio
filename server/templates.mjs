@@ -163,6 +163,59 @@ export async function reuseTemplate(id) {
   return target
 }
 
+// 画布「另存为模板」：把一张流程的节点/连线一起存成可复用的工作流模板。
+// 与爆款模板不同，它没有视频、没有分镜，只在模板库里占一条「工作流」类型；
+// blueprint 是恢复用的真节点与连线，套用时原样建回一张新画布。
+export async function createTemplateFromFlow({ flow, title = '', contentType = '工作流', tags = [], user = null }) {
+  if (!flow) return null
+  const list = await loadAll()
+  const now = new Date().toISOString()
+  const nodes = Array.isArray(flow.nodes) ? flow.nodes : []
+  const edges = Array.isArray(flow.edges) ? flow.edges : []
+  const prompts = nodes
+    .filter((node) => node?.type === 'llm' && node?.data?.config?.systemPrompt)
+    .map((node) => String(node.data.config.systemPrompt).slice(0, 200))
+  const template = {
+    id: 'tpl_' + randomUUID().slice(0, 8),
+    kind: 'flow',
+    title: String(title || flow.name || '未命名工作流').trim().slice(0, 120),
+    contentType: String(contentType || '工作流').trim().slice(0, 40),
+    tags: (Array.isArray(tags) ? tags : []).map((tag) => String(tag).trim()).filter(Boolean).slice(0, 12),
+    platform: 'canvas',
+    platformLabel: '画布',
+    sourceUrl: '',
+    sourceId: flow.id,
+    author: '',
+    publishedAt: '',
+    stats: { plays: 0, likes: 0, comments: 0, shares: 0, collects: 0 },
+    durationSec: 0,
+    hook: '',
+    hookType: '',
+    structure: [],
+    // 卡片/详情展示用：节点标题 + 类型，避免前端去解 blueprint 的完整结构
+    flowNodes: nodes.slice(0, 30).map((node) => ({
+      title: String(node?.data?.title || node?.type || '节点').slice(0, 80),
+      kind: String(node?.type || 'input'),
+    })),
+    storyboard: [],
+    analysis: { pacing: '', viralPoints: [], reusableRules: prompts.slice(0, 5), targetAudience: '' },
+    frames: [],
+    cover: '',
+    video: { width: 0, height: 0, fps: 0, duration: 0 },
+    blueprint: {
+      nodes: JSON.parse(JSON.stringify(nodes)).slice(0, 60),
+      edges: JSON.parse(JSON.stringify(edges)).slice(0, 120),
+    },
+    origin: 'canvas',
+    reuseCount: 0,
+    ownerId: user?.id || '',
+    createdAt: now,
+  }
+  list.unshift(template)
+  await persist(list)
+  return template
+}
+
 // 后台治理与画布「另存为模板」共用：只允许改能决定展示与检索的字段
 export async function updateTemplate(id, patch = {}, user = null) {
   const list = await loadAll()
@@ -200,8 +253,10 @@ export async function templateStats(user = null) {
   }
   return {
     total: list.length,
-    parsed: list.filter((item) => item.kind !== 'saved').length,
+    // 已解析只算跑过复刻、真的有脚本与分镜的；画布工作流单独计数，不混进解析口径
+    parsed: list.filter((item) => item.kind === 'replica').length,
     saved: list.filter((item) => item.kind === 'saved').length,
+    flows: list.filter((item) => item.kind === 'flow').length,
     byType,
   }
 }

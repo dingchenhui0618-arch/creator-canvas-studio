@@ -63,8 +63,8 @@ export type TemplateAnalysis = {
 export type ReplicaTemplate = {
   thumb?: string
   id: string
-  /** saved：只存了链接与互动数据，还没解析；replica：跑过一键复刻，有脚本与分镜 */
-  kind: 'saved' | 'replica'
+  /** saved：只存了链接与互动数据；replica：跑过一键复刻，有脚本与分镜；flow：画布另存的工作流 */
+  kind: 'saved' | 'replica' | 'flow'
   savedAt?: string
   title: string
   contentType: string
@@ -85,9 +85,12 @@ export type ReplicaTemplate = {
   frames: { index: number; t: number; url: string }[]
   cover: string
   video: { width: number; height: number; fps: number; duration: number }
-  origin: 'ai' | 'manual'
+  origin: 'ai' | 'manual' | 'canvas'
   reuseCount: number
   createdAt: string
+  /** kind === 'flow' 时才有：画布节点摘要与可恢复的节点/连线 */
+  flowNodes?: { title: string; kind: string }[]
+  blueprint?: { nodes: unknown[]; edges: unknown[] }
 }
 
 export type JobLog = { at: string; text: string }
@@ -108,5 +111,7 @@ export type TemplateList = {
   total: number
   parsed: number
   saved: number
+  /** 画布另存的工作流模板条数（不混进「已解析」） */
+  flows?: number
   byType: Record<string, number>
 }

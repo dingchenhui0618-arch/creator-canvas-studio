@@ -92,6 +92,8 @@ export const config = {
       replicate: Number(process.env.VQ_CREDIT_REPLICATE ?? 10),
       review: Number(process.env.VQ_CREDIT_REVIEW ?? 5),
       chat: Number(process.env.VQ_CREDIT_CHAT ?? 1),
+      // 画布整条流程跑一次（含模型调用）：按次计费，失败全额退回
+      flow_run: Number(process.env.VQ_CREDIT_FLOW_RUN ?? 2),
     },
     // 同一账号同时能跑几个：防连点把上游配额一次打光
     concurrency: {
@@ -99,6 +101,8 @@ export const config = {
       replicate: Number(process.env.VQ_CONCURRENCY_REPLICATE ?? 2),
       review: Number(process.env.VQ_CONCURRENCY_REVIEW ?? 1),
       chat: Number(process.env.VQ_CONCURRENCY_CHAT ?? 2),
+      // 同账号同时只允许一条画布流程在跑，避免连点把上游配额打光
+      flow_run: Number(process.env.VQ_CONCURRENCY_FLOW_RUN ?? 1),
     },
   },
   // 界面口径：生产环境只讲产品语言（不出现模型标识、上游地址、环境变量）；

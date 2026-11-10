@@ -40,6 +40,8 @@
 .cv-save.is-error { color: var(--fail); }
 .cv-save.is-error .cv-save-dot { background: var(--fail); }
 .cv-head-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+/* 运行前的积分口径：按次扣，失败退回；数字用等宽，避免和按钮抢注意力 */
+.cv-run-credit { font-family: var(--font-mono); font-size: 11px; letter-spacing: .02em; color: var(--faint); white-space: nowrap; }
 .cv-flow-select { position: relative; display: inline-flex; align-items: center; }
 .cv-flow-select select {
   appearance: none;

@@ -15,6 +15,7 @@ import { config, visionEnabled } from '../config.mjs'
 import { currentUser } from '../auth.mjs'
 import { charge, refund } from '../credits.mjs'
 import { enter, leave } from '../gate.mjs'
+import { publicError } from '../public-error.mjs'
 
 const PREFIX = '/api/agents'
 
@@ -25,14 +26,18 @@ function methodNotAllowed(res, allowed) {
 function agentError(res, error) {
   const status = Number(error?.httpStatus) || Number(error?.status) || 500
   if (status >= 500) console.error('[agents] ' + (error?.stack || error?.message || error))
-  sendJson(res, status, {
-    error: String(error?.message || error),
+  const body = {
+    // 生产界面只讲产品语言：模型名、上游状态和逐条尝试明细保留在内部环境与日志里
+    error: publicError(error, '智能体暂时不可用，请稍后重试'),
     code: error?.code || 'AGENT_ERROR',
     suggestion: error?.suggestion || '',
-    model: error?.model || '',
-    upstreamStatus: error?.upstreamStatus || null,
-    attempted: Array.isArray(error?.attempted) ? error.attempted : [],
-  })
+  }
+  if (config.ui.mode === 'internal') {
+    body.model = error?.model || ''
+    body.upstreamStatus = error?.upstreamStatus || null
+    body.attempted = Array.isArray(error?.attempted) ? error.attempted : []
+  }
+  sendJson(res, status, body)
 }
 
 export function createAgentsRouter() {

@@ -13,7 +13,9 @@ import { EDITION_BY_ID, type AdminSection, type EditionId } from './editions'
 export type ShellPage = Exclude<Page, 'login' | 'agent-editor'>
 
 export type Route =
-  | { kind: 'page'; page: ShellPage }
+  // flowId 只对 canvas 有意义：地址栏 #/canvas/<flowId> 直接打开某一张流程，
+  // 从模板库/运行记录里点「在画布打开」都落到这个形式。
+  | { kind: 'page'; page: ShellPage; flowId?: string }
   | { kind: 'agent-editor'; agentRef: string | null }
   | { kind: 'admin'; section: AdminSection }
 
@@ -82,6 +84,7 @@ export function parseRoute(hash: string): Route {
     return { kind: 'agent-editor', agentRef: tail }
   }
   if ((USER_PAGES as readonly string[]).includes(head)) {
+    if (head === 'canvas') return { kind: 'page', page: 'canvas', flowId: tail || undefined }
     return { kind: 'page', page: head as ShellPage }
   }
   return DEFAULT_ROUTE
@@ -89,14 +92,17 @@ export function parseRoute(hash: string): Route {
 
 /** 规范化 hash：没有任何查询串，只保留可寻址的路径。 */
 export function toHash(route: Route): string {
-  if (route.kind === 'page') return '#/' + route.page
+  if (route.kind === 'page') {
+    if (route.page === 'canvas' && route.flowId) return '#/canvas/' + encodeURIComponent(route.flowId)
+    return '#/' + route.page
+  }
   if (route.kind === 'admin') return '#/admin/' + route.section
   return '#/agents/' + (route.agentRef ? encodeURIComponent(route.agentRef) : 'new')
 }
 
 /** 用字符串比较路由是否相同，供 key、订阅去重和「无变化不写历史」共用。 */
 export function routeKey(route: Route): string {
-  if (route.kind === 'page') return 'page:' + route.page
+  if (route.kind === 'page') return 'page:' + route.page + (route.page === 'canvas' && route.flowId ? ':' + route.flowId : '')
   if (route.kind === 'admin') return 'admin:' + route.section
   return 'agent-editor:' + (route.agentRef ?? 'new')
 }
@@ -153,6 +159,14 @@ export function navigate(route: Route, options: { replace?: boolean } = {}) {
     else window.location.hash = hash
   }
   publish(route)
+}
+
+/** 只改地址栏、不触发重渲染：画布页内切流程时同步 flowId，避免整页重挂载。 */
+export function replaceRoute(route: Route) {
+  ensureListening()
+  const hash = toHash(route)
+  if (window.location.hash === hash) return
+  window.history.replaceState(null, '', hash)
 }
 
 export function subscribeRoute(listener: () => void): () => void {

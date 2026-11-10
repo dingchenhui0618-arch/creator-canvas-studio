@@ -49,11 +49,15 @@ export type RunItem = {
   durationMs: number
   total: number
   nodes?: RunNode[]
+  error?: string | null
+  credits?: { cost: number; balance: number | null; refunded: boolean } | null
 }
 
 export type RunsResponse = {
   items: RunItem[]
   total: number
+  offset?: number
+  limit?: number
 }
 
 export type VersionInfo = {

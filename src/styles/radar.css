@@ -55,7 +55,7 @@
 }
 .radar-idle-tag:hover { color:var(--ink); border-color:var(--line-strong); }
 /* ---------- 模板库：待解析条目与互动数据 ---------- */
-.template-summary { grid-template-columns:repeat(4,minmax(0,1fr)); }
+.template-summary { grid-template-columns:repeat(5,minmax(0,1fr)); }
 .template-card { background:var(--surface-raised); border-color:var(--line); }
 .template-copy > strong { font-size:14px; font-weight:600; line-height:1.5; }
 .template-hook { color:var(--muted); font-size:12px; }
@@ -63,6 +63,10 @@
 .template-stats span { display:inline-flex; align-items:center; gap:3px; }
 .template-type.is-pending { color:var(--warn); background:var(--warn-soft); }
 .drawer-stats { display:flex; flex-wrap:wrap; gap:8px 16px; color:var(--muted); font-size:12px; }
+.drawer-list--flow { padding-left:0; list-style:none; }
+.drawer-list--flow li { display:flex; align-items:baseline; gap:12px; padding:6px 0; border-bottom:1px solid var(--line-faint); }
+.drawer-list--flow li .vq-mono { color:var(--faint); font-size:11px; }
+.drawer-list--flow li em { margin-left:auto; font-style:normal; font-family:var(--font-mono); font-size:11px; letter-spacing:.04em; color:var(--faint); text-transform:uppercase; }
 .drawer-stats b { color:var(--ink); font-family:var(--font-mono); font-size:13px; font-weight:500; }
 .drawer-section--pending .drawer-pending-copy { margin:0 0 12px; color:var(--muted); font-size:12.5px; line-height:1.75; }
 .drawer-section--pending .button { height:34px; }

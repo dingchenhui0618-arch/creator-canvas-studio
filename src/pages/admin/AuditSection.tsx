@@ -21,8 +21,25 @@ function outputOf(value: unknown): string {
   }
 }
 
+// 导出当前筛选结果：只导已加载的记录，字段与表格一致，带 BOM 让 Excel 正确识别中文
+function exportCsv(runs: RunItem[]) {
+  const rows: (string | number | null | undefined)[][] = [
+    ['运行 ID', '流程 ID', '流程', '状态', '耗时 ms', '节点数', '开始时间', '结束时间', '错误'],
+    ...runs.map((run) => [run.id, run.flowId, run.flowName, run.status, run.durationMs, run.total, run.startedAt, run.finishedAt || '', run.error || '']),
+  ]
+  const csv = rows.map((row) => row.map((cell) => '"' + String(cell ?? '').replace(/"/g, '""') + '"').join(',')).join('\n')
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = 'visionqa-runs-' + new Date().toISOString().slice(0, 10) + '.csv'
+  anchor.click()
+  URL.revokeObjectURL(url)
+}
+
 export default function AuditSection() {
-  const { data, error, loading, reload } = useApi<RunsResponse>('/api/runs')
+  const [status, setStatus] = useState('')
+  const { data, error, loading, reload } = useApi<RunsResponse>('/api/runs?limit=50' + (status ? '&status=' + status : ''))
   const [openId, setOpenId] = useState<string | null>(null)
 
   const runs = [...(data?.items ?? [])].sort((a, b) => b.startedAt.localeCompare(a.startedAt))
@@ -46,6 +63,20 @@ export default function AuditSection() {
             <p className="admin-sub">{data ? `共 ${data.total} 条；节点输出来自列表返回的 nodes 字段。` : '等待接口返回。'}</p>
           </div>
           <SourceTag kind="api" source="GET /api/runs" />
+        </div>
+
+        <div className="admin-run-toolbar">
+          <label className="admin-run-filter">
+            <span>状态</span>
+            <select value={status} onChange={(event) => setStatus(event.target.value)}>
+              <option value="">全部</option>
+              <option value="success">成功</option>
+              <option value="error">失败</option>
+            </select>
+          </label>
+          <button type="button" className="admin-btn admin-btn--ghost" onClick={() => exportCsv(runs)} disabled={!runs.length}>
+            导出 CSV（当前筛选）
+          </button>
         </div>
 
         {runs.length ? (

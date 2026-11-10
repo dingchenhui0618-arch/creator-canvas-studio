@@ -391,8 +391,8 @@ DOMAIN=visionqa.wavisionai.cn bash deploy/production/enable-https.sh            
 | VISIONQA_SERVICE_URL | VisionQA 插件服务地址，默认 http://127.0.0.1:6300 |
 | VQ_REGISTRATION | 注册开关，**默认关闭**，只有显式写 1 才开放（以前是「不等于 0 就开」，漏配即公开注册） |
 | VQ_ADMIN_EMAILS | 管理员邮箱（逗号分隔），可看全部数据、发放积分；库里 kind='admin' 等价 |
-| VQ_CREDIT_WELCOME / VQ_CREDIT_SEARCH / VQ_CREDIT_REPLICATE / VQ_CREDIT_REVIEW / VQ_CREDIT_CHAT | 初始积分与各动作单价，默认 100 / 2 / 10 / 5 / 1 |
-| VQ_CONCURRENCY_SEARCH / _REPLICATE / _REVIEW / _CHAT | 单账号并发上限，默认 1 / 2 / 1 / 2 |
+| VQ_CREDIT_WELCOME / VQ_CREDIT_SEARCH / VQ_CREDIT_REPLICATE / VQ_CREDIT_REVIEW / VQ_CREDIT_CHAT / VQ_CREDIT_FLOW_RUN | 初始积分与各动作单价，默认 100 / 2 / 10 / 5 / 1 / 2（画布整条流程跑一次） |
+| VQ_CONCURRENCY_SEARCH / _REPLICATE / _REVIEW / _CHAT / _FLOW_RUN | 单账号并发上限，默认 1 / 2 / 1 / 2 / 1 |
 
 ## 十、接口
 
@@ -560,3 +560,41 @@ DOMAIN=visionqa.wavisionai.cn bash deploy/production/enable-https.sh            
 ### 十七.4 下一批
 
 运行记录分页/筛选、画布流程按 ID 打开、画布「另存为模板」落模板库、流程执行计积分、智能体历史接口、后台模板编辑表单。
+
+## 十八、2026-11-10 追加六：待接 API 第二批（运行记录、画布计费、流程模板、按 ID 打开）
+
+### 十八.1 这一批做了什么
+
+| 位置 | 之前 | 现在 |
+| --- | --- | --- |
+| 运行记录 | 只拉默认 20 条，没有筛选 | 服务端分页 + 按流程 / 状态 / 关键词筛选，显示「当前区间 x–y / 总数」 |
+| 运行记录详情 | 只有节点输出 | 头行显示本次消耗或退回的积分，可一键「在画布打开」对应流程 |
+| 画布运行 | 点了就跑，不扣积分 | 按次扣 2 积分（`VQ_CREDIT_FLOW_RUN` 可改）；跑之前显示「运行 2 积分 · 余额」，余额不足直接禁用；有节点失败整单退回，运行结果里显示「已退回 2 积分」 |
+| 画布地址 | 永远打开列表第一条 | `#/canvas/<flowId>`，刷新、复制链接、从运行记录/模板库跳转都落到同一张画布 |
+| 画布「另存为模板」 | 其实是复制一张新流程，模板库找不到 | 真的写进模板库的「工作流」条目（带 blueprint），在模板库里能筛「工作流」、能看到节点清单、点「在画布打开」原样开回一张新画布 |
+| 后台运行审计 | 只有列表 | 可按成功/失败筛选，一键导出当前筛选结果 CSV（带 BOM，Excel 直接可读） |
+| 运行报错文案 | 上游原始报文原样透出（带模型名与余额细节） | 统一走 `server/public-error.mjs`：生产只给「模型服务额度不足，本次不计费」这类产品语言；模型名/上游状态只在内部环境与日志里 |
+
+新增/变更接口：`POST /api/templates`（`{from:"flow", flowId}`）、`GET /api/runs?flowId=&status=&q=&limit=&offset=`、`POST /api/flows/:id/run` 计费与退款。
+
+![运行记录：分页、流程/状态筛选与积分](docs/screenshot-runs-filters-2026-11-10.png)
+
+![画布：运行前显示本次积分与余额](docs/screenshot-canvas-run-credits-2026-11-10.png)
+
+![模板库：画布另存的工作流模板](docs/screenshot-templates-flow-2026-11-10.png)
+
+![模板库：工作流详情与节点清单](docs/screenshot-template-flow-detail-2026-11-10.png)
+
+![后台运行审计：状态筛选与导出 CSV](docs/screenshot-admin-audit-filter-2026-11-10.png)
+
+### 十八.2 实测（内部环境同代码、独立数据；生产同 bundle）
+
+- 计费：跑一条 input→output 流程 → 200，`credits.cost=2`、余额 100→98；`GET /api/runs?status=success` 能查到，`offset` 翻页正确。
+- 余额不足：把余额扣到 1 再跑 → 402 `CREDIT_INSUFFICIENT`（需要 2 / 余额 1），余额不变。
+- 失败退款：llm 节点因上游 402 失败 → 运行记录 `status=error`、`credits.refunded=true`，余额回到运行前；界面上的报错是「模型服务额度不足，本次不计费」。
+- 工作流模板：`POST /api/templates {from:"flow"}` → 201，blueprint 带 2 节点 1 连线；`apply` → 201，新流程节点与连线一致；测试模板与流程已删除。
+- 生产：用现有流程跑了一次真实运行（2 积分），截图里的运行记录与模板卡片就是这次验收产生的；bundle `index-BufeDKIP.js`，两个服务 active、`/api/health` ok。
+
+### 十八.3 下一批
+
+智能体历史接口（`GET/POST /api/agents/:id/history`）、智能体编辑页真实运行次数、工具节点真正执行、后台模板编辑表单、设置页积分流水加载更多、后台按账号筛选运行记录。
