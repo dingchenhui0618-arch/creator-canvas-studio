@@ -1,10 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle, ArrowLeft, BookOpen, Check, ChevronDown, MessageSquareText, Trash2, Wrench } from 'lucide-react'
-import { AGENT_CATEGORIES, createAgent, deleteAgent, listAgents, setPendingSelectAgent, updateAgent } from '../api/agents'
+import {
+  AGENT_CATEGORIES,
+  createAgent,
+  deleteAgent,
+  formatRelative,
+  listAgents,
+  setPendingSelectAgent,
+  updateAgent,
+} from '../api/agents'
 import type { AgentCategory, AgentInput, AgentRecord, AgentsList } from '../api/agents'
 import type { Page } from '../domain/types'
 import PageHead from '../components/PageHead'
 import { useModelOptions } from '../components/ModelSwitch'
+import { useUiMode } from '../api/app'
 import '../styles/agents.css'
 
 type AgentEditorPageProps = {
@@ -48,6 +57,8 @@ const hydrate = (record: AgentRecord): AgentForm => ({
 })
 
 export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: seed }: AgentEditorPageProps) {
+  // 生产只讲产品语言：不出现存储文件、接口路径和字段清单，那些留在内部测试环境
+  const { internal } = useUiMode()
   const [meta, setMeta] = useState<AgentsList | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
@@ -123,7 +134,7 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
     const values = new Set(meta?.models ?? [])
     if (form.model) values.add(form.model)
     return [
-      { value: '', label: '默认（服务端配置）' },
+      { value: '', label: '平台默认' },
       ...[...values].map((value) => ({ value, label: modelLabels.get(value) || 'VisionQA 模型' })),
     ]
   }, [form.model, meta?.models, modelLabels])
@@ -193,6 +204,18 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
   }, [editingId, onNavigate])
 
   const knowledgeCount = form.knowledge.split('\n').filter((line) => line.trim()).length
+  // 列表里的运行次数与最近运行来自服务端，不再写死成「0 次 / 未运行」
+  const currentRecord = useMemo(
+    () => (editingId ? meta?.items.find((item) => item.id === editingId) ?? null : null),
+    [editingId, meta],
+  )
+  const toolSummary = useMemo(() => {
+    const tools = meta?.tools ?? []
+    return {
+      ready: tools.filter((tool) => tool.state === 'ready').length,
+      planned: tools.filter((tool) => tool.state === 'planned').length,
+    }
+  }, [meta])
 
   return (
     <div ref={pageRef} className="page agx-page agx-editor">
@@ -204,7 +227,11 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
           </button>
         }
         title={editingId ? form.name || '编辑智能体' : '新建智能体'}
-        desc="保存即写入 data/agents.json，回到列表就能直接对话。"
+        desc={
+          internal
+            ? '保存即写入 data/agents.json，回到列表就能直接对话。'
+            : '保存后回到列表即可直接对话；每次运行都会在「历史 → 运行记录」留档。'
+        }
         actions={
           <div className="agx-head-actions">
           {editingId && (
@@ -287,7 +314,11 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
                 onChange={(event) => patch({ systemPrompt: event.target.value })}
                 placeholder={'你是一位……\n\n工作方式：\n1. ……\n2. ……\n\n约束：\n- 只使用用户给出的信息，缺什么写「待确认」；\n- 不要编造数据、案例或效果承诺。'}
               />
-              <small>写清目标、步骤、禁止事项，以及未知信息怎么处理；对话时会作为 system 消息发给模型。</small>
+              <small>
+                {internal
+                  ? '写清目标、步骤、禁止事项，以及未知信息怎么处理；对话时会作为 system 消息发给模型。'
+                  : '写清目标、步骤与禁止事项，以及未知信息怎么处理；保存后每次对话都会带上它。'}
+              </small>
             </label>
           </section>
 
@@ -307,12 +338,18 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
                 onChange={(event) => patch({ knowledge: event.target.value })}
                 placeholder={'每行一条，例如：\n镜头切换按 3-4 秒一个节拍。\n评审结论只用 通过 / 待确认 / 问题 三档。'}
               />
-              <small>每行一条事实或规则，最多 20 条；会拼进 system 消息，优先级高于模型常识。</small>
+              <small>
+                {internal
+                  ? '每行一条事实或规则，最多 20 条；会拼进 system 消息，优先级高于模型常识。'
+                  : '每行一条事实或规则，最多 20 条；会并入每次对话的上下文，优先级高于模型常识。'}
+              </small>
             </label>
             <div className="agx-field">
               <span>
                 工具
-                <b className="agx-mono">仅声明</b>
+                <b className="agx-mono">
+                  {toolSummary.ready} 已接入 · {toolSummary.planned} 待接入
+                </b>
               </span>
               <div className="agx-tool-grid">
                 {(meta?.tools ?? []).map((tool) => {
@@ -329,7 +366,7 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
                       <span>
                         <strong>
                           {tool.label}
-                          {tool.state === 'planned' ? ' · 待接入' : ''}
+                          {tool.state === 'planned' ? ' · 待接入' : ' · 已接入'}
                         </strong>
                         <span>{tool.description}</span>
                       </span>
@@ -337,7 +374,10 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
                   )
                 })}
               </div>
-              <small>工具只做能力声明，本次对话不会自动执行；真实工具接入后再打开执行开关。</small>
+              <small>
+                已接入的工具会在对话前真正执行：读取模板库 / 画布流程的标题带进上下文，或把回复里的 JSON 整理成可下载文件。待接入的
+                只作能力声明，不会假装执行。
+              </small>
             </div>
           </section>
 
@@ -359,7 +399,13 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
                   </select>
                   <ChevronDown size={13} />
                 </div>
-                <small>{loading ? '读取服务端模型列表…' : '来自服务端 VISION_MODEL / VISION_FALLBACKS，失败时会自动降级。'}</small>
+                <small>
+                  {loading
+                    ? '正在读取可用模型…'
+                    : internal
+                      ? '来自服务端 VISION_MODEL / VISION_FALLBACKS，失败时会自动降级。'
+                      : '由平台统一配置；某个模型不可用时会自动切换到备用模型。'}
+                </small>
               </label>
               <label className="agx-field">
                 <span>
@@ -389,9 +435,13 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
           )}
 
           <footer className="agx-editor-foot">
-            <span className="agx-mono">
-              {editingId ? 'PATCH /api/agents/' + editingId : 'POST /api/agents'}
-            </span>
+            {internal ? (
+              <span className="agx-mono">
+                {editingId ? 'PATCH /api/agents/' + editingId : 'POST /api/agents'}
+              </span>
+            ) : (
+              <span className="agx-mono">{editingId ? '编辑已有智能体' : '新建智能体'}</span>
+            )}
             <div>
               <button className="agx-btn" onClick={onBack}>
                 取消
@@ -416,15 +466,15 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
               <div className="agx-card-meta">
                 <span>
                   <span>模型</span>
-                  <span className="agx-mono">{form.model ? modelLabels.get(form.model) || 'VisionQA 模型' : '服务端默认'}</span>
+                  <span className="agx-mono">{form.model ? modelLabels.get(form.model) || 'VisionQA 模型' : '平台默认'}</span>
                 </span>
                 <span>
                   <span>最近运行</span>
-                  <span className="agx-mono">未运行</span>
+                  <span className="agx-mono">{formatRelative(currentRecord?.lastRunAt)}</span>
                 </span>
                 <span>
                   <span>使用次数</span>
-                  <span className="agx-mono">0 次</span>
+                  <span className="agx-mono">{currentRecord?.runCount ?? 0} 次</span>
                 </span>
               </div>
             </div>
@@ -461,15 +511,30 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
           </section>
 
           <section className="agx-side-panel agx-side-panel--quiet">
-            <span className="agx-kicker">落盘与接口</span>
-            <p className="agx-side-copy">
-              存储 <code>data/agents.json</code>（临时文件 + rename 原子写）。字段：名称 / 分类 / 职责 / 系统提示词 / 模型 / 温度 / 知识 / 工具。
-            </p>
-            <p className="agx-side-note">
-              <BookOpen size={12} /> 知识会进入 system 消息
-              <br />
-              <Wrench size={12} /> 工具只做能力声明
-            </p>
+            <span className="agx-kicker">{internal ? '落盘与接口' : '保存后'}</span>
+            {internal ? (
+              <>
+                <p className="agx-side-copy">
+                  存储 <code>data/agents.json</code>（临时文件 + rename 原子写）。字段：名称 / 分类 / 职责 / 系统提示词 / 模型 / 温度 / 知识 / 工具。
+                </p>
+                <p className="agx-side-note">
+                  <BookOpen size={12} /> 知识会进入 system 消息
+                  <br />
+                  <Wrench size={12} /> 已接入工具会真正读取本地数据
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="agx-side-copy">
+                  保存后，列表卡片与对话会立刻用新的提示词、知识和工具。每次对话都会在「历史 → 运行记录」留一条记录，失败会标出原因并退回积分。
+                </p>
+                <p className="agx-side-note">
+                  <BookOpen size={12} /> 知识会并入本次对话的上下文
+                  <br />
+                  <Wrench size={12} /> 已接入工具会读取模板库与画布流程
+                </p>
+              </>
+            )}
           </section>
         </aside>
       </div>

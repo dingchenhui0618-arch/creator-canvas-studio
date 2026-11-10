@@ -58,15 +58,55 @@ export type AgentInput = {
   tools: string[]
 }
 
+export type AgentToolEvidence = { id: string; label: string; detail: string }
+export type AgentArtifact = { name: string; type: string; content: string; bytes: number }
+export type AgentToolsResult = {
+  used: AgentToolEvidence[]
+  artifacts: AgentArtifact[]
+  skipped: { id: string; label: string; reason: string }[]
+}
+
 export type AgentChatReply = {
+  credits?: { cost: number; balance: number | null }
   reply: string
   model: string
   latencyMs: number
   usage: unknown
   attempted: string[]
+  tools?: AgentToolsResult
+  run?: { id: string; createdAt: string; credits: { cost: number; balance: number | null; refunded: boolean } | null }
   memory: { turns: number; messages: number }
   outputType: OutputType
   agent: { id: string; name: string; runCount: number; lastRunAt: string | null }
+}
+
+export type AgentRunRecord = {
+  id: string
+  agentId: string
+  agentName: string
+  status: 'success' | 'error'
+  conversationId?: string
+  message: string
+  reply: string
+  error: string
+  model: string
+  outputType: string
+  latencyMs: number
+  credits: { cost: number; balance: number | null; refunded: boolean } | null
+  tools: {
+    used: AgentToolEvidence[]
+    skipped: { id: string; label: string; reason: string }[]
+    artifacts: { name: string; type: string; bytes: number }[]
+  } | null
+  createdAt: string
+}
+
+export type AgentHistory = {
+  items: AgentRunRecord[]
+  total: number
+  offset: number
+  limit: number
+  agent: { id: string; name: string; runCount: number; lastRunAt: string | null; lastModel: string }
 }
 
 type ResponseBody = {
@@ -139,12 +179,23 @@ export type ChatMemoryItem = { role: 'user' | 'assistant'; content: string }
 
 export const chatWithAgent = (
   id: string,
-  input: { message: string; outputType: OutputType; model?: string; history?: ChatMemoryItem[] },
+  input: { message: string; outputType: OutputType; model?: string; history?: ChatMemoryItem[]; conversationId?: string },
 ) =>
   request<AgentChatReply>('/api/agents/' + id + '/chat', {
     method: 'POST',
     body: JSON.stringify({ ...input, count: 1 }),
   })
+
+export const listAgentHistory = (id: string, params: { limit?: number; offset?: number } = {}) => {
+  const query = new URLSearchParams()
+  if (params.limit) query.set('limit', String(params.limit))
+  if (params.offset) query.set('offset', String(params.offset))
+  const suffix = query.toString()
+  return request<AgentHistory>('/api/agents/' + id + '/history' + (suffix ? '?' + suffix : ''))
+}
+
+export const clearAgentHistory = (id: string) =>
+  request<{ ok: boolean; removed: number }>('/api/agents/' + id + '/history', { method: 'DELETE' })
 
 const pad = (value: number) => String(value).padStart(2, '0')
 

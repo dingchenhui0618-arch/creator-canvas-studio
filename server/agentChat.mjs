@@ -1,5 +1,7 @@
 import { config, visionEnabled } from './config.mjs'
 import { AGENT_TOOLS } from './agents.mjs'
+import { listTemplates } from './templates.mjs'
+import { listFlows } from './flows.mjs'
 import { callTextModel, llmEnabled, modelChain } from './llm.mjs'
 
 // 智能体对话：消息构造 + 输出类型约束在这里，真正的模型调用复用 llm.mjs 的
@@ -110,7 +112,68 @@ export function normalizeMemory(history) {
   return items
 }
 
-function buildMessages(agent, message, outputType, memory = []) {
+// 已接线工具：在对话前真正读一次本地数据，把摘要放进 system 消息，并在响应里回报读了什么。
+// 只读取当前账号能看到的模板与流程，不写任何东西，也不代表模型真的「操作」了画布。
+export async function collectToolContext(agent, user = null) {
+  const ids = new Set(Array.isArray(agent.tools) ? agent.tools : [])
+  const used = []
+  const blocks = []
+  if (ids.has('templates-read')) {
+    try {
+      const items = (await listTemplates({}, user)).slice(0, 6)
+      used.push({ id: 'templates-read', label: '读取模板库', detail: items.length ? items.length + ' 条' : '模板库为空' })
+      if (items.length) {
+        blocks.push(
+          '模板库最近入库（工具读取，仅供改写参考）：\n' +
+            items
+              .map((item) => '- ' + item.title + '（' + item.contentType + (item.kind === 'flow' ? ' · 画布工作流' : '') + '）')
+              .join('\n'),
+        )
+      }
+    } catch {
+      used.push({ id: 'templates-read', label: '读取模板库', detail: '读取失败，本次忽略' })
+    }
+  }
+  if (ids.has('canvas-read')) {
+    try {
+      const flows = (await listFlows(user)).slice(0, 6)
+      used.push({ id: 'canvas-read', label: '读取画布流程', detail: flows.length ? flows.length + ' 张' : '还没有画布流程' })
+      if (flows.length) {
+        blocks.push(
+          '已有画布流程（工具读取，仅供延续结构）：\n' +
+            flows.map((flow) => '- ' + flow.name + '（' + (Array.isArray(flow.nodes) ? flow.nodes.length : 0) + ' 个节点）').join('\n'),
+        )
+      }
+    } catch {
+      used.push({ id: 'canvas-read', label: '读取画布流程', detail: '读取失败，本次忽略' })
+    }
+  }
+  return { used, blocks }
+}
+
+// 回复里的 JSON：只认 fenced 代码块或整段就是一个对象/数组，解析失败就不生成文件，
+// 不猜、不截断成坏 JSON。
+export function extractJsonArtifact(reply) {
+  const source = String(reply || '')
+  let raw = ''
+  const fenced = source.match(/```(?:json)?\s*\n([\s\S]*?)```/i)
+  if (fenced) raw = fenced[1].trim()
+  if (!raw) {
+    const trimmed = source.trim()
+    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) raw = trimmed
+  }
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw)
+    const content = JSON.stringify(parsed, null, 2)
+    if (content.length > 200000) return null
+    return { name: 'agent-output.json', type: 'application/json', content, bytes: Buffer.byteLength(content, 'utf8') }
+  } catch {
+    return null
+  }
+}
+
+function buildMessages(agent, message, outputType, memory = [], toolContext = { used: [], blocks: [] }) {
   const type = OUTPUT_TYPES.find((item) => item.id === outputType) || OUTPUT_TYPES[0]
   const knowledge = (agent.knowledge || [])
     .map((item) => String(item || '').trim())
@@ -118,10 +181,10 @@ function buildMessages(agent, message, outputType, memory = []) {
     .slice(0, 20)
     .map((item, index) => index + 1 + '. ' + item)
     .join('\n')
-  const tools = (agent.tools || [])
+  const declared = (agent.tools || [])
     .map((id) => AGENT_TOOLS.find((tool) => tool.id === id))
-    .filter(Boolean)
-    .map((tool) => tool.label + '（' + tool.description + '）')
+    .filter((tool) => tool && tool.state === 'planned')
+    .map((tool) => tool.label + '（还没有接线，本次不会执行）')
   const system = [
     '你是「' + agent.name + '」，一个' + agent.category + '方向的创作智能体。',
     '职责：' + agent.role,
@@ -131,7 +194,13 @@ function buildMessages(agent, message, outputType, memory = []) {
     '- 只使用用户给出的信息和下面的知识；缺什么就写「待确认」，不要编造事实、数据或客户案例。',
     '- 用简体中文回答，结构清楚，避免营销套话。',
     knowledge ? '\n知识库（优先级高于模型常识）：\n' + knowledge : '',
-    tools.length ? '\n可以覆盖的能力（本次对话不自动执行工具）：' + tools.join('；') : '',
+    toolContext.blocks.length ? '\n工具读取的上下文（只读，不是用户新给的需求）：\n' + toolContext.blocks.join('\n\n') : '',
+    toolContext.used.length
+      ? '\n本次已执行工具：' +
+        toolContext.used.map((tool) => tool.label + '（' + tool.detail + '）').join('；') +
+        '。如果这些上下文和用户本次的问题无关，就忽略它，不要硬凑引用。'
+      : '',
+    declared.length ? '\n以下能力只作声明，本次不会执行：' + declared.join('；') : '',
     '',
     '系统提示词：',
     String(agent.systemPrompt || '').trim(),
@@ -148,7 +217,7 @@ function buildMessages(agent, message, outputType, memory = []) {
   ]
 }
 
-export async function chatWithAgent({ agent, message, outputType, model, history, log }) {
+export async function chatWithAgent({ agent, message, outputType, model, history, user = null, log }) {
   if (!llmEnabled() || !visionEnabled()) {
     throw chatError('NO_MODEL', 503, '服务端没有可用的模型凭证，无法调用本地模型', {
       suggestion: '在项目 .env 里配置 VISION_API_KEY，或确认本机 ~/.codex/auth.json 存在；配置后需要重启 API。',
@@ -160,8 +229,9 @@ export async function chatWithAgent({ agent, message, outputType, model, history
       suggestion: '在 .env 里设置 VISION_MODEL 与 VISION_FALLBACKS 后重启 API。',
     })
   }
+  const toolContext = await collectToolContext(agent, user)
   const memory = normalizeMemory(history)
-  const messages = buildMessages(agent, message, outputType, memory)
+  const messages = buildMessages(agent, message, outputType, memory, toolContext)
   const temperature = Math.max(0, Math.min(1, Number(agent.temperature ?? 0.4)))
   const startedAt = Date.now()
   try {
@@ -172,6 +242,12 @@ export async function chatWithAgent({ agent, message, outputType, model, history
       models: candidates,
       log,
     })
+    const tools = { used: toolContext.used, artifacts: [], skipped: [] }
+    if ((agent.tools || []).includes('export-json')) {
+      const artifact = extractJsonArtifact(result.text)
+      if (artifact) tools.artifacts.push(artifact)
+      else tools.skipped.push({ id: 'export-json', label: '导出 JSON', reason: '回复里没有可解析的 JSON 块' })
+    }
     return {
       reply: result.text,
       model: result.model,
@@ -179,6 +255,7 @@ export async function chatWithAgent({ agent, message, outputType, model, history
       usage: null,
       attempted: candidates,
       temperature,
+      tools,
       memory: { turns: Math.ceil(memory.length / 2), messages: memory.length },
     }
   } catch (error) {

@@ -9,6 +9,7 @@ import {
   ChevronDown,
   Clock,
   Copy,
+  Download,
   History,
   Pencil,
   Plus,
@@ -19,14 +20,16 @@ import {
 import {
   OUTPUT_TYPES,
   chatWithAgent,
+  clearAgentHistory,
   deleteAgent,
   formatClock,
   formatRelative,
   clearPendingSelectAgent,
+  listAgentHistory,
   listAgents,
   peekPendingSelectAgent,
 } from '../api/agents'
-import type { AgentRecord, AgentsList, OutputType } from '../api/agents'
+import type { AgentArtifact, AgentRecord, AgentRunRecord, AgentsList, AgentToolsResult, OutputType } from '../api/agents'
 import { getCredits, type CreditsResponse } from '../api/credits'
 import PageHead from '../components/PageHead'
 import { useModelOptions } from '../components/ModelSwitch'
@@ -38,6 +41,7 @@ type ChatMessage = {
   content: string
   model?: string
   latencyMs?: number
+  tools?: AgentToolsResult
   at: number
 }
 
@@ -53,6 +57,19 @@ type HistoryEntry = {
 type Failure = { message: string; suggestion: string; detail: string; prompt: string }
 
 const HISTORY_KEY = 'vq:agents:history:v1'
+const RUN_PAGE = 10
+
+function downloadArtifact(artifact: AgentArtifact) {
+  const blob = new Blob([artifact.content], { type: artifact.type || 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = artifact.name || 'agent-output.json'
+  document.body.appendChild(anchor)
+  anchor.click()
+  document.body.removeChild(anchor)
+  URL.revokeObjectURL(url)
+}
 
 const nextId = () =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : String(Math.random()).slice(2)
@@ -364,6 +381,16 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
   const [failure, setFailure] = useState<Failure | null>(null)
   const [history, setHistory] = useState<HistoryEntry[]>(readHistory)
   const [historyOpen, setHistoryOpen] = useState(false)
+  // 历史弹层两栏：本机对话（可恢复上下文）与服务端运行记录（成败、耗时、扣退积分都在）
+  const [historyTab, setHistoryTab] = useState<'chat' | 'runs'>('chat')
+  const [runs, setRuns] = useState<AgentRunRecord[]>([])
+  const [runsTotal, setRunsTotal] = useState(0)
+  const [runsLoading, setRunsLoading] = useState(false)
+  const [runsError, setRunsError] = useState('')
+  const [runsLoadedId, setRunsLoadedId] = useState('')
+  const [expandedRun, setExpandedRun] = useState('')
+  const [armedClear, setArmedClear] = useState(false)
+  const [copiedRun, setCopiedRun] = useState('')
   const [copiedId, setCopiedId] = useState('')
   const [armedDelete, setArmedDelete] = useState('')
   const [actionError, setActionError] = useState('')
@@ -415,6 +442,35 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
     void load()
   }, [load])
 
+  const loadRuns = useCallback(async (agentId: string, offset = 0) => {
+    if (!agentId) return
+    setRunsLoading(true)
+    setRunsError('')
+    try {
+      const data = await listAgentHistory(agentId, { limit: RUN_PAGE, offset })
+      setRuns((current) => (offset === 0 ? data.items : [...current, ...data.items]))
+      setRunsTotal(data.total)
+      setRunsLoadedId(agentId)
+    } catch (caught) {
+      setRunsError(caught instanceof Error ? caught.message : '运行记录加载失败')
+    } finally {
+      setRunsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!historyOpen || historyTab !== 'runs' || !selectedId) return
+    if (runsLoadedId === selectedId) return
+    // oxlint-disable-next-line react/set-state-in-effect
+    void loadRuns(selectedId, 0)
+  }, [historyOpen, historyTab, loadRuns, runsLoadedId, selectedId])
+
+  useEffect(() => {
+    if (!armedClear) return
+    const timer = window.setTimeout(() => setArmedClear(false), 3200)
+    return () => window.clearTimeout(timer)
+  }, [armedClear])
+
   useEffect(() => {
     if (!pending) return
     const timer = window.setInterval(() => setElapsed(Date.now() - pending.startedAt), 100)
@@ -450,6 +506,12 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
     (id: string) => {
       clearPendingSelectAgent()
       setSelectedId(id)
+      // 换智能体时把上一台的运行记录清掉，避免弹层里先闪一下别人的记录
+      setRuns([])
+      setRunsTotal(0)
+      setRunsLoadedId('')
+      setRunsError('')
+      setExpandedRun('')
       const agent = agents.find((item) => item.id === id)
       if (agent?.model) setModel(agent.model)
       if (agent) {
@@ -497,6 +559,7 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
           outputType,
           model: model || agent.model,
           history,
+          conversationId: activeConversationId,
         })
         const replyMessage: ChatMessage = {
           id: nextId(),
@@ -504,10 +567,42 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
           content: result.reply,
           model: result.model,
           latencyMs: result.latencyMs,
+          tools: result.tools,
           at: Date.now(),
         }
         const finalMessages = [...nextMessages, replyMessage]
         setMessages(finalMessages)
+        // 服务端已落一条运行记录：把这条摘要补进已展开的「运行记录」，不用重新请求
+        if (result.run && runsLoadedId === agent.id) {
+          const record: AgentRunRecord = {
+            id: result.run.id,
+            agentId: agent.id,
+            agentName: agent.name,
+            status: 'success',
+            conversationId: activeConversationId,
+            message: content,
+            reply: result.reply,
+            error: '',
+            model: result.model,
+            outputType,
+            latencyMs: result.latencyMs,
+            credits: result.run.credits,
+            tools: result.tools
+              ? {
+                  used: result.tools.used,
+                  skipped: result.tools.skipped,
+                  artifacts: result.tools.artifacts.map((artifact) => ({
+                    name: artifact.name,
+                    type: artifact.type,
+                    bytes: artifact.bytes,
+                  })),
+                }
+              : null,
+            createdAt: result.run.createdAt,
+          }
+          setRuns((current) => [record, ...current])
+          setRunsTotal((total) => total + 1)
+        }
         // 对话完成后写入本地历史（完整一轮才写入），刷新后可以从「历史」找回
         const first = finalMessages.find((item) => item.role === 'user')
         const entry: HistoryEntry = {
@@ -516,7 +611,12 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
           agentName: agent.name,
           title: (first?.content ?? content).slice(0, 42),
           at: new Date().toISOString(),
-          messages: finalMessages,
+          // 下载文件的内容不写进 localStorage（12 条对话会撑爆配额），恢复时只保留工具摘要
+          messages: finalMessages.map((message) =>
+            message.tools
+              ? { ...message, tools: { used: message.tools.used, skipped: message.tools.skipped, artifacts: [] } }
+              : message,
+          ),
         }
         const nextHistory = [entry, ...readHistory().filter((item) => item.id !== activeConversationId)].slice(0, 12)
         writeHistory(nextHistory)
@@ -551,18 +651,44 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
           prompt: content,
         })
         if (insufficient) getCredits(1).then(setCredits).catch(() => undefined)
+        // 失败也会在服务端留一条运行记录；已展开过就重新拉第一页，避免界面还是旧的
+        if (runsLoadedId === agent.id) void loadRuns(agent.id, 0)
       } finally {
         setPending(null)
         getCredits(1).then(setCredits).catch(() => undefined)
       }
     },
-    [conversationId, draft, messages, model, outputType, pending, selectedAgent],
+    [conversationId, draft, loadRuns, messages, model, outputType, pending, runsLoadedId, selectedAgent],
   )
 
   const handleCopy = useCallback(async (message: ChatMessage) => {
     const ok = await copyText(message.content)
     setCopiedId(ok ? message.id : '')
     if (ok) window.setTimeout(() => setCopiedId((current) => (current === message.id ? '' : current)), 1600)
+  }, [])
+
+  const clearRuns = useCallback(async () => {
+    if (!selectedId) return
+    if (!armedClear) {
+      setArmedClear(true)
+      return
+    }
+    setArmedClear(false)
+    setRunsError('')
+    try {
+      await clearAgentHistory(selectedId)
+      setRuns([])
+      setRunsTotal(0)
+      setExpandedRun('')
+    } catch (caught) {
+      setRunsError(caught instanceof Error ? caught.message : '清空失败')
+    }
+  }, [armedClear, selectedId])
+
+  const copyRun = useCallback(async (run: AgentRunRecord) => {
+    const ok = await copyText(run.status === 'error' ? run.error || '运行失败' : run.reply)
+    setCopiedRun(ok ? run.id : '')
+    if (ok) window.setTimeout(() => setCopiedRun((current) => (current === run.id ? '' : current)), 1600)
   }, [])
 
   const openAgentEditor = useCallback((agent: AgentRecord) => onOpenAgent(agent.name), [onOpenAgent])
@@ -658,22 +784,118 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
             {historyOpen && (
               <>
                 <button className="agx-backdrop" aria-label="关闭历史" onClick={() => setHistoryOpen(false)} />
-                <div className="agx-popover" role="dialog" aria-label="历史对话">
+                <div className="agx-popover" role="dialog" aria-label="历史">
                   <div className="agx-popover-head">
-                    <span>最近对话</span>
+                    <div className="agx-popover-tabs" role="tablist" aria-label="历史类型">
+                      <button
+                        role="tab"
+                        aria-selected={historyTab === 'chat'}
+                        className={historyTab === 'chat' ? 'is-active' : ''}
+                        onClick={() => setHistoryTab('chat')}
+                      >
+                        本机对话
+                      </button>
+                      <button
+                        role="tab"
+                        aria-selected={historyTab === 'runs'}
+                        className={historyTab === 'runs' ? 'is-active' : ''}
+                        onClick={() => setHistoryTab('runs')}
+                      >
+                        运行记录
+                        {runsLoadedId === selectedId && runsTotal > 0 && <em>{runsTotal}</em>}
+                      </button>
+                    </div>
                     <button className="agx-icon-btn" onClick={() => setHistoryOpen(false)} aria-label="关闭">
                       <X size={13} />
                     </button>
                   </div>
-                  {history.length === 0 && <p className="agx-popover-empty">还没有对话记录</p>}
-                  {history.map((entry) => (
-                    <button className="agx-history-item" key={entry.id} onClick={() => restoreHistory(entry)}>
-                      <strong>{entry.title}</strong>
-                      <span>
-                        {entry.agentName} · {formatRelative(entry.at)}
-                      </span>
-                    </button>
-                  ))}
+                  {historyTab === 'chat' ? (
+                    <>
+                      {history.length === 0 && <p className="agx-popover-empty">还没有对话记录</p>}
+                      {history.map((entry) => (
+                        <button className="agx-history-item" key={entry.id} onClick={() => restoreHistory(entry)}>
+                          <strong>{entry.title}</strong>
+                          <span>
+                            {entry.agentName} · {formatRelative(entry.at)}
+                          </span>
+                        </button>
+                      ))}
+                      <p className="agx-popover-note">本机对话只存在这台浏览器；换设备请看「运行记录」。</p>
+                    </>
+                  ) : (
+                    <div className="agx-runs">
+                      {runs.length > 0 && (
+                        <div className="agx-runs-toolbar">
+                          <span>
+                            {selectedAgent?.name ?? '智能体'} · 共 {runsTotal} 次
+                          </span>
+                          <button
+                            type="button"
+                            className={'agx-runs-clear' + (armedClear ? ' is-armed' : '')}
+                            onClick={() => void clearRuns()}
+                          >
+                            {armedClear ? '确认清空' : '清空'}
+                          </button>
+                        </div>
+                      )}
+                      {runsError && <p className="agx-popover-empty">{runsError}</p>}
+                      {!runsError && runs.length === 0 && (
+                        <p className="agx-popover-empty">{runsLoading ? '正在读取运行记录…' : '这个智能体还没有运行记录'}</p>
+                      )}
+                      {runs.map((run) => {
+                        const open = expandedRun === run.id
+                        return (
+                          <div className={'agx-run' + (run.status === 'error' ? ' is-error' : '')} key={run.id}>
+                            <button
+                              type="button"
+                              className="agx-run-head"
+                              onClick={() => setExpandedRun(open ? '' : run.id)}
+                              aria-expanded={open}
+                            >
+                              <span className="agx-run-state">{run.status === 'error' ? '失败' : '成功'}</span>
+                              <span className="agx-run-msg">{run.message || '（没有记录输入）'}</span>
+                              <span className="agx-run-meta">
+                                {formatRelative(run.createdAt)} · {run.outputType || '输出'} · {(run.latencyMs / 1000).toFixed(1)}s
+                                {run.credits
+                                  ? ' · ' + (run.credits.refunded ? '已退 ' : '') + run.credits.cost + ' 积分'
+                                  : ''}
+                              </span>
+                            </button>
+                            {open && (
+                              <div className="agx-run-detail">
+                                {run.tools?.used.length ? (
+                                  <p>工具：{run.tools.used.map((tool) => tool.label + '（' + tool.detail + '）').join('；')}</p>
+                                ) : null}
+                                {run.tools?.skipped.length ? (
+                                  <p>{run.tools.skipped.map((tool) => tool.label + '：' + tool.reason).join('；')}</p>
+                                ) : null}
+                                {run.status === 'error' ? (
+                                  <p className="agx-run-error">{run.error || '运行失败'}</p>
+                                ) : (
+                                  <pre className="agx-run-reply">{run.reply}</pre>
+                                )}
+                                <button type="button" className="agx-btn agx-btn--quiet" onClick={() => void copyRun(run)}>
+                                  {copiedRun === run.id ? <Check size={12} /> : <Copy size={12} />}
+                                  {copiedRun === run.id ? '已复制' : run.status === 'error' ? '复制原因' : '复制回复'}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                      {runs.length > 0 && runs.length < runsTotal && (
+                        <button
+                          type="button"
+                          className="agx-runs-more"
+                          onClick={() => selectedId && void loadRuns(selectedId, runs.length)}
+                          disabled={runsLoading}
+                        >
+                          {runsLoading ? '加载中…' : '加载更多'}
+                        </button>
+                      )}
+                      <p className="agx-popover-note">运行记录存在服务端，成功与失败都会留档；清空只删这个智能体的记录。</p>
+                    </div>
+                  )}
                 </div>
               </>
             )}
@@ -717,6 +939,27 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
                       {copiedId === message.id ? '已复制' : '复制'}
                     </button>
                   </div>
+                  {message.tools &&
+                    (message.tools.used.length > 0 || message.tools.artifacts.length > 0 || message.tools.skipped.length > 0) && (
+                      <div className="agx-msg-tools">
+                        {message.tools.used.map((tool) => (
+                          <span key={tool.id}>
+                            {tool.label} · {tool.detail}
+                          </span>
+                        ))}
+                        {message.tools.skipped.map((tool) => (
+                          <span key={tool.id} className="is-muted">
+                            {tool.label} · {tool.reason}
+                          </span>
+                        ))}
+                        {message.tools.artifacts.map((artifact) => (
+                          <button type="button" key={artifact.name} onClick={() => downloadArtifact(artifact)}>
+                            <Download size={11} />
+                            {artifact.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                 </div>
               ))}
               {pending && (

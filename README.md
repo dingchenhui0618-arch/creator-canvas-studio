@@ -598,3 +598,34 @@ DOMAIN=visionqa.wavisionai.cn bash deploy/production/enable-https.sh            
 ### 十八.3 下一批
 
 智能体历史接口（`GET/POST /api/agents/:id/history`）、智能体编辑页真实运行次数、工具节点真正执行、后台模板编辑表单、设置页积分流水加载更多、后台按账号筛选运行记录。
+
+## 十九、2026-11-10 追加七：待接 API 第三批（智能体运行历史、工具真执行、模板编辑）
+
+### 十九.1 这一批做了什么
+
+| 位置 | 之前 | 现在 |
+| --- | --- | --- |
+| 智能体历史 | 只有一个本机浏览器 `localStorage` 对话列表，换设备或清缓存就没了；运行只累加一个数字 | 「历史」弹层分两栏：「本机对话」照旧可恢复上下文；「运行记录」读服务端 `GET /api/agents/:id/history`，成功与失败都留档，含输入、回复、模型口径、耗时、扣退积分、工具读取结果；支持分页、展开、复制、清空（两次确认） |
+| 智能体编辑页 | 右侧预览写死「最近运行 未运行 / 使用次数 0 次」 | 读服务端真实的最近运行、累计次数与最近模型；工具按「已接入 / 待接入」分开显示 |
+| 智能体工具 | 五个工具都只写在 system 里，界面小字承认「不自动执行」 | 三个真执行：「读取模板库」「读取画布流程」在对话前读当前账号的模板与流程摘要带进上下文；「导出 JSON」把回复里的 JSON 块整理成可下载文件。响应与运行记录都回报读了什么，没读到就写「为空 / 读取失败」。图片生成、网页读取仍是待接入，界面不假装 |
+| 后台模板治理 | 接口支持 PATCH，但管理页只有删除 | 就地编辑标题 / 类型 / 标签 / 原链接，保存走 `PATCH /api/templates/:id`，成功后重新请求列表；失败与成功都有明确提示 |
+| 生产口径 | 智能体编辑页还露着 `data/agents.json`、`PATCH /api/agents/…`、`VISION_MODEL`、`system 消息` | 生产只讲产品语言（「保存后回到列表即可直接对话」「由平台统一配置」）；文件、接口路径、环境变量名只在 `VQ_UI_MODE=internal` 的内部环境出现 |
+
+新增接口：`GET /api/agents/:id/history?limit=&offset=`、`DELETE /api/agents/:id/history`；`POST /api/agents/:id/chat` 响应增加 `tools`（读了什么、生成了什么文件）与 `run`（本次运行的扣费记录），并接收 `conversationId` 把同一轮对话串起来。
+
+![智能体运行记录：成功与失败都留档，展开可看原因与扣退积分](docs/screenshot-agent-history-2026-11-10.png)
+
+![智能体编辑器：工具已接入/待接入分开，运行次数来自服务端](docs/screenshot-agent-editor-tools-2026-11-10.png)
+
+![后台模板治理：就地编辑标题 / 类型 / 标签 / 原链接](docs/screenshot-admin-template-edit-2026-11-10.png)
+
+### 十九.2 实测
+
+- 本地集成（同一份服务端代码 + 本地 mock 模型，真实 HTTP 与真实鉴权）：新建带三个工具的智能体 → 对话 200；`tools.used` 报「读取模板库 1 条 / 读取画布流程 1 张」（先建了一条工作流模板和一张流程，确认它真的读到），`tools.artifacts[0]` 是 156 字节的 `agent-output.json`；`GET history` → total 1、status success、`credits.cost=1`、回复 254 字、`runCount=1`、`lastModel` 有值。
+- 失败路径（内部环境真实上游）：对话 502 → 运行记录 `status=error`、`credits {cost:1, balance:97, refunded:true}`、错误文案「模型服务额度不足，本次不计费」；余额保持运行前的 100；`DELETE history` 移除 1 条；未知智能体 404、匿名 401。
+- 工具 id 迁移：老 `agents.json` 里的 `assets-read` / `canvas-write` 在读取时折成 `templates-read` / `canvas-read`，再次保存落盘的也是新 id（单测通过）。
+- 生产：bundle `index-C7ILN4e4.js`，两个服务 active、`/api/health` ok。截图里的失败记录是上游未充值时的一次真实调用；模板编辑用的 QA 条目与流程已删除（模板库回到 0 条），积分 98 未变（扣 1 已退回）。
+
+### 十九.3 下一批
+
+设置页积分流水「加载更多」、后台运行记录按账号 / 流程筛选、后台系统磁盘占用、全局模型偏好、更新检查与下载、找回密码；智能体的「图片生成 / 网页读取」要等图像与网页读取通道。上游模型账号余额仍需充值，智能体成功路径与视觉评审在补余额前只能在内部环境用 mock 验证。

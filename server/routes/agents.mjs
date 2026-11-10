@@ -11,6 +11,7 @@ import {
   updateAgent,
 } from '../agents.mjs'
 import { OUTPUT_TYPES, availableModels, chatWithAgent } from '../agentChat.mjs'
+import { clearAgentRuns, listAgentRuns, recordAgentRun } from '../agent-history.mjs'
 import { config, visionEnabled } from '../config.mjs'
 import { currentUser } from '../auth.mjs'
 import { charge, refund } from '../credits.mjs'
@@ -104,6 +105,7 @@ export function createAgentsRouter() {
             sendJson(res, 400, { error: '消息超过 4000 字，请拆成几段再试' })
             return true
           }
+          const conversationId = String(body.conversationId || '').slice(0, 80)
           const outputType = String(body.outputType || OUTPUT_TYPES[0].id)
           if (!OUTPUT_TYPES.some((item) => item.id === outputType)) {
             sendJson(res, 400, { error: '不支持的输出类型：' + outputType + '（可选：' + OUTPUT_TYPES.map((item) => item.id).join(' / ') + '）' })
@@ -139,6 +141,7 @@ export function createAgentsRouter() {
             return true
           }
           let result
+          const startedAt = Date.now()
           try {
             result = await chatWithAgent({
               agent,
@@ -146,16 +149,51 @@ export function createAgentsRouter() {
               outputType,
               model: requested || agent.model,
               history: Array.isArray(body.history) ? body.history : [],
+              user,
               log: (line) => console.log('[agents] ' + line),
             })
           } catch (error) {
-            // 模型调用失败：退积分，不让失败也扣钱
+            // 模型调用失败：退积分，不让失败也扣钱；失败也留一条运行记录，界面能看到原因与退款
             if (user?.id && paid.cost > 0) refund(user.id, 'chat', { ref: agent.name, amount: paid.cost })
+            try {
+              await recordAgentRun({
+                agent,
+                user,
+                status: 'error',
+                message,
+                outputType,
+                conversationId,
+                latencyMs: Date.now() - startedAt,
+                error: publicError(error, '智能体暂时不可用，请稍后重试'),
+                credits: { cost: paid.cost, balance: paid.balance, refunded: paid.cost > 0 },
+              })
+            } catch {
+              // 历史写入失败不影响把上游错误返回给界面
+            }
             throw error
           } finally {
             if (user?.id) leave(user.id, 'chat')
           }
           const updated = await recordRun(agent.id, { model: result.model })
+          let run = null
+          try {
+            run = await recordAgentRun({
+              agent,
+              user,
+              status: 'success',
+              message,
+              reply: result.reply,
+              model: result.model,
+              outputType,
+              latencyMs: result.latencyMs,
+              credits: { cost: paid.cost, balance: paid.balance, refunded: false },
+              tools: result.tools,
+              conversationId,
+            })
+          } catch (error) {
+            // 历史落库失败不该把已经成功的回复变成 500，日志里留痕即可
+            console.error('[agents] 运行历史写入失败：' + (error?.message || error))
+          }
           sendJson(res, 200, {
             credits: { cost: paid.cost, balance: paid.balance },
             reply: result.reply,
@@ -163,12 +201,47 @@ export function createAgentsRouter() {
             latencyMs: result.latencyMs,
             usage: result.usage || null,
             attempted: result.attempted,
+            tools: result.tools || { used: [], artifacts: [], skipped: [] },
+            run: run ? { id: run.id, createdAt: run.createdAt, credits: run.credits } : null,
             memory: result.memory || { turns: 0, messages: 0 },
             outputType,
             agent: updated
               ? { id: updated.id, name: updated.name, runCount: updated.runCount, lastRunAt: updated.lastRunAt }
               : { id: agent.id, name: agent.name, runCount: (agent.runCount || 0) + 1, lastRunAt: new Date().toISOString() },
           })
+          return true
+        }
+
+        // 运行历史：GET 分页读取；DELETE 清空这个智能体的历史
+        if (segments.length === 2 && action === 'history') {
+          const agent = await getAgent(id, user)
+          if (!agent) {
+            sendJson(res, 404, { error: '智能体不存在：' + id })
+            return true
+          }
+          if (req.method === 'GET') {
+            const history = await listAgentRuns(id, {
+              limit: url.searchParams.get('limit') || 20,
+              offset: url.searchParams.get('offset') || 0,
+            })
+            sendJson(res, 200, {
+              ...history,
+              agent: {
+                id: agent.id,
+                name: agent.name,
+                runCount: agent.runCount || 0,
+                lastRunAt: agent.lastRunAt || null,
+                lastModel: agent.lastModel || '',
+              },
+            })
+            return true
+          }
+          if (req.method === 'DELETE') {
+            const removed = await clearAgentRuns(id)
+            sendJson(res, 200, { ok: true, removed })
+            return true
+          }
+          methodNotAllowed(res, 'GET / DELETE')
           return true
         }
 

@@ -94,7 +94,7 @@
 
 ### P2 —— 体验与工程
 
-10. 智能体「数量」固定 1；工具只声明不执行。
+10. 智能体「数量」固定 1；三个只读工具（读模板库 / 读画布流程 / 导出 JSON）已真执行，图片生成与网页读取仍待接入。
 11. 单机复刻无队列，4C8G 建议同时 ≤2。
 12. 前端单包 594 KB（gzip 181 KB），可按页面拆包。
 13. 管理后台缺用户列表 / 重置口令 / 审计日志落库。
@@ -291,9 +291,9 @@ curl -s https://visionqa.wavisionai.cn/api/auth/config   # 只有 registrationEn
 | 一键复刻 | ✅ 已补（2026-11-10）：弹窗显示单价/余额，余额不足禁用开始，402 给出「找管理员发放」 | GET /api/credits | 已完成 |
 | 模板库 | ✅ 已补（2026-11-10）：「套用到画布」生成带输入/复刻节点的流程并跳转画布 | POST /api/templates/:id/apply | 已完成 |
 | 模板库 | 「送去评审」只切页不发起 | POST /api/review 或改成「去评审」 | 半成品 |
-| 智能体列表 | 「历史」只存 localStorage，最多 12 条 | GET/POST /api/agents/:id/history | 占位 |
-| 智能体编辑 | 右侧预览的最近运行/使用次数永远 0 | 直接用 GET /api/agents 的 runCount/lastRunAt | 半成品 |
-| 智能体编辑 | 三个工具标 ready 但对话时不执行 | POST /api/agents/:id/chat 内真正调度，或改回 planned | 占位 |
+| 智能体列表 | ✅ 已补（2026-11-10 第三批）：历史弹层分「本机对话 / 运行记录」，运行记录读服务端并按账号隔离，成功与失败都留档、可清空 | GET /api/agents/:id/history、DELETE 同路径 | 已完成 |
+| 智能体编辑 | ✅ 已补（2026-11-10 第三批）：最近运行 / 使用次数 / 最近模型读真实数据 | GET /api/agents 的 runCount/lastRunAt/lastModel | 已完成 |
+| 智能体编辑 | ✅ 已补（2026-11-10 第三批）：读取模板库、读取画布流程在对话前真实执行，导出 JSON 产出可下载文件；图片生成 / 网页读取仍标待接入 | POST /api/agents/:id/chat 内调度只读工具 | 已完成（余两个待通道工具） |
 | 智能体对话 | ✅ 已补（2026-11-10）：输入框上方常驻余额/单价，402 显示差额并提示管理员发放 | GET /api/credits | 已完成 |
 | 画布 | ✅ 已补（2026-11-10 第二批）：「另存为模板」写进模板库的「工作流」条目，可筛可套用回画布 | POST /api/templates {from: flow, flowId} | 已完成 |
 | 画布 | ✅ 已补（2026-11-10 第二批）：「运行流程」按次扣 2 积分，余额不足 402 拦截，节点失败整单退回 | POST /api/flows/:id/run 内接 charge/refund | 已完成 |
@@ -308,7 +308,7 @@ curl -s https://visionqa.wavisionai.cn/api/auth/config   # 只有 registrationEn
 | 后台总览 | ✅ 已补（2026-11-10）：用户数取 GET /api/admin/users 的 total | GET /api/admin/users | 已完成 |
 | 后台账号 | ✅ 已补（2026-11-10）：可停用/启用、设/撤管理员；不允许把自己降级或停用 | PATCH /api/admin/users/:id {active, kind} | 已完成（删除账号未做） |
 | 后台模型 Key | 只能看末四位，改要登服务器改 .env | PUT /api/admin/config（密钥托管有风险，不建议） | 半成品 |
-| 后台模板治理 | 接口已补（PATCH /api/templates/:id，2026-11-10）；管理页还没做编辑表单 | PATCH /api/templates/:id | 半成品（余 UI） |
+| 后台模板治理 | ✅ 已补（2026-11-10 第三批）：就地编辑标题 / 类型 / 标签 / 原链接，成功后重拉列表 | PATCH /api/templates/:id | 已完成 |
 | 后台运行审计 | ✅ 状态筛选 + 导出当前筛选 CSV（2026-11-10 第二批）；按账号/流程筛选仍未做 | GET /api/admin/runs?userId=&flowId= | 半成品（余账号/流程筛选） |
 | 后台系统 | 数据目录不显示占用 | 复用 GET /api/system/health 的 disk 项 | 半成品 |
 | 全局 | 顶栏「切换模型」只写 localStorage，全站没有调用方 | 各 POST 增加 {model}，或 PUT /api/preferences | 占位 |
@@ -316,11 +316,13 @@ curl -s https://visionqa.wavisionai.cn/api/auth/config   # 只有 registrationEn
 | 登录页 | 「忘记密码？」只弹「还没接入」，还提示用访客身份 | POST /api/auth/forgot、POST /api/auth/reset | 占位 |
 | 充值 | 未开通占位（按你的要求不动） | 等金额/档位/支付方式 | 冻结 |
 
-静态统计（2026-11-10 第二批补齐后）：已完成 11 条、余半成品 8 条、占位 7 条、外部依赖 2 条、冻结 1 条。
+静态统计（2026-11-10 第三批补齐后）：已完成 15 条、余半成品 8 条、占位 4 条、外部依赖 2 条、冻结 1 条。
 
 第一批已落地（提交见 README 十七）：复刻/评审/对话三处积分可见与 402 提示、模板套用到画布、评审历史落库与回看、后台用户数、账号停用与角色调整、模板 PATCH 接口。
 
 第二批已落地（提交见 README 十八）：运行记录分页/筛选、画布按 flowId 打开、画布「另存为模板」落模板库、流程执行计积分与失败退款、后台运行审计状态筛选与 CSV 导出、用户可见报错统一为产品语言（不再透出模型名与上游余额报文）。
+
+第三批已落地（提交见 README 十九）：智能体运行历史落库（成功/失败都留档，含扣退积分与工具证据）、编辑页真实运行统计、三个只读工具真执行与 JSON 导出、后台模板就地编辑、智能体编辑页生产/内部两种文案口径。
 
 **当前阻塞（非代码）**：上游模型账号返回 `Insufficient Balance`（deepseek-flash 文本对话与视觉评审都会 402），智能体与评审在补余额前不可用；检索服务仍正常。
 

@@ -15,7 +15,10 @@ export type TemplateItem = {
   id: string
   title: string
   contentType: string
+  kind?: string
   platformLabel?: string
+  tags?: string[]
+  sourceUrl?: string
   durationSec: number
   createdAt: string
   thumb?: string

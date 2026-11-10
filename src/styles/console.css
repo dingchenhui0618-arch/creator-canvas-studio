@@ -497,6 +497,76 @@
   line-height: 1.7;
 }
 
+.admin-hint--ok {
+  padding: 8px 12px;
+  color: var(--pass, #176b43);
+  background: var(--pass-soft, #eef4f0);
+  border: 1px solid rgba(23, 107, 67, 0.18);
+  border-radius: 6px;
+}
+
+.admin-row-actions {
+  display: inline-flex;
+  gap: 8px;
+}
+
+/* 模板治理：就地编辑面板（标题 / 类型 / 标签 / 原链接） */
+.admin-edit {
+  margin-bottom: 16px;
+  border-color: var(--line-strong, #d8d3c9);
+}
+
+.admin-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+  margin-top: 12px;
+}
+
+.admin-edit-field {
+  display: grid;
+  gap: 4px;
+}
+
+.admin-edit-field--wide {
+  grid-column: 1 / -1;
+}
+
+.admin-edit-field > span {
+  color: var(--faint, #8a8a8a);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.admin-edit-field input {
+  height: 32px;
+  padding: 0 8px;
+  color: var(--ink, #111111);
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--line-strong, #d8d3c9);
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.admin-edit-field input:focus-visible {
+  outline: 2px solid var(--ink, #111111);
+  outline-offset: -1px;
+}
+
+.admin-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+@media (max-width: 720px) {
+  .admin-edit-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .admin-toolbar {
   display: flex;
   align-items: flex-end;

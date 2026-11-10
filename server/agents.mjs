@@ -12,16 +12,32 @@ export const AGENT_CATEGORIES = [
   { id: '投放素材', label: '投放素材', hint: '产出多版投放文案与方向' },
 ]
 
+// 工具分两种：state=ready 的在对话前真正执行（只读取本地数据，或把回复整理成可下载文件），
+// state=planned 的还没有通道，只作为能力声明展示，不会假装执行。
 export const AGENT_TOOLS = [
-  { id: 'assets-read', label: '读取资产库', description: '读取工作区已整理的素材与引用', scope: '只读', state: 'ready' },
-  { id: 'canvas-write', label: '写入画布', description: '把运行结果写回画布并建立引用', scope: '读写', state: 'ready' },
-  { id: 'export-json', label: '导出 JSON', description: '把结构化结果导出为可复用配置', scope: '读写', state: 'ready' },
+  { id: 'templates-read', label: '读取模板库', description: '把模板库最近的标题与类型带进本次对话', scope: '只读', state: 'ready' },
+  { id: 'canvas-read', label: '读取画布流程', description: '读取你已有的画布流程标题与节点数', scope: '只读', state: 'ready' },
+  { id: 'export-json', label: '导出 JSON', description: '把回复里的 JSON 块整理成可下载文件', scope: '产出文件', state: 'ready' },
   { id: 'image-gen', label: '图片生成', description: '调用图像通道生成素材', scope: '读写', state: 'planned' },
   { id: 'web-read', label: '网页读取', description: '读取公开页面作为创作参考', scope: '只读', state: 'planned' },
 ]
 
 const CATEGORY_IDS = AGENT_CATEGORIES.map((item) => item.id)
 const TOOL_IDS = AGENT_TOOLS.map((item) => item.id)
+
+// 早期版本的工具栏只有声明、没有执行通道，id 也不同；读老数据时折成现在的 id，
+// 否则这些智能体一保存就会被「包含不支持的选项」拦下。
+const LEGACY_TOOL_IDS = {
+  'assets-read': 'templates-read',
+  'canvas-write': 'canvas-read',
+}
+
+function withKnownTools(agent) {
+  const mapped = (Array.isArray(agent.tools) ? agent.tools : [])
+    .map((id) => LEGACY_TOOL_IDS[id] || id)
+    .filter((id) => TOOL_IDS.includes(id))
+  return { ...agent, tools: [...new Set(mapped)] }
+}
 const agentsFile = path.join(config.dataDir, 'agents.json')
 
 let cache = null
@@ -69,7 +85,7 @@ function seedAgents() {
         '品牌调性：克制、具体，不用夸张形容词。',
         '未知信息写「待确认」，不要编造卖点或数据。',
       ],
-      tools: ['assets-read', 'export-json'],
+      tools: ['templates-read', 'export-json'],
       createdAt: daysAgo(6),
       updatedAt: daysAgo(6),
       runCount: 0,
@@ -90,7 +106,7 @@ function seedAgents() {
         '证据要指到具体区域：左上、主体、右下角文案位。',
         '不要臆造画面里没有的元素。',
       ],
-      tools: ['assets-read'],
+      tools: ['templates-read'],
       createdAt: daysAgo(4),
       updatedAt: daysAgo(4),
       runCount: 0,
@@ -111,7 +127,7 @@ function seedAgents() {
         '分镜按镜头号递增，标注景别与运镜。',
         '开头 3 秒必须给结果或冲突。',
       ],
-      tools: ['canvas-write', 'export-json'],
+      tools: ['canvas-read', 'export-json'],
       createdAt: daysAgo(2),
       updatedAt: daysAgo(2),
       runCount: 0,
@@ -132,7 +148,7 @@ function seedAgents() {
         '每条文案不超过 60 字，前 8 个字要能独立成立。',
         '不做价格、授权、效果的虚假承诺。',
       ],
-      tools: ['assets-read', 'image-gen'],
+      tools: ['templates-read', 'image-gen'],
       createdAt: daysAgo(1),
       updatedAt: daysAgo(1),
       runCount: 0,
@@ -163,7 +179,7 @@ async function loadAll() {
   try {
     const raw = await fsp.readFile(agentsFile, 'utf8')
     const parsed = JSON.parse(raw)
-    cache = (Array.isArray(parsed) ? parsed : []).map(withKnownModel)
+    cache = (Array.isArray(parsed) ? parsed : []).map(withKnownModel).map(withKnownTools)
   } catch (error) {
     if (error?.code === 'ENOENT') {
       cache = seedAgents()
