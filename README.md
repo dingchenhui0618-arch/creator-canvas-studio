@@ -517,12 +517,38 @@ DOMAIN=visionqa.wavisionai.cn bash deploy/production/enable-https.sh            
 
 - 用无头 Chrome 带真实会话登录线上，逐页读 `document.body.innerText` 扫 `红狐|REDFOX|redfox|deepseek`：13 条路由（工作台、爆款雷达、模板库、智能体、视觉评审、运行记录、设置、后台六个分页）**全部 0 命中**。
 - `/api/models` 的 label 已是「VisionQA 通用模型 / 视觉模型 / 对话模型」，id 仍只用于请求；画布检查器的模型下拉同步改成只显示名称。
-- 画布线上：`/vq-theme.css` 与 `/assets/bd-canvas-app-icon.png` 均 200，sha256 与仓库一致；`#local-backend-status`、`.enterprise-budget-indicator` 计算样式为 `display:none`。
-- 部署：bundle `index-Cjmnf3zi.js` 与服务器 dist 一致，`/api/health` ok。
+## 十六、2026-11-10 追加四：生产/内部两套口径 + 待接 API 开工
 
-### 十五.4 仍要你定
+### 十六.1 环境分离
 
-- 后台「显示技术详情」默认关；要不要连这个开关也去掉（去掉后就完全看不到真实模型 ID 与上游地址，排障只能登服务器）。
-- 画布顶栏账号/额度挂件是整颗隐藏的；以后若要用画布自己的企业账号体系，删掉 `vq-theme.css` 里那条即可恢复。
-- 充值仍是占位、模板库仍是 0 条、画布流程执行仍不计积分，这三件维持上一轮的状态。
+同一份构建跑两套环境，差异只来自服务端 `VQ_UI_MODE`：
 
+| 项 | 生产（默认） | 内部测试（`VQ_UI_MODE=internal`） |
+| --- | --- | --- |
+| 后台「模型 Key」 | 只报能力、状态、凭证末四位 | 展开模型 ID、上游地址、环境变量清单（凭证仍脱敏） |
+| 后台「总览」 | 只报状态 | 多「运行环境 / 文本模型 / 视觉模型」技术字段 |
+| 顶栏 | 无标识 | 右侧「内部测试」虚线胶囊 |
+| 判断方式 | fail-closed：不写或拼错都按生产 | 显式写 `internal` |
+
+- 线上多了一个只绑 `127.0.0.1:8800` 的 `visionqa-internal` 服务，数据目录独立，靠 SSH 隧道访问；发布时两个服务一起重启。细节与隧道命令见 [docs/environments.md](docs/environments.md)。
+- `/api/config` 与 `/api/config/probe` 以前只要求登录，任何注册用户都能看到模型标识、上游地址与环境变量清单；现在收紧到管理员（403）。
+- 检索额度响应里不再带外部充值链接，生产界面也不会出现厂商域名。
+
+![生产后台：只报产品口径](docs/screenshot-admin-keys-prod-2026-11-10.png)
+
+![内部测试后台：同一页展开技术详情，顶栏有「内部测试」](docs/screenshot-admin-keys-internal-2026-11-10.png)
+
+![生产后台总览：用户数来自 /api/admin/users](docs/screenshot-admin-overview-prod-2026-11-10.png)
+
+![内部测试总览：多出运行环境与模型字段](docs/screenshot-admin-overview-internal-2026-11-10.png)
+
+### 十六.2 实测
+
+- 线上 `/api/app` → `{"mode":"prod","internal":false}`；内部服务 `127.0.0.1:8800/api/app` → `{"mode":"internal","internal":true}`，`systemctl is-active visionqa-internal` = active。
+- 生产后台截图里没有模型 ID、上游地址、环境变量表；内部截图里三项齐全，凭证仍是 `****9709 · 35 位`。
+- 后台总览「用户数」从写死的「—」改为 `GET /api/admin/users` 的 total，生产实测 1。
+- 生产 bundle `index-C48p7hyH.js`，`/api/health` ok；内部环境与生产共用同一份 `dist`。
+
+### 十六.3 接下来
+
+按 [docs/launch-readiness.md](docs/launch-readiness.md)「三点十」的待接 API 清单继续：先做用户可感知的积分余额与 402 提示、模板应用/另存为模板、评审历史、运行记录分页筛选，再做后台用户管理与智能体历史。充值保持占位。

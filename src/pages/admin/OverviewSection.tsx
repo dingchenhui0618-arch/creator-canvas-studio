@@ -1,3 +1,4 @@
+import { useUiMode } from '../../api/app'
 import { useApi, type Health, type RunsResponse, type TemplatesResponse } from './data'
 import { AdminHead, Badge, ErrorBanner, LoadingLine, RefreshButton, SourceTag } from './ui'
 
@@ -5,20 +6,24 @@ export default function OverviewSection() {
   const health = useApi<Health>('/api/health')
   const templates = useApi<TemplatesResponse>('/api/templates')
   const runs = useApi<RunsResponse>('/api/runs')
+  const users = useApi<{ items: { id: string }[]; total: number }>('/api/admin/users')
+  const { internal } = useUiMode()
 
   const errors = [
     health.error ? `GET /api/health：${health.error}` : '',
     templates.error ? `GET /api/templates：${templates.error}` : '',
     runs.error ? `GET /api/runs：${runs.error}` : '',
+    users.error ? `GET /api/admin/users：${users.error}` : '',
   ].filter(Boolean)
 
   const retryAll = () => {
     health.reload()
     templates.reload()
     runs.reload()
+    users.reload()
   }
 
-  const busy = health.loading || templates.loading || runs.loading
+  const busy = health.loading || templates.loading || runs.loading || users.loading
 
   return (
     <>
@@ -35,12 +40,10 @@ export default function OverviewSection() {
         <article className="admin-card admin-stat">
           <div className="admin-stat-top">
             <span className="admin-label">用户数</span>
-            <SourceTag kind="local" source="data/auth.db（SQLite 用户表）" />
+            <SourceTag kind="api" source="GET /api/admin/users" />
           </div>
-          <p className="admin-value">—</p>
-          <p className="admin-foot">
-            账号已落库（data/auth.db，SQLite），但还没有管理员用户列表接口，所以这里不给数字。
-          </p>
+          <p className="admin-value">{users.loading ? '—' : (users.data?.total ?? '—')}</p>
+          <p className="admin-foot">真实账号表（含积分余额），不是示例数字。</p>
         </article>
 
         <article className="admin-card admin-stat">
@@ -49,7 +52,7 @@ export default function OverviewSection() {
             <SourceTag kind="api" source="GET /api/templates" />
           </div>
           <p className="admin-value">
-            {templates.loading ? '—' : (templates.data?.items.length ?? '—')}
+            {templates.loading ? '—' : (templates.data?.total ?? templates.data?.items.length ?? '—')}
           </p>
           <p className="admin-foot">来自模板库实际条目，含 AI 入库与复用来源。</p>
         </article>
@@ -122,6 +125,33 @@ export default function OverviewSection() {
                 <span>health.ok = {String(health.data.ok)}</span>
               </dd>
             </div>
+            {internal ? (
+              <div>
+                <dt>运行环境</dt>
+                <dd>
+                  <Badge tone="neutral">内部测试</Badge>
+                  <span className="admin-mono">VQ_UI_MODE=internal · 仅内部环境展示技术字段</span>
+                </dd>
+              </div>
+            ) : null}
+            {internal && health.data.llmModel ? (
+              <div>
+                <dt>文本模型</dt>
+                <dd>
+                  <span className="admin-mono">{health.data.llmModel}</span>
+                  <span>health.llmModel</span>
+                </dd>
+              </div>
+            ) : null}
+            {internal && health.data.visionModel ? (
+              <div>
+                <dt>视觉模型</dt>
+                <dd>
+                  <span className="admin-mono">{health.data.visionModel}</span>
+                  <span>health.visionModel</span>
+                </dd>
+              </div>
+            ) : null}
           </dl>
         ) : null}
       </section>
@@ -129,9 +159,9 @@ export default function OverviewSection() {
       <section className="admin-note">
         <p>说明</p>
         <ul>
-          <li>账号已落库到 <code>data/auth.db</code>，但本页还没接用户列表接口，所以只展示当前会话。</li>
-          <li>模板数、运行数、依赖状态分别来自 <code>/api/templates</code>、<code>/api/runs</code>、<code>/api/health</code>。</li>
-          <li>health 接口只暴露「是否配置」布尔值；检索服务未接入时检索会回退示例数据，界面上会明确标注。</li>
+          <li>用户数来自 <code>/api/admin/users</code> 的真实账号表，模板数与运行数分别来自 <code>/api/templates</code>、<code>/api/runs</code>。</li>
+          <li>依赖状态来自 <code>/api/health</code>；检索服务未接入时雷达会回退示例数据并明确标注。</li>
+          <li>生产环境只展示状态；模型标识、上游地址与环境变量清单只在内部测试环境（<code>VQ_UI_MODE=internal</code>）展示。</li>
         </ul>
       </section>
     </>

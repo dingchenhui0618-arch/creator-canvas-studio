@@ -738,3 +738,17 @@ curl -sI https://vq.example.com | head
 sudo /usr/local/bin/vq-backup.sh         # 先按第 9 节安装脚本
 sudo /usr/local/bin/vq-healthcheck.sh    # 先按第 8 节安装脚本
 ```
+
+## 内部测试环境（2026-11-10 起）
+
+生产与内部测试共用同一份代码和 `dist`，差异只来自环境变量 `VQ_UI_MODE`：
+
+| 服务 | 监听 | 数据目录 | 口径 |
+| --- | --- | --- | --- |
+| `visionqa` | 127.0.0.1:8799 | `/var/lib/visionqa` | 生产：只讲产品语言 |
+| `visionqa-internal` | 127.0.0.1:8800 | `/var/lib/visionqa-internal` | 内部：后台保留模型/上游/环境变量等排障信息 |
+
+- unit：`/etc/systemd/system/visionqa-internal.service`；覆盖变量：`/etc/visionqa-internal.env`（在 `/opt/visionqa/.env` 之后加载）。
+- 内部环境不监听公网，访问方式是 SSH 隧道：`ssh -L 8801:127.0.0.1:8800 root@<服务器>`，浏览器打开 `http://127.0.0.1:8801`。
+- **发布后两个服务都要重启**：`systemctl restart visionqa visionqa-internal`，否则内部环境会继续跑旧进程。
+- 完整说明见 [environments.md](environments.md)。

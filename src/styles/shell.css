@@ -679,6 +679,21 @@
   font-size: 12px;
 }
 
+/* 只在 VQ_UI_MODE=internal 的部署出现：提醒操作者当前看到的是带技术详情的内部环境 */
+.vq-env-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
 .vq-breadcrumb strong {
   color: var(--ink);
   font-weight: 500;

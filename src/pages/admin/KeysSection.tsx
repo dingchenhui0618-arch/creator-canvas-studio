@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import docUrl from '../../../docs/replication-pipeline.md?url'
 import { request } from '../../api/client'
+import { useUiMode } from '../../api/app'
 import { useApi } from './data'
 import { AdminHead, Badge, ErrorBanner, LoadingLine, RefreshButton, SourceTag } from './ui'
 
@@ -31,8 +32,9 @@ export default function KeysSection() {
   const [probe, setProbe] = useState<Probe | null>(null)
   const [probing, setProbing] = useState(false)
   const [copied, setCopied] = useState('')
-  // 默认只露产品口径（VisionQA 模型 / 检索服务），真实模型 ID、上游地址与环境变量值收进「技术详情」
-  const [showTech, setShowTech] = useState(false)
+  // 生产环境只讲产品口径（VisionQA 模型 / 检索服务）；内部测试环境直接把技术详情铺开，方便排障。
+  const { internal } = useUiMode()
+  const showTech = internal
 
   const copyDocPath = async () => {
     try {
@@ -63,20 +65,12 @@ export default function KeysSection() {
       <AdminHead
         kicker="ADMIN / KEYS"
         title="模型与密钥"
-        description="读服务端当前生效的配置：模型、地址、凭证末四位。凭证值本身永不下发，只回答「配了没有、几位」。"
-        actions={
-          <div className="admin-doc-actions">
-            <button
-              type="button"
-              className="admin-btn admin-btn--ghost"
-              onClick={() => setShowTech((value) => !value)}
-              aria-pressed={showTech}
-            >
-              {showTech ? '隐藏技术详情' : '显示技术详情'}
-            </button>
-            <RefreshButton onClick={config.reload} busy={config.loading} />
-          </div>
+        description={
+          internal
+            ? '内部测试环境：模型标识、上游地址、凭证末四位与环境变量清单全部展开，仅管理员可见。'
+            : '服务端当前接入的模型与检索服务，以及它们现在能不能用。'
         }
+        actions={<RefreshButton onClick={config.reload} busy={config.loading} />}
       />
 
       {config.error ? <ErrorBanner message={`GET /api/config：${config.error}`} onRetry={config.reload} /> : null}
@@ -89,8 +83,9 @@ export default function KeysSection() {
               <div>
                 <p className="admin-label">当前生效的接入</p>
                 <p className="admin-sub">
-                  文本与视觉分开配置：便宜的快模型能聊天，但它看不了图，抽帧评审必须走多模态模型。
-                  「已配置」只说明服务端拿到了凭证，能不能通信要看下面的自检。
+                  {internal
+                    ? '文本与视觉分开配置：便宜的快模型能聊天，但它看不了图，抽帧评审必须走多模态模型。「已配置」只说明服务端拿到了凭证，能不能通信要看下面的自检。'
+                    : '文本模型负责对话与文案，视觉模型负责看抽帧画面。「已配置」只说明服务端已经接好，能不能通要看下面的自检。'}
                 </p>
               </div>
               <SourceTag kind="api" source="GET /api/config" />
@@ -151,8 +146,12 @@ export default function KeysSection() {
                     <td>
                       <Badge tone={data.remote.enabled ? 'ok' : 'neutral'}>{data.remote.enabled ? '已接入' : '本机执行'}</Badge>
                     </td>
-                    <td className="admin-mono">{data.remote.enabled ? data.remote.label : '本机 ffmpeg'}</td>
-                    <td className="admin-mono">上限 {data.limits.maxVideoMb} MB / {data.limits.maxFrames} 帧</td>
+                    <td className="admin-mono">
+                      {internal ? (data.remote.enabled ? data.remote.label : '本机 ffmpeg') : data.remote.enabled ? '远端算力' : '本机执行'}
+                    </td>
+                    <td className="admin-mono">
+                      {internal ? `上限 ${data.limits.maxVideoMb} MB / ${data.limits.maxFrames} 帧` : '按服务端上限'}
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -171,20 +170,22 @@ export default function KeysSection() {
               ) : null}
             </div>
             <p className="admin-hint">
-              自检只请求上游 <code>/models</code>（列模型，不产生推理费用），用真实 key 判断「现在通不通」，不把配置存在当成可用。
+              {internal
+                ? '自检只请求上游 /models（列模型，不产生推理费用），用真实 key 判断「现在通不通」，不把配置存在当成可用。'
+                : '自检只做一次连通检查，不产生推理费用；它回答「现在通不通」，不把配置存在当成可用。'}
             </p>
           </section>
 
-          <section className="admin-card admin-block">
-            <div className="admin-block-head">
-              <div>
-                <p className="admin-label">接入清单</p>
-                <p className="admin-sub">再接一把 key 就是改这里的一行，重启服务生效，代码里没有第二处要改。</p>
+          {internal ? (
+            <section className="admin-card admin-block">
+              <div className="admin-block-head">
+                <div>
+                  <p className="admin-label">接入清单</p>
+                  <p className="admin-sub">再接一把 key 就是改这里的一行，重启服务生效，代码里没有第二处要改。</p>
+                </div>
+                <SourceTag kind="local" source={DOC_PATH} />
               </div>
-              <SourceTag kind="local" source={DOC_PATH} />
-            </div>
 
-            {showTech ? (
               <div className="admin-table-wrap">
                 <table className="admin-table">
                   <thead>
@@ -205,28 +206,36 @@ export default function KeysSection() {
                   </tbody>
                 </table>
               </div>
-            ) : (
-              <p className="admin-hint">
-                共 {data.envKeys.length} 项环境变量，含模型与检索服务的技术标识；默认不展示，点右上角「显示技术详情」可查看完整清单与当前值。
-              </p>
-            )}
 
-            <div className="admin-doc-row">
-              <code>{DOC_PATH}</code>
-              <div className="admin-doc-actions">
-                <button type="button" className="admin-btn admin-btn--ghost" onClick={copyDocPath}>
-                  复制路径
-                </button>
-                <a className="admin-btn admin-btn--ghost" href={docUrl} target="_blank" rel="noreferrer">
-                  打开文档
-                </a>
+              <div className="admin-doc-row">
+                <code>{DOC_PATH}</code>
+                <div className="admin-doc-actions">
+                  <button type="button" className="admin-btn admin-btn--ghost" onClick={copyDocPath}>
+                    复制路径
+                  </button>
+                  <a className="admin-btn admin-btn--ghost" href={docUrl} target="_blank" rel="noreferrer">
+                    打开文档
+                  </a>
+                </div>
               </div>
-            </div>
-            {copied ? <p className="admin-hint">{copied}</p> : null}
-            <p className="admin-hint">
-              改完 .env 执行 <code>sudo systemctl restart visionqa</code>；模型下拉框读 <code>/api/models</code>，清单变化会自动出现。
-            </p>
-          </section>
+              {copied ? <p className="admin-hint">{copied}</p> : null}
+              <p className="admin-hint">
+                改完 .env 执行 <code>sudo systemctl restart visionqa</code>；模型下拉框读 <code>/api/models</code>，清单变化会自动出现。
+              </p>
+            </section>
+          ) : (
+            <section className="admin-card admin-block">
+              <div className="admin-block-head">
+                <div>
+                  <p className="admin-label">接入说明</p>
+                  <p className="admin-sub">
+                    模型、检索服务与算力都由服务端统一维护，这里只报状态和连通性；需要调整接入时由平台维护人员处理。
+                  </p>
+                </div>
+                <SourceTag kind="api" source="GET /api/config" />
+              </div>
+            </section>
+          )}
         </>
       ) : null}
     </>

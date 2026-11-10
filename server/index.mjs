@@ -23,7 +23,7 @@ import { createReviewRouter } from './routes/review.mjs'
 import { createAuthRouter } from './routes/auth.mjs'
 import { createCreditsRouter } from './routes/credits.mjs'
 import { createAdminRouter } from './routes/admin.mjs'
-import { currentUser, listUsers, clientIp } from './auth.mjs'
+import { currentUser, listUsers, clientIp, isAdmin } from './auth.mjs'
 import { charge, refund, ensureWelcomeCredits } from './credits.mjs'
 import { enter, leave } from './gate.mjs'
 import { installProcessGuards, logEvent, logRequestError, startAccess } from './log.mjs'
@@ -46,7 +46,7 @@ const featureRoutes = [
 
 // VQ_REQUIRE_AUTH=1 时，除少数公开端点外所有 /api/* 都要登录。
 // 默认关闭，本地演示不受影响；生产必须打开。
-const PUBLIC_API = ['/api/auth', '/api/health', '/api/version', '/api/models']
+const PUBLIC_API = ['/api/auth', '/api/health', '/api/version', '/api/models', '/api/app']
 function needsLogin(pathname) {
   if (!config.auth.requireAuth) return false
   if (!pathname.startsWith('/api/')) return false
@@ -54,6 +54,9 @@ function needsLogin(pathname) {
 }
 
 const STARTED_AT = new Date().toISOString()
+
+// 版本号只读一次：/api/version 与 /api/app 都用它，避免每次请求都读盘
+const PKG = JSON.parse(await fsp.readFile(path.join(process.cwd(), 'package.json'), 'utf8'))
 
 // woff2/woff 必须给字体 MIME，否则浏览器按 octet-stream 直接拒绝加载
 const MIME = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.json': 'application/json', '.woff2': 'font/woff2', '.woff': 'font/woff', '.txt': 'text/plain; charset=utf-8' }
@@ -222,9 +225,19 @@ const server = http.createServer(async (req, res) => {
 
     if (pathname === '/api/version') {
       // 真实的版本号：读本仓库 package.json；客户端拿它和自己的构建版本比对，用来发现「页面是旧的」
-      const pkg = JSON.parse(await fsp.readFile(path.join(process.cwd(), 'package.json'), 'utf8'))
-      sendJson(res, 200, { version: pkg.version, name: pkg.name, startedAt: STARTED_AT })
+      sendJson(res, 200, { version: PKG.version, name: PKG.name, startedAt: STARTED_AT })
       return
+    }
+
+    if (pathname === '/api/app') {
+      // 界面口径：生产环境只讲产品语言；内部测试环境（VQ_UI_MODE=internal）多显示排障详情。
+      // 这个字段只影响展示，不参与权限判断，所以公开可读，登录页也能用。
+      return sendJson(res, 200, {
+        ok: true,
+        mode: config.ui.mode,
+        internal: config.ui.mode === 'internal',
+        version: PKG.version,
+      })
     }
 
     if (pathname === '/api/bdc/status') {
@@ -258,6 +271,12 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/models') {
       // 模型清单只读：给界面提供「切换模型」的下拉选项，模型本体在服务端 .env 里配
       return sendJson(res, 200, { ok: true, ...modelCatalog() })
+    }
+
+    // /api/config 与 /api/config/probe 会把模型标识、上游地址和环境变量清单发给调用方，
+    // 以前只要求登录，任何注册用户都能看到；现在收紧到管理员。
+    if ((pathname === '/api/config' || pathname === '/api/config/probe') && !isAdmin(user)) {
+      return sendJson(res, 403, { error: '只有管理员可以查看服务端配置', code: 'NOT_ADMIN' })
     }
 
     if (pathname === '/api/config') {
@@ -397,7 +416,7 @@ const server = http.createServer(async (req, res) => {
             items,
             total: items.length,
             note: '检索服务返回 3105（凭证不可用），当前显示的是示例数据：请到后台确认检索凭证后再试。',
-            quota: { code: 'REDFOX_DISABLED', message: error.message, rechargeUrl: 'https://redfox.hk/dashboard' },
+            quota: { code: 'REDFOX_DISABLED', message: error.message },
           })
         }
         if (error?.code === 'REDFOX_QUOTA') {
@@ -408,7 +427,7 @@ const server = http.createServer(async (req, res) => {
             items,
             total: items.length,
             note: 'VisionQA 检索服务已连通，但服务端额度不足（' + (error.quota?.amount ?? 0) + ' 元起充 / ' + (error.quota?.goodsName || '见服务后台') + '），当前显示的是示例数据。',
-            quota: { code: 'REDFOX_QUOTA', message: error.message, rechargeUrl: error.rechargeUrl, goodsName: error.quota?.goodsName || '' },
+            quota: { code: 'REDFOX_QUOTA', message: error.message, goodsName: error.quota?.goodsName || '' },
           })
         }
         throw error

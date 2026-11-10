@@ -101,6 +101,12 @@ export const config = {
       chat: Number(process.env.VQ_CONCURRENCY_CHAT ?? 2),
     },
   },
+  // 界面口径：生产环境只讲产品语言（不出现模型标识、上游地址、环境变量）；
+  // 内部测试环境显式设 VQ_UI_MODE=internal 后，后台保留完整技术详情用于排障。
+  // 默认 prod：生产漏配也绝不会把技术细节亮给用户。
+  ui: {
+    mode: (process.env.VQ_UI_MODE || '').trim().toLowerCase() === 'internal' ? 'internal' : 'prod',
+  },
   // 远端算力：给了 REPLICATE_REMOTE_URL 就把「解析/下载/抽帧」交给它，本地不跑 ffmpeg
   remote: {
     url: (process.env.REPLICATE_REMOTE_URL || '').trim(),
@@ -139,3 +145,4 @@ export const config = {
 
 export const redfoxEnabled = () => Boolean(config.redfox.key)
 export const visionEnabled = () => Boolean(config.vision.apiKey)
+export const internalMode = () => config.ui.mode === 'internal'

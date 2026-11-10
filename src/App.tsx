@@ -33,6 +33,7 @@ import { SettingsPage } from './pages/SettingsPage'
 import { RadarPage } from './pages/RadarPage'
 import { RequireSession } from './auth/RequireSession'
 import { useSession } from './auth/useSession'
+import { useUiMode } from './api/app'
 import { initialsFor, sessionKindLabel, type RegisterInput, type Session, type SignInInput } from './auth/session'
 import { listAgents } from './api/agents'
 import { navigate, pageToRoute, routeKey, routeToPage, useRoute } from './router'
@@ -140,6 +141,7 @@ function Workbench({
   onSwitchAccount: () => void
 }) {
   const route = useRoute()
+  const { internal } = useUiMode()
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
   const [toast, setToast] = useState('')
@@ -469,6 +471,11 @@ function Workbench({
           </div>
 
           <div className="vq-topbar-right">
+            {internal ? (
+              <span className="vq-env-pill vq-mono" title="内部测试环境：后台会显示模型标识、上游地址与环境变量等排障信息">
+                内部测试
+              </span>
+            ) : null}
             <ModelSwitch />
           </div>
         </header>
@@ -507,6 +514,10 @@ function Workbench({
               <div>
                 <span>站点</span>
                 <strong className="vq-mono">{window.location.host}</strong>
+              </div>
+              <div>
+                <span>环境</span>
+                <strong className="vq-mono">{internal ? '内部测试' : '生产'}</strong>
               </div>
               <div>
                 <span>检查接口</span>
