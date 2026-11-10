@@ -5,11 +5,12 @@ import fs from 'node:fs/promises'
 import crypto from 'node:crypto'
 import path from 'node:path'
 import { readBody, sendJson } from './_shared.mjs'
-import { currentUser, isAdmin, listUsers, findUserById, updateUserAccess, setPassword, destroyOtherSessions } from '../auth.mjs'
+import { currentUser, isAdmin, listUsers, findUserById, updateUserAccess, setPassword, destroyOtherSessions, deleteUser, countAdmins } from '../auth.mjs'
 import { grant, ledgerOf, balanceOf } from '../credits.mjs'
 import { config } from '../config.mjs'
 import { deepHealth } from '../health.mjs'
 import { logEvent } from '../log.mjs'
+import { removePreference } from '../preferences.mjs'
 
 const USER_CREDITS = /^\/api\/admin\/users\/([\w-]+)\/credits$/
 const USER_PASSWORD = /^\/api\/admin\/users\/([\w-]+)\/password$/
@@ -136,6 +137,28 @@ export function createAdminRouter() {
             credits: Number(updated.credits || 0),
           },
         })
+        return true
+      }
+
+      // 删除账号：只删登录与积分；模板 / 画布 / 运行记录保留，避免误删别人引用过的内容
+      if (accessMatch && req.method === 'DELETE') {
+        const target = findUserById(accessMatch[1])
+        if (!target) {
+          sendJson(res, 404, { error: '账号不存在' })
+          return true
+        }
+        if (target.id === user.id) {
+          sendJson(res, 400, { error: '不能删除当前登录的管理员账号', code: 'SELF_DELETE' })
+          return true
+        }
+        if (target.kind === 'admin' && countAdmins() <= 1) {
+          sendJson(res, 400, { error: '这是最后一个管理员账号，不能删除', code: 'LAST_ADMIN' })
+          return true
+        }
+        deleteUser(target.id)
+        removePreference(target.id)
+        logEvent('user-deleted', { by: user.email, to: target.email, kind: target.kind })
+        sendJson(res, 200, { ok: true, id: target.id, email: target.email })
         return true
       }
 

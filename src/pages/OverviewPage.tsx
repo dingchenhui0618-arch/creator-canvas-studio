@@ -28,6 +28,8 @@ type Props = {
   userName: string
   onCreate: () => void
   onNavigate: (page: Page) => void
+  // 工作台列的是画布服务里的画布项目：点哪块就开哪块，不再只是跳到画布页
+  onOpenCanvas: (canvasId: string) => void
 }
 
 const pad2 = (value: number) => String(value).padStart(2, '0')
@@ -55,7 +57,7 @@ function secondsOf(ms?: number): string {
  * 工作台只看真实数据：画布来自画布服务，运行与模板来自工作台 API。
  * 任何一块没有数据就写空状态并给出下一步，不用示例行填充——上线后的首页不能靠假数据撑版面。
  */
-export function OverviewPage({ userName, onCreate, onNavigate }: Props) {
+export function OverviewPage({ userName, onCreate, onNavigate, onOpenCanvas }: Props) {
   const { internal } = useUiMode()
   const [now] = useState(() => new Date())
   const [canvases, setCanvases] = useState<BdcCanvas[]>([])
@@ -167,7 +169,7 @@ export function OverviewPage({ userName, onCreate, onNavigate }: Props) {
         {canvases.length ? (
           <div className="vq-task-grid">
             {canvases.slice(0, 3).map((canvas, index) => (
-              <button type="button" className="vq-task" key={canvas.id} onClick={() => onNavigate('canvas')}>
+              <button type="button" className="vq-task" key={canvas.id} onClick={() => onOpenCanvas(canvas.id)}>
                 <span className="vq-task-index">{String(index + 1).padStart(2, '0')}</span>
                 <strong>{canvas.name}</strong>
                 <p>

@@ -13,9 +13,10 @@ import { EDITION_BY_ID, type AdminSection, type EditionId } from './editions'
 export type ShellPage = Exclude<Page, 'login' | 'agent-editor'>
 
 export type Route =
-  // flowId 只对 canvas 有意义：地址栏 #/canvas/<flowId> 直接打开某一张流程，
-  // 从模板库/运行记录里点「在画布打开」都落到这个形式。
-  | { kind: 'page'; page: ShellPage; flowId?: string }
+  // 画布有两个可寻址对象：
+  //   #/canvas/<flowId>            内置编排的流程（模板库、运行记录跳转都走它）
+  //   #/canvas/project/<画布ID>    画布服务里的画布项目（工作台「继续上次的画布」走它）
+  | { kind: 'page'; page: ShellPage; flowId?: string; canvasId?: string }
   | { kind: 'agent-editor'; agentRef: string | null }
   | { kind: 'admin'; section: AdminSection }
 
@@ -84,7 +85,10 @@ export function parseRoute(hash: string): Route {
     return { kind: 'agent-editor', agentRef: tail }
   }
   if ((USER_PAGES as readonly string[]).includes(head)) {
-    if (head === 'canvas') return { kind: 'page', page: 'canvas', flowId: tail || undefined }
+    if (head === 'canvas') {
+      if (tail === 'project' && segments[2]) return { kind: 'page', page: 'canvas', canvasId: segments[2] }
+      return { kind: 'page', page: 'canvas', flowId: tail || undefined }
+    }
     return { kind: 'page', page: head as ShellPage }
   }
   return DEFAULT_ROUTE
@@ -93,7 +97,10 @@ export function parseRoute(hash: string): Route {
 /** 规范化 hash：没有任何查询串，只保留可寻址的路径。 */
 export function toHash(route: Route): string {
   if (route.kind === 'page') {
-    if (route.page === 'canvas' && route.flowId) return '#/canvas/' + encodeURIComponent(route.flowId)
+    if (route.page === 'canvas') {
+      if (route.canvasId) return '#/canvas/project/' + encodeURIComponent(route.canvasId)
+      if (route.flowId) return '#/canvas/' + encodeURIComponent(route.flowId)
+    }
     return '#/' + route.page
   }
   if (route.kind === 'admin') return '#/admin/' + route.section
@@ -102,7 +109,13 @@ export function toHash(route: Route): string {
 
 /** 用字符串比较路由是否相同，供 key、订阅去重和「无变化不写历史」共用。 */
 export function routeKey(route: Route): string {
-  if (route.kind === 'page') return 'page:' + route.page + (route.page === 'canvas' && route.flowId ? ':' + route.flowId : '')
+  if (route.kind === 'page') {
+    if (route.page === 'canvas') {
+      if (route.canvasId) return 'page:canvas:project:' + route.canvasId
+      if (route.flowId) return 'page:canvas:flow:' + route.flowId
+    }
+    return 'page:' + route.page
+  }
   if (route.kind === 'admin') return 'admin:' + route.section
   return 'agent-editor:' + (route.agentRef ?? 'new')
 }

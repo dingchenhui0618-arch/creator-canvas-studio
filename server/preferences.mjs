@@ -45,6 +45,17 @@ export function preferenceModel(userId) {
   return preferenceOf(userId).model
 }
 
+// 删账号时一起清掉，不留一份没有主人的偏好。
+export function removePreference(userId) {
+  const id = String(userId || '').trim()
+  if (!id) return false
+  const data = load()
+  if (!data.users[id]) return false
+  delete data.users[id]
+  persist(data)
+  return true
+}
+
 export function setPreference(userId, patch = {}) {
   const id = String(userId || '').trim()
   if (!id) return preferenceOf('')

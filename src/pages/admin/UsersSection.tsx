@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { listAdminUsers, grantCredits, updateAdminUser, resetAdminPassword, type AdminUser } from '../../api/credits'
+import { listAdminUsers, grantCredits, updateAdminUser, resetAdminPassword, deleteAdminUser, type AdminUser } from '../../api/credits'
+import { readSession } from '../../auth/session'
 import type { SessionKind } from '../../auth/session'
 import { useUiMode } from '../../api/app'
 import { formatDateTime } from './data'
@@ -34,6 +35,13 @@ export default function UsersSection() {
   const [resetError, setResetError] = useState('')
   const [resetResult, setResetResult] = useState<{ email: string; password: string; signedOut: number } | null>(null)
   const [copied, setCopied] = useState(false)
+  // 删除账号不可撤销：先展开确认条，要求手输邮箱才能提交
+  const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState('')
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
+  const [deleteMessage, setDeleteMessage] = useState('')
+  const currentUserId = useMemo(() => readSession()?.user.id || '', [])
 
   const load = useCallback(() => {
     setLoading(true)
@@ -102,6 +110,38 @@ export default function UsersSection() {
     }
   }
 
+  const askDelete = (item: AdminUser) => {
+    setDeleteTarget(item)
+    setDeleteConfirm('')
+    setDeleteError('')
+    setDeleteMessage('')
+    setResetResult(null)
+  }
+
+  const cancelDelete = () => {
+    setDeleteTarget(null)
+    setDeleteConfirm('')
+    setDeleteError('')
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteTarget || deleteBusy) return
+    setDeleteBusy(true)
+    setDeleteError('')
+    try {
+      await deleteAdminUser(deleteTarget.id)
+      setDeleteMessage('已删除账号 ' + deleteTarget.email + '。该账号创建过的模板、画布与运行记录仍保留。')
+      if (selectedId === deleteTarget.id) setSelectedId('')
+      setDeleteTarget(null)
+      setDeleteConfirm('')
+      load()
+    } catch (caught) {
+      setDeleteError(caught instanceof Error ? caught.message : '删除账号失败')
+    } finally {
+      setDeleteBusy(false)
+    }
+  }
+
   const submit = async () => {
     const value = Number(amount)
     if (!selected) return
@@ -128,7 +168,7 @@ export default function UsersSection() {
       <AdminHead
         kicker="ADMIN / USERS"
         title="账号与积分"
-        description={internal ? '账号存在服务端数据库（data/auth.db，SQLite）；积分是服务端账本。管理员可停用、改角色、重置口令：临时口令只返回一次，旧会话全部注销。' : '账号与积分都在账号体系里；管理员可以停用账号、调整角色，或重置口令（一次性临时口令，旧登录会退出）。'}
+        description={internal ? '账号存在服务端数据库（data/auth.db，SQLite）；积分是服务端账本。管理员可停用、改角色、重置口令、删除账号：临时口令只返回一次，旧会话全部注销；删除会一并清掉会话、流水与 preferences.json 里的偏好。' : '账号与积分都在账号体系里；管理员可以停用账号、调整角色、重置口令（一次性临时口令，旧登录会退出），或删除账号。删除不可撤销，但该账号创建过的内容会保留。'}
         actions={
           <>
             <SourceTag kind="api" source="/api/admin/users" />
@@ -140,6 +180,45 @@ export default function UsersSection() {
       {error ? <ErrorBanner message={error} onRetry={load} /> : null}
       {accessMessage ? <p className="admin-hint">{accessMessage}</p> : null}
       {resetError ? <p className="admin-hint" role="alert">{resetError}</p> : null}
+      {deleteMessage ? <p className="admin-hint">{deleteMessage}</p> : null}
+      {deleteTarget ? (
+        <div className="admin-delete" role="dialog" aria-label="删除账号">
+          <div className="admin-delete-copy">
+            <span className="admin-label">删除账号</span>
+            <p className="admin-sub">
+              将删除 {deleteTarget.email} 的登录、会话与积分记录，不能撤销。
+              {internal
+                ? '服务端同时清掉 data/auth.db 里的会话与 credit_ledger，以及 preferences.json 里的模型偏好；模板、画布与运行记录保留。'
+                : '该账号创建过的模板、画布与运行记录会保留，但不再有可登录的主人。'}
+            </p>
+            <label className="admin-delete-confirm">
+              <span>输入邮箱确认</span>
+              <input
+                className="vq-input"
+                value={deleteConfirm}
+                onChange={(event) => setDeleteConfirm(event.target.value)}
+                placeholder={deleteTarget.email}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </label>
+          </div>
+          <div className="admin-doc-actions">
+            <button
+              type="button"
+              className="admin-btn admin-btn--danger"
+              disabled={deleteBusy || deleteConfirm.trim().toLowerCase() !== deleteTarget.email.toLowerCase()}
+              onClick={() => void confirmDelete()}
+            >
+              {deleteBusy ? '删除中…' : '确认删除'}
+            </button>
+            <button type="button" className="admin-btn admin-btn--ghost" disabled={deleteBusy} onClick={cancelDelete}>
+              取消
+            </button>
+          </div>
+          {deleteError ? <p className="admin-hint" role="alert">{deleteError}</p> : null}
+        </div>
+      ) : null}
       {resetResult ? (
         <div className="admin-reset" role="status">
           <div className="admin-reset-copy">
@@ -223,6 +302,15 @@ export default function UsersSection() {
                           onClick={() => void resetPassword(item)}
                         >
                           {resetBusy === item.id ? '重置中…' : '重置口令'}
+                        </button>
+                        <button
+                          type="button"
+                          className="admin-btn admin-btn--danger"
+                          disabled={deleteBusy || item.id === currentUserId}
+                          title={item.id === currentUserId ? '不能删除当前登录账号' : '删除账号：登录、会话与积分记录一并删除'}
+                          onClick={() => askDelete(item)}
+                        >
+                          删除
                         </button>
                       </div>
                     </td>

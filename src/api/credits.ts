@@ -66,6 +66,10 @@ export const updateAdminUser = (userId: string, patch: { active?: boolean; kind?
     body: JSON.stringify(patch),
   })
 
+// 删除账号：只删登录与积分；模板、画布与运行记录保留（服务端决定，不在界面假装一并清空）
+export const deleteAdminUser = (userId: string) =>
+  request<{ ok: boolean; id: string; email: string }>('/api/admin/users/' + userId, { method: 'DELETE' })
+
 export const grantCredits = (userId: string, amount: number, note: string) =>
   request<{ ok: boolean; balance: number; ledger: CreditEntry[] }>('/api/admin/users/' + userId + '/credits', {
     method: 'POST',

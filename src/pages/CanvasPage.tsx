@@ -29,7 +29,7 @@ import {
 } from '../api/flows'
 import { getCredits } from '../api/credits'
 import { useUiMode } from '../api/app'
-import { replaceRoute } from '../router'
+import { navigate, replaceRoute } from '../router'
 import {
   createBdcCanvas,
   getBdcStatus,
@@ -58,17 +58,19 @@ const nodeTypes = {
   output: FlowNodeCard,
 }
 
-// flowId 来自地址栏 #/canvas/<flowId>：从模板库、运行记录或刷新页面都能直接落到指定流程
-type CanvasPageProps = { onToast?: (message: string) => void; flowId?: string }
+// 画布页有两个入口，都来自地址栏：
+//   flowId   #/canvas/<flowId>          内置编排的流程（模板库、运行记录跳转）
+//   canvasId #/canvas/project/<画布ID>  画布服务里的画布项目（工作台「继续上次的画布」）
+type CanvasPageProps = { onToast?: (message: string) => void; flowId?: string; canvasId?: string }
 
 type Snapshot = { nodes: Node<FlowNodeData>[]; edges: Edge[] }
 
 type SaveState = 'saved' | 'saving' | 'dirty' | 'error'
 
-export default function CanvasPage({ onToast, flowId }: CanvasPageProps) {
+export default function CanvasPage({ onToast, flowId, canvasId }: CanvasPageProps) {
   return (
     <ReactFlowProvider>
-      <CanvasWorkspace onToast={onToast} flowId={flowId} />
+      <CanvasWorkspace onToast={onToast} flowId={flowId} canvasId={canvasId} />
     </ReactFlowProvider>
   )
 }
@@ -85,7 +87,7 @@ function hostOf(value: string): string {
   }
 }
 
-function CanvasWorkspace({ onToast, flowId: initialFlowId }: CanvasPageProps) {
+function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanvasId }: CanvasPageProps) {
   const { internal } = useUiMode()
   const rf = useReactFlow()
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<FlowNodeData>>([])
@@ -108,9 +110,15 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId }: CanvasPageProps) {
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [bdc, setBdc] = useState<BdcStatus | null>(null)
   const [bdcView, setBdcView] = useState(false)
+  // 从工作台点进来时地址里带的是画布项目 id：等画布服务确认后再挂 iframe
+  const bdcTarget = initialCanvasId || ''
+  const [bdcChecked, setBdcChecked] = useState(false)
+  const [bdcMissing, setBdcMissing] = useState(false)
   // 画布 ↔ 工作台：画布列表、当前画布、把评审笔记写回画布
   const [canvases, setCanvases] = useState<BdcCanvas[]>([])
   const [canvasId, setCanvasId] = useState(() => {
+    // 地址里点名了画布项目就以它为准；否则沿用上次打开的
+    if (initialCanvasId) return initialCanvasId
     try { return window.localStorage.getItem('vq:bdcCanvas') || '' } catch { return '' }
   })
   const [noteOpen, setNoteOpen] = useState(false)
@@ -297,6 +305,11 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId }: CanvasPageProps) {
   useEffect(() => {
     let alive = true
     const load = async () => {
+      // 目标是画布项目时不需要流程：不写地址、不创建「未命名流程」，直接留给下面的画布视图
+      if (bdcTarget) {
+        setLoadState('ready')
+        return
+      }
       setLoadState('loading')
       try {
         let list = await listFlows()
@@ -330,7 +343,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId }: CanvasPageProps) {
     return () => {
       alive = false
     }
-  }, [applyFlow, initialFlowId, rf])
+  }, [applyFlow, initialFlowId, rf, bdcTarget])
 
   // 自动保存：只比较节点/连线/流程名的投影，选中态变化不会触发保存
   useEffect(() => {
@@ -681,6 +694,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId }: CanvasPageProps) {
           if (status.deployed) setBdcView(true)
         })
         .catch(() => undefined)
+        .finally(() => setBdcChecked(true))
     }, 0)
     return () => window.clearTimeout(timer)
   }, [])
@@ -703,11 +717,16 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId }: CanvasPageProps) {
         if (cancelled) return
         const list = res.canvases || []
         setCanvases(list)
-        setCanvasId((current) => (list.some((item) => item.id === current) ? current : list[0]?.id || ''))
+        // 链接里的画布可能已被别人删掉：直说，不悄悄换成列表第一块
+        setBdcMissing(Boolean(bdcTarget) && !list.some((item) => item.id === bdcTarget))
+        setCanvasId((current) => {
+          if (bdcTarget && list.some((item) => item.id === bdcTarget)) return bdcTarget
+          return list.some((item) => item.id === current) ? current : list[0]?.id || ''
+        })
       })
       .catch(() => undefined)
     return () => { cancelled = true }
-  }, [bdc?.deployed])
+  }, [bdc?.deployed, bdcTarget])
 
   useEffect(() => {
     try {
@@ -768,6 +787,44 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId }: CanvasPageProps) {
       : saveState === 'error'
         ? '保存失败'
         : '已保存'
+
+  // 画布项目依赖画布服务：确认前只给一条细状态条；连不上就写清楚，不白屏、不假装已打开
+  if (bdcTarget && !bdcChecked) {
+    return (
+      <div className="page cv-page">
+        <div className="cv-bdc-strip">
+          <span className="cv-bdc-label">VisionQA Canvas</span>
+          <span className="cv-bdc-state">正在连接画布…</span>
+        </div>
+      </div>
+    )
+  }
+  if (bdcTarget && bdcMissing) {
+    return (
+      <div className="page cv-page">
+        <div className="vq-empty">
+          <strong>这块画布不在了</strong>
+          <span>它可能已被删除，或链接里的编号不属于当前账号。回工作台看现在还有哪些画布。</span>
+          <button type="button" className="vq-button vq-button--ghost" onClick={() => navigate({ kind: 'page', page: 'overview' })}>
+            返回工作台
+          </button>
+        </div>
+      </div>
+    )
+  }
+  if (bdcTarget && (!bdc || !bdc.deployed)) {
+    return (
+      <div className="page cv-page">
+        <div className="vq-empty">
+          <strong>这块画布暂时打不开</strong>
+          <span>画布服务没有连接上，工作台里的画布项目需要它才能显示。稍后重试，或回到工作台用内置编排。</span>
+          <button type="button" className="vq-button vq-button--ghost" onClick={() => navigate({ kind: 'page', page: 'overview' })}>
+            返回工作台
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className={`page cv-page${bdcView && bdc?.deployed ? ' is-bdc' : ''}`}>
@@ -850,7 +907,11 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId }: CanvasPageProps) {
           <button
             className="cv-icon-btn"
             type="button"
-            onClick={() => setBdcView(false)}
+            onClick={() => {
+              // 从画布项目链接进来的页面没有加载内置流程：回内置编排要走一次路由，让它正常拉流程
+              if (bdcTarget) navigate({ kind: 'page', page: 'canvas' })
+              else setBdcView(false)
+            }}
             title="回到内置编排"
             aria-label="回到内置编排"
           >

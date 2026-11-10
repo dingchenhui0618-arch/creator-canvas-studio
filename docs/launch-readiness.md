@@ -285,8 +285,8 @@ curl -s https://visionqa.wavisionai.cn/api/auth/config   # 只有 registrationEn
 
 | 页面 | 现在点下去会怎样 | 需要接什么 | 类别 |
 | --- | --- | --- | --- |
-| 工作台总览 | 点画布卡片只跳到画布页，不会打开那一块 | `#/canvas/<canvasId>` + GET /api/bdc/canvases/:id | 半成品 |
-| 工作台总览 | 「新建 → 资产画布」只跳转不创建 | 复用 POST /api/bdc/canvases 或 /api/flows | 占位 |
+| 工作台总览 | ✅ 已补（2026-11-10 第七批）：点画布卡片按 id 打开那一块，地址可刷新/复制；连不上画布服务时说明并给返回入口 | `#/canvas/project/<canvasId>` + GET /api/bdc/canvases | 已完成 |
+| 工作台总览 | ✅ 已补（2026-11-10 第七批）：「新建 → 资产画布」真调画布服务建一块并直接打开，失败如实提示并退回画布页 | POST /api/bdc/canvases | 已完成 |
 | 爆款雷达 | 排序只重排当前这一页 | GET /api/search?...&sort=likes（服务端排序） | 半成品 |
 | 一键复刻 | ✅ 已补（2026-11-10）：弹窗显示单价/余额，余额不足禁用开始，402 给出「找管理员发放」 | GET /api/credits | 已完成 |
 | 模板库 | ✅ 已补（2026-11-10）：「套用到画布」生成带输入/复刻节点的流程并跳转画布 | POST /api/templates/:id/apply | 已完成 |
@@ -307,7 +307,7 @@ curl -s https://visionqa.wavisionai.cn/api/auth/config   # 只有 registrationEn
 | 设置 | ✅ 已补（2026-11-10 第六批）：本人可用「当前口令 + 新口令」修改，成功后其它设备会话注销、当前会话保留 | POST /api/auth/password | 已完成 |
 | 设置 | 「工作区」单值展示，多工作区切换没有后端 | GET/POST /api/workspaces | 占位 |
 | 后台总览 | ✅ 已补（2026-11-10）：用户数取 GET /api/admin/users 的 total | GET /api/admin/users | 已完成 |
-| 后台账号 | ✅ 已补（2026-11-10，第六批加重置口令）：可停用/启用、设/撤管理员、重置口令（一次性临时口令，旧会话全部注销）；不允许把自己降级或停用 | PATCH /api/admin/users/:id、POST /api/admin/users/:id/password | 已完成（删除账号未做） |
+| 后台账号 | ✅ 已补（2026-11-10，第六批加重置口令、第七批加删除账号）：可停用/启用、设/撤管理员、重置口令（一次性临时口令，旧会话全部注销）、删除账号（输入邮箱确认；删登录/会话/积分流水/模型偏好，保留其创建的内容）；不允许把自己降级、停用或删除 | PATCH /api/admin/users/:id、POST /api/admin/users/:id/password、DELETE /api/admin/users/:id | 已完成 |
 | 后台模型 Key | 只能看末四位，改要登服务器改 .env | PUT /api/admin/config（密钥托管有风险，不建议） | 半成品 |
 | 后台模板治理 | ✅ 已补（2026-11-10 第三批）：就地编辑标题 / 类型 / 标签 / 原链接，成功后重拉列表 | PATCH /api/templates/:id | 已完成 |
 | 后台运行审计 | ✅ 已补（2026-11-10 第四批）：账号 / 流程 / 状态三个筛选、账号列、CSV 带账号；可单独筛「未归属」历史运行 | GET /api/runs?ownerId=&flowId=&status= | 已完成 |
@@ -317,7 +317,7 @@ curl -s https://visionqa.wavisionai.cn/api/auth/config   # 只有 registrationEn
 | 登录页 | ✅ 已补（2026-11-10 第六批）：不再提示「访客身份」，明确引导联系管理员重置；自助邮件找回仍需邮件通道，未做 | 管理员重置 + POST /api/auth/password | 已完成（无邮件通道） |
 | 充值 | 未开通占位（按你的要求不动） | 等金额/档位/支付方式 | 冻结 |
 
-静态统计（2026-11-10 第六批补齐后）：已完成 21 条、余半成品 5 条、占位 2 条、外部依赖 2 条、冻结 1 条。
+静态统计（2026-11-10 第七批补齐后）：已完成 23 条、余半成品 4 条、占位 1 条、外部依赖 2 条、冻结 1 条。
 
 第一批已落地（提交见 README 十七）：复刻/评审/对话三处积分可见与 402 提示、模板套用到画布、评审历史落库与回看、后台用户数、账号停用与角色调整、模板 PATCH 接口。
 
@@ -330,6 +330,8 @@ curl -s https://visionqa.wavisionai.cn/api/auth/config   # 只有 registrationEn
 第五批已落地（提交见 README 二十一）：后台「真实接口」标记与接口路径只在内部环境显示、后台各页生产文案收敛、模型 Key 凭证只写「已配置」、数据占用接口与系统页真实占用 / 磁盘余量。
 
 第六批已落地（提交见 README 二十二）：全局模型偏好改为服务端按账号保存并真正接入智能体对话与画布 llm 节点、设置页本人修改口令、后台管理员重置口令（一次性临时口令 + 旧会话注销）、登录页忘记密码文案与自助找回边界。
+
+第七批已落地（提交见 README 二十三）：后台删除账号（输入邮箱确认、会话/流水/偏好一并清理、自我保护）、工作台画布卡片按画布项目 id 打开（`#/canvas/project/<id>`）、「新建 → 资产画布」真实创建并打开。
 
 **当前阻塞（非代码）**：上游模型账号返回 `Insufficient Balance`（deepseek-flash 文本对话与视觉评审都会 402），智能体与评审在补余额前不可用；检索服务仍正常。
 

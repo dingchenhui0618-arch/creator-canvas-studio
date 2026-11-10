@@ -36,6 +36,7 @@ import { useSession } from './auth/useSession'
 import { useUiMode } from './api/app'
 import { initialsFor, sessionKindLabel, type RegisterInput, type Session, type SignInInput } from './auth/session'
 import { listAgents } from './api/agents'
+import { createBdcCanvas } from './api/bdc'
 import { navigate, pageToRoute, routeKey, routeToPage, useRoute } from './router'
 import packageJsonRaw from '../package.json?raw'
 import { EDITION_BY_ID, EDITION_STORAGE_KEY, type AdminSection } from './editions'
@@ -200,6 +201,26 @@ function Workbench({
     setAccountMenuOpen(false)
   }, [])
 
+  // 「新建 → 资产画布」直接调画布服务建一块真画布，建完就打开它；
+  // 服务不可用时退回画布页并如实提示，不留下一个只在本地存在的新画布。
+  const createCanvasProject = useCallback(async () => {
+    notify('正在新建画布…')
+    const stamp = new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit' }).format(new Date())
+    try {
+      const result = await createBdcCanvas('新画布 ' + stamp)
+      if (result?.canvas?.id) {
+        navigate({ kind: 'page', page: 'canvas', canvasId: result.canvas.id })
+        notify('已新建画布：' + result.canvas.name)
+        return
+      }
+      go('canvas')
+      notify('画布服务没有返回新画布，已打开画布页')
+    } catch (error) {
+      go('canvas')
+      notify('新建画布失败：' + (error instanceof Error ? error.message : String(error)))
+    }
+  }, [go, notify])
+
   // 列表入口只把名称交给外壳。先换成稳定 id 再写地址，地址栏里始终是 #/agents/<id>；
   // 解析失败时退回名称，编辑器那边仍能按唯一名称找回记录。
   const openAgent = useCallback((name: string) => {
@@ -273,7 +294,8 @@ function Workbench({
     }
     switch (route.page) {
       case 'canvas':
-        return <CanvasPage flowId={route.flowId} onToast={notify} />
+        // 每个画布目标一份页面状态：从工作台连点两块画布时整页重置，不带上一块的撤销栈
+        return <CanvasPage key={'canvas:' + (route.canvasId || route.flowId || '')} flowId={route.flowId} canvasId={route.canvasId} onToast={notify} />
       case 'radar':
         return <RadarPage onToast={notify} onOpenTemplates={() => go('templates')} />
       case 'templates':
@@ -285,7 +307,14 @@ function Workbench({
           />
         )
       case 'overview':
-        return <OverviewPage userName={session.user.name} onCreate={() => setShowCreate(true)} onNavigate={go} />
+        return (
+          <OverviewPage
+            userName={session.user.name}
+            onCreate={() => setShowCreate(true)}
+            onNavigate={go}
+            onOpenCanvas={(canvasId) => navigate({ kind: 'page', page: 'canvas', canvasId })}
+          />
+        )
       case 'agents':
         return <AgentsPage onCreate={openNewAgent} onOpenAgent={openAgent} />
       case 'runs':
@@ -586,8 +615,7 @@ function Workbench({
             if (kind === 'agent') {
               openNewAgent()
             } else {
-              // 画布的新建在画布页里做（那里才有画布服务端接口），这里只负责把人送过去。
-              go('canvas')
+              void createCanvasProject()
             }
           }}
         />

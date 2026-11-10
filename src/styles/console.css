@@ -817,6 +817,46 @@
   user-select: all;
 }
 
+/* 删除账号：不可撤销，确认条用红色左边线，必须手输邮箱才能提交 */
+.admin-delete {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 16px;
+  padding: 16px;
+  margin: 0 0 16px;
+  border: 1px solid var(--line, #e5e2db);
+  border-left: 2px solid var(--fail, #a33838);
+  border-radius: 6px;
+  background: var(--surface-raised, #ffffff);
+}
+
+.admin-delete-copy {
+  flex: 1 1 320px;
+}
+
+.admin-delete-copy .admin-sub {
+  margin: 4px 0 12px;
+}
+
+.admin-delete-confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--ink-muted, #5f5f5f);
+  font-size: 12px;
+}
+
+.admin-delete-confirm .vq-input {
+  max-width: 240px;
+}
+
+.admin-delete > .admin-hint {
+  flex-basis: 100%;
+  margin: 0;
+}
+
 .admin-danger .admin-block-head {
   align-items: center;
 }

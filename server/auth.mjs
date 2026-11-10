@@ -124,6 +124,30 @@ export function updateUserAccess(id, patch = {}) {
   return findUserById(id)
 }
 
+// 删除账号：登录、会话与积分流水一起删掉，避免残留一条登不进去、也发不了积分的幽灵账号。
+// 模板 / 画布 / 运行记录不在这里删：它们可能已被别人引用过，误删比留一条「已删除账号」的历史更糟。
+export function deleteUser(id) {
+  const database = openDb()
+  if (!findUserById(id)) return false
+  database.exec('BEGIN IMMEDIATE')
+  try {
+    database.prepare('DELETE FROM sessions WHERE user_id = ?').run(String(id))
+    database.prepare('DELETE FROM credit_ledger WHERE user_id = ?').run(String(id))
+    database.prepare('DELETE FROM users WHERE id = ?').run(String(id))
+    database.exec('COMMIT')
+    return true
+  } catch (error) {
+    database.exec('ROLLBACK')
+    throw error
+  }
+}
+
+// 管理员数量：用于「别把最后一个管理员删掉」这类守卫。停用的管理员也算，避免把自己锁在门外。
+export function countAdmins() {
+  const row = openDb().prepare("SELECT COUNT(*) AS n FROM users WHERE kind = 'admin'").get()
+  return Number(row?.n || 0)
+}
+
 export function createUser({ email, password, name, kind = 'account' }) {
   const normalized = String(email).trim().toLowerCase()
   const id = 'usr_' + crypto.randomBytes(9).toString('base64url')
