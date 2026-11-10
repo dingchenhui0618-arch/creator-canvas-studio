@@ -14,10 +14,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const getHealth = () => request<{ ok: boolean; redfox: boolean; vision: boolean; visionModel: string; templates: number }>('/api/health')
 
-export function searchMedia(params: { platform: string; q: string; start?: string; end?: string }) {
+export function searchMedia(params: { platform: string; q: string; start?: string; end?: string; page?: number; sort?: string }) {
   const query = new URLSearchParams({ platform: params.platform, q: params.q })
   if (params.start) query.set('start', params.start)
   if (params.end) query.set('end', params.end)
+  if (params.page && params.page > 1) query.set('page', String(params.page))
+  if (params.sort) query.set('sort', params.sort)
   return request<SearchResult>('/api/search?' + query.toString())
 }
 

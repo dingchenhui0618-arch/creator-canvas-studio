@@ -151,7 +151,8 @@ async function main() {
   const beforeDisabled = (await req('/api/credits', { cookies: a })).json?.balance
   const s2 = await req('/api/search?q=disabled', { cookies: a })
   const afterDisabled = (await req('/api/credits', { cookies: a })).json?.balance
-  check('上游失败退积分', beforeDisabled === afterDisabled && /禁用/.test(String(s2.json?.note || '')), 'before=' + beforeDisabled + ' after=' + afterDisabled)
+  // 3105 的用户文案已收敛成产品语言（「凭证不可用」），不再直说上游原因
+  check('上游失败退积分', beforeDisabled === afterDisabled && /禁用|凭证不可用/.test(String(s2.json?.note || '')), 'before=' + beforeDisabled + ' after=' + afterDisabled + ' note=' + String(s2.json?.note || '').slice(0, 40))
 
   const health = await req('/api/system/health', { cookies: a })
   const ids = (health.json?.checks || []).map((entry) => entry.id).join(',')

@@ -230,7 +230,10 @@ async function requestOnce(pathname, payload, headers) {
   return json
 }
 
-export async function searchMedia({ platform, keyword, startDate, endDate, pageNum = 1, pageSize = 24 }) {
+// 排序字段：只认互动数据里真实存在的六项，未知值回落到点赞，不静默返回乱序
+const SORT_FIELDS = ['likes', 'collects', 'comments', 'shares', 'plays', 'interactions']
+
+export async function searchMedia({ platform, keyword, startDate, endDate, pageNum = 1, pageSize = 24, sort = 'likes' }) {
   if (!redfoxEnabled()) throw Object.assign(new Error('检索服务未接入'), { code: 'NO_KEY' })
   const tasks = []
   if (platform === 'douyin' || platform === 'all') {
@@ -270,8 +273,11 @@ export async function searchMedia({ platform, keyword, startDate, endDate, pageN
     const rateLimited = errors.some((message) => /过于频繁|限流/.test(message))
     throw Object.assign(new Error(errors.join('；')), { code: rateLimited ? 'REDFOX_RATE' : 'REDFOX_ERROR' })
   }
-  items.sort((a, b) => b.stats.likes - a.stats.likes)
-  return { mode: 'live', items, total, errors }
+  const field = SORT_FIELDS.includes(sort) ? sort : 'likes'
+  items.sort((a, b) => (Number(b.stats[field]) || 0) - (Number(a.stats[field]) || 0))
+  // 每页都是上游按页码取回的：页满且总数还没到，才认为后面还有
+  const hasMore = items.length >= pageSize && (total <= 0 || pageNum * pageSize < total)
+  return { mode: 'live', items, total, errors, page: pageNum, pageSize, sort: field, hasMore }
 }
 
 export async function resolveVideoUrl(platform, pageUrl) {

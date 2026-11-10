@@ -66,6 +66,12 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
   const [items, setItems] = useState<MediaItem[]>([])
   const [mode, setMode] = useState<'live' | 'mock'>('mock')
   const [note, setNote] = useState('')
+  // 分页：每次「加载更多」都是一次真实检索（按次计费），所以页码、快照和是否还有下一页都要记住
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [snapshot, setSnapshot] = useState<{ platform: string; q: string; start: string; end: string } | null>(null)
   const [quota, setQuota] = useState<{ code: string; message: string; rechargeUrl?: string; goodsName?: string } | null>(null)
   const [loading, setLoading] = useState(false)
   // 进页面不自动检索：红狐按次计费，必须由用户点「检索」才发请求
@@ -89,9 +95,14 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
     setLoading(true)
     setError('')
     setInsufficient('')
+    const query = { platform, q: keyword.trim(), start: range ? dayOffset(Number(range)) : '', end: range ? dayOffset(0) : '' }
     try {
-      const result = await searchMedia({ platform, q: keyword.trim(), start: range ? dayOffset(Number(range)) : '', end: range ? dayOffset(0) : '' })
+      const result = await searchMedia({ ...query, page: 1, sort })
       setItems(result.items)
+      setTotal(Number(result.total) || result.items.length)
+      setPage(1)
+      setHasMore(Boolean(result.hasMore))
+      setSnapshot(query)
       setMode(result.mode)
       setNote(result.note || '')
       setQuota(result.quota ? { code: result.quota.code, message: result.quota.message, rechargeUrl: result.quota.rechargeUrl, goodsName: result.quota.goodsName } : null)
@@ -106,7 +117,34 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
       setLoading(false)
       refreshCredits()
     }
-  }, [keyword, platform, range, refreshCredits])
+  }, [keyword, platform, range, sort, refreshCredits])
+
+  // 加载更多：沿用第一次检索的筛选快照，只把页码往后翻；同一批结果按 id 去重
+  const loadMore = useCallback(async () => {
+    if (!snapshot || loadingMore || !hasMore) return
+    setLoadingMore(true)
+    setError('')
+    setInsufficient('')
+    try {
+      const result = await searchMedia({ ...snapshot, page: page + 1, sort })
+      setItems((current) => {
+        const seen = new Set(current.map((entry) => entry.id))
+        return [...current, ...result.items.filter((entry) => !seen.has(entry.id))]
+      })
+      setTotal(Number(result.total) || total)
+      setPage((value) => value + 1)
+      setHasMore(Boolean(result.hasMore))
+      if (result.note) setNote(result.note)
+      if (result.quota) setQuota({ code: result.quota.code, message: result.quota.message, rechargeUrl: result.quota.rechargeUrl, goodsName: result.quota.goodsName })
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : String(caught)
+      if (/积分不足/.test(message)) setInsufficient(message)
+      else setError(message)
+    } finally {
+      setLoadingMore(false)
+      refreshCredits()
+    }
+  }, [snapshot, page, sort, hasMore, loadingMore, total, refreshCredits])
 
   useEffect(() => {
     getHealth()
@@ -121,6 +159,13 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
     copy.sort((a, b) => ((b.stats as Record<string, number>)[sort] || 0) - ((a.stats as Record<string, number>)[sort] || 0))
     return copy
   }, [items, sort])
+
+  // 筛选改动后旧结果还在屏上：明确告诉用户要点「重新检索」，加载更多也停住，避免混进两套条件
+  const currentStart = range ? dayOffset(Number(range)) : ''
+  const stale = Boolean(searched && snapshot && (snapshot.platform !== platform || snapshot.q !== keyword.trim() || snapshot.start !== currentStart))
+  // 有些关键词上游没回播放量，按播放排就排不动：与其静默不动，不如说清缺哪项数据
+  const sortLabel = SORTS.find((entry) => entry.value === sort)?.label || '排序'
+  const sortHasData = sorted.some((item) => ((item.stats as Record<string, number>)[sort] || 0) > 0)
 
   const totalLikes = sorted.reduce((sum, item) => sum + item.stats.likes, 0)
   const totalPlays = sorted.reduce((sum, item) => sum + (item.stats.plays || 0), 0)
@@ -234,7 +279,10 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
 
       {searched && (
         <div className="radar-summary">
-          <span><strong>{sorted.length}</strong> 条内容</span>
+          <span>
+            <strong>{sorted.length}</strong> 条已加载
+            {total > sorted.length ? ' · 共 ' + formatCount(total) + ' 条' : ''}
+          </span>
           {totalPlays > 0 && <span><strong>{formatCount(totalPlays)}</strong> 累计播放</span>}
           <span><strong>{formatCount(totalLikes)}</strong> 累计点赞</span>
           <span className="radar-summary-note">{mode === 'live' ? '数据来自 VisionQA 检索' : hasKey ? '示例数据 · 服务不可用' : '示例数据 · 检索未接入'}</span>
@@ -313,13 +361,31 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
             )
           })}
         </div>
-      ) : searched ? (
-        <div className="radar-empty">
-          <Sparkles size={22} />
-          <strong>没有检索到内容</strong>
-          <span>换一个更细的关键词（例如「通勤穿搭」而不是「穿搭」），或放宽时间范围。</span>
+      ) : null}
+
+      {searched && sorted.length ? (
+        <div className="radar-more">
+          <span className="radar-more-note">
+            {stale
+              ? '筛选条件已改，点「重新检索」才会更新结果；加载更多已暂停。'
+              : hasMore
+                ? '已加载 ' + sorted.length + ' 条' + (total > sorted.length ? ' / 共 ' + formatCount(total) + ' 条' : '') + '，排序作用于已加载范围。'
+                : '已加载全部 ' + sorted.length + ' 条。'}
+            {!sortHasData ? ' 当前结果缺少' + sortLabel + '所需的数据，顺序不会变化。' : ''}
+          </span>
+          <button
+            className="button button--ghost"
+            disabled={loadingMore || stale || !hasMore || Boolean(insufficient)}
+            title={stale ? '先点「重新检索」' : hasMore ? '每次加载一页，和检索一样按次计费' : '没有更多了'}
+            onClick={() => void loadMore()}
+          >
+            {loadingMore ? <RefreshCw size={14} className="spin" /> : null}
+            {hasMore ? (loadingMore ? '加载中' : '加载更多 · 每次 ' + (credits?.prices.search ?? 2) + ' 积分') : '已加载全部'}
+          </button>
         </div>
-      ) : (
+      ) : null}
+
+      {!searched ? (
         <div className="radar-idle">
           <Search size={20} />
           <strong>先输入关键词，再点「检索」</strong>
@@ -334,7 +400,13 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
             ))}
           </div>
         </div>
-      )}
+      ) : !sorted.length && !loading ? (
+        <div className="radar-empty">
+          <Sparkles size={22} />
+          <strong>没有检索到内容</strong>
+          <span>换一个更细的关键词（例如「通勤穿搭」而不是「穿搭」），或放宽时间范围。</span>
+        </div>
+      ) : null}
 
       {modalItem && (
         <ReplicateModal

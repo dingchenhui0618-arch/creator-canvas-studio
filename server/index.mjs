@@ -395,15 +395,18 @@ const server = http.createServer(async (req, res) => {
       const keyword = url.searchParams.get('q') || ''
       const startDate = url.searchParams.get('start') || ''
       const endDate = url.searchParams.get('end') || ''
+      const page = Math.max(1, Math.floor(Number(url.searchParams.get('page') || 1)) || 1)
+      // 排序由服务端按回传字段做，未知值回落点赞；加载更多时页码递增，排序规则不变
+      const sort = url.searchParams.get('sort') || 'likes'
       if (!redfoxEnabled()) {
         const items = searchFixtures(keyword)
-        return sendJson(res, 200, { mode: 'mock', items, total: items.length, note: '检索服务未接入，当前展示示例数据（非真实平台数据）' })
+        return sendJson(res, 200, { mode: 'mock', items, total: items.length, page: 1, hasMore: false, sort, note: '检索服务未接入，当前展示示例数据（非真实平台数据）' })
       }
       // 检索按次扣积分：一次请求=一页结果。示例数据不扣费（上面已经返回）。
       const paid = beginPaid(res, user, 'search', keyword)
       if (!paid) return
       try {
-        const result = await searchMedia({ platform, keyword, startDate, endDate, pageNum: Number(url.searchParams.get('page') || 1), pageSize: 24 })
+        const result = await searchMedia({ platform, keyword, startDate, endDate, pageNum: page, pageSize: 24, sort })
         return sendJson(res, 200, {
           ...result,
           note: result.errors?.length ? result.errors.join('；') : '',

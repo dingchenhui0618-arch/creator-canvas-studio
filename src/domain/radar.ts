@@ -27,6 +27,12 @@ export type SearchResult = {
   mode: 'live' | 'mock'
   items: MediaItem[]
   total: number
+  /** 本次取回的是第几页（从 1 开始） */
+  page?: number
+  /** 后面还有没有下一页：页满且总数没到 */
+  hasMore?: boolean
+  /** 服务端实际使用的排序字段 */
+  sort?: string
   note?: string
   quota?: QuotaNotice
 }

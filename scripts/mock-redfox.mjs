@@ -26,15 +26,25 @@ http.createServer(async (req, res) => {
   // slow：故意拖 1.5 秒，用来验证「同一账号并发上限」真的会拦住第二个请求
   if (keyword === 'slow') await new Promise((resolve) => setTimeout(resolve, 1500))
 
-  const list = Array.from({ length: Number(body.pageSize || 3) }, (_, index) => ({
-    content: '假数据 ' + (index + 1) + ' · ' + keyword,
-    authorName: 'mock-author',
-    likeCount: 1000 + index,
-    commentCount: 10 + index,
-    shareCount: 5 + index,
-    collectCount: 20 + index,
-    opusUrl: 'https://example.com/video/' + (index + 1),
-    publishTime: '2026-11-01 10:00',
-  }))
-  return send(2000, { list, total: list.length })
+  // 支持分页：页码不同返回不同条目，互不重复（前端加载更多按 id 去重就能验证）
+  const pageNum = Math.max(1, Number(body.pageNum || 1))
+  const pageSize = Math.max(1, Number(body.pageSize || 3))
+  // 播放量跨页递减、点赞跨页递增，用来区分「按播放」和「按点赞」两种排序
+  const list = Array.from({ length: pageSize }, (_, index) => {
+    const offset = (pageNum - 1) * pageSize + index
+    return {
+      awemeId: 'mock-' + pageNum + '-' + (index + 1),
+      noteId: 'mock-xhs-' + pageNum + '-' + (index + 1),
+      content: '假数据 ' + pageNum + '-' + (index + 1) + ' · ' + keyword,
+      authorName: 'mock-author',
+      playCount: 90000 - offset * 100,
+      likeCount: 100 + offset * 10,
+      commentCount: 10 + index,
+      shareCount: 5 + index,
+      collectCount: 20 + index,
+      opusUrl: 'https://example.com/video/' + pageNum + '/' + (index + 1),
+      publishTime: '2026-11-01 10:00',
+    }
+  })
+  return send(2000, { list, total: 500 })
 }).listen(port, '127.0.0.1', () => console.log('[mock-redfox] http://127.0.0.1:' + port))

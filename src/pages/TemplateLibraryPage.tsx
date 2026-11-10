@@ -327,17 +327,20 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
                 <footer className="drawer-foot">
                   {detail.kind === 'flow' ? null : (
                     <>
-                      <button className="button button--ghost" onClick={() => {
-                        const firstFrame = detail.frames?.[0]?.url || ''
-                        const media = firstFrame.replace(/^\/media\//, '')
-                        requestReview({
-                          media: media || undefined,
-                          imageUrl: media ? undefined : detail.cover || undefined,
-                          label: detail.title,
-                          intent: '评审这条模板的首帧是否适合作为封面/开场',
-                        })
-                      }}>
-                        <ScanEye size={14} />送去评审
+                      <button
+                        className="button button--ghost"
+                        title="打开视觉评审页并用这条的首帧预填；在评审页点「开始评审」才会扣积分"
+                        onClick={() => {
+                          const firstFrame = detail.frames?.[0]?.url || ''
+                          const media = firstFrame.replace(/^\/media\//, '')
+                          requestReview({
+                            media: media || undefined,
+                            imageUrl: media ? undefined : detail.cover || undefined,
+                            label: detail.title,
+                            intent: '评审这条模板的首帧是否适合作为封面/开场',
+                          })
+                        }}>
+                        <ScanEye size={14} />去评审
                       </button>
                       <button className="button button--ghost" disabled={!isParsed(detail)} onClick={() => {
                         const list = [detail.hook, ...detail.structure.map((beat) => beat.beat + '：' + beat.voiceover), 'CTA：' + (detail.structure.at(-1)?.purpose || '')].join('\n')

@@ -43,7 +43,7 @@
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/api/health` | `{ok, redfox, vision, visionModel, templates}`，前端据此显示「示例数据模式 / 红狐已连接」 |
-| GET | `/api/search?platform=all\|douyin\|xiaohongshu&q=&start=&end=&page=` | `{mode:'live'\|'mock', items[], total, note}` |
+| GET | `/api/search?platform=all\|douyin\|xiaohongshu&q=&start=&end=&page=&sort=likes\|collects\|comments\|shares\|plays\|interactions` | `{mode:'live'\|'mock', items[], total, page, hasMore, sort, note}`；sort 未知值回落 likes |
 | POST | `/api/replicate` | body `{item, url}`，返回 `{jobId}`；`url` 为空时用 `item.url` |
 | GET | `/api/jobs/:id` | `{status:'running'\|'done'\|'error', step, progress, logs[], error, templateId}` |
 | GET | `/api/templates?q=&type=` | `{items[], total, byType}` |
