@@ -14,6 +14,7 @@ import type { Page } from '../domain/types'
 import PageHead from '../components/PageHead'
 import { useModelOptions } from '../components/ModelSwitch'
 import { useUiMode } from '../api/app'
+import { getPreferences } from '../api/preferences'
 import '../styles/agents.css'
 
 type AgentEditorPageProps = {
@@ -80,7 +81,8 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
       setLoading(true)
       setLoadError('')
       try {
-        const data = await listAgents()
+        // 新智能体默认沿用顶栏选择的模型；没选过才用平台默认
+        const [data, prefs] = await Promise.all([listAgents(), getPreferences().catch(() => ({ model: '' }))])
         if (!alive) return
         setMeta(data)
         const record: AgentRecord | undefined = seed ? data.items.find((item) => item.name === seed.name) : undefined
@@ -89,7 +91,7 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
           setForm(hydrate(record))
           return
         }
-        const next = blankForm(data.defaultModel)
+        const next = blankForm(prefs.model || data.defaultModel)
         if (seed) {
           next.name = seed.name
           next.role = seed.description
@@ -134,7 +136,7 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
     const values = new Set(meta?.models ?? [])
     if (form.model) values.add(form.model)
     return [
-      { value: '', label: '平台默认' },
+      { value: '', label: '账号默认模型' },
       ...[...values].map((value) => ({ value, label: modelLabels.get(value) || 'VisionQA 模型' })),
     ]
   }, [form.model, meta?.models, modelLabels])
@@ -466,7 +468,7 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
               <div className="agx-card-meta">
                 <span>
                   <span>模型</span>
-                  <span className="agx-mono">{form.model ? modelLabels.get(form.model) || 'VisionQA 模型' : '平台默认'}</span>
+                  <span className="agx-mono">{form.model ? modelLabels.get(form.model) || 'VisionQA 模型' : '账号默认模型'}</span>
                 </span>
                 <span>
                   <span>最近运行</span>

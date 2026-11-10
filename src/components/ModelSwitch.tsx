@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { Bot, Check, ChevronDown } from 'lucide-react'
+import { getPreferences, saveModelPreference } from '../api/preferences'
+import { useUiMode } from '../api/app'
 
-type ModelEntry = { id: string; label: string; provider: string; ready: boolean }
+type ModelEntry = { id: string; label: string; provider: string; kind?: string; ready: boolean }
 type Catalog = {
   ok?: boolean
   current?: string
@@ -12,9 +14,12 @@ type Catalog = {
 }
 
 const STORAGE_KEY = 'vq.model'
+const KIND_LABEL: Record<string, string> = { text: '对话', vision: '视觉', both: '通用', multimodal: '通用' }
 
 // 一个进程只打一次 /api/models：顶栏与检查器的模型候选共用同一份
 let catalogPromise: Promise<Catalog | null> | null = null
+// 最近一次从服务端读到的偏好：给同步的 selectedModel() 兜底
+let lastPreferred = ''
 
 function loadCatalog(): Promise<Catalog | null> {
   if (!catalogPromise) {
@@ -41,8 +46,9 @@ export function useModelOptions(): Array<{ id: string; label: string }> {
   return options
 }
 
-/** 当前选中的模型。调用方拿它拼请求参数，切换后立刻生效。 */
+/** 当前选中的模型（同步读取；异步调用方请用 /api/preferences）。 */
 export function selectedModel(): string {
+  if (lastPreferred) return lastPreferred
   try {
     return localStorage.getItem(STORAGE_KEY) || ''
   } catch {
@@ -53,12 +59,16 @@ export function selectedModel(): string {
 /**
  * 顶栏的模型切换口子。
  * 列表来自服务端 /api/models（读 VISION_MODELS / VISION_MODEL / VISION_FALLBACKS），
+ * 选择保存到服务端 /api/preferences（按账号），刷新、换浏览器都还是同一个选择。
  * 前端不硬编码任何模型名——以后往 .env 里加模型，这里自动出现。
  */
 export function ModelSwitch() {
+  const { internal } = useUiMode()
   const [open, setOpen] = useState(false)
   const [catalog, setCatalog] = useState<Catalog | null>(null)
   const [picked, setPicked] = useState(() => selectedModel())
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
   const boxRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -66,6 +76,20 @@ export function ModelSwitch() {
     loadCatalog().then((json) => {
       if (alive && json) setCatalog(json)
     })
+    getPreferences()
+      .then((prefs) => {
+        if (!alive) return
+        lastPreferred = prefs.model
+        setPicked(prefs.model)
+      })
+      .catch(() => {
+        // 接口不可用（旧版本服务端/网络问题）：退回本机记住的选择，不弹错吓用户
+        try {
+          if (alive) setPicked(localStorage.getItem(STORAGE_KEY) || '')
+        } catch {
+          /* 隐私模式下读不到就不预选 */
+        }
+      })
     return () => {
       alive = false
     }
@@ -94,13 +118,28 @@ export function ModelSwitch() {
   const ready = Boolean(catalog?.configured)
 
   const choose = (id: string) => {
+    if (saving) return
+    const previous = picked
     setPicked(id)
     setOpen(false)
-    try {
-      localStorage.setItem(STORAGE_KEY, id)
-    } catch {
-      /* 隐私模式下写不进去就不持久化，功能不受影响 */
-    }
+    setError('')
+    setSaving(true)
+    saveModelPreference(id)
+      .then((prefs) => {
+        lastPreferred = prefs.model
+        setPicked(prefs.model)
+        try {
+          localStorage.setItem(STORAGE_KEY, prefs.model)
+        } catch {
+          /* 隐私模式下写不进去也不影响服务端偏好 */
+        }
+      })
+      .catch((caught) => {
+        // 没保存成功就不要假装切了：恢复原选择并说明原因
+        setPicked(previous)
+        setError(caught instanceof Error ? caught.message : '模型偏好没有保存成功')
+      })
+      .finally(() => setSaving(false))
   }
 
   return (
@@ -111,7 +150,7 @@ export function ModelSwitch() {
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
-        title={ready ? '切换模型' : '还没有配置模型'}
+        title={ready ? '切换模型' : '还没有可用模型'}
       >
         <Bot size={14} />
         <span className="vq-model-name">{activeLabel || '未配置模型'}</span>
@@ -139,10 +178,11 @@ export function ModelSwitch() {
                     onClick={() => choose(model.id)}
                     role="option"
                     aria-selected={model.id === active}
+                    disabled={saving}
                   >
                     <span className="vq-model-item-main">
                       <strong>{model.label}</strong>
-                      <small>{model.provider}</small>
+                      <small>{KIND_LABEL[model.kind || model.provider] || '模型'}</small>
                     </span>
                     {model.id === active && <Check size={14} />}
                   </button>
@@ -151,8 +191,23 @@ export function ModelSwitch() {
             </ul>
           )}
 
-          <p className="vq-model-hint">{catalog?.hint || '模型清单读取中…'}</p>
-          {!ready && <p className="vq-model-warn">凭证未配置：选中模型也不会真正发起调用。</p>}
+          {picked && models.length > 0 ? (
+            <button type="button" className="vq-model-reset" onClick={() => choose('')} disabled={saving}>
+              恢复平台默认
+            </button>
+          ) : null}
+
+          <p className={'vq-model-hint' + (error ? ' is-error' : '')}>
+            {error ||
+              (internal
+                ? '偏好保存在服务端并按账号生效；智能体对话与画布节点在未单独指定模型时使用它。'
+                : '选择后按账号保存，下次打开还是这个模型。')}
+          </p>
+          {!ready && (
+            <p className="vq-model-warn">
+              {internal ? '凭证未配置：选中模型也不会真正发起调用。' : '当前暂时无法发起模型调用，请联系平台维护人员。'}
+            </p>
+          )}
         </div>
       )}
     </div>

@@ -31,6 +31,7 @@ import {
 } from '../api/agents'
 import type { AgentArtifact, AgentRecord, AgentRunRecord, AgentsList, AgentToolsResult, OutputType } from '../api/agents'
 import { getCredits, type CreditsResponse } from '../api/credits'
+import { getPreferences } from '../api/preferences'
 import PageHead from '../components/PageHead'
 import { useModelOptions } from '../components/ModelSwitch'
 import '../styles/agents.css'
@@ -396,6 +397,8 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
   const [actionError, setActionError] = useState('')
   // 对话按次扣积分：输入框上方常驻「余额 / 单价」，402 时不再是一句干巴巴的失败
   const [credits, setCredits] = useState<CreditsResponse | null>(null)
+  // 顶栏选择的模型保存在服务端；智能体本身没绑模型时用它作为默认值
+  const preferredModelRef = useRef('')
 
   const draftRef = useRef<HTMLTextAreaElement>(null)
   const stageRef = useRef<HTMLElement>(null)
@@ -403,6 +406,22 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
 
   const agents = useMemo(() => data?.items ?? [], [data])
   const selectedAgent = useMemo(() => agents.find((item) => item.id === selectedId) ?? null, [agents, selectedId])
+
+  useEffect(() => {
+    let alive = true
+    getPreferences()
+      .then((prefs) => {
+        if (!alive) return
+        preferredModelRef.current = prefs.model
+        setModel((current) => current || prefs.model)
+      })
+      .catch(() => {
+        // 偏好接口不可用时按平台默认，不阻塞对话
+      })
+    return () => {
+      alive = false
+    }
+  }, [])
 
   useEffect(() => {
     let alive = true
@@ -416,7 +435,9 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
     setLoading(true)
     setLoadError('')
     try {
-      const result = await listAgents()
+      // 列表与账号偏好一起拿：避免列表先回来、把「平台默认」写进输入框后再也换不掉
+      const [result, prefs] = await Promise.all([listAgents(), getPreferences().catch(() => ({ model: '' }))])
+      preferredModelRef.current = prefs.model || preferredModelRef.current
       const requested = peekPendingSelectAgent()
       const nextId =
         requested && result.items.some((item) => item.id === requested)
@@ -425,7 +446,7 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
       const nextAgent = result.items.find((item) => item.id === nextId)
       setData(result)
       setSelectedId(nextId)
-      setModel(nextAgent?.model || result.defaultModel)
+      setModel(prefs.model || nextAgent?.model || preferredModelRef.current || result.defaultModel)
       setOutputType(
         nextAgent ? (OUTPUT_TYPE_BY_CATEGORY[nextAgent.category] ?? DEFAULT_OUTPUT_TYPE) : DEFAULT_OUTPUT_TYPE,
       )
@@ -513,7 +534,8 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
       setRunsError('')
       setExpandedRun('')
       const agent = agents.find((item) => item.id === id)
-      if (agent?.model) setModel(agent.model)
+      // 顶栏的账号偏好优先；没有偏好时沿用智能体自己的模型
+      setModel(preferredModelRef.current || agent?.model || '')
       if (agent) {
         setOutputType(OUTPUT_TYPE_BY_CATEGORY[agent.category] ?? DEFAULT_OUTPUT_TYPE)
       }

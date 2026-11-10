@@ -2,15 +2,17 @@
 // 目前两个动作是真的：列真实账号（含积分余额）、给某个账号发放/扣减积分。
 // 充值通道没接，所以积分的唯一来源是这里 + 新账号初始额度。
 import fs from 'node:fs/promises'
+import crypto from 'node:crypto'
 import path from 'node:path'
 import { readBody, sendJson } from './_shared.mjs'
-import { currentUser, isAdmin, listUsers, findUserById, updateUserAccess } from '../auth.mjs'
+import { currentUser, isAdmin, listUsers, findUserById, updateUserAccess, setPassword, destroyOtherSessions } from '../auth.mjs'
 import { grant, ledgerOf, balanceOf } from '../credits.mjs'
 import { config } from '../config.mjs'
 import { deepHealth } from '../health.mjs'
 import { logEvent } from '../log.mjs'
 
 const USER_CREDITS = /^\/api\/admin\/users\/([\w-]+)\/credits$/
+const USER_PASSWORD = /^\/api\/admin\/users\/([\w-]+)\/password$/
 const USER_ACCESS = /^\/api\/admin\/users\/([\w-]+)$/
 
 function forbid(res) {
@@ -162,6 +164,41 @@ export function createAdminRouter() {
         } catch (error) {
           sendJson(res, 400, { error: String(error?.message || error) })
         }
+        return true
+      }
+
+      const passwordMatch = pathname.match(USER_PASSWORD)
+      if (passwordMatch && req.method === 'POST') {
+        const target = findUserById(passwordMatch[1])
+        if (!target) {
+          sendJson(res, 404, { error: '账号不存在' })
+          return true
+        }
+        if (target.id === user.id) {
+          sendJson(res, 400, { error: '自己的口令请到「设置 → 修改口令」里改', code: 'SELF_RESET' })
+          return true
+        }
+        const body = await readBody(req)
+        let password = String(body.password || '').trim()
+        if (password) {
+          if (password.length < 8 || password.length > 200 || !/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
+            sendJson(res, 400, { error: '新口令至少 8 位，且同时包含字母和数字', code: 'WEAK_PASSWORD' })
+            return true
+          }
+        } else {
+          // 临时口令：固定带大写字母与数字，满足口令策略；只在这一次响应里返回
+          password = 'Vq7' + crypto.randomBytes(7).toString('base64url')
+        }
+        setPassword(target.id, password)
+        // 口令被管理员重置后，该账号所有旧会话立即失效
+        const signedOut = destroyOtherSessions(target.id)
+        logEvent('user-password-reset', { by: user.email, to: target.email, signedOut })
+        sendJson(res, 200, {
+          ok: true,
+          password,
+          signedOut,
+          user: { id: target.id, email: target.email, name: target.name, kind: target.kind, active: Boolean(target.is_active) },
+        })
         return true
       }
 

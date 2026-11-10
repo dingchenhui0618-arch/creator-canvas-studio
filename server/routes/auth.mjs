@@ -16,7 +16,10 @@ import {
   clearFailures,
   clientIp,
   verifyPassword,
+  changePassword,
+  destroyOtherSessions,
 } from '../auth.mjs'
+import { logEvent } from '../log.mjs'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 const MIN_PASSWORD = 8
@@ -153,6 +156,29 @@ export function createAuthRouter() {
         })
         setCookie(res, sessionCookie(token, days * 24 * 3600))
         sendJson(res, 200, { user: publicUser(row) })
+        return true
+      }
+
+      if (pathname === '/api/auth/password' && req.method === 'POST') {
+        const row = currentUser(req)
+        if (!row) return (fail(res, 401, '请先登录'), true)
+        const body = await readBody(req)
+        const current = String(body.currentPassword || '')
+        const next = String(body.newPassword || '')
+        if (!current) return (fail(res, 400, '请输入当前密码', 'password'), true)
+        const passwordError = checkPassword(next)
+        if (passwordError) return (fail(res, 400, passwordError, 'password'), true)
+        if (current === next) return (fail(res, 400, '新密码不能和当前密码相同', 'password'), true)
+        const result = changePassword(row.id, current, next)
+        if (!result.ok) {
+          if (result.code === 'NOT_FOUND') return (fail(res, 404, '账号不存在'), true)
+          return (fail(res, 400, '当前密码不正确', 'password'), true)
+        }
+        // 其它设备上的会话立即失效；当前这条保留，避免改完口令就被踢回登录页
+        const token = parseCookies(req)[config.auth.cookieName]
+        const signedOut = destroyOtherSessions(row.id, token)
+        logEvent('password-change', { by: row.email, signedOut })
+        sendJson(res, 200, { ok: true, signedOut })
         return true
       }
 

@@ -366,7 +366,13 @@ export function LoginPage({ notice, onSignIn, onRegister }: Props) {
                 <button
                   type="button"
                   className="vq-link"
-                  onClick={() => setInfo('密码重置还没接入；需要重置请联系工作区管理员，或先用访客身份进入。')}
+                  onClick={() =>
+                    setInfo(
+                      internal
+                        ? '内部环境：管理员在「后台 → 账号」里可直接重置口令，新口令只显示一次；该账号所有旧会话会被注销。'
+                        : '忘记密码请联系工作区管理员重置。平台不通过邮件找回，也不会以任何方式向你索要当前口令。',
+                    )
+                  }
                 >
                   忘记密码？
                 </button>

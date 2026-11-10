@@ -26,6 +26,7 @@ import { createReviewRouter } from './routes/review.mjs'
 import { createAuthRouter } from './routes/auth.mjs'
 import { createCreditsRouter } from './routes/credits.mjs'
 import { createAdminRouter } from './routes/admin.mjs'
+import { createPreferencesRouter } from './routes/preferences.mjs'
 import { currentUser, listUsers, clientIp, isAdmin } from './auth.mjs'
 import { charge, refund, ensureWelcomeCredits } from './credits.mjs'
 import { enter, leave } from './gate.mjs'
@@ -45,6 +46,7 @@ const featureRoutes = [
   createBillingRouter(),
   createCreditsRouter(),
   createAdminRouter(),
+  createPreferencesRouter(),
 ]
 
 // VQ_REQUIRE_AUTH=1 时，除少数公开端点外所有 /api/* 都要登录。

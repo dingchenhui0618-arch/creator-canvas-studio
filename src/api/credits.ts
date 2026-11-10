@@ -72,6 +72,13 @@ export const grantCredits = (userId: string, amount: number, note: string) =>
     body: JSON.stringify({ amount, note }),
   })
 
+// 管理员重置口令：不带密码时服务端生成临时口令，只在这一次响应里返回。
+export const resetAdminPassword = (userId: string, password?: string) =>
+  request<{ ok: boolean; password: string; signedOut: number; user: AdminUser }>('/api/admin/users/' + userId + '/password', {
+    method: 'POST',
+    body: JSON.stringify(password ? { password } : {}),
+  })
+
 // 流水类型的中文名：服务端只存 kind，展示层在这里翻译
 export const CREDIT_KIND_LABEL: Record<string, string> = {
   search: '检索',

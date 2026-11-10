@@ -100,13 +100,13 @@ export function Inspector({ node, onPatch, onConfig, onDuplicate, onDelete }: In
 
           {node.data.kind === 'llm' && (
             <>
-              <Field label="模型" hint={internal ? '首选模型失败时服务端会按配置的 fallback 链重试。' : '首选模型不可用时会自动切换到备用模型。'}>
+              <Field label="模型" hint={internal ? '留空时用账号偏好（顶栏选择），再回退服务端默认；首选失败会走 fallback 链。' : '留空时使用你账号的默认模型；首选不可用时会自动切换备用模型。'}>
                 <select
                   className="cv-input"
                   value={config.model ?? ''}
                   onChange={(event) => onConfig({ model: event.target.value }, 'model')}
                 >
-                  <option value="">{internal ? '跟随服务端默认' : '跟随平台默认'}</option>
+                  <option value="">{internal ? '跟随账号偏好 / 服务端默认' : '跟随账号默认模型'}</option>
                   {modelOptions.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
                   {config.model && !modelOptions.some((item) => item.id === config.model) ? (
                     <option value={config.model}>自定义模型</option>

@@ -9,7 +9,8 @@ function summary(data: FlowNodeData): string {
     case 'input':
       return (data.config.text ?? '').slice(0, 18) || '空输入'
     case 'llm':
-      return (data.config.model ?? '未选模型') + ' · T' + (data.config.temperature ?? 0.4)
+      // 卡片上不露模型标识：选了就写「已选模型」，具体是哪个在检查器里看产品名称
+      return (data.config.model ? '已选模型' : '默认模型') + ' · T' + (data.config.temperature ?? 0.4)
     case 'kb':
       return (data.config.contentType || '全部类型') + ' · 取 ' + (data.config.limit ?? 3) + ' 条'
     case 'tool':

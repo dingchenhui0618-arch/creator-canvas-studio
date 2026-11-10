@@ -17,6 +17,8 @@ import { currentUser } from '../auth.mjs'
 import { charge, refund } from '../credits.mjs'
 import { enter, leave } from '../gate.mjs'
 import { publicError } from '../public-error.mjs'
+import { preferenceModel } from '../preferences.mjs'
+import { modelCatalog } from '../models.mjs'
 
 const PREFIX = '/api/agents'
 
@@ -116,8 +118,11 @@ export function createAgentsRouter() {
             sendJson(res, 400, { error: '当前每次只生成 1 条回复，数量固定为 1' })
             return true
           }
-          const requested = String(body.model || agent.model || '').trim()
-          const allowed = new Set([...availableModels(), agent.model].filter(Boolean))
+          // 请求显式指定 > 账号级首选模型（顶栏切换）> 智能体绑定的模型
+          // 顶栏是工作区的全局默认；每次对话里的模型胶囊仍可单独覆盖
+          const requested = String(body.model || preferenceModel(user?.id) || agent.model || '').trim()
+          // 顶栏清单里的模型都允许传：视觉专用模型不在文本链里时，llm.mjs 会按既有降级链继续，不会 400
+          const allowed = new Set([...availableModels(), agent.model, ...modelCatalog().models.map((item) => item.id)].filter(Boolean))
           if (requested && !allowed.has(requested)) {
             sendJson(res, 400, { error: '模型 ' + requested + ' 不在可用列表', models: [...allowed] })
             return true

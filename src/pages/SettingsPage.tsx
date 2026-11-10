@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Activity, CreditCard, LogOut, RefreshCw } from 'lucide-react'
+import { Activity, CreditCard, KeyRound, LogOut, RefreshCw } from 'lucide-react'
 import { MonoTag } from '../components/ui'
 import PageHead from '../components/PageHead'
 import { getBillingOverview, type BillingOverview } from '../api/billing'
 import { useUiMode } from '../api/app'
 import { creditKindLabel, getCredits, getSystemHealth, type CreditEntry, type CreditsResponse, type SystemHealth } from '../api/credits'
+import { changePassword } from '../api/auth'
 import { initialsFor, sessionKindLabel, type Session } from '../auth/session'
 import '../styles/shell.css'
 import '../styles/credits.css'
@@ -47,6 +48,12 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
   const [health, setHealth] = useState<SystemHealth | null>(null)
   const [healthError, setHealthError] = useState('')
   const [healthLoading, setHealthLoading] = useState(true)
+  const [pwCurrent, setPwCurrent] = useState('')
+  const [pwNext, setPwNext] = useState('')
+  const [pwConfirm, setPwConfirm] = useState('')
+  const [pwBusy, setPwBusy] = useState(false)
+  const [pwError, setPwError] = useState('')
+  const [pwMessage, setPwMessage] = useState('')
 
   const loadCredits = useCallback(() => {
     getCredits(LEDGER_PAGE)
@@ -90,6 +97,36 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
   useEffect(() => {
     loadHealth()
   }, [loadHealth])
+
+  const submitPassword = async () => {
+    if (pwBusy) return
+    setPwError('')
+    setPwMessage('')
+    if (!pwCurrent) {
+      setPwError('请输入当前口令')
+      return
+    }
+    if (pwNext.length < 8 || !/[A-Za-z]/.test(pwNext) || !/[0-9]/.test(pwNext)) {
+      setPwError('新口令至少 8 位，且同时包含字母和数字')
+      return
+    }
+    if (pwNext !== pwConfirm) {
+      setPwError('两次输入的新口令不一致')
+      return
+    }
+    setPwBusy(true)
+    try {
+      const result = await changePassword(pwCurrent, pwNext)
+      setPwMessage(result.signedOut > 0 ? '口令已更新，其它设备上的 ' + result.signedOut + ' 个登录已退出。' : '口令已更新。')
+      setPwCurrent('')
+      setPwNext('')
+      setPwConfirm('')
+    } catch (caught) {
+      setPwError(caught instanceof Error ? caught.message : '口令没有更新，请稍后重试')
+    } finally {
+      setPwBusy(false)
+    }
+  }
 
   const signedInAt = new Intl.DateTimeFormat('zh-CN', {
     dateStyle: 'medium',
@@ -162,6 +199,68 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
               <span className="vq-row-value">{session.user.workspace}</span>
             </div>
           </div>
+        </section>
+
+        <section className="vq-card vq-card--wide" id="account-security">
+          <div className="vq-card-head">
+            <div>
+              <span className="vq-mono">安全 / Security</span>
+              <h2>修改口令</h2>
+              <p>
+                {internal
+                  ? '当前口令与新口令都由服务端校验；成功后其它设备上的会话会立即注销，这一条保留。'
+                  : '修改后，其它设备上的登录会自动退出，当前设备保持登录。'}
+              </p>
+            </div>
+            <MonoTag>口令</MonoTag>
+          </div>
+          <div className="vq-inline-form vq-password-form">
+            <label className="vq-field">
+              <span>当前口令</span>
+              <input
+                className="vq-input"
+                type="password"
+                autoComplete="current-password"
+                value={pwCurrent}
+                onChange={(event) => setPwCurrent(event.target.value)}
+                disabled={pwBusy}
+              />
+            </label>
+            <label className="vq-field">
+              <span>新口令</span>
+              <input
+                className="vq-input"
+                type="password"
+                autoComplete="new-password"
+                placeholder="至少 8 位，含字母和数字"
+                value={pwNext}
+                onChange={(event) => setPwNext(event.target.value)}
+                disabled={pwBusy}
+              />
+            </label>
+            <label className="vq-field">
+              <span>再输一次</span>
+              <input
+                className="vq-input"
+                type="password"
+                autoComplete="new-password"
+                value={pwConfirm}
+                onChange={(event) => setPwConfirm(event.target.value)}
+                disabled={pwBusy}
+              />
+            </label>
+            <button type="button" className="vq-button vq-button--primary" onClick={() => void submitPassword()} disabled={pwBusy}>
+              <KeyRound size={14} />
+              {pwBusy ? '更新中…' : '更新口令'}
+            </button>
+          </div>
+          {pwError ? <p className="vq-field-error" role="alert">{pwError}</p> : null}
+          {pwMessage ? <p className="vq-password-ok" role="status">{pwMessage}</p> : null}
+          <p className="vq-password-note">
+            {internal
+              ? '口令用 scrypt 加盐存储；管理员重置口令时会给一次性临时口令，同样会注销旧会话。'
+              : '口令只用于你本人登录，平台不会以明文保存。'}
+          </p>
         </section>
 
         <section className="vq-card vq-card--wide">

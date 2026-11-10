@@ -199,6 +199,21 @@
   min-width: 180px;
 }
 .vq-field--narrow { min-width: 96px; flex: 0 0 96px; }
+
+/* 修改口令：三个输入等宽铺开，按钮跟最后一行对齐 */
+.vq-password-form .vq-field { flex: 1 1 180px; }
+.vq-password-form .vq-button { margin-bottom: 0; }
+.vq-password-ok {
+  margin: 8px 0 0;
+  color: var(--pass);
+  font-size: 12px;
+}
+.vq-password-note {
+  margin: 8px 0 0;
+  color: var(--faint);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
 .vq-field--wide { flex: 1 1 220px; }
 .vq-field > span {
   color: var(--faint);

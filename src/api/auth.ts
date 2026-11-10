@@ -70,6 +70,14 @@ export async function register(payload: RegisterPayload): Promise<AuthUser> {
   return body.user
 }
 
+/** 修改当前账号口令；成功后服务端会注销其它设备上的会话。 */
+export function changePassword(currentPassword: string, newPassword: string): Promise<{ ok: boolean; signedOut: number }> {
+  return request<{ ok: boolean; signedOut: number }>('/api/auth/password', {
+    method: 'POST',
+    body: JSON.stringify({ currentPassword, newPassword }),
+  })
+}
+
 /** 204 No Content：成功与否都只需要清本地缓存，所以不解析响应体。 */
 export async function logout(): Promise<void> {
   await request<null>('/api/auth/logout', { method: 'POST' })

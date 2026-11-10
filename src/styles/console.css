@@ -785,6 +785,38 @@
   gap: 8px;
 }
 
+/* 管理员重置口令：临时口令只显示一次，尽量让它显眼但不抢整页 */
+.admin-reset {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  margin: 0 0 16px;
+  border: 1px solid var(--line, #e5e2db);
+  border-left: 2px solid var(--ink, #111111);
+  border-radius: 6px;
+  background: var(--surface-raised, #ffffff);
+}
+
+.admin-reset-copy {
+  flex: 1 1 260px;
+}
+
+.admin-reset .admin-sub {
+  margin: 4px 0 0;
+}
+
+.admin-reset-code {
+  padding: 6px 12px;
+  border: 1px dashed var(--line-strong, rgba(17, 17, 17, 0.2));
+  border-radius: 4px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  user-select: all;
+}
+
 .admin-danger .admin-block-head {
   align-items: center;
 }

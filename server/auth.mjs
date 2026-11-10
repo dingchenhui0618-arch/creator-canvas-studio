@@ -154,6 +154,21 @@ export function createUser({ email, password, name, kind = 'account' }) {
   return findUserById(id)
 }
 
+// 自己改口令：先验当前口令，再写新哈希；所有其它设备上的会话一律注销。
+export function setPassword(userId, password) {
+  if (!findUserById(userId)) return null
+  openDb().prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(password), userId)
+  return findUserById(userId)
+}
+
+export function changePassword(userId, currentPassword, nextPassword) {
+  const row = findUserById(userId)
+  if (!row) return { ok: false, code: 'NOT_FOUND' }
+  if (!verifyPassword(currentPassword, row.password_hash)) return { ok: false, code: 'BAD_CURRENT' }
+  setPassword(userId, nextPassword)
+  return { ok: true }
+}
+
 export function createSession(user, { userAgent = '', ip = '', remember = false } = {}) {
   const token = crypto.randomBytes(32).toString('base64url')
   const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
@@ -179,6 +194,15 @@ export function userForToken(token) {
   }
   if (!row.is_active) return null
   return row
+}
+
+// 改口令/重置口令后清掉其它会话，保留操作者当前这一条（keepToken 为空则全部清掉）。
+export function destroyOtherSessions(userId, keepToken = '') {
+  const database = openDb()
+  const result = keepToken
+    ? database.prepare('DELETE FROM sessions WHERE user_id = ? AND token_hash <> ?').run(String(userId), crypto.createHash('sha256').update(String(keepToken)).digest('hex'))
+    : database.prepare('DELETE FROM sessions WHERE user_id = ?').run(String(userId))
+  return Number(result?.changes || 0)
 }
 
 export function destroySession(token) {

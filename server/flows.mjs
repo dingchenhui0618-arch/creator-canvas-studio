@@ -7,6 +7,7 @@ import { callTextModel } from './llm.mjs'
 import { reviewVisual } from './review.mjs'
 import { listTemplates, templateStats } from './templates.mjs'
 import { publicError } from './public-error.mjs'
+import { preferenceModel } from './preferences.mjs'
 
 // 画布流程：存储（data/flows.json）+ 运行记录（data/runs.json）+ 拓扑执行引擎。
 // 原子写范式与 server/templates.mjs 一致：先写 .tmp，再 rename 覆盖。
@@ -47,7 +48,8 @@ function defaultConfig(kind) {
       return { text: '' }
     case 'llm':
       return {
-        model: config.vision.model,
+        // 留空 = 跟随账号偏好 / 平台默认；不要把平台模型名写死进流程数据
+        model: '',
         temperature: 0.4,
         systemPrompt: '你是 VisionQA 的内容与视觉编导。基于用户提供的素材和知识库上下文，给出具体、可执行的创作建议，不要空泛。',
       }
@@ -103,7 +105,7 @@ function normalizeConfig(kind, raw) {
       return { text: clip(source.text ?? base.text, 8000) }
     case 'llm':
       return {
-        model: trimText(source.model, 80) || base.model,
+        model: trimText(source.model, 80),
         temperature: clampNumber(source.temperature, 0, 2, base.temperature),
         systemPrompt: clip(source.systemPrompt ?? base.systemPrompt, 4000),
       }
@@ -433,7 +435,8 @@ async function runLlm(node, ctx) {
   const result = await callTextModel(messages, {
     temperature: Number(cfg.temperature),
     maxTokens: 1200,
-    models: [cfg.model, ...config.vision.fallbacks].filter(Boolean),
+    // 节点没选模型时用画布主人的账号级首选模型；再后面才是全局降级链
+    models: [cfg.model, ctx.ownerId ? preferenceModel(ctx.ownerId) : '', ...config.vision.fallbacks].filter(Boolean),
     log: (message) => console.log('[flows] ' + message),
   })
   return { text: clip(result.text), model: result.model, temperature: cfg.temperature }
@@ -661,7 +664,7 @@ export async function runFlow(flow, { onEvent, credits = null } = {}) {
     const nodeStartedAt = Date.now()
     let result
     try {
-      const ctx = collectContext(activeIn, results, nodesById)
+      const ctx = { ...collectContext(activeIn, results, nodesById), ownerId: flow.ownerId || '' }
       const executed = await executeNode(node, ctx)
       result = {
         id: node.id,

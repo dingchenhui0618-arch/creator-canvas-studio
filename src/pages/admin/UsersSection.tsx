@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { listAdminUsers, grantCredits, updateAdminUser, type AdminUser } from '../../api/credits'
+import { listAdminUsers, grantCredits, updateAdminUser, resetAdminPassword, type AdminUser } from '../../api/credits'
 import type { SessionKind } from '../../auth/session'
 import { useUiMode } from '../../api/app'
 import { formatDateTime } from './data'
@@ -30,6 +30,10 @@ export default function UsersSection() {
   const [grantMessage, setGrantMessage] = useState('')
   const [accessBusy, setAccessBusy] = useState('')
   const [accessMessage, setAccessMessage] = useState('')
+  const [resetBusy, setResetBusy] = useState('')
+  const [resetError, setResetError] = useState('')
+  const [resetResult, setResetResult] = useState<{ email: string; password: string; signedOut: number } | null>(null)
+  const [copied, setCopied] = useState(false)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -70,6 +74,34 @@ export default function UsersSection() {
     }
   }
 
+  const resetPassword = async (item: AdminUser) => {
+    if (resetBusy) return
+    setResetBusy(item.id)
+    setResetError('')
+    setResetResult(null)
+    setCopied(false)
+    try {
+      const result = await resetAdminPassword(item.id)
+      setResetResult({ email: item.email, password: result.password, signedOut: result.signedOut })
+      load()
+    } catch (caught) {
+      setResetError(caught instanceof Error ? caught.message : '口令重置失败')
+    } finally {
+      setResetBusy('')
+    }
+  }
+
+  const copyPassword = async () => {
+    if (!resetResult) return
+    try {
+      await navigator.clipboard.writeText(resetResult.password)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1600)
+    } catch {
+      setCopied(false)
+    }
+  }
+
   const submit = async () => {
     const value = Number(amount)
     if (!selected) return
@@ -96,7 +128,7 @@ export default function UsersSection() {
       <AdminHead
         kicker="ADMIN / USERS"
         title="账号与积分"
-        description={internal ? '账号存在服务端数据库（data/auth.db，SQLite）；积分是服务端账本，检索/复刻/评审/对话按次扣减，失败原路退回。' : '账号与积分都存在账号体系里；检索 / 复刻 / 评审 / 对话按次扣减，失败原路退回。'}
+        description={internal ? '账号存在服务端数据库（data/auth.db，SQLite）；积分是服务端账本。管理员可停用、改角色、重置口令：临时口令只返回一次，旧会话全部注销。' : '账号与积分都在账号体系里；管理员可以停用账号、调整角色，或重置口令（一次性临时口令，旧登录会退出）。'}
         actions={
           <>
             <SourceTag kind="api" source="/api/admin/users" />
@@ -107,6 +139,26 @@ export default function UsersSection() {
 
       {error ? <ErrorBanner message={error} onRetry={load} /> : null}
       {accessMessage ? <p className="admin-hint">{accessMessage}</p> : null}
+      {resetError ? <p className="admin-hint" role="alert">{resetError}</p> : null}
+      {resetResult ? (
+        <div className="admin-reset" role="status">
+          <div className="admin-reset-copy">
+            <span className="admin-label">新口令（只显示这一次）</span>
+            <p className="admin-sub">
+              已重置 {resetResult.email} 的口令，该账号 {resetResult.signedOut} 个旧登录已退出。请通过安全渠道交给对方，不要贴在公开频道。
+            </p>
+          </div>
+          <code className="admin-reset-code">{resetResult.password}</code>
+          <div className="admin-doc-actions">
+            <button type="button" className="admin-btn admin-btn--ghost" onClick={() => void copyPassword()}>
+              {copied ? '已复制' : '复制'}
+            </button>
+            <button type="button" className="admin-btn admin-btn--ghost" onClick={() => setResetResult(null)}>
+              关闭
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <section className="admin-card admin-block">
         <div className="admin-block-head">
@@ -162,6 +214,15 @@ export default function UsersSection() {
                           onClick={() => void changeAccess(item, { kind: item.kind === 'admin' ? 'account' : 'admin' })}
                         >
                           {item.kind === 'admin' ? '设为普通账号' : '设为管理员'}
+                        </button>
+                        <button
+                          type="button"
+                          className="admin-btn admin-btn--ghost"
+                          disabled={resetBusy === item.id}
+                          title="生成一次性临时口令，该账号所有旧会话会退出"
+                          onClick={() => void resetPassword(item)}
+                        >
+                          {resetBusy === item.id ? '重置中…' : '重置口令'}
                         </button>
                       </div>
                     </td>
