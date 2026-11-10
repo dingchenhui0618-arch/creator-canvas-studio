@@ -161,11 +161,17 @@ export function ensureWelcomeCredits() {
   return granted
 }
 
-export function ledgerOf(userId, limit = 20) {
+export function ledgerCountOf(userId) {
+  if (!userId) return 0
+  const row = getDb().prepare('SELECT COUNT(*) AS n FROM credit_ledger WHERE user_id = ?').get(String(userId))
+  return Number(row?.n || 0)
+}
+
+export function ledgerOf(userId, limit = 20, offset = 0) {
   if (!userId) return []
   const rows = getDb()
-    .prepare('SELECT id, delta, balance_after, kind, ref, created_at FROM credit_ledger WHERE user_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?')
-    .all(String(userId), Math.max(1, Math.min(200, Number(limit) || 20)))
+    .prepare('SELECT id, delta, balance_after, kind, ref, created_at FROM credit_ledger WHERE user_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ? OFFSET ?')
+    .all(String(userId), Math.max(1, Math.min(200, Number(limit) || 20)), Math.max(0, Math.round(Number(offset) || 0)))
   return rows.map((row) => ({
     id: row.id,
     delta: Number(row.delta),
@@ -176,15 +182,20 @@ export function ledgerOf(userId, limit = 20) {
   }))
 }
 
-// 一次请求的完整视角：余额 + 单价 + 最近流水
-export function creditsFor(user, limit = 20) {
+// 一次请求的完整视角：余额 + 单价 + 一页流水（带总数，前端才能做「加载更多」）
+export function creditsFor(user, { limit = 20, offset = 0 } = {}) {
+  const count = Math.max(1, Math.min(200, Number(limit) || 20))
+  const start = Math.max(0, Math.round(Number(offset) || 0))
   return {
     ok: true,
     unit: config.credits.unit,
     balance: balanceOf(user?.id),
     prices: { ...config.credits.prices },
     concurrency: { ...config.credits.concurrency },
-    ledger: ledgerOf(user?.id, limit),
+    ledger: ledgerOf(user?.id, count, start),
+    ledgerTotal: ledgerCountOf(user?.id),
+    ledgerOffset: start,
+    ledgerLimit: count,
     billingEnabled: false,
   }
 }

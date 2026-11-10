@@ -18,8 +18,10 @@ export function createCreditsRouter() {
         sendJson(res, 401, { error: '未登录', loginRequired: true })
         return true
       }
-      const limit = Number(url.searchParams.get('limit') || 20)
-      sendJson(res, 200, creditsFor(user, limit))
+      sendJson(res, 200, creditsFor(user, {
+        limit: url.searchParams.get('limit') || 20,
+        offset: url.searchParams.get('offset') || 0,
+      }))
       return true
     },
   }

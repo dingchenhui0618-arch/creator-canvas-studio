@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { AlertCircle, ArrowRight, Check, ExternalLink, Film, Loader2, Sparkles, X } from 'lucide-react'
 import { getJob, getTemplate, formatDuration, startReplicate } from '../api/radar'
 import { getCredits, type CreditsResponse } from '../api/credits'
+import { useUiMode } from '../api/app'
 import type { MediaItem, ReplicaTemplate, ReplicateJob } from '../domain/radar'
 
 const STEPS = [
@@ -28,6 +29,7 @@ export function ReplicateModal({ item, hasKey, visionReady, onClose, onDone, onO
   onDone: (title: string) => void
   onOpenTemplates: () => void
 }) {
+  const { internal } = useUiMode()
   const [url, setUrl] = useState('')
   const [phase, setPhase] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
   const [job, setJob] = useState<ReplicateJob | null>(null)
@@ -125,7 +127,7 @@ export function ReplicateModal({ item, hasKey, visionReady, onClose, onDone, onO
             </div>
             <div className="replicate-checks">
               <span className={hasKey ? 'is-ok' : 'is-warn'}>{hasKey ? '解析服务已配置；解析失败时用直链兜底' : '解析服务未接入：只能用直链视频'}</span>
-              <span className={visionReady ? 'is-ok' : 'is-warn'}>{visionReady ? '视觉模型就绪，逐帧分析可运行' : '视觉模型未就绪，需要在服务端配置凭证'}</span>
+              <span className={visionReady ? 'is-ok' : 'is-warn'}>{visionReady ? '视觉模型就绪，逐帧分析可运行' : internal ? '视觉模型未就绪，需要在服务端配置凭证' : '视觉能力暂未就绪，请联系管理员'}</span>
               {price !== null ? (
                 <span className={insufficient ? 'is-warn' : 'is-ok'}>
                   本次消耗 {price} 积分 · 当前余额 {balance ?? '—'}

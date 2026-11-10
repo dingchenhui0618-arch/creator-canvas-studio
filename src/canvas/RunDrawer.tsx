@@ -1,6 +1,7 @@
 import { Check, CircleAlert, CircleDashed, CircleSlash, Loader, X } from 'lucide-react'
 import { NODE_META } from './catalog'
 import type { RunNodeResult, RunRecord } from '../api/flows'
+import { useUiMode } from '../api/app'
 
 type RunDrawerProps = {
   open: boolean
@@ -43,6 +44,7 @@ function nodeOutputText(output: RunNodeResult['output']): string {
 }
 
 export function RunDrawer({ open, running, flowName, runId, total, nodes, record, error, onClose, onSelectNode }: RunDrawerProps) {
+  const { internal } = useUiMode()
   const progress = total > 0 ? Math.round((nodes.length / total) * 100) : 0
   const duration = record ? record.durationMs : nodes.reduce((sum, node) => sum + (node.ms || 0), 0)
   const statusText = running ? 'RUNNING' : record ? (record.status === 'success' ? 'DONE' : 'ERROR') : error ? 'ERROR' : 'IDLE'
@@ -117,8 +119,8 @@ export function RunDrawer({ open, running, flowName, runId, total, nodes, record
       </div>
 
       <footer className="cv-drawer-foot">
-        <span>运行记录写入 data/runs.json</span>
-        <span className="cv-mono">GET /api/runs</span>
+        <span>{internal ? '运行记录写入 data/runs.json' : '运行记录保存在你的账号下'}</span>
+        <span className="cv-mono">{internal ? 'GET /api/runs' : '最近一次运行'}</span>
       </footer>
     </aside>
   )

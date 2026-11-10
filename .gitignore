@@ -38,3 +38,6 @@ deploy/env.applied
 # 协作过程中的临时截图
 docs/_wip/
 .tmp-qa/
+
+# 本地验证：临时脚本、测试数据库与打包文件
+.tmp-*

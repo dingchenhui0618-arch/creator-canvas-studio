@@ -10,6 +10,7 @@ import {
 } from '../auth/session'
 import type { RegisterInput, Session, SignInInput } from '../auth/session'
 import { getAuthConfig } from '../api/auth'
+import { useUiMode } from '../api/app'
 import '../styles/shell.css'
 
 type Mode = 'signin' | 'signup'
@@ -29,6 +30,7 @@ type Props = {
 }
 
 export function LoginPage({ notice, onSignIn, onRegister }: Props) {
+  const { internal } = useUiMode()
   const [mode, setMode] = useState<Mode>('signin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -191,7 +193,7 @@ export function LoginPage({ notice, onSignIn, onRegister }: Props) {
         </div>
 
         <footer className="vq-login-brand-foot">
-          <span className="vq-mono">账号与会话由服务端校验。</span>
+          <span className="vq-mono">{internal ? '账号与会话由服务端校验。' : '账号与会话均已安全校验。'}</span>
           <span className="vq-mono">© 2026 VisionQA</span>
         </footer>
       </section>
@@ -204,7 +206,9 @@ export function LoginPage({ notice, onSignIn, onRegister }: Props) {
             <p>
               {isSignup
                 ? '注册完直接进入工作台。昵称只是显示名，可以稍后再补。'
-                : '使用工作邮箱继续。会话由服务端校验，凭据不进浏览器存储。'}
+                : internal
+                  ? '使用工作邮箱继续。会话由服务端校验，凭据不进浏览器存储。'
+                  : '使用工作邮箱继续。登录状态会安全保存，凭据不留在浏览器里。'}
             </p>
           </div>
 
@@ -386,7 +390,7 @@ export function LoginPage({ notice, onSignIn, onRegister }: Props) {
 
           <p className="vq-login-foot">
             <Lock size={12} />
-            <span>会话保存在服务端下发的 HttpOnly cookie 里；浏览器只缓存用户名与邮箱，用于首屏渲染。</span>
+            <span>{internal ? '会话保存在服务端下发的 HttpOnly cookie 里；浏览器只缓存用户名与邮箱，用于首屏渲染。' : '登录状态会安全保存；浏览器只记住用户名与邮箱，用来加快下次打开。'}</span>
           </p>
         </div>
       </main>

@@ -28,6 +28,7 @@ import {
   type RunRecord,
 } from '../api/flows'
 import { getCredits } from '../api/credits'
+import { useUiMode } from '../api/app'
 import { replaceRoute } from '../router'
 import {
   createBdcCanvas,
@@ -85,6 +86,7 @@ function hostOf(value: string): string {
 }
 
 function CanvasWorkspace({ onToast, flowId: initialFlowId }: CanvasPageProps) {
+  const { internal } = useUiMode()
   const rf = useReactFlow()
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<FlowNodeData>>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
@@ -893,7 +895,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId }: CanvasPageProps) {
           <button className="cv-btn" type="button" onClick={() => { void saveAsTemplate() }} disabled={running} title="把当前画布另存为一个新流程">
             <Copy size={14} />另存为模板
           </button>
-          <button className="cv-btn" type="button" onClick={() => { void saveNow().then((ok) => toast(ok ? '已保存到 data/flows.json' : '保存失败：' + saveError)) }} disabled={running || saveState === 'saving'} title="Ctrl+S">
+          <button className="cv-btn" type="button" onClick={() => { void saveNow().then((ok) => toast(ok ? (internal ? '已保存到 data/flows.json' : '已保存') : '保存失败：' + saveError)) }} disabled={running || saveState === 'saving'} title="Ctrl+S">
             <Save size={14} />保存
           </button>
           {runCredit && runCredit.price > 0 ? (
@@ -935,7 +937,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId }: CanvasPageProps) {
             <div>
               <strong>画布还没对外发布</strong>
               <p>VisionQA Canvas 现在只监听本机（{bdc.web.url}），从别的电脑打开会连到访客自己的机器。</p>
-              <p className="cv-muted">把它部署到独立子域并把 BDC_WEB_URL 指过去，这里就会直接显示画布。</p>
+              <p className="cv-muted">{internal ? '把它部署到独立子域并把 BDC_WEB_URL 指过去，这里就会直接显示画布。' : '发布到独立域名后，这里就会直接显示画布。'}</p>
             </div>
             <button className="cv-btn" type="button" onClick={() => setBdcView(false)}>用内置编排</button>
           </div>
@@ -948,7 +950,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId }: CanvasPageProps) {
           <div>
             <strong>画布加载失败</strong>
             <p>{loadError}</p>
-            <p className="cv-muted">确认 API 服务（127.0.0.1:8787）已启动，然后重新加载页面。</p>
+            <p className="cv-muted">{internal ? '确认 API 服务（127.0.0.1:8787）已启动，然后重新加载页面。' : '稍后重新加载页面；如果仍未恢复，请联系平台维护人员。'}</p>
           </div>
           <button className="cv-btn" type="button" onClick={() => window.location.reload()}>重新加载</button>
         </div>
@@ -1033,7 +1035,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId }: CanvasPageProps) {
                 />
               </ReactFlow>
 
-              {loadState === 'loading' && <div className="cv-overlay">正在读取 data/flows.json…</div>}
+              {loadState === 'loading' && <div className="cv-overlay">{internal ? '正在读取 data/flows.json…' : '正在读取画布…'}</div>}
               {loadState === 'ready' && !nodes.length && (
                 <div className="cv-overlay cv-overlay--empty">
                   <strong>画布还没有节点</strong>

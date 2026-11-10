@@ -99,6 +99,7 @@ export function createFlowsRouter() {
           flowId: url.searchParams.get('flowId') || '',
           status: url.searchParams.get('status') || '',
           q: url.searchParams.get('q') || '',
+          ownerId: url.searchParams.get('ownerId') || '',
           limit: url.searchParams.get('limit') || 20,
           offset: url.searchParams.get('offset') || 0,
         }, user)

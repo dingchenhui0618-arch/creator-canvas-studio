@@ -297,11 +297,14 @@ export async function deleteFlow(id) {
 
 // ---------- 运行记录 ----------
 
-export async function listRuns({ flowId = '', status = '', q = '', limit = 20, offset = 0 } = {}, user = null) {
+export async function listRuns({ flowId = '', status = '', q = '', ownerId = '', limit = 20, offset = 0 } = {}, user = null) {
   const list = (await loadRuns()).filter((run) => canAccess(run, user))
   const keyword = String(q || '').trim()
   let filtered = list
   if (flowId) filtered = filtered.filter((run) => run.flowId === flowId)
+  // __none__ 是后台「未归属」筛选：积分制之前或本地演示产生的记录没有 ownerId
+  if (ownerId === '__none__') filtered = filtered.filter((run) => !run.ownerId)
+  else if (ownerId) filtered = filtered.filter((run) => (run.ownerId || '') === ownerId)
   // 运行状态只有 success / error 两种落库值，running 只在流式过程中出现
   if (status === 'success' || status === 'error') filtered = filtered.filter((run) => run.status === status)
   if (keyword) filtered = filtered.filter((run) => run.flowName.includes(keyword) || run.id.includes(keyword) || String(run.error || '').includes(keyword))

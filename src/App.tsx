@@ -175,18 +175,20 @@ function Workbench({
         payload = null
       }
       if (!response.ok || !payload?.version) {
-        setUpdateMessage('更新通道未接入：/api/version 没有返回版本信息，未执行任何下载。')
+        setUpdateMessage(internal ? '更新通道未接入：/api/version 没有返回版本信息，未执行任何下载。' : '暂时无法检查更新，未执行任何下载。')
       } else if (payload.version === APP_VERSION) {
-        setUpdateMessage(`已是最新版本（远端 ${payload.version}）。`)
+        setUpdateMessage(`已是最新版本（${payload.version}）。`)
       } else {
-        setUpdateMessage(`远端版本 ${payload.version}，与本地 ${APP_VERSION} 不一致；发布版需重新拉取构建产物。`)
+        setUpdateMessage(internal
+          ? `远端版本 ${payload.version}，与本地 ${APP_VERSION} 不一致；发布版需重新拉取构建产物。`
+          : `有新版本可用（${payload.version}），请联系平台维护人员完成升级。`)
       }
     } catch {
-      setUpdateMessage('更新通道未接入：请求 /api/version 失败，未执行任何下载。')
+      setUpdateMessage(internal ? '更新通道未接入：请求 /api/version 失败，未执行任何下载。' : '暂时无法检查更新，未执行任何下载。')
     } finally {
       setUpdateChecking(false)
     }
-  }, [])
+  }, [internal])
 
   const go = useCallback((page: Page) => {
     navigate(pageToRoute(page))
@@ -313,7 +315,7 @@ function Workbench({
               <span className="vq-workspace-avatar">{initials}</span>
               <span className="vq-workspace-meta">
                 <strong>{session.user.workspace}</strong>
-                <span>{session.user.kind === 'guest' ? '访客会话' : '服务端会话'}</span>
+                <span>{session.user.kind === 'guest' ? '访客会话' : internal ? '服务端会话' : '已登录'}</span>
               </span>
             </div>
           )}
@@ -399,7 +401,7 @@ function Workbench({
                   <div className="vq-menu vq-sidebar-account-menu" role="menu">
                     <div className="vq-sidebar-account-menu-meta">
                       <span className="vq-mono">{sessionKindLabel(session.user.kind)}</span>
-                      <span className="vq-mono">服务端会话</span>
+                      <span className="vq-mono">{internal ? '服务端会话' : '已登录'}</span>
                     </div>
                     <button type="button" role="menuitem" onClick={() => go('settings')}>
                       <Settings2 size={15} />
@@ -504,7 +506,7 @@ function Workbench({
           >
             <div className="vq-update-head">
               <div>
-                <span className="vq-mono">Build / Version</span>
+                <span className="vq-mono">{internal ? 'Build / Version' : '发布版本'}</span>
                 <h2 id="vq-update-title">版本与在线更新</h2>
               </div>
               <button type="button" className="vq-icon-button" aria-label="关闭" onClick={() => setUpdateOpen(false)}>
@@ -525,14 +527,18 @@ function Workbench({
                 <span>环境</span>
                 <strong className="vq-mono">{internal ? '内部测试' : '生产'}</strong>
               </div>
-              <div>
-                <span>检查接口</span>
-                <strong className="vq-mono">/api/version</strong>
-              </div>
+              {internal ? (
+                <div>
+                  <span>检查接口</span>
+                  <strong className="vq-mono">/api/version</strong>
+                </div>
+              ) : null}
             </div>
 
             <p className="vq-update-note">
-              检查更新只读取服务端 <code>/api/version</code> 的版本号；接口未接入时不会伪造下载进度或「已是最新」。发布版更新通过重新拉取构建产物完成。
+              {internal
+                ? '检查更新只读取服务端 /api/version 的版本号；接口未接入时不会伪造下载进度或「已是最新」。发布版更新通过重新拉取构建产物完成。'
+                : '检查更新只读取平台的发布版本；没有可用更新时不会伪造进度，也不会假装已是最新。'}
             </p>
 
             {updateMessage && (
@@ -560,7 +566,7 @@ function Workbench({
               </button>
             </div>
 
-            <p className="vq-update-foot">账号与会话由服务端校验，数据落在服务端数据目录。© 2026 VisionQA</p>
+            <p className="vq-update-foot">{internal ? '账号与会话由服务端校验，数据落在服务端数据目录。' : '登录状态安全保存，数据保存在你的账号下。'} © 2026 VisionQA</p>
           </div>
         </div>
       )}

@@ -20,6 +20,9 @@ export type CreditsResponse = {
   prices: CreditPrices
   concurrency: CreditConcurrency
   ledger: CreditEntry[]
+  ledgerTotal?: number
+  ledgerOffset?: number
+  ledgerLimit?: number
   billingEnabled: boolean
 }
 
@@ -50,7 +53,8 @@ export type SystemHealth = {
   checks: HealthCheck[]
 }
 
-export const getCredits = (limit = 20) => request<CreditsResponse>('/api/credits?limit=' + limit)
+export const getCredits = (limit = 20, offset = 0) =>
+  request<CreditsResponse>('/api/credits?limit=' + limit + '&offset=' + offset)
 
 export const getSystemHealth = () => request<SystemHealth>('/api/system/health')
 

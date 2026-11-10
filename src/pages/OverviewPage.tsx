@@ -5,6 +5,7 @@ import PageHead from '../components/PageHead'
 import { MonoTag } from '../components/ui'
 import { request } from '../api/client'
 import { listBdcCanvases, type BdcCanvas } from '../api/bdc'
+import { useUiMode } from '../api/app'
 import '../styles/overview.css'
 
 type RunRow = {
@@ -55,6 +56,7 @@ function secondsOf(ms?: number): string {
  * 任何一块没有数据就写空状态并给出下一步，不用示例行填充——上线后的首页不能靠假数据撑版面。
  */
 export function OverviewPage({ userName, onCreate, onNavigate }: Props) {
+  const { internal } = useUiMode()
   const [now] = useState(() => new Date())
   const [canvases, setCanvases] = useState<BdcCanvas[]>([])
   const [runs, setRuns] = useState<RunRow[]>([])
@@ -128,7 +130,11 @@ export function OverviewPage({ userName, onCreate, onNavigate }: Props) {
             </>
           )
         }
-        desc="三个数字分别来自画布服务、/api/runs 与 /api/templates；没有数据的区块写空状态，不放示例数据。"
+        desc={
+          internal
+            ? '三个数字分别来自画布服务、/api/runs 与 /api/templates；没有数据的区块写空状态，不放示例数据。'
+            : '三个数字分别是画布、运行与模板的真实数量；没有数据的区块写空状态，不放示例数据。'
+        }
         actions={
           <>
             <button type="button" className="vq-button vq-button--ghost" onClick={() => void load()} disabled={loading}>
@@ -272,13 +278,13 @@ export function OverviewPage({ userName, onCreate, onNavigate }: Props) {
           )}
 
           <p className="vq-note">
-            <span>模板、运行与画布都存服务端，换浏览器登录同一账号即可看到。</span>
+            <span>{internal ? '模板、运行与画布都存服务端，换浏览器登录同一账号即可看到。' : '模板、运行与画布都保存在你的账号下，换浏览器登录同一账号即可看到。'}</span>
           </p>
         </aside>
       </div>
 
       <footer className="vq-overview-foot">
-        <span>画布数据来自画布服务；运行与模板来自工作台 API。</span>
+        <span>{internal ? '画布数据来自画布服务；运行与模板来自工作台 API。' : '画布、运行与模板数据都在你的账号下。'}</span>
         <span className="vq-mono">VisionQA · 生产站点</span>
       </footer>
     </div>

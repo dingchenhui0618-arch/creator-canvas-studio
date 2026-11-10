@@ -8,6 +8,7 @@ import {
   TOOL_OPTIONS,
 } from './catalog'
 import { useModelOptions } from '../components/ModelSwitch'
+import { useUiMode } from '../api/app'
 import type { FlowNodeData, NodeConfig } from './types'
 
 type InspectorProps = {
@@ -31,6 +32,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 export function Inspector({ node, onPatch, onConfig, onDuplicate, onDelete }: InspectorProps) {
   // 模型候选来自服务端 /api/models；hook 必须在提前 return 之前调用
   const modelOptions = useModelOptions()
+  const { internal } = useUiMode()
 
   if (!node) {
     return (
@@ -98,13 +100,13 @@ export function Inspector({ node, onPatch, onConfig, onDuplicate, onDelete }: In
 
           {node.data.kind === 'llm' && (
             <>
-              <Field label="模型" hint="首选模型失败时服务端会按配置的 fallback 链重试。">
+              <Field label="模型" hint={internal ? '首选模型失败时服务端会按配置的 fallback 链重试。' : '首选模型不可用时会自动切换到备用模型。'}>
                 <select
                   className="cv-input"
                   value={config.model ?? ''}
                   onChange={(event) => onConfig({ model: event.target.value }, 'model')}
                 >
-                  <option value="">跟随服务端默认</option>
+                  <option value="">{internal ? '跟随服务端默认' : '跟随平台默认'}</option>
                   {modelOptions.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
                   {config.model && !modelOptions.some((item) => item.id === config.model) ? (
                     <option value={config.model}>自定义模型</option>
@@ -170,7 +172,7 @@ export function Inspector({ node, onPatch, onConfig, onDuplicate, onDelete }: In
           )}
 
           {node.data.kind === 'tool' && (
-            <Field label="工具" hint="工具在服务端执行，只暴露已注册的三个内置能力。">
+            <Field label="工具" hint={internal ? '工具在服务端执行，只暴露已注册的三个内置能力。' : '工具由平台执行，只提供已接入的能力。'}>
               <select
                 className="cv-select"
                 value={config.toolName ?? 'templates.stats'}

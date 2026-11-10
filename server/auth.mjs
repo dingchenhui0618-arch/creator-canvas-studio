@@ -128,9 +128,29 @@ export function createUser({ email, password, name, kind = 'account' }) {
   const normalized = String(email).trim().toLowerCase()
   const id = 'usr_' + crypto.randomBytes(9).toString('base64url')
   const displayName = (name || '').trim() || normalized.split('@')[0] || 'VisionQA 用户'
-  openDb()
-    .prepare('INSERT INTO users (id, email, name, workspace, password_hash, kind, is_active, credits, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)')
-    .run(id, normalized, displayName, '个人工作区', hashPassword(password), kind, config.credits.welcome, nowIso())
+  const welcome = Math.max(0, Math.round(Number(config.credits.welcome) || 0))
+  const createdAt = nowIso()
+  const database = openDb()
+  // 初始额度也要记一条流水：否则新账号的余额是 100，账本却是空的，用户会以为积分来路不明
+  database.exec('BEGIN IMMEDIATE')
+  try {
+    database
+      .prepare('INSERT INTO users (id, email, name, workspace, password_hash, kind, is_active, credits, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)')
+      .run(id, normalized, displayName, '个人工作区', hashPassword(password), kind, welcome, createdAt)
+    if (welcome > 0) {
+      database
+        .prepare('INSERT INTO credit_ledger (id, user_id, delta, balance_after, kind, ref, meta, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        .run('cl_' + crypto.randomBytes(8).toString('base64url'), id, welcome, welcome, 'welcome', '新账号初始额度', null, createdAt)
+    }
+    database.exec('COMMIT')
+  } catch (error) {
+    try {
+      database.exec('ROLLBACK')
+    } catch {
+      // 回滚失败说明事务已经不在了，交给上层处理
+    }
+    throw error
+  }
   return findUserById(id)
 }
 

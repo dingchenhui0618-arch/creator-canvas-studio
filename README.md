@@ -629,3 +629,35 @@ DOMAIN=visionqa.wavisionai.cn bash deploy/production/enable-https.sh            
 ### 十九.3 下一批
 
 设置页积分流水「加载更多」、后台运行记录按账号 / 流程筛选、后台系统磁盘占用、全局模型偏好、更新检查与下载、找回密码；智能体的「图片生成 / 网页读取」要等图像与网页读取通道。上游模型账号余额仍需充值，智能体成功路径与视觉评审在补余额前只能在内部环境用 mock 验证。
+
+## 二十、2026-11-10 追加八：待接 API 第四批（生产文案收敛、积分流水分页、运行审计按账号筛选）
+
+### 二十.1 这一批做了什么
+
+| 位置 | 之前 | 现在 |
+| --- | --- | --- |
+| 生产文案 | 登录页、工作台、设置页、画布、运行抽屉、节点检查器、复刻弹窗、顶栏与更新弹窗仍会露出「服务端」「/api/version」「data/flows.json」「VISION_MODEL」这类实现细节 | 生产环境统一产品语言（「登录状态会安全保存」「数据保存在你的账号下」「平台统一维护」）；文件路径、接口地址、环境变量名只在 `VQ_UI_MODE=internal` 的内部环境保留 |
+| 设置页积分流水 | 固定只取最近 12 条，多了就看不到 | `GET /api/credits?limit=&offset=` 服务端分页，返回 `ledgerTotal / ledgerOffset / ledgerLimit`；页面显示「共 N 条，已显示 M 条」并按 12 条「加载更多」，不做前端假分页 |
+| 新账号初始额度 | 账号创建时直接写余额 100，账本里没有对应流水，用户看到「有余额、无来源」 | `createUser` 在同一事务里补一条 `welcome` 流水（「新账号初始额度」），余额与流水从第一条开始就对得上 |
+| 后台运行审计 | 只能按状态筛选，账号一列也没有 | 账号 / 流程 / 状态三个筛选（`GET /api/runs?ownerId=&flowId=&status=`），表格新增账号列并显示邮箱提示，CSV 同步导出账号；`ownerId=__none__` 专查积分制之前没有归属的历史运行 |
+
+新接口参数：`GET /api/runs` 增加 `ownerId`（支持 `__none__`），`GET /api/credits` 增加 `offset` 并在响应里带上总数与分页回显。
+
+![生产设置页：简单产品语言、积分余额与流水，底部显示「共 6 条，已显示 6 条」](docs/screenshot-settings-ledger-2026-11-10.png)
+
+![内部环境设置页：保留服务端 / cookie / token 等技术说明，流水超过 12 条时出现「加载更多」](docs/screenshot-settings-internal-ledger-2026-11-10.png)
+
+![生产运行审计：账号 / 流程 / 状态三个筛选与账号列](docs/screenshot-admin-audit-filter-2026-11-10.png)
+
+![生产登录页：不再出现「会话由服务端校验」「HttpOnly cookie」等实现细节](docs/screenshot-login-prod-copy-2026-11-10.png)
+
+### 二十.2 实测
+
+- 隔离环境（独立 `DATA_DIR` + 临时端口，真实 HTTP 与真实鉴权）：种子管理员登录后账本 1 条 `welcome`（+100）；再发放 20 次 → `ledgerTotal=21`，第一页 12 条、第二页 9 条、两页 id 无重复、按时间倒序；`offset=40` 返回空页；`limit=9999&offset=-5` 被夹到 200 / 0；匿名 401。
+- 运行审计：建一条 input→output 流程并真实执行 → 200 success、扣 2 积分；`ownerId=<账号>` 命中 1 条且 `ownerId` 正确，`ownerId=__none__` 在写入一条无归属运行并重启后命中 2 条，未知账号 0 条，`flowId+status=success` 1 条、`flowId+status=error` 0 条。
+- 生产：bundle `index-B5ffs6O4.js`，`visionqa` 与 `visionqa-internal` 均 active、`/api/health` ok；当前余额 98、流水 6 条、运行 1 条、账号 1 个、流程 4 张；截图为真实线上渲染。
+- 内部环境：流水 14 条、余额 100，设置页显示「共 14 条，已显示 12 条」与「加载更多」，与生产同一份代码、只是 `VQ_UI_MODE` 不同。
+
+### 二十.3 下一批
+
+后台系统磁盘占用、全局模型偏好、更新检查与下载、找回密码；后台页面（总览 / 账号 / 模型 Key / 模板治理 / 系统）还留着接口路径和「真实接口」标记，下一步按同一口径收敛。上游模型账号余额仍需充值，智能体成功路径与视觉评审在补余额前只能在内部环境用 mock 验证。

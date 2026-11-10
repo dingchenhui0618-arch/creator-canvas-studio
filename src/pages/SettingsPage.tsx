@@ -3,7 +3,8 @@ import { Activity, CreditCard, LogOut, RefreshCw } from 'lucide-react'
 import { MonoTag } from '../components/ui'
 import PageHead from '../components/PageHead'
 import { getBillingOverview, type BillingOverview } from '../api/billing'
-import { creditKindLabel, getCredits, getSystemHealth, type CreditsResponse, type SystemHealth } from '../api/credits'
+import { useUiMode } from '../api/app'
+import { creditKindLabel, getCredits, getSystemHealth, type CreditEntry, type CreditsResponse, type SystemHealth } from '../api/credits'
 import { initialsFor, sessionKindLabel, type Session } from '../auth/session'
 import '../styles/shell.css'
 import '../styles/credits.css'
@@ -33,23 +34,49 @@ function formatStamp(value?: string | null) {
  * 设置页只放能兑现的东西：会话是服务端真的、积分是服务端账本真的、系统状态是真的探活。
  * 充值通道还没接（用户还没定价），所以那块仍然是「未开通」占位，不摆假档位。
  */
+const LEDGER_PAGE = 12
+
 export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
+  const { internal } = useUiMode()
   const [billing, setBilling] = useState<BillingOverview | null>(null)
   const [billingError, setBillingError] = useState('')
   const [credits, setCredits] = useState<CreditsResponse | null>(null)
   const [creditsError, setCreditsError] = useState('')
+  const [ledgerMore, setLedgerMore] = useState<CreditEntry[]>([])
+  const [ledgerLoading, setLedgerLoading] = useState(false)
   const [health, setHealth] = useState<SystemHealth | null>(null)
   const [healthError, setHealthError] = useState('')
   const [healthLoading, setHealthLoading] = useState(true)
+
+  const loadCredits = useCallback(() => {
+    getCredits(LEDGER_PAGE)
+      .then((next) => {
+        setCredits(next)
+        setLedgerMore([])
+        setCreditsError('')
+      })
+      .catch((caught) => setCreditsError(caught instanceof Error ? caught.message : '积分读取失败'))
+  }, [])
 
   useEffect(() => {
     getBillingOverview()
       .then(setBilling)
       .catch((caught) => setBillingError(caught instanceof Error ? caught.message : '充值状态读取失败'))
-    getCredits(12)
-      .then(setCredits)
-      .catch((caught) => setCreditsError(caught instanceof Error ? caught.message : '积分读取失败'))
-  }, [])
+    loadCredits()
+  }, [loadCredits])
+
+  const ledger = credits ? [...credits.ledger, ...ledgerMore] : []
+  const ledgerTotal = credits?.ledgerTotal ?? ledger.length
+  const ledgerHasMore = ledger.length < ledgerTotal
+
+  const loadMoreLedger = () => {
+    if (!credits || ledgerLoading) return
+    setLedgerLoading(true)
+    getCredits(LEDGER_PAGE, ledger.length)
+      .then((next) => setLedgerMore((prev) => [...prev, ...next.ledger]))
+      .catch((caught) => setCreditsError(caught instanceof Error ? caught.message : '积分流水读取失败'))
+      .finally(() => setLedgerLoading(false))
+  }
 
   const loadHealth = useCallback(() => {
     setHealthLoading(true)
@@ -78,7 +105,11 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
       <PageHead
         kicker="工作区设置"
         title="设置"
-        desc="账号、积分、系统状态都是服务端真实数据；充值通道还没定价，保持未开通。"
+        desc={
+          internal
+            ? '账号、积分、系统状态都是服务端真实数据；充值通道还没定价，保持未开通。'
+            : '账号、积分与运行状态都来自真实数据；充值通道还没开通，暂不开放购买。'
+        }
       />
 
       <div className="vq-settings-grid">
@@ -87,7 +118,7 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
             <div>
               <span className="vq-mono">账号 / Account</span>
               <h2>当前会话</h2>
-              <p>会话保存在服务端，凭据是 HttpOnly cookie；关掉浏览器再打开仍是登录状态。</p>
+              <p>{internal ? '会话保存在服务端，凭据是 HttpOnly cookie；关掉浏览器再打开仍是登录状态。' : '登录状态会安全保存，关掉浏览器再打开仍然是登录状态。'}</p>
             </div>
             <MonoTag>{sessionKindLabel(session.user.kind)}</MonoTag>
           </div>
@@ -112,21 +143,21 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
             <div className="vq-row">
               <div className="vq-row-copy">
                 <strong>会话存储</strong>
-                <span>客户端只持 cookie；服务端只存 token 的 sha256</span>
+                <span>{internal ? '客户端只持 cookie；服务端只存 token 的 sha256' : '登录凭证只保存在本机浏览器，平台不保存明文'}</span>
               </div>
-              <span className="vq-row-value vq-mono">vq_session · HttpOnly</span>
+              <span className="vq-row-value vq-mono">{internal ? 'vq_session · HttpOnly' : '已安全保存'}</span>
             </div>
             <div className="vq-row">
               <div className="vq-row-copy">
                 <strong>本次登录时间</strong>
-                <span>服务端会话的创建时间，用于会话过期判断</span>
+                <span>{internal ? '服务端会话的创建时间，用于会话过期判断' : '本次登录的时间，用于判断登录是否过期'}</span>
               </div>
               <span className="vq-row-value vq-mono">{signedInAt}</span>
             </div>
             <div className="vq-row">
               <div className="vq-row-copy">
                 <strong>工作区</strong>
-                <span>单工作区部署；多工作区切换还没有后端</span>
+                <span>{internal ? '单工作区部署；多工作区切换还没有后端' : '当前工作区；多工作区切换暂未开放'}</span>
               </div>
               <span className="vq-row-value">{session.user.workspace}</span>
             </div>
@@ -146,7 +177,7 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
             <div className="vq-row">
               <div className="vq-row-copy">
                 <strong>当前余额</strong>
-                <span>{creditsError || '来自服务端积分账本，不是浏览器缓存'}</span>
+                <span>{creditsError || (internal ? '来自服务端积分账本，不是浏览器缓存' : '来自真实积分记录，不是浏览器缓存')}</span>
               </div>
               <span className="vq-credit-balance">
                 <b>{typeof balance === 'number' ? balance : '—'}</b>
@@ -173,7 +204,7 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
               </div>
             </div>
 
-            {credits && credits.ledger.length ? (
+            {ledger.length ? (
               <table className="vq-ledger">
                 <thead>
                   <tr>
@@ -185,7 +216,7 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
                   </tr>
                 </thead>
                 <tbody>
-                  {credits.ledger.map((entry) => (
+                  {ledger.map((entry) => (
                     <tr key={entry.id}>
                       <td className="time">{formatStamp(entry.createdAt)}</td>
                       <td>{creditKindLabel(entry.kind)}</td>
@@ -202,6 +233,19 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
             ) : (
               <p className="vq-ledger-empty">还没有积分流水：检索一次就会在这里留一条记录。</p>
             )}
+            {ledger.length ? (
+              <div className="vq-ledger-more">
+                <span>
+                  共 {ledgerTotal} 条，已显示 {ledger.length} 条
+                  {creditsError ? '（' + creditsError + '）' : ''}
+                </span>
+                {ledgerHasMore ? (
+                  <button type="button" className="vq-button vq-button--ghost" onClick={loadMoreLedger} disabled={ledgerLoading}>
+                    {ledgerLoading ? '加载中…' : '加载更多'}
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </section>
 
@@ -246,7 +290,7 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
             <div>
               <span className="vq-mono">系统状态 / Health</span>
               <h2>健康检查</h2>
-              <p>这里会真连数据库、数据目录、模板库、模型接口和检索接口，不是「环境变量填了没填」。</p>
+              <p>{internal ? '这里会真连数据库、数据目录、模板库、模型接口和检索接口，不是「环境变量填了没填」。' : '这里会真实检查数据存储、模板库、模型与检索服务是否可用，而不只是看配置有没有填。'}</p>
             </div>
             <div className="vq-account-actions">
               {health ? <MonoTag>{HEALTH_LABEL[health.status] || health.status}</MonoTag> : null}
@@ -283,7 +327,7 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
       </div>
 
       <footer className="vq-settings-foot">
-        <span>设置项不落浏览器；账号、积分与系统状态都由服务端校验。</span>
+        <span>{internal ? '设置项不落浏览器；账号、积分与系统状态都由服务端校验。' : '设置项不保存在浏览器；账号、积分与运行状态都会实时校验。'}</span>
         <span className="vq-mono">VisionQA · Workbench</span>
       </footer>
     </div>

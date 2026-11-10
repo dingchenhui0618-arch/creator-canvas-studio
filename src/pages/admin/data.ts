@@ -46,6 +46,7 @@ export type RunItem = {
   id: string
   flowId: string
   flowName: string
+  ownerId?: string
   status: string
   startedAt: string
   finishedAt?: string | null
