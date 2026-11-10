@@ -376,13 +376,14 @@ const server = http.createServer(async (req, res) => {
       // 浅检查：只回答「配了没配」，给探针用（不需要登录）。
       // 真实可用性看 /api/system/health（登录后可见，会真连上游）。
       const stats = await templateStats(user)
+      // 公开探针只回答「配了没配」：生产环境连模型标识都不返回，
+      // 模型名与降级链只在内部测试环境可见（后台「排查信息」/总览要用）。
       return sendJson(res, 200, {
         ok: true,
         redfox: redfoxEnabled(),
         vision: visionEnabled(),
-        visionModel: config.vision.model,
+        ...(config.ui.mode === 'internal' ? { visionModel: config.vision.model, llmModel: config.llm.model } : {}),
         llm: visionEnabled(),
-        llmModel: config.llm.model,
         templates: stats.total,
         uptimeSec: Math.round(process.uptime()),
       })

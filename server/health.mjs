@@ -2,9 +2,12 @@
 // 以前 /api/health 只看 key 在不在，key 过期、余额为 0、上游 DNS 挂了它都照样 ok:true。
 // 这里逐项真探：数据库能查、数据目录能写、模板库能读、模型接口能连、红狐能连。
 // 结果缓存 10 秒，避免界面刷新把上游探活打成刷屏。
+//
+// 生产环境这一页也会给普通用户看：同样的检查，但只输出产品语言（不带路径、Node 版本、
+// 上游域名或原始报错）；内部测试环境保留原始信息用于排障。
 import fsp from 'node:fs/promises'
 import path from 'node:path'
-import { config, redfoxEnabled, visionEnabled } from './config.mjs'
+import { config, internalMode, redfoxEnabled, visionEnabled } from './config.mjs'
 import { openDb as getDb } from './auth.mjs'
 import { templateStats } from './templates.mjs'
 
@@ -12,14 +15,21 @@ const CACHE_MS = 10000
 let cached = null
 
 const startedAt = Date.now()
+const isInternal = () => internalMode()
+const pick = (internalText, prodText) => (isInternal() ? internalText : prodText)
 
-async function timed(fn, { timeoutMs = 0 } = {}) {
+async function timed(fn, { timeoutMs = 0, failure = '暂时不可用' } = {}) {
   const started = Date.now()
   try {
     const detail = await fn()
     return { status: 'ok', detail, ms: Date.now() - started }
   } catch (error) {
-    return { status: timeoutMs && error?.name === 'TimeoutError' ? 'warn' : 'fail', detail: String(error?.message || error), ms: Date.now() - started }
+    const raw = String(error?.message || error)
+    return {
+      status: timeoutMs && error?.name === 'TimeoutError' ? 'warn' : 'fail',
+      detail: isInternal() ? raw : failure,
+      ms: Date.now() - started,
+    }
   }
 }
 
@@ -33,86 +43,107 @@ export async function deepHealth({ force = false } = {}) {
 
   checks.push({
     id: 'api',
-    label: '服务进程',
+    label: pick('服务进程', '服务运行'),
     status: 'ok',
-    detail: 'Node ' + process.version + ' · 已运行 ' + seconds(Date.now() - startedAt) + ' 秒 · 内存 ' + Math.round(process.memoryUsage().rss / 1048576) + 'MB',
+    detail: pick(
+      'Node ' + process.version + ' · 已运行 ' + seconds(Date.now() - startedAt) + ' 秒 · 内存 ' + Math.round(process.memoryUsage().rss / 1048576) + 'MB',
+      '运行正常',
+    ),
     ms: 0,
   })
 
   checks.push({
     id: 'db',
-    label: '账号与积分库',
-    ...(await timed(async () => {
-      const row = getDb().prepare('SELECT COUNT(*) AS users FROM users').get()
-      const ledger = getDb().prepare('SELECT COUNT(*) AS rows FROM credit_ledger').get()
-      return row.users + ' 个账号 · ' + ledger.rows + ' 条积分流水'
-    })),
+    label: pick('账号与积分库', '账号与积分'),
+    ...(await timed(
+      async () => {
+        const row = getDb().prepare('SELECT COUNT(*) AS users FROM users').get()
+        const ledger = getDb().prepare('SELECT COUNT(*) AS rows FROM credit_ledger').get()
+        return pick(row.users + ' 个账号 · ' + ledger.rows + ' 条积分流水', '账号与积分数据可读')
+      },
+      { failure: '账号与积分数据暂时不可用' },
+    )),
   })
 
   checks.push({
     id: 'disk',
-    label: '数据目录读写',
-    ...(await timed(async () => {
-      await fsp.mkdir(config.dataDir, { recursive: true })
-      const probe = path.join(config.dataDir, '.health-' + process.pid + '.tmp')
-      await fsp.writeFile(probe, 'ok', 'utf8')
-      await fsp.rm(probe, { force: true })
-      let free = ''
-      try {
-        const stats = await fsp.statfs(config.dataDir)
-        free = ' · 剩余 ' + Math.round((stats.bfree * stats.bsize) / 1073741824) + 'GB'
-      } catch {
-        free = ''
-      }
-      return config.dataDir + free
-    })),
+    label: pick('数据目录读写', '数据存储'),
+    ...(await timed(
+      async () => {
+        await fsp.mkdir(config.dataDir, { recursive: true })
+        const probe = path.join(config.dataDir, '.health-' + process.pid + '.tmp')
+        await fsp.writeFile(probe, 'ok', 'utf8')
+        await fsp.rm(probe, { force: true })
+        let free = ''
+        try {
+          const stats = await fsp.statfs(config.dataDir)
+          free = ' · 剩余 ' + Math.round((stats.bfree * stats.bsize) / 1073741824) + 'GB'
+        } catch {
+          free = ''
+        }
+        return pick(config.dataDir + free, '可读写' + free)
+      },
+      { failure: '存储暂时不可用' },
+    )),
   })
 
   checks.push({
     id: 'templates',
     label: '模板库',
-    ...(await timed(async () => {
-      const stats = await templateStats()
-      return '共 ' + stats.total + ' 条 · 已解析 ' + stats.parsed + ' · 待解析 ' + stats.saved
-    })),
+    ...(await timed(
+      async () => {
+        const stats = await templateStats()
+        return pick(
+          '共 ' + stats.total + ' 条 · 已解析 ' + stats.parsed + ' · 待解析 ' + stats.saved,
+          '共 ' + stats.total + ' 条模板',
+        )
+      },
+      { failure: '模板库暂时不可用' },
+    )),
   })
 
   checks.push({
     id: 'vision',
-    label: '模型接口',
+    label: pick('模型接口', '模型服务'),
     ...(visionEnabled()
-      ? await timed(async () => {
-          const response = await fetch(config.vision.baseUrl + '/models', {
-            headers: { Authorization: 'Bearer ' + config.vision.apiKey },
-            signal: AbortSignal.timeout(config.limits.probeTimeoutMs),
-          })
-          const text = await response.text()
-          if (!response.ok) throw new Error('HTTP ' + response.status + ' · ' + text.slice(0, 120))
-          let count = 0
-          try {
-            count = (JSON.parse(text).data || []).length
-          } catch {
-            count = 0
-          }
-          return '上游 ' + count + ' 个模型可用'
-        })
-      : { status: 'warn', detail: '模型服务未接入，评审与对话不可用', ms: 0 }),
+      ? await timed(
+          async () => {
+            const response = await fetch(config.vision.baseUrl + '/models', {
+              headers: { Authorization: 'Bearer ' + config.vision.apiKey },
+              signal: AbortSignal.timeout(config.limits.probeTimeoutMs),
+            })
+            const text = await response.text()
+            if (!response.ok) throw new Error('HTTP ' + response.status + ' · ' + text.slice(0, 120))
+            let count = 0
+            try {
+              count = (JSON.parse(text).data || []).length
+            } catch {
+              count = 0
+            }
+            return pick('上游 ' + count + ' 个模型可用', count ? count + ' 个模型可用' : '模型服务可用')
+          },
+          { timeoutMs: config.limits.probeTimeoutMs, failure: '模型服务暂时不可用' },
+        )
+      : { status: 'warn', detail: pick('模型服务未接入，评审与对话不可用', '模型服务未开通'), ms: 0 }),
   })
 
   checks.push({
     id: 'redfox',
     label: '检索服务',
     ...(redfoxEnabled()
-      ? await timed(async () => {
-          const response = await fetch(config.redfox.baseUrl, {
-            method: 'GET',
-            signal: AbortSignal.timeout(config.limits.probeTimeoutMs),
-          })
-          // 只要连上了（哪怕是 401/404）就说明 DNS/TLS/网络通路正常，key 是否有效由真实检索回报
-          // 详情里不带上游域名：设置页是用户可见页面，只报「通不通」
-          return '可达（HTTP ' + response.status + '）'
-        })
-      : { status: 'warn', detail: '检索服务未接入，雷达走示例数据', ms: 0 }),
+      ? await timed(
+          async () => {
+            const response = await fetch(config.redfox.baseUrl, {
+              method: 'GET',
+              signal: AbortSignal.timeout(config.limits.probeTimeoutMs),
+            })
+            // 只要连上了（哪怕是 401/404）就说明 DNS/TLS/网络通路正常，key 是否有效由真实检索回报
+            // 详情里不带上游域名：设置页是用户可见页面，只报「通不通」
+            return pick('可达（HTTP ' + response.status + '）', '已连通')
+          },
+          { timeoutMs: config.limits.probeTimeoutMs, failure: '检索服务暂时不可用' },
+        )
+      : { status: 'warn', detail: pick('检索服务未接入，雷达走示例数据', '检索服务未开通'), ms: 0 }),
   })
 
   const failed = checks.filter((item) => item.status === 'fail').length

@@ -389,7 +389,7 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
             <div>
               <span className="vq-mono">系统状态 / Health</span>
               <h2>健康检查</h2>
-              <p>{internal ? '这里会真连数据库、数据目录、模板库、模型接口和检索接口，不是「环境变量填了没填」。' : '这里会真实检查数据存储、模板库、模型与检索服务是否可用，而不只是看配置有没有填。'}</p>
+              <p>{internal ? '这里会真连数据库、数据目录、模板库、模型接口和检索接口，不是「环境变量填了没填」。' : '这里会检查数据存储、模板库、模型与检索服务是否可用。'}</p>
             </div>
             <div className="vq-account-actions">
               {health ? <MonoTag>{HEALTH_LABEL[health.status] || health.status}</MonoTag> : null}
@@ -411,7 +411,7 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
                     <span className="detail" title={check.detail}>
                       {check.detail}
                     </span>
-                    <span className="ms">{check.ms}ms</span>
+                    {internal ? <span className="ms">{check.ms}ms</span> : null}
                   </div>
                 ))}
               </div>
@@ -419,7 +419,10 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
               <p className="vq-ledger-empty">检测中…</p>
             )}
             <p className="vq-billing-note">
-              结果缓存 10 秒，避免刷新把上游探活打成刷屏；最后检测于 {health ? formatStamp(health.checkedAt) : '—'}。
+              {internal
+                ? '结果缓存 10 秒，避免刷新把上游探活打成刷屏'
+                : '结果缓存 10 秒，避免频繁检测'}
+              ；最后检测于 {health ? formatStamp(health.checkedAt) : '—'}。
             </p>
           </div>
         </section>

@@ -135,7 +135,7 @@ export function OverviewPage({ userName, onCreate, onNavigate, onOpenCanvas }: P
         desc={
           internal
             ? '三个数字分别来自画布服务、/api/runs 与 /api/templates；没有数据的区块写空状态，不放示例数据。'
-            : '三个数字分别是画布、运行与模板的真实数量；没有数据的区块写空状态，不放示例数据。'
+            : '三个数字分别是画布、运行与模板的当前数量；没有数据时写清空状态。'
         }
         actions={
           <>

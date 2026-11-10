@@ -350,7 +350,9 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
               <span>
                 工具
                 <b className="agx-mono">
-                  {toolSummary.ready} 已接入 · {toolSummary.planned} 待接入
+                  {internal
+                    ? toolSummary.ready + ' 已接入 · ' + toolSummary.planned + ' 待接入'
+                    : toolSummary.ready + ' 项可用 · ' + toolSummary.planned + ' 项即将开放'}
                 </b>
               </span>
               <div className="agx-tool-grid">
@@ -368,7 +370,13 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
                       <span>
                         <strong>
                           {tool.label}
-                          {tool.state === 'planned' ? ' · 待接入' : ' · 已接入'}
+                          {internal
+                            ? tool.state === 'planned'
+                              ? ' · 待接入'
+                              : ' · 已接入'
+                            : tool.state === 'planned'
+                              ? ' · 即将开放'
+                              : ' · 可用'}
                         </strong>
                         <span>{tool.description}</span>
                       </span>
@@ -377,8 +385,8 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
                 })}
               </div>
               <small>
-                已接入的工具会在对话前真正执行：把对话里链接的公开网页正文、模板库 / 画布流程的标题带进上下文，或把回复里的
-                JSON 整理成可下载文件。待接入的只作能力声明，不会假装执行。
+                {internal ? '已接入' : '可用'}的工具会在对话前真正执行：把对话里链接的公开网页正文、模板库 / 画布流程的标题带进上下文，或把回复里的
+                JSON 整理成可下载文件。{internal ? '待接入的只作能力声明' : '未开放的工具只作能力说明'}，不会假装执行。
               </small>
             </div>
           </section>
@@ -533,7 +541,7 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
                 <p className="agx-side-note">
                   <BookOpen size={12} /> 知识会并入本次对话的上下文
                   <br />
-                  <Wrench size={12} /> 已接入工具会读取模板库、画布流程与对话里的公开网页
+                  <Wrench size={12} /> 工具会读取模板库、画布流程与对话里的公开网页
                 </p>
               </>
             )}

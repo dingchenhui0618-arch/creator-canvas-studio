@@ -5,6 +5,7 @@ import { getCredits, type CreditsResponse } from '../api/credits'
 import { listTemplates, coverSrc } from '../api/radar'
 import type { ReplicaTemplate } from '../domain/radar'
 import { consumeReviewTarget, onReviewRequest, type ReviewTarget } from '../state/review'
+import { useUiMode } from '../api/app'
 import PageHead from '../components/PageHead'
 import '../styles/review.css'
 
@@ -14,6 +15,7 @@ const VERDICT_LABEL: Record<string, string> = { pass: '通过', needs_review: '�
 type Picked = { media?: string; imageUrl?: string; label: string; preview: string }
 
 export default function ReviewPage() {
+  const { internal } = useUiMode()
   const [status, setStatus] = useState<ReviewStatus | null>(null)
   const [templates, setTemplates] = useState<ReplicaTemplate[]>([])
   const [picked, setPicked] = useState<Picked | null>(null)
@@ -262,7 +264,7 @@ export default function ReviewPage() {
                 </li>
                 <li>
                   <span className="vq-mono">02</span>
-                  <div><strong>出结论</strong><p>按 visual-baseline 七项维度评审，结论只有通过 / 需人工确认 / 不通过三种。</p></div>
+                  <div><strong>出结论</strong><p>{internal ? '按 visual-baseline 七项维度评审' : '按七项视觉维度评审'}，结论只有通过 / 需人工确认 / 不通过三种。</p></div>
                 </li>
                 <li>
                   <span className="vq-mono">03</span>
@@ -271,8 +273,12 @@ export default function ReviewPage() {
               </ol>
               <p className="review-empty-note">
                 {status?.service
-                  ? '当前由 VisionQA 插件服务出结论；fixture provider 只证明链路可用，不代表模型准确率。'
-                  : 'VisionQA 插件服务未启动（127.0.0.1:6300），当前由本地视觉模型按同一套 visual-baseline 规则评审，provider 会写进结果。'}
+                  ? internal
+                    ? '当前由 VisionQA 插件服务出结论；fixture provider 只证明链路可用，不代表模型准确率。'
+                    : '当前由本地评审服务出结论，结果里会标明来源。'
+                  : internal
+                    ? 'VisionQA 插件服务未启动（127.0.0.1:6300），当前由本地视觉模型按同一套 visual-baseline 规则评审，provider 会写进结果。'
+                    : '本地评审插件未启动，本次由平台视觉模型按同一套评审规则完成。'}
               </p>
             </div>
           )}

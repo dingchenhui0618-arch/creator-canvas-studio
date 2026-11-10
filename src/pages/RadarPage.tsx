@@ -200,7 +200,7 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
             </span>
             <span
               className={'radar-credit' + (insufficient || (credits && credits.balance !== null && credits.balance < credits.prices.search) ? ' is-low' : '')}
-              title="积分余额来自服务端账本；示例数据不扣积分"
+              title="积分余额来自服务端记录；示例结果不扣积分"
             >
               余额 <strong>{credits?.balance ?? '—'}</strong> {credits?.unit || '积分'}
               {credits ? ' · 每次 ' + credits.prices.search : ''}
@@ -243,7 +243,7 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
       </div>
       {credits ? (
         <p className="radar-credit-note">
-          每次检索消耗 <strong>{credits.prices.search}</strong> {credits.unit}，上游失败会原路退回；示例数据不扣积分。
+          每次检索消耗 <strong>{credits.prices.search}</strong> {credits.unit}，检索失败会原路退回；示例结果不扣积分。
         </p>
       ) : null}
 
