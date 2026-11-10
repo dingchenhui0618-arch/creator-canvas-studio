@@ -4,6 +4,7 @@ import { AGENT_CATEGORIES, createAgent, deleteAgent, listAgents, setPendingSelec
 import type { AgentCategory, AgentInput, AgentRecord, AgentsList } from '../api/agents'
 import type { Page } from '../domain/types'
 import PageHead from '../components/PageHead'
+import { useModelOptions } from '../components/ModelSwitch'
 import '../styles/agents.css'
 
 type AgentEditorPageProps = {
@@ -112,11 +113,20 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
   )
   const ready = checks.slice(0, 3).every((check) => check.pass)
 
+  const catalogModels = useModelOptions()
+  const modelLabels = useMemo(() => {
+    const map = new Map<string, string>()
+    catalogModels.forEach((item) => map.set(item.id, item.label))
+    return map
+  }, [catalogModels])
   const modelOptions = useMemo(() => {
     const values = new Set(meta?.models ?? [])
     if (form.model) values.add(form.model)
-    return [{ value: '', label: '默认（服务端配置）' }, ...[...values].map((value) => ({ value, label: value }))]
-  }, [form.model, meta?.models])
+    return [
+      { value: '', label: '默认（服务端配置）' },
+      ...[...values].map((value) => ({ value, label: modelLabels.get(value) || 'VisionQA 模型' })),
+    ]
+  }, [form.model, meta?.models, modelLabels])
 
   const toggleTool = useCallback((id: string) => {
     setForm((current) => ({
@@ -406,7 +416,7 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
               <div className="agx-card-meta">
                 <span>
                   <span>模型</span>
-                  <span className="agx-mono">{form.model || '服务端默认'}</span>
+                  <span className="agx-mono">{form.model ? modelLabels.get(form.model) || 'VisionQA 模型' : '服务端默认'}</span>
                 </span>
                 <span>
                   <span>最近运行</span>

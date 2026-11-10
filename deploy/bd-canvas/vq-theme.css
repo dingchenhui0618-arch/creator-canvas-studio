@@ -420,17 +420,17 @@ input[type="range"]::-moz-range-thumb { border-color: #ffffff !important; }
 .enterprise-budget-track { background: var(--ui-border-default) !important; }
 .enterprise-budget-indicator { box-shadow: none !important; }
 .enterprise-connection-pill { color: var(--ui-text-muted) !important; background: var(--ui-surface-control) !important; }
-.local-backend-status { color: var(--ui-text-muted) !important; background: transparent !important; }
-.local-backend-status[data-status="online"] {
-  color: #176b43 !important;
-  border-color: rgb(23 107 67 / 28%) !important;
-  background: rgb(23 107 67 / 9%) !important;
-}
-.local-backend-status[data-status="offline"] {
-  color: #a33838 !important;
-  border-color: rgb(163 56 56 / 30%) !important;
-  background: rgb(163 56 56 / 9%) !important;
-}
+/* 顶栏那颗「主后端正常 / 断开」胶囊：画布在 VisionQA 里只是编辑器，
+   进程与数据目录的健康由工作台「设置 → 系统状态」负责，画布里重复报一遍只会添噪。 */
+.local-backend-status { display: none !important; }
+/* 同一颗账号/额度挂件右侧的「后端正常」也一样：只留「个人模式 / 余额」，后端状态不在画布里报。 */
+.enterprise-connection-pill { display: none !important; }
+/* 整颗账号/额度挂件（个人模式 + 余额条）在 VisionQA 内嵌场景里是噪音：
+   账号、余额、积分都在宿主自己的顶栏与设置页里，画布不必再报一遍。 */
+.enterprise-budget-indicator { display: none !important; }
+/* 品牌图标换成 VisionQA 自己的标记（deploy/bd-canvas/bd-canvas-app-icon.png），
+   同时是站点 favicon；圆角与底/字色和宿主一致，尺寸交给画布自己算。 */
+.logo-icon { border-radius: 6px !important; }
 
 /* ========================================================================== */
 /* 9. 顶栏几何：与 VisionQA 的 42px 状态条同一套高度 / 底色 / 发丝线 / 等宽标签   */
@@ -470,16 +470,6 @@ input[type="range"]::-moz-range-thumb { border-color: #ffffff !important; }
 .canvas-tab.active {
   background: var(--ui-surface-raised) !important;
   border: 1px solid var(--ui-border-default) !important;
-}
-.local-backend-status {
-  height: 20px !important;
-  padding: 0 8px !important;
-  border: 1px solid var(--ui-border-subtle) !important;
-  border-radius: 6px !important;
-  font-family: var(--ui-font-mono) !important;
-  font-size: 10px !important;
-  letter-spacing: 0.04em !important;
-  text-transform: uppercase !important;
 }
 /* 底部控制条与标注工具条：白面 + 发丝线 + 10px 圆角，和宿主卡片同款 */
 .canvas-controls,

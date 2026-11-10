@@ -26,19 +26,19 @@ function loadCatalog(): Promise<Catalog | null> {
 }
 
 /** 检查器里 llm 节点的模型候选：服务端清单，前端不写死任何模型名。 */
-export function useModelIds(): string[] {
-  const [ids, setIds] = useState<string[]>([])
+export function useModelOptions(): Array<{ id: string; label: string }> {
+  const [options, setOptions] = useState<Array<{ id: string; label: string }>>([])
   useEffect(() => {
     let alive = true
     loadCatalog().then((json) => {
       if (!alive || !json) return
-      setIds((json.models ?? []).map((item) => item.id))
+      setOptions((json.models ?? []).map((item) => ({ id: item.id, label: item.label })))
     })
     return () => {
       alive = false
     }
   }, [])
-  return ids
+  return options
 }
 
 /** 当前选中的模型。调用方拿它拼请求参数，切换后立刻生效。 */
@@ -89,6 +89,8 @@ export function ModelSwitch() {
 
   const models = catalog?.models ?? []
   const active = picked || catalog?.current || ''
+  // 顶栏只露产品口径的名称：id 是给请求用的，不在界面出现上游厂商名
+  const activeLabel = active ? models.find((item) => item.id === active)?.label || '已选模型' : ''
   const ready = Boolean(catalog?.configured)
 
   const choose = (id: string) => {
@@ -112,7 +114,7 @@ export function ModelSwitch() {
         title={ready ? '切换模型' : '还没有配置模型'}
       >
         <Bot size={14} />
-        <span className="vq-model-name">{active || '未配置模型'}</span>
+        <span className="vq-model-name">{activeLabel || '未配置模型'}</span>
         <ChevronDown size={12} />
       </button>
 
@@ -120,7 +122,9 @@ export function ModelSwitch() {
         <div className="vq-model-pop" role="listbox" aria-label="模型列表">
           <div className="vq-model-pop-head">
             <span className="vq-mono">Model</span>
-            <span className="vq-model-source">{catalog?.source === 'none' ? '未接入' : catalog?.source || '…'}</span>
+            <span className="vq-model-source">
+              {catalog?.source === 'none' ? '未接入' : catalog?.source === 'VISION_MODELS' ? '服务端清单' : catalog?.source === 'VISION_MODEL' ? '默认模型' : '…'}
+            </span>
           </div>
 
           {models.length === 0 ? (

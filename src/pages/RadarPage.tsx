@@ -151,7 +151,7 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
           <>
             <span className={`status-pill ${hasKey ? (quota ? 'is-error' : 'is-live') : 'is-mock'}`}>
               <span className="status-dot" />
-              {hasKey ? (quota ? '红狐接口异常' : '红狐接口已连接') : '示例数据模式'}
+              {hasKey ? (quota ? '检索服务异常' : '检索服务已连接') : '示例数据模式'}
             </span>
             <span
               className={'radar-credit' + (insufficient || (credits && credits.balance !== null && credits.balance < credits.prices.search) ? ' is-low' : '')}
@@ -206,15 +206,15 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
         <div className="radar-banner radar-banner--quota">
           <AlertCircle size={15} />
           <span>
-            红狐接口已连通，但<strong>{quota.code === 'REDFOX_DISABLED' ? 'Key 已被禁用' : '账号积分不足'}</strong>：{quota.message}。当前显示的是示例数据，不是真实平台数据。
+            VisionQA 检索服务已连通，但<strong>{quota.code === 'REDFOX_DISABLED' ? 'Key 已被禁用' : '账号积分不足'}</strong>：{quota.message}。当前显示的是示例数据，不是真实平台数据。
             {quota.goodsName ? '（充值商品：' + quota.goodsName + '）' : ''}
-            {quota.rechargeUrl ? <a href={quota.rechargeUrl} target="_blank" rel="noreferrer">{quota.code === 'REDFOX_DISABLED' ? '去红狐后台查看 Key' : '去红狐后台充值'}</a> : null}
+            {quota.code === 'REDFOX_DISABLED' ? '（请管理员到服务端确认检索凭证）' : '（请管理员补充服务端额度）'}
           </span>
         </div>
       ) : !hasKey ? (
         <div className="radar-banner">
           <AlertCircle size={15} />
-          <span>{note || '未配置红狐 API Key，当前展示的是示例数据（标题与互动数都不是真实平台数据）。接入 Key 后，这一屏会直接显示真实检索结果。'}</span>
+          <span>{note || '检索服务还没接入，当前展示的是示例数据（标题与互动数都不是真实平台数据）。接入后，这一屏会直接显示真实检索结果。'}</span>
         </div>
       ) : null}
 
@@ -237,7 +237,7 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
           <span><strong>{sorted.length}</strong> 条内容</span>
           {totalPlays > 0 && <span><strong>{formatCount(totalPlays)}</strong> 累计播放</span>}
           <span><strong>{formatCount(totalLikes)}</strong> 累计点赞</span>
-          <span className="radar-summary-note">{mode === 'live' ? '数据来自红狐接口' : hasKey ? '示例数据 · 接口不可用' : '示例数据 · 未连接红狐'}</span>
+          <span className="radar-summary-note">{mode === 'live' ? '数据来自 VisionQA 检索' : hasKey ? '示例数据 · 服务不可用' : '示例数据 · 检索未接入'}</span>
         </div>
       )}
 
@@ -325,8 +325,8 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
           <strong>先输入关键词，再点「检索」</strong>
           <span>
             {hasKey
-              ? '红狐按次计费，进页面不会自动检索；点一次检索才发一次请求。'
-              : '还没有配置红狐 Key：检索会返回明确标注的示例数据。'}
+              ? '检索按次计费，进页面不会自动检索；点一次检索才发一次请求。'
+              : '检索服务还没接入：检索会返回明确标注的示例数据。'}
           </span>
           <div className="radar-idle-tags">
             {['春季通勤穿搭', '咖啡开箱', '租房改造', '护肤台收纳'].map((value) => (

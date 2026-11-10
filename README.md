@@ -491,3 +491,38 @@ DOMAIN=visionqa.wavisionai.cn bash deploy/production/enable-https.sh            
 - 画布流程执行没有接积分（只受并发与超时保护），要不要按次计费等你定。
 
 完整差距清单见 [docs/launch-readiness.md](docs/launch-readiness.md) 的「三点九」。
+
+## 十五、2026-11-10 追加三：画布图标、后端状态下线、全站口径统一
+
+### 十五.1 三项改动
+
+| 项 | 之前 | 现在 |
+| --- | --- | --- |
+| 画布图标 | 上游 BD Canvas 的紫色渐变「B」标（569×569），同时当 favicon | 换成 VisionQA 标记（V + 检视框：深墨底、奶油字、紫环），512×512、四角透明，favicon 同步；源文件 [deploy/bd-canvas/bd-canvas-app-icon.svg](deploy/bd-canvas/bd-canvas-app-icon.svg) |
+| 画布顶栏「主后端正常」 | 品牌旁一颗 10px 胶囊，探 `/api/health` 后显示「主后端正常 / 断开 / 检测中」 | 主题层 `display:none`，画布里不再报后端状态；进程、数据目录、模型与检索的探活统一放「设置 → 系统状态」 |
+| 画布顶栏账号/额度挂件 | 右侧「个人模式 + 后端正常 + 额度条」 | 整颗隐藏：账号、余额、积分都在 VisionQA 自己的顶栏与设置页，画布只留品牌、画布页签与工具 |
+| 全站口径 | 雷达、设置、复刻、后台写着「红狐」「deepseek-flash」 | 一律以 VisionQA 为主语：检索服务 / 模型服务 / VisionQA 通用·视觉·对话模型；后台「模型与密钥」默认只露产品口径，真实模型 ID、上游地址、环境变量值收进右上角「显示技术详情」 |
+
+### 十五.2 真实截图（线上渲染，1440 宽）
+
+![画布：VisionQA 图标，后端状态与账号挂件都不再显示](docs/screenshot-canvas-branding-2026-11-10.png)
+
+![爆款雷达：状态改成「检索服务已连接」](docs/screenshot-radar-visionqa-2026-11-10.png)
+
+![设置：健康检查只报通断与耗时，不再带模型名和上游域名](docs/screenshot-settings-health-clean-2026-11-10.png)
+
+![后台模型与密钥：默认产品口径，「显示技术详情」才展开真实配置](docs/screenshot-admin-keys-toggle-2026-11-10.png)
+
+### 十五.3 验收口径（实测）
+
+- 用无头 Chrome 带真实会话登录线上，逐页读 `document.body.innerText` 扫 `红狐|REDFOX|redfox|deepseek`：13 条路由（工作台、爆款雷达、模板库、智能体、视觉评审、运行记录、设置、后台六个分页）**全部 0 命中**。
+- `/api/models` 的 label 已是「VisionQA 通用模型 / 视觉模型 / 对话模型」，id 仍只用于请求；画布检查器的模型下拉同步改成只显示名称。
+- 画布线上：`/vq-theme.css` 与 `/assets/bd-canvas-app-icon.png` 均 200，sha256 与仓库一致；`#local-backend-status`、`.enterprise-budget-indicator` 计算样式为 `display:none`。
+- 部署：bundle `index-Cjmnf3zi.js` 与服务器 dist 一致，`/api/health` ok。
+
+### 十五.4 仍要你定
+
+- 后台「显示技术详情」默认关；要不要连这个开关也去掉（去掉后就完全看不到真实模型 ID 与上游地址，排障只能登服务器）。
+- 画布顶栏账号/额度挂件是整颗隐藏的；以后若要用画布自己的企业账号体系，删掉 `vq-theme.css` 里那条即可恢复。
+- 充值仍是占位、模板库仍是 0 条、画布流程执行仍不计积分，这三件维持上一轮的状态。
+

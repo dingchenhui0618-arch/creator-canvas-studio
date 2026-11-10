@@ -229,3 +229,12 @@ ssh -i ~/.ssh/taskwatch_relay_ed25519 root@139.196.123.28 'bash /tmp/vq-deploy2.
 2. **能力分配（assignment）**：`provider + model + feature` 三者必须匹配（generate / chat / tts / voice-clone / reverse-prompt），配错返回 400。
 3. **常驻**：要不要把 VisionQA Canvas 三个端口也加进看门狗（现有 `DSH Services` 只托管 dsh-web 与 image-shim），掉线自动拉起。
 4. **公网暴露**：现在三个端口都只监听 `127.0.0.1`，符合手册要求。要对外就得上反向代理 + IP 限制，别直接映射 5313。
+
+### 8.1g 画布身份与状态显示（2026-11-10 晚）
+
+1. **图标换成 VisionQA 的标记**：上游 `public/assets/bd-canvas-app-icon.png`（569×569 紫渐变 B）替换为 VisionQA 标记（V + 检视框，深墨底、奶油字、紫环），512×512、四角透明，同时是站点 favicon。源文件留在公开仓库 `deploy/bd-canvas/bd-canvas-app-icon.svg`，部署只需覆盖 `/opt/bdcanvas/public/assets/bd-canvas-app-icon.png`，不动上游源码。
+2. **顶栏不再报后端状态**：`#local-backend-status`（探 `/api/health` 后显示「主后端正常 / 断开 / 检测中」）由主题层 `display:none` 隐藏；账号/额度挂件 `.enterprise-budget-indicator` 一起隐藏——在 VisionQA 内嵌场景里，账号、余额与健康检查都在宿主自己的顶栏和「设置 → 系统状态」。
+3. 主题层只加了两条隐藏规则，仍遵守「只改视觉、不写死尺寸」的既有约定；实测 `#local-backend-status` 与 `.enterprise-budget-indicator` 计算样式为 `display:none`。
+
+![画布：VisionQA 图标，顶栏只留品牌与画布页签](screenshot-canvas-branding-2026-11-10.png)
+

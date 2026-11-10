@@ -72,7 +72,7 @@ export default function OverviewSection() {
             {health.loading ? '检查中' : health.data?.vision ? '已配置' : '未配置'}
           </p>
           <p className="admin-foot">
-            {health.data ? `视觉模型 ${health.data.visionModel || '—'}` : '等待 /api/health 返回。'}
+            {health.data ? (health.data.vision ? '视觉模型已接入' : '视觉模型未接入') : '等待 /api/health 返回。'}
           </p>
         </article>
       </div>
@@ -91,12 +91,12 @@ export default function OverviewSection() {
         {health.data ? (
           <dl className="admin-kv">
             <div>
-              <dt>红狐检索</dt>
+              <dt>检索服务</dt>
               <dd>
                 <Badge tone={health.data.redfox ? 'ok' : 'warn'}>
                   {health.data.redfox ? '已配置' : '未配置'}
                 </Badge>
-                <span className="admin-mono">health.redfox = {String(health.data.redfox)}</span>
+                <span>检索服务由服务端配置，这里只报状态。</span>
               </dd>
             </div>
             <div>
@@ -105,7 +105,7 @@ export default function OverviewSection() {
                 <Badge tone={health.data.vision ? 'ok' : 'warn'}>
                   {health.data.vision ? '已配置' : '未配置'}
                 </Badge>
-                <span className="admin-mono">{health.data.visionModel || '—'}</span>
+                <span>模型标识与地址在「模型 Key」页，需要时再展开技术详情。</span>
               </dd>
             </div>
             <div>
@@ -131,7 +131,7 @@ export default function OverviewSection() {
         <ul>
           <li>账号已落库到 <code>data/auth.db</code>，但本页还没接用户列表接口，所以只展示当前会话。</li>
           <li>模板数、运行数、依赖状态分别来自 <code>/api/templates</code>、<code>/api/runs</code>、<code>/api/health</code>。</li>
-          <li>health 接口只暴露「是否配置」布尔值；红狐未配置时检索会回退示例数据，界面上会明确标注。</li>
+          <li>health 接口只暴露「是否配置」布尔值；检索服务未接入时检索会回退示例数据，界面上会明确标注。</li>
         </ul>
       </section>
     </>

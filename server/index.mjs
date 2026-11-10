@@ -303,8 +303,8 @@ const server = http.createServer(async (req, res) => {
           { key: 'VISION_MODELS', purpose: '界面上可选的模型清单（逗号分隔）', current: config.vision.models.join(',') },
           { key: 'VISION_FALLBACKS', purpose: '视觉调用失败时的降级链', current: config.vision.fallbacks.join(',') },
           { key: 'LLM_FALLBACKS', purpose: '文本调用失败时的降级链', current: config.llm.fallbacks.join(',') },
-          { key: 'REDFOX_API_KEY', purpose: '红狐检索密钥（抖音 / 小红书）', current: mask(config.redfox.key) },
-          { key: 'REDFOX_BASE_URL', purpose: '红狐接口地址', current: config.redfox.baseUrl },
+          { key: 'REDFOX_API_KEY', purpose: '检索服务密钥（抖音 / 小红书）', current: mask(config.redfox.key) },
+          { key: 'REDFOX_BASE_URL', purpose: '检索服务地址', current: config.redfox.baseUrl },
           { key: 'REPLICATE_REMOTE_URL', purpose: '远端算力地址，不填就走本机 ffmpeg', current: config.remote.enabled ? '已配置' : '' },
           { key: 'MAX_VIDEO_MB', purpose: '单条视频体积上限', current: String(config.limits.maxVideoMb) },
           { key: 'MAX_FRAMES', purpose: '每条视频抽帧数上限', current: String(config.limits.maxFrames) },
@@ -372,7 +372,7 @@ const server = http.createServer(async (req, res) => {
       const endDate = url.searchParams.get('end') || ''
       if (!redfoxEnabled()) {
         const items = searchFixtures(keyword)
-        return sendJson(res, 200, { mode: 'mock', items, total: items.length, note: '未配置 REDFOX_API_KEY，当前展示示例数据（非真实平台数据）' })
+        return sendJson(res, 200, { mode: 'mock', items, total: items.length, note: '检索服务未接入，当前展示示例数据（非真实平台数据）' })
       }
       // 检索按次扣积分：一次请求=一页结果。示例数据不扣费（上面已经返回）。
       const paid = beginPaid(res, user, 'search', keyword)
@@ -388,7 +388,7 @@ const server = http.createServer(async (req, res) => {
         // 上游失败/额度不足都退积分：用户没拿到真实数据就不该被扣
         paid.refund()
         if (error?.code === 'REDFOX_RATE') {
-          return sendJson(res, 429, { error: '红狐接口触发频率限制（抖音 10 次/秒、小红书 20 次/秒），请稍后重试', code: 'REDFOX_RATE' })
+          return sendJson(res, 429, { error: '检索服务触发频率限制（抖音 10 次/秒、小红书 20 次/秒），请稍后重试', code: 'REDFOX_RATE' })
         }
         if (error?.code === 'REDFOX_DISABLED') {
           const items = searchFixtures(keyword)
@@ -396,7 +396,7 @@ const server = http.createServer(async (req, res) => {
             mode: 'mock',
             items,
             total: items.length,
-            note: '红狐 API Key 已被禁用（3105），当前显示的是示例数据：请到红狐后台确认 Key 状态后再试。',
+            note: '检索服务返回 3105（凭证不可用），当前显示的是示例数据：请到后台确认检索凭证后再试。',
             quota: { code: 'REDFOX_DISABLED', message: error.message, rechargeUrl: 'https://redfox.hk/dashboard' },
           })
         }
@@ -407,7 +407,7 @@ const server = http.createServer(async (req, res) => {
             mode: 'mock',
             items,
             total: items.length,
-            note: '红狐接口已连通，但账号积分不足（' + (error.quota?.amount ?? 0) + ' 元起充 / ' + (error.quota?.goodsName || '见红狐后台') + '），当前显示的是示例数据。',
+            note: 'VisionQA 检索服务已连通，但服务端额度不足（' + (error.quota?.amount ?? 0) + ' 元起充 / ' + (error.quota?.goodsName || '见服务后台') + '），当前显示的是示例数据。',
             quota: { code: 'REDFOX_QUOTA', message: error.message, rechargeUrl: error.rechargeUrl, goodsName: error.quota?.goodsName || '' },
           })
         }

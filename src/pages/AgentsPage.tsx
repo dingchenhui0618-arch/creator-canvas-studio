@@ -28,6 +28,7 @@ import {
 } from '../api/agents'
 import type { AgentRecord, AgentsList, OutputType } from '../api/agents'
 import PageHead from '../components/PageHead'
+import { useModelOptions } from '../components/ModelSwitch'
 import '../styles/agents.css'
 
 type ChatMessage = {
@@ -594,12 +595,23 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
   }, [data])
 
   const visibleAgents = category === '全部' ? agents : agents.filter((item) => item.category === category)
+  // 模型一律显示产品口径（VisionQA 通用 / 视觉 / 对话模型），真实 id 只用于请求
+  const catalogModels = useModelOptions()
+  const modelLabels = useMemo(() => {
+    const map = new Map<string, string>()
+    catalogModels.forEach((item) => map.set(item.id, item.label))
+    return map
+  }, [catalogModels])
+  const modelLabel = useCallback(
+    (id?: string) => (id ? modelLabels.get(id) || 'VisionQA 模型' : ''),
+    [modelLabels],
+  )
   const modelOptions = useMemo(() => {
     const values = new Set(data?.models ?? [])
     if (model) values.add(model)
-    const options = [...values].map((value) => ({ value, label: value }))
+    const options = [...values].map((value) => ({ value, label: modelLabels.get(value) || 'VisionQA 模型' }))
     return options.length ? options : [{ value: '', label: '未配置模型' }]
-  }, [data?.models, model])
+  }, [data?.models, model, modelLabels])
 
   const agentOptions = useMemo(
     () => (agents.length ? agents.map((item) => ({ value: item.id, label: item.name })) : [{ value: '', label: '还没有智能体' }]),
@@ -676,7 +688,7 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
                   <div className="agx-msg-meta">
                     <span>
                       {message.role === 'user' ? '你' : selectedAgent?.name ?? '智能体'} · {formatClock(new Date(message.at).toISOString())}
-                      {message.model ? ' · ' + message.model : ''}
+                      {message.model ? ' · ' + modelLabel(message.model) : ''}
                       {message.latencyMs ? ' · ' + (message.latencyMs / 1000).toFixed(1) + 's' : ''}
                     </span>
                     <button onClick={() => void handleCopy(message)}>
@@ -860,7 +872,7 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
                   <div className="agx-card-meta">
                     <span>
                       <span>模型</span>
-                      <span className="agx-mono">{agent.model || '默认'}</span>
+                      <span className="agx-mono">{modelLabel(agent.model) || '默认'}</span>
                     </span>
                     <span>
                       <span>最近运行</span>

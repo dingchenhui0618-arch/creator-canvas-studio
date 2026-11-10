@@ -31,6 +31,8 @@ export default function KeysSection() {
   const [probe, setProbe] = useState<Probe | null>(null)
   const [probing, setProbing] = useState(false)
   const [copied, setCopied] = useState('')
+  // 默认只露产品口径（VisionQA 模型 / 检索服务），真实模型 ID、上游地址与环境变量值收进「技术详情」
+  const [showTech, setShowTech] = useState(false)
 
   const copyDocPath = async () => {
     try {
@@ -62,7 +64,19 @@ export default function KeysSection() {
         kicker="ADMIN / KEYS"
         title="模型与密钥"
         description="读服务端当前生效的配置：模型、地址、凭证末四位。凭证值本身永不下发，只回答「配了没有、几位」。"
-        actions={<RefreshButton onClick={config.reload} busy={config.loading} />}
+        actions={
+          <div className="admin-doc-actions">
+            <button
+              type="button"
+              className="admin-btn admin-btn--ghost"
+              onClick={() => setShowTech((value) => !value)}
+              aria-pressed={showTech}
+            >
+              {showTech ? '隐藏技术详情' : '显示技术详情'}
+            </button>
+            <RefreshButton onClick={config.reload} busy={config.loading} />
+          </div>
+        }
       />
 
       {config.error ? <ErrorBanner message={`GET /api/config：${config.error}`} onRetry={config.reload} /> : null}
@@ -101,7 +115,7 @@ export default function KeysSection() {
                     <td>
                       <Badge tone={data.llm.enabled ? 'ok' : 'warn'}>{data.llm.enabled ? '已配置' : '未配置'}</Badge>
                     </td>
-                    <td className="admin-mono">{data.llm.model}</td>
+                    <td className="admin-mono">{showTech ? data.llm.model : 'VisionQA 通用模型'}</td>
                     <td className="admin-mono">与视觉共用同一把 key</td>
                   </tr>
                   <tr>
@@ -113,20 +127,20 @@ export default function KeysSection() {
                       <Badge tone={data.vision.enabled ? 'ok' : 'warn'}>{data.vision.enabled ? '已配置' : '未配置'}</Badge>
                     </td>
                     <td className="admin-mono">
-                      {data.vision.model}
-                      <span className="admin-cell-sub">{data.vision.baseUrl}</span>
+                      {showTech ? data.vision.model : 'VisionQA 视觉模型'}
+                      <span className="admin-cell-sub">{showTech ? data.vision.baseUrl : '地址与模型标识由服务端维护'}</span>
                     </td>
                     <td className="admin-mono">{data.vision.apiKeyMasked || '—'}</td>
                   </tr>
                   <tr>
                     <td>
-                      <strong>红狐检索</strong>
+                      <strong>检索服务</strong>
                       <span className="admin-cell-sub">抖音 / 小红书真实素材</span>
                     </td>
                     <td>
                       <Badge tone={data.redfox.enabled ? 'ok' : 'warn'}>{data.redfox.enabled ? '已配置' : '未配置'}</Badge>
                     </td>
-                    <td className="admin-mono">{data.redfox.baseUrl}</td>
+                    <td className="admin-mono">{showTech ? data.redfox.baseUrl : '已配置（地址由服务端维护）'}</td>
                     <td className="admin-mono">{data.redfox.apiKeyMasked || '—'}</td>
                   </tr>
                   <tr>
@@ -170,26 +184,32 @@ export default function KeysSection() {
               <SourceTag kind="local" source={DOC_PATH} />
             </div>
 
-            <div className="admin-table-wrap">
-              <table className="admin-table">
-                <thead>
-                  <tr>
-                    <th>环境变量</th>
-                    <th>用途</th>
-                    <th>当前值</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.envKeys.map((item) => (
-                    <tr key={item.key}>
-                      <td className="admin-mono">{item.key}</td>
-                      <td>{item.purpose}</td>
-                      <td className="admin-mono">{item.current || <span className="admin-cell-sub">未设置</span>}</td>
+            {showTech ? (
+              <div className="admin-table-wrap">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>环境变量</th>
+                      <th>用途</th>
+                      <th>当前值</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {data.envKeys.map((item) => (
+                      <tr key={item.key}>
+                        <td className="admin-mono">{item.key}</td>
+                        <td>{item.purpose}</td>
+                        <td className="admin-mono">{item.current || <span className="admin-cell-sub">未设置</span>}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="admin-hint">
+                共 {data.envKeys.length} 项环境变量，含模型与检索服务的技术标识；默认不展示，点右上角「显示技术详情」可查看完整清单与当前值。
+              </p>
+            )}
 
             <div className="admin-doc-row">
               <code>{DOC_PATH}</code>

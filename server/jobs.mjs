@@ -58,7 +58,7 @@ export async function startReplicate(item, overrideUrl, { ownerId = '', onSettle
   if (item?.url) targets.push({ url: item.url, label: item.platformLabel + '原链接' })
   if (!targets.length) {
     job.status = 'error'
-    job.error = '这条内容没有可用的视频链接：示例数据不含真实链接，请接入红狐 Key 或粘贴视频直链。'
+    job.error = '这条内容没有可用的视频链接：示例数据不含真实链接，请先接入检索服务或粘贴视频直链。'
     return job
   }
 

@@ -7,7 +7,7 @@ import {
   STATUS_TEXT,
   TOOL_OPTIONS,
 } from './catalog'
-import { useModelIds } from '../components/ModelSwitch'
+import { useModelOptions } from '../components/ModelSwitch'
 import type { FlowNodeData, NodeConfig } from './types'
 
 type InspectorProps = {
@@ -30,7 +30,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 
 export function Inspector({ node, onPatch, onConfig, onDuplicate, onDelete }: InspectorProps) {
   // 模型候选来自服务端 /api/models；hook 必须在提前 return 之前调用
-  const modelIds = useModelIds()
+  const modelOptions = useModelOptions()
 
   if (!node) {
     return (
@@ -99,15 +99,17 @@ export function Inspector({ node, onPatch, onConfig, onDuplicate, onDelete }: In
           {node.data.kind === 'llm' && (
             <>
               <Field label="模型" hint="首选模型失败时服务端会按配置的 fallback 链重试。">
-                <input
+                <select
                   className="cv-input"
-                  list="cv-model-options"
                   value={config.model ?? ''}
                   onChange={(event) => onConfig({ model: event.target.value }, 'model')}
-                />
-                <datalist id="cv-model-options">
-                  {modelIds.map((model) => <option key={model} value={model} />)}
-                </datalist>
+                >
+                  <option value="">跟随服务端默认</option>
+                  {modelOptions.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+                  {config.model && !modelOptions.some((item) => item.id === config.model) ? (
+                    <option value={config.model}>自定义模型</option>
+                  ) : null}
+                </select>
               </Field>
               <Field label="温度">
                 <div className="cv-range-row">

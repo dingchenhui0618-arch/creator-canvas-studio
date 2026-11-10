@@ -160,7 +160,7 @@ export async function postJson(pathname, payload, headers = {}, options = {}) {
   const platform = options.platform || 'default'
   const blocked = blockedUntil.get(platform)
   if (blocked && blocked > Date.now()) {
-    throw Object.assign(new Error('API Key 已被红狐禁用（3105），暂停调用 ' + Math.ceil((blocked - Date.now()) / 1000) + ' 秒'), { redfoxCode: 3105, code: 'REDFOX_DISABLED' })
+    throw Object.assign(new Error('检索服务返回 3105（凭证不可用），暂停调用 ' + Math.ceil((blocked - Date.now()) / 1000) + ' 秒'), { redfoxCode: 3105, code: 'REDFOX_DISABLED' })
   }
   const key = cacheKey(pathname, payload)
   return withCache(key, async () => {
@@ -198,7 +198,7 @@ async function requestOnce(pathname, payload, headers) {
   })
   const text = await response.text()
   if (!response.ok) {
-    const error = new Error('红狐接口 HTTP ' + response.status + '：' + text.slice(0, 160))
+    const error = new Error('检索接口 HTTP ' + response.status + '：' + text.slice(0, 160))
     error.status = response.status
     error.redfoxRate = response.status === 429
     throw error
@@ -207,12 +207,12 @@ async function requestOnce(pathname, payload, headers) {
   try {
     json = JSON.parse(text)
   } catch {
-    throw new Error('红狐接口返回的不是 JSON：' + text.slice(0, 120))
+    throw new Error('检索接口返回的不是 JSON：' + text.slice(0, 120))
   }
   const code = json?.code
   const okCode = code === 2000 || code === 200 || code === undefined
   if (!okCode) {
-    const message = json?.msg || json?.message || ('红狐接口返回码 ' + code)
+    const message = json?.msg || json?.message || ('检索接口返回码 ' + code)
     const error = new Error(message)
     error.redfoxCode = code
     error.redfoxRate = /过于频繁|限流/.test(message)
@@ -231,7 +231,7 @@ async function requestOnce(pathname, payload, headers) {
 }
 
 export async function searchMedia({ platform, keyword, startDate, endDate, pageNum = 1, pageSize = 24 }) {
-  if (!redfoxEnabled()) throw Object.assign(new Error('未配置 REDFOX_API_KEY'), { code: 'NO_KEY' })
+  if (!redfoxEnabled()) throw Object.assign(new Error('检索服务未接入'), { code: 'NO_KEY' })
   const tasks = []
   if (platform === 'douyin' || platform === 'all') {
     tasks.push(postJson(DOUYIN_SEARCH, {
@@ -265,7 +265,7 @@ export async function searchMedia({ platform, keyword, startDate, endDate, pageN
   if (!items.length && quota) throw Object.assign(new Error(quota.message), { code: 'REDFOX_QUOTA', quota: quota.quota, rechargeUrl: quota.rechargeUrl })
   if (!items.length && errors.length) {
     if (errors.some((message) => /禁用|disabled/.test(message))) {
-      throw Object.assign(new Error('红狐 API Key 已被禁用（3105），请到红狐后台确认 Key 状态'), { code: 'REDFOX_DISABLED' })
+      throw Object.assign(new Error('检索服务返回 3105（凭证不可用），请到后台确认检索凭证状态'), { code: 'REDFOX_DISABLED' })
     }
     const rateLimited = errors.some((message) => /过于频繁|限流/.test(message))
     throw Object.assign(new Error(errors.join('；')), { code: rateLimited ? 'REDFOX_RATE' : 'REDFOX_ERROR' })
@@ -275,7 +275,7 @@ export async function searchMedia({ platform, keyword, startDate, endDate, pageN
 }
 
 export async function resolveVideoUrl(platform, pageUrl) {
-  if (!redfoxEnabled()) throw Object.assign(new Error('未配置 REDFOX_API_KEY'), { code: 'NO_KEY' })
+  if (!redfoxEnabled()) throw Object.assign(new Error('检索服务未接入'), { code: 'NO_KEY' })
   const endpoint = DOWNLOAD_ENDPOINTS[platform]
   if (!endpoint) throw new Error('暂不支持的平台：' + platform)
   const json = await postJson(endpoint, { url: pageUrl, source: config.redfox.source }, {
@@ -288,6 +288,6 @@ export async function resolveVideoUrl(platform, pageUrl) {
     const url = res?.downloadUrl || res?.url
     if (url && (res?.type === 'video' || /\.mp4/.test(url))) { downloadUrl = downloadUrl || url }
   }
-  if (!downloadUrl) throw new Error('红狐未返回可下载的视频地址（' + (data.msg || json?.msg || '无资源') + '）')
+  if (!downloadUrl) throw new Error('检索服务未返回可下载的视频地址（' + (data.msg || json?.msg || '无资源') + '）')
   return { downloadUrl, title: data.desc || data.title || '', cover: data.cover || data.coverUrl || '', durationSec: Number(data.duration || 0) || null }
 }

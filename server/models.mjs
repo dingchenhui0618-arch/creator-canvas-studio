@@ -24,15 +24,24 @@ export function modelCatalog() {
 
   const seen = new Set()
   const models = []
+  // 界面口径不写上游厂商名：模型一律以 VisionQA 的产品名称展示，id 仍留给请求与配置。
+  const counters = {}
   for (const id of ids) {
     if (seen.has(id)) continue
     seen.add(id)
+    // kind 给界面区分「能读图的」和「只能聊天的」，避免拿纯文本模型去跑抽帧评审
+    const isText = textSet.has(id)
+    const isVision = visionSet.has(id)
+    const kind = isText && !isVision ? 'text' : 'multimodal'
+    // both = 既能读图也能聊；text / vision 各自单独成口径
+    const labelKey = isText ? (isVision ? 'both' : 'text') : 'vision'
+    counters[labelKey] = (counters[labelKey] || 0) + 1
+    const base = labelKey === 'text' ? 'VisionQA 对话模型' : labelKey === 'vision' ? 'VisionQA 视觉模型' : 'VisionQA 通用模型'
     models.push({
       id,
-      label: id,
-      provider: id.includes('/') ? id.split('/')[0] : 'vision',
-      // kind 给界面区分「能读图的」和「只能聊天的」，避免拿纯文本模型去跑抽帧评审
-      kind: textSet.has(id) && !visionSet.has(id) ? 'text' : 'multimodal',
+      label: counters[labelKey] === 1 ? base : base + ' ' + counters[labelKey],
+      provider: labelKey,
+      kind,
       ready: visionEnabled(),
     })
   }
@@ -45,7 +54,7 @@ export function modelCatalog() {
     configured: visionEnabled(),
     source: explicit.length ? 'VISION_MODELS' : config.vision.model ? 'VISION_MODEL' : 'none',
     hint: models.length
-      ? '在服务器 .env 里改 VISION_MODELS / LLM_MODEL 可以增删模型，重启服务后这里自动更新。'
-      : '还没有配置模型：在服务器 .env 里加 VISION_MODELS=模型A,模型B（配合 VISION_BASE_URL / VISION_API_KEY），重启服务后模型会出现在这个下拉框里。',
+      ? '模型清单由服务端维护，服务端更新后这里自动同步，前端不写死任何模型名。'
+      : '模型服务还没有接入：管理员在服务端配置后，可选模型会出现在这个下拉框里。',
   }
 }

@@ -246,7 +246,7 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
             <div>
               <span className="vq-mono">系统状态 / Health</span>
               <h2>健康检查</h2>
-              <p>这里会真连数据库、数据目录、模板库、模型接口和红狐接口，不是「环境变量填了没填」。</p>
+              <p>这里会真连数据库、数据目录、模板库、模型接口和检索接口，不是「环境变量填了没填」。</p>
             </div>
             <div className="vq-account-actions">
               {health ? <MonoTag>{HEALTH_LABEL[health.status] || health.status}</MonoTag> : null}

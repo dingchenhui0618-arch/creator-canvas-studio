@@ -94,14 +94,14 @@ export async function deepHealth({ force = false } = {}) {
           } catch {
             count = 0
           }
-          return config.vision.model + ' · 上游 ' + count + ' 个模型可用'
+          return '上游 ' + count + ' 个模型可用'
         })
-      : { status: 'warn', detail: '未配置 VISION_API_KEY，评审与对话不可用', ms: 0 }),
+      : { status: 'warn', detail: '模型服务未接入，评审与对话不可用', ms: 0 }),
   })
 
   checks.push({
     id: 'redfox',
-    label: '红狐检索接口',
+    label: '检索服务',
     ...(redfoxEnabled()
       ? await timed(async () => {
           const response = await fetch(config.redfox.baseUrl, {
@@ -109,9 +109,10 @@ export async function deepHealth({ force = false } = {}) {
             signal: AbortSignal.timeout(config.limits.probeTimeoutMs),
           })
           // 只要连上了（哪怕是 401/404）就说明 DNS/TLS/网络通路正常，key 是否有效由真实检索回报
-          return config.redfox.baseUrl + ' · 可达（HTTP ' + response.status + '）'
+          // 详情里不带上游域名：设置页是用户可见页面，只报「通不通」
+          return '可达（HTTP ' + response.status + '）'
         })
-      : { status: 'warn', detail: '未配置 REDFOX_API_KEY，雷达走示例数据', ms: 0 }),
+      : { status: 'warn', detail: '检索服务未接入，雷达走示例数据', ms: 0 }),
   })
 
   const failed = checks.filter((item) => item.status === 'fail').length
