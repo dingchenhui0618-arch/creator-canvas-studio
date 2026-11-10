@@ -1,9 +1,12 @@
 // /api/admin/*：只有管理员能用。
 // 目前两个动作是真的：列真实账号（含积分余额）、给某个账号发放/扣减积分。
 // 充值通道没接，所以积分的唯一来源是这里 + 新账号初始额度。
+import fs from 'node:fs/promises'
+import path from 'node:path'
 import { readBody, sendJson } from './_shared.mjs'
 import { currentUser, isAdmin, listUsers, findUserById, updateUserAccess } from '../auth.mjs'
 import { grant, ledgerOf, balanceOf } from '../credits.mjs'
+import { config } from '../config.mjs'
 import { deepHealth } from '../health.mjs'
 import { logEvent } from '../log.mjs'
 
@@ -12,6 +15,67 @@ const USER_ACCESS = /^\/api\/admin\/users\/([\w-]+)$/
 
 function forbid(res) {
   sendJson(res, 403, { error: '只有管理员可以访问管理接口', code: 'NOT_ADMIN' })
+}
+
+// 数据目录占用：后台「系统」页要显示真实数字，而不是写「接口没返回」。
+// 只统计数据目录本身，遍历失败的单条跳过（例如刚被删掉的临时文件），不让整页报错。
+async function storageSummary() {
+  const root = config.dataDir
+  const items = []
+  let totalBytes = 0
+  let totalFiles = 0
+
+  async function sizeOf(target) {
+    let bytes = 0
+    let files = 0
+    const entries = await fs.readdir(target, { withFileTypes: true, recursive: true })
+    for (const entry of entries) {
+      if (!entry.isFile()) continue
+      try {
+        const info = await fs.stat(path.join(entry.parentPath || target, entry.name))
+        bytes += info.size
+        files += 1
+      } catch {
+        // 统计期间被删掉的文件不计入
+      }
+    }
+    return { bytes, files }
+  }
+
+  let top = []
+  try {
+    top = await fs.readdir(root, { withFileTypes: true })
+  } catch {
+    top = []
+  }
+  for (const entry of top) {
+    try {
+      if (entry.isFile()) {
+        const info = await fs.stat(path.join(root, entry.name))
+        items.push({ name: entry.name, bytes: info.size, files: 1 })
+        totalBytes += info.size
+        totalFiles += 1
+      } else if (entry.isDirectory()) {
+        const sum = await sizeOf(path.join(root, entry.name))
+        items.push({ name: entry.name + '/', bytes: sum.bytes, files: sum.files })
+        totalBytes += sum.bytes
+        totalFiles += sum.files
+      }
+    } catch {
+      // 单个条目统计失败不影响其它条目
+    }
+  }
+  items.sort((a, b) => b.bytes - a.bytes)
+
+  let disk = null
+  try {
+    const info = await fs.statfs(root)
+    disk = { totalBytes: Number(info.blocks) * Number(info.bsize), freeBytes: Number(info.bavail) * Number(info.bsize) }
+  } catch {
+    disk = null
+  }
+
+  return { ok: true, dataDir: root, bytes: totalBytes, files: totalFiles, items, disk, checkedAt: new Date().toISOString() }
 }
 
 export function createAdminRouter() {
@@ -98,6 +162,11 @@ export function createAdminRouter() {
         } catch (error) {
           sendJson(res, 400, { error: String(error?.message || error) })
         }
+        return true
+      }
+
+      if (pathname === '/api/admin/storage' && req.method === 'GET') {
+        sendJson(res, 200, await storageSummary())
         return true
       }
 

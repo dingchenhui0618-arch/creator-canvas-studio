@@ -68,7 +68,7 @@ export default function KeysSection() {
         description={
           internal
             ? '内部测试环境：模型标识、上游地址、凭证末四位与环境变量清单全部展开，仅管理员可见。'
-            : '服务端当前接入的模型与检索服务，以及它们现在能不能用。'
+            : '平台当前接入的模型与检索服务，以及它们现在能不能用。'
         }
         actions={<RefreshButton onClick={config.reload} busy={config.loading} />}
       />
@@ -85,7 +85,7 @@ export default function KeysSection() {
                 <p className="admin-sub">
                   {internal
                     ? '文本与视觉分开配置：便宜的快模型能聊天，但它看不了图，抽帧评审必须走多模态模型。「已配置」只说明服务端拿到了凭证，能不能通信要看下面的自检。'
-                    : '文本模型负责对话与文案，视觉模型负责看抽帧画面。「已配置」只说明服务端已经接好，能不能通要看下面的自检。'}
+                    : '文本模型负责对话与文案，视觉模型负责看抽帧画面。「已配置」只说明平台已经接好，能不能通要看下面的自检。'}
                 </p>
               </div>
               <SourceTag kind="api" source="GET /api/config" />
@@ -111,7 +111,7 @@ export default function KeysSection() {
                       <Badge tone={data.llm.enabled ? 'ok' : 'warn'}>{data.llm.enabled ? '已配置' : '未配置'}</Badge>
                     </td>
                     <td className="admin-mono">{showTech ? data.llm.model : 'VisionQA 通用模型'}</td>
-                    <td className="admin-mono">与视觉共用同一把 key</td>
+                    <td className="admin-mono">{internal ? '与视觉共用同一把 key' : '已配置'}</td>
                   </tr>
                   <tr>
                     <td>
@@ -123,9 +123,9 @@ export default function KeysSection() {
                     </td>
                     <td className="admin-mono">
                       {showTech ? data.vision.model : 'VisionQA 视觉模型'}
-                      <span className="admin-cell-sub">{showTech ? data.vision.baseUrl : '地址与模型标识由服务端维护'}</span>
+                      <span className="admin-cell-sub">{showTech ? data.vision.baseUrl : '地址与模型标识由平台维护'}</span>
                     </td>
-                    <td className="admin-mono">{data.vision.apiKeyMasked || '—'}</td>
+                    <td className="admin-mono">{internal ? data.vision.apiKeyMasked || '—' : data.vision.enabled ? '已配置' : '未配置'}</td>
                   </tr>
                   <tr>
                     <td>
@@ -135,8 +135,8 @@ export default function KeysSection() {
                     <td>
                       <Badge tone={data.redfox.enabled ? 'ok' : 'warn'}>{data.redfox.enabled ? '已配置' : '未配置'}</Badge>
                     </td>
-                    <td className="admin-mono">{showTech ? data.redfox.baseUrl : '已配置（地址由服务端维护）'}</td>
-                    <td className="admin-mono">{data.redfox.apiKeyMasked || '—'}</td>
+                    <td className="admin-mono">{showTech ? data.redfox.baseUrl : '已配置（地址由平台维护）'}</td>
+                    <td className="admin-mono">{internal ? data.redfox.apiKeyMasked || '—' : data.redfox.enabled ? '已配置' : '未配置'}</td>
                   </tr>
                   <tr>
                     <td>
@@ -150,7 +150,7 @@ export default function KeysSection() {
                       {internal ? (data.remote.enabled ? data.remote.label : '本机 ffmpeg') : data.remote.enabled ? '远端算力' : '本机执行'}
                     </td>
                     <td className="admin-mono">
-                      {internal ? `上限 ${data.limits.maxVideoMb} MB / ${data.limits.maxFrames} 帧` : '按服务端上限'}
+                      {internal ? `上限 ${data.limits.maxVideoMb} MB / ${data.limits.maxFrames} 帧` : '按平台上限'}
                     </td>
                   </tr>
                 </tbody>
@@ -229,7 +229,7 @@ export default function KeysSection() {
                 <div>
                   <p className="admin-label">接入说明</p>
                   <p className="admin-sub">
-                    模型、检索服务与算力都由服务端统一维护，这里只报状态和连通性；需要调整接入时由平台维护人员处理。
+                    模型、检索服务与算力都由平台统一维护，这里只报状态和连通性；需要调整接入时由平台维护人员处理。
                   </p>
                 </div>
                 <SourceTag kind="api" source="GET /api/config" />

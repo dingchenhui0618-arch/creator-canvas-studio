@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { listAdminUsers, grantCredits, updateAdminUser, type AdminUser } from '../../api/credits'
 import type { SessionKind } from '../../auth/session'
+import { useUiMode } from '../../api/app'
 import { formatDateTime } from './data'
 import { AdminHead, Badge, EmptyState, ErrorBanner, LoadingLine, RefreshButton, SourceTag } from './ui'
 import '../../styles/credits.css'
@@ -18,6 +19,7 @@ function roleLabel(kind: SessionKind): string {
  * 非管理员进来会看到 403 的实话，而不是一张空表。
  */
 export default function UsersSection() {
+  const { internal } = useUiMode()
   const [items, setItems] = useState<AdminUser[]>([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
@@ -94,7 +96,7 @@ export default function UsersSection() {
       <AdminHead
         kicker="ADMIN / USERS"
         title="账号与积分"
-        description="账号存在服务端数据库（data/auth.db，SQLite）；积分是服务端账本，检索/复刻/评审/对话按次扣减，失败原路退回。"
+        description={internal ? '账号存在服务端数据库（data/auth.db，SQLite）；积分是服务端账本，检索/复刻/评审/对话按次扣减，失败原路退回。' : '账号与积分都存在账号体系里；检索 / 复刻 / 评审 / 对话按次扣减，失败原路退回。'}
         actions={
           <>
             <SourceTag kind="api" source="/api/admin/users" />
@@ -109,7 +111,7 @@ export default function UsersSection() {
       <section className="admin-card admin-block">
         <div className="admin-block-head">
           <div>
-            <p className="admin-label">真实账号</p>
+            <p className="admin-label">{internal ? '真实账号' : '账号列表'}</p>
             <p className="admin-sub">
               共 {items.length} 个账号，积分合计 {totalCredits}。数据按账号隔离：模板、智能体、画布、运行记录只有本人（或管理员）能看。
             </p>
@@ -169,7 +171,7 @@ export default function UsersSection() {
             </table>
           </div>
         ) : (
-          <EmptyState title="还没有账号" description="注册开关默认关闭；用 npm run adduser 加第一个账号。" />
+          <EmptyState title="还没有账号" description={internal ? '注册开关默认关闭；用 npm run adduser 加第一个账号。' : '注册入口默认关闭；需要新账号时通过管理员创建。'} />
         )}
       </section>
 

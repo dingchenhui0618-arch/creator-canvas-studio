@@ -1,4 +1,13 @@
 import type { ReactNode } from 'react'
+import { useUiMode } from '../../api/app'
+
+// 生产环境不显示接口路径：错误提示只说哪块数据没取到，路径留给内部环境排障
+function stripApiPrefix(message: string) {
+  return message
+    .split('；')
+    .map((part) => part.replace(/^\s*(?:(?:GET|POST|PATCH|DELETE|PUT)\s+)?\/api\/[^\s：:]*[：:]\s*/, ''))
+    .join('；')
+}
 
 export function AdminHead({
   kicker,
@@ -24,6 +33,8 @@ export function AdminHead({
 }
 
 export function SourceTag({ kind, source }: { kind: 'api' | 'local'; source: string }) {
+  const { internal } = useUiMode()
+  if (!internal) return null
   return (
     <span className={`admin-tag admin-tag--${kind}`} title={source}>
       <span className="admin-tag-dot" aria-hidden="true" />
@@ -33,11 +44,12 @@ export function SourceTag({ kind, source }: { kind: 'api' | 'local'; source: str
 }
 
 export function ErrorBanner({ message, onRetry, title = '数据加载失败' }: { message: string; onRetry?: () => void; title?: string }) {
+  const { internal } = useUiMode()
   return (
     <div className="admin-error" role="alert">
       <div>
         <strong>{title}</strong>
-        <p>{message}</p>
+        <p>{internal ? message : stripApiPrefix(message)}</p>
       </div>
       {onRetry ? (
         <button type="button" className="admin-btn admin-btn--ghost" onClick={onRetry}>
@@ -49,10 +61,11 @@ export function ErrorBanner({ message, onRetry, title = '数据加载失败' }: 
 }
 
 export function LoadingLine({ label }: { label: string }) {
+  const { internal } = useUiMode()
   return (
     <p className="admin-loading" role="status">
       <span className="admin-loading-dot" aria-hidden="true" />
-      正在请求 {label}…
+      {internal ? `正在请求 ${label}…` : '正在加载…'}
     </p>
   )
 }

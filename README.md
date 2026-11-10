@@ -661,3 +661,33 @@ DOMAIN=visionqa.wavisionai.cn bash deploy/production/enable-https.sh            
 ### 二十.3 下一批
 
 后台系统磁盘占用、全局模型偏好、更新检查与下载、找回密码；后台页面（总览 / 账号 / 模型 Key / 模板治理 / 系统）还留着接口路径和「真实接口」标记，下一步按同一口径收敛。上游模型账号余额仍需充值，智能体成功路径与视觉评审在补余额前只能在内部环境用 mock 验证。
+
+## 二十一、2026-11-10 追加九：后台生产口径与数据占用
+
+### 二十一.1 这一批做了什么
+
+| 位置 | 之前 | 现在 |
+| --- | --- | --- |
+| 后台全站 | 「真实接口 / 本地会话」标记、`GET /api/...` 路径和接口错误前缀在生产环境也显示 | `SourceTag` 只在内部环境渲染；加载提示生产写「正在加载…」；错误横幅在生产自动去掉 `GET /api/...：` 前缀，只说哪块数据没取到 |
+| 后台总览 / 账号 / 模型 Key / 模板治理 | 描述里写 `data/auth.db`、`GET /api/templates`、`npm run adduser`、凭证末四位 | 生产改产品语言（账号体系、模板库真实条目、平台统一维护），凭证只显示「已配置」；文件路径、接口、命令、末四位只在 `VQ_UI_MODE=internal` 出现 |
+| 后台系统 | 数据目录只写「接口没有返回磁盘用量」，地址与服务名原样展示 | 新增 `GET /api/admin/storage`：真实统计 data 目录的文件数 / 字节数 / 逐条目占用，并用 `statfs` 给出磁盘余量；生产把回环地址写成「内网地址」、服务名写「VisionQA 工作台」，目录路径与 `deployed = true` 只在内部环境显示 |
+
+新接口：`GET /api/admin/storage`（仅管理员）→ `{dataDir, bytes, files, items[{name,bytes,files}], disk{totalBytes,freeBytes}, checkedAt}`；遍历中单条失败会跳过，不让整页报错。
+
+![生产后台系统：真实占用、磁盘余量与内网地址收敛](docs/screenshot-admin-system-storage-2026-11-10.png)
+
+![内部后台系统：保留数据目录、真实接口标记与 deployed 字段](docs/screenshot-admin-system-internal-2026-11-10.png)
+
+![生产后台总览：去掉接口路径与「真实接口」标记](docs/screenshot-admin-overview-prod-2026-11-10.png)
+
+![生产模型 Key：凭证只写「已配置」，地址与模型标识不露出](docs/screenshot-admin-keys-prod-2026-11-10.png)
+
+### 二十一.2 实测
+
+- 隔离环境（临时 `DATA_DIR` + 临时端口）：管理员 `GET /api/admin/storage` → 200，`files=4`、`bytes=153228`，items 含 `auth.db` / `auth.db-wal` / `agents.json`，disk 返回总量与可用；匿名 401；新建普通账号访问 storage 与 users 均 403 `NOT_ADMIN`。
+- 生产：`/api/admin/storage` → 200，`bytes=352718`、`files=8`，disk 39 GB 总量 / 12 GB 可用；bundle `index-BK7y7DVf.js`，两个服务 active、`/api/health` ok；截图为线上真实渲染。
+- 内部环境：同一接口返回 498 KB / 10 个文件，数据目录 `/var/lib/visionqa-internal`，页面保留「真实接口」标记与 `deployed` 字段，与生产只差 `VQ_UI_MODE`。
+
+### 二十一.3 下一批
+
+全局模型偏好（顶栏切换目前只写 localStorage，没有任何调用方）、更新检查与下载、找回密码 / 管理员重置口令；后台账号页的删除账号仍未做。上游模型账号余额仍需充值，智能体成功路径与视觉评审在补余额前只能在内部环境用 mock 验证。

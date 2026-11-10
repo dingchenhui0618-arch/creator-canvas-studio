@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { request } from '../../api/client'
+import { useUiMode } from '../../api/app'
 import { formatDateTime, formatSeconds, useApi, type TemplateItem, type TemplatesResponse } from './data'
 import { AdminHead, EmptyState, ErrorBanner, LoadingLine, RefreshButton, SourceTag } from './ui'
 
 type EditForm = { title: string; contentType: string; tags: string; sourceUrl: string }
 
 export default function TemplatesSection() {
+  const { internal } = useUiMode()
   const { data, error, loading, reload } = useApi<TemplatesResponse>('/api/templates')
   const [query, setQuery] = useState('')
   const [pending, setPending] = useState<string | null>(null)
@@ -93,7 +95,7 @@ export default function TemplatesSection() {
       <AdminHead
         kicker="ADMIN / TEMPLATES"
         title="模板库管理"
-        description="来自 GET /api/templates 的真实条目；支持关键词过滤、就地编辑标题/类型/标签/原链接，以及逐条删除。"
+        description={internal ? '来自 GET /api/templates 的真实条目；支持关键词过滤、就地编辑标题/类型/标签/原链接，以及逐条删除。' : '模板库的真实条目；支持关键词过滤、就地编辑标题 / 类型 / 标签 / 原链接，以及逐条删除。'}
         actions={<RefreshButton onClick={reload} busy={loading} />}
       />
 
@@ -270,8 +272,14 @@ export default function TemplatesSection() {
         ) : null}
 
         <p className="admin-hint">
-          编辑调用 <code>PATCH /api/templates/:id</code>，只改标题 / 类型 / 标签 / 原链接；删除调用{' '}
-          <code>DELETE /api/templates/:id</code>，需要二次确认。两者成功后都重新请求列表，不做本地假删除。
+          {internal ? (
+            <>
+              编辑调用 <code>PATCH /api/templates/:id</code>，只改标题 / 类型 / 标签 / 原链接；删除调用{' '}
+              <code>DELETE /api/templates/:id</code>，需要二次确认。两者成功后都重新请求列表，不做本地假删除。
+            </>
+          ) : (
+            '编辑只改标题 / 类型 / 标签 / 原链接；删除需要二次确认。保存与删除成功后都会重新拉取列表，不做本地假删除。'
+          )}
         </p>
       </section>
     </>

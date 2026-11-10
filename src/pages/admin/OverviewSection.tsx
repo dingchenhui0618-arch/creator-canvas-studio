@@ -30,7 +30,7 @@ export default function OverviewSection() {
       <AdminHead
         kicker="ADMIN / OVERVIEW"
         title="后台总览"
-        description="用户、模板、运行与依赖的实时汇总。每个数字都标注来源，不混用演示数据与真实接口。"
+        description={internal ? '用户、模板、运行与依赖的实时汇总。每个数字都标注来源，不混用演示数据与真实接口。' : '用户、模板、运行与依赖的实时汇总；没有数据的区块写空状态，不放示例数字。'}
         actions={<RefreshButton onClick={retryAll} busy={busy} />}
       />
 
@@ -43,7 +43,7 @@ export default function OverviewSection() {
             <SourceTag kind="api" source="GET /api/admin/users" />
           </div>
           <p className="admin-value">{users.loading ? '—' : (users.data?.total ?? '—')}</p>
-          <p className="admin-foot">真实账号表（含积分余额），不是示例数字。</p>
+          <p className="admin-foot">{internal ? '真实账号表（含积分余额），不是示例数字。' : '账号列表（含积分余额），不是示例数字。'}</p>
         </article>
 
         <article className="admin-card admin-stat">
@@ -63,7 +63,7 @@ export default function OverviewSection() {
             <SourceTag kind="api" source="GET /api/runs" />
           </div>
           <p className="admin-value">{runs.loading ? '—' : (runs.data?.total ?? '—')}</p>
-          <p className="admin-foot">画布流程实际运行记录总数，按服务端返回计。</p>
+          <p className="admin-foot">{internal ? '画布流程实际运行记录总数，按服务端返回计。' : '画布流程的实际运行记录总数。'}</p>
         </article>
 
         <article className="admin-card admin-stat">
@@ -75,7 +75,7 @@ export default function OverviewSection() {
             {health.loading ? '检查中' : health.data?.vision ? '已配置' : '未配置'}
           </p>
           <p className="admin-foot">
-            {health.data ? (health.data.vision ? '视觉模型已接入' : '视觉模型未接入') : '等待 /api/health 返回。'}
+            {health.data ? (health.data.vision ? '视觉模型已接入' : '视觉模型未接入') : '正在检查。'}
           </p>
         </article>
       </div>
@@ -84,7 +84,7 @@ export default function OverviewSection() {
         <div className="admin-block-head">
           <div>
             <p className="admin-label">依赖明细</p>
-            <p className="admin-sub">GET /api/health 的原始字段，不做推断。</p>
+            <p className="admin-sub">{internal ? 'GET /api/health 的原始字段，不做推断。' : '依赖检查的原始结果，不做推断。'}</p>
           </div>
           <SourceTag kind="api" source="GET /api/health" />
         </div>
@@ -99,7 +99,7 @@ export default function OverviewSection() {
                 <Badge tone={health.data.redfox ? 'ok' : 'warn'}>
                   {health.data.redfox ? '已配置' : '未配置'}
                 </Badge>
-                <span>检索服务由服务端配置，这里只报状态。</span>
+                <span>{internal ? '检索服务由服务端配置，这里只报状态。' : '检索服务由平台统一维护，这里只报状态。'}</span>
               </dd>
             </div>
             <div>
@@ -108,21 +108,21 @@ export default function OverviewSection() {
                 <Badge tone={health.data.vision ? 'ok' : 'warn'}>
                   {health.data.vision ? '已配置' : '未配置'}
                 </Badge>
-                <span>模型标识与地址在「模型 Key」页，需要时再展开技术详情。</span>
+                <span>{internal ? '模型标识与地址在「模型 Key」页，需要时再展开技术详情。' : '模型由平台统一维护；需要时联系维护人员。'}</span>
               </dd>
             </div>
             <div>
               <dt>模板统计</dt>
               <dd>
                 <span className="admin-mono">{health.data.templates} 条</span>
-                <span>health.templates，与模板列表数量一致。</span>
+                <span>{internal ? 'health.templates，与模板列表数量一致。' : '与模板库条目数一致。'}</span>
               </dd>
             </div>
             <div>
               <dt>API 健康</dt>
               <dd>
                 <Badge tone={health.data.ok ? 'ok' : 'fail'}>{health.data.ok ? '正常' : '异常'}</Badge>
-                <span>health.ok = {String(health.data.ok)}</span>
+                <span>{internal ? 'health.ok = ' + String(health.data.ok) : '健康检查结果'}</span>
               </dd>
             </div>
             {internal ? (
@@ -159,9 +159,19 @@ export default function OverviewSection() {
       <section className="admin-note">
         <p>说明</p>
         <ul>
-          <li>用户数来自 <code>/api/admin/users</code> 的真实账号表，模板数与运行数分别来自 <code>/api/templates</code>、<code>/api/runs</code>。</li>
-          <li>依赖状态来自 <code>/api/health</code>；检索服务未接入时雷达会回退示例数据并明确标注。</li>
-          <li>生产环境只展示状态；模型标识、上游地址与环境变量清单只在内部测试环境（<code>VQ_UI_MODE=internal</code>）展示。</li>
+          {internal ? (
+            <>
+              <li>用户数来自 <code>/api/admin/users</code> 的真实账号表，模板数与运行数分别来自 <code>/api/templates</code>、<code>/api/runs</code>。</li>
+              <li>依赖状态来自 <code>/api/health</code>；检索服务未接入时雷达会回退示例数据并明确标注。</li>
+              <li>生产环境只展示状态；模型标识、上游地址与环境变量清单只在内部测试环境（<code>VQ_UI_MODE=internal</code>）展示。</li>
+            </>
+          ) : (
+            <>
+              <li>用户数来自真实账号表，模板数与运行数是模板库、运行记录的实际条目数。</li>
+              <li>依赖状态来自实时检查；检索服务未接入时雷达会回退示例数据并明确标注。</li>
+              <li>模型、检索与算力都由平台统一维护，这里只展示是否可用。</li>
+            </>
+          )}
         </ul>
       </section>
     </>
