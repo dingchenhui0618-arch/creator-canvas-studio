@@ -201,6 +201,8 @@ async function migrateOwnership() {
 
 const server = http.createServer(async (req, res) => {
   const trace = startAccess(req, res, { ip: clientIp(req) })
+  // 管理动作审计要带上同一个请求 id，出问题时能从「操作日志」跳到「排查信息」
+  req.vqTraceId = trace.traceId
   res.setHeader('X-Request-Id', trace.traceId)
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')

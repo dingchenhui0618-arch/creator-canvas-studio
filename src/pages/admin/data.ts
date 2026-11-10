@@ -64,6 +64,29 @@ export type RunsResponse = {
   limit?: number
 }
 
+export type AuditItem = {
+  id: string
+  at: string
+  actorId: string
+  actorEmail: string
+  action: string
+  actionLabel: string
+  targetType: string
+  targetId: string
+  targetLabel: string
+  detail: unknown
+  ip: string
+  traceId: string
+}
+
+export type AuditResponse = {
+  items: AuditItem[]
+  total: number
+  limit: number
+  offset: number
+  actions: { value: string; label: string }[]
+}
+
 export type VersionInfo = {
   version: string
   name: string

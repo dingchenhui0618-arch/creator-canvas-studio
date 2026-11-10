@@ -895,6 +895,134 @@
   font-size: 12px;
 }
 
+/* 审计页签：两个视图共用页头，切换用发丝线标签而不是胶囊按钮 */
+.admin-tabs {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  border-bottom: 1px solid var(--line, #e6e3dd);
+}
+
+.admin-tab {
+  margin-bottom: -1px;
+  padding: 0 0 12px;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  background: none;
+  color: var(--muted, #5c5c5c);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.admin-tab:hover {
+  color: var(--ink, #111111);
+}
+
+.admin-tab.is-active {
+  border-bottom-color: var(--ink, #111111);
+  color: var(--ink, #111111);
+  font-weight: 500;
+}
+
+.admin-tab:focus-visible {
+  outline: 2px solid var(--ink, #111111);
+  outline-offset: 2px;
+}
+
+.admin-audit-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-audit-input {
+  width: 240px;
+  height: 30px;
+  font-size: 12px;
+}
+
+.admin-audit-detail {
+  max-width: 360px;
+  color: var(--muted, #5c5c5c);
+  font-size: 12px;
+}
+
+.admin-audit-source {
+  color: var(--faint, #8a8a8a);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.admin-diag-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-diag-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 24px;
+  margin-top: 24px;
+}
+
+.admin-diag-errors {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line-faint, #f0eee9);
+  list-style: none;
+}
+
+.admin-diag-errors li {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line-faint, #f0eee9);
+}
+
+.admin-diag-error-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--faint, #8a8a8a);
+  font-size: 11px;
+}
+
+.admin-diag-errors p {
+  margin: 4px 0 0;
+  color: var(--muted, #5c5c5c);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 1.6;
+  word-break: break-all;
+}
+
+.admin-diag-errors .admin-cell-sub {
+  display: block;
+  margin-top: 4px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+/* 排障表只有五列，固定 720 会让「耗时」被横滚藏掉；这里允许按容器收窄 */
+.admin-table--diag {
+  min-width: 0;
+}
+
+.admin-table--diag th,
+.admin-table--diag td {
+  padding: 8px;
+}
+
+.admin-diag-path {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @media (max-width: 1120px) {
   .admin-grid--stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -920,5 +1048,23 @@
   .admin-kv > div {
     grid-template-columns: minmax(0, 1fr);
     gap: 4px;
+  }
+
+  .admin-audit-source {
+    display: none;
+  }
+
+  .admin-audit-search {
+    flex: 1;
+    min-width: 200px;
+  }
+
+  .admin-audit-input {
+    width: 100%;
+  }
+
+  .admin-diag-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
   }
 }

@@ -7,9 +7,10 @@ import path from 'node:path'
 import { readBody, sendJson } from './_shared.mjs'
 import { currentUser, isAdmin, listUsers, findUserById, updateUserAccess, setPassword, destroyOtherSessions, deleteUser, countAdmins } from '../auth.mjs'
 import { grant, ledgerOf, balanceOf } from '../credits.mjs'
-import { config } from '../config.mjs'
+import { config, redfoxEnabled, visionEnabled } from '../config.mjs'
 import { deepHealth } from '../health.mjs'
-import { logEvent } from '../log.mjs'
+import { diagnosticsLogs, logEvent } from '../log.mjs'
+import { listAudit, recordAudit } from '../audit.mjs'
 import { removePreference } from '../preferences.mjs'
 
 const USER_CREDITS = /^\/api\/admin\/users\/([\w-]+)\/credits$/
@@ -126,6 +127,15 @@ export function createAdminRouter() {
         }
         const updated = updateUserAccess(target.id, patch)
         logEvent('user-access', { by: user.email, to: target.email, active: updated.is_active, kind: updated.kind })
+        recordAudit({
+          req,
+          actor: user,
+          action: 'user.access',
+          targetType: 'user',
+          targetId: target.id,
+          targetLabel: target.email,
+          detail: { active: Boolean(updated.is_active), kind: updated.kind },
+        })
         sendJson(res, 200, {
           ok: true,
           user: {
@@ -158,6 +168,15 @@ export function createAdminRouter() {
         deleteUser(target.id)
         removePreference(target.id)
         logEvent('user-deleted', { by: user.email, to: target.email, kind: target.kind })
+        recordAudit({
+          req,
+          actor: user,
+          action: 'user.delete',
+          targetType: 'user',
+          targetId: target.id,
+          targetLabel: target.email,
+          detail: { kind: target.kind },
+        })
         sendJson(res, 200, { ok: true, id: target.id, email: target.email })
         return true
       }
@@ -178,6 +197,15 @@ export function createAdminRouter() {
         try {
           const result = grant(target.id, amount, { note: String(body.note || '').slice(0, 120), operator: user.email })
           logEvent('credit-grant', { by: user.email, to: target.email, amount, balance: result.balance })
+          recordAudit({
+            req,
+            actor: user,
+            action: 'credits.grant',
+            targetType: 'user',
+            targetId: target.id,
+            targetLabel: target.email,
+            detail: { amount, note: String(body.note || '').slice(0, 120), balance: result.balance },
+          })
           sendJson(res, 200, {
             ok: true,
             userId: target.id,
@@ -212,10 +240,20 @@ export function createAdminRouter() {
           // 临时口令：固定带大写字母与数字，满足口令策略；只在这一次响应里返回
           password = 'Vq7' + crypto.randomBytes(7).toString('base64url')
         }
+        const passwordMode = body.password ? 'custom' : 'temporary'
         setPassword(target.id, password)
         // 口令被管理员重置后，该账号所有旧会话立即失效
         const signedOut = destroyOtherSessions(target.id)
         logEvent('user-password-reset', { by: user.email, to: target.email, signedOut })
+        recordAudit({
+          req,
+          actor: user,
+          action: 'user.password',
+          targetType: 'user',
+          targetId: target.id,
+          targetLabel: target.email,
+          detail: { mode: passwordMode, signedOut },
+        })
         sendJson(res, 200, {
           ok: true,
           password,
@@ -237,6 +275,82 @@ export function createAdminRouter() {
 
       if (pathname === '/api/admin/credits/me' && req.method === 'GET') {
         sendJson(res, 200, { ok: true, balance: balanceOf(user.id) })
+        return true
+      }
+
+      if (pathname === '/api/admin/audit' && req.method === 'GET') {
+        sendJson(
+          res,
+          200,
+          listAudit({
+            action: url.searchParams.get('action') || '',
+            actorId: url.searchParams.get('actorId') || '',
+            q: url.searchParams.get('q') || '',
+            limit: url.searchParams.get('limit') || 50,
+            offset: url.searchParams.get('offset') || 0,
+          }),
+        )
+        return true
+      }
+
+      // 排障信息只在内部环境存在：生产环境连这个路径都不认，避免任何技术细节被带出去。
+      // 返回内容只有「进程 / 配置是否就绪 / 最近请求与错误」，不含任何密钥明文。
+      if (pathname === '/api/admin/diagnostics' && req.method === 'GET') {
+        if (config.ui.mode !== 'internal') {
+          sendJson(res, 404, { error: '接口不存在', code: 'NOT_FOUND' })
+          return true
+        }
+        let pkg = { name: 'visionqa', version: '' }
+        try {
+          pkg = JSON.parse(await fs.readFile(path.join(process.cwd(), 'package.json'), 'utf8'))
+        } catch {
+          // 读不到 package.json 不影响排障，版本留空
+        }
+        const memory = process.memoryUsage()
+        sendJson(res, 200, {
+          ok: true,
+          mode: config.ui.mode,
+          generatedAt: new Date().toISOString(),
+          package: { name: pkg.name, version: pkg.version },
+          process: {
+            pid: process.pid,
+            node: process.version,
+            platform: process.platform,
+            startedAt: new Date(Date.now() - process.uptime() * 1000).toISOString(),
+            uptimeSec: Math.round(process.uptime()),
+            memoryMb: {
+              rss: Math.round(memory.rss / 1048576),
+              heapUsed: Math.round(memory.heapUsed / 1048576),
+              heapTotal: Math.round(memory.heapTotal / 1048576),
+              external: Math.round(memory.external / 1048576),
+            },
+          },
+          config: {
+            dataDir: config.dataDir,
+            uiMode: config.ui.mode,
+            models: {
+              chat: config.llm.model,
+              chatFallbacks: config.llm.fallbacks,
+              vision: config.vision.model,
+              visionFallbacks: config.vision.fallbacks,
+              visionModels: config.vision.models,
+            },
+            upstream: {
+              visionBaseUrl: config.vision.baseUrl,
+              visionKeyConfigured: visionEnabled(),
+              searchKeyConfigured: redfoxEnabled(),
+              remoteWorker: config.remote.enabled,
+              remoteWorkerLabel: config.remote.label,
+            },
+            auth: { requireAuth: config.auth.requireAuth, registrationEnabled: config.auth.registrationEnabled },
+            limits: { ...config.limits },
+            credits: {
+              prices: { ...config.credits.prices },
+              concurrency: { ...config.credits.concurrency },
+            },
+          },
+          logs: diagnosticsLogs({ access: 120, errors: 30 }),
+        })
         return true
       }
 
