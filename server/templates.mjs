@@ -163,6 +163,25 @@ export async function reuseTemplate(id) {
   return target
 }
 
+// 后台治理与画布「另存为模板」共用：只允许改能决定展示与检索的字段
+export async function updateTemplate(id, patch = {}, user = null) {
+  const list = await loadAll()
+  const index = list.findIndex((item) => item.id === id && canAccess(item, user))
+  if (index < 0) return null
+  const current = list[index]
+  const next = { ...current }
+  if (patch.title !== undefined) next.title = String(patch.title).trim().slice(0, 120) || current.title
+  if (patch.contentType !== undefined) next.contentType = String(patch.contentType).trim().slice(0, 40)
+  if (Array.isArray(patch.tags)) {
+    next.tags = patch.tags.map((tag) => String(tag).trim()).filter(Boolean).slice(0, 12)
+  }
+  if (patch.sourceUrl !== undefined) next.sourceUrl = String(patch.sourceUrl).trim().slice(0, 1000)
+  next.updatedAt = new Date().toISOString()
+  list[index] = next
+  await persist(list)
+  return next
+}
+
 export async function deleteTemplate(id) {
   const list = await loadAll()
   const next = list.filter((item) => item.id !== id)

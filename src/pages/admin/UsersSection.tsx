@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { listAdminUsers, grantCredits, type AdminUser } from '../../api/credits'
+import { listAdminUsers, grantCredits, updateAdminUser, type AdminUser } from '../../api/credits'
 import type { SessionKind } from '../../auth/session'
 import { formatDateTime } from './data'
 import { AdminHead, Badge, EmptyState, ErrorBanner, LoadingLine, RefreshButton, SourceTag } from './ui'
@@ -26,6 +26,8 @@ export default function UsersSection() {
   const [note, setNote] = useState('')
   const [granting, setGranting] = useState(false)
   const [grantMessage, setGrantMessage] = useState('')
+  const [accessBusy, setAccessBusy] = useState('')
+  const [accessMessage, setAccessMessage] = useState('')
 
   const load = useCallback(() => {
     setLoading(true)
@@ -46,6 +48,25 @@ export default function UsersSection() {
 
   const selected = useMemo(() => items.find((item) => item.id === selectedId) || null, [items, selectedId])
   const totalCredits = items.reduce((sum, item) => sum + (item.credits || 0), 0)
+
+  const changeAccess = async (item: AdminUser, patch: { active?: boolean; kind?: 'admin' | 'account' }) => {
+    setAccessBusy(item.id)
+    setAccessMessage('')
+    try {
+      const result = await updateAdminUser(item.id, patch)
+      setAccessMessage(
+        (result.user.kind === 'admin' ? '已将 ' : '已把 ') +
+          item.email +
+          (result.user.kind === 'admin' ? ' 设为管理员' : ' 设为普通账号') +
+          (patch.active === false ? '，并停用登录' : patch.active === true ? '，恢复登录' : ''),
+      )
+      load()
+    } catch (caught) {
+      setAccessMessage(caught instanceof Error ? caught.message : '账号状态修改失败')
+    } finally {
+      setAccessBusy('')
+    }
+  }
 
   const submit = async () => {
     const value = Number(amount)
@@ -83,6 +104,7 @@ export default function UsersSection() {
       />
 
       {error ? <ErrorBanner message={error} onRetry={load} /> : null}
+      {accessMessage ? <p className="admin-hint">{accessMessage}</p> : null}
 
       <section className="admin-card admin-block">
         <div className="admin-block-head">
@@ -107,6 +129,7 @@ export default function UsersSection() {
                   <th className="num-col">积分</th>
                   <th>上次登录</th>
                   <th>状态</th>
+                  <th>操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -119,6 +142,26 @@ export default function UsersSection() {
                     <td className="admin-mono">{formatDateTime(item.lastLoginAt)}</td>
                     <td>
                       <Badge tone={item.active ? 'ok' : 'fail'}>{item.active ? '在用' : '停用'}</Badge>
+                    </td>
+                    <td>
+                      <div className="admin-doc-actions">
+                        <button
+                          type="button"
+                          className="admin-btn admin-btn--ghost"
+                          disabled={accessBusy === item.id}
+                          onClick={() => void changeAccess(item, { active: !item.active })}
+                        >
+                          {item.active ? '停用' : '启用'}
+                        </button>
+                        <button
+                          type="button"
+                          className="admin-btn admin-btn--ghost"
+                          disabled={accessBusy === item.id}
+                          onClick={() => void changeAccess(item, { kind: item.kind === 'admin' ? 'account' : 'admin' })}
+                        >
+                          {item.kind === 'admin' ? '设为普通账号' : '设为管理员'}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

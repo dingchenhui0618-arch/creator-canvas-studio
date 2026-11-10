@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertCircle, Copy, ExternalLink, Film, Heart, Layers, MessageCircle, Play, RefreshCw, ScanEye, Search, Share2, Sparkles, Star, Trash2, X } from 'lucide-react'
-import { coverSrc, deleteTemplate, formatCount, formatDuration, getHealth, getTemplate, listTemplates, reuseTemplate } from '../api/radar'
+import { applyTemplate, coverSrc, deleteTemplate, formatCount, formatDuration, getHealth, getTemplate, listTemplates } from '../api/radar'
 import type { MediaItem, ReplicaTemplate } from '../domain/radar'
 import { requestReview } from '../state/review'
 import { ReplicateModal } from '../components/ReplicateModal'
@@ -34,7 +34,7 @@ const coverFor = (template: ReplicaTemplate) => {
   return url.startsWith('/media/') || url.startsWith('/api/') ? url : coverSrc(url)
 }
 
-export function TemplateLibraryPage({ onToast, onBack }: { onToast: (message: string) => void; onBack: () => void }) {
+export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast: (message: string) => void; onBack: () => void; onOpenCanvas: () => void }) {
   const [items, setItems] = useState<ReplicaTemplate[]>([])
   const [byType, setByType] = useState<Record<string, number>>({})
   const [parsed, setParsed] = useState(0)
@@ -304,8 +304,20 @@ export function TemplateLibraryPage({ onToast, onBack }: { onToast: (message: st
                   }}>
                     <Copy size={14} />复制脚本
                   </button>
-                  <button className="button button--primary" disabled={!isParsed(detail)} onClick={() => { void reuseTemplate(detail.id).then((next) => { setDetail({ ...detail, reuseCount: next.reuseCount }); onToast('已标记复用，脚本结构可以直接套用') }) }}>
-                    <Layers size={14} />复用此模板
+                  <button
+                    className="button button--primary"
+                    disabled={!isParsed(detail)}
+                    onClick={() => {
+                      void applyTemplate(detail.id)
+                        .then((result) => {
+                          setDetail({ ...detail, reuseCount: result.template.reuseCount })
+                          onToast('已生成画布草稿：' + result.flow.name)
+                          onOpenCanvas()
+                        })
+                        .catch((caught) => onToast(caught instanceof Error ? caught.message : '套用模板失败'))
+                    }}
+                  >
+                    <Layers size={14} />套用到画布
                   </button>
                   <button className="button button--danger button--tiny" onClick={() => { void deleteTemplate(detail.id).then(() => { setDetail(null); onToast('模板已删除'); void load() }) }}>
                     <Trash2 size={13} />删除

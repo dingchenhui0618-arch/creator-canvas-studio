@@ -275,7 +275,7 @@ function Workbench({
       case 'radar':
         return <RadarPage onToast={notify} onOpenTemplates={() => go('templates')} />
       case 'templates':
-        return <TemplateLibraryPage onToast={notify} onBack={() => go('radar')} />
+        return <TemplateLibraryPage onToast={notify} onBack={() => go('radar')} onOpenCanvas={() => go('canvas')} />
       case 'overview':
         return <OverviewPage userName={session.user.name} onCreate={() => setShowCreate(true)} onNavigate={go} />
       case 'agents':

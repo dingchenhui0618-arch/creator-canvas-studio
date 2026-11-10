@@ -523,32 +523,40 @@ DOMAIN=visionqa.wavisionai.cn bash deploy/production/enable-https.sh            
 
 同一份构建跑两套环境，差异只来自服务端 `VQ_UI_MODE`：
 
-| 项 | 生产（默认） | 内部测试（`VQ_UI_MODE=internal`） |
+## 十七、2026-11-10 追加五：待接 API 第一批（积分可见性、模板套用、评审历史、账号管理）
+
+### 十七.1 这一批做了什么
+
+| 页面 | 之前 | 现在 |
 | --- | --- | --- |
-| 后台「模型 Key」 | 只报能力、状态、凭证末四位 | 展开模型 ID、上游地址、环境变量清单（凭证仍脱敏） |
-| 后台「总览」 | 只报状态 | 多「运行环境 / 文本模型 / 视觉模型」技术字段 |
-| 顶栏 | 无标识 | 右侧「内部测试」虚线胶囊 |
-| 判断方式 | fail-closed：不写或拼错都按生产 | 显式写 `internal` |
+| 一键复刻 | 弹窗只有「开始复刻」，402 混在普通报错里 | 弹窗显示「本次消耗 10 积分 · 当前余额」；余额不足直接禁用并提示找管理员；完成后显示扣了多少 |
+| 智能体对话 | 每次扣 1 积分，界面上看不到余额 | 输入框上方常驻「余额 / 每次对话」；402 显示差额与发放方式 |
+| 视觉评审 | 每次扣 5 积分，页头只有模型状态 | 页头多一枚「每次 5 积分 · 余额」；结论落库到 `data/reviews.json`，左侧「最近评审」可回看 |
+| 模板库 | 「复用此模板」只是 reuseCount +1 | 改成「套用到画布」：生成一张带输入节点 + 复刻脚本节点的流程，并直接跳转画布 |
+| 后台账号 | 状态只读 | 可停用/启用、设/撤管理员；服务端拦住「把自己降级或停用」 |
+| 后台总览 | 用户数写死「—」 | 取 `GET /api/admin/users` 的 total |
+| 后台模板 | 只有删除 | 服务端已支持 `PATCH /api/templates/:id`（标题/类型/标签/原链接），编辑表单下一批补 |
 
-- 线上多了一个只绑 `127.0.0.1:8800` 的 `visionqa-internal` 服务，数据目录独立，靠 SSH 隧道访问；发布时两个服务一起重启。细节与隧道命令见 [docs/environments.md](docs/environments.md)。
-- `/api/config` 与 `/api/config/probe` 以前只要求登录，任何注册用户都能看到模型标识、上游地址与环境变量清单；现在收紧到管理员（403）。
-- 检索额度响应里不再带外部充值链接，生产界面也不会出现厂商域名。
+新增接口：`POST /api/templates/:id/apply`、`GET /api/reviews`、`GET /api/reviews/:id`、`PATCH /api/admin/users/:id`。
 
-![生产后台：只报产品口径](docs/screenshot-admin-keys-prod-2026-11-10.png)
+![智能体：输入框上方常驻余额与单价](docs/screenshot-agents-credits-2026-11-10.png)
 
-![内部测试后台：同一页展开技术详情，顶栏有「内部测试」](docs/screenshot-admin-keys-internal-2026-11-10.png)
+![视觉评审：页头显示每次积分与余额](docs/screenshot-review-credits-2026-11-10.png)
 
-![生产后台总览：用户数来自 /api/admin/users](docs/screenshot-admin-overview-prod-2026-11-10.png)
+![内部测试：评审历史可回看（记录为 QA 测试数据）](docs/screenshot-review-history-internal-2026-11-10.png)
 
-![内部测试总览：多出运行环境与模型字段](docs/screenshot-admin-overview-internal-2026-11-10.png)
+![后台账号：停用/启用与角色调整](docs/screenshot-admin-users-access-2026-11-10.png)
 
-### 十六.2 实测
+### 十七.2 实测
 
-- 线上 `/api/app` → `{"mode":"prod","internal":false}`；内部服务 `127.0.0.1:8800/api/app` → `{"mode":"internal","internal":true}`，`systemctl is-active visionqa-internal` = active。
-- 生产后台截图里没有模型 ID、上游地址、环境变量表；内部截图里三项齐全，凭证仍是 `****9709 · 35 位`。
-- 后台总览「用户数」从写死的「—」改为 `GET /api/admin/users` 的 total，生产实测 1。
-- 生产 bundle `index-C48p7hyH.js`，`/api/health` ok；内部环境与生产共用同一份 `dist`。
+- 内部环境（与生产同代码、独立数据库）：`POST /api/templates/from-radar` → 201；`POST /api/templates/:id/apply` → 201，返回流程含 2 个节点（input / llm）与 1 条连线；`GET /api/reviews` → 200；对自己的管理员账号 PATCH 停用 → 400 `SELF_LOCKOUT`，守卫生效。
+- 生产 bundle `index-B7leFJhm.js`，`/api/health` ok，两个服务均 active。
+- 评审历史页用一条内部测试记录验证了列表、回看与像素锚点渲染；这条记录标记为「测试」，不属于真实业务数据。
 
-### 十六.3 接下来
+### 十七.3 当前阻塞（不是代码问题）
 
-按 [docs/launch-readiness.md](docs/launch-readiness.md)「三点十」的待接 API 清单继续：先做用户可感知的积分余额与 402 提示、模板应用/另存为模板、评审历史、运行记录分页筛选，再做后台用户管理与智能体历史。充值保持占位。
+上游模型账号返回 `Insufficient Balance`：`deepseek-flash` 的 `/models` 正常，但真实 `chat/completions` 与视觉评审都 402。也就是说**智能体对话和视觉评审在补余额前不可用**（错误会如实显示，扣掉的积分会退回）；检索服务仍正常。需要你给上游账号充值，或换一把有余额的 key。
+
+### 十七.4 下一批
+
+运行记录分页/筛选、画布流程按 ID 打开、画布「另存为模板」落模板库、流程执行计积分、智能体历史接口、后台模板编辑表单。

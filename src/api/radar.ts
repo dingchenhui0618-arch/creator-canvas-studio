@@ -22,7 +22,7 @@ export function searchMedia(params: { platform: string; q: string; start?: strin
 }
 
 export const startReplicate = (item: MediaItem, url: string) =>
-  request<{ jobId: string }>('/api/replicate', { method: 'POST', body: JSON.stringify({ item, url }) })
+  request<{ jobId: string; credits?: { cost: number; balance: number | null } }>('/api/replicate', { method: 'POST', body: JSON.stringify({ item, url }) })
 
 export const getJob = (id: string) => request<ReplicateJob>('/api/jobs/' + id)
 
@@ -41,6 +41,13 @@ export const saveTemplate = (item: MediaItem) =>
   )
 
 export const getTemplate = (id: string) => request<ReplicaTemplate>('/api/templates/' + id)
+
+// 套用模板会真的生成一张画布草稿（输入节点 + 复刻脚本节点），而不是只加复用次数
+export const applyTemplate = (id: string) =>
+  request<{ ok: boolean; flow: { id: string; name: string }; template: ReplicaTemplate }>('/api/templates/' + id + '/apply', {
+    method: 'POST',
+    body: JSON.stringify({}),
+  })
 export const reuseTemplate = (id: string) => request<ReplicaTemplate>('/api/templates/' + id + '/reuse', { method: 'POST' })
 export const deleteTemplate = (id: string) => request<{ ok: boolean }>('/api/templates/' + id, { method: 'DELETE' })
 

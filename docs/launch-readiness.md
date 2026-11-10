@@ -288,27 +288,27 @@ curl -s https://visionqa.wavisionai.cn/api/auth/config   # 只有 registrationEn
 | 工作台总览 | 点画布卡片只跳到画布页，不会打开那一块 | `#/canvas/<canvasId>` + GET /api/bdc/canvases/:id | 半成品 |
 | 工作台总览 | 「新建 → 资产画布」只跳转不创建 | 复用 POST /api/bdc/canvases 或 /api/flows | 占位 |
 | 爆款雷达 | 排序只重排当前这一页 | GET /api/search?...&sort=likes（服务端排序） | 半成品 |
-| 一键复刻 | 弹窗不显示单价/余额，402 当普通报错 | 复用 GET /api/credits，补 402 文案 | 半成品 |
-| 模板库 | 「复用此模板」只让 reuseCount+1 | POST /api/templates/:id/apply {flowId} | 半成品 |
+| 一键复刻 | ✅ 已补（2026-11-10）：弹窗显示单价/余额，余额不足禁用开始，402 给出「找管理员发放」 | GET /api/credits | 已完成 |
+| 模板库 | ✅ 已补（2026-11-10）：「套用到画布」生成带输入/复刻节点的流程并跳转画布 | POST /api/templates/:id/apply | 已完成 |
 | 模板库 | 「送去评审」只切页不发起 | POST /api/review 或改成「去评审」 | 半成品 |
 | 智能体列表 | 「历史」只存 localStorage，最多 12 条 | GET/POST /api/agents/:id/history | 占位 |
 | 智能体编辑 | 右侧预览的最近运行/使用次数永远 0 | 直接用 GET /api/agents 的 runCount/lastRunAt | 半成品 |
 | 智能体编辑 | 三个工具标 ready 但对话时不执行 | POST /api/agents/:id/chat 内真正调度，或改回 planned | 占位 |
-| 智能体对话 | 每次扣 1 积分，界面不显示余额，402 当失败 | 复用 GET /api/credits + 402 提示 | 半成品 |
+| 智能体对话 | ✅ 已补（2026-11-10）：输入框上方常驻余额/单价，402 显示差额并提示管理员发放 | GET /api/credits | 已完成 |
 | 画布 | 「另存为模板」实际是复制流程，模板库找不到 | POST /api/templates {from: flow, flowId} | 半成品 |
 | 画布 | 「运行流程」不扣积分 | POST /api/flows/:id/run 内接 charge/beginPaid | 半成品 |
 | 画布 | 进画布固定加载第一条流程，地址里没有 ID | `#/canvas/<flowId>` + GET /api/flows/:id | 半成品 |
 | 画布 | 默认视图是 VisionQA Canvas 的 iframe，本机地址只能给提示卡 | 独立子域 + BDC_WEB_URL（外部部署） | 外部依赖 |
-| 视觉评审 | 结论只在内存，刷新即失，无历史 | GET /api/reviews、GET /api/reviews/:id（落库） | 占位 |
-| 视觉评审 | 每次扣 5 积分，界面无余额，402 当通用错误 | 复用 GET /api/credits | 半成品 |
+| 视觉评审 | ✅ 已补（2026-11-10）：评审落库到 data/reviews.json，页面「最近评审」可回看详情 | GET /api/reviews、GET /api/reviews/:id | 已完成 |
+| 视觉评审 | ✅ 已补（2026-11-10）：页头显示每次积分与余额，402 走统一错误提示 | GET /api/credits | 已完成 |
 | 视觉评审 | 「插件服务」状态取自本机 127.0.0.1:6300 | 外部插件服务，前端解决不了 | 外部依赖 |
 | 运行记录 | 只拉默认 20 条，无翻页/筛选，其他动作为不写入 | GET /api/runs?kind=&flowId=&limit= | 半成品 |
 | 设置 | 积分流水只显示最近 12 条，没有更多 | GET /api/credits?limit= + 加载更多 | 半成品 |
 | 设置 | 「工作区」单值展示，多工作区切换没有后端 | GET/POST /api/workspaces | 占位 |
-| 后台总览 | 「用户数」永远是 — | 直接用 GET /api/admin/users 的 total | 半成品 |
-| 后台账号 | 状态列只读，不能启用/停用、改角色、删号 | PATCH /api/admin/users/:id {active, role} | 半成品 |
+| 后台总览 | ✅ 已补（2026-11-10）：用户数取 GET /api/admin/users 的 total | GET /api/admin/users | 已完成 |
+| 后台账号 | ✅ 已补（2026-11-10）：可停用/启用、设/撤管理员；不允许把自己降级或停用 | PATCH /api/admin/users/:id {active, kind} | 已完成（删除账号未做） |
 | 后台模型 Key | 只能看末四位，改要登服务器改 .env | PUT /api/admin/config（密钥托管有风险，不建议） | 半成品 |
-| 后台模板治理 | 只有删除，不能改标题/类型、重新解析、转移归属 | PATCH /api/templates/:id | 半成品 |
+| 后台模板治理 | 接口已补（PATCH /api/templates/:id，2026-11-10）；管理页还没做编辑表单 | PATCH /api/templates/:id | 半成品（余 UI） |
 | 后台运行审计 | 只有列表，不能按账号/流程筛选，不能导出 | GET /api/admin/runs?userId=&flowId= | 半成品 |
 | 后台系统 | 数据目录不显示占用 | 复用 GET /api/system/health 的 disk 项 | 半成品 |
 | 全局 | 顶栏「切换模型」只写 localStorage，全站没有调用方 | 各 POST 增加 {model}，或 PUT /api/preferences | 占位 |
@@ -316,5 +316,9 @@ curl -s https://visionqa.wavisionai.cn/api/auth/config   # 只有 registrationEn
 | 登录页 | 「忘记密码？」只弹「还没接入」，还提示用访客身份 | POST /api/auth/forgot、POST /api/auth/reset | 占位 |
 | 充值 | 未开通占位（按你的要求不动） | 等金额/档位/支付方式 | 冻结 |
 
-静态统计：完全占位 8 条、半成品 16 条、外部依赖 2 条、充值冻结 1 条。优先级建议：先收拾「假开关」（顶栏模型切换、忘记密码），再补「界面承诺 > 后端能力」（模板复用、另存为模板），最后统一积分可见性（复刻/评审/对话三处已扣分但界面零提示）。
+静态统计（2026-11-10 第一批补齐后）：已完成 7 条、余半成品 12 条、占位 7 条、外部依赖 2 条、冻结 1 条。
+
+第一批已落地（提交见 README 十七）：复刻/评审/对话三处积分可见与 402 提示、模板套用到画布、评审历史落库与回看、后台用户数、账号停用与角色调整、模板 PATCH 接口。
+
+**当前阻塞（非代码）**：上游模型账号返回 `Insufficient Balance`（deepseek-flash 文本对话与视觉评审都会 402），智能体与评审在补余额前不可用；检索服务仍正常。
 

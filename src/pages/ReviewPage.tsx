@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Crosshair, Loader2, Play, RefreshCw, ScanEye, TriangleAlert } from 'lucide-react'
-import { getReviewStatus, runReview, type ReviewResult, type ReviewStatus } from '../api/review'
+import { getReview, getReviewStatus, listReviews, runReview, type ReviewResult, type ReviewStatus, type ReviewSummary } from '../api/review'
+import { getCredits, type CreditsResponse } from '../api/credits'
 import { listTemplates, coverSrc } from '../api/radar'
 import type { ReplicaTemplate } from '../domain/radar'
 import { consumeReviewTarget, onReviewRequest, type ReviewTarget } from '../state/review'
@@ -21,6 +22,9 @@ export default function ReviewPage() {
   const [elapsed, setElapsed] = useState(0)
   const [error, setError] = useState('')
   const [active, setActive] = useState<string | null>(null)
+  const [credits, setCredits] = useState<CreditsResponse | null>(null)
+  const [reviews, setReviews] = useState<ReviewSummary[]>([])
+  const [historyError, setHistoryError] = useState('')
   const [manualUrl, setManualUrl] = useState('')
   const timerRef = useRef<number | null>(null)
   const startedRef = useRef(0)
@@ -34,6 +38,10 @@ export default function ReviewPage() {
 
   useEffect(() => {
     let alive = true
+    getCredits(1).then((next) => { if (alive) setCredits(next) }).catch(() => { if (alive) setCredits(null) })
+    listReviews(6)
+      .then((data) => { if (alive) setReviews(data.items) })
+      .catch((caught) => { if (alive) setHistoryError(caught instanceof Error ? caught.message : '评审历史读取失败') })
     Promise.all([getReviewStatus(), listTemplates({})])
       .then(([health, list]) => {
         if (!alive) return
@@ -79,15 +87,37 @@ export default function ReviewPage() {
     setError('')
     setResult(null)
     try {
-      const next = await runReview({ media: picked.media, imageUrl: picked.imageUrl, intent: picked.label })
+      const next = await runReview({ media: picked.media, imageUrl: picked.imageUrl, intent: picked.label, label: picked.label })
       setResult(next)
       setActive(next.observations[0]?.id ?? null)
+      // 评审已落库：刷新历史与余额，不靠本地缓存假装有记录
+      void listReviews(6).then((data) => setReviews(data.items)).catch(() => undefined)
     } catch (reason) {
       setError(String((reason as Error)?.message || reason))
     } finally {
       setRunning(false)
+      getCredits(1).then(setCredits).catch(() => undefined)
     }
   }
+
+  const openHistory = useCallback(async (id: string) => {
+    try {
+      const record = await getReview(id)
+      const media = record.source.media || ''
+      const imageUrl = record.source.imageUrl || ''
+      setPicked({
+        media: media || undefined,
+        imageUrl: imageUrl || undefined,
+        label: record.source.label || record.intent || '历史评审',
+        preview: imageUrl || (media ? '/media/' + media.replace(/^media\//, '') : ''),
+      })
+      setResult(record.result)
+      setActive(record.result.observations?.[0]?.id ?? null)
+      setError('')
+    } catch (caught) {
+      setHistoryError(caught instanceof Error ? caught.message : '读取评审记录失败')
+    }
+  }, [])
 
   const anchors = useMemo(() => (result?.observations || []).filter((item) => item.evidence && (item.evidence.w > 0 || item.evidence.h > 0)), [result])
 
@@ -103,6 +133,11 @@ export default function ReviewPage() {
               <ScanEye size={13} /> 插件服务 {status?.service ? '已连接' : '未启动'}
             </span>
             <span className={`vq-chip ${status?.model ? 'is-pass' : 'is-fail'}`}>评审模型 {status?.model ? '可用' : '未配置'}</span>
+            {credits ? (
+              <span className="vq-chip" title="评审按次扣积分，失败原路退回">
+                每次 {credits.prices.review} {credits.unit} · 余额 {credits.balance ?? '—'}
+              </span>
+            ) : null}
           </div>
         }
       />
@@ -152,6 +187,33 @@ export default function ReviewPage() {
               </button>
             </div>
           </div>
+
+          <div className="review-history">
+            <div className="review-picker-head">
+              <span className="vq-mono">最近评审</span>
+              <span className="vq-mono">{reviews.length}</span>
+            </div>
+            {historyError ? <p className="review-empty">{historyError}</p> : null}
+            {reviews.length ? (
+              <ul>
+                {reviews.map((item) => (
+                  <li key={item.id}>
+                    <button type="button" className="review-history-item" onClick={() => void openHistory(item.id)}>
+                      <span className={item.verdict ? 'vq-chip is-verdict is-' + item.verdict : 'vq-chip'}>
+                        {VERDICT_LABEL[item.verdict] || '未记录'}
+                      </span>
+                      <span className="review-history-title">{item.source.label || item.intent || '未命名评审'}</span>
+                      <span className="vq-mono">
+                        {new Date(item.createdAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="review-empty">还没有评审记录；评审成功一次就会出现在这里。</p>
+            )}
+          </div>
         </aside>
 
         <section className="review-stage">
@@ -176,10 +238,12 @@ export default function ReviewPage() {
               </div>
               <div className="review-canvas-meta">
                 <span className="vq-mono">{picked.label}</span>
-                <button type="button" className="button button--primary button--tiny" disabled={running || !status?.model} onClick={run}>
-                  {running ? <Loader2 size={13} className="spin" /> : <Play size={13} />}
-                  {running ? '评审中 ' + elapsed + 's' : result ? '重新评审' : '开始评审'}
-                </button>
+                <div className="review-canvas-actions">
+                  <button type="button" className="button button--primary button--tiny" disabled={running || !status?.model} onClick={run}>
+                    {running ? <Loader2 size={13} className="spin" /> : <Play size={13} />}
+                    {running ? '评审中 ' + elapsed + 's' : result ? '重新评审' : '开始评审'}
+                  </button>
+                </div>
               </div>
             </div>
           ) : (

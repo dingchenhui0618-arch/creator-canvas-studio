@@ -10,12 +10,14 @@ import {
   getTemplate,
   reuseTemplate,
   deleteTemplate,
+  updateTemplate,
   templateStats,
   saveTemplateFromItem,
   adoptUnowned as adoptUnownedTemplates,
 } from './templates.mjs'
 import { adoptUnowned as adoptUnownedAgents } from './agents.mjs'
-import { adoptUnownedFlows } from './flows.mjs'
+import { adoptUnownedFlows, createFlow } from './flows.mjs'
+import { adoptUnowned as adoptUnownedReviews } from './reviews.mjs'
 import { createBillingRouter } from './routes/billing.mjs'
 import { createAgentsRouter } from './routes/agents.mjs'
 import { createFlowsRouter } from './routes/flows.mjs'
@@ -183,8 +185,9 @@ async function migrateOwnership() {
     const templates = await adoptUnownedTemplates(admin.id)
     const agents = await adoptUnownedAgents(admin.id)
     const flows = await adoptUnownedFlows(admin.id)
-    if (templates || agents || flows) {
-      logEvent('migrate-ownership', { to: admin.email, templates, agents, flows })
+    const reviews = await adoptUnownedReviews(admin.id)
+    if (templates || agents || flows || reviews) {
+      logEvent('migrate-ownership', { to: admin.email, templates, agents, flows, reviews })
     }
     const welcomed = ensureWelcomeCredits()
     if (welcomed) logEvent('welcome-credits', { accounts: welcomed, amount: config.credits.welcome })
@@ -469,6 +472,52 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, job)
     }
 
+    // 模板库「复用此模板」：真的生成一张画布草稿（输入节点 + 复刻脚本节点），
+    // 不再是只把 reuseCount +1 的假动作。生成后前端直接跳到画布。
+    const applyMatch = pathname.match(/^\/api\/templates\/([\w-]+)\/apply$/)
+    if (applyMatch && req.method === 'POST') {
+      const template = await getTemplate(applyMatch[1], user)
+      if (!template) return sendJson(res, 404, { error: '模板不存在' })
+      const body = await readBody(req)
+      const rules = (template.analysis?.reusableRules || []).join('；')
+      const structureText = (template.structure || [])
+        .map((item) => (typeof item === 'string' ? item : item?.title || ''))
+        .filter(Boolean)
+        .join(' → ')
+      const prompt =
+        '按模板结构复写一条同类型脚本：' +
+        (structureText || template.contentType || '结构未标注') +
+        '。' +
+        (rules ? '可复用规则：' + rules + '。' : '') +
+        '开头钩子参考：' +
+        (template.hook || '未标注') +
+        '。输出可以直接进入画布继续改。'
+      const flow = await createFlow(
+        {
+          name: String(body.name || template.title || '模板复刻').slice(0, 60),
+          description: ('来自模板库 · ' + (template.contentType || '未分类') + (template.sourceUrl ? ' · ' + template.sourceUrl : '')).slice(0, 240),
+          nodes: [
+            {
+              id: 'n_input',
+              type: 'input',
+              position: { x: 80, y: 140 },
+              data: { kind: 'input', title: '原始素材', config: { text: template.hook || template.title || '' } },
+            },
+            {
+              id: 'n_llm',
+              type: 'llm',
+              position: { x: 420, y: 140 },
+              data: { kind: 'llm', title: '复刻脚本', config: { systemPrompt: prompt } },
+            },
+          ],
+          edges: [{ id: 'e_input_llm', source: 'n_input', target: 'n_llm' }],
+        },
+        user,
+      )
+      const updated = await reuseTemplate(template.id)
+      return sendJson(res, 201, { ok: true, flow, template: updated })
+    }
+
     // 爆款雷达 → 模板库：只落「链接 + 互动数据」，不下载视频、不抽帧（解析靠一键复刻）
     if (pathname === '/api/templates/from-radar' && req.method === 'POST') {
       const body = await readBody(req)
@@ -493,7 +542,16 @@ const server = http.createServer(async (req, res) => {
     if (tplMatch) {
       const id = tplMatch[1]
       if (tplMatch[2]) {
+        if (!(await getTemplate(id, user))) return sendJson(res, 404, { error: '模板不存在' })
         const updated = await reuseTemplate(id)
+        if (!updated) return sendJson(res, 404, { error: '模板不存在' })
+        return sendJson(res, 200, updated)
+      }
+      if (req.method === 'PATCH') {
+        // 后台模板治理：改标题、内容类型、标签与原链接；权限在管理后台，接口这里再校验一次
+        if (!isAdmin(user)) return sendJson(res, 403, { error: '只有管理员可以改模板', code: 'NOT_ADMIN' })
+        const body = await readBody(req)
+        const updated = await updateTemplate(id, body, user)
         if (!updated) return sendJson(res, 404, { error: '模板不存在' })
         return sendJson(res, 200, updated)
       }

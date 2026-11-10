@@ -27,6 +27,7 @@ import {
   peekPendingSelectAgent,
 } from '../api/agents'
 import type { AgentRecord, AgentsList, OutputType } from '../api/agents'
+import { getCredits, type CreditsResponse } from '../api/credits'
 import PageHead from '../components/PageHead'
 import { useModelOptions } from '../components/ModelSwitch'
 import '../styles/agents.css'
@@ -366,6 +367,8 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
   const [copiedId, setCopiedId] = useState('')
   const [armedDelete, setArmedDelete] = useState('')
   const [actionError, setActionError] = useState('')
+  // 对话按次扣积分：输入框上方常驻「余额 / 单价」，402 时不再是一句干巴巴的失败
+  const [credits, setCredits] = useState<CreditsResponse | null>(null)
 
   const draftRef = useRef<HTMLTextAreaElement>(null)
   const stageRef = useRef<HTMLElement>(null)
@@ -373,6 +376,14 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
 
   const agents = useMemo(() => data?.items ?? [], [data])
   const selectedAgent = useMemo(() => agents.find((item) => item.id === selectedId) ?? null, [agents, selectedId])
+
+  useEffect(() => {
+    let alive = true
+    getCredits(1)
+      .then((next) => { if (alive) setCredits(next) })
+      .catch(() => { if (alive) setCredits(null) })
+    return () => { alive = false }
+  }, [])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -524,15 +535,25 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
             : current,
         )
       } catch (caught) {
-        const error = caught as Error & { suggestion?: string; code?: string; upstreamStatus?: number }
+        const error = caught as Error & {
+          suggestion?: string
+          code?: string
+          upstreamStatus?: number
+          body?: { code?: string; balance?: number; cost?: number }
+        }
+        const insufficient = error.body?.code === 'CREDIT_INSUFFICIENT'
         setFailure({
           message: error.message || '运行失败',
-          suggestion: error.suggestion || '',
+          suggestion: insufficient
+            ? '积分不足：每次对话消耗 ' + (error.body?.cost ?? '—') + ' 积分，当前余额 ' + (error.body?.balance ?? '—') + ' 积分。充值通道未开通，请联系管理员发放。'
+            : error.suggestion || '',
           detail: [error.code, error.upstreamStatus ? 'HTTP ' + error.upstreamStatus : ''].filter(Boolean).join(' · '),
           prompt: content,
         })
+        if (insufficient) getCredits(1).then(setCredits).catch(() => undefined)
       } finally {
         setPending(null)
+        getCredits(1).then(setCredits).catch(() => undefined)
       }
     },
     [conversationId, draft, messages, model, outputType, pending, selectedAgent],
@@ -736,6 +757,12 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
           )}
 
           <div className={'agx-composer' + (selectedAgent ? '' : ' is-disabled')}>
+            {credits ? (
+              <div className="agx-credit-line">
+                余额 <strong>{credits.balance ?? '—'}</strong> {credits.unit} · 每次对话 <strong>{credits.prices.chat}</strong> {credits.unit}
+                {credits.balance !== null && credits.balance < credits.prices.chat ? ' · 余额不足，请管理员发放' : ''}
+              </div>
+            ) : null}
             <textarea
               ref={draftRef}
               className="agx-textarea"

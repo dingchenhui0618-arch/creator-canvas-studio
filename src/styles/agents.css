@@ -390,6 +390,17 @@
 .agx-composer.is-disabled {
   background: var(--surface);
 }
+.agx-credit-line {
+  padding: 0 0 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--ink-faint);
+}
+.agx-credit-line strong {
+  color: var(--ink-soft);
+  font-weight: 500;
+}
 .agx-textarea {
   display: block;
   width: 100%;

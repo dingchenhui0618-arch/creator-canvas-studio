@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { AlertCircle, ArrowRight, Check, ExternalLink, Film, Loader2, Sparkles, X } from 'lucide-react'
 import { getJob, getTemplate, formatDuration, startReplicate } from '../api/radar'
+import { getCredits, type CreditsResponse } from '../api/credits'
 import type { MediaItem, ReplicaTemplate, ReplicateJob } from '../domain/radar'
 
 const STEPS = [
@@ -32,9 +33,19 @@ export function ReplicateModal({ item, hasKey, visionReady, onClose, onDone, onO
   const [job, setJob] = useState<ReplicateJob | null>(null)
   const [template, setTemplate] = useState<ReplicaTemplate | null>(null)
   const [error, setError] = useState('')
+  const [credits, setCredits] = useState<CreditsResponse | null>(null)
+  const [spent, setSpent] = useState<{ cost: number; balance: number | null } | null>(null)
   const timer = useRef<number | undefined>(undefined)
 
-  useEffect(() => () => { window.clearInterval(timer.current) }, [])
+  // 复刻按次扣积分：开始前把单价和余额说清楚，而不是等 402 才报错
+  useEffect(() => {
+    getCredits(1).then(setCredits).catch(() => setCredits(null))
+    return () => { window.clearInterval(timer.current) }
+  }, [])
+
+  const price = credits?.prices.replicate ?? null
+  const balance = credits?.balance ?? null
+  const insufficient = balance !== null && price !== null && balance < price
 
   const poll = (jobId: string) => {
     window.clearInterval(timer.current)
@@ -69,8 +80,10 @@ export function ReplicateModal({ item, hasKey, visionReady, onClose, onDone, onO
     setJob(null)
     setTemplate(null)
     try {
-      const { jobId } = await startReplicate(item, url.trim())
-      poll(jobId)
+      const result = await startReplicate(item, url.trim())
+      setSpent(result.credits ?? null)
+      getCredits(1).then(setCredits).catch(() => undefined)
+      poll(result.jobId)
     } catch (caught) {
       setPhase('error')
       setError(caught instanceof Error ? caught.message : String(caught))
@@ -113,10 +126,16 @@ export function ReplicateModal({ item, hasKey, visionReady, onClose, onDone, onO
             <div className="replicate-checks">
               <span className={hasKey ? 'is-ok' : 'is-warn'}>{hasKey ? '解析服务已配置；解析失败时用直链兜底' : '解析服务未接入：只能用直链视频'}</span>
               <span className={visionReady ? 'is-ok' : 'is-warn'}>{visionReady ? '视觉模型就绪，逐帧分析可运行' : '视觉模型未就绪，需要在服务端配置凭证'}</span>
+              {price !== null ? (
+                <span className={insufficient ? 'is-warn' : 'is-ok'}>
+                  本次消耗 {price} 积分 · 当前余额 {balance ?? '—'}
+                  {insufficient ? '（还差 ' + (price - (balance ?? 0)) + '，先让管理员发放）' : ''}
+                </span>
+              ) : null}
             </div>
             <div className="replicate-foot">
               <button className="button button--ghost" onClick={onClose}>取消</button>
-              <button className="button button--primary" disabled={!canRun} onClick={() => void begin()}>
+              <button className="button button--primary" disabled={!canRun || insufficient} onClick={() => void begin()}>
                 <Sparkles size={15} />开始复刻
               </button>
             </div>
@@ -158,6 +177,7 @@ export function ReplicateModal({ item, hasKey, visionReady, onClose, onDone, onO
               <div>
                 <strong>{template?.title || '已存入模板库'}</strong>
                 <span>{template ? template.contentType + ' · ' + template.structure.length + ' 个段落 · ' + template.storyboard.length + ' 个分镜 · ' + formatDuration(template.durationSec) : '正在刷新模板库'}</span>
+                {spent ? <span className="replicate-credit">本次消耗 {spent.cost} 积分 · 余额 {spent.balance ?? '—'}</span> : null}
               </div>
             </div>
             {template && (
@@ -182,6 +202,9 @@ export function ReplicateModal({ item, hasKey, visionReady, onClose, onDone, onO
         {phase === 'error' && (
           <div className="replicate-body">
             <div className="replicate-error"><AlertCircle size={15} /><span>{error}</span></div>
+            {/积分不足/.test(error) ? (
+              <p className="replicate-note">积分可以在「设置 → 积分」查看；充值通道还没开通，需要管理员在后台发放。</p>
+            ) : null}
             {!hasKey && (
               <p className="replicate-note">解析服务还没接入：平台链接无法解析。可以先粘贴一条 mp4 直链验证拆帧与模板流程，或先让管理员接入解析服务。</p>
             )}

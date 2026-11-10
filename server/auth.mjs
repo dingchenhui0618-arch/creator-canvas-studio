@@ -113,6 +113,17 @@ export function findUserById(id) {
   return openDb().prepare('SELECT * FROM users WHERE id = ?').get(String(id)) || null
 }
 
+// 后台账号管理：只允许改「是否在用」与角色，改动立即生效（停用后现有会话也会失效）
+export function updateUserAccess(id, patch = {}) {
+  const current = findUserById(id)
+  if (!current) return null
+  const active = patch.active === undefined ? Number(current.is_active) : patch.active ? 1 : 0
+  const kind = patch.kind === undefined ? current.kind : String(patch.kind)
+  openDb().prepare('UPDATE users SET is_active = ?, kind = ? WHERE id = ?').run(active, kind, id)
+  if (!active) openDb().prepare('DELETE FROM sessions WHERE user_id = ?').run(id)
+  return findUserById(id)
+}
+
 export function createUser({ email, password, name, kind = 'account' }) {
   const normalized = String(email).trim().toLowerCase()
   const id = 'usr_' + crypto.randomBytes(9).toString('base64url')

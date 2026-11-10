@@ -24,6 +24,14 @@
 .review-manual-row { display:flex; gap:8px; }
 .review-manual-row input { flex:1; min-width:0; padding:8px 8px; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface-raised); font-size:12px; color:var(--ink); }
 
+.review-canvas-actions { display:flex; align-items:center; gap:12px; }
+.review-credit { font-family:var(--font-mono); font-size:11px; letter-spacing:.02em; color:var(--faint); white-space:nowrap; }
+.review-history { display:flex; flex-direction:column; gap:8px; padding-top:12px; border-top:1px solid var(--line); }
+.review-history ul { display:flex; flex-direction:column; gap:4px; margin:0; padding:0; list-style:none; }
+.review-history-item { display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:8px; width:100%; padding:8px; border:1px solid transparent; border-radius:var(--radius-sm); background:transparent; color:var(--ink); text-align:left; cursor:pointer; }
+.review-history-item:hover { border-color:var(--line); background:var(--surface-raised); }
+.review-history-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; }
+
 .review-stage { display:flex; flex-direction:column; gap:16px; min-width:0; }
 .review-canvas { display:flex; flex-direction:column; gap:12px; }
 .review-canvas-frame { display:flex; justify-content:center; padding:12px; border:1px solid var(--line); background:#0f0f0f; }

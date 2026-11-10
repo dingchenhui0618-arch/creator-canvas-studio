@@ -56,6 +56,12 @@ export const getSystemHealth = () => request<SystemHealth>('/api/system/health')
 
 export const listAdminUsers = () => request<{ items: AdminUser[]; total: number }>('/api/admin/users')
 
+export const updateAdminUser = (userId: string, patch: { active?: boolean; kind?: 'admin' | 'account' }) =>
+  request<{ ok: boolean; user: AdminUser }>('/api/admin/users/' + userId, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  })
+
 export const grantCredits = (userId: string, amount: number, note: string) =>
   request<{ ok: boolean; balance: number; ledger: CreditEntry[] }>('/api/admin/users/' + userId + '/credits', {
     method: 'POST',
