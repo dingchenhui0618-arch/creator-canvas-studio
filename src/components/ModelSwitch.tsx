@@ -160,9 +160,15 @@ export function ModelSwitch() {
       {open && (
         <div className="vq-model-pop" role="listbox" aria-label="模型列表">
           <div className="vq-model-pop-head">
-            <span className="vq-mono">Model</span>
+            <span className="vq-mono">{internal ? 'Model' : '模型'}</span>
             <span className="vq-model-source">
-              {catalog?.source === 'none' ? '未接入' : catalog?.source === 'VISION_MODELS' ? '服务端清单' : catalog?.source === 'VISION_MODEL' ? '默认模型' : '…'}
+              {catalog?.source === 'none'
+                ? (internal ? '未接入' : '暂不可用')
+                : catalog?.source === 'VISION_MODELS'
+                  ? (internal ? '服务端清单' : '平台配置')
+                  : catalog?.source === 'VISION_MODEL'
+                    ? (internal ? '默认模型' : '默认')
+                    : '…'}
             </span>
           </div>
 

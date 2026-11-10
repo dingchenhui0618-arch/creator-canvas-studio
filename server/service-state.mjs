@@ -9,7 +9,7 @@
 const BLOCK_MS = 5 * 60 * 1000
 const MAX_COUNT = 99
 
-const model = { blocked: false, code: '', at: 0, count: 0, lastMessage: '', lastModel: '' }
+const model = { blocked: false, code: '', at: 0, count: 0, lastMessage: '', lastModel: '', verifiedAt: 0 }
 
 const PUBLIC_MESSAGE = {
   quota: '模型服务额度不足，暂时不能生成。本次未扣积分，管理员正在处理。',
@@ -41,6 +41,8 @@ export function noteModelFailure(error, modelName = '') {
   model.count = Math.min(MAX_COUNT, model.count + 1)
   model.lastMessage = String(error?.message || error || '').slice(0, 300)
   model.lastModel = String(modelName || '').slice(0, 80)
+  // 出过失败就不再算「已验证」：即使 5 分钟后自动失效，也要等下一次真实成功才算数
+  model.verifiedAt = 0
   return true
 }
 
@@ -51,11 +53,23 @@ export function noteModelSuccess() {
   model.count = 0
   model.lastMessage = ''
   model.lastModel = ''
+  model.verifiedAt = Date.now()
+}
+
+function resetWithoutProof() {
+  model.blocked = false
+  model.code = ''
+  model.at = 0
+  model.count = 0
+  model.lastMessage = ''
+  model.lastModel = ''
+  model.verifiedAt = 0
 }
 
 // 管理员处理完之后由界面「重新检测」调用：先放行一次真实请求，成功了状态自然清掉。
+// 这里只清阻塞，不代表「已验证」——进程刚启动或刚放行时都还是待验证。
 export function clearModelBlock() {
-  noteModelSuccess()
+  resetWithoutProof()
 }
 
 export function modelServiceState(now = Date.now()) {
@@ -63,8 +77,10 @@ export function modelServiceState(now = Date.now()) {
   if (!active) {
     return {
       available: true,
+      verified: model.verifiedAt > 0,
+      verifiedAt: model.verifiedAt ? new Date(model.verifiedAt).toISOString() : null,
       code: 'ok',
-      message: '模型服务可用',
+      message: model.verifiedAt ? '模型服务可用' : '模型服务已连通，待首次生成验证',
       internalDetail: '',
       upstreamMessage: '',
       lastModel: '',
@@ -83,6 +99,8 @@ export function modelServiceState(now = Date.now()) {
   ].filter(Boolean)
   return {
     available: false,
+    verified: false,
+    verifiedAt: null,
     code,
     message: PUBLIC_MESSAGE[code] || PUBLIC_MESSAGE.unknown,
     internalDetail: parts.join(' · '),

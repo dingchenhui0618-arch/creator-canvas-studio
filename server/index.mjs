@@ -52,7 +52,9 @@ const featureRoutes = [
 
 // VQ_REQUIRE_AUTH=1 时，除少数公开端点外所有 /api/* 都要登录。
 // 默认关闭，本地演示不受影响；生产必须打开。
-const PUBLIC_API = ['/api/auth', '/api/health', '/api/version', '/api/models', '/api/app']
+// /api/models 会返回真实模型标识：只给登录后的界面用，匿名探针不该看到。
+// 本地演示（VQ_REQUIRE_AUTH=0）不受影响，仍然公开。
+const PUBLIC_API = ['/api/auth', '/api/health', '/api/version', '/api/app']
 function needsLogin(pathname) {
   if (!config.auth.requireAuth) return false
   if (!pathname.startsWith('/api/')) return false
@@ -233,8 +235,15 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === '/api/version') {
-      // 真实的版本号：读本仓库 package.json；客户端拿它和自己的构建版本比对，用来发现「页面是旧的」
-      sendJson(res, 200, { version: PKG.version, name: PKG.name, startedAt: STARTED_AT })
+      // 真实的版本号：读本仓库 package.json；客户端拿它和自己的构建版本比对，用来发现「页面是旧的」。
+      // 生产匿名探针只回产品名与版本；包名与启动时刻属于部署细节，登录后（后台系统页）才返回。
+      const internal = config.ui.mode === 'internal'
+      sendJson(res, 200, {
+        ok: true,
+        version: PKG.version,
+        name: internal ? PKG.name : 'VisionQA',
+        ...(user ? { startedAt: STARTED_AT } : {}),
+      })
       return
     }
 
@@ -403,7 +412,7 @@ const server = http.createServer(async (req, res) => {
         message: state.message,
         retryAfterSec: state.retryAfterSec,
         ...(config.ui.mode === 'internal'
-          ? { code: state.code, detail: state.internalDetail, upstream: state.upstreamMessage, since: state.since, count: state.count, lastModel: state.lastModel }
+          ? { code: state.code, detail: state.internalDetail, upstream: state.upstreamMessage, since: state.since, count: state.count, lastModel: state.lastModel, verified: state.verified, verifiedAt: state.verifiedAt }
           : {}),
       }
       return sendJson(res, 200, { ok: true, model })

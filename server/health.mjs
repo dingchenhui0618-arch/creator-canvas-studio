@@ -115,30 +115,52 @@ export async function deepHealth({ force = false } = {}) {
       ...(isInternal() ? { code: modelState.code } : {}),
       ms: 0,
     })
+  } else if (visionEnabled()) {
+    // 探活只能证明「接口连得上」；进程刚启动、或刚点过「重新检测」时还没有真实调用证据，
+    // 这时标成「注意 · 待首次生成验证」，不把接口连通冒充成「可用」。
+    const started = Date.now()
+    try {
+      const response = await fetch(config.vision.baseUrl + '/models', {
+        headers: { Authorization: 'Bearer ' + config.vision.apiKey },
+        signal: AbortSignal.timeout(config.limits.probeTimeoutMs),
+      })
+      const text = await response.text()
+      if (!response.ok) throw new Error('HTTP ' + response.status + ' · ' + text.slice(0, 120))
+      let count = 0
+      try {
+        count = (JSON.parse(text).data || []).length
+      } catch {
+        count = 0
+      }
+      const verified = modelState.verified
+      checks.push({
+        id: 'vision',
+        label: pick('模型接口', '模型服务'),
+        status: verified ? 'ok' : 'warn',
+        detail: verified
+          ? pick('上游 ' + count + ' 个模型可用 · 最近一次真实调用成功', '可用')
+          : pick('上游 ' + count + ' 个模型可连 · 尚未验证真实生成', '接口已连通 · 待首次生成验证'),
+        ...(isInternal() ? { code: verified ? 'ok' : 'unverified', count } : {}),
+        ms: Date.now() - started,
+      })
+    } catch (error) {
+      const raw = String(error?.message || error)
+      checks.push({
+        id: 'vision',
+        label: pick('模型接口', '模型服务'),
+        status: error?.name === 'TimeoutError' ? 'warn' : 'fail',
+        detail: isInternal() ? raw : '模型服务暂时不可用',
+        ...(isInternal() ? { code: error?.name === 'TimeoutError' ? 'timeout' : 'probe-failed' } : {}),
+        ms: Date.now() - started,
+      })
+    }
   } else {
     checks.push({
       id: 'vision',
       label: pick('模型接口', '模型服务'),
-      ...(visionEnabled()
-        ? await timed(
-            async () => {
-              const response = await fetch(config.vision.baseUrl + '/models', {
-                headers: { Authorization: 'Bearer ' + config.vision.apiKey },
-                signal: AbortSignal.timeout(config.limits.probeTimeoutMs),
-              })
-              const text = await response.text()
-              if (!response.ok) throw new Error('HTTP ' + response.status + ' · ' + text.slice(0, 120))
-              let count = 0
-              try {
-                count = (JSON.parse(text).data || []).length
-              } catch {
-                count = 0
-              }
-              return pick('上游 ' + count + ' 个模型可用', count ? count + ' 个模型可用' : '模型服务可用')
-            },
-            { timeoutMs: config.limits.probeTimeoutMs, failure: '模型服务暂时不可用' },
-          )
-        : { status: 'warn', detail: pick('模型服务未接入，评审与对话不可用', '模型服务未开通'), ms: 0 }),
+      status: 'warn',
+      detail: pick('模型服务未接入，评审与对话不可用', '模型服务未开通'),
+      ms: 0,
     })
   }
 

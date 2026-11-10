@@ -31,12 +31,13 @@ function agentError(res, error) {
   const status = Number(error?.httpStatus) || Number(error?.status) || 500
   if (status >= 500) console.error('[agents] ' + (error?.stack || error?.message || error))
   const body = {
-    // 生产界面只讲产品语言：模型名、上游状态和逐条尝试明细保留在内部环境与日志里
+    // 生产界面只讲产品语言：模型名、上游状态、建议原文和逐条尝试明细都留在内部环境与日志里。
+    // 建议原文里会出现 .env、VISION_*、127.0.0.1、模型名，生产环境不能返回，否则界面「建议」一行会直接把它显示出来。
     error: publicError(error, '智能体暂时不可用，请稍后重试'),
     code: error?.code || 'AGENT_ERROR',
-    suggestion: error?.suggestion || '',
   }
   if (config.ui.mode === 'internal') {
+    body.suggestion = error?.suggestion || ''
     body.model = error?.model || ''
     body.upstreamStatus = error?.upstreamStatus || null
     body.attempted = Array.isArray(error?.attempted) ? error.attempted : []

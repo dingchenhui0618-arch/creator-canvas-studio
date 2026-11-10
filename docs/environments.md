@@ -21,7 +21,14 @@
 额度不足、凭证失效这类账号级故障会被记住 5 分钟，期间对话与评审在扣费前直接返回 503 `MODEL_UNAVAILABLE`，
 页面提示条可「重新检测」（`POST /api/system/service/recheck`）放行一次；任一次真实调用成功即清零。
 生产从 `GET /api/system/service` 只拿到 `available / message / retryAfterSec`；内部环境额外拿到
-`code / detail / upstream / since / count / lastModel` 用于排障。
+`code / detail / upstream / since / count / lastModel / verified / verifiedAt` 用于排障。
+
+进程刚启动、或刚点过「重新检测」时还没有真实调用证据：健康检查标「注意 · 接口已连通 · 待首次生成验证」，
+不把接口连通冒充成可用；成功一次才转「正常」。
+
+公开面也按环境收敛：`GET /api/models` 两套环境都要求登录（本地演示 `VQ_REQUIRE_AUTH=0` 除外）；
+`GET /api/version` 匿名只回产品名与版本，启动时间登录后才有，内部环境保留包名。
+顶栏模型菜单在生产写「模型 / 平台配置」，内部保留 `Model` / 服务端清单。
 
 ## 二、线上两套服务
 
@@ -79,3 +86,9 @@ sudo systemctl restart visionqa-internal
 ![生产：模型服务异常，只写「暂时不可用」，不出现上游报文](screenshot-settings-model-down-2026-11-10.png)
 
 ![内部测试：保留上游报文、模型名与失败时间，用于排障](screenshot-settings-model-down-internal-2026-11-10.png)
+
+模型菜单与内部排查信息（2026-11-10 实测）：
+
+![生产顶栏模型菜单：只写「模型 / 平台配置」与 VisionQA 产品名](screenshot-prod-model-menu-2026-11-10.png)
+
+![内部测试后台：保留进程、模型、上游地址与最近请求](screenshot-internal-admin-system-2026-11-10.png)

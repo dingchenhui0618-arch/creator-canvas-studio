@@ -345,4 +345,6 @@ curl -s https://visionqa.wavisionai.cn/api/auth/config   # 只有 registrationEn
 
 第十二批已落地（提交见 README 二十八）：模型服务不再用 `/models` 探活冒充可用——记住最近一次真实调用（只认额度不足/凭证失效两类账号级故障，5 分钟自动失效），健康检查如实标为不可用；已知不可用时对话与评审在扣费前返回 503 `MODEL_UNAVAILABLE`（带 `retryAfterSec`），不写扣退流水；任一次真实调用成功即清零，页面「重新检测」可放行一次。生产只返回 `available / message / retryAfterSec`，内部额外返回 `code / detail / upstream / since / count / lastModel`（`GET /api/system/service`）。新增隔离测试 25 项，回归 18/33/29/24/16/7 项全过；线上真实失败一次扣 1 退 1，紧接着的第二次请求余额与流水均不变。
 
+第十三批已落地（提交见 README 二十九）：公开面收敛与全站验收——`GET /api/models` 要求登录（生产与内部），匿名不再拿到真实模型标识；`GET /api/version` 匿名只回产品名与版本，启动时间登录后才有，内部环境保留包名；智能体失败响应在生产不再带技术建议（内部保留）；健康检查在「进程刚启动、还没有真实调用」时标「注意 · 接口已连通 · 待首次生成验证」，成功一次才转正常；顶栏模型菜单生产改「模型 / 平台配置」。新增只读验收脚本 `scripts/acceptance.mjs`（生产 25/25、内部 8/8）；新增隔离测试 13 项，回归 30/18/33/29/19/17/26/17/24/16/7 全过；线上 15 页复扫 0 命中；bundle `index-BTld5fHv.js`。
+
 **当前阻塞（非代码）**：上游模型账号返回 `Insufficient Balance`（deepseek-flash 文本对话与视觉评审都会 402），智能体与评审在补余额前不可用；现在系统会如实显示「模型服务暂时不可用」并在扣费前拦下，不再先扣再退。检索服务仍正常。
