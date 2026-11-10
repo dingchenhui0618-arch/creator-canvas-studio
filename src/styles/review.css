@@ -129,3 +129,38 @@
 .review-steps p { margin: 0; font-size: 12px; line-height: 1.62; }
 
 .review-empty-state { max-width: 780px; margin: 0 auto; }
+
+/* 模型服务不可用：页头下方一条，说清原因与「不扣积分」，重试由用户决定 */
+.review-model-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 8px 12px;
+  color: #6f3a3a;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--fail);
+  border-radius: 8px;
+}
+.review-model-note > svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--fail);
+}
+.review-model-note-text {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+.review-model-note-text span {
+  font-size: 12px;
+  line-height: 1.6;
+}
+.review-model-note-text small {
+  color: var(--fail);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}

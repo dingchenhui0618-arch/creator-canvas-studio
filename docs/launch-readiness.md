@@ -343,4 +343,6 @@ curl -s https://visionqa.wavisionai.cn/api/auth/config   # 只有 registrationEn
 
 第十一批已落地（提交见 README 二十七）：生产 15 个页面按真实登录态扫描并复扫，清掉最后 6 处技术词与内部地址（健康检查的 Node 版本/数据目录/HTTP 状态码、视觉评审的 127.0.0.1 与 provider、智能体工具的「待接入」、雷达的「上游」等）；健康检查接口改为按环境分口径，生产只回答能不能用、失败不返回原始报错，公开 /api/health 在生产不再返回模型标识。新增隔离测试 18 项，复扫 15 页 0 命中，回归 33/29/24/16/7 项全过。
 
-**当前阻塞（非代码）**：上游模型账号返回 `Insufficient Balance`（deepseek-flash 文本对话与视觉评审都会 402），智能体与评审在补余额前不可用；检索服务仍正常。
+第十二批已落地（提交见 README 二十八）：模型服务不再用 `/models` 探活冒充可用——记住最近一次真实调用（只认额度不足/凭证失效两类账号级故障，5 分钟自动失效），健康检查如实标为不可用；已知不可用时对话与评审在扣费前返回 503 `MODEL_UNAVAILABLE`（带 `retryAfterSec`），不写扣退流水；任一次真实调用成功即清零，页面「重新检测」可放行一次。生产只返回 `available / message / retryAfterSec`，内部额外返回 `code / detail / upstream / since / count / lastModel`（`GET /api/system/service`）。新增隔离测试 25 项，回归 18/33/29/24/16/7 项全过；线上真实失败一次扣 1 退 1，紧接着的第二次请求余额与流水均不变。
+
+**当前阻塞（非代码）**：上游模型账号返回 `Insufficient Balance`（deepseek-flash 文本对话与视觉评审都会 402），智能体与评审在补余额前不可用；现在系统会如实显示「模型服务暂时不可用」并在扣费前拦下，不再先扣再退。检索服务仍正常。

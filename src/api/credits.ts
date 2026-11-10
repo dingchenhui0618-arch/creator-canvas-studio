@@ -53,8 +53,28 @@ export type SystemHealth = {
   checks: HealthCheck[]
 }
 
+// 模型服务是否真的能出结果：取最近一次真实调用的结论，不是「接口能不能连」。
+// 生产只拿到 available / message；内部环境额外带 code、上游报文与失败时间用于排障。
+export type ModelServiceState = {
+  available: boolean
+  message: string
+  retryAfterSec?: number
+  code?: string
+  detail?: string
+  upstream?: string
+  since?: string | null
+  count?: number
+  lastModel?: string
+}
+
 export const getCredits = (limit = 20, offset = 0) =>
   request<CreditsResponse>('/api/credits?limit=' + limit + '&offset=' + offset)
+
+export const getModelService = () => request<{ ok: boolean; model: ModelServiceState }>('/api/system/service')
+
+// 管理员处理完之后由界面「重新检测」放行一次真实请求
+export const recheckModelService = () =>
+  request<{ ok: boolean; cleared: boolean }>('/api/system/service/recheck', { method: 'POST' })
 
 export const getSystemHealth = () => request<SystemHealth>('/api/system/health')
 

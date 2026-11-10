@@ -10,6 +10,7 @@ import path from 'node:path'
 import { config, internalMode, redfoxEnabled, visionEnabled } from './config.mjs'
 import { openDb as getDb } from './auth.mjs'
 import { templateStats } from './templates.mjs'
+import { modelServiceState } from './service-state.mjs'
 
 const CACHE_MS = 10000
 let cached = null
@@ -102,30 +103,44 @@ export async function deepHealth({ force = false } = {}) {
     )),
   })
 
-  checks.push({
-    id: 'vision',
-    label: pick('模型接口', '模型服务'),
-    ...(visionEnabled()
-      ? await timed(
-          async () => {
-            const response = await fetch(config.vision.baseUrl + '/models', {
-              headers: { Authorization: 'Bearer ' + config.vision.apiKey },
-              signal: AbortSignal.timeout(config.limits.probeTimeoutMs),
-            })
-            const text = await response.text()
-            if (!response.ok) throw new Error('HTTP ' + response.status + ' · ' + text.slice(0, 120))
-            let count = 0
-            try {
-              count = (JSON.parse(text).data || []).length
-            } catch {
-              count = 0
-            }
-            return pick('上游 ' + count + ' 个模型可用', count ? count + ' 个模型可用' : '模型服务可用')
-          },
-          { timeoutMs: config.limits.probeTimeoutMs, failure: '模型服务暂时不可用' },
-        )
-      : { status: 'warn', detail: pick('模型服务未接入，评审与对话不可用', '模型服务未开通'), ms: 0 }),
-  })
+  // 模型服务：/models 能连通只说明接口通，账号余额为 0 时真实调用仍然 402。
+  // 先看最近一次真实调用的结果，再决定要不要探活——避免「显示可用、一用就失败」。
+  const modelState = modelServiceState()
+  if (visionEnabled() && !modelState.available) {
+    checks.push({
+      id: 'vision',
+      label: pick('模型接口', '模型服务'),
+      status: 'fail',
+      detail: pick(modelState.internalDetail, '暂时不可用'),
+      ...(isInternal() ? { code: modelState.code } : {}),
+      ms: 0,
+    })
+  } else {
+    checks.push({
+      id: 'vision',
+      label: pick('模型接口', '模型服务'),
+      ...(visionEnabled()
+        ? await timed(
+            async () => {
+              const response = await fetch(config.vision.baseUrl + '/models', {
+                headers: { Authorization: 'Bearer ' + config.vision.apiKey },
+                signal: AbortSignal.timeout(config.limits.probeTimeoutMs),
+              })
+              const text = await response.text()
+              if (!response.ok) throw new Error('HTTP ' + response.status + ' · ' + text.slice(0, 120))
+              let count = 0
+              try {
+                count = (JSON.parse(text).data || []).length
+              } catch {
+                count = 0
+              }
+              return pick('上游 ' + count + ' 个模型可用', count ? count + ' 个模型可用' : '模型服务可用')
+            },
+            { timeoutMs: config.limits.probeTimeoutMs, failure: '模型服务暂时不可用' },
+          )
+        : { status: 'warn', detail: pick('模型服务未接入，评审与对话不可用', '模型服务未开通'), ms: 0 }),
+    })
+  }
 
   checks.push({
     id: 'redfox',

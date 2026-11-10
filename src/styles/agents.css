@@ -1383,3 +1383,43 @@
 .agx-md strong {
   font-weight: 600;
 }
+
+/* 模型服务不可用：贴在输入卡片顶部，说清原因与「不扣积分」，把重试决定留给用户 */
+.agx-model-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  color: #6f3a3a;
+  background: var(--fail-soft);
+  border: 1px solid rgba(163, 56, 56, 0.22);
+  border-radius: 8px;
+}
+.agx-model-note > svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--fail);
+}
+.agx-model-note-text {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+.agx-model-note-text span {
+  font-size: 12px;
+  line-height: 1.6;
+}
+.agx-model-note-text small {
+  color: var(--fail);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.agx-model-note .agx-btn {
+  flex: none;
+  height: 24px;
+  color: var(--fail);
+  font-size: 11.5px;
+}

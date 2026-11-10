@@ -19,6 +19,7 @@ import { enter, leave } from '../gate.mjs'
 import { publicError } from '../public-error.mjs'
 import { preferenceModel } from '../preferences.mjs'
 import { modelCatalog } from '../models.mjs'
+import { modelServiceState, noteModelFailure, noteModelSuccess } from '../service-state.mjs'
 
 const PREFIX = '/api/agents'
 
@@ -127,6 +128,18 @@ export function createAgentsRouter() {
             sendJson(res, 400, { error: '模型 ' + requested + ' 不在可用列表', models: [...allowed] })
             return true
           }
+          // 已知模型服务不可用（额度不足 / 凭证失效）：直接说明，不先扣再退。
+          // 这类故障换候选模型也没用，省掉一次注定失败的调用与一笔退款流水。
+          const provider = modelServiceState()
+          if (!provider.available) {
+            sendJson(res, 503, {
+              error: provider.message,
+              code: 'MODEL_UNAVAILABLE',
+              retryAfterSec: provider.retryAfterSec,
+              ...(config.ui.mode === 'internal' ? { detail: provider.internalDetail, upstream: provider.upstreamMessage } : {}),
+            })
+            return true
+          }
           // 对话按次扣积分：先扣后调，失败退款；同一账号默认最多 2 个对话在跑
           const limit = Number(config.credits.concurrency.chat || 0)
           if (user?.id && !enter(user.id, 'chat', limit)) {
@@ -157,7 +170,11 @@ export function createAgentsRouter() {
               user,
               log: (line) => console.log('[agents] ' + line),
             })
+            // 成功即恢复：管理员充值或换 key 后不需要重启，下一次调用成功就清掉状态
+            noteModelSuccess()
           } catch (error) {
+            // 额度 / 凭证这类账号级故障记下来：健康检查与下一次对话都按「不可用」处理
+            noteModelFailure(error, requested || agent.model)
             // 模型调用失败：退积分，不让失败也扣钱；失败也留一条运行记录，界面能看到原因与退款
             if (user?.id && paid.cost > 0) refund(user.id, 'chat', { ref: agent.name, amount: paid.cost })
             try {

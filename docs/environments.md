@@ -17,6 +17,12 @@
 
 生产环境的判断是 **fail-closed**：只有显式写 `VQ_UI_MODE=internal` 才进内部口径，漏配、拼错都按生产处理。
 
+「模型服务可用」看的是**最近一次真实调用**，不是 `/models` 能不能连通：上游余额为 0 时 `/models` 照样返回 200。
+额度不足、凭证失效这类账号级故障会被记住 5 分钟，期间对话与评审在扣费前直接返回 503 `MODEL_UNAVAILABLE`，
+页面提示条可「重新检测」（`POST /api/system/service/recheck`）放行一次；任一次真实调用成功即清零。
+生产从 `GET /api/system/service` 只拿到 `available / message / retryAfterSec`；内部环境额外拿到
+`code / detail / upstream / since / count / lastModel` 用于排障。
+
 ## 二、线上两套服务
 
 | 服务 | 端口 | 数据目录 | 说明 |
@@ -67,3 +73,9 @@ sudo systemctl restart visionqa-internal
 ![内部测试后台模型与密钥](screenshot-admin-keys-internal-2026-11-10.png)
 
 ![内部测试后台总览：多出运行环境与模型字段](screenshot-admin-overview-internal-2026-11-10.png)
+
+模型服务不可用时的两种口径（2026-11-10 实测）：
+
+![生产：模型服务异常，只写「暂时不可用」，不出现上游报文](screenshot-settings-model-down-2026-11-10.png)
+
+![内部测试：保留上游报文、模型名与失败时间，用于排障](screenshot-settings-model-down-internal-2026-11-10.png)

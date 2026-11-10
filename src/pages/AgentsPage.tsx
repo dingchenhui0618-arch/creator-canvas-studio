@@ -30,8 +30,9 @@ import {
   peekPendingSelectAgent,
 } from '../api/agents'
 import type { AgentArtifact, AgentRecord, AgentRunRecord, AgentsList, AgentToolsResult, OutputType } from '../api/agents'
-import { getCredits, type CreditsResponse } from '../api/credits'
+import { getCredits, getModelService, recheckModelService, type CreditsResponse, type ModelServiceState } from '../api/credits'
 import { getPreferences } from '../api/preferences'
+import { useUiMode } from '../api/app'
 import PageHead from '../components/PageHead'
 import { useModelOptions } from '../components/ModelSwitch'
 import '../styles/agents.css'
@@ -397,6 +398,10 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
   const [actionError, setActionError] = useState('')
   // 对话按次扣积分：输入框上方常驻「余额 / 单价」，402 时不再是一句干巴巴的失败
   const [credits, setCredits] = useState<CreditsResponse | null>(null)
+  // 模型服务状态：额度 / 凭证这类账号级故障要在输入前就说清楚，而不是让人白点一次
+  const [modelState, setModelState] = useState<ModelServiceState | null>(null)
+  const [rechecking, setRechecking] = useState(false)
+  const { internal } = useUiMode()
   // 顶栏选择的模型保存在服务端；智能体本身没绑模型时用它作为默认值
   const preferredModelRef = useRef('')
 
@@ -428,7 +433,23 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
     getCredits(1)
       .then((next) => { if (alive) setCredits(next) })
       .catch(() => { if (alive) setCredits(null) })
+    getModelService()
+      .then((next) => { if (alive) setModelState(next.model) })
+      .catch(() => { if (alive) setModelState(null) })
     return () => { alive = false }
+  }, [])
+
+  const recheckModel = useCallback(async () => {
+    setRechecking(true)
+    try {
+      await recheckModelService()
+      const next = await getModelService()
+      setModelState(next.model)
+    } catch {
+      // 状态接口本身不可用时不伪装成功：下一次发送会给出真实原因
+    } finally {
+      setRechecking(false)
+    }
   }, [])
 
   const load = useCallback(async () => {
@@ -673,6 +694,10 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
           prompt: content,
         })
         if (insufficient) getCredits(1).then(setCredits).catch(() => undefined)
+        // 服务端说模型不可用时，同步刷新顶部提示，避免再点一次还是一样的结果
+        if (error.body?.code === 'MODEL_UNAVAILABLE') {
+          getModelService().then((next) => setModelState(next.model)).catch(() => undefined)
+        }
         // 失败也会在服务端留一条运行记录；已展开过就重新拉第一页，避免界面还是旧的
         if (runsLoadedId === agent.id) void loadRuns(agent.id, 0)
       } finally {
@@ -787,7 +812,9 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
     [agents],
   )
 
-  const canSend = Boolean(selectedAgent && draft.trim() && !pending && !loading)
+  // 模型服务确认不可用时不再让用户白点：先看提示，或点「重新检测」放行一次
+  const modelBlocked = modelState?.available === false
+  const canSend = Boolean(selectedAgent && draft.trim() && !pending && !loading && !modelBlocked)
 
   return (
     <div className="page agx-page">
@@ -1004,7 +1031,7 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
                   <strong>运行失败</strong>
                   <p>{failure.message}</p>
                   {failure.suggestion && <p className="agx-failure-suggestion">建议：{failure.suggestion}</p>}
-                  {failure.detail && <small>{failure.detail}</small>}
+                  {internal && failure.detail ? <small>{failure.detail}</small> : null}
                   <div>
                     <button
                       className="agx-btn agx-btn--quiet"
@@ -1026,6 +1053,18 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
               <div className="agx-credit-line">
                 余额 <strong>{credits.balance ?? '—'}</strong> {credits.unit} · 每次对话 <strong>{credits.prices.chat}</strong> {credits.unit}
                 {credits.balance !== null && credits.balance < credits.prices.chat ? ' · 余额不足，请管理员发放' : ''}
+              </div>
+            ) : null}
+            {modelBlocked ? (
+              <div className="agx-model-note" role="status">
+                <AlertCircle size={13} />
+                <div className="agx-model-note-text">
+                  <span>{modelState?.message || '模型服务暂时不可用。本次未扣积分，请稍后再试。'}</span>
+                  {internal && modelState?.detail ? <small>{modelState.detail}</small> : null}
+                </div>
+                <button type="button" className="agx-btn agx-btn--quiet" onClick={() => void recheckModel()} disabled={rechecking}>
+                  {rechecking ? '检测中' : '重新检测'}
+                </button>
               </div>
             ) : null}
             <textarea

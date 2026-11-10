@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Crosshair, Loader2, Play, RefreshCw, ScanEye, TriangleAlert } from 'lucide-react'
 import { getReview, getReviewStatus, listReviews, runReview, type ReviewResult, type ReviewStatus, type ReviewSummary } from '../api/review'
-import { getCredits, type CreditsResponse } from '../api/credits'
+import { getCredits, getModelService, recheckModelService, type CreditsResponse, type ModelServiceState } from '../api/credits'
 import { listTemplates, coverSrc } from '../api/radar'
 import type { ReplicaTemplate } from '../domain/radar'
 import { consumeReviewTarget, onReviewRequest, type ReviewTarget } from '../state/review'
@@ -25,6 +25,9 @@ export default function ReviewPage() {
   const [error, setError] = useState('')
   const [active, setActive] = useState<string | null>(null)
   const [credits, setCredits] = useState<CreditsResponse | null>(null)
+  // 模型服务状态：额度 / 凭证故障时先说明，不让人点一次再退一次积分
+  const [modelState, setModelState] = useState<ModelServiceState | null>(null)
+  const [rechecking, setRechecking] = useState(false)
   const [reviews, setReviews] = useState<ReviewSummary[]>([])
   const [historyError, setHistoryError] = useState('')
   const [manualUrl, setManualUrl] = useState('')
@@ -41,6 +44,9 @@ export default function ReviewPage() {
   useEffect(() => {
     let alive = true
     getCredits(1).then((next) => { if (alive) setCredits(next) }).catch(() => { if (alive) setCredits(null) })
+    getModelService()
+      .then((next) => { if (alive) setModelState(next.model) })
+      .catch(() => { if (alive) setModelState(null) })
     listReviews(6)
       .then((data) => { if (alive) setReviews(data.items) })
       .catch((caught) => { if (alive) setHistoryError(caught instanceof Error ? caught.message : '评审历史读取失败') })
@@ -81,6 +87,21 @@ export default function ReviewPage() {
     }
   }, [running])
 
+  const recheckModel = async () => {
+    setRechecking(true)
+    try {
+      await recheckModelService()
+      const next = await getModelService()
+      setModelState(next.model)
+    } catch {
+      // 状态接口不可用时不伪装成功
+    } finally {
+      setRechecking(false)
+    }
+  }
+
+  const modelBlocked = modelState?.available === false
+
   const run = async () => {
     if (!picked) return
     startedRef.current = Date.now()
@@ -96,6 +117,8 @@ export default function ReviewPage() {
       void listReviews(6).then((data) => setReviews(data.items)).catch(() => undefined)
     } catch (reason) {
       setError(String((reason as Error)?.message || reason))
+      // 失败后同步一次服务状态：额度 / 凭证问题会在页头与提示条上显示
+      getModelService().then((next) => setModelState(next.model)).catch(() => undefined)
     } finally {
       setRunning(false)
       getCredits(1).then(setCredits).catch(() => undefined)
@@ -134,7 +157,9 @@ export default function ReviewPage() {
             <span className={`vq-chip ${status?.service ? 'is-pass' : 'is-warn'}`}>
               <ScanEye size={13} /> 插件服务 {status?.service ? '已连接' : '未启动'}
             </span>
-            <span className={`vq-chip ${status?.model ? 'is-pass' : 'is-fail'}`}>评审模型 {status?.model ? '可用' : '未配置'}</span>
+            <span className={`vq-chip ${status?.model && !modelBlocked ? 'is-pass' : 'is-fail'}`}>
+              评审模型 {status?.model ? (modelBlocked ? '暂时不可用' : '可用') : '未配置'}
+            </span>
             {credits ? (
               <span className="vq-chip" title="评审按次扣积分，失败原路退回">
                 每次 {credits.prices.review} {credits.unit} · 余额 {credits.balance ?? '—'}
@@ -143,6 +168,19 @@ export default function ReviewPage() {
           </div>
         }
       />
+
+      {modelBlocked ? (
+        <div className="review-model-note" role="status">
+          <TriangleAlert size={14} />
+          <div className="review-model-note-text">
+            <span>{modelState?.message || '模型服务暂时不可用。本次未扣积分，请稍后再试。'}</span>
+            {internal && modelState?.detail ? <small>{modelState.detail}</small> : null}
+          </div>
+          <button type="button" className="button button--ghost button--tiny" onClick={() => void recheckModel()} disabled={rechecking}>
+            <RefreshCw size={12} /> {rechecking ? '检测中' : '重新检测'}
+          </button>
+        </div>
+      ) : null}
 
       <div className="review-body">
         <aside className="review-picker">
@@ -241,7 +279,7 @@ export default function ReviewPage() {
               <div className="review-canvas-meta">
                 <span className="vq-mono">{picked.label}</span>
                 <div className="review-canvas-actions">
-                  <button type="button" className="button button--primary button--tiny" disabled={running || !status?.model} onClick={run}>
+                  <button type="button" className="button button--primary button--tiny" disabled={running || !status?.model || modelBlocked} onClick={run}>
                     {running ? <Loader2 size={13} className="spin" /> : <Play size={13} />}
                     {running ? '评审中 ' + elapsed + 's' : result ? '重新评审' : '开始评审'}
                   </button>

@@ -32,6 +32,7 @@ import { charge, refund, ensureWelcomeCredits } from './credits.mjs'
 import { enter, leave } from './gate.mjs'
 import { installProcessGuards, logEvent, logRequestError, startAccess } from './log.mjs'
 import { deepHealth } from './health.mjs'
+import { clearModelBlock, modelServiceState } from './service-state.mjs'
 import { fetchPublic } from './media.mjs'
 import { bdcStatus, listCanvases, createCanvas, appendCanvasNote } from './bdc.mjs'
 import { modelCatalog } from './models.mjs'
@@ -391,6 +392,28 @@ const server = http.createServer(async (req, res) => {
 
     if (pathname === '/api/system/health' && req.method === 'GET') {
       return sendJson(res, 200, await deepHealth({ force: url.searchParams.get('force') === '1' }))
+    }
+
+    // 模型服务是否真的能出结果（登录可见）：最近一次真实调用的结论。
+    // 生产只返回「能不能用 + 一句产品说明」，上游报文、模型名、失败时间只在内部环境返回。
+    if (pathname === '/api/system/service' && req.method === 'GET') {
+      const state = modelServiceState()
+      const model = {
+        available: state.available,
+        message: state.message,
+        retryAfterSec: state.retryAfterSec,
+        ...(config.ui.mode === 'internal'
+          ? { code: state.code, detail: state.internalDetail, upstream: state.upstreamMessage, since: state.since, count: state.count, lastModel: state.lastModel }
+          : {}),
+      }
+      return sendJson(res, 200, { ok: true, model })
+    }
+
+    // 管理员处理（充值 / 换 key）之后，由界面「重新检测」放行一次真实请求；
+    // 成功会清掉状态，失败会重新记为不可用。
+    if (pathname === '/api/system/service/recheck' && req.method === 'POST') {
+      clearModelBlock()
+      return sendJson(res, 200, { ok: true, cleared: true, model: { available: true } })
     }
 
     if (pathname === '/api/search') {

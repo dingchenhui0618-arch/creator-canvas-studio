@@ -8,6 +8,7 @@ import { currentUser } from '../auth.mjs'
 import { charge, refund } from '../credits.mjs'
 import { enter, leave } from '../gate.mjs'
 import { publicError } from '../public-error.mjs'
+import { modelServiceState, noteModelFailure, noteModelSuccess } from '../service-state.mjs'
 
 const MEDIA_MIME = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' }
 
@@ -51,6 +52,17 @@ export function createReviewRouter() {
       }
       if (pathname === '/api/review' && req.method === 'POST') {
         const body = await readBody(req)
+        // 已知模型服务不可用（额度 / 凭证）：直接说明，不先扣再退
+        const provider = modelServiceState()
+        if (!provider.available) {
+          sendJson(res, 503, {
+            error: provider.message,
+            code: 'MODEL_UNAVAILABLE',
+            retryAfterSec: provider.retryAfterSec,
+            ...(config.ui.mode === 'internal' ? { detail: provider.internalDetail, upstream: provider.upstreamMessage } : {}),
+          })
+          return true
+        }
         // 评审按次扣积分：先扣后调，失败退款
         const limit = Number(config.credits.concurrency.review || 0)
         if (user?.id && !enter(user.id, 'review', limit)) {
@@ -84,6 +96,8 @@ export function createReviewRouter() {
             intent: body.intent ? String(body.intent).slice(0, 300) : '',
             log: (message) => console.log('[review] ' + message),
           })
+          // 插件服务出结论时没有用到平台模型，不清除模型侧状态
+          if (result.mode === 'local-model') noteModelSuccess()
           const source = body.media
             ? { kind: 'template', label: body.label || body.intent || '', media: body.media }
             : { kind: body.imageUrl ? 'url' : 'unknown', label: body.label || body.intent || '', imageUrl: body.imageUrl || '' }
@@ -96,6 +110,7 @@ export function createReviewRouter() {
           })
           sendJson(res, 200, { ...result, reviewId: saved.id, credits: { cost: paid.cost, balance: paid.balance } })
         } catch (error) {
+          noteModelFailure(error)
           if (user?.id && paid.cost > 0) refund(user.id, 'review', { amount: paid.cost, ref: '评审失败退款' })
           console.error('[review] ' + (error?.stack || error?.message || error))
           sendJson(res, 500, { error: publicError(error, '评审服务暂时不可用，积分已退回') })
