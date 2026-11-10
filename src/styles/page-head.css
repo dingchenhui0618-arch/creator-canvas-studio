@@ -1,0 +1,97 @@
+/* 全站统一页头。字号、字重、字距都来自 tokens.css 的 --head-*；
+   改 token 即可影响工作台、智能体、运行记录、视觉评审、画布、模板库与编辑页。 */
+.vq-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-6);
+  margin: 0 0 var(--space-6);
+  padding: 0 0 var(--space-4);
+  border-bottom: 1px solid var(--line);
+}
+
+.vq-head-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.vq-head-kicker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+  color: var(--faint);
+  font-family: var(--font-ui);
+  font-size: var(--head-kicker-size);
+  font-weight: var(--head-kicker-weight);
+  letter-spacing: var(--head-kicker-tracking);
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+.vq-head-kicker time {
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: var(--text-mono);
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.vq-head-title {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: var(--head-title-size);
+  font-weight: var(--head-title-weight);
+  letter-spacing: var(--head-title-tracking);
+  line-height: var(--head-title-leading);
+  text-wrap: balance;
+  font-variant-numeric: tabular-nums;
+}
+
+.vq-head-title b {
+  font-weight: var(--head-title-weight);
+  font-variant-numeric: tabular-nums;
+}
+
+.vq-head-title .vq-head-sep {
+  margin: 0 var(--space-2);
+  color: var(--line-strong);
+  font-weight: 400;
+}
+
+.vq-head-kicker .vq-head-sep {
+  color: var(--line-strong);
+  font-weight: 400;
+}
+
+.vq-head-desc {
+  max-width: 72ch;
+  margin: var(--space-2) 0 0;
+  color: var(--muted);
+  font-size: var(--head-desc-size);
+  line-height: var(--head-desc-leading);
+}
+
+.vq-head-actions {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+@media (max-width: 760px) {
+  .vq-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .vq-head-actions {
+    justify-content: flex-start;
+    width: 100%;
+  }
+}

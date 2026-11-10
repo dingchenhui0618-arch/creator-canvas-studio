@@ -4,6 +4,7 @@ import { coverSrc, deleteTemplate, formatCount, formatDuration, getHealth, getTe
 import type { MediaItem, ReplicaTemplate } from '../domain/radar'
 import { requestReview } from '../state/review'
 import { ReplicateModal } from '../components/ReplicateModal'
+import PageHead from '../components/PageHead'
 import '../styles/radar.css'
 
 const TYPES = ['全部', '口播干货', '剧情演绎', '教程拆解', '产品测评', '种草分享', '开箱体验', '探店vlog', '混剪卡点', '待解析']
@@ -88,19 +89,19 @@ export function TemplateLibraryPage({ onToast, onBack }: { onToast: (message: st
 
   return (
     <div className="page page--templates">
-      <div className="page-heading">
-        <div>
-          <div className="eyebrow"><span className="eyebrow-dot" />模板库</div>
-          <h1>模板库</h1>
-          <p>只存原链接、互动数据和解析出来的脚本与分镜，不保存原视频文件。雷达里点「加入模板库」会先存一条待解析条目，点「一键复刻」才会补上解析内容。</p>
-        </div>
-        <div className="heading-actions">
-          <button className="button button--ghost" onClick={onBack}>回到雷达</button>
-          <button className="button button--ghost" onClick={() => void load()} disabled={loading}>
-            <RefreshCw size={15} className={loading ? 'spin' : ''} />刷新
-          </button>
-        </div>
-      </div>
+      <PageHead
+        kicker="模板库 / TEMPLATES"
+        title="模板库"
+        desc="只存原链接、互动数据和解析出来的脚本与分镜，不保存原视频文件。雷达里点「加入模板库」会先存一条待解析条目，点「一键复刻」才会补上解析内容。"
+        actions={
+          <>
+            <button className="button button--ghost" onClick={onBack}>回到雷达</button>
+            <button className="button button--ghost" onClick={() => void load()} disabled={loading}>
+              <RefreshCw size={15} className={loading ? 'spin' : ''} />刷新
+            </button>
+          </>
+        }
+      />
 
       <div className="asset-summary template-summary">
         <div><span className="section-kicker">模板总数</span><strong>{items.length}</strong><span>条</span></div>

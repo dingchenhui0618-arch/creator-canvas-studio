@@ -3,6 +3,7 @@ import { AlertCircle, ArrowLeft, BookOpen, Check, ChevronDown, MessageSquareText
 import { AGENT_CATEGORIES, createAgent, deleteAgent, listAgents, setPendingSelectAgent, updateAgent } from '../api/agents'
 import type { AgentCategory, AgentInput, AgentRecord, AgentsList } from '../api/agents'
 import type { Page } from '../domain/types'
+import PageHead from '../components/PageHead'
 import '../styles/agents.css'
 
 type AgentEditorPageProps = {
@@ -185,16 +186,17 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
 
   return (
     <div ref={pageRef} className="page agx-page agx-editor">
-      <header className="agx-head">
-        <div>
-          <button className="agx-btn agx-btn--quiet agx-back" onClick={onBack}>
-            <ArrowLeft size={13} />
+      <PageHead
+        kicker={
+          <button type="button" className="agx-head-back" onClick={onBack}>
+            <ArrowLeft size={12} />
             返回智能体
           </button>
-          <h1>{editingId ? form.name || '编辑智能体' : '新建智能体'}</h1>
-          <p>保存即写入 data/agents.json，回到列表就能直接对话。</p>
-        </div>
-        <div className="agx-head-actions">
+        }
+        title={editingId ? form.name || '编辑智能体' : '新建智能体'}
+        desc="保存即写入 data/agents.json，回到列表就能直接对话。"
+        actions={
+          <div className="agx-head-actions">
           {editingId && (
             <button className={'agx-btn ' + (armedDelete ? 'agx-btn--danger' : 'agx-btn--quiet')} onClick={() => void remove()}>
               <Trash2 size={14} />
@@ -204,12 +206,13 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
           <button className="agx-btn" onClick={onBack}>
             取消
           </button>
-          <button className="agx-btn agx-btn--ink" onClick={() => void save()} disabled={saving || !ready}>
-            <Check size={14} />
-            {saving ? '保存中…' : editingId ? '保存修改' : '创建智能体'}
-          </button>
-        </div>
-      </header>
+            <button className="agx-btn agx-btn--ink" onClick={() => void save()} disabled={saving || !ready}>
+              <Check size={14} />
+              {saving ? '保存中…' : editingId ? '保存修改' : '创建智能体'}
+            </button>
+          </div>
+        }
+      />
 
       {loadError && (
         <div className="agx-alert">

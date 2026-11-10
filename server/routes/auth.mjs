@@ -47,6 +47,8 @@ function checkPassword(password) {
   if (!password) return '请输入密码'
   if (password.length < MIN_PASSWORD) return '密码至少 ' + MIN_PASSWORD + ' 位'
   if (password.length > MAX_PASSWORD) return '密码过长'
+  // 只有长度没有强度，等于把「12345678」放行。要求字母 + 数字两组。
+  if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) return '密码要同时包含字母和数字'
   return ''
 }
 
@@ -72,6 +74,8 @@ export function createAuthRouter() {
         sendJson(res, 200, {
           registrationEnabled: config.auth.registrationEnabled,
           minPasswordLength: MIN_PASSWORD,
+          // 注册页照着这句显示规则，改策略只改服务端一处
+          passwordPolicy: '至少 ' + MIN_PASSWORD + ' 位，且同时包含字母和数字',
         })
         return true
       }

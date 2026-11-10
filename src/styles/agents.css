@@ -36,39 +36,29 @@
   outline-offset: 2px;
 }
 
-/* ---------- 页头 ---------- */
-.agx-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 32px;
-  padding-bottom: 24px;
-  border-bottom: 1px solid var(--line);
-}
-.agx-head h1 {
-  margin: 0 0 8px;
-  font-size: 28px;
-  line-height: 1.04;
-  font-weight: 500;
-  letter-spacing: -0.035em;
-}
-.agx-head p {
-  max-width: 520px;
-  margin: 0;
-  color: var(--muted);
-  font-size: 14px;
-  line-height: 1.7;
-}
+/* ---------- 页头（版式由 PageHead 统一，这里只留页面自己的按钮排布） ---------- */
 .agx-head-actions {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 8px;
-  padding-top: 4px;
+  gap: var(--space-2);
 }
-.agx-back {
-  margin-bottom: 16px;
-  padding-left: 0;
+.agx-head-back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0;
+  color: var(--faint);
+  background: transparent;
+  border: 0;
+  font-family: var(--font-ui);
+  font-size: var(--head-kicker-size);
+  font-weight: var(--head-kicker-weight);
+  letter-spacing: var(--head-kicker-tracking);
+  line-height: 1.4;
+}
+.agx-head-back:hover {
+  color: var(--ink);
 }
 
 /* ---------- 按钮 / 胶囊 ---------- */
@@ -1072,10 +1062,6 @@
 @media (max-width: 760px) {
   .agx-page {
     padding: 24px 16px 48px;
-  }
-  .agx-head {
-    flex-direction: column;
-    gap: 16px;
   }
   .agx-head-actions {
     width: 100%;

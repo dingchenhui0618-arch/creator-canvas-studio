@@ -1,0 +1,175 @@
+// 地址栏路由：页面的唯一真源是 location.hash。
+// 约定：#/overview #/radar #/templates #/agents #/runs #/review #/canvas #/settings
+//      智能体编辑：#/agents/new 与 #/agents/<id 或唯一名称>
+//      后台管理：#/admin/<section>，section 取自 editions.ts 的后台导航。
+//
+// 说明：本文件不碰登录态。RequireSession 仍然决定有没有工作台；
+// 只有工作台内部的页面切换走 hash，刷新与前进/后退都由浏览器负责。
+import { useSyncExternalStore } from 'react'
+import type { Page } from './domain/types'
+import { EDITION_BY_ID, type AdminSection, type EditionId } from './editions'
+
+/** 外壳里真正占一屏的用户页面；登录与编辑器各自有独立入口。 */
+export type ShellPage = Exclude<Page, 'login' | 'agent-editor'>
+
+export type Route =
+  | { kind: 'page'; page: ShellPage }
+  | { kind: 'agent-editor'; agentRef: string | null }
+  | { kind: 'admin'; section: AdminSection }
+
+export const DEFAULT_ROUTE: Route = { kind: 'page', page: 'overview' }
+
+const USER_PAGES: readonly ShellPage[] = [
+  'overview',
+  'radar',
+  'templates',
+  'agents',
+  'runs',
+  'review',
+  'canvas',
+  'settings',
+]
+
+// 后台 section 直接取自 editions.ts，避免在路由里再抄一份会漂移的清单。
+const ADMIN_SECTIONS: readonly string[] = EDITION_BY_ID.admin.nav.map((item) => item.section ?? item.id)
+const DEFAULT_ADMIN_SECTION: AdminSection = (ADMIN_SECTIONS[0] as AdminSection | undefined) ?? 'overview'
+
+/** 把路由转回 domain 里的 Page：后台没有用户 Page 语义，统一落到工作台用于面包屑兜底。 */
+export function routeToPage(route: Route): Page {
+  if (route.kind === 'page') return route.page
+  if (route.kind === 'agent-editor') return 'agent-editor'
+  return 'overview'
+}
+
+/** Page 转向量：列表页跳转、事件兼容都走这里，避免各页面自己拼 hash。 */
+export function pageToRoute(page: Page, agentRef: string | null = null): Route {
+  if (page === 'login') return DEFAULT_ROUTE
+  if (page === 'agent-editor') return { kind: 'agent-editor', agentRef }
+  return { kind: 'page', page }
+}
+
+function decodeSegment(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    // 坏链接不抛错，按原样当引用去查，查不到由页面给「找不到」提示。
+    return value
+  }
+}
+
+function parseAdminSection(value: string | undefined): AdminSection {
+  if (value && ADMIN_SECTIONS.includes(value)) return value as AdminSection
+  return DEFAULT_ADMIN_SECTION
+}
+
+/** 纯解析：不读写 history，方便在事件回调里复用。 */
+export function parseRoute(hash: string): Route {
+  const cleaned = hash.replace(/^#/, '').trim()
+  if (!cleaned || cleaned === '/') return DEFAULT_ROUTE
+  const segments = cleaned
+    .replace(/^\/+/, '')
+    .replace(/\/+$/, '')
+    .split('/')
+    .filter(Boolean)
+    .map(decodeSegment)
+  if (!segments.length) return DEFAULT_ROUTE
+
+  const [head, tail] = segments
+  if (head === 'admin') return { kind: 'admin', section: parseAdminSection(tail) }
+  if (head === 'agents') {
+    if (!tail) return { kind: 'page', page: 'agents' }
+    if (tail === 'new') return { kind: 'agent-editor', agentRef: null }
+    return { kind: 'agent-editor', agentRef: tail }
+  }
+  if ((USER_PAGES as readonly string[]).includes(head)) {
+    return { kind: 'page', page: head as ShellPage }
+  }
+  return DEFAULT_ROUTE
+}
+
+/** 规范化 hash：没有任何查询串，只保留可寻址的路径。 */
+export function toHash(route: Route): string {
+  if (route.kind === 'page') return '#/' + route.page
+  if (route.kind === 'admin') return '#/admin/' + route.section
+  return '#/agents/' + (route.agentRef ? encodeURIComponent(route.agentRef) : 'new')
+}
+
+/** 用字符串比较路由是否相同，供 key、订阅去重和「无变化不写历史」共用。 */
+export function routeKey(route: Route): string {
+  if (route.kind === 'page') return 'page:' + route.page
+  if (route.kind === 'admin') return 'admin:' + route.section
+  return 'agent-editor:' + (route.agentRef ?? 'new')
+}
+
+let snapshot: Route | null = null
+let listening = false
+const listeners = new Set<() => void>()
+
+function publish(route: Route) {
+  const previous = snapshot
+  if (previous && routeKey(previous) === routeKey(route)) return
+  snapshot = route
+  for (const listener of listeners) listener()
+}
+
+function handleHashChange() {
+  const route = parseRoute(window.location.hash)
+  const canonical = toHash(route)
+  // 非法或旧格式的 hash 用 replaceState 修正，不额外压一条历史。
+  if (window.location.hash !== canonical) window.history.replaceState(null, '', canonical)
+  publish(route)
+}
+
+function ensureListening() {
+  if (listening || typeof window === 'undefined') return
+  listening = true
+  window.addEventListener('hashchange', handleHashChange)
+}
+
+/**
+ * 首次进入：把空 hash / 非规范 hash 修正成规范地址，使用 replaceState，
+ * 保证启动本身不产生多余的历史记录。preferredEdition 只用于「没有 hash」时的落点。
+ */
+export function initializeRoute(preferredEdition?: EditionId): Route {
+  const raw = window.location.hash
+  const bare = raw === '' || raw === '#' || raw === '#/'
+  let route = parseRoute(raw)
+  if (bare && preferredEdition === 'admin') {
+    route = { kind: 'admin', section: DEFAULT_ADMIN_SECTION }
+  }
+  snapshot = route
+  const canonical = toHash(route)
+  if (raw !== canonical) window.history.replaceState(null, '', canonical)
+  ensureListening()
+  return route
+}
+
+/** 写路由：默认压一条历史（浏览器后退可用），replace 只改当前条目。 */
+export function navigate(route: Route, options: { replace?: boolean } = {}) {
+  ensureListening()
+  const hash = toHash(route)
+  if (window.location.hash !== hash) {
+    if (options.replace) window.history.replaceState(null, '', hash)
+    else window.location.hash = hash
+  }
+  publish(route)
+}
+
+export function subscribeRoute(listener: () => void): () => void {
+  ensureListening()
+  if (!snapshot) snapshot = parseRoute(window.location.hash)
+  listeners.add(listener)
+  return () => {
+    listeners.delete(listener)
+  }
+}
+
+export function getRouteSnapshot(): Route {
+  if (!snapshot) snapshot = parseRoute(window.location.hash)
+  return snapshot
+}
+
+/** 组件里读当前路由：写入 navigate 或浏览器前进/后退都会触发重渲染。 */
+export function useRoute(): Route {
+  return useSyncExternalStore(subscribeRoute, getRouteSnapshot, getRouteSnapshot)
+}

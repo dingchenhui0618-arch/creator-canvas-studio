@@ -77,6 +77,29 @@ export const config = {
   limits: {
     maxVideoMb: Number(process.env.MAX_VIDEO_MB || 160),
     maxFrames: Number(process.env.MAX_FRAMES || 18),
+    // 下载/探活类外部请求的超时：以前完全没设，一个不响应的源就能把进程挂住
+    downloadTimeoutMs: Number(process.env.DOWNLOAD_TIMEOUT_MS || 120000),
+    probeTimeoutMs: Number(process.env.PROBE_TIMEOUT_MS || 3000),
+  },
+  // 积分制：检索 / 一键复刻 / 视觉评审 / 智能体对话按次扣积分。
+  // 单价是「内部积分」不是钱，改价只改环境变量；充值通道与支付档位仍未接入（只留占位卡）。
+  credits: {
+    unit: process.env.VQ_CREDIT_UNIT || '积分',
+    // 新账号初始额度：够试一轮检索 + 复刻，不至于一注册就卡住
+    welcome: Number(process.env.VQ_CREDIT_WELCOME ?? 100),
+    prices: {
+      search: Number(process.env.VQ_CREDIT_SEARCH ?? 2),
+      replicate: Number(process.env.VQ_CREDIT_REPLICATE ?? 10),
+      review: Number(process.env.VQ_CREDIT_REVIEW ?? 5),
+      chat: Number(process.env.VQ_CREDIT_CHAT ?? 1),
+    },
+    // 同一账号同时能跑几个：防连点把上游配额一次打光
+    concurrency: {
+      search: Number(process.env.VQ_CONCURRENCY_SEARCH ?? 1),
+      replicate: Number(process.env.VQ_CONCURRENCY_REPLICATE ?? 2),
+      review: Number(process.env.VQ_CONCURRENCY_REVIEW ?? 1),
+      chat: Number(process.env.VQ_CONCURRENCY_CHAT ?? 2),
+    },
   },
   // 远端算力：给了 REPLICATE_REMOTE_URL 就把「解析/下载/抽帧」交给它，本地不跑 ffmpeg
   remote: {
@@ -98,8 +121,13 @@ export const config = {
     secureCookies: process.env.VQ_SECURE_COOKIES === '1',
     // 生产必须为 1：除 /api/auth/* 与健康检查外，所有 API 都要求登录
     requireAuth: process.env.VQ_REQUIRE_AUTH === '1',
-    registrationEnabled: process.env.VQ_REGISTRATION !== '0',
-    // 部署引导账号：库里没有这个邮箱时建一条普通账号（kind=account），只为「部署完能登录」。
+    // 默认关闭（fail-closed）：只有显式写 VQ_REGISTRATION=1 才开放注册。
+    // 以前是 !== '0'，环境变量漏配就变成任何人都能注册——公开站点上等于开了个免费入口。
+    registrationEnabled: process.env.VQ_REGISTRATION === '1',
+    // 管理员邮箱（逗号分隔）：这些账号可以看全部数据、发放积分。
+    // 库里 kind='admin' 的账号等价；单账号部署启动时会自动把第一个账号提升为管理员。
+    adminEmails: splitList(process.env.VQ_ADMIN_EMAILS).map((item) => item.toLowerCase()),
+    // 部署引导账号：库里没有这个邮箱时建一条账号（还没有管理员时它是 kind=admin），只为「部署完能登录」。
     // 不叫演示账号了：口令不再下发给访客，界面上也没有任何演示标识。
     // 兼容旧键名 VQ_DEMO_*：老 .env 不用改也能继续用。
     seedAccount: Boolean((process.env.VQ_SEED_PASSWORD || process.env.VQ_DEMO_PASSWORD || '').trim()),

@@ -76,6 +76,17 @@
   --shadow-raise: 0 1px 2px rgba(17, 17, 17, 0.04), 0 10px 24px rgba(17, 17, 17, 0.05);
   --focus: 0 0 0 2px #111111;
 
+  /* ---------- 页头排版：改这一处即可影响所有页头（PageHead / page-head.css） ---------- */
+  --head-title-size: 26px;
+  --head-title-weight: 500;
+  --head-title-tracking: -0.01em;
+  --head-title-leading: 1.25;
+  --head-kicker-size: 11.5px;
+  --head-kicker-weight: 500;
+  --head-kicker-tracking: 0.06em;
+  --head-desc-size: 12.5px;
+  --head-desc-leading: 1.7;
+
   /* 兼容旧变量名：旧组件读这些，直接指向新品牌色 */
   --paper: var(--canvas);
   --surface-soft: #f6f6f6;

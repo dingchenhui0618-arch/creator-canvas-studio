@@ -1,4 +1,5 @@
 import { callTextModel, extractJson, llmEnabled } from './llm.mjs'
+import { assertPublicHttpUrl } from './media.mjs'
 
 // VisionQA 视觉评审：优先接 VisionQA 插件服务（同一套 VisualReview 契约），
 // 服务不可用时退到本地模型的 visual-baseline 评审，并如实标注 provider。
@@ -88,6 +89,8 @@ export async function reviewVisual({ imageUrl, imageBytes, mime = 'image/jpeg', 
       if (imageBytes) {
         form.append('candidate', new Blob([imageBytes], { type: mime }), 'candidate.' + (mime.includes('png') ? 'png' : 'jpg'))
       } else if (imageUrl) {
+        // 评审接口接受外部图片地址：同样要拦内网地址，否则它就是一个匿名 SSRF 入口
+        await assertPublicHttpUrl(imageUrl)
         const response = await fetch(imageUrl, { signal: AbortSignal.timeout(8000) })
         const buffer = Buffer.from(await response.arrayBuffer())
         form.append('candidate', new Blob([buffer], { type: 'image/jpeg' }), 'candidate.jpg')
@@ -123,6 +126,8 @@ export async function reviewVisual({ imageUrl, imageBytes, mime = 'image/jpeg', 
   let dataUrl = imageUrl
   if (imageBytes) dataUrl = toDataUrl(imageBytes, mime)
   if (!dataUrl) throw Object.assign(new Error('没有可评审的画面'), { code: 'NO_IMAGE' })
+  // 走本地模型时 url 会原样交给上游，所以同样要先过 SSRF 校验（不给内网地址当跳板）
+  if (!imageBytes) await assertPublicHttpUrl(imageUrl)
 
   log?.('本地模型评审（visual-baseline）')
   const result = await callTextModel([

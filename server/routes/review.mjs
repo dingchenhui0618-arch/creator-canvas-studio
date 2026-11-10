@@ -3,6 +3,9 @@ import { reviewVisual, reviewStatus } from '../review.mjs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { config } from '../config.mjs'
+import { currentUser } from '../auth.mjs'
+import { charge, refund } from '../credits.mjs'
+import { enter, leave } from '../gate.mjs'
 
 const MEDIA_MIME = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' }
 
@@ -25,6 +28,25 @@ export function createReviewRouter() {
       }
       if (pathname === '/api/review' && req.method === 'POST') {
         const body = await readBody(req)
+        const user = currentUser(req)
+        // 评审按次扣积分：先扣后调，失败退款
+        const limit = Number(config.credits.concurrency.review || 0)
+        if (user?.id && !enter(user.id, 'review', limit)) {
+          sendJson(res, 429, { error: '这个账号还有评审在跑，等它结束再试', code: 'CONCURRENCY_LIMIT', limit })
+          return true
+        }
+        const paid = user?.id ? charge(user.id, 'review', { ref: body.intent ? String(body.intent).slice(0, 60) : '视觉评审' }) : { ok: true, cost: 0, balance: null }
+        if (!paid.ok) {
+          if (user?.id) leave(user.id, 'review')
+          sendJson(res, 402, {
+            error: '积分不足：本次评审需要 ' + paid.cost + ' 积分，当前余额 ' + paid.balance + ' 积分',
+            code: 'CREDIT_INSUFFICIENT',
+            balance: paid.balance,
+            cost: paid.cost,
+            needed: paid.needed,
+          })
+          return true
+        }
         try {
           let imageBytes
           let mime = 'image/jpeg'
@@ -40,9 +62,12 @@ export function createReviewRouter() {
             intent: body.intent ? String(body.intent).slice(0, 300) : '',
             log: (message) => console.log('[review] ' + message),
           })
-          sendJson(res, 200, result)
+          sendJson(res, 200, { ...result, credits: { cost: paid.cost, balance: paid.balance } })
         } catch (error) {
+          if (user?.id && paid.cost > 0) refund(user.id, 'review', { amount: paid.cost, ref: '评审失败退款' })
           sendJson(res, 500, { error: String(error?.message || error) })
+        } finally {
+          if (user?.id) leave(user.id, 'review')
         }
         return true
       }

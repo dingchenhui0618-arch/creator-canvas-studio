@@ -8,76 +8,31 @@
   padding: 32px 32px 48px;
 }
 
+/* 旧页头：SettingsPage 仍在用，Lead 迁移后再删；字号已对齐 PageHead token */
 .vq-page-head {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 24px;
-  margin-bottom: 24px;
-  padding-bottom: 24px;
+  gap: var(--space-6);
+  margin-bottom: var(--space-6);
+  padding-bottom: var(--space-4);
   border-bottom: 1px solid var(--line);
 }
 
 .vq-page-head h1 {
-  margin: 8px 0 0;
-  font-size: 28px;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
+  margin: var(--space-2) 0 0;
+  font-size: var(--head-title-size);
+  font-weight: var(--head-title-weight);
+  letter-spacing: var(--head-title-tracking);
+  line-height: var(--head-title-leading);
 }
 
 .vq-page-head p {
   max-width: 64ch;
-  margin: 8px 0 0;
+  margin: var(--space-2) 0 0;
   color: var(--muted);
-  font-size: 12px;
-  line-height: 1.7;
-}
-
-.vq-page-head h1 b {
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.03em;
-}
-.vq-page-head h1 .vq-head-sep {
-  margin: 0 8px;
-  color: var(--line-strong);
-  font-weight: 400;
-}
-
-/* 页头元信息：中文走界面字体，只有日期用等宽数字对齐 */
-.vq-kicker {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--faint);
-  font-family: var(--font-ui);
-  font-size: 11.5px;
-  letter-spacing: 0.01em;
-}
-.vq-kicker-word {
-  color: var(--ink);
-  font-weight: 500;
-}
-.vq-kicker-dot {
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: var(--line-strong);
-}
-.vq-kicker time {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.02em;
-  font-variant-numeric: tabular-nums;
-}
-
-.vq-page-actions {
-  display: flex;
-  flex: none;
-  gap: 8px;
-  align-items: center;
-  padding-bottom: 2px;
+  font-size: var(--head-desc-size);
+  line-height: var(--head-desc-leading);
 }
 
 .vq-section {

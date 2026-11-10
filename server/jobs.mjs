@@ -7,13 +7,16 @@ import { probeVideo, detectSceneCuts, planTimestamps, extractFrames } from './fr
 import { replicateRemote } from './remote.mjs'
 import { analyzeFrames } from './vision.mjs'
 import { createTemplate } from './templates.mjs'
+import { canAccess } from './owner.mjs'
 
 const jobs = new Map()
 const MAX_JOBS = 40
 
-export function getJob(id) {
+export function getJob(id, user = null) {
   const job = jobs.get(id)
   if (!job) return null
+  // 任务也归属到发起人：别人拿着 jobId 看不到你的进度和模板
+  if (!canAccess(job, user)) return null
   return {
     id: job.id,
     status: job.status,
@@ -46,8 +49,9 @@ function step(job, name, progress, text) {
   if (text) job.logs.push({ at: new Date().toISOString(), text })
 }
 
-export async function startReplicate(item, overrideUrl) {
+export async function startReplicate(item, overrideUrl, { ownerId = '', onSettled = null } = {}) {
   const job = createJob()
+  job.ownerId = ownerId || ''
   const jobDir = path.join(config.dataDir, 'jobs', job.id)
   const targets = []
   if (overrideUrl) targets.push({ url: overrideUrl, label: '手动直链' })
@@ -67,6 +71,14 @@ export async function startReplicate(item, overrideUrl) {
     // 成功和失败都要清：以前只在成功分支里删，失败一次就在盘上留一份最多 160MB 的源视频
     .finally(() => {
       fsp.rm(jobDir, { recursive: true, force: true }).catch(() => {})
+      // 结算回调：调用方用它释放并发闸门、失败退积分
+      if (typeof onSettled === 'function') {
+        try {
+          onSettled(job.status)
+        } catch {
+          // 结算回调里的异常不该影响任务本身
+        }
+      }
     })
   return job
 }
@@ -141,7 +153,7 @@ async function runPipeline(job, jobDir, item, targets) {
   const analysis = await analyzeFrames({ frames, meta, sceneCuts, log: (text) => job.logs.push({ at: new Date().toISOString(), text }) })
 
   step(job, 'save', 94, '写入模板库')
-  const template = await createTemplate({ item, meta, analysis, frames, jobId: job.id })
+  const template = await createTemplate({ item, meta, analysis, frames, jobId: job.id, user: job.ownerId ? { id: job.ownerId } : null })
   job.templateId = template.id
   step(job, 'done', 100, '复刻完成，已存入模板库：' + template.title)
   job.status = 'done'

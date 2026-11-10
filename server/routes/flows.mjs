@@ -1,5 +1,6 @@
 import { sendJson, readBody, notFound } from './_shared.mjs'
 import { listFlows, getFlow, createFlow, updateFlow, deleteFlow, runFlow, listRuns, getRun, NODE_KINDS, TOOLS, REVIEW_PROFILES } from '../flows.mjs'
+import { currentUser } from '../auth.mjs'
 
 // /api/flows 与 /api/runs 共用一个 router：
 // index.mjs 会按 prefix + extraPrefixes 分发，因此两个前缀都进到这里。
@@ -30,6 +31,7 @@ export function createFlowsRouter() {
     extraPrefixes: ['/api/runs'],
     async handle(req, res, url, pathname) {
       if (!isOwnPath(pathname)) return false
+      const user = currentUser(req)
 
       // 节点类型与工具的元信息，前端 inspector 用它渲染下拉框
       if (pathname === '/api/flows/meta' && req.method === 'GET') {
@@ -38,14 +40,14 @@ export function createFlowsRouter() {
       }
 
       if (pathname === '/api/flows' && req.method === 'GET') {
-        const items = await listFlows()
+        const items = await listFlows(user)
         sendJson(res, 200, { items, total: items.length })
         return true
       }
 
       if (pathname === '/api/flows' && req.method === 'POST') {
         const body = await readBody(req)
-        const flow = await createFlow(body)
+        const flow = await createFlow(body, user)
         sendJson(res, 201, flow)
         return true
       }
@@ -54,14 +56,14 @@ export function createFlowsRouter() {
         const result = await listRuns({
           flowId: url.searchParams.get('flowId') || '',
           limit: url.searchParams.get('limit') || 20,
-        })
+        }, user)
         sendJson(res, 200, result)
         return true
       }
 
       const runItemMatch = pathname.match(RUN_ITEM)
       if (runItemMatch && req.method === 'GET') {
-        const run = await getRun(runItemMatch[1])
+        const run = await getRun(runItemMatch[1], user)
         if (!run) {
           notFound(res, '运行记录不存在')
           return true
@@ -77,7 +79,7 @@ export function createFlowsRouter() {
           sendJson(res, 405, { error: '只支持 POST' })
           return true
         }
-        const flow = await getFlow(runMatch[1])
+        const flow = await getFlow(runMatch[1], user)
         if (!flow) {
           notFound(res, '流程不存在')
           return true
@@ -114,7 +116,7 @@ export function createFlowsRouter() {
       if (itemMatch) {
         const id = itemMatch[1]
         if (req.method === 'GET') {
-          const flow = await getFlow(id)
+          const flow = await getFlow(id, user)
           if (!flow) {
             notFound(res, '流程不存在')
             return true
@@ -124,6 +126,10 @@ export function createFlowsRouter() {
         }
         if (req.method === 'PATCH') {
           const body = await readBody(req)
+          if (!(await getFlow(id, user))) {
+            notFound(res, '流程不存在')
+            return true
+          }
           const updated = await updateFlow(id, body)
           if (!updated) {
             notFound(res, '流程不存在')
@@ -133,6 +139,10 @@ export function createFlowsRouter() {
           return true
         }
         if (req.method === 'DELETE') {
+          if (!(await getFlow(id, user))) {
+            notFound(res, '流程不存在')
+            return true
+          }
           const removed = await deleteFlow(id)
           sendJson(res, removed ? 200 : 404, { ok: removed })
           return true

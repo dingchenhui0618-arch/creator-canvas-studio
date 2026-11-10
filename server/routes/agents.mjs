@@ -11,7 +11,10 @@ import {
   updateAgent,
 } from '../agents.mjs'
 import { OUTPUT_TYPES, availableModels, chatWithAgent } from '../agentChat.mjs'
-import { visionEnabled } from '../config.mjs'
+import { config, visionEnabled } from '../config.mjs'
+import { currentUser } from '../auth.mjs'
+import { charge, refund } from '../credits.mjs'
+import { enter, leave } from '../gate.mjs'
 
 const PREFIX = '/api/agents'
 
@@ -37,6 +40,7 @@ export function createAgentsRouter() {
     prefix: PREFIX,
     async handle(req, res, url, pathname) {
       try {
+        const user = currentUser(req)
         const rest = pathname.slice(PREFIX.length).replace(/^\/+/, '').replace(/\/+$/, '')
         const segments = rest ? rest.split('/') : ['']
 
@@ -44,8 +48,8 @@ export function createAgentsRouter() {
         if (segments.length === 1 && segments[0] === '') {
           if (req.method === 'GET') {
             const category = url.searchParams.get('category') || ''
-            const items = await listAgents({ q: url.searchParams.get('q') || '', category })
-            const stats = await agentStats()
+            const items = await listAgents({ q: url.searchParams.get('q') || '', category }, user)
+            const stats = await agentStats(user)
             const models = availableModels()
             sendJson(res, 200, {
               items,
@@ -63,7 +67,7 @@ export function createAgentsRouter() {
           }
           if (req.method === 'POST') {
             const body = await readBody(req)
-            const agent = await createAgent(body)
+            const agent = await createAgent(body, user)
             sendJson(res, 201, agent)
             return true
           }
@@ -80,7 +84,7 @@ export function createAgentsRouter() {
             methodNotAllowed(res, 'POST')
             return true
           }
-          const agent = await getAgent(id)
+          const agent = await getAgent(id, user)
           if (!agent) {
             sendJson(res, 404, { error: '智能体不存在：' + id })
             return true
@@ -111,16 +115,44 @@ export function createAgentsRouter() {
             sendJson(res, 400, { error: '模型 ' + requested + ' 不在可用列表', models: [...allowed] })
             return true
           }
-          const result = await chatWithAgent({
-            agent,
-            message,
-            outputType,
-            model: requested || agent.model,
-            history: Array.isArray(body.history) ? body.history : [],
-            log: (line) => console.log('[agents] ' + line),
-          })
+          // 对话按次扣积分：先扣后调，失败退款；同一账号默认最多 2 个对话在跑
+          const limit = Number(config.credits.concurrency.chat || 0)
+          if (user?.id && !enter(user.id, 'chat', limit)) {
+            sendJson(res, 429, { error: '这个账号还有对话在跑，等它结束再试', code: 'CONCURRENCY_LIMIT', limit })
+            return true
+          }
+          const paid = user?.id ? charge(user.id, 'chat', { ref: agent.name }) : { ok: true, cost: 0, balance: null }
+          if (!paid.ok) {
+            if (user?.id) leave(user.id, 'chat')
+            sendJson(res, 402, {
+              error: '积分不足：本次对话需要 ' + paid.cost + ' 积分，当前余额 ' + paid.balance + ' 积分',
+              code: 'CREDIT_INSUFFICIENT',
+              balance: paid.balance,
+              cost: paid.cost,
+              needed: paid.needed,
+            })
+            return true
+          }
+          let result
+          try {
+            result = await chatWithAgent({
+              agent,
+              message,
+              outputType,
+              model: requested || agent.model,
+              history: Array.isArray(body.history) ? body.history : [],
+              log: (line) => console.log('[agents] ' + line),
+            })
+          } catch (error) {
+            // 模型调用失败：退积分，不让失败也扣钱
+            if (user?.id && paid.cost > 0) refund(user.id, 'chat', { ref: agent.name, amount: paid.cost })
+            throw error
+          } finally {
+            if (user?.id) leave(user.id, 'chat')
+          }
           const updated = await recordRun(agent.id, { model: result.model })
           sendJson(res, 200, {
+            credits: { cost: paid.cost, balance: paid.balance },
             reply: result.reply,
             model: result.model,
             latencyMs: result.latencyMs,
@@ -138,7 +170,7 @@ export function createAgentsRouter() {
         // 单个智能体：GET / PATCH / DELETE
         if (segments.length === 1) {
           if (req.method === 'GET') {
-            const agent = await getAgent(id)
+            const agent = await getAgent(id, user)
             if (!agent) {
               sendJson(res, 404, { error: '智能体不存在：' + id })
               return true
@@ -148,6 +180,10 @@ export function createAgentsRouter() {
           }
           if (req.method === 'PATCH' || req.method === 'PUT') {
             const body = await readBody(req)
+            if (!(await getAgent(id, user))) {
+              sendJson(res, 404, { error: '智能体不存在：' + id })
+              return true
+            }
             const agent = await updateAgent(id, body)
             if (!agent) {
               sendJson(res, 404, { error: '智能体不存在：' + id })
@@ -157,6 +193,10 @@ export function createAgentsRouter() {
             return true
           }
           if (req.method === 'DELETE') {
+            if (!(await getAgent(id, user))) {
+              sendJson(res, 404, { error: '智能体不存在：' + id })
+              return true
+            }
             const done = await deleteAgent(id)
             if (!done) {
               sendJson(res, 404, { error: '智能体不存在：' + id })

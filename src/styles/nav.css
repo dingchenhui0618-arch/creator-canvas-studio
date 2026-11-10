@@ -1,0 +1,299 @@
+/* 外壳补充样式：懒加载骨架、渲染兜底卡片、小屏数据区规则。
+   颜色只取 tokens.css 的变量；间距只走 4/8 栅格。
+   页面自身样式（runs.css / agents.css / radar.css）不改，这里用更具体的选择器修正。 */
+
+/* ---------- 懒加载骨架 ---------- */
+.vq-skeleton {
+  display: grid;
+  gap: 24px;
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 32px 32px 48px;
+}
+
+.vq-skeleton-label {
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: var(--text-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.vq-skeleton-head {
+  display: grid;
+  gap: 12px;
+}
+
+.vq-skeleton-line {
+  display: block;
+  height: 12px;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+}
+
+.vq-skeleton-line--title {
+  width: 34%;
+  height: 24px;
+}
+
+.vq-skeleton-line--copy {
+  width: 62%;
+}
+
+.vq-skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.vq-skeleton-card {
+  display: block;
+  min-height: 120px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+
+.vq-skeleton-label,
+.vq-skeleton-line,
+.vq-skeleton-card {
+  animation: vq-skeleton-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes vq-skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vq-skeleton-label,
+  .vq-skeleton-line,
+  .vq-skeleton-card {
+    animation: none;
+  }
+}
+
+/* ---------- 渲染兜底卡片 ---------- */
+.vq-error-fallback {
+  display: grid;
+  justify-items: center;
+  width: 100%;
+  min-height: 100%;
+  padding: 48px 32px;
+}
+
+.vq-error-card {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+  width: 100%;
+  max-width: 640px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+}
+
+.vq-error-kicker {
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: var(--text-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.vq-error-card h1 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 28px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.vq-error-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: 1.7;
+}
+
+.vq-error-detail {
+  display: grid;
+  gap: 8px;
+}
+
+.vq-error-label {
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: var(--text-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.vq-error-summary {
+  max-height: 160px;
+  margin: 0;
+  padding: 12px 16px;
+  overflow: auto;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-mono);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.vq-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ---------- 小屏：数据页 ---------- */
+@media (max-width: 720px) {
+  /* 页面内边距收到 16px：运行记录、智能体、模板库、工作台、后台。 */
+  .vq-content .runs-page,
+  .vq-content .agx-page,
+  .vq-content .page.page--templates,
+  .vq-content .vq-page,
+  .vq-content .admin-page {
+    padding: 16px;
+  }
+
+  /* 统一页头（PageHead）在 760px 已转纵向，这里不再重复；只处理数据区。 */
+  .vq-content .runs-stats {
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  /* 运行记录：状态与耗时保留，开始时间属于低优先级列，窄屏隐藏。 */
+  .vq-content .runs-row-meta > span:nth-child(3) {
+    display: none;
+  }
+
+  .vq-content .runs-row {
+    grid-template-columns: 8px minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 12px 8px;
+  }
+
+  .vq-content .runs-detail {
+    padding: 16px;
+  }
+
+  .vq-content .runs-node-head {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  /* 智能体：分类条在自己的容器里横向滚动；卡片只留模型与最近运行。 */
+  .vq-content .agx-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .vq-content .agx-tabs {
+    max-width: 100%;
+    flex-wrap: nowrap;
+    gap: 16px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+  }
+
+  .vq-content .agx-tabs button {
+    flex: 0 0 auto;
+  }
+
+  .vq-content .agx-card-meta > span:nth-child(3) {
+    display: none;
+  }
+
+  .vq-content .agx-library-head {
+    flex-wrap: wrap;
+    gap: 4px 12px;
+  }
+
+  /* 智能体回复里的 Markdown 表格：只让表格容器横滚，不撑开整页。 */
+  .vq-content .agx-md-table,
+  .vq-content .admin-table-wrap {
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+  }
+
+  .vq-content .agx-md-table table {
+    min-width: 480px;
+  }
+
+  /* 模板库：筛选条同样在容器内横滚；转发数是最低优先级指标。 */
+  .vq-content .page.page--templates .asset-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+
+  .vq-content .page.page--templates .inline-search {
+    width: 100%;
+    max-width: none;
+  }
+
+  .vq-content .page.page--templates .filter-tabs {
+    max-width: 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+  }
+
+  .vq-content .page.page--templates .filter-tabs button {
+    flex: 0 0 auto;
+  }
+
+  .vq-content .template-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .vq-content .template-stats span:nth-child(5) {
+    display: none;
+  }
+
+  .vq-skeleton {
+    padding: 16px;
+  }
+
+  .vq-skeleton-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .vq-skeleton-line--title,
+  .vq-skeleton-line--copy {
+    width: 100%;
+  }
+
+  .vq-error-fallback {
+    padding: 16px;
+  }
+
+  .vq-error-card {
+    padding: 16px;
+  }
+
+  .vq-error-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

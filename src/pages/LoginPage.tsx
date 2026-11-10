@@ -39,9 +39,11 @@ export function LoginPage({ notice, onSignIn, onRegister }: Props) {
   const [errors, setErrors] = useState<FormErrors>({})
   const [info, setInfo] = useState('')
   // 注册开关与密码长度由后端下发；登录页不再展示任何演示账号或口令。
-  const [registrationEnabled, setRegistrationEnabled] = useState(true)
+  // 首屏默认不显示注册入口（跟服务端 fail-closed 一致），拿到配置再放开。
+  const [registrationEnabled, setRegistrationEnabled] = useState(false)
   // 密码长度以后端配置为准，这里只放一个兜底值；登录不校验长度。
   const [minPasswordLength, setMinPasswordLength] = useState(DEFAULT_MIN_PASSWORD_LENGTH)
+  const [passwordPolicy, setPasswordPolicy] = useState('')
   const passwordRef = useRef<HTMLInputElement>(null)
   const isSignup = mode === 'signup'
 
@@ -53,6 +55,7 @@ export function LoginPage({ notice, onSignIn, onRegister }: Props) {
         if (!active) return
         setRegistrationEnabled(config.registrationEnabled)
         if (config.minPasswordLength > 0) setMinPasswordLength(config.minPasswordLength)
+        if (config.passwordPolicy) setPasswordPolicy(config.passwordPolicy)
       })
       .catch(() => {
         // 后端没起来：注册入口按最保守处理（不显示），登录照常可填。
@@ -84,6 +87,7 @@ export function LoginPage({ notice, onSignIn, onRegister }: Props) {
       // 只有注册校验密码长度，长度取后端下发的 minPasswordLength。
       if (!password) nextErrors.password = '请设置密码'
       else if (password.length < minPasswordLength) nextErrors.password = `密码至少 ${minPasswordLength} 位`
+      else if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) nextErrors.password = '密码要同时包含字母和数字'
       if (trimmedName.length > NAME_MAX_LENGTH) nextErrors.name = `昵称最多 ${NAME_MAX_LENGTH} 字`
     } else if (!password) {
       nextErrors.password = '请输入密码'
@@ -315,11 +319,11 @@ export function LoginPage({ notice, onSignIn, onRegister }: Props) {
                   type={showPassword ? 'text' : 'password'}
                   name="password"
                   autoComplete={isSignup ? 'new-password' : 'current-password'}
-                  placeholder={isSignup ? `至少 ${minPasswordLength} 位` : '账户密码'}
+                  placeholder={isSignup ? `至少 ${minPasswordLength} 位，含字母和数字` : '账户密码'}
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   aria-invalid={Boolean(errors.password)}
-                  aria-describedby={errors.password ? 'vq-password-error' : undefined}
+                  aria-describedby={errors.password ? 'vq-password-error' : isSignup ? 'vq-password-policy' : undefined}
                   disabled={busy}
                 />
                 <button
@@ -335,6 +339,11 @@ export function LoginPage({ notice, onSignIn, onRegister }: Props) {
               {errors.password && (
                 <span className="vq-field-error" id="vq-password-error">
                   {errors.password}
+                </span>
+              )}
+              {isSignup && !errors.password && (
+                <span className="vq-field-hint" id="vq-password-policy">
+                  {passwordPolicy || `至少 ${minPasswordLength} 位，且同时包含字母和数字`}
                 </span>
               )}
             </div>

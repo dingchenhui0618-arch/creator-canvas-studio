@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ArrowRight, ArrowUpRight, Plus, RefreshCw } from 'lucide-react'
 import type { Page } from '../domain/types'
+import PageHead from '../components/PageHead'
 import { MonoTag } from '../components/ui'
 import { request } from '../api/client'
 import { listBdcCanvases, type BdcCanvas } from '../api/bdc'
@@ -103,42 +104,44 @@ export function OverviewPage({ userName, onCreate, onNavigate }: Props) {
 
   return (
     <div className="vq-page">
-      <header className="vq-page-head">
-        <div>
-          {/* 不给问候语：这一屏的价值是「有什么、各多少」，不是寒暄 */}
-          <div className="vq-kicker">
-            <span className="vq-kicker-word">工作台</span>
-            <span className="vq-kicker-dot" aria-hidden="true" />
+      <PageHead
+        kicker={
+          <>
+            {/* 不给问候语：这一屏的价值是「有什么、各多少」，不是寒暄 */}
+            <span>工作台</span>
+            <span className="vq-head-sep" aria-hidden="true">·</span>
             <span>{userName}</span>
-            <span className="vq-kicker-dot" aria-hidden="true" />
+            <span className="vq-head-sep" aria-hidden="true">·</span>
             <time dateTime={now.toISOString().slice(0, 10)}>{todayLabel(now)}</time>
-          </div>
-          <h1>
-            {loading ? (
-              '正在读取…'
-            ) : (
-              <>
-                <b>{canvases.length}</b> 块画布
-                <span className="vq-head-sep" aria-hidden="true">·</span>
-                <b>{runs.length}</b> 条运行
-                <span className="vq-head-sep" aria-hidden="true">·</span>
-                <b>{templates.length}</b> 个模板
-              </>
-            )}
-          </h1>
-          <p>三个数字分别来自画布服务、/api/runs 与 /api/templates；没有数据的区块写空状态，不放示例数据。</p>
-        </div>
-        <div className="vq-page-actions">
-          <button type="button" className="vq-button vq-button--ghost" onClick={() => void load()} disabled={loading}>
-            <RefreshCw size={14} />
-            刷新
-          </button>
-          <button type="button" className="vq-button vq-button--primary" onClick={onCreate}>
-            <Plus size={14} />
-            新建
-          </button>
-        </div>
-      </header>
+          </>
+        }
+        title={
+          loading ? (
+            '正在读取…'
+          ) : (
+            <>
+              <b>{canvases.length}</b> 块画布
+              <span className="vq-head-sep" aria-hidden="true">·</span>
+              <b>{runs.length}</b> 条运行
+              <span className="vq-head-sep" aria-hidden="true">·</span>
+              <b>{templates.length}</b> 个模板
+            </>
+          )
+        }
+        desc="三个数字分别来自画布服务、/api/runs 与 /api/templates；没有数据的区块写空状态，不放示例数据。"
+        actions={
+          <>
+            <button type="button" className="vq-button vq-button--ghost" onClick={() => void load()} disabled={loading}>
+              <RefreshCw size={14} />
+              刷新
+            </button>
+            <button type="button" className="vq-button vq-button--primary" onClick={onCreate}>
+              <Plus size={14} />
+              新建
+            </button>
+          </>
+        }
+      />
 
       {errors.length ? (
         <p className="vq-note vq-note--error" role="status">

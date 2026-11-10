@@ -23,6 +23,8 @@ http.createServer(async (req, res) => {
   if (keyword === 'disabled') return send(3105, { msg: 'API Key已禁用' })
   if (keyword === 'nopoints') return send(3210, { msg: '积分不足，请完成支付后重试', amount: 100, goodsName: 'RedFox API积分充值（100元=1000积分）' })
   if (keyword === 'flaky' && Math.random() < 0.6) return send(0, { msg: '接口调用过于频繁，当前限制为10次/秒，请稍后再试' })
+  // slow：故意拖 1.5 秒，用来验证「同一账号并发上限」真的会拦住第二个请求
+  if (keyword === 'slow') await new Promise((resolve) => setTimeout(resolve, 1500))
 
   const list = Array.from({ length: Number(body.pageSize || 3) }, (_, index) => ({
     content: '假数据 ' + (index + 1) + ' · ' + keyword,

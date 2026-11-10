@@ -2,6 +2,7 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { config } from './config.mjs'
+import { canAccess } from './owner.mjs'
 
 // 智能体存储：data/agents.json，原子写与 templates.mjs 同一套范式。
 export const AGENT_CATEGORIES = [
@@ -234,8 +235,8 @@ function normalizeInput(input, { partial = false } = {}) {
   return out
 }
 
-export async function listAgents({ q = '', category = '' } = {}) {
-  const list = await loadAll()
+export async function listAgents({ q = '', category = '' } = {}, user = null) {
+  const list = (await loadAll()).filter((item) => canAccess(item, user))
   const keyword = String(q).trim()
   return list
     .filter((item) => (category ? item.category === category : true))
@@ -243,12 +244,12 @@ export async function listAgents({ q = '', category = '' } = {}) {
     .sort((a, b) => String(b.lastRunAt || b.updatedAt || b.createdAt).localeCompare(String(a.lastRunAt || a.updatedAt || a.createdAt)))
 }
 
-export async function getAgent(id) {
+export async function getAgent(id, user = null) {
   const list = await loadAll()
-  return list.find((item) => item.id === id) || null
+  return list.find((item) => item.id === id && canAccess(item, user)) || null
 }
 
-export async function createAgent(input) {
+export async function createAgent(input, user = null) {
   const list = await loadAll()
   const data = normalizeInput(input)
   if (list.some((item) => item.name === data.name)) throw invalid('已有同名智能体：' + data.name)
@@ -261,6 +262,7 @@ export async function createAgent(input) {
     runCount: 0,
     lastRunAt: null,
     lastModel: '',
+    ownerId: user?.id || '',
   }
   await persist([agent, ...list])
   return agent
@@ -300,8 +302,8 @@ export async function recordRun(id, { model }) {
   return updated
 }
 
-export async function agentStats() {
-  const list = await loadAll()
+export async function agentStats(user = null) {
+  const list = (await loadAll()).filter((item) => canAccess(item, user))
   const byCategory = {}
   for (const item of list) byCategory[item.category] = (byCategory[item.category] || 0) + 1
   return {
@@ -309,4 +311,15 @@ export async function agentStats() {
     runs: list.reduce((sum, item) => sum + (item.runCount || 0), 0),
     byCategory,
   }
+}
+
+// 启动迁移：老数据没有归属，认领给管理员
+export async function adoptUnowned(ownerId) {
+  if (!ownerId) return 0
+  const list = await loadAll()
+  const pending = list.filter((item) => !item.ownerId)
+  if (!pending.length) return 0
+  for (const item of pending) item.ownerId = ownerId
+  await persist(list)
+  return pending.length
 }

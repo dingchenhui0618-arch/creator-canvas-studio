@@ -2,7 +2,7 @@
 // 会话凭证是 HttpOnly cookie，由浏览器自动携带；前端不读取、不保存 token。
 import { request as apiRequest } from './client'
 
-export type AuthUserKind = 'account' | 'demo' | 'guest'
+export type AuthUserKind = 'account' | 'demo' | 'guest' | 'admin'
 
 export type AuthUser = {
   id: string
@@ -23,6 +23,8 @@ export type AuthConfig = {
   registrationEnabled: boolean
   /** 注册密码最小长度由后端下发（login 不校验长度，老密码不受影响）。 */
   minPasswordLength: number
+  /** 完整口令规则的一句话说明，直接显示在注册表单下面。 */
+  passwordPolicy?: string
 }
 
 type AuthErrorBody = { error?: string; field?: unknown }

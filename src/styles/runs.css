@@ -8,9 +8,7 @@
   margin: 0 auto;
   padding: 32px 32px 48px;
 }
-.runs-head { display:flex; align-items:flex-start; justify-content:space-between; gap:24px; }
-.runs-head h1 { margin:8px 0 8px; font-size:28px; font-weight: 500; letter-spacing:-.02em; }
-.runs-head p { margin:0; max-width:70ch; color:var(--muted); font-size:12px; line-height:1.7; }
+.runs-page > .vq-head { margin-bottom: 0; }
 .runs-stats { display:flex; gap:32px; padding:12px 0; border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
 .runs-stats div { display:flex; align-items:baseline; gap:8px; }
 .runs-stats strong { font-size:20px; font-weight:600; letter-spacing:-.02em; }

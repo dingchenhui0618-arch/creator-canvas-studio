@@ -17,7 +17,10 @@ import {
 import { coverSrc, formatCount, formatDuration, getHealth, saveTemplate, searchMedia } from '../api/radar'
 import type { MediaItem } from '../domain/radar'
 import { ReplicateModal } from '../components/ReplicateModal'
+import PageHead from '../components/PageHead'
+import { getCredits, type CreditsResponse } from '../api/credits'
 import '../styles/radar.css'
+import '../styles/credits.css'
 
 const PLATFORMS = [
   { value: 'all', label: '全部平台' },
@@ -73,10 +76,19 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
   const [modalItem, setModalItem] = useState<MediaItem | null>(null)
   const [savedIds, setSavedIds] = useState<string[]>([])
   const [savingId, setSavingId] = useState('')
+  // 积分：检索前告诉用户这一下花多少，检索后显示扣了多少、还剩多少
+  const [credits, setCredits] = useState<CreditsResponse | null>(null)
+  const [insufficient, setInsufficient] = useState('')
+
+  // 积分余额是服务端账本，检索成功/失败后都重新拉一次，界面上的数字永远可信
+  const refreshCredits = useCallback(() => {
+    getCredits(1).then(setCredits).catch(() => setCredits(null))
+  }, [])
 
   const runSearch = useCallback(async () => {
     setLoading(true)
     setError('')
+    setInsufficient('')
     try {
       const result = await searchMedia({ platform, q: keyword.trim(), start: range ? dayOffset(Number(range)) : '', end: range ? dayOffset(0) : '' })
       setItems(result.items)
@@ -85,19 +97,24 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
       setQuota(result.quota ? { code: result.quota.code, message: result.quota.message, rechargeUrl: result.quota.rechargeUrl, goodsName: result.quota.goodsName } : null)
       setSearched(true)
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught))
+      const message = caught instanceof Error ? caught.message : String(caught)
+      setError(message)
+      // 余额不足不是「出错」，是明确的状态：单独提示，并禁用检索按钮
+      if (/积分不足/.test(message)) setInsufficient(message)
       setSearched(true)
     } finally {
       setLoading(false)
+      refreshCredits()
     }
-  }, [keyword, platform, range])
+  }, [keyword, platform, range, refreshCredits])
 
   useEffect(() => {
     getHealth()
       .then((health) => { setHasKey(health.redfox); setVisionReady(health.vision) })
       .catch(() => { setHasKey(false); setVisionReady(false) })
-    // 首屏只读健康状态，不检索：检索必须由用户点按钮触发
-  }, [])
+    refreshCredits()
+    // 首屏只读健康状态与积分余额，不检索：检索必须由用户点按钮触发
+  }, [refreshCredits])
 
   const sorted = useMemo(() => {
     const copy = [...items]
@@ -126,20 +143,27 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
 
   return (
     <div className="page page--radar">
-      <div className="page-heading">
-        <div>
-          <div className="eyebrow"><span className="eyebrow-dot" />内容雷达</div>
-          <h1>爆款雷达</h1>
-          <p>按关键词检索抖音与小红书的内容与互动数据：点赞、收藏、评论、转发、播放都取原始值。挑一条加进模板库只存链接，或者直接拆成脚本与分镜。</p>
-        </div>
-        <div className="heading-actions">
-          <span className={`status-pill ${hasKey ? (quota ? 'is-error' : 'is-live') : 'is-mock'}`}>
-            <span className="status-dot" />
-            {hasKey ? (quota ? '红狐接口异常' : '红狐接口已连接') : '示例数据模式'}
-          </span>
-          <button className="button button--ghost" onClick={onOpenTemplates}>模板库</button>
-        </div>
-      </div>
+      <PageHead
+        kicker="内容雷达"
+        title="爆款雷达"
+        desc="按关键词检索抖音与小红书的内容与互动数据：点赞、收藏、评论、转发、播放都取原始值。挑一条加进模板库只存链接，或者直接拆成脚本与分镜。"
+        actions={
+          <>
+            <span className={`status-pill ${hasKey ? (quota ? 'is-error' : 'is-live') : 'is-mock'}`}>
+              <span className="status-dot" />
+              {hasKey ? (quota ? '红狐接口异常' : '红狐接口已连接') : '示例数据模式'}
+            </span>
+            <span
+              className={'radar-credit' + (insufficient || (credits && credits.balance !== null && credits.balance < credits.prices.search) ? ' is-low' : '')}
+              title="积分余额来自服务端账本；示例数据不扣积分"
+            >
+              余额 <strong>{credits?.balance ?? '—'}</strong> {credits?.unit || '积分'}
+              {credits ? ' · 每次 ' + credits.prices.search : ''}
+            </span>
+            <button className="button button--ghost" onClick={onOpenTemplates}>模板库</button>
+          </>
+        }
+      />
 
       <div className="radar-toolbar">
         <div className="filter-tabs">
@@ -162,11 +186,21 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
         <select className="select select--compact" value={sort} onChange={(event) => setSort(event.target.value)} aria-label="排序方式">
           {SORTS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
         </select>
-        <button className="button button--primary" onClick={() => void runSearch()} disabled={loading}>
+        <button
+          className="button button--primary"
+          onClick={() => void runSearch()}
+          disabled={loading || Boolean(insufficient)}
+          title={insufficient ? '积分不足，先让管理员发放积分' : ''}
+        >
           {loading ? <RefreshCw size={15} className="spin" /> : <Search size={15} />}
           {loading ? '检索中' : searched ? '重新检索' : '检索'}
         </button>
       </div>
+      {credits ? (
+        <p className="radar-credit-note">
+          每次检索消耗 <strong>{credits.prices.search}</strong> {credits.unit}，上游失败会原路退回；示例数据不扣积分。
+        </p>
+      ) : null}
 
       {quota ? (
         <div className="radar-banner radar-banner--quota">
@@ -184,12 +218,19 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
         </div>
       ) : null}
 
-      {error && (
+      {insufficient ? (
+        <div className="radar-banner radar-banner--error">
+          <AlertCircle size={15} />
+          <span>
+            {insufficient}。充值通道还没开通，请让管理员在「设置 → 账号与积分」里发放，或稍后余额到账再试。
+          </span>
+        </div>
+      ) : error ? (
         <div className="radar-banner radar-banner--error">
           <AlertCircle size={15} />
           <span>{error}</span>
         </div>
-      )}
+      ) : null}
 
       {searched && (
         <div className="radar-summary">

@@ -1,76 +1,172 @@
-import { useState } from 'react'
-import { sessionKindLabel, readSession } from '../../auth/session'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { listAdminUsers, grantCredits, type AdminUser } from '../../api/credits'
+import type { SessionKind } from '../../auth/session'
 import { formatDateTime } from './data'
-import { AdminHead, SourceTag } from './ui'
+import { AdminHead, Badge, EmptyState, ErrorBanner, LoadingLine, RefreshButton, SourceTag } from './ui'
+import '../../styles/credits.css'
+
+// 角色列说业务话：服务端 kind 只有 admin / account / guest 三种
+function roleLabel(kind: SessionKind): string {
+  if (kind === 'admin') return '管理员'
+  if (kind === 'guest') return '访客'
+  return '普通账号'
+}
 
 /**
- * 账号页如实说明现状：账号已落库，但服务端还没有管理员用户列表接口，
- * 所以这里只展示当前会话，不摆示例用户、也不给假的分页。
+ * 账号页现在是真接口：GET /api/admin/users 列真实账号（含积分余额），
+ * POST /api/admin/users/:id/credits 发放/扣减积分。权限在服务端判断（kind=admin 或 VQ_ADMIN_EMAILS），
+ * 非管理员进来会看到 403 的实话，而不是一张空表。
  */
 export default function UsersSection() {
-  const [session] = useState(() => readSession())
+  const [items, setItems] = useState<AdminUser[]>([])
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [selectedId, setSelectedId] = useState('')
+  const [amount, setAmount] = useState('50')
+  const [note, setNote] = useState('')
+  const [granting, setGranting] = useState(false)
+  const [grantMessage, setGrantMessage] = useState('')
+
+  const load = useCallback(() => {
+    setLoading(true)
+    setError('')
+    listAdminUsers()
+      .then((data) => {
+        setItems(data.items)
+        setSelectedId((current) => current || data.items[0]?.id || '')
+      })
+      .catch((caught) => setError(caught instanceof Error ? caught.message : '账号列表读取失败'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    const timer = window.setTimeout(load, 0)
+    return () => window.clearTimeout(timer)
+  }, [load])
+
+  const selected = useMemo(() => items.find((item) => item.id === selectedId) || null, [items, selectedId])
+  const totalCredits = items.reduce((sum, item) => sum + (item.credits || 0), 0)
+
+  const submit = async () => {
+    const value = Number(amount)
+    if (!selected) return
+    if (!Number.isFinite(value) || value === 0) {
+      setGrantMessage('数量必须是非 0 整数（负数表示扣减）')
+      return
+    }
+    setGranting(true)
+    setGrantMessage('')
+    try {
+      const result = await grantCredits(selected.id, Math.trunc(value), note.trim())
+      setGrantMessage('已' + (value > 0 ? '发放' : '扣减') + ' ' + Math.abs(Math.trunc(value)) + ' 积分，' + selected.email + ' 当前余额 ' + result.balance + ' 积分')
+      setNote('')
+      load()
+    } catch (caught) {
+      setGrantMessage(caught instanceof Error ? caught.message : '发放失败')
+    } finally {
+      setGranting(false)
+    }
+  }
 
   return (
     <>
       <AdminHead
         kicker="ADMIN / USERS"
-        title="账号"
-        description="账号存在服务端数据库（data/auth.db，SQLite）。管理员用户列表接口还没做，这一页只显示当前会话，不虚构其他用户。"
-        actions={<SourceTag kind="local" source="data/auth.db" />}
+        title="账号与积分"
+        description="账号存在服务端数据库（data/auth.db，SQLite）；积分是服务端账本，检索/复刻/评审/对话按次扣减，失败原路退回。"
+        actions={
+          <>
+            <SourceTag kind="api" source="/api/admin/users" />
+            <RefreshButton onClick={load} busy={loading} />
+          </>
+        }
       />
+
+      {error ? <ErrorBanner message={error} onRetry={load} /> : null}
 
       <section className="admin-card admin-block">
         <div className="admin-block-head">
           <div>
-            <p className="admin-label">当前会话</p>
-            <p className="admin-sub">来自 /api/auth/me 校验过的浏览器缓存；角色由服务端 users.kind 决定。</p>
+            <p className="admin-label">真实账号</p>
+            <p className="admin-sub">
+              共 {items.length} 个账号，积分合计 {totalCredits}。数据按账号隔离：模板、智能体、画布、运行记录只有本人（或管理员）能看。
+            </p>
           </div>
         </div>
 
-        <div className="admin-table-wrap">
-          <table className="admin-table">
-            <thead>
-              <tr>
-                <th>邮箱</th>
-                <th>显示名</th>
-                <th>角色</th>
-                <th>工作区</th>
-                <th>本次登录</th>
-              </tr>
-            </thead>
-            <tbody>
-              {session ? (
+        {loading && !items.length ? (
+          <LoadingLine label="/api/admin/users" />
+        ) : items.length ? (
+          <div className="admin-table-wrap">
+            <table className="admin-table">
+              <thead>
                 <tr>
-                  <td className="admin-mono">{session.user.email}</td>
-                  <td>{session.user.name}</td>
-                  <td>{sessionKindLabel(session.user.kind)}</td>
-                  <td>{session.user.workspace}</td>
-                  <td className="admin-mono">{formatDateTime(session.signedInAt)}</td>
+                  <th>邮箱</th>
+                  <th>显示名</th>
+                  <th>角色</th>
+                  <th className="num-col">积分</th>
+                  <th>上次登录</th>
+                  <th>状态</th>
                 </tr>
-              ) : (
-                <tr>
-                  <td colSpan={5} className="admin-cell-sub">
-                    当前浏览器没有会话。
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        <p className="admin-hint">
-          新增账号目前只有一条路：在服务端执行 <code>npm run adduser</code>（见 README「账号」一节）。页面上不放点了没反应的
-          「新建账号」按钮。
-        </p>
+              </thead>
+              <tbody>
+                {items.map((item) => (
+                  <tr key={item.id}>
+                    <td className="admin-mono">{item.email}</td>
+                    <td>{item.name}</td>
+                    <td>{roleLabel(item.kind as SessionKind)}</td>
+                    <td className="admin-mono num-col">{item.credits}</td>
+                    <td className="admin-mono">{formatDateTime(item.lastLoginAt)}</td>
+                    <td>
+                      <Badge tone={item.active ? 'ok' : 'fail'}>{item.active ? '在用' : '停用'}</Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState title="还没有账号" description="注册开关默认关闭；用 npm run adduser 加第一个账号。" />
+        )}
       </section>
 
-      <section className="admin-note">
-        <p>要做完整用户管理，需要补这三样</p>
-        <ul>
-          <li>服务端：<code>GET /api/admin/users</code>（分页、关键字、状态筛选）。</li>
-          <li>服务端：禁用 / 重置口令接口，写审计日志。</li>
-          <li>前端：本页换成表格 + 行内操作，权限判断放在服务端。</li>
-        </ul>
+      <section className="admin-card admin-block">
+        <div className="admin-block-head">
+          <div>
+            <p className="admin-label">发放积分</p>
+            <p className="admin-sub">充值通道未开通（金额与档位还没定），所以积分只能由管理员在这里发放。</p>
+          </div>
+        </div>
+
+        <div className="vq-inline-form">
+          <label className="vq-field">
+            <span>账号</span>
+            <select className="vq-input" value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>
+              {items.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.email}（{item.credits} 积分）
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="vq-field vq-field--narrow">
+            <span>数量</span>
+            <input className="vq-input" value={amount} onChange={(event) => setAmount(event.target.value)} inputMode="numeric" />
+          </label>
+          <label className="vq-field vq-field--wide">
+            <span>备注</span>
+            <input
+              className="vq-input"
+              value={note}
+              placeholder="例如：首批体验额度"
+              onChange={(event) => setNote(event.target.value)}
+            />
+          </label>
+          <button type="button" className="vq-button vq-button--primary" onClick={submit} disabled={granting || !selected}>
+            {granting ? '提交中…' : '发放 / 扣减'}
+          </button>
+        </div>
+        {grantMessage ? <p className="admin-hint">{grantMessage}</p> : null}
       </section>
     </>
   )

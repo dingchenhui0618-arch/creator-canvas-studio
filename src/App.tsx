@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import {
   Activity,
   Bot,
@@ -24,27 +24,110 @@ import './styles/shell.css'
 import './styles/overview.css'
 import { CreateModal, NavItem } from './components/ui'
 import { ModelSwitch } from './components/ModelSwitch'
-import CanvasPage from './pages/CanvasPage'
-import AgentEditorPage from './pages/AgentEditorPage'
+import { ErrorBoundary } from './components/ErrorBoundary'
+import { PageSkeleton } from './components/PageSkeleton'
 import ReviewPage from './pages/ReviewPage'
 import { OverviewPage } from './pages/OverviewPage'
-import { AgentsPage } from './pages/AgentsPage'
 import { RunsPage } from './pages/RunsPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { RadarPage } from './pages/RadarPage'
-import { TemplateLibraryPage } from './pages/TemplateLibraryPage'
-import AdminConsolePage from './pages/admin/AdminConsolePage'
 import { RequireSession } from './auth/RequireSession'
 import { useSession } from './auth/useSession'
 import { initialsFor, sessionKindLabel, type RegisterInput, type Session, type SignInInput } from './auth/session'
+import { listAgents } from './api/agents'
+import { navigate, pageToRoute, routeKey, routeToPage, useRoute } from './router'
 import packageJsonRaw from '../package.json?raw'
-import { EDITION_BY_ID, readInitialEdition, EDITION_STORAGE_KEY, type AdminSection, type EditionId } from './editions'
+import { EDITION_BY_ID, EDITION_STORAGE_KEY, type AdminSection } from './editions'
 
 const APP_VERSION = (JSON.parse(packageJsonRaw) as { version?: string }).version ?? '0.0.0'
 
-function sectionLabel(edition: EditionId, section: string): string {
-  const found = EDITION_BY_ID[edition].nav.find((item) => item.section === section)
-  return found?.label ?? EDITION_BY_ID[edition].nav[0]?.label ?? ''
+// 重页面按路由拆包：画布带 @xyflow、智能体与模板库带各自的样式表，首屏不必等它们。
+const CanvasPage = lazy(() => import('./pages/CanvasPage'))
+const AgentsPage = lazy(() => import('./pages/AgentsPage').then((module) => ({ default: module.AgentsPage })))
+const TemplateLibraryPage = lazy(() =>
+  import('./pages/TemplateLibraryPage').then((module) => ({ default: module.TemplateLibraryPage })),
+)
+const AdminConsolePage = lazy(() => import('./pages/admin/AdminConsolePage'))
+const AgentEditorPage = lazy(() => import('./pages/AgentEditorPage'))
+
+function sectionLabel(section: string): string {
+  const found = EDITION_BY_ID.admin.nav.find((item) => item.section === section)
+  return found?.label ?? EDITION_BY_ID.admin.nav[0]?.label ?? ''
+}
+
+type AgentSeed = { name: string; description: string }
+
+/**
+ * 智能体编辑器路由：地址里可能给的是 id（外链）或名称（列表入口只回传名称）。
+ * 先把引用解析成 AgentEditorPage 需要的 { name, description }，再交给编辑器。
+ */
+function AgentEditorRoute({
+  agentRef,
+  onBack,
+  onNavigate,
+  onToast,
+}: {
+  agentRef: string | null
+  onBack: () => void
+  onNavigate: (page: Page) => void
+  onToast: (message: string) => void
+}) {
+  const [seed, setSeed] = useState<AgentSeed | null>(null)
+  const [status, setStatus] = useState<'loading' | 'ready' | 'missing'>(agentRef ? 'loading' : 'ready')
+
+  useEffect(() => {
+    if (!agentRef) return
+    let alive = true
+    listAgents()
+      .then((data) => {
+        if (!alive) return
+        const record =
+          data.items.find((item) => item.id === agentRef) ?? data.items.find((item) => item.name === agentRef)
+        if (!record) {
+          setStatus('missing')
+          return
+        }
+        setSeed({ name: record.name, description: record.role })
+        setStatus('ready')
+      })
+      .catch(() => {
+        if (alive) setStatus('missing')
+      })
+    return () => {
+      alive = false
+    }
+  }, [agentRef])
+
+  if (status === 'loading') return <PageSkeleton label="正在打开智能体编辑器" />
+  if (status === 'missing') {
+    return (
+      <div className="vq-error-fallback" role="alert">
+        <div className="vq-error-card">
+          <span className="vq-error-kicker">智能体 / 未找到</span>
+          <h1>找不到这个智能体</h1>
+          <p>地址里的智能体可能已被删除，或链接中的编号不属于当前工作区。返回列表重新选择，或新建一个。</p>
+          <div className="vq-error-actions">
+            <button type="button" className="vq-button vq-button--primary" onClick={onBack}>
+              返回智能体列表
+            </button>
+            <button type="button" className="vq-button vq-button--ghost" onClick={() => onNavigate('agent-editor')}>
+              新建智能体
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <AgentEditorPage
+      key={seed?.name ?? 'new'}
+      agent={seed ?? undefined}
+      onBack={onBack}
+      onNavigate={onNavigate}
+      onToast={onToast}
+    />
+  )
 }
 
 function Workbench({
@@ -56,22 +139,19 @@ function Workbench({
   onSignOut: () => void
   onSwitchAccount: () => void
 }) {
-  const [activePage, setActivePage] = useState<Page>('overview')
-  const [edition, setEdition] = useState<EditionId>(() => readInitialEdition())
-  const [consoleSection, setConsoleSection] = useState<string>(() => {
-    const initial = readInitialEdition()
-    return EDITION_BY_ID[initial].nav[0]?.section ?? 'overview'
-  })
+  const route = useRoute()
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
   const [toast, setToast] = useState('')
-  const [editorAgent, setEditorAgent] = useState<{ name: string; description: string } | null>(null)
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const [updateOpen, setUpdateOpen] = useState(false)
   const [updateChecking, setUpdateChecking] = useState(false)
   const [updateMessage, setUpdateMessage] = useState('')
   const toastTimer = useRef<number | undefined>(undefined)
   const accountRef = useRef<HTMLDivElement>(null)
+
+  // 侧栏高亮、面包屑和内容页都从 hash 路由推导，页面本身不再保存 activePage。
+  const activePage = routeToPage(route)
 
   const notify = useCallback((message: string) => {
     setToast(message)
@@ -106,30 +186,46 @@ function Workbench({
     }
   }, [])
 
-  const switchEdition = useCallback((next: EditionId) => {
-    setEdition(next)
+  const go = useCallback((page: Page) => {
+    navigate(pageToRoute(page))
+    setAccountMenuOpen(false)
+  }, [])
+
+  const openNewAgent = useCallback(() => {
+    navigate({ kind: 'agent-editor', agentRef: null })
+    setAccountMenuOpen(false)
+  }, [])
+
+  // 列表入口只把名称交给外壳。先换成稳定 id 再写地址，地址栏里始终是 #/agents/<id>；
+  // 解析失败时退回名称，编辑器那边仍能按唯一名称找回记录。
+  const openAgent = useCallback((name: string) => {
+    setAccountMenuOpen(false)
+    void listAgents()
+      .then((data) => {
+        const record = data.items.find((item) => item.name === name)
+        navigate({ kind: 'agent-editor', agentRef: record?.id ?? name })
+      })
+      .catch(() => {
+        navigate({ kind: 'agent-editor', agentRef: name })
+      })
+  }, [])
+
+  const leaveAdmin = useCallback(() => {
     try {
-      window.localStorage.setItem(EDITION_STORAGE_KEY, next)
+      window.localStorage.setItem(EDITION_STORAGE_KEY, 'user')
     } catch {
       // 隐私模式下写不进去，本次会话仍然生效
     }
-    setAccountMenuOpen(false)
-    const firstSection = EDITION_BY_ID[next].nav[0]?.section
-    if (firstSection) setConsoleSection(firstSection)
-    if (next === 'user') setActivePage('overview')
-  }, [])
-
-  const go = useCallback((page: Page) => {
-    setActivePage(page)
+    navigate({ kind: 'page', page: 'overview' })
     setAccountMenuOpen(false)
   }, [])
 
-  // 跨页跳转：模板库等页面通过 window 事件请求切页，外壳只负责接收。
+  // 跨页跳转：保留旧的自定义事件（评审页仍用它），统一翻译成 hash 路由。
   useEffect(() => {
     const onNavigate = (event: Event) => {
       const detail = (event as CustomEvent<{ page?: Page }>).detail
       if (detail?.page && detail.page !== 'login' && detail.page in pageLabels) {
-        setActivePage(detail.page)
+        navigate(pageToRoute(detail.page))
         setAccountMenuOpen(false)
       }
     }
@@ -159,15 +255,19 @@ function Workbench({
     }
   }, [accountMenuOpen, updateOpen])
 
-  // 智能体编辑器只认服务端返回的条目，前端不再缓存一份假列表。
-  const openAgent = (name: string) => {
-    setEditorAgent({ name, description: '' })
-    setActivePage('agent-editor')
-  }
-
   const renderPage = () => {
-    if (edition === 'admin') return <AdminConsolePage section={consoleSection as AdminSection} />
-    switch (activePage) {
+    if (route.kind === 'admin') return <AdminConsolePage section={route.section} />
+    if (route.kind === 'agent-editor') {
+      return (
+        <AgentEditorRoute
+          agentRef={route.agentRef}
+          onBack={() => go('agents')}
+          onNavigate={go}
+          onToast={notify}
+        />
+      )
+    }
+    switch (route.page) {
       case 'canvas':
         return <CanvasPage onToast={notify} />
       case 'radar':
@@ -177,25 +277,7 @@ function Workbench({
       case 'overview':
         return <OverviewPage userName={session.user.name} onCreate={() => setShowCreate(true)} onNavigate={go} />
       case 'agents':
-        return (
-          <AgentsPage
-            onCreate={() => {
-              setEditorAgent(null)
-              go('agent-editor')
-            }}
-            onOpenAgent={openAgent}
-          />
-        )
-      case 'agent-editor':
-        return (
-          <AgentEditorPage
-            key={editorAgent?.name ?? 'new'}
-            agent={editorAgent ?? undefined}
-            onBack={() => go('agents')}
-            onNavigate={go}
-            onToast={notify}
-          />
-        )
+        return <AgentsPage onCreate={openNewAgent} onOpenAgent={openAgent} />
       case 'runs':
         return <RunsPage />
       case 'review':
@@ -228,19 +310,19 @@ function Workbench({
             </div>
           )}
 
-          {edition === 'admin' && (
-            // 后台只从地址栏 ?edition=admin 进来；普通用户侧栏里没有任何形态切换。
+          {route.kind === 'admin' && (
+            // 后台只从地址栏 #/admin/<section> 进来；普通用户侧栏里没有任何形态切换。
             <div className="vq-edition-bar" aria-label="当前形态">
               <span className="vq-edition-kicker" title={EDITION_BY_ID.admin.hint}>
                 后台管理版
               </span>
-              <button type="button" className="vq-edition-exit" onClick={() => switchEdition('user')}>
+              <button type="button" className="vq-edition-exit" onClick={leaveAdmin}>
                 返回生产版
               </button>
             </div>
           )}
 
-          {edition === 'user' ? (
+          {route.kind !== 'admin' ? (
             <nav className="vq-nav" aria-label="主导航">
               <NavItem icon={Grid2X2} label="工作台" active={activePage === 'overview'} compact={!sidebarOpen} onClick={() => go('overview')} />
               <NavItem icon={Radar} label="爆款雷达" active={activePage === 'radar'} compact={!sidebarOpen} onClick={() => go('radar')} />
@@ -256,17 +338,19 @@ function Workbench({
               <NavItem icon={ScanEye} label="视觉评审" active={activePage === 'review'} compact={!sidebarOpen} onClick={() => go('review')} />
             </nav>
           ) : (
-            <nav className="vq-nav" aria-label={EDITION_BY_ID[edition].label + '导航'}>
-              {EDITION_BY_ID[edition].nav.map((item) => {
+            <nav className="vq-nav" aria-label={EDITION_BY_ID.admin.label + '导航'}>
+              {EDITION_BY_ID.admin.nav.map((item) => {
                 const Icon = item.icon
                 return (
                   <NavItem
                     key={item.id}
                     icon={Icon}
                     label={item.label}
-                    active={consoleSection === item.section}
+                    active={route.kind === 'admin' && route.section === item.section}
                     compact={!sidebarOpen}
-                    onClick={() => setConsoleSection(item.section ?? item.id)}
+                    onClick={() => {
+                      if (item.section) navigate({ kind: 'admin', section: item.section as AdminSection })
+                    }}
                   />
                 )
               })}
@@ -275,7 +359,7 @@ function Workbench({
         </div>
 
         <div className="vq-sidebar-bottom">
-                    {edition === 'user' ? (
+                    {route.kind !== 'admin' ? (
             <>
   <div className="vq-nav-divider" role="presentation" />
             <nav className="vq-nav vq-nav--utility" aria-label="设置层">
@@ -377,9 +461,9 @@ function Workbench({
               <span>{session.user.workspace}</span>
               <ChevronRight size={11} />
               <strong>
-                {edition === 'user'
-                  ? pageLabels[activePage]
-                  : EDITION_BY_ID[edition].label + ' · ' + sectionLabel(edition, consoleSection)}
+                {route.kind === 'admin'
+                  ? EDITION_BY_ID.admin.label + ' · ' + sectionLabel(route.section)
+                  : pageLabels[activePage]}
               </strong>
             </div>
           </div>
@@ -389,7 +473,11 @@ function Workbench({
           </div>
         </header>
 
-        <div className="vq-content">{renderPage()}</div>
+        <div className="vq-content">
+          <ErrorBoundary key={routeKey(route)}>
+            <Suspense fallback={<PageSkeleton />}>{renderPage()}</Suspense>
+          </ErrorBoundary>
+        </div>
       </div>
 
       {updateOpen && (
@@ -473,8 +561,7 @@ function Workbench({
           onCreate={(kind) => {
             setShowCreate(false)
             if (kind === 'agent') {
-              setEditorAgent(null)
-              go('agent-editor')
+              openNewAgent()
             } else {
               // 画布的新建在画布页里做（那里才有画布服务端接口），这里只负责把人送过去。
               go('canvas')

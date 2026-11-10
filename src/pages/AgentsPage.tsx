@@ -27,6 +27,7 @@ import {
   peekPendingSelectAgent,
 } from '../api/agents'
 import type { AgentRecord, AgentsList, OutputType } from '../api/agents'
+import PageHead from '../components/PageHead'
 import '../styles/agents.css'
 
 type ChatMessage = {
@@ -609,12 +610,12 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
 
   return (
     <div className="page agx-page">
-      <header className="agx-head">
-        <div>
-          <h1>智能体</h1>
-          <p>选择一个智能体，描述你要它做的事。</p>
-        </div>
-        <div className="agx-head-actions">
+      <PageHead
+        kicker="智能体 / 对话"
+        title="智能体"
+        desc="选择一个智能体，描述你要它做的事。"
+        actions={
+          <div className="agx-head-actions">
           <div className="agx-history-wrap">
             <button className="agx-btn" onClick={() => setHistoryOpen((open) => !open)} aria-expanded={historyOpen}>
               <History size={15} />
@@ -644,12 +645,13 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
               </>
             )}
           </div>
-          <button className="agx-btn agx-btn--ink" onClick={onCreate}>
-            <Plus size={15} />
-            新建智能体
-          </button>
-        </div>
-      </header>
+            <button className="agx-btn agx-btn--ink" onClick={onCreate}>
+              <Plus size={15} />
+              新建智能体
+            </button>
+          </div>
+        }
+      />
 
       <section className="agx-stage" ref={stageRef}>
         <div className="agx-composer-wrap">

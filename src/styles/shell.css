@@ -1243,6 +1243,12 @@
   font-size: 12px;
 }
 
+.vq-field-hint {
+  color: var(--faint);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
 .vq-login-row {
   display: flex;
   align-items: center;

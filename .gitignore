@@ -37,3 +37,4 @@ deploy/env.applied
 
 # 协作过程中的临时截图
 docs/_wip/
+.tmp-qa/

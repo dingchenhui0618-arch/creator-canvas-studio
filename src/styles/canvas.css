@@ -5,40 +5,19 @@
   padding: 24px 32px 24px;
 }
 
-/* ---------- 头部 ---------- */
-.cv-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-  margin-bottom: 16px;
-}
-.cv-head-main { min-width: 0; }
-.cv-eyebrow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--faint);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: .14em;
-  text-transform: uppercase;
-}
-.cv-eyebrow::before { content: ''; width: 14px; height: 1px; background: var(--line-strong); }
-.cv-title-row { display: flex; align-items: center; gap: 12px; margin-top: 8px; min-width: 0; }
+/* ---------- 头部（版式由 PageHead 统一，这里只留可编辑流程名） ---------- */
+.cv-title-row { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .cv-flow-name {
   width: min(560px, 42vw);
   margin-left: -8px;
-  padding: 1px 8px;
+  padding: 0 8px;
   color: var(--ink);
   background: transparent;
   border: 1px solid transparent;
   border-radius: 6px;
-  font-family: var(--font-ui);
-  font-size: 28px;
-  font-weight: 500;
-  letter-spacing: -.035em;
-  line-height: 1.2;
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
 }
 .cv-flow-name:hover { border-color: var(--line); }
 .cv-flow-name:focus { outline: none; border-color: var(--line-strong); background: var(--surface-raised); }
@@ -60,8 +39,6 @@
 .cv-save.is-saving .cv-save-dot { background: var(--ink); animation: cv-pulse 1.2s ease-in-out infinite; }
 .cv-save.is-error { color: var(--fail); }
 .cv-save.is-error .cv-save-dot { background: var(--fail); }
-.cv-sub { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
-
 .cv-head-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .cv-flow-select { position: relative; display: inline-flex; align-items: center; }
 .cv-flow-select select {
@@ -584,12 +561,12 @@
 @media (max-width: 1280px) {
   .page.cv-page { padding: 24px 24px 16px; }
   .cv-workspace { grid-template-columns: 188px minmax(0, 1fr) 288px; height: calc(100vh - 214px); }
-  .cv-flow-name { width: min(420px, 36vw); font-size: 20px; }
+  .cv-flow-name { width: min(420px, 36vw); }
   .cv-head-actions .cv-btn { padding: 0 8px; }
 }
 
 @media (max-width: 1024px) {
-  .cv-head { flex-direction: column; align-items: stretch; }
+  .cv-page .vq-head { flex-direction: column; align-items: stretch; }
   .cv-head-actions { justify-content: flex-start; }
   .cv-workspace {
     grid-template-columns: minmax(0, 1fr) 272px;
@@ -635,17 +612,6 @@
   border-radius: 10px;
   background: var(--surface);
 }
-
-/* VisionQA Canvas 为画布本体时的紧凑页头 */
-.cv-head--bdc { padding-bottom: 16px; }
-.cv-bdc-name {
-  font-family: var(--font-display, inherit);
-  font-size: 20px;
-  font-weight: 600;
-  letter-spacing: -0.015em;
-  color: var(--ink);
-}
-.cv-head--bdc + .cv-bdc-frame { height: calc(100vh - 214px); }
 
 /* ---------- VisionQA Canvas 沉浸模式 ----------
    第三方画布自带顶栏与工具条，我们这一层只保留一条状态条：

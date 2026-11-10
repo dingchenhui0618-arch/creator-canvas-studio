@@ -4,6 +4,7 @@ import { getReviewStatus, runReview, type ReviewResult, type ReviewStatus } from
 import { listTemplates, coverSrc } from '../api/radar'
 import type { ReplicaTemplate } from '../domain/radar'
 import { consumeReviewTarget, onReviewRequest, type ReviewTarget } from '../state/review'
+import PageHead from '../components/PageHead'
 import '../styles/review.css'
 
 const SEVERITY_LABEL: Record<string, string> = { blocker: '阻塞', major: '主要', minor: '次要', info: '信息' }
@@ -92,19 +93,19 @@ export default function ReviewPage() {
 
   return (
     <div className="review-page">
-      <header className="review-head">
-        <div>
-          <span className="vq-mono">VisionQA · visual-baseline</span>
-          <h1>视觉评审</h1>
-          <p>选一张画面，按 VisionQA 的 visual-baseline 规则出结论：每条判断都带证据锚点，没有证据的一律标记为「无法判断」。</p>
-        </div>
-        <div className="review-head-status">
-          <span className={`vq-chip ${status?.service ? 'is-pass' : 'is-warn'}`}>
-            <ScanEye size={13} /> 插件服务 {status?.service ? '已连接' : '未启动'}
-          </span>
-          <span className={`vq-chip ${status?.model ? 'is-pass' : 'is-fail'}`}>评审模型 {status?.model ? '可用' : '未配置'}</span>
-        </div>
-      </header>
+      <PageHead
+        kicker="VisionQA · visual-baseline"
+        title="视觉评审"
+        desc="选一张画面，按 VisionQA 的 visual-baseline 规则出结论：每条判断都带证据锚点，没有证据的一律标记为「无法判断」。"
+        actions={
+          <div className="review-head-status">
+            <span className={`vq-chip ${status?.service ? 'is-pass' : 'is-warn'}`}>
+              <ScanEye size={13} /> 插件服务 {status?.service ? '已连接' : '未启动'}
+            </span>
+            <span className={`vq-chip ${status?.model ? 'is-pass' : 'is-fail'}`}>评审模型 {status?.model ? '可用' : '未配置'}</span>
+          </div>
+        }
+      />
 
       <div className="review-body">
         <aside className="review-picker">

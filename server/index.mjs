@@ -5,19 +5,44 @@ import { config, redfoxEnabled, visionEnabled } from './config.mjs'
 import { searchMedia } from './redfox.mjs'
 import { searchFixtures } from './fixtures.mjs'
 import { startReplicate, getJob } from './jobs.mjs'
-import { listTemplates, getTemplate, reuseTemplate, deleteTemplate, templateStats, saveTemplateFromItem } from './templates.mjs'
+import {
+  listTemplates,
+  getTemplate,
+  reuseTemplate,
+  deleteTemplate,
+  templateStats,
+  saveTemplateFromItem,
+  adoptUnowned as adoptUnownedTemplates,
+} from './templates.mjs'
+import { adoptUnowned as adoptUnownedAgents } from './agents.mjs'
+import { adoptUnownedFlows } from './flows.mjs'
 import { createBillingRouter } from './routes/billing.mjs'
 import { createAgentsRouter } from './routes/agents.mjs'
 import { createFlowsRouter } from './routes/flows.mjs'
 import { createReviewRouter } from './routes/review.mjs'
 import { createAuthRouter } from './routes/auth.mjs'
-import { currentUser } from './auth.mjs'
+import { createCreditsRouter } from './routes/credits.mjs'
+import { createAdminRouter } from './routes/admin.mjs'
+import { currentUser, listUsers, clientIp } from './auth.mjs'
+import { charge, refund, ensureWelcomeCredits } from './credits.mjs'
+import { enter, leave } from './gate.mjs'
+import { installProcessGuards, logEvent, logRequestError, startAccess } from './log.mjs'
+import { deepHealth } from './health.mjs'
+import { fetchPublic } from './media.mjs'
 import { bdcStatus, listCanvases, createCanvas, appendCanvasNote } from './bdc.mjs'
 import { modelCatalog } from './models.mjs'
 
 // 功能路由：每个模块自己处理 /api/<prefix> 下的请求，index.mjs 只管分发
 // auth 放最前面：/api/auth/* 永远不需要登录就能访问
-const featureRoutes = [createAuthRouter(), createAgentsRouter(), createFlowsRouter(), createReviewRouter(), createBillingRouter()]
+const featureRoutes = [
+  createAuthRouter(),
+  createAgentsRouter(),
+  createFlowsRouter(),
+  createReviewRouter(),
+  createBillingRouter(),
+  createCreditsRouter(),
+  createAdminRouter(),
+]
 
 // VQ_REQUIRE_AUTH=1 时，除少数公开端点外所有 /api/* 都要登录。
 // 默认关闭，本地演示不受影响；生产必须打开。
@@ -66,6 +91,7 @@ const IMAGE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122 Safari/53
 
 // 小红书 / 抖音的封面常以 http 下发，而 CDN 只认 https + 对应站点的 Referer（实测 http 直连 403、https 200）。
 // 所以先按原样试，失败再把协议升到 https 重试，都失败才返回 404。
+// 走 fetchPublic：内网地址直接拒，重定向逐跳校验，带超时。
 async function fetchCoverImage(url) {
   const referer = /xhscdn|xiaohongshu/.test(url.host)
     ? 'https://www.xiaohongshu.com'
@@ -73,9 +99,9 @@ async function fetchCoverImage(url) {
       ? 'https://www.douyin.com'
       : url.origin
   const attempt = async (target) => {
-    const response = await fetch(target, {
+    const { response } = await fetchPublic(target, {
       headers: { Referer: referer, 'User-Agent': IMAGE_UA },
-      signal: AbortSignal.timeout(15000),
+      timeoutMs: 15000,
     })
     const type = response.headers.get('content-type') || ''
     if (!response.ok || !type.startsWith('image/')) return null
@@ -110,7 +136,63 @@ async function proxyImage(res, target) {
   }
 }
 
+// ---- 积分与并发：一次「要花钱」的请求进来，先过并发闸门，再扣积分 ----
+// 返回 { cost, release }；余额不足/并发超限时直接写响应并返回 null。
+// 未登录（本地演示）时既不扣费也不限流。
+function beginPaid(res, user, kind, ref) {
+  if (!user?.id) return { cost: 0, release: () => {} }
+  const max = Number(config.credits.concurrency[kind] || 0)
+  if (!enter(user.id, kind, max)) {
+    sendJson(res, 429, {
+      error: '这个账号还有同类型任务在跑，等它结束再试',
+      code: 'CONCURRENCY_LIMIT',
+      limit: max,
+    })
+    return null
+  }
+  const paid = charge(user.id, kind, { ref })
+  if (!paid.ok) {
+    leave(user.id, kind)
+    sendJson(res, 402, {
+      error: '积分不足：本次需要 ' + paid.cost + ' 积分，当前余额 ' + paid.balance + ' 积分',
+      code: 'CREDIT_INSUFFICIENT',
+      balance: paid.balance,
+      cost: paid.cost,
+      needed: paid.needed,
+    })
+    return null
+  }
+  return {
+    cost: paid.cost,
+    balance: paid.balance,
+    release: () => leave(user.id, kind),
+    refund: () => { if (paid.cost > 0) refund(user.id, kind, { ref, amount: paid.cost }) },
+  }
+}
+
+// 老数据没有归属：升级后把历史模板 / 智能体 / 画布认领给管理员，
+// 否则「多用户隔离」一上线，所有人都会看不见自己升级前建的东西。
+async function migrateOwnership() {
+  try {
+    const users = listUsers()
+    const admin = users.find((item) => item.kind === 'admin') || users[0]
+    if (!admin) return
+    const templates = await adoptUnownedTemplates(admin.id)
+    const agents = await adoptUnownedAgents(admin.id)
+    const flows = await adoptUnownedFlows(admin.id)
+    if (templates || agents || flows) {
+      logEvent('migrate-ownership', { to: admin.email, templates, agents, flows })
+    }
+    const welcomed = ensureWelcomeCredits()
+    if (welcomed) logEvent('welcome-credits', { accounts: welcomed, amount: config.credits.welcome })
+  } catch (error) {
+    logRequestError('', error, { scope: 'migrate-ownership' })
+  }
+}
+
 const server = http.createServer(async (req, res) => {
+  const trace = startAccess(req, res, { ip: clientIp(req) })
+  res.setHeader('X-Request-Id', trace.traceId)
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS')
@@ -120,10 +202,13 @@ const server = http.createServer(async (req, res) => {
   const pathname = decodeURIComponent(url.pathname)
 
   try {
+    const user = currentUser(req)
+    if (user) trace.userId = user.email
+
     // 登录门必须排在功能路由前面：featureRoutes 以前放在门之前，VQ_REQUIRE_AUTH=1 时
     // /api/agents、/api/flows、/api/billing 仍然匿名可读（实测线上 200），等于把智能体提示词和画布流程公开了。
     // /api/auth/* 已在 PUBLIC_API 里豁免，登录接口不受影响。
-    if (needsLogin(pathname) && !currentUser(req)) {
+    if (needsLogin(pathname) && !user) {
       return sendJson(res, 401, { error: '未登录', loginRequired: true })
     }
 
@@ -203,6 +288,12 @@ const server = http.createServer(async (req, res) => {
         },
         remote: { enabled: config.remote.enabled, label: config.remote.label },
         limits: { maxVideoMb: config.limits.maxVideoMb, maxFrames: config.limits.maxFrames },
+        credits: {
+          unit: config.credits.unit,
+          welcome: config.credits.welcome,
+          prices: config.credits.prices,
+          concurrency: config.credits.concurrency,
+        },
         // 「再接一个 key」只动这些环境变量，改完重启服务即可，代码里没有第二处要改
         envKeys: [
           { key: 'VISION_BASE_URL', purpose: '模型接口地址（OpenAI 兼容 /v1）', current: config.vision.baseUrl },
@@ -217,6 +308,12 @@ const server = http.createServer(async (req, res) => {
           { key: 'REPLICATE_REMOTE_URL', purpose: '远端算力地址，不填就走本机 ffmpeg', current: config.remote.enabled ? '已配置' : '' },
           { key: 'MAX_VIDEO_MB', purpose: '单条视频体积上限', current: String(config.limits.maxVideoMb) },
           { key: 'MAX_FRAMES', purpose: '每条视频抽帧数上限', current: String(config.limits.maxFrames) },
+          { key: 'VQ_CREDIT_SEARCH', purpose: '每次检索消耗的积分', current: String(config.credits.prices.search) },
+          { key: 'VQ_CREDIT_REPLICATE', purpose: '每次一键复刻消耗的积分', current: String(config.credits.prices.replicate) },
+          { key: 'VQ_CREDIT_REVIEW', purpose: '每次视觉评审消耗的积分', current: String(config.credits.prices.review) },
+          { key: 'VQ_CREDIT_CHAT', purpose: '每次智能体对话消耗的积分', current: String(config.credits.prices.chat) },
+          { key: 'VQ_CREDIT_WELCOME', purpose: '新账号初始积分', current: String(config.credits.welcome) },
+          { key: 'VQ_ADMIN_EMAILS', purpose: '管理员邮箱（逗号分隔，可发放积分）', current: config.auth.adminEmails.join(',') },
         ],
       })
     }
@@ -249,7 +346,9 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === '/api/health') {
-      const stats = await templateStats()
+      // 浅检查：只回答「配了没配」，给探针用（不需要登录）。
+      // 真实可用性看 /api/system/health（登录后可见，会真连上游）。
+      const stats = await templateStats(user)
       return sendJson(res, 200, {
         ok: true,
         redfox: redfoxEnabled(),
@@ -258,7 +357,12 @@ const server = http.createServer(async (req, res) => {
         llm: visionEnabled(),
         llmModel: config.llm.model,
         templates: stats.total,
+        uptimeSec: Math.round(process.uptime()),
       })
+    }
+
+    if (pathname === '/api/system/health' && req.method === 'GET') {
+      return sendJson(res, 200, await deepHealth({ force: url.searchParams.get('force') === '1' }))
     }
 
     if (pathname === '/api/search') {
@@ -270,10 +374,19 @@ const server = http.createServer(async (req, res) => {
         const items = searchFixtures(keyword)
         return sendJson(res, 200, { mode: 'mock', items, total: items.length, note: '未配置 REDFOX_API_KEY，当前展示示例数据（非真实平台数据）' })
       }
+      // 检索按次扣积分：一次请求=一页结果。示例数据不扣费（上面已经返回）。
+      const paid = beginPaid(res, user, 'search', keyword)
+      if (!paid) return
       try {
         const result = await searchMedia({ platform, keyword, startDate, endDate, pageNum: Number(url.searchParams.get('page') || 1), pageSize: 24 })
-        return sendJson(res, 200, { ...result, note: result.errors?.length ? result.errors.join('；') : '' })
+        return sendJson(res, 200, {
+          ...result,
+          note: result.errors?.length ? result.errors.join('；') : '',
+          credits: { cost: paid.cost, balance: paid.balance },
+        })
       } catch (error) {
+        // 上游失败/额度不足都退积分：用户没拿到真实数据就不该被扣
+        paid.refund()
         if (error?.code === 'REDFOX_RATE') {
           return sendJson(res, 429, { error: '红狐接口触发频率限制（抖音 10 次/秒、小红书 20 次/秒），请稍后重试', code: 'REDFOX_RATE' })
         }
@@ -299,18 +412,40 @@ const server = http.createServer(async (req, res) => {
           })
         }
         throw error
+      } finally {
+        paid.release()
       }
     }
 
     if (pathname === '/api/replicate' && req.method === 'POST') {
       const body = await readBody(req)
-      const job = await startReplicate(body.item || {}, body.url || '')
-      return sendJson(res, 200, { jobId: job.id })
+      const item = body.item || {}
+      const paid = beginPaid(res, user, 'replicate', String(item.title || body.url || '').slice(0, 80))
+      if (!paid) return
+      try {
+        const job = await startReplicate(item, body.url || '', {
+          ownerId: user?.id || '',
+          onSettled: (status) => {
+            paid.release()
+            if (status === 'error') paid.refund()
+          },
+        })
+        // 连链接都没有时任务立刻失败，不再等回调
+        if (job.status === 'error') {
+          paid.release()
+          paid.refund()
+        }
+        return sendJson(res, 200, { jobId: job.id, credits: { cost: paid.cost, balance: paid.balance } })
+      } catch (error) {
+        paid.release()
+        paid.refund()
+        throw error
+      }
     }
 
     const jobMatch = pathname.match(/^\/api\/jobs\/([\w-]+)$/)
     if (jobMatch) {
-      const job = getJob(jobMatch[1])
+      const job = getJob(jobMatch[1], user)
       if (!job) return sendJson(res, 404, { error: 'job not found' })
       return sendJson(res, 200, job)
     }
@@ -320,18 +455,18 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req)
       const item = body.item || {}
       if (!item.url) return sendJson(res, 400, { error: '这条内容没有原链接，无法加入模板库' })
-      const result = await saveTemplateFromItem({ item })
-      return sendJson(res, result.created ? 201 : 200, { ...result, ...(await templateStats()) })
+      const result = await saveTemplateFromItem({ item, user })
+      return sendJson(res, result.created ? 201 : 200, { ...result, ...(await templateStats(user)) })
     }
 
     if (pathname === '/api/templates') {
-      const stats = await templateStats()
+      const stats = await templateStats(user)
       const list = await listTemplates({
         q: url.searchParams.get('q') || '',
         contentType: url.searchParams.get('type') || '',
         platform: url.searchParams.get('platform') || '',
         kind: url.searchParams.get('kind') || '',
-      })
+      }, user)
       return sendJson(res, 200, { items: list, ...stats })
     }
 
@@ -347,7 +482,7 @@ const server = http.createServer(async (req, res) => {
         const done = await deleteTemplate(id)
         return sendJson(res, done ? 200 : 404, { ok: done })
       }
-      const template = await getTemplate(id)
+      const template = await getTemplate(id, user)
       if (!template) return sendJson(res, 404, { error: '模板不存在' })
       return sendJson(res, 200, template)
     }
@@ -374,10 +509,14 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' })
     res.end('not found: ' + pathname)
   } catch (error) {
-    sendJson(res, 500, { error: String(error?.message || error) })
+    logRequestError(trace.traceId, error, { path: pathname, method: req.method })
+    sendJson(res, 500, { error: String(error?.message || error), traceId: trace.traceId })
   }
 })
 
+installProcessGuards()
+await migrateOwnership()
+
 server.listen(config.port, '127.0.0.1', () => {
-  console.log('[api] http://127.0.0.1:' + config.port + '  redfox=' + (redfoxEnabled() ? 'on' : 'mock') + '  vision=' + (visionEnabled() ? config.vision.model : 'off'))
+  logEvent('listen', { port: config.port, redfox: redfoxEnabled() ? 'on' : 'mock', vision: visionEnabled() ? config.vision.model : 'off', auth: config.auth.requireAuth ? 'on' : 'off' })
 })

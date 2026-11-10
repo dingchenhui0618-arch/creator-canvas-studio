@@ -7,7 +7,8 @@ import {
   register as requestRegister,
 } from '../api/auth'
 
-export type SessionKind = 'demo' | 'account' | 'guest'
+// admin 是服务端 users.kind='admin'：能看全部数据、发放积分。界面只用来显示角色与放开管理台入口。
+export type SessionKind = 'demo' | 'account' | 'guest' | 'admin'
 
 export type SessionUser = {
   id: string
@@ -58,7 +59,7 @@ export const DEFAULT_MIN_PASSWORD_LENGTH = 8
 export const NAME_MAX_LENGTH = 40
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-const SESSION_KINDS: readonly SessionKind[] = ['account', 'demo', 'guest']
+const SESSION_KINDS: readonly SessionKind[] = ['account', 'demo', 'guest', 'admin']
 
 function isSessionUser(value: unknown): value is SessionUser {
   if (typeof value !== 'object' || value === null) return false
@@ -239,6 +240,7 @@ export async function signOut(): Promise<void> {
 }
 
 export function sessionKindLabel(kind: SessionKind): string {
+  if (kind === 'admin') return '管理员'
   if (kind === 'demo') return '账号'
   if (kind === 'guest') return '访客会话'
   return '工作邮箱'

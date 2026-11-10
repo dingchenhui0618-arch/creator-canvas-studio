@@ -2,6 +2,7 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { config } from './config.mjs'
+import { canAccess } from './owner.mjs'
 
 let cache = null
 
@@ -37,10 +38,11 @@ async function persist(list) {
   })
 }
 
-export async function listTemplates({ q = '', contentType = '', platform = '', kind = '' } = {}) {
+export async function listTemplates({ q = '', contentType = '', platform = '', kind = '' } = {}, user = null) {
   const list = await loadAll()
   const keyword = q.trim()
   return list
+    .filter((item) => canAccess(item, user))
     .filter((item) => (kind ? item.kind === kind : true))
     .filter((item) => (contentType ? item.contentType === contentType : true))
     .filter((item) => (platform ? item.platform === platform : true))
@@ -56,10 +58,13 @@ export async function listTemplates({ q = '', contentType = '', platform = '', k
 
 // 只存「链接 + 互动数据」的条目：在爆款雷达点「加入模板库」立刻落库，
 // 不下载视频、不抽帧、不建本地目录；解析（脚本/分镜）仍然靠「一键复刻」补上。
-export async function saveTemplateFromItem({ item }) {
+export async function saveTemplateFromItem({ item, user = null }) {
   const list = await loadAll()
   const sourceId = String(item?.id || '')
-  const existing = list.find((entry) => entry.kind === 'saved' && entry.sourceId && entry.sourceId === sourceId)
+  // 去重只在同一账号内做：两个账号收藏同一条爆款，各自算各自的一条
+  const existing = list.find(
+    (entry) => entry.kind === 'saved' && entry.sourceId && entry.sourceId === sourceId && canAccess(entry, user),
+  )
   if (existing) return { template: existing, created: false }
   const now = new Date().toISOString()
   const template = {
@@ -86,6 +91,7 @@ export async function saveTemplateFromItem({ item }) {
     video: { width: 0, height: 0, fps: 0, duration: Number(item?.durationSec) || 0 },
     origin: 'manual',
     reuseCount: 0,
+    ownerId: user?.id || '',
     createdAt: now,
     savedAt: now,
   }
@@ -96,12 +102,12 @@ export async function saveTemplateFromItem({ item }) {
 
 
 
-export async function getTemplate(id) {
+export async function getTemplate(id, user = null) {
   const list = await loadAll()
-  return list.find((item) => item.id === id) || null
+  return list.find((item) => item.id === id && canAccess(item, user)) || null
 }
 
-export async function createTemplate({ item, meta, analysis, frames, jobId }) {
+export async function createTemplate({ item, meta, analysis, frames, jobId, user = null }) {
   const list = await loadAll()
   const id = 'tpl_' + randomUUID().slice(0, 8)
   const targetDir = path.join(config.framesDir, id)
@@ -110,7 +116,9 @@ export async function createTemplate({ item, meta, analysis, frames, jobId }) {
   await fsp.cp(sourceDir, targetDir, { recursive: true })
 
   // 雷达里先「加入模板库」、后来才复刻的同一条内容：升级成已解析模板，不重复占两格
-  const savedIndex = list.findIndex((entry) => entry.kind === 'saved' && entry.sourceId && entry.sourceId === item?.id)
+  const savedIndex = list.findIndex(
+    (entry) => entry.kind === 'saved' && entry.sourceId && entry.sourceId === item?.id && canAccess(entry, user),
+  )
   const saved = savedIndex >= 0 ? list.splice(savedIndex, 1)[0] : null
   const template = {
     id,
@@ -137,6 +145,7 @@ export async function createTemplate({ item, meta, analysis, frames, jobId }) {
     video: { width: meta.width, height: meta.height, fps: meta.fps, duration: meta.duration },
     origin: 'ai',
     reuseCount: saved?.reuseCount || 0,
+    ownerId: user?.id || saved?.ownerId || '',
     createdAt: saved?.createdAt || new Date().toISOString(),
   }
   list.unshift(template)
@@ -163,8 +172,8 @@ export async function deleteTemplate(id) {
   return true
 }
 
-export async function templateStats() {
-  const list = await loadAll()
+export async function templateStats(user = null) {
+  const list = (await loadAll()).filter((item) => canAccess(item, user))
   const byType = {}
   for (const item of list) {
     if (item.kind === 'saved') continue
@@ -176,4 +185,15 @@ export async function templateStats() {
     saved: list.filter((item) => item.kind === 'saved').length,
     byType,
   }
+}
+
+// 启动迁移：升级前的老数据没有归属，认领给管理员，免得升级后所有人都「看不见自己的模板」
+export async function adoptUnowned(ownerId) {
+  if (!ownerId) return 0
+  const list = await loadAll()
+  const pending = list.filter((item) => !item.ownerId)
+  if (!pending.length) return 0
+  for (const item of pending) item.ownerId = ownerId
+  await persist(list)
+  return pending.length
 }

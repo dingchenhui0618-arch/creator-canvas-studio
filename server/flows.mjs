@@ -2,6 +2,7 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { config } from './config.mjs'
+import { canAccess } from './owner.mjs'
 import { callTextModel } from './llm.mjs'
 import { reviewVisual } from './review.mjs'
 import { listTemplates, templateStats } from './templates.mjs'
@@ -213,17 +214,17 @@ async function persistRuns(list) {
 
 // ---------- 流程 CRUD ----------
 
-export async function listFlows() {
-  const list = await loadFlows()
+export async function listFlows(user = null) {
+  const list = (await loadFlows()).filter((item) => canAccess(item, user))
   return [...list].sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
 }
 
-export async function getFlow(id) {
+export async function getFlow(id, user = null) {
   const list = await loadFlows()
-  return list.find((item) => item.id === id) || null
+  return list.find((item) => item.id === id && canAccess(item, user)) || null
 }
 
-export async function createFlow(input = {}) {
+export async function createFlow(input = {}, user = null) {
   const nodes = (Array.isArray(input.nodes) ? input.nodes : []).slice(0, 60).map(normalizeNode)
   const seen = new Set()
   const uniqueNodes = nodes.filter((node) => {
@@ -241,6 +242,7 @@ export async function createFlow(input = {}) {
     runCount: 0,
     lastRunId: null,
     lastRunAt: null,
+    ownerId: user?.id || '',
     createdAt: now,
     updatedAt: now,
   }
@@ -294,16 +296,16 @@ export async function deleteFlow(id) {
 
 // ---------- 运行记录 ----------
 
-export async function listRuns({ flowId = '', limit = 20 } = {}) {
-  const list = await loadRuns()
+export async function listRuns({ flowId = '', limit = 20 } = {}, user = null) {
+  const list = (await loadRuns()).filter((run) => canAccess(run, user))
   const count = Math.min(50, Math.max(1, Number(limit) || 20))
   const filtered = flowId ? list.filter((run) => run.flowId === flowId) : list
   return { items: filtered.slice(0, count), total: filtered.length }
 }
 
-export async function getRun(id) {
+export async function getRun(id, user = null) {
   const list = await loadRuns()
-  return list.find((run) => run.id === id) || null
+  return list.find((run) => run.id === id && canAccess(run, user)) || null
 }
 
 // ---------- 拓扑与执行 ----------
@@ -545,6 +547,21 @@ function clipOutput(output) {
   return copy
 }
 
+// 启动迁移：老流程没有归属，认领给管理员
+export async function adoptUnownedFlows(ownerId) {
+  if (!ownerId) return 0
+  let adopted = 0
+  await enqueueWrite(async () => {
+    const list = await loadFlows()
+    const pending = list.filter((item) => !item.ownerId)
+    if (!pending.length) return
+    for (const item of pending) item.ownerId = ownerId
+    adopted = pending.length
+    await persistFlows(list)
+  })
+  return adopted
+}
+
 async function saveRun(run) {
   await enqueueWrite(async () => {
     const list = await loadRuns()
@@ -595,6 +612,7 @@ export async function runFlow(flow, { onEvent } = {}) {
     total: order.length,
     nodes: [],
     output: '',
+    ownerId: flow.ownerId || '',
   }
   emit({ type: 'run-start', run: { id: run.id, flowId: run.flowId, flowName: run.flowName, total: order.length } })
 

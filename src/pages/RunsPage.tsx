@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Activity, RefreshCw, Workflow } from 'lucide-react'
 import { request } from '../api/client'
+import PageHead from '../components/PageHead'
 import '../styles/runs.css'
 
 type RunNode = {
@@ -66,16 +67,16 @@ export function RunsPage() {
 
   return (
     <div className="runs-page">
-      <header className="runs-head">
-        <div>
-          <span className="vq-mono">Runs · 画布执行记录</span>
-          <h1>运行记录</h1>
-          <p>每次画布执行都以真实模型调用为单位记录：哪个节点、多久、返回了什么、在哪一步失败。</p>
-        </div>
-        <button type="button" className="button button--ghost button--tiny" onClick={() => void load()}>
-          <RefreshCw size={13} />刷新
-        </button>
-      </header>
+      <PageHead
+        kicker="Runs · 画布执行记录"
+        title="运行记录"
+        desc="每次画布执行都以真实模型调用为单位记录：哪个节点、多久、返回了什么、在哪一步失败。"
+        actions={
+          <button type="button" className="button button--ghost button--tiny" onClick={() => void load()}>
+            <RefreshCw size={13} />刷新
+          </button>
+        }
+      />
 
       <div className="runs-stats">
         <div><strong>{items.length}</strong><span>总运行</span></div>

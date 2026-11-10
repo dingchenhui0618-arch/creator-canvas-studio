@@ -13,7 +13,7 @@ const KEY_LEN = 64
 
 let db = null
 
-function openDb() {
+export function openDb() {
   if (db) return db
   const file = config.auth.dbFile
   fs.mkdirSync(path.dirname(file), { recursive: true })
@@ -28,6 +28,7 @@ function openDb() {
       password_hash TEXT NOT NULL,
       kind TEXT NOT NULL DEFAULT 'account',
       is_active INTEGER NOT NULL DEFAULT 1,
+      credits INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
       last_login_at TEXT
     );
@@ -41,10 +42,32 @@ function openDb() {
     );
     CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
+    -- 积分流水：余额在 users.credits，流水是账本；两边同一个事务里改，余额永远等于流水求和
+    CREATE TABLE IF NOT EXISTS credit_ledger (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      delta INTEGER NOT NULL,
+      balance_after INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      ref TEXT,
+      meta TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_credit_user ON credit_ledger(user_id, created_at);
   `)
+  ensureColumn(db, 'users', 'credits', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn(db, 'users', 'kind', "TEXT NOT NULL DEFAULT 'account'")
   seedFirstAccount()
+  ensureAnAdmin()
   pruneSessions()
   return db
+}
+
+// 老库没有新列时补上（SQLite 没有 ADD COLUMN IF NOT EXISTS）
+function ensureColumn(database, table, column, definition) {
+  const columns = database.prepare('PRAGMA table_info(' + table + ')').all()
+  if (columns.some((item) => item.name === column)) return
+  database.exec('ALTER TABLE ' + table + ' ADD COLUMN ' + column + ' ' + definition)
 }
 
 export function hashPassword(password) {
@@ -74,6 +97,7 @@ function publicUser(row) {
     name: row.name,
     workspace: row.workspace,
     kind: row.kind,
+    credits: Number(row.credits || 0),
   }
 }
 
@@ -89,13 +113,13 @@ export function findUserById(id) {
   return openDb().prepare('SELECT * FROM users WHERE id = ?').get(String(id)) || null
 }
 
-export function createUser({ email, password, name }) {
+export function createUser({ email, password, name, kind = 'account' }) {
   const normalized = String(email).trim().toLowerCase()
   const id = 'usr_' + crypto.randomBytes(9).toString('base64url')
   const displayName = (name || '').trim() || normalized.split('@')[0] || 'VisionQA 用户'
   openDb()
-    .prepare('INSERT INTO users (id, email, name, workspace, password_hash, kind, is_active, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?)')
-    .run(id, normalized, displayName, '个人工作区', hashPassword(password), 'account', nowIso())
+    .prepare('INSERT INTO users (id, email, name, workspace, password_hash, kind, is_active, credits, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)')
+    .run(id, normalized, displayName, '个人工作区', hashPassword(password), kind, config.credits.welcome, nowIso())
   return findUserById(id)
 }
 
@@ -212,12 +236,56 @@ export function clientIp(req) {
   return chain.length ? chain[chain.length - 1] : req.socket?.remoteAddress || 'unknown'
 }
 
-// ---- 首个账号：库里没有账号时按 VQ_SEED_* 建一个普通账号 ----
+// ---- 管理员 ----
+// 默认只有 kind='admin' 或 VQ_ADMIN_EMAILS 里的账号能看全部数据、发放积分。
+export function isAdmin(user) {
+  if (!user) return false
+  if (user.kind === 'admin') return true
+  return config.auth.adminEmails.includes(String(user.email || '').toLowerCase())
+}
+
+// 单账号部署（绝大多数自建实例）不该还要手工改库才能发积分：
+// 库里一个管理员都没有时，把部署引导账号（或最早的那个账号）提升为管理员。
+export function ensureAnAdmin() {
+  try {
+    const admins = openDb().prepare("SELECT id FROM users WHERE kind = 'admin'").all()
+    if (admins.length) return
+    const seeded = config.auth.seedEmail ? findUserByEmail(config.auth.seedEmail) : null
+    const target = seeded || openDb().prepare('SELECT id, email FROM users ORDER BY created_at LIMIT 1').get()
+    if (!target) return
+    openDb().prepare("UPDATE users SET kind = 'admin' WHERE id = ?").run(target.id)
+    console.log('[auth] 库里没有管理员，已把 ' + (target.email || target.id) + ' 提升为管理员')
+  } catch (error) {
+    console.error('[auth] 管理员自检失败：' + (error?.message || error))
+  }
+}
+
+// 管理台用：真实账号列表（含余额），不返回口令哈希
+export function listUsers() {
+  return openDb()
+    .prepare('SELECT id, email, name, workspace, kind, is_active, credits, created_at, last_login_at FROM users ORDER BY created_at')
+    .all()
+    .map((row) => ({
+      id: row.id,
+      email: row.email,
+      name: row.name,
+      workspace: row.workspace,
+      kind: row.kind,
+      active: Boolean(row.is_active),
+      credits: Number(row.credits || 0),
+      createdAt: row.created_at,
+      lastLoginAt: row.last_login_at,
+    }))
+}
+
+// ---- 首个账号：库里没有账号时按 VQ_SEED_* 建一个账号（此时它就是管理员） ----
 // 它只是「部署后能登录」的引导账号，不是演示入口：kind 是 account，界面上也没有任何地方
 // 会把它标成演示账号，更不会把口令发给访客。
 export function seedFirstAccount() {
   if (!config.auth.seedAccount || !config.auth.seedEmail) return
   const email = config.auth.seedEmail
   if (findUserByEmail(email)) return
-  createUser({ email, password: config.auth.seedPassword, name: config.auth.seedName })
+  const anyUser = openDb().prepare('SELECT COUNT(*) AS n FROM users').get()
+  const kind = Number(anyUser?.n || 0) === 0 ? 'admin' : 'account'
+  createUser({ email, password: config.auth.seedPassword, name: config.auth.seedName, kind })
 }

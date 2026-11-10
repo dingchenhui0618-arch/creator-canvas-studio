@@ -1,8 +1,6 @@
 /* 视觉评审页：VisionQA 检视语言 */
 .review-page { display:flex; flex-direction:column; gap:24px; }
-.review-head { display:flex; align-items:flex-start; justify-content:space-between; gap:24px; }
-.review-head h1 { margin:8px 0 8px; font-size:28px; font-weight: 500; letter-spacing:-.02em; }
-.review-head p { margin:0; max-width:76ch; color:var(--muted); font-size:12px; line-height:1.7; }
+.review-page > .vq-head { margin-bottom: 0; }
 .review-head-status { display:flex; gap:8px; padding-top:4px; }
 
 .vq-chip { display:inline-flex; align-items:center; gap:4px; padding:4px 8px; border:1px solid var(--line); border-radius:999px; font-family:var(--font-mono); font-size: 11px; letter-spacing:.04em; color:var(--muted); background:var(--surface-raised); text-transform:uppercase; }

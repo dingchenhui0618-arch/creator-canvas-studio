@@ -31,7 +31,9 @@ type SessionState = { session: Session | null; loading: boolean }
 export function useSession(): SessionController {
   const [state, setState] = useState<SessionState>(() => {
     const cached = readSession()
-    return { session: cached, loading: Boolean(cached && cached.user.kind !== 'guest') }
+    // 没有本地缓存时也要先问一次服务端：cookie 还在（换了浏览器、清了 localStorage）
+    // 就不该把人甩回登录页。这段时间先给启动占位，不闪登录页。
+    return { session: cached, loading: cached ? cached.user.kind !== 'guest' : true }
   })
   // 用户主动登录 / 注册 / 退出 / 访客进入都会推进 epoch，用来丢弃迟到的 /me 响应。
   const epoch = useRef(0)
@@ -39,7 +41,7 @@ export function useSession(): SessionController {
   useEffect(() => {
     const cached = readSession()
     // 访客是纯本地会话，没有后端 cookie 可校验。
-    if (!cached || cached.user.kind === 'guest') return
+    if (cached && cached.user.kind === 'guest') return
 
     const controller = new AbortController()
     const startedAt = epoch.current
@@ -49,7 +51,9 @@ export function useSession(): SessionController {
       try {
         const user = await fetchMe(controller.signal)
         if (!active || epoch.current !== startedAt) return
-        const next: Session = { ...cached, user }
+        // 没有本地缓存时，cookie 会话照样能被 /api/auth/me 认出来，直接补一条缓存
+        const base: Session = cached || { version: 1, user, remember: true, signedInAt: new Date().toISOString() }
+        const next: Session = { ...base, user }
         persistSession(next)
         setState({ session: next, loading: false })
       } catch (error) {

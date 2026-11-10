@@ -41,6 +41,7 @@ import { RunDrawer } from '../canvas/RunDrawer'
 import { autoLayout } from '../canvas/layout'
 import { fromFlowEdges, fromFlowNodes, toFlowEdges, toFlowNodes, validateConnection } from '../canvas/serialize'
 import type { FlowNodeData, FlowNodeKind, RunNodeStatus } from '../canvas/types'
+import PageHead from '../components/PageHead'
 import '../styles/canvas.css'
 
 const nodeTypes = {
@@ -822,10 +823,10 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
           </button>
         </div>
       ) : (
-      <div className="cv-head">
-        <div className="cv-head-main">
-          <div className="cv-eyebrow">画布 / 流程编排</div>
-          <div className="cv-title-row">
+      <PageHead
+        kicker="画布 / 流程编排"
+        title={
+          <span className="cv-title-row">
             <input
               className="cv-flow-name"
               value={name}
@@ -837,10 +838,11 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
             <span className={`cv-save is-${saveState}`} title={saveError || saveLabel}>
               <span className="cv-save-dot" />{saveLabel}
             </span>
-          </div>
-          <p className="cv-sub">服务端按拓扑序执行 · 模型调用走本地端点 · 运行记录写入 data/runs.json</p>
-        </div>
-        <div className="cv-head-actions">
+          </span>
+        }
+        desc="服务端按拓扑序执行 · 模型调用走本地端点 · 运行记录写入 data/runs.json"
+        actions={
+          <div className="cv-head-actions">
           <label className="cv-flow-select">
             <span className="cv-sr-only">切换流程</span>
             <select
@@ -867,8 +869,9 @@ function CanvasWorkspace({ onToast }: CanvasPageProps) {
           <button className="cv-icon-btn" type="button" onClick={() => { void removeFlow() }} disabled={running || loadState !== 'ready'} aria-label="删除流程" title="删除流程">
             <Trash size={14} />
           </button>
-        </div>
-      </div>
+          </div>
+        }
+      />
       )}
 
       {bdc?.deployed && !bdcView ? (
