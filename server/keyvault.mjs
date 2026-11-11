@@ -124,7 +124,21 @@ function persist() {
   refreshCounts()
 }
 
+function usageOf(key) {
+  const entry = health.get(key.id) || {}
+  const cooldownSec = entry.until > Date.now() ? Math.ceil((entry.until - Date.now()) / 1000) : 0
+  return {
+    ok: entry.ok || 0,
+    fail: entry.fail || 0,
+    lastError: entry.lastError || '',
+    lastErrorAt: entry.lastErrorAt || '',
+    lastUsedAt: entry.lastUsedAt || '',
+    cooldownSec,
+  }
+}
+
 function publicKey(key) {
+  const usage = usageOf(key)
   return {
     id: key.id,
     name: key.name,
@@ -139,7 +153,8 @@ function publicKey(key) {
     createdAt: key.createdAt,
     updatedAt: key.updatedAt,
     lastTest: key.lastTest || null,
-    cooling: isCooling(key),
+    cooling: usage.cooldownSec > 0,
+    usage,
   }
 }
 
@@ -207,6 +222,10 @@ export function listKeys() {
       total: items.length,
       enabled: items.filter((item) => item.enabled).length,
       cooling: items.filter((item) => item.cooling).length,
+      usage: items.reduce(
+        (sum, item) => ({ ok: sum.ok + item.usage.ok, fail: sum.fail + item.usage.fail }),
+        { ok: 0, fail: 0 },
+      ),
       counts: vaultCounts(),
     },
   }
@@ -317,15 +336,22 @@ export function resolveKey({ capability = 'text', model = '' } = {}) {
 /** 调用结果回报：连续失败 3 次的 Key 冷却 60 秒，成功后立刻恢复。 */
 export function reportKey(id, ok, error = '') {
   if (!id) return
+  const now = Date.now()
+  const entry = health.get(id) || { fails: 0, until: 0, ok: 0, fail: 0 }
+  entry.lastUsedAt = new Date(now).toISOString()
   if (ok) {
-    health.delete(id)
+    entry.ok = (entry.ok || 0) + 1
+    entry.fails = 0
+    entry.until = 0
+    health.set(id, entry)
     return
   }
-  const entry = health.get(id) || { fails: 0, until: 0 }
+  entry.fail = (entry.fail || 0) + 1
   entry.fails += 1
   entry.lastError = String(error || '').slice(0, 200)
+  entry.lastErrorAt = new Date(now).toISOString()
   if (entry.fails >= 3) {
-    entry.until = Date.now() + 60_000
+    entry.until = now + 60_000
     entry.fails = 0
   }
   health.set(id, entry)
@@ -345,11 +371,75 @@ export function vaultModels(capability) {
 // 直到有人第一次打开后台或发起模型调用才恢复。
 load()
 
+/**
+ * 后台「测试」：能真实调用的能力就打一次真实请求（max_tokens=1），
+ * 不能安全真实调用的能力（出图 / 视频会产生费用）只探测凭证，并在结果里写明 mode，
+ * 不让「/models 返回 200」冒充「模型可用」。
+ */
 export async function testKey(id) {
   const key = load().keys.find((item) => item.id === id)
   if (!key) throw Object.assign(new Error('Key 不存在'), { status: 404, code: 'KEY_NOT_FOUND' })
   const started = Date.now()
   const apiKey = safeDecrypt(key.apiKey)
+  const capabilities = key.capabilities || []
+  const declaredModel = (key.models || [])[0] || ''
+  const realCallable = capabilities.some((item) => item === 'text' || item === 'vision')
+  const probeNote = realCallable && !declaredModel ? '这把 Key 没有声明模型，只验证了凭证' : '出图 / 视频会产生费用，这里只验证凭证'
+
+  if (realCallable && declaredModel) {
+    let result
+    try {
+      const response = await fetch(key.baseUrl + '/chat/completions', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: declaredModel,
+          messages: [{ role: 'user', content: 'ping' }],
+          max_tokens: 1,
+          stream: false,
+        }),
+        signal: AbortSignal.timeout(15_000),
+      })
+      const text = await response.text()
+      let choices = 0
+      let reply = ''
+      let upstreamError = ''
+      try {
+        const parsed = JSON.parse(text)
+        choices = Array.isArray(parsed?.choices) ? parsed.choices.length : 0
+        reply = String(parsed?.choices?.[0]?.message?.content || '')
+        if (!choices && parsed?.error) upstreamError = String(parsed.error.message || parsed.error)
+      } catch {
+        upstreamError = text.slice(0, 200)
+      }
+      result = {
+        ok: response.ok && choices > 0,
+        mode: 'real-call',
+        model: declaredModel,
+        status: response.status,
+        ms: Date.now() - started,
+        models: [],
+        reply: reply.slice(0, 40),
+        error: response.ok && choices > 0 ? '' : upstreamError || text.slice(0, 200),
+      }
+    } catch (error) {
+      result = {
+        ok: false,
+        mode: 'real-call',
+        model: declaredModel,
+        status: 0,
+        ms: Date.now() - started,
+        models: [],
+        reply: '',
+        error: String(error?.message || error).slice(0, 200),
+      }
+    }
+    key.lastTest = { ...result, at: new Date().toISOString() }
+    key.updatedAt = new Date().toISOString()
+    persist()
+    return { ...result, key: publicKey(key) }
+  }
+
   let result
   try {
     const response = await fetch(key.baseUrl + '/models', {
@@ -364,9 +454,29 @@ export async function testKey(id) {
     } catch {
       // 网关不一定回 JSON，保留状态码就够了
     }
-    result = { ok: response.ok, status: response.status, ms: Date.now() - started, models, error: response.ok ? '' : text.slice(0, 200) }
+    result = {
+      ok: response.ok,
+      mode: 'credential-probe',
+      note: probeNote,
+      model: '',
+      status: response.status,
+      ms: Date.now() - started,
+      models,
+      reply: '',
+      error: response.ok ? '' : text.slice(0, 200),
+    }
   } catch (error) {
-    result = { ok: false, status: 0, ms: Date.now() - started, models: [], error: String(error?.message || error).slice(0, 200) }
+    result = {
+      ok: false,
+      mode: 'credential-probe',
+      note: probeNote,
+      model: '',
+      status: 0,
+      ms: Date.now() - started,
+      models: [],
+      reply: '',
+      error: String(error?.message || error).slice(0, 200),
+    }
   }
   key.lastTest = { ...result, at: new Date().toISOString() }
   key.updatedAt = new Date().toISOString()

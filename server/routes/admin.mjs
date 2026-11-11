@@ -155,7 +155,7 @@ export function createAdminRouter() {
             targetType: 'model-key',
             targetId: keyTest[1],
             targetLabel: result?.key?.name || keyTest[1],
-            detail: { ok: result.ok, status: result.status, ms: result.ms },
+            detail: { ok: result.ok, mode: result.mode, status: result.status, ms: result.ms },
           })
           sendJson(res, 200, { ok: true, ...result })
         } catch (error) {

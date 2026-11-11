@@ -56,9 +56,34 @@ const good = createKey({
   priority: 50,
 })
 
+// 文本能力：测试按钮必须打一次真实对话请求，而不是拿 /models 的 200 冒充可用
 const tested = await testKey(good.id)
-assert.equal(tested.ok, true, '测试接口应能连上 mock /models')
-assert.deepEqual(tested.models, ['mock-flash'])
+assert.equal(tested.ok, true, '文本 Key 的真实调用应通过')
+assert.equal(tested.mode, 'real-call')
+assert.equal(tested.model, 'mock-flash')
+assert.ok(hits.includes('mock-flash'), '测试必须真的打到 /chat/completions')
+
+// 坏 Key：真实调用失败要如实报错
+const badTest = await testKey(bad.id)
+assert.equal(badTest.ok, false, '连不上的 Key 不能报成功')
+assert.equal(badTest.mode, 'real-call')
+assert.ok(badTest.error.length > 0)
+
+// 出图能力：不允许为了一个测试按钮真的生成图片，只探测凭证并写明 mode
+const imageKey = createKey({
+  name: '出图 Key',
+  provider: 'custom',
+  baseUrl: 'http://127.0.0.1:' + port + '/v1',
+  apiKey: 'sk-image-' + 'y'.repeat(12),
+  models: ['mock-image'],
+  capabilities: ['image'],
+})
+const probe = await testKey(imageKey.id)
+assert.equal(probe.mode, 'credential-probe')
+assert.equal(probe.ok, true)
+assert.deepEqual(probe.models, ['mock-flash'])
+assert.ok(probe.note && probe.note.includes('只验证凭证'))
+deleteKey(imageKey.id)
 
 // 前 3 次都先撞坏 Key（每次都会失败并记一次），坏 Key 冷却后第 4 次落到好 Key
 let succeeded = 0

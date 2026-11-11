@@ -45,9 +45,22 @@ reportKey(created.id, false, 'boom')
 assert.equal(resolveKey({ capability: 'text', model: 'deepseek-flash' }), null, '冷却中的 Key 不应被选中')
 assert.equal(listKeys().items[0].cooling, true)
 
+// 后台要看得见「为什么这把 Key 没被用」：失败次数、最近错误、冷却剩余秒数
+const cooling = listKeys().items[0]
+assert.equal(cooling.usage.fail, 3, '失败的调用要计数')
+assert.equal(cooling.usage.lastError, 'boom')
+assert.equal(cooling.usage.lastErrorAt.length > 0, true)
+assert.ok(cooling.usage.cooldownSec > 0 && cooling.usage.cooldownSec <= 60, '冷却剩余秒数要在 1–60 之间')
+assert.equal(listKeys().summary.usage.fail, 3)
+
 // 成功后恢复
 reportKey(created.id, true)
 assert.equal(resolveKey({ capability: 'text', model: 'deepseek-flash' })?.id, created.id)
+const recovered = listKeys().items[0]
+assert.equal(recovered.cooling, false)
+assert.equal(recovered.usage.cooldownSec, 0)
+assert.equal(recovered.usage.ok, 1, '成功调用要计数')
+assert.equal(listKeys().summary.usage.ok, 1)
 
 const updated = updateKey(created.id, { enabled: false })
 assert.equal(updated.enabled, false)

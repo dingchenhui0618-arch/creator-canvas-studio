@@ -120,11 +120,16 @@ export default function ModelKeyPool() {
     setTestResult((value) => ({ ...value, [key.id]: '测试中…' }))
     try {
       const result = await testModelKey(key.id)
+      const real = result.mode !== 'credential-probe'
+      const note = result.note ? ' · ' + result.note : ''
       setTestResult((value) => ({
         ...value,
         [key.id]: result.ok
-          ? '连接正常 · HTTP ' + result.status + ' · ' + result.ms + 'ms' + (result.models.length ? ' · ' + result.models.length + ' 个模型' : '')
-          : '连接失败 · ' + (result.error || 'HTTP ' + result.status),
+          ? (real ? '真实调用通过' : '凭证正常') +
+            ' · HTTP ' + result.status + ' · ' + result.ms + 'ms' +
+            (real ? (result.reply ? ' · 回复「' + result.reply + '」' : '') : result.models?.length ? ' · ' + result.models.length + ' 个模型' : '') +
+            note
+          : (real ? '真实调用失败' : '凭证无效') + ' · ' + (result.error || 'HTTP ' + result.status) + note,
       }))
       reload()
     } catch (cause) {
@@ -156,7 +161,8 @@ export default function ModelKeyPool() {
         <>
           <p className="admin-hint">
             已启用 {data.summary.enabled} / {data.summary.total} 把 · 文本 {counts.text || 0} · 视觉 {counts.vision || 0} · 出图{' '}
-            {counts.image || 0} · 视频 {counts.video || 0}
+            {counts.image || 0} · 视频 {counts.video || 0} · 累计调用 成功 {data.summary.usage?.ok || 0} / 失败{' '}
+            {data.summary.usage?.fail || 0}
             {data.summary.cooling ? ` · ${data.summary.cooling} 把冷却中` : ''}
             {data.fallback.configured ? ' · 环境变量兜底凭证已配置' : ' · 环境变量兜底未配置'}
           </p>
@@ -228,6 +234,7 @@ export default function ModelKeyPool() {
                     <th>能力</th>
                     <th>模型</th>
                     <th>路由</th>
+                    <th>调用</th>
                     <th>状态</th>
                     <th>操作</th>
                   </tr>
@@ -244,7 +251,21 @@ export default function ModelKeyPool() {
                       <td className="admin-mono">{key.models.length ? key.models.join(', ') : '通用'}</td>
                       <td className="admin-mono">P{key.priority} · W{key.weight}</td>
                       <td>
-                        {key.enabled ? <Badge tone={key.cooling ? 'warn' : 'ok'}>{key.cooling ? '冷却中' : '启用'}</Badge> : <Badge tone="warn">已停用</Badge>}
+                        <span className="admin-mono">成功 {key.usage?.ok || 0} · 失败 {key.usage?.fail || 0}</span>
+                        {key.usage?.lastError ? (
+                          <span className="admin-cell-sub" title={key.usage.lastError}>
+                            最近失败：{key.usage.lastError.slice(0, 40)}
+                          </span>
+                        ) : null}
+                      </td>
+                      <td>
+                        {key.enabled ? (
+                          <Badge tone={key.cooling ? 'warn' : 'ok'}>
+                            {key.cooling ? `冷却中 ${key.usage?.cooldownSec || 0}s` : '启用'}
+                          </Badge>
+                        ) : (
+                          <Badge tone="warn">已停用</Badge>
+                        )}
                         {testResult[key.id] ? <span className="admin-cell-sub">{testResult[key.id]}</span> : null}
                       </td>
                       <td>
