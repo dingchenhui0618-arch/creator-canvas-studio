@@ -82,6 +82,8 @@ export const config = {
     issuer: 'visionqa',
     audience: 'bd-canvas',
     ttlSec: Number(process.env.VQ_CANVAS_TICKET_TTL || 120),
+    // 画布企业服务的内网地址：后台「画布身份」页从这里读，不经过公网 nginx
+    adminUrl: (process.env.VQ_CANVAS_ADMIN_URL || 'http://127.0.0.1:5313').trim(),
   },
   limits: {
     maxVideoMb: Number(process.env.MAX_VIDEO_MB || 160),

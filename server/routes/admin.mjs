@@ -15,12 +15,14 @@ import { removePreference } from '../preferences.mjs'
 import { AGENT_TOOLS } from '../agents.mjs'
 import { lastWebRead, readWebPage } from '../webread.mjs'
 import { listKeys, createKey, updateKey, deleteKey, testKey, PROVIDER_PRESETS } from '../keyvault.mjs'
+import { canvasAdminConfigured, listCanvasUsers, setCanvasUserAccess } from '../canvas-admin.mjs'
 
 const MODEL_KEY = /^\/api\/admin\/model-keys\/([\w-]+)$/
 const MODEL_KEY_TEST = /^\/api\/admin\/model-keys\/([\w-]+)\/test$/
 const USER_CREDITS = /^\/api\/admin\/users\/([\w-]+)\/credits$/
 const USER_PASSWORD = /^\/api\/admin\/users\/([\w-]+)\/password$/
 const USER_ACCESS = /^\/api\/admin\/users\/([\w-]+)$/
+const CANVAS_ACCESS = /^\/api\/admin\/canvas\/users\/(\d+)\/access$/
 
 function forbid(res) {
   sendJson(res, 403, { error: '只有管理员可以访问管理接口', code: 'NOT_ADMIN' })
@@ -203,6 +205,67 @@ export function createAdminRouter() {
         return true
       }
 
+      // ── 画布身份（跨系统）────────────────────────────────────────
+      // 画布已并入 VisionQA 账号：这里列出从工作台进过画布的人，并允许停用/恢复。
+      // 画布服务在自己的内网端口上，用互通密钥验证；画布没配好时如实说 unavailable。
+      if (pathname === '/api/admin/canvas/users' && req.method === 'GET') {
+        if (!canvasAdminConfigured()) {
+          sendJson(res, 200, { available: false, reason: '画布账号互通未配置', items: [], total: 0 })
+          return true
+        }
+        try {
+          const items = await listCanvasUsers()
+          const joined = items.map((item) => {
+            const account = item.visionqaUserId ? findUserById(item.visionqaUserId) : null
+            return {
+              id: item.id,
+              displayName: item.displayName,
+              active: Boolean(item.active),
+              lastLoginAt: item.lastLoginAt,
+              createdAt: item.createdAt,
+              visionqaUserId: item.visionqaUserId,
+              account: account
+                ? { id: account.id, email: account.email, name: account.name, active: Boolean(account.is_active) }
+                : null,
+            }
+          })
+          const activeCount = joined.filter((item) => item.active).length
+          sendJson(res, 200, {
+            available: true,
+            items: joined,
+            total: joined.length,
+            summary: { active: activeCount, suspended: joined.length - activeCount, missing: joined.filter((item) => !item.account).length },
+          })
+        } catch (error) {
+          sendJson(res, 200, { available: false, reason: error?.message || '画布服务暂时连不上', code: error?.code, items: [], total: 0 })
+        }
+        return true
+      }
+
+      const canvasAccess = pathname.match(CANVAS_ACCESS)
+      if (canvasAccess && req.method === 'POST') {
+        try {
+          const body = await readBody(req)
+          if (typeof body?.enabled !== 'boolean') {
+            sendJson(res, 400, { error: 'enabled 必须是布尔值', code: 'BAD_REQUEST' })
+            return true
+          }
+          const item = await setCanvasUserAccess(canvasAccess[1], body.enabled)
+          recordAudit({
+            req,
+            actor: user,
+            action: 'canvas.access',
+            targetType: 'canvas-user',
+            targetId: String(item?.id || canvasAccess[1]),
+            targetLabel: item?.displayName || '画布身份 ' + canvasAccess[1],
+            detail: { enabled: Boolean(item?.active), visionqaUserId: item?.visionqaUserId },
+          })
+          sendJson(res, 200, { ok: true, item: { id: item?.id, active: Boolean(item?.active), displayName: item?.displayName } })
+        } catch (error) {
+          sendJson(res, error?.status || 502, { error: error?.message || '画布身份状态修改失败', code: error?.code })
+        }
+        return true
+      }
       const accessMatch = pathname.match(USER_ACCESS)
       if (accessMatch && req.method === 'PATCH') {
         const target = findUserById(accessMatch[1])

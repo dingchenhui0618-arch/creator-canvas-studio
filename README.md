@@ -1057,3 +1057,15 @@ VQ_SCOPE=internal VQ_BASE=http://127.0.0.1:8801 VQ_COOKIE=<内部会话> node sc
 ![从 VisionQA 进入：账号菜单只剩 VisionQA 身份与文件操作](docs/screenshot-canvas-trust-2026-11-11.png)
 
 细节见 [docs/canvas-account-gate.md](docs/canvas-account-gate.md)。
+
+### 三十、后台「画布身份」：跨系统看人、停用画布访问（2026-11-11）
+
+- 新增后台「画布」页：列出所有从工作台进过画布的人，显示 VisionQA 账号、画布身份、最近进入与状态；每行可「停用画布 / 恢复画布」。停用只停画布，不停工作台登录。
+- 链路只走服务端：浏览器调 `/api/admin/canvas/users`（管理员鉴权）→ 服务端带 `X-VisionQA-Secret` 调画布内网 `127.0.0.1:5313/enterprise/api/visionqa/users` → 按 `external_id` 回连 VisionQA 账号表补邮箱。密钥不进浏览器，也不新开公网端口。
+- 线上实测：列表 200（1 位，回连出邮箱）→ 停用 200 → 该用户换画布票据 **403** → 恢复 200 → 换票据回到 **200**；运行审计里留下两条 `canvas.access`；真点按钮状态「可用 → 已停用 → 可用」跟着翻。
+- 画布没连上时页面显示「画布服务未连接」和原因，不假装空表；未配置互通时接口回 `available:false`。
+- 生产 bundle `index-DXBcisLC.js`；`visionqa` / `visionqa-internal` / `bdc-enterprise` 均 active，`/api/health` ok。单测 `node scripts/test-canvas-admin.mjs` 5/5。
+
+![后台「画布」页：VisionQA 账号、画布身份、最近进入、状态与停用按钮](docs/screenshot-admin-canvas-2026-11-11.png)
+
+细节见 [docs/canvas-account-gate.md](docs/canvas-account-gate.md) 第六节。
