@@ -1805,6 +1805,25 @@ hypit 商业授权到位后，按调研给出的顺序（P0-1 → P0-2 → P0-3�
 
 详见 [docs/key-failover.md](docs/key-failover.md)。
 
+## 四十七、2026-11-11 收尾：四项平台化目标的线上验收（第三十批）
+
+目标要求「每步都要有可验证的线上结果」，这一批把四项逐条在生产上复验了一遍，并把证据收进
+[docs/objective-audit-2026-11-11.md](docs/objective-audit-2026-11-11.md)：
+
+| 目标 | 线上证据（2026-11-11 复核） |
+| --- | --- |
+| ① 统一 VisionQA 账号登录画布 | 独立打开画布只剩「画布已并入 VisionQA 账号」的门，**企业登录按钮 0 个**；工作台内画布头像菜单只有「VisionQA 账号 / 额度由 VisionQA 统一管理」，登录·注册·退出条目 0 个；票据接口 200（iss visionqa / aud bd-canvas / TTL 120s），匿名 401 |
+| ② 平台 Key 接入与路由 | 池内 2 把（DeepSeek：text+vision+judge；SeeAPI：image+video）；四种能力预演都指向正确 Key；生产演练 P0 坏 Key 401·131ms → P100 真 Key 803ms，换 Key 成功 1→2；权重 2000 次实测 25.3% / 74.7% |
+| ③ 审阅 hypit 并评估融入 | P0-1 已上线：模板台词约需 25.5s / 原片 18s（fit=tight、多 7.5s、8 镜 7 个偏多）；存量模板用 recalc 脚本按新口径重算；P0-2 给出实测依赖（Node 22.12 < 22.15、无 Chromium、1.8GB/2 核、无 Provider 凭证）故不硬装 |
+| ④ Jev 类判断模型 | /api/review/health → judge 已配置（deepseek-flash，chat 协议）；真实评审 43.1s、判断 3.9s；SystemOne 协议已实现，TypeSafe 生产 451 地区限制 |
+
+![独立打开画布：只剩「从 VisionQA 进入」的门](docs/screenshot-canvas-gate-2026-11-11.png)
+
+![工作台内画布：头像菜单只有 VisionQA 账号，额度由 VisionQA 统一管理](docs/screenshot-canvas-trust-2026-11-11.png)
+
+**仍是业主决策、没有代做的两项**：hypit P0-2 要不要单开 worker + 买 Provider 额度（决定「真出片 A/B」做不做）；
+要不要再买一家文本供应商（决定「真实多供应商回退」能不能验）。SeeAPI 出图出视频要等额度为 0 的那把 Key 充值。
+
 
 
 
