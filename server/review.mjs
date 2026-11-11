@@ -1,5 +1,6 @@
 import { callTextModel, extractJson, llmEnabled } from './llm.mjs'
 import { assertPublicHttpUrl } from './media.mjs'
+import { judgeReview, judgeStatus } from './judge.mjs'
 
 // VisionQA 视觉评审：优先接 VisionQA 插件服务（同一套 VisualReview 契约），
 // 服务不可用时退到本地模型的 visual-baseline 评审，并如实标注 provider。
@@ -29,6 +30,16 @@ async function serviceHealth() {
   } catch {
     return false
   }
+}
+
+/**
+ * 判断层：视觉模型出完结论后，再让判断模型（Jev）给一份结构化判断。
+ * 它只加一块「依据」，不改 verdict —— 两个模型口径不同，改结论就说不清是谁的责任。
+ * 判断层没配 / 调不通时原样返回，评审不因此失败。
+ */
+async function attachJudge(mapped, intent) {
+  const judge = await judgeReview(mapped, { intent })
+  return { ...mapped, judge }
 }
 
 function toDataUrl(bytes, mime = 'image/jpeg') {
@@ -98,7 +109,7 @@ export async function reviewVisual({ imageUrl, imageBytes, mime = 'image/jpeg', 
       const response = await fetch(SERVICE_URL + '/api/visual-review', { method: 'POST', body: form, signal: AbortSignal.timeout(60000) })
       const json = await response.json()
       if (response.ok) {
-        const mapped = normalize(json, 'visionqa-plugin@' + SERVICE_URL.replace(/^https?:\/\//, ''), requestId)
+        const mapped = await attachJudge(normalize(json, 'visionqa-plugin@' + SERVICE_URL.replace(/^https?:\/\//, ''), requestId), intent)
         return { ...mapped, ms: Date.now() - started, mode: 'service', note: '由 VisionQA 插件服务返回（fixture provider 时只证明链路可用，不代表模型准确率）' }
       }
     } catch (error) {
@@ -142,10 +153,17 @@ export async function reviewVisual({ imageUrl, imageBytes, mime = 'image/jpeg', 
   ], { temperature: 0.2, maxTokens: 3000, json: true, log })
 
   const parsed = extractJson(result.text)
-  const mapped = normalize(parsed, 'local-model:' + result.model, requestId)
+  const mapped = await attachJudge(normalize(parsed, 'local-model:' + result.model, requestId), intent)
   return { ...mapped, ms: Date.now() - started, mode: 'local-model', note: '由本地视觉模型按 VisionQA visual-baseline 规则评审' }
 }
 
 export async function reviewStatus() {
-  return { service: await serviceHealth(), serviceUrl: SERVICE_URL, model: llmEnabled(), profiles: PROFILES }
+  return {
+    service: await serviceHealth(),
+    serviceUrl: SERVICE_URL,
+    model: llmEnabled(),
+    profiles: PROFILES,
+    // 判断层是否启用：评审页据此决定要不要显示「判断模型」区块
+    judge: judgeStatus(),
+  }
 }

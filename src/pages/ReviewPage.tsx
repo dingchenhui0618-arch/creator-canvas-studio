@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Crosshair, Loader2, Play, RefreshCw, ScanEye, TriangleAlert } from 'lucide-react'
-import { getReview, getReviewStatus, listReviews, runReview, type ReviewResult, type ReviewStatus, type ReviewSummary } from '../api/review'
+import { getReview, getReviewStatus, listReviews, runReview, type JudgeResult, type ReviewResult, type ReviewStatus, type ReviewSummary } from '../api/review'
 import { getCredits, getModelService, recheckModelService, type CreditsResponse, type ModelServiceState } from '../api/credits'
 import { listTemplates, coverSrc } from '../api/radar'
 import type { ReplicaTemplate } from '../domain/radar'
@@ -11,6 +11,66 @@ import '../styles/review.css'
 
 const SEVERITY_LABEL: Record<string, string> = { blocker: '阻塞', major: '主要', minor: '次要', info: '信息' }
 const VERDICT_LABEL: Record<string, string> = { pass: '通过', needs_review: '需人工确认', fail: '不通过' }
+const SUPPORT_LABEL: Record<string, string> = {
+  supported: '一致',
+  too_strict: '偏严',
+  too_lenient: '偏松',
+}
+const RISK_LABEL = ['可以直接发布', '小修后可以发布', '必须先解决问题再发布']
+
+function percent(value: number | null | undefined) {
+  if (value === null || value === undefined) return '—'
+  return Math.round(value * 100) + '%'
+}
+
+/**
+ * 判断层（TypeSafe / Jev）：视觉模型出结论，判断模型判「这份结论站不站得住」。
+ * 只展示依据，不改结论 —— 两个模型口径不同，改结论就说不清是谁的责任。
+ */
+function JudgePanel({ judge }: { judge: JudgeResult }) {
+  if (judge.status === 'disabled') {
+    return (
+      <div className="review-judge is-off">
+        <div className="review-judge-head">
+          <h3>判断模型 · Jev</h3>
+          <span className="vq-mono">未启用</span>
+        </div>
+        <p>{judge.note}</p>
+      </div>
+    )
+  }
+  if (judge.status === 'failed') {
+    return (
+      <div className="review-judge is-off">
+        <div className="review-judge-head">
+          <h3>判断模型 · Jev</h3>
+          <span className="vq-mono">调用失败</span>
+        </div>
+        <p>判断层这次没跑通，上面的评审结论不受影响；后台「路由决策」里能看到原因。</p>
+      </div>
+    )
+  }
+  const risk = judge.publishRisk
+  const support = judge.verdictSupport
+  const riskLabel = risk
+    ? risk.legend?.[String(Math.round(risk.score))] || RISK_LABEL[Math.round(risk.score)] || risk.score.toFixed(1)
+    : '—'
+  return (
+    <div className="review-judge">
+      <div className="review-judge-head">
+        <h3>判断模型 · Jev</h3>
+        <span className="vq-mono">{judge.model} · {judge.ms} ms</span>
+      </div>
+      <div className="review-judge-grid">
+        <div><span>结论有画面依据</span><strong>{percent(judge.evidenceConsistent)}</strong></div>
+        <div><span>结论与问题一致</span><strong>{support ? SUPPORT_LABEL[support.choice] || support.choice : '—'}</strong></div>
+        <div><span>建议可直接执行</span><strong>{percent(judge.actionable)}</strong></div>
+        <div><span>发布前风险</span><strong>{riskLabel}</strong></div>
+      </div>
+      <p className="review-judge-note">判断层只给依据，不改上面的结论；两者不一致时以视觉证据为准，再人工确认。</p>
+    </div>
+  )
+}
 
 type Picked = { media?: string; imageUrl?: string; label: string; preview: string }
 
@@ -338,6 +398,8 @@ export default function ReviewPage() {
                 <p>{result.summary}</p>
                 <span className="vq-mono">{result.provider} · {(result.ms / 1000).toFixed(1)}s</span>
               </div>
+
+              {result.judge ? <JudgePanel judge={result.judge} /> : null}
 
               <ol className="review-observations">
                 {result.observations.map((item) => (

@@ -13,6 +13,7 @@ const CAPABILITIES = [
   { id: 'vision', label: '视觉' },
   { id: 'image', label: '出图' },
   { id: 'video', label: '出视频' },
+  { id: 'judge', label: '判断（Jev）' },
 ]
 
 function capabilityLabel(id: string) {

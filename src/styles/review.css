@@ -86,6 +86,20 @@
 .review-gaps li { font-size:12px; color:var(--muted); line-height:1.6; }
 .review-note { margin:0; padding-top:12px; border-top:1px solid var(--line); color:var(--faint); font-size:12px; line-height:1.6; }
 
+/* 判断层（Jev）：与结论并排，回答「这份结论站不站得住」，不抢结论的位置 */
+.review-judge { display:flex; flex-direction:column; gap:12px; padding:12px 16px; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface); }
+.review-judge.is-off { background:transparent; border-style:dashed; }
+.review-judge-head { display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
+.review-judge-head h3 { margin:0; font-size:12px; font-weight:500; }
+.review-judge-head .vq-mono { color:var(--faint); font-size:12px; }
+.review-judge p { margin:0; font-size:12px; line-height:1.65; color:var(--muted); }
+.review-judge-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:12px; }
+.review-judge-grid > div { display:flex; flex-direction:column; gap:4px; }
+.review-judge-grid span { font-size:12px; color:var(--faint); }
+.review-judge-grid strong { font-size:16px; font-weight:500; color:var(--ink); letter-spacing:-.01em; }
+.review-judge-note { padding-top:8px; border-top:1px solid var(--line-faint); color:var(--faint); }
+@media (max-width: 900px) { .review-judge-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
+
 @media (max-width: 1180px) {
   .review-body { grid-template-columns:1fr; }
   .review-grid { grid-template-columns:repeat(3, 1fr); }

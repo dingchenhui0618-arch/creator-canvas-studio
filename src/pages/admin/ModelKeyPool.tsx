@@ -8,6 +8,7 @@ const CAPABILITIES = [
   { id: 'vision', label: '视觉' },
   { id: 'image', label: '出图' },
   { id: 'video', label: '出视频' },
+  { id: 'judge', label: '判断（Jev）' },
 ]
 
 const EMPTY_FORM = {
@@ -162,8 +163,8 @@ export default function ModelKeyPool() {
         <>
           <p className="admin-hint">
             已启用 {data.summary.enabled} / {data.summary.total} 把 · 文本 {counts.text || 0} · 视觉 {counts.vision || 0} · 出图{' '}
-            {counts.image || 0} · 视频 {counts.video || 0} · 累计调用 成功 {data.summary.usage?.ok || 0} / 失败{' '}
-            {data.summary.usage?.fail || 0}
+            {counts.image || 0} · 视频 {counts.video || 0} · 判断 {counts.judge || 0} · 累计调用 成功{' '}
+            {data.summary.usage?.ok || 0} / 失败 {data.summary.usage?.fail || 0}
             {data.summary.cooling ? ` · ${data.summary.cooling} 把冷却中` : ''}
             {data.fallback.configured ? ' · 环境变量兜底凭证已配置' : ' · 环境变量兜底未配置'}
           </p>

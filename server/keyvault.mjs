@@ -12,18 +12,23 @@ import path from 'node:path'
 import { config } from './config.mjs'
 import { setVaultCounts, vaultCounts } from './vault-state.mjs'
 
-const CAPABILITIES = ['text', 'vision', 'image', 'video']
+const CAPABILITIES = ['text', 'vision', 'image', 'video', 'judge']
 const CAPABILITY_ALIASES = {
   chat: 'text',
   llm: 'text',
   multimodal: 'vision',
   image2: 'image',
   video2: 'video',
+  judgment: 'judge',
+  jev: 'judge',
+  typesafe: 'judge',
+  判断: 'judge',
 }
 
 // 后台表单的供应商预设：只用来带出 baseUrl，真实请求仍以管理员的输入为准。
 export const PROVIDER_PRESETS = [
   { id: 'deepseek', label: 'DeepSeek 官方', baseUrl: 'https://api.deepseek.com/v1' },
+  { id: 'typesafe', label: 'TypeSafe（Jev 判断）', baseUrl: 'https://api.typesafe.ai/v1' },
   { id: 'bailian', label: '阿里云百炼', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1' },
   { id: 'volcengine', label: '火山方舟', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3' },
   { id: 'openai', label: 'OpenAI', baseUrl: 'https://api.openai.com/v1' },
@@ -106,7 +111,7 @@ function load() {
 }
 
 function refreshCounts() {
-  const counts = { text: 0, vision: 0, image: 0, video: 0 }
+  const counts = { text: 0, vision: 0, image: 0, video: 0, judge: 0 }
   for (const key of load().keys) {
     if (!key.enabled) continue
     for (const capability of key.capabilities || []) {
