@@ -8,7 +8,14 @@ import { ReplicateModal } from '../components/ReplicateModal'
 import PageHead from '../components/PageHead'
 import '../styles/radar.css'
 
-const TYPES = ['全部', '工作流', '口播干货', '剧情演绎', '教程拆解', '产品测评', '种草分享', '开箱体验', '探店vlog', '混剪卡点', '待解析']
+// 类型标签按库里真实的内容类型生成：写死一份清单，一旦运营改了分类就会出现「点了没结果」的空标签
+const pickTypes = (byType: Record<string, number>, saved: number) => {
+  const names = Object.entries(byType)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([name]) => name)
+  if (saved > 0 && !names.includes('待解析')) names.push('待解析')
+  return ['全部', ...names]
+}
 
 // 模板详情里需要 MediaItem 才能跑复刻：这里把模板还原成检索卡片
 function asMedia(template: ReplicaTemplate): MediaItem {
@@ -50,11 +57,16 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
   const [health, setHealth] = useState<{ redfox: boolean; vision: boolean }>({ redfox: false, vision: false })
   const [replicateItem, setReplicateItem] = useState<MediaItem | null>(null)
 
+  const totalReuse = useMemo(() => items.reduce((sum, item) => sum + (item.reuseCount || 0), 0), [items])
+  const typeOptions = useMemo(() => pickTypes(byType, saved), [byType, saved])
+  // 分类被后台改名后，旧分类已经不在标签里：渲染时直接落回「全部」，不用再开一个 setState 副作用
+  const activeType = type === '全部' || typeOptions.includes(type) ? type : '全部'
+
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
-      const result = await listTemplates({ q: keyword.trim(), type: type === '全部' ? '' : type })
+      const result = await listTemplates({ q: keyword.trim(), type: activeType === '全部' ? '' : activeType })
       setItems(result.items)
       setByType(result.byType || {})
       setParsed(result.parsed || 0)
@@ -65,7 +77,7 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
     } finally {
       setLoading(false)
     }
-  }, [keyword, type])
+  }, [keyword, activeType])
 
   // 数据来自本地 API，挂载与筛选变化时由外部系统触发一次重新拉取
   // eslint-disable-next-line react/set-state-in-effect
@@ -88,7 +100,7 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
     }
   }
 
-  const totalReuse = useMemo(() => items.reduce((sum, item) => sum + (item.reuseCount || 0), 0), [items])
+
 
   return (
     <div className="page page--templates">
@@ -120,8 +132,8 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
           <input value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="搜索标题、钩子、标签或可复用规则" />
         </label>
         <div className="filter-tabs template-type-tabs">
-          {TYPES.map((value) => (
-            <button key={value} className={type === value ? 'is-active' : ''} onClick={() => setType(value)}>
+          {typeOptions.map((value) => (
+            <button key={value} className={activeType === value ? 'is-active' : ''} onClick={() => setType(value)}>
               {value}
               {value !== '全部' && byType[value] ? <span className="tab-count">{byType[value]}</span> : null}
             </button>
@@ -178,7 +190,11 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
                   )}
                 </div>
                 <div className="template-foot">
-                  <span>{item.platformLabel}{item.author ? ' · ' + item.author : ''}</span>
+                  <span>
+                    {item.shared ? <span className="template-shared">官方示例</span> : null}
+                    {item.platformLabel}
+                    {item.author ? ' · ' + item.author : ''}
+                  </span>
                   <span>{item.reuseCount ? '已复用 ' + item.reuseCount + ' 次' : '未复用'}</span>
                 </div>
               </div>
@@ -259,7 +275,11 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
                               <div>
                                 <strong>{beat.beat}</strong>
                                 <p>{beat.voiceover}</p>
-                                {beat.onScreen && <span className="beat-onscreen">屏幕字：{beat.onScreen}</span>}
+                                {beat.onScreen && (
+                                  <span className="beat-onscreen">
+                                    屏幕字：{beat.onScreen.replace(/^(建议)?(屏幕字|字幕)s*[：:]s*/, '')}
+                                  </span>
+                                )}
                               </div>
                             </li>
                           ))}

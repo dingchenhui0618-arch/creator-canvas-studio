@@ -24,6 +24,9 @@ export type TemplateItem = {
   thumb?: string
   cover?: string
   storyboard?: unknown[]
+  ownerId?: string
+  /** 公共模板：所有账号可见；后台可一键设为公共或收回 */
+  shared?: boolean
 }
 
 export type TemplatesResponse = {

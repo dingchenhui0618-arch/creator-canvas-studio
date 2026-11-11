@@ -588,6 +588,99 @@
   outline-offset: -1px;
 }
 
+/* 告警卡：一行一个事件，次数与最近时间靠等宽字体对齐；确认按钮固定在右侧 */
+.admin-alert-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-alert-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  margin: 8px 0 12px;
+  color: var(--muted, #6b6b6b);
+  font-size: 12px;
+}
+
+.admin-alert-facts b {
+  color: var(--ink, #111111);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-weight: 500;
+}
+
+.admin-alert-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-alert-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--line, #e7e2d9);
+  border-radius: 4px;
+  background: var(--surface-subtle, #f8f7f4);
+}
+
+.admin-alert-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.admin-alert-copy strong {
+  font-size: 13px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+/* 公共模板勾选：整行、复选框与说明基线对齐，不用浏览器默认 13px 挤压行高 */
+.admin-edit-check {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-edit-check input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+}
+
+.admin-edit-check > span {
+  color: var(--muted, #6b6b6b);
+  font-family: inherit;
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+/* 模板范围：公共（所有账号可见）/ 账号（仅创建人） */
+.admin-scope {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  color: var(--muted, #6b6b6b);
+  border: 1px solid var(--line, #e7e2d9);
+  border-radius: 3px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.admin-scope.is-public {
+  color: var(--ink, #111111);
+  border-color: var(--line-strong, #d8d3c9);
+  background: var(--surface-subtle, #f6f4ef);
+}
+
 /* 平台 Key 池表单：select 与多选能力沿用同一套输入高度 */
 .admin-edit-field select {
   height: 32px;

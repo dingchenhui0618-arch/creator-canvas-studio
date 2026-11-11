@@ -4,7 +4,7 @@ import { useUiMode } from '../../api/app'
 import { formatDateTime, formatSeconds, useApi, type TemplateItem, type TemplatesResponse } from './data'
 import { AdminHead, EmptyState, ErrorBanner, LoadingLine, RefreshButton, SourceTag } from './ui'
 
-type EditForm = { title: string; contentType: string; tags: string; sourceUrl: string }
+type EditForm = { title: string; contentType: string; tags: string; sourceUrl: string; shared: boolean }
 
 export default function TemplatesSection() {
   const { internal } = useUiMode()
@@ -15,7 +15,7 @@ export default function TemplatesSection() {
   const [actionError, setActionError] = useState('')
   // 编辑与删除分开：编辑是就地改四个可治理字段，保存走 PATCH，成功后重新请求列表
   const [editing, setEditing] = useState<TemplateItem | null>(null)
-  const [form, setForm] = useState<EditForm>({ title: '', contentType: '', tags: '', sourceUrl: '' })
+  const [form, setForm] = useState<EditForm>({ title: '', contentType: '', tags: '', sourceUrl: '', shared: false })
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [savedNote, setSavedNote] = useState('')
@@ -60,6 +60,7 @@ export default function TemplatesSection() {
       contentType: item.contentType || '',
       tags: (item.tags || []).join('，'),
       sourceUrl: item.sourceUrl || '',
+      shared: Boolean(item.shared),
     })
   }
 
@@ -78,6 +79,7 @@ export default function TemplatesSection() {
             .map((tag) => tag.trim())
             .filter(Boolean),
           sourceUrl: form.sourceUrl,
+          shared: form.shared,
         }),
       })
       setSavedNote('已保存「' + updated.title + '」，列表已重新请求')
@@ -148,6 +150,14 @@ export default function TemplatesSection() {
                 onChange={(event) => setForm((current) => ({ ...current, sourceUrl: event.target.value }))}
               />
             </label>
+            <label className="admin-edit-field admin-edit-field--wide admin-edit-check">
+              <input
+                type="checkbox"
+                checked={form.shared}
+                onChange={(event) => setForm((current) => ({ ...current, shared: event.target.checked }))}
+              />
+              <span>公共模板：所有账号都看得见（运营种子内容），关掉后只归管理员账号</span>
+            </label>
           </div>
           <div className="admin-edit-actions">
             <button type="button" className="admin-btn admin-btn--ghost" onClick={() => setEditing(null)} disabled={saving}>
@@ -192,6 +202,7 @@ export default function TemplatesSection() {
                   <th>帧</th>
                   <th>标题</th>
                   <th>类型</th>
+                  <th>范围</th>
                   <th>镜头</th>
                   <th>时长</th>
                   <th>入库</th>
@@ -213,6 +224,11 @@ export default function TemplatesSection() {
                       <span className="admin-cell-sub admin-mono">{item.id}</span>
                     </td>
                     <td>{item.contentType}</td>
+                    <td>
+                      <span className={'admin-scope' + (item.shared ? ' is-public' : '')}>
+                        {item.shared ? '公共' : '账号'}
+                      </span>
+                    </td>
                     <td className="admin-mono">{item.storyboard?.length ?? 0}</td>
                     <td className="admin-mono">{formatSeconds(item.durationSec)}</td>
                     <td className="admin-mono">{formatDateTime(item.createdAt)}</td>

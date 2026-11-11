@@ -49,9 +49,11 @@ function step(job, name, progress, text) {
   if (text) job.logs.push({ at: new Date().toISOString(), text })
 }
 
-export async function startReplicate(item, overrideUrl, { ownerId = '', onSettled = null } = {}) {
+export async function startReplicate(item, overrideUrl, { ownerId = '', shared = false, onSettled = null } = {}) {
   const job = createJob()
   job.ownerId = ownerId || ''
+  // 公共模板：运营账号跑出来的解析结果不给任何人「私有」，所有账号可见
+  job.shared = Boolean(shared)
   const jobDir = path.join(config.dataDir, 'jobs', job.id)
   const targets = []
   if (overrideUrl) targets.push({ url: overrideUrl, label: '手动直链' })
@@ -153,7 +155,15 @@ async function runPipeline(job, jobDir, item, targets) {
   const analysis = await analyzeFrames({ frames, meta, sceneCuts, log: (text) => job.logs.push({ at: new Date().toISOString(), text }) })
 
   step(job, 'save', 94, '写入模板库')
-  const template = await createTemplate({ item, meta, analysis, frames, jobId: job.id, user: job.ownerId ? { id: job.ownerId } : null })
+  const template = await createTemplate({
+    item,
+    meta,
+    analysis,
+    frames,
+    jobId: job.id,
+    user: job.ownerId ? { id: job.ownerId } : null,
+    shared: Boolean(job.shared),
+  })
   job.templateId = template.id
   step(job, 'done', 100, '复刻完成，已存入模板库：' + template.title)
   job.status = 'done'

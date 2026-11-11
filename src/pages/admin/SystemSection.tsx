@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { request } from '../../api/client'
 import { useUiMode } from '../../api/app'
 import { formatDateTime, formatDuration, useApi, type BdcPort, type BdcStatus, type VersionInfo } from './data'
 import { AdminHead, Badge, ErrorBanner, LoadingLine, RefreshButton, SourceTag } from './ui'
@@ -57,6 +59,32 @@ type DiagnosticsInfo = {
   }
 }
 
+type AlertItem = {
+  id: string
+  kind: string
+  level: string
+  title: string
+  detail: string
+  count: number
+  firstAt: string
+  lastAt: string
+  ackAt: string | null
+}
+
+type AlertsInfo = {
+  items: AlertItem[]
+  counts: { open: number; total: number; byKind: Record<string, number> }
+  disk: { ok: boolean; freeBytes: number; totalBytes: number; thresholdBytes: number }
+  channel: { webhook: boolean; diskFreeMb: number }
+}
+
+const ALERT_KIND_LABEL: Record<string, string> = {
+  'server-5xx': '服务端 5xx',
+  'model-blocked': '模型上游失败',
+  'disk-low': '磁盘不足',
+  test: '测试',
+}
+
 // 后台只需要「大概多大」，用十进制单位；少于 1 KB 也写清楚，不显示 0 B 之外的奇怪精度。
 function formatBytes(value?: number | null): string {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return '—'
@@ -89,17 +117,49 @@ export default function SystemSection() {
   const version = useApi<VersionInfo>('/api/version')
   const bdc = useApi<BdcStatus>('/api/bdc/status')
   const storage = useApi<StorageInfo>('/api/admin/storage')
+  const alerts = useApi<AlertsInfo>('/api/admin/alerts')
+  const [alertNote, setAlertNote] = useState('')
+  const [busy, setBusy] = useState('')
 
   const errors = [
     version.error ? `GET /api/version：${version.error}` : '',
     bdc.error ? `GET /api/bdc/status：${bdc.error}` : '',
     storage.error ? `GET /api/admin/storage：${storage.error}` : '',
+    alerts.error ? `GET /api/admin/alerts：${alerts.error}` : '',
   ].filter(Boolean)
 
   const reload = () => {
     version.reload()
     bdc.reload()
     storage.reload()
+    alerts.reload()
+  }
+
+  const sendTestAlert = async () => {
+    setBusy('test')
+    setAlertNote('')
+    try {
+      await request('/api/admin/alerts/test', { method: 'POST', body: JSON.stringify({}) })
+      setAlertNote('已记一条测试告警；外推通道' + (alerts.data?.channel.webhook ? '已配置，会同步推送' : '未配置，只留在本站队列'))
+      alerts.reload()
+    } catch (cause) {
+      setAlertNote(cause instanceof Error ? cause.message : '发送失败')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  const ack = async (item: AlertItem) => {
+    setBusy(item.id)
+    setAlertNote('')
+    try {
+      await request('/api/admin/alerts/' + item.id + '/ack', { method: 'POST', body: JSON.stringify({}) })
+      alerts.reload()
+    } catch (cause) {
+      setAlertNote(cause instanceof Error ? cause.message : '确认失败')
+    } finally {
+      setBusy('')
+    }
   }
 
   return (
@@ -116,6 +176,75 @@ export default function SystemSection() {
       />
 
       {errors.length ? <ErrorBanner message={errors.join('；')} onRetry={reload} /> : null}
+
+      <section className="admin-card admin-block">
+        <div className="admin-block-head">
+          <div>
+            <p className="admin-label">告警</p>
+            <p className="admin-sub">
+              5xx、模型上游失败、磁盘剩余不足三类会落到这里：同一条 30 分钟内只累加次数；服务重启后仍然在，不靠人盯日志。
+            </p>
+          </div>
+          <div className="admin-alert-actions">
+            <SourceTag kind="api" source="GET /api/admin/alerts" />
+            <button type="button" className="admin-btn admin-btn--ghost" onClick={() => void sendTestAlert()} disabled={busy === 'test'}>
+              {busy === 'test' ? '发送中…' : '发一条测试告警'}
+            </button>
+          </div>
+        </div>
+
+        {alerts.loading && !alerts.data ? <LoadingLine label="/api/admin/alerts" /> : null}
+
+        {alerts.data ? (
+          <>
+            <div className="admin-alert-facts">
+              <span>
+                <b>{alerts.data.counts.open}</b> 未确认
+              </span>
+              <span>
+                <b>{alerts.data.counts.total}</b> 历史累计
+              </span>
+              <span>
+                磁盘剩余 <b>{formatBytes(alerts.data.disk.freeBytes)}</b>，阈值 {formatBytes(alerts.data.disk.thresholdBytes)}
+              </span>
+              <span>
+                外推通道 <b>{alerts.data.channel.webhook ? '已配置' : '未配置'}</b>
+              </span>
+            </div>
+
+            {alerts.data.items.length ? (
+              <ul className="admin-alert-list">
+                {alerts.data.items.map((item) => (
+                  <li key={item.id} className="admin-alert-row">
+                    <Badge tone={item.kind === 'test' ? 'neutral' : item.level === 'warn' ? 'warn' : 'fail'}>
+                      {ALERT_KIND_LABEL[item.kind] || item.kind}
+                    </Badge>
+                    <div className="admin-alert-copy">
+                      <strong>{item.title}</strong>
+                      <span className="admin-cell-sub admin-mono">
+                        第 {item.count} 次 · 最近 {formatDateTime(item.lastAt)}
+                        {item.detail ? ' · ' + item.detail : ''}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="admin-btn admin-btn--ghost admin-btn--icon"
+                      onClick={() => void ack(item)}
+                      disabled={busy === item.id}
+                    >
+                      {busy === item.id ? '确认中…' : '确认'}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="admin-hint admin-hint--ok">没有未确认的告警：5xx、上游失败与磁盘水位都正常。</p>
+            )}
+          </>
+        ) : null}
+
+        {alertNote ? <p className="admin-hint">{alertNote}</p> : null}
+      </section>
 
       <div className="admin-grid admin-grid--two">
         <section className="admin-card admin-block">

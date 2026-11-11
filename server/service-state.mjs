@@ -3,6 +3,8 @@
 //   1) 健康检查不再把「接口能连」当成「服务可用」；
 //   2) 已知额度/凭证问题时直接拦在扣费之前，避免每次先扣再退；
 //   3) 生产只给产品语言，内部环境保留上游原始报文、模型名与时间。
+// 账号级故障（额度 / 凭证）同时进告警队列：这类问题不会自愈，等用户来报就太晚了。
+import { recordAlert } from './alerts.mjs'
 //
 // 状态在进程内保存，5 分钟后自动失效：管理员充值或换 key 后不用重启服务，
 // 下一次真实调用成功就会把状态清掉。
@@ -43,6 +45,12 @@ export function noteModelFailure(error, modelName = '') {
   model.lastModel = String(modelName || '').slice(0, 80)
   // 出过失败就不再算「已验证」：即使 5 分钟后自动失效，也要等下一次真实成功才算数
   model.verifiedAt = 0
+  void recordAlert({
+    kind: 'model-blocked',
+    title: (INTERNAL_LABEL[code] || INTERNAL_LABEL.unknown) + '：' + String(modelName || '模型'),
+    detail: String(error?.message || error || '').slice(0, 300),
+    dedupeKey: 'model-blocked|' + code + '|' + String(modelName || ''),
+  })
   return true
 }
 

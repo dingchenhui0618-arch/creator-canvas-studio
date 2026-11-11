@@ -135,6 +135,8 @@ export type ReplicaTemplate = {
   video: { width: number; height: number; fps: number; duration: number }
   origin: 'ai' | 'manual' | 'canvas'
   reuseCount: number
+  /** 公共模板：运营放进来的示例，所有账号都看得见（ownerId 为空） */
+  shared?: boolean
   createdAt: string
   /** kind === 'flow' 时才有：画布节点摘要与可恢复的节点/连线 */
   flowNodes?: { title: string; kind: string }[]

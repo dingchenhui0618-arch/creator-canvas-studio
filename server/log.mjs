@@ -6,6 +6,7 @@
 //   2) 5xx 额外打一条带堆栈的错误日志，响应体里带同一个 traceId，方便按 id 反查
 //   3) unhandledRejection / uncaughtException 的兜底（后者记完日志退出，交给 systemd 重启）
 import crypto from 'node:crypto'
+import { recordAlert } from './alerts.mjs'
 
 const DISABLED = String(process.env.VQ_ACCESS_LOG || '1') === '0'
 
@@ -48,6 +49,17 @@ export function startAccess(req, res, { ip = '' } = {}) {
   const finish = () => {
     if (done) return
     done = true
+    // 5xx 进告警队列（503 是「能力未开通」这类预期状态，不算故障）。
+    // 放在 DISABLED 判断之前：就算为了减噪关了访问日志，故障也不能没人知道。
+    if (res.statusCode >= 500 && res.statusCode !== 503) {
+      const where = String(req.url || '/').split('?')[0]
+      recordAlert({
+        kind: 'server-5xx',
+        title: 'HTTP ' + res.statusCode + ' ' + req.method + ' ' + where,
+        detail: 'traceId ' + traceId + (trace.userId ? ' · 账号 ' + trace.userId : ''),
+        dedupeKey: 'server-5xx|' + res.statusCode + '|' + where,
+      }).catch(() => {})
+    }
     if (DISABLED) return
     const ms = Number(process.hrtime.bigint() - startedAt) / 1e6
     const url = String(req.url || '/')

@@ -58,14 +58,22 @@ export async function listTemplates({ q = '', contentType = '', platform = '', k
 
 // 只存「链接 + 互动数据」的条目：在爆款雷达点「加入模板库」立刻落库，
 // 不下载视频、不抽帧、不建本地目录；解析（脚本/分镜）仍然靠「一键复刻」补上。
-export async function saveTemplateFromItem({ item, user = null }) {
+export async function saveTemplateFromItem({ item, user = null, shared = false }) {
   const list = await loadAll()
   const sourceId = String(item?.id || '')
   // 去重只在同一账号内做：两个账号收藏同一条爆款，各自算各自的一条
   const existing = list.find(
     (entry) => entry.kind === 'saved' && entry.sourceId && entry.sourceId === sourceId && canAccess(entry, user),
   )
-  if (existing) return { template: existing, created: false }
+  if (existing) {
+    // 运营把同一条内容再收一次「公共模板」：升级成公共，不再多占一格
+    if (shared && (existing.ownerId || !existing.shared)) {
+      existing.ownerId = ''
+      existing.shared = true
+      await persist(list)
+    }
+    return { template: existing, created: false }
+  }
   const now = new Date().toISOString()
   const template = {
     id: 'tpl_' + randomUUID().slice(0, 8),
@@ -92,7 +100,8 @@ export async function saveTemplateFromItem({ item, user = null }) {
     video: { width: 0, height: 0, fps: 0, duration: Number(item?.durationSec) || 0 },
     origin: 'manual',
     reuseCount: 0,
-    ownerId: user?.id || '',
+    ownerId: shared ? '' : user?.id || '',
+    ...(shared ? { shared: true } : {}),
     createdAt: now,
     savedAt: now,
   }
@@ -108,7 +117,7 @@ export async function getTemplate(id, user = null) {
   return list.find((item) => item.id === id && canAccess(item, user)) || null
 }
 
-export async function createTemplate({ item, meta, analysis, frames, jobId, user = null }) {
+export async function createTemplate({ item, meta, analysis, frames, jobId, user = null, shared = false }) {
   const list = await loadAll()
   const id = 'tpl_' + randomUUID().slice(0, 8)
   const targetDir = path.join(config.framesDir, id)
@@ -148,7 +157,9 @@ export async function createTemplate({ item, meta, analysis, frames, jobId, user
     video: { width: meta.width, height: meta.height, fps: meta.fps, duration: meta.duration },
     origin: 'ai',
     reuseCount: saved?.reuseCount || 0,
-    ownerId: user?.id || saved?.ownerId || '',
+    // 公共模板（运营种子内容）没有归属，所有账号都看得见；其余归创建人
+    ownerId: shared ? '' : user?.id || saved?.ownerId || '',
+    ...(shared || saved?.shared ? { shared: true } : {}),
     createdAt: saved?.createdAt || new Date().toISOString(),
   }
   list.unshift(template)
@@ -232,6 +243,12 @@ export async function updateTemplate(id, patch = {}, user = null) {
     next.tags = patch.tags.map((tag) => String(tag).trim()).filter(Boolean).slice(0, 12)
   }
   if (patch.sourceUrl !== undefined) next.sourceUrl = String(patch.sourceUrl).trim().slice(0, 1000)
+  // 公共模板：运营放进来的示例，所有账号可见（ownerId 置空）；收回时重新归到管理员名下
+  if (patch.shared !== undefined) {
+    const shared = Boolean(patch.shared)
+    next.shared = shared
+    next.ownerId = shared ? '' : user?.id || current.ownerId || ''
+  }
   next.updatedAt = new Date().toISOString()
   list[index] = next
   await persist(list)
@@ -268,7 +285,8 @@ export async function templateStats(user = null) {
 export async function adoptUnowned(ownerId) {
   if (!ownerId) return 0
   const list = await loadAll()
-  const pending = list.filter((item) => !item.ownerId)
+  // 公共模板（shared）本来就是「没有归属、所有人可见」，不能被启动迁移认领成管理员私有
+  const pending = list.filter((item) => !item.ownerId && !item.shared)
   if (!pending.length) return 0
   for (const item of pending) item.ownerId = ownerId
   await persist(list)

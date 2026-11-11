@@ -18,6 +18,7 @@ import { lastWebRead, readWebPage } from '../webread.mjs'
 import { listKeys, createKey, updateKey, deleteKey, testKey, listRoutes, previewRoute, vaultModels, PROVIDER_PRESETS, CAPABILITIES } from '../keyvault.mjs'
 import { gatewayStatus, modelCoverage } from '../gateway.mjs'
 import { canvasAdminConfigured, listCanvasUsers, setCanvasUserAccess } from '../canvas-admin.mjs'
+import { alertCounts, ackAlert, checkDisk, listAlerts, recordAlert } from '../alerts.mjs'
 
 const MODEL_KEY = /^\/api\/admin\/model-keys\/([\w-]+)$/
 const MODEL_KEY_TEST = /^\/api\/admin\/model-keys\/([\w-]+)\/test$/
@@ -698,6 +699,41 @@ export function createAdminRouter() {
             error: String(error?.message || '页面读取失败'),
           })
         }
+        return true
+      }
+
+      // 告警：5xx / 模型上游失败 / 磁盘不足 三类。没有外部通道也能在后台看，
+      // 配了 VQ_ALERT_WEBHOOK 的会在记告警时同步往外推一条。
+      if (pathname === '/api/admin/alerts' && req.method === 'GET') {
+        const status = url.searchParams.get('status') === 'all' ? 'all' : 'open'
+        const items = await listAlerts({ status, limit: Number(url.searchParams.get('limit')) || 50 })
+        const counts = await alertCounts()
+        const disk = await checkDisk()
+        sendJson(res, 200, {
+          items,
+          counts,
+          disk,
+          channel: { webhook: Boolean(config.alerts.webhook), diskFreeMb: config.alerts.diskFreeMb },
+        })
+        return true
+      }
+
+      if (pathname === '/api/admin/alerts/test' && req.method === 'POST') {
+        const alert = await recordAlert({
+          kind: 'test',
+          level: 'warn',
+          title: '测试告警：后台链路正常',
+          detail: '由 ' + user.email + ' 手动触发，用来确认告警队列与外推通道是通的',
+        })
+        sendJson(res, 201, { ok: true, alert })
+        return true
+      }
+
+      const alertAck = pathname.match(/^\/api\/admin\/alerts\/([\w-]+)\/ack$/)
+      if (alertAck && req.method === 'POST') {
+        const done = await ackAlert(alertAck[1], user.email)
+        if (!done) return (sendJson(res, 404, { error: '没有这条告警' }), true)
+        sendJson(res, 200, { ok: true, alert: done, counts: await alertCounts() })
         return true
       }
 

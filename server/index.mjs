@@ -34,6 +34,7 @@ import { charge, refund, ensureWelcomeCredits } from './credits.mjs'
 import { enter, leave } from './gate.mjs'
 import { installProcessGuards, logEvent, logRequestError, startAccess } from './log.mjs'
 import { rateLimit } from './ratelimit.mjs'
+import { startAlertWatch } from './alerts.mjs'
 import { deepHealth } from './health.mjs'
 import { clearModelBlock, modelServiceState } from './service-state.mjs'
 import { fetchPublic } from './media.mjs'
@@ -504,11 +505,14 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/replicate' && req.method === 'POST') {
       const body = await readBody(req)
       const item = body.item || {}
+      // 公共模板：只有管理员能落成「所有账号可见」的种子内容
+      const shared = body.shared === true && isAdmin(user)
       const paid = beginPaid(res, user, 'replicate', String(item.title || body.url || '').slice(0, 80))
       if (!paid) return
       try {
         const job = await startReplicate(item, body.url || '', {
           ownerId: user?.id || '',
+          shared,
           onSettled: (status) => {
             paid.release()
             if (status === 'error') paid.refund()
@@ -617,7 +621,8 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req)
       const item = body.item || {}
       if (!item.url) return sendJson(res, 400, { error: '这条内容没有原链接，无法加入模板库' })
-      const result = await saveTemplateFromItem({ item, user })
+      const shared = body.shared === true && isAdmin(user)
+      const result = await saveTemplateFromItem({ item, user, shared })
       return sendJson(res, result.created ? 201 : 200, { ...result, ...(await templateStats(user)) })
     }
 
@@ -709,5 +714,7 @@ installProcessGuards()
 await migrateOwnership()
 
 server.listen(config.port, '127.0.0.1', () => {
+  // 告警哨兵：磁盘水位每 5 分钟看一次（5xx 与上游失败是事件驱动，不用轮询）
+  startAlertWatch()
   logEvent('listen', { port: config.port, redfox: redfoxEnabled() ? 'on' : 'mock', vision: visionEnabled() ? config.vision.model : 'off', auth: config.auth.requireAuth ? 'on' : 'off' })
 })

@@ -258,17 +258,24 @@ export function OverviewPage({ userName, onCreate, onNavigate, onOpenCanvas }: P
           </div>
 
           {recentTemplates.length ? (
-            recentTemplates.map((template) => (
-              <button type="button" className="vq-template-row" key={template.id} onClick={() => onNavigate('templates')}>
-                <span className="vq-template-copy">
-                  <strong>{template.title}</strong>
-                  <span className="vq-mono">
-                    {template.contentType || '脚本'} · {(template.durationSec ?? 0).toFixed(0)}s
+            <>
+              {recentTemplates.map((template) => (
+                <button type="button" className="vq-template-row" key={template.id} onClick={() => onNavigate('templates')}>
+                  <span className="vq-template-copy">
+                    <strong>{template.title}</strong>
+                    <span className="vq-mono">
+                      {template.contentType || '脚本'} · {(template.durationSec ?? 0).toFixed(0)}s
+                    </span>
                   </span>
-                </span>
+                  <ArrowRight size={13} />
+                </button>
+              ))}
+              {/* 首进工作台要有一个明确的「从哪儿开始」：直接拿一条已解析模板 */}
+              <button type="button" className="vq-button vq-button--ghost" onClick={() => onNavigate('templates')}>
+                拿一条模板开始
                 <ArrowRight size={13} />
               </button>
-            ))
+            </>
           ) : (
             <div className="vq-empty vq-empty--inline">
               <strong>模板库还是空的</strong>

@@ -93,12 +93,18 @@ export function normalizeResult(raw, frames, videoDuration = 0) {
     if (!Number.isFinite(num)) return fallback
     return Math.max(0, Math.min(total, Math.round(num * 10) / 10))
   }
+  // 模型习惯在内容里自带标签（"屏幕字：xxx"），界面上已经有标签，再留一遍就是重影
+  const stripLabel = (text, labels) => {
+    let out = String(text || '').trim()
+    for (const label of labels) out = out.replace(new RegExp('^' + label + '\\s*[：:]\\s*'), '')
+    return out
+  }
   const rawBeats = (Array.isArray(raw.structure) ? raw.structure : []).slice(0, 12).map((beat, index) => ({
     beat: String(beat.beat || ('段落 ' + (index + 1))).slice(0, 40),
     startSec: clampSec(beat.startSec, index === 0 ? 0 : last * (index / 12)),
     endSec: clampSec(beat.endSec, last),
-    voiceover: String(beat.voiceover || '').slice(0, 600),
-    onScreen: String(beat.onScreen || '').slice(0, 120),
+    voiceover: stripLabel(beat.voiceover, ['建议旁白', '建议口播', '旁白', '口播']).slice(0, 600),
+    onScreen: stripLabel(beat.onScreen, ['建议屏幕字', '屏幕字', '建议字幕', '字幕']).slice(0, 120),
     purpose: String(beat.purpose || '').slice(0, 200),
   }))
   const rawShots = (Array.isArray(raw.storyboard) ? raw.storyboard : []).slice(0, 24).map((shot, index) => ({

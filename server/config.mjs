@@ -156,6 +156,12 @@ export const config = {
     icp: (process.env.VQ_ICP || '').trim(),
     supportEmail: (process.env.VQ_SUPPORT_EMAIL || '').trim(),
   },
+  // 告警：本站队列（后台「系统」页）永远可用；配了 VQ_ALERT_WEBHOOK 才往外推。
+  // 没有通道时至少「坏了能在后台看到」，不会像以前一样只有 journalctl。
+  alerts: {
+    webhook: (process.env.VQ_ALERT_WEBHOOK || '').trim(),
+    diskFreeMb: Number(process.env.VQ_ALERT_DISK_FREE_MB || 1024),
+  },
   auth: {
     dbFile: path.join(dataDir, 'auth.db'),
     cookieName: 'vq_session',
