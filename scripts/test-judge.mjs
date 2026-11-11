@@ -12,7 +12,7 @@ process.env.VQ_KEY_SECRET = 'test-secret-for-judge'
 process.env.VISION_API_KEY = ''
 process.env.VISION_BASE_URL = 'http://127.0.0.1:1/v1'
 process.env.LLM_MODEL = 'fake-vision'
-process.env.LLM_FALLBACKS = ''
+process.env.LLM_FALLBACKS = 'text-only-fallback'
 process.env.VISION_MODEL = 'fake-vision'
 process.env.VISION_MODELS = 'fake-vision'
 process.env.VISION_FALLBACKS = ''
@@ -34,10 +34,18 @@ const REVIEW = {
   notAssessable: ['没有提供投放尺寸，无法判断裁切安全区。'],
 }
 
+const visionCalls = []
 const vision = http.createServer((req, res) => {
   if (req.method === 'POST' && req.url === '/v1/chat/completions') {
-    req.resume()
+    const chunks = []
+    req.on('data', (chunk) => chunks.push(chunk))
     req.on('end', () => {
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+        visionCalls.push({ model: body.model, image: body.messages?.[1]?.content?.find?.((part) => part.type === 'image_url')?.image_url?.url || '' })
+      } catch {
+        visionCalls.push({ model: '', image: '' })
+      }
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(REVIEW) }, finish_reason: 'stop' }] }))
     })
@@ -103,6 +111,12 @@ const judgeBase = 'http://127.0.0.1:' + judge.address().port + '/v1'
 
 const { createKey, deleteKey, listRoutes } = await import('../server/keyvault.mjs')
 const { judgeReview, judgeStatus } = await import('../server/judge.mjs')
+const { modelChain, visionChain } = await import('../server/llm.mjs')
+
+// 0) 视觉调用只能用「明确声明的视觉模型」：文本 fallback 不许混进看图的链路，
+//    否则视觉模型失败后会静默换纯文本模型，图片被丢掉、评审返回一句「没有图像」（生产实测踩到）
+assert.deepEqual(visionChain(), ['fake-vision'], '看图的链路里只有视觉模型')
+assert.ok(modelChain().includes('text-only-fallback'), '纯文本链路仍保留文本 fallback')
 const { reviewVisual } = await import('../server/review.mjs')
 
 createKey({
@@ -283,4 +297,6 @@ assert.equal(JSON.stringify(listRoutes(50)).includes('sk-vision-1234567890'), fa
 vision.close()
 judge.close()
 fs.rmSync(temp, { recursive: true, force: true })
+assert.deepEqual([...new Set(visionCalls.map((item) => item.model))], ['fake-vision'], '评审请求确实只用了视觉模型');
+assert.ok(visionCalls.every((item) => /^data:image\//.test(item.image)), '图片以 data URL 送出，不把远程地址交给上游');
 console.log('PASS judge: 能力别名 / 四问映射 / 结果挂载不改结论 / 请求形态 / 路由留痕 / 失败不拖垮评审 / 未启用明确 / 严格上游去 json 模式 / 5xx 重发')

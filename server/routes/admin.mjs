@@ -14,7 +14,7 @@ import { listAudit, recordAudit } from '../audit.mjs'
 import { removePreference } from '../preferences.mjs'
 import { AGENT_TOOLS } from '../agents.mjs'
 import { lastWebRead, readWebPage } from '../webread.mjs'
-import { listKeys, createKey, updateKey, deleteKey, testKey, listRoutes, previewRoute, vaultModels, PROVIDER_PRESETS } from '../keyvault.mjs'
+import { listKeys, createKey, updateKey, deleteKey, testKey, listRoutes, previewRoute, vaultModels, PROVIDER_PRESETS, CAPABILITIES } from '../keyvault.mjs'
 import { gatewayStatus, modelCoverage } from '../gateway.mjs'
 import { canvasAdminConfigured, listCanvasUsers, setCanvasUserAccess } from '../canvas-admin.mjs'
 
@@ -159,8 +159,10 @@ export function createAdminRouter() {
         try {
           const body = await readBody(req)
           const capability = String(body?.capability || 'text')
-          if (!['text', 'vision', 'image', 'video'].includes(capability)) {
-            sendJson(res, 400, { error: '能力只能是 text / vision / image / video', code: 'BAD_CAPABILITY' })
+          // 用 Key 池同一份能力清单，避免像 2026-11-11 那样：界面加了「判断（Jev）」选项，
+          // 预演接口的白名单没跟上，选判断就 400。
+          if (!CAPABILITIES.includes(capability)) {
+            sendJson(res, 400, { error: '能力只能是 ' + CAPABILITIES.join(' / '), code: 'BAD_CAPABILITY' })
             return true
           }
           const preview = previewRoute({ capability, model: String(body?.model || '').slice(0, 80) })

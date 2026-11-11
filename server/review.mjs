@@ -1,4 +1,4 @@
-import { callTextModel, extractJson, llmEnabled } from './llm.mjs'
+import { callTextModel, extractJson, llmEnabled, visionChain } from './llm.mjs'
 import { assertPublicHttpUrl } from './media.mjs'
 import { judgeReview, judgeStatus } from './judge.mjs'
 
@@ -8,19 +8,22 @@ const SERVICE_URL = process.env.VISIONQA_SERVICE_URL || 'http://127.0.0.1:6300'
 const PROFILES = ['visual-baseline', 'visual-hierarchy', 'content-cover', 'ecommerce-apparel']
 
 const SYSTEM = [
-  '你是 VisionQA 的视觉评审器。你的任务是对给定画面做出有证据的视觉判断，而不是夸它好看。',
+  '你是 VisionQA 的视觉评审器。你的任务是对给定画面做出可复查的视觉判断，而不是夸它好看。',
   '',
   '评审维度（profile=visual-baseline）：层级（谁是第一视觉落点）、对比（文字与背景可读性）、对齐与间距、字体与字号一致性、色彩克制、构图与裁切（重要元素是否被切）、可识别性（主体是否清楚）。',
   '',
   '硬性规则：',
   '1. 只输出 JSON，不要 markdown，不要解释过程。',
-  '2. 每条 observation 必须给出 evidence：画面中问题的像素区域 bbox（x/y/w/h，取值 0–1 的相对坐标），无法定位时填 null，并把该条降级为 info。',
-  '3. 没有证据的猜测不要写成问题；无法判断时放进 notAssessable 并说明缺什么。',
-  '4. 严重度只用 blocker / major / minor / info。',
-  '5. 修正建议必须是有界的（改字号、改对比、改裁切、改间距），不要写「重新设计」。',
+  '2. 每条 observation 必须能落到**具体元素**：statement 里写清「是哪个元素 + 什么数值/什么位置」，例如「页头标题 #1A1A1A 压在以 #F5F5F5 为主的背景上，对比度约 2.4:1」「右下角卡片的按钮距容器底边 0px，文字被裁掉约 8px」。',
+  '3. 写不出具体元素、也说不出数值或位置的维度判断（如「视觉层级需要加强」「配色可以更协调」）**不是问题**：不写进 observation，放到 notAssessable 里说明「哪个维度无法定位到具体元素」；**不要用整张画面的锚点去支撑一句笼统的话**。',
+  '4. evidence 必须是该条问题所指元素所在区域的 bbox（x/y/w/h，0–1 相对坐标），框住元素本身而不是整幅画面；框不出这个元素，就说明这条看不出来，不要写。',
+  '5. 没有证据的猜测不要写成问题；看不到的部分不要猜，放进 notAssessable。',
+  '6. 严重度只用 blocker / major / minor / info；info 只用于「看到但不确定算不算问题」。',
+  '7. 修正建议必须是有界的（改字号、改对比、改裁切、改间距），写清改哪个元素的哪一项参数，不要写「重新设计」「优化视觉」。',
+  '8. 每条 statement 控制在 60 个汉字内，不做设计理论科普。',
   '',
   '输出结构：',
-  '{"verdict":"pass|needs_review|fail","summary":"一句话结论","observations":[{"dimension":"hierarchy|contrast|spacing|type|color|composition|legibility","severity":"blocker|major|minor|info","statement":"问题描述","evidence":{"x":0,"y":0,"w":0,"h":0},"confidence":0.0}],"fixes":[{"title":"动作","detail":"具体怎么改"}],"notAssessable":["缺什么信息导致无法判断"]}',
+  '{"verdict":"pass|needs_review|fail","summary":"一句话结论","observations":[{"dimension":"hierarchy|contrast|spacing|type|color|composition|legibility","severity":"blocker|major|minor|info","statement":"具体元素 + 数值/位置","evidence":{"x":0,"y":0,"w":0,"h":0},"confidence":0.0}],"fixes":[{"title":"动作","detail":"具体怎么改"}],"notAssessable":["缺什么信息导致无法判断"]}',
 ].join('\n')
 
 async function serviceHealth() {
@@ -137,8 +140,18 @@ export async function reviewVisual({ imageUrl, imageBytes, mime = 'image/jpeg', 
   let dataUrl = imageUrl
   if (imageBytes) dataUrl = toDataUrl(imageBytes, mime)
   if (!dataUrl) throw Object.assign(new Error('没有可评审的画面'), { code: 'NO_IMAGE' })
-  // 走本地模型时 url 会原样交给上游，所以同样要先过 SSRF 校验（不给内网地址当跳板）
-  if (!imageBytes) await assertPublicHttpUrl(imageUrl)
+  if (!imageBytes) {
+    // 自己把图取下来再当 data URL 发出去，不要把远程地址原样交给上游模型：
+    // 模型服务未必够得着我们的图床（生产实测 DeepSeek 取 GitHub raw 直接 400），
+    // 而且这样一来图片地址只在我们的出口出现，不给上游当代理跳板。
+    await assertPublicHttpUrl(imageUrl)
+    const response = await fetch(imageUrl, { signal: AbortSignal.timeout(15_000) })
+    if (!response.ok) throw new Error('取不到这张图（HTTP ' + response.status + '）')
+    const buffer = Buffer.from(await response.arrayBuffer())
+    if (buffer.length > 8 * 1024 * 1024) throw new Error('图片超过 8 MB，先压缩再评审')
+    const type = String(response.headers.get('content-type') || '').split(';')[0]
+    dataUrl = toDataUrl(buffer, type.startsWith('image/') ? type : 'image/jpeg')
+  }
 
   log?.('本地模型评审（visual-baseline）')
   const result = await callTextModel([
@@ -150,7 +163,7 @@ export async function reviewVisual({ imageUrl, imageBytes, mime = 'image/jpeg', 
         { type: 'image_url', image_url: { url: dataUrl, detail: 'low' } },
       ],
     },
-  ], { temperature: 0.2, maxTokens: 3000, json: true, log })
+  ], { temperature: 0.2, maxTokens: 3000, json: true, log, models: visionChain() })
 
   const parsed = extractJson(result.text)
   const mapped = await attachJudge(normalize(parsed, 'local-model:' + result.model, requestId), intent)

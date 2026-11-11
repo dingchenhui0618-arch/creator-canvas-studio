@@ -12,7 +12,7 @@ import path from 'node:path'
 import { config } from './config.mjs'
 import { setVaultCounts, vaultCounts } from './vault-state.mjs'
 
-const CAPABILITIES = ['text', 'vision', 'image', 'video', 'judge']
+export const CAPABILITIES = ['text', 'vision', 'image', 'video', 'judge']
 const CAPABILITY_ALIASES = {
   chat: 'text',
   llm: 'text',

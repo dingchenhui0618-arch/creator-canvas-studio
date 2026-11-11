@@ -186,3 +186,52 @@ TypeSafe 官方接口在**生产服务器（腾讯云上海）出口被地区拒
 - DeepSeek 当判断器（余额 0）；
 - Jev 的图像能力（当前判断只看评审文本，不看图片本身）；
 - 判断层的按次成本与配额。
+## 八、生产点亮与一次「假评审」事故（2026-11-11 第二十六批）
+
+### 8.1 点亮
+
+DeepSeek 余额补足后，生产 DeepSeek Key 真调成功（874 ms），能力扩到 `text / vision / judge`；
+`/api/review/health` 变为 `configured:true, provider:deepseek, model:deepseek-flash, protocol:chat`。没有新增 Key。
+
+### 8.2 事故：评审了一个不存在的画面
+
+第一次生产评审返回「未提供可分析的截图图像」，provider 是 `deepseek-v4-pro`。日志显示：
+
+1. `deepseek-flash` → `400 Failed to download image from https://raw.githubusercontent.com/...`
+   （生产出口取不到 GitHub raw，实测 `gh_raw=000`）；
+2. 模型链回退到**纯文本**的 `deepseek-v4-pro`，图片参数被丢弃，模型如实回答「没有图像」，
+   但评审层把这句话当成一次正常评审返回了。
+
+**危害**：它给出一份格式合法、看起来正常的评审结论，比直接报错更难发现。
+
+### 8.3 修复
+
+- **服务端取图**：评审先自己下载图片（15 秒超时、8 MB 上限、SSRF 校验）再以 `data:` URL 发上游。
+  上游不必再够得着我们的图床，也不会被当成代理跳板。
+- **视觉链路独立**（`visionChain()`）：只用明确声明的视觉模型；全都不可用时明确失败并退积分，
+  绝不静默换成纯文本模型。
+- **预演白名单**：`/api/admin/model-keys/preview` 与 Key 池共用 `CAPABILITIES`，判断能力不再 400。
+
+### 8.4 评审提示词收紧对判断分的影响
+
+| 场景 | 收紧前 | 收紧后 |
+| --- | --- | --- |
+| 本地真实模型 | 0.45 | **0.96** |
+| 生产 DeepSeek | —（先前不可用） | **0.90** |
+
+### 8.5 生产实测
+
+| 项 | 结果 |
+| --- | --- |
+| 评审 | `deepseek-flash`，43.1 秒，7 条问题全部带锚点并落到具体元素与数值 |
+| 判断 | `deepseek-flash`，3.9 秒，1822 token |
+| 四个判断 | 依据 0.90 / 一致（0.90）/ 可执行 0.95 / 风险 2 |
+
+截图：[生产判断区块](screenshot-review-judge-prod-2026-11-11.png)。
+假评审记录与临时测试图已清理。
+
+### 8.6 仍未验证
+
+- 真实 TypeSafe System One 的判断质量（生产出口 451）；
+- Jev 的图像危险区（当前判断只看评审文本）；
+- 判断层按次成本与配额（DeepSeek 单价未按判断单独统计）。

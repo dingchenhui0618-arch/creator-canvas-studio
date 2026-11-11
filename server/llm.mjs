@@ -15,6 +15,17 @@ export function llmEnabled() {
   return visionEnabled()
 }
 
+/**
+ * 多模态调用（评审要看图）专用的模型链：只允许「明确声明为视觉模型」的模型进来。
+ * 为什么单独一条：文本 fallback 常常是纯文本模型（deepseek-v4-pro 这类），
+ * 一旦视觉模型失败就换它，图片会被静默丢掉，评审返回一句「未提供可分析的截图图像」——
+ * 比报错更难发现（2026-11-11 生产实测踩到）。
+ */
+export function visionChain() {
+  const list = [...new Set([config.vision.model, ...config.vision.fallbacks, ...config.vision.models].filter(Boolean))]
+  return list.length ? list : modelChain()
+}
+
 async function callOnce(messages, model, { temperature = 0.3, maxTokens = 2000, json = false } = {}) {
   // max_tokens 包含推理 token：推理型模型给太小会把正文截断，chatCompletion 会按可重试错误抛出
   const { message } = await chatCompletion({ model, messages, temperature, maxTokens, json })
