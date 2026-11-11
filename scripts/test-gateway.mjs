@@ -218,7 +218,20 @@ assert.equal(task2.id, 'task-abc')
 const pollAfterFailover = await pollVideoTask('task-abc')
 assert.equal(pollAfterFailover.status, 'succeeded', '换把后建的任务，轮询要回到接住它的那把 Key')
 
-// 9.3) 权重只在同优先级内生效：两把同优先级时都算候选，但只试到成功为止
+// 9.3) 画布要的模型名没有任何 Key 声明：回人话，模型名只进后台日志
+// （接真 Key 时最容易踩的坑：管理员照产品名填了模型，画布发的是上游真实模型名）
+await assert.rejects(
+  () => generateImage({ model: 'unserved-model', prompt: 'x' }),
+  (error) =>
+    error.code === 'NO_IMAGE_KEY' &&
+    error.status === 503 &&
+    !/unserved-model/.test(error.message) &&
+    /unserved-model/.test(String(error.detail)),
+)
+assert.equal(listRoutes(20).items[0].source, 'none')
+assert.ok(/unserved-model/.test(String(listRoutes(20).items[0].error)), '模型名要落在后台路由日志里')
+
+// 9.4) 权重只在同优先级内生效：两把同优先级时都算候选，但只试到成功为止
 const order = [badImageKey.id, goodImageKey.id, badVideoKey.id]
 for (const id of order) deleteKey(id)
 
@@ -233,4 +246,4 @@ assert.equal(JSON.stringify(listRoutes(50)).includes('sk-video-1234567890'), fal
 
 upstream.close()
 fs.rmSync(temp, { recursive: true, force: true })
-console.log('PASS gateway: 令牌鉴权 / 出图转发 / 失败计健康 / 空结果 / 视频建任务轮询 / 无 Key 明确报错 / 日志无明文')
+console.log('PASS gateway: 令牌鉴权 / 出图转发 / 失败计健康 / 空结果 / 视频建任务轮询 / 无 Key 明确报错 / 模型名对不上 / 日志无明文')

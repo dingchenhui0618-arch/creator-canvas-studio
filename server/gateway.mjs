@@ -10,7 +10,7 @@
 // 3. 生成结果原样回给调用方（拿到 url 就够），不落本地磁盘 —— 备份是画布自己的事。
 import crypto from 'node:crypto'
 import { config } from './config.mjs'
-import { recordRoute, reportKey, resolveKeyCandidates } from './keyvault.mjs'
+import { recordRoute, reportKey, resolveKeyCandidates, vaultModels } from './keyvault.mjs'
 
 const JOB_TTL_MS = 2 * 60 * 60 * 1000
 const jobs = new Map()
@@ -75,6 +75,16 @@ function friendlyUpstream(status, text) {
   return '上游拒绝了这次生成' + suffix
 }
 
+/** fetch 抛出来的东西（fetch failed / ETIMEDOUT…）对管理员没信息量，翻成人话。 */
+function friendlyNetwork(error) {
+  const raw = String(error?.message || error || '')
+  if (/fetch failed|ENOTFOUND|ECONNREFUSED|ECONNRESET|EAI_AGAIN|socket hang up/i.test(raw)) {
+    return '网络不通或地址填错了'
+  }
+  if (error?.name === 'TimeoutError' || /timeout|timed out/i.test(raw)) return '上游超时'
+  return raw.slice(0, 120)
+}
+
 async function postJson(url, apiKey, body, timeoutMs) {
   const response = await fetch(url, {
     method: 'POST',
@@ -105,6 +115,30 @@ function parseJson(text) {
 
 const MAX_ATTEMPTS = 3
 
+/**
+ * 池里挑不出 Key 时的说法。要分得清两种情况：
+ * 「一把都没有」和「有 Key，但没一把声明了这个模型」—— 后者才是接 Key 时最常见的坑
+ * （画布发的是方舟真实模型名，管理员照着产品名填就匹配不上），
+ * 所以给用户看的还是人话，具体模型名只写进后台路由日志。
+ */
+function missingKeyError(capability, model) {
+  const label = capability === 'image' ? '出图' : '出视频'
+  const known = vaultModels(capability)
+  const mismatch = Boolean(model) && known.length > 0 && !known.includes(model)
+  return gatewayError(
+    503,
+    capability === 'image' ? 'NO_IMAGE_KEY' : 'NO_VIDEO_KEY',
+    mismatch
+      ? '平台还没接入能出这个效果的模型，请联系管理员补一把' + label + ' Key'
+      : '平台还没接入' + label + '模型，请联系管理员补一把' + label + ' Key',
+    {
+      detail: mismatch
+        ? '池里没有声明模型 ' + model + ' 的' + label + ' Key；现有 Key 声明的模型：' + known.slice(0, 5).join(' / ')
+        : '池里没有可用的' + label + ' Key',
+    },
+  )
+}
+
 /** 把「试了哪几把、最后一把为什么失败」讲成人话，后台与调用方都看得懂。 */
 function failoverMessage(action, candidates, lastError) {
   const reason = lastError?.message || '上游拒绝了这次请求'
@@ -125,7 +159,7 @@ async function attemptImage(key, requestBody, started, model) {
   } catch (error) {
     reportKey(key.id, false, String(error?.message || error))
     recordRoute({ capability: 'image', model, keyId: key.id, keyName: key.name, source: 'pool', reason: key.reason, attempt: key.attempt, ms: Date.now() - started, ok: false, error: String(error?.message || error) })
-    throw gatewayError(502, 'UPSTREAM_UNREACHABLE', '连不上出图上游：' + String(error?.message || error).slice(0, 120))
+    throw gatewayError(502, 'UPSTREAM_UNREACHABLE', '连不上出图上游：' + friendlyNetwork(error))
   }
   if (!upstream.response.ok) {
     const message = friendlyUpstream(upstream.response.status, upstream.text)
@@ -161,8 +195,9 @@ export async function generateImage(payload = {}) {
   const model = String(payload.model || '')
   const candidates = resolveKeyCandidates({ capability: 'image', model, limit: MAX_ATTEMPTS })
   if (!candidates.length) {
-    recordRoute({ capability: 'image', model, source: 'none', reason: '池里没有可用的出图 Key', ms: Date.now() - started, ok: false, error: '没有可用的出图 Key' })
-    throw gatewayError(503, 'NO_IMAGE_KEY', '没有可用的出图 Key：请在后台「模型 Key」里添加一把声明了「出图」能力的 Key')
+    const error = missingKeyError('image', model)
+    recordRoute({ capability: 'image', model, source: 'none', reason: '池里没有可用的出图 Key', ms: Date.now() - started, ok: false, error: error.detail })
+    throw error
   }
   let lastError = null
   for (const key of candidates) {
@@ -195,7 +230,7 @@ async function attemptVideoCreate(key, requestBody, started, model) {
   } catch (error) {
     reportKey(key.id, false, String(error?.message || error))
     recordRoute({ capability: 'video', model, keyId: key.id, keyName: key.name, source: 'pool', reason: key.reason, attempt: key.attempt, ms: Date.now() - started, ok: false, error: String(error?.message || error) })
-    throw gatewayError(502, 'UPSTREAM_UNREACHABLE', '连不上出视频上游：' + String(error?.message || error).slice(0, 120))
+    throw gatewayError(502, 'UPSTREAM_UNREACHABLE', '连不上出视频上游：' + friendlyNetwork(error))
   }
   if (!upstream.response.ok) {
     const message = friendlyUpstream(upstream.response.status, upstream.text)
@@ -226,8 +261,9 @@ export async function createVideoTask(payload = {}) {
   const model = String(payload.model || '')
   const candidates = resolveKeyCandidates({ capability: 'video', model, limit: MAX_ATTEMPTS })
   if (!candidates.length) {
-    recordRoute({ capability: 'video', model, source: 'none', reason: '池里没有可用的出视频 Key', ms: Date.now() - started, ok: false, error: '没有可用的出视频 Key' })
-    throw gatewayError(503, 'NO_VIDEO_KEY', '没有可用的出视频 Key：请在后台「模型 Key」里添加一把声明了「出视频」能力的 Key')
+    const error = missingKeyError('video', model)
+    recordRoute({ capability: 'video', model, source: 'none', reason: '池里没有可用的出视频 Key', ms: Date.now() - started, ok: false, error: error.detail })
+    throw error
   }
   let lastError = null
   for (const key of candidates) {
@@ -266,7 +302,7 @@ export async function pollVideoTask(taskId) {
     upstream = await getJson(trimBase(job.baseUrl) + '/contents/generations/tasks/' + encodeURIComponent(id), job.apiKey, config.gateway.videoTimeoutMs)
   } catch (error) {
     reportKey(job.keyId, false, String(error?.message || error))
-    throw gatewayError(502, 'UPSTREAM_UNREACHABLE', '连不上出视频上游：' + String(error?.message || error).slice(0, 120))
+    throw gatewayError(502, 'UPSTREAM_UNREACHABLE', '连不上出视频上游：' + friendlyNetwork(error))
   }
   if (!upstream.response.ok) {
     const message = friendlyUpstream(upstream.response.status, upstream.text)
