@@ -5,6 +5,7 @@ import { useUiMode } from '../../api/app'
 import { useApi } from './data'
 import { AdminHead, Badge, ErrorBanner, LoadingLine, RefreshButton, SourceTag } from './ui'
 import ModelKeyPool from './ModelKeyPool'
+import ModelRoutePanel from './ModelRoutePanel'
 
 const DOC_PATH = 'docs/replication-pipeline.md'
 
@@ -75,6 +76,7 @@ export default function KeysSection() {
       />
 
       <ModelKeyPool />
+      <ModelRoutePanel />
 
       {config.error ? <ErrorBanner message={`GET /api/config：${config.error}`} onRetry={config.reload} /> : null}
       {config.loading && !data ? <LoadingLine label="/api/config" /> : null}

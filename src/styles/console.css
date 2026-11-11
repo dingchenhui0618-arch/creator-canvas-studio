@@ -1133,3 +1133,34 @@
     gap: 16px;
   }
 }
+
+/* ── 平台 Key 池：路由预演与最近路由 ─────────────────────────────
+   预演表单沿用「新建 Key」的字段样式；结果条只用左侧 2px 墨线强调，
+   不加底色和阴影，与后台其它卡片同一套克制风格。间距按 4/8pt 栅格。 */
+.admin-route-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 16px;
+  margin-top: 12px;
+}
+
+.admin-route-form .admin-edit-field {
+  flex: 1 1 216px;
+  max-width: 320px;
+}
+
+.admin-route-result {
+  margin-top: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--line, #e6e3dd);
+  border-left: 2px solid var(--ink, #111111);
+  border-radius: 4px;
+  color: var(--ink, #111111);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.admin-table--routes {
+  min-width: 760px;
+}

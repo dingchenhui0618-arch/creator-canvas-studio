@@ -70,3 +70,69 @@ export const deleteModelKey = (id: string) =>
 
 export const testModelKey = (id: string) =>
   request<ModelKeyTest & { key: ModelKey }>('/api/admin/model-keys/' + id + '/test', { method: 'POST' })
+
+export const listModelRoutes = (limit = 50) =>
+  request<RouteList>('/api/admin/model-keys/routes?limit=' + encodeURIComponent(String(limit)))
+
+export const previewModelRoute = (input: { capability: string; model: string }) =>
+  request<RoutePreview>('/api/admin/model-keys/preview', { method: 'POST', body: JSON.stringify(input) })
+
+export type RouteKeyRow = {
+  id: string
+  name: string
+  provider: string
+  priority: number
+  weight: number
+  /** eligible = 这次可选；其余是被跳过的原因 */
+  state: 'eligible' | 'disabled' | 'capability' | 'model' | 'cooling'
+  reason: string
+  /** 只在同优先级候选组里有值：按权重被选中的概率百分比 */
+  share?: number
+}
+
+export type RoutePreview = {
+  ok: true
+  capability: string
+  model: string
+  keys: RouteKeyRow[]
+  eligible: RouteKeyRow[]
+  group: RouteKeyRow[]
+  priority: number | null
+  chosen: RouteKeyRow | null
+  description: string
+  fallback: { configured: boolean; model: string }
+}
+
+export type RouteEntry = {
+  id: string
+  at: string
+  capability: string
+  model: string
+  keyId: string
+  keyName: string
+  source: 'pool' | 'env' | 'none'
+  reason: string
+  attempt: number
+  ms: number
+  ok: boolean
+  /** 人话结论，例如「额度不足（HTTP 402）」 */
+  error: string
+  /** 原始上游报错，悬停查看；没有做归类时为空 */
+  detail?: string
+}
+
+export type RouteList = {
+  items: RouteEntry[]
+  summary: {
+    total: number
+    ok: number
+    fail: number
+    env: number
+    none: number
+    avgMs: number
+    lastAt: string
+    byKey: { keyId: string; keyName: string; ok: number; fail: number; count: number; avgMs: number }[]
+  }
+  fallback: { configured: boolean; model: string; baseUrl: string }
+}
+

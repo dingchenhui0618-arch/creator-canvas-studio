@@ -1058,7 +1058,7 @@ VQ_SCOPE=internal VQ_BASE=http://127.0.0.1:8801 VQ_COOKIE=<内部会话> node sc
 
 细节见 [docs/canvas-account-gate.md](docs/canvas-account-gate.md)。
 
-### 三十、后台「画布身份」：跨系统看人、停用画布访问（2026-11-11）
+## 三十、后台「画布身份」：跨系统看人、停用画布访问（2026-11-11）
 
 - 新增后台「画布」页：列出所有从工作台进过画布的人，显示 VisionQA 账号、画布身份、最近进入与状态；每行可「停用画布 / 恢复画布」。停用只停画布，不停工作台登录。
 - 链路只走服务端：浏览器调 `/api/admin/canvas/users`（管理员鉴权）→ 服务端带 `X-VisionQA-Secret` 调画布内网 `127.0.0.1:5313/enterprise/api/visionqa/users` → 按 `external_id` 回连 VisionQA 账号表补邮箱。密钥不进浏览器，也不新开公网端口。
@@ -1069,3 +1069,43 @@ VQ_SCOPE=internal VQ_BASE=http://127.0.0.1:8801 VQ_COOKIE=<内部会话> node sc
 ![后台「画布」页：VisionQA 账号、画布身份、最近进入、状态与停用按钮](docs/screenshot-admin-canvas-2026-11-11.png)
 
 细节见 [docs/canvas-account-gate.md](docs/canvas-account-gate.md) 第六节。
+
+## 三十一、2026-11-11 追加：路由看得见 —— 预演这次走哪把、刚才走了哪把（第十四批）
+
+上一批把 Key 池做到「后台能增删改」，但改完只能等下一次失败才知道有没有生效。这一批补上可观测：
+**预演**回答「现在调一次会走哪把」，**最近路由**回答「刚才那次走了哪把、为什么、多快、成没成」。
+
+### 三十一.1 做了什么
+
+| 能力 | 具体 |
+| --- | --- |
+| 预演 | `POST /api/admin/model-keys/preview`：按能力 + 模型逐把给出状态与原因，同优先级组给选中概率，末尾一句结论 |
+| 决策日志 | `GET /api/admin/model-keys/routes`：每次真实调用一条（能力 / 模型 / Key / 理由 / 耗时 / 成败），失败也记；汇总成功失败、回落环境变量次数、平均耗时、按 Key 聚合 |
+| 判定一致 | 预演与真实调用共用 `planRoute` 这一份判定，不允许两边各写一套 |
+| 报错人话 | 上游 402 / 401 / 429 / 5xx / 截断归类成「额度不足（HTTP 402）」这类结论，原始报文留在悬停里 |
+| 隐私边界 | 只记 Key id 与名称；**不记 Key 明文、不记请求正文与对话内容**（单测断言守住） |
+| 生命周期 | 内存最近 200 条，重启清空，界面写明 |
+
+### 三十一.2 线上实测（生产，2026-11-11 13:28）
+
+- 预演（文本 / deepseek-flash）：「现在调用会用「DeepSeek 官方（原环境变量）」（优先级 P100）」，
+  候选表一行「会用这把」，概率 100%。
+- 真实对话一次，路由日志落两条：deepseek-flash 471 ms、deepseek-v4-pro 392 ms，
+  走的都是同一把池内 Key，理由「优先级 P100 里唯一可用的一把」，结论「额度不足（HTTP 402）」。
+  两条正好对应模型降级链的两次真实尝试 —— 日志记的是真发出去的请求，不是配置快照。
+- 这次失败没有改动余额与流水：生产返回 502「模型服务额度不足，本次不计费」，扣费前就拦下了。
+- 生产 bundle `index-Dw4ANQ4O.js`，`visionqa` / `visionqa-internal` 均 active，`/api/health` ok；
+  `/api/admin/model-keys/routes` 匿名 401。
+
+### 三十一.3 验收
+
+- `node scripts/test-keyvault.mjs` 通过（新增：预演判定、组内概率、模型白名单不匹配的原因、
+  日志聚合、人话报错、不带明文）。
+- 新增 `node scripts/test-model-routes.mjs`：假上游跑真实 `chatCompletion` 链路 —— 预演与真实调用选中同一把、
+  成功留痕、402 失败留痕、日志不含 Key 明文与对话内容。
+- `npm run build` 通过；`npm run lint` 0 错误、5 条既有警告（本轮顺手修掉 1 条未使用导入）。
+
+![后台「路由预演」与「最近路由」：真实接口，预演结论 + 每把 Key 的判定 + 刚才两次调用的耗时与结论](docs/screenshot-admin-routes-2026-11-11.png)
+
+细节见 [docs/model-routing.md](docs/model-routing.md)。
+

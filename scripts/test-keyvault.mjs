@@ -10,7 +10,7 @@ process.env.DATA_DIR = temp
 process.env.VQ_KEY_SECRET = 'test-secret-for-keyvault'
 process.env.VISION_API_KEY = ''
 
-const { createKey, listKeys, updateKey, deleteKey, resolveKey, reportKey, vaultModels } = await import('../server/keyvault.mjs')
+const { createKey, listKeys, updateKey, deleteKey, resolveKey, reportKey, vaultModels, planRoute, previewRoute, recordRoute, listRoutes } = await import('../server/keyvault.mjs')
 
 const plaintext = 'sk-test-1234567890abcdef'
 const created = createKey({
@@ -70,9 +70,40 @@ updateKey(created.id, { enabled: true, priority: 5 })
 assert.equal(listKeys().summary.counts.text, 1)
 assert.equal(listKeys().summary.counts.vision, 1)
 
+// 路由解释：预演与真实调用共用同一套判定，后台说走哪把，实际就按这个选
+const plan = planRoute({ capability: 'text', model: 'deepseek-flash' })
+assert.equal(plan.keys.length, 1)
+assert.equal(plan.keys[0].state, 'eligible')
+assert.equal(plan.group.length, 1)
+assert.equal(plan.group[0].share, 100)
+assert.match(previewRoute({ capability: 'text', model: 'deepseek-flash' }).description, /会用/)
+assert.equal(previewRoute({ capability: 'image' }).group.length, 0, '没有出图能力的 Key 不能假装可用')
+
+// 模型白名单不匹配要说清是哪一项不对，而不是只回「没有可用 Key」
+const miss = planRoute({ capability: 'text', model: 'other-model' })
+assert.equal(miss.keys[0].state, 'model')
+assert.match(miss.keys[0].reason, /other-model/)
+
+// 路由日志：最新在前、按 Key 聚合、绝不带 Key 明文
+recordRoute({ capability: 'text', model: 'deepseek-flash', keyId: created.id, keyName: created.name, source: 'pool', reason: '测试成功', ms: 42, ok: true })
+recordRoute({ capability: 'text', model: 'deepseek-flash', source: 'env', reason: '池里没有可用 Key', ms: 900, ok: false, error: 'HTTP 402 {"error":{"message":"Insufficient Balance"}}' })
+const routes = listRoutes(10)
+assert.equal(routes.summary.total, 2)
+assert.equal(routes.summary.ok, 1)
+assert.equal(routes.summary.fail, 1)
+assert.equal(routes.summary.env, 1)
+assert.equal(routes.summary.avgMs, 471)
+assert.equal(routes.summary.byKey.length, 2)
+assert.equal(routes.items[0].source, 'env', '最新的记录排在最前')
+assert.equal(routes.items[0].keyId, '', '回落环境变量时不记 Key id')
+assert.equal(JSON.stringify(routes).includes(plaintext), false, '路由日志不能带 Key 明文')
+// 给管理员看的是人话，原始上游报错留在 detail 里
+assert.equal(routes.items[0].error, '额度不足（HTTP 402）')
+assert.match(routes.items[0].detail, /Insufficient Balance/)
+
 deleteKey(created.id)
 assert.equal(listKeys().items.length, 0)
 assert.equal(resolveKey({ capability: 'text' }), null)
 
 fs.rmSync(temp, { recursive: true, force: true })
-console.log('PASS keyvault: 加密落盘 / 脱敏 / 模型匹配 / 冷却恢复 / 增删改')
+console.log('PASS keyvault: 加密落盘 / 脱敏 / 模型匹配 / 冷却恢复 / 增删改 / 路由预演 / 路由日志')

@@ -1,5 +1,5 @@
 import { config } from './config.mjs'
-import { resolveKey, reportKey } from './keyvault.mjs'
+import { recordRoute, resolveKey, reportKey } from './keyvault.mjs'
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -28,10 +28,26 @@ export async function chatCompletion({
 }) {
   let useJson = Boolean(json)
   for (let attempt = 0; attempt < 2; attempt += 1) {
+    const started = Date.now()
     const resolved = resolveKey({ capability, model })
     const baseUrl = String(resolved?.baseUrl || config.vision.baseUrl || '').replace(/\/+$/, '')
     const apiKey = resolved?.apiKey || config.vision.apiKey
+    // 每次真实调用落一条路由记录：走了哪把 Key、为什么、耗时多少、成没成。
+    // 后台「路由决策」页读的就是这条日志，所以失败也要记，不能只记成功的。
+    const route = (extra = {}) =>
+      recordRoute({
+        capability,
+        model,
+        keyId: resolved?.id,
+        keyName: resolved?.name,
+        source: resolved ? 'pool' : apiKey ? 'env' : 'none',
+        reason: resolved?.reason || (apiKey ? '池里没有可用 Key，回落到环境变量凭证' : '池里没有可用 Key，环境变量也没配'),
+        attempt: attempt + 1,
+        ms: Date.now() - started,
+        ...extra,
+      })
     if (!apiKey) {
+      route({ ok: false, error: '未配置模型凭证' })
       const error = new Error('未配置模型凭证：管理员还没有在后台添加可用 Key')
       error.code = 'NO_MODEL'
       throw error
@@ -57,6 +73,7 @@ export async function chatCompletion({
           continue
         }
         reportKey(resolved?.id, false, 'HTTP ' + response.status + ' ' + text.slice(0, 160))
+        route({ ok: false, error: 'HTTP ' + response.status + ' ' + text.slice(0, 120) })
         const error = new Error(
           model + (busy ? ' 上游繁忙（HTTP ' + response.status + '）' : ' HTTP ' + response.status + '：' + text.slice(0, 140)),
         )
@@ -70,16 +87,19 @@ export async function chatCompletion({
       const finishReason = String(choice.finish_reason || '')
       if (finishReason === 'length') {
         reportKey(resolved?.id, false, 'finish_reason=length')
+        route({ ok: false, error: '输出被 max_tokens 截断（finish_reason=length）' })
         const error = new Error(model + ' 输出被 max_tokens 截断（finish_reason=length）')
         error.retryable = true
         error.truncated = true
         throw error
       }
       reportKey(resolved?.id, true)
+      route({ ok: true })
       return { message: choice.message || {}, finishReason, usage: parsed?.usage, jsonMode: useJson }
     } catch (error) {
       if (error?.code === 'NO_MODEL' || error?.status) throw error
       reportKey(resolved?.id, false, String(error?.message || error))
+      route({ ok: false, error: String(error?.message || error).slice(0, 120) })
       throw error
     } finally {
       if (timer) clearTimeout(timer)

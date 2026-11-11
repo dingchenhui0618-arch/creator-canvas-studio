@@ -14,7 +14,7 @@ import { listAudit, recordAudit } from '../audit.mjs'
 import { removePreference } from '../preferences.mjs'
 import { AGENT_TOOLS } from '../agents.mjs'
 import { lastWebRead, readWebPage } from '../webread.mjs'
-import { listKeys, createKey, updateKey, deleteKey, testKey, PROVIDER_PRESETS } from '../keyvault.mjs'
+import { listKeys, createKey, updateKey, deleteKey, testKey, listRoutes, previewRoute, PROVIDER_PRESETS } from '../keyvault.mjs'
 import { canvasAdminConfigured, listCanvasUsers, setCanvasUserAccess } from '../canvas-admin.mjs'
 
 const MODEL_KEY = /^\/api\/admin\/model-keys\/([\w-]+)$/
@@ -124,6 +124,37 @@ export function createAdminRouter() {
             baseUrl: config.vision.baseUrl,
           },
         })
+        return true
+      }
+
+      // 路由可观测：最近 200 次真实调用走了哪把 Key、为什么、多快、成没成；
+      // 外加「现在调一次会走哪把」的预演 —— 改完 Key 不用等出问题才知道效果。
+      if (pathname === '/api/admin/model-keys/routes' && req.method === 'GET') {
+        const data = listRoutes(Number(url.searchParams.get('limit')) || 50)
+        sendJson(res, 200, {
+          ...data,
+          fallback: { configured: visionEnabled(), model: config.vision.model, baseUrl: config.vision.baseUrl },
+        })
+        return true
+      }
+
+      if (pathname === '/api/admin/model-keys/preview' && req.method === 'POST') {
+        try {
+          const body = await readBody(req)
+          const capability = String(body?.capability || 'text')
+          if (!['text', 'vision', 'image', 'video'].includes(capability)) {
+            sendJson(res, 400, { error: '能力只能是 text / vision / image / video', code: 'BAD_CAPABILITY' })
+            return true
+          }
+          const preview = previewRoute({ capability, model: String(body?.model || '').slice(0, 80) })
+          sendJson(res, 200, {
+            ok: true,
+            ...preview,
+            fallback: { configured: visionEnabled(), model: config.vision.model },
+          })
+        } catch (error) {
+          sendJson(res, 400, { error: error?.message || '预演失败' })
+        }
         return true
       }
 

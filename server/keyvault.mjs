@@ -307,29 +307,193 @@ function weightedPick(items) {
 }
 
 /**
+ * 路由解释：把「为什么是这把 Key」拆成每把 Key 的状态，后台预演和排障都用它。
+ * 真实调用（resolveKey）与预演（previewRoute）共用这一套判定，
+ * 不允许出现「后台说走 A、实际走了 B」。
+ */
+export function planRoute({ capability = 'text', model = '' } = {}) {
+  const rows = load().keys.map((key) => {
+    const caps = key.capabilities || []
+    const models = key.models || []
+    const entry = health.get(key.id) || {}
+    const coolingSec = entry.until > Date.now() ? Math.ceil((entry.until - Date.now()) / 1000) : 0
+    let state = 'eligible'
+    let reason = '可选'
+    if (!key.enabled) {
+      state = 'disabled'
+      reason = '已停用'
+    } else if (!caps.includes(capability)) {
+      state = 'capability'
+      reason = '没有「' + capability + '」能力'
+    } else if (model && models.length && !models.includes(model)) {
+      state = 'model'
+      reason = '模型白名单里没有 ' + model
+    } else if (coolingSec > 0) {
+      state = 'cooling'
+      reason = '冷却中，还需 ' + coolingSec + ' 秒'
+    }
+    return {
+      id: key.id,
+      name: key.name,
+      provider: key.provider,
+      priority: key.priority,
+      weight: key.weight,
+      state,
+      reason,
+    }
+  })
+  const eligible = rows.filter((row) => row.state === 'eligible')
+  const priority = eligible.length ? Math.min(...eligible.map((row) => row.priority)) : null
+  const group = eligible.filter((row) => row.priority === priority)
+  const total = group.reduce((sum, row) => sum + Math.max(1, row.weight || 1), 0)
+  const groupWithShare = group.map((row) => ({
+    ...row,
+    share: total ? Math.round((Math.max(1, row.weight || 1) / total) * 1000) / 10 : 0,
+  }))
+  // 同能力但优先级排在后面的 Key，也要在后台说清「它不是坏了，是排在后面」。
+  const keys = rows.map((row) =>
+    row.state === 'eligible' && row.priority !== priority
+      ? { ...row, reason: '优先级 P' + row.priority + ' 排在 P' + priority + ' 之后' }
+      : row,
+  )
+  return { capability, model, keys, eligible, group: groupWithShare, priority }
+}
+
+/**
  * 选一把当前可用的 Key。
  * - capability：text / vision / image / video
  * - model：给了就优先匹配声明了该模型的 Key；声明了模型白名单但都不匹配时，只用「通用 Key」
  * 没有任何可用 Key 时返回 null，调用方回落环境变量。
  */
 export function resolveKey({ capability = 'text', model = '' } = {}) {
-  const candidates = load().keys.filter((key) => key.enabled && (key.capabilities || []).includes(capability))
-  if (!candidates.length) return null
-  const modelMatched = model
-    ? candidates.filter((key) => !(key.models || []).length || key.models.includes(model))
-    : candidates
-  const pool = (modelMatched.length ? modelMatched : candidates.filter((key) => !(key.models || []).length))
-    .filter((key) => !isCooling(key))
-  if (!pool.length) return null
-  const minPriority = Math.min(...pool.map((key) => key.priority))
-  const group = pool.filter((key) => key.priority === minPriority)
-  const picked = weightedPick(group)
+  const plan = planRoute({ capability, model })
+  if (!plan.group.length) return null
+  const picked = weightedPick(plan.group)
+  const key = load().keys.find((item) => item.id === picked.id)
+  if (!key) return null
   return {
-    id: picked.id,
-    name: picked.name,
-    baseUrl: picked.baseUrl,
-    apiKey: safeDecrypt(picked.apiKey),
-    model: model || (picked.models || [])[0] || '',
+    id: key.id,
+    name: key.name,
+    baseUrl: key.baseUrl,
+    apiKey: safeDecrypt(key.apiKey),
+    model: model || (key.models || [])[0] || '',
+    priority: key.priority,
+    weight: key.weight,
+    candidates: plan.group.length,
+    reason:
+      plan.group.length > 1
+        ? '同为优先级 P' + key.priority + ' 的 ' + plan.group.length + ' 把按权重随机（这把约 ' + picked.share + '%）'
+        : '优先级 P' + key.priority + ' 里唯一可用的一把',
+  }
+}
+
+/** 后台「预演」：现在调一次会不会有可用 Key、会落在哪一组，说明为什么不选别人。 */
+export function previewRoute({ capability = 'text', model = '' } = {}) {
+  const plan = planRoute({ capability, model })
+  let description
+  if (!plan.group.length) {
+    description = '池里没有可用 Key：这次调用会回落到环境变量里的旧凭证；环境变量也没配就会直接报「未配置模型凭证」。'
+  } else if (plan.group.length === 1) {
+    description = '现在调用会用「' + plan.group[0].name + '」（优先级 P' + plan.group[0].priority + '）。'
+  } else {
+    description =
+      '现在调用会从 ' + plan.group.length + ' 把里按权重随机选一把：' +
+      plan.group.map((item) => item.name + ' ' + item.share + '%').join(' · ') +
+      '。它们优先级同为 P' + plan.group[0].priority + '，权重只影响选中概率。'
+  }
+  return {
+    ...plan,
+    chosen: plan.group.length === 1 ? plan.group[0] : null,
+    description,
+  }
+}
+
+// ── 路由决策日志（内存环形缓冲，最近 200 次）────────────────────
+// 后台要能回答「刚才那次调用到底走了哪把 Key、为什么、花多久、成没成」。
+// 只记脱敏信息：Key id / 名称 / 来源，绝不记 Key 明文与请求正文。
+const ROUTE_LIMIT = 200
+const routes = []
+let routeSeq = 0
+
+// 路由日志里给管理员看的是人话，不是一段上游 JSON；原始报错留在 detail 里供悬停查看。
+function friendlyError(raw) {
+  const text = String(raw || '').slice(0, 200)
+  const status = (text.match(/^HTTP (\d{3})/) || [])[1] || ''
+  const suffix = status ? '（HTTP ' + status + '）' : ''
+  if (/insufficient[_ ]?balance|insufficient_quota|余额不足/i.test(text)) return { error: '额度不足' + suffix, detail: text }
+  if (/invalid[_ ]?api[_ ]?key|unauthorized|凭证|401|403/i.test(text)) return { error: '凭证无效' + suffix, detail: text }
+  if (/rate.?limit|too many requests|429/i.test(text)) return { error: '上游限流' + suffix, detail: text }
+  if (/finish_reason=length|截断/.test(text)) return { error: '输出被截断', detail: text }
+  if (/^HTTP 5\d\d|overload|busy|timeout|aborted|fetch failed|ECONN/i.test(text)) return { error: '上游暂不可用' + suffix, detail: text }
+  return { error: text, detail: '' }
+}
+
+export function recordRoute(input = {}) {
+  const source = input.source === 'pool' ? 'pool' : input.source === 'env' ? 'env' : 'none'
+  const friendly = friendlyError(input.error)
+  const entry = {
+    id: 'r' + String(++routeSeq),
+    at: new Date().toISOString(),
+    capability: String(input.capability || 'text'),
+    model: String(input.model || ''),
+    keyId: source === 'pool' ? String(input.keyId || '') : '',
+    keyName: String(input.keyName || '').slice(0, 40),
+    source,
+    reason: String(input.reason || '').slice(0, 160),
+    attempt: Number(input.attempt) || 1,
+    ms: Math.max(0, Math.round(Number(input.ms) || 0)),
+    ok: Boolean(input.ok),
+    error: friendly.error,
+    detail: friendly.detail,
+  }
+  routes.unshift(entry)
+  if (routes.length > ROUTE_LIMIT) routes.length = ROUTE_LIMIT
+  return entry
+}
+
+export function listRoutes(limit = 50) {
+  const size = Math.max(1, Math.min(ROUTE_LIMIT, Number(limit) || 50))
+  let ok = 0
+  let fail = 0
+  let msSum = 0
+  let env = 0
+  let none = 0
+  const buckets = new Map()
+  for (const item of routes) {
+    if (item.ok) ok += 1
+    else fail += 1
+    msSum += item.ms
+    if (item.source === 'env') env += 1
+    if (item.source === 'none') none += 1
+    const bucketKey = item.source === 'pool' ? item.keyId : item.source
+    const bucket = buckets.get(bucketKey) || {
+      keyId: item.keyId,
+      keyName: item.keyName || (item.source === 'env' ? '环境变量旧凭证' : '没有可用 Key'),
+      ok: 0,
+      fail: 0,
+      ms: 0,
+      count: 0,
+    }
+    if (item.ok) bucket.ok += 1
+    else bucket.fail += 1
+    bucket.ms += item.ms
+    bucket.count += 1
+    buckets.set(bucketKey, bucket)
+  }
+  return {
+    items: routes.slice(0, size),
+    summary: {
+      total: routes.length,
+      ok,
+      fail,
+      env,
+      none,
+      avgMs: routes.length ? Math.round(msSum / routes.length) : 0,
+      lastAt: routes[0]?.at || '',
+      byKey: [...buckets.values()]
+        .map((bucket) => ({ ...bucket, avgMs: Math.round(bucket.ms / Math.max(1, bucket.count)) }))
+        .sort((a, b) => b.count - a.count),
+    },
   }
 }
 
