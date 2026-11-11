@@ -75,6 +75,14 @@ export const config = {
     timeoutMs: Number(process.env.VISION_TIMEOUT_MS || 300000),
     apiKey: (process.env.VISION_API_KEY || '').trim() || (visionBaseIsLocal ? readLocalToken() : ''),
   },
+  // 画布账号互通：VisionQA 签短时票据，画布企业服务用同一把共享密钥校验后换自己的会话。
+  // 没配 VQ_CANVAS_SHARED_SECRET 时整体关闭，画布仍用它的原生登录，不会意外免登录。
+  canvas: {
+    sharedSecret: (process.env.VQ_CANVAS_SHARED_SECRET || '').trim(),
+    issuer: 'visionqa',
+    audience: 'bd-canvas',
+    ttlSec: Number(process.env.VQ_CANVAS_TICKET_TTL || 120),
+  },
   limits: {
     maxVideoMb: Number(process.env.MAX_VIDEO_MB || 160),
     maxFrames: Number(process.env.MAX_FRAMES || 18),

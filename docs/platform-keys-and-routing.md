@@ -66,14 +66,58 @@
 
 图里这把是原 `.env` 里的 DeepSeek 凭证，通过管理接口迁进 Key 池；点「测试」发出的真实请求被上游以 402 `Insufficient Balance` 拒绝，界面如实显示错误原文——这正是「余额不足」这一唯一阻塞的线上证据。
 
-## 三、第二期：画布账号桥（设计）
+## 三、第二期：画布账号桥（2026-11-11 已上线）
 
-目标：画布里没有任何账号 UI，用户从 VisionQA 进入就是已登录状态。
+目标：画布里没有任何账号 UI，用户从 VisionQA 进入就是已登录状态。**线上已跑通。**
 
-1. **信任模式**：画布企业服务加环境变量 VQ_TRUST_ISSUER（固定 visionqa）与共享密钥；新增 POST /enterprise/api/auth/exchange：校验 VisionQA 签发的短时 JWT（sub=VisionQA 用户 id），按 external_id upsert 一条影子用户，返回画布自己的会话 token。
-2. **前端注入**：VisionQA 画布页在 iframe 加载完成后 postMessage 一次会话 token（不放 URL，避免进日志与 Referer）；画布启动时监听并交换，之后所有请求带画布 token。
-3. **入口收敛**：信任模式下隐藏画布的登录、注册、账号菜单；用户管理只在 VisionQA 后台。
-4. **额度与计费**：画布按影子用户记账；VisionQA 侧只做平台级用量与积分展示，两边对账以画布的 generation_records 为准。
+### 3.1 链路
+
+```
+VisionQA 登录 → 打开画布页 → iframe 加载画布
+  → 画布向父窗口 postMessage {type:'vq-canvas:ready'}
+  → VisionQA 取一张 120 秒票据（GET /api/canvas/session-token）
+  → 父窗口回 {type:'vq-canvas:ticket', token}（targetOrigin 固定画布源）
+  → 画布 POST /enterprise/api/auth/exchange
+  → 企业服务校验 HS256 票据，按 external_id upsert 影子用户，回画布自己 30 天的 JWT
+  → 之后所有画布请求都带画布 token，用户全程看不到画布登录框
+```
+
+### 3.2 实现位置
+
+| 位置 | 作用 |
+| --- | --- |
+| `server/canvas-session.mjs` | 签发票据：HS256，claims 只有 iss/aud/sub/email/name/role/iat/exp/jti，时效封顶 10 分钟 |
+| `server/routes/canvas.mjs` | `GET /api/canvas/session-token`（必须登录）；没配共享密钥返回 503 CANVAS_TRUST_DISABLED |
+| `src/pages/CanvasPage.tsx` | 监听 `vq-canvas:ready`，校验 origin 后把票据 postMessage 进 iframe（不用 `*` 发凭据） |
+| `enterprise_server/visionqa_trust.py` | 画布侧验票：aud/iss/exp/iat 全查，任何不符直接 401，不做宽松兜底 |
+| `enterprise_server/auth.py` | `POST /enterprise/api/auth/exchange`：按 `external_id = vq:<visionqa 用户 id>` upsert 影子用户 |
+| `enterprise_server/db.py` | `enterprise_users` 加 `external_id` 列 + 唯一索引（老库自动迁移） |
+| `src/features/enterprise/visionqaTrust.ts` | 画布侧握手：只认 `event.source === window.parent` 的票据消息 |
+| `src/features/enterprise/enterprise.ts` | `exchangeVisionQaTicket()`；托管模式标记 `trustMode` 进 getState，菜单据此隐藏账号入口 |
+
+### 3.3 画布里还剩什么
+
+- 登录、注册、改名、改头像、重置密码、登出：**托管模式下全部不渲染**，账号只在 VisionQA 后台管。
+- 影子用户按 `external_id` 唯一：同一个 VisionQA 账号重进画布始终是同一条画布用户，任务、历史、额度不会串。
+- 每次进画布都重新换一次票据：VisionQA 换账号，画布跟着换，不会沿用上一个人的画布 token。
+- 额度：影子用户初始 unlimited（画布不拦），等生成网关接入后由 VisionQA 按次记账。
+
+### 3.4 线上验证（2026-11-11）
+
+- 票据：`GET /api/canvas/session-token` → 200，TTL 120 秒。
+- 兑换：`POST /enterprise/api/auth/exchange` → 200，返回画布 JWT；同一张票重复兑换返回同一个用户 id（幂等）。
+- 身份：iframe 内 `GET /enterprise/api/auth/me` → 200，`display_name` 为 VisionQA 账号的显示名，`username` 为影子用户。
+- 失败路径：`not-a-jwt` / `a.b.c` 都被 401 `TICKET_INVALID` 拒绝。
+- 单测：`node scripts/test-canvas-session.mjs`（签名/过期/篡改/受众/角色/时效上限）、画布 `npx vitest run src/__tests__/enterprise-visionqa-trust.test.ts`（3 项）。
+
+![画布内的账号菜单（2026-11-11 线上实拍）](screenshot-canvas-trust-2026-11-11.png)
+
+画布头像菜单只剩「VisionQA 账号 + 保存/另存为/打开画布」，没有任何登录、注册、改密、登出入口。
+
+### 3.5 回退出
+
+- VisionQA 侧删掉 `VQ_CANVAS_SHARED_SECRET` 并重启：票据接口回 503，画布自动回落到它自己的登录。
+- 画布侧删掉 `VISIONQA_TRUST_SECRET` 并重启：兑换接口回 503 `TRUST_DISABLED`，行为同上。
 
 ## 四、第二期：画布生成网关（设计）
 

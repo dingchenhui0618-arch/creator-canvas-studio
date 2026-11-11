@@ -28,6 +28,7 @@ import {
   type RunRecord,
 } from '../api/flows'
 import { getCredits } from '../api/credits'
+import { getCanvasSessionTicket } from '../api/canvasSession'
 import { useUiMode } from '../api/app'
 import { navigate, replaceRoute } from '../router'
 import {
@@ -131,6 +132,8 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
   const [futureCount, setFutureCount] = useState(0)
   // 画布运行按次扣积分：运行前就把单价和余额摆出来，402 时不用去猜
   const [runCredit, setRunCredit] = useState<{ price: number; balance: number | null } | null>(null)
+  // 画布 iframe：画布加载完会要一张信任票据，拿到后它自己换会话，用户不用在画布里再登一次
+  const bdcFrameRef = useRef<HTMLIFrameElement | null>(null)
 
   const bdcLocalOnly =
     Boolean(bdc?.web.url) &&
@@ -738,6 +741,41 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
   }, [canvasId])
 
   // iframe 地址：一次性入口（种 cookie）+ 画布 id（画布自己用 ?loadCanvas= 认）
+  // 票据只发给画布自己的源：postMessage 的 targetOrigin 用真实 origin，绝不用 '*'
+  const bdcOrigin = useMemo(() => {
+    try {
+      return new URL(bdc?.web.embedUrl || bdc?.web.url || '').origin
+    } catch {
+      return ''
+    }
+  }, [bdc?.web.embedUrl, bdc?.web.url])
+
+  useEffect(() => {
+    if (!bdcOrigin) return
+    let cancelled = false
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== bdcOrigin) return
+      const data = event.data as { type?: string } | null
+      if (!data || data.type !== 'vq-canvas:ready') return
+      getCanvasSessionTicket()
+        .then((ticket) => {
+          if (cancelled) return
+          bdcFrameRef.current?.contentWindow?.postMessage(
+            { type: 'vq-canvas:ticket', token: ticket.token, issuer: ticket.issuer, audience: ticket.audience, expiresAt: ticket.expiresAt },
+            bdcOrigin,
+          )
+        })
+        .catch(() => {
+          // 互通没开或票据接口不可用：画布继续走它自己的登录，不弹错误打断用户
+        })
+    }
+    window.addEventListener('message', onMessage)
+    return () => {
+      cancelled = true
+      window.removeEventListener('message', onMessage)
+    }
+  }, [bdcOrigin])
+
   const bdcFrameSrc = useMemo(() => {
     const base = bdc?.web.embedUrl || bdc?.web.url || ''
     if (!base || !canvasId) return base
@@ -1003,7 +1041,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
             <button className="cv-btn" type="button" onClick={() => setBdcView(false)}>用内置编排</button>
           </div>
         ) : (
-          <iframe key={frameKey} className="cv-bdc-frame" src={bdcFrameSrc} title="VisionQA Canvas" />
+          <iframe key={frameKey} ref={bdcFrameRef} className="cv-bdc-frame" src={bdcFrameSrc} title="VisionQA Canvas" />
         )
       ) : loadState === 'error' ? (
         <div className="cv-state">
