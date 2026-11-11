@@ -6,6 +6,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import assert from 'node:assert/strict'
+import { PassThrough } from 'node:stream'
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'vq-gateway-'))
 process.env.DATA_DIR = temp
@@ -81,6 +82,7 @@ assert.equal(authorizeGateway({ headers: { authorization: 'Bearer test-gateway-t
 // 2) 出图：转发到 {baseUrl}/images/generations，用池里那把 Key 的凭证
 const image = await generateImage({ model: 'fake-image', prompt: '一只猫', size: '1024x1024' })
 assert.deepEqual(image.urls, ['https://example.invalid/a.png'])
+assert.deepEqual(image.data, [{ url: 'https://example.invalid/a.png' }], '上游 body 必须原样出现在顶层 data：画布按 data[].url 取图')
 const imageCall = seen.find((item) => item.url === '/v1/images/generations')
 assert.equal(imageCall.auth, 'Bearer sk-image-1234567890', '必须用平台 Key 的凭证请求上游')
 assert.match(imageCall.body, /一只猫/)
@@ -108,12 +110,44 @@ const poll1 = await pollVideoTask('task-abc')
 assert.equal(poll1.status, 'running')
 const poll2 = await pollVideoTask('task-abc')
 assert.equal(poll2.status, 'succeeded')
-assert.equal(poll2.data.content.video_url, 'https://example.invalid/v.mp4')
+assert.equal(poll2.content.video_url, 'https://example.invalid/v.mp4')
 const videoRoutes = listRoutes(50).items.filter((item) => item.capability === 'video')
 assert.equal(videoRoutes.length, 2, '建任务一条 + 终态一条，轮询中间态不刷日志')
 
 // 6) 不认识的视频任务：说清是重启导致的，不假装在跑
 await assert.rejects(() => pollVideoTask('task-nope'), (error) => error.code === 'TASK_NOT_FOUND' && error.status === 404)
+
+// 6.5) 路由层：方舟写法的路径与平台写法等价，且鉴权在路由层就拦住
+const { createGatewayRouter } = await import('../server/routes/gateway.mjs')
+const router = createGatewayRouter()
+const fakeRes = () => ({
+  statusCode: 0,
+  body: '',
+  writeHead(status) {
+    this.statusCode = status
+    return this
+  },
+  end(chunk) {
+    this.body = String(chunk || '')
+    return this
+  },
+})
+const fakeReq = (method, headers) => Object.assign(new PassThrough(), { method, headers })
+const pollCallsBefore = seen.filter((item) => item.url.startsWith('/v1/contents/generations/tasks/task-abc')).length
+const arkPollRes = fakeRes()
+await router.handle(await fakeReq('GET', { authorization: 'Bearer test-gateway-token' }), arkPollRes, new URL('http://x/api/gateway/v1/contents/generations/tasks/task-abc'), '/api/gateway/v1/contents/generations/tasks/task-abc')
+assert.equal(arkPollRes.statusCode, 200)
+assert.equal(JSON.parse(arkPollRes.body).status, 'succeeded')
+const pollCallsAfter = seen.filter((item) => item.url.startsWith('/v1/contents/generations/tasks/task-abc')).length
+assert.equal(pollCallsAfter, pollCallsBefore + 1, '方舟写法必须真的走到轮询')
+const deniedRes = fakeRes()
+await router.handle(await fakeReq('GET', { authorization: 'Bearer nope' }), deniedRes, new URL('http://x/api/gateway/v1/contents/generations/tasks/task-abc'), '/api/gateway/v1/contents/generations/tasks/task-abc')
+assert.equal(deniedRes.statusCode, 401)
+assert.equal(JSON.parse(deniedRes.body).code, 'GATEWAY_UNAUTHORIZED')
+assert.equal(seen.filter((item) => item.url.startsWith('/v1/contents/generations/tasks/task-abc')).length, pollCallsAfter, '被拒的请求不能打到上游')
+const unknownRes = fakeRes()
+await router.handle(await fakeReq('GET', { authorization: 'Bearer test-gateway-token' }), unknownRes, new URL('http://x/api/gateway/v1/nope'), '/api/gateway/v1/nope')
+assert.equal(unknownRes.statusCode, 404)
 
 // 7) 池里没有出图 Key：明确告诉管理员去加 Key，而不是回一个上游错误
 deleteKey(imageKey.id)

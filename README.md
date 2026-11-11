@@ -1148,10 +1148,48 @@ Key 池上一版只服务文本与视觉，出图和出视频是断开的两截�
 
 ### 三十二.4 还没做的
 
-- **画布侧还没把地址指过来**：画布的三个 Seedream 端点与 Seedance 的 baseUrl 目前写死 Ark，
-  要改成读环境变量再指向本通道（三步见 [docs/generation-gateway.md](docs/generation-gateway.md) 第七节）。
-  顺序上先有出图 Key 再接更稳 —— 否则画布的生成按钮会稳定报 503，看不出问题在哪。
+- **真实出图 / 出视频**：通道已就绪，池里还没有声明「出图 / 出视频」能力的 Key，等业务给。
 - 通道不在积分链上扣费；只认服务令牌，不按账号计量；视频任务登记在进程内存，重启后旧任务查不到。
-- 一句话结论：**出图 / 出视频的「平台 Key + 路由」这一半已经通了，缺的是上游 Key 与画布那一根线。**
 
+画布那一根线在下一节接了。
 
+## 三十三、2026-11-11 追加：画布接进平台生成通道（第十六批）
+
+上一节把通道做出来了，但画布还写死火山方舟地址、密钥用自己那张表 —— 平台池换了 Key 画布不知道。
+这一批把画布改成「地址读环境变量、密钥表只放一把平台令牌」，并给统一登录进来的用户默认授权平台模型。
+
+### 三十三.1 做了什么
+
+| 项 | 具体 |
+| --- | --- |
+| 画布端点 | 三款 Seedream 的端点改成 `模型级环境变量 → BD_IMAGE_GATEWAY_ENDPOINT → 方舟官方地址`；Seedance 的 base 改读 `BD_SEEDANCE_BASE_URL`。不设环境变量时行为完全不变 |
+| 走回环 | 画布服务的环境变量指向 `http://127.0.0.1:8799/api/gateway/v1`：同机通信，服务令牌不出网卡，也不依赖 nginx 与证书 |
+| 方舟写法 | 通道加了 `/contents/generations/tasks[/<id>]` 别名，按方舟协议写死的客户端只改 base URL 就能接 |
+| 画布密钥 | 画布 `enterprise_api_keys` 里放一把「VisionQA 平台生成通道」（值即平台服务令牌），模型不限；Key id 写进 `system_settings.visionqa.gateway_key_id` |
+| 用户授权 | VisionQA 票据换画布会话时，影子用户若一条授权都没有，自动补 5 个平台模型（Seedream 4.5 / 5.0 Pro / 5.0 Flash、Seedance 2.0 / 2.0 Fast）；管理员之后单独收回不会被登录覆盖 |
+| 三个幂等脚本 | `deploy/bd-canvas/wire_gateway.py`（改端点）、`setup_gateway_key.py`（建 Key + 写指针 + 补授权）、`grant_models.py`（登录自动授权） |
+
+### 三十三.2 线上实测（生产，2026-11-11 13:45）
+
+| 检查 | 结果 |
+| --- | --- |
+| 画布后台「Key 管理」 | 1 把：VisionQA 平台生成通道 · 火山方舟 · 按渠道共享 · `534***4f5e` · 启用 |
+| 画布后台点这把 Key 的「测试」 | `success: true`，`base_url` 是 `http://127.0.0.1:8799/api/gateway/v1`，`status_code` 404 —— 画布进程确实在读新地址，令牌也过了通道鉴权 |
+| 全链联调（池里临时放一把出图 Key，指向本地假上游） | 画布 `POST /enterprise/api/generate/seedream45` 回 200、`generated_images: 1`、图片落进画布媒体备份；平台路由日志 35 ms 一条成功，模型 `doubao-seedream-4-5-251128` 原样透传 |
+| 池里没有出图 Key 时画布的表现 | 502，文案「没有可用的出图 Key：请在后台「模型 Key」里添加一把声明了「出图」能力的 Key」 |
+| 收尾 | 临时 Key 已删、假上游已停、联调产生的生成记录 / 媒体备份 / 额度全部还原（198 张免费额度回到未用） |
+
+联调还揪出一个真问题：通道原来把上游 body 包成 `{ data: {...} }`，画布按 `data[].url` 取图，于是
+「200 但 0 张图」。现在返回上游 body 原样平铺，并加了断言 `image.data` 必须等于上游的 `data[]`。
+
+![画布后台「Key 管理」：唯一一把 Key 是 VisionQA 平台生成通道](docs/screenshot-canvas-gateway-key-2026-11-11.png)
+
+### 三十三.3 验收
+
+- `node scripts/test-gateway.mjs` 加了两组断言：方舟别名在路由层真的走到轮询、被拒的请求打不到上游；返回体必须平铺上游 `data[]`。全部通过；回归 `test-keyvault`、`test-model-routes`、`test-canvas-admin`、`test-canvas-session` 全过；`npm run build` 通过；`npm run lint` 0 错误 4 条既有警告。
+- 画布侧 `python -m py_compile` 通过，服务重启后 `bdc-enterprise` active。
+
+### 三十三.4 还没做的
+
+- **还是要一把真出图 / 出视频 Key**：现在画布点生成会如实报「没有可用的出图 Key」，通道与授权都已就绪，贴 Key 即通。
+- 画布出视频的真实建任务 + 轮询没跑过（通道侧已用假上游覆盖）；新模型上线时，画布前端模型目录与两个授权脚本的常量要一起改。

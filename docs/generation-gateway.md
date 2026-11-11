@@ -1,7 +1,7 @@
 # 平台生成通道：出图 / 出视频也走平台 Key
 
 这份文档说明 VisionQA 的出图 / 出视频通道（`/api/gateway/v1/*`）：它解决什么问题、
-接口长什么样、怎么鉴权、怎么选 Key、失败了怎么排查，以及画布侧怎么接（**尚未执行**）。
+接口长什么样、怎么鉴权、怎么选 Key、失败了怎么排查，以及画布侧怎么接（已接通，见第七节）。
 
 适用代码：`server/gateway.mjs`（转发与任务登记）、`server/routes/gateway.mjs`（HTTP）、
 `server/config.mjs` 的 `gateway` 段、后台「模型 Key → 生成通道」卡片。
@@ -26,6 +26,17 @@ Key 池以前只服务文本与视觉（对话、评审）。出图 / 出视频�
 | 出视频 · 建任务 | `POST /api/gateway/v1/videos/generations` | `model` `content[]` `ratio` 等原样转发 | 上游 `id`（任务 id） |
 | 出视频 · 轮询 | `GET /api/gateway/v1/videos/generations/<id>` | — | 上游任务状态，含 `content.video_url` |
 
+三层路径都另有一套方舟原样写法，等价指向同一段逻辑，**按方舟协议写死的客户端只改 base URL 就能接**：
+
+| 方舟写法（画布用的就是这套） | 等价于 |
+| --- | --- |
+| `POST /api/gateway/v1/images/generations` | 出图 |
+| `POST /api/gateway/v1/contents/generations/tasks` | 出视频 · 建任务 |
+| `GET /api/gateway/v1/contents/generations/tasks/<id>` | 出视频 · 轮询 |
+
+返回体是**上游原始 body**（`data[]`、`id`、`status`、`content` 都在顶层），平台自己的
+`urls` / `key` / `ms` 附加在同一层。这一点不能改：调用方就是按 `data[].url` 取图的，
+包一层 `{ data: {...} }` 会让它「成功但 0 张图」（联调时真踩到过，见第八节）。
 出图是同步的：一次请求等到图。出视频是异步的：建任务拿 id，然后按 id 轮询。
 **轮询必须回到建任务的那把 Key**，所以服务端记住「任务 id → Key」的对应关系。
 
@@ -78,34 +89,85 @@ Content-Type: application/json
 - 接入地址（一键复制，给画布侧填）；
 - 正在跑的视频任务与它走的那把 Key。
 
-## 七、画布侧怎么接（**尚未执行**）
+## 七、画布侧怎么接（已接通，2026-11-11）
 
-画布现在的出图 / 出视频端点是写死的 Ark 地址，密钥来自它自己的 `enterprise_api_keys` 表。
-要接到本通道，需要三步，**都还没做**：
+画布原本把方舟地址写死在代码里，密钥来自它自己的 `enterprise_api_keys` 表。现在改成：
+地址读环境变量、密钥表里只放一把「平台生成通道」的 Key（值就是平台服务令牌）。
 
-1. 把 `enterprise_server/generation_seedream.py` 的三个端点常量
-   （`SEEDREAM45_ENDPOINT` / `SEEDREAM50_PRO_ENDPOINT` / `SEEDREAM50_FLASH_ENDPOINT`）
-   和 `generation_seedance.py` 的 `SEEDANCE_BASE_URL` 改成读环境变量；
-2. 把环境变量指向 `https://visionqa.wavisionai.cn/api/gateway/v1`（图片走 `/images/generations`，
-   视频走 `/videos/generations` 与轮询）；
-3. 在画布的企业密钥表里加一条指向本通道的记录（值填平台服务令牌），把模型分配指过去。
+### 1. 改代码：地址改读环境变量（幂等补丁）
 
-顺序很重要：**先有出图 Key，再接画布**。现在池里没有任何出图 / 出视频 Key，
-接过去只会让画布的生成按钮稳定报 503，反而看不出问题在哪。
+```bash
+python3 deploy/bd-canvas/wire_gateway.py --root /opt/bdcanvas --dry-run   # 先看会改什么
+python3 deploy/bd-canvas/wire_gateway.py --root /opt/bdcanvas
+```
+
+它给 `generation_seedream.py` 加一个 `_gateway_endpoint()`，把三款 Seedream 的端点改成：
+
+```text
+模型级环境变量 → BD_IMAGE_GATEWAY_ENDPOINT → 方舟官方地址
+```
+
+并把 `generation_seedance.py` 的 `SEEDANCE_BASE_URL` 改成读 `BD_SEEDANCE_BASE_URL`。
+**不设环境变量时行为完全不变**，所以补丁本身不会改变线上行为。
+
+### 2. 配地址：画布走本机回环，不出公网
+
+`/etc/systemd/system/bdc-enterprise.service`：
+
+```ini
+Environment=BD_IMAGE_GATEWAY_ENDPOINT=http://127.0.0.1:8799/api/gateway/v1/images/generations
+Environment=BD_SEEDANCE_BASE_URL=http://127.0.0.1:8799/api/gateway/v1
+```
+
+然后 `systemctl daemon-reload && systemctl restart bdc-enterprise`。用回环而不是公网域名：画布与 VisionQA 同机，
+服务令牌不必出网卡，也不依赖 nginx 与证书。画布搬到别的机器时把这两行换成公网地址即可。
+
+### 3. 建 Key、写指针、给现有用户补授权
+
+```bash
+/opt/bdcanvas/.venv/bin/python deploy/bd-canvas/setup_gateway_key.py --dry-run
+/opt/bdcanvas/.venv/bin/python deploy/bd-canvas/setup_gateway_key.py
+```
+
+它从 `/opt/visionqa/.env` 读平台令牌（不打印），调画布管理员接口建一把名为
+「VisionQA 平台生成通道」的 Key（`provider=volcengine`，模型不限），把 Key id 写进
+`system_settings` 的 `visionqa.gateway_key_id`，再给现有账号补 5 个模型授权。
+
+### 4. 新用户首次进画布自动授权
+
+```bash
+/opt/bdcanvas/.venv/bin/python deploy/bd-canvas/grant_models.py --root /opt/bdcanvas
+```
+
+VisionQA 票据换画布会话时（`enterprise_server/auth.py` 的 `exchange()`），如果这个影子用户
+**一条模型授权都没有**，就按 `visionqa.gateway_key_id` 补上 5 个平台模型：
+Seedream 4.5 / 5.0 Pro / 5.0 Flash，Seedance 2.0 / 2.0 Fast。
+只在「一条都没有」时补，管理员之后单独收回某个模型不会被下次登录覆盖。
+
+### 5. 验收
+
+- 画布后台「Key 管理」能看到这把 Key（[截图](screenshot-canvas-gateway-key-2026-11-11.png)）；
+- 画布后台点这把 Key 的「测试」：返回里 `base_url` 是 `http://127.0.0.1:8799/api/gateway/v1`、
+  `status_code` 是 404（本通道对未知任务的回答），说明**画布进程确实在读新地址、令牌也过了鉴权**；
+- 池里放一把临时出图 Key（指向本地假上游）→ 画布调 `/enterprise/api/generate/seedream45`
+  → 返回 200、`generated_images: 1`、图片落进画布媒体备份，平台「最近路由」记一条成功。
 
 ## 八、验证情况
 
 已验证（生产，2026-11-11）：
 
-- 通道未带令牌 → `401 GATEWAY_UNAUTHORIZED`；
-- 带上令牌但池里没有出图 Key → `503 NO_IMAGE_KEY`（出视频同理 `NO_VIDEO_KEY`）；
-- 公网入口（`https://visionqa.wavisionai.cn/api/gateway/v1/...`）与内网行为一致，说明 nginx 转发与 TLS 都对；
-- 后台「生成通道」读到真实状态：通道已开启、令牌前后四位、出图 / 出视频 Key 各 0 把。
+- 通道未带令牌 → `401 GATEWAY_UNAUTHORIZED`；带上令牌但池里没有出图 Key → `503 NO_IMAGE_KEY`
+  （出视频同理 `NO_VIDEO_KEY`）；公网入口与回环行为一致；
+- 后台「生成通道」读到真实状态：通道已开启、令牌前后四位、Key 计数与模型清单；
+- **画布→通道→平台 Key→上游→回画布** 全链联调（临时假上游，跑完即删）：
+  画布 `/enterprise/api/generate/seedream45` 回 200、`generated_images: 1`、媒体备份 id 2，
+  路由日志 35 ms 一条成功，模型名 `doubao-seedream-4-5-251128` 原样透传；
+- 联调时发现并修掉一个真问题：通道原来把上游 body 包成 `{ data: {...} }`，
+  画布按 `data[].url` 取图，于是「200 但 0 张图」。现在改为上游 body 原样平铺，
+  并加了断言 `image.data` 必须等于上游的 `data[]`。
 
-尚不能验证：真实出图 / 出视频（需要一把方舟出图 Key，等业务给）。链路本身由
-`node scripts/test-gateway.mjs` 用假上游跑通：出图转发、上游 500、空结果、视频建任务 + 轮询、
-无 Key 报错、未配置令牌 503、日志不含 Key 明文。
-
+尚未验证：**真实出图 / 出视频**（要一把方舟出图 / 出视频 Key，等业务给）；
+画布出视频链路的真实建任务与轮询（通道侧已由 `scripts/test-gateway.mjs` 的假上游覆盖）。
 ## 九、还没做
 
 - **计费**：通道不在积分链上扣费。画布自己有免费额度与计费，平台侧暂不重复收费。
@@ -113,3 +175,6 @@ Content-Type: application/json
 - **任务持久化**：视频任务与 Key 的对应关系在进程内存里，重启后旧任务查不到（画布会重新发起）。
 - **多进程**：如果以后 Node 起多实例，任务登记要挪到共享存储。
 - **非方舟供应商**：OpenAI 系 `/images/generations` 形态可用；百炼的异步出图协议不同，没接。
+- **画布出视频真联调**：通道侧已用假上游覆盖建任务 + 轮询；画布侧要等一把出视频 Key 才能跑真实任务。
+- **新模型要同步两处**：画布前端的模型目录（`modelCatalog.ts`）与授权脚本里的 `VISIONQA_GATEWAY_MODELS` /
+  `MODELS` 常量。现在固定 5 个平台模型，加模型时两个脚本的列表一起改。

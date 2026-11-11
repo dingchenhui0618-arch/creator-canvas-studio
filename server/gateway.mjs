@@ -151,7 +151,9 @@ export async function generateImage(payload = {}) {
   }
   reportKey(key.id, true)
   recordRoute({ capability: 'image', model, keyId: key.id, keyName: key.name, source: 'pool', reason: key.reason, ms: Date.now() - started, ok: true })
-  return { ok: true, data, urls, key: { id: key.id, name: key.name }, ms: Date.now() - started }
+  // 上游响应原样给调用方：画布就是按方舟的 { data: [{ url }] } 取图的，
+  // 包一层 { data: {...} } 会让它「成功但 0 张图」。平台自己的元信息放在同级字段里。
+  return { ...data, ok: true, urls, key: { id: key.id, name: key.name }, ms: Date.now() - started }
 }
 
 function pruneJobs() {
@@ -197,7 +199,7 @@ export async function createVideoTask(payload = {}) {
   recordRoute({ capability: 'video', model, keyId: key.id, keyName: key.name, source: 'pool', reason: key.reason, ms: Date.now() - started, ok: true })
   const createdAt = Date.now()
   jobs.set(taskId, { keyId: key.id, keyName: key.name, baseUrl: key.baseUrl, apiKey: key.apiKey, model: requestBody.model, createdAt, at: createdAt, recorded: false })
-  return { ok: true, data, id: taskId, key: { id: key.id, name: key.name }, ms: Date.now() - started }
+  return { ...(data && typeof data === 'object' ? data : {}), ok: true, id: taskId, key: { id: key.id, name: key.name }, ms: Date.now() - started }
 }
 
 /**
@@ -242,7 +244,7 @@ export async function pollVideoTask(taskId) {
       })
     }
   }
-  return { ok: true, data, status, key: { id: job.keyId, name: job.keyName } }
+  return { ...data, ok: true, status, key: { id: job.keyId, name: job.keyName } }
 }
 
 /** 后台「生成通道」页读的运行时状态：只回计数与任务摘要，不回令牌与上游 Key。 */
