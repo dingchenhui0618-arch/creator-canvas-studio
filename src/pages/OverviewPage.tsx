@@ -5,7 +5,7 @@ import PageHead from '../components/PageHead'
 import { MonoTag } from '../components/ui'
 import { request } from '../api/client'
 import { listBdcCanvases, type BdcCanvas } from '../api/bdc'
-import { useUiMode } from '../api/app'
+import { useSiteInfo, useUiMode } from '../api/app'
 import '../styles/overview.css'
 
 type RunRow = {
@@ -59,6 +59,7 @@ function secondsOf(ms?: number): string {
  */
 export function OverviewPage({ userName, onCreate, onNavigate, onOpenCanvas }: Props) {
   const { internal } = useUiMode()
+  const site = useSiteInfo()
   const [now] = useState(() => new Date())
   const [canvases, setCanvases] = useState<BdcCanvas[]>([])
   const [runs, setRuns] = useState<RunRow[]>([])
@@ -287,7 +288,12 @@ export function OverviewPage({ userName, onCreate, onNavigate, onOpenCanvas }: P
 
       <footer className="vq-overview-foot">
         <span>{internal ? '画布数据来自画布服务；运行与模板来自工作台 API。' : '画布、运行与模板数据都在你的账号下。'}</span>
-        <span className="vq-mono">VisionQA · 生产站点</span>
+        <span className="vq-overview-legal">
+          <a className="vq-link" href="#/legal/terms">服务条款</a>
+          <a className="vq-link" href="#/legal/privacy">隐私说明</a>
+          <a className="vq-link" href="#/welcome">上手指引</a>
+          {site.icp ? <span className="vq-mono">{site.icp}</span> : null}
+        </span>
       </footer>
     </div>
   )

@@ -215,7 +215,7 @@ export default function ReviewPage() {
         actions={
           <div className="review-head-status">
             <span className={`vq-chip ${status?.service ? 'is-pass' : 'is-warn'}`}>
-              <ScanEye size={13} /> 插件服务 {status?.service ? '已连接' : '未启动'}
+              <ScanEye size={13} /> 评审引擎 {status?.service ? '本地服务' : '平台模型'}
             </span>
             <span className={`vq-chip ${status?.model && !modelBlocked ? 'is-pass' : 'is-fail'}`}>
               评审模型 {status?.model ? (modelBlocked ? '暂时不可用' : '可用') : '未配置'}
@@ -376,7 +376,7 @@ export default function ReviewPage() {
                     : '当前由本地评审服务出结论，结果里会标明来源。'
                   : internal
                     ? 'VisionQA 插件服务未启动（127.0.0.1:6300），当前由本地视觉模型按同一套 visual-baseline 规则评审，provider 会写进结果。'
-                    : '本地评审插件未启动，本次由平台视觉模型按同一套评审规则完成。'}
+                    : '本次由平台视觉模型按同一套评审规则出结论，结果里会标明来源。'}
               </p>
             </div>
           )}

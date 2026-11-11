@@ -5,8 +5,9 @@ import fs from 'node:fs/promises'
 import crypto from 'node:crypto'
 import path from 'node:path'
 import { readBody, sendJson } from './_shared.mjs'
-import { currentUser, isAdmin, listUsers, findUserById, updateUserAccess, setPassword, destroyOtherSessions, deleteUser, countAdmins } from '../auth.mjs'
+import { currentUser, isAdmin, listUsers, findUserById, findUserByEmail, createUser, updateUserAccess, setPassword, destroyOtherSessions, deleteUser, countAdmins } from '../auth.mjs'
 import { grant, ledgerOf, balanceOf } from '../credits.mjs'
+import { listRequests, resolveRequest } from '../credit-requests.mjs'
 import { config, redfoxEnabled, visionEnabled } from '../config.mjs'
 import { deepHealth } from '../health.mjs'
 import { diagnosticsLogs, logEvent } from '../log.mjs'
@@ -111,6 +112,97 @@ export function createAdminRouter() {
         return true
       }
 
+      if (pathname === '/api/admin/users' && req.method === 'POST') {
+        const body = await readBody(req)
+        const email = String(body.email || '').trim().toLowerCase()
+        const name = String(body.name || '').trim().slice(0, 40)
+        const kind = body.kind === 'admin' ? 'admin' : 'account'
+        if (!email) return (sendJson(res, 400, { error: '请输入邮箱', field: 'email' }), true)
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return (sendJson(res, 400, { error: '邮箱格式不正确', field: 'email' }), true)
+        if (findUserByEmail(email)) return (sendJson(res, 409, { error: '这个邮箱已经有账号了', field: 'email' }), true)
+        let password = String(body.password || '').trim()
+        if (password) {
+          if (password.length < 8 || password.length > 200 || !/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
+            return (sendJson(res, 400, { error: '口令至少 8 位，且同时包含字母和数字', field: 'password' }), true)
+          }
+        } else {
+          // 不填口令就生成一次性临时口令，同样只在这一次响应里返回
+          password = 'Vq7' + crypto.randomBytes(7).toString('base64url')
+        }
+        let created
+        try {
+          created = createUser({ email, password, name, kind })
+        } catch (error) {
+          sendJson(res, 400, { error: '建号失败：' + String(error?.message || error) })
+          return true
+        }
+        // 额外初始积分单独记一笔流水，账本上「欢迎额度」和「管理员发放」分得清
+        const extra = Math.trunc(Number(body.credits) || 0)
+        let balance = Number(created.credits || 0)
+        if (extra > 0) {
+          const result = grant(created.id, extra, { note: '建号时发放', operator: user.email })
+          balance = result.balance
+        } else if (extra < 0) {
+          sendJson(res, 400, { error: '初始积分不能是负数', field: 'credits' })
+          return true
+        }
+        const payload = {
+          ok: true,
+          password,
+          balance,
+          user: { id: created.id, email: created.email, name: created.name, kind: created.kind, active: Boolean(created.is_active), credits: balance },
+        }
+        logEvent('user-create', { by: user.email, email, kind, balance })
+        recordAudit({ req, actor: user, action: 'user.create', targetType: 'user', targetId: created.id, targetLabel: created.email, detail: { kind, balance } })
+        sendJson(res, 201, payload)
+        return true
+      }
+      // ── 额度申请 ────────────────────────────────────────────────
+      // 用户积分不够时提交的申请；管理员在这里发放或忽略，发放与账本记的是同一笔。
+      if (pathname === '/api/admin/credit-requests' && req.method === 'GET') {
+        const status = String(url.searchParams.get('status') || '')
+        const items = listRequests({ status })
+        sendJson(res, 200, { items, total: items.length, pending: listRequests({ status: 'pending' }).length })
+        return true
+      }
+
+      const CREDIT_REQUEST = /^\/api\/admin\/credit-requests\/([\w-]+)$/
+      const requestMatch = pathname.match(CREDIT_REQUEST)
+      if (requestMatch && req.method === 'POST') {
+        const list = listRequests({})
+        const target = list.find((item) => item.id === requestMatch[1])
+        if (!target) {
+          sendJson(res, 404, { error: '申请不存在' })
+          return true
+        }
+        if (target.status !== 'pending') {
+          sendJson(res, 409, { error: '这条申请已经处理过了', request: target })
+          return true
+        }
+        const body = await readBody(req)
+        if (body.action === 'ignore') {
+          const resolved = resolveRequest(target.id, { status: 'ignored', by: user.email })
+          logEvent('credit-request-ignore', { by: user.email, request: target.id, user: target.email })
+          sendJson(res, 200, { ok: true, request: resolved, balance: null })
+          return true
+        }
+        const amount = Math.trunc(Number(body.amount) || target.amount)
+        if (!Number.isFinite(amount) || amount === 0) {
+          sendJson(res, 400, { error: '发放数量必须是非 0 整数' })
+          return true
+        }
+        const account = findUserById(target.userId)
+        if (!account) {
+          sendJson(res, 404, { error: '申请对应的账号已被删除' })
+          return true
+        }
+        const result = grant(account.id, amount, { note: '额度申请发放（' + target.id + '）', operator: user.email })
+        const resolved = resolveRequest(target.id, { status: 'granted', by: user.email, grantedAmount: amount })
+        logEvent('credit-request-grant', { by: user.email, to: account.email, amount, balance: result.balance })
+        recordAudit({ req, actor: user, action: 'credits.grant', targetType: 'user', targetId: account.id, targetLabel: account.email, detail: { amount, note: '额度申请 ' + target.id, balance: result.balance } })
+        sendJson(res, 200, { ok: true, request: resolved, balance: result.balance })
+        return true
+      }
       // ── 平台 Key 池 ────────────────────────────────────────────────
       // 管理员在后台随时增删改，下一次模型调用就生效（不需要重启进程）。
       // 列表只回脱敏值，明文 Key 永远不会离开服务端。
@@ -136,6 +228,7 @@ export function createAdminRouter() {
         const maskToken = (token) => (token ? String(token).slice(0, 4) + '••••' + String(token).slice(-4) : '')
         sendJson(res, 200, {
           ...status,
+          userOpen: config.gateway.open,
           tokenMasked: maskToken(config.gateway.token),
           keys: { image: counts.image || 0, video: counts.video || 0 },
           models: { image: vaultModels('image'), video: vaultModels('video') },

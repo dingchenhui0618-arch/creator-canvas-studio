@@ -5,7 +5,7 @@ import { request } from './client'
 
 export type UiMode = 'prod' | 'internal'
 
-type AppInfo = { ok: boolean; mode: UiMode; internal: boolean; version?: string }
+export type AppInfo = { ok: boolean; mode: UiMode; internal: boolean; version?: string; icp?: string; supportEmail?: string }
 
 let cached: AppInfo | null = null
 let pending: Promise<AppInfo> | null = null
@@ -24,6 +24,26 @@ function loadAppInfo(): Promise<AppInfo> {
       })
   }
   return pending
+}
+
+// 站点信息（备案号 / 客服邮箱）：登录页与页脚都要用，公开可读，失败按空处理。
+export function useSiteInfo(): { icp: string; supportEmail: string; version: string } {
+  const [info, setInfo] = useState<AppInfo | null>(cached)
+  useEffect(() => {
+    if (info) return
+    let alive = true
+    void loadAppInfo()
+      .then((next) => {
+        if (alive) setInfo(next)
+      })
+      .catch(() => {
+        if (alive) setInfo({ ok: false, mode: 'prod', internal: false })
+      })
+    return () => {
+      alive = false
+    }
+  }, [info])
+  return { icp: info?.icp || '', supportEmail: info?.supportEmail || '', version: info?.version || '' }
 }
 
 export function useUiMode(): { mode: UiMode; internal: boolean; loading: boolean } {

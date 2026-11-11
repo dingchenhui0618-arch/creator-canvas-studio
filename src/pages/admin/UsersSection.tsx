@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { listAdminUsers, grantCredits, updateAdminUser, resetAdminPassword, deleteAdminUser, type AdminUser } from '../../api/credits'
+import { listAdminUsers, createAdminUser, grantCredits, updateAdminUser, resetAdminPassword, deleteAdminUser, listCreditRequests, resolveCreditRequest, type AdminUser, type CreditRequest } from '../../api/credits'
 import { readSession } from '../../auth/session'
 import type { SessionKind } from '../../auth/session'
 import { useUiMode } from '../../api/app'
@@ -42,6 +42,21 @@ export default function UsersSection() {
   const [deleteError, setDeleteError] = useState('')
   const [deleteMessage, setDeleteMessage] = useState('')
   const currentUserId = useMemo(() => readSession()?.user.id || '', [])
+  // 建号：口令留空由服务端生成一次性临时口令，建完只显示这一次
+  const [createEmail, setCreateEmail] = useState('')
+  const [createName, setCreateName] = useState('')
+  const [createKind, setCreateKind] = useState<'account' | 'admin'>('account')
+  const [createCredits, setCreateCredits] = useState('100')
+  const [createPassword, setCreatePassword] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState('')
+  const [created, setCreated] = useState<{ email: string; password: string; balance: number } | null>(null)
+  const [createdCopied, setCreatedCopied] = useState(false)
+  // 额度申请队列：用户积分不够时提交，这里发放或忽略
+  const [requests, setRequests] = useState<CreditRequest[]>([])
+  const [requestBusy, setRequestBusy] = useState('')
+  const [requestMessage, setRequestMessage] = useState('')
+  const [requestError, setRequestError] = useState('')
 
   const load = useCallback(() => {
     setLoading(true)
@@ -60,6 +75,58 @@ export default function UsersSection() {
     return () => window.clearTimeout(timer)
   }, [load])
 
+  const loadRequests = useCallback(() => {
+    listCreditRequests('pending')
+      .then((data) => setRequests(data.items))
+      .catch((caught) => setRequestError(caught instanceof Error ? caught.message : '申请队列读取失败'))
+  }, [])
+
+  useEffect(() => {
+    const timer = window.setTimeout(loadRequests, 0)
+    return () => window.clearTimeout(timer)
+  }, [loadRequests])
+
+  const decideRequest = async (item: CreditRequest, action: 'grant' | 'ignore') => {
+    if (requestBusy) return
+    setRequestBusy(item.id)
+    setRequestError('')
+    setRequestMessage('')
+    try {
+      const result = await resolveCreditRequest(item.id, { action, amount: item.amount })
+      setRequestMessage(
+        action === 'grant'
+          ? '已给 ' + item.email + ' 发放 ' + item.amount + ' 积分，余额 ' + (result.balance ?? '—') + '。'
+          : '已忽略 ' + item.email + ' 的申请。',
+      )
+      loadRequests()
+      load()
+    } catch (caught) {
+      setRequestError(caught instanceof Error ? caught.message : '处理失败')
+    } finally {
+      setRequestBusy('')
+    }
+  }
+
+  const grantAllRequests = async () => {
+    if (requestBusy || !requests.length) return
+    setRequestBusy('all')
+    setRequestError('')
+    setRequestMessage('')
+    let done = 0
+    try {
+      for (const item of requests) {
+        await resolveCreditRequest(item.id, { action: 'grant', amount: item.amount })
+        done += 1
+      }
+      setRequestMessage('已按申请发放 ' + done + ' 条。')
+    } catch (caught) {
+      setRequestError('已发放 ' + done + ' 条，后面这条失败：' + (caught instanceof Error ? caught.message : '未知错误'))
+    } finally {
+      setRequestBusy('')
+      loadRequests()
+      load()
+    }
+  }
   const selected = useMemo(() => items.find((item) => item.id === selectedId) || null, [items, selectedId])
   const totalCredits = items.reduce((sum, item) => sum + (item.credits || 0), 0)
 
@@ -163,6 +230,49 @@ export default function UsersSection() {
     }
   }
 
+  const createAccount = async () => {
+    if (creating) return
+    const email = createEmail.trim().toLowerCase()
+    if (!email) {
+      setCreateError('请先填邮箱')
+      return
+    }
+    setCreating(true)
+    setCreateError('')
+    setCreated(null)
+    try {
+      const result = await createAdminUser({
+        email,
+        name: createName.trim() || undefined,
+        kind: createKind,
+        password: createPassword.trim() || undefined,
+        credits: Math.max(0, Math.trunc(Number(createCredits) || 0)),
+      })
+      setCreated({ email: result.user.email, password: result.password, balance: result.balance })
+      setCreateEmail('')
+      setCreateName('')
+      setCreateCredits('100')
+      setCreatePassword('')
+      setCreateKind('account')
+      load()
+    } catch (caught) {
+      setCreateError(caught instanceof Error ? caught.message : '建号失败')
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const copyCreatedPassword = async () => {
+    if (!created) return
+    try {
+      await navigator.clipboard.writeText(created.password)
+      setCreatedCopied(true)
+      window.setTimeout(() => setCreatedCopied(false), 2000)
+    } catch {
+      setCreatedCopied(false)
+    }
+  }
+
   return (
     <>
       <AdminHead
@@ -239,6 +349,152 @@ export default function UsersSection() {
         </div>
       ) : null}
 
+      <section className="admin-card admin-block">
+        <div className="admin-block-head">
+          <div>
+            <p className="admin-label">额度申请</p>
+            <p className="admin-sub">
+              {requests.length
+                ? '共 ' + requests.length + ' 条待处理。发放走服务端账本，发放人、金额与时间都会记进审计。'
+                : '现在没有待处理的申请。用户在「设置 → 积分」里提交后，这里就会出现。'}
+            </p>
+          </div>
+          {requests.length ? (
+            <div className="admin-row-actions">
+              <button type="button" className="admin-btn admin-btn--primary" disabled={Boolean(requestBusy)} onClick={() => void grantAllRequests()}>
+                {requestBusy === 'all' ? '发放中…' : '全部按申请发放'}
+              </button>
+            </div>
+          ) : null}
+        </div>
+        {requestError ? <p className="admin-hint" role="alert">{requestError}</p> : null}
+        {requestMessage ? <p className="admin-hint">{requestMessage}</p> : null}
+        {requests.length ? (
+          <div className="admin-table-wrap">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>邮箱</th>
+                  <th className="num-col">申请积分</th>
+                  <th>用途</th>
+                  <th>提交时间</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {requests.map((item) => (
+                  <tr key={item.id}>
+                    <td>{item.email}</td>
+                    <td className="admin-mono num-col">{item.amount}</td>
+                    <td className="admin-cell-sub">{item.reason || '—'}</td>
+                    <td className="admin-mono admin-nowrap">{formatDateTime(item.createdAt)}</td>
+                    <td>
+                      <div className="admin-row-actions">
+                        <button
+                          type="button"
+                          className="admin-btn admin-btn--primary"
+                          disabled={Boolean(requestBusy)}
+                          onClick={() => void decideRequest(item, 'grant')}
+                        >
+                          {requestBusy === item.id ? '处理中…' : '发放 ' + item.amount}
+                        </button>
+                        <button
+                          type="button"
+                          className="admin-btn admin-btn--ghost"
+                          disabled={Boolean(requestBusy)}
+                          onClick={() => void decideRequest(item, 'ignore')}
+                        >
+                          忽略
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </section>
+      <section className="admin-card admin-block">
+        <div className="admin-block-head">
+          <div>
+            <p className="admin-label">新建账号</p>
+            <p className="admin-sub">
+              注册默认关闭，账号由管理员在这里开。口令留空会生成一次性临时口令，只显示这一次；给对方的初始积分会在账本里单独记一笔，和系统送的额度分得清。
+            </p>
+          </div>
+        </div>
+        <div className="admin-edit-grid">
+          <label className="admin-edit-field">
+            <span>邮箱</span>
+            <input
+              value={createEmail}
+              onChange={(event) => setCreateEmail(event.target.value)}
+              placeholder="对方的常用邮箱"
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </label>
+          <label className="admin-edit-field">
+            <span>显示名</span>
+            <input
+              value={createName}
+              onChange={(event) => setCreateName(event.target.value)}
+              placeholder="可留空，默认取邮箱前缀"
+            />
+          </label>
+          <label className="admin-edit-field">
+            <span>角色</span>
+            <select value={createKind} onChange={(event) => setCreateKind(event.target.value === 'admin' ? 'admin' : 'account')}>
+              <option value="account">普通账号</option>
+              <option value="admin">管理员</option>
+            </select>
+          </label>
+          <label className="admin-edit-field">
+            <span>初始积分</span>
+            <input
+              value={createCredits}
+              onChange={(event) => setCreateCredits(event.target.value.replace(/[^0-9]/g, ''))}
+              inputMode="numeric"
+              placeholder="100"
+            />
+          </label>
+          <label className="admin-edit-field admin-edit-field--wide">
+            <span>口令（8 位以上，含字母和数字）</span>
+            <input
+              value={createPassword}
+              onChange={(event) => setCreatePassword(event.target.value)}
+              placeholder="留空则生成一次性临时口令"
+              autoComplete="new-password"
+            />
+          </label>
+        </div>
+        <div className="admin-edit-actions">
+          <button type="button" className="admin-btn admin-btn--primary" disabled={creating} onClick={() => void createAccount()}>
+            {creating ? '创建中…' : '创建账号'}
+          </button>
+        </div>
+        {createError ? <p className="admin-hint" role="alert">{createError}</p> : null}
+        {created ? (
+          <div className="admin-reset" role="status">
+            <div className="admin-reset-copy">
+              <span className="admin-label">账号已创建（口令只显示这一次）</span>
+              <p className="admin-sub">
+                已创建 {created.email}，余额 {created.balance} 积分。把口令通过安全渠道交给对方，不要贴在公开频道。
+              </p>
+            </div>
+            <code className="admin-reset-code">{created.password}</code>
+            <div className="admin-doc-actions">
+              <button type="button" className="admin-btn admin-btn--ghost" onClick={() => void copyCreatedPassword()}>
+                {createdCopied ? '已复制' : '复制'}
+              </button>
+              <button type="button" className="admin-btn admin-btn--ghost" onClick={() => setCreated(null)}>
+                关闭
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </section>
       <section className="admin-card admin-block">
         <div className="admin-block-head">
           <div>

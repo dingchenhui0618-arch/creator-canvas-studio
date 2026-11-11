@@ -38,6 +38,7 @@ import { initialsFor, sessionKindLabel, type RegisterInput, type Session, type S
 import { listAgents } from './api/agents'
 import { createBdcCanvas } from './api/bdc'
 import { navigate, pageToRoute, routeKey, routeToPage, useRoute } from './router'
+import { welcomeSeenKey } from './onboarding'
 import packageJsonRaw from '../package.json?raw'
 import { EDITION_BY_ID, EDITION_STORAGE_KEY, type AdminSection } from './editions'
 
@@ -50,6 +51,8 @@ const TemplateLibraryPage = lazy(() =>
   import('./pages/TemplateLibraryPage').then((module) => ({ default: module.TemplateLibraryPage })),
 )
 const AdminConsolePage = lazy(() => import('./pages/admin/AdminConsolePage'))
+const LegalPage = lazy(() => import('./pages/LegalPage').then((module) => ({ default: module.LegalPage })))
+const WelcomePage = lazy(() => import('./pages/WelcomePage').then((module) => ({ default: module.WelcomePage })))
 const AgentEditorPage = lazy(() => import('./pages/AgentEditorPage'))
 
 function sectionLabel(section: string): string {
@@ -281,6 +284,8 @@ function Workbench({
   }, [accountMenuOpen, updateOpen])
 
   const renderPage = () => {
+    // 合规页与引导页在 App 根部整屏渲染，不进侧栏外壳
+    if (route.kind === 'legal' || route.kind === 'welcome') return null
     if (route.kind === 'admin') return <AdminConsolePage section={route.section} />
     if (route.kind === 'agent-editor') {
       return (
@@ -475,11 +480,11 @@ function Workbench({
                 setUpdateOpen(true)
                 setUpdateMessage('')
               }}
-              title="版本与在线更新"
+              title="版本信息"
             >
               <span className="vq-version-dot" aria-hidden="true" />
               <span className="vq-version-label">v{APP_VERSION}</span>
-              <span className="vq-version-action">在线更新</span>
+              <span className="vq-version-action">版本</span>
             </button>
           </div>
         </div>
@@ -518,6 +523,9 @@ function Workbench({
         </header>
 
         <div className="vq-content">
+          <p className="vq-mobile-note" role="note">
+            这是一个桌面工作台。手机上能查看，但检索、拆解与评审建议在电脑上做。
+          </p>
           <ErrorBoundary key={routeKey(route)}>
             <Suspense fallback={<PageSkeleton />}>{renderPage()}</Suspense>
           </ErrorBoundary>
@@ -536,7 +544,7 @@ function Workbench({
             <div className="vq-update-head">
               <div>
                 <span className="vq-mono">{internal ? 'Build / Version' : '发布版本'}</span>
-                <h2 id="vq-update-title">版本与在线更新</h2>
+                <h2 id="vq-update-title">版本信息</h2>
               </div>
               <button type="button" className="vq-icon-button" aria-label="关闭" onClick={() => setUpdateOpen(false)}>
                 <X size={16} />
@@ -626,7 +634,32 @@ function Workbench({
 
 function App() {
   const { session, loading: sessionLoading, signIn, register, signOut } = useSession()
+  // 服务条款 / 隐私说明：不登录也要能打开（登录页页脚可点进来）
+  const route = useRoute()
   const [authNotice, setAuthNotice] = useState('')
+
+  // 新账号第一次进工作台：落到引导页；看过一次就不再自动打开（按账号记，换账号各算各的）
+  const seenKey = session ? welcomeSeenKey(session.user.id) : ''
+  const currentRouteKey = routeKey(route)
+  useEffect(() => {
+    if (!session || !seenKey) return
+    if (currentRouteKey !== 'page:overview') return
+    try {
+      if (window.localStorage.getItem(seenKey)) return
+    } catch {
+      return
+    }
+    navigate({ kind: 'welcome' }, { replace: true })
+  }, [session, seenKey, currentRouteKey])
+
+  const finishWelcome = useCallback(() => {
+    try {
+      if (seenKey) window.localStorage.setItem(seenKey, '1')
+    } catch {
+      // 隐私模式下写不进去：本次进工作台，下次还会打开引导，可以接受
+    }
+    navigate({ kind: 'page', page: 'overview' }, { replace: true })
+  }, [seenKey])
 
   const handleSignIn = useCallback(
     async (input: SignInInput) => {
@@ -653,6 +686,22 @@ function App() {
     },
     [signOut],
   )
+
+  if (route.kind === 'welcome' && session) {
+    return (
+      <Suspense fallback={<PageSkeleton label="正在准备引导" />}>
+        <WelcomePage name={session.user.name} onDone={finishWelcome} />
+      </Suspense>
+    )
+  }
+
+  if (route.kind === 'legal') {
+    return (
+      <Suspense fallback={<PageSkeleton label="正在打开条款" />}>
+        <LegalPage doc={route.doc} />
+      </Suspense>
+    )
+  }
 
   return (
     <RequireSession

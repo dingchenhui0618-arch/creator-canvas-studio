@@ -1889,6 +1889,43 @@ P1 八条、P2 六条见审计文。
 
 **下一步建议（三件都不依赖外部决策）**：①后台加「新建账号」；②备份脚本 + 一次恢复演练（`model-keys.json` 必须与 `.model-keys.secret` 成对）；③种 20 条真实模板。
 
+## 五十、2026-11-11 追加：把审计里的 P0 与 P1 做掉，并加新用户引导页（第三十三批）
+
+审计列了 7 条 P0、8 条 P1。这一批把**除「内容冷启动」以外的 P0 全部做完**，P1 做完 7 条（剩外部告警卡在通道上），
+另加一个 `/#/welcome` 引导页。完整证据见 [docs/launch-remediation-2026-11-11.md](docs/launch-remediation-2026-11-11.md)。
+
+| 交付 | 生产证据 |
+| --- | --- |
+| 后台「新建账号」 | `POST /api/admin/users` 201；页面建号后立即能登录；口令留空自动生成、只显示一次；账本 welcome + grant 两笔 |
+| 额度申请闭环 | 设置页提交 → 后台队列「发放 / 全部发放 / 忽略」；发放后余额 120 → 420；重复处理 409 |
+| 合规两页 + 备案号槽位 | `/#/legal/terms`、`/#/legal/privacy` 不登录可读；`VQ_ICP`、`VQ_SUPPORT_EMAIL` 配了才显示 |
+| 备份与恢复 | `scripts/backup.mjs` + `verify-restore.mjs`；生产演练 704 KB / 23 文件，解包读出 users 1、keys 2、templates 1；systemd 每日 03:30 |
+| 出图出视频明示 | `VQ_GATEWAY_OPEN` 默认关：生成请求 503「生成能力暂未开放」，不再让上游 402 装成「生成失败」 |
+| 限流 | 按 IP + 桶（检索 20 / 复刻 6 / 评审 10 / 对话 30 / 画布 6 / 申请 3，每分钟）；第 4 次申请实测 429 + Retry-After |
+| 文案与状态 | 评审页「插件服务未启动」→「评审引擎」；设置页「健康检查」→「功能可用性」，非内部环境不再显示诊断串；「在线更新」→「版本」；去掉「多工作区暂未开放」；复刻口径写清「不出成片」 |
+| 新用户引导 | 首进 `#/overview` 自动跳 `#/welcome`；三步卡片带真实单价与余额；看过按账号记住，页脚「上手指引」可回看 |
+
+![新用户引导页](docs/screenshot-welcome-2026-11-11.png)
+
+![后台建号：口令只显示一次](docs/screenshot-admin-create-user-2026-11-11.png)
+
+![额度申请队列](docs/screenshot-admin-credit-queue-2026-11-11.png)
+
+![服务条款：不登录可读](docs/screenshot-legal-terms-2026-11-11.png)
+
+### 五十.1 备份为什么必须整目录
+
+`model-keys.json` 里的 Key 是用 `.model-keys.secret` 加密的。只恢复前者，后台所有 Key 都解不开、模型全挂。
+所以 `scripts/backup.mjs` 在打包后会列一次内容，缺 `auth.db`、`templates.json`，或「有 model-keys.json 却没有 secret」直接非零退出。
+
+### 五十.2 还差的外部输入
+
+备案号与客服邮箱（`VQ_ICP` / `VQ_SUPPORT_EMAIL`）、邮件找回口令的 SMTP、定价与支付、种子模板、外部告警通道。
+给了值我就能接上；没给之前这些位置不显示、不编造。
+
+---
+
+
 
 
 

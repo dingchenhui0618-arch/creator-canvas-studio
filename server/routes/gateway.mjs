@@ -10,6 +10,7 @@
 // 只改 base URL 就能接过来，不用改它的业务代码。
 import { readBody, sendJson } from './_shared.mjs'
 import { authorizeGateway, createImageTask, createVideoTask, generateImage, listPoolModels, pollVideoTask } from '../gateway.mjs'
+import { config } from '../config.mjs'
 
 const IMAGE_CREATE = new Set(['/api/gateway/v1/images/generations'])
 const IMAGE_CREATE_ASYNC = new Set(['/api/gateway/v1/images/generations/async'])
@@ -39,6 +40,13 @@ export function createGatewayRouter() {
       const auth = authorizeGateway(req)
       if (!auth.ok) {
         sendJson(res, auth.status, { ok: false, error: auth.error, code: auth.code })
+        return true
+      }
+
+      // 生成能力开关：渠道额度没开通时明确拒绝，而不是让上游 402 以「生成失败」回到画布上。
+      // 模型目录与轮询仍然可用：画布可以探活、可以取已完成的任务结果。
+      if (!config.gateway.open && req.method === 'POST') {
+        sendJson(res, 503, { ok: false, error: '生成能力暂未开放：平台渠道额度还没开通', code: 'GATEWAY_NOT_OPEN' })
         return true
       }
 

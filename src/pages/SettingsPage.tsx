@@ -4,7 +4,7 @@ import { MonoTag } from '../components/ui'
 import PageHead from '../components/PageHead'
 import { getBillingOverview, type BillingOverview } from '../api/billing'
 import { useUiMode } from '../api/app'
-import { creditKindLabel, getCredits, getSystemHealth, type CreditEntry, type CreditsResponse, type SystemHealth } from '../api/credits'
+import { creditKindLabel, getCredits, getMyCreditRequest, requestCredits, getSystemHealth, type CreditEntry, type CreditRequest, type CreditsResponse, type SystemHealth } from '../api/credits'
 import { changePassword } from '../api/auth'
 import { initialsFor, sessionKindLabel, type Session } from '../auth/session'
 import '../styles/shell.css'
@@ -54,6 +54,14 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
   const [pwBusy, setPwBusy] = useState(false)
   const [pwError, setPwError] = useState('')
   const [pwMessage, setPwMessage] = useState('')
+  // 额度申请：充值没接，用户要有可执行的出口
+  const [reqPending, setReqPending] = useState<CreditRequest | null>(null)
+  const [reqOpen, setReqOpen] = useState(false)
+  const [reqAmount, setReqAmount] = useState('200')
+  const [reqReason, setReqReason] = useState('')
+  const [reqBusy, setReqBusy] = useState(false)
+  const [reqError, setReqError] = useState('')
+  const [reqMessage, setReqMessage] = useState('')
 
   const loadCredits = useCallback(() => {
     getCredits(LEDGER_PAGE)
@@ -70,6 +78,9 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
       .then(setBilling)
       .catch((caught) => setBillingError(caught instanceof Error ? caught.message : '充值状态读取失败'))
     loadCredits()
+    getMyCreditRequest()
+      .then((data) => setReqPending(data.pending))
+      .catch(() => setReqPending(null))
   }, [loadCredits])
 
   const ledger = credits ? [...credits.ledger, ...ledgerMore] : []
@@ -98,6 +109,23 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
     loadHealth()
   }, [loadHealth])
 
+  const submitCreditRequest = async () => {
+    if (reqBusy) return
+    setReqBusy(true)
+    setReqError('')
+    setReqMessage('')
+    try {
+      const result = await requestCredits(Number(reqAmount) || 0, reqReason.trim())
+      setReqPending(result.pending || result.request)
+      setReqMessage(result.created ? '已提交，管理员处理后积分会自动到账。' : '你已经有一条待处理的申请，不用重复提交。')
+      setReqOpen(false)
+      setReqReason('')
+    } catch (caught) {
+      setReqError(caught instanceof Error ? caught.message : '提交失败')
+    } finally {
+      setReqBusy(false)
+    }
+  }
   const submitPassword = async () => {
     if (pwBusy) return
     setPwError('')
@@ -194,7 +222,7 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
             <div className="vq-row">
               <div className="vq-row-copy">
                 <strong>工作区</strong>
-                <span>{internal ? '单工作区部署；多工作区切换还没有后端' : '当前工作区；多工作区切换暂未开放'}</span>
+                <span>{internal ? '单工作区部署；多工作区切换还没有后端' : '当前账号所属的工作区'}</span>
               </div>
               <span className="vq-row-value">{session.user.workspace}</span>
             </div>
@@ -303,6 +331,57 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
               </div>
             </div>
 
+            <div className="vq-row">
+              <div className="vq-row-copy">
+                <strong>额度不够用</strong>
+                <span>
+                  {reqPending
+                    ? '已提交申请（' + reqPending.amount + ' 积分），管理员处理前会保留这条。'
+                    : '充值通道还没开通。写一条申请，管理员在后台直接把积分发到你的账号。'}
+                </span>
+              </div>
+              <div className="vq-billing-actions">
+                <button type="button" className="vq-button vq-button--ghost" onClick={() => setReqOpen((value) => !value)}>
+                  {reqOpen ? '收起' : reqPending ? '查看申请' : '申请额度'}
+                </button>
+              </div>
+            </div>
+            {reqOpen ? (
+              reqPending ? (
+                <p className="vq-billing-note">
+                  申请 {reqPending.id} · {reqPending.amount} 积分 · 提交于 {formatStamp(reqPending.createdAt)}。
+                  {reqPending.reason ? ' 用途：' + reqPending.reason : ' 未填用途。'}
+                </p>
+              ) : (
+                <div className="vq-inline-form vq-password-form">
+                  <label className="vq-field">
+                    <span>需要多少积分</span>
+                    <input
+                      className="vq-input"
+                      value={reqAmount}
+                      onChange={(event) => setReqAmount(event.target.value.replace(/[^0-9]/g, ''))}
+                      inputMode="numeric"
+                      placeholder="200"
+                    />
+                  </label>
+                  <label className="vq-field">
+                    <span>用途（可选）</span>
+                    <input
+                      className="vq-input"
+                      value={reqReason}
+                      onChange={(event) => setReqReason(event.target.value)}
+                      placeholder="例如：本周解析 10 条模板"
+                      maxLength={120}
+                    />
+                  </label>
+                  <button type="button" className="vq-button vq-button--primary" onClick={() => void submitCreditRequest()} disabled={reqBusy}>
+                    {reqBusy ? '提交中…' : '提交申请'}
+                  </button>
+                </div>
+              )
+            ) : null}
+            {reqError ? <p className="vq-billing-note" role="alert">{reqError}</p> : null}
+            {reqMessage ? <p className="vq-billing-note">{reqMessage}</p> : null}
             {ledger.length ? (
               <table className="vq-ledger">
                 <thead>
@@ -387,9 +466,9 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
         <section className="vq-card vq-card--wide" id="system-status">
           <div className="vq-card-head">
             <div>
-              <span className="vq-mono">系统状态 / Health</span>
-              <h2>健康检查</h2>
-              <p>{internal ? '这里会真连数据库、数据目录、模板库、模型接口和检索接口，不是「环境变量填了没填」。' : '这里会检查数据存储、模板库、模型与检索服务是否可用。'}</p>
+              <span className="vq-mono">可用性 / Status</span>
+              <h2>功能可用性</h2>
+              <p>{internal ? '这里会真连数据库、数据目录、模板库、模型接口和检索接口，不是「环境变量填了没填」。' : '看一下检索、评审、模型与数据存储现在能不能用。细节在后台「系统」页。'}</p>
             </div>
             <div className="vq-account-actions">
               {health ? <MonoTag>{HEALTH_LABEL[health.status] || health.status}</MonoTag> : null}
@@ -408,9 +487,11 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
                   <div className="vq-health-row" key={check.id}>
                     <strong>{check.label}</strong>
                     <span className={'vq-health-tag ' + check.status}>{HEALTH_LABEL[check.status] || check.status}</span>
-                    <span className="detail" title={check.detail}>
-                      {check.detail}
-                    </span>
+                    {internal ? (
+                      <span className="detail" title={check.detail}>
+                        {check.detail}
+                      </span>
+                    ) : null}
                     {internal ? <span className="ms">{check.ms}ms</span> : null}
                   </div>
                 ))}
@@ -419,9 +500,7 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
               <p className="vq-ledger-empty">检测中…</p>
             )}
             <p className="vq-billing-note">
-              {internal
-                ? '结果缓存 10 秒，避免刷新把上游探活打成刷屏'
-                : '结果缓存 10 秒，避免频繁检测'}
+              {internal ? '结果缓存 10 秒，避免刷新把上游探活打成刷屏' : '结果缓存 10 秒'}
               ；最后检测于 {health ? formatStamp(health.checkedAt) : '—'}。
             </p>
           </div>

@@ -95,7 +95,7 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
       <PageHead
         kicker="模板库 / TEMPLATES"
         title="模板库"
-        desc="只存原链接、互动数据和解析出来的脚本与分镜，不保存原视频文件。雷达里点「加入模板库」会先存一条待解析条目，点「一键复刻」才会补上解析内容。"
+        desc="只存原链接、互动数据和解析出来的脚本与分镜，不保存原视频文件。雷达里点「加入模板库」先存一条待解析条目，点「解析」才补上脚本与分镜；解析结果可直接交给拍摄，平台当前不出成片。"
         actions={
           <>
             <button className="button button--ghost" onClick={onBack}>回到雷达</button>
@@ -135,7 +135,7 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
         <div className="radar-empty">
           <Layers size={22} />
           <strong>模板库还是空的</strong>
-          <span>去「爆款雷达」检索一条：点「加入模板库」先存链接与互动数据，点「一键复刻」再拆脚本和分镜。</span>
+          <span>去「爆款雷达」检索一条：点「加入模板库」先存链接与互动数据，点「解析」再拆脚本和分镜（出成片要自己拍）。</span>
           <button className="button button--primary" onClick={onBack}>去检索一条</button>
         </div>
       ) : (

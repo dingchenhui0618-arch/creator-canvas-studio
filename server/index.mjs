@@ -33,6 +33,7 @@ import { currentUser, listUsers, clientIp, isAdmin } from './auth.mjs'
 import { charge, refund, ensureWelcomeCredits } from './credits.mjs'
 import { enter, leave } from './gate.mjs'
 import { installProcessGuards, logEvent, logRequestError, startAccess } from './log.mjs'
+import { rateLimit } from './ratelimit.mjs'
 import { deepHealth } from './health.mjs'
 import { clearModelBlock, modelServiceState } from './service-state.mjs'
 import { fetchPublic } from './media.mjs'
@@ -232,6 +233,18 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 401, { error: '未登录', loginRequired: true })
     }
 
+    // 最贵的几个入口按 IP 限速：积分挡不住换号刷，上游额度才是真被烧的东西
+    const limited = rateLimit(req, pathname, clientIp(req))
+    if (limited) {
+      res.setHeader('Retry-After', String(limited.retryAfterSec))
+      return sendJson(res, 429, {
+        error: '操作太频繁了，请 ' + limited.retryAfterSec + ' 秒后再试',
+        code: 'RATE_LIMITED',
+        bucket: limited.bucket,
+        retryAfterSec: limited.retryAfterSec,
+      })
+    }
+
     for (const route of featureRoutes) {
       const prefixes = [route.prefix, ...(route.extraPrefixes || [])]
       if (prefixes.some((prefix) => pathname === prefix || pathname.startsWith(prefix + '/'))) {
@@ -261,6 +274,8 @@ const server = http.createServer(async (req, res) => {
         mode: config.ui.mode,
         internal: config.ui.mode === 'internal',
         version: PKG.version,
+        icp: config.site.icp,
+        supportEmail: config.site.supportEmail,
       })
     }
 

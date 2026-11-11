@@ -89,6 +89,9 @@ export const config = {
   // 令牌与画布互通密钥分开：一把给账号，一把给出图，泄露时能单独轮换。
   gateway: {
     token: (process.env.VQ_GATEWAY_TOKEN || '').trim(),
+    // 渠道额度是否已开通：没开通时网关对生成请求直接 503 并说明原因，
+    // 不让上游的 402 以「生成失败」的样子回到画布上。买了额度写 VQ_GATEWAY_OPEN=1。
+    open: process.env.VQ_GATEWAY_OPEN === '1',
     imageTimeoutMs: Number(process.env.VQ_GATEWAY_IMAGE_TIMEOUT_MS || 120000),
     videoTimeoutMs: Number(process.env.VQ_GATEWAY_VIDEO_TIMEOUT_MS || 60000),
     publicBaseUrl: (process.env.VQ_PUBLIC_BASE_URL || 'https://visionqa.wavisionai.cn').trim().replace(/\/+$/, ''),
@@ -146,6 +149,12 @@ export const config = {
     token: (process.env.REPLICATE_REMOTE_TOKEN || '').trim(),
     label: process.env.REPLICATE_REMOTE_LABEL || 'remote-worker',
     timeoutMs: Number(process.env.REPLICATE_REMOTE_TIMEOUT_MS || 180000),
+  },
+  // 站点信息：备案号与客服邮箱由环境变量给，代码里不写死、也不编造。
+  // 没有配置就不显示（页脚不摆空链接，登录页不摆假邮箱）。
+  site: {
+    icp: (process.env.VQ_ICP || '').trim(),
+    supportEmail: (process.env.VQ_SUPPORT_EMAIL || '').trim(),
   },
   auth: {
     dbFile: path.join(dataDir, 'auth.db'),

@@ -96,6 +96,46 @@ export const grantCredits = (userId: string, amount: number, note: string) =>
     body: JSON.stringify({ amount, note }),
   })
 
+
+export type CreditRequest = {
+  id: string
+  userId: string
+  email: string
+  name: string
+  amount: number
+  reason: string
+  status: 'pending' | 'granted' | 'ignored'
+  createdAt: string
+  resolvedAt: string | null
+  resolvedBy: string | null
+  grantedAmount: number | null
+}
+
+// 额度申请：积分不够时的出口（充值通道还没接，定价未定）
+export const getMyCreditRequest = () => request<{ ok: boolean; pending: CreditRequest | null }>('/api/credits/request')
+
+export const requestCredits = (amount: number, reason: string) =>
+  request<{ ok: boolean; created: boolean; request: CreditRequest; pending: CreditRequest | null }>('/api/credits/request', {
+    method: 'POST',
+    body: JSON.stringify({ amount, reason }),
+  })
+
+export const listCreditRequests = (status = '') =>
+  request<{ items: CreditRequest[]; total: number; pending: number }>('/api/admin/credit-requests' + (status ? '?status=' + status : ''))
+
+export const resolveCreditRequest = (id: string, body: { action: 'grant' | 'ignore'; amount?: number }) =>
+  request<{ ok: boolean; request: CreditRequest; balance: number | null }>('/api/admin/credit-requests/' + id, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+
+// 后台建号：不填口令时服务端生成一次性临时口令（只在这次响应里返回）。
+// 建完账本里会有两笔：服务端给的初始额度 + 管理员追加的额度。
+export const createAdminUser = (input: { email: string; name?: string; kind?: 'admin' | 'account'; password?: string; credits?: number }) =>
+  request<{ ok: boolean; password: string; balance: number; user: AdminUser }>('/api/admin/users', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
 // 管理员重置口令：不带密码时服务端生成临时口令，只在这一次响应里返回。
 export const resetAdminPassword = (userId: string, password?: string) =>
   request<{ ok: boolean; password: string; signedOut: number; user: AdminUser }>('/api/admin/users/' + userId + '/password', {

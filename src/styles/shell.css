@@ -2199,3 +2199,50 @@
   color: var(--muted);
   font-size: 12px;
 }
+
+/* 服务条款 / 隐私说明：公开阅读页，不登录也能打开 */
+.vq-legal { min-height: 100vh; background: var(--canvas); color: var(--ink); font-family: var(--font-ui); padding: 48px 24px 64px; }
+.vq-legal-inner { max-width: 720px; margin: 0 auto; background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 40px 40px 32px; box-shadow: var(--shadow-raise); }
+.vq-legal-back { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); background: none; border: 0; padding: 0; cursor: pointer; }
+.vq-legal-back:hover { color: var(--ink); }
+.vq-legal h1 { margin: 24px 0 4px; font-size: 26px; font-weight: 500; letter-spacing: -0.01em; }
+.vq-legal-meta { margin: 0 0 32px; font-size: 12px; color: var(--faint); }
+.vq-legal h2 { margin: 32px 0 8px; font-size: 15px; font-weight: 500; }
+.vq-legal p { margin: 0; font-size: 14px; line-height: 1.75; color: var(--muted); }
+.vq-legal-foot { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--line-faint); font-size: 12px; color: var(--faint); }
+@media (max-width: 640px) { .vq-legal { padding: 16px 12px 40px; } .vq-legal-inner { padding: 24px 20px; } .vq-legal h1 { font-size: 22px; } }
+/* 新用户引导页：三步卡片 + 真实单价与余额 */
+.vq-welcome { min-height: 100vh; background: var(--canvas); color: var(--ink); font-family: var(--font-ui); padding: 64px 24px; }
+.vq-welcome-inner { max-width: 880px; margin: 0 auto; }
+.vq-welcome-kicker { font-size: 12px; color: var(--faint); letter-spacing: 0.04em; }
+.vq-welcome h1 { margin: 12px 0 8px; font-size: 30px; font-weight: 500; letter-spacing: -0.02em; }
+.vq-welcome-lede { margin: 0 0 32px; max-width: 620px; font-size: 14px; line-height: 1.7; color: var(--muted); }
+.vq-welcome-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.vq-welcome-step { display: flex; flex-direction: column; gap: 8px; padding: 20px; text-align: left; background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-md); cursor: pointer; transition: border-color 0.15s ease, transform 0.15s ease; }
+.vq-welcome-step:hover { border-color: var(--line-strong); transform: translateY(-1px); }
+.vq-welcome-step:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.vq-welcome-step-head { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+.vq-welcome-step strong { font-size: 14px; font-weight: 500; line-height: 1.4; }
+.vq-welcome-step-body { font-size: 13px; line-height: 1.6; color: var(--muted); }
+.vq-welcome-step-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--line-faint); font-size: 12px; color: var(--faint); }
+.vq-welcome-note { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 24px; padding: 16px 20px; background: var(--surface); border: 1px solid var(--line-faint); border-radius: var(--radius-md); font-size: 13px; color: var(--muted); }
+.vq-welcome-foot { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-top: 40px; font-size: 12px; color: var(--faint); }
+@media (max-width: 760px) { .vq-welcome { padding: 32px 16px; } .vq-welcome h1 { font-size: 24px; } .vq-welcome-steps { grid-template-columns: 1fr; } }
+/* 窄屏只提示，不假装做了移动端适配 */
+.vq-mobile-note { display: none; }
+@media (max-width: 900px) {
+  .vq-mobile-note {
+    display: block;
+    margin: 0 0 12px;
+    padding: 8px 12px;
+    border: 1px solid var(--line-faint);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+}
+
+
+

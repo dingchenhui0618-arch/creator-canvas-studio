@@ -10,7 +10,7 @@ import {
 } from '../auth/session'
 import type { RegisterInput, Session, SignInInput } from '../auth/session'
 import { getAuthConfig } from '../api/auth'
-import { useUiMode } from '../api/app'
+import { useSiteInfo, useUiMode } from '../api/app'
 import '../styles/shell.css'
 
 type Mode = 'signin' | 'signup'
@@ -31,6 +31,7 @@ type Props = {
 
 export function LoginPage({ notice, onSignIn, onRegister }: Props) {
   const { internal } = useUiMode()
+  const site = useSiteInfo()
   const [mode, setMode] = useState<Mode>('signin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -370,7 +371,9 @@ export function LoginPage({ notice, onSignIn, onRegister }: Props) {
                     setInfo(
                       internal
                         ? '内部环境：管理员在「后台 → 账号」里可直接重置口令，新口令只显示一次；该账号所有旧会话会被注销。'
-                        : '忘记密码请联系工作区管理员重置。平台不通过邮件找回，也不会以任何方式向你索要当前口令。',
+                        : site.supportEmail
+                          ? '忘记口令请找管理员重置（' + site.supportEmail + '）。平台不通过邮件找回，也不会以任何方式向你索要当前口令。'
+                          : '忘记口令请找工作区管理员重置。平台不通过邮件找回，也不会以任何方式向你索要当前口令。',
                     )
                   }
                 >
@@ -393,6 +396,11 @@ export function LoginPage({ notice, onSignIn, onRegister }: Props) {
               )}
             </button>
           </form>
+
+          <p className="vq-login-foot vq-login-foot--legal">
+            <a className="vq-link" href="#/legal/terms">服务条款</a>
+            <a className="vq-link" href="#/legal/privacy">隐私说明</a>
+          </p>
 
           <p className="vq-login-foot">
             <Lock size={12} />

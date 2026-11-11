@@ -18,6 +18,8 @@ export type Route =
   //   #/canvas/project/<画布ID>    画布服务里的画布项目（工作台「继续上次的画布」走它）
   | { kind: 'page'; page: ShellPage; flowId?: string; canvasId?: string }
   | { kind: 'agent-editor'; agentRef: string | null }
+  | { kind: 'legal'; doc: 'terms' | 'privacy' }
+  | { kind: 'welcome' }
   | { kind: 'admin'; section: AdminSection }
 
 export const DEFAULT_ROUTE: Route = { kind: 'page', page: 'overview' }
@@ -79,6 +81,8 @@ export function parseRoute(hash: string): Route {
 
   const [head, tail] = segments
   if (head === 'admin') return { kind: 'admin', section: parseAdminSection(tail) }
+  if (head === 'legal') return { kind: 'legal', doc: tail === 'privacy' ? 'privacy' : 'terms' }
+  if (head === 'welcome') return { kind: 'welcome' }
   if (head === 'agents') {
     if (!tail) return { kind: 'page', page: 'agents' }
     if (tail === 'new') return { kind: 'agent-editor', agentRef: null }
@@ -104,6 +108,8 @@ export function toHash(route: Route): string {
     return '#/' + route.page
   }
   if (route.kind === 'admin') return '#/admin/' + route.section
+  if (route.kind === 'legal') return '#/legal/' + route.doc
+  if (route.kind === 'welcome') return '#/welcome'
   return '#/agents/' + (route.agentRef ? encodeURIComponent(route.agentRef) : 'new')
 }
 
@@ -117,6 +123,8 @@ export function routeKey(route: Route): string {
     return 'page:' + route.page
   }
   if (route.kind === 'admin') return 'admin:' + route.section
+  if (route.kind === 'legal') return 'legal:' + route.doc
+  if (route.kind === 'welcome') return 'welcome'
   return 'agent-editor:' + (route.agentRef ?? 'new')
 }
 
