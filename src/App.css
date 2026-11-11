@@ -483,3 +483,12 @@ button { cursor:pointer; }
 .rail-thumb--gold,
 .rail-thumb--blue,
 .rail-thumb--rose { background: #efeeea; }
+
+/* ---------- 时长与台词对账（hypit P0-1）---------- */
+.timing-note { display:flex; flex-wrap:wrap; align-items:baseline; gap:8px; margin:0; padding:8px 12px; border:1px solid var(--line); border-radius:9px; background:rgba(255,254,250,.7); font-size:12px; color:var(--ink-soft); }
+.timing-note strong { font-family:var(--font-mono),monospace; font-size:12px; font-weight:700; color:var(--ink); }
+.timing-note span { color:var(--ink-faint); }
+.beat-time-warn { display:block; margin-top:2px; font-style:normal; color:var(--warn); }
+.timing-note--tight { border-color:rgba(138,91,8,.28); background:var(--warn-soft); }
+.timing-note--tight strong { color:var(--warn); }
+.shot-tags span.is-tight { background:var(--warn-soft); color:var(--warn); }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertCircle, Copy, ExternalLink, Film, Heart, Layers, MessageCircle, Play, RefreshCw, ScanEye, Search, Share2, Sparkles, Star, Trash2, X } from 'lucide-react'
 import { applyTemplate, coverSrc, deleteTemplate, formatCount, formatDuration, getHealth, getTemplate, listTemplates } from '../api/radar'
+import { describeTiming } from '../domain/radar'
 import type { MediaItem, ReplicaTemplate } from '../domain/radar'
 import { requestReview } from '../state/review'
 import { ReplicateModal } from '../components/ReplicateModal'
@@ -251,7 +252,10 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
                         <ol className="beat-list">
                           {detail.structure.map((beat, index) => (
                             <li key={index} className="beat-item">
-                              <span className="beat-time">{beat.startSec}s – {beat.endSec}s</span>
+                              <span className="beat-time">
+                                {beat.startSec}s – {beat.endSec}s
+                                {beat.fit === 'tight' && <em className="beat-time-warn">台词约需 {beat.expectedSec}s</em>}
+                              </span>
                               <div>
                                 <strong>{beat.beat}</strong>
                                 <p>{beat.voiceover}</p>
@@ -264,6 +268,12 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
 
                       <section className="drawer-section">
                         <div className="drawer-section-head"><h3>分镜表</h3><span>{detail.storyboard.length} 个镜头</span></div>
+                        {detail.timing && detail.timing.estimatedSec > 0 ? (
+                          <p className={`timing-note timing-note--${detail.timing.fit}`}>
+                            <strong>台词约需 {detail.timing.estimatedSec}s</strong>
+                            <span>原片 {detail.timing.durationSec}s · {describeTiming(detail.timing)}</span>
+                          </p>
+                        ) : null}
                         <div className="shot-table">
                           {detail.storyboard.map((shot) => (
                             <div className="shot-row" key={shot.shotNo}>
@@ -276,6 +286,7 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
                                 <div className="shot-tags">
                                   <span>{shot.camera || '机位未标注'}</span>
                                   {shot.caption && <span>字幕：{shot.caption}</span>}
+                                  {shot.expectedSec && shot.fit === 'tight' ? <span className="is-tight">念完约 {shot.expectedSec}s</span> : null}
                                   {shot.audio && <span>{shot.audio}</span>}
                                 </div>
                                 {shot.purpose && <p>{shot.purpose}</p>}

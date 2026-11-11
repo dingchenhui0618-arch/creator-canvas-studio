@@ -2,6 +2,7 @@ import fsp from 'node:fs/promises'
 import { config, visionEnabled } from './config.mjs'
 import { chatCompletion } from './chatcall.mjs'
 import { vaultModels } from './keyvault.mjs'
+import { reconcileTimeline } from './speech.mjs'
 
 const SYSTEM_PROMPT = [
   '你是短视频拆解专家。用户会给你一条短视频的抽帧画面（按时间顺序，每帧带时间戳）和检测到的镜头切换点。',
@@ -81,14 +82,18 @@ async function callWithFallback(messages, log) {
   throw lastError || new Error('所有视觉模型都不可用')
 }
 
-function normalizeResult(raw, frames) {
+// 导出给单测：时长对账是这条链路里唯一能用数字验证的部分，别只靠线上肉眼看。
+export function normalizeResult(raw, frames, videoDuration = 0) {
   const last = frames[frames.length - 1]?.t ?? 0
+  // 片长以真实视频时长为准，抽帧最后一帧往往比片长短一截（帧没落到结尾），
+  // 拿它当总时长会和界面上写的 0:18 对不上。
+  const total = Number(videoDuration) > 0 ? Math.round(Number(videoDuration) * 10) / 10 : last
   const clampSec = (value, fallback) => {
     const num = Number(value)
     if (!Number.isFinite(num)) return fallback
-    return Math.max(0, Math.min(last + 2, Math.round(num * 10) / 10))
+    return Math.max(0, Math.min(total, Math.round(num * 10) / 10))
   }
-  const structure = (Array.isArray(raw.structure) ? raw.structure : []).slice(0, 12).map((beat, index) => ({
+  const rawBeats = (Array.isArray(raw.structure) ? raw.structure : []).slice(0, 12).map((beat, index) => ({
     beat: String(beat.beat || ('段落 ' + (index + 1))).slice(0, 40),
     startSec: clampSec(beat.startSec, index === 0 ? 0 : last * (index / 12)),
     endSec: clampSec(beat.endSec, last),
@@ -96,7 +101,7 @@ function normalizeResult(raw, frames) {
     onScreen: String(beat.onScreen || '').slice(0, 120),
     purpose: String(beat.purpose || '').slice(0, 200),
   }))
-  const storyboard = (Array.isArray(raw.storyboard) ? raw.storyboard : []).slice(0, 24).map((shot, index) => ({
+  const rawShots = (Array.isArray(raw.storyboard) ? raw.storyboard : []).slice(0, 24).map((shot, index) => ({
     shotNo: index + 1,
     startSec: clampSec(shot.startSec, frames[index]?.t ?? 0),
     endSec: clampSec(shot.endSec, frames[index + 1]?.t ?? last),
@@ -107,6 +112,16 @@ function normalizeResult(raw, frames) {
     audio: String(shot.audio || '').slice(0, 120),
     purpose: String(shot.purpose || '').slice(0, 200),
   }))
+
+  // 时长与台词对账：模型给的秒数常常和台词量对不上（2 秒要塞 90 个字，或者 12 秒只说一句话），
+  // 照着这种分镜表拍不出片。这里按语速把每段念完需要的时间算出来，逐段标出 mismatch。
+  const beatsTimed = reconcileTimeline(rawBeats, { totalSec: total, textOf: (beat) => beat.voiceover || beat.onScreen })
+  const shotsTimed = reconcileTimeline(rawShots, { totalSec: total, textOf: (shot) => shot.caption })
+  const structure = beatsTimed.rows
+  const storyboard = shotsTimed.rows
+  // 整条以「段落口播」为准：那才是真的被念出来的内容；镜头字幕往往只是屏幕上的一行短字，
+  // 拿它估整条时长会系统性偏短。段落没口播时才退回镜头层。
+  const timing = beatsTimed.summary.estimatedSec > 0 ? beatsTimed.summary : shotsTimed.summary
   return {
     title: String(raw.title || '').slice(0, 40),
     contentType: String(raw.contentType || '口播干货').slice(0, 20),
@@ -115,6 +130,7 @@ function normalizeResult(raw, frames) {
     hookType: String(raw.hookType || '痛点提问').slice(0, 20),
     structure,
     storyboard,
+    timing,
     analysis: {
       pacing: String(raw.analysis?.pacing || '中').slice(0, 8),
       viralPoints: (raw.analysis?.viralPoints || []).map((v) => String(v).slice(0, 200)).slice(0, 6),
@@ -154,5 +170,5 @@ export async function analyzeFrames({ frames, meta, sceneCuts, log }) {
     ], log)
     parsed = extractJson(repaired.text)
   }
-  return normalizeResult(parsed, frames)
+  return normalizeResult(parsed, frames, meta.duration)
 }

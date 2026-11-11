@@ -541,6 +541,22 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 201, { ok: true, flow, template: updated })
       }
       const rules = (template.analysis?.reusableRules || []).join('；')
+      // 分镜时长按台词量估过：念不完的镜头在提示词里标出来，复刻时先删口播再加时长
+      // 以「段落口播」为准：真正要念出来的是口播，镜头字幕往往只有三五个字
+      const beatsWithTiming = (template.structure || []).filter((beat) => beat.expectedSec)
+      const timingNote = beatsWithTiming.length
+        ? beatsWithTiming
+          .slice(0, 12)
+          .map((beat, index) => '#' + (index + 1) + ' ' + (beat.startSec ?? 0) + 's–' + (beat.endSec ?? 0) + 's（这句要念 ' + beat.expectedSec + 's）：' + String(beat.voiceover || beat.beat || '').replace(/[。；;，,]+$/, ''))
+          .join('；')
+        : (template.storyboard || [])
+          .filter((shot) => shot.expectedSec)
+          .slice(0, 12)
+          .map((shot) => '#' + shot.shotNo + ' ' + (shot.startSec ?? 0) + 's–' + (shot.endSec ?? 0) + 's（台词约需 ' + shot.expectedSec + 's）' + (shot.caption ? '：' + shot.caption : ''))
+          .join('；')
+      const timingLine = timingNote
+        ? '口播与镜头时长对账：' + timingNote + '。镜头时长必须容得下台词（中文口播约 4.5 字/秒）。'
+        : ''
       const structureText = (template.structure || [])
         .map((item) => (typeof item === 'string' ? item : item?.title || ''))
         .filter(Boolean)
@@ -552,7 +568,9 @@ const server = http.createServer(async (req, res) => {
         (rules ? '可复用规则：' + rules + '。' : '') +
         '开头钩子参考：' +
         (template.hook || '未标注') +
-        '。输出可以直接进入画布继续改。'
+        '。' +
+        (timingLine ? timingLine : '') +
+        '输出可以直接进入画布继续改。'
       const flow = await createFlow(
         {
           name: String(body.name || template.title || '模板复刻').slice(0, 60),

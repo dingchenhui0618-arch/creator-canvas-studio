@@ -85,6 +85,7 @@ export async function saveTemplateFromItem({ item, user = null }) {
     hookType: '',
     structure: [],
     storyboard: [],
+    timing: null,
     analysis: { pacing: '', viralPoints: [], reusableRules: [], targetAudience: '' },
     frames: [],
     cover: String(item?.cover || ''),
@@ -139,6 +140,8 @@ export async function createTemplate({ item, meta, analysis, frames, jobId, user
     hookType: analysis.hookType,
     structure: analysis.structure,
     storyboard: analysis.storyboard.map((shot) => ({ ...shot, frameUrl: '/media/frames/' + id + '/frame-' + String(shot.frameIndex).padStart(2, '0') + '.jpg' })),
+    // 时长与台词对账结果：模板详情和「复用此模板」都靠它判断这条片子照不照得下来
+    timing: analysis.timing || null,
     analysis: analysis.analysis,
     frames: frames.map((frame) => ({ index: frame.index, t: frame.t, url: '/media/frames/' + id + '/' + frame.name })),
     cover: frames[0] ? '/media/frames/' + id + '/' + frames[0].name : '',

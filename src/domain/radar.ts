@@ -37,6 +37,9 @@ export type SearchResult = {
   quota?: QuotaNotice
 }
 
+/** 时长与台词对账：fit 由语速估算（约 4.5 字/秒）与原片时长比较得出。 */
+export type SpeechFit = 'ok' | 'tight' | 'loose' | 'untimed'
+
 export type ScriptBeat = {
   beat: string
   startSec: number
@@ -44,6 +47,9 @@ export type ScriptBeat = {
   voiceover: string
   onScreen: string
   purpose: string
+  /** 这段口播念完大约要几秒 */
+  expectedSec?: number
+  fit?: SpeechFit
 }
 
 export type StoryboardShot = {
@@ -57,6 +63,29 @@ export type StoryboardShot = {
   caption: string
   audio: string
   purpose: string
+  /** 这句字幕念完大约要几秒 */
+  expectedSec?: number
+  fit?: SpeechFit
+}
+
+export type TemplateTiming = {
+  estimatedSec: number
+  actualSec: number
+  durationSec: number
+  fit: SpeechFit
+  overSec: number
+  tight: number
+  loose: number
+}
+
+/** 一句话说明这条模板的时长问题（与 server/speech.mjs 的 describeTiming 同口径）。 */
+export function describeTiming(timing?: TemplateTiming | null): string {
+  if (!timing || !timing.estimatedSec) return ''
+  if (timing.fit === 'tight') {
+    return '台词量比原片长，照着念完大约要多 ' + Math.max(1, Math.round(timing.overSec)) + ' 秒'
+  }
+  if (timing.fit === 'loose') return '画面比台词长，照着拍会有空镜，需要补口播或加快剪辑'
+  return timing.tight ? '整体时长合理，其中 ' + timing.tight + ' 个镜头台词偏多' : '台词量与时长匹配'
 }
 
 export type TemplateAnalysis = {
@@ -87,6 +116,8 @@ export type ReplicaTemplate = {
   hookType: string
   structure: ScriptBeat[]
   storyboard: StoryboardShot[]
+  /** 整条模板的时长对账结果（saved 状态、纯画布工作流没有这一项） */
+  timing?: TemplateTiming | null
   analysis: TemplateAnalysis
   frames: { index: number; t: number; url: string }[]
   cover: string

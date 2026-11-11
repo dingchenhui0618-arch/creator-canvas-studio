@@ -10,7 +10,7 @@ import { extractUrl, readWebPage } from './webread.mjs'
 // 「模型名 + 状态码 + 建议」的结构化错误，交给路由原样返回。
 export const OUTPUT_TYPES = [
   { id: '脚本', label: '脚本', instruction: '输出短视频口播脚本：按段落写，标注每段时长与画面提示，全文控制在 400 字以内。' },
-  { id: '分镜', label: '分镜', instruction: '输出分镜表：用 Markdown 表格，列为 镜头号 / 时长 / 景别 / 画面 / 台词或字幕。' },
+  { id: '分镜', label: '分镜', instruction: '输出分镜表：用 Markdown 表格，列为 镜头号 / 时长 / 景别 / 画面 / 台词或字幕。时长按台词量给：中文口播约 4.5 字/秒，每镜标注「台词约需 X 秒」，两者对不上时先删台词再加时长。' },
   { id: '评审', label: '评审', instruction: '输出评审结论：先给「通过 / 待确认 / 问题」三类结论，再逐条给证据与修改建议。' },
   { id: '文案', label: '文案', instruction: '输出可直接投放的短文案：给 3 条备选，每条不超过 60 字，附一句投放建议。' },
 ]
