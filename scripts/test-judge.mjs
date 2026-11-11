@@ -20,6 +20,7 @@ process.env.VISIONQA_SERVICE_URL = 'http://127.0.0.1:1'
 
 let typesafeMode = 'ok'
 let chatMode = 'ok'
+let flakyCount = 0
 const judgeRequests = []
 
 const REVIEW = {
@@ -54,6 +55,18 @@ const judge = http.createServer((req, res) => {
     if (req.url === '/v1/chat/completions') {
       if (chatMode === 'region') {
         return res.writeHead(451, { 'Content-Type': 'application/json' }).end('{"title":"Typesafe is not available in your region.","status":451}')
+      }
+      const payload = JSON.parse(body || '{}')
+      // OpenAI 官方口径：启用 json_object 时输入里必须出现 "json" 字样，否则 400
+      if (chatMode === 'strict-json' && payload.response_format) {
+        return res.writeHead(400, { 'Content-Type': 'application/json' }).end(JSON.stringify({
+          error: { message: "Response input messages must contain the word 'json' in some form to use 'text.format' of type 'json_object'.", type: 'invalid_request_error' },
+        }))
+      }
+      // 上游偶发 5xx：第一次返回 502，第二次正常
+      if (chatMode === 'flaky') {
+        flakyCount += 1
+        if (flakyCount === 1) return res.writeHead(502, { 'Content-Type': 'application/json' }).end('{"error":"bad gateway"}')
       }
       const content = JSON.stringify({
         evidence_consistent: 0.77,
@@ -203,6 +216,24 @@ assert.equal(chatBody.response_format.type, 'json_object')
 assert.match(chatBody.messages[0].content, /evidence_consistent/)
 assert.match(chatBody.messages[1].content, /needs_review/, '判断要和评审一起发给判断模型')
 
+// 8b) 严格上游在 json 模式下 400（要求输入里有 "json" 字样）：去掉 response_format 重发一次，判断照样回来
+chatMode = 'strict-json'
+const strictJudged = await judgeReview(REVIEW, { intent: '' })
+assert.equal(strictJudged.status, 'ok')
+const strictCalls = judgeRequests.filter((item) => item.url === '/v1/chat/completions').slice(-2)
+assert.ok(JSON.parse(strictCalls[0].body).response_format, '第一次带 json 模式')
+assert.equal(JSON.parse(strictCalls[1].body).response_format, undefined, '第二次去掉 json 模式再问')
+assert.equal(strictJudged.evidenceConsistent, 0.77, '退回普通模式后仍拿到四个判断')
+chatMode = 'ok'
+
+// 8c) 上游 5xx 抖一下：重发一次就成功，不该因此丢掉整层判断
+flakyCount = 0
+chatMode = 'flaky'
+const flakyJudged = await judgeReview(REVIEW, { intent: '' })
+assert.equal(flakyJudged.status, 'ok')
+assert.equal(flakyCount, 2, '一次 502 后重发了一次')
+chatMode = 'ok'
+
 // 9) baseUrl 少写 /v1 也能拼对（TypeSafe 只认 /v1/systemone，少一段就是 404）
 const bareKey = createKey({
   name: '少写 /v1 的判断 Key',
@@ -252,4 +283,4 @@ assert.equal(JSON.stringify(listRoutes(50)).includes('sk-vision-1234567890'), fa
 vision.close()
 judge.close()
 fs.rmSync(temp, { recursive: true, force: true })
-console.log('PASS judge: 能力别名 / 四问映射 / 结果挂载不改结论 / 请求形态 / 路由留痕 / 失败不拖垮评审 / 未启用明确')
+console.log('PASS judge: 能力别名 / 四问映射 / 结果挂载不改结论 / 请求形态 / 路由留痕 / 失败不拖垮评审 / 未启用明确 / 严格上游去 json 模式 / 5xx 重发')

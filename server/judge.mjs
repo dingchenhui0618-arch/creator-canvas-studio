@@ -13,7 +13,9 @@
 // 没配 Key 时返回 status=disabled，评审照常出结论，不因为判断层缺席就把评审卡住。
 import { recordRoute, reportKey, resolveKeyCandidates } from './keyvault.mjs'
 
-const TIMEOUT_MS = 12_000
+// 判断层在评审请求里是最后一段，给推理型判断模型留够时间：实测 gpt-5.6-luna 一次判断
+// 单次调用 12–25 秒（含推理 token），原先的 12 秒会在模型正常可用时误判成失败。
+const TIMEOUT_MS = 30_000
 const MAX_ATTEMPTS = 2
 const VERSION_SUFFIX = /\/v\d+$/
 
@@ -252,35 +254,58 @@ export async function callJudge(key, state, questions, model) {
     if (!parsed.answered.length) throw new Error('判断模型没有返回判断结果')
     return { protocol, model: String(data?.model || model), usage: data?.usage || null, parsed, ms: Date.now() - started }
   }
-  const response = await requestWithRetry(judgeEndpoint(key.baseUrl, '/chat/completions'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key.apiKey },
-    body: JSON.stringify({
-      model,
-      temperature: 0,
-      stream: false,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: CHAT_INSTRUCTIONS },
-        { role: 'user', content: JSON.stringify({ state, questions }) },
-      ],
-    }),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-  })
-  const text = await response.text()
-  if (!response.ok) throw judgeFailure(response.status, text)
-  let body = null
-  try {
-    body = JSON.parse(text)
-  } catch {
-    throw new Error('判断模型返回的不是 JSON')
+  // 对话形态：严格实现（OpenAI 官方、部分兼容网关）在启用 json_object 时要求输入里出现 "json"
+  // 字样，另一些网关干脆不认 response_format（直接 400）。两种情况都退回「不带 json 模式」再试一次，
+  // 解析层本来就能从带围栏 / 带前缀的回复里挖 JSON，不该因为上游口径不同就整层失效。
+  const userContent = '评审内容（JSON）：' + JSON.stringify({ state, questions })
+  // 两次机会：第一次失败可能是「上游不认 json 模式」或「上游 5xx 抽风」（两者都实测踩到过），
+  // 分别退回不带 json 模式 / 稍等重发一次，再失败才把失败交给上层记路由日志。
+  let useJson = true
+  let grew = 0
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const response = await requestWithRetry(judgeEndpoint(key.baseUrl, '/chat/completions'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key.apiKey },
+      body: JSON.stringify({
+        model,
+        temperature: 0,
+        stream: false,
+        ...(useJson ? { response_format: { type: 'json_object' } } : {}),
+        messages: [
+          { role: 'system', content: CHAT_INSTRUCTIONS },
+          { role: 'user', content: userContent },
+        ],
+      }),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    })
+    const text = await response.text()
+    if (!response.ok) {
+      if (useJson && Number(response.status) === 400 && /response_format|json_object|must contain the word/i.test(text)) {
+        useJson = false
+        continue
+      }
+      // 5xx 是上游抽风，不是配置错：隔 800ms 重发一次，避免一次抖动就让评审少一层依据
+      if (Number(response.status) >= 500 && grew < 1) {
+        grew += 1
+        await new Promise((resolve) => setTimeout(resolve, 800))
+        continue
+      }
+      throw judgeFailure(response.status, text)
+    }
+    let body = null
+    try {
+      body = JSON.parse(text)
+    } catch {
+      throw new Error('判断模型返回的不是 JSON')
+    }
+    const content = body?.choices?.[0]?.message?.content || ''
+    const answers = extractJson(content)
+    if (!answers) throw new Error('判断模型没有按格式返回判断结果')
+    const parsed = parseChatJudgment(answers)
+    if (!parsed.answered.length) throw new Error('判断模型没有按格式返回判断结果')
+    return { protocol, model: String(body?.model || model), usage: body?.usage || null, parsed, ms: Date.now() - started }
   }
-  const content = body?.choices?.[0]?.message?.content || ''
-  const answers = extractJson(content)
-  if (!answers) throw new Error('判断模型没有按格式返回判断结果')
-  const parsed = parseChatJudgment(answers)
-  if (!parsed.answered.length) throw new Error('判断模型没有按格式返回判断结果')
-  return { protocol, model: String(body?.model || model), usage: body?.usage || null, parsed, ms: Date.now() - started }
+  throw new Error('判断模型调用失败：上游不接受 json 模式，也没给出可用判断')
 }
 
 /**
