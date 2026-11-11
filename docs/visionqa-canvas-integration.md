@@ -238,3 +238,7 @@ ssh -i ~/.ssh/taskwatch_relay_ed25519 root@139.196.123.28 'bash /tmp/vq-deploy2.
 
 ![画布：VisionQA 图标，顶栏只留品牌与画布页签](screenshot-canvas-branding-2026-11-10.png)
 
+
+### 8.1h 画布账号入口彻底下线（2026-11-11）
+
+详见 [canvas-account-gate.md](canvas-account-gate.md)：服务端拒绝画布自己的登录/注册/改密，独立打开画布只留回 VisionQA 的入口。
