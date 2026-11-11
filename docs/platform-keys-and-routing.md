@@ -44,7 +44,7 @@
 | POST | /api/admin/model-keys | 新增 |
 | PATCH | /api/admin/model-keys/:id | 改名称 / 地址 / Key / 模型 / 能力 / 优先级 / 权重 / 启停 |
 | DELETE | /api/admin/model-keys/:id | 删除 |
-| POST | /api/admin/model-keys/:id/test | 真实请求 baseUrl/models，返回状态码、耗时、模型数 |
+| POST | /api/admin/model-keys/:id/test | 对文本 / 视觉能力打一次真实请求（max_tokens=1）；出图 / 视频只探测凭证并写明 mode |
 
 所有写操作都进管理员操作审计（action: model-key.create/update/delete/test）。
 
@@ -54,7 +54,17 @@
 - 模型下拉框会自动出现 Key 池里声明的模型，前端不写死模型名。
 - 前端入口：后台「模型与密钥」页顶部新增「平台 Key 池」区块。
 
-![后台 · 平台 Key 池（2026-11-11 线上实拍）](screenshot-admin-key-pool-2026-11-11.png)
+### 2.5 后台能看见什么（2026-11-11 增补）
+
+管理 Key 不能只看「加进去了」，还要能回答三个问题：这把 Key 现在能不能用、为什么最近没被选中、失败是上游的什么错。
+
+- **真实调用自检**：「测试」不再拿 `GET /models` 的 200 冒充可用——文本 / 视觉能力会真的发一次 `chat/completions`（max_tokens=1），出图 / 视频因为会产生费用，只探测凭证，并在结果里标 `credential-probe`，界面上写「凭证正常 · 只验证了凭证」，不写成「可用」。
+- **每把 Key 的调用计数**：路由实际调用后累计成功 / 失败次数、最近一次错误与时间、冷却剩余秒数；失败 3 次进冷却的那把会在状态列显示「冷却中 42s」。
+- **合计**：顶部一行给出 已启用 / 总数、各能力数量、累计成功 / 失败、冷却中数量、环境变量兜底状态。
+
+![后台 · 平台 Key 池（2026-11-11 线上实拍，含真实调用自检与调用计数）](screenshot-admin-key-pool-usage-2026-11-11.png)
+
+图里这把是原 `.env` 里的 DeepSeek 凭证，通过管理接口迁进 Key 池；点「测试」发出的真实请求被上游以 402 `Insufficient Balance` 拒绝，界面如实显示错误原文——这正是「余额不足」这一唯一阻塞的线上证据。
 
 ## 三、第二期：画布账号桥（设计）
 
@@ -87,7 +97,7 @@
 **第一期（已完成）**
 
 - `node scripts/test-keyvault.mjs`：加密落盘 / 脱敏 / 模型匹配 / 冷却恢复 / 增删改。
-- `node scripts/test-model-keys-e2e.mjs`：真实 HTTP 走 Key 池、坏 Key 冷却后自动切到好 Key。
+- `node scripts/test-model-keys-e2e.mjs`：真实 HTTP 走 Key 池、坏 Key 冷却后自动切到好 Key；文本 Key 的「测试」必须打到 `/chat/completions`（不许用 /models 冒充），出图 Key 只探测凭证且标注 `credential-probe`。
 - 本地起服务实测：登录 → GET/POST/PATCH 管理接口 → `/api/models` 出现新模型 → 落盘文件不含明文。
 
 **第二期（待做）**

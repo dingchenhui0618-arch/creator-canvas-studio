@@ -226,11 +226,10 @@ export default function ModelKeyPool() {
             <EmptyState title="还没有平台 Key" description="贴一把上游 Key 进来，保存后下一次模型调用就会用到它。" />
           ) : (
             <div className="admin-table-wrap">
-              <table className="admin-table">
+              <table className="admin-table admin-table--keys">
                 <thead>
                   <tr>
-                    <th>名称 / 渠道</th>
-                    <th>凭证</th>
+                    <th>名称 · 渠道 · 凭证</th>
                     <th>能力</th>
                     <th>模型</th>
                     <th>路由</th>
@@ -244,17 +243,23 @@ export default function ModelKeyPool() {
                     <tr key={key.id}>
                       <td>
                         <strong>{key.name}</strong>
-                        <span className="admin-cell-sub">{key.provider} · {key.baseUrl}</span>
+                        <span className="admin-cell-sub admin-mono">{key.provider} · {key.masked}</span>
+                        <span className="admin-cell-sub admin-mono">{key.baseUrl}</span>
                       </td>
-                      <td className="admin-mono">{key.masked}</td>
                       <td>{key.capabilities.map((item) => <Badge key={item} tone="ok">{capabilityLabel(item)}</Badge>)}</td>
-                      <td className="admin-mono">{key.models.length ? key.models.join(', ') : '通用'}</td>
-                      <td className="admin-mono">P{key.priority} · W{key.weight}</td>
+                      <td className="admin-mono admin-key-model" title={key.models.join(', ')}>
+                        {key.models.length === 0
+                          ? '通用'
+                          : key.models.length > 2
+                            ? key.models.slice(0, 2).join(', ') + ' +' + (key.models.length - 2)
+                            : key.models.join(', ')}
+                      </td>
+                      <td className="admin-mono admin-nowrap">P{key.priority} · W{key.weight}</td>
                       <td>
-                        <span className="admin-mono">成功 {key.usage?.ok || 0} · 失败 {key.usage?.fail || 0}</span>
+                        <span className="admin-mono admin-nowrap">成功 {key.usage?.ok || 0} · 失败 {key.usage?.fail || 0}</span>
                         {key.usage?.lastError ? (
-                          <span className="admin-cell-sub" title={key.usage.lastError}>
-                            最近失败：{key.usage.lastError.slice(0, 40)}
+                          <span className="admin-key-test" title={key.usage.lastError}>
+                            最近失败：{key.usage.lastError}
                           </span>
                         ) : null}
                       </td>
@@ -266,7 +271,11 @@ export default function ModelKeyPool() {
                         ) : (
                           <Badge tone="warn">已停用</Badge>
                         )}
-                        {testResult[key.id] ? <span className="admin-cell-sub">{testResult[key.id]}</span> : null}
+                        {testResult[key.id] ? (
+                          <span className="admin-key-test" title={testResult[key.id]}>
+                            {testResult[key.id]}
+                          </span>
+                        ) : null}
                       </td>
                       <td>
                         <div className="admin-row-actions">

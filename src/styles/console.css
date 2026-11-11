@@ -263,6 +263,39 @@
   line-height: 1.4;
 }
 
+/* Key 池表格：8 列在 1440 下太挤，凭证并进名称列，第一列给足宽度 */
+.admin-table--keys th:first-child,
+.admin-table--keys td:first-child {
+  min-width: 210px;
+}
+
+/* Key 池表格：编号、计数一律单行；真实调用报错只占一行并折叠，展开看 title */
+.admin-nowrap {
+  white-space: nowrap;
+}
+
+/* 模型列只留两种模型，多的用 +N，列宽不随模型列表变长 */
+.admin-key-model {
+  display: block;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-key-test {
+  display: block;
+  max-width: 210px;
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--faint, #8a8a8a);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.55;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .admin-table--templates {
   min-width: 880px;
 }
