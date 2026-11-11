@@ -73,12 +73,23 @@ export type TemplateTiming = {
   actualSec: number
   durationSec: number
   fit: SpeechFit
+  /** 估算用的语速档位：fast / normal / slow（来自模型对原片节奏的判断） */
+  pace?: string
+  /** 中文字/秒 */
+  rate?: number
   overSec: number
   tight: number
   loose: number
 }
 
 /** 一句话说明这条模板的时长问题（与 server/speech.mjs 的 describeTiming 同口径）。 */
+/** 语速档位的中文标签（与 server/speech.mjs 的 PACE_ALIAS 对应）。 */
+export function paceLabel(pace?: string): string {
+  if (pace === 'fast' || pace === '快') return '快'
+  if (pace === 'slow' || pace === '慢') return '慢'
+  return '中'
+}
+
 export function describeTiming(timing?: TemplateTiming | null): string {
   if (!timing || !timing.estimatedSec) return ''
   if (timing.fit === 'tight') {

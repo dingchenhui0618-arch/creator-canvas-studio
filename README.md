@@ -1692,3 +1692,56 @@ hypit 商业授权到位后，按调研给出的顺序（P0-1 → P0-2 → P0-3�
 
 详见 [docs/timing-estimation.md](docs/timing-estimation.md)。
 
+## 四十五、2026-11-11 追加：语速口径对齐 hypit，存量模板不用重跑就能重算（第二十八批）
+
+### 四十五.1 先跟 vendor 对一次表
+
+上一批的 4.5 字/秒是我们自己拍的。hypit 有现成的 `@hypit/speech-estimate@0.1.1`，
+装下来在**同一条真实模板的 8 段口播（135 字）**上对比：
+
+| 口径 | 8 段合计 |
+| --- | --- |
+| 我们 4.5 字/秒 | 34.5 秒 |
+| hypit 慢（4.2） | 32.1 秒 |
+| hypit 中（5.25） | **25.7 秒** |
+| hypit 快（6.5625） | 20.6 秒 |
+
+我们比 vendor 中速慢了 17%。既然长期要向它借语义，口径必须一致，否则同一句话在两个系统里
+得出两个结论。于是整段换成 vendor 的密度表（zh 4.2 / 5.25 / 6.5625，en 按音节 4.2 / 4.6 / 5.6），
+并且**不再额外加标点停顿**（vendor 的密度已含停顿）、**语速档位跟着模型判断的节奏走**
+（`analysis.pacing` 快/中/慢 → fast/normal/slow）。`tight` 阈值从 1.35 收到 1.2。
+
+### 四十五.2 存量模板不用重新花积分复刻
+
+`scripts/recalc-timing.mjs`：按已落库的脚本/分镜重算 `expectedSec`、`fit`、`timing`，
+默认只试算、加 `--write` 才写回。生产上那条模板：**34.5s → 25.5s**（片长 18s，仍判「念不完，多 7.5 秒」，
+8 个镜头 7 个偏多）。重算前备份到 `/root/templates-backup-*.json`。
+
+![模板详情抽屉：按中速 5.25 字/秒重估后的对账](docs/screenshot-template-timing-2026-11-11.png)
+
+### 四十五.3 P0-2 依赖摸底：生产机现在跑不了 hypit
+
+| 项 | 实测 | 要求 | 结论 |
+| --- | --- | --- | --- |
+| Node | v22.12.0 | ≥22.15.0 | ❌ 差 3 个 patch |
+| ffmpeg | 系统无（项目内 `ffmpeg-static` 可用） | 需要 | ⚠️ 可用自带 |
+| Chromium | 无 | 需要 | ❌ |
+| 内存 / CPU | 1.8 GB / 2 核 | README 提 64 并发 Chromium | ❌ 产能差两个数量级 |
+| npm registry | 200（比 GitHub raw 通） | — | ✅ |
+| 包 | `@hypit/hypit@0.3.2`，解包 1.49 MB、136 个依赖 | — | ⚠️ |
+
+而且真正出片要 HypiHub / HiAPI / Pollo 这类 Provider 凭证，我们一个都没有——
+**装上也跑不出一次真实 build**。所以这一步要么单开一台 worker + 买额度，
+要么就停在「只借语义」（现在这版）。不在生产机硬装。
+
+### 四十五.4 验收
+
+- `scripts/test-speech.mjs` 扩到 **39 项断言**（vendor 三档密度、标点不加时、汉字/音节单位、
+  上下限、三档判定、缺时长补齐、整条汇总带档位、快节奏估算更短等）。
+- 回归 keyvault / model-routes / gateway / model-keys-e2e / canvas-admin / canvas-session / judge 全过；
+  build 通过、lint 0 错误（5 条历史警告）。
+- 生产重算 1 条模板，接口与抽屉显示同步更新。
+
+详见 [docs/timing-estimation.md](docs/timing-estimation.md)。
+
+

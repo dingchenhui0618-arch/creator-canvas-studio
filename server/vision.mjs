@@ -115,8 +115,10 @@ export function normalizeResult(raw, frames, videoDuration = 0) {
 
   // 时长与台词对账：模型给的秒数常常和台词量对不上（2 秒要塞 90 个字，或者 12 秒只说一句话），
   // 照着这种分镜表拍不出片。这里按语速把每段念完需要的时间算出来，逐段标出 mismatch。
-  const beatsTimed = reconcileTimeline(rawBeats, { totalSec: total, textOf: (beat) => beat.voiceover || beat.onScreen })
-  const shotsTimed = reconcileTimeline(rawShots, { totalSec: total, textOf: (shot) => shot.caption })
+  // 语速档位跟着模型对节奏的判断走：快/中/慢对应 hypit 的 fast/normal/slow 密度
+  const pace = String(raw.analysis?.pacing || '中')
+  const beatsTimed = reconcileTimeline(rawBeats, { totalSec: total, pace, textOf: (beat) => beat.voiceover || beat.onScreen })
+  const shotsTimed = reconcileTimeline(rawShots, { totalSec: total, pace, textOf: (shot) => shot.caption })
   const structure = beatsTimed.rows
   const storyboard = shotsTimed.rows
   // 整条以「段落口播」为准：那才是真的被念出来的内容；镜头字幕往往只是屏幕上的一行短字，

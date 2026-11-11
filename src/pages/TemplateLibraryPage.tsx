@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertCircle, Copy, ExternalLink, Film, Heart, Layers, MessageCircle, Play, RefreshCw, ScanEye, Search, Share2, Sparkles, Star, Trash2, X } from 'lucide-react'
 import { applyTemplate, coverSrc, deleteTemplate, formatCount, formatDuration, getHealth, getTemplate, listTemplates } from '../api/radar'
-import { describeTiming } from '../domain/radar'
+import { describeTiming, paceLabel } from '../domain/radar'
 import type { MediaItem, ReplicaTemplate } from '../domain/radar'
 import { requestReview } from '../state/review'
 import { ReplicateModal } from '../components/ReplicateModal'
@@ -271,7 +271,9 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
                         {detail.timing && detail.timing.estimatedSec > 0 ? (
                           <p className={`timing-note timing-note--${detail.timing.fit}`}>
                             <strong>台词约需 {detail.timing.estimatedSec}s</strong>
-                            <span>原片 {detail.timing.durationSec}s · {describeTiming(detail.timing)}</span>
+                            <span>
+                              原片 {detail.timing.durationSec}s · 按{paceLabel(detail.timing.pace)}速估（{detail.timing.rate ?? 0} 字/秒）· {describeTiming(detail.timing)}
+                            </span>
                           </p>
                         ) : null}
                         <div className="shot-table">
