@@ -9,13 +9,13 @@
 // 与聊天链路的三点区别：
 // 1. 鉴权用平台服务令牌（Bearer），不走用户会话 —— 调用方是画布服务，不是浏览器；
 // 2. 出图是一次同步请求；出视频是「建任务 + 轮询」，轮询必须回到建任务的那把 Key，
-//    所以任务 id 与 Key 的对应关系记在进程内（重启后丢失，画布会重新发起）；
+//    所以任务 id 与 Key 的对应关系落盘（见 gateway-tasks.mjs）：发版重启后照样查得到结果，
+//    不会让用户为同一段片子付两次钱；
 // 3. 生成结果原样回给调用方（拿到 url 就够），不落本地磁盘 —— 备份是画布自己的事。
 import crypto from 'node:crypto'
 import { config } from './config.mjs'
-import { listKeys, recordRoute, reportKey, resolveKeyCandidates, vaultModels } from './keyvault.mjs'
-
-const JOB_TTL_MS = 2 * 60 * 60 * 1000
+import { countRunning, finishTask, getTask, listTasks, pruneTasks, rememberTask, resetTaskStore } from './gateway-tasks.mjs'
+import { keyMaterial, listKeys, openSecret, recordRoute, reportKey, resolveKeyCandidates, sealSecret, vaultModels } from './keyvault.mjs'
 
 // 画布出图节点会发过来的真实模型名（来源：画布源码里的 CHANNEL_MODEL 常量，2026-11-11 核对）。
 // 后台拿它做「画布要的模型现在有没有人接」的对账，避免 Key 加上了却因为模型名对不上而用不了。
@@ -114,8 +114,6 @@ export function modelCoverage() {
     ...coverageRows('video', withCap('video'), CANVAS_VIDEO_MODELS),
   ]
 }
-const jobs = new Map()
-
 function nowIso() {
   return new Date().toISOString()
 }
@@ -325,11 +323,9 @@ export async function generateImage(payload = {}) {
   })
 }
 
+// 任务台账的清理由 gateway-tasks.mjs 负责（跑着的 2 小时、终态留 24 小时）。
 function pruneJobs() {
-  const now = Date.now()
-  for (const [id, job] of jobs) {
-    if (now - job.at > JOB_TTL_MS) jobs.delete(id)
-  }
+  pruneTasks()
 }
 
 /**
@@ -389,8 +385,7 @@ export async function createVideoTask(payload = {}) {
       lastError = error
       continue
     }
-    const createdAt = Date.now()
-    jobs.set(created.taskId, { kind: 'video', keyId: key.id, keyName: key.name, baseUrl: key.baseUrl, apiKey: key.apiKey, model: requestBody.model, createdAt, at: createdAt, recorded: false })
+    rememberTask({ id: created.taskId, kind: 'video', keyId: key.id, keyName: key.name, baseUrl: key.baseUrl, model: requestBody.model, sealedKey: sealSecret(key.apiKey) })
     return { ...(created.data && typeof created.data === 'object' ? created.data : {}), ok: true, id: created.taskId, key: { id: key.id, name: key.name }, attempt: key.attempt, ms: Date.now() - started }
   }
   throw gatewayError(lastError?.status || 502, lastError?.code || 'UPSTREAM_REJECTED', failoverMessage('出视频', candidates, lastError), {
@@ -407,13 +402,19 @@ export async function createVideoTask(payload = {}) {
 export async function pollVideoTask(taskId) {
   pruneJobs()
   const id = String(taskId || '')
-  const job = jobs.get(id)
+  const job = getTask(id)
   if (!job) {
-    throw gatewayError(404, 'TASK_NOT_FOUND', '找不到这个视频任务：服务重启后需要重新发起生成')
+    throw gatewayError(404, 'TASK_NOT_FOUND', '找不到这个生成任务：任务 id 对不上，或它已经超过两小时。请重新发起生成')
+  }
+  // 优先用建任务那一刻的凭证密文：上游任务挂在那把凭证的账号下，
+  // 后来管理员换了 Key 的秘钥也不该拿新凭证去查旧任务。
+  const apiKey = openSecret(job.sealedKey) || keyMaterial(job.keyId)?.apiKey || ''
+  if (!apiKey) {
+    throw gatewayError(409, 'TASK_KEY_GONE', '这个任务用的 Key 已经被删掉，上游结果取不回来了；请重新生成一次')
   }
   let upstream
   try {
-    upstream = await getJson(upstreamUrl({ baseUrl: job.baseUrl }, 'task', id), job.apiKey, config.gateway.videoTimeoutMs)
+    upstream = await getJson(upstreamUrl({ baseUrl: job.baseUrl }, 'task', id), apiKey, config.gateway.videoTimeoutMs)
   } catch (error) {
     reportKey(job.keyId, false, String(error?.message || error))
     throw gatewayError(502, 'UPSTREAM_UNREACHABLE', '连不上出视频上游：' + friendlyNetwork(error))
@@ -427,22 +428,19 @@ export async function pollVideoTask(taskId) {
   const status = String(data.status || '').toLowerCase()
   // SeeAPI 的终态比方舟多两个：refunded（失败已退款）与 canceled（已取消），都算没出片
   const terminal = ['succeeded', 'failed', 'refunded', 'canceled'].includes(status)
-  if (terminal) {
-    if (!job.recorded) {
-      job.recorded = true
-      job.at = Date.now()
-      recordRoute({
-        capability: job.kind === 'image' ? 'image' : 'video',
-        model: job.model,
-        keyId: job.keyId,
-        keyName: job.keyName,
-        source: 'pool',
-        reason: '任务完成回执',
-        ms: Date.now() - job.createdAt,
-        ok: status === 'succeeded',
-        error: status === 'succeeded' ? '' : String(data?.error?.message || '上游报告任务没出结果（' + status + '）').slice(0, 160),
-      })
-    }
+  if (terminal && !job.terminalAt) {
+    finishTask(id, { status, error: status === 'succeeded' ? '' : String(data?.error?.message || '上游报告任务没出结果（' + status + '）').slice(0, 160) })
+    recordRoute({
+      capability: job.kind === 'image' ? 'image' : 'video',
+      model: job.model,
+      keyId: job.keyId,
+      keyName: job.keyName,
+      source: 'pool',
+      reason: '任务完成回执',
+      ms: Date.now() - job.createdAt,
+      ok: status === 'succeeded',
+      error: status === 'succeeded' ? '' : String(data?.error?.message || '上游报告任务没出结果（' + status + '）').slice(0, 160),
+    })
   }
   return { ...data, ok: true, status, key: { id: job.keyId, name: job.keyName } }
 }
@@ -473,8 +471,7 @@ export async function createImageTask(payload = {}) {
       lastError = error
       continue
     }
-    const createdAt = Date.now()
-    jobs.set(created.taskId, { kind: 'image', keyId: key.id, keyName: key.name, baseUrl: key.baseUrl, apiKey: key.apiKey, model: requestBody.model, createdAt, at: createdAt, recorded: false })
+    rememberTask({ id: created.taskId, kind: 'image', keyId: key.id, keyName: key.name, baseUrl: key.baseUrl, model: requestBody.model, sealedKey: sealSecret(key.apiKey) })
     return { ...(created.data && typeof created.data === 'object' ? created.data : {}), ok: true, id: created.taskId, key: { id: key.id, name: key.name }, attempt: key.attempt, ms: Date.now() - started }
   }
   throw gatewayError(lastError?.status || 502, lastError?.code || 'UPSTREAM_REJECTED', failoverMessage('出图', candidates, lastError), {
@@ -507,13 +504,17 @@ export function listPoolModels(capability = '') {
 /** 后台「生成通道」页读的运行时状态：只回计数与任务摘要，不回令牌与上游 Key。 */
 export function gatewayStatus() {
   pruneJobs()
-  const items = [...jobs.entries()]
-    .map(([id, job]) => ({ id, keyName: job.keyName, model: job.model, ageSec: Math.round((Date.now() - job.at) / 1000) }))
-    .sort((a, b) => a.ageSec - b.ageSec)
-    .slice(0, 10)
+  const items = listTasks(10).map((task) => ({
+    id: task.id,
+    kind: task.kind,
+    keyName: task.keyName,
+    model: task.model,
+    status: task.terminalAt ? task.status : 'running',
+    ageSec: Math.round((Date.now() - task.createdAt) / 1000),
+  }))
   return {
     configured: gatewayConfigured(),
-    activeTasks: jobs.size,
+    activeTasks: countRunning(),
     recentTasks: items,
     endpoints: {
       images: 'POST /api/gateway/v1/images/generations',
@@ -528,5 +529,5 @@ export function gatewayStatus() {
 }
 
 export function resetGatewayJobs() {
-  jobs.clear()
+  resetTaskStore()
 }

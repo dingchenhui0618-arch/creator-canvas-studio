@@ -1430,3 +1430,50 @@ Key 池上一版只服务文本与视觉，出图和出视频是断开的两截�
 
 ![后台「平台 Key 池」：SeeAPI · 出图出视频 已启用](docs/screenshot-admin-keypool-seeapi-2026-11-11.png)
 
+## 四十、2026-11-11 追加：生成的活儿活过发版——任务台账与调用日志都落盘（第二十三批）
+
+### 四十.1 为什么要改
+
+画布出视频是「建任务 → 按 id 轮询」两段式，任务在上游挂在建它那把 Key 的账号下。
+之前「任务 id → 那把 Key」只记在进程内存里：**一次发版重启，正在跑的片子就查不到了**，
+用户只能重新生成、再付一次钱。后台「最近路由」同理，重启即清空，排障时看不到发版前发生了什么。
+
+### 四十.2 改了什么
+
+- 新增 `server/gateway-tasks.mjs`：任务台账写进 `DATA_DIR/gateway-tasks.json`（0600），
+  记任务 id、类型、模型、走的 Key、状态与时间；跑着的留 2 小时，终态留 24 小时，最多 100 条。
+- 台账里**不存明文密钥**：那一次调用用的 Key 用平台自己的 AES-256-GCM 再包一层（`sealedKey`），
+  只在轮询那一刻解开。所以轮询优先用封存的那把凭证（任务就挂在这个账号下，换过 Key 也应该用它），
+  封存缺失才回落到池里的活 Key；**Key 被删掉后，已付费的任务照样能查完**。
+- 路由日志同样落盘（`DATA_DIR/model-routes.json`，最近 200 条），发版不再清零。
+- 轮询 404 的话术改了：不再是「服务重启后需要重新发起生成」（那是旧限制），
+  现在是「任务 id 对不上，或它已经超过两小时」。任务用的 Key 被删且没有封存时回 409 `TASK_KEY_GONE`。
+- 后台「生成通道」的「最近任务」表加了**类型 / 状态**两列：出图 · 出视频、生成中 / 已出图 / 已出片 /
+  未出片（含已退款、已取消），并有空状态说明「服务发版重启也不会丢」。
+
+### 四十.3 线上实测（生产 https://visionqa.wavisionai.cn）
+
+在服务器上起一个本地回环上游（只认 SeeAPI 的建任务 / 查任务两条路径，127.0.0.1:8099），
+临时建一把 Key 指过去，然后按真实链路操作：
+
+| 步骤 | 结果 |
+| --- | --- |
+| 1. 经公网通道建任务 `POST /api/gateway/v1/video/generations` | 200，任务 id `live-restart-2` |
+| 2. `systemctl restart visionqa` 后 `/api/health` | true |
+| 3. 重启后轮询 `GET /api/gateway/v1/tasks/live-restart-2` | 200，`status: succeeded`，拿到 `output.video_url` |
+| 4. 后台「最近任务」 | 同一行：出视频 · seedance-2.0-mini · 已出片 |
+
+验收完把临时 Key 删掉、台账与路由日志里那几行清掉、回环上游进程杀掉；
+现在池里仍是两把真 Key（DeepSeek 官方、SeeAPI · 出图出视频），台账与路由日志已归零。
+截图里那把「接入验收 · 本地回环」就是这次验收临时建的，**不在池子里**。
+
+### 四十.4 验收
+
+- `scripts/test-gateway.mjs` 新增重启用例：建任务 → 断言台账落盘且**不含密钥明文** →
+  清空内存模拟进程重启 → 轮询仍拿到成品地址且用的是同一把凭证 → 删掉 Key 后旧任务照样查得完 →
+  后台列表能读回类型 / 状态 / Key 名 → 不存在的 id 回 404 而不是「重启丢了」。
+- 回归 `test-keyvault` / `test-model-routes` / `test-canvas-admin` / `test-canvas-session` /
+  `test-judge` / `test-model-keys-e2e` 全过；`npm run build`、`npm run lint` 0 错误。
+- 生产 bundle `assets/index-DeIISh1S.js`，五个服务 active。
+
+![后台「生成通道」最近任务：类型 / 模型 / 走的 Key / 状态 / 发起于一屏可见，发版重启不丢](docs/screenshot-admin-gateway-tasks-2026-11-11.png)

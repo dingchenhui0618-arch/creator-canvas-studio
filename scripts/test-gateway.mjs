@@ -48,7 +48,12 @@ const upstream = http.createServer((req, res) => {
       return send(202, { id: 'img-job-1', object: 'task', status: 'queued' })
     }
     if (req.method === 'POST' && req.url === '/cgcm/v1/video/generations') {
+      // 发版重启场景用单独的任务 id，免得和前面的用例互相覆盖
+      if (body.includes('重启')) return send(202, { id: 'job-restart', object: 'task', status: 'queued' })
       return send(202, { id: 'job-cgcm', object: 'task', status: 'queued' })
+    }
+    if (req.method === 'GET' && req.url === '/cgcm/v1/tasks/job-restart') {
+      return send(200, { id: 'job-restart', status: 'succeeded', output: { video_url: 'https://example.invalid/restart.mp4' } })
     }
     if (req.method === 'GET' && req.url === '/cgcm/v1/tasks/img-job-1') {
       return send(200, { id: 'img-job-1', status: 'succeeded', output: { url: 'https://example.invalid/cgcm-async.png' } })
@@ -422,9 +427,46 @@ assert.equal(gatewayConfigured(), false)
 assert.equal(authorizeGateway({ headers: { authorization: 'Bearer anything' } }).status, 503)
 assert.equal(gatewayStatus().configured, false)
 
+// 9.7) 发版重启不丢任务：任务 id → 那把 Key 的对应关系落盘，重启后照样能查到成品
+const restartKey = createKey({
+  name: '重启用例 Key',
+  provider: 'cgcm',
+  baseUrl: 'http://127.0.0.1:' + upstream.address().port + '/cgcm',
+  apiKey: 'sk_live_restart_1234567890',
+  models: ['seedance-2.0-fast'],
+  capabilities: ['video'],
+  priority: 10,
+  weight: 100,
+})
+const restartTask = await createVideoTask({ model: 'seedance-2.0-fast', prompt: '重启后还要能查到', duration: 4 })
+assert.equal(restartTask.id, 'job-restart')
+const ledgerRaw = fs.readFileSync(path.join(temp, 'gateway-tasks.json'), 'utf8')
+assert.equal(ledgerRaw.includes('job-restart'), true, '任务台账必须落盘')
+assert.equal(ledgerRaw.includes('sk_live_restart_1234567890'), false, '台账里不能有密钥明文')
+
+const { forgetInMemoryForTest } = await import('../server/gateway-tasks.mjs')
+forgetInMemoryForTest() // 等价于进程重启：内存清空，只能从磁盘恢复
+const afterRestart = await pollVideoTask('job-restart')
+assert.equal(afterRestart.status, 'succeeded')
+assert.equal(afterRestart.output.video_url, 'https://example.invalid/restart.mp4', '重启后仍然查得到成品地址')
+const restartPollCall = seen.filter((item) => item.url === '/cgcm/v1/tasks/job-restart').at(-1)
+assert.equal(restartPollCall.auth, 'Bearer sk_live_restart_1234567890', '重启后轮询必须还回到同一把 Key 的凭证')
+
+// 建任务的 Key 后来被删掉：已付费的任务照样能查完（凭证密文在台账里）
+deleteKey(restartKey.id)
+const afterKeyDelete = await pollVideoTask('job-restart')
+assert.equal(afterKeyDelete.status, 'succeeded')
+// 台账在后台可见：类型、状态、走的 Key 都能读出来
+const listedTask = gatewayStatus().recentTasks.find((task) => task.id === 'job-restart')
+assert.equal(listedTask.kind, 'video')
+assert.equal(listedTask.status, 'succeeded')
+assert.equal(listedTask.keyName, '重启用例 Key')
+// 不存在的任务 id：明确 404，不说「重启丢了」
+await assert.rejects(() => pollVideoTask('task-not-exist'), (error) => error.status === 404 && error.code === 'TASK_NOT_FOUND')
+
 assert.equal(JSON.stringify(listRoutes(50)).includes('sk-image-1234567890'), false, '日志不能带 Key 明文')
 assert.equal(JSON.stringify(listRoutes(50)).includes('sk-video-1234567890'), false, '日志不能带 Key 明文')
 
 upstream.close()
 fs.rmSync(temp, { recursive: true, force: true })
-console.log('PASS gateway: 令牌鉴权 / 出图转发 / 失败计健康 / 空结果 / 视频建任务轮询 / 无 Key 明确报错 / 模型名对不上 / SeeAPI 协议 / 日志无明文')
+console.log('PASS gateway: 令牌鉴权 / 出图转发 / 失败计健康 / 空结果 / 视频建任务轮询 / 无 Key 明确报错 / 模型名对不上 / SeeAPI 协议 / 重启不丢任务 / 日志无明文')

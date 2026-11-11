@@ -96,6 +96,37 @@ function maskKey(plain) {
   return value.slice(0, 4) + '••••' + value.slice(-4)
 }
 
+// 给别的模块包一份密文用：生成通道要落盘「这条任务用的是哪把凭证」，
+// 但它不该把明文 Key 写进任何文件，统一走这里的封存 / 解封。
+export function sealSecret(plain) {
+  return plain ? encrypt(plain) : ''
+}
+
+export function openSecret(payload) {
+  if (!payload) return ''
+  try {
+    return decrypt(payload)
+  } catch {
+    return ''
+  }
+}
+
+/** 按 id 取一把 Key 的调用材料（含明文 apiKey）。只在服务端内部用，绝不进接口返回。 */
+export function keyMaterial(id) {
+  const key = load().keys.find((item) => item.id === String(id || ''))
+  if (!key) return null
+  return {
+    id: key.id,
+    name: key.name,
+    provider: key.provider,
+    baseUrl: key.baseUrl,
+    apiKey: safeDecrypt(key.apiKey),
+    models: key.models || [],
+    capabilities: key.capabilities || [],
+    enabled: Boolean(key.enabled),
+  }
+}
+
 let state = null
 const health = new Map()
 
@@ -464,9 +495,41 @@ export function previewRoute({ capability = 'text', model = '' } = {}) {
 // ── 路由决策日志（内存环形缓冲，最近 200 次）────────────────────
 // 后台要能回答「刚才那次调用到底走了哪把 Key、为什么、花多久、成没成」。
 // 只记脱敏信息：Key id / 名称 / 来源，绝不记 Key 明文与请求正文。
+// 路由日志也落盘：发版会重启进程，管理员翻「最近路由」时不应该因为一次部署就清空。
+// 只留最近 200 条，写盘是覆盖式的，量很小。
 const ROUTE_LIMIT = 200
+const routesFile = () => path.join(config.dataDir, 'model-routes.json')
 const routes = []
 let routeSeq = 0
+let routesLoaded = false
+
+function loadRoutes() {
+  if (routesLoaded) return
+  routesLoaded = true
+  try {
+    const parsed = JSON.parse(fs.readFileSync(routesFile(), 'utf8'))
+    for (const row of Array.isArray(parsed?.items) ? parsed.items : []) {
+      if (row?.id) routes.push(row)
+    }
+    for (const row of routes) {
+      const seq = Number(String(row.id).replace(/^r/, '')) || 0
+      if (seq > routeSeq) routeSeq = seq
+    }
+  } catch {
+    // 没有历史日志就从空开始
+  }
+}
+
+function persistRoutes() {
+  try {
+    fs.mkdirSync(config.dataDir, { recursive: true })
+    const tmp = routesFile() + '.' + process.pid + '.tmp'
+    fs.writeFileSync(tmp, JSON.stringify({ version: 1, items: routes }, null, 2), { mode: 0o600 })
+    fs.renameSync(tmp, routesFile())
+  } catch (error) {
+    console.error('[keys] 路由日志写入失败：' + String(error?.message || error))
+  }
+}
 
 // 路由日志里给管理员看的是人话，不是一段上游 JSON；原始报错留在 detail 里供悬停查看。
 function friendlyError(raw) {
@@ -482,6 +545,7 @@ function friendlyError(raw) {
 }
 
 export function recordRoute(input = {}) {
+  loadRoutes()
   const source = input.source === 'pool' ? 'pool' : input.source === 'env' ? 'env' : 'none'
   const friendly = friendlyError(input.error)
   const entry = {
@@ -501,10 +565,12 @@ export function recordRoute(input = {}) {
   }
   routes.unshift(entry)
   if (routes.length > ROUTE_LIMIT) routes.length = ROUTE_LIMIT
+  persistRoutes()
   return entry
 }
 
 export function listRoutes(limit = 50) {
+  loadRoutes()
   const size = Math.max(1, Math.min(ROUTE_LIMIT, Number(limit) || 50))
   let ok = 0
   let fail = 0

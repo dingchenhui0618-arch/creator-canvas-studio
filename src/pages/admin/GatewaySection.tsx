@@ -16,6 +16,16 @@ const GROUPS: { capability: 'image' | 'video'; label: string }[] = [
   { capability: 'video', label: '出视频' },
 ]
 
+// 任务状态说人话：running 用「生成中」，其余按有没有拿到成品分两类。
+function taskStatusLabel(task: { kind: 'image' | 'video'; status: string }) {
+  const done = task.kind === 'image' ? '已出图' : '已出片'
+  if (task.status === 'running') return '生成中'
+  if (task.status === 'succeeded') return done
+  if (task.status === 'refunded') return '未出片 · 已退款'
+  if (task.status === 'canceled') return '未出片 · 已取消'
+  return '未出片'
+}
+
 /**
  * 生成通道：画布的出图 / 出视频请求经这里，按「能力 → 模型 → 优先级 → 权重」选平台 Key。
  * 这里只展示「开没开、有几把 Key、什么模型、跑着几个任务」——令牌与上游 Key 不出浏览器。
@@ -158,17 +168,21 @@ export default function GatewaySection() {
                 <thead>
                   <tr>
                     <th>生成任务</th>
+                    <th>类型</th>
                     <th>模型</th>
                     <th>走的 Key</th>
-                    <th>创建于</th>
+                    <th>状态</th>
+                    <th>发起于</th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.recentTasks.map((task) => (
                     <tr key={task.id}>
                       <td className="admin-mono">{task.id}</td>
+                      <td className="admin-mono">{task.kind === 'image' ? '出图' : '出视频'}</td>
                       <td className="admin-mono">{task.model || '—'}</td>
                       <td>{task.keyName || '—'}</td>
+                      <td>{taskStatusLabel(task)}</td>
                       <td className="admin-mono admin-nowrap">{task.ageSec} 秒前</td>
                     </tr>
                   ))}
@@ -177,8 +191,8 @@ export default function GatewaySection() {
             </div>
           ) : (
             <EmptyState
-              title="还没有进行中的生成任务"
-              description="画布发起出图 / 出视频后，这里会显示任务与它走的那把 Key。"
+              title="还没有生成任务"
+              description="画布发起出图 / 出视频后，这里会显示任务、走的 Key 和最终结果；服务发版重启也不会丢。"
             />
           )}
         </>

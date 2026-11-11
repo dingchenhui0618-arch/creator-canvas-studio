@@ -2,8 +2,11 @@ import { request } from './client'
 
 export type GatewayTask = {
   id: string
+  kind: 'image' | 'video'
   keyName: string
   model: string
+  /** running 还在跑；succeeded 出片了；failed / refunded / canceled 都是没出片 */
+  status: string
   ageSec: number
 }
 
