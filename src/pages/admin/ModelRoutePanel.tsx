@@ -146,7 +146,7 @@ export default function ModelRoutePanel() {
             <p className="admin-label">最近路由</p>
             <p className="admin-sub">
               每次真实模型调用记一条：走了哪把 Key、为什么、多快、成没成。出图 / 出视频一把失败会自动换下一把，
-              每次尝试各记一条，能看出是第几把接住的。只存在内存里，重启清空；不含 Key 明文，也不含对话内容。
+              每次尝试各记一条，能看出是第几把接住的。日志落盘、发版重启不清空，只留最近 200 条；不含 Key 明文，也不含对话内容。
             </p>
           </div>
           <div className="admin-row-actions">

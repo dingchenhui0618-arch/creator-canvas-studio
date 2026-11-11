@@ -1477,3 +1477,46 @@ Key 池上一版只服务文本与视觉，出图和出视频是断开的两截�
 - 生产 bundle `assets/index-DeIISh1S.js`，五个服务 active。
 
 ![后台「生成通道」最近任务：类型 / 模型 / 走的 Key / 状态 / 发起于一屏可见，发版重启不丢](docs/screenshot-admin-gateway-tasks-2026-11-11.png)
+## 四十一、2026-11-11 追加：判断层换得起供应商——TypeSafe 被地区限制，任何对话模型也能当判断器（第二十四批）
+
+### 四十一.1 这轮查出来的真问题
+
+**TypeSafe 官方接口在生产服务器上被地区拒绝**：`GET /v1/models` 与 `POST /v1/systemone` 都回
+`451 {"title":"Typesafe is not available in your region."}`。就算拿到 Key，判断层在生产也调不通。
+（同一份 Node 脚本在家用宽带的开发机上是 `403 Must supply an API key`，是可达的——问题在出口地区，不在域名或路径。）
+
+### 四十一.2 改法：判断器不再是「一家供应商」
+
+- 判断层支持两种协议，按 Key 自动选：渠道选「TypeSafe（Jev 判断）」或 baseUrl 是 typesafe.ai → 走
+  `POST /v1/systemone`；其它（DeepSeek / 百炼 / 中转）→ 走 `POST /v1/chat/completions`，要求模型按固定
+  JSON 回答同样四个判断。**两条协议解析与展示完全一致**，界面上只是多一句「对话形态 / TypeSafe 形态」。
+- baseUrl 少写 `/v1` 也会自动补（TypeSafe 只认 `/v1/systemone`，少一段就是 404）。
+- 后台「测试 Key」对判断能力**真跑一次判断**（`judgeSelfCheck`），结果显示在 Key 行：
+  `判断自检通过（对话形态，风险 1/2）` 或 `判断自检失败：…按地区拒绝（HTTP 451）…`。
+- 顺带修两个真实坑：上游 4xx 后掐连接会让复用连接的第二次请求抛 `fetch failed`（判断与凭证探测都加了
+  网络层重试一次）；报错不再原样塞上游 JSON，451/401/402/404/429 各给人话，状态列可换行三行。
+- 顺手改正一处过期文案：「最近路由」还写着「只存在内存里，重启清空」——上一批已经落盘了，改成
+  「落盘、发版重启不清空，只留最近 200 条」。
+
+### 四十一.3 线上实测（生产）
+
+| 用例 | 结果 |
+| --- | --- |
+| 对话形态判断器（本机回环 stub，仅验收用） | `判断自检通过（对话形态，风险 1/2）`，四项判断全部回填：依据 0.74 / 结论偏严 / 可执行 0.61 / 风险 1 |
+| TypeSafe 官方（`https://api.typesafe.ai/v1`） | 凭证探测与判断自检都回 `接口在当前网络不可用（上游按地区拒绝，HTTP 451）` |
+
+验完删掉两把临时 Key、杀掉回环进程；池里仍是 DeepSeek 官方 + SeeAPI 两把真 Key，路由日志归零。
+
+### 四十一.4 验收
+
+- `scripts/test-judge.mjs` 新增：对话协议（请求打到 `/v1/chat/completions`、带 `response_format: json_object`、
+  把评审一起发过去）、少写 `/v1` 自动补、451 地区限制的人话、402/404 文案、后台「测试 Key」附带判断自检。
+- 回归 `test-keyvault` / `test-model-routes` / `test-gateway` / `test-model-keys-e2e` / `test-canvas-admin` 全过；
+  `npm run build` 通过，`npm run lint` 0 错误（4 条历史警告）。
+
+![后台「平台 Key 池」：判断 Key 点测试后显示判断自检结果；TypeSafe 官方那行给出地区限制原因](docs/screenshot-admin-judge-selfcheck-2026-11-11.png)
+
+### 四十一.5 你要做的一步
+
+判断层现在只差一把**能用的判断器 Key**：要么给 DeepSeek 补上余额（现有那把 Key 勾上「判断」即可，不用再买新的），
+要么给一条能出国访问 TypeSafe 的出口/代理。给我其中一样，我立刻跑一次真实判断并出截图。

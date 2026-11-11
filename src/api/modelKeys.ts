@@ -37,6 +37,14 @@ export type ModelKeyTest = {
   error?: string
   reply?: string
   models?: string[]
+  /** 判断能力会额外真跑一次判断（见 server/judge.mjs 的 judgeSelfCheck） */
+  judge?: {
+    ok: boolean
+    protocol: 'systemone' | 'chat'
+    model: string
+    answers: { evidenceConsistent: number | null; verdictSupport: string; publishRisk: number | null; actionable: number | null } | null
+    error: string
+  } | null
 }
 
 export type ModelKeyList = {

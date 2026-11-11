@@ -123,14 +123,21 @@ export default function ModelKeyPool() {
       const result = await testModelKey(key.id)
       const real = result.mode !== 'credential-probe'
       const note = result.note ? ' · ' + result.note : ''
+      // 判断能力不只探凭证：这里带上「真跑一次判断」的结果，通不通、走哪种协议一眼看见
+      const judged = result.judge
+        ? result.judge.ok
+          ? ' · 判断自检通过（' + (result.judge.protocol === 'systemone' ? 'TypeSafe 形态' : '对话形态') + '，风险 ' +
+            (result.judge.answers?.publishRisk ?? '—') + '/2）'
+          : ' · 判断自检失败：' + (result.judge.error || '未知原因')
+        : ''
       setTestResult((value) => ({
         ...value,
         [key.id]: result.ok
           ? (real ? '真实调用通过' : '凭证正常') +
             ' · HTTP ' + result.status + ' · ' + result.ms + 'ms' +
             (real ? (result.reply ? ' · 回复「' + result.reply + '」' : '') : result.models?.length ? ' · ' + result.models.length + ' 个模型' : '') +
-            note
-          : (real ? '真实调用失败' : '凭证无效') + ' · ' + (result.error || 'HTTP ' + result.status) + note,
+            note + judged
+          : (real ? '真实调用失败' : '凭证无效') + ' · ' + (result.error || 'HTTP ' + result.status) + note + judged,
       }))
       reload()
     } catch (cause) {
@@ -204,6 +211,10 @@ export default function ModelKeyPool() {
                   </label>
                 ))}
               </div>
+              <p className="admin-hint">
+                勾了「判断」的 Key 点「测试」会真跑一次判断自检。判断器两种都能用：TypeSafe 官方（走
+                /v1/systemone），或任何对话模型（走 /v1/chat/completions，例如 DeepSeek、百炼）。
+              </p>
             </div>
             <label className="admin-edit-field">
               <span>优先级（小=先用）</span>

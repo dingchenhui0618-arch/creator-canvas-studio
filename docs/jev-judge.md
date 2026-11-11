@@ -82,3 +82,53 @@ Content-Type: application/json
 **还没验证**：真实 TypeSafe 账号（没有 Key，登录注册需要业务方提供）；Jev 的图像能力
 （TypeSafe 的图像危险区需要 `jev-preview` 与 `TypeSafe-Danger-Zone-Images` 头，当前判断只看评审文本，
 不看图片本身）；按次成本与配额。
+## 六、两种判断器与地区限制实测（2026-11-11 第二十四批）
+
+### 6.1 为什么加第二种
+
+TypeSafe 官方接口在**生产服务器（腾讯云上海）出口被地区拒绝**——`GET /v1/models` 与
+`POST /v1/systemone` 都回 `451 {"title":"Typesafe is not available in your region."}`。
+也就是说，即使拿到 Key，判断层在生产也调不通。同一台机器上的 Node 直接请求同样 451，
+而家用宽带的开发机是 `403 Must supply an API key`（可达），所以不是域名或路径问题，是出口地区。
+
+判断层的价值在「四个结构化判断」，不在某一家供应商。于是判断器支持两种协议，按 Key 自动选：
+
+| Key 的渠道 / baseUrl | 协议 | 请求 |
+| --- | --- | --- |
+| 渠道选「TypeSafe（Jev 判断）」，或 baseUrl 域名是 typesafe.ai | systemone | `POST {baseUrl}/v1/systemone`（baseUrl 少写 `/v1` 会自动补） |
+| 其它（DeepSeek / 百炼 / 中转） | chat | `POST {baseUrl}/v1/chat/completions`，要求按固定 JSON 回同样四个判断 |
+
+两条协议共用同一套解析与展示：`evidenceConsistent` / `verdictSupport` / `actionable` / `publishRisk`，
+界面上看不出来源差异，只多一个「对话形态 / TypeSafe 形态」的说法。
+
+### 6.2 后台「测试 Key」真跑一次判断
+
+勾了「判断」的 Key，点「测试」不会只探 `/models`，而是拿一小段样例评审真调一次判断（`judgeSelfCheck`），
+结果显示在 Key 那一行的状态列：
+
+- 通过：`判断自检通过（对话形态，风险 1/2）`
+- 失败：`判断自检失败：判断模型在当前网络不可用：上游按地区拒绝（HTTP 451）。换一条出口，或改用国内可用的判断模型`
+
+只声明判断能力的 Key，「测通」以判断调通为准；同时声明对话 / 视觉的 Key，主结果仍看对话探测。
+
+### 6.3 线上实测（生产 https://visionqa.wavisionai.cn）
+
+| 用例 | Key | 结果 |
+| --- | --- | --- |
+| 对话形态判断器 | 本机回环 stub（OpenAI 兼容，仅验收用） | `判断自检通过（对话形态，风险 1/2）`，四项判断全部回填：依据 0.74 / 结论偏严 / 可执行 0.61 / 风险 1 |
+| TypeSafe 官方 | baseUrl `https://api.typesafe.ai/v1` | 凭证探测与判断自检都是 `接口在当前网络不可用（上游按地区拒绝，HTTP 451）` |
+
+验完把两把临时 Key 删掉、回环进程杀掉，池里仍是两把真 Key，路由日志归零。
+
+### 6.4 顺带修掉的两个真实坑
+
+- **连接复用**：上游（经 CDN）回 4xx 后会掐连接，复用同一条连接的下一次 `fetch` 直接抛 `fetch failed`，
+  管理员只看到一句查不出原因的报错。判断请求与凭证探测都改成**网络层失败重试一次**，
+  现在同一次点「测试」能稳定拿到 451 与原因。
+- **报错说人话**：不再把上游 JSON 原样塞进表格。451 / 401 / 402 / 404 / 429 各自一句话，
+  状态列允许换行最多三行（完整内容悬停可看），不再被省略号吃掉原因。
+
+### 6.5 还没验证
+
+真实 TypeSafe 账号的四个判断质量（生产出口 451，需要一条境外出口或代理）；
+真实国内判断模型（DeepSeek 余额仍是 0，补上后把它的能力勾上「判断」即可直接用）。

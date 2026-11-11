@@ -658,6 +658,47 @@ export function vaultModels(capability) {
 load()
 
 /**
+ * 判断能力额外真跑一次：判断 Key 的价值就在「能不能给出四个判断」，
+ * 所以不只探 /models，而是拿一小段样例评审真调一次（见 judge.mjs 的 judgeSelfCheck）。
+ * 只声明了判断能力的 Key，「测通」以判断调通为准；同时声明对话/视觉的，主结果仍看对话探测。
+ */
+/**
+ * 探测失败的原因也要说人话：直接把上游 JSON 塞进表格里，管理员看不出是额度、地区还是路径写错。
+ */
+function probeFailureText(status, text) {
+  const raw = String(text || '').slice(0, 200)
+  if (Number(status) === 451 || /not available in your region/i.test(raw)) {
+    return '接口在当前网络不可用（上游按地区拒绝，HTTP 451）'
+  }
+  if (Number(status) === 401 || Number(status) === 403) return 'Key 无效或没有权限（HTTP ' + status + '）'
+  if (Number(status) === 402) return '额度不足（HTTP 402）'
+  if (Number(status) === 404) return '接口路径不对（HTTP 404）：检查 baseUrl 是否带 /v1'
+  if (Number(status) === 429) return '被上游限流（HTTP 429）'
+  return raw || 'HTTP ' + status
+}
+
+async function probeFetch(url, options, timeoutMs) {
+  try {
+    return await fetch(url, { ...options, signal: AbortSignal.timeout(timeoutMs) })
+  } catch {
+    // 上游经 CDN 时常在 4xx 后掐连接，复用同一条连接的下一次 fetch 会直接抛 fetch failed（TypeSafe 451 实测）
+    return fetch(url, { ...options, signal: AbortSignal.timeout(timeoutMs) })
+  }
+}
+
+async function withJudgeCheck(result, key, capabilities) {
+  if (!(capabilities || []).includes('judge')) return result
+  try {
+    const { judgeSelfCheck } = await import('./judge.mjs')
+    const judge = await judgeSelfCheck(key)
+    const onlyJudge = (capabilities || []).every((item) => item === 'judge')
+    return { ...result, ok: onlyJudge ? judge.ok : result.ok, judge }
+  } catch (error) {
+    return { ...result, judge: { ok: false, protocol: '', model: '', answers: null, error: String(error?.message || error) } }
+  }
+}
+
+/**
  * 后台「测试」：能真实调用的能力就打一次真实请求（max_tokens=1），
  * 不能安全真实调用的能力（出图 / 视频会产生费用）只探测凭证，并在结果里写明 mode，
  * 不让「/models 返回 200」冒充「模型可用」。
@@ -675,7 +716,7 @@ export async function testKey(id) {
   if (realCallable && declaredModel) {
     let result
     try {
-      const response = await fetch(key.baseUrl + '/chat/completions', {
+      const response = await probeFetch(key.baseUrl.replace(/\/+$/, '') + '/chat/completions', {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -684,8 +725,7 @@ export async function testKey(id) {
           max_tokens: 1,
           stream: false,
         }),
-        signal: AbortSignal.timeout(15_000),
-      })
+      }, 15_000)
       const text = await response.text()
       let choices = 0
       let reply = ''
@@ -706,7 +746,7 @@ export async function testKey(id) {
         ms: Date.now() - started,
         models: [],
         reply: reply.slice(0, 40),
-        error: response.ok && choices > 0 ? '' : upstreamError || text.slice(0, 200),
+        error: response.ok && choices > 0 ? '' : upstreamError || probeFailureText(response.status, text),
       }
     } catch (error) {
       result = {
@@ -720,6 +760,7 @@ export async function testKey(id) {
         error: String(error?.message || error).slice(0, 200),
       }
     }
+    result = await withJudgeCheck(result, key, capabilities)
     key.lastTest = { ...result, at: new Date().toISOString() }
     key.updatedAt = new Date().toISOString()
     persist()
@@ -728,10 +769,9 @@ export async function testKey(id) {
 
   let result
   try {
-    const response = await fetch(key.baseUrl + '/models', {
+    const response = await probeFetch(key.baseUrl.replace(/\/+$/, '') + '/models', {
       headers: { Authorization: 'Bearer ' + apiKey },
-      signal: AbortSignal.timeout(8000),
-    })
+    }, 8000)
     const text = await response.text()
     let models = []
     try {
@@ -749,7 +789,7 @@ export async function testKey(id) {
       ms: Date.now() - started,
       models,
       reply: '',
-      error: response.ok ? '' : text.slice(0, 200),
+      error: response.ok ? '' : probeFailureText(response.status, text),
     }
   } catch (error) {
     result = {
@@ -764,6 +804,7 @@ export async function testKey(id) {
       error: String(error?.message || error).slice(0, 200),
     }
   }
+  result = await withJudgeCheck(result, key, capabilities)
   key.lastTest = { ...result, at: new Date().toISOString() }
   key.updatedAt = new Date().toISOString()
   persist()

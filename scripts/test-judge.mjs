@@ -19,6 +19,7 @@ process.env.VISION_FALLBACKS = ''
 process.env.VISIONQA_SERVICE_URL = 'http://127.0.0.1:1'
 
 let typesafeMode = 'ok'
+let chatMode = 'ok'
 const judgeRequests = []
 
 const REVIEW = {
@@ -49,8 +50,26 @@ const judge = http.createServer((req, res) => {
   req.on('end', () => {
     const body = Buffer.concat(chunks).toString('utf8')
     judgeRequests.push({ url: req.url, auth: req.headers.authorization, body })
+    // 对话协议：任何 OpenAI 兼容模型当判断器（国内网络走这条）
+    if (req.url === '/v1/chat/completions') {
+      if (chatMode === 'region') {
+        return res.writeHead(451, { 'Content-Type': 'application/json' }).end('{"title":"Typesafe is not available in your region.","status":451}')
+      }
+      const content = JSON.stringify({
+        evidence_consistent: 0.77,
+        verdict_supported: { choice: 'too_strict', confidence: 0.62 },
+        actionable: 0.55,
+        publish_risk: { score: 2, confidence: 0.7 },
+      })
+      return res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({
+        model: 'deepseek-chat',
+        choices: [{ message: { content }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 210, completion_tokens: 32 },
+      }))
+    }
     if (req.url !== '/v1/systemone') return res.writeHead(404, { 'Content-Type': 'application/json' }).end('{"error":"not found"}')
     if (typesafeMode === 'fail') return res.writeHead(503, { 'Content-Type': 'application/json' }).end('{"error":"upstream busy"}')
+    if (typesafeMode === 'region') return res.writeHead(451, { 'Content-Type': 'application/json' }).end('{"title":"Typesafe is not available in your region.","status":451}')
     res.writeHead(200, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({
       model: 'jev-test',
@@ -147,6 +166,84 @@ assert.equal(judgeStatus().configured, false)
 const disabled = await judgeReview({ verdict: 'pass', summary: 'ok', observations: [], fixes: [] }, { intent: '' })
 assert.equal(disabled.status, 'disabled')
 assert.match(disabled.note, /还没接入/)
+
+// 8) 对话协议：baseUrl 不是 typesafe.ai 就按 OpenAI 兼容接口问同样四个判断
+const { judgeEndpoint, judgeProtocol, friendlyJudgeError } = await import('../server/judge.mjs')
+const { testKey } = await import('../server/keyvault.mjs')
+assert.equal(judgeProtocol({ baseUrl: 'https://api.typesafe.ai/v1' }), 'systemone')
+assert.equal(judgeProtocol({ baseUrl: 'https://api.deepseek.com/v1' }), 'chat')
+assert.equal(judgeEndpoint('https://api.typesafe.ai', '/systemone'), 'https://api.typesafe.ai/v1/systemone')
+assert.equal(judgeEndpoint('https://api.typesafe.ai/v1/', '/systemone'), 'https://api.typesafe.ai/v1/systemone')
+assert.match(friendlyJudgeError(451, '{"title":"Typesafe is not available in your region."}'), /地区/)
+assert.match(friendlyJudgeError(404, '{}'), /\/v1/)
+assert.match(friendlyJudgeError(402, '{}'), /额度/)
+
+const chatKey = createKey({
+  name: '对话式判断 Key',
+  provider: 'deepseek',
+  baseUrl: judgeBase,
+  apiKey: 'sk-chat-judge-1234567890',
+  models: ['deepseek-chat'],
+  capabilities: ['judge'],
+  priority: 10,
+  weight: 100,
+})
+const chatJudged = await judgeReview(REVIEW, { intent: '评审这张内容封面' })
+assert.equal(chatJudged.status, 'ok')
+assert.equal(chatJudged.provider, 'chat')
+assert.equal(chatJudged.protocol, 'chat')
+assert.equal(chatJudged.evidenceConsistent, 0.77)
+assert.equal(chatJudged.verdictSupport.choice, 'too_strict')
+assert.equal(chatJudged.publishRisk.score, 2)
+const chatCall = judgeRequests.at(-1)
+assert.equal(chatCall.url, '/v1/chat/completions')
+assert.equal(chatCall.auth, 'Bearer sk-chat-judge-1234567890')
+const chatBody = JSON.parse(chatCall.body)
+assert.equal(chatBody.response_format.type, 'json_object')
+assert.match(chatBody.messages[0].content, /evidence_consistent/)
+assert.match(chatBody.messages[1].content, /needs_review/, '判断要和评审一起发给判断模型')
+
+// 9) baseUrl 少写 /v1 也能拼对（TypeSafe 只认 /v1/systemone，少一段就是 404）
+const bareKey = createKey({
+  name: '少写 /v1 的判断 Key',
+  provider: 'typesafe',
+  baseUrl: 'http://127.0.0.1:' + judge.address().port,
+  apiKey: 'sk-bare-judge-1234567890',
+  models: ['jev-test'],
+  capabilities: ['judge'],
+  priority: 10,
+  weight: 100,
+})
+deleteKey(chatKey.id)
+const bareJudged = await judgeReview(REVIEW, { intent: '' })
+assert.equal(bareJudged.status, 'ok')
+assert.equal(judgeRequests.at(-1).url, '/v1/systemone', 'baseUrl 不带 /v1 时自动补上')
+
+// 10) 地区限制：上游 451 时给出人话原因，评审照样返回
+deleteKey(bareKey.id)
+const regionKey = createKey({
+  name: '被地区限制的判断 Key',
+  provider: 'typesafe',
+  baseUrl: judgeBase,
+  apiKey: 'sk-region-judge-1234567890',
+  models: ['jev-test'],
+  capabilities: ['judge'],
+  priority: 10,
+  weight: 100,
+})
+typesafeMode = 'region'
+const regionJudged = await judgeReview(REVIEW, { intent: '' })
+assert.equal(regionJudged.status, 'failed')
+assert.match(regionJudged.error, /地区/)
+typesafeMode = 'ok'
+
+// 11) 后台「测试 Key」：判断能力会真跑一次判断自检，而不是只探 /models
+const tested = await testKey(regionKey.id)
+assert.equal(tested.judge.ok, true)
+assert.equal(tested.judge.protocol, 'systemone')
+assert.equal(tested.judge.answers.evidenceConsistent, 0.82)
+assert.equal(tested.ok, true, '只声明判断能力的 Key，测通以判断调通为准')
+deleteKey(regionKey.id)
 
 // 7) 日志里不能出现 Key 明文
 assert.equal(JSON.stringify(listRoutes(50)).includes('ts-judge-1234567890'), false)

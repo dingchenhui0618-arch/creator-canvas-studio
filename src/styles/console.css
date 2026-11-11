@@ -284,16 +284,17 @@
 }
 
 .admin-key-test {
-  display: block;
-  max-width: 210px;
-  margin-top: 3px;
+  display: -webkit-box;
+  max-width: 260px;
+  margin-top: 4px;
   overflow: hidden;
   color: var(--faint, #8a8a8a);
   font-size: 12px;
   font-weight: 400;
   line-height: 1.55;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
 
 .admin-table--templates {
