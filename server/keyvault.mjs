@@ -466,7 +466,7 @@ export function resolveKeyCandidates({ capability = 'text', model = '', acceptMo
       reason:
         ordered.length > 1
           ? '第 ' + (index + 1) + ' 把（' + (index === 0 ? '首选' : '失败后回退') + '，共 ' + ordered.length + ' 把候选）'
-          : '唯一可用的一把',
+          : '优先级 P' + key.priority + ' 里唯一可用的一把',
     }
   })
 }
@@ -601,6 +601,18 @@ export function listRoutes(limit = 50) {
   }
   // 换 Key 成功：这次调用第一把失败、后面某把成功了 —— 后台用它证明「回退真的生效」。
   const failover = routes.filter((item) => item.ok && Number(item.attempt) > 1).length
+  // 同名 Key（换过凭证重建一把、演练 Key 用过两次）在按 Key 汇总里要能区分开，
+  // 否则后台会出现两行一模一样的小结，管理员分不清是同一把还是两把。
+  const named = [...buckets.values()].map((bucket) => ({ ...bucket, avgMs: Math.round(bucket.ms / Math.max(1, bucket.count)) }))
+  const nameCount = new Map()
+  for (const item of named) nameCount.set(item.keyName, (nameCount.get(item.keyName) || 0) + 1)
+  const byKey = named
+    .map((item) =>
+      (nameCount.get(item.keyName) || 0) > 1 && item.keyId
+        ? { ...item, keyName: item.keyName + '（' + item.keyId.slice(-4) + '）' }
+        : item,
+    )
+    .sort((a, b) => b.count - a.count)
   return {
     items: routes.slice(0, size),
     summary: {
@@ -612,9 +624,7 @@ export function listRoutes(limit = 50) {
       failover,
       avgMs: routes.length ? Math.round(msSum / routes.length) : 0,
       lastAt: routes[0]?.at || '',
-      byKey: [...buckets.values()]
-        .map((bucket) => ({ ...bucket, avgMs: Math.round(bucket.ms / Math.max(1, bucket.count)) }))
-        .sort((a, b) => b.count - a.count),
+      byKey,
     },
   }
 }

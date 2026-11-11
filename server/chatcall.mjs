@@ -1,5 +1,5 @@
 import { config } from './config.mjs'
-import { recordRoute, resolveKey, reportKey } from './keyvault.mjs'
+import { recordRoute, reportKey, resolveKeyCandidates } from './keyvault.mjs'
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -15,6 +15,14 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
  *
  * 凭证解析：优先用后台「平台 Key」池里符合能力的 Key（运行时可增删），
  * 池里没有可用 Key 时回落到环境变量里的旧凭证；Key 由管理员在后台维护，不写死在进程里。
+ *
+ * 多 Key 故障回退（2026-11-11 补）：以前这里只取「首选那一把」，它挂了整条模型链就算失败，
+ * 后面的 Key 明明可用也没机会上场 —— 与目标里「多 Key 权重与故障回退」不符。
+ * 现在按优先级 / 权重拿到一串候选 Key，同一把挂了（欠费、无效、限流、上游 5xx、连不上）
+ * 就换下一把接着试，每次真实请求都落一条带 attempt 序号的记录；
+ * 后台「路由决策」里的「换把成功」就是 attempt > 1 且 ok 的那些记录。
+ * 只有「输出被 max_tokens 截断」不换把：那是模型与参数的问题，换 Key 也一样截断，
+ * 留给上层的模型链去换模型。
  */
 export async function chatCompletion({
   model,
@@ -25,87 +33,115 @@ export async function chatCompletion({
   signal,
   timeoutMs = config.vision.timeoutMs,
   capability = 'text',
+  maxKeys = 3,
 }) {
-  let useJson = Boolean(json)
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const started = Date.now()
-    const resolved = resolveKey({ capability, model })
-    const baseUrl = String(resolved?.baseUrl || config.vision.baseUrl || '').replace(/\/+$/, '')
-    const apiKey = resolved?.apiKey || config.vision.apiKey
-    // 每次真实调用落一条路由记录：走了哪把 Key、为什么、耗时多少、成没成。
-    // 后台「路由决策」页读的就是这条日志，所以失败也要记，不能只记成功的。
-    const route = (extra = {}) =>
-      recordRoute({
-        capability,
-        model,
-        keyId: resolved?.id,
-        keyName: resolved?.name,
-        source: resolved ? 'pool' : apiKey ? 'env' : 'none',
-        reason: resolved?.reason || (apiKey ? '池里没有可用 Key，回落到环境变量凭证' : '池里没有可用 Key，环境变量也没配'),
-        attempt: attempt + 1,
-        ms: Date.now() - started,
-        ...extra,
-      })
-    if (!apiKey) {
-      route({ ok: false, error: '未配置模型凭证' })
-      const error = new Error('未配置模型凭证：管理员还没有在后台添加可用 Key')
-      error.code = 'NO_MODEL'
-      throw error
-    }
-    const controller = signal ? null : new AbortController()
-    const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null
-    const body = { model, messages, temperature, max_tokens: maxTokens }
-    if (useJson) body.response_format = { type: 'json_object' }
-    try {
-      const response = await fetch(baseUrl + '/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey },
-        body: JSON.stringify(body),
-        signal: signal || controller.signal,
-      })
-      const text = await response.text()
-      if (!response.ok) {
-        const busy = response.status === 429 || response.status >= 500 || /overloaded/i.test(text)
-        // 网关不认 response_format：去掉它重试一次，而不是把整条链路判死
-        // （这不是 Key 的问题，不能计入失败次数，否则正常请求也会把 Key 打进冷却）
-        if (useJson && response.status === 400 && /response_format|json_object|unsupported/i.test(text)) {
-          useJson = false
-          continue
+  const candidates = resolveKeyCandidates({ capability, model, limit: maxKeys })
+  // 池里没有任何可用 Key 时，仍按老规矩回落环境变量凭证；来源在路由日志里标 env / none。
+  const attempts = candidates.length
+    ? candidates
+    : [
+        {
+          id: '',
+          name: '',
+          baseUrl: '',
+          apiKey: '',
+          attempt: 1,
+          source: config.vision.apiKey ? 'env' : 'none',
+          reason: config.vision.apiKey ? '池里没有可用 Key，回落到环境变量凭证' : '池里没有可用 Key，环境变量也没配',
+        },
+      ]
+  let lastError = null
+  for (const candidate of attempts) {
+    const baseUrl = String(candidate.baseUrl || config.vision.baseUrl || '').replace(/\/+$/, '')
+    const apiKey = candidate.apiKey || (candidate.source === 'env' || candidate.source === 'none' ? config.vision.apiKey : '')
+    const source = candidate.id ? 'pool' : candidate.source || (apiKey ? 'env' : 'none')
+    let useJson = Boolean(json)
+    for (let pass = 0; pass < 2; pass += 1) {
+      const started = Date.now()
+      // 每次真实调用落一条路由记录：走了哪把 Key、为什么、耗时多少、成没成。
+      // 后台「路由决策」页读的就是这条日志，所以失败也要记，不能只记成功的。
+      const route = (extra = {}) =>
+        recordRoute({
+          capability,
+          model,
+          keyId: candidate.id,
+          keyName: candidate.name,
+          source,
+          reason: candidate.reason || (source === 'env' ? '池里没有可用 Key，回落到环境变量凭证' : '池里没有可用 Key，环境变量也没配'),
+          attempt: candidate.attempt || 1,
+          ms: Date.now() - started,
+          ...extra,
+        })
+      if (!apiKey) {
+        route({ ok: false, error: '未配置模型凭证' })
+        const error = new Error('未配置模型凭证：管理员还没有在后台添加可用 Key')
+        error.code = 'NO_MODEL'
+        throw error
+      }
+      const controller = signal ? null : new AbortController()
+      const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null
+      const body = { model, messages, temperature, max_tokens: maxTokens }
+      if (useJson) body.response_format = { type: 'json_object' }
+      try {
+        const response = await fetch(baseUrl + '/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey },
+          body: JSON.stringify(body),
+          signal: signal || controller.signal,
+        })
+        const text = await response.text()
+        if (!response.ok) {
+          const busy = response.status === 429 || response.status >= 500 || /overloaded/i.test(text)
+          // 网关不认 response_format：去掉它重试一次，而不是把整条链路判死
+          // （这不是 Key 的问题，不能计入失败次数，否则正常请求也会把 Key 打进冷却）
+          if (useJson && response.status === 400 && /response_format|json_object|unsupported/i.test(text)) {
+            useJson = false
+            continue
+          }
+          reportKey(candidate.id, false, 'HTTP ' + response.status + ' ' + text.slice(0, 160))
+          route({ ok: false, error: 'HTTP ' + response.status + ' ' + text.slice(0, 120) })
+          const error = new Error(
+            model + (busy ? ' 上游繁忙（HTTP ' + response.status + '）' : ' HTTP ' + response.status + '：' + text.slice(0, 140)),
+          )
+          error.retryable = busy
+          error.status = response.status
+          console.error('[chat] ' + model + ' ' + response.status + ' ' + text.slice(0, 400))
+          lastError = error
+          break
         }
-        reportKey(resolved?.id, false, 'HTTP ' + response.status + ' ' + text.slice(0, 160))
-        route({ ok: false, error: 'HTTP ' + response.status + ' ' + text.slice(0, 120) })
-        const error = new Error(
-          model + (busy ? ' 上游繁忙（HTTP ' + response.status + '）' : ' HTTP ' + response.status + '：' + text.slice(0, 140)),
-        )
-        error.retryable = busy
-        error.status = response.status
-        console.error('[chat] ' + model + ' ' + response.status + ' ' + text.slice(0, 400))
-        throw error
+        const parsed = JSON.parse(text)
+        const choice = parsed?.choices?.[0] || {}
+        const finishReason = String(choice.finish_reason || '')
+        if (finishReason === 'length') {
+          reportKey(candidate.id, false, 'finish_reason=length')
+          route({ ok: false, error: '输出被 max_tokens 截断（finish_reason=length）' })
+          const error = new Error(model + ' 输出被 max_tokens 截断（finish_reason=length）')
+          error.retryable = true
+          error.truncated = true
+          // 截断是「模型 + max_tokens」的问题：换一把同模型的 Key 只会再截断一次，
+          // 直接交给上层的模型链换模型，不在这里多烧一次钱。
+          throw error
+        }
+        reportKey(candidate.id, true)
+        route({ ok: true })
+        return { message: choice.message || {}, finishReason, usage: parsed?.usage, jsonMode: useJson }
+      } catch (error) {
+        if (error?.code === 'NO_MODEL' || error?.status || error?.truncated) {
+          lastError = error
+          break
+        }
+        reportKey(candidate.id, false, String(error?.message || error))
+        route({ ok: false, error: String(error?.message || error).slice(0, 120) })
+        lastError = error
+        break
+      } finally {
+        if (timer) clearTimeout(timer)
       }
-      const parsed = JSON.parse(text)
-      const choice = parsed?.choices?.[0] || {}
-      const finishReason = String(choice.finish_reason || '')
-      if (finishReason === 'length') {
-        reportKey(resolved?.id, false, 'finish_reason=length')
-        route({ ok: false, error: '输出被 max_tokens 截断（finish_reason=length）' })
-        const error = new Error(model + ' 输出被 max_tokens 截断（finish_reason=length）')
-        error.retryable = true
-        error.truncated = true
-        throw error
-      }
-      reportKey(resolved?.id, true)
-      route({ ok: true })
-      return { message: choice.message || {}, finishReason, usage: parsed?.usage, jsonMode: useJson }
-    } catch (error) {
-      if (error?.code === 'NO_MODEL' || error?.status) throw error
-      reportKey(resolved?.id, false, String(error?.message || error))
-      route({ ok: false, error: String(error?.message || error).slice(0, 120) })
-      throw error
-    } finally {
-      if (timer) clearTimeout(timer)
     }
+    // 还有候选就换下一把（故障回退）；没有候选时这一段结束、下面抛出最后一次错误。
+    if (lastError?.truncated) throw lastError
   }
-  throw new Error(model + ' 调用失败')
+  throw lastError || new Error(model + ' 调用失败')
 }
 
 export { sleep }
