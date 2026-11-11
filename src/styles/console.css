@@ -633,6 +633,30 @@
   }
 }
 
+/* 平台 Key 池：行内编辑（点「编辑」在那一行下面展开，不跳页、不弹窗） */
+.admin-table--keys tr.admin-key-editor > td {
+  padding: 16px;
+  background: var(--canvas, #faf9f7);
+  border-top: 1px solid var(--line-strong, #d8d3c9);
+  vertical-align: top;
+}
+
+.admin-key-editor-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+
+.admin-key-editor-head strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.admin-key-editor .admin-edit-grid {
+  margin-top: 8px;
+}
+
 .admin-toolbar {
   display: flex;
   align-items: flex-end;
