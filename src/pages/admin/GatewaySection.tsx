@@ -5,8 +5,15 @@ import type { GatewayStatus } from '../../api/gateway'
 
 const ENDPOINTS: { key: keyof GatewayStatus['endpoints']; label: string; note: string }[] = [
   { key: 'images', label: '出图', note: '同步返回 data[].url，画布直接取图' },
+  { key: 'imagesAsync', label: '出图 · 异步建任务', note: '只回任务 id，再按 id 轮询取图' },
   { key: 'videoCreate', label: '出视频 · 建任务', note: '返回任务 id，画布按 id 轮询' },
   { key: 'videoPoll', label: '出视频 · 轮询', note: '回到建任务的那把 Key 查进度' },
+  { key: 'taskPoll', label: '任务 · 查结果', note: 'SeeAPI 形态的通用查任务地址' },
+]
+
+const GROUPS: { capability: 'image' | 'video'; label: string }[] = [
+  { capability: 'image', label: '出图' },
+  { capability: 'video', label: '出视频' },
 ]
 
 /**
@@ -34,8 +41,8 @@ export default function GatewaySection() {
         <div>
           <p className="admin-label">生成通道</p>
           <p className="admin-sub">
-            画布的出图 / 出视频请求已经走这里：按能力选平台 Key 再转发上游。接口按火山方舟（Ark）形态实现，
-            令牌与上游 Key 都不进浏览器。
+            画布的出图 / 出视频请求已经走这里：按能力选平台 Key 再转发上游。方舟与 SeeAPI（CGCM）两种上游协议都接，
+            贴 Key 时只管贴地址，协议按地址自动认。令牌与上游 Key 都不进浏览器。
           </p>
         </div>
         <div className="admin-row-actions">
@@ -53,50 +60,58 @@ export default function GatewaySection() {
         <>
           <p className="admin-hint">
             <Badge tone={data.configured ? 'ok' : 'warn'}>{data.configured ? '通道已开启' : '通道未开启'}</Badge>{' '}
-            出图 Key {data.keys.image} 把 · 出视频 Key {data.keys.video} 把 · 正在跑 {data.activeTasks} 个视频任务
-            {data.models.image.length ? ` · 可出图模型 ${data.models.image.join(' / ')}` : ' · 还没有声明出图模型的 Key'}
-            {data.models.video.length ? ` · 可出视频模型 ${data.models.video.join(' / ')}` : ''}
+            出图 Key {data.keys.image} 把 · 出视频 Key {data.keys.video} 把 · 正在跑 {data.activeTasks} 个生成任务
           </p>
 
-          <div className="admin-table-wrap">
-            <table className="admin-table">
-              <thead>
-                <tr>
-                  <th>画布要的模型</th>
-                  <th>现在谁接</th>
-                  <th>说明</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.coverage.map((row) => (
-                  <tr key={row.model}>
-                    <td>
-                      <strong>{row.label}</strong>
-                      <div className="admin-cell-sub admin-mono">{row.model}</div>
-                    </td>
-                    <td>
-                      <Badge tone={row.ready ? 'ok' : 'warn'}>
-                        {row.ready ? (row.coveredBy === 'generic' ? '通用 Key 接' : '已接入') : '缺 Key'}
-                      </Badge>
-                    </td>
-                    <td className="admin-cell-sub">
-                      {row.ready ? row.keys.map((key) => key.name).join(' / ') : '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="admin-hint">
-            {data.coverage.some((row) => !row.ready)
-              ? '还不通：' +
-                data.coverage
-                  .filter((row) => !row.ready)
-                  .map((row) => row.label)
-                  .join('、') +
-                '。补一把方舟 Key 就都通了——模型清单留空表示通用，或照上面一列的名字填。'
-              : '三个出图模型都有人接，画布点哪个都能出图。'}
-          </p>
+          {GROUPS.map((group) => {
+            const rows = data.coverage.filter((row) => row.capability === group.capability)
+            if (!rows.length) return null
+            const missing = rows.filter((row) => !row.ready)
+            return (
+              <div key={group.capability} className="admin-block">
+                <p className="admin-label">{group.label}</p>
+                <div className="admin-table-wrap">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>画布要的模型</th>
+                        <th>现在谁接</th>
+                        <th>说明</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((row) => (
+                        <tr key={row.model}>
+                          <td>
+                            <strong>{row.label}</strong>
+                            <div className="admin-cell-sub admin-mono">{row.model}</div>
+                          </td>
+                          <td>
+                            <Badge tone={row.ready ? 'ok' : 'warn'}>
+                              {row.ready ? (row.coveredBy === 'generic' ? '通用 Key 接' : '已接入') : '缺 Key'}
+                            </Badge>
+                          </td>
+                          <td className="admin-cell-sub">
+                            {row.ready
+                              ? row.keys.map((key) => key.name).join(' / ') +
+                                (row.upstream ? ' · 按 ' + row.upstream + ' 发' : '')
+                              : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="admin-hint">
+                  {missing.length
+                    ? '还不通：' +
+                      missing.map((row) => row.label).join('、') +
+                      '。补一把声明了这些模型的 Key 就通——模型清单留空表示通用，或照上面一列的名字填。'
+                    : rows.length + ' 个' + group.label + '模型都有人接，画布点哪个都能生成。'}
+                </p>
+              </div>
+            )
+          })}
 
           <div className="admin-table-wrap">
             <table className="admin-table">
@@ -133,7 +148,7 @@ export default function GatewaySection() {
               ? `服务令牌已配置（${data.tokenMasked}），画布侧用 Authorization: Bearer 调用。`
               : '服务令牌还没配置：通道会直接回 503，不会匿名放行。'}
             {data.keys.image === 0 && data.keys.video === 0
-              ? ' 现在还没有声明出图 / 出视频能力的 Key：贴一把方舟 Key 并勾上对应能力，通道就能出图。'
+              ? ' 现在还没有声明出图 / 出视频能力的 Key：贴一把 Key 并勾上对应能力，通道就能生成。'
               : ''}
           </p>
 
@@ -142,7 +157,7 @@ export default function GatewaySection() {
               <table className="admin-table admin-table--routes">
                 <thead>
                   <tr>
-                    <th>视频任务</th>
+                    <th>生成任务</th>
                     <th>模型</th>
                     <th>走的 Key</th>
                     <th>创建于</th>

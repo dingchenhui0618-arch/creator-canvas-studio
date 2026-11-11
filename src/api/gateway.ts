@@ -10,9 +10,11 @@ export type GatewayTask = {
 export type GatewayCoverage = {
   model: string
   label: string
-  capability: 'image'
+  capability: 'image' | 'video'
   ready: boolean
   coveredBy: 'model' | 'generic' | 'none'
+  /** 靠改名接上的：这里写发给上游的真实模型名（如 SeeAPI 的 seedream-5.0-pro） */
+  upstream?: string
   keys: { id: string; name: string; priority: number }[]
 }
 
@@ -22,7 +24,13 @@ export type GatewayStatus = {
   baseUrl: string
   activeTasks: number
   recentTasks: GatewayTask[]
-  endpoints: { images: string; videoCreate: string; videoPoll: string }
+  endpoints: {
+    images: string
+    imagesAsync: string
+    videoCreate: string
+    videoPoll: string
+    taskPoll: string
+  }
   keys: { image: number; video: number }
   models: { image: string[]; video: string[] }
   coverage: GatewayCoverage[]

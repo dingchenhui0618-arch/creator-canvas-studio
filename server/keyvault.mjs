@@ -31,6 +31,7 @@ export const PROVIDER_PRESETS = [
   { id: 'typesafe', label: 'TypeSafe（Jev 判断）', baseUrl: 'https://api.typesafe.ai/v1' },
   { id: 'bailian', label: '阿里云百炼', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1' },
   { id: 'volcengine', label: '火山方舟', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3' },
+  { id: 'cgcm', label: 'SeeAPI / CGCM（出图出视频）', baseUrl: 'https://api.cgcm-api.com' },
   { id: 'openai', label: 'OpenAI', baseUrl: 'https://api.openai.com/v1' },
   { id: 'custom', label: '自定义 / 中转', baseUrl: '' },
 ]
@@ -311,7 +312,10 @@ function weightedPick(items) {
  * 真实调用（resolveKey）与预演（previewRoute）共用这一套判定，
  * 不允许出现「后台说走 A、实际走了 B」。
  */
-export function planRoute({ capability = 'text', model = '' } = {}) {
+export function planRoute({ capability = 'text', model = '', acceptModels = null } = {}) {
+  // 同一个模型在不同上游叫法可能不同（方舟 doubao-… / SeeAPI seedream-…），
+  // 调用方把「都能接受的名字」一起给过来，命中任一即可。
+  const accepted = (Array.isArray(acceptModels) && acceptModels.length ? acceptModels : model ? [model] : []).filter(Boolean)
   const rows = load().keys.map((key) => {
     const caps = key.capabilities || []
     const models = key.models || []
@@ -325,9 +329,9 @@ export function planRoute({ capability = 'text', model = '' } = {}) {
     } else if (!caps.includes(capability)) {
       state = 'capability'
       reason = '没有「' + capability + '」能力'
-    } else if (model && models.length && !models.includes(model)) {
+    } else if (accepted.length && models.length && !accepted.some((name) => models.includes(name))) {
       state = 'model'
-      reason = '模型白名单里没有 ' + model
+      reason = '模型白名单里没有 ' + accepted.join(' / ')
     } else if (coolingSec > 0) {
       state = 'cooling'
       reason = '冷却中，还需 ' + coolingSec + ' 秒'
@@ -393,8 +397,8 @@ export function resolveKey({ capability = 'text', model = '' } = {}) {
  * 出图 / 建视频这类一次请求失败后还能换把重试的场景用它。
  * 排序规则与 planRoute 完全一致：优先级小的先试，同优先级按权重随机（不放回）。
  */
-export function resolveKeyCandidates({ capability = 'text', model = '', limit = 3 } = {}) {
-  const plan = planRoute({ capability, model })
+export function resolveKeyCandidates({ capability = 'text', model = '', acceptModels = null, limit = 3 } = {}) {
+  const plan = planRoute({ capability, model, acceptModels })
   const cap = Math.max(1, Math.min(5, Number(limit) || 3))
   const eligible = plan.keys.filter((row) => row.state === 'eligible')
   const ordered = []
@@ -422,6 +426,7 @@ export function resolveKeyCandidates({ capability = 'text', model = '', limit = 
       provider: key.provider,
       baseUrl: key.baseUrl,
       apiKey: safeDecrypt(key.apiKey),
+      models: key.models || [],
       model: model || (key.models || [])[0] || '',
       priority: key.priority,
       weight: key.weight,

@@ -16,6 +16,7 @@ process.env.VQ_GATEWAY_TOKEN = 'test-gateway-token'
 
 let imageMode = 'ok'
 let videoPolls = 0
+let cgcmVideoPolls = 0
 const seen = []
 
 const upstream = http.createServer((req, res) => {
@@ -38,6 +39,26 @@ const upstream = http.createServer((req, res) => {
     if (req.method === 'POST' && req.url === '/v1/contents/generations/tasks') {
       return send(200, { id: 'task-abc' })
     }
+    // SeeAPI / CGCM 形态（baseUrl 里带 cgcm 的 Key 走这一套）
+    if (req.method === 'POST' && req.url === '/cgcm/v1/images/generations') {
+      if (imageMode === 'fail') return send(500, { error: { message: 'cgcm boom' } })
+      return send(200, { data: [{ url: 'https://example.invalid/cgcm-sync.png' }] })
+    }
+    if (req.method === 'POST' && req.url === '/cgcm/v1/images/generations/async') {
+      return send(202, { id: 'img-job-1', object: 'task', status: 'queued' })
+    }
+    if (req.method === 'POST' && req.url === '/cgcm/v1/video/generations') {
+      return send(202, { id: 'job-cgcm', object: 'task', status: 'queued' })
+    }
+    if (req.method === 'GET' && req.url === '/cgcm/v1/tasks/img-job-1') {
+      return send(200, { id: 'img-job-1', status: 'succeeded', output: { url: 'https://example.invalid/cgcm-async.png' } })
+    }
+    if (req.method === 'GET' && req.url === '/cgcm/v1/tasks/job-cgcm') {
+      cgcmVideoPolls += 1
+      return send(200, cgcmVideoPolls < 2
+        ? { id: 'job-cgcm', status: 'running' }
+        : { id: 'job-cgcm', status: 'succeeded', output: { video_url: 'https://example.invalid/cgcm.mp4' } })
+    }
     if (req.method === 'GET' && req.url === '/v1/contents/generations/tasks/task-abc') {
       videoPolls += 1
       return send(200, videoPolls < 2 ? { id: 'task-abc', status: 'running' } : { id: 'task-abc', status: 'succeeded', content: { video_url: 'https://example.invalid/v.mp4' } })
@@ -50,7 +71,7 @@ const base = 'http://127.0.0.1:' + upstream.address().port + '/v1'
 
 const { createKey, deleteKey, listRoutes } = await import('../server/keyvault.mjs')
 const { config } = await import('../server/config.mjs')
-const { authorizeGateway, createVideoTask, gatewayConfigured, gatewayStatus, generateImage, pollVideoTask } = await import('../server/gateway.mjs')
+const { authorizeGateway, createImageTask, createVideoTask, gatewayConfigured, gatewayStatus, generateImage, pollVideoTask } = await import('../server/gateway.mjs')
 
 const imageKey = createKey({
   name: '假出图 Key',
@@ -151,6 +172,15 @@ const unknownRes = fakeRes()
 await router.handle(await fakeReq('GET', { authorization: 'Bearer test-gateway-token' }), unknownRes, new URL('http://x/api/gateway/v1/nope'), '/api/gateway/v1/nope')
 assert.equal(unknownRes.statusCode, 404)
 
+// 6.6) 模型目录：画布「测试 Key」探这里判活，内容只来自池里的声明
+const modelsRes = fakeRes()
+await router.handle(await fakeReq('GET', { authorization: 'Bearer test-gateway-token' }), modelsRes, new URL('http://x/api/gateway/v1/models'), '/api/gateway/v1/models')
+assert.equal(modelsRes.statusCode, 200)
+const listedModels = JSON.parse(modelsRes.body)
+assert.equal(listedModels.object, 'list')
+assert.ok(listedModels.data.some((item) => item.id === 'fake-image'), '池里声明的模型要出现在目录里')
+assert.equal(JSON.stringify(listedModels).includes('sk-'), false, '模型目录不能带 Key')
+
 // 7) 池里没有出图 Key：明确告诉管理员去加 Key，而不是回一个上游错误
 deleteKey(imageKey.id)
 await assert.rejects(() => generateImage({ model: 'fake-image', prompt: 'x' }), (error) => error.code === 'NO_IMAGE_KEY' && error.status === 503)
@@ -232,8 +262,10 @@ assert.equal(listRoutes(20).items[0].source, 'none')
 assert.ok(/unserved-model/.test(String(listRoutes(20).items[0].error)), '模型名要落在后台路由日志里')
 
 // 9.4) 画布要的模型有没有 Key 接得住：缺 Key / 通用 Key / 精确声明 三种口径
-const { modelCoverage } = await import('../server/gateway.mjs')
-assert.deepEqual(modelCoverage().map((row) => row.coveredBy), ['none', 'none', 'none'], '池里只有声明了别的模型的 Key 时，画布的模型都算缺')
+const { modelCoverage, keyProtocol, upstreamUrl } = await import('../server/gateway.mjs')
+const imageRows = () => modelCoverage().filter((row) => row.capability === 'image')
+assert.deepEqual(imageRows().map((row) => row.coveredBy), ['none', 'none', 'none'], '池里只有声明了别的模型的 Key 时，画布的模型都算缺')
+assert.equal(modelCoverage().filter((row) => row.capability === 'video').length, 8, '出视频的 8 个模型也要在对账表里')
 const genericKey = createKey({
   name: '通用出图 Key',
   provider: 'volcengine',
@@ -244,7 +276,12 @@ const genericKey = createKey({
   priority: 20,
   weight: 100,
 })
-assert.deepEqual(modelCoverage().map((row) => row.coveredBy), ['generic', 'generic', 'generic'], '模型清单留空算通用 Key')
+assert.deepEqual(imageRows().map((row) => row.coveredBy), ['generic', 'generic', 'generic'], '模型清单留空算通用 Key')
+assert.deepEqual(
+  modelCoverage().filter((row) => row.capability === 'video').map((row) => row.coveredBy),
+  Array(8).fill('none'),
+  '通用出图 Key 不能顶出视频模型',
+)
 const exactKey = createKey({
   name: 'Seedream 4.5 专用',
   provider: 'volcengine',
@@ -255,13 +292,125 @@ const exactKey = createKey({
   priority: 30,
   weight: 100,
 })
-const covered = modelCoverage()
+const covered = imageRows()
 assert.equal(covered[0].model, 'doubao-seedream-4-5-251128')
 assert.equal(covered[0].coveredBy, 'model', '精确声明了模型名的 Key 优先算它')
 assert.equal(covered[0].keys[0].name, 'Seedream 4.5 专用')
 assert.deepEqual(covered.slice(1).map((row) => row.coveredBy), ['generic', 'generic'])
+const videoExact = createKey({
+  name: 'Seedance 2.0 Mini 专用',
+  provider: 'cgcm',
+  baseUrl: 'http://127.0.0.1:' + upstream.address().port + '/cgcm',
+  apiKey: 'sk-cgcm-1234567890',
+  models: ['seedance-2.0-mini'],
+  capabilities: ['video'],
+  priority: 30,
+  weight: 100,
+})
+const miniRow = modelCoverage().find((row) => row.model === 'seedance-2.0-mini')
+assert.equal(miniRow.coveredBy, 'model')
+assert.equal(miniRow.keys[0].name, 'Seedance 2.0 Mini 专用')
+deleteKey(videoExact.id)
 deleteKey(genericKey.id)
 deleteKey(exactKey.id)
+
+// 9.6) 上游协议按 Key 的 baseUrl 认：同一套接口既能接方舟，也能接 SeeAPI / CGCM
+assert.equal(keyProtocol({ baseUrl: 'https://ark.cn-beijing.volces.com/api/v3' }), 'ark')
+assert.equal(keyProtocol({ baseUrl: 'https://api.cgcm-api.com' }), 'cgcm')
+assert.equal(keyProtocol({ baseUrl: 'https://api.cgcm-api.com/v1/' }), 'cgcm')
+assert.equal(upstreamUrl({ baseUrl: 'https://api.cgcm-api.com' }, 'videoCreate'), 'https://api.cgcm-api.com/v1/video/generations')
+assert.equal(
+  upstreamUrl({ baseUrl: 'https://api.cgcm-api.com/v1/' }, 'task', 'job-1'),
+  'https://api.cgcm-api.com/v1/tasks/job-1',
+  '地址写成 …/v1 也要拼对',
+)
+assert.equal(
+  upstreamUrl({ baseUrl: 'https://ark.cn-beijing.volces.com/api/v3' }, 'task', 'task-1'),
+  'https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks/task-1',
+)
+assert.equal(upstreamUrl({ baseUrl: 'http://127.0.0.1:1/ark' }, 'image'), 'http://127.0.0.1:1/ark/images/generations')
+
+const cgcmBase = 'http://127.0.0.1:' + upstream.address().port + '/cgcm'
+const cgcmImageKey = createKey({
+  name: 'SeeAPI 出图 Key',
+  provider: 'cgcm',
+  baseUrl: cgcmBase,
+  apiKey: 'sk-cgcm-image-1234567890',
+  models: ['image-2-pro'],
+  capabilities: ['image'],
+  priority: 5,
+  weight: 100,
+})
+const cgcmImage = await generateImage({ model: 'image-2-pro', prompt: '白底产品主图' })
+assert.deepEqual(cgcmImage.urls, ['https://example.invalid/cgcm-sync.png'])
+const cgcmSyncCall = seen.find((item) => item.url === '/cgcm/v1/images/generations')
+assert.equal(cgcmSyncCall.auth, 'Bearer sk-cgcm-image-1234567890', 'SeeAPI 形态也要用平台 Key 转发')
+assert.equal(JSON.parse(cgcmSyncCall.body).response_format, 'url', 'SeeAPI 同步出图默认回 base64，平台要的是地址')
+
+const cgcmImageTask = await createImageTask({ model: 'image-2-pro', prompt: '异步出图' })
+assert.equal(cgcmImageTask.id, 'img-job-1')
+assert.ok(seen.some((item) => item.url === '/cgcm/v1/images/generations/async'), '异步出图要走 …/generations/async')
+const cgcmImageDone = await pollVideoTask('img-job-1')
+assert.equal(cgcmImageDone.status, 'succeeded')
+assert.equal(cgcmImageDone.output.url, 'https://example.invalid/cgcm-async.png')
+
+const cgcmVideoKey = createKey({
+  name: 'SeeAPI 出视频 Key',
+  provider: 'cgcm',
+  baseUrl: cgcmBase,
+  apiKey: 'sk-cgcm-video-1234567890',
+  models: ['seedance-2.0-mini'],
+  capabilities: ['video'],
+  priority: 5,
+  weight: 100,
+})
+const cgcmTask = await createVideoTask({ model: 'seedance-2.0-mini', prompt: '产品缓慢旋转展示', duration: 4, aspect_ratio: '16:9', resolution: '480p' })
+assert.equal(cgcmTask.id, 'job-cgcm')
+const cgcmCreateCall = seen.find((item) => item.url === '/cgcm/v1/video/generations')
+assert.equal(cgcmCreateCall.auth, 'Bearer sk-cgcm-video-1234567890', 'SeeAPI 建视频任务用平台 Key')
+assert.equal((await pollVideoTask('job-cgcm')).status, 'running')
+const cgcmDone = await pollVideoTask('job-cgcm')
+assert.equal(cgcmDone.status, 'succeeded')
+assert.equal(cgcmDone.output.video_url, 'https://example.invalid/cgcm.mp4', 'SeeAPI 的成品在 output.video_url')
+assert.equal(listRoutes(10).items[0].capability, 'video')
+// 同一款模型两个名字：画布发方舟名，SeeAPI 只认自己的叫法，通道按别名换名转发
+const aliasKey = createKey({
+  name: 'SeeAPI Seedream 5.0 Pro',
+  provider: 'cgcm',
+  baseUrl: cgcmBase,
+  apiKey: 'sk-cgcm-seedream-1234567890',
+  models: ['seedream-5.0-pro'],
+  capabilities: ['image'],
+  priority: 5,
+  weight: 100,
+})
+const aliasCoverage = modelCoverage().find((row) => row.model === 'doubao-seedream-5-0-pro-260628')
+assert.equal(aliasCoverage.ready, true, '声明了 SeeAPI 名字的 Key 也算接得住画布这个模型')
+assert.equal(aliasCoverage.upstream, 'seedream-5.0-pro', '后台要标出「按哪个上游名字发」')
+const aliasedImage = await generateImage({ model: 'doubao-seedream-5-0-pro-260628', prompt: '一张白底产品图' })
+const aliasCall = seen.filter((item) => item.url === '/cgcm/v1/images/generations').at(-1)
+assert.equal(JSON.parse(aliasCall.body).model, 'seedream-5.0-pro', '发给 SeeAPI 的必须是它认的名字')
+assert.ok(aliasedImage.ok)
+// 方舟 Key 声明的是原名，就不要改写
+const arkAliasKey = createKey({
+  name: '方舟 Seedream 5.0 Pro',
+  provider: 'volcengine',
+  baseUrl: base,
+  apiKey: 'sk-ark-seedream-1234567890',
+  models: ['doubao-seedream-5-0-pro-260628'],
+  capabilities: ['image'],
+  priority: 6,
+  weight: 100,
+})
+deleteKey(aliasKey.id)
+const arkImage = await generateImage({ model: 'doubao-seedream-5-0-pro-260628', prompt: 'x' })
+const arkCall = seen.filter((item) => item.url === '/v1/images/generations').at(-1)
+assert.equal(JSON.parse(arkCall.body).model, 'doubao-seedream-5-0-pro-260628', '方舟 Key 不用改名')
+assert.ok(arkImage.ok)
+assert.equal(modelCoverage().find((row) => row.model === 'doubao-seedream-5-0-pro-260628').upstream, '', '原名接住时不标改名')
+deleteKey(arkAliasKey.id)
+
+for (const id of [cgcmImageKey.id, cgcmVideoKey.id]) deleteKey(id)
 
 // 9.5) 权重只在同优先级内生效：两把同优先级时都算候选，但只试到成功为止
 const order = [badImageKey.id, goodImageKey.id, badVideoKey.id]
@@ -278,4 +427,4 @@ assert.equal(JSON.stringify(listRoutes(50)).includes('sk-video-1234567890'), fal
 
 upstream.close()
 fs.rmSync(temp, { recursive: true, force: true })
-console.log('PASS gateway: 令牌鉴权 / 出图转发 / 失败计健康 / 空结果 / 视频建任务轮询 / 无 Key 明确报错 / 模型名对不上 / 日志无明文')
+console.log('PASS gateway: 令牌鉴权 / 出图转发 / 失败计健康 / 空结果 / 视频建任务轮询 / 无 Key 明确报错 / 模型名对不上 / SeeAPI 协议 / 日志无明文')

@@ -244,3 +244,50 @@ watermark:false, sequential_image_generation:"disabled"}`。
    写进响应的 `detail` 与后台路由日志，管理员一看就知道差在哪。
 2. **网络错误翻成人话**：`fetch failed` / `ENOTFOUND` / 超时不再原样抛出来，
    统一说「网络不通或地址填错了」或「上游超时」。
+
+
+---
+
+## 十一、接第二种上游：SeeAPI（CGCM）
+
+画布不止有火山方舟的通道。2026-11-11 又接了一把 SeeAPI（CGCM）的 Key，
+协议形态与方舟完全不同，所以通道现在按 **Key 的 baseUrl 自动认协议**——
+管理员贴 Key 时只管贴地址，不用再选一个「协议」字段。
+
+| 动作 | 方舟（ark） | SeeAPI（cgcm） |
+| --- | --- | --- |
+| 同步出图 | `POST {base}/images/generations` | `POST {base}/v1/images/generations` |
+| 异步出图 | — | `POST {base}/v1/images/generations/async` → `GET {base}/v1/tasks/<id>` |
+| 建视频任务 | `POST {base}/contents/generations/tasks` | `POST {base}/v1/video/generations` |
+| 查任务 | `GET {base}/contents/generations/tasks/<id>` | `GET {base}/v1/tasks/<id>` |
+
+判定只看域名特征（`cgcm` / `seeapi`），地址写成 `https://api.cgcm-api.com` 或
+`https://api.cgcm-api.com/v1` 都认。
+
+### 同一个模型两个名字
+
+画布的出图节点按方舟的真实模型名发请求（`doubao-seedream-5-0-pro-260628`），
+SeeAPI 只认自己的叫法（`seedream-5.0-pro`）。通道里维护一张别名表：
+
+```js
+export const MODEL_ALIASES = {
+  'doubao-seedream-5-0-pro-260628': 'seedream-5.0-pro',
+}
+```
+
+- 选 Key 时「原名与别名」都算命中，所以声明了 `seedream-5.0-pro` 的 Key 能接住画布的 5.0 Pro；
+- 真正的请求体里换成上游叫法再发（方舟 Key 不动，原名照发）；
+- 后台对账表在这一行标「按 seedream-5.0-pro 发」，避免管理员误以为模型名已经填对。
+
+### 请求形态差异
+
+- SeeAPI 同步出图默认回 `b64_json`（一张图几 MB），通道在调用方没指定时按
+  `response_format: "url"` 要地址，画布按 `data[].url` 取图；
+- SeeAPI 的异步出图强制要 `Idempotency-Key`，调用方没给时通道按本次请求生成一个；
+- SeeAPI 的任务终态比方舟多两个：`refunded`（失败已退款）、`canceled`，都按「没出片」记路由日志。
+
+### 模型目录接口
+
+`GET /api/gateway/v1/models` 返回池里已声明的模型（OpenAI 形态）。
+画布后台「测试 Key」会先探这个地址判活，所以把画布指向通道后，
+那把 `provider=cgcm` 的平台令牌 Key 在画布后台点「测试」是 200，而不是 401。

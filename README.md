@@ -1384,3 +1384,49 @@ Key 池上一版只服务文本与视觉，出图和出视频是断开的两截�
 
 - 画布 iframe 的地址里带一个共享口令 `k=…`（nginx 那层 Basic 认证的免密 Cookie）。已登录用户在 DOM 里能看到它；拿到它能绕过 nginx 那道门，但进不了画布的业务接口（画布接口仍要 VisionQA 票据）。
 - 要彻底去掉得让 VisionQA 反向代理画布（同源），属于后续工作；它不影响「只用 VisionQA 账号」这件事本身。
+## 三十九、2026-11-11 追加：SeeAPI 的 Key 进池子，画布的 CGCM 渠道也走平台通道（第二十二批）
+
+用户给了一把 SeeAPI（CGCM）Key，要求「加到画布那边，并确认开通的模型」。
+做法不是把 Key 塞进画布自己的表，而是反过来：**Key 进平台池，画布只拿平台令牌** ——
+以后换 Key 只动 VisionQA 后台，画布不用再碰。
+
+### 三十九.1 做了什么
+
+| 项 | 具体 |
+| --- | --- |
+| Key 入库 | 后台「模型 Key」新增 SeeAPI · 出图出视频（`provider=cgcm`，`https://api.cgcm-api.com`，勾出图 + 出视频，模型清单 13 个）；AES-256-GCM 加密落盘，列表只回 `sk_l••••5dEA` |
+| 上游协议 | 通道按 Key 的 baseUrl 自动认协议：方舟（`/images/generations`、`/contents/generations/tasks`）与 SeeAPI（`/v1/images/generations[/async]`、`/v1/video/generations`、`/v1/tasks/<id>`）。贴 Key 时不用选协议 |
+| 新接口 | 异步出图建任务、SeeAPI 建视频任务、通用查任务，以及模型目录 `GET /api/gateway/v1/models`（画布「测试 Key」拿它判活） |
+| 改名转发 | 画布发方舟名 `doubao-seedream-5-0-pro-260628`，SeeAPI 只认 `seedream-5.0-pro`：通道按别名换名发出去，对账表标「按 seedream-5.0-pro 发」 |
+| 对账表扩到出视频 | 8 个出视频模型也进「画布要的模型 → 现在谁接」，不再只看三款 Seedream |
+| 画布侧 | `deploy/bd-canvas/wire_cgcm.py`（幂等）：CGCM 的 base 改读 `BD_CGCM_BASE_URL`（不设时行为完全不变）、建一把 `provider=cgcm` 的平台令牌 Key、给 3 个账号补 13 个模型授权；systemd drop-in 把地址指到 `127.0.0.1:8799/api/gateway` |
+
+### 三十九.2 线上实测（2026-11-11 14:40–14:50）
+
+| 检查 | 结果 |
+| --- | --- |
+| 这把 Key 能调用的模型（`GET /v1/models`） | 200，14 个：Seedance 2.0 / 2.0 Fast / 2.0 Mini / 2.5、MiniMax H3、Wan 3.0 / 3.0 Prime、Happy Horse 1.1、可灵 4.0（9 个视频）+ Image2 Pro / Image2.5 / Nano Banana Flash / Pro / Seedream 5.0 Pro（5 个图片） |
+| 平台池 | 2 把：DeepSeek 官方、SeeAPI · 出图出视频（`sk_l••••5dEA`，优先级 P10） |
+| 对账表 | 出视频 8 个全部「已接入」；出图 Seedream 5.0 Pro「已接入 · 按 seedream-5.0-pro 发」；Seedream 4.5 / 5.0 Flash 仍「缺 Key」（这把 Key 没有这两档，如实标缺） |
+| 画布「Key 管理」 | 2 把，新增 `VisionQA 平台生成通道（CGCM）`；点「测试」→ `success: true`、`base_url=http://127.0.0.1:8799/api/gateway/v1`、`status 200` —— 画布进程确实在读平台地址，令牌也过了通道鉴权 |
+| 画布授权 | 3 个账号 × 13 个 CGCM 模型（`cgcm-seedance-*`、`cgcm-image2`、`cgcm-nano-banana`、`seeapi`） |
+| 真跑一次出视频（`seedance-2.0-mini` / 4 秒 / 480p，走通道） | **502「出视频失败：上游额度不足（HTTP 402）」**，`detail` 为 `insufficient_credits` |
+
+### 三十九.3 卡在哪（一句话）
+
+**Key 开通了 14 个模型，但账户余额是 0**：选 Key、鉴权、换地址、发请求全对，
+卡在 SeeAPI 的 `insufficient_credits`。充值后画布点生成即可出片，代码不用再动。
+
+### 三十九.4 验收
+
+- `scripts/test-gateway.mjs` 新增 SeeAPI 协议组：协议判定与地址拼接（含 `…/v1` 写法）、
+  同步出图（默认要 url 不要 base64）、异步出图建任务 + 查任务、建视频任务 + 轮询、
+  别名换名转发（方舟 Key 不改名）、模型目录。回归 `test-keyvault` / `test-model-routes` /
+  `test-canvas-admin` / `test-canvas-session` / `test-judge` / `test-model-keys-e2e` 全过；
+  `npm run build`、`npm run lint` 0 错误。
+- 画布侧三处改动 `py_compile` 通过，`bdc-enterprise` / `bdc-api` 重启后 active。
+
+![后台「生成通道」：出视频 8 个模型已接入 SeeAPI，出图 5.0 Pro 标明按上游名发](docs/screenshot-admin-gateway-seeapi-2026-11-11.png)
+
+![后台「平台 Key 池」：SeeAPI · 出图出视频 已启用](docs/screenshot-admin-keypool-seeapi-2026-11-11.png)
+
