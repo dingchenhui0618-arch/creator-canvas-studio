@@ -4,6 +4,7 @@ import { request } from '../../api/client'
 import { useUiMode } from '../../api/app'
 import { useApi } from './data'
 import { AdminHead, Badge, ErrorBanner, LoadingLine, RefreshButton, SourceTag } from './ui'
+import ModelKeyPool from './ModelKeyPool'
 
 const DOC_PATH = 'docs/replication-pipeline.md'
 
@@ -72,6 +73,8 @@ export default function KeysSection() {
         }
         actions={<RefreshButton onClick={config.reload} busy={config.loading} />}
       />
+
+      <ModelKeyPool />
 
       {config.error ? <ErrorBanner message={`GET /api/config：${config.error}`} onRetry={config.reload} /> : null}
       {config.loading && !data ? <LoadingLine label="/api/config" /> : null}

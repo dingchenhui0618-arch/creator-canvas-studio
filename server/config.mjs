@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { vaultHas } from './vault-state.mjs'
 
 const root = process.cwd()
 
@@ -155,5 +156,7 @@ export const config = {
 }
 
 export const redfoxEnabled = () => Boolean(config.redfox.key)
-export const visionEnabled = () => Boolean(config.vision.apiKey)
+// 模型是否已接入：环境变量里的旧凭证，或后台 Key 池里至少有一把 text/vision Key。
+// Key 池是运行时增删的，所以这里每次调用都重新判断，不需要重启。
+export const visionEnabled = () => Boolean(config.vision.apiKey) || vaultHas('text') || vaultHas('vision')
 export const internalMode = () => config.ui.mode === 'internal'

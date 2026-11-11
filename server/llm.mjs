@@ -1,12 +1,14 @@
 import { config, visionEnabled } from './config.mjs'
 import { chatCompletion, sleep } from './chatcall.mjs'
+import { vaultModels } from './keyvault.mjs'
 
 // 纯文本模型调用：与 vision.mjs 共用同一套「重试 + 降级链」，供评审、智能体对话、画布节点使用
 
 export function modelChain() {
   // 文本模型优先；LLM_* 没配时退回视觉链（很多多模态模型聊天一样好用）
-  const text = [config.llm.model, ...config.llm.fallbacks].filter(Boolean)
-  return text.length ? text : [config.vision.model, ...config.vision.fallbacks].filter(Boolean)
+  // 后台 Key 池里声明的模型也进候选链：管理员加一把新 Key 就能直接选到它的模型，不用改环境变量。
+  const text = [...new Set([config.llm.model, ...config.llm.fallbacks, ...vaultModels('text')].filter(Boolean))]
+  return text.length ? text : [...new Set([config.vision.model, ...config.vision.fallbacks, ...vaultModels('vision')].filter(Boolean))]
 }
 
 export function llmEnabled() {

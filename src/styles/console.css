@@ -554,6 +554,38 @@
   outline-offset: -1px;
 }
 
+/* 平台 Key 池表单：select 与多选能力沿用同一套输入高度 */
+.admin-edit-field select {
+  height: 32px;
+  padding: 0 8px;
+  color: var(--ink, #111111);
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--line-strong, #d8d3c9);
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.admin-edit-field select:focus-visible {
+  outline: 2px solid var(--ink, #111111);
+  outline-offset: -1px;
+}
+
+.admin-key-caps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  min-height: 32px;
+}
+
+.admin-key-cap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ink, #111111);
+}
+
 .admin-edit-actions {
   display: flex;
   justify-content: flex-end;

@@ -1,4 +1,5 @@
 import { config } from './config.mjs'
+import { resolveKey, reportKey } from './keyvault.mjs'
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -11,6 +12,9 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
  * 2. 有些网关不认 response_format（直接 400），这时自动退回不带它的请求，不让功能整体挂掉。
  * 3. finish_reason=length 说明 max_tokens 被推理过程吃满、拿到的是半截 JSON：
  *    按可重试错误抛出，让上层换更宽松的参数或候选模型，而不是把半截 JSON 当答案。
+ *
+ * 凭证解析：优先用后台「平台 Key」池里符合能力的 Key（运行时可增删），
+ * 池里没有可用 Key 时回落到环境变量里的旧凭证；Key 由管理员在后台维护，不写死在进程里。
  */
 export async function chatCompletion({
   model,
@@ -20,17 +24,26 @@ export async function chatCompletion({
   json = false,
   signal,
   timeoutMs = config.vision.timeoutMs,
+  capability = 'text',
 }) {
   let useJson = Boolean(json)
   for (let attempt = 0; attempt < 2; attempt += 1) {
+    const resolved = resolveKey({ capability, model })
+    const baseUrl = String(resolved?.baseUrl || config.vision.baseUrl || '').replace(/\/+$/, '')
+    const apiKey = resolved?.apiKey || config.vision.apiKey
+    if (!apiKey) {
+      const error = new Error('未配置模型凭证：管理员还没有在后台添加可用 Key')
+      error.code = 'NO_MODEL'
+      throw error
+    }
     const controller = signal ? null : new AbortController()
     const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null
     const body = { model, messages, temperature, max_tokens: maxTokens }
     if (useJson) body.response_format = { type: 'json_object' }
     try {
-      const response = await fetch(config.vision.baseUrl + '/chat/completions', {
+      const response = await fetch(baseUrl + '/chat/completions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + config.vision.apiKey },
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey },
         body: JSON.stringify(body),
         signal: signal || controller.signal,
       })
@@ -38,10 +51,12 @@ export async function chatCompletion({
       if (!response.ok) {
         const busy = response.status === 429 || response.status >= 500 || /overloaded/i.test(text)
         // 网关不认 response_format：去掉它重试一次，而不是把整条链路判死
+        // （这不是 Key 的问题，不能计入失败次数，否则正常请求也会把 Key 打进冷却）
         if (useJson && response.status === 400 && /response_format|json_object|unsupported/i.test(text)) {
           useJson = false
           continue
         }
+        reportKey(resolved?.id, false, 'HTTP ' + response.status + ' ' + text.slice(0, 160))
         const error = new Error(
           model + (busy ? ' 上游繁忙（HTTP ' + response.status + '）' : ' HTTP ' + response.status + '：' + text.slice(0, 140)),
         )
@@ -54,12 +69,18 @@ export async function chatCompletion({
       const choice = parsed?.choices?.[0] || {}
       const finishReason = String(choice.finish_reason || '')
       if (finishReason === 'length') {
+        reportKey(resolved?.id, false, 'finish_reason=length')
         const error = new Error(model + ' 输出被 max_tokens 截断（finish_reason=length）')
         error.retryable = true
         error.truncated = true
         throw error
       }
+      reportKey(resolved?.id, true)
       return { message: choice.message || {}, finishReason, usage: parsed?.usage, jsonMode: useJson }
+    } catch (error) {
+      if (error?.code === 'NO_MODEL' || error?.status) throw error
+      reportKey(resolved?.id, false, String(error?.message || error))
+      throw error
     } finally {
       if (timer) clearTimeout(timer)
     }

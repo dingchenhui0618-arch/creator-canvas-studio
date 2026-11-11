@@ -1,6 +1,7 @@
 import fsp from 'node:fs/promises'
 import { config, visionEnabled } from './config.mjs'
 import { chatCompletion } from './chatcall.mjs'
+import { vaultModels } from './keyvault.mjs'
 
 const SYSTEM_PROMPT = [
   '你是短视频拆解专家。用户会给你一条短视频的抽帧画面（按时间顺序，每帧带时间戳）和检测到的镜头切换点。',
@@ -39,6 +40,7 @@ async function callModel(messages, model) {
     temperature: 0.3,
     maxTokens: 8000,
     json: true,
+    capability: 'vision',
   })
   // 推理型多模态模型可能把 JSON 写进 reasoning_content（content 为空），这里兜住
   const content = String(message.content || '').trim() || String(message.reasoning_content || '').trim()
@@ -64,7 +66,8 @@ async function callWithRetry(messages, model, log) {
 }
 
 async function callWithFallback(messages, log) {
-  const candidates = [config.vision.model, ...config.vision.fallbacks]
+  // 后台 Key 池声明的视觉模型也进候选链，加一把多模态 Key 即可换模型
+  const candidates = [...new Set([config.vision.model, ...config.vision.fallbacks, ...vaultModels('vision')].filter(Boolean))]
   let lastError
   for (const model of candidates) {
     try {

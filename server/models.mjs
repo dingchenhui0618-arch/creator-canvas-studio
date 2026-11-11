@@ -1,4 +1,5 @@
 import { config, visionEnabled } from './config.mjs'
+import { vaultModels } from './keyvault.mjs'
 
 function splitList(value) {
   return String(value || '')
@@ -16,8 +17,9 @@ function splitList(value) {
  */
 export function modelCatalog() {
   const explicit = splitList(process.env.VISION_MODELS)
-  const textIds = splitList([config.llm.model, ...config.llm.fallbacks].join(','))
-  const visionIds = splitList([config.vision.model, ...config.vision.fallbacks].join(','))
+  // 后台 Key 池里声明的模型也要出现在下拉框里，管理员加 Key 后前端自动看到新模型
+  const textIds = [...new Set([...splitList([config.llm.model, ...config.llm.fallbacks].join(',')), ...vaultModels('text')])]
+  const visionIds = [...new Set([...splitList([config.vision.model, ...config.vision.fallbacks].join(',')), ...vaultModels('vision')])]
   const textSet = new Set(textIds)
   const visionSet = new Set(visionIds)
   const ids = explicit.length ? explicit : [...textIds, ...visionIds]

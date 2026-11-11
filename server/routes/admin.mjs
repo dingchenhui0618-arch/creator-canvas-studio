@@ -14,7 +14,10 @@ import { listAudit, recordAudit } from '../audit.mjs'
 import { removePreference } from '../preferences.mjs'
 import { AGENT_TOOLS } from '../agents.mjs'
 import { lastWebRead, readWebPage } from '../webread.mjs'
+import { listKeys, createKey, updateKey, deleteKey, testKey, PROVIDER_PRESETS } from '../keyvault.mjs'
 
+const MODEL_KEY = /^\/api\/admin\/model-keys\/([\w-]+)$/
+const MODEL_KEY_TEST = /^\/api\/admin\/model-keys\/([\w-]+)\/test$/
 const USER_CREDITS = /^\/api\/admin\/users\/([\w-]+)\/credits$/
 const USER_PASSWORD = /^\/api\/admin\/users\/([\w-]+)\/password$/
 const USER_ACCESS = /^\/api\/admin\/users\/([\w-]+)$/
@@ -102,6 +105,101 @@ export function createAdminRouter() {
       if (pathname === '/api/admin/users' && req.method === 'GET') {
         const items = listUsers()
         sendJson(res, 200, { items, total: items.length })
+        return true
+      }
+
+      // ── 平台 Key 池 ────────────────────────────────────────────────
+      // 管理员在后台随时增删改，下一次模型调用就生效（不需要重启进程）。
+      // 列表只回脱敏值，明文 Key 永远不会离开服务端。
+      if (pathname === '/api/admin/model-keys' && req.method === 'GET') {
+        const data = listKeys()
+        sendJson(res, 200, {
+          ...data,
+          providers: PROVIDER_PRESETS,
+          fallback: {
+            configured: visionEnabled(),
+            model: config.vision.model,
+            baseUrl: config.vision.baseUrl,
+          },
+        })
+        return true
+      }
+
+      if (pathname === '/api/admin/model-keys' && req.method === 'POST') {
+        try {
+          const key = createKey(await readBody(req))
+          recordAudit({
+            req,
+            actor: user,
+            action: 'model-key.create',
+            targetType: 'model-key',
+            targetId: key.id,
+            targetLabel: key.name,
+            detail: { provider: key.provider, capabilities: key.capabilities, models: key.models },
+          })
+          sendJson(res, 201, { ok: true, key })
+        } catch (error) {
+          sendJson(res, error?.status || 400, { error: error?.message || '创建 Key 失败', code: error?.code })
+        }
+        return true
+      }
+
+      const keyTest = pathname.match(MODEL_KEY_TEST)
+      if (keyTest && req.method === 'POST') {
+        try {
+          const result = await testKey(keyTest[1])
+          recordAudit({
+            req,
+            actor: user,
+            action: 'model-key.test',
+            targetType: 'model-key',
+            targetId: keyTest[1],
+            targetLabel: result?.key?.name || keyTest[1],
+            detail: { ok: result.ok, status: result.status, ms: result.ms },
+          })
+          sendJson(res, 200, { ok: true, ...result })
+        } catch (error) {
+          sendJson(res, error?.status || 400, { error: error?.message || '连接测试失败', code: error?.code })
+        }
+        return true
+      }
+
+      const keyMatch = pathname.match(MODEL_KEY)
+      if (keyMatch && req.method === 'PATCH') {
+        try {
+          const key = updateKey(keyMatch[1], await readBody(req))
+          recordAudit({
+            req,
+            actor: user,
+            action: 'model-key.update',
+            targetType: 'model-key',
+            targetId: key.id,
+            targetLabel: key.name,
+            detail: { enabled: key.enabled, capabilities: key.capabilities, priority: key.priority, weight: key.weight },
+          })
+          sendJson(res, 200, { ok: true, key })
+        } catch (error) {
+          sendJson(res, error?.status || 400, { error: error?.message || '更新 Key 失败', code: error?.code })
+        }
+        return true
+      }
+
+      if (keyMatch && req.method === 'DELETE') {
+        try {
+          const key = deleteKey(keyMatch[1])
+          recordAudit({
+            req,
+            actor: user,
+            action: 'model-key.delete',
+            targetType: 'model-key',
+            targetId: key.id,
+            targetLabel: key.name,
+            detail: { provider: key.provider },
+          })
+          sendJson(res, 200, { ok: true, id: key.id })
+        } catch (error) {
+          sendJson(res, error?.status || 400, { error: error?.message || '删除 Key 失败', code: error?.code })
+        }
         return true
       }
 
