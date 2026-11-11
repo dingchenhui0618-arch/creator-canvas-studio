@@ -94,6 +94,8 @@
 - 生产 10 屏巡检（工作台 / 雷达 / 模板库 / 智能体 / 运行记录 / 视觉评审 / 画布 / 设置 / 引导页 / 条款页 1440×1000）：**0 个 JS 异常、0 个 ≥400 响应、0 处横向溢出**；窄屏 390 宽四屏 `scrollWidth` 均 390。
 - `npx tsc -b` 通过、`npm run build` 通过、部署后两服务 active、`/api/health` 正常（`templates: 25`）。
 - 告警模块单测：去重累加、确认、`open` 列表、阈值、落盘、无 webhook 不报错（PASS）。
+- 数据涨到 23.5 MB 后**重做了一次备份 + 恢复演练**：新档案 **19.2 MB / 331 文件**（`/var/backups/visionqa/visionqa-2026-11-11-11-49-37.tgz`），解包后 `verify-restore` 读出 **users 1、admins 1、keys 2（两把 Key 名字都能解出来）、templates 25**，还原目录 20 MB。
+  注意：生产 Node 是 v22.12.0，恢复校验要用与启动一致的参数（`/usr/local/bin/node --experimental-sqlite scripts/verify-restore.mjs`），否则会报 `ERR_UNKNOWN_BUILTIN_MODULE`。
 
 ## 五、证据截图（生产真实渲染 1440×1000）
 
