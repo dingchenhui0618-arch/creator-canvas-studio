@@ -1817,7 +1817,7 @@ hypit 商业授权到位后，按调研给出的顺序（P0-1 → P0-2 → P0-3�
 | ③ 审阅 hypit 并评估融入 | P0-1 已上线：模板台词约需 25.5s / 原片 18s（fit=tight、多 7.5s、8 镜 7 个偏多）；存量模板用 recalc 脚本按新口径重算；P0-2 给出实测依赖（Node 22.12 < 22.15、无 Chromium、1.8GB/2 核、无 Provider 凭证）故不硬装 |
 | ④ Jev 类判断模型 | /api/review/health → judge 已配置（deepseek-flash，chat 协议）；真实评审 43.1s、判断 3.9s；SystemOne 协议已实现，TypeSafe 生产 451 地区限制 |
 
-![独立打开画布：只剩「从 VisionQA 进入」的门](docs/screenshot-canvas-gate-2026-11-11.png)
+![独立打开画布：只剩「从 VisionQA 进入」的门](docs/screenshot-canvas-entry-gate-2026-11-11.png)
 
 ![工作台内画布：头像菜单只有 VisionQA 账号，额度由 VisionQA 统一管理](docs/screenshot-canvas-trust-2026-11-11.png)
 

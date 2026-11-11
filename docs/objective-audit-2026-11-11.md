@@ -21,7 +21,7 @@
 | 画布头像菜单 | 只有「VisionQA 账号 / VisionQA 管理员 / 额度由 VisionQA 统一管理」；登录 / 注册 / 退出条目 **0 个**，iframe 内也不再出现那道门 |
 | 票据接口 | GET /api/canvas/session-token → 200，JWT iss=visionqa、aud=bd-canvas、role=admin、TTL 120 秒；匿名访问 **401 未登录** |
 
-![独立打开画布：只剩「从 VisionQA 进入」的门](screenshot-canvas-gate-2026-11-11.png)
+![独立打开画布：只剩「从 VisionQA 进入」的门](screenshot-canvas-entry-gate-2026-11-11.png)
 
 ![工作台内画布：头像菜单只有 VisionQA 账号，额度由 VisionQA 统一管理](screenshot-canvas-trust-2026-11-11.png)
 
