@@ -28,6 +28,7 @@ import { createCreditsRouter } from './routes/credits.mjs'
 import { createAdminRouter } from './routes/admin.mjs'
 import { createPreferencesRouter } from './routes/preferences.mjs'
 import { createCanvasRouter } from './routes/canvas.mjs'
+import { createGatewayRouter } from './routes/gateway.mjs'
 import { currentUser, listUsers, clientIp, isAdmin } from './auth.mjs'
 import { charge, refund, ensureWelcomeCredits } from './credits.mjs'
 import { enter, leave } from './gate.mjs'
@@ -50,13 +51,16 @@ const featureRoutes = [
   createAdminRouter(),
   createPreferencesRouter(),
   createCanvasRouter(),
+  createGatewayRouter(),
 ]
 
 // VQ_REQUIRE_AUTH=1 时，除少数公开端点外所有 /api/* 都要登录。
 // 默认关闭，本地演示不受影响；生产必须打开。
 // /api/models 会返回真实模型标识：只给登录后的界面用，匿名探针不该看到。
 // 本地演示（VQ_REQUIRE_AUTH=0）不受影响，仍然公开。
-const PUBLIC_API = ['/api/auth', '/api/health', '/api/version', '/api/app']
+// /api/gateway 由平台服务令牌鉴权（画布服务端调用，没有浏览器会话），所以不走登录门；
+// 路由内部每一步都先验令牌，未配置时回 503，不会变成匿名可用。
+const PUBLIC_API = ['/api/auth', '/api/health', '/api/version', '/api/app', '/api/gateway']
 function needsLogin(pathname) {
   if (!config.auth.requireAuth) return false
   if (!pathname.startsWith('/api/')) return false

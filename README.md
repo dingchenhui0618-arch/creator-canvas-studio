@@ -1108,4 +1108,50 @@ VQ_SCOPE=internal VQ_BASE=http://127.0.0.1:8801 VQ_COOKIE=<内部会话> node sc
 ![后台「路由预演」与「最近路由」：真实接口，预演结论 + 每把 Key 的判定 + 刚才两次调用的耗时与结论](docs/screenshot-admin-routes-2026-11-11.png)
 
 细节见 [docs/model-routing.md](docs/model-routing.md)。
+## 三十二、2026-11-11 追加：出图 / 出视频也走平台 Key（第十五批）
+
+Key 池上一版只服务文本与视觉，出图和出视频是断开的两截：画布用它自己的密钥表，
+平台池里的「出图 / 出视频」能力只是个勾选框，没有调用路径。这一批把中间那段补上。
+
+### 三十二.1 做了什么
+
+| 能力 | 具体 |
+| --- | --- |
+| 生成通道 | 新增 `/api/gateway/v1/*`：出图（同步）、出视频建任务、出视频轮询；协议按火山方舟（Ark）形态实现，画布的出图 / 出视频节点本来就是这一套 |
+| 鉴权 | 平台服务令牌 `VQ_GATEWAY_TOKEN`，`Authorization: Bearer`，常量时间比较；没配令牌整条通道 503，绝不退化成匿名可用。令牌与画布账号共享密钥分开两把 |
+| 选 Key | 复用池里的能力路由：能力 → 模型白名单 → 跳过冷却 → 优先级最小的一组 → 组内按权重随机；每次转发写一条路由记录（含耗时与成败） |
+| 视频任务 | 任务 id → Key 的对应关系记在服务端（重启失效，画布会重发）；轮询回同一把 Key；只在终态补记一条日志，中间态不刷屏 |
+| 失败口径 | 无 Key `503 NO_IMAGE_KEY` / `NO_VIDEO_KEY`；上游拒绝 `502 UPSTREAM_REJECTED` + 人话；连不上 `502 UPSTREAM_UNREACHABLE`；空结果 `502 UPSTREAM_EMPTY`；未知任务 `404 TASK_NOT_FOUND` |
+| 后台可见 | 「模型 Key」页新增「生成通道」卡片：开没开、令牌前后四位、出图 / 出视频 Key 各几把、可用模型、三个接口、接入地址一键复制、正在跑的视频任务 |
+
+### 三十二.2 线上实测（生产，2026-11-11 13:34）
+
+| 检查 | 结果 |
+| --- | --- |
+| 不带令牌（内网） | 401 `GATEWAY_UNAUTHORIZED` |
+| 不带令牌（公网 `visionqa.wavisionai.cn`） | 401，说明 nginx 转发与 TLS 都对 |
+| 带正确令牌、池里没有出图 Key | 503 `NO_IMAGE_KEY`「请在后台「模型 Key」里添加一把声明了「出图」能力的 Key」 |
+| 带正确令牌、池里没有出视频 Key | 503 `NO_VIDEO_KEY` |
+| 后台 `GET /api/admin/gateway` | 通道已开启、令牌 `5340••••4f5e`、出图 / 出视频各 0 把、接入地址 `https://visionqa.wavisionai.cn/api/gateway/v1` |
+
+生产 bundle `index-KJVi7kcQ.js`，`visionqa` / `visionqa-internal` 均 active，`/api/health` ok。
+令牌只在服务器 `.env` 与本机被忽略的 `deploy/env.applied` 里，没有进仓库、没有进日志、没有进浏览器。
+
+### 三十二.3 验收
+
+- 新增 `node scripts/test-gateway.mjs`（假方舟上游，8 项全过）：令牌鉴权三条分支、出图转发且用的是平台 Key 的凭证、
+  上游 500 归因并计入健康度、上游 200 但没图不能当成功、视频建任务 + 两次轮询回到同一把 Key、终态只记一条日志、
+  池里没有出图 Key 时明确报错、未配置令牌整体 503、日志里没有 Key 明文。
+- 回归 `test-keyvault`、`test-model-routes`、`test-canvas-admin`、`test-canvas-session` 全过；`npm run build` 通过；`npm run lint` 0 错误 4 条既有警告。
+
+![后台「生成通道」：通道已开启、令牌前后四位、三个接口、接入地址与正在跑的视频任务](docs/screenshot-admin-gateway-2026-11-11.png)
+
+### 三十二.4 还没做的
+
+- **画布侧还没把地址指过来**：画布的三个 Seedream 端点与 Seedance 的 baseUrl 目前写死 Ark，
+  要改成读环境变量再指向本通道（三步见 [docs/generation-gateway.md](docs/generation-gateway.md) 第七节）。
+  顺序上先有出图 Key 再接更稳 —— 否则画布的生成按钮会稳定报 503，看不出问题在哪。
+- 通道不在积分链上扣费；只认服务令牌，不按账号计量；视频任务登记在进程内存，重启后旧任务查不到。
+- 一句话结论：**出图 / 出视频的「平台 Key + 路由」这一半已经通了，缺的是上游 Key 与画布那一根线。**
+
 

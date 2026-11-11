@@ -14,7 +14,8 @@ import { listAudit, recordAudit } from '../audit.mjs'
 import { removePreference } from '../preferences.mjs'
 import { AGENT_TOOLS } from '../agents.mjs'
 import { lastWebRead, readWebPage } from '../webread.mjs'
-import { listKeys, createKey, updateKey, deleteKey, testKey, listRoutes, previewRoute, PROVIDER_PRESETS } from '../keyvault.mjs'
+import { listKeys, createKey, updateKey, deleteKey, testKey, listRoutes, previewRoute, vaultModels, PROVIDER_PRESETS } from '../keyvault.mjs'
+import { gatewayStatus } from '../gateway.mjs'
 import { canvasAdminConfigured, listCanvasUsers, setCanvasUserAccess } from '../canvas-admin.mjs'
 
 const MODEL_KEY = /^\/api\/admin\/model-keys\/([\w-]+)$/
@@ -123,6 +124,21 @@ export function createAdminRouter() {
             model: config.vision.model,
             baseUrl: config.vision.baseUrl,
           },
+        })
+        return true
+      }
+
+      // 生成通道：画布的出图 / 出视频请求走这里。后台只回「开没开、几把 Key、跑着几个任务」，
+      // 不回令牌明文与上游 Key —— 这两样东西任何人都不能从浏览器拿到。
+      if (pathname === '/api/admin/gateway' && req.method === 'GET') {
+        const status = gatewayStatus()
+        const counts = listKeys().summary.counts
+        const maskToken = (token) => (token ? String(token).slice(0, 4) + '••••' + String(token).slice(-4) : '')
+        sendJson(res, 200, {
+          ...status,
+          tokenMasked: maskToken(config.gateway.token),
+          keys: { image: counts.image || 0, video: counts.video || 0 },
+          models: { image: vaultModels('image'), video: vaultModels('video') },
         })
         return true
       }

@@ -166,11 +166,6 @@ function safeDecrypt(value) {
   }
 }
 
-function isCooling(key) {
-  const entry = health.get(key.id)
-  return Boolean(entry && entry.until > Date.now())
-}
-
 function normalizeCapabilities(input) {
   const raw = Array.isArray(input) ? input : String(input || '').split(/[,，\s]+/)
   const result = []

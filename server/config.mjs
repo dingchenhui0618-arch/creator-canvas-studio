@@ -85,6 +85,14 @@ export const config = {
     // 画布企业服务的内网地址：后台「画布身份」页从这里读，不经过公网 nginx
     adminUrl: (process.env.VQ_CANVAS_ADMIN_URL || 'http://127.0.0.1:5313').trim(),
   },
+  // 平台生成通道：画布的出图 / 出视频请求走这里，按能力选平台 Key 再转发上游。
+  // 令牌与画布互通密钥分开：一把给账号，一把给出图，泄露时能单独轮换。
+  gateway: {
+    token: (process.env.VQ_GATEWAY_TOKEN || '').trim(),
+    imageTimeoutMs: Number(process.env.VQ_GATEWAY_IMAGE_TIMEOUT_MS || 120000),
+    videoTimeoutMs: Number(process.env.VQ_GATEWAY_VIDEO_TIMEOUT_MS || 60000),
+    publicBaseUrl: (process.env.VQ_PUBLIC_BASE_URL || 'https://visionqa.wavisionai.cn').trim().replace(/\/+$/, ''),
+  },
   limits: {
     maxVideoMb: Number(process.env.MAX_VIDEO_MB || 160),
     maxFrames: Number(process.env.MAX_FRAMES || 18),
