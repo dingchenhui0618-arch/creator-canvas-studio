@@ -10,9 +10,38 @@
 // 3. 生成结果原样回给调用方（拿到 url 就够），不落本地磁盘 —— 备份是画布自己的事。
 import crypto from 'node:crypto'
 import { config } from './config.mjs'
-import { recordRoute, reportKey, resolveKeyCandidates, vaultModels } from './keyvault.mjs'
+import { listKeys, recordRoute, reportKey, resolveKeyCandidates, vaultModels } from './keyvault.mjs'
 
 const JOB_TTL_MS = 2 * 60 * 60 * 1000
+
+// 画布出图节点会发过来的真实模型名（来源：画布源码里的 CHANNEL_MODEL 常量，2026-11-11 核对）。
+// 后台拿它做「画布要的模型现在有没有人接」的对账，避免 Key 加上了却因为模型名对不上而用不了。
+export const CANVAS_IMAGE_MODELS = [
+  { model: 'doubao-seedream-4-5-251128', label: 'Seedream 4.5' },
+  { model: 'doubao-seedream-5-0-pro-260628', label: 'Seedream 5.0 Pro' },
+  { model: 'doubao-seedream-5-0-flash-260915', label: 'Seedream 5.0 Flash' },
+]
+
+/**
+ * 画布要的每个出图模型，现在有没有 Key 接得住。
+ * 「留空 = 通用」的 Key 也算接得住，但要标明是靠通用 Key 接的 —— 否则管理员会以为模型名已经填对了。
+ */
+export function modelCoverage() {
+  const imageKeys = listKeys().items.filter((key) => key.enabled && (key.capabilities || []).includes('image'))
+  return CANVAS_IMAGE_MODELS.map((entry) => {
+    const exact = imageKeys.filter((key) => (key.models || []).includes(entry.model))
+    const generic = imageKeys.filter((key) => (key.models || []).length === 0)
+    const hit = exact.length ? exact : generic
+    return {
+      model: entry.model,
+      label: entry.label,
+      capability: 'image',
+      ready: hit.length > 0,
+      coveredBy: exact.length ? 'model' : generic.length ? 'generic' : 'none',
+      keys: hit.map((key) => ({ id: key.id, name: key.name, priority: key.priority })),
+    }
+  })
+}
 const jobs = new Map()
 
 function nowIso() {

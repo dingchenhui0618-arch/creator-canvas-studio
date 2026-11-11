@@ -231,7 +231,39 @@ await assert.rejects(
 assert.equal(listRoutes(20).items[0].source, 'none')
 assert.ok(/unserved-model/.test(String(listRoutes(20).items[0].error)), '模型名要落在后台路由日志里')
 
-// 9.4) 权重只在同优先级内生效：两把同优先级时都算候选，但只试到成功为止
+// 9.4) 画布要的模型有没有 Key 接得住：缺 Key / 通用 Key / 精确声明 三种口径
+const { modelCoverage } = await import('../server/gateway.mjs')
+assert.deepEqual(modelCoverage().map((row) => row.coveredBy), ['none', 'none', 'none'], '池里只有声明了别的模型的 Key 时，画布的模型都算缺')
+const genericKey = createKey({
+  name: '通用出图 Key',
+  provider: 'volcengine',
+  baseUrl: base,
+  apiKey: 'sk-generic-image-1234567890',
+  models: [],
+  capabilities: ['image'],
+  priority: 20,
+  weight: 100,
+})
+assert.deepEqual(modelCoverage().map((row) => row.coveredBy), ['generic', 'generic', 'generic'], '模型清单留空算通用 Key')
+const exactKey = createKey({
+  name: 'Seedream 4.5 专用',
+  provider: 'volcengine',
+  baseUrl: base,
+  apiKey: 'sk-exact-image-1234567890',
+  models: ['doubao-seedream-4-5-251128'],
+  capabilities: ['image'],
+  priority: 30,
+  weight: 100,
+})
+const covered = modelCoverage()
+assert.equal(covered[0].model, 'doubao-seedream-4-5-251128')
+assert.equal(covered[0].coveredBy, 'model', '精确声明了模型名的 Key 优先算它')
+assert.equal(covered[0].keys[0].name, 'Seedream 4.5 专用')
+assert.deepEqual(covered.slice(1).map((row) => row.coveredBy), ['generic', 'generic'])
+deleteKey(genericKey.id)
+deleteKey(exactKey.id)
+
+// 9.5) 权重只在同优先级内生效：两把同优先级时都算候选，但只试到成功为止
 const order = [badImageKey.id, goodImageKey.id, badVideoKey.id]
 for (const id of order) deleteKey(id)
 

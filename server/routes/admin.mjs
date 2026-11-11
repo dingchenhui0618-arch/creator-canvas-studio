@@ -15,7 +15,7 @@ import { removePreference } from '../preferences.mjs'
 import { AGENT_TOOLS } from '../agents.mjs'
 import { lastWebRead, readWebPage } from '../webread.mjs'
 import { listKeys, createKey, updateKey, deleteKey, testKey, listRoutes, previewRoute, vaultModels, PROVIDER_PRESETS } from '../keyvault.mjs'
-import { gatewayStatus } from '../gateway.mjs'
+import { gatewayStatus, modelCoverage } from '../gateway.mjs'
 import { canvasAdminConfigured, listCanvasUsers, setCanvasUserAccess } from '../canvas-admin.mjs'
 
 const MODEL_KEY = /^\/api\/admin\/model-keys\/([\w-]+)$/
@@ -139,6 +139,7 @@ export function createAdminRouter() {
           tokenMasked: maskToken(config.gateway.token),
           keys: { image: counts.image || 0, video: counts.video || 0 },
           models: { image: vaultModels('image'), video: vaultModels('video') },
+          coverage: modelCoverage(),
         })
         return true
       }

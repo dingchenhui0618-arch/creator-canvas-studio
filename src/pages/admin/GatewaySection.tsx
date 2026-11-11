@@ -34,8 +34,8 @@ export default function GatewaySection() {
         <div>
           <p className="admin-label">生成通道</p>
           <p className="admin-sub">
-            画布的出图 / 出视频请求将走这里，按能力选平台 Key 再转发上游。接口按火山方舟（Ark）形态实现，
-            令牌与上游 Key 都不进浏览器；画布侧还没把地址指过来，接口现在可以先用令牌自检。
+            画布的出图 / 出视频请求已经走这里：按能力选平台 Key 再转发上游。接口按火山方舟（Ark）形态实现，
+            令牌与上游 Key 都不进浏览器。
           </p>
         </div>
         <div className="admin-row-actions">
@@ -56,6 +56,46 @@ export default function GatewaySection() {
             出图 Key {data.keys.image} 把 · 出视频 Key {data.keys.video} 把 · 正在跑 {data.activeTasks} 个视频任务
             {data.models.image.length ? ` · 可出图模型 ${data.models.image.join(' / ')}` : ' · 还没有声明出图模型的 Key'}
             {data.models.video.length ? ` · 可出视频模型 ${data.models.video.join(' / ')}` : ''}
+          </p>
+
+          <div className="admin-table-wrap">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>画布要的模型</th>
+                  <th>现在谁接</th>
+                  <th>说明</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.coverage.map((row) => (
+                  <tr key={row.model}>
+                    <td>
+                      <strong>{row.label}</strong>
+                      <div className="admin-cell-sub admin-mono">{row.model}</div>
+                    </td>
+                    <td>
+                      <Badge tone={row.ready ? 'ok' : 'warn'}>
+                        {row.ready ? (row.coveredBy === 'generic' ? '通用 Key 接' : '已接入') : '缺 Key'}
+                      </Badge>
+                    </td>
+                    <td className="admin-cell-sub">
+                      {row.ready ? row.keys.map((key) => key.name).join(' / ') : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="admin-hint">
+            {data.coverage.some((row) => !row.ready)
+              ? '还不通：' +
+                data.coverage
+                  .filter((row) => !row.ready)
+                  .map((row) => row.label)
+                  .join('、') +
+                '。补一把方舟 Key 就都通了——模型清单留空表示通用，或照上面一列的名字填。'
+              : '三个出图模型都有人接，画布点哪个都能出图。'}
           </p>
 
           <div className="admin-table-wrap">
