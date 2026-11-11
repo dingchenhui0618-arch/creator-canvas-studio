@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useApi } from './data'
-import { Badge, EmptyState, ErrorBanner, LoadingLine, RefreshButton, SourceTag } from './ui'
+import { Badge, EmptyState, ErrorBanner, LoadingLine, SourceTag } from './ui'
 import { createModelKey, deleteModelKey, testModelKey, updateModelKey, type ModelKey, type ModelKeyList } from '../../api/modelKeys'
 
 const CAPABILITIES = [
@@ -146,10 +146,7 @@ export default function ModelKeyPool() {
             池里没有可用 Key 时才会回落到环境变量里的旧凭证。保存即生效，不用重启。
           </p>
         </div>
-        <div className="admin-doc-actions">
-          <SourceTag kind="api" source="GET /api/admin/model-keys" />
-          <RefreshButton onClick={reload} busy={loading} />
-        </div>
+        <SourceTag kind="api" source="GET /api/admin/model-keys" />
       </div>
 
       {error ? <ErrorBanner message={`GET /api/admin/model-keys：${error}`} onRetry={reload} /> : null}
