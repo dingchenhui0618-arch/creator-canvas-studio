@@ -382,6 +382,54 @@ export function resolveKey({ capability = 'text', model = '' } = {}) {
   }
 }
 
+/**
+ * 故障回退：给出一串「按顺序去试」的 Key，第一把失败就换下一把。
+ * 与 resolveKey 的区别：resolveKey 只回答「首选是谁」，这里把后备的也排出来，
+ * 出图 / 建视频这类一次请求失败后还能换把重试的场景用它。
+ * 排序规则与 planRoute 完全一致：优先级小的先试，同优先级按权重随机（不放回）。
+ */
+export function resolveKeyCandidates({ capability = 'text', model = '', limit = 3 } = {}) {
+  const plan = planRoute({ capability, model })
+  const cap = Math.max(1, Math.min(5, Number(limit) || 3))
+  const eligible = plan.keys.filter((row) => row.state === 'eligible')
+  const ordered = []
+  const priorities = [...new Set(eligible.map((row) => row.priority))].sort((a, b) => a - b)
+  for (const priority of priorities) {
+    const pool = eligible.filter((row) => row.priority === priority)
+    while (pool.length && ordered.length < cap) {
+      const total = pool.reduce((sum, row) => sum + Math.max(1, row.weight || 1), 0)
+      let ticket = Math.random() * total
+      let index = 0
+      for (; index < pool.length; index += 1) {
+        ticket -= Math.max(1, pool[index].weight || 1)
+        if (ticket <= 0) break
+      }
+      if (index >= pool.length) index = pool.length - 1
+      ordered.push(pool.splice(index, 1)[0])
+    }
+    if (ordered.length >= cap) break
+  }
+  return ordered.map((row, index) => {
+    const key = load().keys.find((item) => item.id === row.id)
+    return {
+      id: key.id,
+      name: key.name,
+      provider: key.provider,
+      baseUrl: key.baseUrl,
+      apiKey: safeDecrypt(key.apiKey),
+      model: model || (key.models || [])[0] || '',
+      priority: key.priority,
+      weight: key.weight,
+      attempt: index + 1,
+      candidates: ordered.length,
+      reason:
+        ordered.length > 1
+          ? '第 ' + (index + 1) + ' 把（' + (index === 0 ? '首选' : '失败后回退') + '，共 ' + ordered.length + ' 把候选）'
+          : '唯一可用的一把',
+    }
+  })
+}
+
 /** 后台「预演」：现在调一次会不会有可用 Key、会落在哪一组，说明为什么不选别人。 */
 export function previewRoute({ capability = 'text', model = '' } = {}) {
   const plan = planRoute({ capability, model })
@@ -475,6 +523,8 @@ export function listRoutes(limit = 50) {
     bucket.count += 1
     buckets.set(bucketKey, bucket)
   }
+  // 换 Key 成功：这次调用第一把失败、后面某把成功了 —— 后台用它证明「回退真的生效」。
+  const failover = routes.filter((item) => item.ok && Number(item.attempt) > 1).length
   return {
     items: routes.slice(0, size),
     summary: {
@@ -483,6 +533,7 @@ export function listRoutes(limit = 50) {
       fail,
       env,
       none,
+      failover,
       avgMs: routes.length ? Math.round(msSum / routes.length) : 0,
       lastAt: routes[0]?.at || '',
       byKey: [...buckets.values()]

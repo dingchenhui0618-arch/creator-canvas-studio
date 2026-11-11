@@ -28,6 +28,8 @@ const upstream = http.createServer((req, res) => {
       res.writeHead(status, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify(payload))
     }
+    // 坏 Key 专用前缀：任何请求都 500，用来验证「换下一把」
+    if (req.url.startsWith('/v1bad/')) return send(500, { error: { message: 'bad key boom' } })
     if (req.method === 'POST' && req.url === '/v1/images/generations') {
       if (imageMode === 'fail') return send(500, { error: { message: 'internal boom' } })
       if (imageMode === 'empty') return send(200, { data: [] })
@@ -154,6 +156,71 @@ deleteKey(imageKey.id)
 await assert.rejects(() => generateImage({ model: 'fake-image', prompt: 'x' }), (error) => error.code === 'NO_IMAGE_KEY' && error.status === 503)
 const noKeyRoute = listRoutes(20).items[0]
 assert.equal(noKeyRoute.source, 'none')
+
+// 9) 故障回退：第一把 500 就换第二把，调用方仍然拿到图；日志里两条、第二条是第 2 次尝试
+const badBase = 'http://127.0.0.1:' + upstream.address().port + '/v1bad'
+const badImageKey = createKey({
+  name: '坏出图 Key',
+  provider: 'volcengine',
+  baseUrl: badBase,
+  apiKey: 'sk-bad-image-1234567890',
+  models: ['fake-image'],
+  capabilities: ['image'],
+  priority: 5,
+  weight: 100,
+})
+const goodImageKey = createKey({
+  name: '备援出图 Key',
+  provider: 'volcengine',
+  baseUrl: base,
+  apiKey: 'sk-good-image-1234567890',
+  models: ['fake-image'],
+  capabilities: ['image'],
+  priority: 10,
+  weight: 100,
+})
+const routed = await generateImage({ model: 'fake-image', prompt: '换把试试' })
+assert.deepEqual(routed.urls, ['https://example.invalid/a.png'])
+assert.equal(routed.attempt, 2, '第一把失败后必须换到第 2 把')
+assert.equal(routed.key.name, '备援出图 Key')
+const failoverRoutes = listRoutes(40).items.filter((item) => item.capability === 'image')
+assert.equal(failoverRoutes[0].ok, true)
+assert.equal(failoverRoutes[0].attempt, 2, '成功那条要标明是第 2 次尝试')
+assert.equal(failoverRoutes[0].keyName, '备援出图 Key')
+assert.equal(failoverRoutes[1].ok, false)
+assert.equal(failoverRoutes[1].attempt, 1)
+assert.equal(failoverRoutes[1].keyName, '坏出图 Key')
+assert.ok(listRoutes(40).summary.failover >= 1, '后台统计要能看到「换 Key 成功」')
+
+// 9.1) 两把都坏：报错要说清试了几把，不能只报「上游拒绝」
+imageMode = 'fail'
+await assert.rejects(
+  () => generateImage({ model: 'fake-image', prompt: '全坏' }),
+  (error) => error.code === 'UPSTREAM_REJECTED' && error.attempts === 2 && /连续试了 2 把 Key/.test(error.message),
+)
+imageMode = 'ok'
+
+// 9.2) 出视频建任务同样换把：第一把坏、第二把建成功，轮询回到第二把
+const badVideoKey = createKey({
+  name: '坏视频 Key',
+  provider: 'volcengine',
+  baseUrl: badBase,
+  apiKey: 'sk-bad-video-1234567890',
+  models: ['fake-video'],
+  capabilities: ['video'],
+  priority: 5,
+  weight: 100,
+})
+const task2 = await createVideoTask({ model: 'fake-video', content: [{ type: 'text', text: '换把出视频' }] })
+assert.equal(task2.attempt, 2)
+assert.equal(task2.key.name, '假视频 Key')
+assert.equal(task2.id, 'task-abc')
+const pollAfterFailover = await pollVideoTask('task-abc')
+assert.equal(pollAfterFailover.status, 'succeeded', '换把后建的任务，轮询要回到接住它的那把 Key')
+
+// 9.3) 权重只在同优先级内生效：两把同优先级时都算候选，但只试到成功为止
+const order = [badImageKey.id, goodImageKey.id, badVideoKey.id]
+for (const id of order) deleteKey(id)
 
 // 8) 未配置令牌：整条通道 503，不匿名放行
 config.gateway.token = ''

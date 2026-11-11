@@ -62,7 +62,19 @@ Content-Type: application/json
 池里没有可用 Key 时**不回落环境变量**（生成类调用没有历史凭证可退），直接回
 `503 NO_IMAGE_KEY` / `503 NO_VIDEO_KEY`，并说清「去后台加一把声明了对应能力的 Key」。
 
-每次转发都会写一条路由记录（能力 / 模型 / Key / 理由 / 耗时 / 成败），后台「最近路由」能查到。
+### 故障回退：一把失败就换下一把
+
+出图与「建视频任务」都是一次请求定生死，所以两处都按 `resolveKeyCandidates()` 排出的候选表逐个试
+（最多 3 把）：
+
+1. `planRoute` 先算出这次有哪些 Key 可选（启用 / 有能力 / 模型匹配 / 不在冷却）；
+2. 候选顺序：优先级小的先试，同优先级按权重随机且不放回，最后才用更低优先级的 Key 兜底；
+3. 任何失败都换下一把：连不上、上游 4xx / 5xx、返回 200 但没有图片地址 / 任务 id；
+4. 全部失败时按最后一把的结论回错误，但文案会带「连续试了 N 把 Key 都没成」，并在响应里带 `attempts`；
+5. **轮询不换把**：视频任务挂在某把 Key 的账号下，轮询必须回到建任务的那把（任务 id → Key 记在进程内）。
+
+每次**尝试**都会写一条路由记录（能力 / 模型 / Key / 理由 / 第几把 / 耗时 / 成败），
+后台「最近路由」能看出「第 1 把 500、第 2 把接住」，统计行还有「换 Key 成功 N 次」。
 轮询的中间态不单独记日志，只在任务到终态（成功 / 失败）时补一条，避免每 5 秒刷一行。
 
 ## 五、失败口径
@@ -72,7 +84,7 @@ Content-Type: application/json
 | 没有令牌 / 令牌不对 | `401 GATEWAY_UNAUTHORIZED` |
 | 通道未配置 | `503 GATEWAY_NOT_CONFIGURED` |
 | 没有对应能力的 Key | `503 NO_IMAGE_KEY` / `503 NO_VIDEO_KEY` |
-| 上游 4xx / 5xx | `502 UPSTREAM_REJECTED` + 人话说明 + `upstreamStatus` |
+| 上游 4xx / 5xx（所有候选都失败） | `502 UPSTREAM_REJECTED` + 人话说明 + `upstreamStatus`，文案带「连续试了 N 把 Key」、响应带 `attempts` |
 | 连不上上游 / 超时 | `502 UPSTREAM_UNREACHABLE` |
 | 上游 200 但没有图片地址 / 任务 id | `502 UPSTREAM_EMPTY` |
 | 轮询未知任务（服务重启） | `404 TASK_NOT_FOUND`，提示重新发起 |
@@ -162,6 +174,9 @@ Seedream 4.5 / 5.0 Pro / 5.0 Flash，Seedance 2.0 / 2.0 Fast。
 - **画布→通道→平台 Key→上游→回画布** 全链联调（临时假上游，跑完即删）：
   画布 `/enterprise/api/generate/seedream45` 回 200、`generated_images: 1`、媒体备份 id 2，
   路由日志 35 ms 一条成功，模型名 `doubao-seedream-4-5-251128` 原样透传；
+- **故障回退**（池里两把演练 Key：P5 永远 500、P10 正常）：一次调用 `attempt: 2`、
+  `key.name` 是第二把，路由日志两条（第 1 把失败 / 第 2 把成功）、统计「换 Key 成功 2 次」；
+  只剩坏 Key 时回 `502 UPSTREAM_REJECTED`；演练 Key 与假上游跑完即删；
 - 联调时发现并修掉一个真问题：通道原来把上游 body 包成 `{ data: {...} }`，
   画布按 `data[].url` 取图，于是「200 但 0 张图」。现在改为上游 body 原样平铺，
   并加了断言 `image.data` 必须等于上游的 `data[]`。

@@ -1,6 +1,7 @@
 // 平台生成通道：把画布的出图 / 出视频请求，按「能力 → 模型 → 优先级 → 权重」选一把
-// 平台 Key 转发到上游。协议按火山方舟（Ark）的公开形态实现，因为画布的出图 / 出视频节点
-// 用的就是这一套；其它兼容 /images/generations 的供应商也能直接接。
+// 平台 Key 转发到上游；一把失败就换下一把（最多 3 把），单把 Key 坏掉不该让整次生成失败。
+// 协议按火山方舟（Ark）的公开形态实现，因为画布的出图 / 出视频节点用的就是这一套；
+// 其它兼容 /images/generations 的供应商也能直接接。
 //
 // 与聊天链路的三点区别：
 // 1. 鉴权用平台服务令牌（Bearer），不走用户会话 —— 调用方是画布服务，不是浏览器；
@@ -9,7 +10,7 @@
 // 3. 生成结果原样回给调用方（拿到 url 就够），不落本地磁盘 —— 备份是画布自己的事。
 import crypto from 'node:crypto'
 import { config } from './config.mjs'
-import { recordRoute, reportKey, resolveKey } from './keyvault.mjs'
+import { recordRoute, reportKey, resolveKeyCandidates } from './keyvault.mjs'
 
 const JOB_TTL_MS = 2 * 60 * 60 * 1000
 const jobs = new Map()
@@ -102,58 +103,81 @@ function parseJson(text) {
   }
 }
 
+const MAX_ATTEMPTS = 3
+
+/** 把「试了哪几把、最后一把为什么失败」讲成人话，后台与调用方都看得懂。 */
+function failoverMessage(action, candidates, lastError) {
+  const reason = lastError?.message || '上游拒绝了这次请求'
+  return candidates.length > 1
+    ? action + '失败：连续试了 ' + candidates.length + ' 把 Key 都没成，最后一把说 ' + reason
+    : action + '失败：' + reason
+}
+
 /**
- * 出图：选一把「出图」能力的 Key，把请求原样转发到 {baseUrl}/images/generations。
- * 成功返回上游 data（画布按 data[].url 取图），失败按人话报错并计入 Key 健康度。
+ * 一次出图尝试：选中的那把 Key 把请求原样转发到 {baseUrl}/images/generations。
+ * 成功返回上游 data（画布按 data[].url 取图）。每次尝试都单独记一条路由，
+ * 后台才看得出「第 1 把挂了、第 2 把接上」，而不是只留一条含糊的失败。
  */
-export async function generateImage(payload = {}) {
-  const started = Date.now()
-  const model = String(payload.model || '')
-  const key = resolveKey({ capability: 'image', model })
-  if (!key) {
-    recordRoute({
-      capability: 'image',
-      model,
-      source: 'none',
-      reason: '池里没有可用的出图 Key',
-      ms: Date.now() - started,
-      ok: false,
-      error: '没有可用的出图 Key',
-    })
-    throw gatewayError(503, 'NO_IMAGE_KEY', '没有可用的出图 Key：请在后台「模型 Key」里添加一把声明了「出图」能力的 Key')
-  }
-  const requestBody = { ...payload, model: payload.model || key.model }
+async function attemptImage(key, requestBody, started, model) {
   let upstream
   try {
     upstream = await postJson(trimBase(key.baseUrl) + '/images/generations', key.apiKey, requestBody, config.gateway.imageTimeoutMs)
   } catch (error) {
     reportKey(key.id, false, String(error?.message || error))
-    recordRoute({ capability: 'image', model, keyId: key.id, keyName: key.name, source: 'pool', reason: key.reason, ms: Date.now() - started, ok: false, error: String(error?.message || error) })
+    recordRoute({ capability: 'image', model, keyId: key.id, keyName: key.name, source: 'pool', reason: key.reason, attempt: key.attempt, ms: Date.now() - started, ok: false, error: String(error?.message || error) })
     throw gatewayError(502, 'UPSTREAM_UNREACHABLE', '连不上出图上游：' + String(error?.message || error).slice(0, 120))
   }
   if (!upstream.response.ok) {
     const message = friendlyUpstream(upstream.response.status, upstream.text)
     reportKey(key.id, false, 'HTTP ' + upstream.response.status + ' ' + upstream.text.slice(0, 160))
-    recordRoute({ capability: 'image', model, keyId: key.id, keyName: key.name, source: 'pool', reason: key.reason, ms: Date.now() - started, ok: false, error: 'HTTP ' + upstream.response.status + ' ' + upstream.text.slice(0, 160) })
+    recordRoute({ capability: 'image', model, keyId: key.id, keyName: key.name, source: 'pool', reason: key.reason, attempt: key.attempt, ms: Date.now() - started, ok: false, error: 'HTTP ' + upstream.response.status + ' ' + upstream.text.slice(0, 160) })
     throw gatewayError(502, 'UPSTREAM_REJECTED', message, { upstreamStatus: upstream.response.status, detail: upstream.text.slice(0, 300) })
   }
   const data = parseJson(upstream.text)
   if (!data) {
     reportKey(key.id, false, '上游返回的不是 JSON')
-    recordRoute({ capability: 'image', model, keyId: key.id, keyName: key.name, source: 'pool', reason: key.reason, ms: Date.now() - started, ok: false, error: '上游返回的不是 JSON' })
+    recordRoute({ capability: 'image', model, keyId: key.id, keyName: key.name, source: 'pool', reason: key.reason, attempt: key.attempt, ms: Date.now() - started, ok: false, error: '上游返回的不是 JSON' })
     throw gatewayError(502, 'UPSTREAM_BAD_PAYLOAD', '出图上游返回的内容无法解析')
   }
   const urls = extractUrls(data)
   if (!urls.length) {
     reportKey(key.id, false, '上游没有返回图片地址')
-    recordRoute({ capability: 'image', model, keyId: key.id, keyName: key.name, source: 'pool', reason: key.reason, ms: Date.now() - started, ok: false, error: '上游没有返回图片地址' })
+    recordRoute({ capability: 'image', model, keyId: key.id, keyName: key.name, source: 'pool', reason: key.reason, attempt: key.attempt, ms: Date.now() - started, ok: false, error: '上游没有返回图片地址' })
     throw gatewayError(502, 'UPSTREAM_EMPTY', '出图上游没有返回图片地址')
   }
   reportKey(key.id, true)
-  recordRoute({ capability: 'image', model, keyId: key.id, keyName: key.name, source: 'pool', reason: key.reason, ms: Date.now() - started, ok: true })
+  recordRoute({ capability: 'image', model, keyId: key.id, keyName: key.name, source: 'pool', reason: key.reason, attempt: key.attempt, ms: Date.now() - started, ok: true })
   // 上游响应原样给调用方：画布就是按方舟的 { data: [{ url }] } 取图的，
   // 包一层 { data: {...} } 会让它「成功但 0 张图」。平台自己的元信息放在同级字段里。
-  return { ...data, ok: true, urls, key: { id: key.id, name: key.name }, ms: Date.now() - started }
+  return { ...data, ok: true, urls, key: { id: key.id, name: key.name }, attempt: key.attempt, ms: Date.now() - started }
+}
+
+/**
+ * 出图：按「优先级 → 权重」排出一串出图 Key，一把失败就换下一把（最多 3 把）。
+ * 单把 Key 坏掉不该让整次生成失败，这就是「故障回退」。
+ */
+export async function generateImage(payload = {}) {
+  const started = Date.now()
+  const model = String(payload.model || '')
+  const candidates = resolveKeyCandidates({ capability: 'image', model, limit: MAX_ATTEMPTS })
+  if (!candidates.length) {
+    recordRoute({ capability: 'image', model, source: 'none', reason: '池里没有可用的出图 Key', ms: Date.now() - started, ok: false, error: '没有可用的出图 Key' })
+    throw gatewayError(503, 'NO_IMAGE_KEY', '没有可用的出图 Key：请在后台「模型 Key」里添加一把声明了「出图」能力的 Key')
+  }
+  let lastError = null
+  for (const key of candidates) {
+    const requestBody = { ...payload, model: payload.model || key.model }
+    try {
+      return await attemptImage(key, requestBody, started, model)
+    } catch (error) {
+      lastError = error
+    }
+  }
+  throw gatewayError(lastError?.status || 502, lastError?.code || 'UPSTREAM_REJECTED', failoverMessage('出图', candidates, lastError), {
+    ...(lastError?.upstreamStatus ? { upstreamStatus: lastError.upstreamStatus } : {}),
+    ...(lastError?.detail ? { detail: lastError.detail } : {}),
+    attempts: candidates.length,
+  })
 }
 
 function pruneJobs() {
@@ -163,43 +187,67 @@ function pruneJobs() {
   }
 }
 
-/** 出视频第一步：建任务。记下任务 id → Key 的对应关系，轮询时回到同一把 Key。 */
-export async function createVideoTask(payload = {}) {
-  pruneJobs()
-  const started = Date.now()
-  const model = String(payload.model || '')
-  const key = resolveKey({ capability: 'video', model })
-  if (!key) {
-    recordRoute({ capability: 'video', model, source: 'none', reason: '池里没有可用的出视频 Key', ms: Date.now() - started, ok: false, error: '没有可用的出视频 Key' })
-    throw gatewayError(503, 'NO_VIDEO_KEY', '没有可用的出视频 Key：请在后台「模型 Key」里添加一把声明了「出视频」能力的 Key')
-  }
-  const requestBody = { ...payload, model: payload.model || key.model }
+/** 一次建视频任务的尝试：成功返回上游 body 与任务 id，失败抛 gatewayError 并单独记一条路由。 */
+async function attemptVideoCreate(key, requestBody, started, model) {
   let upstream
   try {
     upstream = await postJson(trimBase(key.baseUrl) + '/contents/generations/tasks', key.apiKey, requestBody, config.gateway.videoTimeoutMs)
   } catch (error) {
     reportKey(key.id, false, String(error?.message || error))
-    recordRoute({ capability: 'video', model, keyId: key.id, keyName: key.name, source: 'pool', reason: key.reason, ms: Date.now() - started, ok: false, error: String(error?.message || error) })
+    recordRoute({ capability: 'video', model, keyId: key.id, keyName: key.name, source: 'pool', reason: key.reason, attempt: key.attempt, ms: Date.now() - started, ok: false, error: String(error?.message || error) })
     throw gatewayError(502, 'UPSTREAM_UNREACHABLE', '连不上出视频上游：' + String(error?.message || error).slice(0, 120))
   }
   if (!upstream.response.ok) {
     const message = friendlyUpstream(upstream.response.status, upstream.text)
     reportKey(key.id, false, 'HTTP ' + upstream.response.status + ' ' + upstream.text.slice(0, 160))
-    recordRoute({ capability: 'video', model, keyId: key.id, keyName: key.name, source: 'pool', reason: key.reason, ms: Date.now() - started, ok: false, error: 'HTTP ' + upstream.response.status + ' ' + upstream.text.slice(0, 160) })
+    recordRoute({ capability: 'video', model, keyId: key.id, keyName: key.name, source: 'pool', reason: key.reason, attempt: key.attempt, ms: Date.now() - started, ok: false, error: 'HTTP ' + upstream.response.status + ' ' + upstream.text.slice(0, 160) })
     throw gatewayError(502, 'UPSTREAM_REJECTED', message, { upstreamStatus: upstream.response.status, detail: upstream.text.slice(0, 300) })
   }
   const data = parseJson(upstream.text)
   const taskId = String(data?.id || data?.task_id || '')
   if (!taskId) {
     reportKey(key.id, false, '上游没有返回任务 id')
-    recordRoute({ capability: 'video', model, keyId: key.id, keyName: key.name, source: 'pool', reason: key.reason, ms: Date.now() - started, ok: false, error: '上游没有返回任务 id' })
+    recordRoute({ capability: 'video', model, keyId: key.id, keyName: key.name, source: 'pool', reason: key.reason, attempt: key.attempt, ms: Date.now() - started, ok: false, error: '上游没有返回任务 id' })
     throw gatewayError(502, 'UPSTREAM_EMPTY', '出视频上游没有返回任务 id')
   }
   reportKey(key.id, true)
-  recordRoute({ capability: 'video', model, keyId: key.id, keyName: key.name, source: 'pool', reason: key.reason, ms: Date.now() - started, ok: true })
-  const createdAt = Date.now()
-  jobs.set(taskId, { keyId: key.id, keyName: key.name, baseUrl: key.baseUrl, apiKey: key.apiKey, model: requestBody.model, createdAt, at: createdAt, recorded: false })
-  return { ...(data && typeof data === 'object' ? data : {}), ok: true, id: taskId, key: { id: key.id, name: key.name }, ms: Date.now() - started }
+  recordRoute({ capability: 'video', model, keyId: key.id, keyName: key.name, source: 'pool', reason: key.reason, attempt: key.attempt, ms: Date.now() - started, ok: true })
+  return { data, taskId }
+}
+
+/**
+ * 出视频第一步：建任务。
+ * 与出图一样支持换把重试；建成功后把「任务 id → 这把 Key」记下来，
+ * 轮询必须回到同一把 Key —— 任务在上游是挂在某把 Key 的账号下的。
+ */
+export async function createVideoTask(payload = {}) {
+  pruneJobs()
+  const started = Date.now()
+  const model = String(payload.model || '')
+  const candidates = resolveKeyCandidates({ capability: 'video', model, limit: MAX_ATTEMPTS })
+  if (!candidates.length) {
+    recordRoute({ capability: 'video', model, source: 'none', reason: '池里没有可用的出视频 Key', ms: Date.now() - started, ok: false, error: '没有可用的出视频 Key' })
+    throw gatewayError(503, 'NO_VIDEO_KEY', '没有可用的出视频 Key：请在后台「模型 Key」里添加一把声明了「出视频」能力的 Key')
+  }
+  let lastError = null
+  for (const key of candidates) {
+    const requestBody = { ...payload, model: payload.model || key.model }
+    let created
+    try {
+      created = await attemptVideoCreate(key, requestBody, started, model)
+    } catch (error) {
+      lastError = error
+      continue
+    }
+    const createdAt = Date.now()
+    jobs.set(created.taskId, { keyId: key.id, keyName: key.name, baseUrl: key.baseUrl, apiKey: key.apiKey, model: requestBody.model, createdAt, at: createdAt, recorded: false })
+    return { ...(created.data && typeof created.data === 'object' ? created.data : {}), ok: true, id: created.taskId, key: { id: key.id, name: key.name }, attempt: key.attempt, ms: Date.now() - started }
+  }
+  throw gatewayError(lastError?.status || 502, lastError?.code || 'UPSTREAM_REJECTED', failoverMessage('出视频', candidates, lastError), {
+    ...(lastError?.upstreamStatus ? { upstreamStatus: lastError.upstreamStatus } : {}),
+    ...(lastError?.detail ? { detail: lastError.detail } : {}),
+    attempts: candidates.length,
+  })
 }
 
 /**

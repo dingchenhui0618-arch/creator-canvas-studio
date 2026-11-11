@@ -144,7 +144,8 @@ export default function ModelRoutePanel() {
           <div>
             <p className="admin-label">最近路由</p>
             <p className="admin-sub">
-              每次真实模型调用记一条：走了哪把 Key、为什么、多快、成没成。只存在内存里，重启清空；不含 Key 明文，也不含对话内容。
+              每次真实模型调用记一条：走了哪把 Key、为什么、多快、成没成。出图 / 出视频一把失败会自动换下一把，
+              每次尝试各记一条，能看出是第几把接住的。只存在内存里，重启清空；不含 Key 明文，也不含对话内容。
             </p>
           </div>
           <div className="admin-row-actions">
@@ -162,6 +163,7 @@ export default function ModelRoutePanel() {
           <>
             <p className="admin-hint">
               本次运行 {summary.total} 次 · 成功 {summary.ok} · 失败 {summary.fail} · 平均 {summary.avgMs} ms
+              {summary.failover ? ` · 换 Key 成功 ${summary.failover} 次` : ''}
               {summary.env ? ` · 回落环境变量 ${summary.env} 次` : ''}
               {summary.none ? ` · 没有可用 Key ${summary.none} 次` : ''}
               {summary.lastAt ? ` · 最近一次 ${formatDateTime(summary.lastAt)}` : ''}

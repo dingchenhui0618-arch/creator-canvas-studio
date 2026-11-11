@@ -148,6 +148,7 @@ export default function ModelKeyPool() {
           <p className="admin-label">平台 Key 池</p>
           <p className="admin-sub">
             这里是整个平台共用的上游 Key。优先级小的先选，同优先级按权重随机；连续失败 3 次自动冷却 60 秒；
+            出图 / 出视频一把失败会自动换下一把（一次最多试 3 把），单把 Key 坏掉不会让整次生成失败；
             池里没有可用 Key 时才会回落到环境变量里的旧凭证。保存即生效，不用重启。
           </p>
         </div>

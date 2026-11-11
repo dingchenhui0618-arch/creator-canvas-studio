@@ -129,6 +129,8 @@ export type RouteList = {
     fail: number
     env: number
     none: number
+    /** 换 Key 成功的次数：第一把失败、后面某把接住了 */
+    failover: number
     avgMs: number
     lastAt: string
     byKey: { keyId: string; keyName: string; ok: number; fail: number; count: number; avgMs: number }[]
