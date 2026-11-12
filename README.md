@@ -2223,3 +2223,27 @@ v0.9.10 让「甲方看没看」第一次有了答案，这一轮让这个答案
 
 验收：生产 **v0.9.37**、入口 index-17r_07kF.js（500,912 字节）、release 20261112-233656-2026-11-13-review-from-p.tar.gz、/api/version 0.9.37、/api/health ok（templates 26）、两服务 active。这一轮**生产零写入**：截图前后 /api/projects、/api/templates、/api/flows 的 id/version/updatedAt 完全一致（1 / 26 / 7）。生产实测：GET /api/reviews/candidates → total 1 / withoutCanvas 0（毛衣折叠收纳法 · 第 2 版 · 评过 2 次 · 需人工确认）；首屏 1 行候选、左栏收起；点「评这一版」→ #/review/project/prj_f38d68c6；1440 与 390 都是 scrollWidth == clientWidth。本地演示数据（.tmp-qa/r117data，示例数据、不扣积分）验多条作品：6 条取 4 条、待开画布 →「先开画布」进 #/projects/prj_canvas_tpl、需人工确认 →「评这一版」进 #/review/project/prj_follow、已交付无画布 →「打开作品」，底部「还有 2 条在作品里」。这一轮不调模型、没发起一次真实评审（0 积分）。npm test **355/355**（新增 10 条 test/review-candidates.test.mjs）、oxlint **0 error / 6 warning**、tsc -b 干净、构建通过。
 细节见 [视觉评审先问「评哪条作品的哪一版」](./docs/review-from-project-2026-11-13.md)。
+
+## 一百零七、同一条原片，库里已经留下了什么（v0.9.38）
+
+目标模式里「来源 → 模板」的第一问是「这条我是不是已经有了」，以前两处都答不上来：发现页的检索卡片只有「加入模板库」，收过的内容再点一次只退成一句「这条已经在模板库里了」，然后没有出路；模板详情只看得见「这条模板名下的作品」，以它为底改编出的那条是另一条模板，看上去像两条不相干的来源。
+
+- **认原片**（`server/source-footprint.mjs`）：平台 + 平台 id 优先（链接会被加分享参数、末尾斜杠或 #，id 不会），没有 id 时退回规范化链接，与发现页「库里的原片」共用 `originKey`；画布 / 智能体 / 作品沉淀出来的模板本来就没有原片，两处都不出现。
+- **模板详情 · 来源**：多一块「这条原片在库里」——2 条模板 · 1 条作品 · 套用过 3 次，同源模板做成胶囊点一下切过去；只有一条就写明只有一条，官方示例写明「改编或套用都会另存成你自己的那条」。
+- **发现页 · 检索卡片**：封面左下角「库里已有」（有作品时写「库里已有 · 1 条作品」），操作行的「加入模板库」换成「打开模板」，点进去就是已有的那条。
+- **接口只读现算**：`GET /api/templates/<id>` 多一段 `footprint`（没有原片为 `null`）；`POST /api/library/marks` 一次最多 50 条（非 POST 405、未登录 401、没身份的条目不命中）。都不检索、不扣积分。
+- **统计口径**：一条作品多版只算一条、同一条作品出现两次取最近改动的那行；命中的代表条目先挑有作品的、再挑自己的，最后才是最近存进来的（不会把你指回官方示例那条）。
+- **顺手修**：详情里的作品行本来没有 `templateId`，「这条原片开出几条作品」会永远算成 0 → `flattenTemplateWorks` 把 templateId 带回来。
+
+![生产 1440：模板详情「来源」里多了一块「这条原片在库里 1 条模板 · 1 条作品 · 套用过 5 次」，并写明这是官方示例](docs/screenshot-template-origin-2026-11-13.png)
+
+![生产 390：同一块在手机上不挤，说明折成两行，页宽 390 无横向滚动](docs/screenshot-template-origin-390-2026-11-13.png)
+
+![本地演示数据（非生产）1440：检索卡片「库里已有」，操作行从「加入模板库」换成「打开模板」](docs/screenshot-radar-library-marks-2026-11-13.png)
+
+![本地演示数据 390：标记在封面左下角，与右下角的时长互不重叠](docs/screenshot-radar-library-marks-390-2026-11-13.png)
+
+![本地演示数据 1440：同一条原片存成 2 条模板、开出 1 条作品，同源胶囊点一下切到改编版](docs/screenshot-template-origin-sibling-2026-11-13.png)
+
+验收：生产 **v0.9.38**、入口 index-DhPC7_xe.js（501,676 字节）、release 20261112-235114-2026-11-13-library-origi.tar.gz、/api/version 0.9.38、/api/health ok（templates 26）、两服务 active。这一轮**生产零写入**：核对前后 /api/projects、/api/templates、/api/flows 的 id/version/updatedAt 完全一致（1 / 26 / 7）。生产实测：GET /api/templates/tpl_5323f485 → footprint 1 条模板 · 1 条作品（毛衣折叠收纳法 v2）· 套用过 5 次 · shared true；GET /api/templates/tpl_8cfe9e23（智能体草稿）→ footprint null；POST /api/library/marks 用三条真实平台 id → total 3 / matched 3、templateId 与库里那条对得上，一条库里没有的 id → matched 0，没有平台 id 也没有链接 → matched 0；未登录 401、GET 405；1440 与 390 都是 scrollWidth == clientWidth。本地演示数据（.tmp-qa/r118data，示例数据、不扣积分）：检索「收纳」两条里被收过的那条带「库里已有」、未收过的仍是「加入模板库」，点「打开模板」进 #/templates/tpl_demo_desk；检索「通勤」那枚标记写「库里已有 · 1 条作品」；tpl_demo_spring 的抽屉读出「2 条模板 · 1 条作品 · 套用过 3 次」+ 同源胶囊「春日通勤穿搭 · 我的版本（改编版）」；390 上胶囊与时长互不重叠。**这一轮没有发起真实检索**（按次 2 积分），生产用真实平台 id 直接打接口验；不调模型、不花积分。npm test **369/369**（新增 test/source-footprint.test.mjs 14 条）、oxlint **0 error / 6 warning**、tsc -b 干净、构建通过。
+细节见 [同一条原片，库里已经留下了什么](./docs/source-footprint-2026-11-13.md)。
