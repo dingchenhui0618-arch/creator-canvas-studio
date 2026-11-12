@@ -608,6 +608,11 @@
 .agx-textarea:disabled {
   cursor: not-allowed;
 }
+/* 2026-11-12：整张 composer 就是这一个输入控件，焦点提示由它自己给（边框转墨 + 柔光）。
+   里面的 textarea 再画一道 1px 直角 outline，就成了「外圆内方」的第二个框，所以这里让位。 */
+.agx-composer .agx-textarea:focus-visible {
+  outline: 0;
+}
 .agx-composer-bar {
   display: flex;
   flex-wrap: wrap;

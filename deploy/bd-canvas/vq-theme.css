@@ -245,6 +245,21 @@ button[style*="var(--generate-btn)"] {
   color: #ffffff !important;
 }
 
+/* toast（.snap-toast）是 div，走内联样式 background:var(--generate-btn) + color:var(--text-primary)：
+   两个变量在浅色主题里都是 #111，于是提示整块是黑的、字完全看不见 —— 画布上「拖出连线松手」就会弹出这么一块黑框。
+   内联样式优先，必须 !important；这里把它定成纸面卡片：白底 + 墨字 + 发丝线 + 10px 圆角（对齐宿主胶囊尺度）。 */
+.snap-toast {
+  color: #111111 !important;
+  background: #ffffff !important;
+  border: 1px solid rgb(17 17 17 / 14%) !important;
+  border-radius: 10px !important;
+  padding: 8px 14px !important;
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+  letter-spacing: .01em;
+  box-shadow: 0 2px 4px rgb(17 17 17 / 6%), 0 16px 32px rgb(17 17 17 / 8%) !important;
+}
+
 /* ========================================================================== */
 /* 5. 深色假设逐条翻转：白 alpha 的描边 / 悬浮 / 分隔 → 墨 alpha                  */
 /* ========================================================================== */

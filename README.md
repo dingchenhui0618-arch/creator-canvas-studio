@@ -2254,3 +2254,25 @@ push 到 master 与所有 PR 都会跑一条流水线，任何一步非零这次
 
 ![模板库（1280 宽，统计卡三张一行）](docs/screenshot-ui-templates-1280-2026-11-12.png)
 
+## 五十五、两处界面缺陷：画布黑框与「外圆内方」（2026-11-12）
+
+用户点出的两处都不是观感问题，是样式缺陷。生产 v0.1.3（入口 `index-BBTGNX2-.js`）已修复，详细根因与量尺见 [docs/ui-fix-2026-11-12.md](docs/ui-fix-2026-11-12.md)。
+
+| 现象 | 根因 | 修法 |
+| --- | --- | --- |
+| 画布「节点拉出线」松手后冒出一块纯黑圆角框（约 240×35，没有字） | 那是 BD Canvas 的 toast：内联 `background:var(--generate-btn)` + `color:var(--text-primary)`，浅色主题把两个变量都翻成了 `#111111` → 黑底黑字。触发路径是松手在空白处要弹「创建下游节点」菜单，这个节点没有可创建的下游，退化成一句 toast | `deploy/bd-canvas/vq-theme.css` 补 `.snap-toast`：白底墨字、10px 圆角、发丝线、中性投影（内联样式优先，必须 `!important`）。只替换服务器上 `/opt/bdcanvas/public/vq-theme.css` 即生效，不重建、不重启 |
+| 智能体输入卡 24px 圆角，点进去里面浮出一圈直角 1px 方框 | `.agx-page textarea:focus-visible { outline: 1px solid var(--ink); outline-offset: 2px }`，`outline` 不吃圆角，于是外圆内方 | `.agx-composer .agx-textarea:focus-visible { outline: 0 }`，焦点提示交给卡片自己（墨色描边 + 柔光）；其余字段的键盘焦点照旧 |
+
+验收：两个服务 active、`/api/health` ok（templates 25）；画布 toast 实测白底墨字可读；输入区聚焦后 `outline: none`、卡片 `border-color: rgb(17,17,17)` + `0 0 0 4px` 柔光；`tsc -b` + `vite build` 通过、`oxlint` 0 error（8 条既有 warning）、`node --test` 43/43。
+
+改之前：拖线松手后是一块看不见字的黑框。
+
+![改之前：画布黑框](docs/screenshot-before-canvas-toast-2026-11-12.png)
+
+![改之前：外圆内方的 1px 直角框](docs/screenshot-before-composer-2026-11-12.png)
+
+改之后：
+
+![改之后：白底墨字的 toast](docs/screenshot-fix-canvas-toast-2026-11-12.png)
+
+![改之后：卡片即输入框，只剩墨色描边与柔光](docs/screenshot-fix-composer-2026-11-12.png)
