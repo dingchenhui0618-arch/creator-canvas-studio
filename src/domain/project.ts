@@ -107,6 +107,15 @@ export type ProjectRun = {
   available: boolean
 }
 
+/**
+ * 作品列表的筛法：只分「当前这一版交没交出去」，评审结论继续写在胶囊里。
+ * 与状态胶囊同一口径：交付了 v2 又开 v3 的那条算「在做」，不算「已交付」。
+ */
+export type ProjectBucket = 'all' | 'active' | 'delivered'
+
+/** 分面计数：按关键字算、不按当前状态算——换了状态，另一排数字仍然是真的 */
+export type ProjectListFacets = { all: number; active: number; delivered: number }
+
 export type ProjectSummary = Project & {
   template: ProjectTemplateBrief | null
   reviews: ProjectReviews

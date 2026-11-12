@@ -106,6 +106,142 @@
   }
 }
 
+/* ---------- 列表工具栏：找得到、筛得动（v0.9.23） ----------
+   作品多起来以后第一件事是「找到那一条」：标题 / 模板名搜、按交没交出去筛。
+   搜索框与筛选胶囊共用全站一套圆角与高度，不与页头按钮抢视觉重量。 */
+.vq-projects-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  min-width: 0;
+  margin: var(--space-4) 0;
+}
+
+.vq-projects-search {
+  display: inline-flex;
+  flex: 1 1 240px;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 340px;
+  height: 32px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  color: var(--faint);
+  transition: border-color var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out),
+    color var(--dur-1) var(--ease-out);
+}
+
+.vq-projects-search:focus-within {
+  border-color: var(--line-strong);
+  box-shadow: var(--ring-soft);
+  color: var(--ink);
+}
+
+.vq-projects-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+
+.vq-projects-search input::placeholder {
+  color: var(--faint);
+}
+
+.vq-projects-search input:focus {
+  outline: none;
+}
+
+/* type=search 自带的清除钮与右侧那枚 X 重复，只留一个 */
+.vq-projects-search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+/* 没输入时右侧提示「/」：与顶栏「跳转到…」的 kbd 同一套写法 */
+.vq-projects-search kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--surface-soft);
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.vq-projects-search-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--surface-soft);
+  color: var(--muted);
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
+}
+
+.vq-projects-search-clear:hover {
+  background: var(--line);
+  color: var(--ink);
+}
+
+.vq-projects-search-clear:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+/* 「筛出 2 / 共 9 条」：数字走等宽，靠右，不与胶囊挤在一起 */
+.vq-projects-count {
+  margin: 0 0 0 auto;
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.vq-projects-count .vq-mono {
+  color: var(--muted);
+}
+
+.vq-projects-reset {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+  text-underline-offset: 2px;
+}
+
+.vq-projects-reset:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+.vq-projects-reset:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+  border-radius: var(--radius-xs);
+}
+
 /* ---------- 列表 ---------- */
 
 .vq-projects-grid {
@@ -1268,6 +1404,21 @@
 @media (max-width: 780px) {
   .vq-projects-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* 窄屏：搜索独占一行，胶囊与计数自己换行；计数不再靠右顶到屏幕边上 */
+  .vq-projects-toolbar {
+    gap: var(--space-2);
+    margin: var(--space-3) 0;
+  }
+
+  .vq-projects-search {
+    flex-basis: 100%;
+    max-width: none;
+  }
+
+  .vq-projects-count {
+    margin-left: 0;
   }
 
   /* 评审面板在手机上只有 240px 正文宽：结论与版次先排一行，摘要独占下一行 */

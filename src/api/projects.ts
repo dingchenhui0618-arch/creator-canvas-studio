@@ -1,7 +1,40 @@
 import { request } from './client'
-import type { Project, ProjectDetail, ProjectScript, ProjectShare, ProjectSummary, ShareSummaryRow, SharedProject } from '../domain/project'
+import type {
+  Project,
+  ProjectBucket,
+  ProjectDetail,
+  ProjectListFacets,
+  ProjectScript,
+  ProjectShare,
+  ProjectSummary,
+  ShareSummaryRow,
+  SharedProject,
+} from '../domain/project'
 
-export const listProjects = () => request<{ ok: boolean; items: ProjectSummary[]; total: number }>('/api/projects')
+export type ProjectListFilter = { q?: string; state?: ProjectBucket }
+
+export type ProjectListResult = {
+  ok: boolean
+  items: ProjectSummary[]
+  /** 账号下看得见的作品总数，不受筛选影响 */
+  total: number
+  /** 筛出来几条 */
+  shown: number
+  facets: ProjectListFacets
+  /** 归一后的关键字（小写、空格收成一个），界面用它判断「有没有在筛」 */
+  query: string
+  state: ProjectBucket
+}
+
+// 不带参数就是原来的全部列表：筛选可省，接口向后兼容
+export const listProjects = (filter: ProjectListFilter = {}) => {
+  const params = new URLSearchParams()
+  const keyword = (filter.q || '').trim()
+  if (keyword) params.set('q', keyword)
+  if (filter.state && filter.state !== 'all') params.set('state', filter.state)
+  const query = params.toString()
+  return request<ProjectListResult>('/api/projects' + (query ? '?' + query : ''))
+}
 
 // 工作台的「分享出去的链接」：跨作品汇总，一条作品一行，不带 token 与记录键
 export const listShares = () => request<{ items: ShareSummaryRow[]; total: number; opens: number }>('/api/shares')

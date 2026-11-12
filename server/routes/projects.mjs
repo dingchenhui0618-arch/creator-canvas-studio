@@ -28,6 +28,7 @@ import { shareBriefsByProject } from '../share-summary.mjs'
 import { dropAcksForProject } from '../review-acks.mjs'
 import { dropDecisionsForProject, listDecisions } from '../review-decisions.mjs'
 import { decisionFor, reviewsForVersion } from '../project-status.mjs'
+import { projectListQuery } from '../project-list.mjs'
 import { buildZip } from '../zip-store.mjs'
 import {
   listProjects,
@@ -429,7 +430,12 @@ export function createProjectsRouter() {
             share: shareBriefs.get(project.id) || null,
           })
         }
-        sendJson(res, 200, { ok: true, items, total: items.length })
+        // 搜什么、筛什么都在 project-list.mjs 里算：分面计数与真正筛出来的行同一口径
+        const listed = projectListQuery(items, {
+          q: url.searchParams.get('q') || '',
+          state: url.searchParams.get('state') || 'all',
+        })
+        sendJson(res, 200, { ok: true, ...listed })
         return true
       }
 
