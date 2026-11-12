@@ -111,7 +111,7 @@ function flowBrief(flow) {
  * 作品详情：作品页与交付稿导出读同一个函数，避免两处口径分叉。
  * 运行归集要跨版本：当前版 + 归档版的画布一起查，开新版之后旧版的运行记录仍在作品里。
  */
-async function projectDetailView(project, user) {
+async function projectDetailView(project, user, { snapshots = false } = {}) {
   const projectFlows = [project.flowId, ...project.versions.map((entry) => entry.flowId)].filter(Boolean)
   const [template, flow, reviews, versionCounts, runData] = await Promise.all([
     project.templateId ? getTemplate(project.templateId, user) : null,
@@ -120,13 +120,22 @@ async function projectDetailView(project, user) {
     reviewSummaryByVersion(project.id, user),
     listRunsByFlows(projectFlows, { limit: 20 }, user),
   ])
-  // 归档的旧版本只存了 flowId：这里顺手确认画布还在，已删掉的版本按钮要禁用而不是点开报错
+  // 归档的旧版本只存了 flowId：这里顺手确认画布还在，已删掉的版本按钮要禁用而不是点开报错。
+  // 页面只要「这一版几段脚本」；交付稿要跟上一版对比，才把快照与节点一起带上（snapshots）。
   const versions = await Promise.all(project.versions.map(async (entry) => {
     const archived = entry.flowId ? await getFlow(entry.flowId, user) : null
+    const snapshot = entry.script || null
     return {
-      ...entry,
+      n: entry.n,
+      flowId: entry.flowId,
+      name: entry.name,
+      archivedAt: entry.archivedAt,
       available: Boolean(archived),
       nodes: Array.isArray(archived?.nodes) ? archived.nodes.length : 0,
+      // 开新版时存下的脚本快照：这里只给段数，正文只在导出时带
+      scriptBeats: Array.isArray(snapshot?.structure) ? snapshot.structure.length : 0,
+      scriptSource: snapshot?.source || '',
+      ...(snapshots ? { scriptSnapshot: snapshot, nodeList: archived?.nodes || null } : {}),
     }
   }))
   const versionOfFlow = new Map()
@@ -146,12 +155,14 @@ async function projectDetailView(project, user) {
     const version = versionOfFlow.get(flowId) || 0
     runCounts[version] = (runCounts[version] || 0) + Number(amount)
   }
+  const flowView = flowBrief(flow)
   return {
     project: projectBrief(project),
     // 作品页的分享面板读这里：列表接口不返回 token
     share: project.share,
     template: templateDetail(template),
-    flow: flowBrief(flow),
+    // 节点本身只在导出时带上：页面上十几版节点一起传过去没有用，还拖慢首屏
+    flow: snapshots && flowView ? { ...flowView, nodeList: flow.nodes } : flowView,
     // 作品页的脚本：自己的版本优先（source: project），否则跟随模板
     script: scriptView(project, template),
     reviews: reviews.items,
@@ -166,9 +177,11 @@ async function projectDetailView(project, user) {
 // 交付稿的内容只组装一次：Markdown 文件与 A4 打印稿读同一份，
 // 不会出现「文件里一个时间、纸上另一个时间」。
 async function deliverablePayload(project, user, tzOffsetMinutes) {
-  const detail = await projectDetailView(project, user)
-  // 评审全文（含问题与修正建议）只在导出时读一次：详情列表里不带这几十 KB
-  const latest = detail.reviews.find((item) => Number(item.version ?? 0) === project.version) || null
+  // 交付稿要写「每一版和上一版比改了什么」：快照与节点只有导出时才取
+  const detail = await projectDetailView(project, user, { snapshots: true })
+  // 评审全文（含问题与修正建议）只在导出时读一次：详情列表里不带这几十 KB。
+  // 版本 0 是版本划分之前记的评审，按页面同一套规则折进 v1，否则老作品会显示「记录没读到」。
+  const latest = detail.reviews.find((item) => Math.max(1, Math.round(Number(item.version) || 0)) === project.version) || null
   const review = latest ? await getReview(latest.id, user) : null
   return projectDeliverable(detail, { review, tzOffsetMinutes })
 }
@@ -198,7 +211,9 @@ export function createProjectsRouter() {
       // 排版与内容是服务端给的，打印对话框里纸张已经写死 A4，用户只需要按一下。
       const printPath = pathname.match(DELIVERABLE_PRINT)
       if (printPath && req.method === 'GET') {
-        if (!user) {
+        // 与其它接口同一套：生产必须登录；本地演示（VQ_REQUIRE_AUTH=0）不认人但照常可用，
+        // 否则本地打开打印页只会看到一张「登录已过期」，没法验收排版。
+        if (!user && config.auth.requireAuth) {
           sendPrintNotice(res, 401, {
             title: '登录已过期',
             message: '这个打印页要用你的登录态取数据：回到作品页再点一次「打印稿」，或者先登录。',
@@ -425,9 +440,12 @@ export function createProjectsRouter() {
           nodes: current.nodes,
           edges: current.edges,
         }, user)
+        // 归档这一版的脚本：脚本只有一份（作品级），不留快照，历史版本当时说了什么就再也查不到了
+        const template = project.templateId ? await getTemplate(project.templateId, user) : null
         const updated = await archiveProjectVersion(project.id, {
           flowId: copy.id,
           prevName: current.name,
+          script: scriptView(project, template),
         }, user)
         if (!updated) {
           sendJson(res, 409, { error: '开新版本没有成功：这一版没有归档，作品仍然指向原来的画布', code: 'VERSION_FAILED' })

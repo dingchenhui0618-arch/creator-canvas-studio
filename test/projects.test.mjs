@@ -121,6 +121,32 @@ test('第一张画布把作品推进 v1，开一版新的归档旧画布、版�
   assert.equal(reloaded.version, 2)
 })
 
+test('开新版时把这一版的脚本存进归档：历史版本当时说了什么还能查', async () => {
+  const project = await p.createProject({ title: '快照', templateId: 'tpl_a' }, userA)
+  await p.updateProject(project.id, { flowId: 'flow_s1' }, userA)
+  const snapshot = {
+    hook: '旧钩子',
+    structure: [{ beat: '开场', voiceover: '第一版的一句', startSec: 0, endSec: 3, expectedSec: 2.9 }],
+    source: 'template',
+    updatedAt: '2026-11-12T04:00:00.000Z',
+  }
+  const archived = await p.archiveProjectVersion(project.id, { flowId: 'flow_s2', prevName: '第一版', script: snapshot }, userA)
+  const entry = archived.versions[0]
+  assert.equal(entry.script.hook, '旧钩子')
+  assert.equal(entry.script.structure[0].voiceover, '第一版的一句')
+  assert.equal(entry.script.source, 'template', '当时跟随模板也要记下来')
+
+  // 落盘再读：快照跟作品一起存住，而不仅仅活在内存里
+  const fresh = await import('../server/projects.mjs?snapshot-read')
+  const reloaded = await fresh.getProject(project.id, userA)
+  assert.equal(reloaded.versions[0].script.structure[0].voiceover, '第一版的一句')
+  assert.equal(reloaded.versions[0].script.structure[0].expectedSec, 2.9)
+
+  // 没传快照的归档版本记成空，而不是凭空编一份出来
+  const later = await p.archiveProjectVersion(project.id, { flowId: 'flow_s3', prevName: '第二版' }, userA)
+  assert.equal(later.versions[1].script, null)
+})
+
 test('评审按版本记账，版本对照的计数互不串', async () => {
   const project = await p.createProject({ title: '对照', templateId: 'tpl_a' }, userA)
   await p.updateProject(project.id, { flowId: 'flow_x' }, userA)

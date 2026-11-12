@@ -61,7 +61,22 @@ function fixture(overrides = {}) {
       ...overrides.script,
     },
     reviews: [{ id: 'rev_1', version: 2, verdict: 'needs_review', summary: '结构清楚', createdAt: '2026-11-12T05:10:00.000Z' }],
-    versions: [{ n: 1, flowId: 'flow_1', name: '咖啡 v1', archivedAt: '2026-11-12T04:00:00.000Z', available: true, nodes: 5 }],
+    versions: [{
+      n: 1,
+      flowId: 'flow_1',
+      name: '咖啡 v1',
+      archivedAt: '2026-11-12T04:00:00.000Z',
+      available: true,
+      nodes: 5,
+      scriptBeats: 1,
+      scriptSnapshot: {
+        hook: '三分钟做一杯手冲',
+        structure: [{ beat: '开场', voiceover: '三分钟做一杯手冲咖啡', startSec: 0, endSec: 3 }],
+        source: 'project',
+        updatedAt: '2026-11-12T03:40:00.000Z',
+      },
+      nodeList: [{ id: 'n_input', type: 'input', data: { title: '原始素材', config: { text: '钩子' } } }],
+    }],
     versionCounts: {
       '1': { count: 1, lastVerdict: 'pass', lastAt: '2026-11-12T03:00:00.000Z' },
       '2': { count: 1, lastVerdict: 'needs_review', lastAt: '2026-11-12T05:10:00.000Z' },
@@ -107,8 +122,9 @@ test('完整稿：脚本、分镜、评审、版本、运行都在，且不写�
   assert.ok(markdown.includes('最新一次（v2）：需人工确认'))
   assert.ok(markdown.includes('1. **重要 · 字幕**：第 2 镜字幕一行 18 个字（依据强度 82%）'))
   assert.ok(markdown.includes('1. 拆字幕：第 2 镜字幕拆成两句'))
-  assert.ok(markdown.includes('| v1 | 咖啡 v1 | 5 | 1 次 | 1 次 | 通过 |'))
-  assert.ok(markdown.includes('| v2（当前） | 咖啡 v2 | 6 | 1 次 | 1 次 | 需人工确认 |'))
+  assert.ok(markdown.includes('| v1 | 咖啡 v1 | 5 | 1 段 | 1 次 | 1 次 | 通过 | 2026-11-12 12:00 |'))
+  assert.ok(markdown.includes('| v2（当前） | 咖啡 v2 | 6 | 2 段 | 1 次 | 1 次 | 需人工确认 | — |'))
+  assert.ok(markdown.includes('### v1 · 咖啡 v1'), '每一版都要有自己的明细块')
   assert.ok(markdown.includes('| 2026-11-12 13:20 | v2 | 成功 | 6 | 1 分 1 秒 | 3 积分 |'))
   assert.ok(markdown.includes('- 标记交付：还没标记'))
   assert.ok(!markdown.includes('tok_secret_abc'), '分享 token 是一把钥匙，不能写进交付稿')
@@ -159,7 +175,8 @@ test('版本划分之前的历史评审与运行折进 v1', () => {
   detail.runCounts = { '0': 3 }
   detail.runs = []
   const { markdown } = projectDeliverable(detail, { review: null, now: NOW, tzOffsetMinutes: TZ })
-  assert.ok(markdown.includes('| v1（当前） | 咖啡 v2 | 6 | 2 次 | 3 次 | 通过 |'))
+  assert.ok(markdown.includes('| v1（当前） | 咖啡 v2 | 6 | 2 段 | 2 次 | 3 次 | 通过 | — |'))
+  assert.ok(!markdown.includes('### v1 ·'), '没有归档版本时不写每版明细')
 })
 
 test('运行很多时只列最近几次，并写明一共跑过多少次', () => {

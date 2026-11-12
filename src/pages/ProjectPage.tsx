@@ -402,6 +402,7 @@ export default function ProjectPage({
   // 状态与「下一步」只看当前这一版评过没有：新版刚开出来时不能因为上一版评过就跳过评审
   const currentReviews = reviewsForVersion(data.versionCounts, project.version)
   const step = projectStep(project, currentReviews.count)
+  const scriptBeats = script ? script.structure.length : 0
   const versionRows = [
     {
       n: project.version,
@@ -411,6 +412,7 @@ export default function ProjectPage({
       archivedAt: '',
       available: Boolean(flow),
       nodes: flow ? flow.nodes : 0,
+      scriptBeats,
       current: true,
     },
     ...data.versions.map((item) => ({ ...item, current: false })),
@@ -574,7 +576,9 @@ export default function ProjectPage({
               版本对照
               <span className="vq-mono">{project.version} 版</span>
             </h2>
-            <p className="vq-project-versions-note">旧版本的画布还能打开看，但再改它不会写回那一版：要改就在最新一版上改。</p>
+            <p className="vq-project-versions-note">
+              开新版时会把这一版的脚本存一份快照，再改只影响新版；旧版本的画布还能打开看，但改它不会写回那一版。
+            </p>
             <button
               type="button"
               className="vq-button vq-button--ghost"
@@ -598,6 +602,8 @@ export default function ProjectPage({
                     <span className="vq-version-meta">
                       <span className="vq-mono">{row.current ? '最新' : '归档 ' + stamp(row.archivedAt)}</span>
                       <span>{row.nodes} 节点</span>
+                      {/* 没存快照的旧版本写清楚：不能让人以为「那一版就是现在的脚本」 */}
+                      <span>{row.scriptBeats ? row.scriptBeats + ' 段脚本' : row.current ? '没写脚本' : '脚本没存快照'}</span>
                       <span>{counter.count ? counter.count + ' 次评审' : '未评审'}</span>
                       <span>{runCount ? runCount + ' 次运行' : '没跑过'}</span>
                       {verdict ? <span className={'vq-project-verdict is-' + counter.lastVerdict}>{verdict}</span> : null}

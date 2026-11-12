@@ -10,7 +10,7 @@
 //     版本划分之前留下的评审与运行折进 v1（与 src/domain/project.ts 同一套规则）。
 import { describeTiming } from './speech.mjs'
 
-export const DELIVERABLE_LIMITS = { runs: 8, observations: 8, fixes: 6 }
+export const DELIVERABLE_LIMITS = { runs: 8, observations: 8, fixes: 6, versions: 6 }
 
 const VERDICT_LABEL = { pass: '通过', needs_review: '需人工确认', fail: '不通过' }
 const SEVERITY_LABEL = { blocker: '阻断', major: '重要', minor: '轻微', info: '提示' }
@@ -245,28 +245,230 @@ function reviewSection(detail, review, tz) {
   return out
 }
 
+// ---------- 版本：每一版都写全 ----------
+//
+// 「把这版和上一版一起发我」是编导最常提的要求，但版本之间能对照的只有三样：
+// 画布（旧版画布一直留着）、评审与运行（按版本记）、以及开新版时存下的脚本快照。
+// 脚本只有一份（作品级，copy-on-write），更早开的版本没有快照——这一点必须写进稿子，
+// 否则读者会以为「v1 的脚本就是现在这个样子」。
+
+// 节点指纹：复制版本时节点 id 沿用，靠 id 认「同一个节点改没改」，内容比的是配置文本
+function fingerprint(nodes) {
+  if (!Array.isArray(nodes)) return null
+  return nodes.map((node) => {
+    const text = String(node?.type || '') + ':' + JSON.stringify(node?.data?.config ?? {})
+    let hash = 2166136261
+    for (let i = 0; i < text.length; i += 1) {
+      hash ^= text.charCodeAt(i)
+      hash = Math.imul(hash, 16777619)
+    }
+    return { id: String(node?.id || ''), title: flat(node?.data?.title) || '未命名节点', hash: (hash >>> 0).toString(36) }
+  })
+}
+
+const names = (list, max = 3) => {
+  const shown = list.slice(0, max).join('、')
+  return list.length > max ? shown + ' 等 ' + list.length + ' 个' : shown
+}
+
+// 句子里的摘要与原因要短：纸上一行排不下三段，读者也只需要知道「大概说了什么」
+const shorten = (value, max = 90) => {
+  const text = flat(value)
+  return text.length > max ? text.slice(0, max - 1) + '…' : text
+}
+
+/** 两份节点指纹比出「多了 / 少了 / 改了」；缺一侧（画布被删）就返回 null。 */
+function canvasDelta(prev, next) {
+  if (!prev || !next) return null
+  const before = new Map(prev.map((node) => [node.id, node]))
+  const after = new Map(next.map((node) => [node.id, node]))
+  const added = []
+  const removed = []
+  const changed = []
+  for (const [id, node] of after) {
+    const old = before.get(id)
+    if (!old) added.push(node.title)
+    else if (old.hash !== node.hash) changed.push(node.title)
+  }
+  for (const [id, node] of before) if (!after.has(id)) removed.push(node.title)
+  return { added, removed, changed }
+}
+
+function canvasText(delta) {
+  if (!delta) return ''
+  const bits = []
+  if (delta.added.length) bits.push('多 ' + delta.added.length + ' 个（' + names(delta.added) + '）')
+  if (delta.removed.length) bits.push('少 ' + delta.removed.length + ' 个（' + names(delta.removed) + '）')
+  if (delta.changed.length) bits.push('改 ' + delta.changed.length + ' 个（' + names(delta.changed) + '）')
+  return bits.length ? bits.join('、') : '节点没动'
+}
+
+// 脚本按段名对：改名不算改口播，重名段落按出现顺序比词
+function scriptText(prev, next) {
+  if (!prev?.structure?.length || !next?.structure?.length) return ''
+  const group = (script) => {
+    const map = new Map()
+    for (const beat of script.structure) {
+      const name = flat(beat?.beat) || '未命名段落'
+      if (!map.has(name)) map.set(name, [])
+      map.get(name).push(flat(beat?.voiceover))
+    }
+    return map
+  }
+  const before = group(prev)
+  const after = group(next)
+  const added = [...after.keys()].filter((name) => !before.has(name))
+  const removed = [...before.keys()].filter((name) => !after.has(name))
+  let changed = 0
+  for (const [name, lines] of after) {
+    const old = before.get(name)
+    if (!old) continue
+    if (old.length !== lines.length || old.some((line, index) => line !== lines[index])) changed += 1
+  }
+  const hookChanged = flat(prev.hook) !== flat(next.hook)
+  const bits = []
+  if (added.length) bits.push('多 ' + added.length + ' 段（' + names(added) + '）')
+  if (removed.length) bits.push('少 ' + removed.length + ' 段（' + names(removed) + '）')
+  if (changed) bits.push(changed + ' 段口播改过')
+  if (!bits.length && !hookChanged) return '跟上一版一样'
+  bits.push(hookChanged ? '钩子换过' : '钩子没变')
+  return bits.join('、')
+}
+
+/** 评审与运行按版本分组：版本 0 是版本划分之前记的，折进 v1（与页面同一套规则）。 */
+function groupByVersion(items) {
+  const map = new Map()
+  for (const item of Array.isArray(items) ? items : []) {
+    const version = Math.max(1, Math.round(Number(item?.version) || 0))
+    const list = map.get(version) || []
+    list.push(item)
+    map.set(version, list)
+  }
+  return map
+}
+
 function versionSection(detail, tz) {
   const { project } = detail
-  const out = ['', '## 版本对照', '']
+  const out = ['', '## 版本对照']
   if (!project.version) {
-    out.push('还没开画布，所以只有脚本这一版。')
+    out.push('', '还没开画布，所以只有脚本这一版。')
     return out
   }
-  out.push('| 版本 | 画布 | 节点 | 评审 | 运行 | 最近结论 | 归档 |', '| --- | --- | --- | --- | --- | --- | --- |')
-  const rows = [
-    ...(detail.versions || []).map((entry) => ({ n: entry.n, name: entry.name, nodes: entry.nodes, archivedAt: entry.archivedAt, current: false })),
-    { n: project.version, name: detail.flow?.name || '当前版', nodes: detail.flow?.nodes || 0, archivedAt: '', current: true },
-  ]
+  const archived = [...(Array.isArray(detail.versions) ? detail.versions : [])].sort((a, b) => a.n - b.n)
+  const current = {
+    n: project.version,
+    name: detail.flow?.name || '当前版',
+    nodes: detail.flow?.nodes || 0,
+    available: Boolean(detail.flow),
+    archivedAt: '',
+    nodeList: detail.flow?.nodeList || null,
+    script: detail.script || null,
+    current: true,
+  }
+  // 归档版本的快照字段是 scriptSnapshot（详情视图只在导出时带它）；正文里统一当 script 用
+  const rows = [...archived.map((entry) => ({ ...entry, script: entry.scriptSnapshot || null, current: false })), current]
+  const byNumber = new Map(rows.map((row) => [row.n, row]))
+  const reviewMap = groupByVersion(detail.reviews)
+  const runMap = groupByVersion(detail.runs)
+  for (const list of reviewMap.values()) {
+    list.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+  }
+  for (const list of runMap.values()) {
+    list.sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)))
+  }
+  const beats = (script) => (Array.isArray(script?.structure) ? script.structure.length : 0)
+  const scriptCell = (row) => {
+    if (row.current) return beats(row.script) ? beats(row.script) + ' 段' : '没写脚本'
+    return row.script ? beats(row.script) + ' 段' : '没存快照'
+  }
+
+  out.push(
+    '',
+    '共 ' + rows.length + ' 版，现在是 v' + project.version + '。开新版本时会给这一版的脚本存一份快照；' +
+      '在这之前开的版本没有快照，那几版当时的口播已经找不回来了。',
+  )
+  // 当前版相对上一版改了什么：这是「把这版和上一版一起发我」里读者最先要看的一句
+  const previous = byNumber.get(project.version - 1) || null
+  if (previous) {
+    const canvas = canvasText(canvasDelta(fingerprint(previous.nodeList), fingerprint(current.nodeList)))
+    const script = scriptText(previous.script, current.script)
+    const bits = [canvas ? '画布' + canvas : '', script ? '脚本' + script : ''].filter(Boolean)
+    if (bits.length) out.push('', 'v' + current.n + ' 比 v' + previous.n + '：' + bits.join('；') + '。')
+  }
+
+  out.push('', '| 版本 | 画布 | 节点 | 脚本 | 评审 | 运行 | 最近结论 | 归档 |', '| --- | --- | --- | --- | --- | --- | --- | --- |')
   for (const row of rows) {
     const counter = reviewsOf(detail.versionCounts, row.n)
     const runs = runsOf(detail.runCounts, row.n)
     out.push(
-      '| v' + row.n + (row.current ? '（当前）' : '') + ' | ' + cell(row.name) + ' | ' + row.nodes + ' | ' +
+      '| v' + row.n + (row.current ? '（当前）' : '') + ' | ' + cell(row.name) + ' | ' + row.nodes + ' | ' + scriptCell(row) + ' | ' +
         (counter.count ? counter.count + ' 次' : '未评') + ' | ' + (runs ? runs + ' 次' : '没跑过') + ' | ' +
         (VERDICT_LABEL[counter.lastVerdict] || '—') + ' | ' + (row.current ? '—' : stamp(row.archivedAt, tz)) + ' |',
     )
   }
-  if ((detail.versions || []).length) {
+
+  // 每一版的现场：从新到旧，一版一小段；版数多时只写最近几版，上面的表里仍然有全量
+  const blocks = rows.filter((row) => !row.current).reverse().slice(0, DELIVERABLE_LIMITS.versions)
+  if (blocks.length) {
+    out.push('', '下面按从新到旧，把每一版的画布、脚本、评审与运行放在一起。')
+    for (const row of blocks) {
+      const before = byNumber.get(row.n - 1) || null
+      out.push('', '### v' + row.n + ' · ' + flat(row.name), '')
+      out.push(
+        '- 归档：' + stamp(row.archivedAt, tz) + ' · ' +
+          (row.available ? '画布 ' + row.nodes + ' 个节点' : '画布已经被删除，只剩这一行归档记录'),
+      )
+      const canvas = canvasText(canvasDelta(fingerprint(before?.nodeList), fingerprint(row.nodeList)))
+      if (before && canvas) out.push('- 画布：比 v' + before.n + ' ' + canvas)
+      if (row.script) {
+        const hook = flat(row.script.hook)
+        const delta = before ? (before.script ? scriptText(before.script, row.script) : '') : ''
+        const compare = before
+          ? (before.script ? '；比 v' + before.n + ' ' + delta : '；v' + before.n + ' 没存快照，比不了')
+          : '；最早一版'
+        out.push(
+          '- 脚本：' + beats(row.script) + ' 段' + (hook ? '，钩子「' + shorten(hook, 40) + '」' : '') +
+            (row.script.source === 'template' ? '（当时跟随模板）' : '') + compare,
+        )
+      } else {
+        out.push('- 脚本：这一版没存快照（开版时还没有快照功能），当时的口播找不回来了')
+      }
+      const reviews = reviewMap.get(row.n) || []
+      const counter = reviewsOf(detail.versionCounts, row.n)
+      if (!reviews.length) {
+        out.push('- 评审：' + (counter.count ? '评过 ' + counter.count + ' 次，正文不在最近 20 条里' : '没评过'))
+      } else {
+        const last = reviews[0]
+        const extras = [stamp(last.createdAt, tz), last.observations ? last.observations + ' 条问题' : ''].filter(Boolean)
+        out.push(
+          '- 评审：' + (counter.count || reviews.length) + ' 次；最近「' + (VERDICT_LABEL[last.verdict] || '未给结论') + '」' +
+            '（' + extras.join('，') + '）' + (last.summary ? '：' + shorten(last.summary) : ''),
+        )
+      }
+      const listed = runMap.get(row.n) || []
+      const total = runsOf(detail.runCounts, row.n)
+      if (!total) {
+        out.push('- 运行：没跑过')
+      } else if (!listed.length) {
+        out.push('- 运行：' + total + ' 次（明细不在最近 20 条里）')
+      } else {
+        const failed = listed.filter((run) => run.status !== 'success' || run.error)
+        const latest = failed[0]
+        // 失败原因本身常带括号：用「」包起来，读的时候不会和外面的说明括号混成一句
+        const reason = latest ? '（最近一次 ' + stamp(latest.startedAt, tz) + ' 失败：「' + shorten(latest.error || '没记原因', 60) + '」）' : ''
+        const outcome = !failed.length
+          ? '都成功'
+          : listed.length >= total && failed.length >= total
+            ? (total === 1 ? '这次失败了' : '全失败') + reason
+            : failed.length + ' 次失败' + reason
+        // 明细只留最近 20 条：总次数比明细多时要说明，否则「1 次失败」会被读成全部
+        const scope = listed.length < total ? '，明细只留最近 ' + listed.length + ' 次（其中 ' + outcome + '）' : '，' + outcome
+        out.push('- 运行：' + total + ' 次' + scope)
+      }
+    }
+  }
+
+  if (archived.length) {
     out.push('', '旧版本的画布还在的话能打开看，但改它不会写回那一版：要改就在最新一版上改。')
   }
   return out

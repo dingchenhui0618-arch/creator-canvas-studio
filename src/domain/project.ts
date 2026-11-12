@@ -22,7 +22,15 @@ export type ProjectReviews = { count: number; lastVerdict: string; lastAt: strin
 export type ProjectVersion = { n: number; flowId: string; name: string; archivedAt: string }
 
 /** 作品详情会顺手确认归档画布还在，并带上节点数 */
-export type ProjectVersionView = ProjectVersion & { available: boolean; nodes: number }
+// 归档版本额外带上开版时存下的脚本快照段数：交付稿与版本对照都靠它说「这一版几段」
+export type ProjectVersionView = ProjectVersion & {
+  available: boolean
+  nodes: number
+  /** 开新版那一刻的脚本段数；0 表示那一版没存快照（升级前开的版本） */
+  scriptBeats: number
+  /** 那一版的脚本当时是自己的还是跟随模板；没快照就是空串 */
+  scriptSource: '' | 'project' | 'template'
+}
 
 export type Project = {
   id: string

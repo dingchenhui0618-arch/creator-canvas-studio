@@ -50,6 +50,33 @@ async function persist(list) {
 
 const clip = (value, max) => String(value ?? '').slice(0, max)
 
+// 开新版那一刻的脚本快照：版本之间唯一能对照的「这一版说了什么」。
+// 脚本本身只有一份（作品级），归档时不留快照，历史版本的口播就永远找不回来了。
+function normalizeVersionScript(raw) {
+  if (!raw || typeof raw !== 'object') return null
+  const structure = (Array.isArray(raw.structure) ? raw.structure : [])
+    .filter((beat) => beat && typeof beat === 'object')
+    .slice(0, 12)
+    .map((beat) => ({
+      beat: clip(beat.beat, 60),
+      voiceover: clip(beat.voiceover, 600),
+      onScreen: clip(beat.onScreen, 200),
+      purpose: clip(beat.purpose, 200),
+      startSec: Number(beat.startSec) || 0,
+      endSec: Number(beat.endSec) || 0,
+      expectedSec: Number(beat.expectedSec) || 0,
+      fit: beat.fit === 'tight' || beat.fit === 'loose' ? beat.fit : '',
+    }))
+  if (!structure.length) return null
+  return {
+    hook: clip(raw.hook, 400),
+    structure,
+    // 这一版的脚本当时是「自己的」还是「跟随模板」：模板之后改了，快照仍然是当时的样子
+    source: raw.source === 'template' ? 'template' : 'project',
+    updatedAt: String(raw.updatedAt || ''),
+  }
+}
+
 function normalizeVersion(raw, fallbackN) {
   const n = Math.round(Number(raw?.n))
   return {
@@ -57,6 +84,7 @@ function normalizeVersion(raw, fallbackN) {
     flowId: String(raw?.flowId || ''),
     name: clip(raw?.name || '未命名画布', 60),
     archivedAt: String(raw?.archivedAt || ''),
+    script: normalizeVersionScript(raw?.script),
   }
 }
 
@@ -195,7 +223,7 @@ export async function bindProjectFlow(id, flowId, user = null) {
  * 开新版本：当前画布存成归档（只存 flowId 与名字，不复制节点），作品改指向新画布。
  * 复制画布本身由路由做——存储层只认指针，不碰流程服务。
  */
-export async function archiveProjectVersion(id, { flowId = '', prevName = '' } = {}, user = null) {
+export async function archiveProjectVersion(id, { flowId = '', prevName = '', script = null } = {}, user = null) {
   const list = await loadAll()
   const found = list.find((item) => item.id === id && canAccess(item, user))
   if (!found) return null
@@ -204,7 +232,14 @@ export async function archiveProjectVersion(id, { flowId = '', prevName = '' } =
   const now = new Date().toISOString()
   found.versions = [
     ...current.versions,
-    { n: current.version, flowId: current.flowId, name: clip(prevName || '上一版画布', 60), archivedAt: now },
+    {
+      n: current.version,
+      flowId: current.flowId,
+      name: clip(prevName || '上一版画布', 60),
+      archivedAt: now,
+      // 归档时把这一版的脚本一起存下来：之后改脚本也只影响新版本
+      script: normalizeVersionScript(script) || undefined,
+    },
   ].slice(-MAX_VERSIONS)
   found.flowId = String(flowId || '')
   found.version = current.version + 1
