@@ -16,7 +16,7 @@ import {
 } from '../api/radar'
 import { downloadTemplateMarkdown } from '../lib/templateExport'
 import { describeTiming, paceLabel } from '../domain/radar'
-import type { MediaItem, ReplicaTemplate, ScriptBeat, StoryboardShot } from '../domain/radar'
+import type { MediaItem, ReplicaTemplate, ScriptBeat, StoryboardShot, TemplateSourceCount, TemplateSourceKey } from '../domain/radar'
 import { requestReview } from '../state/review'
 import { createProject } from '../api/projects'
 import { ReplicateModal } from '../components/ReplicateModal'
@@ -53,6 +53,16 @@ function asMedia(template: ReplicaTemplate): MediaItem {
 
 const isParsed = (template: ReplicaTemplate) => template.kind !== 'saved'
 
+// 卡片脚注上的来源标签：只有不是「发现」的才贴（发现是库里最大的一类，贴了等于每张卡都多一个词）。
+// 文案与抽屉、来源胶囊同一套口径，服务端 templateSource 决定 key。
+const SOURCE_TAG: Record<string, string> = {
+  project: '来自作品',
+  adapted: '改编版',
+  agent: '智能体',
+  canvas: '画布',
+  shared: '官方示例',
+}
+
 // 改编草稿：只带「这一版」要改的三样东西，其余字段照抄原模板
 type AdaptDraft = {
   title: string
@@ -82,9 +92,14 @@ export function TemplateLibraryPage({
   const [items, setItems] = useState<ReplicaTemplate[]>([])
   const [byType, setByType] = useState<Record<string, number>>({})
   const [parsed, setParsed] = useState(0)
-  const [saved, setSaved] = useState(0)
+  // 全库条数（筛选时不变）与当前来源下还没解析的条数：两个数不能混用
+  const [total, setTotal] = useState(0)
+  const [pending, setPending] = useState(0)
+  // 每个来源各有几条：胶囊由服务端给，前端不另写一份分类表
+  const [sources, setSources] = useState<TemplateSourceCount[]>([])
 
   const [type, setType] = useState('全部')
+  const [source, setSource] = useState<TemplateSourceKey | ''>('')
   const [keyword, setKeyword] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -102,19 +117,34 @@ export function TemplateLibraryPage({
 
   // 顶部汇总那格「作品在用」：直接用列表接口现算的总数，不再累加 reuseCount 那种只增不减的计数器
   const [projectTotal, setProjectTotal] = useState(0)
-  const typeOptions = useMemo(() => pickTypes(byType, saved), [byType, saved])
+  const typeOptions = useMemo(() => pickTypes(byType, pending), [byType, pending])
   // 分类被后台改名后，旧分类已经不在标签里：渲染时直接落回「全部」，不用再开一个 setState 副作用
   const activeType = type === '全部' || typeOptions.includes(type) ? type : '全部'
+  // 来源也一样：删光某个来源的最后一条后，它的胶囊会消失，这时也落回「全部」
+  const sourceOptions = useMemo(() => sources.filter((entry) => entry.count > 0), [sources])
+  const activeSource = sourceOptions.some((entry) => entry.key === source) ? source : ''
+  const sourceLabel = useCallback(
+    (key?: string) => sources.find((entry) => entry.key === key)?.label || '',
+    [sources],
+  )
+  const filtering = activeType !== '全部' || Boolean(activeSource)
+  const clearFilters = () => {
+    setType('全部')
+    setSource('')
+    setKeyword('')
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
-      const result = await listTemplates({ q: keyword.trim(), type: activeType === '全部' ? '' : activeType })
+      const result = await listTemplates({ q: keyword.trim(), type: activeType === '全部' ? '' : activeType, source: activeSource })
       setItems(result.items)
       setByType(result.byType || {})
       setParsed(result.parsed || 0)
-      setSaved(result.saved || 0)
+      setPending(result.pending ?? result.saved ?? 0)
+      setTotal(result.total || 0)
+      setSources(result.sources || [])
       setProjectTotal(result.projectTotal || 0)
 
     } catch (caught) {
@@ -122,7 +152,7 @@ export function TemplateLibraryPage({
     } finally {
       setLoading(false)
     }
-  }, [keyword, activeType])
+  }, [keyword, activeType, activeSource])
 
   // 数据来自本地 API，挂载与筛选变化时由外部系统触发一次重新拉取
   // eslint-disable-next-line react/set-state-in-effect
@@ -263,7 +293,7 @@ export function TemplateLibraryPage({
       />
 
       <div className="asset-summary template-summary">
-        <div><span className="section-kicker">模板总数</span><strong>{items.length}</strong><span>条</span></div>
+        <div><span className="section-kicker">模板总数</span><strong>{total}</strong><span>条</span></div>
         <div><span className="section-kicker">已解析</span><strong>{parsed}</strong><span>有脚本与分镜</span></div>
         <div><span className="section-kicker">作品在用</span><strong>{projectTotal}</strong><span>条</span></div>
       </div>
@@ -273,31 +303,89 @@ export function TemplateLibraryPage({
           <Search size={15} />
           <input value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="搜索标题、钩子、标签或可复用规则" />
         </label>
-        <div className="vq-filter-row">
-          {typeOptions.map((value) => (
-            <button
-              key={value}
-              type="button"
-              className={'vq-filter-chip' + (activeType === value ? ' is-active' : '')}
-              aria-pressed={activeType === value}
-              onClick={() => setType(value)}
-            >
-              {value}
-              {value !== '全部' && byType[value] ? <span className="vq-filter-chip__count">{byType[value]}</span> : null}
-            </button>
-          ))}
+        <div className="template-facets">
+          {/* 两排筛选各回答一个问题：类型是「这条是什么」，来源是「这条从哪来」。
+              类型的数字跟着来源算（来源=作品时不该还挂着只有雷达条目才有的类型）。 */}
+          <div className="template-facet">
+            <span className="template-facet__label">类型</span>
+            <div className="vq-filter-row">
+              {typeOptions.map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={'vq-filter-chip' + (activeType === value ? ' is-active' : '')}
+                  aria-pressed={activeType === value}
+                  onClick={() => setType(value)}
+                >
+                  {value}
+                  {value !== '全部' && byType[value] ? <span className="vq-filter-chip__count">{byType[value]}</span> : null}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="template-facet">
+            <span className="template-facet__label">来源</span>
+            <div className="vq-filter-row">
+              <button
+                type="button"
+                className={'vq-filter-chip' + (activeSource === '' ? ' is-active' : '')}
+                aria-pressed={activeSource === ''}
+                onClick={() => setSource('')}
+              >
+                全部
+              </button>
+              {sourceOptions.map((entry) => (
+                <button
+                  key={entry.key}
+                  type="button"
+                  className={'vq-filter-chip' + (activeSource === entry.key ? ' is-active' : '')}
+                  aria-pressed={activeSource === entry.key}
+                  title={'只看从「' + entry.label + '」来的模板'}
+                  onClick={() => setSource(entry.key)}
+                >
+                  {entry.label}
+                  <span className="vq-filter-chip__count">{entry.count}</span>
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
+
+      {filtering ? (
+        <div className="template-filter-note">
+          <span>
+            筛到 <b>{items.length}</b> 条
+            {activeSource ? ' · 来源：' + sourceLabel(activeSource) : ''}
+            {activeType !== '全部' ? ' · 类型：' + activeType : ''}
+            {total > 0 ? ' · 全库 ' + total + ' 条' : ''}
+          </span>
+          <button type="button" className="button button--ghost button--tiny" onClick={clearFilters}>清空条件</button>
+        </div>
+      ) : null}
 
       {error && <div className="radar-banner radar-banner--error"><AlertCircle size={15} /><span>{error}</span></div>}
 
       {!loading && !items.length ? (
-        <div className="radar-empty">
-          <Layers size={22} />
-          <strong>模板库还是空的</strong>
-          <span>去「发现」检索一条：点「加入模板库」先存链接与互动数据，点「解析」再拆脚本和分镜（出成片要自己拍）。</span>
-          <button className="button button--primary" onClick={onBack}>去检索一条</button>
-        </div>
+        total > 0 ? (
+          // 库里有东西、只是这次没筛到：说清是哪几个条件没匹配上，别写成「模板库还是空的」
+          <div className="radar-empty">
+            <Search size={22} />
+            <strong>没有筛到模板</strong>
+            <span>
+              {[keyword.trim() ? '搜索「' + keyword.trim() + '」' : '', activeSource ? '来源「' + sourceLabel(activeSource) + '」' : '', activeType !== '全部' ? '类型「' + activeType + '」' : ''].filter(Boolean).join(' · ') || '当前条件'}
+              {' 一条都没匹配上；全库 ' + total + ' 条，清掉条件就能看到。'}
+            </span>
+            <button className="button button--ghost" onClick={clearFilters}>清空条件</button>
+          </div>
+        ) : (
+          <div className="radar-empty">
+            <Layers size={22} />
+            <strong>模板库还是空的</strong>
+            <span>去「发现」检索一条：点「加入模板库」先存链接与互动数据，点「解析」再拆脚本和分镜（出成片要自己拍）。</span>
+            <button className="button button--primary" onClick={onBack}>去检索一条</button>
+          </div>
+        )
       ) : (
         <div className="template-grid">
           {items.map((item) => (
@@ -342,11 +430,8 @@ export function TemplateLibraryPage({
                 <div className="template-foot">
                   {/* 平台与作者单行省略：长作者名不再把脚注顶成两行 */}
                   <span className="template-foot-info">
-                    {item.shared ? <span className="template-shared">官方示例</span> : null}
-                    {item.kind === 'adapted' ? (
-                      <span className="template-shared">{item.origin === 'project' ? '来自作品' : '改编版'}</span>
-                    ) : null}
-                    {item.kind === 'agent' ? <span className="template-shared">智能体</span> : null}
+                    {/* 来源标签由服务端的 source 决定：卡片、抽屉、来源胶囊说的是一件事 */}
+                    {item.source && SOURCE_TAG[item.source] ? <span className="template-shared">{SOURCE_TAG[item.source]}</span> : null}
                     {item.platformLabel}
                     {item.author ? ' · ' + item.author : ''}
                   </span>
@@ -666,13 +751,44 @@ export function TemplateLibraryPage({
                   )}
 
                   <section className="drawer-section">
-                    <div className="drawer-section-head"><h3>来源</h3><span>不保存视频文件</span></div>
+                    <div className="drawer-section-head"><h3>来源</h3><span>{sourceLabel(detail.source) || '模板'}</span></div>
                     <div className="drawer-source">
-                      <span>
-                        {detail.platformLabel}
-                        {detail.author ? ' · ' + detail.author : ''} · {detail.sourceId}
-                      </span>
-                      {detail.sourceUrl ? <a href={detail.sourceUrl} target="_blank" rel="noreferrer"><ExternalLink size={13} />打开原视频</a> : <span className="is-muted">原链接缺失（示例数据或直链测试）</span>}
+                      {/* 以前这里只有一条「平台 · 作者 · 平台 ID + 原链接」，于是从作品/智能体/画布来的模板
+                          也被写成「原链接缺失（示例数据或直链测试）」——它们本来就没有原片，不是链接丢了。 */}
+                      {detail.kind === 'agent' ? (
+                        <span>智能体{detail.agentName ? ' ' + detail.agentName : ''}的草稿 · 不存原视频</span>
+                      ) : detail.kind === 'adapted' && (detail.origin === 'project' || detail.projectId) ? (
+                        <>
+                          <span>
+                            来自作品《{detail.projectTitle || '已删的作品'}》
+                            {detail.projectVersion ? ' · 第 ' + detail.projectVersion + ' 版' : ' · 还没开画布'}
+                            {' · 这一版的分镜不是原片，作者与互动数据不复制'}
+                          </span>
+                          {detail.projectId ? (
+                            <button
+                              type="button"
+                              className="button button--ghost button--tiny"
+                              onClick={() => {
+                                const target = detail.projectId
+                                setDetail(null)
+                                if (target) onOpenProject(target)
+                              }}
+                            >
+                              <ArrowRight size={13} />打开这条作品
+                            </button>
+                          ) : null}
+                        </>
+                      ) : detail.kind === 'adapted' ? (
+                        <span>改编自{detail.adaptedFrom ? '模板 ' + detail.adaptedFrom : '另一条模板'} · 原片的作者、链接与互动数据不复制</span>
+                      ) : (
+                        <>
+                          <span>
+                            {detail.platformLabel}
+                            {detail.author ? ' · ' + detail.author : ''} · {detail.sourceId}
+                          </span>
+                          {detail.sourceUrl ? <a href={detail.sourceUrl} target="_blank" rel="noreferrer"><ExternalLink size={13} />打开原视频</a> : <span className="is-muted">这条没有原链接</span>}
+                        </>
+                      )}
                       {detail.shared ? (
                         <button
                           type="button"

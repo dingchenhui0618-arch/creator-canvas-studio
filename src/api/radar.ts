@@ -35,10 +35,12 @@ export const startReplicate = (item: MediaItem, url: string) =>
 
 export const getJob = (id: string) => request<ReplicateJob>('/api/jobs/' + id)
 
-export function listTemplates(params: { q?: string; type?: string } = {}) {
+export function listTemplates(params: { q?: string; type?: string; source?: string } = {}) {
   const query = new URLSearchParams()
   if (params.q) query.set('q', params.q)
   if (params.type) query.set('type', params.type)
+  // 来源是第二排筛选（v0.9.33）：服务端只认 TEMPLATE_SOURCES 里的 key，写错会回 400 而不是静默回全库
+  if (params.source) query.set('source', params.source)
   return request<TemplateList>('/api/templates?' + query.toString())
 }
 

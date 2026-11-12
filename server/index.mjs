@@ -13,6 +13,9 @@ import {
   deleteTemplate,
   updateTemplate,
   templateStats,
+  templateSource,
+  parseTemplateSource,
+  TEMPLATE_SOURCES,
   saveTemplateFromItem,
   createTemplateFromFlow,
   adaptTemplate,
@@ -801,14 +804,23 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === '/api/templates') {
+      // 来源是模板库的第二排筛选（v0.9.33）：认不出来的来源直接 400，不静默退化成「全部」——
+      // 否则链接里写错一个 key，用户看到的是整整一库模板，还以为筛过了。
+      const { source, unknown } = parseTemplateSource(url.searchParams.get('source'))
+      if (unknown) {
+        return sendJson(res, 400, {
+          error: '不认识的来源：' + unknown + '；可用：' + TEMPLATE_SOURCES.map((entry) => entry.key).join(' / '),
+        })
+      }
       // 卡片上那句「几条作品在用」现算：模板库与作品是两组数据，计数器（reuseCount）不会因为删作品而回落
       const [stats, list, byTemplate] = await Promise.all([
-        templateStats(user),
+        templateStats(user, { source }),
         listTemplates({
           q: url.searchParams.get('q') || '',
           contentType: url.searchParams.get('type') || '',
           platform: url.searchParams.get('platform') || '',
           kind: url.searchParams.get('kind') || '',
+          source,
         }, user),
         projectsByTemplate(user),
       ])
@@ -926,7 +938,8 @@ const server = http.createServer(async (req, res) => {
       if (!template) return sendJson(res, 404, { error: '模板不存在' })
       // 详情多给一段：用这条模板的作品（最近改过的排前面），点一行就能进那条作品；最多列 8 条
       const byTemplate = await projectsByTemplate(user)
-      return sendJson(res, 200, { ...template, ...templateWorksView(byTemplate.get(id) || []) })
+      // 来源跟着详情一起给：抽屉里那句「这条从哪来」与卡片、筛选胶囊用同一套口径
+      return sendJson(res, 200, { ...template, source: templateSource(template), ...templateWorksView(byTemplate.get(id) || []) })
     }
 
     if (pathname === '/api/cover') {

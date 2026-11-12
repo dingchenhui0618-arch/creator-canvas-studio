@@ -146,6 +146,8 @@ export type ReplicaTemplate = {
   shareCreatedAt?: string
   /** project：从一条作品沉淀下来的（adapt 那条路的 origin 是 adapted） */
   origin: 'ai' | 'manual' | 'canvas' | 'agent' | 'adapted' | 'project'
+  /** 「这条从哪来」：服务端 templateSource 的唯一口径，卡片标签与来源胶囊共用 */
+  source?: TemplateSourceKey
   /** origin === 'project' 时才有：它是从哪条作品的第几版沉淀出来的 */
   projectId?: string
   projectTitle?: string
@@ -230,14 +232,25 @@ export type ReplicateJob = {
   createdAt: string
 }
 
+/** 模板来源：一张卡片只属于一个来源（官方示例优先，其次是作品 / 智能体 / 画布 / 改编，其余算发现） */
+export type TemplateSourceKey = 'radar' | 'project' | 'agent' | 'canvas' | 'adapted' | 'shared'
+
+/** 来源胶囊：key 与文案都由服务端给，前端不另写一份分类表 */
+export type TemplateSourceCount = { key: TemplateSourceKey; label: string; count: number }
+
 export type TemplateList = {
   items: ReplicaTemplate[]
+  /** 全库条数：筛选时它不变，筛到的条数看 items.length */
   total: number
   parsed: number
   saved: number
   /** 画布另存的工作流模板条数（不混进「已解析」） */
   flows?: number
+  /** 当前来源下还没解析的条数：类型标签里的「待解析」只在它 > 0 时出现 */
+  pending?: number
   byType: Record<string, number>
+  /** 每个来源各有几条（按全库算，数量为 0 的不显示胶囊） */
+  sources?: TemplateSourceCount[]
   /** 这批模板名下共有几条作品在用：作品是现算的，不是复用次数的计数器 */
   projectTotal?: number
 }

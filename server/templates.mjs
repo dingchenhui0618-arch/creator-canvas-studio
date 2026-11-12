@@ -39,13 +39,47 @@ async function persist(list) {
   })
 }
 
-export async function listTemplates({ q = '', contentType = '', platform = '', kind = '' } = {}, user = null) {
+// 模板的来源：用户看模板库问的第一句是「这条从哪来」，不是「它是什么类型」。
+// 一张卡片只能属于一个来源，顺序即优先级：
+//   - 官方示例（运营给的样例）单独一类，哪怕它是检索解析出来的，也不冒充「我发现的」；
+//   - 作品：做完的作品存回来的那一版（kind 仍是 adapted，靠 origin/projectId 认）；
+//   - 智能体、画布：各是一条入口，别混进「发现」；
+//   - 改编：以另一条模板为底改出来的；
+//   - 发现：雷达检索来的（saved 待解析 + replica 已解析），以及 v0.9.2 之前没有 kind 的老条目。
+export const TEMPLATE_SOURCES = [
+  { key: 'radar', label: '发现' },
+  { key: 'project', label: '作品' },
+  { key: 'agent', label: '智能体' },
+  { key: 'canvas', label: '画布' },
+  { key: 'adapted', label: '改编' },
+  { key: 'shared', label: '官方示例' },
+]
+
+export function templateSource(item) {
+  if (!item) return 'radar'
+  if (item.shared) return 'shared'
+  if (item.kind === 'agent') return 'agent'
+  if (item.kind === 'flow') return 'canvas'
+  if (item.kind === 'adapted') return item.origin === 'project' || item.projectId ? 'project' : 'adapted'
+  return 'radar'
+}
+
+/** 来源筛选参数：只认 TEMPLATE_SOURCES 里的 key（大小写与空格宽容），认不出来交回 unknown，由接口回 400。 */
+export function parseTemplateSource(raw) {
+  const value = String(raw || '').trim().toLowerCase()
+  if (!value) return { source: '', unknown: '' }
+  const known = TEMPLATE_SOURCES.find((entry) => entry.key === value)
+  return known ? { source: known.key, unknown: '' } : { source: '', unknown: value }
+}
+
+export async function listTemplates({ q = '', contentType = '', platform = '', kind = '', source = '' } = {}, user = null) {
   const list = await loadAll()
   const keyword = q.trim()
   return list
     .filter((item) => canAccess(item, user))
     .filter((item) => !item.deletedAt)
     .filter((item) => (kind ? item.kind === kind : true))
+    .filter((item) => (source ? templateSource(item) === source : true))
     .filter((item) => (contentType ? item.contentType === contentType : true))
     .filter((item) => (platform ? item.platform === platform : true))
     .filter((item) =>
@@ -55,7 +89,7 @@ export async function listTemplates({ q = '', contentType = '', platform = '', k
     )
     .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
     // 缩略图：解析过的模板用第一帧，只存链接的用平台封面（走 /api/cover 代理）
-    .map((item) => ({ ...item, thumb: item.frames?.[0]?.url || item.cover || '' }))
+    .map((item) => ({ ...item, source: templateSource(item), thumb: item.frames?.[0]?.url || item.cover || '' }))
 }
 
 // 只存「链接 + 互动数据」的条目：在爆款雷达点「加入模板库」立刻落库，
@@ -536,10 +570,18 @@ export async function deleteTemplatesByOwner(ownerId) {
   return mine.length
 }
 
-export async function templateStats(user = null) {
+export async function templateStats(user = null, { source = '' } = {}) {
   const list = (await loadAll()).filter((item) => canAccess(item, user)).filter((item) => !item.deletedAt)
+  // 来源计数永远按全库算：它是一排筛选胶囊的底数，切到别的来源不该让其它胶囊的数字跟着变小
+  const sources = TEMPLATE_SOURCES.map((entry) => ({
+    key: entry.key,
+    label: entry.label,
+    count: list.filter((item) => templateSource(item) === entry.key).length,
+  }))
+  // 类型标签与「待解析」跟着当前来源算：来源=作品时，不该还挂着只有雷达条目才有的类型
+  const scoped = source ? list.filter((item) => templateSource(item) === source) : list
   const byType = {}
-  for (const item of list) {
+  for (const item of scoped) {
     if (item.kind === 'saved') continue
     byType[item.contentType] = (byType[item.contentType] || 0) + 1
   }
@@ -549,7 +591,10 @@ export async function templateStats(user = null) {
     parsed: list.filter((item) => item.kind === 'replica').length,
     saved: list.filter((item) => item.kind === 'saved').length,
     flows: list.filter((item) => item.kind === 'flow').length,
+    // 当前来源下还有几条只存了链接、没解析的：类型标签里的「待解析」只在它 > 0 时出现
+    pending: scoped.filter((item) => item.kind === 'saved').length,
     byType,
+    sources,
   }
 }
 

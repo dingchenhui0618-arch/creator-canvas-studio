@@ -59,6 +59,20 @@
    再窄降到两张。以前写死 repeat(5, 1fr)，1280 上每张只剩 180px，标题被挤成「已解 / 析」。 */
 .template-summary { grid-template-columns:repeat(5,minmax(0,1fr)); }
 @media (max-width:1439px) { .template-summary { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+/* ---------- 模板库第二排筛选：来源（v0.9.33）----------
+   类型回答「这条是什么」，来源回答「这条从哪来」。两排都走全站统一的 .vq-filter-chip，
+   每排前面挂一个标签：两排胶囊长得一样，不写标签就分不清自己在筛什么。 */
+.template-facets { display:grid; gap:8px; min-width:0; }
+.template-facet { display:flex; align-items:center; gap:12px; min-width:0; }
+.template-facet__label { flex:none; width:32px; color:var(--faint); font-size:11px; letter-spacing:.08em; }
+.template-filter-note { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; margin:0 0 16px; color:var(--muted); font-size:12.5px; }
+.template-filter-note b { color:var(--ink); font-family:var(--font-mono); font-weight:500; }
+.template-filter-note .button { height:28px; }
+/* 抽屉里的「来源」：一句说明 + 一个动作（打开原视频 / 打开那条作品），以前是一串没有样式的行内元素 */
+.drawer-source { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; color:var(--muted); font-size:12.5px; line-height:1.7; }
+.drawer-source a { display:inline-flex; align-items:center; gap:4px; color:var(--ink); }
+.drawer-source .button { height:28px; }
+@media (max-width:640px) { .template-facet { align-items:flex-start; flex-direction:column; gap:8px; } .template-facet__label { width:auto; } }
 .template-card { background:var(--surface-raised); border-color:var(--line); }
 .template-copy > strong { font-size:14px; font-weight:600; line-height:1.5; }
 .template-hook { color:var(--muted); font-size:12px; }
