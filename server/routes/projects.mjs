@@ -25,6 +25,7 @@ import { packageNote, parseShotRange, setSheetHtml, setSheetModel } from '../pro
 import { reviewImageRef, reviewSheetHtml, reviewSheetSelection } from '../project-review-sheet.mjs'
 import { getShareVisits, getShareVisitsByKey } from '../share-visits.mjs'
 import { shareBriefsByProject } from '../share-summary.mjs'
+import { dropAcksForProject } from '../review-acks.mjs'
 import { buildZip } from '../zip-store.mjs'
 import {
   listProjects,
@@ -751,7 +752,9 @@ export function createProjectsRouter() {
         }
         // 评审记录留着当历史，但不再挂在已删除的作品上
         const detached = await detachReviewsFromProject(removed.id)
-        sendJson(res, 200, { ok: true, removed: { id: removed.id, detachedReviews: detached } })
+        // 「已看过」是待办上的便利贴：作品没了，便利贴一起撕掉
+        const droppedAcks = await dropAcksForProject(removed.id)
+        sendJson(res, 200, { ok: true, removed: { id: removed.id, detachedReviews: detached, droppedAcks } })
         return true
       }
 

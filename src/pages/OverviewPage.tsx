@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowRight, ArrowUpRight, LayoutTemplate, Plus, RefreshCw, Search, Workflow } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, Eye, LayoutTemplate, Plus, RefreshCw, Search, Workflow } from 'lucide-react'
 import type { Page } from '../domain/types'
 import PageHead from '../components/PageHead'
 import { MonoTag } from '../components/ui'
@@ -7,7 +7,7 @@ import { request } from '../api/client'
 import { listBdcCanvases, type BdcCanvas } from '../api/bdc'
 import type { RunProjectRef } from '../api/flows'
 import { listProjects, listShares } from '../api/projects'
-import { listReviewQueue, type ReviewQueueRow } from '../api/review'
+import { ackReview, listReviewQueue, unackReview, type ReviewQueueRow, type ReviewQueueSeenRow } from '../api/review'
 import { projectStatus, reviewsForVersion, type ProjectSummary, type ShareSummaryRow } from '../domain/project'
 import { REVIEW_VERDICT_LABEL, reviewTimeLabel } from '../domain/review'
 import { runWorkLine } from '../domain/run'
@@ -87,6 +87,12 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
   // 评审队列：最近一次结论是需人工确认 / 不通过的作品，按评审时间倒序（v0.9.19）
   const [queue, setQueue] = useState<ReviewQueueRow[]>([])
   const [queueTotal, setQueueTotal] = useState(0)
+  // 看过了、这一版先不改的：还在作品里，但不催了（v0.9.20）
+  const [seen, setSeen] = useState<ReviewQueueSeenRow[]>([])
+  const [seenTotal, setSeenTotal] = useState(0)
+  // 正在「已看过 / 撤销」的那条作品：按钮转圈并禁用，防连点
+  const [ackBusy, setAckBusy] = useState('')
+  const [queueError, setQueueError] = useState('')
   const [loading, setLoading] = useState(true)
   const [errors, setErrors] = useState<string[]>([])
 
@@ -136,9 +142,13 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
     if (queueResult.status === 'fulfilled') {
       setQueue(queueResult.value.items ?? [])
       setQueueTotal(queueResult.value.total ?? 0)
+      setSeen(queueResult.value.seen ?? [])
+      setSeenTotal(queueResult.value.seenTotal ?? 0)
     } else {
       setQueue([])
       setQueueTotal(0)
+      setSeen([])
+      setSeenTotal(0)
       problems.push('评审队列：' + String((queueResult.reason as Error)?.message || queueResult.reason))
     }
     setErrors(problems)
@@ -151,6 +161,51 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
     }, 0)
     return () => window.clearTimeout(timer)
   }, [load])
+
+  // 队列单独刷新：看没看过只影响这一块，不必把整页六路请求重跑一遍
+  const refreshQueue = useCallback(async () => {
+    try {
+      const result = await listReviewQueue(3)
+      setQueue(result.items ?? [])
+      setQueueTotal(result.total ?? 0)
+      setSeen(result.seen ?? [])
+      setSeenTotal(result.seenTotal ?? 0)
+      setQueueError('')
+    } catch (error) {
+      setQueueError('评审队列：' + String((error as Error)?.message || error))
+    }
+  }, [])
+
+  // 已看过：只处理待办，不动评审结论——那条评审还在评审历史里，作品胶囊照旧
+  const markSeen = useCallback(
+    async (projectId: string) => {
+      setAckBusy(projectId)
+      try {
+        await ackReview(projectId)
+        await refreshQueue()
+      } catch (error) {
+        setQueueError('「已看过」没记上：' + String((error as Error)?.message || error))
+      } finally {
+        setAckBusy('')
+      }
+    },
+    [refreshQueue],
+  )
+
+  const undoSeen = useCallback(
+    async (projectId: string) => {
+      setAckBusy(projectId)
+      try {
+        await unackReview(projectId)
+        await refreshQueue()
+      } catch (error) {
+        setQueueError('撤销没成功：' + String((error as Error)?.message || error))
+      } finally {
+        setAckBusy('')
+      }
+    },
+    [refreshQueue],
+  )
 
   const recentRuns = runs.slice(0, 6)
   const recentTemplates = templates.slice(0, 4)
@@ -282,7 +337,9 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
             <p className="vq-review-queue-sub">
               {queueTotal
                 ? '最近一次结论是「需人工确认」或「不通过」的作品，按评审时间排；点一条进作品改一版。'
-                : '评审给出意见的作品会排在这里；点一条进作品改一版，改完可以再评一次。'}
+                : seenTotal
+                  ? '没有新的等你看；下面这些你看过了、这一版先没改。'
+                  : '评审给出意见的作品会排在这里；点一条进作品改一版，改完可以再评一次。'}
             </p>
           </div>
           <button type="button" className="vq-link" onClick={() => onNavigate('review')}>
@@ -291,31 +348,79 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
           </button>
         </div>
 
+        {queueError ? (
+          <p className="vq-note vq-note--error" role="status">
+            {queueError}
+          </p>
+        ) : null}
+
         {queue.length ? (
           <div className="vq-review-queue-list">
             {queue.map((row) => (
-              <button type="button" className="vq-review-queue-row" key={row.projectId} onClick={() => onOpenProject(row.projectId)}>
-                <span className={'vq-project-status is-' + row.status.tone}>{row.status.text}</span>
-                <span className="vq-review-queue-copy">
-                  <strong>{row.title}</strong>
-                  <span className="vq-mono">
-                    第 {Math.max(1, row.version)} 版 · 评过 {row.count} 次 · {reviewTimeLabel(row.at)}
+              <div className="vq-review-queue-row" key={row.projectId}>
+                <button
+                  type="button"
+                  className="vq-review-queue-open"
+                  onClick={() => onOpenProject(row.projectId)}
+                  aria-label={'打开作品：' + row.title + '，第 ' + Math.max(1, row.version) + ' 版'}
+                >
+                  <span className={'vq-project-status is-' + row.status.tone}>{row.status.text}</span>
+                  <span className="vq-review-queue-copy">
+                    <strong>{row.title}</strong>
+                    <span className="vq-mono">
+                      第 {Math.max(1, row.version)} 版 · 评过 {row.count} 次 ·{' '}
+                      <span className="vq-review-queue-time">{reviewTimeLabel(row.at)}</span>
+                    </span>
                   </span>
-                </span>
-                <ArrowRight size={13} />
-              </button>
+                  <ArrowRight size={13} />
+                </button>
+                <button
+                  type="button"
+                  className="vq-button vq-button--quiet vq-button--tiny vq-review-queue-ack"
+                  onClick={() => void markSeen(row.projectId)}
+                  disabled={ackBusy === row.projectId}
+                  title="看过了，这一版先不改：从待办里拿掉；这一版再评出结论，它会自己回来"
+                >
+                  <Eye size={12} />
+                  已看过
+                </button>
+              </div>
             ))}
           </div>
         ) : (
           <div className="vq-empty vq-empty--inline">
-            <strong>没有等你改的评审</strong>
-            <span>评审一版画面后，结论是「需人工确认」或「不通过」的作品会排在这里；通过的作品直接去交付。</span>
-            <button type="button" className="vq-button vq-button--ghost" onClick={() => onNavigate('review')}>
-              去视觉评审
-              <ArrowRight size={13} />
-            </button>
+            <strong>{seenTotal ? '等你看的都看过了' : '没有等你改的评审'}</strong>
+            <span>
+              {seenTotal
+                ? '看过不等于改过：作品状态还是「评审 · 需人工确认 / 不通过」，评审证据也都在作品页；这一版再评一次会回到这里。'
+                : '评审一版画面后，结论是「需人工确认」或「不通过」的作品会排在这里；通过的作品直接去交付。'}
+            </span>
+            {seenTotal ? null : (
+              <button type="button" className="vq-button vq-button--ghost" onClick={() => onNavigate('review')}>
+                去视觉评审
+                <ArrowRight size={13} />
+              </button>
+            )}
           </div>
         )}
+
+        {/* 看过的留在下面一行：还能撤销，也不是「改完了」 */}
+        {seenTotal && seen[0] ? (
+          <div className="vq-review-queue-seen">
+            <span className="vq-review-queue-seen-text">
+              已看过 {seenTotal} 条，这一版先没改 · 最近：{seen[0].title}（第 {Math.max(1, seen[0].version)} 版 ·{' '}
+              {reviewTimeLabel(seen[0].seenAt)} 看过）
+            </span>
+            <button
+              type="button"
+              className="vq-link"
+              onClick={() => void undoSeen(seen[0].projectId)}
+              disabled={ackBusy === seen[0].projectId}
+            >
+              撤销
+            </button>
+          </div>
+        ) : null}
       </section>
 
       <div className="vq-start">

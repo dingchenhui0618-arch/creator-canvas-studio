@@ -1,7 +1,8 @@
 import { sendJson, readBody } from './_shared.mjs'
 import { reviewVisual, reviewStatus } from '../review.mjs'
 import { saveReview, listReviews, getReview } from '../reviews.mjs'
-import { reviewQueue } from '../review-queue.mjs'
+import { reviewQueue, reviewQueueRow } from '../review-queue.mjs'
+import { ackReview, unackReview } from '../review-acks.mjs'
 import { getProject, listProjects } from '../projects.mjs'
 import { projectsById, withReviewProject } from '../review-ownership.mjs'
 import fsp from 'node:fs/promises'
@@ -25,6 +26,7 @@ async function readLocalMedia(mediaPath) {
 }
 
 const REVIEW_ITEM = /^\/api\/reviews\/([\w-]+)$/
+const ACK_ITEM = /^\/api\/reviews\/ack\/([\w-]+)$/
 
 export function createReviewRouter() {
   return {
@@ -61,6 +63,33 @@ export function createReviewRouter() {
       if (pathname === '/api/reviews/queue' && req.method === 'GET') {
         const queue = await reviewQueue(user, { limit: url.searchParams.get('limit') || 6 })
         sendJson(res, 200, { ok: true, ...queue })
+        return true
+      }
+      // 「已看过」：这条评审人看过了、这一版先不改，从待办里拿掉。
+      // 不改结论、不改作品状态、不扣积分；记的是「哪一版哪一次评审」，评出新结论会自动回到待办。
+      if (pathname === '/api/reviews/ack' && req.method === 'POST') {
+        const body = await readBody(req)
+        const projectId = body.projectId ? String(body.projectId).slice(0, 40) : ''
+        if (!projectId) {
+          sendJson(res, 400, { error: '要说清是哪条作品', code: 'PROJECT_REQUIRED' })
+          return true
+        }
+        const row = await reviewQueueRow(projectId, user)
+        if (!row) {
+          sendJson(res, 409, {
+            error: '这条现在没有等你处理的评审：结论是通过、已经交付，或者这一版还没评过',
+            code: 'NO_PENDING_REVIEW',
+          })
+          return true
+        }
+        const ack = await ackReview({ projectId, version: row.version, reviewAt: row.at, verdict: row.verdict }, user)
+        sendJson(res, 200, { ok: true, ack, row })
+        return true
+      }
+      const ackItem = pathname.match(ACK_ITEM)
+      if (ackItem && req.method === 'DELETE') {
+        const removed = await unackReview(ackItem[1], user)
+        sendJson(res, 200, { ok: true, removed })
         return true
       }
       const reviewItem = pathname.match(REVIEW_ITEM)

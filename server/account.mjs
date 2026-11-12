@@ -6,6 +6,7 @@ import { deleteFlow, listFlows, listRuns } from './flows.mjs'
 import { deleteAgent, listAgents } from './agents.mjs'
 import { deleteReviewsByOwner, listReviews, detachReviewsFromProject } from './reviews.mjs'
 import { deleteProjectsByOwner, listProjects } from './projects.mjs'
+import { deleteAcksByOwner } from './review-acks.mjs'
 import { preferenceOf, removePreference } from './preferences.mjs'
 import { balanceOf, ledgerOf } from './credits.mjs'
 import { countAdmins, deleteUser, findUserById } from './auth.mjs'
@@ -93,6 +94,7 @@ export async function deleteOwnAccount(user, { deleteContent = true } = {}) {
     }
     removed.projects = await deleteProjectsByOwner(user.id)
     removed.reviews = await deleteReviewsByOwner(user.id)
+    removed.reviewAcks = await deleteAcksByOwner(user.id)
   }
   removePreference(user.id)
   const deleted = deleteUser(user.id)

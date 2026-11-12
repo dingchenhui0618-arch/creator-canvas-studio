@@ -142,5 +142,32 @@ export type ReviewQueueRow = {
   status: { text: string; tone: string; verdict: string }
 }
 
+/** 已经看过、这一版先不改的一条：结论不变，只是从待办里挪开。 */
+export type ReviewQueueSeenRow = ReviewQueueRow & { seenAt: string }
+
+export type ReviewQueue = {
+  ok: boolean
+  /** 还没看的 */
+  items: ReviewQueueRow[]
+  total: number
+  /** 看过了、先没改的（最多 10 条，够写一行「已看过 N 条」） */
+  seen: ReviewQueueSeenRow[]
+  seenTotal: number
+}
+
 export const listReviewQueue = (limit = 6) =>
-  request<{ ok: boolean; items: ReviewQueueRow[]; total: number }>('/api/reviews/queue?limit=' + limit)
+  request<ReviewQueue>('/api/reviews/queue?limit=' + limit)
+
+/**
+ * 已看过：把这条作品从「评审等你看的」待办里拿掉。
+ * 服务端只认当前这一版最近一次评审；结论、胶囊、作品状态都不动，也不扣积分。
+ */
+export const ackReview = (projectId: string) =>
+  request<{ ok: boolean; ack: { projectId: string; version: number; reviewAt: string; at: string } }>('/api/reviews/ack', {
+    method: 'POST',
+    body: JSON.stringify({ projectId }),
+  })
+
+/** 撤销「已看过」：它回到待办。 */
+export const unackReview = (projectId: string) =>
+  request<{ ok: boolean; removed: number }>('/api/reviews/ack/' + projectId, { method: 'DELETE' })

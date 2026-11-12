@@ -608,41 +608,87 @@
   background: var(--surface-raised);
 }
 
+/* 一行两个动作：进作品（主体）+ 已看过（行尾），所以行本身不再是按钮——
+   按钮里不能套按钮，整行可点改成「主体那颗按钮铺满左侧」。 */
 .vq-review-queue-row {
   display: grid;
-  /* 胶囊固定一列：三档文案长短不一（不通过 / 需人工确认），作品名必须从同一条竖线开始 */
-  grid-template-columns: 128px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
-  width: 100%;
-  padding: 12px 16px;
-  border: 0;
-  background: transparent;
-  color: var(--ink);
-  text-align: left;
-  transition: background-color var(--dur-1) var(--ease-out);
 }
 
 .vq-review-queue-row + .vq-review-queue-row {
   border-top: 1px solid var(--line-faint);
 }
 
-.vq-review-queue-row:hover {
+.vq-review-queue-open {
+  display: grid;
+  /* 胶囊固定一列：三档文案长短不一（不通过 / 需人工确认），作品名必须从同一条竖线开始 */
+  grid-template-columns: 128px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px 16px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-1) var(--ease-out);
+}
+
+.vq-review-queue-open:hover {
   background: var(--surface);
 }
 
-.vq-review-queue-row:focus-visible {
+.vq-review-queue-open:focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: -2px;
 }
 
-.vq-review-queue-row .vq-project-status {
+.vq-review-queue-open .vq-project-status {
   justify-self: start;
+}
+
+/* 「已看过」：11px 的小动作，平时是灰的，别和作品名抢注意力 */
+.vq-review-queue-row .vq-review-queue-ack {
+  flex: none;
+  margin-right: 16px;
+  color: var(--faint);
+  /* 全局 .vq-scope button { font: inherit } 比 .vq-button 更具体，会把这些按钮的字号顶回 16px；
+     行尾这个小动作要 11px，只能在这条更具体的选择器上写。 */
+  font-size: 11px;
+  font-weight: 400;
+  transition: color var(--dur-1) var(--ease-out), background-color var(--dur-1) var(--ease-out);
+}
+
+.vq-review-queue-row .vq-review-queue-ack:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+/* 看过的一行：写清楚「看过不等于改过」，并给撤销 */
+.vq-review-queue-seen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.vq-review-queue-seen-text {
+  min-width: 0;
 }
 
 .vq-review-queue-copy {
   display: flex;
-  flex: 1;
   flex-direction: column;
   gap: 4px;
   min-width: 0;
@@ -663,22 +709,31 @@
   line-height: 1.5;
 }
 
-.vq-review-queue-row > svg {
+/* 窄屏换行时别把「11/13 00:40」劈成两截：时间是整体，要么在上行末尾，要么整块落到下一行 */
+.vq-review-queue-time {
+  white-space: nowrap;
+}
+
+.vq-review-queue-open > svg {
   flex-shrink: 0;
   color: var(--faint);
 }
 
 /* 窄屏：胶囊挪到作品名上面一行，把正文这一列让出来，
    否则「第 1 版 · 评过 8 次 · 11/13 00:40」会被挤成三行。 */
+/* 窄屏：胶囊挪到作品名上面一行，把正文这一列让出来，
+   否则「第 1 版 · 评过 8 次 · 11/13 00:40」会被挤成两行；
+   右边那列留给「已看过」——整行本来就能点，箭头在窄屏只是装饰，让位给动作。 */
 @media (max-width: 640px) {
-  .vq-review-queue-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas: 'pill arrow' 'copy arrow';
+  .vq-review-queue-open {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'pill' 'copy';
     align-items: start;
-    gap: 8px 12px;
+    gap: 8px;
+    padding: 12px;
   }
 
-  .vq-review-queue-row .vq-project-status {
+  .vq-review-queue-open .vq-project-status {
     grid-area: pill;
   }
 
@@ -686,13 +741,23 @@
     grid-area: copy;
   }
 
-  .vq-review-queue-row > svg {
-    grid-area: arrow;
-    align-self: center;
+  .vq-review-queue-open > svg {
+    display: none;
+  }
+
+  .vq-review-queue-row .vq-review-queue-ack {
+    height: 32px;
+    margin-right: 8px;
+    padding: 0 8px;
+  }
+
+  /* 一个图标 16px 换正文一行宽：11px 的「已看过」在窄屏够读，图标反而占掉作品名 */
+  .vq-review-queue-row .vq-review-queue-ack svg {
+    display: none;
   }
 }
 
-.vq-review-queue-row:hover > svg {
+.vq-review-queue-open:hover > svg {
   color: var(--ink);
 }
 
