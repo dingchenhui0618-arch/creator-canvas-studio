@@ -333,7 +333,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
           ) : (
             <div className="vq-empty vq-empty--inline">
               <strong>模板库还是空的</strong>
-              <span>在爆款雷达里复刻一条内容，拆出来的脚本结构会落到这里。</span>
+              <span>在「发现」里复刻一条内容，拆出来的脚本结构会落到这里。</span>
               <button type="button" className="vq-button vq-button--ghost" onClick={() => onNavigate('radar')}>
                 去检索
                 <ArrowRight size={13} />

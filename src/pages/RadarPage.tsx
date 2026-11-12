@@ -224,8 +224,8 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
   return (
     <div className="page page--radar">
       <PageHead
-        kicker="内容雷达"
-        title="爆款雷达"
+        kicker="内容发现"
+        title="发现"
         desc="按关键词检索抖音与小红书的内容与互动数据：点赞、收藏、评论、转发、播放都取原始值。挑一条加进模板库只存链接，或者直接拆成脚本与分镜。"
         actions={
           <>

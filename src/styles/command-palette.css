@@ -1,0 +1,190 @@
+/* 快速跳转面板（Ctrl / ⌘ + K）。
+   只用一个中性遮罩 + 一张贴顶窄面板：不加渐变、不加彩色，语义色留给评审结论。
+   间距只取 4 / 8 / 12 / 16 / 24，圆角只取 token 里的 6 / 10 / 20。 */
+
+.cp-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  align-items: start;
+  justify-items: center;
+  padding: 8vh 24px 24px;
+  background: rgba(17, 17, 17, 0.34);
+}
+
+.cp-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(560px, 100%);
+  max-height: 88vh;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-pop);
+  animation: cp-in var(--dur-2) var(--ease-out) both;
+}
+
+@keyframes cp-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.cp-field {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid var(--line);
+  color: var(--faint);
+}
+
+.cp-field input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: var(--text-md);
+}
+
+.cp-field input::placeholder {
+  color: var(--faint);
+}
+
+.cp-field kbd {
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: var(--text-mono);
+  letter-spacing: 0.04em;
+}
+
+.cp-list {
+  flex: 1;
+  min-height: 0;
+  padding: 8px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.cp-group-label {
+  padding: 8px 8px 0;
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: var(--text-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.cp-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  text-align: left;
+  cursor: pointer;
+}
+
+.cp-item.is-active {
+  background: rgba(17, 17, 17, 0.055);
+  color: var(--ink);
+}
+
+.cp-item svg {
+  flex: none;
+  color: var(--faint);
+}
+
+.cp-item.is-active svg {
+  color: var(--ink);
+}
+
+.cp-item-copy {
+  display: grid;
+  flex: 1;
+  gap: 0;
+  min-width: 0;
+}
+
+.cp-item-copy strong {
+  overflow: hidden;
+  color: inherit;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cp-item-copy small {
+  overflow: hidden;
+  color: var(--faint);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cp-item-enter {
+  flex: none;
+  color: var(--faint);
+}
+
+.cp-empty {
+  padding: 24px 16px;
+  color: var(--faint);
+  font-size: var(--text-xs);
+  text-align: center;
+}
+
+.cp-foot {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--line);
+  color: var(--faint);
+  font-size: var(--text-xs);
+}
+
+.cp-foot-key {
+  font-family: var(--font-mono);
+  font-size: var(--text-mono);
+  letter-spacing: 0.06em;
+}
+
+@media (max-width: 640px) {
+  .cp-backdrop {
+    padding: 8vh 12px 12px;
+  }
+
+  .cp-foot span:first-child {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cp-panel {
+    animation: none;
+  }
+}

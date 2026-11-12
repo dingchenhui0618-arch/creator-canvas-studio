@@ -293,7 +293,7 @@ export function TemplateLibraryPage({
         <div className="radar-empty">
           <Layers size={22} />
           <strong>模板库还是空的</strong>
-          <span>去「爆款雷达」检索一条：点「加入模板库」先存链接与互动数据，点「解析」再拆脚本和分镜（出成片要自己拍）。</span>
+          <span>去「发现」检索一条：点「加入模板库」先存链接与互动数据，点「解析」再拆脚本和分镜（出成片要自己拍）。</span>
           <button className="button button--primary" onClick={onBack}>去检索一条</button>
         </div>
       ) : (

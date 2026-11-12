@@ -612,6 +612,28 @@ select:focus-visible {
   gap: 2px;
 }
 
+/* 工具区分组标签：一级只留四个去处，其余能力收在这里（P2 导航收敛） */
+.vq-nav-label {
+  margin: 16px 0 4px;
+  padding: 0 12px;
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: var(--text-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* 收起或窄屏时，分组标签同一元素变成一道发丝线，不额外多渲染一个节点 */
+.vq-sidebar--collapsed .vq-nav-label {
+  height: 1px;
+  margin: 12px 8px 8px;
+  padding: 0;
+  overflow: hidden;
+  background: var(--line);
+  color: transparent;
+  font-size: 0;
+}
+
 .vq-nav-item {
   position: relative;
   display: flex;
@@ -1011,7 +1033,29 @@ select:focus-visible {
   border-radius: var(--radius-xs);
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--text-mono);
+}
+
+/* 顶栏这一格是按钮不是输入框：点开就是快速跳转面板（Ctrl / ⌘ + K） */
+.vq-search--trigger {
+  flex: 0 1 auto;
+  border-color: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.vq-search--trigger:hover {
+  border-color: var(--line);
+  background: var(--surface-raised);
+  color: var(--muted);
+}
+
+.vq-search-label {
+  flex: 1;
+  overflow: hidden;
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .vq-user-menu {
@@ -2004,6 +2048,16 @@ select:focus-visible {
     justify-content: center;
   }
 
+  .vq-nav-label {
+    height: 1px;
+    margin: 12px 8px 8px;
+    padding: 0;
+    overflow: hidden;
+    background: var(--line);
+    color: transparent;
+    font-size: 0;
+  }
+
   .vq-workspace,
   .vq-workspace-meta,
   .vq-brand-text,
@@ -2029,12 +2083,14 @@ select:focus-visible {
   }
 
   .vq-search {
+    justify-content: center;
     width: 30px;
     padding: 0 8px;
   }
 
   .vq-search input,
-  .vq-search kbd {
+  .vq-search kbd,
+  .vq-search-label {
     display: none;
   }
 

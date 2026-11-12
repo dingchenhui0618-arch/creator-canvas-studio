@@ -23,7 +23,7 @@ export const pageLabels: Record<Page, string> = {
   canvas: '画布',
   runs: '运行记录',
   settings: '设置',
-  radar: '爆款雷达',
+  radar: '发现',
   templates: '模板库',
   review: '视觉评审',
 }

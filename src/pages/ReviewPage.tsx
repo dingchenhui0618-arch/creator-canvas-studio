@@ -293,7 +293,7 @@ export default function ReviewPage({ projectId }: { projectId?: string } = {}) {
                 <span className="review-thumb-name">{item.title}</span>
               </button>
             ))}
-            {!templates.length ? <p className="review-empty">模板库还是空的，先去「爆款雷达」复刻一条。</p> : null}
+            {!templates.length ? <p className="review-empty">模板库还是空的，先去「发现」复刻一条。</p> : null}
           </div>
 
           <div className="review-manual">

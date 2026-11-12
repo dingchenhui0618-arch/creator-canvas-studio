@@ -1,23 +1,17 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Activity,
-  Bot,
   Check,
   ChevronRight,
-  Clapperboard,
   Compass,
-  Grid2X2,
-  LayoutTemplate,
   Loader2,
   LogOut,
   MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
-  Radar,
+  Plus,
   RefreshCw,
-  ScanEye,
+  Search,
   Settings2,
-  Workflow,
   X,
 } from 'lucide-react'
 import { pageLabels, type Page } from './domain/types'
@@ -25,6 +19,9 @@ import './App.css'
 import './styles/shell.css'
 import './styles/overview.css'
 import { NavItem } from './components/ui'
+import { CommandPalette } from './components/CommandPalette'
+import type { PaletteCommand } from './domain/commands'
+import { PRIMARY_NAV, SETTINGS_NAV, TOOL_NAV, isNavActive, isToolPage, type NavEntry } from './nav'
 import { WelcomeGuide } from './components/WelcomeGuide'
 import { ModelSwitch } from './components/ModelSwitch'
 import { ErrorBoundary } from './components/ErrorBoundary'
@@ -48,6 +45,9 @@ import packageJsonRaw from '../package.json?raw'
 import { EDITION_BY_ID, EDITION_STORAGE_KEY, type AdminSection } from './editions'
 
 const APP_VERSION = (JSON.parse(packageJsonRaw) as { version?: string }).version ?? '0.0.0'
+
+// 快速跳转的快捷键提示按平台显示；功能本身两个修饰键都收。
+const IS_MAC = typeof navigator !== 'undefined' && /mac|iphone|ipad/i.test(navigator.platform || navigator.userAgent)
 
 // 重页面按路由拆包：画布带 @xyflow、智能体与模板库带各自的样式表，首屏不必等它们。
 const CanvasPage = lazy(() => import('./pages/CanvasPage'))
@@ -155,6 +155,8 @@ function Workbench({
   const route = useRoute()
   const { internal } = useUiMode()
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  // 快速跳转：导航收敛到 4 项之后，工具与动作靠键盘跳转（Ctrl / ⌘ + K）
+  const [paletteOpen, setPaletteOpen] = useState(false)
   // 画布专注模式：收起侧栏与顶栏，把屏幕让给画布本身（状态在壳里，画布页只负责切换）
   const [canvasFocus, setCanvasFocus] = useState(false)
 
@@ -191,6 +193,8 @@ function Workbench({
   // 专注模式只在画布页生效：离开画布时侧栏与顶栏一定回来，不会出现「侧栏不见了」；
   // 回到画布仍保持专注，等于记住用户上次的选择。
   const focusOn = canvasFocus && activePage === 'canvas'
+  // 面包屑跟着导航层级走：工具页多一段「工具」，否则用户看不出自己已经离开了主线
+  const inTools = isToolPage(activePage) || activePage === 'agent-editor'
 
   const notify = useCallback((message: string) => {
     setToast(message)
@@ -256,6 +260,80 @@ function Workbench({
       notify('新建画布失败：' + (error instanceof Error ? error.message : String(error)))
     }
   }, [go, notify])
+
+  // 侧栏与命令面板共用同一个跳转口径：已经在画布上不重载当前流程。
+  const navTo = useCallback(
+    (entry: NavEntry) => {
+      if (entry.id === 'canvas' && route.kind === 'page' && route.page === 'canvas') {
+        setAccountMenuOpen(false)
+        return
+      }
+      go(entry.id)
+    },
+    [go, route],
+  )
+
+  // 命令面板的清单直接由导航真源生成，再补三条真实动作；不另抄一份页面清单。
+  const paletteCommands = useMemo<PaletteCommand[]>(() => {
+    const navCommand = (entry: NavEntry, group: string): PaletteCommand => ({
+      id: 'go-' + entry.id,
+      label: entry.label,
+      hint: entry.hint,
+      group,
+      icon: entry.icon,
+      keywords: entry.keywords,
+      run: () => navTo(entry),
+    })
+    return [
+      ...PRIMARY_NAV.map((entry) => navCommand(entry, '页面')),
+      ...TOOL_NAV.map((entry) => navCommand(entry, '工具')),
+      navCommand(SETTINGS_NAV, '设置'),
+      {
+        id: 'action-new-canvas',
+        label: '新建空白画布',
+        hint: '建一块真画布，建完直接打开',
+        group: '动作',
+        icon: Plus,
+        keywords: 'new canvas 新建 空白 画布',
+        run: () => void createCanvasProject(),
+      },
+      {
+        id: 'action-guide',
+        label: '使用引导',
+        hint: '三步：找 → 拆 → 验',
+        group: '动作',
+        icon: Compass,
+        keywords: 'guide help 帮助 引导 教程',
+        run: () => setGuideOpen(true),
+      },
+      {
+        id: 'action-sidebar',
+        label: sidebarOpen ? '收起侧栏' : '展开侧栏',
+        hint: '把屏幕让给内容',
+        group: '动作',
+        icon: sidebarOpen ? PanelLeftClose : PanelLeftOpen,
+        keywords: 'sidebar 侧栏 折叠 展开',
+        run: () => setSidebarOpen((value) => !value),
+      },
+    ]
+  }, [createCanvasProject, navTo, sidebarOpen])
+
+  // Ctrl / ⌘ + K 打开快速跳转。正在输入的地方不抢键：编辑器里的同名快捷键仍然属于编辑器。
+  useEffect(() => {
+    if (guideOpen || updateOpen) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'k') return
+      const target = event.target as HTMLElement | null
+      const editing =
+        target instanceof HTMLElement &&
+        (target.isContentEditable || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT')
+      if (editing) return
+      event.preventDefault()
+      setPaletteOpen((value) => !value)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [guideOpen, updateOpen])
 
   // 列表入口只把名称交给外壳。先换成稳定 id 再写地址，地址栏里始终是 #/agents/<id>；
   // 解析失败时退回名称，编辑器那边仍能按唯一名称找回记录。
@@ -441,31 +519,37 @@ function Workbench({
           )}
 
           {route.kind !== 'admin' ? (
-            <nav className="vq-nav" aria-label="主导航">
-              <NavItem icon={Grid2X2} label="工作台" active={activePage === 'overview'} compact={!sidebarOpen} onClick={() => go('overview')} />
-              <NavItem icon={Clapperboard} label="作品" active={activePage === 'projects'} compact={!sidebarOpen} onClick={() => go('projects')} />
-              <NavItem icon={Radar} label="爆款雷达" active={activePage === 'radar'} compact={!sidebarOpen} onClick={() => go('radar')} />
-              <NavItem icon={LayoutTemplate} label="模板库" active={activePage === 'templates'} compact={!sidebarOpen} onClick={() => go('templates')} />
-              <NavItem
-                icon={Bot}
-                label="智能体"
-                active={activePage === 'agents' || activePage === 'agent-editor'}
-                compact={!sidebarOpen}
-                onClick={() => go('agents')}
-              />
-              <NavItem
-                icon={Workflow}
-                label="画布"
-                active={activePage === 'canvas'}
-                compact={!sidebarOpen}
-                // 已经在画布上再点一次「画布」不该把地址栏退回 #/canvas、把当前流程重载一遍
-                onClick={() => {
-                  if (route.kind === 'page' && route.page === 'canvas') return
-                  go('canvas')
-                }}
-              />
-              <NavItem icon={ScanEye} label="视觉评审" active={activePage === 'review'} compact={!sidebarOpen} onClick={() => go('review')} />
-            </nav>
+            <>
+              <nav className="vq-nav" aria-label="主导航">
+                {PRIMARY_NAV.map((entry) => (
+                  <NavItem
+                    key={entry.id}
+                    icon={entry.icon}
+                    label={entry.label}
+                    active={isNavActive(entry, activePage)}
+                    compact={!sidebarOpen}
+                    onClick={() => navTo(entry)}
+                  />
+                ))}
+              </nav>
+              {/* 工具区：能力不再和「发现 / 模板库」并列成同一类入口；收起侧栏时只留一道分隔线 */}
+              <nav className="vq-nav vq-nav--tools" aria-label="工具">
+                {/* 展开时是一行分组标签，收起或窄屏时同一元素变成一道分隔线（见 shell.css） */}
+                <div className="vq-nav-label" aria-hidden="true">
+                  工具
+                </div>
+                {TOOL_NAV.map((entry) => (
+                  <NavItem
+                    key={entry.id}
+                    icon={entry.icon}
+                    label={entry.label}
+                    active={isNavActive(entry, activePage)}
+                    compact={!sidebarOpen}
+                    onClick={() => navTo(entry)}
+                  />
+                ))}
+              </nav>
+            </>
           ) : (
             <nav className="vq-nav" aria-label={EDITION_BY_ID.admin.label + '导航'}>
               {EDITION_BY_ID.admin.nav.map((item) => {
@@ -492,8 +576,14 @@ function Workbench({
             <>
   <div className="vq-nav-divider" role="presentation" />
             <nav className="vq-nav vq-nav--utility" aria-label="设置层">
-              <NavItem utility icon={Activity} label="运行记录" active={activePage === 'runs'} compact={!sidebarOpen} onClick={() => go('runs')} />
-              <NavItem utility icon={Settings2} label="设置" active={activePage === 'settings'} compact={!sidebarOpen} onClick={() => go('settings')} />
+              <NavItem
+                utility
+                icon={SETTINGS_NAV.icon}
+                label={SETTINGS_NAV.label}
+                active={activePage === 'settings'}
+                compact={!sidebarOpen}
+                onClick={() => go('settings')}
+              />
             </nav>
             </>
           ) : null}
@@ -599,6 +689,12 @@ function Workbench({
             </button>
             <div className="vq-breadcrumb">
               <span>{session.user.workspace}</span>
+              {inTools ? (
+                <>
+                  <ChevronRight size={11} />
+                  <span>工具</span>
+                </>
+              ) : null}
               <ChevronRight size={11} />
               <strong>
                 {route.kind === 'admin'
@@ -607,6 +703,18 @@ function Workbench({
               </strong>
             </div>
           </div>
+
+          <button
+            type="button"
+            className="vq-search vq-search--trigger"
+            onClick={() => setPaletteOpen(true)}
+            aria-label="快速跳转（Ctrl 或 Command 加 K）"
+            title="快速跳转 · Ctrl / ⌘ + K"
+          >
+            <Search size={14} aria-hidden="true" />
+            <span className="vq-search-label">跳转到…</span>
+            <kbd>{IS_MAC ? '⌘K' : 'Ctrl K'}</kbd>
+          </button>
 
           <div className="vq-topbar-right">
             {internal ? (
@@ -627,6 +735,8 @@ function Workbench({
           </ErrorBoundary>
         </div>
       </div>
+
+      {paletteOpen ? <CommandPalette commands={paletteCommands} onClose={() => setPaletteOpen(false)} /> : null}
 
       {updateOpen && (
         <div className="vq-modal-backdrop" onMouseDown={() => setUpdateOpen(false)}>

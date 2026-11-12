@@ -28,6 +28,8 @@ export function NavItem({ icon: Icon, label, active, compact, utility, badge, on
       type="button"
       className={`vq-nav-item${active ? ' is-active' : ''}${compact ? ' vq-nav-item--compact' : ''}${utility ? ' vq-nav-item--utility' : ''}`}
       onClick={onClick}
+      // 窄屏会把文字藏起来（只剩图标），可访问名与图标态的 tooltip 都得由 label 兜住
+      aria-label={label}
       title={compact ? label : undefined}
       aria-current={active ? 'page' : undefined}
     >

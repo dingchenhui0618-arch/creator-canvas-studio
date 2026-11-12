@@ -17,7 +17,7 @@ const STEPS = [
     key: 'radar',
     icon: ScanSearch,
     kicker: '01 · 找',
-    title: '先在爆款雷达里检索',
+    title: '先在「发现」里检索',
     body: '按关键词看抖音与小红书的真实互动数，挑一条值得拆的。',
     page: 'radar' as Page,
   },
