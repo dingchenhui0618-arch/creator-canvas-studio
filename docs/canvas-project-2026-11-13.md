@@ -1,6 +1,7 @@
 # 画布知道自己在做哪条作品（v0.9.34）
 
-版本 0.9.34 / 发布包 `20261112-224232-2026-11-13-canvas-proj.tar.gz` / 入口 `index-9SIs2xIj.js`（491,325 字节）/
+版本 0.9.34 / 发布包 `20261112-224232-2026-11-13-canvas-proj.tar.gz` / 入口 `index-9SIs2xIj.js`（491,325 字节）
+/ 提交 `6a979ab` + `a1e0a45` / CI run 43322776222 success
 生产 `https://visionqa.wavisionai.cn`，两服务 active，`/api/health` ok（templates 26）。
 
 ## 一、补的是价值链上最后一处「不知道自己归谁」的页面
