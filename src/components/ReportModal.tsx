@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { AlertTriangle, Check, Loader2, X } from 'lucide-react'
 import { submitReport, type ReportCategory, type ReportTarget } from '../api/reports'
+import { Select } from './Select'
 import '../styles/shell.css'
 
 // 举报侵权 / 不当内容：不要求登录。只填「类型 + 具体情况」就能提交；
@@ -84,13 +85,14 @@ export function ReportModal({
 
             <label className="vq-field">
               <span>类型</span>
-              <select className="vq-input" value={category} onChange={(event) => setCategory(event.target.value as ReportCategory)} disabled={busy}>
-                {CATEGORIES.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
+              <Select
+                className="vq-select--block"
+                label="举报类型"
+                value={category}
+                options={CATEGORIES.map((item) => ({ value: item.value, label: item.label }))}
+                disabled={busy}
+                onChange={(value) => setCategory(value as ReportCategory)}
+              />
             </label>
             <p className="vq-report-hint">{CATEGORIES.find((item) => item.value === category)?.hint}</p>
 

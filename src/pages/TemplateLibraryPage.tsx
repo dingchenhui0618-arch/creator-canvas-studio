@@ -191,11 +191,17 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
           <Search size={15} />
           <input value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="搜索标题、钩子、标签或可复用规则" />
         </label>
-        <div className="filter-tabs template-type-tabs">
+        <div className="vq-filter-row">
           {typeOptions.map((value) => (
-            <button key={value} className={activeType === value ? 'is-active' : ''} onClick={() => setType(value)}>
+            <button
+              key={value}
+              type="button"
+              className={'vq-filter-chip' + (activeType === value ? ' is-active' : '')}
+              aria-pressed={activeType === value}
+              onClick={() => setType(value)}
+            >
               {value}
-              {value !== '全部' && byType[value] ? <span className="tab-count">{byType[value]}</span> : null}
+              {value !== '全部' && byType[value] ? <span className="vq-filter-chip__count">{byType[value]}</span> : null}
             </button>
           ))}
         </div>

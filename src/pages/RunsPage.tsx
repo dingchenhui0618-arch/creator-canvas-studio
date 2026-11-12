@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Activity, ChevronLeft, ChevronRight, RefreshCw, Search, Workflow } from 'lucide-react'
 import PageHead from '../components/PageHead'
+import { Select } from '../components/Select'
 import { listFlows, listRuns, type ApiFlow, type RunRecord } from '../api/flows'
 import '../styles/runs.css'
 
@@ -157,18 +158,27 @@ export function RunsPage({ onOpenFlow }: { onOpenFlow?: (flowId: string) => void
         </label>
         <label className="runs-select">
           <span>流程</span>
-          <select value={flowId} onChange={(event) => resetTo(() => setFlowId(event.target.value))}>
-            <option value="">全部流程</option>
-            {flows.map((flow) => <option key={flow.id} value={flow.id}>{flow.name}</option>)}
-          </select>
+          <Select
+            size="sm"
+            label="按流程筛选"
+            value={flowId}
+            options={[{ value: '', label: '全部流程' }, ...flows.map((flow) => ({ value: flow.id, label: flow.name }))]}
+            onChange={(value) => resetTo(() => setFlowId(value))}
+          />
         </label>
         <label className="runs-select">
           <span>状态</span>
-          <select value={status} onChange={(event) => resetTo(() => setStatus(event.target.value as '' | 'success' | 'error'))}>
-            <option value="">全部</option>
-            <option value="success">成功</option>
-            <option value="error">失败</option>
-          </select>
+          <Select
+            size="sm"
+            label="按状态筛选"
+            value={status}
+            options={[
+              { value: '', label: '全部状态' },
+              { value: 'success', label: '成功' },
+              { value: 'error', label: '失败' },
+            ]}
+            onChange={(value) => resetTo(() => setStatus(value as '' | 'success' | 'error'))}
+          />
         </label>
         {filtered ? (
           <button

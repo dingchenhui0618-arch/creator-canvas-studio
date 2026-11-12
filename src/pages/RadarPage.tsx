@@ -18,6 +18,7 @@ import {
 import { clearSearchHistory, coverSrc, formatCount, formatDuration, getHealth, listSearchHistory, saveTemplate, searchMedia, toggleSearchFavorite } from '../api/radar'
 import type { MediaItem, SearchHistoryEntry } from '../domain/radar'
 import { ReplicateModal } from '../components/ReplicateModal'
+import { Select } from '../components/Select'
 import PageHead from '../components/PageHead'
 import { getCredits, type CreditsResponse } from '../api/credits'
 import '../styles/radar.css'
@@ -245,9 +246,17 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
       />
 
       <div className="radar-toolbar">
-        <div className="filter-tabs">
+        <div className="vq-filter-row">
           {PLATFORMS.map((item) => (
-            <button key={item.value} className={platform === item.value ? 'is-active' : ''} onClick={() => setPlatform(item.value)}>{item.label}</button>
+            <button
+              key={item.value}
+              type="button"
+              className={'vq-filter-chip' + (platform === item.value ? ' is-active' : '')}
+              aria-pressed={platform === item.value}
+              onClick={() => setPlatform(item.value)}
+            >
+              {item.label}
+            </button>
           ))}
         </div>
         <label className="inline-search radar-search">
@@ -259,12 +268,8 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
             placeholder="搜索赛道或选题，例如：春季通勤穿搭 / 咖啡开箱 / 租房改造"
           />
         </label>
-        <select className="select select--compact" value={range} onChange={(event) => setRange(event.target.value)} aria-label="时间范围">
-          {RANGES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-        </select>
-        <select className="select select--compact" value={sort} onChange={(event) => setSort(event.target.value)} aria-label="排序方式">
-          {SORTS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-        </select>
+        <Select value={range} options={RANGES} onChange={setRange} label="时间范围" />
+        <Select value={sort} options={SORTS} onChange={setSort} label="排序方式" />
         <button
           className="button button--primary"
           onClick={() => void runSearch()}

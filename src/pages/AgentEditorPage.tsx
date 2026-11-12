@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AlertCircle, ArrowLeft, BookOpen, Check, ChevronDown, MessageSquareText, Trash2, Wrench } from 'lucide-react'
+import { AlertCircle, ArrowLeft, BookOpen, Check, MessageSquareText, Trash2, Wrench } from 'lucide-react'
 import {
   AGENT_CATEGORIES,
   createAgent,
@@ -12,6 +12,7 @@ import {
 import type { AgentCategory, AgentInput, AgentRecord, AgentsList } from '../api/agents'
 import type { Page } from '../domain/types'
 import PageHead from '../components/PageHead'
+import { Select } from '../components/Select'
 import { useModelOptions } from '../components/ModelSwitch'
 import { useUiMode } from '../api/app'
 import { getPreferences } from '../api/preferences'
@@ -279,16 +280,14 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
               </label>
               <label className="agx-field">
                 <span>分类</span>
-                <div className="agx-select-wrap">
-                  <select value={form.category} onChange={(event) => patch({ category: event.target.value as AgentCategory })}>
-                    {AGENT_CATEGORIES.map((item) => (
-                      <option value={item} key={item}>
-                        {item}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown size={13} />
-                </div>
+                <Select
+                  size="sm"
+                  className="vq-select--block"
+                  label="分类"
+                  value={form.category}
+                  options={AGENT_CATEGORIES.map((item) => ({ value: item, label: item }))}
+                  onChange={(value) => patch({ category: value as AgentCategory })}
+                />
               </label>
             </div>
             <label className="agx-field">
@@ -399,16 +398,14 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
             <div className="agx-field-grid">
               <label className="agx-field">
                 <span>模型</span>
-                <div className="agx-select-wrap">
-                  <select value={form.model} onChange={(event) => patch({ model: event.target.value })}>
-                    {modelOptions.map((option) => (
-                      <option value={option.value} key={option.value || 'default'}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown size={13} />
-                </div>
+                <Select
+                  size="sm"
+                  className="vq-select--block"
+                  label="模型"
+                  value={form.model}
+                  options={modelOptions.map((option) => ({ value: option.value, label: option.label }))}
+                  onChange={(value) => patch({ model: value })}
+                />
                 <small>
                   {loading
                     ? '正在读取可用模型…'
