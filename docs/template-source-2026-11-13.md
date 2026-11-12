@@ -3,7 +3,7 @@
 - 版本：**0.9.33**
 - 发布包：`20261112-222013-2026-11-13-template-sour.tar.gz`
 - 前端入口：`index-DBLdMQWQ.js`（491,325 字节，含「来源」「筛到 1 条 · 来源：智能体 · 全库 26 条」「没有筛到模板」）
-- 提交：`59f2ffc`（代码）+ `6828b4a`（文档）+ 补号提交；CI run **43319348399 success**
+- 提交：`59f2ffc`（代码）+ `6828b4a`（文档）+ `dc061f9`（补号）；CI run **43319348399 success**
 - 生产：`https://visionqa.wavisionai.cn`，两服务 active，`/api/health` ok（templates 26）
 
 ## 一、为什么要做
