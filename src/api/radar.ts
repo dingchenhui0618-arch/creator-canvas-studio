@@ -1,4 +1,4 @@
-import type { MediaItem, ReplicaTemplate, ReplicateJob, SearchHistoryEntry, SearchResult, SharedTemplate, TakenOrigins, TemplateList } from '../domain/radar'
+import type { LibraryMark, MediaItem, ReplicaTemplate, ReplicateJob, SearchHistoryEntry, SearchResult, SharedTemplate, TakenOrigins, TemplateList } from '../domain/radar'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...init })
@@ -27,6 +27,13 @@ export function searchMedia(params: { platform: string; q: string; start?: strin
 
 // 发现页开场：你从发现里带走过哪些原片、哪条已经开成作品（只读，不检索、不扣积分）
 export const getTakenOrigins = (limit = 4) => request<TakenOrigins>('/api/taken-origins?limit=' + limit)
+
+// 这一屏检索结果里，哪几条已经在库里：只问库里有没有，不检索、不扣积分
+export const lookupLibrary = (items: { id: string; platform: string; url: string }[]) =>
+  request<{ items: LibraryMark[]; total: number; matched: number }>('/api/library/marks', {
+    method: 'POST',
+    body: JSON.stringify({ items }),
+  })
 
 export const listSearchHistory = () => request<{ items: SearchHistoryEntry[] }>('/api/search/history')
 export const toggleSearchFavorite = (id: string) =>

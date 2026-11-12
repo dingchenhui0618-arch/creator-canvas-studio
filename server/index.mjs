@@ -30,8 +30,9 @@ import {
   publicTemplateView,
   adoptUnowned as adoptUnownedTemplates,
 } from './templates.mjs'
-import { projectsByTemplate, templateWorksView, totalProjectCount, withProjectCount } from './template-usage.mjs'
+import { flattenTemplateWorks, projectsByTemplate, templateWorksView, totalProjectCount, withProjectCount } from './template-usage.mjs'
 import { takenOrigins, ORIGIN_LIMIT } from './taken-origins.mjs'
+import { originFootprint, libraryMarks } from './source-footprint.mjs'
 import { listProjects } from './projects.mjs'
 import { adoptUnowned as adoptUnownedAgents } from './agents.mjs'
 import { adoptUnownedFlows, createFlow, getFlow } from './flows.mjs'
@@ -530,6 +531,17 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, takenOrigins(templates, projects, { limit }))
     }
 
+    // 这几条检索结果里，哪几条已经在库里（v0.9.38）。发现页每张卡片的「库里已有」问的就是这一句。
+    // 只问「库里有没有」：不检索、不扣积分。认的是平台 id 而不是链接原文——链接会带分享参数。
+    if (pathname === '/api/library/marks') {
+      if (req.method !== 'POST') return sendJson(res, 405, { error: 'method not allowed' })
+      if (!user) return sendJson(res, 401, { error: '需要登录' })
+      const body = await readBody(req)
+      const asked = Array.isArray(body.items) ? body.items.slice(0, 200) : []
+      const [templates, byTemplate] = await Promise.all([listTemplates({}, user), projectsByTemplate(user)])
+      return sendJson(res, 200, { ok: true, ...libraryMarks(templates, flattenTemplateWorks(byTemplate), asked) })
+    }
+
     // 检索历史与收藏：只存条件不存结果，点一下就填回表单（不自动检索，避免替用户扣积分）
     if (pathname === '/api/search/history' && req.method === 'GET') {
       if (!user) return sendJson(res, 401, { error: '需要登录' })
@@ -953,10 +965,16 @@ const server = http.createServer(async (req, res) => {
       }
       const template = await getTemplate(id, user)
       if (!template) return sendJson(res, 404, { error: '模板不存在' })
-      // 详情多给一段：用这条模板的作品（最近改过的排前面），点一行就能进那条作品；最多列 8 条
-      const byTemplate = await projectsByTemplate(user)
+      // 详情多给两段：用这条模板的作品（最近改过的排前面），和这条原片在库里的全貌
+      // （同源改编版、跨模板开出的作品）。两块都现算，不落库。
+      const [templates, byTemplate] = await Promise.all([listTemplates({}, user), projectsByTemplate(user)])
       // 来源跟着详情一起给：抽屉里那句「这条从哪来」与卡片、筛选胶囊用同一套口径
-      return sendJson(res, 200, { ...template, source: templateSource(template), ...templateWorksView(byTemplate.get(id) || []) })
+      return sendJson(res, 200, {
+        ...template,
+        source: templateSource(template),
+        ...templateWorksView(byTemplate.get(id) || []),
+        footprint: originFootprint(templates, flattenTemplateWorks(byTemplate), template),
+      })
     }
 
     if (pathname === '/api/cover') {

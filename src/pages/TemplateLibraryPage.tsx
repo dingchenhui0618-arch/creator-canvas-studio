@@ -845,6 +845,55 @@ export function TemplateLibraryPage({
                         </button>
                       ) : null}
                     </div>
+                    {/* 这条原片在库里的全貌（v0.9.38）：同源的改编版、跨模板开出的作品。
+                        以前只看得见「这条模板」自己的作品，改编版一多就不知道它们其实是同一条原片。 */}
+                    {detail.footprint ? (
+                      <div className="drawer-origin">
+                        <p className="drawer-origin-count">
+                          <span>这条原片在库里</span>
+                          <b>{detail.footprint.templateCount} 条模板</b>
+                          <em>·</em>
+                          <b>{detail.footprint.workCount} 条作品</b>
+                          {detail.footprint.applied > 0 ? (
+                            <>
+                              <em>·</em>
+                              <span>套用过 {detail.footprint.applied} 次</span>
+                            </>
+                          ) : null}
+                        </p>
+                        {detail.footprint.siblings.length ? (
+                          <div className="drawer-origin-siblings">
+                            {detail.footprint.siblings.map((sibling) => (
+                              <button
+                                type="button"
+                                className="drawer-origin-sibling"
+                                key={sibling.id}
+                                title={'打开这条同源模板：' + sibling.title}
+                                onClick={() => onOpenTemplate?.(sibling.id)}
+                                disabled={!onOpenTemplate}
+                              >
+                                <span>{sibling.title}</span>
+                                <em>
+                                  {SOURCE_TAG[sibling.source] || '模板'}
+                                  {sibling.shared ? ' · 官方' : ''}
+                                </em>
+                              </button>
+                            ))}
+                            {detail.footprint.siblingTotal > detail.footprint.siblings.length ? (
+                              <span className="drawer-origin-more">
+                                还有 {detail.footprint.siblingTotal - detail.footprint.siblings.length} 条
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <p className="drawer-origin-note">
+                            {detail.footprint.shared
+                              ? '官方示例：改编或套用都会另存成你自己的那条，这条不动。'
+                              : '这条原片在库里只有这一条模板。'}
+                          </p>
+                        )}
+                      </div>
+                    ) : null}
                   </section>
                   </>
                   )}

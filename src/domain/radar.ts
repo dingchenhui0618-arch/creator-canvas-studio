@@ -195,6 +195,45 @@ export type ReplicaTemplate = {
   projectCount?: number
   /** 详情接口才有：用这条模板的作品，最近改过的排前面 */
   projects?: TemplateProjectRef[]
+  /** 详情接口才有：这条原片在库里的全貌（同源改编版 + 跨模板开出的作品）；没有原片的模板为 null。
+   *  字段名不能叫 origin：模板自己的 origin 是「这条从哪来」（ai / manual / canvas …）。 */
+  footprint?: TemplateOrigin | null
+}
+
+/** 模板详情里「这条原片在库里」：同源模板、跨模板开出的作品、套用过几次 */
+export type TemplateOrigin = {
+  /** 认原片的键：平台 + 平台 id（没有平台 id 时是规范化链接），与发现页同一套规则 */
+  key: string
+  platform: string
+  platformLabel: string
+  sourceId: string
+  templateId: string
+  /** 这条原片在库里存成了几条模板（含当前这条） */
+  templateCount: number
+  /** 除当前这条外的同源模板，最近存进来的排前面 */
+  siblings: { id: string; title: string; source: string; kind: string; shared: boolean; reuseCount: number; createdAt: string }[]
+  siblingTotal: number
+  /** 这条原片开出了几条作品：一条作品多版只算一条 */
+  workCount: number
+  works: { id: string; title: string; version: number; status: 'active' | 'done'; delivered: boolean; updatedAt: string }[]
+  /** 组内各条模板的 reuseCount 之和 */
+  applied: number
+  /** 整组都是官方示例：不是你自己带回来的 */
+  shared: boolean
+  /** 模板与作品里最近一次变动 */
+  lastAt: string
+}
+
+/** 发现页检索卡片：这条内容已经在库里（给到已有的那条模板，别重复收一遍） */
+export type LibraryMark = {
+  id: string
+  templateId: string
+  title: string
+  source: string
+  shared: boolean
+  /** 这条原片开出了几条作品 */
+  workCount: number
+  project: { id: string; title: string; version: number } | null
 }
 
 /** 模板详情里「用这条模板的作品」那一行：够认出是哪条、走到哪一步 */

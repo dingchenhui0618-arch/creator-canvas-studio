@@ -17,8 +17,8 @@ import {
   Sparkles,
   Star,
 } from 'lucide-react'
-import { clearSearchHistory, coverSrc, formatCount, formatDuration, getHealth, getTakenOrigins, listSearchHistory, saveTemplate, searchMedia, toggleSearchFavorite } from '../api/radar'
-import type { MediaItem, SearchHistoryEntry, TakenOrigins } from '../domain/radar'
+import { clearSearchHistory, coverSrc, formatCount, formatDuration, getHealth, getTakenOrigins, listSearchHistory, lookupLibrary, saveTemplate, searchMedia, toggleSearchFavorite } from '../api/radar'
+import type { LibraryMark, MediaItem, SearchHistoryEntry, TakenOrigins } from '../domain/radar'
 import { ago, stampTime } from '../domain/share'
 import { ReplicateModal } from '../components/ReplicateModal'
 import { Select } from '../components/Select'
@@ -139,7 +139,8 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
   const [hasKey, setHasKey] = useState(false)
   const [visionReady, setVisionReady] = useState(false)
   const [modalItem, setModalItem] = useState<MediaItem | null>(null)
-  const [savedIds, setSavedIds] = useState<string[]>([])
+  // 这一屏里哪几条已经在库里：按平台 id 认（链接带分享参数也认得出来），只读现查，不检索、不扣积分
+  const [marks, setMarks] = useState<Record<string, LibraryMark>>({})
   const [savingId, setSavingId] = useState('')
   // 积分：检索前告诉用户这一下花多少，检索后显示扣了多少、还剩多少
   const [credits, setCredits] = useState<CreditsResponse | null>(null)
@@ -313,6 +314,25 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
     return copy
   }, [items, sort])
 
+  // 结果一换就问一次「这几条库里有没有」：只读、不扣积分，问的是平台 id 而不是链接原文
+  useEffect(() => {
+    if (!sorted.length) return
+    let live = true
+    lookupLibrary(sorted.slice(0, 24).map((item) => ({ id: item.id, platform: item.platform, url: item.url || '' })))
+      .then((result) => {
+        if (!live) return
+        const next: Record<string, LibraryMark> = {}
+        for (const mark of result.items) next[mark.id] = mark
+        setMarks(next)
+      })
+      .catch(() => {
+        if (live) setMarks({})
+      })
+    return () => {
+      live = false
+    }
+  }, [sorted])
+
   // 筛选改动后旧结果还在屏上：明确告诉用户要点「重新检索」，加载更多也停住，避免混进两套条件
   const currentStart = range ? dayOffset(Number(range)) : ''
   const stale = Boolean(searched && snapshot && (snapshot.platform !== platform || snapshot.q !== keyword.trim() || snapshot.start !== currentStart))
@@ -328,7 +348,19 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
       setSavingId(item.id)
       try {
         const result = await saveTemplate(item)
-        setSavedIds((current) => (current.includes(item.id) ? current : [...current, item.id]))
+        // 刚存下的这一条当场变成「库里已有」，按钮跟着换成「打开模板」：不必等下一次检索
+        setMarks((current) => ({
+          ...current,
+          [item.id]: {
+            id: item.id,
+            templateId: result.template.id,
+            title: result.template.title,
+            source: '',
+            shared: false,
+            workCount: 0,
+            project: null,
+          },
+        }))
         loadTaken()
         onToast(result.created ? '已加入模板库：只存了原链接与互动数据' : '这条已经在模板库里了')
       } catch (caught) {
@@ -586,7 +618,7 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
         <div className="radar-grid">
           {sorted.map((item) => {
             const rate = interactionRate(item)
-            const saved = savedIds.includes(item.id)
+            const mark = marks[item.id]
             return (
               <article className="radar-card" key={item.id}>
                 <div className="radar-cover">
@@ -599,6 +631,11 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
                   )}
                   <span className="radar-badge">{item.platformLabel}</span>
                   <span className="radar-duration"><Film size={11} />{formatDuration(item.durationSec)}</span>
+                  {mark ? (
+                    <span className="radar-owned" title={'已经在模板库里：' + mark.title}>
+                      <Check size={11} />库里已有{mark.workCount ? ' · ' + mark.workCount + ' 条作品' : ''}
+                    </span>
+                  ) : null}
                   <button
                     className="radar-hover"
                     disabled={mode === 'mock'}
@@ -628,15 +665,25 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
                   <button className="button button--ghost button--tiny" disabled={!item.url} onClick={() => item.url && window.open(item.url, '_blank', 'noopener')}>
                     <ExternalLink size={13} />原视频
                   </button>
-                  <button
-                    className="button button--ghost button--tiny"
-                    disabled={!item.url || savingId === item.id || saved}
-                    title={!item.url ? '示例数据没有原链接，无法加入模板库' : '只存原链接与互动数据，不下载视频'}
-                    onClick={() => void addToLibrary(item)}
-                  >
-                    {saved ? <Check size={13} /> : <BookmarkPlus size={13} />}
-                    {saved ? '已加入' : savingId === item.id ? '加入中' : '加入模板库'}
-                  </button>
+                  {mark ? (
+                    <button
+                      className="button button--ghost button--tiny"
+                      title={'已经在模板库里：打开「' + mark.title + '」'}
+                      onClick={() => onOpenTemplate?.(mark.templateId)}
+                      disabled={!onOpenTemplate}
+                    >
+                      <ArrowRight size={13} />打开模板
+                    </button>
+                  ) : (
+                    <button
+                      className="button button--ghost button--tiny"
+                      disabled={!item.url || savingId === item.id}
+                      title={!item.url ? '示例数据没有原链接，无法加入模板库' : '只存原链接与互动数据，不下载视频'}
+                      onClick={() => void addToLibrary(item)}
+                    >
+                      <BookmarkPlus size={13} />{savingId === item.id ? '加入中' : '加入模板库'}
+                    </button>
+                  )}
                   <button
                     className="button button--primary button--tiny"
                     disabled={mode === 'mock'}

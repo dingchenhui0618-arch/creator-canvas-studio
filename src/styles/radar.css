@@ -10,6 +10,28 @@
 .radar-cover-empty { position:relative; color:var(--faint); }
 .radar-cover-empty .vq-mono { font-size:12px; letter-spacing:.14em; }
 .radar-cover .radar-badge, .radar-cover .radar-duration, .radar-cover .radar-hover { z-index:1; }
+/* 检索卡片：这条已经在库里（v0.9.38）。放在封面左下角，与右下角的时长同一层，
+   回答「我是不是已经收过它」，而不是把「加入模板库」按成一次重复落库。 */
+.radar-owned {
+  position:absolute;
+  left:9px;
+  bottom:9px;
+  z-index:1;
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  padding:4px 8px;
+  color:var(--ink);
+  background:rgba(255,254,250,.94);
+  border:1px solid var(--line);
+  border-radius:var(--radius-sm);
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:.02em;
+  box-shadow:0 2px 6px rgba(37,35,31,.06);
+}
+.radar-owned svg { color:var(--pass); }
+@media (max-width:640px) { .radar-owned { left:8px; bottom:8px; } }
 /* ---------- 2026-11-10：检索改手动触发，卡片信息密度与字号对齐 tokens ---------- */
 .radar-card { background:var(--surface-raised); border-color:var(--line); }
 .radar-title { font-size:14px; font-weight:600; letter-spacing:0; line-height:1.5; }
@@ -72,6 +94,31 @@
 .drawer-source { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; color:var(--muted); font-size:12.5px; line-height:1.7; }
 .drawer-source a { display:inline-flex; align-items:center; gap:4px; color:var(--ink); }
 .drawer-source .button { height:28px; }
+/* 这条原片在库里（v0.9.38）：同源的改编版与跨模板开出的作品。
+   改编版一多，光看「这条模板名下的作品」会以为它们是两条不相干的来源。 */
+.drawer-origin { margin-top:12px; padding:12px; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface); }
+.drawer-origin-count { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 8px; margin:0; color:var(--muted); font-size:12.5px; }
+.drawer-origin-count b { color:var(--ink); font-family:var(--font-mono); font-size:13px; font-weight:500; }
+.drawer-origin-count em { font-style:normal; color:var(--line-strong); }
+.drawer-origin-siblings { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:8px; }
+.drawer-origin-sibling {
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  max-width:100%;
+  padding:4px 12px;
+  color:var(--ink);
+  background:var(--surface-raised);
+  border:1px solid var(--line);
+  border-radius:var(--radius-pill);
+  font-size:12px;
+  transition:border-color var(--dur-2) var(--ease-out);
+}
+.drawer-origin-sibling span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:220px; }
+.drawer-origin-sibling em { font-style:normal; color:var(--muted); font-size:11px; }
+.drawer-origin-sibling:hover { border-color:var(--line-strong); }
+.drawer-origin-more { color:var(--muted); font-size:11.5px; }
+.drawer-origin-note { margin:8px 0 0; color:var(--muted); font-size:12px; line-height:1.7; }
 @media (max-width:640px) { .template-facet { align-items:flex-start; flex-direction:column; gap:8px; } .template-facet__label { width:auto; } }
 .template-card { background:var(--surface-raised); border-color:var(--line); }
 .template-copy > strong { font-size:14px; font-weight:600; line-height:1.5; }

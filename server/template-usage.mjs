@@ -35,6 +35,19 @@ export async function projectsByTemplate(user = null) {
   return map
 }
 
+/**
+ * 摊平成「一条作品一行」，并把 templateId 带回来。
+ * byTemplate 里的行是给详情抽屉看的（没有 templateId），而「同一条原片开出了几条作品」
+ * 要靠 templateId 把作品按模板归到原片上——少了这一列，那块永远算成 0 条。
+ */
+export function flattenTemplateWorks(byTemplate) {
+  const rows = []
+  for (const [templateId, list] of byTemplate) {
+    for (const project of list) rows.push({ ...project, templateId })
+  }
+  return rows
+}
+
 /** 模板列表卡片：每条挂一个「几条作品在用」；没被用过的写 0，卡片按 0 不显示。 */
 export function withProjectCount(items, byTemplate) {
   return items.map((item) => ({ ...item, projectCount: (byTemplate.get(item.id) || []).length }))
