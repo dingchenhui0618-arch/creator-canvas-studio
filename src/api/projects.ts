@@ -132,3 +132,11 @@ export function deliverablePrintUrl(id: string): string {
 export function setSheetUrl(id: string): string {
   return '/print/projects/' + encodeURIComponent(id) + '/deliverable?only=script&tz=' + encodeURIComponent(tzOffset())
 }
+
+/**
+ * 评审对照纸地址：评审把每条问题框在当时的画面上，编号对到右边的问题列表。
+ * 与交付包里的「评审对照页.html」是同一份渲染，只是画面改成走登录态。
+ */
+export function reviewSheetUrl(id: string): string {
+  return '/print/projects/' + encodeURIComponent(id) + '/review?tz=' + encodeURIComponent(tzOffset())
+}

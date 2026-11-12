@@ -22,6 +22,7 @@ import {
 import { projectDeliverable } from '../project-deliverable.mjs'
 import { deliverablePrintHtml, printNoticeHtml } from '../project-deliverable-html.mjs'
 import { packageNote, parseShotRange, setSheetHtml, setSheetModel } from '../project-set-sheet.mjs'
+import { REVIEW_SHEET_LIMITS, reviewImageRef, reviewSheetHtml } from '../project-review-sheet.mjs'
 import { buildZip } from '../zip-store.mjs'
 import {
   listProjects,
@@ -48,6 +49,8 @@ const DELIVERABLE = /^\/api\/projects\/([\w-]+)\/deliverable$/
 const DELIVERABLE_ZIP = /^\/api\/projects\/([\w-]+)\/deliverable\.zip$/
 // 打印版不进 /api：它是在新标签里打开的 HTML，地址栏里那串会印在纸的页脚上
 const DELIVERABLE_PRINT = /^\/print\/projects\/([\w-]+)\/deliverable$/
+// 评审对照纸：评审把问题框在哪一块画面上，同一张 A4 里印出来（交付包里也有同一份）
+const REVIEW_PRINT = /^\/print\/projects\/([\w-]+)\/review$/
 
 // 详情 / 列表里的 project 不带原始脚本：脚本只从顶层 script 读（带来源、重算后的时长），
 // 否则同一份脚本在一页里有两个口径，界面迟早读到旧的那个。
@@ -223,12 +226,33 @@ async function storyboardFrames(template) {
     try {
       const data = await fsp.readFile(path.join(config.framesDir, template.id, matched[2]))
       seen.add(name)
-      out.push({ name, data })
+      // templateId/file 只为「评审评的是不是这一张」服务：是同一张就复用这个文件，不再复制一份
+      out.push({ name, data, templateId: matched[1], file: matched[2] })
     } catch {
       // 抽帧目录被清过（模板回收站 / 过期清理）：这一镜没有图，别拿别的帧顶
     }
   }
   return out
+}
+
+/**
+ * 评审对照纸要印的那几次评审：每一版取最近一次，最多 3 版（与纸上同一套口径）。
+ * 列表给的是摘要，正文（问题与框）按 id 再读一次——纸上要框，就需要那几条坐标。
+ */
+async function reviewSheetRecords(detail, user) {
+  const latest = new Map()
+  for (const item of Array.isArray(detail?.reviews) ? detail.reviews : []) {
+    const version = Math.max(1, Math.round(Number(item.version) || 0))
+    const seen = latest.get(version)
+    if (!seen || String(item.createdAt || '') > String(seen.createdAt || '')) latest.set(version, item)
+  }
+  const ordered = [...latest.values()].sort((a, b) => Number(b.version) - Number(a.version))
+  const records = []
+  for (const item of ordered.slice(0, REVIEW_SHEET_LIMITS.blocks)) {
+    const full = await getReview(item.id, user)
+    if (full) records.push(full)
+  }
+  return records
 }
 
 export function createProjectsRouter() {
@@ -289,6 +313,46 @@ export function createProjectsRouter() {
         const { markdown } = await deliverablePayload(printable, user, printTz)
         res.writeHead(200, PRINT_HEAD)
         res.end(deliverablePrintHtml({ markdown, projectId: printable.id, title: printable.title }))
+        return true
+      }
+
+      // 评审对照纸：评审把每条问题框在当时的画面上，框上的编号对到右边的问题列表。
+      // 交付包里的「评审对照页.html」是同一份渲染，只是画面改成走包里的帧图。
+      const reviewPrintPath = pathname.match(REVIEW_PRINT)
+      if (reviewPrintPath && req.method === 'GET') {
+        if (!user && config.auth.requireAuth) {
+          sendPrintNotice(res, 401, {
+            title: '登录已过期',
+            message: '这个打印页要用你的登录态取数据：回到作品页再点一次「评审对照」，或者先登录。',
+            href: '/#/login',
+            label: '去登录',
+          })
+          return true
+        }
+        const printable = await getProject(reviewPrintPath[1], user)
+        if (!printable) {
+          sendPrintNotice(res, 404, {
+            title: '作品不在了',
+            message: '这条作品可能已经被删除。回作品列表看看还在不在。',
+            href: '/#/projects',
+            label: '回作品列表',
+          })
+          return true
+        }
+        const rawReviewTz = Number(url.searchParams.get('tz'))
+        const reviewTz = Number.isFinite(rawReviewTz) ? Math.max(-720, Math.min(840, Math.round(rawReviewTz))) : 480
+        const detail = await projectDetailView(printable, user)
+        const records = await reviewSheetRecords(detail, user)
+        res.writeHead(200, PRINT_HEAD)
+        res.end(
+          reviewSheetHtml({
+            project: printable,
+            records,
+            now: new Date(),
+            tzOffsetMinutes: reviewTz,
+            projectId: printable.id,
+          }),
+        )
         return true
       }
 
@@ -554,18 +618,61 @@ export function createProjectsRouter() {
           generatedAt: now.toISOString(),
           tzOffsetMinutes: zipTz,
         })
+        // 评审对照页：评审评过的那张画面如果就是分镜里的帧，直接复用包里那一份；
+        // 不是（另一条模板的帧）才复制进来。读不到就照实写「不在这份产物里」，不拿别的图顶。
+        const reviewRecords = await reviewSheetRecords(detail, user)
+        const packagedFrames = new Map(frames.map((frame) => [frame.templateId + '/' + frame.file, frame.name]))
+        const reviewImages = new Map()
+        const reviewExtras = []
+        for (const record of reviewRecords) {
+          const image = reviewImageRef(record.source)
+          if (!image) continue
+          const packagedName = packagedFrames.get(image.templateId + '/' + image.file)
+          if (packagedName) {
+            reviewImages.set(record.id, 'frames/' + packagedName)
+            continue
+          }
+          try {
+            const data = await fsp.readFile(path.join(config.framesDir, image.templateId, image.file))
+            const name = '评审/对照-' + String(reviewExtras.length + 1).padStart(2, '0') + '.jpg'
+            reviewExtras.push({ name, data })
+            reviewImages.set(record.id, name)
+          } catch {
+            // 帧图被清理过（模板回收站 / 过期清理）：这张纸只印问题与编号
+          }
+        }
+        const reviewSheet = reviewRecords.length
+          ? reviewSheetHtml({
+              project,
+              records: reviewRecords,
+              now,
+              tzOffsetMinutes: zipTz,
+              offline: true,
+              imageSrc: (block) => reviewImages.get(block.id) || '',
+              imageNote: (block) => {
+                const source = reviewImages.get(block.id)
+                if (!source) return ''
+                return source.startsWith('frames/')
+                  ? '画面：交付包里是 ' + source
+                  : '画面：这张不在分镜帧里，跟着这张纸放在 ' + source
+              },
+            })
+          : ''
         const note = packageNote({
           model: setSheetModel({ project, script: detail.script, template: detail.template }),
           generatedAt: now.toISOString(),
           tzOffsetMinutes: zipTz,
           frameCount: frames.length,
+          reviewSheetCount: reviewRecords.length,
         })
         const archive = buildZip(
           [
             { name: fileName, data: Buffer.from(markdown, 'utf8') },
             { name: '现场页.html', data: Buffer.from(sheet, 'utf8') },
+            ...(reviewSheet ? [{ name: '评审对照页.html', data: Buffer.from(reviewSheet, 'utf8') }] : []),
             { name: '说明.txt', data: Buffer.from(note, 'utf8') },
             ...frames.map((frame) => ({ name: 'frames/' + frame.name, data: frame.data })),
+            ...reviewExtras,
           ],
           { mtime: now },
         )

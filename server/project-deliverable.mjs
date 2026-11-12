@@ -9,6 +9,7 @@
 //  3. 口径跟页面一致：脚本用作品自己的版本优先（scriptView 已算好），
 //     版本划分之前留下的评审与运行折进 v1（与 src/domain/project.ts 同一套规则）。
 import { describeTiming } from './speech.mjs'
+import { DIMENSION_LABEL, boxText, normalizeBox } from './project-review-sheet.mjs'
 
 export const DELIVERABLE_LIMITS = { runs: 8, observations: 8, fixes: 6, versions: 6 }
 
@@ -222,11 +223,27 @@ function reviewSection(detail, review, tz) {
   const observations = Array.isArray(result.observations) ? result.observations.slice(0, DELIVERABLE_LIMITS.observations) : []
   if (observations.length) {
     out.push('', '### 问题（' + observations.length + '）', '')
+    let boxed = 0
     observations.forEach((item, index) => {
       const severity = SEVERITY_LABEL[item.severity] || '提示'
-      const confidence = typeof item.confidence === 'number' ? '（依据强度 ' + Math.round(item.confidence * 100) + '%）' : ''
-      out.push((index + 1) + '. **' + severity + ' · ' + (item.dimension || '整体') + '**：' + (item.statement || '') + confidence)
+      // 依据强度与框位置并进同一个括号：连着两个括号读起来像两句话粘在一起
+      const notes = []
+      if (typeof item.confidence === 'number') notes.push('依据强度 ' + Math.round(item.confidence * 100) + '%')
+      // 框的位置写成百分比：只下这份 .md 的人也能对着原图找到那条判断说的是哪一块
+      const box = boxText(normalizeBox(item.evidence))
+      if (box) { boxed += 1; notes.push(box) }
+      out.push(
+        (index + 1) + '. **' + severity + ' · ' + (DIMENSION_LABEL[item.dimension] || item.dimension || '整体') + '**：' + (item.statement || '') +
+          (notes.length ? '（' + notes.join(' · ') + '）' : ''),
+      )
     })
+    // 编号与交付包里的「评审对照页.html」是同一套：纸上框写几号，这里就是第几条
+    if (boxed) {
+      out.push(
+        '',
+        '证据框：' + boxed + ' 条问题在画面上框了位置（编号同上）。画面与框的对照图见交付包里的「评审对照页.html」；只拿到这份稿时，按括号里的百分比对着原图找。',
+      )
+    }
   }
 
   const fixes = Array.isArray(result.fixes) ? result.fixes.slice(0, DELIVERABLE_LIMITS.fixes) : []

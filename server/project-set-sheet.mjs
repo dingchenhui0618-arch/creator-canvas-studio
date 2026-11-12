@@ -408,7 +408,7 @@ function stampText(value, tzOffsetMinutes) {
 }
 
 /** 交付包里那张「这张纸是什么」的说明：不解释太多，只写文件对应关系与口径。 */
-export function packageNote({ model, generatedAt = '', tzOffsetMinutes = 480, frameCount = 0 } = {}) {
+export function packageNote({ model, generatedAt = '', tzOffsetMinutes = 480, frameCount = 0, reviewSheetCount = 0 } = {}) {
   const lines = [
     'VisionQA 交付包',
     '',
@@ -420,6 +420,10 @@ export function packageNote({ model, generatedAt = '', tzOffsetMinutes = 480, fr
     frameCount
       ? 'frames/        原片帧图 ' + frameCount + ' 张，按镜头编号命名（shot-01.jpg …），和现场页里的画面一一对应'
       : 'frames/        这条作品没有帧图可打：模板是待解析的，或者原片抽帧没有落盘',
+    // 没有评审时不给这一行：包里没有这张纸，写上去读者会去找一个不存在的文件
+    ...(reviewSheetCount
+      ? ['评审对照页.html  评审说过的问题框在当时的画面上：左边框上的编号，就是右边问题列表的编号（' + reviewSheetCount + ' 版）']
+      : []),
     '',
     '口径：口播与时长以脚本为准（按台词估算），镜头时间来自模板；改过脚本不会自动重排镜头时间。',
     '现场页在离线状态下也用同一套数字：它和交付稿是同一次导出的同一份数据。',

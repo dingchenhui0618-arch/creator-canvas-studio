@@ -12,6 +12,7 @@ import {
   getProject,
   openProjectCanvas,
   resetProjectScript,
+  reviewSheetUrl,
   saveProjectScript,
   setSheetUrl,
   startProjectVersion,
@@ -89,7 +90,7 @@ export default function ProjectPage({
   const [shareOpen, setShareOpen] = useState(false)
   const [shareBusy, setShareBusy] = useState<'' | 'enable' | 'disable' | 'copy'>('')
   const [shareCopied, setShareCopied] = useState(false)
-  // 交付菜单：四种产物（交付稿 / 打印稿 / 现场页 / 交付包）收在一个入口里，
+  // 交付菜单：五种产物（交付稿 / 打印稿 / 现场页 / 评审对照 / 交付包）收在一个入口里，
   // 页头就不会排到七个按钮；点空白处或 Esc 收起（和账号菜单同一套习惯）
   const [deliverOpen, setDeliverOpen] = useState(false)
   const deliverRef = useRef<HTMLDivElement | null>(null)
@@ -280,6 +281,11 @@ export default function ProjectPage({
   const openSetSheet = () => {
     if (!data) return
     openPaper(setSheetUrl(data.project.id), '新标签被浏览器拦下了：允许本站弹窗，或者下载「交付包」里的现场页')
+  }
+
+  const openReviewSheet = () => {
+    if (!data) return
+    openPaper(reviewSheetUrl(data.project.id), '新标签被浏览器拦下了：允许本站弹窗，或者下载「交付包」里的评审对照页')
   }
 
   const remove = async () => {
@@ -539,8 +545,8 @@ export default function ProjectPage({
             <button type="button" className="vq-button vq-button--ghost" onClick={() => void toggleDone()} disabled={busy === 'done'}>
               {project.status === 'done' ? '重新打开' : '标记交付'}
             </button>
-            {/* 交付：四种产物收在一个入口里。页头再放四个按钮就排成一条工具条了，
-                而「交付这一版」本来就是一件事的四种形态。 */}
+            {/* 交付：五种产物收在一个入口里。页头再放五个按钮就排成一条工具条了，
+                而「交付这一版」本来就是一件事的几种形态。 */}
             <div className="vq-actions-menu" ref={deliverRef}>
               <button
                 type="button"
@@ -549,7 +555,7 @@ export default function ProjectPage({
                 aria-expanded={deliverOpen}
                 onClick={() => setDeliverOpen((value) => !value)}
                 disabled={busy === 'export' || busy === 'zip'}
-                title="交付这一版：Markdown 全文、A4 打印稿、现场页、交付包"
+                title="交付这一版：Markdown 全文、A4 打印稿、现场页、评审对照、交付包"
               >
                 <Download size={14} />
                 {busy === 'export' ? '正在整理…' : busy === 'zip' ? '正在打包…' : '交付'}
@@ -607,6 +613,20 @@ export default function ProjectPage({
                       <small>只留脚本与分镜，带原片帧图；打开后可只印其中几镜</small>
                     </span>
                   </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setDeliverOpen(false)
+                      openReviewSheet()
+                    }}
+                  >
+                    <ScanEye size={15} />
+                    <span className="vq-menu-copy">
+                      <strong>评审对照</strong>
+                      <small>评审说过的问题框在画面上，编号对得上；打印或存 PDF</small>
+                    </span>
+                  </button>
                   <div className="vq-menu-sep" />
                   <button
                     type="button"
@@ -619,7 +639,7 @@ export default function ProjectPage({
                     <Package size={15} />
                     <span className="vq-menu-copy">
                       <strong>交付包</strong>
-                      <small>.zip：交付稿 + 现场页 + 帧图，解压就能看</small>
+                      <small>.zip：交付稿 + 现场页 + 评审对照 + 帧图，解压就能看</small>
                     </span>
                   </button>
                 </div>
