@@ -38,6 +38,10 @@
 .review-canvas-frame { display:flex; justify-content:center; padding:12px; border:1px solid var(--line); background:#0f0f0f; }
 .review-canvas-shot { position:relative; display:inline-block; max-width:100%; line-height:0; }
 .review-canvas-frame img { display:block; max-width:100%; max-height:400px; width:auto; height:auto; }
+/* 证据原图被清理过：给一块说明，不留破图；结论与锚点照旧在下方 */
+.review-canvas-missing { display:grid; justify-items:center; gap:8px; width:min(520px,100%); padding:32px 24px; border:1px dashed var(--line); border-radius:var(--radius-sm); background:var(--surface-raised); color:var(--muted); line-height:1.6; text-align:center; }
+.review-canvas-missing strong { color:var(--ink); font-size:13px; font-weight:500; }
+.review-canvas-missing span { max-width:36em; color:var(--faint); font-size:12px; }
 .review-anchor { position:absolute; border:1px solid rgba(255,255,255,.5); background:rgba(255,255,255,.06); transition:background .15s ease, border-color .15s ease; }
 .review-anchor.is-minor, .review-anchor.is-info { border-color:rgba(255,255,255,.35); }
 .review-anchor.is-major { border-color:rgba(212,164,71,.9); background:rgba(212,164,71,.1); }

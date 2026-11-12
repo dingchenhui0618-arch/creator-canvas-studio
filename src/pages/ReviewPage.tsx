@@ -78,8 +78,22 @@ type Picked = { media?: string; imageUrl?: string; label: string; preview: strin
 
 export default function ReviewPage({
   projectId,
+  reviewId,
   onOpenProject,
-}: { projectId?: string; onOpenProject?: (projectId: string) => void } = {}) {
+  onOpenReview,
+  onReviewProject,
+  onClearReview,
+}: {
+  projectId?: string
+  reviewId?: string
+  onOpenProject?: (projectId: string) => void
+  /** 打开某一条历史评审：地址换成 #/review/<评审 id>，刷新与后退都能回到那条 */
+  onOpenReview?: (reviewId: string) => void
+  /** 接着评这条作品当前这一版：新评审挂在作品下，有归属 */
+  onReviewProject?: (projectId: string) => void
+  /** 回到不带记录的自由评审 */
+  onClearReview?: () => void
+} = {}) {
   const { internal } = useUiMode()
   // 从作品页进来时，这次评审的结论会挂在那条作品下；标题只为把话说清楚（读不到就不显示名字）
   const [projectTitle, setProjectTitle] = useState('')
@@ -99,6 +113,11 @@ export default function ReviewPage({
   const [historyError, setHistoryError] = useState('')
   // 打开的是历次评审里的哪一条：历史只读，所以要说清它记在哪条作品的第几版
   const [openedScope, setOpenedScope] = useState<{ id: string; title: string; version: number } | null>(null)
+  // 现在打开的是不是一条已落库的评审：是就只读，不给「再来一次」把结论盖成一条没归属的新记录
+  const [openedId, setOpenedId] = useState<string | null>(null)
+  const [openError, setOpenError] = useState('')
+  // 证据原图被删过（模板帧清理 / 远程图片失效）：说清楚，不留一张破图
+  const [previewBroken, setPreviewBroken] = useState(false)
   const [manualUrl, setManualUrl] = useState('')
   const timerRef = useRef<number | null>(null)
   const startedRef = useRef(0)
@@ -122,6 +141,9 @@ export default function ReviewPage({
     setError('')
     setActive(null)
     setOpenedScope(null)
+    setOpenedId(null)
+    setOpenError('')
+    setPreviewBroken(false)
   }, [])
 
   useEffect(() => {
@@ -215,8 +237,14 @@ export default function ReviewPage({
     }
   }
 
-  const openHistory = useCallback(async (id: string) => {
+  /**
+   * 打开一条已经落库的评审：画面、结论、锚点都从记录里读。
+   * 归属用记录自己的 project（服务端现算），不依赖「最近评审」那 6 条——
+   * 从作品页点开的往往是更早的评审，根本不在最近列表里。
+   */
+  const loadRecord = useCallback(async (id: string) => {
     try {
+      // 先拿到记录再动状态：效果里只发起请求，不在同一帧里连锁改状态
       const record = await getReview(id)
       const media = record.source.media || ''
       const imageUrl = record.source.imageUrl || ''
@@ -228,16 +256,46 @@ export default function ReviewPage({
       })
       setResult(record.result)
       setActive(record.result.observations?.[0]?.id ?? null)
-      setError('')
-      // 归属从列表那一条取（列表里已经算好作品标题），不为一条历史记录再打一次接口
-      const linked = reviews.find((item) => item.id === id)
-      setOpenedScope(linked?.project ? { id: linked.project.id, title: linked.project.title, version: linked.version || 0 } : null)
+      setOpenedId(record.id)
+      setOpenedScope(record.project ? { id: record.project.id, title: record.project.title, version: record.version || 0 } : null)
+      setOpenError('')
+      setPreviewBroken(false)
     } catch (caught) {
-      setHistoryError(caught instanceof Error ? caught.message : '读取评审记录失败')
+      // 记录读不到（删了、或不是这个账号的）就退回可选画面的状态，并把原因说出来
+      setPicked(null)
+      setResult(null)
+      setOpenedId(null)
+      setOpenedScope(null)
+      setOpenError(caught instanceof Error ? caught.message : '读取评审记录失败')
     }
-  }, [reviews])
+  }, [])
+
+  // 地址里带评审 id：进入就打开那一条，刷新、前进后退、直接分享链接都落到同一份记录。
+  // 与作品页同一套写法：先让这一帧画完再发请求，免得同一帧里连锁改状态。
+  useEffect(() => {
+    if (!reviewId) return
+    const timer = window.setTimeout(() => {
+      void loadRecord(reviewId)
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [reviewId, loadRecord])
+
+  /** 收起这条历史记录，回到可以另选画面/另开评审的状态；地址里的评审 id 一并去掉 */
+  const clearRecord = useCallback(() => {
+    setPicked(null)
+    setResult(null)
+    setActive(null)
+    setOpenedScope(null)
+    setOpenedId(null)
+    setOpenError('')
+    setPreviewBroken(false)
+    onClearReview?.()
+  }, [onClearReview])
 
   const anchors = useMemo(() => (result?.observations || []).filter((item) => item.evidence && (item.evidence.w > 0 || item.evidence.h > 0)), [result])
+
+  // 正在打开地址里那条评审：打开的还是另一条（或还没打开）就算加载中，不用另存一个状态
+  const recordLoading = Boolean(reviewId) && openedId !== reviewId && !openError
 
   return (
     <div className="review-page">
@@ -297,7 +355,10 @@ export default function ReviewPage({
                 key={item.id}
                 type="button"
                 className={`review-thumb ${picked?.label === item.title ? 'is-active' : ''}`}
-                onClick={() => pick({ imageUrl: item.thumb ? undefined : coverSrc(item.cover), media: item.thumb ? item.thumb.replace(/^\/media\//, '') : undefined, label: item.title, preview: item.thumb || coverSrc(item.cover) })}
+                onClick={() => {
+                  if (reviewId) onClearReview?.()
+                  pick({ imageUrl: item.thumb ? undefined : coverSrc(item.cover), media: item.thumb ? item.thumb.replace(/^\/media\//, '') : undefined, label: item.title, preview: item.thumb || coverSrc(item.cover) })
+                }}
                 title={item.title}
               >
                 {item.thumb || item.cover ? <img src={item.thumb || coverSrc(item.cover)} alt="" loading="lazy" /> : <span className="review-thumb-fallback">{item.contentType}</span>}
@@ -322,6 +383,7 @@ export default function ReviewPage({
                 onClick={() => {
                   const value = manualUrl.trim()
                   if (!value) return
+                  if (reviewId) onClearReview?.()
                   pick({ imageUrl: value, label: value.split('/').pop() || '远程图片', preview: value })
                 }}
               >
@@ -340,7 +402,11 @@ export default function ReviewPage({
               <ul>
                 {reviews.map((item) => (
                   <li key={item.id}>
-                    <button type="button" className="review-history-item" onClick={() => void openHistory(item.id)}>
+                    <button
+                      type="button"
+                      className="review-history-item"
+                      onClick={() => (onOpenReview ? onOpenReview(item.id) : void loadRecord(item.id))}
+                    >
                       <span className={item.verdict ? 'vq-chip is-verdict is-' + item.verdict : 'vq-chip'}>
                         {VERDICT_LABEL[item.verdict] || '未记录'}
                       </span>
@@ -365,7 +431,7 @@ export default function ReviewPage({
               <Clapperboard size={14} strokeWidth={1.75} />
               <div>
                 <strong>这条评审记入：{openedScope.title} · {reviewVersionLabel(openedScope.version)}</strong>
-                <span>历史记录，结论不会再变；要接着评这一版，从作品页进。</span>
+                <span>历史记录，结论不会再变；想接着评这一版，用「评这一版」进那条作品的评审页。</span>
               </div>
               <button type="button" className="button button--ghost button--tiny" onClick={() => onOpenProject?.(openedScope.id)}>
                 回作品 <ArrowRight size={12} />
@@ -376,28 +442,62 @@ export default function ReviewPage({
             <div className="review-canvas">
               <div className="review-canvas-frame vq-frame">
                 <div className="review-canvas-shot">
-                  <img src={picked.preview} alt={picked.label} />
-                  {anchors.map((item) => (
-                  <span
-                      key={item.id}
-                      className={`review-anchor is-${item.severity} ${active === item.id ? 'is-active' : ''}`}
-                      style={{
-                        left: (item.evidence as { x: number }).x * 100 + '%',
-                        top: (item.evidence as { y: number }).y * 100 + '%',
-                        width: (item.evidence as { w: number }).w * 100 + '%',
-                        height: (item.evidence as { h: number }).h * 100 + '%',
-                      }}
-                    />
-                  ))}
+                  {picked.preview && !previewBroken ? (
+                    <>
+                      <img src={picked.preview} alt={picked.label} onError={() => setPreviewBroken(true)} />
+                      {anchors.map((item) => (
+                        <span
+                          key={item.id}
+                          className={`review-anchor is-${item.severity} ${active === item.id ? 'is-active' : ''}`}
+                          style={{
+                            left: (item.evidence as { x: number }).x * 100 + '%',
+                            top: (item.evidence as { y: number }).y * 100 + '%',
+                            width: (item.evidence as { w: number }).w * 100 + '%',
+                            height: (item.evidence as { h: number }).h * 100 + '%',
+                          }}
+                        />
+                      ))}
+                    </>
+                  ) : (
+                    // 原图没了也要能看懂：结论、锚点、修正建议都还在，只是画面不在了
+                    <div className="review-canvas-missing" role="status">
+                      <TriangleAlert size={16} />
+                      <strong>评审时的画面已经不在了</strong>
+                      <span>模板帧被清理、或远程图片失效；这条结论与下面每条问题的锚点仍然有效。</span>
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="review-canvas-meta">
                 <span className="vq-mono">{picked.label}</span>
                 <div className="review-canvas-actions">
-                  <button type="button" className="button button--primary button--tiny" disabled={running || !status?.model || modelBlocked} onClick={run}>
-                    {running ? <Loader2 size={13} className="spin" /> : <Play size={13} />}
-                    {running ? '评审中 ' + elapsed + 's' : result ? '重新评审' : '开始评审'}
-                  </button>
+                  {openedId ? (
+                    // 历史评审只读：在这里再评一次会是一条没归属的新记录，所以要评就回那条作品
+                    openedScope ? (
+                      <button type="button" className="button button--ghost button--tiny" onClick={() => onReviewProject?.(openedScope.id)}>
+                        评这一版 <ArrowRight size={12} />
+                      </button>
+                    ) : (
+                      <button type="button" className="button button--ghost button--tiny" onClick={clearRecord}>
+                        回到评审页 <ArrowRight size={12} />
+                      </button>
+                    )
+                  ) : (
+                    <button type="button" className="button button--primary button--tiny" disabled={running || !status?.model || modelBlocked} onClick={run}>
+                      {running ? <Loader2 size={13} className="spin" /> : <Play size={13} />}
+                      {running ? '评审中 ' + elapsed + 's' : result ? '重新评审' : '开始评审'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : recordLoading ? (
+            <div className="review-empty-state">
+              <div className="review-empty-head">
+                <Loader2 size={18} strokeWidth={1.5} className="spin" />
+                <div>
+                  <strong>正在打开这条评审</strong>
+                  <span>画面、结论与问题锚点都从记录里读。</span>
                 </div>
               </div>
             </div>
@@ -442,6 +542,17 @@ export default function ReviewPage({
               <span>{error}</span>
               <button type="button" className="button button--ghost button--tiny" onClick={run}>
                 <RefreshCw size={12} /> 重试
+              </button>
+            </div>
+          ) : null}
+
+          {/* 地址里那条评审读不到（删了 / 不是本账号的）：说清楚，并给一条回到评审页的路 */}
+          {openError ? (
+            <div className="review-error">
+              <TriangleAlert size={14} />
+              <span>{openError}</span>
+              <button type="button" className="button button--ghost button--tiny" onClick={clearRecord}>
+                回到评审页
               </button>
             </div>
           ) : null}

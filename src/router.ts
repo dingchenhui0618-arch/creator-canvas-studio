@@ -1,6 +1,7 @@
 // 地址栏路由：页面的唯一真源是 location.hash。
 // 约定：#/overview #/projects #/radar #/templates #/agents #/runs #/review #/canvas #/settings
 //      作品：#/projects/<作品 id>；评审带作品：#/review/project/<作品 id>
+//      单条历史评审：#/review/<评审 id>（作品页点一条评审就走到这里，刷新与后退都能回到那条）
 //      智能体编辑：#/agents/new 与 #/agents/<id 或唯一名称>
 //      后台管理：#/admin/<section>，section 取自 editions.ts 的后台导航。
 //
@@ -17,7 +18,7 @@ export type Route =
   // 画布有两个可寻址对象：
   //   #/canvas/<flowId>            内置编排的流程（模板库、运行记录跳转都走它）
   //   #/canvas/project/<画布ID>    画布服务里的画布项目（工作台「继续上次的画布」走它）
-  | { kind: 'page'; page: ShellPage; flowId?: string; canvasId?: string; projectId?: string }
+  | { kind: 'page'; page: ShellPage; flowId?: string; canvasId?: string; projectId?: string; reviewId?: string }
   | { kind: 'agent-editor'; agentRef: string | null }
   | { kind: 'legal'; doc: 'terms' | 'privacy' }
   // 只读分享：链接里带随机 token，不登录也能打开（App 根部整屏渲染，不进工作台外壳）
@@ -106,8 +107,10 @@ export function parseRoute(hash: string): Route {
     return { kind: 'page', page: 'projects' }
   }
   // 评审页的「这次记入哪条作品」也写进地址：#/review/project/<作品 id>
+  // 打开某一条历史评审：地址里带评审 id，那条记录本身就带着归属，不用再挂作品
   if (head === 'review') {
     if (tail === 'project' && segments[2]) return { kind: 'page', page: 'review', projectId: segments[2] }
+    if (tail) return { kind: 'page', page: 'review', reviewId: tail }
     return { kind: 'page', page: 'review' }
   }
   if (head === 'agents') {
@@ -133,6 +136,7 @@ export function toHash(route: Route): string {
       if (route.flowId) return '#/canvas/' + encodeURIComponent(route.flowId)
     }
     if (route.page === 'projects' && route.projectId) return '#/projects/' + encodeURIComponent(route.projectId)
+    if (route.page === 'review' && route.reviewId) return '#/review/' + encodeURIComponent(route.reviewId)
     if (route.page === 'review' && route.projectId) return '#/review/project/' + encodeURIComponent(route.projectId)
     return '#/' + route.page
   }
@@ -151,6 +155,7 @@ export function routeKey(route: Route): string {
       if (route.flowId) return 'page:canvas:flow:' + route.flowId
     }
     if (route.page === 'projects' && route.projectId) return 'page:projects:' + route.projectId
+    if (route.page === 'review' && route.reviewId) return 'page:review:record:' + route.reviewId
     if (route.page === 'review' && route.projectId) return 'page:review:project:' + route.projectId
     return 'page:' + route.page
   }

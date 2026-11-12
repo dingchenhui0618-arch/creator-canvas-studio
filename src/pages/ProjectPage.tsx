@@ -20,6 +20,7 @@ import {
 } from '../api/projects'
 import { describeTiming, type ScriptBeat } from '../domain/radar'
 import { projectStep, reviewsForVersion, runsForVersion, type ProjectDetail } from '../domain/project'
+import { reviewsOfVersion } from '../domain/review'
 import { stampTime as stamp, visitLine } from '../domain/share'
 import '../styles/projects.css'
 
@@ -62,6 +63,7 @@ export default function ProjectPage({
   onBack,
   onOpenFlow,
   onOpenReview,
+  onOpenReviewRecord,
   onBrowseTemplates,
   onToast,
 }: {
@@ -69,6 +71,8 @@ export default function ProjectPage({
   onBack: () => void
   onOpenFlow: (flowId: string) => void
   onOpenReview: (projectId: string) => void
+  /** 打开某一条评审的记录页：那里有当时的证据原图与问题锚点 */
+  onOpenReviewRecord: (reviewId: string) => void
   onBrowseTemplates: () => void
   onToast: (message: string) => void
 }) {
@@ -729,7 +733,8 @@ export default function ProjectPage({
             {versionRows.map((row) => {
               const counter = reviewsForVersion(data.versionCounts, row.n)
               const runCount = runsForVersion(data.runCounts || {}, row.n)
-              const verdict = VERDICT_LABEL[counter.lastVerdict] || ''
+              // 这一版的评审逐条列出来：点一条直接看当时的证据原图，别只留一个「2 次评审」
+              const rowReviews = reviewsOfVersion(reviews, row.n)
               return (
                 <li className={'vq-version-row' + (row.current ? ' is-current' : '')} key={row.n}>
                   <span className="vq-version-n vq-mono">v{row.n}</span>
@@ -742,8 +747,28 @@ export default function ProjectPage({
                       <span>{row.scriptBeats ? row.scriptBeats + ' 段脚本' : row.current ? '没写脚本' : '脚本没存快照'}</span>
                       <span>{counter.count ? counter.count + ' 次评审' : '未评审'}</span>
                       <span>{runCount ? runCount + ' 次运行' : '没跑过'}</span>
-                      {verdict ? <span className={'vq-project-verdict is-' + counter.lastVerdict}>{verdict}</span> : null}
                     </span>
+                    {rowReviews.length ? (
+                      <ul className="vq-version-reviews">
+                        {rowReviews.slice(0, 3).map((review) => (
+                          <li key={review.id}>
+                            <button
+                              type="button"
+                              className={'vq-version-review is-' + (review.verdict || 'none')}
+                              onClick={() => onOpenReviewRecord(review.id)}
+                              title={'看这次评审的证据原图（' + (VERDICT_LABEL[review.verdict] || '未记录') + '）'}
+                            >
+                              <span className="vq-version-review-verdict">{VERDICT_LABEL[review.verdict] || '未记录'}</span>
+                              <span className="vq-mono">{stamp(review.createdAt)}</span>
+                              <ArrowRight size={11} />
+                            </button>
+                          </li>
+                        ))}
+                        {rowReviews.length > 3 ? (
+                          <li className="vq-version-review-more vq-mono">还有 {rowReviews.length - 3} 条在右边「评审」里</li>
+                        ) : null}
+                      </ul>
+                    ) : null}
                   </div>
                   <button
                     type="button"
@@ -1079,24 +1104,37 @@ export default function ProjectPage({
               <span className="vq-mono">{reviews.length ? reviews.length + ' 次' : '还没评过'}</span>
             </div>
             {reviews.length ? (
-              <ul className="vq-project-reviews">
-                {reviews.map((review) => (
-                  <li key={review.id}>
-                    <div className="vq-project-review-flags">
-                      <span className={'vq-project-verdict is-' + (review.verdict || 'none')}>
-                        {VERDICT_LABEL[review.verdict] || '未记录'}
-                      </span>
-                      {review.version ? (
-                        <span className="vq-mono vq-project-review-version">v{review.version}</span>
-                      ) : null}
-                    </div>
-                    <div>
-                      <p>{review.summary || review.intent || '这次评审没有留下结论摘要'}</p>
-                      <span className="vq-mono">{stamp(review.createdAt)}</span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+              <>
+                <p className="vq-project-review-hint">点一条看当时的证据原图与问题锚点。</p>
+                <ul className="vq-project-reviews">
+                  {reviews.map((review) => (
+                    <li key={review.id}>
+                      <button
+                        type="button"
+                        className="vq-project-review-row"
+                        onClick={() => onOpenReviewRecord(review.id)}
+                        title="看这次评审的证据原图"
+                      >
+                        <span className="vq-project-review-flags">
+                          <span className={'vq-project-verdict is-' + (review.verdict || 'none')}>
+                            {VERDICT_LABEL[review.verdict] || '未记录'}
+                          </span>
+                          {review.version ? (
+                            <span className="vq-mono vq-project-review-version">v{review.version}</span>
+                          ) : null}
+                        </span>
+                        <span className="vq-project-review-body">
+                          <span className="vq-project-review-summary">
+                            {review.summary || review.intent || '这次评审没有留下结论摘要'}
+                          </span>
+                          <span className="vq-mono vq-project-review-time">{stamp(review.createdAt)}</span>
+                        </span>
+                        <ArrowRight size={13} className="vq-project-review-go" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </>
             ) : (
               <div className="vq-project-empty">
                 <strong>这一版还没进评审</strong>

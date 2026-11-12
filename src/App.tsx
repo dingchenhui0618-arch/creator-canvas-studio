@@ -438,6 +438,7 @@ function Workbench({
             onBack={() => navigate({ kind: 'page', page: 'projects' })}
             onOpenFlow={(flowId) => navigate({ kind: 'page', page: 'canvas', flowId })}
             onOpenReview={(projectId) => navigate({ kind: 'page', page: 'review', projectId })}
+            onOpenReviewRecord={(reviewId) => navigate({ kind: 'page', page: 'review', reviewId })}
             onBrowseTemplates={() => go('templates')}
             onToast={notify}
           />
@@ -494,7 +495,11 @@ function Workbench({
           <ReviewPage
             key={route.projectId || 'review'}
             projectId={route.projectId}
+            reviewId={route.reviewId}
             onOpenProject={(projectId) => navigate({ kind: 'page', page: 'projects', projectId })}
+            onOpenReview={(reviewId) => navigate({ kind: 'page', page: 'review', reviewId })}
+            onReviewProject={(projectId) => navigate({ kind: 'page', page: 'review', projectId })}
+            onClearReview={() => navigate({ kind: 'page', page: 'review' })}
           />
         )
       case 'settings':

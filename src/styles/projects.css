@@ -633,6 +633,67 @@
   flex: none;
 }
 
+/* 这一版的评审逐条列出来：点一条进那次的记录页，看证据原图与问题锚点 */
+.vq-version-reviews {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin: var(--space-1) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vq-version-review {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 24px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+}
+
+.vq-version-review:hover {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+.vq-version-review.is-pass {
+  border-color: rgba(23, 107, 67, 0.24);
+  background: var(--pass-soft);
+  color: var(--pass);
+}
+
+.vq-version-review.is-needs_review {
+  border-color: rgba(138, 91, 8, 0.24);
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.vq-version-review.is-fail {
+  border-color: rgba(163, 56, 56, 0.24);
+  background: var(--fail-soft);
+  color: var(--fail);
+}
+
+.vq-version-review-verdict {
+  font-weight: var(--weight-medium);
+}
+
+.vq-version-review-more {
+  display: inline-flex;
+  align-items: center;
+  color: var(--faint);
+  font-size: 11px;
+}
+
 /* ---------- 运行归集：一个作品的运行跨版本排成一条时间线 ---------- */
 
 .vq-project-runs {
@@ -810,12 +871,62 @@
 }
 
 .vq-project-reviews li {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: var(--space-2);
-  align-items: start;
   padding-top: var(--space-2);
   border-top: 1px solid var(--line-faint);
+}
+
+/* 每条评审整行可点：进那次的记录页看证据原图 */
+.vq-project-review-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  align-items: start;
+  width: 100%;
+  padding: var(--space-1);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.vq-project-review-row:hover {
+  background: var(--surface-soft);
+}
+
+.vq-project-review-row:hover .vq-project-review-go {
+  color: var(--ink);
+}
+
+.vq-project-review-hint {
+  margin: 0;
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.vq-project-review-body {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.vq-project-review-summary {
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.vq-project-review-time {
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.vq-project-review-go {
+  margin-top: 2px;
+  color: var(--faint);
 }
 
 .vq-project-reviews li:first-child {
@@ -834,12 +945,7 @@
   font-size: 11px;
 }
 
-.vq-project-reviews p {
-  margin: 0 0 var(--space-2);
-  color: var(--ink);
-  font-size: 13px;
-  line-height: 1.7;
-}
+
 
 .vq-project-verdict {
   display: inline-flex;
@@ -1051,6 +1157,26 @@
 @media (max-width: 780px) {
   .vq-projects-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* 评审面板在手机上只有 240px 正文宽：结论与版次先排一行，摘要独占下一行 */
+  .vq-project-review-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .vq-project-review-flags {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .vq-project-review-body {
+    grid-column: 1 / -1;
+  }
+
+  .vq-project-review-go {
+    grid-row: 1;
+    grid-column: 2;
   }
 
   .vq-version-row {
