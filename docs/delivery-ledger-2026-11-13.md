@@ -3,7 +3,7 @@
 - 版本：**0.9.32**
 - 发布包：`20261112-220754-2026-11-13-delivery-ledg.tar.gz`
 - 前端入口：`index-D8DqNqEd.js`（491,290 字节，含「交出去的」「交付稿只按当前这一版生成」「全部 9 条都列出来了」）
-- 提交：`0fcdef4`（代码）+ `TBD-DOCS`（文档）；CI run **TBD-CI success**
+- 提交：`0fcdef4`（代码）+ `9d2c452`（文档）；CI run **43317411076 success**
 - 生产：`https://visionqa.wavisionai.cn`，两服务 active，`/api/health` ok（templates 26）
 
 ## 一、为什么要做
