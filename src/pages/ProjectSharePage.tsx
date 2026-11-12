@@ -2,14 +2,13 @@ import { useEffect, useState } from 'react'
 import { ArrowUpRight, Link2Off, Loader2, Printer, ScanEye } from 'lucide-react'
 import { getSharedProject, sharedReviewSheetUrl } from '../api/projects'
 import type { SharedProject } from '../domain/project'
+import { REVIEW_VERDICT_LABEL as VERDICT_LABEL } from '../domain/review'
 import { describeTiming } from '../domain/radar'
 import '../styles/project-share.css'
 
 // 作品分享页：发给没有账号的人看（甲方、剪辑、客户）。
 // 不套工作台外壳，也没有任何编辑动作；内容只来自 GET /api/share/project/<token>，
 // 服务端按白名单给字段——这里看到的就是分享者愿意公开的那部分。
-
-const VERDICT_LABEL: Record<string, string> = { pass: '通过', needs_review: '需人工确认', fail: '不通过' }
 
 const dayLabel = (iso: string) => {
   if (!iso) return ''

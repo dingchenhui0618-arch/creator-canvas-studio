@@ -20,7 +20,7 @@ import {
 } from '../api/projects'
 import { describeTiming, type ScriptBeat } from '../domain/radar'
 import { projectStep, reviewsForVersion, runsForVersion, type ProjectDetail } from '../domain/project'
-import { reviewsOfVersion } from '../domain/review'
+import { REVIEW_VERDICT_LABEL as VERDICT_LABEL, reviewsOfVersion } from '../domain/review'
 import { stampTime as stamp, visitLine } from '../domain/share'
 import '../styles/projects.css'
 
@@ -34,7 +34,6 @@ const SCRIPT_CANVAS_NOTE: Record<string, string> = {
   'no-script': '',
 }
 
-const VERDICT_LABEL: Record<string, string> = { pass: '通过', needs_review: '需人工确认', fail: '不通过' }
 const KIND_LABEL: Record<string, string> = { replica: '原片拆解', adapted: '改编版', flow: '工作流', saved: '待解析' }
 
 const pad2 = (value: number) => String(value).padStart(2, '0')

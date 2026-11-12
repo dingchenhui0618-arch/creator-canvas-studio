@@ -4,15 +4,16 @@ import { getReview, getReviewStatus, listReviews, runReview, type JudgeResult, t
 import { getCredits, getModelService, recheckModelService, type CreditsResponse, type ModelServiceState } from '../api/credits'
 import { listTemplates, coverSrc } from '../api/radar'
 import { getProject } from '../api/projects'
-import { reviewVersionLabel, reviewWorkLine } from '../domain/review'
+import { REVIEW_VERDICT_LABEL as VERDICT_LABEL, reviewVersionLabel } from '../domain/review'
 import type { ReplicaTemplate } from '../domain/radar'
 import { consumeReviewTarget, onReviewRequest, type ReviewTarget } from '../state/review'
 import { useUiMode } from '../api/app'
 import PageHead from '../components/PageHead'
+import ReviewHistoryModal from '../components/ReviewHistoryModal'
+import { ReviewHistoryRow } from '../components/ReviewHistoryRow'
 import '../styles/review.css'
 
 const SEVERITY_LABEL: Record<string, string> = { blocker: '阻塞', major: '主要', minor: '次要', info: '信息' }
-const VERDICT_LABEL: Record<string, string> = { pass: '通过', needs_review: '需人工确认', fail: '不通过' }
 const SUPPORT_LABEL: Record<string, string> = {
   supported: '一致',
   too_strict: '偏严',
@@ -110,6 +111,9 @@ export default function ReviewPage({
   const [modelState, setModelState] = useState<ModelServiceState | null>(null)
   const [rechecking, setRechecking] = useState(false)
   const [reviews, setReviews] = useState<ReviewSummary[]>([])
+  // 历史存 200 条，左侧只放最近 6 条；总数用来在标题旁写「共 N 条」并给出「查看全部」
+  const [historyTotal, setHistoryTotal] = useState(0)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const [historyError, setHistoryError] = useState('')
   // 打开的是历次评审里的哪一条：历史只读，所以要说清它记在哪条作品的第几版
   const [openedScope, setOpenedScope] = useState<{ id: string; title: string; version: number } | null>(null)
@@ -152,8 +156,12 @@ export default function ReviewPage({
     getModelService()
       .then((next) => { if (alive) setModelState(next.model) })
       .catch(() => { if (alive) setModelState(null) })
-    listReviews(6)
-      .then((data) => { if (alive) setReviews(data.items) })
+    listReviews({ limit: 6 })
+      .then((data) => {
+        if (!alive) return
+        setReviews(data.items)
+        setHistoryTotal(data.total)
+      })
       .catch((caught) => { if (alive) setHistoryError(caught instanceof Error ? caught.message : '评审历史读取失败') })
     Promise.all([getReviewStatus(), listTemplates({})])
       .then(([health, list]) => {
@@ -226,7 +234,12 @@ export default function ReviewPage({
       setResult(next)
       setActive(next.observations[0]?.id ?? null)
       // 评审已落库：刷新历史与余额，不靠本地缓存假装有记录
-      void listReviews(6).then((data) => setReviews(data.items)).catch(() => undefined)
+      void listReviews({ limit: 6 })
+        .then((data) => {
+          setReviews(data.items)
+          setHistoryTotal(data.total)
+        })
+        .catch(() => undefined)
     } catch (reason) {
       setError(String((reason as Error)?.message || reason))
       // 失败后同步一次服务状态：额度 / 凭证问题会在页头与提示条上显示
@@ -395,27 +408,24 @@ export default function ReviewPage({
           <div className="review-history">
             <div className="review-picker-head">
               <span className="vq-mono">最近评审</span>
-              <span className="vq-mono">{reviews.length}</span>
+              {historyTotal ? (
+                <button type="button" className="review-history-more" onClick={() => setHistoryOpen(true)}>
+                  查看全部 {historyTotal} 条 <ArrowRight size={11} />
+                </button>
+              ) : (
+                <span className="vq-mono">{reviews.length}</span>
+              )}
             </div>
             {historyError ? <p className="review-empty">{historyError}</p> : null}
             {reviews.length ? (
               <ul>
                 {reviews.map((item) => (
                   <li key={item.id}>
-                    <button
-                      type="button"
-                      className="review-history-item"
-                      onClick={() => (onOpenReview ? onOpenReview(item.id) : void loadRecord(item.id))}
-                    >
-                      <span className={item.verdict ? 'vq-chip is-verdict is-' + item.verdict : 'vq-chip'}>
-                        {VERDICT_LABEL[item.verdict] || '未记录'}
-                      </span>
-                      <span className="review-history-title">{item.source.label || item.intent || '未命名评审'}</span>
-                      <span className="vq-mono">
-                        {new Date(item.createdAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                      <small className={'review-history-where' + (item.project ? '' : ' is-orphan')}>{reviewWorkLine(item)}</small>
-                    </button>
+                    <ReviewHistoryRow
+                      item={item}
+                      current={item.id === openedId}
+                      onOpen={(id) => (onOpenReview ? onOpenReview(id) : void loadRecord(id))}
+                    />
                   </li>
                 ))}
               </ul>
@@ -613,6 +623,14 @@ export default function ReviewPage({
           ) : null}
         </section>
       </div>
+
+      {historyOpen ? (
+        <ReviewHistoryModal
+          currentId={openedId || undefined}
+          onClose={() => setHistoryOpen(false)}
+          onOpenReview={(id) => (onOpenReview ? onOpenReview(id) : void loadRecord(id))}
+        />
+      ) : null}
     </div>
   )
 }

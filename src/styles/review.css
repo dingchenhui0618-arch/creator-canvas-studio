@@ -31,7 +31,46 @@
 .review-history ul { display:flex; flex-direction:column; gap:4px; margin:0; padding:0; list-style:none; }
 .review-history-item { display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:4px 8px; width:100%; padding:8px; border:1px solid transparent; border-radius:var(--radius-sm); background:transparent; color:var(--ink); text-align:left; cursor:pointer; }
 .review-history-item:hover { border-color:var(--line); background:var(--surface-raised); }
+.review-history-item.is-current { border-color:var(--line); background:var(--surface-raised); box-shadow:inset 2px 0 0 var(--ink); }
 .review-history-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; }
+.review-history-time { color:var(--faint); font-size:11px; }
+.review-history-flag { margin-left:8px; color:var(--faint); font-size:11px; }
+/* 「查看全部」：历史存 200 条，左侧那 6 条只够看最近发生过什么。
+   入口放在「最近评审」标题行右侧——不往下翻到底也看得见。 */
+.review-history-more { display:inline-flex; align-items:center; gap:4px; padding:8px; margin:-8px -8px -8px 0; border:0; border-radius:var(--radius-sm); background:none; color:var(--muted); font-size:12px; cursor:pointer; }
+.review-history-more:hover { background:var(--surface-raised); color:var(--ink); }
+
+/* ---------- 评审历史弹层（v0.9.18）
+   按结论 / 作品筛、一页 20 条往下翻，点一条回到那次评审的证据页。 ---------- */
+.review-history-backdrop { position:fixed; inset:0; z-index:90; display:flex; align-items:center; justify-content:center; padding:24px; background:rgba(17,17,17,.34); backdrop-filter:blur(4px); }
+.review-history-modal { width:min(720px,100%); max-height:min(760px,calc(100vh - 80px)); display:flex; flex-direction:column; overflow:hidden; background:var(--paper); border:1px solid var(--line); border-radius:var(--radius-lg); box-shadow:0 30px 80px rgba(30,26,20,.22); }
+/* 弹层里结论胶囊占固定一列：短标签（通过）与长标签（需人工确认）后面，标题从同一条竖线开始 */
+.review-history-modal .review-history-item { grid-template-columns:96px minmax(0,1fr) auto; gap:2px 8px; padding:4px 8px; }
+.review-history-modal .review-history-item .vq-chip { justify-content:center; width:100%; white-space:nowrap; }
+/* 弹层里一屏能多放几条：历史是拿来扫的，不是拿来读的 */
+.review-history-modal .review-history-where { font-size:11px; line-height:1.5; }
+.review-history-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:24px 24px 8px; }
+.review-history-head h2 { margin:8px 0 0; font-size:17px; letter-spacing:-.02em; }
+.review-history-note { margin:0; padding:0 24px 12px; color:var(--faint); font-size:12px; line-height:1.7; }
+.review-history-filters { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; padding:0 24px 12px; border-bottom:1px solid var(--line); }
+.review-history-scope { display:flex; align-items:center; gap:8px; }
+.review-history-clear { border:0; background:none; color:var(--faint); font-size:12px; cursor:pointer; }
+.review-history-clear:hover { color:var(--ink); }
+.review-history-error { margin:0; padding:8px 24px; color:var(--fail); font-size:12px; }
+.review-history-scroll { flex:1; min-height:0; overflow:auto; padding:12px 24px; }
+.review-history-list { display:flex; flex-direction:column; gap:4px; margin:0; padding:0; list-style:none; }
+.review-history-empty { display:grid; place-items:center; gap:8px; padding:48px 24px; color:var(--faint); font-size:13px; line-height:1.7; text-align:center; }
+.review-history-foot { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; padding:12px 24px 16px; border-top:1px solid var(--line); }
+.review-history-foot-actions { display:flex; align-items:center; gap:8px; }
+@media (max-width:720px) {
+  .review-history-backdrop { padding:8px; }
+  .review-history-modal { max-height:calc(100vh - 16px); }
+  .review-history-head, .review-history-filters, .review-history-scroll, .review-history-foot { padding-left:16px; padding-right:16px; }
+  .review-history-note { padding-left:16px; padding-right:16px; }
+  .review-history-scope { width:100%; }
+  .review-history-scope .vq-select { flex:1; min-width:0; }
+  .review-history-scope .vq-select__trigger { width:100%; }
+}
 
 .review-stage { display:flex; flex-direction:column; gap:16px; min-width:0; }
 .review-canvas { display:flex; flex-direction:column; gap:12px; }

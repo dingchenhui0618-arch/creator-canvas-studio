@@ -1,5 +1,15 @@
 import type { ReviewProjectRef, ReviewSummary } from '../api/review'
 
+/** 结论只有三种口径，全站一处：胶囊、筛选、分享纸都从这里取字。 */
+export const REVIEW_VERDICT_LABEL: Record<string, string> = { pass: '通过', needs_review: '需人工确认', fail: '不通过' }
+
+/** 评审历史里的时间：只到分钟，年份不重复写（列表按时间倒序） */
+export function reviewTimeLabel(at: string): string {
+  const date = new Date(at)
+  if (Number.isNaN(date.getTime())) return '时间未知'
+  return date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
 /**
  * 评审记在作品的第几版，全站一处。
  * 评审记录里存的是「评审当时作品的版次」——作品后来开新版，这条评审仍然记在原来那一版。

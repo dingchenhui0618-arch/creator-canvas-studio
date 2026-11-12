@@ -86,13 +86,56 @@ export async function saveReview({ user = null, source = {}, intent = '', result
   return record
 }
 
-export async function listReviews({ limit = 20, verdict = '', projectId = '' } = {}, user = null) {
+// 结论只有三种；老记录没有结论的算「未记录」，筛选「全部」时也包含它们
+const VERDICTS = new Set(['pass', 'needs_review', 'fail'])
+
+function verdictOf(item) {
+  const verdict = item.result?.verdict
+  return VERDICTS.has(verdict) ? verdict : 'none'
+}
+
+function countVerdicts(items) {
+  const counts = { pass: 0, needs_review: 0, fail: 0, none: 0 }
+  for (const item of items) counts[verdictOf(item)] += 1
+  return counts
+}
+
+function countProjects(items) {
+  const counts = new Map()
+  for (const item of items) if (item.projectId) counts.set(item.projectId, (counts.get(item.projectId) || 0) + 1)
+  return [...counts].map(([id, count]) => ({ id, count })).sort((a, b) => b.count - a.count || a.id.localeCompare(b.id))
+}
+
+/**
+ * 评审历史：一页一页翻，筛选与翻页都在服务端做（最多 200 条，但正文几十 KB，不能整包发给前端）。
+ * 筛选口径：
+ *   verdict   只留某一种结论；
+ *   projectId 只留记在某条作品下的；
+ *   orphan    只留没记入作品的（作品被删、或普通首帧评审）。
+ * facets 是筛选面板上的数字：结论的计数按当前作品筛选算，作品的计数按当前结论筛选算——
+ * 换一个筛选后，另一个筛选上的数字仍然对着真实结果。
+ */
+export async function listReviews({ limit = 20, offset = 0, verdict = '', projectId = '', orphan = false } = {}, user = null) {
   const list = (await loadAll()).filter((item) => canAccess(item, user))
+  const byVerdict = (item) => (verdict ? item.result?.verdict === verdict : true)
+  const byProject = (item) => (projectId ? item.projectId === projectId : orphan ? !item.projectId : true)
+  // 写入顺序就是新的在前，但按时间再排一次：历史列表的顺序不该取决于盘上数组怎么排
   const filtered = list
-    .filter((item) => (verdict ? item.result?.verdict === verdict : true))
-    .filter((item) => (projectId ? item.projectId === projectId : true))
+    .filter((item) => byVerdict(item) && byProject(item))
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
   const count = Math.min(50, Math.max(1, Number(limit) || 20))
-  return { items: filtered.slice(0, count).map(toSummary), total: filtered.length }
+  const skip = Math.max(0, Math.round(Number(offset) || 0))
+  return {
+    items: filtered.slice(skip, skip + count).map(toSummary),
+    total: filtered.length,
+    offset: skip,
+    limit: count,
+    facets: {
+      verdicts: countVerdicts(list.filter(byProject)),
+      projects: countProjects(list.filter(byVerdict)),
+      orphans: list.filter((item) => byVerdict(item) && !item.projectId).length,
+    },
+  }
 }
 
 /**

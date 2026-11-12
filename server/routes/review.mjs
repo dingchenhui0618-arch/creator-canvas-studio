@@ -36,11 +36,23 @@ export function createReviewRouter() {
       if (pathname === '/api/reviews' && req.method === 'GET') {
         const result = await listReviews({
           limit: url.searchParams.get('limit') || 20,
+          offset: url.searchParams.get('offset') || 0,
           verdict: url.searchParams.get('verdict') || '',
           projectId: url.searchParams.get('projectId') || '',
+          orphan: url.searchParams.get('orphan') === '1',
         }, user)
         // 评审只记 projectId，作品标题现算：作品改名后历史评审跟着改口，不用回写两百条记录
-        sendJson(res, 200, { ...result, items: withReviewProject(result.items, projectsById(await listProjects(user))) })
+        const byId = projectsById(await listProjects(user))
+        const projects = result.facets.projects.map((entry) => ({
+          id: entry.id,
+          title: byId.get(entry.id)?.title || '未命名作品',
+          count: entry.count,
+        }))
+        sendJson(res, 200, {
+          ...result,
+          items: withReviewProject(result.items, byId),
+          facets: { ...result.facets, projects },
+        })
         return true
       }
       const reviewItem = pathname.match(REVIEW_ITEM)

@@ -97,9 +97,32 @@ export type ReviewSummary = {
 
 export type ReviewRecord = ReviewSummary & { result: ReviewResult }
 
-export const listReviews = (limit = 10, projectId = '') =>
-  request<{ items: ReviewSummary[]; total: number }>(
-    '/api/reviews?limit=' + limit + (projectId ? '&projectId=' + encodeURIComponent(projectId) : ''),
-  )
+/**
+ * 评审历史一页：total 是筛选后的总数，facets 是筛选面板上的数字。
+ * 结论按当前作品筛选计数、作品按当前结论筛选计数——换一个筛选，数字仍然对着真实结果。
+ */
+export type ReviewFacets = {
+  verdicts: { pass: number; needs_review: number; fail: number; none: number }
+  projects: { id: string; title: string; count: number }[]
+  orphans: number
+}
+
+export type ReviewHistoryPage = {
+  items: ReviewSummary[]
+  total: number
+  offset: number
+  limit: number
+  facets: ReviewFacets
+}
+
+export const listReviews = (query: { limit?: number; offset?: number; verdict?: string; projectId?: string; orphan?: boolean } = {}) => {
+  const params = new URLSearchParams()
+  params.set('limit', String(query.limit ?? 20))
+  if (query.offset) params.set('offset', String(query.offset))
+  if (query.verdict) params.set('verdict', query.verdict)
+  if (query.projectId) params.set('projectId', query.projectId)
+  if (query.orphan) params.set('orphan', '1')
+  return request<ReviewHistoryPage>('/api/reviews?' + params.toString())
+}
 
 export const getReview = (id: string) => request<ReviewRecord>('/api/reviews/' + id)
