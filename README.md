@@ -2081,3 +2081,28 @@ P1 八条、P2 六条见审计文。
 ![模板只读分享页：不登录也能看脚本结构与分镜](docs/screenshot-template-share-2026-11-12.png)
 
 ![模板抽屉的分享区：生成、复制、停止分享](docs/screenshot-template-share-drawer-2026-11-12.png)
+
+### 五十三.6 C1 GitHub Actions CI
+
+push 到 master 与所有 PR 都会跑一条流水线，任何一步非零这次提交就是红的。
+
+| 环节 | 配置 |
+| --- | --- |
+| 触发 | push master + PR，concurrency 按 ref 取消同分支旧 run，超时 15 分钟 |
+| 步骤 | checkout@v7 → setup-node@v7（node 22、npm 缓存）→ npm ci --ignore-scripts → tsc -b → oxlint → npm test → vite build |
+| 为什么跳过安装脚本 | ffmpeg-static / ffprobe-static 的 postinstall 会去 GitHub 下载二进制，CI 的检查与单测用不到，少一个失败面 |
+| 实测 | 923bba1 与 d87ea0d 两次 run 都是 success；后者 22 秒（03:16:19 → 03:16:41） |
+
+### 五十三.7 C2 回归测试入库、可离线跑
+
+一条 `npm test` 跑 29 个离线单测，1.3 秒：不联网、不花积分、不碰生产数据。
+
+| 文件 | 盯住什么 |
+| --- | --- |
+| test/speech.test.mjs | 语速表与 hypit 一致（zh 4.2 / 5.25 / 6.5625）、单位换算、0.8–60 秒钳制、1.2 与 0.55 阈值、缺结束时间补齐 |
+| test/owner.test.mjs | 归属矩阵：未登录不隔离 / 他人不可见 / 公共可看 / 管理员全看 |
+| test/templates.test.mjs | 软删与回收站、编辑快照（没改不留 / 10 版封顶 / 回滚也留一版）、分享 token 生命周期与公开视图白名单 |
+| test/templates-trash-expiry.test.mjs | 列回收站时清掉 31 天前的条目与抽帧 |
+| test/search-history.test.mjs | 重搜去重、账号隔离、收藏不被清空带走、40 条上限、14 条分页 |
+
+隔离方式：每个测试文件在 import 服务端模块之前把 `DATA_DIR` 指到 `os.tmpdir()` 下的新目录，跑完互不影响。

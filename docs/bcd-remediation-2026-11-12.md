@@ -10,8 +10,8 @@
 | B3 | 模板回收站（软删除 / 恢复 / 彻底删除） | 已上线 2026-11-12 |
 | B4 | 模板编辑版本历史（快照 / 回看 / 回滚） | 已上线 2026-11-12 |
 | B5 | 模板只读分享链接 | 已上线 2026-11-12 |
-| C1 | GitHub Actions CI（类型检查 / 构建 / 代码检查 / 单测） | 待做 |
-| C2 | 回归测试入库、可离线跑 | 待做 |
+| C1 | GitHub Actions CI（类型检查 / 构建 / 代码检查 / 单测） | 已上线 2026-11-12 |
+| C2 | 回归测试入库、可离线跑 | 已完成 2026-11-12 |
 | C3 | 前端异常上报 + 后台可见 | 待做 |
 | C4 | 日志保留策略（轮转 + 保留天数） | 待做 |
 | C5 | 部署回滚（保留多个 release + 一键回滚） | 待做 |
@@ -149,3 +149,43 @@
 ![模板只读分享页：不登录也能看脚本结构与分镜](screenshot-template-share-2026-11-12.png)
 
 ![模板抽屉的分享区：生成、复制、停止分享](screenshot-template-share-drawer-2026-11-12.png)
+---
+
+## C1 GitHub Actions CI
+
+### 问题
+仓库此前没有任何自动检查：类型、构建、代码检查、测试全靠上线前在本地手工跑。推错一行就到部署那一刻才发现，没有回退余地。
+
+### 做法
+1. .github/workflows/ci.yml：push 到 master 与所有 PR 都触发，concurrency 按 ref 取消同分支旧任务，超时 15 分钟。
+2. 步骤顺序：checkout → setup-node 22（带 npm 缓存）→ npm ci --ignore-scripts → npx tsc -b → npm run lint → npm test → npm run build。任何一步非零，这个 run 就是红的。
+3. npm ci 用 --ignore-scripts：ffmpeg-static / ffprobe-static 的 postinstall 会去 GitHub 下载二进制，CI 的静态检查与单测都用不到，跳过少一个失败面。
+4. 不跑联网、不跑要花积分的东西：整套单测在临时 DATA_DIR 里跑，不碰生产数据。
+5. checkout / setup-node 用 v7：v4 会触发 Node 20 弃用告警（被强制跑在 Node 24 上）。
+
+### 验证
+- 923bba1 首次运行：success；安装依赖 / 类型检查 / 代码检查 / 单元测试 / 构建 五个业务步骤全部 success。
+- d87ea0d 升级 action 版本后再跑：success，全程 22 秒（03:16:19 → 03:16:41），注解里不再有 Node 20 弃用那一条。
+- 剩下的是既有的 6 条 lint warning：oxlint 退出码 0，不挡合并，但都会打在 CI 注解里，改一处就少一条。
+
+---
+
+## C2 回归测试入库、可离线跑
+
+### 问题
+原来只有 scripts/test-*.mjs 这类脚本：要服务在跑、要配 Key、有的还会花积分（检索 2 分、评审 10 分）。没有一条能进 CI、能离线跑、能在回退时报警。而这一轮改的恰恰都是「丢了数据才发现」的逻辑——软删除、快照、分享白名单、检索历史裁剪。
+
+### 做法
+1. test/ 下用 node:test + node:assert/strict 写单测，package.json 加 npm test（node --test "test/*.test.mjs"）。不需要网络、不需要 Key、不碰生产。
+2. 隔离靠临时目录：每个测试文件在 import 服务端模块之前把 DATA_DIR 指到 os.tmpdir() 下的新目录，config 就按它落 templates.json / search-history.json。
+3. 覆盖这轮改动的不变量：
+   - server/speech.mjs：语速表必须与 hypit 口径一致（zh 4.2 / 5.25 / 6.5625，en 4.2 / 4.6 / 5.6），单位换算（汉字 / 假名 / 英文音节）、0.8–60 秒钳制、1.2 与 0.55 两个阈值、缺结束时间时按台词补齐。
+   - server/owner.mjs：归属矩阵——未登录不隔离、他人不可见、公共（无 ownerId）可看、管理员全看。
+   - server/templates.mjs：软删过滤与回收站、彻底删除、编辑快照（没改内容不留、最多 10 版、回滚本身也留一版）、分享 token 生命周期（生成 / 查到 / 撤销 / 换新 / 进回收站即失效）与公开视图白名单（ownerId / versions / deletedAt / shareToken / blueprint 都不在）。
+   - 回收站 30 天过期清理单独一个测试文件跑：模块有内存缓存，必须让新进程从磁盘读到那条 31 天前的记录，才能验证「列的时候顺手清掉条目与抽帧」。
+   - server/search-history.mjs：相同条件重搜只更新时间、账号隔离、收藏不被清空带走、非收藏 40 条上限、界面 14 条分页。
+
+### 验证
+- node --test "test/*.test.mjs"：29 个测试全过，1.3 秒；npm test 同样 29/29。
+- 断言写的是确切数字（例如「今天我们来拆这条爆款」= 10 个汉字、「用 VisionQA 拆解」= 3 个汉字 + 音节），不是「大概多少」——语速表被改回 4.5 字/秒这类回退会直接红。
+- 全程不读 data/、不连 8799、不花积分；CI 里也就是这条命令。
