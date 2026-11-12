@@ -38,6 +38,7 @@ const USER_PAGES: readonly ShellPage[] = [
   'review',
   'canvas',
   'settings',
+  'local',
 ]
 
 // 后台 section 直接取自 editions.ts，避免在路由里再抄一份会漂移的清单。

@@ -43,6 +43,7 @@ import { createProjectsRouter } from './routes/projects.mjs'
 import { createProjectShareRouter } from './routes/project-share.mjs'
 import { createGatewayRouter } from './routes/gateway.mjs'
 import { createAccountRouter } from './routes/account.mjs'
+import { createLocalAgentRouter } from './routes/local-agent.mjs'
 import { currentUser, listUsers, clientIp, isAdmin } from './auth.mjs'
 import { recordClientError } from './client-errors.mjs'
 import { createReport } from './reports.mjs'
@@ -75,6 +76,8 @@ const featureRoutes = [
   createProjectsRouter(),
   createGatewayRouter(),
   createAccountRouter(),
+  // 桌面端本地工作区的模型入口：密钥留在服务端，循环与工具在客户端
+  createLocalAgentRouter(),
 ]
 
 // VQ_REQUIRE_AUTH=1 时，除少数公开端点外所有 /api/* 都要登录。

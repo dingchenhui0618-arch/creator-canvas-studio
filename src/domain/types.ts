@@ -12,6 +12,7 @@ export type Page =
   | 'radar'
   | 'templates'
   | 'review'
+  | 'local'
 
 /** 面包屑用的页面名。只有真实存在的页面才在这里，删掉的入口不留空标签。 */
 export const pageLabels: Record<Page, string> = {
@@ -26,6 +27,7 @@ export const pageLabels: Record<Page, string> = {
   radar: '发现',
   templates: '模板库',
   review: '视觉评审',
+  local: '本地工作区',
 }
 
 export type NodeKind = 'asset' | 'agent' | 'output'

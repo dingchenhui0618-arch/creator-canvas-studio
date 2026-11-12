@@ -21,7 +21,8 @@ import './styles/overview.css'
 import { NavItem } from './components/ui'
 import { CommandPalette } from './components/CommandPalette'
 import type { PaletteCommand } from './domain/commands'
-import { PRIMARY_NAV, SETTINGS_NAV, TOOL_NAV, isNavActive, isToolPage, type NavEntry } from './nav'
+import { DESKTOP_NAV, PRIMARY_NAV, SETTINGS_NAV, TOOL_NAV, isNavActive, isToolPage, type NavEntry } from './nav'
+import { getDesktop } from './desktop/bridge'
 import { WelcomeGuide } from './components/WelcomeGuide'
 import { ModelSwitch } from './components/ModelSwitch'
 import { ErrorBoundary } from './components/ErrorBoundary'
@@ -33,6 +34,7 @@ import ProjectPage from './pages/ProjectPage'
 import { RunsPage } from './pages/RunsPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { RadarPage } from './pages/RadarPage'
+import LocalWorkspacePage from './pages/LocalWorkspacePage'
 import { RequireSession } from './auth/RequireSession'
 import { useSession } from './auth/useSession'
 import { useUiMode } from './api/app'
@@ -189,6 +191,8 @@ function Workbench({
 
   // 侧栏高亮、面包屑和内容页都从 hash 路由推导，页面本身不再保存 activePage。
   const activePage = routeToPage(route)
+  // 本地工作区只在桌面外壳里成立：网页版连这一项都不显示
+  const desktopBridge = getDesktop()
 
   // 专注模式只在画布页生效：离开画布时侧栏与顶栏一定回来，不会出现「侧栏不见了」；
   // 回到画布仍保持专注，等于记住用户上次的选择。
@@ -286,6 +290,8 @@ function Workbench({
     })
     return [
       ...PRIMARY_NAV.map((entry) => navCommand(entry, '页面')),
+      // 本机这一项只在桌面端存在，网页版不列出（列了也点不进真实能力）
+      ...(desktopBridge ? [navCommand(DESKTOP_NAV, '本机')] : []),
       ...TOOL_NAV.map((entry) => navCommand(entry, '工具')),
       navCommand(SETTINGS_NAV, '设置'),
       {
@@ -316,7 +322,7 @@ function Workbench({
         run: () => setSidebarOpen((value) => !value),
       },
     ]
-  }, [createCanvasProject, navTo, sidebarOpen])
+  }, [createCanvasProject, desktopBridge, navTo, sidebarOpen])
 
   // Ctrl / ⌘ + K 打开快速跳转。正在输入的地方不抢键：编辑器里的同名快捷键仍然属于编辑器。
   useEffect(() => {
@@ -476,6 +482,8 @@ function Workbench({
         )
       case 'runs':
         return <RunsPage onOpenFlow={(flowId) => navigate({ kind: 'page', page: 'canvas', flowId })} />
+      case 'local':
+        return <LocalWorkspacePage />
       case 'review':
         return <ReviewPage key={route.projectId || 'review'} projectId={route.projectId} />
       case 'settings':
@@ -532,6 +540,20 @@ function Workbench({
                   />
                 ))}
               </nav>
+              {desktopBridge ? (
+                <nav className="vq-nav" aria-label="本机">
+                  <div className="vq-nav-label" aria-hidden="true">
+                    本机
+                  </div>
+                  <NavItem
+                    icon={DESKTOP_NAV.icon}
+                    label={DESKTOP_NAV.label}
+                    active={activePage === 'local'}
+                    compact={!sidebarOpen}
+                    onClick={() => navTo(DESKTOP_NAV)}
+                  />
+                </nav>
+              ) : null}
               {/* 工具区：能力不再和「发现 / 模板库」并列成同一类入口；收起侧栏时只留一道分隔线 */}
               <nav className="vq-nav vq-nav--tools" aria-label="工具">
                 {/* 展开时是一行分组标签，收起或窄屏时同一元素变成一道分隔线（见 shell.css） */}
@@ -693,6 +715,11 @@ function Workbench({
                 <>
                   <ChevronRight size={11} />
                   <span>工具</span>
+                </>
+              ) : activePage === 'local' ? (
+                <>
+                  <ChevronRight size={11} />
+                  <span>本机</span>
                 </>
               ) : null}
               <ChevronRight size={11} />

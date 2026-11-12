@@ -9,6 +9,7 @@ import {
   Compass,
   Grid2X2,
   LayoutTemplate,
+  Monitor,
   ScanEye,
   Settings2,
   Workflow,
@@ -48,6 +49,15 @@ export const SETTINGS_NAV: NavEntry = {
   hint: '账号、积分与模型入口',
   icon: Settings2,
   keywords: 'settings 账号 积分 密码',
+}
+
+/** 桌面端专属的一项：只有 Electron 外壳里存在，网页版侧栏不出现（也没有本地能力）。 */
+export const DESKTOP_NAV: NavEntry = {
+  id: 'local',
+  label: '本地工作区',
+  hint: '在本机读写文件、执行命令，每一步都能批准',
+  icon: Monitor,
+  keywords: 'desktop electron 本机 本地 文件夹 命令 终端 workspace',
 }
 
 const TOOL_IDS: readonly Page[] = TOOL_NAV.map((entry) => entry.id)
