@@ -1,12 +1,17 @@
 {
   "name": "creator-canvas-studio",
   "private": true,
-  "version": "0.8.0",
+  "version": "0.9.0",
+  "description": "VisionQA 桌面端：网页外壳 + 本地工作区（agent loop 在本机运行）",
+  "productName": "VisionQA",
+  "author": "Wavision",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
     "desktop": "electron .",
     "desktop:dev": "electron . --local",
+    "desktop:icon": "electron scripts/make-icon.cjs",
+    "desktop:dist": "electron-builder --win --x64",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
@@ -36,6 +41,7 @@
     "@vitejs/plugin-react": "^6.1.2",
     "concurrently": "^10.0.6",
     "electron": "^40.10.6",
+    "electron-builder": "^26.18.0",
     "oxlint": "^1.89.0",
     "typescript": "~7.0.2",
     "vite": "^8.3.5"

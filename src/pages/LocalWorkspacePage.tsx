@@ -601,6 +601,9 @@ export default function LocalWorkspacePage() {
               </span>
             ) : null}
             {error ? <span className="lw-top-error">{error}</span> : null}
+            <span className="lw-desktop" title="这台电脑上安装的 VisionQA 桌面端版本">
+              桌面端 {info?.version ?? '—'}
+            </span>
           </div>
 
           <div className="lw-feed" ref={feedRef}>

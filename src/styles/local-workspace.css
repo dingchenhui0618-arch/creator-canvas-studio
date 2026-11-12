@@ -209,6 +209,13 @@
   color: var(--faint);
 }
 .lw-top-error { color: var(--fail); font-size: var(--text-xs); }
+/* 装的是哪个版本的桌面端，页面上要能直接看到（问支持时先报这个） */
+.lw-desktop {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-mono);
+  color: var(--faint);
+}
 
 .lw-feed {
   display: flex;

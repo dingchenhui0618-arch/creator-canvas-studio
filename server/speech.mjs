@@ -84,7 +84,6 @@ export function speechFit(expectedSec, actualSec) {
  * pace 跟着模型的节奏判断走（快 / 中 / 慢），复刻出来的口播密度才对得上原片。
  */
 export function reconcileTimeline(segments, { totalSec = 0, textOf = (seg) => seg?.caption, pace = '中' } = {}) {
-  const startOf = (seg) => Number(seg?.startSec) || 0
   const endOf = (seg) => Number(seg?.endSec) || 0
   let cursor = 0
   const rows = (Array.isArray(segments) ? segments : []).map((seg, index) => {

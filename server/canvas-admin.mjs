@@ -38,7 +38,7 @@ async function callCanvas(pathname, init = {}) {
       },
       signal: AbortSignal.timeout(TIMEOUT_MS),
     })
-  } catch (error) {
+  } catch {
     throw fail('画布服务暂时连不上', 'CANVAS_UNREACHABLE', 502)
   }
   const data = await response.json().catch(() => null)

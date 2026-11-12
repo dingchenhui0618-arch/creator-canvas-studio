@@ -1,0 +1,48 @@
+# 桌面端打包配置：网页外壳 + 本地工作区（不打包 dist，外壳加载生产站点）
+appId: cn.wavisionai.visionqa
+productName: VisionQA
+copyright: Copyright © 2026 Wavision
+
+directories:
+  output: release-desktop
+  buildResources: build
+
+# 复用 npm 已经下好的 Electron，避免打包时再从 GitHub 拉一份
+electronDist: node_modules/electron/dist
+electronVersion: 40.10.6
+npmRebuild: false
+
+# 外壳只有 electron/ 这一层代码：网页本体在生产站点，node_modules 里没有运行期依赖
+files:
+  - electron/**/*
+  - package.json
+  - "!node_modules/**/*"
+
+asar: true
+compression: maximum
+
+win:
+  icon: build/icon.ico
+  requestedExecutionLevel: asInvoker
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: VisionQA
+  uninstallDisplayName: VisionQA
+  deleteAppDataOnUninstall: false
+  artifactName: VisionQA-Setup-${version}.${ext}
+
+portable:
+  artifactName: VisionQA-Portable-${version}.${ext}

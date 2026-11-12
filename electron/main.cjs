@@ -5,8 +5,27 @@
 // 主进程用 CJS：Electron 的 ESM 主进程在部分版本里拿不到 'electron' 的导出，
 // 用 require 最稳；agent 那几个模块是 ESM，运行时用动态 import 载入。
 const { app, BrowserWindow, Menu, dialog, ipcMain, session, shell } = require('electron')
+const fs = require('node:fs')
 const fsp = require('node:fs/promises')
 const path = require('node:path')
+
+// 桌面端的数据目录用正名，不再按包名落到 creator-canvas-studio。
+// 首次升级把旧目录整个搬一次（会话、长期记忆、登录态都在里面），搬完才设路径；
+// 别的应用已经占用的 %APPDATA%\VisionQA 一律不碰。
+function prepareUserData() {
+  const target = path.join(app.getPath('appData'), 'VisionQA Desktop')
+  const legacy = path.join(app.getPath('appData'), 'creator-canvas-studio')
+  if (!fs.existsSync(target) && fs.existsSync(legacy)) {
+    try {
+      fs.cpSync(legacy, target, { recursive: true })
+    } catch (error) {
+      console.error('迁移旧的桌面端数据目录失败：' + (error && error.message))
+    }
+  }
+  app.setPath('userData', target)
+}
+
+prepareUserData()
 
 const LOCAL_URL =
   process.env.VQ_DESKTOP_URL ||
