@@ -386,7 +386,16 @@ function Workbench({
           />
         )
       case 'agents':
-        return <AgentsPage onCreate={openNewAgent} onOpenAgent={openAgent} />
+        // 结构化草稿的两个出口：存为模板去模板库，送到画布直接带着新流程进画布页
+        return (
+          <AgentsPage
+            onCreate={openNewAgent}
+            onOpenAgent={openAgent}
+            onOpenTemplates={() => go('templates')}
+            onOpenCanvas={(flowId) => navigate({ kind: 'page', page: 'canvas', flowId })}
+            onToast={notify}
+          />
+        )
       case 'runs':
         return <RunsPage onOpenFlow={(flowId) => navigate({ kind: 'page', page: 'canvas', flowId })} />
       case 'review':

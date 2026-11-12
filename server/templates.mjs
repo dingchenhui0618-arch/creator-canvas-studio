@@ -3,6 +3,7 @@ import path from 'node:path'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { config } from './config.mjs'
 import { canAccess } from './owner.mjs'
+import { draftTiming } from './agent-draft.mjs'
 
 let cache = null
 
@@ -292,6 +293,52 @@ export async function adaptTemplate({ source, title = '', hook = '', structure =
     reuseCount: 0,
     ownerId: user?.id || '',
     createdAt: now,
+  }
+  list.unshift(template)
+  await persist(list)
+  return template
+}
+
+// 智能体「存为模板」：草稿本身已经整理成段 + 镜（server/agent-draft.mjs），
+// 这里只负责落库。没有原片、没有抽帧，也没有互动数据——它是一条可套用的脚本模板，
+// 不是某条爆款的复刻记录，所以 kind 单独标成 agent，不做统计、不算已解析的原片。
+export async function createTemplateFromDraft({ draft, agent = null, user = null }) {
+  if (!draft || (!(draft.structure || []).length && !(draft.storyboard || []).length)) return null
+  const list = await loadAll()
+  const now = new Date().toISOString()
+  const durationSec = Number(draft?.stats?.durationSec) || 0
+  const template = {
+    id: 'tpl_' + randomUUID().slice(0, 8),
+    kind: 'agent',
+    title: adaptText(draft.title, 120) || adaptText(agent?.name, 120) || '智能体草稿',
+    contentType: adaptText(draft.contentType, 40) || '脚本',
+    tags: [],
+    platform: '',
+    // 卡片脚注是「标签 + platformLabel + 作者」：两个都写智能体名会重复成
+    // 「智能体 · 口播脚本与分镜 · 口播脚本与分镜」。作者只属于原片，这里留空。
+    platformLabel: agent?.name ? adaptText(agent.name, 40) : '智能体',
+    sourceUrl: '',
+    sourceId: '',
+    author: '',
+    publishedAt: '',
+    stats: {},
+    durationSec: Math.round(durationSec) || 0,
+    hook: adaptText(draft.hook, 400),
+    hookType: '',
+    structure: draft.structure || [],
+    storyboard: (draft.storyboard || []).map((shot) => ({ ...shot, frameUrl: '' })),
+    timing: draftTiming(draft),
+    analysis: null,
+    frames: [],
+    cover: '',
+    video: { width: 0, height: 0, fps: 0, duration: 0 },
+    origin: 'agent',
+    agentId: agent?.id || '',
+    agentName: agent?.name || '',
+    reuseCount: 0,
+    ownerId: user?.id || '',
+    createdAt: now,
+    updatedAt: now,
   }
   list.unshift(template)
   await persist(list)

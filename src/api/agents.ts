@@ -66,6 +66,41 @@ export type AgentToolsResult = {
   skipped: { id: string; label: string; reason: string }[]
 }
 
+// 结构化草稿：服务端从回复里的 ```draft 块整理出来，两个出口（存为模板 / 送到画布）都用它。
+// 秒数是服务端按口播字数算的，界面上直接显示、不再自己算一遍。
+export type AgentDraftBeat = {
+  beat: string
+  startSec: number
+  endSec: number
+  voiceover: string
+  onScreen: string
+  purpose: string
+  expectedSec: number
+  fit?: string
+}
+
+export type AgentDraftShot = {
+  shotNo: number
+  startSec: number
+  endSec: number
+  visual: string
+  camera: string
+  caption: string
+  audio: string
+  purpose: string
+  expectedSec: number
+  fit?: string
+}
+
+export type AgentDraft = {
+  title: string
+  hook: string
+  contentType: string
+  structure: AgentDraftBeat[]
+  storyboard: AgentDraftShot[]
+  stats: { beats: number; shots: number; voiceoverSec: number; storyboardSec: number; durationSec: number }
+}
+
 export type AgentChatReply = {
   credits?: { cost: number; balance: number | null }
   reply: string
@@ -74,6 +109,7 @@ export type AgentChatReply = {
   usage: unknown
   attempted: string[]
   tools?: AgentToolsResult
+  draft?: AgentDraft | null
   run?: { id: string; createdAt: string; credits: { cost: number; balance: number | null; refunded: boolean } | null }
   memory: { turns: number; messages: number }
   outputType: OutputType
@@ -184,6 +220,19 @@ export const chatWithAgent = (
   request<AgentChatReply>('/api/agents/' + id + '/chat', {
     method: 'POST',
     body: JSON.stringify({ ...input, count: 1 }),
+  })
+
+// 两个出口都不扣积分：没有模型调用，只是把已经产出的内容落到模板库或画布。
+export const saveAgentDraftAsTemplate = (id: string, draft: AgentDraft) =>
+  request<{ template: { id: string; title: string; contentType: string; platformLabel: string; beats: number; shots: number; durationSec: number } }>(
+    '/api/agents/' + id + '/draft/template',
+    { method: 'POST', body: JSON.stringify({ draft }) },
+  )
+
+export const sendAgentDraftToCanvas = (id: string, draft: AgentDraft) =>
+  request<{ flow: { id: string; name: string; nodes: number } }>('/api/agents/' + id + '/draft/canvas', {
+    method: 'POST',
+    body: JSON.stringify({ draft }),
   })
 
 export const listAgentHistory = (id: string, params: { limit?: number; offset?: number } = {}) => {

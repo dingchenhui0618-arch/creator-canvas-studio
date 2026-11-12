@@ -1461,3 +1461,92 @@
   color: var(--fail);
   font-size: 11.5px;
 }
+
+/* ---------- 结构化草稿卡：智能体回复的两个出口 ---------- */
+.agx-draft {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 16px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.agx-draft-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.agx-draft-kicker {
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+.agx-draft-head strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.agx-draft-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+.agx-draft-stats span + span::before {
+  content: '·';
+  margin-right: 8px;
+  color: var(--line-strong);
+}
+.agx-draft-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-faint);
+}
+.agx-draft-actions .agx-btn {
+  height: 28px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+.agx-draft-done {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.agx-draft-done svg {
+  color: var(--pass);
+}
+.agx-draft-done button {
+  height: 20px;
+  padding: 0 4px;
+  color: var(--ink);
+  background: none;
+  border: 0;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.agx-draft-done button:hover {
+  color: #000;
+}
+.agx-draft-error {
+  margin: 0;
+  color: var(--fail);
+  font-size: 12px;
+  line-height: 1.6;
+}

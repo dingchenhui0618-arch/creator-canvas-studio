@@ -312,7 +312,7 @@ export function TemplateLibraryPage({
                     ? '来自画布 · 套用后原样开回一张新画布'
                     : isParsed(item) ? item.hook : item.author ? item.author + ' · 只有原链接，还没解析' : '只有原链接，还没解析'}
                 </span>
-                {item.kind === 'flow' || item.kind === 'adapted' ? null : (
+                {item.kind === 'flow' || item.kind === 'adapted' || item.kind === 'agent' ? null : (
                   <div className="template-stats">
                     {(item.stats?.plays || 0) > 0 && <span><Play size={11} />{formatCount(item.stats.plays || 0)}</span>}
                     <span><Heart size={11} />{formatCount(item.stats?.likes || 0)}</span>
@@ -339,6 +339,7 @@ export function TemplateLibraryPage({
                   <span>
                     {item.shared ? <span className="template-shared">官方示例</span> : null}
                     {item.kind === 'adapted' ? <span className="template-shared">改编版</span> : null}
+                    {item.kind === 'agent' ? <span className="template-shared">智能体</span> : null}
                     {item.platformLabel}
                     {item.author ? ' · ' + item.author : ''}
                     {item.reuseCount ? ' · 已复用 ' + item.reuseCount + ' 次' : ''}
@@ -379,13 +380,17 @@ export function TemplateLibraryPage({
                         ? '工作流'
                         : detail.kind === 'adapted'
                           ? '改编版 · ' + (detail.contentType || '脚本')
-                          : (isParsed(detail) ? detail.contentType : '待解析') + ' · ' + detail.platformLabel}
+                          : detail.kind === 'agent'
+                            ? '智能体 · ' + (detail.contentType || '脚本')
+                            : (isParsed(detail) ? detail.contentType : '待解析') + ' · ' + detail.platformLabel}
                     </span>
                     <strong>{detail.title}</strong>
                     <span className="drawer-sub">
                       {detail.kind === 'flow'
                         ? '来自画布 · 套用后开回一张新画布 · ' + (detail.flowNodes?.length || 0) + ' 个节点'
-                        : (detail.author || '未知作者') + ' · ' + formatDuration(detail.durationSec)}
+                        : detail.kind === 'agent'
+                          ? '来自智能体' + (detail.agentName ? ' ' + detail.agentName : '') + ' · ' + detail.structure.length + ' 段 · ' + detail.storyboard.length + ' 镜'
+                          : (detail.author || '未知作者') + ' · ' + formatDuration(detail.durationSec)}
                       {' · 模板 ' + detail.id}
                       {detail.kind === 'adapted' && detail.adaptedFrom ? ' · 改编自 ' + detail.adaptedFrom : ''}
                     </span>
@@ -437,7 +442,7 @@ export function TemplateLibraryPage({
                     </section>
                   ) : (
                   <>
-                  {detail.kind === 'adapted' ? null : (
+                  {detail.kind === 'adapted' || detail.kind === 'agent' ? null : (
                     <section className="drawer-section">
                       <div className="drawer-section-head"><h3>互动数据</h3><span>来自检索结果</span></div>
                       <div className="drawer-stats">
@@ -524,7 +529,7 @@ export function TemplateLibraryPage({
                           <p className={`timing-note timing-note--${detail.timing.fit}`}>
                             <strong>台词约需 {detail.timing.estimatedSec}s</strong>
                             <span>
-                              原片 {detail.timing.durationSec}s · 按{paceLabel(detail.timing.pace)}速估（{detail.timing.rate ?? 0} 字/秒）· {describeTiming(detail.timing)}
+                              {detail.kind === 'agent' ? '分镜' : '原片'} {detail.timing.durationSec}s · 按{paceLabel(detail.timing.pace)}速估（{detail.timing.rate ?? 0} 字/秒）· {describeTiming(detail.timing)}
                             </span>
                           </p>
                         ) : null}
@@ -736,7 +741,7 @@ export function TemplateLibraryPage({
                   ) : null}
                   {adapt ? null : (
                     <>
-                    {detail.kind === 'flow' || !isParsed(detail) ? null : (
+                    {detail.kind === 'flow' || !isParsed(detail) || !detail.storyboard?.length ? null : (
                       <button
                         type="button"
                         className="button button--ghost"

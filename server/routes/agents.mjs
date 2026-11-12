@@ -11,6 +11,10 @@ import {
   updateAgent,
 } from '../agents.mjs'
 import { OUTPUT_TYPES, availableModels, chatWithAgent } from '../agentChat.mjs'
+import { draftToScript, normalizeDraft } from '../agent-draft.mjs'
+import { createTemplateFromDraft } from '../templates.mjs'
+import { createFlow } from '../flows.mjs'
+import { buildReplicateDraft } from '../script-draft.mjs'
 import { clearAgentRuns, listAgentRuns, recordAgentRun } from '../agent-history.mjs'
 import { config, visionEnabled } from '../config.mjs'
 import { currentUser } from '../auth.mjs'
@@ -226,6 +230,8 @@ export function createAgentsRouter() {
             usage: result.usage || null,
             attempted: result.attempted,
             tools: result.tools || { used: [], artifacts: [], skipped: [] },
+            // 结构化草稿：正文之外的机器可读版本，界面据此给出「存为模板 / 送到画布」两个出口
+            draft: result.draft || null,
             run: run ? { id: run.id, createdAt: run.createdAt, credits: run.credits } : null,
             memory: result.memory || { turns: 0, messages: 0 },
             outputType,
@@ -233,6 +239,53 @@ export function createAgentsRouter() {
               ? { id: updated.id, name: updated.name, runCount: updated.runCount, lastRunAt: updated.lastRunAt }
               : { id: agent.id, name: agent.name, runCount: (agent.runCount || 0) + 1, lastRunAt: new Date().toISOString() },
           })
+          return true
+        }
+
+        // 结构化草稿的两个出口：存为模板 / 送到画布。
+        // 草稿由服务端重新整理一遍（不信任客户端回传的形状），两个出口都不扣积分：
+        // 这里没有模型调用，只是在用户点下去之后把「可以继续用的东西」真的落库。
+        if (segments.length === 3 && action === 'draft' && (segments[2] === 'template' || segments[2] === 'canvas')) {
+          if (req.method !== 'POST') {
+            methodNotAllowed(res, 'POST')
+            return true
+          }
+          const agent = await getAgent(id, user)
+          if (!agent) {
+            sendJson(res, 404, { error: '智能体不存在：' + id })
+            return true
+          }
+          const body = await readBody(req)
+          const draft = normalizeDraft(body.draft)
+          if (!draft) {
+            sendJson(res, 400, { error: '这份结果里没有脚本段落或分镜，没法继续用', code: 'DRAFT_EMPTY' })
+            return true
+          }
+          if (segments[2] === 'template') {
+            const template = await createTemplateFromDraft({ draft, agent, user })
+            if (!template) {
+              sendJson(res, 400, { error: '草稿为空，没有可保存的段落', code: 'DRAFT_EMPTY' })
+              return true
+            }
+            sendJson(res, 201, {
+              template: {
+                id: template.id,
+                title: template.title,
+                contentType: template.contentType,
+                platformLabel: template.platformLabel,
+                beats: template.structure.length,
+                shots: template.storyboard.length,
+                durationSec: template.durationSec,
+              },
+            })
+            return true
+          }
+          const description = '来自智能体 ' + agent.name + ' · ' + draft.stats.beats + ' 段 / ' + draft.stats.shots + ' 镜'
+          const flow = await createFlow(
+            buildReplicateDraft({ script: draftToScript(draft), name: draft.title, description }),
+            user,
+          )
+          sendJson(res, 201, { flow: { id: flow.id, name: flow.name, nodes: flow.nodes.length } })
           return true
         }
 

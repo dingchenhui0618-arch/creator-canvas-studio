@@ -4,6 +4,7 @@ import { listTemplates } from './templates.mjs'
 import { listFlows } from './flows.mjs'
 import { callTextModel, llmEnabled, modelChain } from './llm.mjs'
 import { extractUrl, readWebPage } from './webread.mjs'
+import { DRAFT_HINT, extractDraft } from './agent-draft.mjs'
 
 // 智能体对话：消息构造 + 输出类型约束在这里，真正的模型调用复用 llm.mjs 的
 // 「单模型 2 次重试 + 候选模型降级链」；这里只负责把上游错误翻译成
@@ -174,27 +175,44 @@ export async function collectToolContext(agent, user = null, message = '') {
   return { used, skipped, blocks }
 }
 
-// 回复里的 JSON：只认 fenced 代码块或整段就是一个对象/数组，解析失败就不生成文件，
-// 不猜、不截断成坏 JSON。
+// 回复里的 JSON：只认能真正 JSON.parse 的 fenced 代码块（不看标签，```json 与 ```draft 都算），
+// 或整段就是一个对象/数组；解析失败就不生成文件，不猜、不截断成坏 JSON。
+function jsonArtifactOf(raw) {
+  const content = JSON.stringify(JSON.parse(raw), null, 2)
+  if (content.length > 200000) return null
+  return { name: 'agent-output.json', type: 'application/json', content, bytes: Buffer.byteLength(content, 'utf8') }
+}
+
 export function extractJsonArtifact(reply) {
   const source = String(reply || '')
-  let raw = ''
-  const fenced = source.match(/```(?:json)?\s*\n([\s\S]*?)```/i)
-  if (fenced) raw = fenced[1].trim()
-  if (!raw) {
-    const trimmed = source.trim()
-    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) raw = trimmed
+  // 代码块的信息串不止 json：结构化草稿块是 ```draft，之前的正则只认 json，
+  // 导致开了「导出 JSON」的智能体在草稿已经生成时还报「没有可解析的 JSON 块」。
+  // 现在逐个代码块试解析，只认真正能 JSON.parse 的那个，不看标签。
+  const fence = /```[^\n`]*\n([\s\S]*?)```/g
+  let match
+  while ((match = fence.exec(source))) {
+    const raw = match[1].trim()
+    if (!raw || !(raw.startsWith('{') || raw.startsWith('['))) continue
+    try {
+      return jsonArtifactOf(raw)
+    } catch {
+      continue
+    }
   }
-  if (!raw) return null
-  try {
-    const parsed = JSON.parse(raw)
-    const content = JSON.stringify(parsed, null, 2)
-    if (content.length > 200000) return null
-    return { name: 'agent-output.json', type: 'application/json', content, bytes: Buffer.byteLength(content, 'utf8') }
-  } catch {
-    return null
+  const trimmed = source.trim()
+  if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+    try {
+      return jsonArtifactOf(trimmed)
+    } catch {
+      return null
+    }
   }
+  return null
 }
+
+// 只有脚本与分镜两种输出需要结构化草稿：评审是结论，文案是备选句子，
+// 它们没有「段 + 镜」的形状，硬拆只会让出口产出一条空模板。
+const draftableType = (id) => id === '脚本' || id === '分镜'
 
 function buildMessages(agent, message, outputType, memory = [], toolContext = { used: [], skipped: [], blocks: [] }) {
   const type = OUTPUT_TYPES.find((item) => item.id === outputType) || OUTPUT_TYPES[0]
@@ -230,6 +248,7 @@ function buildMessages(agent, message, outputType, memory = [], toolContext = { 
     '',
     '本次输出类型：' + type.label + '。' + type.instruction,
     '如果本次输出类型与系统提示词的结构要求冲突，以本次输出类型为准；语气、知识与禁止项仍然遵守系统提示词。',
+    draftableType(type.id) ? DRAFT_HINT : '',
   ]
     .filter(Boolean)
     .join('\n')
@@ -257,22 +276,36 @@ export async function chatWithAgent({ agent, message, outputType, model, history
   const messages = buildMessages(agent, message, outputType, memory, toolContext)
   const temperature = Math.max(0, Math.min(1, Number(agent.temperature ?? 0.4)))
   const startedAt = Date.now()
+  const withDraft = draftableType(outputType)
   try {
     log?.('调用模型（输出类型：' + outputType + '，温度：' + temperature + '）')
     const result = await callTextModel(messages, {
       temperature,
-      maxTokens: 1800,
+      // 结构化草稿要多写一段 JSON：正文 1800 token 会被它挤掉一半，
+      // 截断的 JSON 什么都拼不回来，只会在界面上消失一块。
+      maxTokens: withDraft ? 3000 : 1800,
       models: candidates,
       log,
     })
-    const tools = { used: toolContext.used, artifacts: [], skipped: [...toolContext.skipped] }
+    const extracted = withDraft ? extractDraft(result.text) : { draft: null, reply: result.text }
+    const tools = { used: [...toolContext.used], artifacts: [], skipped: [...toolContext.skipped] }
+    if (extracted.draft) {
+      tools.used.push({
+        id: 'draft',
+        label: '结构化草稿',
+        detail: extracted.draft.stats.beats + ' 段 / ' + extracted.draft.stats.shots + ' 镜',
+      })
+    }
     if ((agent.tools || []).includes('export-json')) {
+      // 用原始回复取 JSON：结构化草稿块本身就是一段可导出的 JSON，
+      // 用去掉块之后的正文会让「导出 JSON」莫名其妙地报「没有可解析的 JSON 块」。
       const artifact = extractJsonArtifact(result.text)
       if (artifact) tools.artifacts.push(artifact)
       else tools.skipped.push({ id: 'export-json', label: '导出 JSON', reason: '回复里没有可解析的 JSON 块' })
     }
     return {
-      reply: result.text,
+      reply: extracted.reply,
+      draft: extracted.draft,
       model: result.model,
       latencyMs: Date.now() - startedAt,
       usage: null,
@@ -286,7 +319,7 @@ export async function chatWithAgent({ agent, message, outputType, model, history
     const translated = translateUpstreamError(error, candidates)
     // 模型失败时也把已经执行过的工具带回路由：运行历史里能看清「工具读到了、模型没答上来」，
     // 而不是把整次运行写成什么都没发生。
-    translated.tools = { used: toolContext.used, skipped: [...toolContext.skipped], artifacts: [] }
+    translated.tools = { used: [...toolContext.used], skipped: [...toolContext.skipped], artifacts: [] }
     throw translated
   }
 }

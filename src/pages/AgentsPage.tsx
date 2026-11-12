@@ -11,6 +11,8 @@ import {
   Copy,
   Download,
   History,
+  Layers,
+  LayoutTemplate,
   Pencil,
   Plus,
   RotateCcw,
@@ -28,8 +30,10 @@ import {
   listAgentHistory,
   listAgents,
   peekPendingSelectAgent,
+  saveAgentDraftAsTemplate,
+  sendAgentDraftToCanvas,
 } from '../api/agents'
-import type { AgentArtifact, AgentRecord, AgentRunRecord, AgentsList, AgentToolsResult, OutputType } from '../api/agents'
+import type { AgentArtifact, AgentDraft, AgentRecord, AgentRunRecord, AgentsList, AgentToolsResult, OutputType } from '../api/agents'
 import { getCredits, getModelService, recheckModelService, type CreditsResponse, type ModelServiceState } from '../api/credits'
 import { getPreferences } from '../api/preferences'
 import { useUiMode } from '../api/app'
@@ -44,7 +48,18 @@ type ChatMessage = {
   model?: string
   latencyMs?: number
   tools?: AgentToolsResult
+  // 结构化草稿：有它才显示两个出口（存为模板 / 送到画布）
+  draft?: AgentDraft | null
   at: number
+}
+
+// 每个出口的状态按消息 id 记：同一条回复存过模板之后，按钮变成「已存为模板 + 打开」，
+// 下次刷新（本地历史）也还是这个状态，不需要再点一次。
+type DraftAction = {
+  busy: '' | 'template' | 'canvas'
+  error: string
+  template?: { id: string; title: string }
+  flow?: { id: string; name: string }
 }
 
 type HistoryEntry = {
@@ -367,7 +382,102 @@ const OUTPUT_TYPE_BY_CATEGORY: Record<string, OutputType> = {
 
 const DEFAULT_OUTPUT_TYPE: OutputType = '脚本'
 
-export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; onOpenAgent: (name: string) => void }) {
+// 结构化草稿卡：回复下面的一条「可以继续用的东西」。
+// 两个出口都在这里，不跳页：存完模板、建完画布之后原件还在，链接点了再走。
+function DraftCard({
+  draft,
+  action,
+  onSaveTemplate,
+  onSendCanvas,
+  onOpenTemplates,
+  onOpenCanvas,
+}: {
+  draft: AgentDraft
+  action: DraftAction
+  onSaveTemplate: () => void
+  onSendCanvas: () => void
+  onOpenTemplates: () => void
+  onOpenCanvas: (flowId: string) => void
+}) {
+  const busy = action.busy !== ''
+  // 先取出再判空：闭包里用 action.flow.id 会把「已经判过」的窄化丢掉
+  const savedTemplate = action.template
+  const savedFlow = action.flow
+  return (
+    <div className="agx-draft" role="group" aria-label="结构化草稿">
+      <div className="agx-draft-head">
+        <span className="agx-draft-kicker">结构化草稿</span>
+        <strong>{draft.title}</strong>
+      </div>
+      <div className="agx-draft-stats">
+        {draft.stats.beats > 0 ? <span>{draft.stats.beats} 段脚本</span> : null}
+        {draft.stats.shots > 0 ? <span>{draft.stats.shots} 个分镜</span> : null}
+        {draft.stats.voiceoverSec > 0 ? <span>口播约 {draft.stats.voiceoverSec} 秒</span> : null}
+      </div>
+      {action.error ? (
+        <p className="agx-draft-error" role="alert">
+          {action.error}
+        </p>
+      ) : null}
+      <div className="agx-draft-actions">
+        {savedTemplate ? (
+          <span className="agx-draft-done">
+            <Check size={12} />
+            已存为模板 · {savedTemplate.title}
+            <button type="button" onClick={onOpenTemplates}>
+              打开模板库
+            </button>
+          </span>
+        ) : (
+          <button
+            type="button"
+            className="agx-btn agx-btn--ink"
+            onClick={onSaveTemplate}
+            disabled={busy}
+            title="存成一条可套用的脚本模板，模板库和作品页都能用"
+          >
+            <LayoutTemplate size={13} />
+            {action.busy === 'template' ? '保存中' : '存为模板'}
+          </button>
+        )}
+        {savedFlow ? (
+          <span className="agx-draft-done">
+            <Check size={12} />
+            已送到画布 · {savedFlow.name}
+            <button type="button" onClick={() => onOpenCanvas(savedFlow.id)}>
+              打开画布
+            </button>
+          </span>
+        ) : (
+          <button
+            type="button"
+            className="agx-btn"
+            onClick={onSendCanvas}
+            disabled={busy}
+            title="开一张新画布：脚本进了复刻提示词，可以接着改、接着跑"
+          >
+            <Layers size={13} />
+            {action.busy === 'canvas' ? '创建中' : '送到画布'}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export function AgentsPage({
+  onCreate,
+  onOpenAgent,
+  onOpenTemplates,
+  onOpenCanvas,
+  onToast,
+}: {
+  onCreate: () => void
+  onOpenAgent: (name: string) => void
+  onOpenTemplates: () => void
+  onOpenCanvas: (flowId: string) => void
+  onToast?: (message: string) => void
+}) {
   const [data, setData] = useState<AgentsList | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
@@ -401,6 +511,8 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
   // 模型服务状态：额度 / 凭证这类账号级故障要在输入前就说清楚，而不是让人白点一次
   const [modelState, setModelState] = useState<ModelServiceState | null>(null)
   const [rechecking, setRechecking] = useState(false)
+  // 每条回复的两个出口各自记状态：存过模板的那条不再显示「存为模板」按钮
+  const [draftActions, setDraftActions] = useState<Record<string, DraftAction>>({})
   const { internal } = useUiMode()
   // 顶栏选择的模型保存在服务端；智能体本身没绑模型时用它作为默认值
   const preferredModelRef = useRef('')
@@ -611,6 +723,7 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
           model: result.model,
           latencyMs: result.latencyMs,
           tools: result.tools,
+          draft: result.draft ?? null,
           at: Date.now(),
         }
         const finalMessages = [...nextMessages, replyMessage]
@@ -713,6 +826,49 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
     setCopiedId(ok ? message.id : '')
     if (ok) window.setTimeout(() => setCopiedId((current) => (current === message.id ? '' : current)), 1600)
   }, [])
+
+  const markDraftAction = useCallback((id: string, patch: Partial<DraftAction>) => {
+    setDraftActions((current) => {
+      const previous: DraftAction = current[id] ?? { busy: '', error: '' }
+      return { ...current, [id]: { ...previous, ...patch } }
+    })
+  }, [])
+
+  const saveDraftAsTemplate = useCallback(
+    async (message: ChatMessage) => {
+      const agent = selectedAgent
+      const draft = message.draft
+      if (!agent || !draft) return
+      markDraftAction(message.id, { busy: 'template', error: '' })
+      try {
+        const result = await saveAgentDraftAsTemplate(agent.id, draft)
+        markDraftAction(message.id, { busy: '', template: { id: result.template.id, title: result.template.title } })
+        onToast?.(
+          '已存为模板：' + result.template.title + '（' + result.template.beats + ' 段 / ' + result.template.shots + ' 镜）',
+        )
+      } catch (caught) {
+        markDraftAction(message.id, { busy: '', error: caught instanceof Error ? caught.message : '存为模板失败' })
+      }
+    },
+    [markDraftAction, onToast, selectedAgent],
+  )
+
+  const sendDraftToCanvas = useCallback(
+    async (message: ChatMessage) => {
+      const agent = selectedAgent
+      const draft = message.draft
+      if (!agent || !draft) return
+      markDraftAction(message.id, { busy: 'canvas', error: '' })
+      try {
+        const result = await sendAgentDraftToCanvas(agent.id, draft)
+        markDraftAction(message.id, { busy: '', flow: { id: result.flow.id, name: result.flow.name } })
+        onToast?.('已送到画布：' + result.flow.name)
+      } catch (caught) {
+        markDraftAction(message.id, { busy: '', error: caught instanceof Error ? caught.message : '送到画布失败' })
+      }
+    },
+    [markDraftAction, onToast, selectedAgent],
+  )
 
   const clearRuns = useCallback(async () => {
     if (!selectedId) return
@@ -977,6 +1133,16 @@ export function AgentsPage({ onCreate, onOpenAgent }: { onCreate: () => void; on
                   <div className="agx-bubble">
                     {message.role === 'agent' ? <div className="agx-md">{renderMarkdown(message.content)}</div> : message.content}
                   </div>
+                  {message.role === 'agent' && message.draft ? (
+                    <DraftCard
+                      draft={message.draft}
+                      action={draftActions[message.id] || { busy: '', error: '' }}
+                      onSaveTemplate={() => void saveDraftAsTemplate(message)}
+                      onSendCanvas={() => void sendDraftToCanvas(message)}
+                      onOpenTemplates={onOpenTemplates}
+                      onOpenCanvas={onOpenCanvas}
+                    />
+                  ) : null}
                   <div className="agx-msg-meta">
                     <span>
                       {message.role === 'user' ? '你' : selectedAgent?.name ?? '智能体'} · {formatClock(new Date(message.at).toISOString())}
