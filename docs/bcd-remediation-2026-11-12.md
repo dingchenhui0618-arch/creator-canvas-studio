@@ -13,7 +13,7 @@
 | C1 | GitHub Actions CI（类型检查 / 构建 / 代码检查 / 单测） | 已上线 2026-11-12 |
 | C2 | 回归测试入库、可离线跑 | 已完成 2026-11-12 |
 | C3 | 前端异常上报 + 后台可见 | 已上线 2026-11-12 |
-| C4 | 日志保留策略（轮转 + 保留天数） | 待做 |
+| C4 | 日志保留策略（轮转 + 保留天数） | 已上线 2026-11-12 |
 | C5 | 部署回滚（保留多个 release + 一键回滚） | 待做 |
 | D1 | 注册「已读条款」留痕 | 待做 |
 | D2 | TOTP 双因素 | 待做 |
@@ -216,3 +216,26 @@
 ### 边界
 - 只收「浏览器里发生的」：服务端 5xx / 上游失败 / 磁盘水位仍然走「告警」那条线，两边不混。
 - 不做 sourcemap 还原：生产堆栈是压缩后的位置，能看到是哪个页面、哪条错误、第几次，定位到函数需要结合本地复现。要还原映射得在发布时上传 sourcemap，本次不做。
+---
+
+## C4 日志保留策略（轮转 + 保留天数）
+
+### 问题
+日志此前只往 stdout 走，进的是 systemd journal：能看，但项目自己没有口径——查「最近 14 天的访问日志」只能 ssh 上去 journalctl；journal 也没有项目级上限，长期跑会慢慢把磁盘吃掉。data/logs 这条项目自己的日志线根本不存在。
+
+### 做法
+1. server/log-files.mjs：按天写 data/logs/{access,error,app}-YYYY-MM-DD.log，每行一条 JSON（与 stdout 同格式，journalctl 与 grep 都能直接用）。写盘走一条队列，避免并发 append 抢同一个文件。
+2. 保留策略：默认 14 天（VQ_LOG_RETENTION_DAYS）、总量上限 200MB（VQ_LOG_MAX_MB）。先按天数删过期文件，再按总量从最旧的删；每小时最多清一次，进程启动时也清一次。只删整文件，不截断当天的日志。
+3. 接入 log.mjs：访问日志（健康检查与静态资源按原策略不记，避免一天几千行噪音）、5xx 与进程级异常的错误日志（保留完整堆栈，内存环形缓冲才截到 1200 字）、启动/迁移/告警这类事件日志。
+4. 后台「系统」页新增「服务端日志」卡片：保留策略、文件数、总占用、最早与最新日期、文件列表（类型 / 日期 / 大小），可「立即清理」（写管理审计）。
+5. systemd journal 另给一个硬上限：deploy/journald-visionqa.conf（SystemMaxUse=500M、SystemKeepFree=1G、SystemMaxFileSize=50M），装到 /etc/systemd/journald.conf.d/visionqa.conf 后重启 journald。
+
+### 验证（生产，入口 index-gSJGxnIY.js）
+- 打真实请求之后 data/logs 出现 app-2026-11-12.log（启动 listen 事件）与 access-2026-11-12.log：6 行访问日志里 /api/health 一条都没有（按设计不记），路径分布 /api/admin/logs ×2、/api/templates、/api/search/history、/api/auth/login、/api/admin/logs/prune。
+- GET /api/admin/logs → 200，retention 14 天、上限 200MB、文件列表带大小；后台卡片显示「2 个文件 · 7.2 KB，最早/最新 2026-11-12，保留 14 天 / 上限 200 MB」。
+- 手工在服务器放一个 access-2026-09-01.log（31 天前）：POST /api/admin/logs/prune → `{removed:["access-2026-09-01.log"], bytesFreed:37, kept:2}`；再查列表只剩当天两个文件。
+- 单测 test/log-files.test.mjs：按天文件名、写入落当天文件、未知类型忽略、按天数删过期、按总量从旧删（上限调到 1KB 时只留 1 个文件）、列表统计；全库 34 个单测通过。
+- journald：drop-in 安装后 `journalctl --disk-usage` 仍是 416.9M（低于 500M 上限，不触发删除），`journalctl -u visionqa` 正常可读。
+
+### 产物
+![后台「系统」页的服务端日志：保留天数、占用与文件列表](screenshot-log-retention-2026-11-12.png)

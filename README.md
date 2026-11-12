@@ -2122,3 +2122,19 @@ push 到 master 与所有 PR 都会跑一条流水线，任何一步非零这次
 服务端 5xx / 上游失败 / 磁盘仍然走「告警」那条线，两边不混；不做 sourcemap 还原，堆栈是压缩后的位置。
 
 ![后台「系统」页的前端异常](docs/screenshot-client-errors-2026-11-12.png)
+
+### 五十三.9 C4 日志保留策略（轮转 + 保留天数）
+
+日志不再只有 journal：项目自己按天写 `data/logs`，超过保留天数或总量上限就从最旧的删；systemd journal 另外给了硬上限。
+
+| 环节 | 实测（生产，入口 index-gSJGxnIY.js） |
+| --- | --- |
+| 文件 | data/logs/access-YYYY-MM-DD.log / error-… / app-…，每行一条 JSON，与 stdout 同格式 |
+| 轮转 | 按天分文件；访问日志不记 /api/health 与静态资源（实测 6 行里 health 0 条） |
+| 保留 | 默认 14 天、200MB（VQ_LOG_RETENTION_DAYS / VQ_LOG_MAX_MB）；每小时最多清一次，启动也清一次 |
+| 清理 | 手工放一个 31 天前的文件 → 立即清理返回 removed 1 个、kept 2，之后列表只剩当天文件 |
+| 后台 | 「系统」页「服务端日志」卡片：保留策略、文件数、占用、文件列表，可立即清理（写审计） |
+| journald | deploy/journald-visionqa.conf：SystemMaxUse=500M、KeepFree=1G、MaxFileSize=50M；装完仍是 416.9M，不触发删除 |
+| 单测 | test/log-files.test.mjs：轮转命名、过期删除、总量从旧删、列表统计 |
+
+![后台「系统」页的服务端日志](docs/screenshot-log-retention-2026-11-12.png)

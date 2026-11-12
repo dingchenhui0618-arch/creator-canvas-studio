@@ -12,6 +12,7 @@ const ACTIONS = {
   'user.password': '重置口令',
   'credits.grant': '发放积分',
   'client-errors.clear': '清空前端异常',
+  'logs.prune': '清理服务端日志',
 }
 
 let schemaReady = false

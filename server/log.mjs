@@ -7,6 +7,7 @@
 //   3) unhandledRejection / uncaughtException 的兜底（后者记完日志退出，交给 systemd 重启）
 import crypto from 'node:crypto'
 import { recordAlert } from './alerts.mjs'
+import { appendLog } from './log-files.mjs'
 
 const DISABLED = String(process.env.VQ_ACCESS_LOG || '1') === '0'
 
@@ -38,7 +39,10 @@ function line(fields) {
 }
 
 export function logEvent(name, fields = {}) {
-  console.log(line({ t: name, ...fields }))
+  const text = line({ t: name, ...fields })
+  console.log(text)
+  // 同时落一份到 data/logs/app-*.log：journald 归系统管，项目自己的口径在这里
+  appendLog('app', text)
 }
 
 export function startAccess(req, res, { ip = '' } = {}) {
@@ -89,7 +93,10 @@ export function startAccess(req, res, { ip = '' } = {}) {
         scope: 'http',
       })
     }
-    console.log(line({ t: 'access', ...entry }))
+    const text = line({ t: 'access', ...entry })
+    console.log(text)
+    // 健康检查与静态资源不落盘：一天几千行没有排障价值，还可能把日志量撑爆
+    appendLog('access', text)
   }
   res.on('finish', finish)
   res.on('close', finish)
@@ -101,7 +108,10 @@ export function logRequestError(traceId, error, extra = {}) {
   const entry = { at: stamp(), id: traceId, msg: String(detail).slice(0, 4000), ...extra }
   errorTotal += 1
   pushRing(errorRing, ERROR_LIMIT, { ...entry, msg: entry.msg.slice(0, 1200) })
-  console.error(line({ t: 'error', ...entry }))
+  const text = line({ t: 'error', ...entry })
+  console.error(text)
+  // 错误日志保留完整堆栈（内存环形缓冲才截断到 1200 字）
+  appendLog('error', { ...entry, msg: String(detail).slice(0, 4000) })
 }
 
 // 内部环境排障用：返回最近请求与错误，以及本次启动以来的总条数（缓冲会丢旧条目，总数不会）

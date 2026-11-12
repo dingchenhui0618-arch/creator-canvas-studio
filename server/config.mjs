@@ -56,6 +56,12 @@ export const config = {
   searchHistoryFile: path.join(dataDir, 'search-history.json'),
   // 前端异常上报（浏览器里炸的东西），后台「系统」页读它
   clientErrorsFile: path.join(dataDir, 'client-errors.json'),
+  // 服务端日志：按天轮转 + 保留天数 / 总量上限（见 server/log-files.mjs）
+  logs: {
+    dir: (process.env.VQ_LOG_DIR || path.join(dataDir, 'logs')).trim(),
+    retentionDays: Number(process.env.VQ_LOG_RETENTION_DAYS || 14),
+    maxTotalMb: Number(process.env.VQ_LOG_MAX_MB || 200),
+  },
   redfox: {
     key: (process.env.REDFOX_API_KEY || '').trim(),
     baseUrl: process.env.REDFOX_BASE_URL || 'https://redfox.hk',

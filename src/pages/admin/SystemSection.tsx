@@ -97,6 +97,25 @@ type ClientErrorsInfo = {
   limits: { cap: number; dedupeMin: number }
 }
 
+type LogFile = { name: string; kind: string; day: string; bytes: number; mtime: string }
+
+type LogsInfo = {
+  dir: string
+  retentionDays: number
+  maxTotalMb: number
+  totalFiles: number
+  totalBytes: number
+  oldestDay: string
+  newestDay: string
+  files: LogFile[]
+}
+
+const LOG_KIND_LABEL: Record<string, string> = {
+  access: '访问',
+  error: '错误',
+  app: '事件',
+}
+
 const CLIENT_ERROR_KIND: Record<string, string> = {
   error: '脚本错误',
   unhandledrejection: '未处理 Promise',
@@ -409,6 +428,8 @@ export default function SystemSection() {
         ) : null}
       </section>
 
+      <LogsCard internal={internal} />
+
       {internal ? <DiagnosticsCard /> : null}
     </>
   )
@@ -504,6 +525,111 @@ function ClientErrorsCard() {
           ) : (
             <p className="admin-hint admin-hint--ok">最近没有前端异常：页面报错、按钮点了没反应这类问题会出现在这里。</p>
           )}
+        </>
+      ) : null}
+
+      {note ? <p className="admin-hint">{note}</p> : null}
+    </section>
+  )
+}
+
+// 服务端日志：项目自己的 data/logs 按天轮转，保留天数与总量上限都由服务端给。
+// systemd journal 另有一套系统级策略，两边互不替代（这里只讲项目日志）。
+function LogsCard({ internal }: { internal: boolean }) {
+  const { data, error, loading, reload } = useApi<LogsInfo>('/api/admin/logs?limit=40')
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState('')
+
+  const prune = async () => {
+    setBusy(true)
+    setNote('')
+    try {
+      const result = await request<{ ok: boolean; removed: string[]; bytesFreed: number; kept: number }>('/api/admin/logs/prune', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      })
+      setNote(
+        result.removed.length
+          ? '已按保留策略清掉 ' + result.removed.length + ' 个文件（' + formatBytes(result.bytesFreed) + '），剩 ' + result.kept + ' 个'
+          : '没有需要清理的文件：都还在保留期内',
+      )
+      reload()
+    } catch (cause) {
+      setNote(cause instanceof Error ? cause.message : '清理失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className="admin-card admin-block">
+      <div className="admin-block-head">
+        <div>
+          <p className="admin-label">服务端日志</p>
+          <p className="admin-sub">
+            访问、错误、启动事件按天写进 data/logs：超过 {data?.retentionDays ?? 14} 天或总量超过{' '}
+            {data?.maxTotalMb ?? 200}MB 就从最旧的开始删。健康检查与静态资源不进访问日志。
+          </p>
+        </div>
+        <div className="admin-alert-actions">
+          <SourceTag kind="api" source="GET /api/admin/logs" />
+          <button type="button" className="admin-btn admin-btn--ghost" onClick={reload} disabled={loading}>
+            {loading ? '刷新中…' : '刷新'}
+          </button>
+          <button type="button" className="admin-btn admin-btn--ghost" onClick={() => void prune()} disabled={busy}>
+            {busy ? '清理中…' : '立即清理'}
+          </button>
+        </div>
+      </div>
+
+      {error ? <ErrorBanner message={'GET /api/admin/logs：' + error} onRetry={reload} /> : null}
+      {loading && !data ? <LoadingLine label="/api/admin/logs" /> : null}
+
+      {data ? (
+        <>
+          <div className="admin-alert-facts">
+            <span>
+              <b>{data.totalFiles}</b> 个文件 · {formatBytes(data.totalBytes)}
+            </span>
+            <span>
+              最早 <b>{data.oldestDay || '—'}</b> · 最新 <b>{data.newestDay || '—'}</b>
+            </span>
+            <span>
+              保留 <b>{data.retentionDays}</b> 天 / 上限 <b>{data.maxTotalMb}</b> MB
+            </span>
+          </div>
+
+          {data.files.length ? (
+            <div className="admin-table-wrap">
+              <table className="admin-table admin-table--runs">
+                <thead>
+                  <tr>
+                    <th>文件</th>
+                    <th>类型</th>
+                    <th>日期</th>
+                    <th>大小</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.files.map((file) => (
+                    <tr key={file.name}>
+                      <td className={internal ? 'admin-mono' : ''}>{file.name}</td>
+                      <td>{LOG_KIND_LABEL[file.kind] || file.kind}</td>
+                      <td className="admin-mono">{file.day}</td>
+                      <td className="admin-mono">{formatBytes(file.bytes)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="admin-hint">还没有日志文件：下一次请求或启动事件之后会出现在这里。</p>
+          )}
+
+          <p className="admin-hint">
+            {internal ? '目录 ' + data.dir + '；' : ''}
+            清理只在到期或超量时删文件，不会截断当天的日志。systemd journal 的系统级策略另算，两边互不替代。
+          </p>
         </>
       ) : null}
 

@@ -20,6 +20,7 @@ import { gatewayStatus, modelCoverage } from '../gateway.mjs'
 import { canvasAdminConfigured, listCanvasUsers, setCanvasUserAccess } from '../canvas-admin.mjs'
 import { alertCounts, ackAlert, checkDisk, listAlerts, recordAlert } from '../alerts.mjs'
 import { clearClientErrors, listClientErrors } from '../client-errors.mjs'
+import { listLogs, pruneLogs } from '../log-files.mjs'
 
 const MODEL_KEY = /^\/api\/admin\/model-keys\/([\w-]+)$/
 const MODEL_KEY_TEST = /^\/api\/admin\/model-keys\/([\w-]+)\/test$/
@@ -716,6 +717,19 @@ export function createAdminRouter() {
           disk,
           channel: { webhook: Boolean(config.alerts.webhook), diskFreeMb: config.alerts.diskFreeMb },
         })
+        return true
+      }
+
+      // 服务端日志：按天轮转的文件、保留天数与总量上限；清理动作也记审计
+      if (pathname === '/api/admin/logs' && req.method === 'GET') {
+        sendJson(res, 200, await listLogs({ limit: Number(url.searchParams.get('limit')) || 60 }))
+        return true
+      }
+
+      if (pathname === '/api/admin/logs/prune' && req.method === 'POST') {
+        const result = await pruneLogs()
+        recordAudit({ req, actor: user, action: 'logs.prune', targetType: 'logs', targetId: 'all', detail: { removed: result.removed.length } })
+        sendJson(res, 200, { ok: true, ...result })
         return true
       }
 

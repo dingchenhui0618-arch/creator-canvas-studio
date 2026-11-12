@@ -44,6 +44,7 @@ import { recordClientError } from './client-errors.mjs'
 import { charge, refund, ensureWelcomeCredits } from './credits.mjs'
 import { enter, leave } from './gate.mjs'
 import { installProcessGuards, logEvent, logRequestError, startAccess } from './log.mjs'
+import { startLogRetention } from './log-files.mjs'
 import { rateLimit } from './ratelimit.mjs'
 import { startAlertWatch } from './alerts.mjs'
 import { deepHealth } from './health.mjs'
@@ -876,6 +877,9 @@ const server = http.createServer(async (req, res) => {
 
 installProcessGuards()
 await migrateOwnership()
+// 启动先清一次过期日志（停机久了不会把过期文件一直留着），之后每小时最多再清一次
+const prunedLogs = await startLogRetention()
+if (prunedLogs.removed.length) logEvent('logs.prune', { removed: prunedLogs.removed.length, bytesFreed: prunedLogs.bytesFreed })
 
 server.listen(config.port, '127.0.0.1', () => {
   // 告警哨兵：磁盘水位每 5 分钟看一次（5xx 与上游失败是事件驱动，不用轮询）
