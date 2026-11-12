@@ -71,6 +71,8 @@ export type ProjectSummary = Project & {
   versionCounts: Record<string, ProjectReviews>
   /** 这条作品名下所有版本画布一共跑过几次 */
   runs: { count: number }
+  /** 卡片上的分享状态；从没分享过就是 null */
+  share: ProjectShareBrief | null
 }
 
 export type ProjectTemplateDetail = ProjectTemplateBrief & {
@@ -97,6 +99,22 @@ export type ProjectScript = {
   source: 'project' | 'template'
   updatedAt: string
   timing: TemplateTiming | null
+}
+
+/**
+ * 作品列表卡片上的分享状态：只够写一枚胶囊与一个次数。
+ * 不带 token、不带记录键、不带每一轮明细——那些只在作品页的分享面板里。
+ */
+export type ProjectShareBrief = {
+  /** 当前是否有链接正在分享 */
+  live: boolean
+  /** 分享过几轮：正在分享的那条也算一轮 */
+  rounds: number
+  /** 各轮累计打开次数（次数不是人数） */
+  opens: number
+  /** 最近一次被打开的时间；没人打开过是空串 */
+  lastAt: string
+  lastClient: ShareVisits['lastClient']
 }
 
 /** 分享链接被打开过几次：只记次数与客户端类别，不记 IP、不区分是谁 */

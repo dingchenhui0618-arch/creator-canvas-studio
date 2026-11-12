@@ -173,7 +173,8 @@
 
 .vq-project-card-meta {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  /* 脚本 / 分镜 / 评审 / 运行 / 打开：分享次数也算一格，卡片上不用再点进去问「有人看过吗」 */
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: var(--space-2);
   margin-top: var(--space-1);
   padding-top: var(--space-3);
@@ -234,6 +235,38 @@
   border-radius: var(--radius-pill);
   color: var(--muted);
   font-size: 11px;
+}
+
+/* 分享状态（v0.9.13）：卡片上直接说这条还在不在分享。
+   正在分享用绿点 + 绿字（与状态胶囊 is-ok 同一套语气），停用的只留一圈灰描边。
+   数字在下一行的「打开」格，胶囊只负责状态，两者不重复。 */
+.vq-project-share {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 22px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.vq-project-share.is-live {
+  border-color: rgba(23, 107, 67, 0.24);
+  background: var(--pass-soft);
+  color: var(--pass);
+}
+
+.vq-project-share-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: currentColor;
 }
 
 .vq-projects-empty {

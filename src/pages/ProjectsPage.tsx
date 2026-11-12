@@ -3,7 +3,8 @@ import { ArrowRight, Clapperboard, RefreshCw } from 'lucide-react'
 import PageHead from '../components/PageHead'
 import ProjectStatusPill from '../components/ProjectStatus'
 import { listProjects } from '../api/projects'
-import { reviewsForVersion, type ProjectSummary } from '../domain/project'
+import { reviewsForVersion, type ProjectShareBrief, type ProjectSummary } from '../domain/project'
+import { CLIENT_LABEL, stampTime } from '../domain/share'
 import '../styles/projects.css'
 
 const pad2 = (value: number) => String(value).padStart(2, '0')
@@ -15,6 +16,18 @@ function updatedLabel(iso: string): string {
   const sameDay = date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate()
   const time = pad2(date.getHours()) + ':' + pad2(date.getMinutes())
   return sameDay ? '今天 ' + time : pad2(date.getMonth() + 1) + '-' + pad2(date.getDate()) + ' ' + time
+}
+
+/**
+ * 卡片上的分享状态只说三件事：还在不在分享、打开过几次、最近一次什么时候。
+ * 详细到每一轮的记录在作品页的分享面板里，卡片上不铺开。
+ */
+function shareHint(share: ProjectShareBrief): string {
+  const rounds = share.rounds > 1 ? '共 ' + share.rounds + ' 轮链接' : '一条链接'
+  if (!share.opens) return rounds + (share.live ? '，还没人打开' : '，停用前没人打开')
+  const client = CLIENT_LABEL[share.lastClient] || '未知设备'
+  const when = share.lastAt ? '，最近一次 ' + stampTime(share.lastAt) + '（' + client + '）' : ''
+  return rounds + '，打开 ' + share.opens + ' 次' + when
 }
 
 /**
@@ -98,6 +111,12 @@ export default function ProjectsPage({
               <span className="vq-project-card-head">
                 <span className="vq-project-card-tags">
                   <ProjectStatusPill project={item} reviewCount={reviewsForVersion(item.versionCounts || {}, item.version).count} />
+                  {item.share ? (
+                    <span className={'vq-project-share' + (item.share.live ? ' is-live' : '')} title={shareHint(item.share)}>
+                      {item.share.live ? <span className="vq-project-share-dot" aria-hidden="true" /> : null}
+                      {item.share.live ? '分享中' : '已停用'}
+                    </span>
+                  ) : null}
                   {item.version > 1 ? <span className="vq-project-card-version vq-mono">v{item.version}</span> : null}
                 </span>
                 <span className="vq-mono">{updatedLabel(item.updatedAt)}</span>
@@ -125,6 +144,10 @@ export default function ProjectsPage({
                 <span>
                   <em>运行</em>
                   <b>{item.runs?.count ? item.runs.count + ' 次' : '—'}</b>
+                </span>
+                <span>
+                  <em>打开</em>
+                  <b>{item.share?.opens ? item.share.opens + ' 次' : '—'}</b>
                 </span>
               </span>
               <span className="vq-project-card-go">

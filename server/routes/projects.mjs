@@ -24,6 +24,7 @@ import { deliverablePrintHtml, printNoticeHtml } from '../project-deliverable-ht
 import { packageNote, parseShotRange, setSheetHtml, setSheetModel } from '../project-set-sheet.mjs'
 import { reviewImageRef, reviewSheetHtml, reviewSheetSelection } from '../project-review-sheet.mjs'
 import { getShareVisits, getShareVisitsByKey } from '../share-visits.mjs'
+import { shareBriefsByProject } from '../share-summary.mjs'
 import { buildZip } from '../zip-store.mjs'
 import {
   listProjects,
@@ -379,6 +380,8 @@ export function createProjectsRouter() {
         // byFlow 把运行次数按画布分组，跨版本加总才有意义——只取一条记录，这里只要计数。
         const projectFlows = projects.flatMap((project) => [project.flowId, ...project.versions.map((entry) => entry.flowId)])
         const runAgg = projectFlows.filter(Boolean).length ? await listRunsByFlows(projectFlows, { limit: 1 }, user) : { byFlow: {} }
+        // 卡片上的分享状态：只挂一条摘要（还在分享吗、几轮、打开几次），token 与每轮明细都不出这个接口
+        const shareBriefs = await shareBriefsByProject(projects)
         const items = []
         for (const project of projects) {
           const template = project.templateId ? await getTemplate(project.templateId, user) : null
@@ -392,6 +395,7 @@ export function createProjectsRouter() {
             reviews: { count: counters.count, lastVerdict: counters.lastVerdict, lastAt: counters.lastAt },
             versionCounts: counters.versions || {},
             runs: { count: runs },
+            share: shareBriefs.get(project.id) || null,
           })
         }
         sendJson(res, 200, { ok: true, items, total: items.length })
