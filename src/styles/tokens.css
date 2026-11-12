@@ -1,8 +1,20 @@
-/* 字体策略（2026-11-10）：
-   1. 拉丁字母自托管 Geist / Geist Mono（只带拉丁子集，共 52KB），不再 @import fonts.googleapis.com
-      —— 那个请求在国内网络会阻塞首屏，失败了回退到字重不全的系统字体，12px 正文就发虚。
-   2. 中文不再走 webfont，直接用系统黑体（微软雅黑 / 苹方）。Windows 上系统字体带 hinting，
-      小字号比无 hinting 的 Noto Sans SC 网页字体清楚。 */
+/* 字体策略（2026-11-10；2026-11-12 按 Pachat 的排版参考调整）：
+   1. 拉丁字母自托管 Figtree（主）/ Geist Mono（元数据），只带拉丁子集，不再 @import fonts.googleapis.com
+      —— 那个请求在国内网络会阻塞首屏，失败了回退到字重不全的系统字体，小字号正文就发虚。
+      Figtree 是 Pachat 的正文与标题字体：字面比 Geist 圆一点、x-height 更高，小字号更好读。
+   2. 中文仍不走 webfont，直接用系统黑体（微软雅黑 / 苹方）。Windows 上系统字体带 hinting，
+      小字号比无 hinting 的 Noto Sans SC 网页字体清楚。
+   参考：https://pachat.ai/chats/ （2026-11-12 在用户浏览器里量过正文 15.5px / 行高 21.7px、
+   元数据 12.5px、标题 19px / 行高 28.5px，间距 4 / 8 / 12 / 16 / 24 为主）。我们按中文可读性把
+   正文收到 14px、行高放宽到 1.7，其他按 4/8pt 栅格映射。 */
+@font-face {
+  font-family: 'Figtree';
+  src: url('/fonts/figtree.woff2') format('woff2');
+  font-weight: 300 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
 @font-face {
   font-family: 'Geist';
   src: url('/fonts/geist.woff2') format('woff2');
@@ -58,7 +70,13 @@
   --text-xs: 12px;
   --text-sm: 14px;
   --text-body: 14px;
+  --text-md: 15px;
   --text-lg: 16px;
+  /* 阅读面（脚本、评审结论、分享页）单独一套：字号比工作台大一档，行高按中文放宽 */
+  --text-copy: 14px;
+  --leading-copy: 1.7;
+  --text-meta: 12px;
+  --leading-meta: 1.6;
   --text-xl: 20px;
   --text-2xl: 28px;
   --text-3xl: 40px;
@@ -85,7 +103,7 @@
   --shadow-card: 0 1px 2px rgba(17, 17, 17, 0.04);
   --shadow-pop: 0 2px 6px rgba(17, 17, 17, 0.06), 0 18px 42px rgba(17, 17, 17, 0.1);
   --ring-soft: 0 0 0 4px rgba(17, 17, 17, 0.05);
-  --font-ui: 'Geist', 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'Microsoft YaHei', 'Noto Sans SC', 'Source Han Sans SC', system-ui, sans-serif;
+  --font-ui: 'Figtree', 'Geist', 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei UI', 'Microsoft YaHei', 'Noto Sans SC', 'Source Han Sans SC', system-ui, sans-serif;
   --font-mono: 'Geist Mono', 'Cascadia Mono', 'Consolas', 'SFMono-Regular', ui-monospace, monospace;
   --font-display: var(--font-ui);
   --shadow-raise: 0 1px 2px rgba(17, 17, 17, 0.04), 0 10px 24px rgba(17, 17, 17, 0.05);

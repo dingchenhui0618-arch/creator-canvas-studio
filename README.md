@@ -2548,3 +2548,40 @@ v2 跑通、v1 仍截断；再抬到 6000（重试 8000），两版都在第一�
 自己的脚本优先与模板回退、坏数据回退、提示词用作品脚本而不是模板、模板删除也能开画布、手改提示词不覆盖）。
 
 还没做：P1 只剩作品级分享链接；智能体的两个出口仍在等结构化输出；导航收敛（P2）等桌面端形态定了一起做。
+
+## 六十三、排版按 Pachat 参考校准：Figtree、阅读面字阶、24px 留白（v0.3.1）
+
+用户给了 Pachat 的聊天页当参考（https://pachat.ai/chats/gfOxWgl7RjspVTNJ，要登录）。
+我没有照着截图猜，而是在用户真实浏览器里打开、把关键元素的计算样式量了一遍，再挑能用的部分映射到 VisionQA。
+完整实测与映射记在 `docs/design-reference-2026-11-12.md`。
+
+量到的主要值：Figtree（标题与正文同一套，中文回退 PingFang SC / 微软雅黑）；正文 15.5px / 行高 21.7px；
+名字与按钮 13.5–14px / 600；元数据 12.5–13px / 灰色；群标题 19px / 行高 28.5px；消息列表 24px 横向留白、13px 间距；
+按钮 32–38px 高；圆角 4 / 8 / 12 / 16 / 20 / 999。它不是靠颜色花哨，而是**字号、行高与留白一起放松**。
+
+| 改了什么 | 之前 | 现在 |
+| --- | --- | --- |
+| 拉丁字体 | Geist（偏几何、笔画更硬） | Figtree 主字体（自托管 20KB，SIL OFL），Geist 退为回退；等宽元数据仍用 Geist Mono |
+| 阅读面字阶 | 脚本 / 评审正文 12px、行高 1.75 | 新增 `--text-copy: 14px` / `--leading-copy: 1.7`、`--text-meta: 12px` / `--leading-meta: 1.6`；中文行高按可读性比 Pachat 再放宽 |
+| 作品页留白 | 面板 padding 16px、区块 gap 12px | 面板 24px、区块 16px；版本 / 运行区块同步 |
+| 作品列表 | 卡片 16px、间距 12px、标题 16px | 卡片 24px、间距 16px、标题 17px，元数据与动作字大一档 |
+| 通用按钮 | 30px 高 / 12px 字 | 32px 高 / 13px 字、横向 padding 16px，贴近 Pachat 的 32–38px 控制高度 |
+| 不照搬 | — | 整屏柔和渐变、玻璃拟态、聊天气泡仍是 Pachat 的场景语言；VisionQA 保持近黑白、发丝线、取景框 |
+
+间距没有照抄 Pachat 的 2px 细粒度：项目规则是 4/8pt，所以把它的 13 / 18 / 24 落点映射成 12 / 16 / 24，
+观感接近，栅格不乱。字体只换拉丁，中文仍用系统黑体——Windows 上小字号带 hinting，比网页中文字体清楚。
+
+![作品页：脚本正文 14px、面板 24px 留白，8 段脚本一屏读完](docs/screenshot-typography-project-2026-11-12.png)
+
+![作品列表：卡片 24px 留白、标题 17px，统计值大一档](docs/screenshot-typography-projects-2026-11-12.png)
+
+![工作台：页头、主卡与最近运行都换成 Figtree，按钮 32px](docs/screenshot-typography-workbench-2026-11-12.png)
+
+![780px：脚本、分镜与画布面板仍按单列排，没有挤压](docs/screenshot-typography-project-780-2026-11-12.png)
+
+验收：生产 `/api/version` 0.3.1、`/api/health` ok（templates 25）、入口 `index-BUnXhEn-.js`、
+`/fonts/figtree.woff2` 200（20,156 字节）；`npm test` 62/62；oxlint 0 error（8 warning 均为既有）；
+1440 宽度下工作台、作品页、作品列表、模板库、评审、运行记录、设置都实拍看过；780 下作品页、作品列表、工作台、模板库也看过，没有换行挤压或溢出（评审与设置页在 780 复用同一套按钮与输入框，风险点相同）。
+
+下一屏（作品分享页）直接读这套 `--text-copy` / `--text-meta`，不再另写 12px；视觉参考已落成文件，
+以后新增 UI 不用再翻聊天记录。
