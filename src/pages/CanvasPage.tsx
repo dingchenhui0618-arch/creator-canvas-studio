@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, CircleAlert, Copy, LayoutGrid, Maximize2, Play, Plus, RotateCcw, RotateCw, Save, Trash } from 'lucide-react'
+import { ChevronDown, CircleAlert, Copy, Expand, LayoutGrid, Maximize2, Minimize2, Play, Plus, RotateCcw, RotateCw, Save, Trash } from 'lucide-react'
 import {
   Background,
   Controls,
@@ -48,6 +48,7 @@ import { autoLayout } from '../canvas/layout'
 import { fromFlowEdges, fromFlowNodes, toFlowEdges, toFlowNodes, validateConnection } from '../canvas/serialize'
 import type { FlowNodeData, FlowNodeKind, RunNodeStatus } from '../canvas/types'
 import PageHead from '../components/PageHead'
+import { Select } from '../components/Select'
 import '../styles/canvas.css'
 
 const nodeTypes = {
@@ -62,16 +63,23 @@ const nodeTypes = {
 // 画布页有两个入口，都来自地址栏：
 //   flowId   #/canvas/<flowId>          内置编排的流程（模板库、运行记录跳转）
 //   canvasId #/canvas/project/<画布ID>  画布服务里的画布项目（工作台「继续上次的画布」）
-type CanvasPageProps = { onToast?: (message: string) => void; flowId?: string; canvasId?: string }
+type CanvasPageProps = {
+  onToast?: (message: string) => void
+  flowId?: string
+  canvasId?: string
+  // 专注模式：进画布收起侧栏与顶栏，只留画布自己的工具条；再点一次退出
+  focus?: boolean
+  onToggleFocus?: () => void
+}
 
 type Snapshot = { nodes: Node<FlowNodeData>[]; edges: Edge[] }
 
 type SaveState = 'saved' | 'saving' | 'dirty' | 'error'
 
-export default function CanvasPage({ onToast, flowId, canvasId }: CanvasPageProps) {
+export default function CanvasPage({ onToast, flowId, canvasId, focus, onToggleFocus }: CanvasPageProps) {
   return (
     <ReactFlowProvider>
-      <CanvasWorkspace onToast={onToast} flowId={flowId} canvasId={canvasId} />
+      <CanvasWorkspace onToast={onToast} flowId={flowId} canvasId={canvasId} focus={focus} onToggleFocus={onToggleFocus} />
     </ReactFlowProvider>
   )
 }
@@ -88,7 +96,7 @@ function hostOf(value: string): string {
   }
 }
 
-function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanvasId }: CanvasPageProps) {
+function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanvasId, focus, onToggleFocus }: CanvasPageProps) {
   const { internal } = useUiMode()
   const rf = useReactFlow()
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<FlowNodeData>>([])
@@ -886,22 +894,19 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
             {bdcLocalOnly ? '本机已连接' : '已连接'}
           </span>
           <span className="cv-bdc-sep" aria-hidden="true" />
-          <label className="cv-bdc-picker">
+          <div className="cv-bdc-picker">
             <span className="cv-bdc-picker-label">画布项目</span>
-            <select
-              className="cv-bdc-select"
+            <Select
+              size="sm"
+              label="选择画布项目"
               value={canvasId}
-              onChange={(event) => setCanvasId(event.target.value)}
-              aria-label="选择画布项目"
-            >
-              <option value="">{canvases.length ? '未指定（默认画布）' : '暂无已保存的画布'}</option>
-              {canvases.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name} · {item.nodeCount} 节点
-                </option>
-              ))}
-            </select>
-          </label>
+              options={[
+                { value: '', label: canvases.length ? '未指定（默认画布）' : '暂无已保存的画布' },
+                ...canvases.map((item) => ({ value: item.id, label: item.name + ' · ' + item.nodeCount + ' 节点' })),
+              ]}
+              onChange={(value) => setCanvasId(value)}
+            />
+          </div>
           <button className="cv-bdc-action" type="button" onClick={handleCreateCanvas} title="新建一块画布并绑定到工作台">
             <Plus size={12} />新建
           </button>
@@ -941,6 +946,18 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
           ) : null}
           <span className="cv-bdc-spacer" />
           <span className="cv-bdc-url">{bdc.web.url.replace(/^https?:\/\//, '').split('/')[0]}</span>
+          {onToggleFocus ? (
+            <button
+              className={'cv-bdc-action' + (focus ? ' is-primary' : '')}
+              type="button"
+              onClick={onToggleFocus}
+              title={focus ? '退出专注模式，回到自己的工作台' : '专注模式：收起左侧栏与顶栏，只留画布'}
+              aria-pressed={Boolean(focus)}
+            >
+              {focus ? <Minimize2 size={12} /> : <Expand size={12} />}
+              {focus ? '退出专注' : '专注'}
+            </button>
+          ) : null}
           <a
             className="cv-icon-btn"
             href={bdc.web.embedUrl || bdc.web.url}

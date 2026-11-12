@@ -58,6 +58,11 @@ export const applyTemplate = (id: string) =>
     body: JSON.stringify({}),
   })
 export const reuseTemplate = (id: string) => request<ReplicaTemplate>('/api/templates/' + id + '/reuse', { method: 'POST' })
+// 改编：以这条为底存成我的一版（新模板，原条目不动）
+export const adaptTemplate = (
+  id: string,
+  payload: { title: string; hook: string; structure: unknown[]; storyboard: unknown[] },
+) => request<{ ok: boolean; template: ReplicaTemplate }>('/api/templates/' + id + '/adapt', { method: 'POST', body: JSON.stringify(payload) })
 export const deleteTemplate = (id: string) => request<{ ok: boolean; trashed?: boolean }>('/api/templates/' + id, { method: 'DELETE' })
 export const listTemplateTrash = () => request<{ items: ReplicaTemplate[]; days: number }>('/api/templates/trash')
 export const restoreTemplate = (id: string) =>

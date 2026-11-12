@@ -233,6 +233,71 @@ export async function createTemplateFromFlow({ flow, title = '', contentType = '
 
 // 后台治理与画布「另存为模板」共用：只允许改能决定展示与检索的字段
 // 每次改模板先留一版快照：标题/类型/标签/原链接被改错了，能退回上一版，不用重新解析
+// 改编：以一条已解析模板为底，存成用户自己的一份新模板。
+// 官方/他人模板永远不被覆盖——改编版是 kind: 'adapted' + adaptedFrom 的新条目，之后可以再编辑、再套用。
+// 互动数据与抽帧不复制：那是原片的，不是这一版的。
+const ADAPT_MAX_BEATS = 30
+const ADAPT_MAX_SHOTS = 60
+const adaptText = (value, max) => String(value ?? '').trim().slice(0, max)
+
+export async function adaptTemplate({ source, title = '', hook = '', structure = [], storyboard = [], user = null }) {
+  if (!source || !Array.isArray(source.structure) || !source.structure.length) return null
+  const beats = (Array.isArray(structure) ? structure : []).slice(0, ADAPT_MAX_BEATS).map((beat, index) => ({
+    startSec: Number(beat?.startSec) || index * 3,
+    endSec: Number(beat?.endSec) || index * 3 + 3,
+    beat: adaptText(beat?.beat, 60),
+    voiceover: adaptText(beat?.voiceover, 600),
+    onScreen: adaptText(beat?.onScreen, 200),
+    purpose: adaptText(beat?.purpose, 200),
+  }))
+  const shots = (Array.isArray(storyboard) ? storyboard : []).slice(0, ADAPT_MAX_SHOTS).map((shot, index) => ({
+    shotNo: Number(shot?.shotNo) || index + 1,
+    startSec: Number(shot?.startSec) || 0,
+    visual: adaptText(shot?.visual, 400),
+    camera: adaptText(shot?.camera, 60),
+    caption: adaptText(shot?.caption, 200),
+    audio: adaptText(shot?.audio, 200),
+    purpose: adaptText(shot?.purpose, 200),
+    frameUrl: '',
+  }))
+  if (!beats.length || !shots.length) return null
+
+  const list = await loadAll()
+  const now = new Date().toISOString()
+  const template = {
+    id: 'tpl_' + randomUUID().slice(0, 8),
+    kind: 'adapted',
+    adaptedFrom: source.id,
+    title: adaptText(title, 120) || adaptText(source.title + '（改编）', 120),
+    contentType: source.contentType || '脚本',
+    tags: Array.isArray(source.tags) ? source.tags.slice(0, 12) : [],
+    platform: source.platform || '',
+    platformLabel: source.platformLabel || '',
+    sourceUrl: source.sourceUrl || '',
+    sourceId: source.sourceId || '',
+    author: source.author || '',
+    publishedAt: '',
+    stats: {},
+    durationSec: Number(source.durationSec) || 0,
+    hook: adaptText(hook, 400),
+    hookType: source.hookType || '',
+    structure: beats,
+    storyboard: shots,
+    timing: null,
+    analysis: null,
+    frames: [],
+    cover: '',
+    video: source.video || { width: 0, height: 0, fps: 0, duration: 0 },
+    origin: 'adapted',
+    reuseCount: 0,
+    ownerId: user?.id || '',
+    createdAt: now,
+  }
+  list.unshift(template)
+  await persist(list)
+  return template
+}
+
 const VERSION_CAP = 10
 const VERSION_KEYS = ['title', 'contentType', 'tags', 'sourceUrl']
 

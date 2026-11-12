@@ -15,6 +15,7 @@ import {
   templateStats,
   saveTemplateFromItem,
   createTemplateFromFlow,
+  adaptTemplate,
   listTrash,
   restoreTemplate,
   purgeTemplate,
@@ -761,6 +762,27 @@ const server = http.createServer(async (req, res) => {
         tags: body.tags,
         user,
       })
+      return sendJson(res, 201, { ok: true, template })
+    }
+
+    // 改编：把一条模板改成本人的一版，存成新模板（不改原条目）
+    const adaptMatch = pathname.match(/^\/api\/templates\/([\w-]+)\/adapt$/)
+    if (adaptMatch && req.method === 'POST') {
+      const source = await getTemplate(adaptMatch[1], user)
+      if (!source) return sendJson(res, 404, { error: '模板不存在' })
+      if (!Array.isArray(source.structure) || !source.structure.length) {
+        return sendJson(res, 400, { error: '这条模板还没解析，先解析再改编' })
+      }
+      const body = await readBody(req)
+      const template = await adaptTemplate({
+        source,
+        title: body.title,
+        hook: body.hook,
+        structure: body.structure,
+        storyboard: body.storyboard,
+        user,
+      })
+      if (!template) return sendJson(res, 400, { error: '改编内容不完整：至少保留一段脚本和一个镜头' })
       return sendJson(res, 201, { ok: true, template })
     }
 

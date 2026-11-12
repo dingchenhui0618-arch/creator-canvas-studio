@@ -109,8 +109,10 @@ export type TemplateAnalysis = {
 export type ReplicaTemplate = {
   thumb?: string
   id: string
-  /** saved：只存了链接与互动数据；replica：跑过一键复刻，有脚本与分镜；flow：画布另存的工作流 */
-  kind: 'saved' | 'replica' | 'flow'
+  /** saved：只存了链接与互动数据；replica：跑过一键复刻；adapted：以某条为底改编出的我的一版；flow：画布另存的工作流 */
+  kind: 'saved' | 'replica' | 'adapted' | 'flow'
+  /** kind === 'adapted' 时才有：改编自哪条模板 */
+  adaptedFrom?: string
   savedAt?: string
   title: string
   contentType: string
@@ -129,7 +131,8 @@ export type ReplicaTemplate = {
   storyboard: StoryboardShot[]
   /** 整条模板的时长对账结果（saved 状态、纯画布工作流没有这一项） */
   timing?: TemplateTiming | null
-  analysis: TemplateAnalysis
+  /** 改编版没有原片分析，可能是 null */
+  analysis: TemplateAnalysis | null
   frames: { index: number; t: number; url: string }[]
   cover: string
   video: { width: number; height: number; fps: number; duration: number }

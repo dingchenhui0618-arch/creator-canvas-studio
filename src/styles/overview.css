@@ -234,7 +234,14 @@
 }
 
 .vq-note--error {
+  display: inline-flex;
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid rgba(163, 56, 56, 0.2);
+  border-radius: var(--radius-sm);
+  background: var(--fail-soft);
   color: var(--fail);
+  font-size: 12px;
 }
 
 /* 模板行：最近入库的脚本结构 */
@@ -308,6 +315,229 @@
   margin-top: 12px;
 }
 
+
+/* ---------- 工作台「下一步」主卡（2026-11-12）
+   整页只有一个主 CTA：继续最近改动的那块画布；没有画布就从一条爆款开始。
+   统计不再是三张数字卡，压进主卡右侧当背景信息。 ---------- */
+
+.vq-next {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-8);
+  margin-bottom: var(--space-3);
+  padding: var(--space-6) var(--space-8);
+  border-radius: var(--radius-lg);
+  background: var(--ink);
+  background-image: radial-gradient(120% 140% at 100% 0%, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0) 62%);
+  color: #ffffff;
+}
+
+.vq-next-main {
+  min-width: 0;
+}
+
+.vq-next-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: rgba(255, 255, 255, 0.55);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.vq-next h2 {
+  margin: var(--space-2) 0 0;
+  overflow: hidden;
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vq-next-meta {
+  margin: var(--space-2) 0 0;
+  color: rgba(255, 255, 255, 0.6);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.vq-next-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 36px;
+  margin-top: var(--space-6);
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: transform var(--dur-1) var(--ease-out), box-shadow var(--dur-2) var(--ease-out);
+}
+
+.vq-next-cta:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+}
+
+.vq-next-cta:active {
+  transform: translateY(0);
+}
+
+.vq-next-cta:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.4);
+}
+
+.vq-next-cta svg {
+  transition: transform var(--dur-2) var(--ease-out);
+}
+
+.vq-next-cta:hover svg {
+  transform: translateX(2px);
+}
+
+.vq-next-stats {
+  display: flex;
+  gap: var(--space-8);
+  margin: 0;
+  padding-left: var(--space-8);
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.vq-next-stats div {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.vq-next-stats dt {
+  color: rgba(255, 255, 255, 0.5);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.vq-next-stats dd {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+/* ---------- 三个场景化入口：取代原来那个「智能体 / 资产画布」二选一弹窗 ---------- */
+
+.vq-start {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-8);
+}
+
+.vq-start-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease-out), box-shadow var(--dur-2) var(--ease-out),
+    transform var(--dur-1) var(--ease-out);
+}
+
+.vq-start-card:hover {
+  border-color: var(--ink);
+  box-shadow: var(--shadow-raise);
+  transform: translateY(-1px);
+}
+
+.vq-start-card:focus-visible {
+  outline: none;
+  box-shadow: var(--ring-soft);
+  border-color: var(--ink);
+}
+
+.vq-start-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  background: var(--line-faint);
+  color: var(--ink);
+}
+
+.vq-start-copy {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.vq-start-copy strong {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.vq-start-copy span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vq-start-card > svg {
+  color: var(--faint);
+  transition: transform var(--dur-2) var(--ease-out), color var(--dur-1) var(--ease-out);
+}
+
+.vq-start-card:hover > svg {
+  color: var(--ink);
+  transform: translateX(2px);
+}
+
+@media (max-width: 1180px) {
+  .vq-next {
+    grid-template-columns: 1fr;
+    gap: var(--space-6);
+    padding: var(--space-6);
+  }
+
+  .vq-next-stats {
+    padding-left: 0;
+    padding-top: var(--space-4);
+    border-top: 1px solid rgba(255, 255, 255, 0.14);
+    border-left: 0;
+  }
+
+  .vq-start {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 960px) {
+  /* 1180 还放得下三张入口卡；到平板才堆成一列 */
+  .vq-start {
+    grid-template-columns: 1fr;
+  }
+}
 
 @media (max-width: 1180px) {
   .vq-task-grid {

@@ -23,7 +23,7 @@ import { pageLabels, type Page } from './domain/types'
 import './App.css'
 import './styles/shell.css'
 import './styles/overview.css'
-import { CreateModal, NavItem } from './components/ui'
+import { NavItem } from './components/ui'
 import { WelcomeGuide } from './components/WelcomeGuide'
 import { ModelSwitch } from './components/ModelSwitch'
 import { ErrorBoundary } from './components/ErrorBoundary'
@@ -150,7 +150,9 @@ function Workbench({
   const route = useRoute()
   const { internal } = useUiMode()
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [showCreate, setShowCreate] = useState(false)
+  // 画布专注模式：收起侧栏与顶栏，把屏幕让给画布本身（状态在壳里，画布页只负责切换）
+  const [canvasFocus, setCanvasFocus] = useState(false)
+
   const [toast, setToast] = useState('')
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const [updateOpen, setUpdateOpen] = useState(false)
@@ -180,6 +182,10 @@ function Workbench({
 
   // 侧栏高亮、面包屑和内容页都从 hash 路由推导，页面本身不再保存 activePage。
   const activePage = routeToPage(route)
+
+  // 专注模式只在画布页生效：离开画布时侧栏与顶栏一定回来，不会出现「侧栏不见了」；
+  // 回到画布仍保持专注，等于记住用户上次的选择。
+  const focusOn = canvasFocus && activePage === 'canvas'
 
   const notify = useCallback((message: string) => {
     setToast(message)
@@ -324,7 +330,16 @@ function Workbench({
         // 只有「换了画布项目」才整页重挂（不带上一块的撤销栈）。
         // flowId 故意不进 key：页面加载完会把它补进地址栏，进 key 就等于自己把自己重挂一次——
         // 表现出来就是进画布闪一下、/api/flows 连打两遍。
-        return <CanvasPage key={'canvas:' + (route.canvasId || 'flow')} flowId={route.flowId} canvasId={route.canvasId} onToast={notify} />
+        return (
+          <CanvasPage
+            key={'canvas:' + (route.canvasId || 'flow')}
+            flowId={route.flowId}
+            canvasId={route.canvasId}
+            onToast={notify}
+            focus={focusOn}
+            onToggleFocus={() => setCanvasFocus((value) => !value)}
+          />
+        )
       case 'radar':
         return <RadarPage onToast={notify} onOpenTemplates={() => go('templates')} />
       case 'templates':
@@ -339,7 +354,7 @@ function Workbench({
         return (
           <OverviewPage
             userName={session.user.name}
-            onCreate={() => setShowCreate(true)}
+            onCreateCanvas={() => void createCanvasProject()}
             onNavigate={go}
             onOpenCanvas={(canvasId) => navigate({ kind: 'page', page: 'canvas', canvasId })}
             onOpenGuide={() => setGuideOpen(true)}
@@ -361,7 +376,7 @@ function Workbench({
   const initials = initialsFor(session.user.name)
 
   return (
-    <div className="vq-scope vq-shell">
+    <div className={'vq-scope vq-shell' + (focusOn ? ' is-focus' : '')}>
       <aside className={`vq-sidebar${sidebarOpen ? '' : ' vq-sidebar--collapsed'}`}>
         <div className="vq-sidebar-scroll">
           <div className="vq-brand">
@@ -663,19 +678,6 @@ function Workbench({
 
       {guideOpen && <WelcomeGuide onClose={closeGuide} onGo={go} />}
 
-      {showCreate && (
-        <CreateModal
-          onClose={() => setShowCreate(false)}
-          onCreate={(kind) => {
-            setShowCreate(false)
-            if (kind === 'agent') {
-              openNewAgent()
-            } else {
-              void createCanvasProject()
-            }
-          }}
-        />
-      )}
     </div>
   )
 }

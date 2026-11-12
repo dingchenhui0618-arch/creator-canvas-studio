@@ -153,7 +153,7 @@ export default function SharePage({ token }: { token: string }) {
                 </li>
               ))}
             </ol>
-            {(template.analysis?.reusableRules || []).length ? (
+            {template.analysis && template.analysis.reusableRules.length ? (
               <ul className="share-list">
                 {template.analysis.reusableRules.map((rule, index) => (
                   <li key={index}>{rule}</li>

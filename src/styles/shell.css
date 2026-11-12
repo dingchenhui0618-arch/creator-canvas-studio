@@ -2573,3 +2573,14 @@ select:focus-visible {
 .vq-report-done p { display: flex; align-items: center; gap: 6px; margin: 0; }
 .vq-report-done strong { font-family: var(--font-mono); }
 .share-foot-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* 画布专注模式（2026-11-12）：把侧栏与顶栏收起来，屏幕让给画布本身；
+   退出靠画布工具条上的「退出专注」，所以永远不会「关在里面出不来」。 */
+.vq-shell.is-focus .vq-sidebar,
+.vq-shell.is-focus .vq-topbar {
+  display: none;
+}
+
+.vq-shell.is-focus .vq-content {
+  overflow: hidden;
+}

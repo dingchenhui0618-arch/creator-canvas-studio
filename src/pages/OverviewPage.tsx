@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { ArrowRight, ArrowUpRight, Plus, RefreshCw } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { ArrowRight, ArrowUpRight, LayoutTemplate, Plus, RefreshCw, Search, Workflow } from 'lucide-react'
 import type { Page } from '../domain/types'
 import PageHead from '../components/PageHead'
 import { MonoTag } from '../components/ui'
@@ -26,10 +26,11 @@ type TemplateRow = {
 
 type Props = {
   userName: string
-  onCreate: () => void
   onNavigate: (page: Page) => void
   // 工作台列的是画布服务里的画布项目：点哪块就开哪块，不再只是跳到画布页
   onOpenCanvas: (canvasId: string) => void
+  // 空白画布：直接建一块并进去，不再先弹「智能体 / 资产画布」二选一（那个弹窗把主价值藏起来了）
+  onCreateCanvas: () => void
   // 引导是弹窗：页脚「上手指引」重新打开它，不再跳一个 #/welcome 页面
   onOpenGuide: () => void
 }
@@ -56,10 +57,12 @@ function secondsOf(ms?: number): string {
 }
 
 /**
- * 工作台只看真实数据：画布来自画布服务，运行与模板来自工作台 API。
- * 任何一块没有数据就写空状态并给出下一步，不用示例行填充——上线后的首页不能靠假数据撑版面。
+ * 工作台只回答一个问题：下一步点哪里。
+ * 首屏是一张「下一步」主卡（继续上次那块画布，没画布就从一条爆款开始）加三个场景化入口；
+ * 统计压进主卡右侧，不再单开一排数字卡——数字是背景，不是任务。
+ * 任何一块没有数据就写空状态并给出下一步，不用示例行填充。
  */
-export function OverviewPage({ userName, onCreate, onNavigate, onOpenCanvas, onOpenGuide }: Props) {
+export function OverviewPage({ userName, onNavigate, onOpenCanvas, onCreateCanvas, onOpenGuide }: Props) {
   const { internal } = useUiMode()
   const site = useSiteInfo()
   const [now] = useState(() => new Date())
@@ -81,7 +84,7 @@ export function OverviewPage({ userName, onCreate, onNavigate, onOpenCanvas, onO
       setCanvases(canvasResult.value.canvases ?? [])
     } else {
       setCanvases([])
-      problems.push('画布列表：' + (canvasResult.status === 'rejected' ? String((canvasResult.reason as Error)?.message || canvasResult.reason) : canvasResult.value.error || '画布服务无响应'))
+      problems.push('画布列表：' + (canvasResult.status === 'rejected' ? String((canvasResult.reason as Error)?.message || canvasResult.reason) : canvasResult.value.error || '读取失败'))
     }
     if (runResult.status === 'fulfilled') {
       setRuns(runResult.value.items ?? [])
@@ -109,6 +112,12 @@ export function OverviewPage({ userName, onCreate, onNavigate, onOpenCanvas, onO
   const recentRuns = runs.slice(0, 6)
   const recentTemplates = templates.slice(0, 4)
 
+  // 「下一步」= 最近改动过的那块画布；没有画布就先从一条爆款开始
+  const latestCanvas = useMemo(() => {
+    if (!canvases.length) return undefined
+    return [...canvases].sort((a, b) => new Date(String(b.updatedAt ?? 0)).getTime() - new Date(String(a.updatedAt ?? 0)).getTime())[0]
+  }, [canvases])
+
   return (
     <div className="vq-page">
       <PageHead
@@ -121,11 +130,11 @@ export function OverviewPage({ userName, onCreate, onNavigate, onOpenCanvas, onO
         }
         title={loading ? '正在读取…' : '欢迎回来，' + userName}
         desc={
-          internal
-            ? '画布、运行与模板三个数字分别来自画布服务、/api/runs 与 /api/templates；没有数据的区块写空状态，不放示例数据。'
-            : loading
-              ? '正在读取你账号下的画布、运行与模板。'
-              : canvases.length + ' 块画布 · ' + runs.length + ' 条运行 · ' + templates.length + ' 个模板，都在你的账号下；换浏览器登录同一账号即可看到。'
+          loading
+            ? '正在读取你账号下的画布、运行与模板。'
+            : internal
+              ? '首屏主卡读的是画布服务的最近改动；运行与模板分别来自 /api/runs 与 /api/templates。没有数据的区块写空状态，不放示例数据。'
+              : '先看「下一步」，或者从下面三种方式开始一条新内容。'
         }
         actions={
           <>
@@ -133,9 +142,9 @@ export function OverviewPage({ userName, onCreate, onNavigate, onOpenCanvas, onO
               <RefreshCw size={14} />
               刷新
             </button>
-            <button type="button" className="vq-button vq-button--primary" onClick={onCreate}>
+            <button type="button" className="vq-button vq-button--primary" onClick={onCreateCanvas}>
               <Plus size={14} />
-              新建
+              新建画布
             </button>
           </>
         }
@@ -147,52 +156,96 @@ export function OverviewPage({ userName, onCreate, onNavigate, onOpenCanvas, onO
         </p>
       ) : null}
 
-      <section className="vq-section">
-        <div className="vq-section-head">
-          <div>
-            <span className="vq-mono">01 / 画布</span>
-            <h2>继续上次的画布</h2>
-          </div>
-          <span className="vq-mono">{canvases.length} 块</span>
-        </div>
-
-        {canvases.length ? (
-          <div className="vq-task-grid">
-            {canvases.slice(0, 3).map((canvas, index) => (
-              <button type="button" className="vq-task" key={canvas.id} onClick={() => onOpenCanvas(canvas.id)}>
-                <span className="vq-task-index">{String(index + 1).padStart(2, '0')}</span>
-                <strong>{canvas.name}</strong>
-                <p>
-                  {canvas.nodeCount} 个节点 · 版本 r{canvas.revision}
-                </p>
-                <span className="vq-task-foot">
-                  <span className="vq-mono">{clockOf(canvas.updatedAt)}</span>
-                  <span className="vq-task-go">
-                    打开画布
-                    <ArrowRight size={12} />
-                  </span>
-                </span>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <div className="vq-empty">
-            <strong>还没有画布</strong>
-            <span>画布与工作台共用同一批数据：在画布页新建一块，这里立刻会出现。</span>
-            <button type="button" className="vq-button vq-button--ghost" onClick={() => onNavigate('canvas')}>
-              去画布
-              <ArrowRight size={13} />
+      {latestCanvas ? (
+        <section className="vq-next" aria-labelledby="vq-next-title">
+          <div className="vq-next-main">
+            <span className="vq-next-label">下一步 · 画布</span>
+            <h2 id="vq-next-title">{latestCanvas.name}</h2>
+            <p className="vq-next-meta">
+              {latestCanvas.nodeCount} 个节点 · 版本 r{latestCanvas.revision} · 上次改动 {clockOf(latestCanvas.updatedAt)}
+            </p>
+            <button type="button" className="vq-next-cta" onClick={() => onOpenCanvas(latestCanvas.id)}>
+              继续这块画布
+              <ArrowRight size={15} />
             </button>
           </div>
-        )}
-      </section>
+          <dl className="vq-next-stats">
+            <div>
+              <dt>画布</dt>
+              <dd>{canvases.length}</dd>
+            </div>
+            <div>
+              <dt>运行</dt>
+              <dd>{runs.length}</dd>
+            </div>
+            <div>
+              <dt>模板</dt>
+              <dd>{templates.length}</dd>
+            </div>
+          </dl>
+        </section>
+      ) : (
+        <section className="vq-next" aria-labelledby="vq-next-title">
+          <div className="vq-next-main">
+            <span className="vq-next-label">下一步 · 找一条能抄的</span>
+            <h2 id="vq-next-title">从一条爆款开始</h2>
+            <p className="vq-next-meta">检索抖音与小红书的真实互动数据，挑一条拆出脚本与分镜</p>
+            <button type="button" className="vq-next-cta" onClick={() => onNavigate('radar')}>
+              去检索
+              <ArrowRight size={15} />
+            </button>
+          </div>
+          <dl className="vq-next-stats">
+            <div>
+              <dt>画布</dt>
+              <dd>{canvases.length}</dd>
+            </div>
+            <div>
+              <dt>运行</dt>
+              <dd>{runs.length}</dd>
+            </div>
+            <div>
+              <dt>模板</dt>
+              <dd>{templates.length}</dd>
+            </div>
+          </dl>
+        </section>
+      )}
+
+      <div className="vq-start">
+        <button type="button" className="vq-start-card" onClick={() => onNavigate('radar')}>
+          <span className="vq-start-icon"><Search size={16} strokeWidth={1.75} /></span>
+          <span className="vq-start-copy">
+            <strong>从爆款开始</strong>
+            <span>按关键词检索，挑一条加进模板库</span>
+          </span>
+          <ArrowRight size={15} />
+        </button>
+        <button type="button" className="vq-start-card" onClick={() => onNavigate('templates')}>
+          <span className="vq-start-icon"><LayoutTemplate size={16} strokeWidth={1.75} /></span>
+          <span className="vq-start-copy">
+            <strong>从模板开始</strong>
+            <span>
+              {templates.length ? templates.length + ' 条已解析结构，套一条改写' : '模板库还是空的，先从爆款拆一条'}
+            </span>
+          </span>
+          <ArrowRight size={15} />
+        </button>
+        <button type="button" className="vq-start-card" onClick={onCreateCanvas}>
+          <span className="vq-start-icon"><Workflow size={16} strokeWidth={1.75} /></span>
+          <span className="vq-start-copy">
+            <strong>空白画布</strong>
+            <span>从零搭节点，跑一次看每个节点返回什么</span>
+          </span>
+          <ArrowRight size={15} />
+        </button>
+      </div>
 
       <div className="vq-overview-grid">
         <section className="vq-section">
           <div className="vq-section-head">
             <div>
-              <span className="vq-mono">02 / 最近运行</span>
-              <h2>逐节点执行记录</h2>
+              <h2>最近运行</h2>
             </div>
             <button type="button" className="vq-link" onClick={() => onNavigate('runs')}>
               全部运行
@@ -234,14 +287,13 @@ export function OverviewPage({ userName, onCreate, onNavigate, onOpenCanvas, onO
           )}
         </section>
 
-        <aside className="vq-section">
+        <section className="vq-section">
           <div className="vq-section-head">
             <div>
-              <span className="vq-mono">03 / 模板库</span>
-              <h2>可复用的脚本结构</h2>
+              <h2>模板库</h2>
             </div>
             <button type="button" className="vq-link" onClick={() => onNavigate('templates')}>
-              打开模板库
+              全部模板
               <ArrowRight size={13} />
             </button>
           </div>
@@ -259,7 +311,6 @@ export function OverviewPage({ userName, onCreate, onNavigate, onOpenCanvas, onO
                   <ArrowRight size={13} />
                 </button>
               ))}
-              {/* 首进工作台要有一个明确的「从哪儿开始」：直接拿一条已解析模板 */}
               <button type="button" className="vq-button vq-button--ghost vq-template-cta" onClick={() => onNavigate('templates')}>
                 拿一条模板开始
                 <ArrowRight size={13} />
@@ -275,15 +326,10 @@ export function OverviewPage({ userName, onCreate, onNavigate, onOpenCanvas, onO
               </button>
             </div>
           )}
-
-          <p className="vq-note">
-            <span>{internal ? '模板、运行与画布都存服务端，换浏览器登录同一账号即可看到。' : '模板、运行与画布都保存在你的账号下，换浏览器登录同一账号即可看到。'}</span>
-          </p>
-        </aside>
+        </section>
       </div>
 
       <footer className="vq-overview-foot">
-        <span>{internal ? '画布数据来自画布服务；运行与模板来自工作台 API。' : '画布、运行与模板数据都在你的账号下。'}</span>
         <span className="vq-overview-legal">
           <a className="vq-link" href="#/legal/terms">服务条款</a>
           <a className="vq-link" href="#/legal/privacy">隐私说明</a>
