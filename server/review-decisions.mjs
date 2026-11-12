@@ -92,21 +92,46 @@ export async function saveDecision({ projectId, version = 0, reviewAt = '', verd
   })
   await enqueueWrite(async () => {
     const list = await loadAll()
-    // 同一条作品、同一次评审只留一条：改主意是覆盖，不是堆积
-    const rest = list.filter((item) => !((item.ownerId || '') === ownerId && item.projectId === record.projectId && item.reviewAt === record.reviewAt))
+    // 同一条作品、同一次评审只留一条：改主意是覆盖，不是堆积。
+    // 覆盖范围按「看得见」算（canAccess）：没有 ownerId 的历史记录是公共数据，
+    // 不按 ownerId 硬比会留下两条同一版同一次评审的拍板，历史列表就会把一条判断印两遍。
+    const rest = list.filter(
+      (item) => !(canAccess(item, user) && item.projectId === record.projectId && item.reviewAt === record.reviewAt),
+    )
     await persist([record, ...rest].slice(0, MAX_DECISIONS))
   })
   return record
 }
 
-/** 撤销：把这条作品的拍板全撤掉（按版次各自失效，不猜人想撤哪一版）。返回撤销了几条。 */
-export async function clearDecisions(projectId, user = null) {
+/**
+ * 撤销某一次评审的拍板（v0.9.26）：只拿走这一条，别的版本与更早的拍板留在历史里。
+ * 人改主意撤的是自己最近那一次判断，不是把这条作品的记录删干净——要清干净用 clearDecisions。
+ */
+export async function clearDecision(projectId, reviewAt, user = null) {
   if (!projectId) return 0
-  const ownerId = user?.id || ''
+  const at = String(reviewAt || '')
+  if (!at) return 0
   let removed = 0
   await enqueueWrite(async () => {
     const list = await loadAll()
-    const keep = list.filter((item) => !(item.projectId === projectId && (item.ownerId || '') === ownerId))
+    // 能看见才撤得掉：管理员与无登录的本地演示按 canAccess 一样撤得动；
+    // 没有 ownerId 的历史拍板算公共数据，谁看得见谁能撤——与列表口径一致
+    const keep = list.filter(
+      (item) => !(canAccess(item, user) && item.projectId === projectId && String(item.reviewAt || '') === at),
+    )
+    removed = list.length - keep.length
+    if (removed) await persist(keep)
+  })
+  return removed
+}
+
+/** 撤销：把这条作品的拍板全撤掉（按版次各自失效，不猜人想撤哪一版）。返回撤销了几条。 */
+export async function clearDecisions(projectId, user = null) {
+  if (!projectId) return 0
+  let removed = 0
+  await enqueueWrite(async () => {
+    const list = await loadAll()
+    const keep = list.filter((item) => !(canAccess(item, user) && item.projectId === projectId))
     removed = list.length - keep.length
     if (removed) await persist(keep)
   })

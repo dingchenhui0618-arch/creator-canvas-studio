@@ -32,6 +32,11 @@ export type ProjectDecision = {
   decision: 'pass' | 'reject'
   note: string
   at: string
+  /**
+   * 这条还算不算数（服务端算，页面只负责写人话）：
+   *   current 管当前这一版最近一次评审 / stale 这一版后来重评过、已失效 / past 早先某一版的拍板
+   */
+  state?: 'current' | 'stale' | 'past'
 }
 
 /**

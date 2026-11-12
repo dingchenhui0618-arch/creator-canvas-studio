@@ -27,7 +27,7 @@ import { getShareVisits, getShareVisitsByKey } from '../share-visits.mjs'
 import { shareBriefsByProject } from '../share-summary.mjs'
 import { ackFor, dropAcksForProject, listAcks } from '../review-acks.mjs'
 import { dropDecisionsForProject, listDecisions } from '../review-decisions.mjs'
-import { decisionFor, reviewsForVersion } from '../project-status.mjs'
+import { decisionFor, decisionHistory, reviewsForVersion } from '../project-status.mjs'
 import { projectListQuery } from '../project-list.mjs'
 import { buildZip } from '../zip-store.mjs'
 import {
@@ -179,6 +179,9 @@ async function projectDetailView(project, user, { snapshots = false } = {}) {
     .sort((a, b) => String(b.at).localeCompare(String(a.at)))
   const currentReview = reviewsForVersion(versionCounts, project.version)
   const decision = decisionFor(decisions, currentReview.lastAt)
+  // 历史列表与状态胶囊读同一份判断：每条拍板带一个 state（管这一版 / 这一版重评过 / 早先那一版），
+  // 页面只负责把三个词写成人话，不自己再算一遍「还算不算数」（v0.9.26）
+  const decisionLog = decisionHistory(decisions, { version: project.version, reviewAt: currentReview.lastAt })
   // 「已看过」也按「哪一版、哪一次评审」认：作品页要能原地显示看过 / 撤销，
   // 但看过的只是待办，胶囊与下一步一句都不动。
   const ack = ackFor(acks, { projectId: project.id, version: project.version, reviewAt: currentReview.lastAt })
@@ -208,7 +211,7 @@ async function projectDetailView(project, user, { snapshots = false } = {}) {
     script: scriptView(project, template),
     reviews: reviews.items,
     // 拍板记录按时间倒序（纸要按版次各印各的，胶囊只用其中管当前这一版的那条）
-    decisions,
+    decisions: decisionLog,
     decision,
     // 当前这一版看过了没有：对不上就是 null（评出新结论或开了新版自动作废）
     ack,

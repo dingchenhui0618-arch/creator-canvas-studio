@@ -3,7 +3,7 @@ import { reviewVisual, reviewStatus } from '../review.mjs'
 import { saveReview, listReviews, getReview } from '../reviews.mjs'
 import { reviewQueue, reviewQueueRow } from '../review-queue.mjs'
 import { ackReview, unackReview } from '../review-acks.mjs'
-import { saveDecision, clearDecisions, DECISION_KINDS } from '../review-decisions.mjs'
+import { saveDecision, clearDecision, clearDecisions, DECISION_KINDS } from '../review-decisions.mjs'
 import { getProject, listProjects } from '../projects.mjs'
 import { projectsById, withReviewProject } from '../review-ownership.mjs'
 import fsp from 'node:fs/promises'
@@ -136,8 +136,11 @@ export function createReviewRouter() {
       }
       const decisionItem = pathname.match(DECISION_ITEM)
       if (decisionItem && req.method === 'DELETE') {
-        const removed = await clearDecisions(decisionItem[1], user)
-        sendJson(res, 200, { ok: true, removed })
+        // 带 reviewAt 就只撤那一次评审的拍板（作品页的「撤销这一版」）；
+        // 不带就整条作品的记录清掉（清空记录走这里，老调用的行为不变）
+        const reviewAt = url.searchParams.get('reviewAt') || ''
+        const removed = reviewAt ? await clearDecision(decisionItem[1], reviewAt, user) : await clearDecisions(decisionItem[1], user)
+        sendJson(res, 200, { ok: true, removed, scope: reviewAt ? 'review' : 'project' })
         return true
       }
       const reviewItem = pathname.match(REVIEW_ITEM)

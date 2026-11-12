@@ -246,11 +246,17 @@ export const decideReview = async (projectId: string, decision: 'pass' | 'reject
   return result
 }
 
-/** 撤销拍板：这条作品的拍板记录清掉，它回到待办。 */
-export const clearReviewDecision = async (projectId: string) => {
-  const result = await request<{ ok: boolean; removed: number }>('/api/reviews/decision/' + projectId, {
-    method: 'DELETE',
-  })
+/**
+ * 撤销拍板。
+ * 给了 reviewAt 就只拿走那一次评审的拍板（作品页的「撤销这一版」），别的版本与更早的记录留在历史里；
+ * 不给就把这条作品的记录全清掉（「清空拍板记录」）。两种都会让这条回到待办。
+ */
+export const clearReviewDecision = async (projectId: string, reviewAt = '') => {
+  const query = reviewAt ? '?reviewAt=' + encodeURIComponent(reviewAt) : ''
+  const result = await request<{ ok: boolean; removed: number; scope: 'review' | 'project' }>(
+    '/api/reviews/decision/' + projectId + query,
+    { method: 'DELETE' },
+  )
   noteReviewQueueChanged()
   return result
 }

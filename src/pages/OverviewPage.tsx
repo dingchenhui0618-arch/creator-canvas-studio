@@ -613,7 +613,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
           <div className="vq-review-queue-seen is-decided">
             <span className="vq-review-queue-seen-text">
               你拍板过 {decidedTotal} 条 · 最近：{decided[0].title}（第 {Math.max(1, decided[0].version)} 版 ·{' '}
-              {decided[0].decision === 'pass' ? '通过' : '不通过'} · {reviewTimeLabel(decided[0].decidedAt)}）· 撤销在作品页
+              {decided[0].decision === 'pass' ? '通过' : '不通过'} · {reviewTimeLabel(decided[0].decidedAt)}）· 记录与撤销在作品页
             </span>
             <button type="button" className="vq-link" onClick={() => onOpenProject(decided[0].projectId)}>
               打开

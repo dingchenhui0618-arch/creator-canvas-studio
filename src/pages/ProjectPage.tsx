@@ -96,7 +96,9 @@ export default function ProjectPage({
   // 人工复核：一句话备注，加上正在提交的那一档（拍通过 / 拍不通过 / 撤销）
   // null 表示「跟着这条拍板的备注走」：改判或撤销后不用手动清空，渲染时现算
   const [decisionNote, setDecisionNote] = useState<string | null>(null)
-  const [decideBusy, setDecideBusy] = useState<'' | 'pass' | 'reject' | 'undo'>('')
+  const [decideBusy, setDecideBusy] = useState<'' | 'pass' | 'reject' | 'undo' | 'clear'>('')
+  // 「清空拍板记录」要点两下：第一下只是把按钮换成「再点一次」，5 秒没有第二下就缩回去
+  const [clearLogArmed, setClearLogArmed] = useState(false)
   // 「已看过」也在作品页原地做：人点进来看了，就不该再回工作台点一下
   const [ackBusy, setAckBusy] = useState<'' | 'ack' | 'undo'>('')
 
@@ -122,6 +124,13 @@ export default function ProjectPage({
 
 
   // 交付菜单：点别处、按 Esc 都收起
+  // 「清空拍板记录」的第一下只保持 5 秒：等太久还挂着「再点一次」，容易误触
+  useEffect(() => {
+    if (!clearLogArmed) return
+    const timer = window.setTimeout(() => setClearLogArmed(false), 5000)
+    return () => window.clearTimeout(timer)
+  }, [clearLogArmed])
+
   useEffect(() => {
     if (!deliverOpen) return
     const onDown = (event: PointerEvent) => {
@@ -244,16 +253,41 @@ export default function ProjectPage({
     }
   }
 
+  // 撤销只拿走「这一版这一次评审」那一条（v0.9.26）：早先几版的拍板是记录，不是开关。
+  // 要连历史一起清掉，用下面的「清空拍板记录」——两件事写清楚，不靠按钮猜。
   const undoDecision = async () => {
     if (!data) return
     setDecideBusy('undo')
     try {
-      await clearReviewDecision(data.project.id)
+      const result = await clearReviewDecision(data.project.id, data.decision?.reviewAt || '')
       await load()
       setDecisionNote(null)
-      onToast('已撤销拍板，这一条回到待办')
+      setClearLogArmed(false)
+      // removed=0 说明这条在别处已经被撤了（另一个标签页 / 另一个人）：别报「已撤销」
+      onToast(result.removed ? '已撤销这一版的拍板，这一条回到待办' : '这条拍板已经不在记录里了，刷新看看')
     } catch (caught) {
       onToast(caught instanceof Error ? caught.message : '撤销没成功，刷新再试')
+    } finally {
+      setDecideBusy('')
+    }
+  }
+
+  // 清空这条作品的全部拍板记录：连早先几版一起删。两步才动手，删的是记录，没有后悔药。
+  const clearDecisionLog = async () => {
+    if (!data) return
+    if (!clearLogArmed) {
+      setClearLogArmed(true)
+      return
+    }
+    setClearLogArmed(false)
+    setDecideBusy('clear')
+    try {
+      const result = await clearReviewDecision(data.project.id)
+      await load()
+      setDecisionNote(null)
+      onToast(result.removed ? '已清空 ' + result.removed + ' 条拍板记录' : '没有可清空的拍板记录')
+    } catch (caught) {
+      onToast(caught instanceof Error ? caught.message : '清空没成功，刷新再试')
     } finally {
       setDecideBusy('')
     }
@@ -537,6 +571,11 @@ export default function ProjectPage({
   const currentReviews = reviewsForVersion(data.versionCounts, project.version)
   // 人工复核：服务端已经按「当前这一版最近一次评审」挑好了，对不上就是 null（拍板自动失效）
   const decision = data.decision ?? null
+  // 拍板记录（v0.9.26）：这条作品名下每一次拍板都留着，按拍板时间倒序；还算不算数由服务端算好（state）。
+  // 回看要回答的是「上一版为什么放行」，所以每行都带上那次评审的模型结论与当时的备注。
+  const decisionLog = data.decisions ?? []
+  // 记录点得进那一次评审的证据：评审列表里还在，就按评审时间对上
+  const reviewByCreatedAt = new Map(reviews.map((item) => [item.createdAt, item]))
   // 「已看过」同理：版次与评审时间都对上才算
   const ack = data.ack ?? null
   // 输入框显示哪句话：没动过就是这条拍板的备注，动过就是人正在打的字
@@ -1269,8 +1308,9 @@ export default function ProjectPage({
                             className="vq-button vq-button--ghost"
                             onClick={() => void undoDecision()}
                             disabled={decideBusy !== ''}
+                            title="只撤这一版这一次评审的拍板；早先几版的记录留在下面的拍板记录里"
                           >
-                            {decideBusy === 'undo' ? '正在撤销…' : '撤销拍板'}
+                            {decideBusy === 'undo' ? '正在撤销…' : '撤销这一版'}
                           </button>
                           <button
                             type="button"
@@ -1333,6 +1373,78 @@ export default function ProjectPage({
                     )}
                   </div>
                 )}
+              </div>
+            ) : null}
+            {/* 拍板记录（v0.9.26）：改判、撤销、开新版之后，旧的那几条不是消失了，而是躺在这一格里。
+                每行写清哪一版、那次评审模型说了什么、当时为什么放行；还算不算数由服务端算（state）。 */}
+            {decisionLog.length ? (
+              <div className="vq-decision-log">
+                <div className="vq-decision-log-head">
+                  <span className="vq-decision-log-kicker">拍板记录</span>
+                  <span className="vq-mono">{decisionLog.length} 条 · 新的在上</span>
+                </div>
+                <ul className="vq-decision-log-list">
+                  {decisionLog.map((entry) => {
+                    const review = reviewByCreatedAt.get(entry.reviewAt)
+                    const stateText =
+                      entry.state === 'current'
+                        ? '管这一版'
+                        : entry.state === 'stale'
+                          ? '这一版重评过 · 已失效'
+                          : '早先那一版'
+                    // 一行里说完：什么时候拍的、那次评审模型说了什么（中文里不要再插空格）
+                    const metaText =
+                      reviewTimeLabel(entry.at) + ' 拍 · 那次评审：' + (VERDICT_LABEL[entry.verdict] || '未记录结论')
+                    const inner = (
+                      <>
+                        <span className="vq-decision-log-flags">
+                          <span className={'vq-decision-log-tag is-' + entry.decision}>
+                            {entry.decision === 'pass' ? '人工通过' : '人工不通过'}
+                          </span>
+                          <span className="vq-mono vq-decision-log-version">v{entry.version}</span>
+                        </span>
+                        <span className="vq-decision-log-body">
+                          <span className={'vq-decision-log-state is-' + (entry.state || 'past')}>{stateText}</span>
+                          <span className="vq-decision-log-meta">{metaText}</span>
+                          {entry.note ? <span className="vq-decision-log-note">备注：{entry.note}</span> : null}
+                        </span>
+                        {review ? <ArrowRight size={13} className="vq-decision-log-go" /> : null}
+                      </>
+                    )
+                    return (
+                      <li key={entry.id}>
+                        {review ? (
+                          <button
+                            type="button"
+                            className="vq-decision-log-row"
+                            onClick={() => onOpenReviewRecord(review.id)}
+                            title="看这次评审的证据原图"
+                          >
+                            {inner}
+                          </button>
+                        ) : (
+                          <div className="vq-decision-log-row is-static">{inner}</div>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+                <div className="vq-decision-log-foot">
+                  <span>撤销只拿走这一版；早先几版的记录留着。</span>
+                  <button
+                    type="button"
+                    className="vq-link"
+                    onClick={() => void clearDecisionLog()}
+                    disabled={decideBusy !== ''}
+                    title="连早先几版的记录一起删掉：点两下才动手"
+                  >
+                    {decideBusy === 'clear'
+                      ? '正在清空…'
+                      : clearLogArmed
+                        ? '再点一次：清空 ' + decisionLog.length + ' 条'
+                        : '清空拍板记录'}
+                  </button>
+                </div>
               </div>
             ) : null}
             {reviews.length ? (

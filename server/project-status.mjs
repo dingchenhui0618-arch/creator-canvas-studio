@@ -43,6 +43,27 @@ export function decisionFor(decisions, reviewAt) {
 }
 
 /**
+ * 拍板记录回看（v0.9.26）：这条作品名下每一条拍板，连「它还算不算数」一起还回来。
+ * 三种状态都从数据现算，不靠人记：
+ *   current  管当前这一版最近一次评审（与 decisionFor 同一口径，状态胶囊读的就是它）
+ *   stale    同一版，但那次评审后来又被评过：这条已经失效，要重新拍板
+ *   past     早先某一版的拍板：版次翻过去了，记录留着，交付稿与对照纸仍按版次各印各的
+ * 版次 0 是版本划分之前留下的记录，折进 v1——与评审、运行、交付那几处的口径一致。
+ */
+export function decisionHistory(decisions, { version = 0, reviewAt = '' } = {}) {
+  const currentVersion = Math.max(1, Math.round(Number(version) || 0))
+  const at = String(reviewAt || '')
+  return (Array.isArray(decisions) ? decisions : [])
+    .filter((entry) => entry && DECISION_TEXT[entry.decision])
+    .map((entry) => {
+      const ownVersion = Math.max(1, Math.round(Number(entry.version) || 0))
+      // 时间对得上才管这一版：先认时间，再认版次——同一版重评之后旧拍板不能还挂在头上
+      const state = at && String(entry.reviewAt || '') === at ? 'current' : ownVersion === currentVersion ? 'stale' : 'past'
+      return { ...entry, version: ownVersion, state }
+    })
+}
+
+/**
  * 最近一次「标记交付」：交出去的是哪一版、什么时候（老记录没有时间，at 是空串）。
  * deliveries 按发生顺序排，最后一条就是最近一次；没有记录返回 null。
  */

@@ -258,9 +258,12 @@ test('接口：通过的作品 / 非法拍板 / 缺作品 id 都拒收，成功�
   assert.notEqual(ok.body.decision.reviewAt, at(12, 10), '评审时间由服务端取最近一次评审，不信客户端')
   assert.ok(Number.isFinite(Date.parse(ok.body.decision.reviewAt)), '是一个真实时间')
 
+  // 没有登录态 = 本地演示：按 canAccess 一律可见，所以这条作品的记录（含 u_a 那条旧的）一起清掉。
+  // 与「看得见才撤得掉」同一口径：登录账号只撤得掉自己的与没有归属的老记录。
   const undo = await call('DELETE', '/api/reviews/decision/prj_decide')
   assert.equal(undo.status, 200)
-  assert.equal(undo.body.removed, 1)
+  assert.equal(undo.body.removed, 2)
+  assert.equal(undo.body.scope, 'project')
 })
 
 test('队列行接口：拍过板的作品仍然拿得到行（能改判），通过 / 已交付的拿不到', async () => {
