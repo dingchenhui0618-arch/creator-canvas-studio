@@ -1552,3 +1552,122 @@
   font-size: 12px;
   line-height: 1.6;
 }
+.agx-draft-note {
+  color: var(--faint);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.agx-draft-fact {
+  color: var(--faint);
+  font-size: 11px;
+  font-style: normal;
+  font-family: var(--font-mono);
+}
+/* 「写进作品」展开后的选作品面板：选哪一条 + 这一条现在是什么，再让人点覆盖 */
+.agx-draft-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.agx-draft-pick-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.agx-draft-pick-label {
+  flex: none;
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+.agx-draft-select {
+  flex: 1 1 240px;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  color: var(--ink);
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-ui);
+  font-size: 12px;
+}
+.agx-draft-select:disabled {
+  color: var(--faint);
+}
+.agx-draft-pick-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.agx-draft-pick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.agx-draft-pick-actions .agx-btn {
+  height: 28px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+/* 从作品页「让智能体写」过来：一条横幅写明在帮哪条作品、这一版现在是什么 */
+.agx-project {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  width: min(900px, 100%);
+  margin: 0 auto 12px;
+  padding: 12px 16px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.agx-project-kicker {
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+.agx-project strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.agx-project-meta {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+.agx-project-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+.agx-project-actions .agx-btn {
+  height: 28px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+@media (max-width: 700px) {
+  .agx-draft-pick-row {
+    flex-wrap: wrap;
+  }
+  .agx-draft-select {
+    flex: 1 1 100%;
+  }
+  .agx-project-actions {
+    margin-left: 0;
+    flex: 1 1 100%;
+  }
+}

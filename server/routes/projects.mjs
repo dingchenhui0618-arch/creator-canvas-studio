@@ -10,9 +10,10 @@ import { flowBrief, projectBrief } from '../project-briefs.mjs'
 import { currentUser } from '../auth.mjs'
 import { config } from '../config.mjs'
 import { getTemplate, reuseTemplate } from '../templates.mjs'
-import { createFlow, getFlow, updateFlow, listRunsByFlows } from '../flows.mjs'
+import { createFlow, getFlow, listRunsByFlows } from '../flows.mjs'
 import { normalizeProjectScript, scriptPace, scriptView } from '../project-script.mjs'
-import { buildReplicateDraft, patchCanvasScript } from '../script-draft.mjs'
+import { buildReplicateDraft } from '../script-draft.mjs'
+import { syncCanvasScript } from '../project-canvas-sync.mjs'
 import {
   listReviews,
   getReview,
@@ -62,22 +63,6 @@ const REVIEW_PRINT = /^\/print\/projects\/([\w-]+)\/review$/
 
 // 详情 / 列表里的 project 只有一份形状（server/project-briefs.mjs）：
 // 不带原始脚本、不带分享 token。画布归作品那条路（v0.9.29）回执也用同一份。
-
-/**
- * 改完脚本把画布里自动生成的复刻提示词一起换掉。
- * 只认我们生成的那一版（标题「复刻脚本」+ 提示词开头是固定句），用户手改过的整块跳过。
- */
-async function syncCanvasScript(project, template, script, prevHook, user) {
-  if (!project.flowId) return { synced: false, flowId: '', reason: 'no-canvas' }
-  const flow = await getFlow(project.flowId, user)
-  if (!flow) return { synced: false, flowId: project.flowId, reason: 'canvas-missing' }
-  const patched = patchCanvasScript(flow.nodes, { template, script, prevHook })
-  if (!patched.changed) return { synced: false, flowId: flow.id, reason: 'hand-edited' }
-  const updated = await updateFlow(flow.id, { nodes: patched.nodes })
-  if (!updated) return { synced: false, flowId: flow.id, reason: 'save-failed' }
-  // synced 只看提示词：输入节点跟着换了但提示词是手改过的，不能说「画布用的是新脚本」
-  return { synced: patched.promptUpdated, flowId: flow.id, reason: patched.promptUpdated ? 'synced' : 'hand-edited' }
-}
 
 // 列表只给卡片要用的那几项：模板标题、流程名、评审计数
 function templateBrief(template) {

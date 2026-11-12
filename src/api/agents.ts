@@ -1,5 +1,6 @@
 // 智能体 API 客户端：与 server/routes/agents.mjs 的契约一一对应。
 import { request as apiRequest } from './client'
+import type { Project, ProjectScript } from '../domain/project'
 
 export const AGENT_CATEGORIES = ['内容复刻', '视觉评审', '脚本分镜', '投放素材'] as const
 export type AgentCategory = (typeof AGENT_CATEGORIES)[number]
@@ -66,7 +67,7 @@ export type AgentToolsResult = {
   skipped: { id: string; label: string; reason: string }[]
 }
 
-// 结构化草稿：服务端从回复里的 ```draft 块整理出来，两个出口（存为模板 / 送到画布）都用它。
+// 结构化草稿：服务端从回复里的 ```draft 块整理出来，三个出口（存为模板 / 送到画布 / 写进作品）都用它。
 // 秒数是服务端按口播字数算的，界面上直接显示、不再自己算一遍。
 export type AgentDraftBeat = {
   beat: string
@@ -182,6 +183,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 // 跨页面的一次性选中意图（编辑页点「开始对话」→ 列表页选中它）。
 // 用模块变量而不是 sessionStorage，避免 React StrictMode 双重挂载时被提前消费。
 let pendingSelectAgentId = ''
+// 作品页「让智能体写」带过来的那条作品：模块变量而不是地址参数——地址栏里不出现内部 id，
+// 与上面那个「选中哪一个智能体」同一种一次性交接。
+let pendingAgentProjectId = ''
+
+export function setPendingAgentProject(id: string) {
+  pendingAgentProjectId = id
+}
+
+export function peekPendingAgentProject() {
+  return pendingAgentProjectId
+}
+
+export function clearPendingAgentProject() {
+  pendingAgentProjectId = ''
+}
 
 export function setPendingSelectAgent(id: string) {
   pendingSelectAgentId = id
@@ -233,6 +249,22 @@ export const sendAgentDraftToCanvas = (id: string, draft: AgentDraft) =>
   request<{ flow: { id: string; name: string; nodes: number } }>('/api/agents/' + id + '/draft/canvas', {
     method: 'POST',
     body: JSON.stringify({ draft }),
+  })
+
+// 写进作品：只写脚本（钩子 + 段落），分镜留在草稿里——要镜头走「送到画布」。
+// 服务端走作品脚本的 copy-on-write：模板与别的作品不动；回执带被换掉的那一份（来源与段数）。
+export type DraftProjectResult = {
+  ok: boolean
+  project: Project
+  script: ProjectScript | null
+  canvas: { synced: boolean; flowId: string; reason: 'synced' | 'no-canvas' | 'canvas-missing' | 'hand-edited' | 'save-failed' }
+  replaced: { source: '' | 'project' | 'template'; beats: number }
+}
+
+export const writeAgentDraftToProject = (id: string, draft: AgentDraft, projectId: string) =>
+  request<DraftProjectResult>('/api/agents/' + id + '/draft/project', {
+    method: 'POST',
+    body: JSON.stringify({ draft, projectId }),
   })
 
 export const listAgentHistory = (id: string, params: { limit?: number; offset?: number } = {}) => {

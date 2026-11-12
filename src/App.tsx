@@ -39,7 +39,7 @@ import { RequireSession } from './auth/RequireSession'
 import { useSession } from './auth/useSession'
 import { useUiMode } from './api/app'
 import { initialsFor, sessionKindLabel, type RegisterInput, type Session, type SignInInput } from './auth/session'
-import { listAgents } from './api/agents'
+import { listAgents, setPendingAgentProject } from './api/agents'
 import { createBdcCanvas } from './api/bdc'
 import { listReviewQueue } from './api/review'
 import { navigate, pageToRoute, routeKey, routeToPage, useRoute } from './router'
@@ -473,6 +473,11 @@ function Workbench({
             onOpenFlow={(flowId) => navigate({ kind: 'page', page: 'canvas', flowId })}
             onOpenReview={(projectId) => navigate({ kind: 'page', page: 'review', projectId })}
             onOpenReviewRecord={(reviewId) => navigate({ kind: 'page', page: 'review', reviewId })}
+            onOpenAgents={(projectId) => {
+              // 一次性交接：智能体页读到这条作品就清掉，之后再进不会还挂着上一条
+              setPendingAgentProject(projectId)
+              go('agents')
+            }}
             onBrowseTemplates={() => go('templates')}
             onToast={notify}
           />
@@ -512,6 +517,7 @@ function Workbench({
             onOpenAgent={openAgent}
             onOpenTemplates={() => go('templates')}
             onOpenCanvas={(flowId) => navigate({ kind: 'page', page: 'canvas', flowId })}
+            onOpenProject={(projectId) => navigate({ kind: 'page', page: 'projects', projectId })}
             onToast={notify}
           />
         )

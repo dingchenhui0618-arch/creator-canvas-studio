@@ -7,6 +7,7 @@ import {
   Bot,
   Check,
   ChevronDown,
+  Clapperboard,
   Clock,
   Copy,
   Download,
@@ -26,15 +27,20 @@ import {
   deleteAgent,
   formatClock,
   formatRelative,
+  clearPendingAgentProject,
   clearPendingSelectAgent,
   listAgentHistory,
   listAgents,
+  peekPendingAgentProject,
   peekPendingSelectAgent,
   saveAgentDraftAsTemplate,
   sendAgentDraftToCanvas,
+  writeAgentDraftToProject,
 } from '../api/agents'
 import type { AgentArtifact, AgentDraft, AgentRecord, AgentRunRecord, AgentsList, AgentToolsResult, OutputType } from '../api/agents'
 import { getCredits, getModelService, recheckModelService, type CreditsResponse, type ModelServiceState } from '../api/credits'
+import { getProject, listProjects } from '../api/projects'
+import type { ProjectSummary } from '../domain/project'
 import { getPreferences } from '../api/preferences'
 import { useUiMode } from '../api/app'
 import PageHead from '../components/PageHead'
@@ -48,7 +54,7 @@ type ChatMessage = {
   model?: string
   latencyMs?: number
   tools?: AgentToolsResult
-  // 结构化草稿：有它才显示两个出口（存为模板 / 送到画布）
+  // 结构化草稿：有它才显示三个出口（存为模板 / 送到画布 / 写进作品）
   draft?: AgentDraft | null
   at: number
 }
@@ -56,10 +62,44 @@ type ChatMessage = {
 // 每个出口的状态按消息 id 记：同一条回复存过模板之后，按钮变成「已存为模板 + 打开」，
 // 下次刷新（本地历史）也还是这个状态，不需要再点一次。
 type DraftAction = {
-  busy: '' | 'template' | 'canvas'
+  busy: '' | 'template' | 'canvas' | 'project'
   error: string
   template?: { id: string; title: string }
   flow?: { id: string; name: string }
+  /** 已经写进这条作品：标题 / 版次 / 段数与画布那边发生了什么 */
+  project?: { id: string; title: string; version: number; beats: number; canvas: { synced: boolean; reason: string } }
+  /** 「写进作品」展开后的选作品面板：选哪一条、这条现在的脚本是什么 */
+  picker?: {
+    open: boolean
+    id: string
+    loading: boolean
+    error: string
+    detail: null | { title: string; version: number; beats: number; source: '' | 'project' | 'template' }
+  }
+}
+
+// 作品页「让智能体写」带过来的上下文：标题、版次与这一版现在的脚本（标题与段数）。
+// 只用来写一句「在帮哪条作品」和预填输入框，不往对话里塞任何作品内部数据。
+type AgentProjectContext = {
+  id: string
+  title: string
+  version: number
+  beats: number
+  source: '' | 'project' | 'template'
+  hook: string
+}
+
+const versionLabel = (version: number) => (version > 0 ? '第 ' + version + ' 版' : '还没开画布')
+
+function projectPrompt(context: AgentProjectContext) {
+  const lines = ['帮我改《' + context.title + '》这一版（' + versionLabel(context.version) + '）的脚本。']
+  lines.push(
+    context.beats
+      ? '现在这一版有 ' + context.beats + ' 段' + (context.hook ? '，开头钩子是「' + context.hook + '」' : '') + '。'
+      : '这一版还没有脚本。',
+  )
+  lines.push('保留段落结构，重写钩子和每段口播，控制在 6 段以内。')
+  return lines.join('\n')
 }
 
 type HistoryEntry = {
@@ -384,25 +424,64 @@ const DEFAULT_OUTPUT_TYPE: OutputType = '脚本'
 
 // 结构化草稿卡：回复下面的一条「可以继续用的东西」。
 // 两个出口都在这里，不跳页：存完模板、建完画布之后原件还在，链接点了再走。
+// 结构化草稿卡：回复下面的一条「可以继续用的东西」。
+// 三个出口都在这里，不跳页：存完模板、建完画布、写进作品之后原件还在，链接点了再走。
 function DraftCard({
   draft,
   action,
+  works,
+  worksLoading,
+  worksError,
   onSaveTemplate,
   onSendCanvas,
   onOpenTemplates,
   onOpenCanvas,
+  onOpenPicker,
+  onPick,
+  onWriteProject,
+  onCancelPicker,
+  onOpenProject,
 }: {
   draft: AgentDraft
   action: DraftAction
+  works: ProjectSummary[] | null
+  worksLoading: boolean
+  worksError: string
   onSaveTemplate: () => void
   onSendCanvas: () => void
   onOpenTemplates: () => void
   onOpenCanvas: (flowId: string) => void
+  onOpenPicker: () => void
+  onPick: (projectId: string) => void
+  onWriteProject: () => void
+  onCancelPicker: () => void
+  onOpenProject: (projectId: string) => void
 }) {
   const busy = action.busy !== ''
   // 先取出再判空：闭包里用 action.flow.id 会把「已经判过」的窄化丢掉
   const savedTemplate = action.template
   const savedFlow = action.flow
+  const savedProject = action.project
+  const picker = action.picker
+  const picked = picker?.detail ?? null
+  // 写进去的是脚本：草稿里没有段落（只有分镜）就没有这个出口，也不留一个点了会报错的按钮
+  const canWrite = Boolean(picker?.open && picker.id && picked && !picker.loading && !busy)
+  // 覆盖前先把「现在是什么」摆出来：这条作品有没有自己的脚本、段数是多少、换掉之后模板不动
+  const note = (() => {
+    if (!picker?.open) return ''
+    if (worksError) return '作品列表没读到：' + worksError
+    if (worksLoading) return '正在读作品列表…'
+    if (!works || !works.length) return '还没有作品：先去作品页建一条，草稿就能写进去'
+    if (picker.loading) return '正在读这条作品现在的脚本…'
+    if (picker.error) return picker.error
+    if (!picked) return '选一条作品：写进去的是这一版的脚本（钩子 + ' + draft.stats.beats + ' 段），分镜不跟着走'
+    const source = picked.source === 'template' ? '来自模板' : picked.source === 'project' ? '这条作品的版本' : ''
+    const now = picked.beats ? '脚本 ' + picked.beats + ' 段' + (source ? '（' + source + '）' : '') : '还没有脚本'
+    const after = picked.beats
+      ? '换成这份草稿的 ' + draft.stats.beats + ' 段；模板与别的作品不动'
+      : '写这份草稿的 ' + draft.stats.beats + ' 段（钩子 + 段落）；之后它有自己的脚本，模板再改不影响这条'
+    return '现在：《' + picked.title + '》· ' + versionLabel(picked.version) + ' · ' + now + ' → ' + after
+  })()
   return (
     <div className="agx-draft" role="group" aria-label="结构化草稿">
       <div className="agx-draft-head">
@@ -460,7 +539,65 @@ function DraftCard({
             {action.busy === 'canvas' ? '创建中' : '送到画布'}
           </button>
         )}
+        {savedProject ? (
+          <span className="agx-draft-done">
+            <Check size={12} />
+            已写进《{savedProject.title}》· {versionLabel(savedProject.version)} · {savedProject.beats} 段
+            <button type="button" onClick={() => onOpenProject(savedProject.id)}>
+              打开作品
+            </button>
+            {savedProject.canvas.synced ? (
+              <em className="agx-draft-fact">画布里的复刻提示词就是这份脚本</em>
+            ) : savedProject.canvas.reason === 'hand-edited' ? (
+              <em className="agx-draft-fact">画布提示词你手改过，没动</em>
+            ) : null}
+          </span>
+        ) : draft.stats.beats > 0 ? (
+          <button
+            type="button"
+            className="agx-btn"
+            onClick={onOpenPicker}
+            disabled={busy || Boolean(picker?.open)}
+            title="把这份草稿写进一条作品这一版的脚本；写进去之后模板与别的作品不动"
+          >
+            <Clapperboard size={13} />
+            {action.busy === 'project' ? '写入中' : '写进作品'}
+          </button>
+        ) : (
+          <span className="agx-draft-note">只有分镜的草稿写不进作品：作品脚本只认段落，要镜头就送到画布</span>
+        )}
       </div>
+      {picker?.open && !savedProject ? (
+        <div className="agx-draft-pick">
+          <label className="agx-draft-pick-row">
+            <span className="agx-draft-pick-label">写进作品</span>
+            <select
+              className="agx-draft-select"
+              value={picker.id}
+              onChange={(event) => onPick(event.target.value)}
+              disabled={busy || worksLoading || !(works && works.length)}
+            >
+              <option value="">{worksLoading ? '读作品列表…' : '选一条作品'}</option>
+              {/* 下拉只放标题：版次与「这一版现在是什么」写在下面那行注释里，
+                  窄屏上标题本来就会截断，再塞版次只会剩下一个挂着的「·」 */}
+              {(works || []).map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.title}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="agx-draft-pick-note">{note}</p>
+          <div className="agx-draft-pick-actions">
+            <button type="button" className="agx-btn agx-btn--ink" onClick={onWriteProject} disabled={!canWrite}>
+              {action.busy === 'project' ? '写入中' : picked?.beats ? '覆盖这一版脚本' : '写进这一版'}
+            </button>
+            <button type="button" className="agx-btn agx-btn--quiet" onClick={onCancelPicker} disabled={busy}>
+              取消
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -470,12 +607,14 @@ export function AgentsPage({
   onOpenAgent,
   onOpenTemplates,
   onOpenCanvas,
+  onOpenProject,
   onToast,
 }: {
   onCreate: () => void
   onOpenAgent: (name: string) => void
   onOpenTemplates: () => void
   onOpenCanvas: (flowId: string) => void
+  onOpenProject: (projectId: string) => void
   onToast?: (message: string) => void
 }) {
   const [data, setData] = useState<AgentsList | null>(null)
@@ -511,8 +650,13 @@ export function AgentsPage({
   // 模型服务状态：额度 / 凭证这类账号级故障要在输入前就说清楚，而不是让人白点一次
   const [modelState, setModelState] = useState<ModelServiceState | null>(null)
   const [rechecking, setRechecking] = useState(false)
-  // 每条回复的两个出口各自记状态：存过模板的那条不再显示「存为模板」按钮
+  // 每条回复的三个出口各自记状态：存过模板的那条不再显示「存为模板」按钮
   const [draftActions, setDraftActions] = useState<Record<string, DraftAction>>({})
+  // 「写进作品」要选一条：列表按需取一次，读完留着；作品上下文来自作品页的「让智能体写」
+  const [works, setWorks] = useState<ProjectSummary[] | null>(null)
+  const [worksLoading, setWorksLoading] = useState(false)
+  const [worksError, setWorksError] = useState('')
+  const [projectContext, setProjectContext] = useState<AgentProjectContext | null>(null)
   const { internal } = useUiMode()
   // 顶栏选择的模型保存在服务端；智能体本身没绑模型时用它作为默认值
   const preferredModelRef = useRef('')
@@ -641,6 +785,36 @@ export function AgentsPage({
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'nearest' })
   }, [messages.length, pending])
+
+  // 从作品页的「让智能体写」进来：读一眼这条作品现在这一版，写进横幅、预填一次输入框。
+  // 一次性交接，读完就清掉——之后再进智能体页不该还挂着上一条作品。
+  useEffect(() => {
+    const staged = peekPendingAgentProject()
+    if (!staged) return
+    clearPendingAgentProject()
+    let alive = true
+    getProject(staged)
+      .then((detail) => {
+        if (!alive) return
+        const next: AgentProjectContext = {
+          id: detail.project.id,
+          title: detail.project.title,
+          version: detail.project.version,
+          beats: Array.isArray(detail.script?.structure) ? detail.script.structure.length : 0,
+          source: detail.script?.source || '',
+          hook: detail.script?.hook || '',
+        }
+        setProjectContext(next)
+        setDraft((current) => current || projectPrompt(next))
+      })
+      .catch(() => {
+        // 读不到就退回到「没有上下文」：草稿照样能存模板、送画布、选一条作品写进去
+        if (alive) onToast?.('那条作品的上下文没读到：写完草稿再选作品也一样能写进去')
+      })
+    return () => {
+      alive = false
+    }
+  }, [onToast])
 
   useEffect(() => {
     if (!armedDelete) return
@@ -869,6 +1043,120 @@ export function AgentsPage({
     },
     [markDraftAction, onToast, selectedAgent],
   )
+
+  // ---- 写进作品：第三条出口（v0.9.30）----
+  // 作品列表按需取一次；选中的那条再读一次详情，把「现在是什么」摆出来再让人点覆盖。
+  const loadWorks = async () => {
+    if (worksLoading) return
+    setWorksLoading(true)
+    setWorksError('')
+    try {
+      const result = await listProjects()
+      setWorks(result.items)
+    } catch (caught) {
+      setWorksError(caught instanceof Error ? caught.message : '作品列表没读到')
+    } finally {
+      setWorksLoading(false)
+    }
+  }
+
+  const patchPicker = (id: string, patch: Partial<NonNullable<DraftAction['picker']>>) => {
+    setDraftActions((current) => {
+      const previous: DraftAction = current[id] ?? { busy: '', error: '' }
+      const picker = previous.picker ?? { open: true, id: '', loading: false, error: '', detail: null }
+      return { ...current, [id]: { ...previous, picker: { ...picker, ...patch } } }
+    })
+  }
+
+  const loadPickDetail = async (id: string, projectId: string) => {
+    patchPicker(id, { id: projectId, loading: true, error: '', detail: null })
+    try {
+      const detail = await getProject(projectId)
+      patchPicker(id, {
+        loading: false,
+        detail: {
+          title: detail.project.title,
+          version: detail.project.version,
+          beats: Array.isArray(detail.script?.structure) ? detail.script.structure.length : 0,
+          source: detail.script?.source || '',
+        },
+      })
+    } catch (caught) {
+      patchPicker(id, {
+        loading: false,
+        error: (caught instanceof Error ? caught.message : '读不到这条作品现在的脚本') + '：刷新再试',
+      })
+    }
+  }
+
+  const openDraftPicker = (message: ChatMessage) => {
+    // 从作品页来的那条默认就在选中位置：少一个下拉动作，也不容易写错作品
+    const preset = projectContext?.id || ''
+    setDraftActions((current) => {
+      const previous: DraftAction = current[message.id] ?? { busy: '', error: '' }
+      return {
+        ...current,
+        [message.id]: {
+          ...previous,
+          picker: { open: true, id: preset, loading: false, error: '', detail: null },
+        },
+      }
+    })
+    if (!works && !worksLoading) void loadWorks()
+    if (preset) void loadPickDetail(message.id, preset)
+  }
+
+  const cancelDraftPicker = (id: string) => {
+    patchPicker(id, { open: false, id: '', loading: false, error: '', detail: null })
+  }
+
+  const writeDraft = async (message: ChatMessage) => {
+    const agent = selectedAgent
+    const draft = message.draft
+    const projectId = draftActions[message.id]?.picker?.id || ''
+    if (!agent || !draft || !projectId) return
+    markDraftAction(message.id, { busy: 'project', error: '' })
+    patchPicker(message.id, { error: '' })
+    try {
+      const result = await writeAgentDraftToProject(agent.id, draft, projectId)
+      const beats = Array.isArray(result.script?.structure) ? result.script.structure.length : 0
+      markDraftAction(message.id, {
+        busy: '',
+        project: {
+          id: result.project.id,
+          title: result.project.title,
+          version: result.project.version,
+          beats,
+          canvas: result.canvas,
+        },
+      })
+      // 画布那边到底动没动，要在这一句里说清楚：手改过的提示词我们没碰
+      const canvasNote = result.canvas.synced
+        ? '，画布里的复刻提示词就是这份脚本'
+        : result.canvas.reason === 'hand-edited'
+          ? '，画布提示词你手改过没动'
+          : ''
+      onToast?.('已写进《' + result.project.title + '》· ' + versionLabel(result.project.version) + '（' + beats + ' 段' + canvasNote + '）')
+      // 列表缓存与横幅上的版次一起刷新：同一份草稿再写一次，读到的不能是旧的
+      setWorks((current) =>
+        current
+          ? current.map((item) =>
+              item.id === result.project.id
+                ? { ...item, version: result.project.version, updatedAt: result.project.updatedAt }
+                : item,
+            )
+          : current,
+      )
+      setProjectContext((current) =>
+        current && current.id === result.project.id
+          ? { ...current, version: result.project.version, beats, source: 'project', hook: result.script?.hook || '' }
+          : current,
+      )
+    } catch (caught) {
+      patchPicker(message.id, { error: caught instanceof Error ? caught.message : '没写进去' })
+      markDraftAction(message.id, { busy: '' })
+    }
+  }
 
   const clearRuns = useCallback(async () => {
     if (!selectedId) return
@@ -1114,6 +1402,32 @@ export function AgentsPage({
       />
 
       <section className="agx-stage" ref={stageRef}>
+        {projectContext ? (
+          <div className="agx-project" role="status">
+            <span className="agx-project-kicker">在帮</span>
+            <strong>
+              《{projectContext.title}》· {versionLabel(projectContext.version)}
+            </strong>
+            <span className="agx-project-meta">
+              {projectContext.beats
+                ? '脚本 ' + projectContext.beats + ' 段 · ' + (projectContext.source === 'project' ? '这条作品的版本' : '来自模板')
+                : '还没有脚本'}
+            </span>
+            <div className="agx-project-actions">
+              <button type="button" className="agx-btn" onClick={() => onOpenProject(projectContext.id)}>
+                打开作品
+              </button>
+              <button
+                type="button"
+                className="agx-btn agx-btn--quiet"
+                onClick={() => setProjectContext(null)}
+                title="不帮这条作品了：草稿照样能存为模板、送到画布，或写进别的作品"
+              >
+                不帮了
+              </button>
+            </div>
+          </div>
+        ) : null}
         <div className="agx-composer-wrap">
           {messages.length > 0 && (
             <div className="agx-thread-head">
@@ -1137,10 +1451,18 @@ export function AgentsPage({
                     <DraftCard
                       draft={message.draft}
                       action={draftActions[message.id] || { busy: '', error: '' }}
+                      works={works}
+                      worksLoading={worksLoading}
+                      worksError={worksError}
                       onSaveTemplate={() => void saveDraftAsTemplate(message)}
                       onSendCanvas={() => void sendDraftToCanvas(message)}
                       onOpenTemplates={onOpenTemplates}
                       onOpenCanvas={onOpenCanvas}
+                      onOpenPicker={() => openDraftPicker(message)}
+                      onPick={(projectId) => void loadPickDetail(message.id, projectId)}
+                      onWriteProject={() => void writeDraft(message)}
+                      onCancelPicker={() => cancelDraftPicker(message.id)}
+                      onOpenProject={onOpenProject}
                     />
                   ) : null}
                   <div className="agx-msg-meta">

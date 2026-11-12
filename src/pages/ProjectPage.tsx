@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowLeft, ArrowRight, Check, ChevronDown, Clapperboard, CopyPlus, Download, FileText, Link2, Package, Pencil, Plus, Printer, RefreshCw, RotateCcw, ScanEye, Share2, Trash2, Workflow, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Bot, Check, ChevronDown, Clapperboard, CopyPlus, Download, FileText, Link2, Package, Pencil, Plus, Printer, RefreshCw, RotateCcw, ScanEye, Share2, Trash2, Workflow, X } from 'lucide-react'
 import PageHead from '../components/PageHead'
 import ProjectStatusPill from '../components/ProjectStatus'
 import {
@@ -64,6 +64,7 @@ export default function ProjectPage({
   onOpenFlow,
   onOpenReview,
   onOpenReviewRecord,
+  onOpenAgents,
   onBrowseTemplates,
   onToast,
 }: {
@@ -73,6 +74,8 @@ export default function ProjectPage({
   onOpenReview: (projectId: string) => void
   /** 打开某一条评审的记录页：那里有当时的证据原图与问题锚点 */
   onOpenReviewRecord: (reviewId: string) => void
+  /** 让智能体起草这一版脚本：带着这条作品的上下文去智能体页，草稿写完能直接写回这一版 */
+  onOpenAgents: (projectId: string) => void
   onBrowseTemplates: () => void
   onToast: (message: string) => void
 }) {
@@ -1047,6 +1050,15 @@ export default function ProjectPage({
                       <Pencil size={12} />
                       {script ? '改脚本' : '写一条脚本'}
                     </button>
+                    <button
+                      type="button"
+                      className="vq-script-link"
+                      onClick={() => onOpenAgents(data.project.id)}
+                      title="带着这条作品这一版的要求去智能体页；草稿写完点「写进作品」就换成本版的脚本（模板不动）"
+                    >
+                      <Bot size={12} />
+                      让智能体写
+                    </button>
                     {script?.source === 'project' ? (
                       <button type="button" className="vq-script-link" onClick={() => void restoreScript()} disabled={busy === 'script'}>
                         <RotateCcw size={12} />
@@ -1199,8 +1211,16 @@ export default function ProjectPage({
           <section className="vq-project-panel">
             <div className="vq-project-panel-head">
               <h2>分镜</h2>
-              <span className="vq-mono">{template ? template.shots + ' 镜' : '没有分镜'}</span>
+              <span className="vq-mono">{template ? template.shots + ' 镜 · 跟模板' : '没有分镜'}</span>
             </div>
+            {/* 写进作品（v0.9.30）只写脚本：这一版的脚本是自己的、分镜仍是模板那几镜时要说清楚，
+                不让人以为「换了脚本」连镜头也换了 */}
+            {template && template.storyboard.length && script?.source === 'project' ? (
+              <p className="vq-project-note">
+                脚本是这条作品自己的（{script.structure.length} 段），分镜仍是模板那 {template.shots} 镜；
+                分镜要换，就在模板里改编这一版。
+              </p>
+            ) : null}
             {template && template.storyboard.length ? (
               <ol className="vq-shot-list">
                 {template.storyboard.map((shot, index) => (

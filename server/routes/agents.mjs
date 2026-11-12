@@ -12,6 +12,7 @@ import {
 } from '../agents.mjs'
 import { OUTPUT_TYPES, availableModels, chatWithAgent } from '../agentChat.mjs'
 import { draftToScript, normalizeDraft } from '../agent-draft.mjs'
+import { writeDraftToProject } from '../agent-project.mjs'
 import { createTemplateFromDraft } from '../templates.mjs'
 import { createFlow } from '../flows.mjs'
 import { buildReplicateDraft } from '../script-draft.mjs'
@@ -242,10 +243,14 @@ export function createAgentsRouter() {
           return true
         }
 
-        // 结构化草稿的两个出口：存为模板 / 送到画布。
-        // 草稿由服务端重新整理一遍（不信任客户端回传的形状），两个出口都不扣积分：
+        // 结构化草稿的三个出口：存为模板 / 送到画布 / 写进作品。
+        // 草稿由服务端重新整理一遍（不信任客户端回传的形状），三个出口都不扣积分：
         // 这里没有模型调用，只是在用户点下去之后把「可以继续用的东西」真的落库。
-        if (segments.length === 3 && action === 'draft' && (segments[2] === 'template' || segments[2] === 'canvas')) {
+        if (
+          segments.length === 3 &&
+          action === 'draft' &&
+          (segments[2] === 'template' || segments[2] === 'canvas' || segments[2] === 'project')
+        ) {
           if (req.method !== 'POST') {
             methodNotAllowed(res, 'POST')
             return true
@@ -259,6 +264,12 @@ export function createAgentsRouter() {
           const draft = normalizeDraft(body.draft)
           if (!draft) {
             sendJson(res, 400, { error: '这份结果里没有脚本段落或分镜，没法继续用', code: 'DRAFT_EMPTY' })
+            return true
+          }
+          if (segments[2] === 'project') {
+            // 写进作品：只写脚本（钩子 + 段落），分镜留在草稿里——要镜头就走「送到画布」。
+            const result = await writeDraftToProject({ draft, projectId: body.projectId, user })
+            sendJson(res, result.status, result.body)
             return true
           }
           if (segments[2] === 'template') {
