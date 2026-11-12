@@ -119,6 +119,44 @@ export type ProjectRun = {
 }
 
 /**
+ * 交付流水的一行（工作台「交出去的」）：某一版的某一次交付。
+ * current 只回答「这一版还是不是当前版」，deliveredNow 只回答「这条作品现在还在交付状态」——
+ * 两个都是事实，不能合成一句「已交付」，否则开过新版之后旧交付会被说成现状。
+ */
+export type ProjectDeliveryRow = {
+  projectId: string
+  title: string
+  version: number
+  /** 交付时间；老数据 / 开新版补的记录没有时间，是空串 */
+  at: string
+  /** 时间到底记下来没有：没记下的那行写「时间没记下」，不拿别的字段冒充 */
+  atKnown: boolean
+  /** 这条作品现在是第几版 */
+  currentVersion: number
+  /** 交的是不是当前这一版 */
+  current: boolean
+  /** 这条作品现在还在交付状态（交付过之后没开新版） */
+  deliveredNow: boolean
+  /** 那一版评过几次、最后一次结论：交出去的这一版当时评成什么 */
+  reviews: number
+  verdict: string
+}
+
+/** 交付流水的整份数字按全部记录算，不因为只取了一页而变小 */
+export type DeliveryLedger = {
+  items: ProjectDeliveryRow[]
+  total: number
+  /** 交付过几条作品（不是几条记录） */
+  projects: number
+  /** 其中几条交的还是当前这一版 */
+  currentTotal: number
+  /** 最近一次交付的时间；一条带时间的都没有就是空串 */
+  lastAt: string
+  offset: number
+  hasMore: boolean
+}
+
+/**
  * 作品列表的筛法：只分「当前这一版交没交出去」，评审结论继续写在胶囊里。
  * 与状态胶囊同一口径：交付了 v2 又开 v3 的那条算「在做」，不算「已交付」。
  */

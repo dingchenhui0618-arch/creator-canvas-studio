@@ -42,6 +42,7 @@ import { createPreferencesRouter } from './routes/preferences.mjs'
 import { createCanvasRouter } from './routes/canvas.mjs'
 import { createProjectsRouter } from './routes/projects.mjs'
 import { createSharesRouter } from './routes/shares.mjs'
+import { createDeliveriesRouter } from './routes/deliveries.mjs'
 import { createProjectShareRouter } from './routes/project-share.mjs'
 import { createGatewayRouter } from './routes/gateway.mjs'
 import { createAccountRouter } from './routes/account.mjs'
@@ -77,6 +78,8 @@ const featureRoutes = [
   createCanvasRouter(),
   createProjectsRouter(),
   createSharesRouter(),
+  // 工作台的交付流水：跨作品把每一次交付摊成一条线（v0.9.32）
+  createDeliveriesRouter(),
   createGatewayRouter(),
   createAccountRouter(),
   // 桌面端本地工作区的模型入口：密钥留在服务端，循环与工具在客户端

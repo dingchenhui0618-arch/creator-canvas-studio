@@ -1,5 +1,6 @@
 import { request } from './client'
 import type {
+  DeliveryLedger,
   Project,
   ProjectBucket,
   ProjectDetail,
@@ -39,6 +40,13 @@ export const listProjects = (filter: ProjectListFilter = {}) => {
 
 // 工作台的「分享出去的链接」：跨作品汇总，一条作品一行，不带 token 与记录键
 export const listShares = () => request<{ items: ShareSummaryRow[]; total: number; opens: number }>('/api/shares')
+
+/**
+ * 工作台的「交出去的」：跨作品把每一次交付摊成一条线（v0.9.32）。
+ * 一页 8 条；要更早的就带 offset 接着取——数字仍按全部记录算，不会因为翻页变小。
+ */
+export const listDeliveries = (offset = 0) =>
+  request<DeliveryLedger>('/api/deliveries' + (offset > 0 ? '?offset=' + encodeURIComponent(offset) : ''))
 
 export const getProject = (id: string) => request<ProjectDetail>('/api/projects/' + id)
 

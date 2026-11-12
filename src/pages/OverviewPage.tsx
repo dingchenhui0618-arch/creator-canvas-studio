@@ -6,7 +6,7 @@ import { MonoTag } from '../components/ui'
 import { request } from '../api/client'
 import { listBdcCanvases, type BdcCanvas } from '../api/bdc'
 import type { RunProjectRef } from '../api/flows'
-import { listProjects, listShares } from '../api/projects'
+import { deliverablePrintUrl, listDeliveries, listProjects, listShares } from '../api/projects'
 import {
   ackReview,
   listReviewQueue,
@@ -17,7 +17,14 @@ import {
   type ReviewQueueRow,
   type ReviewQueueSeenRow,
 } from '../api/review'
-import { deliveredCurrent, projectStatus, reviewsForVersion, type ProjectSummary, type ShareSummaryRow } from '../domain/project'
+import {
+  deliveredCurrent,
+  projectStatus,
+  reviewsForVersion,
+  type ProjectDeliveryRow,
+  type ProjectSummary,
+  type ShareSummaryRow,
+} from '../domain/project'
 import { REVIEW_VERDICT_LABEL, reviewTimeLabel } from '../domain/review'
 import { runWorkLine } from '../domain/run'
 import { stampTime, visitLine } from '../domain/share'
@@ -137,6 +144,16 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
   // 正在「已看过 / 撤销」的那条作品：按钮转圈并禁用，防连点
   const [ackBusy, setAckBusy] = useState('')
   const [queueError, setQueueError] = useState('')
+  // 交出去的（v0.9.32）：跨作品把每一次交付摊成一条线。
+  // 首屏先排 3 条，点开排到已经取回的一页（8 条），再往下按 offset 接着取——
+  // 「我交出去过什么」不该只给最近一条，也不该只在作品页里一条一条翻。
+  const [deliveries, setDeliveries] = useState<ProjectDeliveryRow[]>([])
+  const [deliveryTotal, setDeliveryTotal] = useState(0)
+  const [deliverySummary, setDeliverySummary] = useState({ projects: 0, current: 0, lastAt: '' })
+  const [deliveryHasMore, setDeliveryHasMore] = useState(false)
+  const [deliveryOpen, setDeliveryOpen] = useState(false)
+  const [deliveryBusy, setDeliveryBusy] = useState(false)
+  const [deliveryError, setDeliveryError] = useState('')
   const [loading, setLoading] = useState(true)
   const [errors, setErrors] = useState<string[]>([])
 
@@ -144,12 +161,13 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
     setLoading(true)
     const problems: string[] = []
     // 队列不在这里取：它跟着筛选项走，由下面那个 effect 单独刷新（首屏也走那一处）
-    const [canvasResult, runResult, templateResult, projectResult, shareResult] = await Promise.allSettled([
+    const [canvasResult, runResult, templateResult, projectResult, shareResult, deliveryResult] = await Promise.allSettled([
       listBdcCanvases(),
       request<{ items: RunRow[] }>('/api/runs'),
       request<{ items: TemplateRow[] }>('/api/templates'),
       listProjects(),
       listShares(),
+      listDeliveries(),
     ])
     if (canvasResult.status === 'fulfilled' && canvasResult.value.ok) {
       setCanvases(canvasResult.value.canvases ?? [])
@@ -182,6 +200,23 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
       setShares([])
       setShareTotals({ total: 0, opens: 0 })
       problems.push('分享记录：' + String((shareResult.reason as Error)?.message || shareResult.reason))
+    }
+
+    if (deliveryResult.status === 'fulfilled') {
+      setDeliveries(deliveryResult.value.items ?? [])
+      setDeliveryTotal(deliveryResult.value.total ?? 0)
+      setDeliverySummary({
+        projects: deliveryResult.value.projects ?? 0,
+        current: deliveryResult.value.currentTotal ?? 0,
+        lastAt: deliveryResult.value.lastAt || '',
+      })
+      setDeliveryHasMore(Boolean(deliveryResult.value.hasMore))
+    } else {
+      setDeliveries([])
+      setDeliveryTotal(0)
+      setDeliverySummary({ projects: 0, current: 0, lastAt: '' })
+      setDeliveryHasMore(false)
+      problems.push('交付记录：' + String((deliveryResult.reason as Error)?.message || deliveryResult.reason))
     }
 
     setErrors(problems)
@@ -242,6 +277,40 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
     }, queueKeyword ? 220 : 0)
     return () => window.clearTimeout(timer)
   }, [queueKeyword, queueRange, refreshQueue])
+
+  // 交付流水往下取（v0.9.32）：只取下一页，按「作品 + 版次」去重——
+  // 翻页途中又交了一版时，相邻两页可能返回同一行。
+  const loadMoreDeliveries = useCallback(async () => {
+    if (deliveryBusy) return
+    setDeliveryBusy(true)
+    try {
+      const next = await listDeliveries(deliveries.length)
+      const seen = new Set(deliveries.map((row) => row.projectId + ':' + row.version))
+      const merged = [...deliveries]
+      for (const row of next.items ?? []) {
+        const key = row.projectId + ':' + row.version
+        if (seen.has(key)) continue
+        seen.add(key)
+        merged.push(row)
+      }
+      setDeliveries(merged)
+      setDeliveryHasMore(Boolean(next.hasMore))
+      setDeliveryTotal(next.total ?? merged.length)
+      setDeliverySummary({ projects: next.projects ?? 0, current: next.currentTotal ?? 0, lastAt: next.lastAt || '' })
+      setDeliveryError('')
+    } catch (error) {
+      setDeliveryError('再往下没取到：' + String((error as Error)?.message || error))
+    } finally {
+      setDeliveryBusy(false)
+    }
+  }, [deliveries, deliveryBusy])
+
+  // 交付稿在新标签里打开：与作品页同一个地址，纸的样式只写一处（v0.9.32）。
+  // 被浏览器拦下就如实说一句，不假装打开了。
+  const openDeliverable = useCallback((projectId: string) => {
+    const opened = window.open(deliverablePrintUrl(projectId), '_blank', 'noopener')
+    setDeliveryError(opened ? '' : '新标签被浏览器拦下了：允许本站弹窗，或者从作品页打开交付稿')
+  }, [])
 
   const queueFiltered = queueRange !== 'all' || queueKeyword.trim() !== ''
 
@@ -316,6 +385,14 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
   const queueRest = Math.max(0, queueTotal - queue.length)
   const queueNextPage = Math.min(QUEUE_PAGE_SIZE, queueRest)
   const queueMaxed = queueRest > 0 && queuePages >= QUEUE_MAX_PAGES
+
+  // 交付流水首屏排 3 条；点开排到已经取回的那一页（8 条），再往下才是「再看 N 条」
+  const visibleDeliveries = deliveryOpen ? deliveries : deliveries.slice(0, 3)
+  const deliveryMore = deliveryOpen ? 0 : Math.max(0, deliveries.length - 3)
+  const deliveryRest = Math.max(0, deliveryTotal - deliveries.length)
+  const deliveryNextPage = Math.min(8, deliveryRest)
+  // 旧版的交付稿不按那一版生成（交付稿只按当前版）：有一行旧版就得把这句话说出来
+  const hasPastDelivery = deliveries.some((row) => !row.current)
 
   const recentRuns = runs.slice(0, 6)
   const recentTemplates = templates.slice(0, 4)
@@ -778,6 +855,138 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
             ) : null}
           </div>
         ) : null}
+      </section>
+
+      {/* 交出去的（v0.9.32）：已经交出去的每一版，按交付时间倒序摊成一条线。
+          这一行回答「交的是哪一版、什么时候」，不是「现在什么状态」——
+          开过新版的旧交付仍然在（记录是事实），但不会被说成现状。 */}
+      <section className="vq-section vq-delivery-ledger" aria-labelledby="vq-delivery-ledger-title">
+        <div className="vq-section-head">
+          <div>
+            <h2 id="vq-delivery-ledger-title">交出去的</h2>
+            <p className="vq-delivery-sub">
+              {deliveryTotal
+                ? '已经交出去 ' +
+                  deliveryTotal +
+                  ' 次，分布在 ' +
+                  deliverySummary.projects +
+                  ' 条作品上' +
+                  (deliverySummary.current
+                    ? '，其中 ' + deliverySummary.current + ' 次交的还是当前这一版。'
+                    : '，都不是当前这一版了：开过新版，旧交付的记录仍然留着。')
+                : '作品评审通过后在作品页「交付这一版」；交出去的每一版都排在这里，开过新版也留得住。'}
+            </p>
+          </div>
+          <button type="button" className="vq-link" onClick={() => onNavigate('projects')}>
+            全部作品
+            <ArrowUpRight size={13} />
+          </button>
+        </div>
+
+        {deliveryError ? (
+          <p className="vq-note vq-note--error" role="status">
+            {deliveryError}
+          </p>
+        ) : null}
+
+        {deliveries.length ? (
+          <>
+            <div className="vq-delivery-list">
+              {visibleDeliveries.map((row) => (
+                <div className="vq-delivery-row" key={row.projectId + ':' + row.version}>
+                  <button
+                    type="button"
+                    className="vq-delivery-open"
+                    onClick={() => onOpenProject(row.projectId)}
+                    aria-label={'打开作品：' + row.title + '，第 ' + row.version + ' 版'}
+                  >
+                    <span className="vq-delivery-tag vq-mono">v{row.version}</span>
+                    <span className="vq-delivery-copy">
+                      <strong>{row.title}</strong>
+                      {/* 时间与结论各自成段：窄屏换行只在「·」处断，不会把「通过」劈成两行 */}
+                      <span className="vq-mono vq-delivery-meta">
+                        <span>{row.atKnown ? stampTime(row.at) + ' 交出去' : '交付时间没记下'}</span>
+                        {' · '}
+                        {row.reviews ? (
+                          <>
+                            <span>{'评审「' + (REVIEW_VERDICT_LABEL[row.verdict] || '未记结论') + '」'}</span>
+                            {' · '}
+                            <span>{'评过 ' + row.reviews + ' 次'}</span>
+                          </>
+                        ) : (
+                          // 没进过评审就别写「未记结论」：那一行本来就没有结论可记
+                          <span>交的时候没进评审</span>
+                        )}
+                      </span>
+                    </span>
+                    <span className={'vq-delivery-state' + (row.current ? ' is-current' : '')}>
+                      {row.current ? '当前版' : '已到 v' + row.currentVersion}
+                    </span>
+                    <ArrowRight size={13} />
+                  </button>
+                  {row.current ? (
+                    <button
+                      type="button"
+                      className="vq-button vq-button--quiet vq-button--tiny vq-delivery-paper"
+                      onClick={() => openDeliverable(row.projectId)}
+                      title="在新标签里打开这一版的交付稿（A4，可存 PDF）"
+                    >
+                      交付稿
+                    </button>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+
+            {deliveryMore ? (
+              <button type="button" className="vq-link vq-delivery-more" onClick={() => setDeliveryOpen(true)}>
+                看这 {deliveries.length} 条
+                <ArrowRight size={12} />
+              </button>
+            ) : null}
+
+            {/* 翻页与评审队列同一套说法：左边写「已列 8 / 12 条」可以被核对，翻到底才说都列出来了 */}
+            {deliveryOpen && deliveryRest ? (
+              <div className="vq-delivery-pager">
+                <span className="vq-delivery-pager-count vq-mono">
+                  已列 <strong>{deliveries.length}</strong> / {deliveryTotal} 条
+                </span>
+                {deliveryHasMore ? (
+                  <button
+                    type="button"
+                    className="vq-button vq-button--quiet vq-button--tiny"
+                    onClick={() => void loadMoreDeliveries()}
+                    disabled={deliveryBusy}
+                    title="接着往下取：一页 8 条"
+                  >
+                    {deliveryBusy ? '正在取…' : '再看 ' + deliveryNextPage + ' 条'}
+                    {deliveryBusy ? null : <ArrowRight size={12} />}
+                  </button>
+                ) : (
+                  <span className="vq-delivery-pager-hint">全部 {deliveryTotal} 条都列出来了</span>
+                )}
+              </div>
+            ) : deliveryOpen && deliveries.length > 8 ? (
+              // 已经翻到底：说一句「都列出来了」，比让翻页行悄悄消失清楚
+              <p className="vq-delivery-tail vq-mono">全部 {deliveryTotal} 条都列出来了</p>
+            ) : null}
+
+            {hasPastDelivery ? (
+              <p className="vq-delivery-note">
+                交付稿只按当前这一版生成：旧版要回看，点进去看作品里的「版本对照」。
+              </p>
+            ) : null}
+          </>
+        ) : (
+          <div className="vq-empty vq-empty--inline">
+            <strong>还没交出去过</strong>
+            <span>标记交付之后，这里按时间排：交的是哪条作品的哪一版、什么时候、现在还算不算数。</span>
+            <button type="button" className="vq-button vq-button--ghost" onClick={() => onNavigate('projects')}>
+              去作品列表
+              <ArrowRight size={13} />
+            </button>
+          </div>
+        )}
       </section>
 
       <div className="vq-start">

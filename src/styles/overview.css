@@ -607,7 +607,8 @@
   margin: var(--space-3) 0;
 }
 
-.vq-review-queue-list {
+.vq-review-queue-list,
+.vq-delivery-list {
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
@@ -871,6 +872,226 @@
 
 .vq-review-queue-open:hover > svg {
   color: var(--ink);
+}
+
+/* ---------- 交出去的（v0.9.32） ----------
+   工作台的第三份清单：已经交出去的每一版，按交付时间倒序。
+   骨架与「评审等你看的」同一套（发丝线包住、行间一条分隔线），
+   但左边是版次不是状态胶囊——这一行回答「交的是哪一版」，不是「现在什么状态」。 */
+.vq-delivery-ledger {
+  margin: 32px 0;
+}
+
+.vq-delivery-ledger .vq-section-head .vq-link {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.vq-delivery-sub {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* 一行可能有两个动作（进作品 + 当前版的「交付稿」），所以行本身不再是按钮：
+   主体那颗按钮铺满左侧，按钮里不套按钮（与评审队列同一条规矩）。 */
+.vq-delivery-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.vq-delivery-row + .vq-delivery-row {
+  border-top: 1px solid var(--line-faint);
+}
+
+.vq-delivery-open {
+  display: grid;
+  /* 版次固定 40px 一列：v1 与 v10 都对齐，作品名从同一条竖线开始 */
+  grid-template-columns: 40px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px 16px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-1) var(--ease-out);
+}
+
+.vq-delivery-open:hover {
+  background: var(--surface);
+}
+
+.vq-delivery-open:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+}
+
+/* 版次：等宽 + 一枚细框，读起来像台账的一列，不像第二枚状态胶囊 */
+.vq-delivery-tag {
+  justify-self: start;
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 20px;
+}
+
+.vq-delivery-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.vq-delivery-copy strong {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vq-delivery-copy .vq-mono {
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+/* 时间 / 结论 / 评过几次各是一段：换行只发生在「·」处，
+   不把「通过」这种两个字的词从中间劈开（390 宽实测过）。 */
+.vq-delivery-meta span {
+  white-space: nowrap;
+}
+
+/* 这一行交的是不是当前版：只写版次事实，不写「已交付」——
+   作品可能已经开到下一版，那一次交付就不再是现状。 */
+.vq-delivery-state {
+  color: var(--faint);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.vq-delivery-state.is-current {
+  color: var(--ink);
+}
+
+.vq-delivery-open > svg {
+  flex-shrink: 0;
+  color: var(--faint);
+}
+
+.vq-delivery-open:hover > svg {
+  color: var(--ink);
+}
+
+/* 「交付稿」：11px 的小动作，与行尾的「已看过」同一档，不跟作品名抢注意力 */
+.vq-delivery-row .vq-delivery-paper {
+  flex: none;
+  margin-right: 16px;
+  /* 它是这一行真正能做的事（取回那一版交付稿），比旁边的状态字要显眼一档 */
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+  transition: color var(--dur-1) var(--ease-out), background-color var(--dur-1) var(--ease-out);
+}
+
+.vq-delivery-row .vq-delivery-paper:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+.vq-delivery-more {
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+/* 翻页：与评审队列的 pager 同一形状（一条发丝线、12px 字、右边一个动作） */
+.vq-delivery-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.vq-delivery-pager-count {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.vq-delivery-pager-count strong {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.vq-delivery-pager-hint {
+  color: var(--faint);
+  font-size: 11px;
+}
+
+/* 翻到底之后的一句：这一页就是全部，不用再找 */
+.vq-delivery-tail {
+  margin: 8px 0 0;
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+/* 交付稿只按当前版生成：这句话写在清单下面，比只藏在一个缺掉的按钮里清楚 */
+.vq-delivery-note {
+  margin: 8px 0 0;
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+/* 窄屏：版次与「已到 v3」并成一行放到作品名上面，把正文这一列让出来；
+   箭头只是装饰（整行本来就能点），让位给「交付稿」。 */
+@media (max-width: 640px) {
+  .vq-delivery-open {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas: 'tag state' 'copy copy';
+    align-items: center;
+    gap: 8px 8px;
+    padding: 12px;
+  }
+
+  .vq-delivery-tag {
+    grid-area: tag;
+  }
+
+  .vq-delivery-copy {
+    grid-area: copy;
+  }
+
+  .vq-delivery-state {
+    grid-area: state;
+    justify-self: start;
+  }
+
+  .vq-delivery-open > svg {
+    display: none;
+  }
+
+  .vq-delivery-row .vq-delivery-paper {
+    height: 32px;
+    margin-right: 8px;
+    padding: 0 8px;
+  }
 }
 
 /* ---------- 分享出去的链接（v0.9.12） ----------
