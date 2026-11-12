@@ -456,6 +456,13 @@
   font-size: var(--text-mono);
   line-height: 1.6;
 }
+.lw-memory-stat {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-mono);
+  line-height: 1.6;
+}
 .lw-memory-empty {
   margin: 0;
   padding: var(--space-2) 0;
@@ -483,6 +490,20 @@
   background: var(--surface);
 }
 .lw-memory-text { margin: 0; color: var(--ink); font-size: var(--text-xs); line-height: 1.6; word-break: break-word; }
+/* 记忆的来源（你让记的 / 智能体记的 / 后台提炼）用一枚小小的胶囊，不抢正文 */
+.lw-memory-meta-text { display: inline-flex; align-items: center; gap: var(--space-1); }
+.lw-memory-src {
+  padding: 0 var(--space-1);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-mono);
+  line-height: 1.6;
+}
+/* 状态栏里「自动记下 N 条」：后台动作只报数，不弹窗 */
+.lw-distilled { color: var(--muted); font-family: var(--font-mono); font-size: var(--text-mono); }
 .lw-memory-meta {
   display: flex;
   align-items: center;

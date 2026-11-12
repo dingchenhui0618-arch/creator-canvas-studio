@@ -180,7 +180,19 @@ async function handleSend({ threadId, text }) {
       },
       approve: (request) => askApproval(thread.id, request),
     })
+    // 一轮结束后在后台提炼长期约定：只读用户说过的话，不调模型、不扣积分。
+    // 提炼失败不影响这一轮的结果，也不该让界面看到一条假错误。
+    let distilled = null
+    if (memory && !(result && result.aborted)) {
+      try {
+        distilled = await memory.distill(workspace, thread.messages)
+      } catch (error) {
+        console.error('后台提炼记忆失败：' + (error && error.message))
+      }
+    }
     await store.save(thread)
+    if (distilled && distilled.added > 0) emitEvent(thread.id, { type: 'memory', phase: 'changed' })
+    if (distilled) emitEvent(thread.id, { type: 'memory', phase: 'distilled', ...distilled })
     // 存盘之后再通知界面刷新会话列表：先发的话列表里的「N 条」还是旧值
     emitEvent(thread.id, { type: 'turn-end' })
     return { ok: true, ...result }
@@ -327,7 +339,10 @@ function registerIpc() {
     compaction: COMPACTION,
     memory: MEMORY_LIMITS,
   }))
-  ipcMain.handle('memory:list', async () => memory.list(await ensureWorkspace()))
+  ipcMain.handle('memory:list', async () => {
+    const workspace = await ensureWorkspace()
+    return { entries: await memory.list(workspace), stats: await memory.stats(workspace) }
+  })
   ipcMain.handle('memory:remove', async (_event, id) => memory.remove(await ensureWorkspace(), String(id || '')))
   ipcMain.handle('memory:clear', async () => memory.clear(await ensureWorkspace()))
   ipcMain.handle('workspace:get', () => ensureWorkspace())

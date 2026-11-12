@@ -9,6 +9,7 @@ import { COMPACTION, estimateTokens, planCompaction, buildSummaryPrompt } from '
 import { parseStep, buildSystemPrompt } from '../electron/agent/protocol.mjs'
 import { createTools, resolveInside } from '../electron/agent/tools.mjs'
 import { MemoryStore, MEMORY_LIMITS, memoryKey } from '../electron/agent/memory.mjs'
+import { distillRun, DISTILL_LIMITS } from '../electron/agent/distill.mjs'
 import { writeFileAtomic } from '../electron/agent/atomic.mjs'
 import { runTurn } from '../electron/agent/loop.mjs'
 
@@ -302,6 +303,82 @@ test('长期记忆：同一件事只留一条，召回按词语重合度排，�
   assert.ok((await store.recall(workspaceDir, { query: '临时约定', limit: 3 })).length <= 3)
   const short = await store.recall(workspaceDir, { query: '临时约定', limit: 20, chars: 40 })
   assert.ok(short.reduce((sum, entry) => sum + entry.text.length, 0) <= 60)
+})
+
+test('语义召回：换了说法也能找到（上线↔发布），完全无关的不进上下文', async () => {
+  const root = await fsp.mkdtemp(path.join(os.tmpdir(), 'vq-mem-'))
+  const store = await new MemoryStore(root).ready()
+  const workspaceDir = path.join(root, 'ws')
+  await store.add(workspaceDir, { text: '发布前先跑 npm test，再用 ops/deploy.sh 部署', source: 'user' })
+
+  const hit = await store.recall(workspaceDir, { query: '上线前要做什么检查' })
+  assert.equal(hit.length, 1)
+  assert.match(hit[0].text, /npm test/)
+  // 完全没有词语重合的问句，不该把无关记忆塞进上下文
+  assert.deepEqual(await store.recall(workspaceDir, { query: '今天天气怎么样' }), [])
+})
+
+test('语义召回：常见词让位给真正稀有的词', async () => {
+  const root = await fsp.mkdtemp(path.join(os.tmpdir(), 'vq-mem-'))
+  const store = await new MemoryStore(root).ready()
+  const workspaceDir = path.join(root, 'ws')
+  await store.add(workspaceDir, { text: '这个工作区的会话都落盘在 userData/local-agent 目录里' })
+  await store.add(workspaceDir, { text: '这个工作区的图标统一放在 build 目录，换图标改 build/icon.ico' })
+
+  const picked = await store.recall(workspaceDir, { query: '图标怎么换' })
+  assert.equal(picked.length, 1)
+  assert.match(picked[0].text, /icon\.ico/)
+})
+
+test('后台提炼只挑长期约定：问句、一次性任务、工具结果都不算', () => {
+  const messages = [
+    { role: 'user', content: '这个工作区是做什么的？' },
+    { role: 'user', content: '帮我改一下 patch-demo 里的版本号' },
+    { role: 'user', content: '以后发版都用 v0.9.x，发布前先跑 npm test' },
+    { role: 'user', content: '以后发版都用 v0.9.x，发布前先跑 npm test' },
+    { role: 'user', content: '工具结果：文件内容如下', tool: { name: 'read_file', ok: true } },
+    { role: 'user', content: '记住：这条走显式命令，不要重复提炼' },
+  ]
+  const run = distillRun(messages)
+  assert.deepEqual(
+    run.candidates.map((candidate) => candidate.text),
+    ['以后发版都用 v0.9.x，发布前先跑 npm test'],
+  )
+  assert.ok(run.scanned >= 3)
+  assert.ok(run.candidates.length <= DISTILL_LIMITS.maxCandidates)
+})
+
+test('后台提炼：同一件事换个说法也不重复记', async () => {
+  const root = await fsp.mkdtemp(path.join(os.tmpdir(), 'vq-mem-'))
+  const store = await new MemoryStore(root).ready()
+  const workspaceDir = path.join(root, 'ws')
+  await store.add(workspaceDir, { text: '发布前先跑 npm test，再用 ops/deploy.sh 部署' })
+  const run = await store.distill(workspaceDir, [
+    { role: 'user', content: '以后发布前都要先跑 npm test 再用 ops/deploy.sh 部署' },
+  ])
+  assert.equal(run.added, 0)
+  assert.equal(run.skipped, 1)
+  assert.equal((await store.list(workspaceDir)).length, 1)
+})
+
+test('后台提炼记进记忆并留下账目：重复的算跳过，来源标成 distill', async () => {
+  const root = await fsp.mkdtemp(path.join(os.tmpdir(), 'vq-mem-'))
+  const store = await new MemoryStore(root).ready()
+  const workspaceDir = path.join(root, 'ws')
+  const messages = [{ role: 'user', content: '以后这个工作区的成片统一按 30 秒、8 镜算' }]
+
+  const first = await store.distill(workspaceDir, messages)
+  assert.equal(first.added, 1)
+  const [entry] = await store.list(workspaceDir)
+  assert.equal(entry.source, 'distill')
+  const stats = await store.stats(workspaceDir)
+  assert.equal(stats.added, 1)
+  assert.ok(stats.scanned >= 1)
+
+  const second = await store.distill(workspaceDir, messages)
+  assert.equal(second.added, 0)
+  assert.equal(second.skipped, 1)
+  assert.equal((await store.list(workspaceDir)).length, 1)
 })
 
 test('buildSystemPrompt：召回的记忆单独成段，并说明与当次说法冲突时以当次为准', () => {

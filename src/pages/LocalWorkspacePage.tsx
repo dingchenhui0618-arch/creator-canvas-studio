@@ -12,6 +12,7 @@ import {
   type LocalThread,
   type LocalThreadSummary,
   type MemoryEntry,
+  type MemoryStats,
   type ThreadMessage,
 } from '../desktop/bridge'
 import '../styles/local-workspace.css'
@@ -131,6 +132,25 @@ function toFeed(messages: ThreadMessage[]): FeedItem[] {
   return items
 }
 
+// 记忆从哪来的要看得见：用户命令、智能体自己记、后台提炼，三种来源别混着写。
+const MEMORY_SOURCE: Record<string, string> = {
+  user: '你让记的',
+  agent: '智能体记的',
+  distill: '后台提炼',
+}
+
+function sourceLabel(source: string): string {
+  return MEMORY_SOURCE[source] || '手动记的'
+}
+
+// 旧版桌面端的 memory:list 返回的是数组；新版返回 { entries, stats }。
+// 网页先发、桌面端后装是常态，这里两种都认，别让旧客户端打开新页面就崩。
+function readMemoryState(value: unknown): { entries: MemoryEntry[]; stats: MemoryStats | null } {
+  if (Array.isArray(value)) return { entries: value as MemoryEntry[], stats: null }
+  const record = (value || {}) as { entries?: MemoryEntry[]; stats?: MemoryStats | null }
+  return { entries: Array.isArray(record.entries) ? record.entries : [], stats: record.stats || null }
+}
+
 function formatTime(iso: string): string {
   if (!iso) return ''
   const date = new Date(iso)
@@ -150,8 +170,10 @@ export default function LocalWorkspacePage() {
   const [running, setRunning] = useState(false)
   const [error, setError] = useState('')
   const [memoryItems, setMemoryItems] = useState<MemoryEntry[]>([])
+  const [memoryStats, setMemoryStats] = useState<MemoryStats | null>(null)
   const [memoryOpen, setMemoryOpen] = useState(false)
   const [recalled, setRecalled] = useState<{ id: string; text: string }[]>([])
+  const [distilled, setDistilled] = useState(0)
   const activeRef = useRef<string | null>(null)
   const keyRef = useRef(0)
   const feedRef = useRef<HTMLDivElement | null>(null)
@@ -186,7 +208,9 @@ export default function LocalWorkspacePage() {
   const refreshMemory = useCallback(async () => {
     if (!bridge) return
     try {
-      setMemoryItems(await bridge.memory.list())
+      const state = readMemoryState(await bridge.memory.list())
+      setMemoryItems(state.entries)
+      setMemoryStats(state.stats)
     } catch {
       // 记忆读不到不影响对话：面板会显示「还没有记忆」
     }
@@ -280,8 +304,13 @@ export default function LocalWorkspacePage() {
         return
       }
       if (event.type === 'memory') {
-        if (event.phase === 'changed') void refreshMemory()
-        else setRecalled(event.entries || [])
+        if (event.phase === 'recall') {
+          setRecalled(event.entries || [])
+          return
+        }
+        void refreshMemory()
+        // 后台提炼记下了新的：状态栏给个数，不弹窗打断对话
+        if (event.phase === 'distilled' && (event.added || 0) > 0) setDistilled(event.added || 0)
         return
       }
       if (event.type === 'turn-end') {
@@ -313,11 +342,13 @@ export default function LocalWorkspacePage() {
     })
     void (async () => {
       try {
-        const [desktopInfo, list, memories] = await Promise.all([bridge.info(), bridge.agent.listThreads(), bridge.memory.list()])
+        const [desktopInfo, list, memoryState] = await Promise.all([bridge.info(), bridge.agent.listThreads(), bridge.memory.list()])
         if (!alive) return
+        const memory = readMemoryState(memoryState)
         setInfo(desktopInfo)
         setThreads(list)
-        setMemoryItems(memories)
+        setMemoryItems(memory.entries)
+        setMemoryStats(memory.stats)
         if (list[0]) await openThread(list[0].id)
       } catch (caught) {
         if (alive) setError(caught instanceof Error ? caught.message : String(caught))
@@ -386,6 +417,7 @@ export default function LocalWorkspacePage() {
     setDraft('')
     setRunning(true)
     setRecalled([])
+    setDistilled(0)
     void refreshThreads()
     setFeed((items) => [...items, { kind: 'user', key: nextKey(), text }])
     try {
@@ -508,6 +540,12 @@ export default function LocalWorkspacePage() {
                     </button>
                   </header>
                   <p className="lw-memory-note">跨会话保留，只在这台机器上；换工作区就是另一份。</p>
+                  {memoryStats ? (
+                    <p className="lw-memory-stat">
+                      后台提炼：看过 {memoryStats.scanned} 句，记下 {memoryStats.added} 条
+                      {memoryStats.skipped > 0 ? '（' + memoryStats.skipped + ' 条重复）' : ''} · {formatTime(memoryStats.at)}
+                    </p>
+                  ) : null}
                   {memoryItems.length === 0 ? (
                     <p className="lw-memory-empty">还没有记忆。说一句「记住：…」直接记一条（不调模型），或者让它自己在需要时记住。</p>
                   ) : (
@@ -516,7 +554,8 @@ export default function LocalWorkspacePage() {
                         <li key={entry.id} className="lw-memory-item">
                           <p className="lw-memory-text">{entry.text}</p>
                           <div className="lw-memory-meta">
-                            <span>
+                            <span className="lw-memory-meta-text">
+                              <span className="lw-memory-src">{sourceLabel(entry.source)}</span>
                               召回 {entry.uses} 次 · {formatTime(entry.usedAt)}
                             </span>
                             <button
@@ -598,6 +637,11 @@ export default function LocalWorkspacePage() {
             {recalled.length > 0 ? (
               <span className="lw-recalled" title={recalled.map((entry) => entry.text).join('\n')}>
                 本轮用到 {recalled.length} 条记忆
+              </span>
+            ) : null}
+            {distilled > 0 ? (
+              <span className="lw-distilled" title="后台从你刚才说的话里挑出并记下的长期约定，可在记忆面板里删">
+                自动记下 {distilled} 条
               </span>
             ) : null}
             {error ? <span className="lw-top-error">{error}</span> : null}

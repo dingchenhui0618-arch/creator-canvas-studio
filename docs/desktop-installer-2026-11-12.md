@@ -1,4 +1,4 @@
-# 桌面端安装包：构建、产物与实装验收（v0.9.0，2026-11-12）
+# 桌面端安装包：构建、产物与实装验收（v0.9.1，2026-11-12）
 
 ## 结论
 
@@ -23,8 +23,10 @@ npm run desktop:dist   # electron-builder --win --x64
 
 | 文件 | 大小 | SHA-256 |
 | --- | --- | --- |
-| `release-desktop/VisionQA-Setup-0.9.0.exe` | 103,055,331 B | `75754db736cea2ec730f2d1c226529cd8e8c0f78097798b3992780a5052c3e08` |
-| `release-desktop/VisionQA-Portable-0.9.0.exe` | 94,887,121 B | `ca19f28281fe5457099da907275a4ac8219018a7c987d08385bd58c4c08f0e5b` |
+| `release-desktop/VisionQA-Setup-0.9.1.exe` | 103,057,739 B | `a86fbac1a498845ea7a5247ad7d3a14147c610bd6e4d9305937e5c4cf97b4771` |
+| `release-desktop/VisionQA-Portable-0.9.1.exe` | 94,862,438 B | `e9658b68d165a4f8edaeb60eb15926c5e2b64a8983a285709c620eb95d62609b` |
+
+v0.9.0 的两个产物已被 0.9.1 覆盖（同一天发布：0.9.0 是安装包本身，0.9.1 补长期记忆的后台提炼与语义召回）。
 
 产物与 `release-desktop/` 都不入库（每份近 100 MB）。**哈希只对这一次构建有效**，重编后必然变化；
 要校验就对本机这一份跑 `Get-FileHash -Algorithm SHA256`。
@@ -47,12 +49,12 @@ npm run desktop:dist   # electron-builder --win --x64
 | 检查 | 结果 |
 | --- | --- |
 | 安装向导 | 三页截图：安装选项 / 选定安装位置（503×362）/ 完成 |
-| 安装目录 | `%LOCALAPPDATA%\Programs\VisionQA\VisionQA.exe`，文件版本 0.9.0、产品名 VisionQA |
-| 卸载项 | `VisionQA 0.9.0`，`Uninstall VisionQA.exe /currentuser` |
+| 安装目录 | `%LOCALAPPDATA%\Programs\VisionQA\VisionQA.exe`，文件版本 0.9.1、产品名 VisionQA |
+| 卸载项 | `VisionQA 0.9.1`，`Uninstall VisionQA.exe /currentuser` |
 | 快捷方式 | 开始菜单 1 个、桌面 1 个 |
-| 装好后启动 | 加载生产站点，状态栏「桌面端 0.9.0」，5 条会话与 2 条记忆都在 |
+| 装好后启动 | 加载生产站点，状态栏「桌面端 0.9.1」，5 条会话与旧记忆都在（覆盖安装） |
 | 静默卸载 `/S` | 安装目录、卸载项、两个快捷方式全部清掉；`%APPDATA%\VisionQA Desktop` 保留 |
-| 静默重装 `/S` | 版本 0.9.0 回来了，卸载项与两个快捷方式各 1，5 条会话 / 2 条记忆仍在，应用正常启动 |
+| 静默重装 `/S` | 版本 0.9.1 回来了，卸载项与两个快捷方式各 1，5 条会话 / 记忆仍在，应用正常启动 |
 | 免安装版 | 双击后自解压运行并加载生产站点，页面与安装版一致 |
 
 截图：

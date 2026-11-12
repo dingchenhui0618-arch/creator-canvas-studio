@@ -51,6 +51,14 @@ export type MemoryEntry = {
   uses: number
 }
 
+/** 上一次后台提炼的账：看过几句、记下几条、跳过几条重复 */
+export type MemoryStats = {
+  at: string
+  scanned: number
+  added: number
+  skipped: number
+}
+
 export type LocalThreadSummary = {
   id: string
   title: string
@@ -88,10 +96,13 @@ export type DesktopEvent =
     }
   | {
       type: 'memory'
-      /** recall：这一轮用到了哪几条；changed：记忆被改写（智能体记了一条，或用户删了） */
-      phase: 'recall' | 'changed'
+      /** recall：这一轮用到了哪几条；changed：记忆被改写（智能体记了一条，或用户删了）；distilled：后台提炼跑完 */
+      phase: 'recall' | 'changed' | 'distilled'
       entries?: { id: string; text: string }[]
       total?: number
+      scanned?: number
+      added?: number
+      skipped?: number
     }
   | { type: 'title'; text: string }
   | { type: 'note'; text: string }
@@ -107,7 +118,7 @@ export type DesktopBridge = {
     choose: () => Promise<string>
   }
   memory: {
-    list: () => Promise<MemoryEntry[]>
+    list: () => Promise<{ entries: MemoryEntry[]; stats: MemoryStats | null }>
     remove: (id: string) => Promise<{ ok: boolean; total?: number; output?: string }>
     clear: () => Promise<{ ok: boolean; removed?: number }>
   }
