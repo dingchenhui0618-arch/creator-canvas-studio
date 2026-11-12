@@ -47,6 +47,57 @@
   color: #ffffff;
 }
 
+/* ---------- 页头「交付」菜单：四种产物收在一个入口 ---------- */
+
+.vq-actions-menu {
+  position: relative;
+  display: inline-flex;
+}
+
+.vq-actions-chevron {
+  margin-left: -2px;
+  color: var(--faint);
+}
+
+.vq-export-menu {
+  width: 300px;
+}
+
+/* 两行条目：图标对齐第一行，不要垂直居中在说明文字中间 */
+.vq-export-menu button {
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-2);
+}
+
+.vq-export-menu button > svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--faint);
+}
+
+.vq-export-menu button:hover > svg {
+  color: var(--ink);
+}
+
+.vq-menu-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.vq-menu-copy strong {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.vq-menu-copy small {
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 /* ---------- 列表 ---------- */
 
 .vq-projects-grid {

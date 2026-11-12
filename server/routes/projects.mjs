@@ -3,6 +3,8 @@
 // 作品默认只存引用：脚本从模板读、画布在流程服务、评审按 projectId 关联。
 // 唯一例外是脚本的 copy-on-write：作品页保存脚本才复制成作品自己的版本（project-script.mjs），
 // 同时把画布里自动生成的复刻提示词换成新脚本——页面之间不能各说各话。
+import fsp from 'node:fs/promises'
+import path from 'node:path'
 import { sendJson, readBody } from './_shared.mjs'
 import { currentUser } from '../auth.mjs'
 import { config } from '../config.mjs'
@@ -19,6 +21,8 @@ import {
 } from '../reviews.mjs'
 import { projectDeliverable } from '../project-deliverable.mjs'
 import { deliverablePrintHtml, printNoticeHtml } from '../project-deliverable-html.mjs'
+import { packageNote, setSheetHtml, setSheetModel } from '../project-set-sheet.mjs'
+import { buildZip } from '../zip-store.mjs'
 import {
   listProjects,
   getProject,
@@ -40,6 +44,8 @@ const SCRIPT = /^\/api\/projects\/([\w-]+)\/script$/
 const CANVAS = /^\/api\/projects\/([\w-]+)\/canvas$/
 const SHARE = /^\/api\/projects\/([\w-]+)\/share$/
 const DELIVERABLE = /^\/api\/projects\/([\w-]+)\/deliverable$/
+// 交付包：交付稿 + 现场页 + 帧图打成一个 zip，收件人解压就能看，不用登录
+const DELIVERABLE_ZIP = /^\/api\/projects\/([\w-]+)\/deliverable\.zip$/
 // 打印版不进 /api：它是在新标签里打开的 HTML，地址栏里那串会印在纸的页脚上
 const DELIVERABLE_PRINT = /^\/print\/projects\/([\w-]+)\/deliverable$/
 
@@ -183,7 +189,8 @@ async function deliverablePayload(project, user, tzOffsetMinutes) {
   // 版本 0 是版本划分之前记的评审，按页面同一套规则折进 v1，否则老作品会显示「记录没读到」。
   const latest = detail.reviews.find((item) => Math.max(1, Math.round(Number(item.version) || 0)) === project.version) || null
   const review = latest ? await getReview(latest.id, user) : null
-  return projectDeliverable(detail, { review, tzOffsetMinutes })
+  // detail 一起带出去：交付包的现场页要同一份脚本与分镜，不必再读一遍作品
+  return { ...projectDeliverable(detail, { review, tzOffsetMinutes }), detail }
 }
 
 // 打印版出错时也给一张纸：这个地址是在新标签里打开的，吐一段 JSON 会让人以为页面坏了。
@@ -196,6 +203,32 @@ const PRINT_HEAD = {
 function sendPrintNotice(res, status, notice) {
   res.writeHead(status, PRINT_HEAD)
   res.end(printNoticeHtml(notice))
+}
+
+/**
+ * 交付包里的帧图：只认分镜里记下的那一份 /media/frames/<模板 id>/<文件名>，
+ * 落地成 shot-03.jpg 这种按镜头编号命名的文件，收件人对着现场页就找得到。
+ * 读不到的不补、不猜：集合里没有它，现场页那一镜就写「没存帧图」。
+ */
+async function storyboardFrames(template) {
+  const shots = Array.isArray(template?.storyboard) ? template.storyboard : []
+  if (!template?.id || !shots.length) return []
+  const out = []
+  const seen = new Set()
+  for (const [index, shot] of shots.entries()) {
+    const matched = String(shot?.frameUrl || '').match(/^\/media\/frames\/([\w-]+)\/([\w.-]+)$/)
+    if (!matched || matched[1] !== template.id) continue
+    const name = 'shot-' + String(Number(shot.shotNo) || index + 1).padStart(2, '0') + '.jpg'
+    if (seen.has(name)) continue
+    try {
+      const data = await fsp.readFile(path.join(config.framesDir, template.id, matched[2]))
+      seen.add(name)
+      out.push({ name, data })
+    } catch {
+      // 抽帧目录被清过（模板回收站 / 过期清理）：这一镜没有图，别拿别的帧顶
+    }
+  }
+  return out
 }
 
 export function createProjectsRouter() {
@@ -234,6 +267,22 @@ export function createProjectsRouter() {
         }
         const rawPrintTz = Number(url.searchParams.get('tz'))
         const printTz = Number.isFinite(rawPrintTz) ? Math.max(-720, Math.min(840, Math.round(rawPrintTz))) : 480
+        // ?only=script 是现场页：只印脚本 + 分镜（带原片帧图），评审与逐版对照留在交付稿里
+        if (String(url.searchParams.get('only') || '') === 'script') {
+          const detail = await projectDetailView(printable, user)
+          res.writeHead(200, PRINT_HEAD)
+          res.end(
+            setSheetHtml({
+              project: printable,
+              script: detail.script,
+              template: detail.template,
+              projectId: printable.id,
+              generatedAt: new Date().toISOString(),
+              tzOffsetMinutes: printTz,
+            }),
+          )
+          return true
+        }
         const { markdown } = await deliverablePayload(printable, user, printTz)
         res.writeHead(200, PRINT_HEAD)
         res.end(deliverablePrintHtml({ markdown, projectId: printable.id, title: printable.title }))
@@ -475,6 +524,57 @@ export function createProjectsRouter() {
           'Cache-Control': 'no-store',
         })
         res.end(markdown)
+        return true
+      }
+
+      // 交付包：一份 .zip（交付稿 + 现场页 + 原片帧图），解压就能看，不用登录也不用联网。
+      // 适合发给不在系统里的人（剪辑、拍摄、甲方）：他们拿到的是一整套，不是几份对不上号的附件。
+      const zipPath = pathname.match(DELIVERABLE_ZIP)
+      if (zipPath && req.method === 'GET') {
+        const project = await getProject(zipPath[1], user)
+        if (!project) {
+          sendJson(res, 404, { error: '作品不存在或已被删除' })
+          return true
+        }
+        const rawZipTz = Number(url.searchParams.get('tz'))
+        const zipTz = Number.isFinite(rawZipTz) ? Math.max(-720, Math.min(840, Math.round(rawZipTz))) : 480
+        const { fileName, markdown, detail } = await deliverablePayload(project, user, zipTz)
+        const frames = await storyboardFrames(detail.template)
+        const now = new Date()
+        const sheet = setSheetHtml({
+          project,
+          script: detail.script,
+          template: detail.template,
+          frameBase: 'frames/',
+          availableFrames: new Set(frames.map((frame) => frame.name)),
+          offline: true,
+          generatedAt: now.toISOString(),
+          tzOffsetMinutes: zipTz,
+        })
+        const note = packageNote({
+          model: setSheetModel({ project, script: detail.script, template: detail.template }),
+          generatedAt: now.toISOString(),
+          tzOffsetMinutes: zipTz,
+          frameCount: frames.length,
+        })
+        const archive = buildZip(
+          [
+            { name: fileName, data: Buffer.from(markdown, 'utf8') },
+            { name: '现场页.html', data: Buffer.from(sheet, 'utf8') },
+            { name: '说明.txt', data: Buffer.from(note, 'utf8') },
+            ...frames.map((frame) => ({ name: 'frames/' + frame.name, data: frame.data })),
+          ],
+          { mtime: now },
+        )
+        const zipName = fileName.replace(/\.md$/i, '') + '-交付包.zip'
+        res.writeHead(200, {
+          'Content-Type': 'application/zip',
+          'Content-Disposition':
+            'attachment; filename="visionqa-deliverable-' + project.id + '.zip"; filename*=UTF-8\'\'' + encodeURIComponent(zipName),
+          'Content-Length': String(archive.length),
+          'Cache-Control': 'no-store',
+        })
+        res.end(archive)
         return true
       }
 

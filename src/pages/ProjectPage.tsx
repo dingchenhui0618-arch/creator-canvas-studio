@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { ArrowLeft, ArrowRight, Check, Clapperboard, CopyPlus, Download, Link2, Pencil, Plus, Printer, RefreshCw, RotateCcw, ScanEye, Share2, Trash2, Workflow, X } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { ArrowLeft, ArrowRight, Check, ChevronDown, Clapperboard, CopyPlus, Download, FileText, Link2, Package, Pencil, Plus, Printer, RefreshCw, RotateCcw, ScanEye, Share2, Trash2, Workflow, X } from 'lucide-react'
 import PageHead from '../components/PageHead'
 import ProjectStatusPill from '../components/ProjectStatus'
 import {
@@ -7,11 +7,13 @@ import {
   deliverablePrintUrl,
   disableProjectShare,
   downloadProjectDeliverable,
+  downloadProjectDeliverableZip,
   enableProjectShare,
   getProject,
   openProjectCanvas,
   resetProjectScript,
   saveProjectScript,
+  setSheetUrl,
   startProjectVersion,
   updateProject,
 } from '../api/projects'
@@ -77,7 +79,7 @@ export default function ProjectPage({
   const [data, setData] = useState<ProjectDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [busy, setBusy] = useState<'' | 'canvas' | 'done' | 'delete' | 'title' | 'version' | 'script' | 'export'>('')
+  const [busy, setBusy] = useState<'' | 'canvas' | 'done' | 'delete' | 'title' | 'version' | 'script' | 'export' | 'zip'>('')
   const [renaming, setRenaming] = useState(false)
   const [draftTitle, setDraftTitle] = useState('')
   // 脚本就地编辑：草稿只在内存里，保存后才写进作品（copy-on-write）
@@ -87,6 +89,10 @@ export default function ProjectPage({
   const [shareOpen, setShareOpen] = useState(false)
   const [shareBusy, setShareBusy] = useState<'' | 'enable' | 'disable' | 'copy'>('')
   const [shareCopied, setShareCopied] = useState(false)
+  // 交付菜单：四种产物（交付稿 / 打印稿 / 现场页 / 交付包）收在一个入口里，
+  // 页头就不会排到七个按钮；点空白处或 Esc 收起（和账号菜单同一套习惯）
+  const [deliverOpen, setDeliverOpen] = useState(false)
+  const deliverRef = useRef<HTMLDivElement | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -107,6 +113,23 @@ export default function ProjectPage({
     }, 0)
     return () => window.clearTimeout(timer)
   }, [load])
+
+  // 交付菜单：点别处、按 Esc 都收起
+  useEffect(() => {
+    if (!deliverOpen) return
+    const onDown = (event: PointerEvent) => {
+      if (!deliverRef.current?.contains(event.target as Node)) setDeliverOpen(false)
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setDeliverOpen(false)
+    }
+    document.addEventListener('pointerdown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [deliverOpen])
 
   // 分享弹窗：Esc 关闭（和版本弹窗同一套习惯）；打开时不再往下滚页面
   useEffect(() => {
@@ -219,13 +242,26 @@ export default function ProjectPage({
     }
   }
 
-  // 打印稿：新标签里打开一张排好版的 A4，打印（存 PDF）交给浏览器。
-  // 不走 fetch：打印页要有自己的地址，刷新一下还能再打印一次。
-  const openPrint = () => {
+  // 交付包：交付稿 + 现场页 + 帧图打成一个 zip。第一次打包要在服务端读一遍帧图，稍慢。
+  const exportZip = async () => {
     if (!data) return
-    const opened = window.open(deliverablePrintUrl(data.project.id), '_blank')
+    setBusy('zip')
+    try {
+      const result = await downloadProjectDeliverableZip(data.project.id)
+      onToast('交付包已导出：' + result.name)
+    } catch (caught) {
+      onToast(caught instanceof Error ? caught.message : '交付包没导出成功')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  // 打印稿 / 现场页：新标签里打开一张排好版的 A4，打印（存 PDF）交给浏览器。
+  // 不走 fetch：打印页要有自己的地址，刷新一下还能再打印一次。
+  const openPaper = (url: string, blocked: string) => {
+    const opened = window.open(url, '_blank')
     if (!opened) {
-      onToast('新标签被浏览器拦下了：允许本站弹窗，或者先用「导出交付稿」拿 Markdown')
+      onToast(blocked)
       return
     }
     // 打印页不需要反过来操作作品页
@@ -234,6 +270,16 @@ export default function ProjectPage({
     } catch {
       // 跨源时改不了 opener，忽略
     }
+  }
+
+  const openPrint = () => {
+    if (!data) return
+    openPaper(deliverablePrintUrl(data.project.id), '新标签被浏览器拦下了：允许本站弹窗，或者先用「交付稿」拿 Markdown')
+  }
+
+  const openSetSheet = () => {
+    if (!data) return
+    openPaper(setSheetUrl(data.project.id), '新标签被浏览器拦下了：允许本站弹窗，或者下载「交付包」里的现场页')
   }
 
   const remove = async () => {
@@ -493,25 +539,92 @@ export default function ProjectPage({
             <button type="button" className="vq-button vq-button--ghost" onClick={() => void toggleDone()} disabled={busy === 'done'}>
               {project.status === 'done' ? '重新打开' : '标记交付'}
             </button>
-            <button
-              type="button"
-              className="vq-button vq-button--ghost"
-              onClick={() => void exportDeliverable()}
-              disabled={busy === 'export'}
-              title="把脚本、分镜、评审结论、版本与运行压成一份 Markdown"
-            >
-              <Download size={14} />
-              {busy === 'export' ? '正在整理…' : '导出交付稿'}
-            </button>
-            <button
-              type="button"
-              className="vq-button vq-button--ghost"
-              onClick={openPrint}
-              title="A4 打印稿：新标签里排好版，打印对话框里直接存为 PDF"
-            >
-              <Printer size={14} />
-              打印稿
-            </button>
+            {/* 交付：四种产物收在一个入口里。页头再放四个按钮就排成一条工具条了，
+                而「交付这一版」本来就是一件事的四种形态。 */}
+            <div className="vq-actions-menu" ref={deliverRef}>
+              <button
+                type="button"
+                className="vq-button vq-button--ghost"
+                aria-haspopup="menu"
+                aria-expanded={deliverOpen}
+                onClick={() => setDeliverOpen((value) => !value)}
+                disabled={busy === 'export' || busy === 'zip'}
+                title="交付这一版：Markdown 全文、A4 打印稿、现场页、交付包"
+              >
+                <Download size={14} />
+                {busy === 'export' ? '正在整理…' : busy === 'zip' ? '正在打包…' : '交付'}
+                <ChevronDown size={13} className="vq-actions-chevron" />
+              </button>
+              {deliverOpen && (
+                <div className="vq-menu vq-export-menu" role="menu">
+                  <div className="vq-menu-head">
+                    <div>
+                      <strong>交付这一版</strong>
+                      <span className="vq-mono">
+                        v{project.version} · 脚本 {scriptBeats} 段 · 分镜 {template ? template.shots : 0} 镜
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setDeliverOpen(false)
+                      void exportDeliverable()
+                    }}
+                  >
+                    <FileText size={15} />
+                    <span className="vq-menu-copy">
+                      <strong>交付稿</strong>
+                      <small>Markdown：脚本、分镜、评审、运行、逐版对照</small>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setDeliverOpen(false)
+                      openPrint()
+                    }}
+                  >
+                    <Printer size={15} />
+                    <span className="vq-menu-copy">
+                      <strong>打印稿</strong>
+                      <small>A4 全文，浏览器里打印或存 PDF</small>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setDeliverOpen(false)
+                      openSetSheet()
+                    }}
+                  >
+                    <Clapperboard size={15} />
+                    <span className="vq-menu-copy">
+                      <strong>现场页</strong>
+                      <small>只留脚本与分镜，带原片帧图，现场打印用</small>
+                    </span>
+                  </button>
+                  <div className="vq-menu-sep" />
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setDeliverOpen(false)
+                      void exportZip()
+                    }}
+                  >
+                    <Package size={15} />
+                    <span className="vq-menu-copy">
+                      <strong>交付包</strong>
+                      <small>.zip：交付稿 + 现场页 + 帧图，解压就能看</small>
+                    </span>
+                  </button>
+                </div>
+              )}
+            </div>
             <button
               type="button"
               className="vq-button vq-button--ghost"

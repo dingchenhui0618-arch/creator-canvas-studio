@@ -9,7 +9,7 @@
 //
 // 安全：所有文本先转义再拼标签。作品标题或台词里写着 <script> 也只显示成字。
 
-const escapeHtml = (value) =>
+export const escapeHtml = (value) =>
   String(value ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -176,7 +176,7 @@ export function renderDeliverableBody(markdown) {
 // 单位全部用 pt / mm：屏幕上是 1:1 的 A4 预览（96dpi 下 210mm 约 794px），
 // 打印时浏览器按物理尺寸排版，两边是同一套数字。间距只走 4/8pt 栅格。
 // ---------------------------------------------------------------------------
-const PAPER_CSS = [
+export const PAPER_CSS = [
   ':root {',
   '  --ink: #111111;',
   '  --muted: #5d5d5d;',
@@ -271,31 +271,44 @@ const PAPER_CSS = [
   '@page { size: A4; margin: 16mm 14mm; }',
 ].join('\n')
 
-// 顶栏（只在屏幕上有）：认品牌、认出这是 A4、给一条回作品页的路，和一个打印按钮
-function toolbar(projectId) {
-  const back = projectId ? '/#/projects/' + encodeURIComponent(projectId) : '/#/projects'
+// 顶栏（只在屏幕上有）：认品牌、认出这是哪一种纸、给一条回作品页的路，和一个打印按钮。
+// offline（下进交付包、解压后双击打开）时没有「返回作品」——那个地址在本机打不开，留着只会 404。
+export function printToolbar({
+  projectId = '',
+  tag = 'A4 打印稿',
+  meta = '210 x 297 mm',
+  hint = '纸张选 A4；想要页码就在打印对话框里打开「页眉和页脚」',
+  back = true,
+  brand = 'img',
+} = {}) {
+  const backHref = projectId ? '/#/projects/' + encodeURIComponent(projectId) : '/#/projects'
+  const mark =
+    brand === 'img'
+      ? '<img class="bar-brand" src="/brand/visionqa-lockup.svg" alt="VisionQA">'
+      : '<span class="bar-textbrand">VisionQA</span>'
   return (
     '<header class="bar">' +
     '<div class="bar-left">' +
-    '<img class="bar-brand" src="/brand/visionqa-lockup.svg" alt="VisionQA">' +
-    '<span class="bar-tag">A4 打印稿</span>' +
-    '<span class="bar-meta">210 x 297 mm</span>' +
+    mark +
+    '<span class="bar-tag">' + escapeHtml(tag) + '</span>' +
+    '<span class="bar-meta">' + escapeHtml(meta) + '</span>' +
     '</div>' +
     '<div class="bar-right">' +
-    '<span class="bar-hint">纸张选 A4；想要页码就在打印对话框里打开「页眉和页脚」</span>' +
-    '<a class="bar-link" href="' + back + '">返回作品</a>' +
+    '<span class="bar-hint">' + escapeHtml(hint) + '</span>' +
+    (back ? '<a class="bar-link" href="' + escapeHtml(backHref) + '">返回作品</a>' : '') +
     '<button class="bar-print" type="button" data-print>打印 / 存为 PDF</button>' +
     '</div>' +
     '</header>'
   )
 }
 
-function pageShell(title, body) {
+// 纸的外壳：extraCss 给需要自己版面的那一种纸（现场页）追加样式，仍然共用同一套纸张与字体
+export function paperShell(title, body, extraCss = '') {
   return (
     '<!doctype html>\n<html lang="zh-CN">\n<head>\n<meta charset="utf-8">\n' +
     '<meta name="viewport" content="width=device-width, initial-scale=1">\n' +
     '<title>' + escapeHtml(title) + '</title>\n' +
-    '<style>\n' + PAPER_CSS + '\n</style>\n</head>\n<body>\n' +
+    '<style>\n' + PAPER_CSS + (extraCss ? '\n' + extraCss : '') + '\n</style>\n</head>\n<body>\n' +
     body + '\n' +
     '<script>var b=document.querySelector("[data-print]");if(b){b.addEventListener("click",function(){window.print()})}</script>\n' +
     '</body>\n</html>\n'
@@ -308,12 +321,12 @@ function pageShell(title, body) {
  */
 export function deliverablePrintHtml({ markdown, projectId = '', title = '交付稿' }) {
   const body =
-    toolbar(projectId) +
+    printToolbar({ projectId }) +
     '\n<main class="sheet">\n' +
     '<div class="sheet-brand"><img class="sheet-mark" src="/brand/visionqa-lockup.svg" alt="VisionQA">' +
     '<span class="sheet-kind">DELIVERABLE / A4</span></div>\n' +
     '<div class="sheet-body">\n' + renderDeliverableBody(markdown) + '\n</div>\n</main>'
-  return pageShell((title || '交付稿') + ' · 交付稿 · VisionQA', body)
+  return paperShell((title || '交付稿') + ' · 交付稿 · VisionQA', body)
 }
 
 /**
@@ -329,5 +342,5 @@ export function printNoticeHtml({ title = '打不开这张稿', message = '', hr
     '<p class="lede">' + escapeHtml(message) + '</p>\n' +
     '<p><a class="bar-print cta" href="' + escapeHtml(href) + '">' + escapeHtml(label) + '</a></p>\n' +
     '</div>\n</main>'
-  return pageShell(title + ' · VisionQA', body)
+  return paperShell(title + ' · VisionQA', body)
 }

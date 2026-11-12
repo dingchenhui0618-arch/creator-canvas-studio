@@ -61,20 +61,18 @@ export const resetProjectScript = (id: string) =>
     { method: 'DELETE' },
   )
 
+// getTimezoneOffset 是「UTC 减本地」的分钟数，取反才是东经为正
+const tzOffset = () => String(-new Date().getTimezoneOffset())
+
 /**
- * 交付稿：把这条作品压成一份 Markdown 附件（脚本、分镜、评审结论、版本、运行）。
- * 走 fetch 而不是 <a href>：要把导出人所在的时区带上（稿子里的时间是本地时间），
- * 也要读出服务端定下的文件名。只读接口，不扣积分。
+ * 有个地址要下载：读出服务端定下的文件名再落盘。
+ * 交付稿与交付包走同一段逻辑——两边的错误文案、文件名解析不该各写一份。
  */
-export async function downloadProjectDeliverable(id: string): Promise<{ name: string; bytes: number }> {
-  // getTimezoneOffset 是「UTC 减本地」的分钟数，取反才是东经为正
-  const tz = String(-new Date().getTimezoneOffset())
-  const response = await fetch('/api/projects/' + encodeURIComponent(id) + '/deliverable?tz=' + encodeURIComponent(tz), {
-    credentials: 'same-origin',
-  })
+async function downloadFrom(endpoint: string, fallbackName: string): Promise<{ name: string; bytes: number }> {
+  const response = await fetch(endpoint, { credentials: 'same-origin' })
   if (!response.ok) {
     const text = await response.text()
-    let message = '交付稿没导出成功（HTTP ' + response.status + '）'
+    let message = '导出没有成功（HTTP ' + response.status + '）'
     try {
       const body = JSON.parse(text) as { error?: string }
       if (body?.error) message = body.error
@@ -87,7 +85,7 @@ export async function downloadProjectDeliverable(id: string): Promise<{ name: st
   // 中文文件名在 filename*=UTF-8''… 里，老服务端只有 filename="…" 时退回它
   const utf8 = disposition.match(/filename\*=UTF-8''([^;]+)/i)
   const plain = disposition.match(/filename="([^"]+)"/)
-  const name = utf8 ? decodeURIComponent(utf8[1]) : plain?.[1] || 'visionqa-deliverable.md'
+  const name = utf8 ? decodeURIComponent(utf8[1]) : plain?.[1] || fallbackName
   const blob = await response.blob()
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
@@ -101,11 +99,36 @@ export async function downloadProjectDeliverable(id: string): Promise<{ name: st
 }
 
 /**
+ * 交付稿：把这条作品压成一份 Markdown 附件（脚本、分镜、评审结论、版本、运行）。
+ * 走后端再落盘：要把导出人所在的时区带上（稿子里的时间是本地时间），也要读出服务端定下的文件名。
+ * 只读接口，不扣积分。
+ */
+export const downloadProjectDeliverable = (id: string) =>
+  downloadFrom('/api/projects/' + encodeURIComponent(id) + '/deliverable?tz=' + encodeURIComponent(tzOffset()), 'visionqa-deliverable.md')
+
+/**
+ * 交付包：交付稿 + 现场页 + 原片帧图打成一个 zip。
+ * 发给不在系统里的人（剪辑、拍摄、甲方）：解压就能看，不用登录也不用联网。
+ */
+export const downloadProjectDeliverableZip = (id: string) =>
+  downloadFrom(
+    '/api/projects/' + encodeURIComponent(id) + '/deliverable.zip?tz=' + encodeURIComponent(tzOffset()),
+    'visionqa-deliverable.zip',
+  )
+
+/**
  * 交付稿的 A4 打印版地址：新标签里打开一张排好版的纸，打印（存 PDF）交给浏览器。
  * 走服务端出的 HTML 而不是前端排版：纸的样式只写一处，也不会把整页应用壳带进打印结果。
  * 时区同理，跟着地址走，纸上的时间就是导出人本地的时间。
  */
 export function deliverablePrintUrl(id: string): string {
-  const tz = String(-new Date().getTimezoneOffset())
-  return '/print/projects/' + encodeURIComponent(id) + '/deliverable?tz=' + encodeURIComponent(tz)
+  return '/print/projects/' + encodeURIComponent(id) + '/deliverable?tz=' + encodeURIComponent(tzOffset())
+}
+
+/**
+ * 现场页地址：同一张纸只留脚本 + 分镜（带原片帧图），编导拿去现场用。
+ * 与交付包里的「现场页.html」是同一份渲染，只是帧图改成走登录态。
+ */
+export function setSheetUrl(id: string): string {
+  return '/print/projects/' + encodeURIComponent(id) + '/deliverable?only=script&tz=' + encodeURIComponent(tzOffset())
 }
