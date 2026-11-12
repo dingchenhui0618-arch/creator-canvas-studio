@@ -98,6 +98,22 @@
   line-height: 1.5;
 }
 
+/* 窄屏：菜单按按钮右对齐会顶出屏幕左边（按钮常落在页头中段），
+   改成贴着底边的浮层——4 项都看得见，也不遮住标题。 */
+@media (max-width: 560px) {
+  .vq-export-menu {
+    position: fixed;
+    top: auto;
+    right: var(--space-4);
+    bottom: var(--space-4);
+    left: var(--space-4);
+    width: auto;
+    max-height: calc(100vh - 32px);
+    overflow: auto;
+    box-shadow: 0 18px 48px rgba(37, 35, 31, 0.22);
+  }
+}
+
 /* ---------- 列表 ---------- */
 
 .vq-projects-grid {
