@@ -64,7 +64,7 @@ test('按模板分组：只算自己能看的作品，最近的排前面', async
 test('一行作品带够认得出的字段，不带脚本与凭证', async () => {
   const byTemplate = await projectsByTemplate(me)
   const [first] = byTemplate.get('tpl_b')
-  assert.deepEqual(Object.keys(first).sort(), ['id', 'status', 'title', 'updatedAt', 'version'])
+  assert.deepEqual(Object.keys(first).sort(), ['delivered', 'id', 'status', 'title', 'updatedAt', 'version'])
   assert.equal(first.version, 2)
   assert.equal(first.title, '作品 prj_b1')
   assert.equal(first.status, 'active')
@@ -93,6 +93,8 @@ test('没登录（公共视图）时按全部作品算；单条 ref 只挑认出
     id: 'prj_x',
     title: '标题',
     status: 'done',
+    // 老数据没有交付记录：done 就是这一版交了，交付稿与分享页同一口径
+    delivered: true,
     version: 3,
     updatedAt: 'now',
   })

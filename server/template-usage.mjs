@@ -4,6 +4,7 @@
 // 「现在还有几条作品绑着它」才是事实，所以这里从 projects.json 现算。
 // 归属沿用 listProjects 的同一套规则：谁能看这条作品，它的模板才被算进用量。
 import { listProjects } from './projects.mjs'
+import { deliveredCurrent } from './project-status.mjs'
 
 /** 模板详情里的一行：够认出是哪条作品、走到哪一步。 */
 export function templateProjectRef(project) {
@@ -11,6 +12,8 @@ export function templateProjectRef(project) {
     id: project.id,
     title: project.title,
     status: project.status,
+    // 交付看「这一版交没交」：开了新版的作品不能说已交付
+    delivered: deliveredCurrent(project),
     version: project.version,
     updatedAt: project.updatedAt,
   }

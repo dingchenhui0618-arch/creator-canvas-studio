@@ -16,6 +16,20 @@
 /* 状态胶囊 .vq-project-status 已收进 shell.css：作品卡片、作品页、工作台都用它，不再只属于这一页。
    这里只剩卡片自己的排版。 */
 
+/* 页头的交付留痕：交的是哪一版、什么时候。胶囊只说「已交付」，时间只有这里给得出来 */
+.vq-project-delivered {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------- 页头「交付」菜单：四种产物收在一个入口 ---------- */
 
 .vq-actions-menu {
@@ -47,6 +61,15 @@
 
 .vq-export-menu button:hover > svg {
   color: var(--ink);
+}
+
+/* 导出菜单顶上的说明：一句话说清「导出 ≠ 宣布交付」，菜单里只有这一处换行文本 */
+.vq-export-note {
+  margin: 0;
+  padding: 0 var(--space-2) var(--space-2);
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.6;
 }
 
 .vq-menu-copy {
@@ -604,6 +627,19 @@
   gap: var(--space-1) var(--space-2);
   color: var(--faint);
   font-size: var(--text-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 「这一版交出去过」：与评审胶囊同一档，绿只是告诉人它已经出去了，不是新的状态 */
+.vq-version-delivered {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 var(--space-2);
+  border: 1px solid rgba(23, 107, 67, 0.24);
+  border-radius: var(--radius-pill);
+  background: var(--pass-soft);
+  color: var(--pass);
   font-variant-numeric: tabular-nums;
 }
 

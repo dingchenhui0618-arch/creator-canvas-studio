@@ -19,7 +19,7 @@ import {
   updateProject,
 } from '../api/projects'
 import { describeTiming, type ScriptBeat } from '../domain/radar'
-import { projectStep, reviewsForVersion, runsForVersion, type ProjectDetail } from '../domain/project'
+import { deliveredCurrent, deliveryOf, projectStep, reviewsForVersion, runsForVersion, type ProjectDetail } from '../domain/project'
 import { decideReview, clearReviewDecision } from '../api/review'
 import { REVIEW_VERDICT_LABEL as VERDICT_LABEL, reviewTimeLabel, reviewsOfVersion } from '../domain/review'
 import { stampTime as stamp, visitLine } from '../domain/share'
@@ -257,14 +257,20 @@ export default function ProjectPage({
     }
   }
 
+  // 标记交付会记下「哪一版、什么时候」（服务端落一条交付记录）；重新打开只改状态，记录留着
   const toggleDone = async () => {
     if (!data) return
-    const next = data.project.status === 'done' ? 'active' : 'done'
+    const next = deliveredCurrent(data.project) ? 'active' : 'done'
     setBusy('done')
     try {
       const result = await updateProject(data.project.id, { status: next })
       setData({ ...data, project: result.project })
-      onToast(next === 'done' ? '已标记为交付' : '已重新打开这条作品')
+      const delivery = deliveryOf(result.project)
+      onToast(
+        next === 'done'
+          ? '已标记交付：v' + (delivery?.version ?? result.project.version) + (delivery?.at ? ' · ' + stamp(delivery.at) : '')
+          : '已重新打开：这一版的交付记录也撤掉了',
+      )
     } catch (caught) {
       onToast(caught instanceof Error ? caught.message : '状态没保存成功')
     } finally {
@@ -505,6 +511,14 @@ export default function ProjectPage({
   const canDecide = currentReviews.lastVerdict === 'needs_review' || currentReviews.lastVerdict === 'fail'
   const step = projectStep(project, currentReviews, decision)
   const scriptBeats = script ? script.structure.length : 0
+  // 交付留痕：最近一次交的是哪一版；开了新版之后旧版那条仍在，但这一版不再算已交付
+  const delivery = deliveryOf(project)
+  const delivered = deliveredCurrent(project)
+  const deliveredVersions = new Map<number, string>(
+    (Array.isArray(project.deliveries) ? project.deliveries : []).map((entry) => [entry.version, entry.at]),
+  )
+  // 老记录没有交付条目：状态是已交付就当当前这一版交过，只是时间没记录
+  if (delivered && !delivery && project.version) deliveredVersions.set(project.version, '')
   const versionRows = [
     {
       n: project.version,
@@ -581,6 +595,15 @@ export default function ProjectPage({
           <>
             <span className="vq-project-headline">
               <ProjectStatusPill project={project} reviews={currentReviews} decision={decision} />
+              {delivered && delivery ? (
+                <span
+                  className="vq-mono vq-project-delivered"
+                  title="交付记录：这一版是哪一刻交出去的。重新打开会收回这一版的交付，开新版则把它留在上一版"
+                >
+                  交付 v{delivery.version}
+                  {delivery.at ? ' · ' + stamp(delivery.at) : ' · 时间没记录'}
+                </span>
+              ) : null}
               <span className="vq-mono">更新 {stamp(project.updatedAt)}</span>
               {template && template.title !== project.title ? <span className="vq-mono">模板 · {template.title}</span> : null}
             </span>
@@ -592,8 +615,18 @@ export default function ProjectPage({
               <RefreshCw size={14} className={loading ? 'vq-spin' : undefined} />
               刷新
             </button>
-            <button type="button" className="vq-button vq-button--ghost" onClick={() => void toggleDone()} disabled={busy === 'done'}>
-              {project.status === 'done' ? '重新打开' : '标记交付'}
+            <button
+              type="button"
+              className="vq-button vq-button--ghost"
+              onClick={() => void toggleDone()}
+              disabled={busy === 'done'}
+              title={
+                delivered
+                  ? '把这条作品放回「在做」，并收回这一版的交付记录；上一版交过的记录留着'
+                  : '标记这一版已交付：会记下是哪一版、什么时候交的'
+              }
+            >
+              {delivered ? '重新打开' : '标记交付'}
             </button>
             {/* 交付：五种产物收在一个入口里。页头再放五个按钮就排成一条工具条了，
                 而「交付这一版」本来就是一件事的几种形态。 */}
@@ -621,6 +654,12 @@ export default function ProjectPage({
                       </span>
                     </div>
                   </div>
+                  {/* 导出是取产物，不是宣布交付：把「标记交付」这一步说清楚，别让人以为导完就算交了 */}
+                  {delivered ? null : (
+                    <p className="vq-export-note">
+                      导出不会改状态：交出去之后点页头「标记交付」，会记下这一版与交付时间；开新版也查得到。
+                    </p>
+                  )}
                   <button
                     type="button"
                     role="menuitem"
@@ -792,6 +831,15 @@ export default function ProjectPage({
                       <span>{row.scriptBeats ? row.scriptBeats + ' 段脚本' : row.current ? '没写脚本' : '脚本没存快照'}</span>
                       <span>{counter.count ? counter.count + ' 次评审' : '未评审'}</span>
                       <span>{runCount ? runCount + ' 次运行' : '没跑过'}</span>
+                      {deliveredVersions.has(row.n) ? (
+                        <span
+                          className="vq-version-delivered"
+                          title="这一版交出去过；重新打开这一版会收回这条记录，开新版会把它留在上一版"
+                        >
+                          交付过
+                          {deliveredVersions.get(row.n) ? ' · ' + stamp(deliveredVersions.get(row.n) as string) : ' · 时间没记录'}
+                        </span>
+                      ) : null}
                     </span>
                     {rowReviews.length ? (
                       <ul className="vq-version-reviews">

@@ -34,6 +34,12 @@ export type ProjectDecision = {
   at: string
 }
 
+/**
+ * 交付记录：一次「标记交付」= 哪一版、什么时候交出去。
+ * 它是事实，不是开关：交付了 v2 又开 v3，v2 那条仍然在；老记录没有时间（at 是空串）。
+ */
+export type ProjectDelivery = { version: number; at: string }
+
 /** 归档的旧版本：只存画布指针与名字，画布本身仍在流程服务里 */
 export type ProjectVersion = { n: number; flowId: string; name: string; archivedAt: string }
 
@@ -57,8 +63,29 @@ export type Project = {
   version: number
   versions: ProjectVersion[]
   status: ProjectStatus
+  /** 交付记录，按发生顺序；最后一条是最近一次 */
+  deliveries?: ProjectDelivery[]
   createdAt: string
   updatedAt: string
+}
+
+/** 最近一次交付：交付了哪一版、什么时候（老记录 at 是空串）；从没交付过是 null */
+export function deliveryOf(project: Project | null | undefined): ProjectDelivery | null {
+  const list = Array.isArray(project?.deliveries) ? project.deliveries : []
+  const last = list[list.length - 1]
+  if (!last) return null
+  return { version: Math.max(0, Math.round(Number(last.version) || 0)), at: String(last.at || '') }
+}
+
+/**
+ * 这一版交付了没有：status=done 只说明按过「标记交付」，交的是哪一版要看交付记录。
+ * 交付 v2 之后开的 v3 还没交——胶囊不能再写已交付。没有交付记录的老数据照旧：done 就是这一版交了。
+ */
+export function deliveredCurrent(project: Project | null | undefined): boolean {
+  if (project?.status !== 'done') return false
+  const delivery = deliveryOf(project)
+  if (!delivery) return true
+  return delivery.version === Math.max(1, Math.round(Number(project?.version) || 0))
 }
 
 /** 一次画布运行的摘要：运行记在画布服务里，作品页把名下所有版本的运行按时间归集成一条线 */
@@ -228,7 +255,7 @@ export function projectStatus(
   reviews: ProjectReviews,
   decision: ProjectDecision | null = null,
 ): { text: string; tone: 'idle' | 'live' | 'ok' | 'warn' | 'fail' | 'done'; verdict: string; human?: 'pass' | 'reject' } {
-  if (project.status === 'done') return { text: '已交付', tone: 'done', verdict: '' }
+  if (deliveredCurrent(project)) return { text: '已交付', tone: 'done', verdict: '' }
   if (!project.flowId) return { text: '待开画布', tone: 'idle', verdict: '' }
   if (!reviews.count) return { text: '在做', tone: 'live', verdict: '' }
   const verdict = reviews.lastVerdict || ''
@@ -282,12 +309,16 @@ export function projectStep(
   reviews: ProjectReviews,
   decision: ProjectDecision | null = null,
 ): { key: ProjectStepKey; label: string; title: string; hint: string; cta: string } {
-  if (project.status === 'done') {
+  if (deliveredCurrent(project)) {
+    const delivery = deliveryOf(project)
     return {
       key: 'done',
       label: '下一步 · 已交付',
       title: '这条已经交付',
-      hint: '画布与评审都留在记录里，随时可以重新打开照着改',
+      // 交的是哪一版要写出来：交付稿与版本对照里也记着同一件事
+      hint: delivery
+        ? '交付的是 v' + delivery.version + '；画布与评审都留在记录里，开一版新的就回到「在做」，上一版的交付时间仍然查得到'
+        : '画布与评审都留在记录里，随时可以重新打开照着改',
       cta: '再打开画布',
     }
   }

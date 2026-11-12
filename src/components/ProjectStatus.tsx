@@ -1,5 +1,6 @@
-import { projectStatus, type Project, type ProjectDecision, type ProjectReviews } from '../domain/project'
+import { deliveryOf, projectStatus, type Project, type ProjectDecision, type ProjectReviews } from '../domain/project'
 import { REVIEW_VERDICT_LABEL, reviewTimeLabel } from '../domain/review'
+import { stampTime } from '../domain/share'
 
 /**
  * 作品状态胶囊：待开画布 / 在做 / 评审 · 通过 / 评审 · 需人工确认 / 评审 · 不通过 / 评审 · 人工通过 / 评审 · 人工不通过 / 已交付。
@@ -17,8 +18,13 @@ export default function ProjectStatusPill({
   decision?: ProjectDecision | null
 }) {
   const status = projectStatus(project, reviews, decision)
+  // 已交付时补一句交付记录：卡片上只写「已交付」，悬停才知道交的是哪一版、什么时候
+  const delivery = status.tone === 'done' ? deliveryOf(project) : null
   const note =
-    status.human && decision
+    delivery
+      // 交付时间与作品页的交付留痕同一种写法（MM-DD HH:mm），同一页里不会两种分隔符
+      ? '交付 v' + delivery.version + (delivery.at ? ' · ' + stampTime(delivery.at) : ' · 时间没记录')
+      : status.human && decision
       ? (decision.decision === 'pass' ? '你拍板通过' : '你拍板不通过') +
         ' · ' + reviewTimeLabel(decision.at) +
         (decision.note ? ' · ' + decision.note : '')

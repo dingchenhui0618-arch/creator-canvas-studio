@@ -43,6 +43,29 @@ export function decisionFor(decisions, reviewAt) {
 }
 
 /**
+ * 最近一次「标记交付」：交出去的是哪一版、什么时候（老记录没有时间，at 是空串）。
+ * deliveries 按发生顺序排，最后一条就是最近一次；没有记录返回 null。
+ */
+export function deliveryOf(project) {
+  const list = Array.isArray(project?.deliveries) ? project.deliveries : []
+  const last = list[list.length - 1]
+  if (!last) return null
+  return { version: Math.max(0, Math.round(Number(last.version) || 0)), at: String(last.at || '') }
+}
+
+/**
+ * 这一版交付了没有：status=done 只说明「按过标记交付」，交的是哪一版要看交付记录。
+ * 交付了 v2 之后开了 v3，v3 还没交——胶囊不能再写「已交付」，下一步也要继续走。
+ * 没有交付记录的老数据照旧：status=done 就是这一版交了。
+ */
+export function deliveredCurrent(project) {
+  if (project?.status !== 'done') return false
+  const delivery = deliveryOf(project)
+  if (!delivery) return true
+  return delivery.version === Math.max(1, Math.round(Number(project?.version) || 0))
+}
+
+/**
  * 状态胶囊：文案 + 语气 + 那条结论。
  * 语气只决定颜色，语义全在文案里，换皮不会改意思。
  *   idle 待开画布 / live 在做 / ok 评审通过 / warn 需人工确认 / fail 不通过 / done 已交付
@@ -51,7 +74,7 @@ export function decisionFor(decisions, reviewAt) {
  * 人拍过板就不再拿模型的「需人工确认」当结论。
  */
 export function projectStatus(project, reviews, decision = null) {
-  if (project?.status === 'done') return { text: '已交付', tone: 'done', verdict: '' }
+  if (deliveredCurrent(project)) return { text: '已交付', tone: 'done', verdict: '' }
   if (!project?.flowId) return { text: '待开画布', tone: 'idle', verdict: '' }
   const count = Number(reviews?.count) || 0
   if (!count) return { text: '在做', tone: 'live', verdict: '' }

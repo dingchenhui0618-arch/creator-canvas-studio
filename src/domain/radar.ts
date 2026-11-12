@@ -163,6 +163,8 @@ export type TemplateProjectRef = {
   id: string
   title: string
   status: 'active' | 'done'
+  /** 这一版交没交：交付了 v2 又开 v3 的作品这里仍是 false */
+  delivered?: boolean
   version: number
   updatedAt: string
 }

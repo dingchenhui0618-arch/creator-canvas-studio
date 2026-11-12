@@ -11,7 +11,7 @@
 // 拍板按「哪一次评审」认：再评出新结论，时间对不上，它回到 items——人拍的是那一次，不是永远。
 import { listProjects, getProject } from './projects.mjs'
 import { reviewCountsByProject } from './reviews.mjs'
-import { reviewsForVersion, projectStatus, decisionFor } from './project-status.mjs'
+import { reviewsForVersion, projectStatus, decisionFor, deliveredCurrent } from './project-status.mjs'
 import { listAcks } from './review-acks.mjs'
 import { listDecisions } from './review-decisions.mjs'
 
@@ -20,8 +20,9 @@ import { listDecisions } from './review-decisions.mjs'
  * 不看「已看过」——那是队列自己的事；接口 POST /api/reviews/ack 也用它，保证两边口径一样。
  */
 export function pendingRow(project, counts) {
-  // 已交付的不用再催：都交出去了，评审意见留作记录
-  if (!project || project.status === 'done') return null
+  // 已交付的不用再催：都交出去了，评审意见留作记录。
+  // 只看「这一版交没交」：交付了 v2 之后开的 v3 还没交，它照旧进待办。
+  if (!project || deliveredCurrent(project)) return null
   const current = reviewsForVersion(counts?.[project.id]?.versions || {}, project.version)
   if (!current.count) return null
   if (current.lastVerdict !== 'needs_review' && current.lastVerdict !== 'fail') return null

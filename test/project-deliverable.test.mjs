@@ -127,7 +127,9 @@ test('完整稿：脚本、分镜、评审、版本、运行都在，且不写�
   assert.ok(markdown.includes('| v2（当前） | 咖啡 v2 | 6 | 2 段 | 1 次 | 1 次 | 需人工确认 | — |'))
   assert.ok(markdown.includes('### v1 · 咖啡 v1'), '每一版都要有自己的明细块')
   assert.ok(markdown.includes('| 2026-11-12 13:20 | v2 | 成功 | 6 | 1 分 1 秒 | 3 积分 |'))
-  assert.ok(markdown.includes('- 标记交付：还没标记'))
+  // v0.9.22：交付留痕不是开关——没标记交付就如实写没交付过，不写一个假时间
+  assert.ok(markdown.includes('- 交付：还没交付过'))
+  assert.ok(!markdown.includes('交付记录：'), '没交过就不该有一条空记录')
   assert.ok(!markdown.includes('tok_secret_abc'), '分享 token 是一把钥匙，不能写进交付稿')
   assert.ok(!markdown.includes('ownerId'), '归属字段不进稿')
   assert.ok(fileName.startsWith('VisionQA-咖啡 3 分钟-20261112'))

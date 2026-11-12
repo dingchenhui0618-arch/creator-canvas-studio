@@ -5,6 +5,7 @@
 // 不会自动漏到公开链接上。
 import path from 'node:path'
 import { config } from './config.mjs'
+import { deliveredCurrent } from './project-status.mjs'
 
 // 分镜最多展示 12 镜：再多读者不会看，页面也会变成一条无限长的清单
 const MAX_STORYBOARD = 12
@@ -95,7 +96,8 @@ export function publicProjectView({ project, template, script, reviews, runs, to
   return {
     project: {
       title: text(project.title, 80),
-      status: project.status === 'done' ? 'done' : 'active',
+      // 交付看的是「这一版交没交」：交过 v2 又开了 v3，分享页不能写已交付
+      status: deliveredCurrent(project) ? 'done' : 'active',
       version: Math.max(0, Math.round(num(project.version))),
       createdAt: String(project.createdAt || ''),
       updatedAt: String(project.updatedAt || ''),

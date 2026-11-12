@@ -423,7 +423,7 @@ export function TemplateLibraryPage({
                               <span>
                                 {project.version > 1 ? 'v' + project.version : '第 1 版'}
                                 {' · '}
-                                {project.status === 'done' ? '已交付' : '在做'}
+                                {(project.delivered ?? project.status === 'done') ? '已交付' : '在做'}
                               </span>
                             </span>
                             <ArrowRight size={13} />

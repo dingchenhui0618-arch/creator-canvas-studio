@@ -20,6 +20,8 @@ export const PROJECT_VERSION_LIMIT = MAX_VERSIONS
 // 一条作品最多留 8 轮分享记录：更早的链接没人会回去看，留个上限免得作品记录无限长
 const MAX_SHARE_HISTORY = 8
 export const SHARE_HISTORY_LIMIT = MAX_SHARE_HISTORY
+// 交付记录：一次「标记交付」= 哪一版、什么时候交出去。留 20 条，与版本上限对齐
+const MAX_DELIVERIES = 20
 
 let cache = null
 let writeChain = Promise.resolve()
@@ -107,6 +109,15 @@ function normalizeShareHistory(raw) {
     .slice(0, MAX_SHARE_HISTORY)
 }
 
+// 交付记录：{ version, at }。老记录没有时间就写空串——照样是「这一版交过」，只是不知道什么时候。
+function normalizeDeliveries(raw) {
+  return (Array.isArray(raw) ? raw : [])
+    .filter((entry) => entry && typeof entry === 'object')
+    .map((entry) => ({ version: Math.max(0, Math.round(Number(entry.version) || 0)), at: String(entry.at || '') }))
+    .filter((entry) => entry.version > 0)
+    .slice(-MAX_DELIVERIES)
+}
+
 /** 把当前这一轮分享归档进历史（停用、或换新 token 时调用），返回是否真的归档了。 */
 function archiveShare(found, closedAt) {
   const key = visitKey(found.shareToken)
@@ -144,6 +155,8 @@ function normalize(item) {
     // 以前开过的链接：token 已清、地址打不开，只留哈希键与起止时间（打开记录按哈希键还对得上）
     shareHistory: normalizeShareHistory(item.shareHistory),
     status: STATUSES.includes(item.status) ? item.status : 'active',
+    // 交付记录：标记交付时落一条；开新版不会把它清掉，旧版交过这件事仍然查得到
+    deliveries: normalizeDeliveries(item.deliveries),
     createdAt: item.createdAt || new Date().toISOString(),
     updatedAt: item.updatedAt || item.createdAt || new Date().toISOString(),
   }
@@ -193,6 +206,7 @@ export async function updateProject(id, patch = {}, user = null) {
   const list = await loadAll()
   const found = list.find((item) => item.id === id && canAccess(item, user))
   if (!found) return null
+  const beforeStatus = found.status
   let changed = false
   for (const key of PATCHABLE) {
     if (!(key in patch)) continue
@@ -204,6 +218,25 @@ export async function updateProject(id, patch = {}, user = null) {
     if (value === found[key]) continue
     found[key] = value
     changed = true
+  }
+  // 标记交付 = 记下「这一版交出去了」：版次与时间都落一条，之后开新版也不会覆盖；
+  // 同一版重复标记只更新时间，不堆重复记录。
+  if (patch.status === 'done') {
+    const at = new Date().toISOString()
+    const version = Math.max(1, Number(found.version) || 1)
+    const rest = normalizeDeliveries(found.deliveries).filter((entry) => entry.version !== version)
+    found.deliveries = [...rest, { version, at }].slice(-MAX_DELIVERIES)
+    changed = true
+  }
+  // 重新打开 = 收回「这一版已交付」：撤掉当前这一版的交付记录，别的版本留着。
+  // 交付是对某一版的宣布，撤销之后稿子与胶囊都回到「这一版还没交」，不留一条假记录。
+  if (patch.status === 'active' && beforeStatus === 'done') {
+    const version = Math.max(1, Number(found.version) || 1)
+    const rest = normalizeDeliveries(found.deliveries).filter((entry) => entry.version !== version)
+    if (rest.length !== normalizeDeliveries(found.deliveries).length) {
+      found.deliveries = rest
+      changed = true
+    }
   }
   // 第一次绑上画布就是 v1：版本计数从这里开始，之后只有「开一版新的」才会加
   if (found.flowId && !Number(found.version)) {
@@ -271,6 +304,16 @@ export async function archiveProjectVersion(id, { flowId = '', prevName = '', sc
       script: normalizeVersionScript(script) || undefined,
     },
   ].slice(-MAX_VERSIONS)
+  // 开新版等于上一版收尾：标着交付的那一版先补一条交付记录（老记录没有时间就写空串），
+  // 作品再放回「在做」——新版还没交，胶囊不能继续写着已交付。
+  if (found.status === 'done') {
+    const deliveries = normalizeDeliveries(found.deliveries)
+    if (!deliveries.some((entry) => entry.version === current.version)) {
+      deliveries.push({ version: current.version, at: '' })
+    }
+    found.deliveries = deliveries.slice(-MAX_DELIVERIES)
+    found.status = 'active'
+  }
   found.flowId = String(flowId || '')
   found.version = current.version + 1
   found.updatedAt = now

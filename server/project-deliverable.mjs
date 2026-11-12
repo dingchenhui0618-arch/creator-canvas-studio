@@ -11,7 +11,29 @@
 import { describeTiming } from './speech.mjs'
 import { DIMENSION_LABEL, boxText, normalizeBox } from './project-review-sheet.mjs'
 // 状态与「某一版评过几次」读作品状态那一处：纸上写的状态与页面上那枚胶囊必须是同一句话
-import { VERDICT_TEXT as VERDICT_LABEL, projectStatus, reviewsForVersion as reviewsOf, decisionFor } from './project-status.mjs'
+import {
+  VERDICT_TEXT as VERDICT_LABEL,
+  projectStatus,
+  reviewsForVersion as reviewsOf,
+  decisionFor,
+  deliveryOf,
+  deliveredCurrent,
+} from './project-status.mjs'
+
+/** 交付记录的一句话：这一版交没交、交了哪一版、什么时候。抬头、交付小节与版本表共用。 */
+function deliveryText(project, tz) {
+  const delivery = deliveryOf(project)
+  const delivered = deliveredCurrent(project)
+  if (delivered && delivery) {
+    return '这一版已经交付 · v' + delivery.version + (delivery.at ? ' · ' + stamp(delivery.at, tz) : '（时间没记录，老记录）')
+  }
+  if (delivered) return '这一版已经交付（时间没记录，老记录）'
+  if (delivery) {
+    return '这一版还没交付 · 上一版 v' + delivery.version +
+      (delivery.at ? ' 于 ' + stamp(delivery.at, tz) + ' 交付' : ' 交付过（时间没记录）')
+  }
+  return '还没交付过（在作品页「标记交付」会记下是哪一版、什么时候）'
+}
 
 export const DELIVERABLE_LIMITS = { runs: 8, observations: 8, fixes: 6, versions: 6 }
 
@@ -74,6 +96,8 @@ function header(detail, ctx) {
     '',
     '- 作品编号：' + project.id,
     '- 状态：' + projectStatus(project, currentReviews, decision).text + (project.version ? '（当前第 ' + project.version + ' 版）' : ''),
+    // 交付是这一版交出去了——收件人要知道交的是哪一版，什么时候交的
+    '- 交付：' + deliveryText(project, tz),
     // 没有拍板也照实写：读者会问「这结论谁定的」，答案就是模型 + 还没人复核
     '- 人工复核：' + (decision
       ? (decision.decision === 'pass' ? '人工通过' : '人工不通过') + ' · ' + stamp(decision.at, tz) + (decision.note ? ' · ' + flat(decision.note) : '')
@@ -386,6 +410,11 @@ function versionSection(detail, tz) {
   const byNumber = new Map(rows.map((row) => [row.n, row]))
   const reviewMap = groupByVersion(detail.reviews)
   const runMap = groupByVersion(detail.runs)
+  // 哪几版交出去过：表里标在版次后面，每版现场再写一条时间
+  const deliveredVersions = new Map(
+    (Array.isArray(project.deliveries) ? project.deliveries : [])
+      .map((entry) => [Math.round(Number(entry.version) || 0), String(entry.at || '')]),
+  )
   for (const list of reviewMap.values()) {
     list.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
   }
@@ -417,7 +446,8 @@ function versionSection(detail, tz) {
     const counter = reviewsOf(detail.versionCounts, row.n)
     const runs = runsOf(detail.runCounts, row.n)
     out.push(
-      '| v' + row.n + (row.current ? '（当前）' : '') + ' | ' + cell(row.name) + ' | ' + row.nodes + ' | ' + scriptCell(row) + ' | ' +
+      '| v' + row.n + (row.current ? '（当前）' : '') + (deliveredVersions.has(row.n) ? ' · 已交付' : '') +
+        ' | ' + cell(row.name) + ' | ' + row.nodes + ' | ' + scriptCell(row) + ' | ' +
         (counter.count ? counter.count + ' 次' : '未评') + ' | ' + (runs ? runs + ' 次' : '没跑过') + ' | ' +
         (VERDICT_LABEL[counter.lastVerdict] || '—') + ' | ' + (row.current ? '—' : stamp(row.archivedAt, tz)) + ' |',
     )
@@ -434,6 +464,10 @@ function versionSection(detail, tz) {
         '- 归档：' + stamp(row.archivedAt, tz) + ' · ' +
           (row.available ? '画布 ' + row.nodes + ' 个节点' : '画布已经被删除，只剩这一行归档记录'),
       )
+      if (deliveredVersions.has(row.n)) {
+        const at = deliveredVersions.get(row.n)
+        out.push('- 交付：' + (at ? stamp(at, tz) + ' 交出去过' : '交出去过（时间没记录）'))
+      }
       const canvas = canvasText(canvasDelta(fingerprint(before?.nodeList), fingerprint(row.nodeList)))
       if (before && canvas) out.push('- 画布：比 v' + before.n + ' ' + canvas)
       if (row.script) {
@@ -524,10 +558,14 @@ function runSection(detail, tz) {
   return out
 }
 
-function deliverySection(detail) {
+function deliverySection(detail, tz) {
   const { project } = detail
   const out = ['', '## 交付', '']
-  out.push('- 标记交付：' + (project.status === 'done' ? '已标记' : '还没标记'))
+  out.push('- 交付：' + deliveryText(project, tz))
+  const history = (Array.isArray(project.deliveries) ? project.deliveries : [])
+    .map((entry) => 'v' + entry.version + (entry.at ? ' · ' + stamp(entry.at, tz) : ' · 时间没记录'))
+    .reverse()
+  if (history.length) out.push('- 交付记录：' + history.join('；'))
   out.push(
     '- 只读分享：' + (detail.share
       ? '已开启（拿到链接的人不用登录就能看脚本、分镜、评审次数与评审对照纸；链接不写进这份稿，只在作品页复制）'
@@ -549,7 +587,7 @@ export function projectDeliverable(detail, { review = null, now = new Date(), tz
     ...reviewSection(detail || {}, review, tz),
     ...versionSection(detail || {}, tz),
     ...runSection(detail || {}, tz),
-    ...deliverySection(detail || {}),
+    ...deliverySection(detail || {}, tz),
     '',
     '---',
     '',

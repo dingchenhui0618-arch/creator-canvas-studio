@@ -8,7 +8,7 @@ import { listBdcCanvases, type BdcCanvas } from '../api/bdc'
 import type { RunProjectRef } from '../api/flows'
 import { listProjects, listShares } from '../api/projects'
 import { ackReview, listReviewQueue, unackReview, type ReviewQueueDecidedRow, type ReviewQueueRow, type ReviewQueueSeenRow } from '../api/review'
-import { projectStatus, reviewsForVersion, type ProjectSummary, type ShareSummaryRow } from '../domain/project'
+import { deliveredCurrent, projectStatus, reviewsForVersion, type ProjectSummary, type ShareSummaryRow } from '../domain/project'
 import { REVIEW_VERDICT_LABEL, reviewTimeLabel } from '../domain/review'
 import { runWorkLine } from '../domain/run'
 import { stampTime, visitLine } from '../domain/share'
@@ -226,7 +226,11 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
     return [...canvases].sort((a, b) => new Date(String(b.updatedAt ?? 0)).getTime() - new Date(String(a.updatedAt ?? 0)).getTime())[0]
   }, [canvases])
 
-  const latestProject = useMemo(() => projects.find((item) => item.status !== 'done') ?? projects[0], [projects])
+  // 还没交出去的那条优先：交付了 v2 又开了 v3 的作品，就是要接着做的那条
+  const latestProject = useMemo(
+    () => projects.find((item) => !deliveredCurrent(item)) ?? projects[0],
+    [projects],
+  )
 
   // 评审给了意见、还没改的那条最该先看：它比「最近改过的作品」更接近「下一步点哪里」。
   // 队列里的第一条要和作品列表对得上（作品可能刚被删），对不上就往后找。
