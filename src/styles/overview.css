@@ -601,6 +601,12 @@
   line-height: 1.6;
 }
 
+/* 找法（v0.9.25）：搜索框 + 时间范围 + 计数，形状与作品页同一条工具栏（shell.css），
+   这里只把上下间距收紧一档——它挂在区块说明下面，不是页头下面。 */
+.vq-review-queue-toolbar {
+  margin: var(--space-3) 0;
+}
+
 .vq-review-queue-list {
   overflow: hidden;
   border: 1px solid var(--line);

@@ -63,7 +63,12 @@ export function createReviewRouter() {
       // 评审队列：还等你改的作品（当前这一版最近一次结论是需人工确认 / 不通过）。
       // 必须排在 /api/reviews/<id> 之前，否则 queue 会被当成一条评审 id。
       if (pathname === '/api/reviews/queue' && req.method === 'GET') {
-        const queue = await reviewQueue(user, { limit: url.searchParams.get('limit') || 6 })
+        // 两种找法（v0.9.25）：时间范围按那次评审的时间限、关键字只搜作品标题；不传就是全部
+        const queue = await reviewQueue(user, {
+          limit: url.searchParams.get('limit') || 6,
+          range: url.searchParams.get('range') || 'all',
+          q: url.searchParams.get('q') || '',
+        })
         sendJson(res, 200, { ok: true, ...queue })
         return true
       }

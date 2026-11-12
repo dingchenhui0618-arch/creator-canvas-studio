@@ -421,6 +421,159 @@
   color: rgba(255, 255, 255, 0.62);
 }
 
+/* ---------- 列表工具栏：搜索框 + 筛选胶囊 + 计数（v0.9.23 作品列表，v0.9.25 评审待办共用） ----------
+   两处都用同一套：搜索框走胶囊圆角、32px 高，计数靠右走等宽数字。
+   以前这套样式只在作品页，工作台的待办要筛就得再抄一份；现在一处定义，两页长相一样。 */
+.vq-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  min-width: 0;
+  margin: var(--space-4) 0;
+}
+
+.vq-toolbar-search {
+  display: inline-flex;
+  flex: 1 1 240px;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 340px;
+  height: 32px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  color: var(--faint);
+  transition: border-color var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out),
+    color var(--dur-1) var(--ease-out);
+}
+
+.vq-toolbar-search:focus-within {
+  border-color: var(--line-strong);
+  box-shadow: var(--ring-soft);
+  color: var(--ink);
+}
+
+.vq-toolbar-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+
+.vq-toolbar-search input::placeholder {
+  color: var(--faint);
+}
+
+.vq-toolbar-search input:focus {
+  outline: none;
+}
+
+/* type=search 自带的清除钮与右侧那枚 X 重复，只留一个 */
+.vq-toolbar-search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+/* 没输入时右侧提示「/」：与顶栏「跳转到…」的 kbd 同一套写法 */
+.vq-toolbar-search kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--surface-soft);
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.vq-toolbar-search-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--surface-soft);
+  color: var(--muted);
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
+}
+
+.vq-toolbar-search-clear:hover {
+  background: var(--line);
+  color: var(--ink);
+}
+
+.vq-toolbar-search-clear:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+/* 「筛出 2 / 共 9 条」：数字走等宽，靠右，不与胶囊挤在一起 */
+.vq-toolbar-count {
+  margin: 0 0 0 auto;
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.vq-toolbar-count .vq-mono {
+  color: var(--muted);
+}
+
+.vq-toolbar-reset {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+  text-underline-offset: 2px;
+}
+
+.vq-toolbar-reset:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+.vq-toolbar-reset:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+  border-radius: var(--radius-xs);
+}
+
+/* 窄屏：搜索独占一行，胶囊与计数自己换行；计数不再靠右顶到屏幕边上 */
+@media (max-width: 780px) {
+  .vq-toolbar {
+    gap: var(--space-2);
+    margin: var(--space-3) 0;
+  }
+
+  .vq-toolbar-search {
+    flex-basis: 100%;
+    max-width: none;
+  }
+
+  .vq-toolbar-count {
+    margin-left: 0;
+  }
+}
+
 /* ---------- 作品状态胶囊（作品卡片 / 作品页 / 工作台共用） ----------
    文案由 projectStatus 决定：待开画布 / 在做 / 评审 · 通过 / 评审 · 需人工确认 / 评审 · 不通过 / 已交付。
    语言在文案里，颜色只表示语气：ok 绿、warn 琥珀、fail 红，与评审结论胶囊同一套色。 */

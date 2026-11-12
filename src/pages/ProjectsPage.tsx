@@ -139,8 +139,8 @@ export default function ProjectsPage({
       />
 
       {total > 0 || filtered ? (
-        <div className="vq-projects-toolbar">
-          <label className="vq-projects-search">
+        <div className="vq-toolbar">
+          <label className="vq-toolbar-search">
             <Search size={14} aria-hidden="true" />
             <input
               ref={searchRef}
@@ -155,7 +155,7 @@ export default function ProjectsPage({
             {keyword ? (
               <button
                 type="button"
-                className="vq-projects-search-clear"
+                className="vq-toolbar-search-clear"
                 aria-label="清掉搜索"
                 title="清掉搜索（Esc）"
                 onClick={() => {
@@ -186,7 +186,7 @@ export default function ProjectsPage({
             ))}
           </div>
 
-          <p className="vq-projects-count">
+          <p className="vq-toolbar-count">
             {filtered ? (
               <>
                 筛出 <strong className="vq-mono">{shown}</strong> / 共 {total} 条
@@ -196,7 +196,7 @@ export default function ProjectsPage({
             )}
           </p>
           {filtered ? (
-            <button type="button" className="vq-projects-reset" onClick={reset}>
+            <button type="button" className="vq-toolbar-reset" onClick={reset}>
               清掉筛选
             </button>
           ) : null}

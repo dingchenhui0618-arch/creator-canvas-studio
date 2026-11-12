@@ -9,11 +9,28 @@
 // v0.9.21 起有第三个出口：人看过证据后拍板（通过 / 不通过）。拍过板的那一条从待办挪到 decided，
 // 状态胶囊改成「评审 · 人工通过 / 人工不通过」，下一步跟着换成交付或继续改。
 // 拍板按「哪一次评审」认：再评出新结论，时间对不上，它回到 items——人拍的是那一次，不是永远。
+//
+// v0.9.25 起队列能找：按「那次评审的时间」限范围、按作品标题搜关键字。
+// 都在服务端算——一屏只取 20 条，前端只筛这 20 条会把「只列了最近 20 条」变成假话；
+// 计数与筛选用同一份列表算，界面上的数字才不会和真正点出来的行对不上（与作品列表 v0.9.23 同一套）。
 import { listProjects, getProject } from './projects.mjs'
 import { reviewCountsByProject } from './reviews.mjs'
 import { reviewsForVersion, projectStatus, decisionFor, deliveredCurrent } from './project-status.mjs'
 import { listAcks } from './review-acks.mjs'
 import { listDecisions } from './review-decisions.mjs'
+// 关键字的分词只有一份：作品列表（v0.9.23）怎么切，这里就怎么切
+import { projectSearchTokens } from './project-list.mjs'
+
+/** 三种时间范围：全部 / 最近 7 天 / 最近 30 天。按那次评审的时间算，不按作品更新时间。 */
+export const QUEUE_RANGES = ['all', '7d', '30d']
+const RANGE_DAYS = { all: 0, '7d': 7, '30d': 30 }
+
+/** 某个范围从哪一刻算起（ISO 串）；「全部」返回空串，表示不设下限。 */
+export function queueRangeSince(range, now = Date.now()) {
+  const days = RANGE_DAYS[range] || 0
+  if (!days) return ''
+  return new Date(now - days * 24 * 60 * 60 * 1000).toISOString()
+}
 
 /**
  * 一条作品当前是否还等着人动手：是就返回队列行，不是就 null。
@@ -49,7 +66,7 @@ export async function reviewQueueRow(projectId, user = null) {
  * 队列：items 是还没看的，seen 是看过了、这一版先不改的。
  * 一条「已看过」只在版次与评审时间都对得上时才算数——同一版又评出新结论会自动回到 items。
  */
-export async function reviewQueue(user = null, { limit = 6 } = {}) {
+export async function reviewQueue(user = null, { limit = 6, range = 'all', q = '' } = {}) {
   const [projects, counts, acks, decisions] = await Promise.all([
     listProjects(user),
     reviewCountsByProject(user),
@@ -85,10 +102,38 @@ export async function reviewQueue(user = null, { limit = 6 } = {}) {
   rows.sort((a, b) => String(b.at).localeCompare(String(a.at)) || a.projectId.localeCompare(b.projectId))
   seen.sort((a, b) => String(b.seenAt).localeCompare(String(a.seenAt)) || a.projectId.localeCompare(b.projectId))
   decided.sort((a, b) => String(b.decidedAt).localeCompare(String(a.decidedAt)) || a.projectId.localeCompare(b.projectId))
+  // 关键字只搜这一行上看得见的作品标题：搜不到的东西不假装能搜到（与作品列表同一套分词，空格是「都要命中」）
+  const tokens = projectSearchTokens(q)
+  const keywordRows = tokens.length
+    ? rows.filter((row) => {
+        const text = String(row.title || '').toLowerCase()
+        return tokens.every((token) => text.includes(token))
+      })
+    : rows
+  // 换一个时间范围，另一排数字仍然是真的：计数按关键字算、不按当前范围算
+  const now = Date.now()
+  const since7 = queueRangeSince('7d', now)
+  const since30 = queueRangeSince('30d', now)
+  const facets = { all: keywordRows.length, '7d': 0, '30d': 0 }
+  for (const row of keywordRows) {
+    if (String(row.at) >= since7) facets['7d'] += 1
+    if (String(row.at) >= since30) facets['30d'] += 1
+  }
+  const wanted = QUEUE_RANGES.includes(range) ? range : 'all'
+  const matched = wanted === 'all' ? keywordRows : keywordRows.filter((row) => String(row.at) >= queueRangeSince(wanted, now))
   const max = Math.min(20, Math.max(1, Math.round(Number(limit) || 6)))
   return {
-    items: rows.slice(0, max),
-    total: rows.length,
+    items: matched.slice(0, max),
+    // 筛出来的条数；不带筛选时就是全部等你改的
+    total: matched.length,
+    // 不带筛选的全量：界面写「筛出 2 / 全部 9 条」用得上
+    allTotal: rows.length,
+    facets,
+    range: wanted,
+    // 归一后的关键字回给界面：输入框里还是原始输入，空状态与计数按这一份判断
+    query: tokens.join(' '),
+    // 不跟着筛选变的那一条（最新的待办）：工作台的「下一步」读它，筛列表不会把主卡换掉
+    lead: rows[0] || null,
     // 看过的只需给界面写一行「已看过 N 条」与撤销，最多 10 条够用
     seen: seen.slice(0, 10),
     seenTotal: seen.length,

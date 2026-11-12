@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowRight, ArrowUpRight, Eye, LayoutTemplate, Plus, RefreshCw, Search, Workflow } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowRight, ArrowUpRight, Eye, LayoutTemplate, Plus, RefreshCw, Search, Workflow, X } from 'lucide-react'
 import type { Page } from '../domain/types'
 import PageHead from '../components/PageHead'
 import { MonoTag } from '../components/ui'
@@ -7,7 +7,16 @@ import { request } from '../api/client'
 import { listBdcCanvases, type BdcCanvas } from '../api/bdc'
 import type { RunProjectRef } from '../api/flows'
 import { listProjects, listShares } from '../api/projects'
-import { ackReview, listReviewQueue, unackReview, type ReviewQueueDecidedRow, type ReviewQueueRow, type ReviewQueueSeenRow } from '../api/review'
+import {
+  ackReview,
+  listReviewQueue,
+  unackReview,
+  type ReviewQueueDecidedRow,
+  type ReviewQueueFacets,
+  type ReviewQueueRange,
+  type ReviewQueueRow,
+  type ReviewQueueSeenRow,
+} from '../api/review'
 import { deliveredCurrent, projectStatus, reviewsForVersion, type ProjectSummary, type ShareSummaryRow } from '../domain/project'
 import { REVIEW_VERDICT_LABEL, reviewTimeLabel } from '../domain/review'
 import { runWorkLine } from '../domain/run'
@@ -45,6 +54,14 @@ type Props = {
   // 引导是弹窗：页脚「上手指引」重新打开它，不再跳一个 #/welcome 页面
   onOpenGuide: () => void
 }
+
+// 队列的三个时间范围（v0.9.25）：按那次评审的时间算，不是作品最近被点开的时间——
+// 「等你看」等的是结论出来的那一刻。
+const QUEUE_RANGES: { value: ReviewQueueRange; label: string; hint: string }[] = [
+  { value: 'all', label: '全部时间', hint: '等你看的全列出来，按评审时间倒序' },
+  { value: '7d', label: '7 天内', hint: '只看最近 7 天评出意见的' },
+  { value: '30d', label: '30 天内', hint: '只看最近 30 天评出意见的' },
+]
 
 const pad2 = (value: number) => String(value).padStart(2, '0')
 
@@ -87,6 +104,16 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
   // 评审队列：最近一次结论是需人工确认 / 不通过的作品，按评审时间倒序（v0.9.19）
   const [queue, setQueue] = useState<ReviewQueueRow[]>([])
   const [queueTotal, setQueueTotal] = useState(0)
+  // 不带筛选的全量：筛着的时候仍然写「全部还有 N 条」，不拿筛出来的数冒充全部（v0.9.25）
+  const [queueAllTotal, setQueueAllTotal] = useState(0)
+  // 时间范围的计数按关键字算、不按当前范围算：换一个范围，另一排数字仍然是真的
+  const [queueFacets, setQueueFacets] = useState<ReviewQueueFacets>({ all: 0, '7d': 0, '30d': 0 })
+  // 不跟着筛选变的最新一条：上面那张「下一步」主卡读它，筛列表不会把主卡换掉（v0.9.25）
+  const [queueLead, setQueueLead] = useState<ReviewQueueRow | null>(null)
+  // 队列的两种找法：时间范围 + 作品标题关键字；在服务端筛，不在这一屏里筛 20 条
+  const [queueRange, setQueueRange] = useState<ReviewQueueRange>('all')
+  const [queueKeyword, setQueueKeyword] = useState('')
+  const queueSearchRef = useRef<HTMLInputElement | null>(null)
   // 看过了、这一版先不改的：还在作品里，但不催了（v0.9.20）
   const [seen, setSeen] = useState<ReviewQueueSeenRow[]>([])
   const [seenTotal, setSeenTotal] = useState(0)
@@ -104,14 +131,13 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
   const load = useCallback(async () => {
     setLoading(true)
     const problems: string[] = []
-    const [canvasResult, runResult, templateResult, projectResult, shareResult, queueResult] = await Promise.allSettled([
+    // 队列不在这里取：它跟着筛选项走，由下面那个 effect 单独刷新（首屏也走那一处）
+    const [canvasResult, runResult, templateResult, projectResult, shareResult] = await Promise.allSettled([
       listBdcCanvases(),
       request<{ items: RunRow[] }>('/api/runs'),
       request<{ items: TemplateRow[] }>('/api/templates'),
       listProjects(),
       listShares(),
-      // 一次取到上限 20：首屏只渲染 3 条，展开时不必再打一次接口
-      listReviewQueue(20),
     ])
     if (canvasResult.status === 'fulfilled' && canvasResult.value.ok) {
       setCanvases(canvasResult.value.canvases ?? [])
@@ -145,22 +171,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
       setShareTotals({ total: 0, opens: 0 })
       problems.push('分享记录：' + String((shareResult.reason as Error)?.message || shareResult.reason))
     }
-    if (queueResult.status === 'fulfilled') {
-      setQueue(queueResult.value.items ?? [])
-      setQueueTotal(queueResult.value.total ?? 0)
-      setSeen(queueResult.value.seen ?? [])
-      setSeenTotal(queueResult.value.seenTotal ?? 0)
-      setDecided(queueResult.value.decided ?? [])
-      setDecidedTotal(queueResult.value.decidedTotal ?? 0)
-    } else {
-      setQueue([])
-      setQueueTotal(0)
-      setSeen([])
-      setSeenTotal(0)
-      setDecided([])
-      setDecidedTotal(0)
-      problems.push('评审队列：' + String((queueResult.reason as Error)?.message || queueResult.reason))
-    }
+
     setErrors(problems)
     setLoading(false)
   }, [])
@@ -172,12 +183,16 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
     return () => window.clearTimeout(timer)
   }, [load])
 
-  // 队列单独刷新：看没看过只影响这一块，不必把整页六路请求重跑一遍
+  // 队列单独刷新：筛选项变了、看没看过变了都只重取这一块，不必把整页五路请求重跑一遍。
+  // 一次取到上限 20：首屏只渲染 3 条，展开时不必再打一次接口。
   const refreshQueue = useCallback(async () => {
     try {
-      const result = await listReviewQueue(20)
+      const result = await listReviewQueue(20, { range: queueRange, q: queueKeyword })
       setQueue(result.items ?? [])
       setQueueTotal(result.total ?? 0)
+      setQueueAllTotal(result.allTotal ?? 0)
+      setQueueFacets(result.facets ?? { all: 0, '7d': 0, '30d': 0 })
+      setQueueLead(result.lead ?? null)
       setSeen(result.seen ?? [])
       setSeenTotal(result.seenTotal ?? 0)
       setDecided(result.decided ?? [])
@@ -186,7 +201,44 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
     } catch (error) {
       setQueueError('评审队列：' + String((error as Error)?.message || error))
     }
+  }, [queueKeyword, queueRange])
+
+  // 换范围立刻问、打字等 220ms 再问；首屏不带筛选，也从这一处取
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void refreshQueue()
+    }, queueKeyword ? 220 : 0)
+    return () => window.clearTimeout(timer)
+  }, [queueKeyword, queueRange, refreshQueue])
+
+  const queueFiltered = queueRange !== 'all' || queueKeyword.trim() !== ''
+
+  const resetQueueFilter = useCallback(() => {
+    setQueueRange('all')
+    setQueueKeyword('')
+    setQueueOpen(false)
+    queueSearchRef.current?.focus()
   }, [])
+
+  // 与作品页同一套顺手键：`/` 聚焦搜索、`Esc` 清关键字；正在别处输入时不抢键
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+      const editing =
+        target instanceof HTMLElement &&
+        (target.isContentEditable || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT')
+      if (event.key === '/' && !editing && queueAllTotal > 0) {
+        event.preventDefault()
+        queueSearchRef.current?.focus()
+        return
+      }
+      if (event.key === 'Escape' && target === queueSearchRef.current && queueKeyword) {
+        setQueueKeyword('')
+      }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [queueAllTotal, queueKeyword])
 
   // 已看过：只处理待办，不动评审结论——那条评审还在评审历史里，作品胶囊照旧
   const markSeen = useCallback(
@@ -241,12 +293,12 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
 
   // 评审给了意见、还没改的那条最该先看：它比「最近改过的作品」更接近「下一步点哪里」。
   // 队列里的第一条要和作品列表对得上（作品可能刚被删），对不上就往后找。
+  // 主卡读服务端给的 lead（不带筛选的最新一条）：筛队列是「找」，不该顺手把「下一步」换掉
   const queuedProject = useMemo(() => {
     const byId = new Map(projects.map((item) => [item.id, item]))
-    const row = queue.find((entry) => byId.has(entry.projectId))
-    const project = row ? byId.get(row.projectId) : undefined
-    return row && project ? { row, project } : null
-  }, [queue, projects])
+    const project = queueLead ? byId.get(queueLead.projectId) : undefined
+    return queueLead && project ? { row: queueLead, project } : null
+  }, [queueLead, projects])
 
   const hero = useMemo(() => {
     const heroProject = queuedProject?.project ?? latestProject
@@ -306,7 +358,11 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
         }
         actions={
           <>
-            <button type="button" className="vq-button vq-button--ghost" onClick={() => void load()} disabled={loading}>
+            <button type="button" className="vq-button vq-button--ghost" onClick={() => {
+            void load()
+            void refreshQueue()
+          }}
+          disabled={loading}>
               <RefreshCw size={14} />
               刷新
             </button>
@@ -355,7 +411,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
           <div>
             <h2 id="vq-review-queue-title">评审等你看的</h2>
             <p className="vq-review-queue-sub">
-              {queueTotal
+              {queueAllTotal
                 ? '最近一次结论是「需人工确认」或「不通过」的作品，按评审时间排；点一条进作品改一版。'
                 : seenTotal
                   ? '没有新的等你看；下面这些你看过了、这一版先没改。'
@@ -369,6 +425,79 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
             <ArrowUpRight size={13} />
           </button>
         </div>
+
+        {/* 队列的找法（v0.9.25）：时间范围按那次评审的时间算、关键字只搜作品标题。
+            在服务端筛——这一屏只有 20 条，只筛这 20 条会把「只列了最近 20 条」变成假话。 */}
+        {queueAllTotal ? (
+          <div className="vq-toolbar vq-review-queue-toolbar">
+            <label className="vq-toolbar-search">
+              <Search size={14} aria-hidden="true" />
+              <input
+                ref={queueSearchRef}
+                type="search"
+                value={queueKeyword}
+                onChange={(event) => {
+                  setQueueKeyword(event.target.value)
+                  setQueueOpen(false)
+                }}
+                placeholder="搜索作品标题"
+                aria-label="按作品标题搜索待办"
+                autoComplete="off"
+                spellCheck={false}
+              />
+              {queueKeyword ? (
+                <button
+                  type="button"
+                  className="vq-toolbar-search-clear"
+                  aria-label="清掉搜索"
+                  title="清掉搜索（Esc）"
+                  onClick={() => {
+                    setQueueKeyword('')
+                    queueSearchRef.current?.focus()
+                  }}
+                >
+                  <X size={12} />
+                </button>
+              ) : (
+                <kbd aria-hidden="true">/</kbd>
+              )}
+            </label>
+
+            <div className="vq-filter-row" role="group" aria-label="按评审时间筛选">
+              {QUEUE_RANGES.map((entry) => (
+                <button
+                  key={entry.value}
+                  type="button"
+                  className={'vq-filter-chip' + (queueRange === entry.value ? ' is-active' : '')}
+                  aria-pressed={queueRange === entry.value}
+                  title={entry.hint}
+                  onClick={() => {
+                    setQueueRange(entry.value)
+                    setQueueOpen(false)
+                  }}
+                >
+                  {entry.label}
+                  <span className="vq-filter-chip__count">{queueFacets[entry.value]}</span>
+                </button>
+              ))}
+            </div>
+
+            <p className="vq-toolbar-count">
+              {queueFiltered ? (
+                <>
+                  筛出 <strong className="vq-mono">{queueTotal}</strong> / 全部 {queueAllTotal} 条
+                </>
+              ) : (
+                <>共 {queueAllTotal} 条等你改</>
+              )}
+            </p>
+            {queueFiltered ? (
+              <button type="button" className="vq-toolbar-reset" onClick={resetQueueFilter}>
+                清掉筛选
+              </button>
+            ) : null}
+          </div>
+        ) : null}
 
         {queueError ? (
           <p className="vq-note vq-note--error" role="status">
@@ -424,6 +553,24 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
             </p>
           ) : null}
           </>
+        ) : queueFiltered ? (
+          <div className="vq-empty vq-empty--inline">
+            <strong>
+              {queueKeyword.trim()
+                ? '没有标题含「' + queueKeyword.trim() + '」的等你改'
+                : queueRange === '7d'
+                  ? '最近 7 天没有等你改的'
+                  : '最近 30 天没有等你改的'}
+            </strong>
+            <span>
+              全部还有 {queueAllTotal} 条等你改：把时间放宽到「全部时间」
+              {queueKeyword.trim() ? '，或换个词' : ''}就能看到。
+            </span>
+            <button type="button" className="vq-button" onClick={resetQueueFilter}>
+              清掉筛选
+              <ArrowRight size={13} />
+            </button>
+          </div>
         ) : (
           <div className="vq-empty vq-empty--inline">
             <strong>{decidedTotal && !seenTotal ? '这一版你拍过板了' : seenTotal ? '等你看的都看过了' : '没有等你改的评审'}</strong>
