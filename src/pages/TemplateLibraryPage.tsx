@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertCircle, Copy, ExternalLink, Film, Heart, Layers, MessageCircle, Play, RefreshCw, ScanEye, Search, Share2, Sparkles, Star, Trash2, X } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { AlertCircle, Copy, Download, ExternalLink, Film, Heart, Layers, MessageCircle, Play, Printer, RefreshCw, ScanEye, Search, Share2, Sparkles, Star, Trash2, X } from 'lucide-react'
 import { applyTemplate, coverSrc, deleteTemplate, formatCount, formatDuration, getHealth, getTemplate, listTemplates } from '../api/radar'
+import { downloadTemplateMarkdown } from '../lib/templateExport'
 import { describeTiming, paceLabel } from '../domain/radar'
 import type { MediaItem, ReplicaTemplate } from '../domain/radar'
 import { requestReview } from '../state/review'
@@ -203,7 +205,7 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
         </div>
       )}
 
-      {(detail || detailLoading) && (
+      {(detail || detailLoading) && createPortal(
         <div className="drawer-backdrop" onMouseDown={() => setDetail(null)}>
           <aside className="template-drawer" onMouseDown={(event) => event.stopPropagation()}>
             {detailLoading && !detail ? (
@@ -355,6 +357,26 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
                   </section>
                   </>
                   )}
+
+                  <section className="drawer-section drawer-section--export">
+                    <div className="drawer-section-head"><h3>导出</h3><span>把这条拿走去用</span></div>
+                    <div className="drawer-export-actions">
+                      <button
+                        className="button button--ghost"
+                        onClick={() => {
+                          const name = downloadTemplateMarkdown(detail)
+                          onToast('已下载 ' + name + '，可直接贴进飞书或 Notion')
+                        }}>
+                        <Download size={14} />下载 Markdown
+                      </button>
+                      <button className="button button--ghost" onClick={() => window.print()}>
+                        <Printer size={14} />打印或存 PDF
+                      </button>
+                    </div>
+                    <p className="drawer-export-note">
+                      Markdown 里是分镜表、口播和每镜建议秒数；打印出来是纯白 A4 稿，在打印对话框里选「另存为 PDF」就能归档或发给剪辑。
+                    </p>
+                  </section>
                 </div>
 
                 <footer className="drawer-foot">
@@ -405,7 +427,8 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
               </>
             ) : null}
           </aside>
-        </div>
+        </div>,
+        document.body,
       )}
 
       {replicateItem && (

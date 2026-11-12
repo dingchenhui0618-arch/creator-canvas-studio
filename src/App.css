@@ -492,3 +492,42 @@ button { cursor:pointer; }
 .timing-note--tight { border-color:rgba(138,91,8,.28); background:var(--warn-soft); }
 .timing-note--tight strong { color:var(--warn); }
 .shot-tags span.is-tight { background:var(--warn-soft); color:var(--warn); }
+
+/* ---------- 模板导出：Markdown 与打印（B1）----------
+   导出是「把拆解结果拿出工作台」的出口：Markdown 进飞书/Notion，打印出纯白 A4 稿存 PDF。
+   打印时抽屉经 portal 挂到 body 上，所以这里只留 .drawer-backdrop，其余节点不上纸。 */
+.drawer-export-actions { display:flex; flex-wrap:wrap; gap:8px; }
+.drawer-export-note { margin:0; font-size:12px; line-height:1.7; color:var(--ink-faint); }
+
+@media print {
+  @page { size:A4; margin:14mm; }
+  /* 纸面用深色墨、浅色线，不去挪用屏幕上的灰 */
+  :root {
+    --paper:#fff; --ink:#111; --ink-soft:#333; --ink-faint:#555;
+    --line:#c9c7c1; --line-faint:#e6e4de; --surface-soft:#f4f3ef;
+    --warn:#7a5206; --warn-soft:#fbf4e3; --violet:#3a3a3a;
+    --violet-soft:#f1f0eb; --violet-dark:#333;
+  }
+  /* 屏幕上的淡紫底色在纸上会变成脏灰，打印时改成一圈细线 */
+  .beat-onscreen { background:#fff !important; border:1px solid var(--line) !important; }
+  html, body, #root { height:auto !important; overflow:visible !important; background:#fff !important; }
+  body > *:not(.drawer-backdrop) { display:none !important; }
+  .drawer-backdrop { position:static !important; inset:auto !important; display:block !important; background:#fff !important; backdrop-filter:none !important; }
+  .template-drawer {
+    width:auto !important; max-width:none !important; height:auto !important; max-height:none !important;
+    display:block !important; overflow:visible !important;
+    border:0 !important; box-shadow:none !important; background:#fff !important; animation:none !important;
+  }
+  .drawer-head { padding:0 0 12px !important; background:#fff !important; border-bottom:1px solid var(--line) !important; }
+  .drawer-head strong { font-size:19pt !important; letter-spacing:0 !important; }
+  .drawer-body { display:block !important; height:auto !important; max-height:none !important; overflow:visible !important; padding:16px 0 0 !important; }
+  .drawer-section { margin:0 0 16px !important; break-inside:avoid; }
+  .drawer-section-head h3 { font-size:10.5pt !important; text-transform:none !important; letter-spacing:0 !important; }
+  .drawer-foot, .drawer-section--export, .icon-button { display:none !important; }
+  .shot-row, .beat-item, .drawer-list li, .drawer-list--flow li { break-inside:avoid; }
+  .shot-copy strong, .beat-item strong { font-size:10pt !important; }
+  .drawer-source, .timing-note, .shot-tags span, .tag, .drawer-stats, .drawer-quote { background:#fff !important; }
+  .drawer-section--pending .button { display:none !important; }
+  * { box-shadow:none !important; text-shadow:none !important; }
+}
+

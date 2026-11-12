@@ -1992,3 +1992,24 @@ P1 八条、P2 六条见审计文。
 
 
 
+
+
+## 五十三、B/C/D 缺口修复：B 组优先（2026-11-12 起，第三十六批）
+
+用户定下的目标：按 [docs/ui-polish-and-gap-audit-2026-11-12.md](docs/ui-polish-and-gap-audit-2026-11-12.md) 审计出的 **B 产品 / C 工程 / D 合规** 三类缺口顺序补齐并上线；A 类外部输入（ICP 备案号、客服邮箱、支付定价、告警 webhook、备份异地）与真实模型校验不在范围内。
+逐条状态与证据记在 [docs/bcd-remediation-2026-11-12.md](docs/bcd-remediation-2026-11-12.md)。
+
+### 五十三.1 B1 模板导出：Markdown + 打印 / 存 PDF
+
+模板详情抽屉底部新增「导出」区，两个按钮：
+
+| 按钮 | 做什么 | 实测 |
+| --- | --- | --- |
+| 下载 Markdown | 生成一份带互动数据、开头钩子、时长对账、脚本结构表、逐镜分镜、爆款分析与来源声明的 md 文件 | 生产点一次落盘 2390 字节，7 个二级标题齐全 |
+| 打印或存 PDF | 打印版式只留抽屉内容、白底 A4、页脚与按钮不上纸，打印对话框里可另存 PDF | 794 宽实测无横向溢出；printToPDF 输出 3 页 |
+
+实现要点：导出是纯函数（src/lib/templateExport.ts），抽屉改用 portal 直挂 body，打印时才能只留这一层；未解析模板与画布工作流模板各有降级分支，不会出现空文件。
+
+![模板抽屉的导出区](docs/screenshot-template-export-2026-11-12.png)
+
+![打印版式：A4 纯白稿，只留抽屉内容](docs/screenshot-template-print-2026-11-12.png)
