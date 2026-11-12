@@ -42,6 +42,7 @@ import { createGatewayRouter } from './routes/gateway.mjs'
 import { createAccountRouter } from './routes/account.mjs'
 import { currentUser, listUsers, clientIp, isAdmin } from './auth.mjs'
 import { recordClientError } from './client-errors.mjs'
+import { createReport } from './reports.mjs'
 import { charge, refund, ensureWelcomeCredits } from './credits.mjs'
 import { enter, leave } from './gate.mjs'
 import { installProcessGuards, logEvent, logRequestError, startAccess } from './log.mjs'
@@ -77,7 +78,17 @@ const featureRoutes = [
 // /api/gateway 由平台服务令牌鉴权（画布服务端调用，没有浏览器会话），所以不走登录门；
 // 路由内部每一步都先验令牌，未配置时回 503，不会变成匿名可用。
 // /api/share 是只读分享链接：链接本身（24 字节随机 token）就是凭证，不需要登录态。
-const PUBLIC_API = ['/api/auth', '/api/health', '/api/version', '/api/app', '/api/gateway', '/api/share', '/api/client-errors']
+const PUBLIC_API = [
+  '/api/auth',
+  '/api/health',
+  '/api/version',
+  '/api/app',
+  '/api/gateway',
+  '/api/share',
+  '/api/client-errors',
+  // 举报侵权不要求登录：被侵权的人不一定有账号；靠 IP 限流 + 内容校验挡住滥用
+  '/api/reports',
+]
 // 前端异常上报要能在登录页、分享页也生效，所以不要求登录；靠 IP 限流 + 体积上限挡住滥用。
 function needsLogin(pathname) {
   if (!config.auth.requireAuth) return false
@@ -517,6 +528,30 @@ const server = http.createServer(async (req, res) => {
       const entry = await recordClientError({ payload: body, ip: clientIp(req), user })
       if (!entry) return sendJson(res, 202, { ok: true, stored: false })
       return sendJson(res, 202, { ok: true, stored: true, id: entry.id })
+    }
+
+    // 侵权 / 不当内容举报：分享页与公共模板都能报，不要求登录
+    if (pathname === '/api/reports' && req.method === 'POST') {
+      let body = {}
+      try {
+        body = await readJsonLimited(req, 8 * 1024)
+      } catch {
+        return sendJson(res, 413, { error: '举报内容过大' })
+      }
+      const result = await createReport({
+        target: body.target || {},
+        category: String(body.category || 'other'),
+        detail: String(body.detail || ''),
+        contact: String(body.contact || ''),
+        user,
+        ip: clientIp(req),
+      })
+      if (!result.ok) {
+        if (result.code === 'DETAIL_TOO_SHORT') return sendJson(res, 400, { error: '请说明要举报的内容（至少 5 个字）', field: 'detail' })
+        return sendJson(res, 400, { error: '缺少举报对象', field: 'target' })
+      }
+      logEvent('report-create', { category: result.report.category, target: result.report.target.id, duplicate: result.duplicate })
+      return sendJson(res, 201, { ok: true, id: result.report.id, duplicate: result.duplicate })
     }
 
     if (pathname === '/api/search') {

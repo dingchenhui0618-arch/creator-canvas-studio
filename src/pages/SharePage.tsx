@@ -3,6 +3,7 @@ import { ArrowUpRight, Download, Link2Off, Loader2, MessageCircle, Play, Printer
 import { formatCount, formatDuration, getSharedTemplate } from '../api/radar'
 import { describeTiming, paceLabel, type ReplicaTemplate, type SharedTemplate } from '../domain/radar'
 import { downloadTemplateMarkdown } from '../lib/templateExport'
+import { ReportModal } from '../components/ReportModal'
 import '../styles/share.css'
 
 // 只读分享页：给没有账号的人看（剪辑、客户、甲方），所以这里不能有工作台外壳、侧栏和任何编辑动作。
@@ -42,6 +43,7 @@ export default function SharePage({ token }: { token: string }) {
   const [status, setStatus] = useState<'loading' | 'ready' | 'missing'>('loading')
   const [template, setTemplate] = useState<SharedTemplate | null>(null)
   const [message, setMessage] = useState('')
+  const [reportOpen, setReportOpen] = useState(false)
 
   useEffect(() => {
     // 换一条分享链接时 App 会整页重挂（key 是 token），所以这里不用先清状态
@@ -275,7 +277,10 @@ export default function SharePage({ token }: { token: string }) {
 
             <Block title="来源" note="未下载或转存原视频">
               <div className="share-source">
-                <span>{template.platformLabel} · {template.id}</span>
+                <span>
+                  {template.platformLabel}
+                  {template.author ? ' · ' + template.author : ''} · {template.id}
+                </span>
                 {template.sourceUrl ? (
                   <a href={template.sourceUrl} target="_blank" rel="noreferrer">
                     打开原视频
@@ -294,12 +299,24 @@ export default function SharePage({ token }: { token: string }) {
             <span>由 VisionQA 分享的只读页面：不能在这里修改内容、套用模板或看到账号信息。</span>
             <span>链接由分享者随时停用，停用后同一地址立即失效。复刻请用自己的素材，并遵守原平台规则。</span>
           </div>
-          <button type="button" className="share-button" onClick={openWorkbench}>
-            打开 VisionQA
-            <ArrowUpRight size={14} />
-          </button>
+          <div className="share-foot-actions">
+            <button type="button" className="share-button" onClick={() => setReportOpen(true)}>
+              举报侵权
+            </button>
+            <button type="button" className="share-button" onClick={openWorkbench}>
+              打开 VisionQA
+              <ArrowUpRight size={14} />
+            </button>
+          </div>
         </footer>
       </main>
+
+      {reportOpen ? (
+        <ReportModal
+          target={{ kind: 'share', id: template.id, title: template.title, url: window.location.href }}
+          onClose={() => setReportOpen(false)}
+        />
+      ) : null}
     </div>
   )
 }

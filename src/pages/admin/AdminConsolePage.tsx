@@ -5,6 +5,7 @@ import CanvasSection from './CanvasSection'
 import KeysSection from './KeysSection'
 import OverviewSection from './OverviewSection'
 import SystemSection from './SystemSection'
+import ReportsSection from './ReportsSection'
 import TemplatesSection from './TemplatesSection'
 import UsersSection from './UsersSection'
 
@@ -16,6 +17,7 @@ export default function AdminConsolePage({ section }: { section: AdminSection })
       {section === 'canvas' ? <CanvasSection /> : null}
       {section === 'keys' ? <KeysSection /> : null}
       {section === 'templates' ? <TemplatesSection /> : null}
+      {section === 'reports' ? <ReportsSection /> : null}
       {section === 'audit' ? <AuditSection /> : null}
       {section === 'system' ? <SystemSection /> : null}
     </div>

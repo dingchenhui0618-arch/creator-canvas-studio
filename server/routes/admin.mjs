@@ -21,6 +21,8 @@ import { canvasAdminConfigured, listCanvasUsers, setCanvasUserAccess } from '../
 import { alertCounts, ackAlert, checkDisk, listAlerts, recordAlert } from '../alerts.mjs'
 import { clearClientErrors, listClientErrors } from '../client-errors.mjs'
 import { listLogs, pruneLogs } from '../log-files.mjs'
+import { listReports, reportCounts, resolveReport } from '../reports.mjs'
+import { disableTemplateShare, getTemplate, updateTemplate } from '../templates.mjs'
 
 const MODEL_KEY = /^\/api\/admin\/model-keys\/([\w-]+)$/
 const MODEL_KEY_TEST = /^\/api\/admin\/model-keys\/([\w-]+)\/test$/
@@ -717,6 +719,49 @@ export function createAdminRouter() {
           disk,
           channel: { webhook: Boolean(config.alerts.webhook), diskFreeMb: config.alerts.diskFreeMb },
         })
+        return true
+      }
+
+      // 举报处理：队列、计数，以及「驳回 / 下架」两个动作
+      if (pathname === '/api/admin/reports' && req.method === 'GET') {
+        const status = String(url.searchParams.get('status') || 'open')
+        const info = await listReports({ status, limit: Number(url.searchParams.get('limit')) || 50 })
+        sendJson(res, 200, { ...info, counts: await reportCounts() })
+        return true
+      }
+
+      const reportResolve = pathname.match(/^\/api\/admin\/reports\/([\w-]+)\/resolve$/)
+      if (reportResolve && req.method === 'POST') {
+        const body = await readBody(req)
+        const action = body.action === 'takedown' ? 'takedown' : 'dismiss'
+        const list = await listReports({ status: 'all', limit: 200 })
+        const target = list.items.find((item) => item.id === reportResolve[1])
+        if (!target) return (sendJson(res, 404, { error: '没有这条举报' }), true)
+        let takedown = null
+        if (action === 'takedown' && target.target.kind === 'template') {
+          const template = await getTemplate(target.target.id, user)
+          if (template) {
+            // 下架 = 从公共模板里收回 + 停掉分享链接；不物理删除（证据要留着）
+            await updateTemplate(template.id, { shared: false }, user)
+            await disableTemplateShare(template.id, user)
+            takedown = { templateId: template.id, title: template.title }
+          }
+        }
+        const report = await resolveReport(reportResolve[1], {
+          action,
+          note: String(body.note || ''),
+          by: user.email,
+        })
+        recordAudit({
+          req,
+          actor: user,
+          action: 'report.resolve',
+          targetType: 'report',
+          targetId: reportResolve[1],
+          targetLabel: target.target.title || target.target.id,
+          detail: { action, takedown, note: String(body.note || '').slice(0, 200) },
+        })
+        sendJson(res, 200, { ok: true, report, takedown })
         return true
       }
 

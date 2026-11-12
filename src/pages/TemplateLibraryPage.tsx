@@ -19,6 +19,8 @@ import type { MediaItem, ReplicaTemplate } from '../domain/radar'
 import { requestReview } from '../state/review'
 import { ReplicateModal } from '../components/ReplicateModal'
 import { TrashModal } from '../components/TrashModal'
+import { ReportModal } from '../components/ReportModal'
+import type { ReportTarget } from '../api/reports'
 import PageHead from '../components/PageHead'
 import '../styles/radar.css'
 
@@ -72,6 +74,7 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
   const [replicateItem, setReplicateItem] = useState<MediaItem | null>(null)
   const [trashOpen, setTrashOpen] = useState(false)
   const [shareBusy, setShareBusy] = useState(false)
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null)
 
   const totalReuse = useMemo(() => items.reduce((sum, item) => sum + (item.reuseCount || 0), 0), [items])
   const typeOptions = useMemo(() => pickTypes(byType, saved), [byType, saved])
@@ -406,8 +409,20 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
                   <section className="drawer-section">
                     <div className="drawer-section-head"><h3>来源</h3><span>不保存视频文件</span></div>
                     <div className="drawer-source">
-                      <span>{detail.platformLabel} · {detail.sourceId}</span>
+                      <span>
+                        {detail.platformLabel}
+                        {detail.author ? ' · ' + detail.author : ''} · {detail.sourceId}
+                      </span>
                       {detail.sourceUrl ? <a href={detail.sourceUrl} target="_blank" rel="noreferrer"><ExternalLink size={13} />打开原视频</a> : <span className="is-muted">原链接缺失（示例数据或直链测试）</span>}
+                      {detail.shared ? (
+                        <button
+                          type="button"
+                          className="button button--ghost button--tiny"
+                          onClick={() => setReportTarget({ kind: 'template', id: detail.id, title: detail.title, url: detail.sourceUrl })}
+                        >
+                          举报
+                        </button>
+                      ) : null}
                     </div>
                   </section>
                   </>
@@ -520,6 +535,17 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
         </div>,
         document.body,
       )}
+
+      {reportTarget ? (
+        <ReportModal
+          target={reportTarget}
+          onClose={() => setReportTarget(null)}
+          onDone={(message) => {
+            setReportTarget(null)
+            onToast(message)
+          }}
+        />
+      ) : null}
 
       {trashOpen && (
         <TrashModal

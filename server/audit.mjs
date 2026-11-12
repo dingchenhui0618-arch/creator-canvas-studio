@@ -13,6 +13,7 @@ const ACTIONS = {
   'credits.grant': '发放积分',
   'client-errors.clear': '清空前端异常',
   'logs.prune': '清理服务端日志',
+  'report.resolve': '处理举报',
 }
 
 let schemaReady = false

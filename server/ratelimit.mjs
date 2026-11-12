@@ -15,6 +15,8 @@ const RULES = [
   { method: 'POST', match: (p) => p === '/api/credits/request', bucket: 'credit_request', limit: 3 },
   // 前端异常上报是公开接口：一个坏页面一屏就能连发几十条，按 IP 压到每分钟 30 条
   { method: 'POST', match: (p) => p === '/api/client-errors', bucket: 'client_error', limit: 30 },
+  // 举报同样公开：一分钟 5 条足够正常人用，脚本会被挡住
+  { method: 'POST', match: (p) => p === '/api/reports', bucket: 'report', limit: 5 },
 ]
 
 // 每 5 分钟清一次过期桶，避免长期运行时 Map 无限长
