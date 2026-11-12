@@ -299,7 +299,9 @@ export async function deleteFlow(id) {
 
 // ---------- 运行记录 ----------
 
-export async function listRuns({ flowId = '', status = '', q = '', ownerId = '', limit = 20, offset = 0 } = {}, user = null) {
+// flowIds 是关键词的补充命中集：运行只记画布名，搜作品名得由调用方先把这几块画布交进来
+// （server/run-ownership.mjs 的 projectFlowsMatching）。它只扩大命中，不改变别的筛选。
+export async function listRuns({ flowId = '', status = '', q = '', ownerId = '', flowIds = [], limit = 20, offset = 0 } = {}, user = null) {
   const list = (await loadRuns()).filter((run) => canAccess(run, user))
   const keyword = String(q || '').trim()
   let filtered = list
@@ -309,7 +311,16 @@ export async function listRuns({ flowId = '', status = '', q = '', ownerId = '',
   else if (ownerId) filtered = filtered.filter((run) => (run.ownerId || '') === ownerId)
   // 运行状态只有 success / error 两种落库值，running 只在流式过程中出现
   if (status === 'success' || status === 'error') filtered = filtered.filter((run) => run.status === status)
-  if (keyword) filtered = filtered.filter((run) => run.flowName.includes(keyword) || run.id.includes(keyword) || String(run.error || '').includes(keyword))
+  const extraFlows = new Set((Array.isArray(flowIds) ? flowIds : []).filter(Boolean).map(String))
+  if (keyword) {
+    filtered = filtered.filter(
+      (run) =>
+        run.flowName.includes(keyword) ||
+        run.id.includes(keyword) ||
+        String(run.error || '').includes(keyword) ||
+        extraFlows.has(run.flowId),
+    )
+  }
   const count = Math.min(50, Math.max(1, Number(limit) || 20))
   const start = Math.min(filtered.length, Math.max(0, Math.round(Number(offset) || 0)))
   return { items: filtered.slice(start, start + count), total: filtered.length, offset: start, limit: count }

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Activity, ChevronLeft, ChevronRight, RefreshCw, Search, Workflow } from 'lucide-react'
+import { Activity, ArrowRight, ChevronLeft, ChevronRight, RefreshCw, Search, Workflow } from 'lucide-react'
 import PageHead from '../components/PageHead'
 import { Select } from '../components/Select'
 import { listFlows, listRuns, type ApiFlow, type RunRecord } from '../api/flows'
+import { runVersionLabel, runWorkLine } from '../domain/run'
 import '../styles/runs.css'
 
 const PAGE_SIZE = 12
@@ -66,7 +67,14 @@ function NodeOutput({ output }: { output: unknown }) {
   )
 }
 
-export function RunsPage({ onOpenFlow }: { onOpenFlow?: (flowId: string) => void }) {
+// onOpenProject：一条运行挂在作品上时，「回作品」直接进那条作品（脚本、分镜、评审都在那儿）。
+export function RunsPage({
+  onOpenFlow,
+  onOpenProject,
+}: {
+  onOpenFlow?: (flowId: string) => void
+  onOpenProject?: (projectId: string) => void
+}) {
   const [items, setItems] = useState<RunRecord[]>([])
   const [total, setTotal] = useState(0)
   const [flows, setFlows] = useState<ApiFlow[]>([])
@@ -131,7 +139,7 @@ export function RunsPage({ onOpenFlow }: { onOpenFlow?: (flowId: string) => void
       <PageHead
         kicker="Runs · 画布执行记录"
         title="运行记录"
-        desc="每次画布执行都以真实模型调用为单位记录：哪个节点、多久、返回了什么、在哪一步失败。"
+        desc="每次画布执行都以真实模型调用为单位记录：哪个节点、多久、返回了什么、在哪一步失败；每条都写着属于哪条作品的第几版。"
         actions={
           <button type="button" className="button button--ghost button--tiny" onClick={() => void load()}>
             <RefreshCw size={13} />刷新
@@ -152,7 +160,7 @@ export function RunsPage({ onOpenFlow }: { onOpenFlow?: (flowId: string) => void
           <input
             value={keyword}
             onChange={(event) => resetTo(() => setKeyword(event.target.value))}
-            placeholder="按流程名、运行 ID 或错误信息搜索"
+            placeholder="按作品名、画布名、运行 ID 或错误信息搜索"
             spellCheck={false}
           />
         </label>
@@ -211,6 +219,7 @@ export function RunsPage({ onOpenFlow }: { onOpenFlow?: (flowId: string) => void
                   <span className={`runs-dot ${item.status === 'success' ? 'is-pass' : 'is-fail'}`} />
                   <span className="runs-row-main">
                     <strong>{item.flowName}</strong>
+                    <small className={'runs-row-where' + (item.project ? '' : ' is-orphan')}>{runWorkLine(item)}</small>
                     <small className="vq-mono">{item.id} · {item.total} 个节点</small>
                   </span>
                   <span className="runs-row-meta">
@@ -232,16 +241,37 @@ export function RunsPage({ onOpenFlow }: { onOpenFlow?: (flowId: string) => void
                 {current.credits && current.credits.cost > 0 ? (
                   <span className="vq-mono">{current.credits.refunded ? '已退回 ' + current.credits.cost + ' 积分' : '消耗 ' + current.credits.cost + ' 积分'}</span>
                 ) : null}
-                {onOpenFlow ? (
-                  <button
-                    type="button"
-                    className="button button--ghost button--tiny runs-open-flow"
-                    onClick={() => onOpenFlow(current.flowId)}
-                  >
-                    在画布打开
-                  </button>
-                ) : null}
+                <span className="runs-detail-actions">
+                  {current.project && onOpenProject ? (
+                    <button
+                      type="button"
+                      className="button button--ghost button--tiny"
+                      onClick={() => onOpenProject(current.project?.id || '')}
+                    >
+                      回作品
+                      <ArrowRight size={13} />
+                    </button>
+                  ) : null}
+                  {onOpenFlow ? (
+                    <button
+                      type="button"
+                      className="button button--ghost button--tiny"
+                      onClick={() => onOpenFlow(current.flowId)}
+                    >
+                      在画布打开
+                    </button>
+                  ) : null}
+                </span>
               </div>
+              {current.project ? (
+                <p className="runs-detail-where">
+                  作品 · {current.project.title} · {runVersionLabel(current.project)}
+                </p>
+              ) : (
+                <p className="runs-detail-where is-orphan">
+                  这次运行没挂在作品上：空白画布直接跑的，作品页不会出现它。
+                </p>
+              )}
               <ol className="runs-nodes">
                 {current.nodes.map((node) => (
                   <li key={node.id} className={`runs-node is-${node.status}`}>

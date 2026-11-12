@@ -5,8 +5,10 @@ import PageHead from '../components/PageHead'
 import { MonoTag } from '../components/ui'
 import { request } from '../api/client'
 import { listBdcCanvases, type BdcCanvas } from '../api/bdc'
+import type { RunProjectRef } from '../api/flows'
 import { listProjects, listShares } from '../api/projects'
 import { projectStatus, type ProjectSummary, type ShareSummaryRow } from '../domain/project'
+import { runWorkLine } from '../domain/run'
 import { stampTime, visitLine } from '../domain/share'
 import { useSiteInfo, useUiMode } from '../api/app'
 import '../styles/overview.css'
@@ -17,6 +19,8 @@ type RunRow = {
   status: string
   startedAt: string
   durationMs: number
+  // 这条运行挂在哪条作品的哪一版；空白画布直接跑的是 null
+  project?: RunProjectRef | null
 }
 
 type TemplateRow = {
@@ -283,7 +287,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
           {recentRuns.length ? (
             <div className="vq-table" role="table" aria-label="最近运行">
               <div className="vq-table-head" role="row">
-                <span role="columnheader">流程</span>
+                <span role="columnheader">画布 / 作品</span>
                 <span role="columnheader">状态</span>
                 <span role="columnheader">耗时</span>
                 <span role="columnheader">开始</span>
@@ -292,7 +296,8 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                 <div className="vq-table-row" role="row" key={run.id}>
                   <div className="vq-table-name" role="cell">
                     <strong>{run.flowName}</strong>
-                    <span className="vq-mono">{run.id}</span>
+                    {/* 第二行先回答「这是哪条作品的运行」：运行 ID 只在运行记录页里排障用得上 */}
+                    <span className="vq-mono">{runWorkLine(run)}</span>
                   </div>
                   <span role="cell">
                     <MonoTag>{run.status === 'success' ? '成功' : '失败'}</MonoTag>

@@ -481,7 +481,12 @@ function Workbench({
           />
         )
       case 'runs':
-        return <RunsPage onOpenFlow={(flowId) => navigate({ kind: 'page', page: 'canvas', flowId })} />
+        return (
+          <RunsPage
+            onOpenFlow={(flowId) => navigate({ kind: 'page', page: 'canvas', flowId })}
+            onOpenProject={(projectId) => navigate({ kind: 'page', page: 'projects', projectId })}
+          />
+        )
       case 'local':
         return <LocalWorkspacePage />
       case 'review':

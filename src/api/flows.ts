@@ -51,6 +51,18 @@ export type RunNodeResult = {
 
 export type RunCredits = { cost: number; balance: number | null; refunded: boolean }
 
+/**
+ * 这条运行属于哪条作品的哪一版：服务端按画布指针现算，不带脚本与分享凭证。
+ * 空白画布直接跑的运行没挂在任何作品上，就是 null。
+ */
+export type RunProjectRef = {
+  id: string
+  title: string
+  version: number
+  /** true = 这条运行跑的是归档的旧版画布 */
+  archived: boolean
+}
+
 export type RunRecord = {
   id: string
   flowId: string
@@ -65,6 +77,8 @@ export type RunRecord = {
   error?: string | null
   /** 本次运行扣的积分；失败会退回，refunded=true */
   credits?: RunCredits | null
+  /** 属于哪条作品的哪一版；没挂在作品上为 null / 缺省 */
+  project?: RunProjectRef | null
 }
 
 export type RunList = { items: RunRecord[]; total: number; offset: number; limit: number }

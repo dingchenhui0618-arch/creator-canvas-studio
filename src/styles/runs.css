@@ -23,9 +23,14 @@
 .runs-row-main { display:flex; flex-direction:column; gap:4px; min-width:0; }
 .runs-row-main strong { font-size:12px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .runs-row-main small { color:var(--faint); font-size:12px; }
+.runs-row-main .runs-row-where { color:var(--muted); font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.runs-row-main .runs-row-where.is-orphan { color:var(--faint); }
 .runs-row-meta { display:flex; flex-direction:column; align-items:flex-end; gap:2px; color:var(--faint); font-size:12px; }
 .runs-detail { display:flex; flex-direction:column; gap:12px; padding:16px; border:1px solid var(--line); border-radius:var(--radius-md); background:var(--surface); }
-.runs-detail-head { display:flex; align-items:center; gap:8px; padding-bottom:12px; border-bottom:1px solid var(--line); color:var(--muted); }
+.runs-detail-head { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding-bottom:12px; border-bottom:1px solid var(--line); color:var(--muted); }
+.runs-detail-actions { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-left:auto; }
+.runs-detail-where { margin:0; color:var(--muted); font-size:12px; }
+.runs-detail-where.is-orphan { color:var(--faint); }
 .runs-detail-head strong { color:var(--ink); font-size:12px; }
 .runs-nodes { display:flex; flex-direction:column; gap:12px; margin:0; padding:0; list-style:none; }
 .runs-node { display:flex; flex-direction:column; gap:8px; padding-left:12px; border-left:2px solid var(--line-strong); }
@@ -58,8 +63,9 @@
 .runs-select { display:flex; align-items:center; gap:8px; }
 .runs-select span { font-family:var(--font-mono); font-size:11px; letter-spacing:.05em; color:var(--faint); }
 .runs-select select { height:34px; padding:0 24px 0 8px; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface); color:var(--ink); font-family:inherit; font-size:12px; }
-.runs-open-flow { margin-left:auto; }
 .runs-pager { display:flex; align-items:center; justify-content:flex-end; gap:8px; padding-top:8px; border-top:1px solid var(--line); }
 .runs-pager .vq-mono { margin-right:8px; color:var(--faint); font-size:12px; }
 .runs-pager button:disabled { opacity:.45; cursor:not-allowed; }
 @media (max-width: 1100px) { .runs-body { grid-template-columns:minmax(0, 1fr); } }
+/* 窄屏这一行放不下「作品 · 标题 · 第 N 版（归档）」：让它换行成两行，宁可高 22px 也不把版次截掉 */
+@media (max-width: 700px) { .runs-row-main .runs-row-where { white-space:normal; overflow:visible; } }

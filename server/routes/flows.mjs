@@ -2,6 +2,8 @@ import { sendJson, readBody, notFound } from './_shared.mjs'
 import { listFlows, getFlow, createFlow, updateFlow, deleteFlow, runFlow, listRuns, getRun, NODE_KINDS, TOOLS, REVIEW_PROFILES } from '../flows.mjs'
 import { currentUser } from '../auth.mjs'
 import { config } from '../config.mjs'
+import { listProjects } from '../projects.mjs'
+import { projectsByFlow, projectFlowsMatching, withRunProject } from '../run-ownership.mjs'
 import { charge, refund, balanceOf } from '../credits.mjs'
 import { enter, leave } from '../gate.mjs'
 import { publicError } from '../public-error.mjs'
@@ -95,15 +97,20 @@ export function createFlowsRouter() {
       }
 
       if (pathname === '/api/runs' && req.method === 'GET') {
+        // 每条运行顺手挂上「是哪条作品的第几版」：运行自己只记 flowId，作品那侧记着画布指针。
+        // 关键词同时按作品名找：运行里的画布名可以改（也可能是「画布 3」），作品名才是人认得的。
+        const projects = await listProjects(user)
+        const keyword = url.searchParams.get('q') || ''
         const result = await listRuns({
           flowId: url.searchParams.get('flowId') || '',
           status: url.searchParams.get('status') || '',
-          q: url.searchParams.get('q') || '',
+          q: keyword,
+          flowIds: projectFlowsMatching(projects, keyword),
           ownerId: url.searchParams.get('ownerId') || '',
           limit: url.searchParams.get('limit') || 20,
           offset: url.searchParams.get('offset') || 0,
         }, user)
-        sendJson(res, 200, result)
+        sendJson(res, 200, { ...result, items: withRunProject(result.items, projectsByFlow(projects)) })
         return true
       }
 
@@ -114,7 +121,9 @@ export function createFlowsRouter() {
           notFound(res, '运行记录不存在')
           return true
         }
-        sendJson(res, 200, run)
+        // 单条运行与列表同一口径：都带 project，页面不用两处判断
+        const projects = await listProjects(user)
+        sendJson(res, 200, withRunProject([run], projectsByFlow(projects))[0])
         return true
       }
 
