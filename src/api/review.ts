@@ -74,11 +74,16 @@ export function runReview(payload: { media?: string; imageUrl?: string; intent?:
   return request<ReviewResult>('/api/review', { method: 'POST', body: JSON.stringify(payload) })
 }
 
+/** 评审记在哪条作品上：只带 id 与标题，版次在评审记录自己的 version 里。 */
+export type ReviewProjectRef = { id: string; title: string }
+
 export type ReviewSummary = {
   id: string
   intent: string
   /** 从作品页发起的评审会带作品 id；普通评审为空 */
   projectId?: string
+  /** 服务端现算的归属：没记入作品或作品已被删掉时是 null */
+  project?: ReviewProjectRef | null
   /** 评审发生在作品的第几版；0 表示作品还没有版本划分 */
   version?: number
   verdict: 'pass' | 'needs_review' | 'fail' | ''

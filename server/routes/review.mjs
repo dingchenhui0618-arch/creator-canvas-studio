@@ -1,7 +1,8 @@
 import { sendJson, readBody } from './_shared.mjs'
 import { reviewVisual, reviewStatus } from '../review.mjs'
 import { saveReview, listReviews, getReview } from '../reviews.mjs'
-import { getProject } from '../projects.mjs'
+import { getProject, listProjects } from '../projects.mjs'
+import { projectsById, withReviewProject } from '../review-ownership.mjs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { config } from '../config.mjs'
@@ -33,11 +34,13 @@ export function createReviewRouter() {
 
       // 评审历史：列表与详情都按账号隔离（管理员可见全部）
       if (pathname === '/api/reviews' && req.method === 'GET') {
-        sendJson(res, 200, await listReviews({
+        const result = await listReviews({
           limit: url.searchParams.get('limit') || 20,
           verdict: url.searchParams.get('verdict') || '',
           projectId: url.searchParams.get('projectId') || '',
-        }, user))
+        }, user)
+        // 评审只记 projectId，作品标题现算：作品改名后历史评审跟着改口，不用回写两百条记录
+        sendJson(res, 200, { ...result, items: withReviewProject(result.items, projectsById(await listProjects(user))) })
         return true
       }
       const reviewItem = pathname.match(REVIEW_ITEM)
@@ -47,7 +50,7 @@ export function createReviewRouter() {
           sendJson(res, 404, { error: '评审记录不存在' })
           return true
         }
-        sendJson(res, 200, record)
+        sendJson(res, 200, withReviewProject([record], projectsById(await listProjects(user)))[0])
         return true
       }
 

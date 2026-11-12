@@ -12,7 +12,8 @@
 .review-picker { display:flex; flex-direction:column; gap:16px; padding:16px; border:1px solid var(--line); border-radius:var(--radius-md); background:var(--surface); }
 .review-picker-head { display:flex; align-items:baseline; justify-content:space-between; }
 .review-picker-head h2 { margin:0; font-size:14px; font-weight: 500; }
-.review-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+/* 模板多的时候（生产 26 条）不把整页撑高：候选自己滚，下面的「最近评审」才不用翻半天 */
+.review-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; max-height:480px; overflow-y:auto; padding-right:4px; }
 .review-thumb { position:relative; display:block; padding:0; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface-raised); overflow:hidden; text-align:left; }
 .review-thumb img { display:block; width:100%; aspect-ratio:16/10; object-fit:cover; }
 .review-thumb-fallback { display:grid; place-items:center; width:100%; aspect-ratio:16/10; font-family:var(--font-mono); font-size: 11px; color:var(--faint); }
@@ -28,7 +29,7 @@
 .review-credit { font-family:var(--font-mono); font-size:11px; letter-spacing:.02em; color:var(--faint); white-space:nowrap; }
 .review-history { display:flex; flex-direction:column; gap:8px; padding-top:12px; border-top:1px solid var(--line); }
 .review-history ul { display:flex; flex-direction:column; gap:4px; margin:0; padding:0; list-style:none; }
-.review-history-item { display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:8px; width:100%; padding:8px; border:1px solid transparent; border-radius:var(--radius-sm); background:transparent; color:var(--ink); text-align:left; cursor:pointer; }
+.review-history-item { display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:4px 8px; width:100%; padding:8px; border:1px solid transparent; border-radius:var(--radius-sm); background:transparent; color:var(--ink); text-align:left; cursor:pointer; }
 .review-history-item:hover { border-color:var(--line); background:var(--surface-raised); }
 .review-history-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; }
 
@@ -206,4 +207,24 @@
   color: var(--muted);
   font-size: 11px;
   line-height: 1.7;
+}
+/* 历次评审：第二行写「记入哪条作品的第几版」，普通评审如实写「没记入作品」 */
+.review-history-where { grid-column:1 / -1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted); font-size:12px; }
+.review-history-where.is-orphan { color:var(--faint); }
+
+/* 打开一条历史评审：先说清它记在哪条作品下，再给一条回作品的路 */
+.review-scope-bar { grid-template-columns:auto minmax(0,1fr) auto; align-items:center; margin-bottom:0; }
+.review-scope-bar .button { white-space:nowrap; }
+
+@media (max-width: 700px) {
+  .review-scope-bar { grid-template-columns:auto minmax(0,1fr); }
+  .review-scope-bar .button { grid-column:1 / -1; justify-self:start; }
+  /* 手机上一行两张就够，三张缩到 78px 宽连标题都读不出 */
+  .review-grid { grid-template-columns:repeat(2, 1fr); }
+  /* 报告发到手机上也要读得下去：结论与修正建议不再并排挤成两条窄栏 */
+  .review-canvas-meta { flex-wrap:wrap; }
+  .review-verdict { grid-template-columns:1fr; }
+  .review-verdict .vq-chip { justify-self:start; }
+  .review-verdict p { grid-column:1 / -1; }
+  .review-fixes li { grid-template-columns:1fr; gap:4px; }
 }

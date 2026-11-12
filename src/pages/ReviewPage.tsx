@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Clapperboard, Crosshair, Loader2, Play, RefreshCw, ScanEye, TriangleAlert } from 'lucide-react'
+import { ArrowRight, Clapperboard, Crosshair, Loader2, Play, RefreshCw, ScanEye, TriangleAlert } from 'lucide-react'
 import { getReview, getReviewStatus, listReviews, runReview, type JudgeResult, type ReviewResult, type ReviewStatus, type ReviewSummary } from '../api/review'
 import { getCredits, getModelService, recheckModelService, type CreditsResponse, type ModelServiceState } from '../api/credits'
 import { listTemplates, coverSrc } from '../api/radar'
 import { getProject } from '../api/projects'
+import { reviewVersionLabel, reviewWorkLine } from '../domain/review'
 import type { ReplicaTemplate } from '../domain/radar'
 import { consumeReviewTarget, onReviewRequest, type ReviewTarget } from '../state/review'
 import { useUiMode } from '../api/app'
@@ -75,7 +76,10 @@ function JudgePanel({ judge }: { judge: JudgeResult }) {
 
 type Picked = { media?: string; imageUrl?: string; label: string; preview: string }
 
-export default function ReviewPage({ projectId }: { projectId?: string } = {}) {
+export default function ReviewPage({
+  projectId,
+  onOpenProject,
+}: { projectId?: string; onOpenProject?: (projectId: string) => void } = {}) {
   const { internal } = useUiMode()
   // 从作品页进来时，这次评审的结论会挂在那条作品下；标题只为把话说清楚（读不到就不显示名字）
   const [projectTitle, setProjectTitle] = useState('')
@@ -93,6 +97,8 @@ export default function ReviewPage({ projectId }: { projectId?: string } = {}) {
   const [rechecking, setRechecking] = useState(false)
   const [reviews, setReviews] = useState<ReviewSummary[]>([])
   const [historyError, setHistoryError] = useState('')
+  // 打开的是历次评审里的哪一条：历史只读，所以要说清它记在哪条作品的第几版
+  const [openedScope, setOpenedScope] = useState<{ id: string; title: string; version: number } | null>(null)
   const [manualUrl, setManualUrl] = useState('')
   const timerRef = useRef<number | null>(null)
   const startedRef = useRef(0)
@@ -115,6 +121,7 @@ export default function ReviewPage({ projectId }: { projectId?: string } = {}) {
     setResult(null)
     setError('')
     setActive(null)
+    setOpenedScope(null)
   }, [])
 
   useEffect(() => {
@@ -185,6 +192,7 @@ export default function ReviewPage({ projectId }: { projectId?: string } = {}) {
     setRunning(true)
     setError('')
     setResult(null)
+    setOpenedScope(null)
     try {
       const next = await runReview({
         media: picked.media,
@@ -221,10 +229,13 @@ export default function ReviewPage({ projectId }: { projectId?: string } = {}) {
       setResult(record.result)
       setActive(record.result.observations?.[0]?.id ?? null)
       setError('')
+      // 归属从列表那一条取（列表里已经算好作品标题），不为一条历史记录再打一次接口
+      const linked = reviews.find((item) => item.id === id)
+      setOpenedScope(linked?.project ? { id: linked.project.id, title: linked.project.title, version: linked.version || 0 } : null)
     } catch (caught) {
       setHistoryError(caught instanceof Error ? caught.message : '读取评审记录失败')
     }
-  }, [])
+  }, [reviews])
 
   const anchors = useMemo(() => (result?.observations || []).filter((item) => item.evidence && (item.evidence.w > 0 || item.evidence.h > 0)), [result])
 
@@ -337,6 +348,7 @@ export default function ReviewPage({ projectId }: { projectId?: string } = {}) {
                       <span className="vq-mono">
                         {new Date(item.createdAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                       </span>
+                      <small className={'review-history-where' + (item.project ? '' : ' is-orphan')}>{reviewWorkLine(item)}</small>
                     </button>
                   </li>
                 ))}
@@ -348,6 +360,18 @@ export default function ReviewPage({ projectId }: { projectId?: string } = {}) {
         </aside>
 
         <section className="review-stage">
+          {openedScope ? (
+            <div className="review-project-scope review-scope-bar" role="note">
+              <Clapperboard size={14} strokeWidth={1.75} />
+              <div>
+                <strong>这条评审记入：{openedScope.title} · {reviewVersionLabel(openedScope.version)}</strong>
+                <span>历史记录，结论不会再变；要接着评这一版，从作品页进。</span>
+              </div>
+              <button type="button" className="button button--ghost button--tiny" onClick={() => onOpenProject?.(openedScope.id)}>
+                回作品 <ArrowRight size={12} />
+              </button>
+            </div>
+          ) : null}
           {picked ? (
             <div className="review-canvas">
               <div className="review-canvas-frame vq-frame">

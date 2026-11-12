@@ -490,7 +490,13 @@ function Workbench({
       case 'local':
         return <LocalWorkspacePage />
       case 'review':
-        return <ReviewPage key={route.projectId || 'review'} projectId={route.projectId} />
+        return (
+          <ReviewPage
+            key={route.projectId || 'review'}
+            projectId={route.projectId}
+            onOpenProject={(projectId) => navigate({ kind: 'page', page: 'projects', projectId })}
+          />
+        )
       case 'settings':
         return <SettingsPage session={session} onSignOut={onSignOut} onSwitchAccount={onSwitchAccount} />
       default:
