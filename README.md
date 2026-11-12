@@ -893,7 +893,7 @@ oxlint **0 error / 7 warning**、`npm run build` 通过。
 生产实测（作品「毛衣折叠收纳法」v2）：
 
 - 页头点「打印稿」→ **真鼠标点击**开出新标签 `/print/projects/prj_f38d68c6/deliverable?tz=480`（标签 165 → 166）。
-- 页面 **18,947 B**、`text/html`、`no-store`、`noindex`；**7 个小节 / 3 张表 / 8 个镜头**；控制台 **0 异常**。
+- 页面 **19,168 B**、`text/html`、`no-store`、`noindex`；**7 个小节 / 3 张表 / 8 个镜头**；控制台 **0 异常**。
 - 服务端真出一份 PDF：**5 页 / 444,140 B**，已存进仓库 [样张 PDF](./docs/sample-deliverable-2026-11-12.pdf)。
 - 没登录是 `401` + 一张「登录已过期」的纸（带「去登录」）；作品被删是 `404` + 「作品不在了」——
   新标签里不吐 JSON。

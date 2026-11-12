@@ -111,7 +111,7 @@ location ^~ /print/ {
 | --- | --- |
 | 页头按钮 | 刷新 / 标记交付 / 导出交付稿 / 打印稿 / 分享 / 删除，1440 宽一行（32px 高），标题 1 行、无横向溢出 |
 | 真点击 | CDP 真实鼠标事件点「打印稿」→ 新标签 `/print/projects/prj_f38d68c6/deliverable?tz=480`（标签数 165 → 166） |
-| 页面 | **18,947 B**、`text/html; charset=utf-8`、`no-store`、`noindex`；7 个小节、3 张表、8 个镜头 |
+| 页面 | **19,168 B**（最终构建；加手机端那条媒体查询前是 18,947 B）、`text/html; charset=utf-8`、`no-store`、`noindex`；7 个小节、3 张表、8 个镜头 |
 | PDF | **5 页 / 444,140 B**（`docs/sample-deliverable-2026-11-12.pdf`，`preferCSSPageSize`） |
 | 控制台 | **0 异常** |
 | 未登录 | `401` + 「登录已过期」+「去登录」，页面里没有打印按钮 |
