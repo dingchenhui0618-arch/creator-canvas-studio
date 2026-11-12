@@ -342,6 +342,19 @@ export async function purgeTemplate(id, user = null) {
   return true
 }
 
+/** 注销账号时用：把这个人名下的所有模板（含回收站里的）连同抽帧一起删掉。 */
+export async function deleteTemplatesByOwner(ownerId) {
+  if (!ownerId) return 0
+  const list = await loadAll()
+  const mine = list.filter((item) => item.ownerId === ownerId)
+  if (!mine.length) return 0
+  await persist(list.filter((item) => item.ownerId !== ownerId))
+  for (const item of mine) {
+    await fsp.rm(path.join(config.framesDir, item.id), { recursive: true, force: true })
+  }
+  return mine.length
+}
+
 export async function templateStats(user = null) {
   const list = (await loadAll()).filter((item) => canAccess(item, user)).filter((item) => !item.deletedAt)
   const byType = {}

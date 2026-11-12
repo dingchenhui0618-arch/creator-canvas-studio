@@ -2311,3 +2311,13 @@
 .vq-2fa-setup > .vq-button,
 .vq-2fa-setup .vq-field > .vq-button,
 .vq-2fa-off .vq-button { align-self: flex-start; }
+/* 账号数据卡（D3）：导出与注销。注销区是危险区，用细红边框圈住，不铺大红底 */
+.vq-inline-error { display: flex; align-items: center; gap: 6px; }
+.vq-account-danger { margin-top: 8px; padding-top: 16px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 12px; }
+.vq-account-danger-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.vq-account-danger-head strong { font-size: 13px; }
+.vq-account-danger-head p { margin: 4px 0 0; max-width: 620px; font-size: 12px; line-height: 1.7; color: var(--muted); }
+.vq-account-danger-body { display: flex; flex-direction: column; gap: 12px; max-width: 520px; padding: 16px; border: 1px solid rgba(163, 56, 56, .24); border-radius: 8px; background: var(--fail-soft); }
+.vq-account-danger-body .vq-field span { font-size: 12px; color: var(--ink-soft); }
+.vq-account-danger-check { align-items: flex-start; font-size: 12px; line-height: 1.7; color: var(--ink-soft); }
+.vq-account-danger-check input { margin-top: 3px; }

@@ -2192,3 +2192,20 @@ push 到 master 与所有 PR 都会跑一条流水线，任何一步非零这次
 ![设置页：开启时的密钥与备用码](docs/screenshot-two-factor-setup-2026-11-12.png)
 
 ![登录第二步](docs/screenshot-login-2fa-2026-11-12.png)
+
+### 五十三.13 D3 自助数据导出 + 注销账号
+
+数据能带走了，账号也能自己注销：导出是一份 JSON，注销要口令 + 手输「注销」，并且可以选是否连内容一起删。
+
+| 环节 | 实测（生产，入口 index-GK2F3RBT.js） |
+| --- | --- |
+| 导出 | GET /api/account/export → 附件 JSON 27KB、12 个顶层键：账号资料、积分流水、偏好、模板（含回收站）、画布流程与运行记录、智能体、评审历史 |
+| 不含敏感项 | password_hash / totp_secret / 备用码 / vq_session 全部不出现 |
+| 注销 | 口令 + 手输「注销」；可选 deleteContent（默认删内容） |
+| 删除范围 | 实测 removed.templates=1，模板总数 25→25；旧会话 401；账号从管理列表消失 |
+| 守卫 | 最后一个管理员注销 → 400 LAST_ADMIN |
+| 界面 | 设置页「导出与注销」卡片，危险区二次确认 |
+
+⚠ 这次部署让生产中断约 2 分钟（account.mjs 引用了不存在的导出，ESM 链接期报错；`node --check` 查不出这类问题）。已补：`test/modules-import.test.mjs`（CI 链接期就红）与 `scripts/deploy.sh` 的 /api/health 等待（失败打印日志并非 0 退出）。
+
+![设置页的导出与注销](docs/screenshot-account-data-2026-11-12.png)

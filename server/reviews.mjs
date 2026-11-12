@@ -87,6 +87,16 @@ export async function listReviews({ limit = 20, verdict = '' } = {}, user = null
   return { items: filtered.slice(0, count).map(toSummary), total: filtered.length }
 }
 
+/** 注销账号时用：删掉这个人名下的评审记录。 */
+export async function deleteReviewsByOwner(ownerId) {
+  if (!ownerId) return 0
+  const list = await loadAll()
+  const mine = list.filter((item) => item.ownerId === ownerId)
+  if (!mine.length) return 0
+  await persist(list.filter((item) => item.ownerId !== ownerId))
+  return mine.length
+}
+
 export async function getReview(id, user = null) {
   const list = await loadAll()
   return list.find((item) => item.id === id && canAccess(item, user)) || null

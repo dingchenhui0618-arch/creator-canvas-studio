@@ -39,6 +39,7 @@ import { createAdminRouter } from './routes/admin.mjs'
 import { createPreferencesRouter } from './routes/preferences.mjs'
 import { createCanvasRouter } from './routes/canvas.mjs'
 import { createGatewayRouter } from './routes/gateway.mjs'
+import { createAccountRouter } from './routes/account.mjs'
 import { currentUser, listUsers, clientIp, isAdmin } from './auth.mjs'
 import { recordClientError } from './client-errors.mjs'
 import { charge, refund, ensureWelcomeCredits } from './credits.mjs'
@@ -66,6 +67,7 @@ const featureRoutes = [
   createPreferencesRouter(),
   createCanvasRouter(),
   createGatewayRouter(),
+  createAccountRouter(),
 ]
 
 // VQ_REQUIRE_AUTH=1 时，除少数公开端点外所有 /api/* 都要登录。

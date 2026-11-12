@@ -40,8 +40,24 @@ chmod +x "$APP_DIR"/ops/*.sh
 chown -R visionqa:visionqa "$APP_DIR"
 
 systemctl restart visionqa visionqa-internal
-sleep 4
-systemctl is-active visionqa visionqa-internal
-curl -s --max-time 10 http://127.0.0.1:8799/api/health || true
+
+# 启动自检要真的等到 /api/health 就绪：只看 systemctl is-active 会拿到 activating，
+# curl 失败又被 || true 吞掉，等于「部署成功」是自己说的（2026-11-12 踩过一次）。
+ready=0
+for _attempt in 1 2 3 4 5 6 7 8; do
+  sleep 2
+  if curl -fsS --max-time 5 http://127.0.0.1:8799/api/health > /tmp/vq-health.json 2>/dev/null; then
+    ready=1
+    break
+  fi
+done
+systemctl is-active visionqa visionqa-internal || true
+if [ "$ready" != "1" ]; then
+  echo '部署自检失败：/api/health 在 16 秒内没有就绪，最近日志如下' >&2
+  journalctl -u visionqa -n 30 --no-pager >&2 || true
+  echo "回上一个版本：bash $APP_DIR/ops/rollback.sh" >&2
+  exit 1
+fi
+cat /tmp/vq-health.json
 echo
 echo "入口：$(ls dist/assets | grep -E '^index-.*\.js$' | head -1)"

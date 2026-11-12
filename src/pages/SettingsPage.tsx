@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Activity, CreditCard, KeyRound, LogOut, RefreshCw } from 'lucide-react'
 import { MonoTag } from '../components/ui'
 import { TwoFactorCard } from '../components/TwoFactorCard'
+import { AccountDataCard } from '../components/AccountDataCard'
 import PageHead from '../components/PageHead'
 import { getBillingOverview, type BillingOverview } from '../api/billing'
 import { useUiMode } from '../api/app'
@@ -293,6 +294,8 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
         </section>
 
         <TwoFactorCard />
+
+        <AccountDataCard email={session.user.email} onSignedOut={onSignOut} />
 
         <section className="vq-card vq-card--wide">
           <div className="vq-card-head">

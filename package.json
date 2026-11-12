@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "test": "node --test \"test/*.test.mjs\"",
+    "test": "node --experimental-sqlite --test \"test/*.test.mjs\"",
     "preview": "vite preview",
     "dev:api": "node server/index.mjs",
     "dev:all": "concurrently -k \"npm:dev:api\" \"npm:dev\"",
