@@ -91,8 +91,42 @@ export type ProjectScript = {
   timing: TemplateTiming | null
 }
 
+/** 作品级只读分享：token 只在作品页的分享面板与地址里出现，列表接口不返回 */
+export type ProjectShare = { token: string; createdAt: string }
+
+/** 分享页读到的公开视图：服务端白名单挑过，不含账号、画布与模板 id */
+export type SharedProjectShot = {
+  shotNo: number
+  startSec: number
+  endSec: number
+  visual: string
+  camera: string
+  caption: string
+  audio: string
+  /** 分镜帧图：走带 token 的公开地址，没有那一帧时是空串 */
+  frameUrl: string
+}
+
+export type SharedProject = {
+  project: { title: string; status: ProjectStatus; version: number; createdAt: string; updatedAt: string }
+  template: {
+    title: string
+    platformLabel: string
+    contentType: string
+    durationSec: number
+    beats: number
+    shots: number
+  } | null
+  script: { hook: string; structure: ScriptBeat[]; source: 'project' | 'template'; timing: TemplateTiming | null } | null
+  storyboard: SharedProjectShot[]
+  stats: { beats: number; shots: number; reviews: number; lastVerdict: string; lastAt: string; runs: number }
+  sharedAt: string
+}
+
 export type ProjectDetail = {
   project: Project
+  /** 这条作品的只读分享链接状态；没开就是 null */
+  share: ProjectShare | null
   template: ProjectTemplateDetail | null
   flow: ProjectFlowBrief | null
   /** 作品页自己的脚本：自己的版本优先，没有则回退到模板 */

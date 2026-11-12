@@ -15,8 +15,10 @@ process.env.DATA_DIR = dir
 
 const EXPECTED = {
   'account.mjs': ['exportAccount', 'deleteOwnAccount', 'exportFileName'],
-  'projects.mjs': ['listProjects', 'getProject', 'createProject', 'updateProject', 'saveProjectScript', 'clearProjectScript', 'deleteProject', 'deleteProjectsByOwner'],
+  'projects.mjs': ['listProjects', 'getProject', 'createProject', 'updateProject', 'saveProjectScript', 'clearProjectScript', 'deleteProject', 'deleteProjectsByOwner', 'enableProjectShare', 'disableProjectShare', 'getProjectByShareToken'],
   'project-script.mjs': ['normalizeProjectScript', 'normalizeStoredScript', 'scriptView', 'scriptPace'],
+  'project-share.mjs': ['publicProjectView', 'frameFileOf'],
+  'routes/project-share.mjs': ['createProjectShareRouter'],
   'script-draft.mjs': ['buildReplicatePrompt', 'buildReplicateDraft', 'patchCanvasScript'],
   'routes/projects.mjs': ['createProjectsRouter'],
   'templates.mjs': ['listTemplates', 'listTrash', 'restoreTemplate', 'purgeTemplate', 'deleteTemplatesByOwner', 'enableTemplateShare', 'disableTemplateShare', 'getSharedTemplate', 'publicTemplateView'],
@@ -28,7 +30,7 @@ const EXPECTED = {
   'search-history.mjs': ['recordSearch', 'listSearchHistory', 'toggleSearchFavorite', 'clearSearchHistory'],
 }
 
-const ROOTS = ['templates.mjs', 'account.mjs', 'projects.mjs', 'project-script.mjs', 'script-draft.mjs', 'routes/projects.mjs', 'routes/account.mjs', 'totp.mjs', 'client-errors.mjs', 'log-files.mjs', 'search-history.mjs', 'owner.mjs', 'speech.mjs']
+const ROOTS = ['templates.mjs', 'account.mjs', 'projects.mjs', 'project-script.mjs', 'project-share.mjs', 'script-draft.mjs', 'routes/projects.mjs', 'routes/project-share.mjs', 'routes/account.mjs', 'totp.mjs', 'client-errors.mjs', 'log-files.mjs', 'search-history.mjs', 'owner.mjs', 'speech.mjs']
 
 test('服务端模块都能加载，关键导出都存在', async () => {
   for (const name of ROOTS) {

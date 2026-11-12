@@ -1,5 +1,5 @@
 import { request } from './client'
-import type { Project, ProjectDetail, ProjectScript, ProjectSummary } from '../domain/project'
+import type { Project, ProjectDetail, ProjectScript, ProjectShare, ProjectSummary, SharedProject } from '../domain/project'
 
 export const listProjects = () => request<{ ok: boolean; items: ProjectSummary[]; total: number }>('/api/projects')
 
@@ -20,6 +20,20 @@ export const startProjectVersion = (id: string) =>
 
 export const deleteProject = (id: string) =>
   request<{ ok: boolean; removed: { id: string; detachedReviews: number } }>('/api/projects/' + id, { method: 'DELETE' })
+
+// 作品级只读分享：发给没有账号的人看脚本与分镜；停止后旧链接立即失效
+export const enableProjectShare = (id: string) =>
+  request<{ ok: boolean; token: string; createdAt: string; share: ProjectShare }>('/api/projects/' + id + '/share', {
+    method: 'POST',
+    body: JSON.stringify({}),
+  })
+
+export const disableProjectShare = (id: string) =>
+  request<{ ok: boolean; share: null }>('/api/projects/' + id + '/share', { method: 'DELETE' })
+
+// 分享页读公开视图：token 在地址里，不需要登录态
+export const getSharedProject = (token: string) =>
+  request<SharedProject & { ok: boolean }>('/api/share/project/' + encodeURIComponent(token))
 
 // 作品页开画布：第一张画布用这条作品现在的脚本生成（不再绕模板库的套用接口）
 export const openProjectCanvas = (id: string) =>

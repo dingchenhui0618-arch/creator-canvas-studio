@@ -24,6 +24,8 @@ import {
   bindProjectFlow,
   saveProjectScript,
   clearProjectScript,
+  enableProjectShare,
+  disableProjectShare,
   archiveProjectVersion,
   deleteProject,
   PROJECT_VERSION_LIMIT,
@@ -33,11 +35,13 @@ const ITEM = /^\/api\/projects\/([\w-]+)$/
 const VERSIONS = /^\/api\/projects\/([\w-]+)\/versions$/
 const SCRIPT = /^\/api\/projects\/([\w-]+)\/script$/
 const CANVAS = /^\/api\/projects\/([\w-]+)\/canvas$/
+const SHARE = /^\/api\/projects\/([\w-]+)\/share$/
 
 // 详情 / 列表里的 project 不带原始脚本：脚本只从顶层 script 读（带来源、重算后的时长），
 // 否则同一份脚本在一页里有两个口径，界面迟早读到旧的那个。
+// 分享 token 同理：只有作品页自己的分享面板需要它，列表卡片不该带着一串能打开作品的凭证。
 function projectBrief(project) {
-  const { script: _script, ...brief } = project
+  const { script: _script, share: _share, ...brief } = project
   return brief
 }
 
@@ -244,6 +248,34 @@ export function createProjectsRouter() {
         return true
       }
 
+      // 作品级只读分享：发给没有账号的人看脚本与分镜。
+      // 今天只做「开 / 停」两件事：token 存在作品上，停止即清掉，旧链接当场失效。
+      const sharePath = pathname.match(SHARE)
+      if (sharePath && req.method === 'POST') {
+        const project = await getProject(sharePath[1], user)
+        if (!project) {
+          sendJson(res, 404, { error: '作品不存在或已被删除' })
+          return true
+        }
+        const result = await enableProjectShare(project.id, user)
+        if (!result) {
+          sendJson(res, 409, { error: '分享链接没开成功：作品可能刚被删掉，刷新再试', code: 'SHARE_FAILED' })
+          return true
+        }
+        sendJson(res, 200, { ok: true, token: result.token, createdAt: result.createdAt, share: { token: result.token, createdAt: result.createdAt } })
+        return true
+      }
+
+      if (sharePath && req.method === 'DELETE') {
+        const done = await disableProjectShare(sharePath[1], user)
+        if (done === null) {
+          sendJson(res, 404, { error: '作品不存在或已被删除' })
+          return true
+        }
+        sendJson(res, 200, { ok: true, share: null })
+        return true
+      }
+
       // 开一版新的：复制当前画布（节点与连线都在），旧画布归档成 vN，作品指向新画布
       const versionPath = pathname.match(VERSIONS)
       if (versionPath && req.method === 'POST') {
@@ -332,6 +364,8 @@ export function createProjectsRouter() {
         sendJson(res, 200, {
           ok: true,
           project: projectBrief(project),
+          // 作品页的分享面板读这里：列表接口不返回 token
+          share: project.share,
           template: templateDetail(template),
           flow: flowBrief(flow),
           // 作品页的脚本：自己的版本优先（source: project），否则跟随模板

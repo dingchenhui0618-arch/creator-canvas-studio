@@ -1,0 +1,287 @@
+/* 作品分享页（v0.4.0）：给没有账号的人看的一份作品说明书。
+   和模板分享页是同一套纸面：近白底、发丝线、等宽元数据；
+   阅读面字号走 2026-11-12 按 Pachat 参考定的 --text-copy / --text-meta，
+   间距只走 4/8pt 栅格（--space-*）。 */
+
+.pshare-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-8) var(--space-6) var(--space-16);
+  background: var(--canvas);
+  color: var(--ink);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+.pshare-page--center { justify-content: center; padding-bottom: var(--space-8); }
+
+.pshare-topbar {
+  width: 100%;
+  max-width: 880px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+.pshare-brand { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.pshare-brand-dot { width: 8px; height: 8px; border-radius: var(--radius-xs); background: var(--ink); flex: none; }
+.pshare-brand-name {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: var(--weight-medium);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.pshare-badge {
+  padding: 2px var(--space-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-mono);
+  letter-spacing: .04em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.pshare-actions { display: flex; gap: var(--space-2); flex: none; }
+
+.pshare-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--ink);
+  font-size: var(--text-meta);
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease-out), background-color var(--dur-1) var(--ease-out);
+}
+.pshare-button:hover { border-color: var(--ink); }
+.pshare-button:focus-visible { outline: none; box-shadow: var(--ring-soft); }
+.pshare-button.is-primary { background: var(--ink); border-color: var(--ink); color: #fff; }
+.pshare-button.is-primary:hover { background: #000; }
+
+.pshare-doc {
+  width: 100%;
+  max-width: 880px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-12);
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+
+/* ---------- 头部 ---------- */
+.pshare-head { display: flex; flex-direction: column; gap: var(--space-3); padding-bottom: var(--space-6); border-bottom: 1px solid var(--line); }
+.pshare-kicker {
+  font-family: var(--font-mono);
+  font-size: var(--text-mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.pshare-head h1 {
+  margin: 0;
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-medium);
+  letter-spacing: -.01em;
+  line-height: 1.3;
+}
+.pshare-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-4); font-size: var(--text-meta); color: var(--muted); }
+.pshare-mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-mono);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.pshare-status {
+  padding: 2px var(--space-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-mono);
+  letter-spacing: .02em;
+  color: var(--ink);
+}
+.pshare-status.is-done { border-color: transparent; background: var(--pass-soft); color: var(--pass); }
+
+/* ---------- 计数 ---------- */
+.pshare-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0 0 var(--space-6);
+  border-bottom: 1px solid var(--line);
+}
+.pshare-stats div { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.pshare-stats dt { font-size: var(--text-meta); color: var(--muted); }
+.pshare-stats dd {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: var(--weight-medium);
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+.pshare-stats dd small { font-size: var(--text-meta); font-weight: var(--weight-normal); color: var(--faint); }
+
+/* ---------- 区块 ---------- */
+.pshare-block { display: flex; flex-direction: column; gap: var(--space-3); }
+.pshare-block-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--line-faint);
+}
+.pshare-block-head h2 { margin: 0; font-size: var(--text-sm); font-weight: var(--weight-semibold); }
+.pshare-block-head span { font-size: var(--text-meta); color: var(--faint); text-align: right; }
+
+.pshare-quote {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-left: 2px solid var(--ink);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--surface);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-medium);
+  line-height: 1.5;
+  letter-spacing: -.01em;
+}
+
+/* ---------- 脚本 ---------- */
+.pshare-beats { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
+.pshare-beats li {
+  display: flex;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--line-faint);
+}
+.pshare-beats li:last-child { border-bottom: 0; padding-bottom: 0; }
+.pshare-beat-n { flex: none; width: 24px; padding-top: 3px; }
+.pshare-beat-main { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.pshare-beat-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); }
+.pshare-beat-row strong { font-size: var(--text-copy); font-weight: var(--weight-semibold); line-height: var(--leading-meta); }
+.pshare-beat-fit { font-size: var(--text-meta); color: var(--muted); }
+.pshare-beat-copy { margin: 0; font-size: var(--text-copy); line-height: var(--leading-copy); color: var(--ink); overflow-wrap: anywhere; }
+.pshare-beat-onscreen { margin: 0; font-size: var(--text-meta); line-height: var(--leading-meta); color: var(--muted); }
+
+.pshare-note { margin: 0; font-size: var(--text-meta); line-height: var(--leading-meta); color: var(--muted); }
+.pshare-empty { margin: 0; font-size: var(--text-meta); line-height: var(--leading-meta); color: var(--muted); }
+
+/* ---------- 分镜 ---------- */
+.pshare-shots { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
+.pshare-shots li {
+  display: flex;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--line-faint);
+}
+.pshare-shots li:last-child { border-bottom: 0; padding-bottom: 0; }
+.pshare-shot-frame { flex: none; display: flex; align-items: flex-start; }
+.pshare-shot-frame img {
+  display: block;
+  width: auto;
+  max-width: 128px;
+  max-height: 152px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.pshare-shot-blank {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 80px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.pshare-shot-main { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.pshare-shot-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); }
+.pshare-shot-row strong { font-size: var(--text-copy); font-weight: var(--weight-semibold); line-height: var(--leading-meta); }
+.pshare-shot-camera { font-size: var(--text-meta); color: var(--muted); }
+.pshare-shot-copy { margin: 0; font-size: var(--text-copy); line-height: var(--leading-copy); color: var(--ink); overflow-wrap: anywhere; }
+.pshare-shot-caption { margin: 0; font-size: var(--text-meta); line-height: var(--leading-meta); color: var(--muted); }
+
+/* ---------- 评审 ---------- */
+.pshare-review-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); font-size: var(--text-meta); color: var(--muted); }
+.pshare-verdict {
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-mono);
+  border: 1px solid transparent;
+}
+.pshare-verdict.is-pass { background: var(--pass-soft); color: var(--pass); }
+.pshare-verdict.is-needs_review { background: var(--warn-soft); color: var(--warn); }
+.pshare-verdict.is-fail { background: var(--fail-soft); color: var(--fail); }
+.pshare-verdict.is-none { background: var(--surface); border-color: var(--line); color: var(--muted); }
+
+/* ---------- 页脚 ---------- */
+.pshare-foot {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-6);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--line);
+}
+.pshare-foot > div { max-width: 560px; }
+.pshare-foot strong { font-size: var(--text-meta); font-weight: var(--weight-semibold); }
+.pshare-foot p { margin: var(--space-1) 0 0; font-size: var(--text-meta); line-height: 1.8; color: var(--faint); }
+.pshare-foot .pshare-button { flex: none; }
+
+/* ---------- 加载 / 失效 ---------- */
+.pshare-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 420px;
+  padding: var(--space-8) var(--space-6);
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  text-align: center;
+  color: var(--muted);
+  font-size: var(--text-meta);
+}
+.pshare-state svg { color: var(--faint); }
+.pshare-state strong { font-size: var(--text-lg); font-weight: var(--weight-medium); color: var(--ink); }
+.pshare-state p { margin: 0; line-height: 1.75; }
+.pshare-state-note { color: var(--faint); }
+.pshare-state .pshare-button { margin-top: var(--space-2); }
+
+/* ---------- 窄屏：纸面收边，分镜图缩小 ---------- */
+@media (max-width: 860px) {
+  .pshare-page { padding: var(--space-6) var(--space-4) var(--space-12); }
+  .pshare-doc { padding: var(--space-6); gap: var(--space-6); }
+  .pshare-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pshare-head h1 { font-size: var(--text-xl); }
+  .pshare-quote { font-size: var(--text-lg); }
+  .pshare-shot-frame img { max-width: 88px; max-height: 108px; }
+  .pshare-foot { flex-direction: column; align-items: flex-start; gap: var(--space-4); }
+  .pshare-page .pshare-actions .pshare-button:not(.is-primary) { display: none; }
+}
+
+/* ---------- 打印：只留纸面 ----------
+   App.css 的全局打印规则只保留 .drawer-backdrop，会把 #root 一起藏掉；
+   分享页自己就是那张纸，所以这里先把 #root 放回来，再收掉工具栏。 */
+@media print {
+  body > #root { display: block !important; }
+  .pshare-page { min-height: auto; background: #fff; padding: 0; gap: 0; }
+  .pshare-topbar { display: none !important; }
+  .pshare-topbar .pshare-actions { display: none; }
+  .pshare-doc { border: 0; padding: 0; max-width: none; }
+  .pshare-beats li, .pshare-shots li { break-inside: avoid; }
+  .pshare-foot { break-inside: avoid; }
+  .pshare-foot .pshare-button { display: none !important; }
+}

@@ -5,7 +5,7 @@
 // （见 project-script.mjs）。没改过的作品仍然跟着模板走，不会平白多一份过期副本。
 import fsp from 'node:fs/promises'
 import path from 'node:path'
-import { randomUUID } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 import { config } from './config.mjs'
 import { canAccess } from './owner.mjs'
 import { normalizeStoredScript } from './project-script.mjs'
@@ -81,6 +81,10 @@ function normalize(item) {
     versions,
     // 作品自己的脚本：只有用户动过才存在；没有就跟随模板（项目页读 scriptView）
     script: normalizeStoredScript(item.script),
+    // 只读分享：token 本身就是凭证；没开就是 null。列表接口不返回它（projectBrief 会剥掉）
+    share: item.shareToken
+      ? { token: String(item.shareToken), createdAt: String(item.shareCreatedAt || '') }
+      : null,
     status: STATUSES.includes(item.status) ? item.status : 'active',
     createdAt: item.createdAt || new Date().toISOString(),
     updatedAt: item.updatedAt || item.createdAt || new Date().toISOString(),
@@ -216,6 +220,49 @@ export async function deleteProject(id, user = null) {
   const [removed] = list.splice(index, 1)
   await persist(list)
   return normalize(removed)
+}
+
+// ---------- 只读分享链接 ----------
+// 分享给没有账号的人看（甲方、剪辑），所以链接本身就是凭证：24 字节随机 token。
+// 与模板分享同一套规则：停止分享就把 token 清掉，旧链接当场失效；重新开启换一个新 token。
+// 公开视图走 project-share.mjs 的白名单，不带归属、内部 id 与画布信息。
+const SHARE_TOKEN_MIN = 16
+
+function newShareToken() {
+  return randomBytes(18).toString('base64url')
+}
+
+export async function enableProjectShare(id, user = null) {
+  const list = await loadAll()
+  const found = list.find((item) => item.id === id && canAccess(item, user))
+  if (!found) return null
+  const token = newShareToken()
+  const createdAt = new Date().toISOString()
+  found.shareToken = token
+  found.shareCreatedAt = createdAt
+  found.shareBy = user?.id || ''
+  await persist(list)
+  return { token, createdAt }
+}
+
+export async function disableProjectShare(id, user = null) {
+  const list = await loadAll()
+  const found = list.find((item) => item.id === id && canAccess(item, user))
+  if (!found) return null
+  if (!found.shareToken) return true
+  delete found.shareToken
+  delete found.shareCreatedAt
+  delete found.shareBy
+  await persist(list)
+  return true
+}
+
+/** 按分享 token 找作品：只认仍然开着分享的条目；长度不够的 token 不查盘。 */
+export async function getProjectByShareToken(token) {
+  if (!token || typeof token !== 'string' || token.length < SHARE_TOKEN_MIN) return null
+  const list = await loadAll()
+  const found = list.find((item) => item.shareToken === token)
+  return found ? normalize(found) : null
 }
 
 /** 注销账号时用。 */

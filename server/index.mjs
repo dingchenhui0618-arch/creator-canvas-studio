@@ -40,6 +40,7 @@ import { createAdminRouter } from './routes/admin.mjs'
 import { createPreferencesRouter } from './routes/preferences.mjs'
 import { createCanvasRouter } from './routes/canvas.mjs'
 import { createProjectsRouter } from './routes/projects.mjs'
+import { createProjectShareRouter } from './routes/project-share.mjs'
 import { createGatewayRouter } from './routes/gateway.mjs'
 import { createAccountRouter } from './routes/account.mjs'
 import { currentUser, listUsers, clientIp, isAdmin } from './auth.mjs'
@@ -61,6 +62,8 @@ import { modelCatalog } from './models.mjs'
 // auth 放最前面：/api/auth/* 永远不需要登录就能访问
 const featureRoutes = [
   createAuthRouter(),
+  // 作品只读分享：/api/share/project/* 在 PUBLIC_API 里，打开链接不需要登录
+  createProjectShareRouter(),
   createAgentsRouter(),
   createFlowsRouter(),
   createReviewRouter(),

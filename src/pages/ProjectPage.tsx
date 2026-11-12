@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ArrowLeft, ArrowRight, Clapperboard, CopyPlus, Pencil, Plus, RefreshCw, RotateCcw, ScanEye, Trash2, Workflow } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Clapperboard, CopyPlus, Link2, Pencil, Plus, RefreshCw, RotateCcw, ScanEye, Share2, Trash2, Workflow, X } from 'lucide-react'
 import PageHead from '../components/PageHead'
 import ProjectStatusPill from '../components/ProjectStatus'
 import {
   deleteProject,
+  disableProjectShare,
+  enableProjectShare,
   getProject,
   openProjectCanvas,
   resetProjectScript,
@@ -79,6 +81,10 @@ export default function ProjectPage({
   // 脚本就地编辑：草稿只在内存里，保存后才写进作品（copy-on-write）
   const [scriptEditing, setScriptEditing] = useState(false)
   const [scriptDraft, setScriptDraft] = useState<{ hook: string; structure: ScriptBeat[] } | null>(null)
+  // 只读分享：链接在这个作品上，弹窗里开、停、复制；token 只从作品详情拿
+  const [shareOpen, setShareOpen] = useState(false)
+  const [shareBusy, setShareBusy] = useState<'' | 'enable' | 'disable' | 'copy'>('')
+  const [shareCopied, setShareCopied] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -100,6 +106,16 @@ export default function ProjectPage({
     return () => window.clearTimeout(timer)
   }, [load])
 
+  // 分享弹窗：Esc 关闭（和版本弹窗同一套习惯）；打开时不再往下滚页面
+  useEffect(() => {
+    if (!shareOpen) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setShareOpen(false)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [shareOpen])
+
   // 作品第一次开画布就是这里：服务端用这条作品**现在的脚本**生成输入 + 复刻两个节点，
   // 建完立刻绑上作品（v1），再打开画布。脚本改过也不怕：画布拿到的就是新词。
   const openCanvas = useCallback(async () => {
@@ -119,6 +135,57 @@ export default function ProjectPage({
       setBusy('')
     }
   }, [data, onOpenFlow, onToast])
+
+  // 只读分享：开 / 停 / 复制。链接是这条作品的地址，不是账号的，所以停止只影响这一条。
+  const shareLink = data?.share ? window.location.origin + '/#/share/project/' + data.share.token : ''
+
+  const openShare = () => {
+    setShareCopied(false)
+    setShareOpen(true)
+  }
+
+  const startShare = async () => {
+    if (!data) return
+    setShareBusy('enable')
+    try {
+      const result = await enableProjectShare(data.project.id)
+      setData({ ...data, share: { token: result.token, createdAt: result.createdAt } })
+      onToast('分享链接已生成：拿到链接的人不用登录就能看')
+    } catch (caught) {
+      onToast(caught instanceof Error ? caught.message : '分享链接没生成成功')
+    } finally {
+      setShareBusy('')
+    }
+  }
+
+  const stopShare = async () => {
+    if (!data) return
+    if (!window.confirm('停止分享？这个地址会立即失效，已经发出去的链接打不开了。')) return
+    setShareBusy('disable')
+    try {
+      await disableProjectShare(data.project.id)
+      setData({ ...data, share: null })
+      onToast('已停止分享，旧链接当场失效')
+    } catch (caught) {
+      onToast(caught instanceof Error ? caught.message : '停止分享失败，刷新再试')
+    } finally {
+      setShareBusy('')
+    }
+  }
+
+  const copyShareLink = async () => {
+    if (!shareLink) return
+    setShareBusy('copy')
+    try {
+      await navigator.clipboard.writeText(shareLink)
+      setShareCopied(true)
+      onToast('分享链接已复制')
+    } catch {
+      onToast('浏览器没给剪贴板权限：手动选中链接复制')
+    } finally {
+      setShareBusy('')
+    }
+  }
 
   const toggleDone = async () => {
     if (!data) return
@@ -389,6 +456,16 @@ export default function ProjectPage({
             </button>
             <button type="button" className="vq-button vq-button--ghost" onClick={() => void toggleDone()} disabled={busy === 'done'}>
               {project.status === 'done' ? '重新打开' : '标记交付'}
+            </button>
+            <button
+              type="button"
+              className="vq-button vq-button--ghost"
+              onClick={openShare}
+              title={data.share ? '这条作品正在只读分享' : '生成一条只读链接发给没有账号的人'}
+            >
+              <Share2 size={14} />
+              分享
+              {data.share ? <span className="vq-share-live" aria-label="分享中" /> : null}
             </button>
             <button type="button" className="vq-button vq-button--ghost is-danger" onClick={() => void remove()} disabled={busy === 'delete'}>
               <Trash2 size={14} />
@@ -867,6 +944,98 @@ export default function ProjectPage({
           </section>
         </aside>
       </div>
+
+      {shareOpen ? (
+        <div className="vq-modal-backdrop" onMouseDown={() => setShareOpen(false)}>
+          <div
+            className="vq-share-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="vq-share-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="vq-share-head">
+              <div>
+                <span className="vq-mono">只读分享 / READ ONLY</span>
+                <h2 id="vq-share-title">把这条作品发给别人看</h2>
+              </div>
+              <button type="button" className="vq-icon-button" aria-label="关闭分享" onClick={() => setShareOpen(false)}>
+                <X size={16} />
+              </button>
+            </div>
+
+            <p className="vq-share-copy">
+              拿到链接的人不用登录就能看：开头钩子、脚本分段与口播时长、分镜，以及评审和运行的次数。
+              看不到账号、积分与画布内容。
+            </p>
+
+            {data.share ? (
+              <>
+                <label className="vq-share-label" htmlFor="vq-share-link">
+                  分享链接
+                </label>
+                <div className="vq-share-row">
+                  <input
+                    id="vq-share-link"
+                    className="vq-share-input"
+                    readOnly
+                    value={shareLink}
+                    onFocus={(event) => event.currentTarget.select()}
+                  />
+                  <button
+                    type="button"
+                    className="vq-button vq-button--primary"
+                    onClick={() => void copyShareLink()}
+                    disabled={shareBusy === 'copy'}
+                  >
+                    {shareCopied ? (
+                      <>
+                        <Check size={14} />
+                        已复制
+                      </>
+                    ) : (
+                      <>
+                        <Link2 size={14} />
+                        复制链接
+                      </>
+                    )}
+                  </button>
+                </div>
+                <div className="vq-share-actions">
+                  <a className="vq-button vq-button--ghost" href={shareLink} target="_blank" rel="noreferrer">
+                    在新标签打开
+                    <ArrowRight size={13} />
+                  </a>
+                  <button
+                    type="button"
+                    className="vq-button vq-button--ghost is-danger"
+                    onClick={() => void stopShare()}
+                    disabled={shareBusy === 'disable'}
+                  >
+                    {shareBusy === 'disable' ? '正在停止…' : '停止分享'}
+                  </button>
+                </div>
+                <p className="vq-share-note">
+                  停止后这个地址立即失效，已经发出去的链接打不开；再开一次会换一条新链接。链接是这个账号开的，只有你能停。
+                </p>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="vq-button vq-button--primary"
+                  onClick={() => void startShare()}
+                  disabled={shareBusy === 'enable'}
+                >
+                  <Share2 size={14} />
+                  {shareBusy === 'enable' ? '正在生成…' : '生成分享链接'}
+                </button>
+                <p className="vq-share-note">链接挂在这条作品上，不用了随时停止；作品删除后链接也会一起失效。</p>
+              </>
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
