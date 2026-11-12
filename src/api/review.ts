@@ -183,6 +183,10 @@ export type ReviewQueue = {
   range: ReviewQueueRange
   /** 归一后的关键字：输入框里还是原始输入，空状态与计数按这一份判断 */
   query: string
+  /** 这一页从第几条开始取（offset 归一后的值）：翻页时界面按它拼行 */
+  offset: number
+  /** 后面还有更早的等你改：界面据此给「再看 N 条」，没有就收起翻页 */
+  hasMore: boolean
   /** 不跟着筛选变的那一条（最新的待办）：工作台的「下一步」读它 */
   lead: ReviewQueueRow | null
   /** 看过了、先没改的（最多 10 条，够写一行「已看过 N 条」） */
@@ -193,10 +197,15 @@ export type ReviewQueue = {
   decidedTotal: number
 }
 
-export const listReviewQueue = (limit = 6, query: { range?: ReviewQueueRange; q?: string } = {}) => {
+export const listReviewQueue = (
+  limit = 6,
+  query: { range?: ReviewQueueRange; q?: string; offset?: number } = {},
+) => {
   const params = new URLSearchParams({ limit: String(limit) })
   if (query.range && query.range !== 'all') params.set('range', query.range)
   if (query.q) params.set('q', query.q)
+  // 翻页（v0.9.27）：只有真的往后翻了才带 offset，第一页的地址与以前一样
+  if (query.offset) params.set('offset', String(query.offset))
   return request<ReviewQueue>('/api/reviews/queue?' + params.toString())
 }
 

@@ -131,6 +131,47 @@ test('一页几条与总数分开：limit 只截列表，total 仍是全部', as
   assert.equal((await reviewQueue(me, { limit: 'abc' })).items.length, 3, '非法 limit 回默认值，不炸')
 })
 
+test('offset 往后取：一页装不下的能翻完', async () => {
+  const first = await reviewQueue(me, { limit: 2, offset: 0 })
+  assert.deepEqual(first.items.map((row) => row.projectId), ['prj_fold', 'prj_spring'])
+  assert.equal(first.offset, 0)
+  assert.equal(first.hasMore, true, '后面还有一条，界面据此给「再看」')
+  assert.equal(first.total, 3, '总数不跟着一页几条变')
+
+  const second = await reviewQueue(me, { limit: 2, offset: 2 })
+  assert.deepEqual(second.items.map((row) => row.projectId), ['prj_legacy'])
+  assert.equal(second.offset, 2)
+  assert.equal(second.hasMore, false, '取到最后一条了，界面不再给「再看」')
+  assert.equal(second.total, 3)
+  // 不跟着翻页变的那一条：工作台的「下一步」读它，翻到第 2 页也不该换
+  assert.equal(second.lead.projectId, 'prj_fold')
+})
+
+test('offset 越界 / 非法值都不炸：空的一页、从第一条重来', async () => {
+  const past = await reviewQueue(me, { limit: 20, offset: 99 })
+  assert.deepEqual(past.items, [], '越界就是空的一页')
+  assert.equal(past.total, 3)
+  assert.equal(past.hasMore, false)
+  assert.equal(past.offset, 3, 'offset 夹到总数上，不写出一个比总数还大的页码')
+  assert.equal((await reviewQueue(me, { limit: 20, offset: 'abc' })).items.length, 3, '非法 offset 当第一页')
+  assert.equal((await reviewQueue(me, { limit: 20, offset: -8 })).items[0].projectId, 'prj_fold', '负数不往回排')
+})
+
+test('筛过之后再翻页：offset 按筛出来的列表算，不按全量', async () => {
+  // 作品名都是「作品 <id>」，这一个词把三条都命中；翻页仍在筛出来的这份列表里走
+  const all = await reviewQueue(me, { limit: 1, q: '作品' })
+  assert.equal(all.total, 3)
+  assert.deepEqual(all.items.map((row) => row.projectId), ['prj_fold'])
+  const next = await reviewQueue(me, { limit: 1, offset: 1, q: '作品' })
+  assert.deepEqual(next.items.map((row) => row.projectId), ['prj_spring'])
+  assert.equal(next.hasMore, true)
+  // 筛出 0 条时，翻页没有第二页可言
+  const none = await reviewQueue(me, { limit: 1, offset: 1, q: '没有这个作品' })
+  assert.deepEqual(none.items, [])
+  assert.equal(none.total, 0)
+  assert.equal(none.hasMore, false)
+})
+
 test('账号隔离：别人的作品不进我的队列', async () => {
   const queue = await reviewQueue(me, { limit: 20 })
   assert.equal(queue.items.some((row) => row.projectId === 'prj_other'), false)
@@ -159,4 +200,36 @@ test('/api/reviews/queue 不会被当成一条评审 id', async () => {
   assert.equal(body.ok, true)
   assert.ok(Array.isArray(body.items))
   assert.equal(typeof body.total, 'number')
+})
+
+test('/api/reviews/queue 认 offset：第二页接在第一页后面', async () => {
+  const { createReviewRouter } = await import('../server/routes/review.mjs')
+  const router = createReviewRouter()
+  const call = async (query) => {
+    const res = {
+      status: 0,
+      body: '',
+      writeHead(status, headers) {
+        this.status = status
+        this.headers = headers || {}
+      },
+      end(chunk) {
+        this.body = String(chunk ?? '')
+      },
+    }
+    const url = new URL('http://localhost/api/reviews/queue?' + query)
+    await router.handle({ method: 'GET', headers: {} }, res, url, url.pathname)
+    assert.equal(res.status, 200)
+    return JSON.parse(res.body)
+  }
+  // 没有登录态时看得见全部作品（本地演示口径），所以 u_b 那条也在队里
+  const first = await call('limit=2')
+  assert.deepEqual(first.items.map((row) => row.projectId), ['prj_other', 'prj_fold'])
+  assert.equal(first.hasMore, true)
+  assert.equal(first.total, 4)
+  const second = await call('limit=2&offset=2')
+  assert.deepEqual(second.items.map((row) => row.projectId), ['prj_spring', 'prj_legacy'])
+  assert.equal(second.offset, 2)
+  assert.equal(second.hasMore, false)
+  assert.equal(second.total, 4)
 })

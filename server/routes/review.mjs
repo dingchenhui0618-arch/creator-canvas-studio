@@ -66,6 +66,8 @@ export function createReviewRouter() {
         // 两种找法（v0.9.25）：时间范围按那次评审的时间限、关键字只搜作品标题；不传就是全部
         const queue = await reviewQueue(user, {
           limit: url.searchParams.get('limit') || 6,
+          // 翻页（v0.9.27）：从第几条往后取；不传就是第一页
+          offset: url.searchParams.get('offset') || 0,
           range: url.searchParams.get('range') || 'all',
           q: url.searchParams.get('q') || '',
         })

@@ -13,6 +13,10 @@
 // v0.9.25 起队列能找：按「那次评审的时间」限范围、按作品标题搜关键字。
 // 都在服务端算——一屏只取 20 条，前端只筛这 20 条会把「只列了最近 20 条」变成假话；
 // 计数与筛选用同一份列表算，界面上的数字才不会和真正点出来的行对不上（与作品列表 v0.9.23 同一套）。
+//
+// v0.9.27 起队列翻得完：一页仍是 20 条，但多了 offset——工作台点「再看 7 条」就接着往下取。
+// 之前第 21 条以后只剩一句「只列了最近 20 条，还有 N 条更早的等你改」，点不动；
+// 现在每一页都如实写「已列 20 / 27 条」，翻到底才说「27 条都列出来了」。
 import { listProjects, getProject } from './projects.mjs'
 import { reviewCountsByProject } from './reviews.mjs'
 import { reviewsForVersion, projectStatus, decisionFor, deliveredCurrent } from './project-status.mjs'
@@ -66,7 +70,7 @@ export async function reviewQueueRow(projectId, user = null) {
  * 队列：items 是还没看的，seen 是看过了、这一版先不改的。
  * 一条「已看过」只在版次与评审时间都对得上时才算数——同一版又评出新结论会自动回到 items。
  */
-export async function reviewQueue(user = null, { limit = 6, range = 'all', q = '' } = {}) {
+export async function reviewQueue(user = null, { limit = 6, offset = 0, range = 'all', q = '' } = {}) {
   const [projects, counts, acks, decisions] = await Promise.all([
     listProjects(user),
     reviewCountsByProject(user),
@@ -122,8 +126,11 @@ export async function reviewQueue(user = null, { limit = 6, range = 'all', q = '
   const wanted = QUEUE_RANGES.includes(range) ? range : 'all'
   const matched = wanted === 'all' ? keywordRows : keywordRows.filter((row) => String(row.at) >= queueRangeSince(wanted, now))
   const max = Math.min(20, Math.max(1, Math.round(Number(limit) || 6)))
+  // 从第几条开始取：非法值当 0、负数不往回排；越过总数就是空的一页，界面据此收起「再看」
+  const from = Math.min(matched.length, Math.max(0, Math.round(Number(offset) || 0)))
+  const items = matched.slice(from, from + max)
   return {
-    items: matched.slice(0, max),
+    items,
     // 筛出来的条数；不带筛选时就是全部等你改的
     total: matched.length,
     // 不带筛选的全量：界面写「筛出 2 / 全部 9 条」用得上
@@ -132,6 +139,9 @@ export async function reviewQueue(user = null, { limit = 6, range = 'all', q = '
     range: wanted,
     // 归一后的关键字回给界面：输入框里还是原始输入，空状态与计数按这一份判断
     query: tokens.join(' '),
+    // 这一页从第几条开始、后面还有没有：界面据此写「已列 20 / 27 条」与「再看 7 条」
+    offset: from,
+    hasMore: from + items.length < matched.length,
     // 不跟着筛选变的那一条（最新的待办）：工作台的「下一步」读它，筛列表不会把主卡换掉
     lead: rows[0] || null,
     // 看过的只需给界面写一行「已看过 N 条」与撤销，最多 10 条够用

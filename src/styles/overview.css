@@ -620,7 +620,48 @@
   font-size: 12px;
 }
 
-/* 超过上限时如实写「只列了最近 20 条」：这一屏不是全部，不装着是 */
+/*
+ * 翻页（v0.9.27）：形状与下面「已看过」「拍过板」那两行一致——一条发丝线、12px 字、右边一个动作。
+ * 左边写「已列 20 / 27 条」而不是「还有 7 条」：数字能被核对，说法只能被相信。
+ * 翻到底之后那一句用 .vq-review-queue-tail（下面），语气压到最轻，不再抢注意力。
+ */
+.vq-review-queue-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.vq-review-queue-pager-count {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.vq-review-queue-pager-count strong {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.vq-review-queue-pager-hint {
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.vq-review-queue-pager .vq-button {
+  flex: none;
+  /* 全局 .vq-scope button { font: inherit } 会把字号顶回 16px，这里压回 11px */
+  font-size: 11px;
+}
+
+/* 翻到底之后的一句：这一页就是全部，不用再找 */
 .vq-review-queue-tail {
   margin: 4px 0 0;
   color: var(--faint);

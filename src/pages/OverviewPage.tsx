@@ -63,6 +63,11 @@ const QUEUE_RANGES: { value: ReviewQueueRange; label: string; hint: string }[] =
   { value: '30d', label: '30 天内', hint: '只看最近 30 天评出意见的' },
 ]
 
+// 队列一页 20 条、最多翻 10 页（v0.9.27）：一页一页往后取，翻到底才说「都列出来了」。
+// 200 条的顶是给「一次点开几百行」兜底：真到那儿了，用搜索或时间范围收窄比继续翻更省事。
+const QUEUE_PAGE_SIZE = 20
+const QUEUE_MAX_PAGES = 10
+
 const pad2 = (value: number) => String(value).padStart(2, '0')
 
 // 页头日期用「2026-11-10 周二」：等宽数字对齐，比「2026 年 11 月 10 日 · 星期二」短一半，
@@ -120,8 +125,12 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
   // 人已经拍过板的：结论按人的走，工作台只留一行交代它去了哪（v0.9.21）
   const [decided, setDecided] = useState<ReviewQueueDecidedRow[]>([])
   const [decidedTotal, setDecidedTotal] = useState(0)
-  // 首屏只排 3 条，第 4 条以后不能凭空消失：给一行「还有 N 条」，点开排到服务端上限（20 条）
+  // 首屏只排 3 条，第 4 条以后不能凭空消失：给一行「还有 N 条」，点开把已取回的行都排出来
   const [queueOpen, setQueueOpen] = useState(false)
+  // 已经取到第几页（v0.9.27）：点一次「再看 N 条」加一页；换筛选回到第一页
+  const [queuePages, setQueuePages] = useState(1)
+  // 正在取下一页：按钮禁用，防连点
+  const [queueBusy, setQueueBusy] = useState(false)
   // 正在「已看过 / 撤销」的那条作品：按钮转圈并禁用，防连点
   const [ackBusy, setAckBusy] = useState('')
   const [queueError, setQueueError] = useState('')
@@ -183,25 +192,45 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
     return () => window.clearTimeout(timer)
   }, [load])
 
-  // 队列单独刷新：筛选项变了、看没看过变了都只重取这一块，不必把整页五路请求重跑一遍。
-  // 一次取到上限 20：首屏只渲染 3 条，展开时不必再打一次接口。
+  // 队列单独刷新：筛选项变了、看没看过变了、又翻了一页，都只重取这一块，不把整页五路请求重跑一遍。
+  // 已经翻开几页就取几页（v0.9.27）：第 2 页之后刷新一次也要把前面的行一起取回来，
+  // 否则「第 1 行已看过」拿掉后行整体前移，拼出来的列表会缺一条。
   const refreshQueue = useCallback(async () => {
+    const pages = Math.max(1, Math.min(QUEUE_MAX_PAGES, Math.round(Number(queuePages) || 1)))
+    setQueueBusy(true)
     try {
-      const result = await listReviewQueue(20, { range: queueRange, q: queueKeyword })
-      setQueue(result.items ?? [])
-      setQueueTotal(result.total ?? 0)
-      setQueueAllTotal(result.allTotal ?? 0)
-      setQueueFacets(result.facets ?? { all: 0, '7d': 0, '30d': 0 })
-      setQueueLead(result.lead ?? null)
-      setSeen(result.seen ?? [])
-      setSeenTotal(result.seenTotal ?? 0)
-      setDecided(result.decided ?? [])
-      setDecidedTotal(result.decidedTotal ?? 0)
+      const results = await Promise.all(
+        Array.from({ length: pages }, (_, index) =>
+          listReviewQueue(QUEUE_PAGE_SIZE, { range: queueRange, q: queueKeyword, offset: index * QUEUE_PAGE_SIZE }),
+        ),
+      )
+      const first = results[0]
+      // 按页顺序拼、按作品去重：翻页途中有人「已看过」时，相邻两页可能返回同一行
+      const seenIds = new Set<string>()
+      const rows: ReviewQueueRow[] = []
+      for (const result of results) {
+        for (const row of result.items ?? []) {
+          if (seenIds.has(row.projectId)) continue
+          seenIds.add(row.projectId)
+          rows.push(row)
+        }
+      }
+      setQueue(rows)
+      setQueueTotal(first.total ?? 0)
+      setQueueAllTotal(first.allTotal ?? 0)
+      setQueueFacets(first.facets ?? { all: 0, '7d': 0, '30d': 0 })
+      setQueueLead(first.lead ?? null)
+      setSeen(first.seen ?? [])
+      setSeenTotal(first.seenTotal ?? 0)
+      setDecided(first.decided ?? [])
+      setDecidedTotal(first.decidedTotal ?? 0)
       setQueueError('')
     } catch (error) {
       setQueueError('评审队列：' + String((error as Error)?.message || error))
+    } finally {
+      setQueueBusy(false)
     }
-  }, [queueKeyword, queueRange])
+  }, [queueKeyword, queuePages, queueRange])
 
   // 换范围立刻问、打字等 220ms 再问；首屏不带筛选，也从这一处取
   useEffect(() => {
@@ -217,6 +246,8 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
     setQueueRange('all')
     setQueueKeyword('')
     setQueueOpen(false)
+    // 换了找法就从第一页看起：不然会停在「第 2 页」而总数已经变了（v0.9.27）
+    setQueuePages(1)
     queueSearchRef.current?.focus()
   }, [])
 
@@ -271,9 +302,15 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
     [refreshQueue],
   )
 
-  // 队列先在页面上排 3 条：total 照旧是全部，第 4 条以后由「还有 N 条」展开
+  // 队列先在页面上排 3 条：第 4 条以后由「还有 N 条」展开，展开的只是已经取回来的行。
+  // 取回来的行数 < 总数时才轮到「已列 20 / 27 条 · 再看 7 条」（v0.9.27）。
   const visibleQueue = queueOpen ? queue : queue.slice(0, 3)
-  const queueHidden = Math.max(0, queueTotal - visibleQueue.length)
+  // 收着的时候写的是「队列里还有几条」（总数 - 3），不是「已经取回来几条」：
+  // 点开先把已取回的 20 条排出来，屏下再写「已列 20 / 27 条」——两句话各说各的事实，数字接得上
+  const queueMore = queueOpen ? 0 : Math.max(0, queueTotal - 3)
+  const queueRest = Math.max(0, queueTotal - queue.length)
+  const queueNextPage = Math.min(QUEUE_PAGE_SIZE, queueRest)
+  const queueMaxed = queueRest > 0 && queuePages >= QUEUE_MAX_PAGES
 
   const recentRuns = runs.slice(0, 6)
   const recentTemplates = templates.slice(0, 4)
@@ -439,6 +476,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                 onChange={(event) => {
                   setQueueKeyword(event.target.value)
                   setQueueOpen(false)
+                  setQueuePages(1)
                 }}
                 placeholder="搜索作品标题"
                 aria-label="按作品标题搜索待办"
@@ -474,6 +512,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                   onClick={() => {
                     setQueueRange(entry.value)
                     setQueueOpen(false)
+                    setQueuePages(1)
                   }}
                 >
                   {entry.label}
@@ -539,18 +578,40 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
               </div>
               ))}
             </div>
-          {/* 第 4 条以后不凭空消失：先写「还有 N 条」，点开排到服务端上限；
-              超过上限时如实写「只列最近 N 条」，不假装这一屏就是全部。 */}
-          {queueHidden ? (
+          {/* 第 4 条以后不凭空消失：先写「还有 N 条」，点开把已取回的行都排出来 */}
+          {queueMore ? (
             <button type="button" className="vq-link vq-review-queue-more" onClick={() => setQueueOpen(true)}>
-              还有 {queueHidden} 条等你改
+              还有 {queueMore} 条等你改
               <ArrowRight size={12} />
             </button>
           ) : null}
-          {queueTotal > queue.length ? (
-            <p className="vq-review-queue-tail vq-mono">
-              只列了最近 {queue.length} 条，还有 {queueTotal - queue.length} 条更早的等你改
-            </p>
+          {/* 翻页（v0.9.27）：取回来的行数少于总数时给出口，翻到底才说「都列出来了」。
+              只在展开之后出现——收着的时候屏上只有 3 行，写「已列 20 条」会是一句假话。
+              之前这里只有一句「只列了最近 20 条，还有 N 条更早的等你改」，点不动。 */}
+          {queueOpen && queueRest ? (
+            <div className="vq-review-queue-pager">
+              <span className="vq-review-queue-pager-count vq-mono">
+                已列 <strong>{queue.length}</strong> / {queueTotal} 条
+              </span>
+              {queueMaxed ? (
+                <span className="vq-review-queue-pager-hint">
+                  一次最多列 {QUEUE_MAX_PAGES * QUEUE_PAGE_SIZE} 条：用上面的搜索或时间范围收窄
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  className="vq-button vq-button--quiet vq-button--tiny"
+                  onClick={() => setQueuePages((pages) => Math.min(QUEUE_MAX_PAGES, pages + 1))}
+                  disabled={queueBusy}
+                  title="接着往下排：一页 20 条"
+                >
+                  {queueBusy ? '正在取…' : '再看 ' + queueNextPage + ' 条'}
+                  {queueBusy ? null : <ArrowRight size={12} />}
+                </button>
+              )}
+            </div>
+          ) : queueOpen && queuePages > 1 ? (
+            <p className="vq-review-queue-tail vq-mono">全部 {queueTotal} 条都列出来了</p>
           ) : null}
           </>
         ) : queueFiltered ? (
