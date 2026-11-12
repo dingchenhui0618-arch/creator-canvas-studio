@@ -1,12 +1,29 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ArrowLeft, ArrowRight, Clapperboard, CopyPlus, Pencil, RefreshCw, ScanEye, Trash2, Workflow } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Clapperboard, CopyPlus, Pencil, Plus, RefreshCw, RotateCcw, ScanEye, Trash2, Workflow } from 'lucide-react'
 import PageHead from '../components/PageHead'
 import ProjectStatusPill from '../components/ProjectStatus'
-import { deleteProject, getProject, startProjectVersion, updateProject } from '../api/projects'
-import { applyTemplate } from '../api/radar'
-import { describeTiming } from '../domain/radar'
+import {
+  deleteProject,
+  getProject,
+  openProjectCanvas,
+  resetProjectScript,
+  saveProjectScript,
+  startProjectVersion,
+  updateProject,
+} from '../api/projects'
+import { describeTiming, type ScriptBeat } from '../domain/radar'
 import { projectStep, reviewsForVersion, runsForVersion, type ProjectDetail } from '../domain/project'
 import '../styles/projects.css'
+
+// 保存脚本之后画布那边发生了什么：直接说人话，不把 reason 漏到界面上
+const SCRIPT_CANVAS_NOTE: Record<string, string> = {
+  synced: '画布里的复刻提示词也换成新脚本了',
+  'no-canvas': '还没开画布，开画布时会用这条脚本生成提示词',
+  'canvas-missing': '这条作品绑的画布不在了，脚本已经存下',
+  'hand-edited': '画布里的提示词是手改过的，没有覆盖',
+  'save-failed': '画布提示词这次没写进去，稍后再存一次脚本',
+  'no-script': '',
+}
 
 const VERDICT_LABEL: Record<string, string> = { pass: '通过', needs_review: '需人工确认', fail: '不通过' }
 const KIND_LABEL: Record<string, string> = { replica: '原片拆解', adapted: '改编版', flow: '工作流', saved: '待解析' }
@@ -34,9 +51,9 @@ function duration(ms: number): string {
 
 /**
  * 作品页：一条内容的完整现场。
- * 首屏只回答「下一步点哪里」（套用模板开画布 → 送评审 → 继续改 → 交付），
+ * 首屏只回答「下一步点哪里」（用脚本开画布 → 送评审 → 继续改 → 交付），
  * 然后是版本对照，下面才是现场：脚本、分镜、画布、评审。
- * 脚本与分镜来自这条作品绑定的模板，页面不留副本；版本只存画布指针。
+ * 脚本默认跟随模板，在页内改过就复制成作品自己的版本（copy-on-write）；版本只存画布指针。
  */
 export default function ProjectPage({
   projectId,
@@ -56,9 +73,12 @@ export default function ProjectPage({
   const [data, setData] = useState<ProjectDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [busy, setBusy] = useState<'' | 'canvas' | 'done' | 'delete' | 'title' | 'version'>('')
+  const [busy, setBusy] = useState<'' | 'canvas' | 'done' | 'delete' | 'title' | 'version' | 'script'>('')
   const [renaming, setRenaming] = useState(false)
   const [draftTitle, setDraftTitle] = useState('')
+  // 脚本就地编辑：草稿只在内存里，保存后才写进作品（copy-on-write）
+  const [scriptEditing, setScriptEditing] = useState(false)
+  const [scriptDraft, setScriptDraft] = useState<{ hook: string; structure: ScriptBeat[] } | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -80,24 +100,19 @@ export default function ProjectPage({
     return () => window.clearTimeout(timer)
   }, [load])
 
-  // 作品第一次绑画布就是这里：套用模板真的建一张流程画布，建完立刻绑上作品，
-  // 再打开画布。失败时如实报错，不留下「画布里有一张、作品上还是空的」这种半截状态。
+  // 作品第一次开画布就是这里：服务端用这条作品**现在的脚本**生成输入 + 复刻两个节点，
+  // 建完立刻绑上作品（v1），再打开画布。脚本改过也不怕：画布拿到的就是新词。
   const openCanvas = useCallback(async () => {
     if (!data) return
     if (data.project.flowId) {
       onOpenFlow(data.project.flowId)
       return
     }
-    if (!data.template) {
-      onToast('这条作品绑定的模板不见了，先去模板库挑一条再开画布')
-      return
-    }
     setBusy('canvas')
     try {
-      const applied = await applyTemplate(data.template.id)
-      await updateProject(data.project.id, { flowId: applied.flow.id })
-      onToast('已生成画布：' + applied.flow.name)
-      onOpenFlow(applied.flow.id)
+      const result = await openProjectCanvas(data.project.id)
+      onToast((result.created ? '已按这条脚本生成画布：' : '画布已就绪：') + result.flow.name)
+      onOpenFlow(result.flow.id)
     } catch (caught) {
       onToast(caught instanceof Error ? caught.message : '开画布失败')
     } finally {
@@ -179,6 +194,85 @@ export default function ProjectPage({
     }
   }
 
+  // 进入脚本编辑：用自己的版本，没有就把当前看到的（模板脚本）拷一份草稿出来，
+  // 保存时才真正落库——不想改就取消，作品不会平白多一份副本。
+  const beginScript = () => {
+    const script = data?.script
+    const structure: ScriptBeat[] = script?.structure?.length
+      ? script.structure.map((beat) => ({ ...beat }))
+      : [{ beat: '', startSec: 0, endSec: 0, voiceover: '', onScreen: '', purpose: '' }]
+    setScriptDraft({ hook: script?.hook || '', structure })
+    setScriptEditing(true)
+  }
+
+  const patchScriptBeat = (index: number, patch: Partial<ScriptBeat>) => {
+    setScriptDraft((current) =>
+      current
+        ? { ...current, structure: current.structure.map((beat, i) => (i === index ? { ...beat, ...patch } : beat)) }
+        : current,
+    )
+  }
+
+  const addScriptBeat = () => {
+    setScriptDraft((current) =>
+      current && current.structure.length < 12
+        ? { ...current, structure: [...current.structure, { beat: '', startSec: 0, endSec: 0, voiceover: '', onScreen: '', purpose: '' }] }
+        : current,
+    )
+  }
+
+  const removeScriptBeat = (index: number) => {
+    setScriptDraft((current) =>
+      current && current.structure.length > 1
+        ? { ...current, structure: current.structure.filter((_, i) => i !== index) }
+        : current,
+    )
+  }
+
+  const cancelScript = () => {
+    setScriptEditing(false)
+    setScriptDraft(null)
+  }
+
+  const saveScript = async () => {
+    if (!data || !scriptDraft) return
+    const structure = scriptDraft.structure
+      .map((beat) => ({ ...beat, beat: beat.beat.trim(), voiceover: beat.voiceover.trim(), onScreen: beat.onScreen.trim() }))
+      .filter((beat) => beat.beat || beat.voiceover || beat.onScreen)
+    if (!structure.length) {
+      onToast('脚本至少要留一段：段落名、口播或屏幕字写一个')
+      return
+    }
+    setBusy('script')
+    try {
+      const result = await saveProjectScript(data.project.id, { hook: scriptDraft.hook.trim(), structure })
+      setScriptEditing(false)
+      setScriptDraft(null)
+      await load()
+      const note = SCRIPT_CANVAS_NOTE[result.canvas?.reason || ''] || ''
+      onToast('脚本已保存' + (note ? '：' + note : ''))
+    } catch (caught) {
+      onToast(caught instanceof Error ? caught.message : '脚本没保存成功')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  const restoreScript = async () => {
+    if (!data) return
+    if (!window.confirm('恢复成模板的脚本？这条作品自己改过的脚本会丢掉，模板本身不动。')) return
+    setBusy('script')
+    try {
+      const result = await resetProjectScript(data.project.id)
+      await load()
+      onToast(result.script ? '已恢复成模板的脚本，画布提示词也跟着回去了' : '已清掉作品自己的脚本')
+    } catch (caught) {
+      onToast(caught instanceof Error ? caught.message : '恢复失败')
+    } finally {
+      setBusy('')
+    }
+  }
+
   if (loading && !data) {
     return (
       <div className="page vq-page">
@@ -202,10 +296,11 @@ export default function ProjectPage({
   }
 
   const { project, template, flow, reviews } = data
+  // 脚本是作品页自己的视图：改过就是这条作品自己的版本，没改过则跟随模板
+  const script = data.script
   // 状态与「下一步」只看当前这一版评过没有：新版刚开出来时不能因为上一版评过就跳过评审
   const currentReviews = reviewsForVersion(data.versionCounts, project.version)
   const step = projectStep(project, currentReviews.count)
-  const timingNote = template ? describeTiming(template.timing) : ''
   const versionRows = [
     {
       n: project.version,
@@ -314,17 +409,18 @@ export default function ProjectPage({
             disabled={busy === 'canvas'}
             onClick={() => {
               if (step.key === 'review') onOpenReview(project.id)
+              else if (!project.flowId && !script) beginScript()
               else void openCanvas()
             }}
           >
-            {busy === 'canvas' ? '正在生成画布…' : step.cta}
+            {busy === 'canvas' ? '正在生成画布…' : !project.flowId && !script ? '先写一条脚本' : step.cta}
             <ArrowRight size={15} />
           </button>
         </div>
         <dl className="vq-next-stats">
           <div>
             <dt>脚本</dt>
-            <dd>{template ? template.beats : 0}</dd>
+            <dd>{script ? script.structure.length : 0}</dd>
           </div>
           <div>
             <dt>分镜</dt>
@@ -461,21 +557,138 @@ export default function ProjectPage({
         <div className="vq-project-col">
           <section className="vq-project-panel">
             <div className="vq-project-panel-head">
-              <h2>脚本大纲</h2>
-              <span className="vq-mono">{template ? template.beats + ' 段' : '没有脚本'}</span>
+              <h2>脚本</h2>
+              <div className="vq-script-head">
+                <span className="vq-mono">
+                  {script ? script.structure.length + ' 段' : '没有脚本'}
+                  {script ? (script.source === 'project' ? ' · 这条作品的版本' : ' · 来自模板') : ''}
+                </span>
+                {scriptEditing ? (
+                  // 8 段的脚本表单比一屏长：保存/取消在页头也留一份，改完一段不用滚到底
+                  <>
+                    <button type="button" className="vq-script-link" onClick={cancelScript} disabled={busy === 'script'}>
+                      取消
+                    </button>
+                    <button
+                      type="button"
+                      className="vq-button vq-button--primary vq-script-save-top"
+                      onClick={() => void saveScript()}
+                      disabled={busy === 'script'}
+                    >
+                      {busy === 'script' ? '保存中…' : '保存脚本'}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button type="button" className="vq-script-link" onClick={beginScript}>
+                      <Pencil size={12} />
+                      {script ? '改脚本' : '写一条脚本'}
+                    </button>
+                    {script?.source === 'project' ? (
+                      <button type="button" className="vq-script-link" onClick={() => void restoreScript()} disabled={busy === 'script'}>
+                        <RotateCcw size={12} />
+                        恢复模板脚本
+                      </button>
+                    ) : null}
+                  </>
+                )}
+              </div>
             </div>
-            {template && template.structure.length ? (
-              <>
-                {template.hook ? <p className="vq-project-hook">开头钩子 · {template.hook}</p> : null}
+            {scriptEditing && scriptDraft ? (
+              <form
+                className="vq-script-edit"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  void saveScript()
+                }}
+              >
+                <label className="vq-script-field">
+                  <span>开头钩子</span>
+                  <textarea
+                    className="vq-script-input"
+                    rows={2}
+                    value={scriptDraft.hook}
+                    maxLength={400}
+                    placeholder="第一句怎么把人留下（可空）"
+                    onChange={(event) => setScriptDraft({ ...scriptDraft, hook: event.target.value })}
+                  />
+                </label>
                 <ol className="vq-beat-list">
-                  {template.structure.map((beat, index) => (
+                  {scriptDraft.structure.map((beat, index) => (
+                    <li className="vq-beat-row vq-beat-row--edit" key={index}>
+                      <span className="vq-mono vq-beat-index">{pad2(index + 1)}</span>
+                      <div className="vq-beat-copy">
+                        <input
+                          className="vq-script-input vq-script-input--beat"
+                          value={beat.beat}
+                          maxLength={60}
+                          placeholder={'第 ' + (index + 1) + ' 段的名字'}
+                          aria-label={'第 ' + (index + 1) + ' 段的段落名'}
+                          onChange={(event) => patchScriptBeat(index, { beat: event.target.value })}
+                        />
+                        <textarea
+                          className="vq-script-input"
+                          rows={2}
+                          value={beat.voiceover}
+                          maxLength={600}
+                          placeholder="这一段要念的口播"
+                          aria-label={'第 ' + (index + 1) + ' 段的口播'}
+                          onChange={(event) => patchScriptBeat(index, { voiceover: event.target.value })}
+                        />
+                        <input
+                          className="vq-script-input"
+                          value={beat.onScreen}
+                          maxLength={200}
+                          placeholder="屏幕字（可空）"
+                          aria-label={'第 ' + (index + 1) + ' 段的屏幕字'}
+                          onChange={(event) => patchScriptBeat(index, { onScreen: event.target.value })}
+                        />
+                        <div className="vq-script-beat-foot">
+                          <span className="vq-mono">
+                            {beat.startSec || beat.endSec ? (beat.startSec || 0) + '–' + (beat.endSec || 0) + ' 秒 · ' : ''}
+                            时长保存后按口播重算
+                          </span>
+                          <button
+                            type="button"
+                            className="vq-script-link is-danger"
+                            onClick={() => removeScriptBeat(index)}
+                            disabled={scriptDraft.structure.length <= 1}
+                          >
+                            删掉这段
+                          </button>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+                <div className="vq-script-edit-foot">
+                  <button type="button" className="vq-button vq-button--ghost" onClick={addScriptBeat} disabled={scriptDraft.structure.length >= 12}>
+                    <Plus size={13} />
+                    加一段
+                  </button>
+                  <span className="vq-script-note">
+                    保存后按口播重估「要念几秒」；画布里自动生成的复刻提示词会一起换成新脚本，模板不动。
+                  </span>
+                  <button type="button" className="vq-button vq-button--ghost" onClick={cancelScript}>
+                    取消
+                  </button>
+                  <button type="submit" className="vq-button vq-button--primary" disabled={busy === 'script'}>
+                    {busy === 'script' ? '保存中…' : '保存脚本'}
+                  </button>
+                </div>
+              </form>
+            ) : script && script.structure.length ? (
+              <>
+                {script.hook ? <p className="vq-project-hook">开头钩子 · {script.hook}</p> : null}
+                <ol className="vq-beat-list">
+                  {script.structure.map((beat, index) => (
                     <li key={index} className="vq-beat-row">
                       <span className="vq-mono vq-beat-index">{pad2(index + 1)}</span>
                       <div className="vq-beat-copy">
                         <span className="vq-beat-name">
                           {beat.beat}
                           <span className="vq-mono">
-                            {beat.startSec ?? 0}–{beat.endSec ?? 0} 秒
+                            {beat.startSec || beat.endSec ? (beat.startSec || 0) + '–' + (beat.endSec || 0) + ' 秒' : '时间待定'}
                             {beat.expectedSec ? ' · 要念 ' + beat.expectedSec + ' 秒' : ''}
                           </span>
                         </span>
@@ -485,16 +698,37 @@ export default function ProjectPage({
                     </li>
                   ))}
                 </ol>
-                {timingNote ? <p className="vq-project-timing">{timingNote}</p> : null}
+                {script.timing && script.timing.estimatedSec ? (
+                  <p className="vq-project-timing">
+                    口播约需 {script.timing.estimatedSec} 秒 · {describeTiming(script.timing).replace('镜头', '段')}
+                  </p>
+                ) : null}
+                <p className="vq-project-note">
+                  {script.source === 'project'
+                    ? '这是这条作品自己的脚本：模板再改也不影响它。'
+                    : '脚本跟着模板走；点「改脚本」会存成这条作品自己的版本，模板不动。'}
+                </p>
               </>
             ) : (
               <div className="vq-project-empty">
-                <strong>{template ? '这条模板还没解析出脚本' : '绑定的模板已被删除'}</strong>
-                <span>脚本与分镜都在模板上：回模板库解析或改编一条，再回来这里就会跟上。</span>
-                <button type="button" className="vq-button vq-button--ghost" onClick={onBrowseTemplates}>
-                  去模板库
-                  <ArrowRight size={13} />
-                </button>
+                <strong>这条作品还没有脚本</strong>
+                <span>
+                  {template
+                    ? '这条模板还没解析出脚本段落；也可以直接写一条这条作品自己的话。'
+                    : '绑定的模板已删除或不在当前账号下；脚本可以直接在这里写，开画布时用它生成复刻提示词。'}
+                </span>
+                <div className="vq-project-empty-actions">
+                  <button type="button" className="vq-button vq-button--ghost" onClick={beginScript}>
+                    <Pencil size={13} />
+                    写一条脚本
+                  </button>
+                  {template ? null : (
+                    <button type="button" className="vq-button vq-button--ghost" onClick={onBrowseTemplates}>
+                      去模板库
+                      <ArrowRight size={13} />
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </section>
@@ -549,8 +783,17 @@ export default function ProjectPage({
             ) : (
               <div className="vq-project-empty">
                 <strong>还没开画布</strong>
-                <span>用这条模板生成一张画布草稿，脚本和分镜会带过去。</span>
-                <button type="button" className="vq-button vq-button--ghost" onClick={() => void openCanvas()} disabled={busy === 'canvas'}>
+                <span>
+                  {data.script
+                    ? '用这条作品现在的脚本生成一张画布草稿：输入节点带钩子，复刻节点带完整提示词。'
+                    : '先在左边写一条脚本（或从模板库套一条），再来开画布。'}
+                </span>
+                <button
+                  type="button"
+                  className="vq-button vq-button--ghost"
+                  onClick={() => void openCanvas()}
+                  disabled={busy === 'canvas' || !data.script}
+                >
                   <Clapperboard size={13} />
                   {busy === 'canvas' ? '生成中…' : '开画布'}
                 </button>
@@ -619,7 +862,7 @@ export default function ProjectPage({
                 </div>
               </dl>
             ) : (
-              <p className="vq-project-note">绑定的模板已被删除；作品本身还在，画布与评审不受影响。</p>
+              <p className="vq-project-note">绑定的模板已被删除或不在当前账号下；作品本身还在，画布与评审不受影响。</p>
             )}
           </section>
         </aside>

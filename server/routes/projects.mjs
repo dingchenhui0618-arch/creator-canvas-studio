@@ -1,12 +1,15 @@
 // /api/projects：作品（一条内容的主线对象）。
 //
-// 作品本身只存「绑哪条模板、绑哪块画布、到哪一步」；脚本与分镜从模板实时读，
-// 画布从流程服务实时读，评审按 projectId 关联。这样改模板不会让作品里留一份过期副本。
+// 作品默认只存引用：脚本从模板读、画布在流程服务、评审按 projectId 关联。
+// 唯一例外是脚本的 copy-on-write：作品页保存脚本才复制成作品自己的版本（project-script.mjs），
+// 同时把画布里自动生成的复刻提示词换成新脚本——页面之间不能各说各话。
 import { sendJson, readBody } from './_shared.mjs'
 import { currentUser } from '../auth.mjs'
 import { config } from '../config.mjs'
-import { getTemplate } from '../templates.mjs'
-import { createFlow, getFlow, listRunsByFlows } from '../flows.mjs'
+import { getTemplate, reuseTemplate } from '../templates.mjs'
+import { createFlow, getFlow, updateFlow, listRunsByFlows } from '../flows.mjs'
+import { normalizeProjectScript, scriptPace, scriptView } from '../project-script.mjs'
+import { buildReplicateDraft, patchCanvasScript } from '../script-draft.mjs'
 import {
   listReviews,
   reviewCountsByProject,
@@ -18,6 +21,9 @@ import {
   getProject,
   createProject,
   updateProject,
+  bindProjectFlow,
+  saveProjectScript,
+  clearProjectScript,
   archiveProjectVersion,
   deleteProject,
   PROJECT_VERSION_LIMIT,
@@ -25,6 +31,31 @@ import {
 
 const ITEM = /^\/api\/projects\/([\w-]+)$/
 const VERSIONS = /^\/api\/projects\/([\w-]+)\/versions$/
+const SCRIPT = /^\/api\/projects\/([\w-]+)\/script$/
+const CANVAS = /^\/api\/projects\/([\w-]+)\/canvas$/
+
+// 详情 / 列表里的 project 不带原始脚本：脚本只从顶层 script 读（带来源、重算后的时长），
+// 否则同一份脚本在一页里有两个口径，界面迟早读到旧的那个。
+function projectBrief(project) {
+  const { script: _script, ...brief } = project
+  return brief
+}
+
+/**
+ * 改完脚本把画布里自动生成的复刻提示词一起换掉。
+ * 只认我们生成的那一版（标题「复刻脚本」+ 提示词开头是固定句），用户手改过的整块跳过。
+ */
+async function syncCanvasScript(project, template, script, prevHook, user) {
+  if (!project.flowId) return { synced: false, flowId: '', reason: 'no-canvas' }
+  const flow = await getFlow(project.flowId, user)
+  if (!flow) return { synced: false, flowId: project.flowId, reason: 'canvas-missing' }
+  const patched = patchCanvasScript(flow.nodes, { template, script, prevHook })
+  if (!patched.changed) return { synced: false, flowId: flow.id, reason: 'hand-edited' }
+  const updated = await updateFlow(flow.id, { nodes: patched.nodes })
+  if (!updated) return { synced: false, flowId: flow.id, reason: 'save-failed' }
+  // synced 只看提示词：输入节点跟着换了但提示词是手改过的，不能说「画布用的是新脚本」
+  return { synced: patched.promptUpdated, flowId: flow.id, reason: patched.promptUpdated ? 'synced' : 'hand-edited' }
+}
 
 // 列表只给卡片要用的那几项：模板标题、流程名、评审计数
 function templateBrief(template) {
@@ -91,7 +122,7 @@ export function createProjectsRouter() {
           const runs = [project.flowId, ...project.versions.map((entry) => entry.flowId)]
             .reduce((sum, flowId) => sum + (flowId ? runAgg.byFlow[flowId] || 0 : 0), 0)
           items.push({
-            ...project,
+            ...projectBrief(project),
             template: templateBrief(template),
             // 总数给「评过几次」，按版本的分组给状态胶囊判断当前这一版
             reviews: { count: counters.count, lastVerdict: counters.lastVerdict, lastAt: counters.lastAt },
@@ -124,6 +155,92 @@ export function createProjectsRouter() {
           user,
         )
         sendJson(res, 201, { ok: true, project })
+        return true
+      }
+
+      // 作品页开画布：第一张画布用这条作品现在的脚本生成，不再绕到模板库的 apply
+      const canvasPath = pathname.match(CANVAS)
+      if (canvasPath && req.method === 'POST') {
+        const project = await getProject(canvasPath[1], user)
+        if (!project) {
+          sendJson(res, 404, { error: '作品不存在或已被删除' })
+          return true
+        }
+        // 已经有画布就直接回去：重复点「开画布」不该生成第二张
+        const existing = project.flowId ? await getFlow(project.flowId, user) : null
+        if (existing) {
+          sendJson(res, 200, { ok: true, created: false, project: projectBrief(project), flow: flowBrief(existing) })
+          return true
+        }
+        const template = project.templateId ? await getTemplate(project.templateId, user) : null
+        const script = scriptView(project, template)
+        if (!script) {
+          sendJson(res, 409, {
+            error: '这条作品还没有脚本：先在作品页写一条脚本，或从模板库挑一条已解析的模板',
+            code: 'SCRIPT_REQUIRED',
+          })
+          return true
+        }
+        const flow = await createFlow(buildReplicateDraft({ template: template || {}, script, name: project.title }), user)
+        const bound = await bindProjectFlow(project.id, flow.id, user)
+        if (!bound) {
+          sendJson(res, 409, { error: '画布建好了但没绑上作品：检查这条作品是否还在', code: 'BIND_FAILED' })
+          return true
+        }
+        if (template) await reuseTemplate(template.id)
+        sendJson(res, 201, { ok: true, created: true, project: projectBrief(bound), flow: flowBrief(flow) })
+        return true
+      }
+
+      // 作品页直接改脚本：第一次保存把模板脚本复制成作品自己的版本（copy-on-write），
+      // 再把画布里自动生成的复刻提示词换成新脚本。模板不动，别的作品也不动。
+      const scriptPath = pathname.match(SCRIPT)
+      if (scriptPath && req.method === 'PUT') {
+        const project = await getProject(scriptPath[1], user)
+        if (!project) {
+          sendJson(res, 404, { error: '作品不存在或已被删除' })
+          return true
+        }
+        const template = project.templateId ? await getTemplate(project.templateId, user) : null
+        const body = await readBody(req)
+        const script = normalizeProjectScript(body, {
+          pace: scriptPace(template),
+          totalSec: Number(template?.durationSec) || 0,
+        })
+        if (!script) {
+          sendJson(res, 400, { error: '脚本至少要留一段有内容的话：段落名、口播或屏幕字写一个', code: 'SCRIPT_EMPTY' })
+          return true
+        }
+        const prevHook = String(project.script?.hook || template?.hook || '')
+        const saved = await saveProjectScript(project.id, script, user)
+        if (!saved) {
+          sendJson(res, 409, { error: '脚本没有保存成功：作品可能刚被删掉，刷新再试', code: 'SCRIPT_SAVE_FAILED' })
+          return true
+        }
+        const canvas = await syncCanvasScript(saved, template, script, prevHook, user)
+        sendJson(res, 200, { ok: true, project: projectBrief(saved), script: scriptView(saved, template), canvas })
+        return true
+      }
+
+      if (scriptPath && req.method === 'DELETE') {
+        const project = await getProject(scriptPath[1], user)
+        if (!project) {
+          sendJson(res, 404, { error: '作品不存在或已被删除' })
+          return true
+        }
+        const template = project.templateId ? await getTemplate(project.templateId, user) : null
+        const prevHook = String(project.script?.hook || template?.hook || '')
+        const cleared = await clearProjectScript(project.id, user)
+        if (!cleared) {
+          sendJson(res, 404, { error: '作品不存在或已被删除' })
+          return true
+        }
+        const view = scriptView(cleared, template)
+        // 回到模板脚本时画布也跟着回去；模板已被删掉就只清作品这边
+        const canvas = view
+          ? await syncCanvasScript(cleared, template, view, prevHook, user)
+          : { synced: false, flowId: cleared.flowId || '', reason: 'no-script' }
+        sendJson(res, 200, { ok: true, project: projectBrief(cleared), script: view, canvas })
         return true
       }
 
@@ -214,9 +331,11 @@ export function createProjectsRouter() {
         }
         sendJson(res, 200, {
           ok: true,
-          project,
+          project: projectBrief(project),
           template: templateDetail(template),
           flow: flowBrief(flow),
+          // 作品页的脚本：自己的版本优先（source: project），否则跟随模板
+          script: scriptView(project, template),
           reviews: reviews.items,
           versions,
           versionCounts,

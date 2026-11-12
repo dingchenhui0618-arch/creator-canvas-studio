@@ -1,13 +1,14 @@
 // 作品（Project）：一条内容的主线对象。
 //
-// 它刻意不复制脚本与分镜：脚本仍留在它绑定的那条模板上（改编版），画布仍是流程服务里的
-// 那张流程，评审仍落在 reviews.json 里。作品只保存「这条内容是谁、用哪条模板、开的哪块画布、
-// 到哪一步」——同一份内容只有一份真源，改模板不会让作品里的脚本悄悄过期。
+// 默认只存引用：脚本留在绑定的模板上，画布在流程服务里，评审在 reviews.json 里。
+// 唯一例外是**脚本的 copy-on-write**：用户在作品页改脚本时，才把脚本复制成作品自己的版本
+// （见 project-script.mjs）。没改过的作品仍然跟着模板走，不会平白多一份过期副本。
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { config } from './config.mjs'
 import { canAccess } from './owner.mjs'
+import { normalizeStoredScript } from './project-script.mjs'
 
 const projectsFile = path.join(config.dataDir, 'projects.json')
 const MAX_PROJECTS = 200
@@ -78,6 +79,8 @@ function normalize(item) {
     version,
     // 归档的旧版本只存指针：画布还在流程服务里，这里不复制节点
     versions,
+    // 作品自己的脚本：只有用户动过才存在；没有就跟随模板（项目页读 scriptView）
+    script: normalizeStoredScript(item.script),
     status: STATUSES.includes(item.status) ? item.status : 'active',
     createdAt: item.createdAt || new Date().toISOString(),
     updatedAt: item.updatedAt || item.createdAt || new Date().toISOString(),
@@ -111,6 +114,8 @@ export async function createProject({ title = '', templateId = '', flowId = '' }
     flowId: String(flowId || ''),
     version: 0,
     versions: [],
+    // 先不复制模板脚本：复制发生在第一次保存脚本时（copy-on-write）
+    script: null,
     status: 'active',
     createdAt: now,
     updatedAt: now,
@@ -147,6 +152,33 @@ export async function updateProject(id, patch = {}, user = null) {
     found.updatedAt = new Date().toISOString()
     await persist(list)
   }
+  return normalize(found)
+}
+
+/**
+ * 保存作品自己的脚本（第一次保存就是把模板脚本复制过来）。
+ * 只收已经归一化过的脚本；形状不对返回 null，调用方当作「没保存成功」。
+ */
+export async function saveProjectScript(id, script, user = null) {
+  const list = await loadAll()
+  const found = list.find((item) => item.id === id && canAccess(item, user))
+  const normalized = normalizeStoredScript(script)
+  if (!found || !normalized) return null
+  found.script = normalized
+  found.updatedAt = new Date().toISOString()
+  await persist(list)
+  return normalize(found)
+}
+
+/** 恢复成「跟随模板」：删掉作品自己的脚本副本，模板改回来作品就跟着变。 */
+export async function clearProjectScript(id, user = null) {
+  const list = await loadAll()
+  const found = list.find((item) => item.id === id && canAccess(item, user))
+  if (!found) return null
+  if (!found.script) return normalize(found)
+  found.script = null
+  found.updatedAt = new Date().toISOString()
+  await persist(list)
   return normalize(found)
 }
 

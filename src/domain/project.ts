@@ -78,10 +78,25 @@ export type ProjectTemplateDetail = ProjectTemplateBrief & {
 
 export type ProjectFlowBrief = { id: string; name: string; nodes: number; updatedAt: string }
 
+/**
+ * 作品页看到的脚本。
+ * source=project 表示这条作品自己的版本（改过就不再跟随模板）；template 表示还在跟随模板。
+ * timing 是这份脚本按当前语速档重算后的口播时长，改完口播「要念几秒」随之更新。
+ */
+export type ProjectScript = {
+  hook: string
+  structure: ScriptBeat[]
+  source: 'project' | 'template'
+  updatedAt: string
+  timing: TemplateTiming | null
+}
+
 export type ProjectDetail = {
   project: Project
   template: ProjectTemplateDetail | null
   flow: ProjectFlowBrief | null
+  /** 作品页自己的脚本：自己的版本优先，没有则回退到模板 */
+  script: ProjectScript | null
   reviews: ReviewSummary[]
   /** 归档版本（不含当前版），按归档先后 */
   versions: ProjectVersionView[]
@@ -130,7 +145,7 @@ export type ProjectStepKey = 'canvas' | 'review' | 'continue' | 'done'
 
 /**
  * 下一步只有一件事：
- *   没画布 → 套用模板开画布；有画布没评审 → 送一次评审；都做过了 → 回去按意见改；交付了 → 收尾。
+ *   没画布 → 用这条脚本开画布；有画布没评审 → 送一次评审；都做过了 → 回去按意见改；交付了 → 收尾。
  * 作品页主卡与工作台都读这一个函数，避免两处口径分叉。
  */
 export function projectStep(
@@ -151,8 +166,8 @@ export function projectStep(
       key: 'canvas',
       label: '下一步 · 开画布',
       title: '先开一张画布',
-      hint: '用这条模板生成画布草稿：脚本与分镜已经带过去，接着把节点连起来',
-      cta: '套用模板开画布',
+      hint: '用这条作品现在的脚本生成画布草稿：输入节点带钩子、复刻节点带完整提示词',
+      cta: '用这条脚本开画布',
     }
   }
   if (!reviewCount) {
