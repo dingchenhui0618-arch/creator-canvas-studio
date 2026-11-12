@@ -178,3 +178,32 @@
   font-size: 11px;
   overflow-wrap: anywhere;
 }
+
+/* 作品模式的评审：先说清这次结论记在哪条作品下，再要求选「你这一版」的画面 */
+.review-project-scope {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: start;
+  margin-bottom: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  color: var(--ink);
+}
+
+.review-project-scope strong {
+  display: block;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  line-height: 1.6;
+}
+
+.review-project-scope span {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.7;
+}

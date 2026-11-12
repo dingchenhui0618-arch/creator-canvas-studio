@@ -142,6 +142,8 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
   const [runCredit, setRunCredit] = useState<{ price: number; balance: number | null } | null>(null)
   // 画布 iframe：画布加载完会要一张信任票据，拿到后它自己换会话，用户不用在画布里再登一次
   const bdcFrameRef = useRef<HTMLIFrameElement | null>(null)
+  // 进页面时地址里点名的那块内置流程（只影响「默认进哪个视图」，之后切流程不动它）
+  const requestedFlowRef = useRef(initialFlowId)
 
   const bdcLocalOnly =
     Boolean(bdc?.web.url) &&
@@ -709,9 +711,10 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
       void getBdcStatus()
         .then((status) => {
           setBdc(status)
-          // VisionQA Canvas 部署后它就是画布本体，默认直接进 VisionQA Canvas；
-          // 用户点「回到内置编排」才切回本仓库那套节点编排。
-          if (status.deployed) setBdcView(true)
+          // 地址里点名了一块内置流程（#/canvas/<flowId>，例如从作品页「套用模板开画布」进来）时，
+          // 默认就进那块流程——刚生成完却先看到画布服务的另一块画布，会以为没生效。
+          // 没点名流程（或者点名的是画布服务里的画布）时默认进 VisionQA Canvas。
+          if (status.deployed) setBdcView(!requestedFlowRef.current)
         })
         .catch(() => undefined)
         .finally(() => setBdcChecked(true))

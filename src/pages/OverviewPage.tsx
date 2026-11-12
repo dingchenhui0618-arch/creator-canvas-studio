@@ -5,6 +5,8 @@ import PageHead from '../components/PageHead'
 import { MonoTag } from '../components/ui'
 import { request } from '../api/client'
 import { listBdcCanvases, type BdcCanvas } from '../api/bdc'
+import { listProjects } from '../api/projects'
+import { projectStatus, type ProjectSummary } from '../domain/project'
 import { useSiteInfo, useUiMode } from '../api/app'
 import '../styles/overview.css'
 
@@ -29,6 +31,8 @@ type Props = {
   onNavigate: (page: Page) => void
   // 工作台列的是画布服务里的画布项目：点哪块就开哪块，不再只是跳到画布页
   onOpenCanvas: (canvasId: string) => void
+  // 作品是主线：有作品时主卡先给「继续这个作品」，没有才退回最近改动的画布
+  onOpenProject: (projectId: string) => void
   // 空白画布：直接建一块并进去，不再先弹「智能体 / 资产画布」二选一（那个弹窗把主价值藏起来了）
   onCreateCanvas: () => void
   // 引导是弹窗：页脚「上手指引」重新打开它，不再跳一个 #/welcome 页面
@@ -62,11 +66,12 @@ function secondsOf(ms?: number): string {
  * 统计压进主卡右侧，不再单开一排数字卡——数字是背景，不是任务。
  * 任何一块没有数据就写空状态并给出下一步，不用示例行填充。
  */
-export function OverviewPage({ userName, onNavigate, onOpenCanvas, onCreateCanvas, onOpenGuide }: Props) {
+export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject, onCreateCanvas, onOpenGuide }: Props) {
   const { internal } = useUiMode()
   const site = useSiteInfo()
   const [now] = useState(() => new Date())
   const [canvases, setCanvases] = useState<BdcCanvas[]>([])
+  const [projects, setProjects] = useState<ProjectSummary[]>([])
   const [runs, setRuns] = useState<RunRow[]>([])
   const [templates, setTemplates] = useState<TemplateRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -75,10 +80,11 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onCreateCanva
   const load = useCallback(async () => {
     setLoading(true)
     const problems: string[] = []
-    const [canvasResult, runResult, templateResult] = await Promise.allSettled([
+    const [canvasResult, runResult, templateResult, projectResult] = await Promise.allSettled([
       listBdcCanvases(),
       request<{ items: RunRow[] }>('/api/runs'),
       request<{ items: TemplateRow[] }>('/api/templates'),
+      listProjects(),
     ])
     if (canvasResult.status === 'fulfilled' && canvasResult.value.ok) {
       setCanvases(canvasResult.value.canvases ?? [])
@@ -98,6 +104,12 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onCreateCanva
       setTemplates([])
       problems.push('模板库：' + String((templateResult.reason as Error)?.message || templateResult.reason))
     }
+    if (projectResult.status === 'fulfilled') {
+      setProjects(projectResult.value.items ?? [])
+    } else {
+      setProjects([])
+      problems.push('作品：' + String((projectResult.reason as Error)?.message || projectResult.reason))
+    }
     setErrors(problems)
     setLoading(false)
   }, [])
@@ -112,11 +124,43 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onCreateCanva
   const recentRuns = runs.slice(0, 6)
   const recentTemplates = templates.slice(0, 4)
 
-  // 「下一步」= 最近改动过的那块画布；没有画布就先从一条爆款开始
+  // 「下一步」= 手上还没交付的那条作品；没有作品再看最近改动的画布；都没有就从一条爆款开始。
+  // 作品优先是这次产品结构收敛的核心：作品才是那条内容，画布只是它的一步。
   const latestCanvas = useMemo(() => {
     if (!canvases.length) return undefined
     return [...canvases].sort((a, b) => new Date(String(b.updatedAt ?? 0)).getTime() - new Date(String(a.updatedAt ?? 0)).getTime())[0]
   }, [canvases])
+
+  const latestProject = useMemo(() => projects.find((item) => item.status !== 'done') ?? projects[0], [projects])
+
+  const hero = useMemo(() => {
+    if (latestProject) {
+      const status = projectStatus(latestProject, latestProject.reviews.count)
+      return {
+        label: '下一步 · 作品 · ' + status.text,
+        title: latestProject.title,
+        meta: (latestProject.template ? '模板 · ' + latestProject.template.title + ' · ' : '') + '更新 ' + clockOf(latestProject.updatedAt),
+        cta: '继续这个作品',
+        go: () => onOpenProject(latestProject.id),
+      }
+    }
+    if (latestCanvas) {
+      return {
+        label: '下一步 · 画布',
+        title: latestCanvas.name,
+        meta: latestCanvas.nodeCount + ' 个节点 · 版本 r' + latestCanvas.revision + ' · 上次改动 ' + clockOf(latestCanvas.updatedAt),
+        cta: '继续这块画布',
+        go: () => onOpenCanvas(latestCanvas.id),
+      }
+    }
+    return {
+      label: '下一步 · 找一条能抄的',
+      title: '从一条爆款开始',
+      meta: '检索抖音与小红书的真实互动数据，挑一条拆出脚本与分镜',
+      cta: '去检索',
+      go: () => onNavigate('radar'),
+    }
+  }, [latestProject, latestCanvas, onOpenProject, onOpenCanvas, onNavigate])
 
   return (
     <div className="vq-page">
@@ -156,61 +200,31 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onCreateCanva
         </p>
       ) : null}
 
-      {latestCanvas ? (
-        <section className="vq-next" aria-labelledby="vq-next-title">
-          <div className="vq-next-main">
-            <span className="vq-next-label">下一步 · 画布</span>
-            <h2 id="vq-next-title">{latestCanvas.name}</h2>
-            <p className="vq-next-meta">
-              {latestCanvas.nodeCount} 个节点 · 版本 r{latestCanvas.revision} · 上次改动 {clockOf(latestCanvas.updatedAt)}
-            </p>
-            <button type="button" className="vq-next-cta" onClick={() => onOpenCanvas(latestCanvas.id)}>
-              继续这块画布
-              <ArrowRight size={15} />
-            </button>
+      <section className="vq-next" aria-labelledby="vq-next-title">
+        <div className="vq-next-main">
+          <span className="vq-next-label">{hero.label}</span>
+          <h2 id="vq-next-title">{hero.title}</h2>
+          <p className="vq-next-meta">{hero.meta}</p>
+          <button type="button" className="vq-next-cta" onClick={hero.go}>
+            {hero.cta}
+            <ArrowRight size={15} />
+          </button>
+        </div>
+        <dl className="vq-next-stats">
+          <div>
+            <dt>作品</dt>
+            <dd>{projects.length}</dd>
           </div>
-          <dl className="vq-next-stats">
-            <div>
-              <dt>画布</dt>
-              <dd>{canvases.length}</dd>
-            </div>
-            <div>
-              <dt>运行</dt>
-              <dd>{runs.length}</dd>
-            </div>
-            <div>
-              <dt>模板</dt>
-              <dd>{templates.length}</dd>
-            </div>
-          </dl>
-        </section>
-      ) : (
-        <section className="vq-next" aria-labelledby="vq-next-title">
-          <div className="vq-next-main">
-            <span className="vq-next-label">下一步 · 找一条能抄的</span>
-            <h2 id="vq-next-title">从一条爆款开始</h2>
-            <p className="vq-next-meta">检索抖音与小红书的真实互动数据，挑一条拆出脚本与分镜</p>
-            <button type="button" className="vq-next-cta" onClick={() => onNavigate('radar')}>
-              去检索
-              <ArrowRight size={15} />
-            </button>
+          <div>
+            <dt>画布</dt>
+            <dd>{canvases.length}</dd>
           </div>
-          <dl className="vq-next-stats">
-            <div>
-              <dt>画布</dt>
-              <dd>{canvases.length}</dd>
-            </div>
-            <div>
-              <dt>运行</dt>
-              <dd>{runs.length}</dd>
-            </div>
-            <div>
-              <dt>模板</dt>
-              <dd>{templates.length}</dd>
-            </div>
-          </dl>
-        </section>
-      )}
+          <div>
+            <dt>模板</dt>
+            <dd>{templates.length}</dd>
+          </div>
+        </dl>
+      </section>
 
       <div className="vq-start">
         <button type="button" className="vq-start-card" onClick={() => onNavigate('radar')}>

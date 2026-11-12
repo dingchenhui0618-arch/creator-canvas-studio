@@ -70,13 +70,15 @@ export function getReviewStatus() {
   return request<ReviewStatus>('/api/review/health')
 }
 
-export function runReview(payload: { media?: string; imageUrl?: string; intent?: string; label?: string }) {
+export function runReview(payload: { media?: string; imageUrl?: string; intent?: string; label?: string; projectId?: string }) {
   return request<ReviewResult>('/api/review', { method: 'POST', body: JSON.stringify(payload) })
 }
 
 export type ReviewSummary = {
   id: string
   intent: string
+  /** 从作品页发起的评审会带作品 id；普通评审为空 */
+  projectId?: string
   verdict: 'pass' | 'needs_review' | 'fail' | ''
   summary: string
   observations: number
@@ -88,6 +90,9 @@ export type ReviewSummary = {
 
 export type ReviewRecord = ReviewSummary & { result: ReviewResult }
 
-export const listReviews = (limit = 10) => request<{ items: ReviewSummary[]; total: number }>('/api/reviews?limit=' + limit)
+export const listReviews = (limit = 10, projectId = '') =>
+  request<{ items: ReviewSummary[]; total: number }>(
+    '/api/reviews?limit=' + limit + (projectId ? '&projectId=' + encodeURIComponent(projectId) : ''),
+  )
 
 export const getReview = (id: string) => request<ReviewRecord>('/api/reviews/' + id)

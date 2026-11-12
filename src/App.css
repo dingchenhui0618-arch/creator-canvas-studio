@@ -452,7 +452,8 @@ button { cursor:pointer; }
 .drawer-source { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 12px; border:1px solid var(--line); border-radius:var(--radius-sm); background:rgba(255,254,250,.7); font-size:12px; color:var(--ink-soft); }
 .drawer-source a { display:inline-flex; align-items:center; gap:4px; color:var(--violet); font-weight:700; }
 .is-muted { color:var(--ink-faint); }
-.drawer-foot { display:flex; align-items:center; justify-content:flex-end; gap:8px; padding:16px 24px; border-top:1px solid var(--line); background:rgba(255,254,250,.7); }
+.drawer-foot { display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:8px; padding:16px 24px; border-top:1px solid var(--line); background:rgba(255,254,250,.7); }
+.drawer-foot .button { flex:0 0 auto; white-space:nowrap; }
 .drawer-foot .button--danger { margin-right:auto; }
 .drawer-loading { display:flex; align-items:center; gap:8px; padding:24px; font-size:12px; color:var(--ink-soft); }
 

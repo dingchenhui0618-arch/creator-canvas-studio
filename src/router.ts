@@ -1,5 +1,6 @@
 // 地址栏路由：页面的唯一真源是 location.hash。
-// 约定：#/overview #/radar #/templates #/agents #/runs #/review #/canvas #/settings
+// 约定：#/overview #/projects #/radar #/templates #/agents #/runs #/review #/canvas #/settings
+//      作品：#/projects/<作品 id>；评审带作品：#/review/project/<作品 id>
 //      智能体编辑：#/agents/new 与 #/agents/<id 或唯一名称>
 //      后台管理：#/admin/<section>，section 取自 editions.ts 的后台导航。
 //
@@ -16,7 +17,7 @@ export type Route =
   // 画布有两个可寻址对象：
   //   #/canvas/<flowId>            内置编排的流程（模板库、运行记录跳转都走它）
   //   #/canvas/project/<画布ID>    画布服务里的画布项目（工作台「继续上次的画布」走它）
-  | { kind: 'page'; page: ShellPage; flowId?: string; canvasId?: string }
+  | { kind: 'page'; page: ShellPage; flowId?: string; canvasId?: string; projectId?: string }
   | { kind: 'agent-editor'; agentRef: string | null }
   | { kind: 'legal'; doc: 'terms' | 'privacy' }
   // 只读分享：链接里带随机 token，不登录也能打开（App 根部整屏渲染，不进工作台外壳）
@@ -27,6 +28,7 @@ export const DEFAULT_ROUTE: Route = { kind: 'page', page: 'overview' }
 
 const USER_PAGES: readonly ShellPage[] = [
   'overview',
+  'projects',
   'radar',
   'templates',
   'agents',
@@ -91,6 +93,16 @@ export function parseRoute(hash: string): Route {
   // 分享链接：token 是整条路径的余下部分，缺了就落回工作台
   if (head === 'share') return tail ? { kind: 'share', token: tail } : DEFAULT_ROUTE
   // 旧的 #/welcome 链接不再单独成页：引导已改成工作台内的弹窗，落回工作台即可。
+  // 作品有两个地址：#/projects 列表与 #/projects/<作品 id>
+  if (head === 'projects') {
+    if (tail) return { kind: 'page', page: 'projects', projectId: tail }
+    return { kind: 'page', page: 'projects' }
+  }
+  // 评审页的「这次记入哪条作品」也写进地址：#/review/project/<作品 id>
+  if (head === 'review') {
+    if (tail === 'project' && segments[2]) return { kind: 'page', page: 'review', projectId: segments[2] }
+    return { kind: 'page', page: 'review' }
+  }
   if (head === 'agents') {
     if (!tail) return { kind: 'page', page: 'agents' }
     if (tail === 'new') return { kind: 'agent-editor', agentRef: null }
@@ -113,6 +125,8 @@ export function toHash(route: Route): string {
       if (route.canvasId) return '#/canvas/project/' + encodeURIComponent(route.canvasId)
       if (route.flowId) return '#/canvas/' + encodeURIComponent(route.flowId)
     }
+    if (route.page === 'projects' && route.projectId) return '#/projects/' + encodeURIComponent(route.projectId)
+    if (route.page === 'review' && route.projectId) return '#/review/project/' + encodeURIComponent(route.projectId)
     return '#/' + route.page
   }
   if (route.kind === 'admin') return '#/admin/' + route.section
@@ -128,6 +142,8 @@ export function routeKey(route: Route): string {
       if (route.canvasId) return 'page:canvas:project:' + route.canvasId
       if (route.flowId) return 'page:canvas:flow:' + route.flowId
     }
+    if (route.page === 'projects' && route.projectId) return 'page:projects:' + route.projectId
+    if (route.page === 'review' && route.projectId) return 'page:review:project:' + route.projectId
     return 'page:' + route.page
   }
   if (route.kind === 'admin') return 'admin:' + route.section

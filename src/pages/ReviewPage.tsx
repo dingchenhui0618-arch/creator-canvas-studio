@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Crosshair, Loader2, Play, RefreshCw, ScanEye, TriangleAlert } from 'lucide-react'
+import { Clapperboard, Crosshair, Loader2, Play, RefreshCw, ScanEye, TriangleAlert } from 'lucide-react'
 import { getReview, getReviewStatus, listReviews, runReview, type JudgeResult, type ReviewResult, type ReviewStatus, type ReviewSummary } from '../api/review'
 import { getCredits, getModelService, recheckModelService, type CreditsResponse, type ModelServiceState } from '../api/credits'
 import { listTemplates, coverSrc } from '../api/radar'
+import { getProject } from '../api/projects'
 import type { ReplicaTemplate } from '../domain/radar'
 import { consumeReviewTarget, onReviewRequest, type ReviewTarget } from '../state/review'
 import { useUiMode } from '../api/app'
@@ -74,8 +75,10 @@ function JudgePanel({ judge }: { judge: JudgeResult }) {
 
 type Picked = { media?: string; imageUrl?: string; label: string; preview: string }
 
-export default function ReviewPage() {
+export default function ReviewPage({ projectId }: { projectId?: string } = {}) {
   const { internal } = useUiMode()
+  // 从作品页进来时，这次评审的结论会挂在那条作品下；标题只为把话说清楚（读不到就不显示名字）
+  const [projectTitle, setProjectTitle] = useState('')
   const [status, setStatus] = useState<ReviewStatus | null>(null)
   const [templates, setTemplates] = useState<ReplicaTemplate[]>([])
   const [picked, setPicked] = useState<Picked | null>(null)
@@ -93,6 +96,19 @@ export default function ReviewPage() {
   const [manualUrl, setManualUrl] = useState('')
   const timerRef = useRef<number | null>(null)
   const startedRef = useRef(0)
+
+  useEffect(() => {
+    if (!projectId) return
+    let alive = true
+    getProject(projectId)
+      .then((data) => {
+        if (alive) setProjectTitle(data.project.title)
+      })
+      .catch(() => undefined)
+    return () => {
+      alive = false
+    }
+  }, [projectId])
 
   const pick = useCallback((target: Picked) => {
     setPicked(target)
@@ -170,7 +186,13 @@ export default function ReviewPage() {
     setError('')
     setResult(null)
     try {
-      const next = await runReview({ media: picked.media, imageUrl: picked.imageUrl, intent: picked.label, label: picked.label })
+      const next = await runReview({
+        media: picked.media,
+        imageUrl: picked.imageUrl,
+        intent: picked.label,
+        label: picked.label,
+        projectId: projectId || undefined,
+      })
       setResult(next)
       setActive(next.observations[0]?.id ?? null)
       // 评审已落库：刷新历史与余额，不靠本地缓存假装有记录
@@ -244,6 +266,15 @@ export default function ReviewPage() {
 
       <div className="review-body">
         <aside className="review-picker">
+          {projectId ? (
+            <div className="review-project-scope" role="note">
+              <Clapperboard size={14} strokeWidth={1.75} />
+              <div>
+                <strong>记入作品：{projectTitle || '正在读取作品…'}</strong>
+                <span>这次结论会挂在这条作品下。要评审的是你这一版的画面，不是原片首帧。</span>
+              </div>
+            </div>
+          ) : null}
           <div className="review-picker-head">
             <h2>被检视对象</h2>
             <span className="vq-mono">{templates.length} 个模板</span>

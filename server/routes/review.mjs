@@ -1,6 +1,7 @@
 import { sendJson, readBody } from './_shared.mjs'
 import { reviewVisual, reviewStatus } from '../review.mjs'
 import { saveReview, listReviews, getReview } from '../reviews.mjs'
+import { getProject } from '../projects.mjs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { config } from '../config.mjs'
@@ -32,7 +33,11 @@ export function createReviewRouter() {
 
       // 评审历史：列表与详情都按账号隔离（管理员可见全部）
       if (pathname === '/api/reviews' && req.method === 'GET') {
-        sendJson(res, 200, await listReviews({ limit: url.searchParams.get('limit') || 20, verdict: url.searchParams.get('verdict') || '' }, user))
+        sendJson(res, 200, await listReviews({
+          limit: url.searchParams.get('limit') || 20,
+          verdict: url.searchParams.get('verdict') || '',
+          projectId: url.searchParams.get('projectId') || '',
+        }, user))
         return true
       }
       const reviewItem = pathname.match(REVIEW_ITEM)
@@ -52,6 +57,15 @@ export function createReviewRouter() {
       }
       if (pathname === '/api/review' && req.method === 'POST') {
         const body = await readBody(req)
+        // 从作品页发起的评审：先确认作品还在，再扣积分——不能收完钱才发现记不进任何作品
+        const projectId = body.projectId ? String(body.projectId) : ''
+        if (projectId) {
+          const project = await getProject(projectId, user)
+          if (!project) {
+            sendJson(res, 404, { error: '这次评审要记入的作品不见了，评审没有开始，也未扣积分', code: 'PROJECT_NOT_FOUND' })
+            return true
+          }
+        }
         // 已知模型服务不可用（额度 / 凭证）：直接说明，不先扣再退
         const provider = modelServiceState()
         if (!provider.available) {
@@ -107,6 +121,7 @@ export function createReviewRouter() {
             intent: body.intent ? String(body.intent).slice(0, 300) : '',
             result,
             credits: { cost: paid.cost, balance: paid.balance },
+            projectId,
           })
           sendJson(res, 200, { ...result, reviewId: saved.id, credits: { cost: paid.cost, balance: paid.balance } })
         } catch (error) {

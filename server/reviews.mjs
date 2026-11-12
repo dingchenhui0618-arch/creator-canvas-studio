@@ -50,6 +50,7 @@ function toSummary(item) {
     summary: item.result?.summary || '',
     observations: Array.isArray(item.result?.observations) ? item.result.observations.length : 0,
     source: item.source || {},
+    projectId: item.projectId || '',
     ms: item.result?.ms || 0,
     model: item.result?.model || '',
     credits: item.credits || null,
@@ -58,10 +59,12 @@ function toSummary(item) {
   }
 }
 
-export async function saveReview({ user = null, source = {}, intent = '', result = null, credits = null }) {
+export async function saveReview({ user = null, source = {}, intent = '', result = null, credits = null, projectId = '' }) {
   const record = {
     id: 'rev_' + randomUUID().slice(0, 8),
     ownerId: user?.id || '',
+    // 作品关联是可选的：从作品页发起的评审才带上，普通评审留空
+    projectId: clip(projectId, 40),
     intent: clip(intent, 120),
     source: {
       kind: source.kind || 'unknown',
@@ -80,11 +83,42 @@ export async function saveReview({ user = null, source = {}, intent = '', result
   return record
 }
 
-export async function listReviews({ limit = 20, verdict = '' } = {}, user = null) {
+export async function listReviews({ limit = 20, verdict = '', projectId = '' } = {}, user = null) {
   const list = (await loadAll()).filter((item) => canAccess(item, user))
-  const filtered = verdict ? list.filter((item) => item.result?.verdict === verdict) : list
+  const filtered = list
+    .filter((item) => (verdict ? item.result?.verdict === verdict : true))
+    .filter((item) => (projectId ? item.projectId === projectId : true))
   const count = Math.min(50, Math.max(1, Number(limit) || 20))
   return { items: filtered.slice(0, count).map(toSummary), total: filtered.length }
+}
+
+/**
+ * 每个作品的评审概况：列表页要显示「已评审 / 结论」，但评审正文有几十 KB，
+ * 不能为了计数把整包都发给前端。这里只在服务端扫一遍算计数。
+ */
+export async function reviewCountsByProject(user = null) {
+  const list = (await loadAll()).filter((item) => canAccess(item, user) && item.projectId)
+  const counts = {}
+  for (const item of list) {
+    const entry = counts[item.projectId] || (counts[item.projectId] = { count: 0, lastVerdict: '', lastAt: '' })
+    entry.count += 1
+    if (String(item.createdAt) > entry.lastAt) {
+      entry.lastAt = String(item.createdAt)
+      entry.lastVerdict = item.result?.verdict || ''
+    }
+  }
+  return counts
+}
+
+/** 作品被删掉后，旧评审保留为历史，但不再挂在任何作品上。 */
+export async function detachReviewsFromProject(projectId) {
+  if (!projectId) return 0
+  const list = await loadAll()
+  const hit = list.filter((item) => item.projectId === projectId)
+  if (!hit.length) return 0
+  for (const item of hit) delete item.projectId
+  await persist(list)
+  return hit.length
 }
 
 /** 注销账号时用：删掉这个人名下的评审记录。 */

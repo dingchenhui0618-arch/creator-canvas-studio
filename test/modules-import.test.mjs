@@ -15,6 +15,8 @@ process.env.DATA_DIR = dir
 
 const EXPECTED = {
   'account.mjs': ['exportAccount', 'deleteOwnAccount', 'exportFileName'],
+  'projects.mjs': ['listProjects', 'getProject', 'createProject', 'updateProject', 'deleteProject', 'deleteProjectsByOwner'],
+  'routes/projects.mjs': ['createProjectsRouter'],
   'templates.mjs': ['listTemplates', 'listTrash', 'restoreTemplate', 'purgeTemplate', 'deleteTemplatesByOwner', 'enableTemplateShare', 'disableTemplateShare', 'getSharedTemplate', 'publicTemplateView'],
   'routes/account.mjs': ['createAccountRouter'],
   'routes/auth.mjs': ['createAuthRouter'],
@@ -24,7 +26,7 @@ const EXPECTED = {
   'search-history.mjs': ['recordSearch', 'listSearchHistory', 'toggleSearchFavorite', 'clearSearchHistory'],
 }
 
-const ROOTS = ['templates.mjs', 'account.mjs', 'routes/account.mjs', 'totp.mjs', 'client-errors.mjs', 'log-files.mjs', 'search-history.mjs', 'owner.mjs', 'speech.mjs']
+const ROOTS = ['templates.mjs', 'account.mjs', 'projects.mjs', 'routes/projects.mjs', 'routes/account.mjs', 'totp.mjs', 'client-errors.mjs', 'log-files.mjs', 'search-history.mjs', 'owner.mjs', 'speech.mjs']
 
 test('服务端模块都能加载，关键导出都存在', async () => {
   for (const name of ROOTS) {

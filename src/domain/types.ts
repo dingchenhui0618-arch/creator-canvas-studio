@@ -3,6 +3,7 @@ import { Grid2X2 } from 'lucide-react'
 export type Page =
   | 'login'
   | 'overview'
+  | 'projects'
   | 'agents'
   | 'agent-editor'
   | 'canvas'
@@ -16,6 +17,7 @@ export type Page =
 export const pageLabels: Record<Page, string> = {
   login: '登录',
   overview: '工作台',
+  projects: '作品',
   agents: '智能体',
   'agent-editor': '智能体编辑器',
   canvas: '画布',

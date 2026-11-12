@@ -1,0 +1,466 @@
+/* VisionQA · 作品（Projects）
+   一条内容一条记录：列表回答「做到哪一步」，作品页回答「下一步点哪里」再看现场。
+   间距只走 4/8pt 栅格，圆角只用 token 的四档，颜色全部取自 tokens.css。 */
+
+.vq-project-page .vq-head-desc {
+  margin-top: var(--space-2);
+}
+
+.vq-project-headline {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+/* ---------- 状态胶囊：待开画布 / 在做 / 已评审 / 已交付 ---------- */
+
+.vq-project-status {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.vq-project-status.is-live {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.vq-project-status.is-ok {
+  border-color: rgba(23, 107, 67, 0.24);
+  background: var(--pass-soft);
+  color: var(--pass);
+}
+
+.vq-project-status.is-done {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: #ffffff;
+}
+
+/* ---------- 列表 ---------- */
+
+.vq-projects-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.vq-project-card {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--ink);
+  text-align: left;
+  transition: border-color var(--dur-1) var(--ease-out), box-shadow var(--dur-2) var(--ease-out),
+    transform var(--dur-1) var(--ease-out);
+}
+
+.vq-project-card:hover {
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-raise);
+  transform: translateY(-1px);
+}
+
+.vq-project-card:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.vq-project-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.vq-project-card-title {
+  overflow: hidden;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-medium);
+  letter-spacing: -0.01em;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vq-project-card-source {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vq-project-card-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line-faint);
+}
+
+.vq-project-card-meta span {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.vq-project-card-meta em {
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-style: normal;
+  letter-spacing: 0.04em;
+}
+
+.vq-project-card-meta b {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-normal);
+  font-variant-numeric: tabular-nums;
+}
+
+.vq-project-card-go {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.vq-project-card:hover .vq-project-card-go {
+  color: var(--ink);
+}
+
+.vq-project-card-go svg {
+  transition: transform var(--dur-2) var(--ease-out);
+}
+
+.vq-project-card:hover .vq-project-card-go svg {
+  transform: translateX(2px);
+}
+
+.vq-projects-empty {
+  margin-top: var(--space-2);
+}
+
+/* ---------- 作品页 ---------- */
+
+.vq-project-back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.vq-project-back:hover {
+  color: var(--ink);
+}
+
+.vq-project-hint {
+  max-width: 56ch;
+  margin: var(--space-2) 0 0;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+
+.vq-project-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.vq-project-col,
+.vq-project-side {
+  display: grid;
+  align-content: start;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.vq-project-panel {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+
+.vq-project-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  color: var(--faint);
+}
+
+.vq-project-panel-head h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+.vq-project-empty {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+  padding: var(--space-4);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+}
+
+.vq-project-empty strong {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+.vq-project-empty span {
+  max-width: 52ch;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 1.7;
+}
+
+.vq-project-empty .vq-button {
+  margin-top: var(--space-1);
+}
+
+.vq-project-hook {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  color: var(--ink);
+  font-size: var(--text-xs);
+  line-height: 1.7;
+}
+
+/* 脚本节拍：左侧序号 + 右侧口播；时间与「要念几秒」走等宽小字 */
+.vq-beat-list,
+.vq-shot-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vq-beat-row,
+.vq-shot-row {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--line-faint);
+}
+
+.vq-beat-row:first-child,
+.vq-shot-row:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.vq-beat-index,
+.vq-shot-index {
+  padding-top: 2px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.vq-beat-copy,
+.vq-shot-copy {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.vq-beat-name,
+.vq-shot-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-size: 13px;
+  font-weight: var(--weight-medium);
+}
+
+.vq-beat-copy p,
+.vq-shot-copy p {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--text-xs);
+  line-height: 1.75;
+}
+
+.vq-beat-onscreen,
+.vq-shot-caption {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.vq-project-timing {
+  margin: 0;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--line-faint);
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* 画布 / 评审 / 来源 */
+.vq-project-flow-name {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-medium);
+  letter-spacing: -0.01em;
+}
+
+.vq-project-flow-meta {
+  margin: 0;
+}
+
+.vq-project-full {
+  width: 100%;
+  justify-content: center;
+}
+
+.vq-project-reviews {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vq-project-reviews li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: start;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--line-faint);
+}
+
+.vq-project-reviews li:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.vq-project-reviews p {
+  margin: 0 0 var(--space-1);
+  color: var(--ink);
+  font-size: var(--text-xs);
+  line-height: 1.7;
+}
+
+.vq-project-verdict {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.vq-project-verdict.is-pass {
+  border-color: rgba(23, 107, 67, 0.24);
+  background: var(--pass-soft);
+  color: var(--pass);
+}
+
+.vq-project-verdict.is-needs_review {
+  border-color: rgba(138, 91, 8, 0.24);
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.vq-project-verdict.is-fail {
+  border-color: rgba(163, 56, 56, 0.24);
+  background: var(--fail-soft);
+  color: var(--fail);
+}
+
+.vq-project-note {
+  margin: 0;
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.vq-project-source {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.vq-project-source div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.vq-project-source dt {
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.vq-project-source dd {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: var(--text-xs);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 按钮语义：删除是危险动作，不用主色 */
+.vq-button.is-danger {
+  color: var(--fail);
+}
+
+.vq-button.is-danger:hover:not(:disabled) {
+  border-color: rgba(163, 56, 56, 0.3);
+  background: var(--fail-soft);
+}
+
+@media (max-width: 1080px) {
+  .vq-project-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 780px) {
+  .vq-projects-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

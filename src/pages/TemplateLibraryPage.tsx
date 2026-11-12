@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { AlertCircle, Check as CheckIcon, Copy, Download, ExternalLink, Film, Heart, Layers, Link2, MessageCircle, PenLine, Play, Printer, RefreshCw, ScanEye, Search, Share2, Sparkles, Star, Trash2, X } from 'lucide-react'
+import { AlertCircle, Check as CheckIcon, Clapperboard, Copy, Download, ExternalLink, Film, Heart, Layers, Link2, MessageCircle, PenLine, Play, Printer, RefreshCw, ScanEye, Search, Share2, Sparkles, Star, Trash2, X } from 'lucide-react'
 import {
   adaptTemplate as adaptTemplateApi,
   applyTemplate,
@@ -18,6 +18,7 @@ import { downloadTemplateMarkdown } from '../lib/templateExport'
 import { describeTiming, paceLabel } from '../domain/radar'
 import type { MediaItem, ReplicaTemplate, ScriptBeat, StoryboardShot } from '../domain/radar'
 import { requestReview } from '../state/review'
+import { createProject } from '../api/projects'
 import { ReplicateModal } from '../components/ReplicateModal'
 import { TrashModal } from '../components/TrashModal'
 import { ReportModal } from '../components/ReportModal'
@@ -67,7 +68,17 @@ const coverFor = (template: ReplicaTemplate) => {
   return url.startsWith('/media/') || url.startsWith('/api/') ? url : coverSrc(url)
 }
 
-export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast: (message: string) => void; onBack: () => void; onOpenCanvas: (flowId?: string) => void }) {
+export function TemplateLibraryPage({
+  onToast,
+  onBack,
+  onOpenCanvas,
+  onOpenProject,
+}: {
+  onToast: (message: string) => void
+  onBack: () => void
+  onOpenCanvas: (flowId?: string) => void
+  onOpenProject: (projectId: string) => void
+}) {
   const [items, setItems] = useState<ReplicaTemplate[]>([])
   const [byType, setByType] = useState<Record<string, number>>({})
   const [parsed, setParsed] = useState(0)
@@ -87,6 +98,7 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
   // 改编草稿：从这条模板拷一份出来改，存的是新模板，原条目不动
   const [adapt, setAdapt] = useState<AdaptDraft | null>(null)
   const [adaptSaving, setAdaptSaving] = useState(false)
+  const [projectSaving, setProjectSaving] = useState(false)
 
   const totalReuse = useMemo(() => items.reduce((sum, item) => sum + (item.reuseCount || 0), 0), [items])
   const typeOptions = useMemo(() => pickTypes(byType, saved), [byType, saved])
@@ -210,6 +222,22 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
       onToast(caught instanceof Error ? caught.message : '保存改编失败')
     } finally {
       setAdaptSaving(false)
+    }
+  }
+
+  // 「用它做作品」：作品只绑模板，不复制脚本分镜；建完直接进作品页，
+  // 下一步（套用模板开画布）由作品页统一给，不在两个地方各写一套流程。
+  const startProject = async (template: ReplicaTemplate) => {
+    setProjectSaving(true)
+    try {
+      const result = await createProject({ templateId: template.id, title: template.title })
+      setDetail(null)
+      onToast('已建作品：' + result.project.title)
+      onOpenProject(result.project.id)
+    } catch (caught) {
+      onToast(caught instanceof Error ? caught.message : '建作品失败')
+    } finally {
+      setProjectSaving(false)
     }
   }
 
@@ -611,8 +639,36 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
                   )}
 
                   <section className="drawer-section drawer-section--export">
-                    <div className="drawer-section-head"><h3>导出</h3><span>把这条拿走去用</span></div>
+                    <div className="drawer-section-head"><h3>导出</h3><span>复制、评审与 Markdown</span></div>
                     <div className="drawer-export-actions">
+                      {adapt || detail.kind === 'flow' ? null : (
+                        <>
+                          <button
+                            className="button button--ghost"
+                            title="打开视觉评审页并用这条的首帧预填；在评审页点「开始评审」才会扣积分"
+                            onClick={() => {
+                              const firstFrame = detail.frames?.[0]?.url || ''
+                              const media = firstFrame.replace(/^\/media\//, '')
+                              requestReview({
+                                media: media || undefined,
+                                imageUrl: media ? undefined : detail.cover || undefined,
+                                label: detail.title,
+                                intent: '评审这条模板的首帧是否适合作为封面/开场',
+                              })
+                            }}>
+                            <ScanEye size={14} />去评审
+                          </button>
+                          <button
+                            className="button button--ghost"
+                            disabled={!isParsed(detail)}
+                            onClick={() => {
+                              const list = [detail.hook, ...detail.structure.map((beat) => beat.beat + '：' + beat.voiceover), 'CTA：' + (detail.structure.at(-1)?.purpose || '')].join('\n')
+                              void navigator.clipboard?.writeText(list).then(() => onToast('脚本已复制到剪贴板')).catch(() => onToast('复制失败'))
+                            }}>
+                            <Copy size={14} />复制脚本
+                          </button>
+                        </>
+                      )}
                       <button
                         className="button button--ghost"
                         onClick={() => {
@@ -678,31 +734,6 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
                       </button>
                     </>
                   ) : null}
-                  {adapt ? null : detail.kind === 'flow' ? null : (
-                    <>
-                      <button
-                        className="button button--ghost"
-                        title="打开视觉评审页并用这条的首帧预填；在评审页点「开始评审」才会扣积分"
-                        onClick={() => {
-                          const firstFrame = detail.frames?.[0]?.url || ''
-                          const media = firstFrame.replace(/^\/media\//, '')
-                          requestReview({
-                            media: media || undefined,
-                            imageUrl: media ? undefined : detail.cover || undefined,
-                            label: detail.title,
-                            intent: '评审这条模板的首帧是否适合作为封面/开场',
-                          })
-                        }}>
-                        <ScanEye size={14} />去评审
-                      </button>
-                      <button className="button button--ghost" disabled={!isParsed(detail)} onClick={() => {
-                        const list = [detail.hook, ...detail.structure.map((beat) => beat.beat + '：' + beat.voiceover), 'CTA：' + (detail.structure.at(-1)?.purpose || '')].join('\n')
-                        void navigator.clipboard?.writeText(list).then(() => onToast('脚本已复制到剪贴板')).catch(() => onToast('复制失败'))
-                      }}>
-                        <Copy size={14} />复制脚本
-                      </button>
-                    </>
-                  )}
                   {adapt ? null : (
                     <>
                     {detail.kind === 'flow' || !isParsed(detail) ? null : (
@@ -715,8 +746,19 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
                         <PenLine size={14} />改编这条
                       </button>
                     )}
+                    {detail.kind !== 'flow' && isParsed(detail) ? (
+                      <button
+                        type="button"
+                        className="button button--primary"
+                        disabled={projectSaving}
+                        title="把这条模板变成一条作品：脚本与分镜跟着走，之后在作品页开画布、送评审"
+                        onClick={() => void startProject(detail)}
+                      >
+                        <Clapperboard size={14} />{projectSaving ? '建作品中' : '用它做作品'}
+                      </button>
+                    ) : null}
                     <button
-                      className="button button--primary"
+                      className={'button ' + (detail.kind !== 'flow' && isParsed(detail) ? 'button--ghost' : 'button--primary')}
                       disabled={detail.kind !== 'flow' && !isParsed(detail)}
                       onClick={() => {
                         void applyTemplate(detail.id)

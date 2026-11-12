@@ -4,6 +4,7 @@ import {
   Bot,
   Check,
   ChevronRight,
+  Clapperboard,
   Compass,
   Grid2X2,
   LayoutTemplate,
@@ -30,6 +31,8 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { PageSkeleton } from './components/PageSkeleton'
 import ReviewPage from './pages/ReviewPage'
 import { OverviewPage } from './pages/OverviewPage'
+import ProjectsPage from './pages/ProjectsPage'
+import ProjectPage from './pages/ProjectPage'
 import { RunsPage } from './pages/RunsPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { RadarPage } from './pages/RadarPage'
@@ -340,6 +343,24 @@ function Workbench({
             onToggleFocus={() => setCanvasFocus((value) => !value)}
           />
         )
+      case 'projects':
+        // 作品有两个地址：#/projects 列表与 #/projects/<id>；打开某一项不换页面职责，只换参数
+        return route.projectId ? (
+          <ProjectPage
+            key={route.projectId}
+            projectId={route.projectId}
+            onBack={() => navigate({ kind: 'page', page: 'projects' })}
+            onOpenFlow={(flowId) => navigate({ kind: 'page', page: 'canvas', flowId })}
+            onOpenReview={(projectId) => navigate({ kind: 'page', page: 'review', projectId })}
+            onBrowseTemplates={() => go('templates')}
+            onToast={notify}
+          />
+        ) : (
+          <ProjectsPage
+            onOpenProject={(projectId) => navigate({ kind: 'page', page: 'projects', projectId })}
+            onBrowseTemplates={() => go('templates')}
+          />
+        )
       case 'radar':
         return <RadarPage onToast={notify} onOpenTemplates={() => go('templates')} />
       case 'templates':
@@ -348,6 +369,7 @@ function Workbench({
             onToast={notify}
             onBack={() => go('radar')}
             onOpenCanvas={(flowId) => navigate({ kind: 'page', page: 'canvas', flowId })}
+            onOpenProject={(projectId) => navigate({ kind: 'page', page: 'projects', projectId })}
           />
         )
       case 'overview':
@@ -357,6 +379,7 @@ function Workbench({
             onCreateCanvas={() => void createCanvasProject()}
             onNavigate={go}
             onOpenCanvas={(canvasId) => navigate({ kind: 'page', page: 'canvas', canvasId })}
+            onOpenProject={(projectId) => navigate({ kind: 'page', page: 'projects', projectId })}
             onOpenGuide={() => setGuideOpen(true)}
           />
         )
@@ -365,7 +388,7 @@ function Workbench({
       case 'runs':
         return <RunsPage onOpenFlow={(flowId) => navigate({ kind: 'page', page: 'canvas', flowId })} />
       case 'review':
-        return <ReviewPage />
+        return <ReviewPage key={route.projectId || 'review'} projectId={route.projectId} />
       case 'settings':
         return <SettingsPage session={session} onSignOut={onSignOut} onSwitchAccount={onSwitchAccount} />
       default:
@@ -409,6 +432,7 @@ function Workbench({
           {route.kind !== 'admin' ? (
             <nav className="vq-nav" aria-label="主导航">
               <NavItem icon={Grid2X2} label="工作台" active={activePage === 'overview'} compact={!sidebarOpen} onClick={() => go('overview')} />
+              <NavItem icon={Clapperboard} label="作品" active={activePage === 'projects'} compact={!sidebarOpen} onClick={() => go('projects')} />
               <NavItem icon={Radar} label="爆款雷达" active={activePage === 'radar'} compact={!sidebarOpen} onClick={() => go('radar')} />
               <NavItem icon={LayoutTemplate} label="模板库" active={activePage === 'templates'} compact={!sidebarOpen} onClick={() => go('templates')} />
               <NavItem

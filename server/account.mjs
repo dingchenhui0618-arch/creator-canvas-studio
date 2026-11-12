@@ -4,7 +4,8 @@ import { config } from './config.mjs'
 import { deleteTemplatesByOwner, listTemplates, listTrash } from './templates.mjs'
 import { deleteFlow, listFlows, listRuns } from './flows.mjs'
 import { deleteAgent, listAgents } from './agents.mjs'
-import { deleteReviewsByOwner, listReviews } from './reviews.mjs'
+import { deleteReviewsByOwner, listReviews, detachReviewsFromProject } from './reviews.mjs'
+import { deleteProjectsByOwner, listProjects } from './projects.mjs'
 import { preferenceOf, removePreference } from './preferences.mjs'
 import { balanceOf, ledgerOf } from './credits.mjs'
 import { countAdmins, deleteUser, findUserById } from './auth.mjs'
@@ -41,6 +42,7 @@ export async function exportAccount(user) {
   const runs = (await listRuns({ limit: 1000 }, user)).items?.filter((item) => (item.ownerId || '') === user.id) || []
   const agents = (await listAgents({}, user)).filter((item) => (item.ownerId || '') === user.id)
   const reviews = (await listReviews({ limit: 50 }, user)).items.filter((item) => (item.ownerId || '') === user.id)
+  const projects = (await listProjects(user)).filter((item) => (item.ownerId || '') === user.id)
   const ledger = ledgerOf(user.id, 1000, 0)
   return {
     format: 'visionqa-account-export',
@@ -56,6 +58,7 @@ export async function exportAccount(user) {
     runs,
     agents,
     reviews,
+    projects,
   }
 }
 
@@ -75,7 +78,7 @@ export async function deleteOwnAccount(user, { deleteContent = true } = {}) {
   // 最后一个管理员注销会把后台锁死：必须先加一个管理员，或者让管理员来删
   if (row.kind === 'admin' && countAdmins() <= 1) return { ok: false, code: 'LAST_ADMIN' }
 
-  const removed = { templates: 0, flows: 0, agents: 0, reviews: 0 }
+  const removed = { templates: 0, flows: 0, agents: 0, reviews: 0, projects: 0 }
   if (deleteContent) {
     removed.templates = await deleteTemplatesByOwner(user.id)
     for (const flow of (await listFlows(user)).filter((item) => (item.ownerId || '') === user.id)) {
@@ -84,6 +87,11 @@ export async function deleteOwnAccount(user, { deleteContent = true } = {}) {
     for (const agent of (await listAgents({}, user)).filter((item) => (item.ownerId || '') === user.id)) {
       if (await deleteAgent(agent.id)) removed.agents += 1
     }
+    // 先解绑再删：评审保留为历史，作品先消失
+    for (const project of (await listProjects(user)).filter((item) => (item.ownerId || '') === user.id)) {
+      await detachReviewsFromProject(project.id)
+    }
+    removed.projects = await deleteProjectsByOwner(user.id)
     removed.reviews = await deleteReviewsByOwner(user.id)
   }
   removePreference(user.id)

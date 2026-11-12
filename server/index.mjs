@@ -39,6 +39,7 @@ import { createCreditsRouter } from './routes/credits.mjs'
 import { createAdminRouter } from './routes/admin.mjs'
 import { createPreferencesRouter } from './routes/preferences.mjs'
 import { createCanvasRouter } from './routes/canvas.mjs'
+import { createProjectsRouter } from './routes/projects.mjs'
 import { createGatewayRouter } from './routes/gateway.mjs'
 import { createAccountRouter } from './routes/account.mjs'
 import { currentUser, listUsers, clientIp, isAdmin } from './auth.mjs'
@@ -68,6 +69,7 @@ const featureRoutes = [
   createAdminRouter(),
   createPreferencesRouter(),
   createCanvasRouter(),
+  createProjectsRouter(),
   createGatewayRouter(),
   createAccountRouter(),
 ]
