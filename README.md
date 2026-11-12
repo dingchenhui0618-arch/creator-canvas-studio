@@ -2193,3 +2193,33 @@ v0.9.10 让「甲方看没看」第一次有了答案，这一轮让这个答案
 
 验收：生产 **v0.9.36**、入口 index-sTfLUpyv.js（498,001 字节）、release 20261112-232100-2026-11-13-radar-taken.tar.gz、/api/version 0.9.36、/api/health ok（templates 26）、两服务 active。这一轮**生产零写入**：截图前后各取一次 /api/projects、/api/templates、/api/flows，作品的 version / updatedAt、模板的 updatedAt、七块画布的 updatedAt 完全一致。生产实测：GET /api/taken-origins → total 25 / withProject 1 / works 1 / official 25；开场写「库里 25 条原片，都是官方示例，1 条已经开成作品；最近一条 1 天前。点一行打开它的模板。」+「另外 21 条在模板库里。」；点「作品 · 第 2 版」→ #/projects/prj_f38d68c6（页头「毛衣折叠收纳法」）；点第一行 → #/templates/tpl_5323f485 抽屉；1440 与 390 都是 scrollWidth == clientWidth。本地演示数据（.tmp-qa/r116data，示例数据检索、不扣积分）验「上次检索还在」：点示例词「护肤台收纳」→ 搜的是这个词（修前是空词）；重载后结果与条件都在，顶部写「这是 11-13 07:21 那次检索留下的结果，没有重新请求，也没再扣积分」；「清掉」回到开场、sessionStorage 清空、服务端检索历史不动。这一轮不调模型、没花一次检索费。npm test **344/344**（新增 9 条 test/taken-origins.test.mjs），oxlint **0 error / 6 warning**、tsc -b 干净、构建通过。
 细节见 [发现记得库里有什么](./docs/radar-origin-library-2026-11-13.md)。
+
+## 一百零六、视觉评审先问「评哪条作品的哪一版」（v0.9.37）
+
+结论先行：**评审页第一屏不再问「挑哪张图」，先问「评哪条作品的哪一版」** —— 之前从侧栏进来，左边铺满 26 张别人的首帧、右边写「先选一张要被检视的画面」；按目标模式，评审回答的是「这一版能不能发」，而版本只属于作品。
+
+| 改之前 | 改之后 |
+| --- | --- |
+| 第一屏是 26 张模板首帧 +「先选一张要被检视的画面」 | 第一屏是我这条作品的这一版（最多 4 条）：作品名 · 第 N 版 · 评过几次 · 状态胶囊 ·「评这一版」 |
+| 模板首帧占掉最贵的位置 | 模板首帧收进左栏「单独评一张画面」，点开才铺开（从作品页进来、库里没作品时自动展开） |
+| 没有画布、已交付的作品都给同一种出口 | 有画布「评这一版」进 #/review/project/<id>；没画布「先开画布」进作品页；已交付且没画布「打开作品」 |
+| 手机首屏先看到 26 张首帧 | ≤1180 一列时主区排前面；390 宽收内边距，胶囊与出口不黏在一起，说明三段改一列 |
+
+三条口径：**候选是「选对象」不是「待办」**（工作台那块只收需人工确认 / 不通过；这里连已通过、还没评过、已交付的都列出来，由人挑）；**排序按最近改动**（与作品列表同一顺序，不按结论猜）；**胶囊与计数不另算**（server/review-candidates.mjs 调 reviewsForVersion / decisionFor / projectStatus / deliveredCurrent，版本划分之前记在 0 上的评审仍折进 v1）。
+
+接口：GET /api/reviews/candidates?limit=1–12（只读现算、非 GET 405、生产未登录 401；返回 total / withoutCanvas / items）。
+
+顺手修：页头说明改成本页现在的职责；作品上下文那句「不是原片首帧」与下面能挑的模板首帧自相矛盾，改成「把这一版要发的画面贴进来最准；没有截图时拿模板首帧也能评，但那是原片那一帧」。
+
+![生产 1440：视觉评审第一屏先选作品——「毛衣折叠收纳法 · 第 2 版 · 评过 2 次 · 评审 · 需人工确认 · 评这一版」，左栏 26 个模板首帧收起着](docs/screenshot-review-from-project-2026-11-13.png)
+
+![生产 1440：点「评这一版」落到 #/review/project/prj_f38d68c6，抬头写「记入作品：毛衣折叠收纳法」，左栏为这一版展开 26 个模板首帧](docs/screenshot-review-project-scope-2026-11-13.png)
+
+![生产 390：同一屏在手机上——作品版本在前面，页宽 390 无横向滚动](docs/screenshot-review-from-project-390-2026-11-13.png)
+
+![本地演示数据（非生产）1440：多条作品时四种状态各一行（待开画布 / 需人工确认 / 待开画布 / 已交付）+「还有 2 条在作品里」](docs/screenshot-review-candidates-local-2026-11-13.png)
+
+![本地演示数据 390：胶囊与出口各占一行，三段说明改一列](docs/screenshot-review-candidates-local-390-2026-11-13.png)
+
+验收：生产 **v0.9.37**、入口 index-17r_07kF.js（500,912 字节）、release 20261112-233656-2026-11-13-review-from-p.tar.gz、/api/version 0.9.37、/api/health ok（templates 26）、两服务 active。这一轮**生产零写入**：截图前后 /api/projects、/api/templates、/api/flows 的 id/version/updatedAt 完全一致（1 / 26 / 7）。生产实测：GET /api/reviews/candidates → total 1 / withoutCanvas 0（毛衣折叠收纳法 · 第 2 版 · 评过 2 次 · 需人工确认）；首屏 1 行候选、左栏收起；点「评这一版」→ #/review/project/prj_f38d68c6；1440 与 390 都是 scrollWidth == clientWidth。本地演示数据（.tmp-qa/r117data，示例数据、不扣积分）验多条作品：6 条取 4 条、待开画布 →「先开画布」进 #/projects/prj_canvas_tpl、需人工确认 →「评这一版」进 #/review/project/prj_follow、已交付无画布 →「打开作品」，底部「还有 2 条在作品里」。这一轮不调模型、没发起一次真实评审（0 积分）。npm test **355/355**（新增 10 条 test/review-candidates.test.mjs）、oxlint **0 error / 6 warning**、tsc -b 干净、构建通过。
+细节见 [视觉评审先问「评哪条作品的哪一版」](./docs/review-from-project-2026-11-13.md)。
