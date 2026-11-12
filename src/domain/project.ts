@@ -111,6 +111,9 @@ export type ShareVisits = {
 /** 作品级只读分享：token 只在作品页的分享面板与地址里出现，列表接口不返回 */
 export type ProjectShare = { token: string; createdAt: string; visits?: ShareVisits }
 
+/** 一轮已经停用的分享：地址打不开，但那次被打开过几次还留着（只留最近 8 轮） */
+export type ShareHistoryEntry = { createdAt: string; closedAt: string; visits: ShareVisits }
+
 /** 分享页读到的公开视图：服务端白名单挑过，不含账号、画布与模板 id */
 export type SharedProjectShot = {
   shotNo: number
@@ -144,6 +147,8 @@ export type ProjectDetail = {
   project: Project
   /** 这条作品的只读分享链接状态；没开就是 null */
   share: ProjectShare | null
+  /** 以前开过的链接：按停用时间倒序，停用后地址打不开，打开记录还能回看 */
+  shareHistory: ShareHistoryEntry[]
   template: ProjectTemplateDetail | null
   flow: ProjectFlowBrief | null
   /** 作品页自己的脚本：自己的版本优先，没有则回退到模板 */

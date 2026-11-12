@@ -9,6 +9,7 @@ import { randomBytes, randomUUID } from 'node:crypto'
 import { config } from './config.mjs'
 import { canAccess } from './owner.mjs'
 import { normalizeStoredScript } from './project-script.mjs'
+import { visitKey } from './share-visits.mjs'
 
 const projectsFile = path.join(config.dataDir, 'projects.json')
 const MAX_PROJECTS = 200
@@ -16,6 +17,9 @@ const STATUSES = ['active', 'done']
 // 一条作品最多保留 20 版：再多就不是「对照」而是流水账，旧版本也不该无限长下去
 const MAX_VERSIONS = 20
 export const PROJECT_VERSION_LIMIT = MAX_VERSIONS
+// 一条作品最多留 8 轮分享记录：更早的链接没人会回去看，留个上限免得作品记录无限长
+const MAX_SHARE_HISTORY = 8
+export const SHARE_HISTORY_LIMIT = MAX_SHARE_HISTORY
 
 let cache = null
 let writeChain = Promise.resolve()
@@ -88,6 +92,30 @@ function normalizeVersion(raw, fallbackN) {
   }
 }
 
+// ---------- 分享历史 ----------
+// 停用分享时 token 会被清掉（链接当场失效），但「那一轮被打开过几次」是发生过的事。
+// 这里只留 token 的哈希前缀、开始与停用时间；记录键打不开链接，却能和打开记录对上。
+function normalizeShareHistory(raw) {
+  return (Array.isArray(raw) ? raw : [])
+    .filter((entry) => entry && typeof entry === 'object')
+    .map((entry) => ({
+      key: /^[0-9a-f]{16}$/.test(String(entry.key || '')) ? String(entry.key) : '',
+      createdAt: String(entry.createdAt || ''),
+      closedAt: String(entry.closedAt || ''),
+    }))
+    .filter((entry) => entry.key)
+    .slice(0, MAX_SHARE_HISTORY)
+}
+
+/** 把当前这一轮分享归档进历史（停用、或换新 token 时调用），返回是否真的归档了。 */
+function archiveShare(found, closedAt) {
+  const key = visitKey(found.shareToken)
+  if (!key) return false
+  const history = normalizeShareHistory(found.shareHistory).filter((entry) => entry.key !== key)
+  found.shareHistory = [{ key, createdAt: String(found.shareCreatedAt || ''), closedAt }, ...history].slice(0, MAX_SHARE_HISTORY)
+  return true
+}
+
 function normalize(item) {
   const versions = (Array.isArray(item.versions) ? item.versions : [])
     .filter((entry) => entry && entry.flowId)
@@ -113,6 +141,8 @@ function normalize(item) {
     share: item.shareToken
       ? { token: String(item.shareToken), createdAt: String(item.shareCreatedAt || '') }
       : null,
+    // 以前开过的链接：token 已清、地址打不开，只留哈希键与起止时间（打开记录按哈希键还对得上）
+    shareHistory: normalizeShareHistory(item.shareHistory),
     status: STATUSES.includes(item.status) ? item.status : 'active',
     createdAt: item.createdAt || new Date().toISOString(),
     updatedAt: item.updatedAt || item.createdAt || new Date().toISOString(),
@@ -271,6 +301,8 @@ export async function enableProjectShare(id, user = null) {
   const list = await loadAll()
   const found = list.find((item) => item.id === id && canAccess(item, user))
   if (!found) return null
+  // 已经开着分享时又点了一次：先把上一轮归档，旧链接的打开记录不会跟着消失
+  archiveShare(found, new Date().toISOString())
   const token = newShareToken()
   const createdAt = new Date().toISOString()
   found.shareToken = token
@@ -285,6 +317,7 @@ export async function disableProjectShare(id, user = null) {
   const found = list.find((item) => item.id === id && canAccess(item, user))
   if (!found) return null
   if (!found.shareToken) return true
+  archiveShare(found, new Date().toISOString())
   delete found.shareToken
   delete found.shareCreatedAt
   delete found.shareBy

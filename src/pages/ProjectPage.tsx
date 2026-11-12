@@ -193,7 +193,7 @@ export default function ProjectPage({
     setShareOpen(true)
     // 打开面板时拉一次最新数据：这一步就是来问「甲方看没看」的，不能拿开页面时的旧数字回答
     void getProject(projectId)
-      .then((next) => setData((prev) => (prev ? { ...prev, share: next.share } : next)))
+      .then((next) => setData((prev) => (prev ? { ...prev, share: next.share, shareHistory: next.shareHistory } : next)))
       .catch(() => {})
   }
 
@@ -219,6 +219,10 @@ export default function ProjectPage({
       await disableProjectShare(data.project.id)
       setData({ ...data, share: null })
       onToast('已停止分享，旧链接当场失效')
+      // 面板不关：顺手取回历史，停掉的那一轮还能看到被打开过几次（v0.9.11）
+      void getProject(data.project.id)
+        .then((next) => setData((prev) => (prev ? { ...prev, share: null, shareHistory: next.shareHistory } : next)))
+        .catch(() => {})
     } catch (caught) {
       onToast(caught instanceof Error ? caught.message : '停止分享失败，刷新再试')
     } finally {
@@ -1273,6 +1277,30 @@ export default function ProjectPage({
                 <p className="vq-share-note">链接挂在这条作品上，不用了随时停止；作品删除后链接也会一起失效。</p>
               </>
             )}
+            {data.shareHistory.length ? (
+              <div className="vq-share-history">
+                <div className="vq-share-visits-head">
+                  <span className="vq-share-visits-label">以前的链接</span>
+                  <span className="vq-mono">停用后打不开，记录留着</span>
+                </div>
+                <ul className="vq-share-history-list">
+                  {data.shareHistory.map((entry) => (
+                    <li className="vq-share-history-row" key={entry.closedAt + entry.createdAt}>
+                      <span className="vq-mono vq-share-history-when">{stamp(entry.closedAt)} 停用</span>
+                      <span className="vq-share-history-text">
+                        {entry.visits.opens > 0 ? (
+                          <>
+                            <strong>{entry.visits.opens}</strong> 次打开 · {visitLine(entry.visits)}
+                          </>
+                        ) : (
+                          '没人打开过'
+                        )}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}

@@ -23,7 +23,7 @@ import { projectDeliverable } from '../project-deliverable.mjs'
 import { deliverablePrintHtml, printNoticeHtml } from '../project-deliverable-html.mjs'
 import { packageNote, parseShotRange, setSheetHtml, setSheetModel } from '../project-set-sheet.mjs'
 import { reviewImageRef, reviewSheetHtml, reviewSheetSelection } from '../project-review-sheet.mjs'
-import { getShareVisits } from '../share-visits.mjs'
+import { getShareVisits, getShareVisitsByKey } from '../share-visits.mjs'
 import { buildZip } from '../zip-store.mjs'
 import {
   listProjects,
@@ -57,7 +57,7 @@ const REVIEW_PRINT = /^\/print\/projects\/([\w-]+)\/review$/
 // 否则同一份脚本在一页里有两个口径，界面迟早读到旧的那个。
 // 分享 token 同理：只有作品页自己的分享面板需要它，列表卡片不该带着一串能打开作品的凭证。
 function projectBrief(project) {
-  const { script: _script, share: _share, ...brief } = project
+  const { script: _script, share: _share, shareHistory: _shareHistory, ...brief } = project
   return brief
 }
 
@@ -167,13 +167,24 @@ async function projectDetailView(project, user, { snapshots = false } = {}) {
   }
   const flowView = flowBrief(flow)
   // 分享面板要显示「链接被打开过几次」：只在作品详情里带上，列表接口不返回 token 与打开记录
-  const share = project.share
-    ? { ...project.share, visits: await getShareVisits(project.share.token) }
-    : null
+  // 历史链接同理：token 清掉之后地址打不开，但那一轮被打开过几次还能回看（v0.9.11）
+  const [share, shareHistory] = await Promise.all([
+    project.share ? getShareVisits(project.share.token).then((visits) => ({ ...project.share, visits })) : null,
+    Promise.all(
+      (project.shareHistory || []).map(async (entry) => ({
+        createdAt: entry.createdAt,
+        closedAt: entry.closedAt,
+        // 只给统计，不给记录键：键虽然打不开链接，也没有给出去的理由
+        visits: await getShareVisitsByKey(entry.key),
+      })),
+    ),
+  ])
   return {
     project: projectBrief(project),
     // 作品页的分享面板读这里：列表接口不返回 token
     share,
+    // 以前开过的链接：按停用时间倒序，每条带那一轮的打开次数与最近一次
+    shareHistory,
     template: templateDetail(template),
     // 节点本身只在导出时带上：页面上十几版节点一起传过去没有用，还拖慢首屏
     flow: snapshots && flowView ? { ...flowView, nodeList: flow.nodes } : flowView,

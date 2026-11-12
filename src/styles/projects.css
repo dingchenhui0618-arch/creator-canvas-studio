@@ -1164,6 +1164,51 @@
   color: var(--faint);
 }
 
+/* ---------- 以前的分享链接（v0.9.11） ----------
+   停用后地址打不开，但那一轮被打开过几次还留着：按停用时间倒序，最多 8 条。
+   每条两行——上行是停用时间，下行是打开情况，390 宽也不用挤成一团。 */
+.vq-share-history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+}
+
+.vq-share-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.vq-share-history-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.vq-share-history-when {
+  font-size: var(--text-mono);
+  color: var(--faint);
+}
+
+.vq-share-history-text {
+  font-size: var(--text-meta);
+  line-height: var(--leading-meta);
+  color: var(--muted);
+}
+
+.vq-share-history-text strong {
+  font-size: var(--text-body);
+  font-weight: var(--weight-medium);
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  margin-right: var(--space-1);
+}
+
 /* 分享中：按钮右侧一个绿点，不改变按钮语义，只用来看状态 */
 .vq-share-live {
   width: 6px;

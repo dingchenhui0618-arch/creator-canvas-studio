@@ -115,12 +115,19 @@ export async function recordShareOpen(token, userAgent, nowMs = Date.now()) {
   return entryView(entry)
 }
 
-/** 作品页的分享面板读这条：没开过分享、或者没人打开过，都返回全零。 */
-export async function getShareVisits(token) {
-  const key = visitKey(token)
-  if (!key) return { ...EMPTY_VISITS }
+/**
+ * 按记录键读。停用分享时 token 就被清掉了，历史链接只剩这个哈希前缀：
+ * 作品页回看「那一轮被打开过几次」只能走这里。
+ */
+export async function getShareVisitsByKey(key) {
+  if (typeof key !== 'string' || !/^[0-9a-f]{16}$/.test(key)) return { ...EMPTY_VISITS }
   const all = await loadAll()
   return entryView(all[key])
+}
+
+/** 作品页的分享面板读这条：没开过分享、或者没人打开过，都返回全零。 */
+export async function getShareVisits(token) {
+  return getShareVisitsByKey(visitKey(token))
 }
 
 /** 停掉分享时不清记录：链接虽然失效了，但「它被打开过几次」是发生过的事。 */
