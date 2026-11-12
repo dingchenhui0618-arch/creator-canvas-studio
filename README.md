@@ -656,6 +656,8 @@ agent（electron/agent/*.mjs：协议解析 / 工具 / 审批 / 压缩 / 存储�
 
 ![批准之后：工具卡给出真实执行结果，审批收成一行「已允许执行」，下面是最终回答](docs/screenshot-desktop-local-done-2026-11-12.png)
 
+![网页版打开 #/local：侧栏里根本没有这一项，页面如实说明本地能力只在桌面端](docs/screenshot-web-local-2026-11-12.png)
+
 验收：生产 **v0.7.0**、入口 `index-XB_UdIu2.js`、release `20261112-122641-0.7.0.tar.gz`、`/api/health` ok（templates 26）、
 `/api/local-agent/meta` 匿名 **401**（登录才可见）。生产 Electron 窗口里真实走了一遍：
 登录 → 本地工作区（工作区 `D:\Projects\visionqa-local-demo`）→ `list_dir` → `read_file brief.md`（读到的就是磁盘上的 10 行）
