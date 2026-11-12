@@ -106,8 +106,10 @@ function header(detail, ctx) {
         : '- 脚本：跟随模板《' + (template?.title || '—') + '》，模板改了这份稿也会变',
     )
   }
-  lines.push('- 建立 ' + stamp(project.createdAt, tz) + ' · 最后更新 ' + stamp(project.updatedAt, tz))
-  lines.push('- 导出时间 ' + stamp(now.toISOString(), tz))
+  // 抬头每一行都写成「标签：值」：文件里读着整齐，纸上那几张事实表也因为这一层才排得齐
+  lines.push('- 建立：' + stamp(project.createdAt, tz))
+  lines.push('- 最后更新：' + stamp(project.updatedAt, tz))
+  lines.push('- 导出时间：' + stamp(now.toISOString(), tz))
   return lines
 }
 
@@ -205,7 +207,8 @@ function reviewSection(detail, review, tz) {
   out.push('最新一次' + (reviewedVersion ? '（v' + reviewedVersion + '）' : '') + '：' + verdict + ' · ' + stamp(review.createdAt, tz))
   const model = result.profile || result.provider || ''
   const meta = [model ? '模型 ' + model + (result.provider && result.provider !== model ? '（' + result.provider + '）' : '') : '', result.ms ? Math.round(result.ms / 100) / 10 + ' 秒' : ''].filter(Boolean)
-  if (meta.length) out.push(meta.join(' · '))
+  // 前面加「· 」：这一行在 Markdown 里紧跟上一行，渲染成一段时两个信息不会粘在一起
+  if (meta.length) out.push('· ' + meta.join(' · '))
   if (result.summary) out.push('', '> ' + String(result.summary).replace(/\r?\n/g, ' '))
   const judge = result.judge
   if (judge && judge.status === 'ok') {

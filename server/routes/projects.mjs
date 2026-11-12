@@ -18,6 +18,7 @@ import {
   detachReviewsFromProject,
 } from '../reviews.mjs'
 import { projectDeliverable } from '../project-deliverable.mjs'
+import { deliverablePrintHtml, printNoticeHtml } from '../project-deliverable-html.mjs'
 import {
   listProjects,
   getProject,
@@ -39,6 +40,8 @@ const SCRIPT = /^\/api\/projects\/([\w-]+)\/script$/
 const CANVAS = /^\/api\/projects\/([\w-]+)\/canvas$/
 const SHARE = /^\/api\/projects\/([\w-]+)\/share$/
 const DELIVERABLE = /^\/api\/projects\/([\w-]+)\/deliverable$/
+// 打印版不进 /api：它是在新标签里打开的 HTML，地址栏里那串会印在纸的页脚上
+const DELIVERABLE_PRINT = /^\/print\/projects\/([\w-]+)\/deliverable$/
 
 // 详情 / 列表里的 project 不带原始脚本：脚本只从顶层 script 读（带来源、重算后的时长），
 // 否则同一份脚本在一页里有两个口径，界面迟早读到旧的那个。
@@ -160,12 +163,68 @@ async function projectDetailView(project, user) {
   }
 }
 
+// 交付稿的内容只组装一次：Markdown 文件与 A4 打印稿读同一份，
+// 不会出现「文件里一个时间、纸上另一个时间」。
+async function deliverablePayload(project, user, tzOffsetMinutes) {
+  const detail = await projectDetailView(project, user)
+  // 评审全文（含问题与修正建议）只在导出时读一次：详情列表里不带这几十 KB
+  const latest = detail.reviews.find((item) => Number(item.version ?? 0) === project.version) || null
+  const review = latest ? await getReview(latest.id, user) : null
+  return projectDeliverable(detail, { review, tzOffsetMinutes })
+}
+
+// 打印版出错时也给一张纸：这个地址是在新标签里打开的，吐一段 JSON 会让人以为页面坏了。
+const PRINT_HEAD = {
+  'Content-Type': 'text/html; charset=utf-8',
+  'Cache-Control': 'no-store',
+  'X-Robots-Tag': 'noindex',
+}
+
+function sendPrintNotice(res, status, notice) {
+  res.writeHead(status, PRINT_HEAD)
+  res.end(printNoticeHtml(notice))
+}
+
 export function createProjectsRouter() {
   return {
     prefix: '/api/projects',
+    // 打印版走 /print/projects/*：地址栏里那串会被浏览器印在纸的页脚上，不能带 /api
+    extraPrefixes: ['/print/projects'],
     async handle(req, res, url, pathname) {
-      if (!pathname.startsWith('/api/projects')) return false
+      if (!pathname.startsWith('/api/projects') && !pathname.startsWith('/print/projects')) return false
       const user = currentUser(req)
+
+      // 交付稿的 A4 打印版：同一份 Markdown 排成一张纸，打印（存 PDF）交给浏览器。
+      // 排版与内容是服务端给的，打印对话框里纸张已经写死 A4，用户只需要按一下。
+      const printPath = pathname.match(DELIVERABLE_PRINT)
+      if (printPath && req.method === 'GET') {
+        if (!user) {
+          sendPrintNotice(res, 401, {
+            title: '登录已过期',
+            message: '这个打印页要用你的登录态取数据：回到作品页再点一次「打印稿」，或者先登录。',
+            href: '/#/login',
+            label: '去登录',
+          })
+          return true
+        }
+        const printable = await getProject(printPath[1], user)
+        if (!printable) {
+          sendPrintNotice(res, 404, {
+            title: '作品不在了',
+            message: '这条作品可能已经被删除。回作品列表看看还在不在。',
+            href: '/#/projects',
+            label: '回作品列表',
+          })
+          return true
+        }
+        const rawPrintTz = Number(url.searchParams.get('tz'))
+        const printTz = Number.isFinite(rawPrintTz) ? Math.max(-720, Math.min(840, Math.round(rawPrintTz))) : 480
+        const { markdown } = await deliverablePayload(printable, user, printTz)
+        res.writeHead(200, PRINT_HEAD)
+        res.end(deliverablePrintHtml({ markdown, projectId: printable.id, title: printable.title }))
+        return true
+      }
+
       // 生产必须登录；本地演示（VQ_REQUIRE_AUTH=0）沿用模板/评审的做法：不认人但照常可用。
       if (!user && config.auth.requireAuth) {
         sendJson(res, 401, { error: '未登录', loginRequired: true })
@@ -387,13 +446,9 @@ export function createProjectsRouter() {
           sendJson(res, 404, { error: '作品不存在或已被删除' })
           return true
         }
-        const detail = await projectDetailView(project, user)
-        // 评审全文（含问题与修正建议）只在导出时读一次：详情列表里不带这几十 KB
-        const latest = detail.reviews.find((item) => Number(item.version ?? 0) === project.version) || null
-        const review = latest ? await getReview(latest.id, user) : null
         const rawTz = Number(url.searchParams.get('tz'))
         const tz = Number.isFinite(rawTz) ? Math.max(-720, Math.min(840, Math.round(rawTz))) : 480
-        const { fileName, markdown } = projectDeliverable(detail, { review, tzOffsetMinutes: tz })
+        const { fileName, markdown } = await deliverablePayload(project, user, tz)
         res.writeHead(200, {
           'Content-Type': 'text/markdown; charset=utf-8',
           // 中文文件名走 RFC 5987：老浏览器读不到 filename* 时退回 ASCII 的名字，不会得到一个空文件名

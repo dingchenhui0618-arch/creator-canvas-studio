@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ArrowLeft, ArrowRight, Check, Clapperboard, CopyPlus, Download, Link2, Pencil, Plus, RefreshCw, RotateCcw, ScanEye, Share2, Trash2, Workflow, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Clapperboard, CopyPlus, Download, Link2, Pencil, Plus, Printer, RefreshCw, RotateCcw, ScanEye, Share2, Trash2, Workflow, X } from 'lucide-react'
 import PageHead from '../components/PageHead'
 import ProjectStatusPill from '../components/ProjectStatus'
 import {
   deleteProject,
+  deliverablePrintUrl,
   disableProjectShare,
   downloadProjectDeliverable,
   enableProjectShare,
@@ -215,6 +216,23 @@ export default function ProjectPage({
       onToast(caught instanceof Error ? caught.message : '交付稿没导出成功')
     } finally {
       setBusy('')
+    }
+  }
+
+  // 打印稿：新标签里打开一张排好版的 A4，打印（存 PDF）交给浏览器。
+  // 不走 fetch：打印页要有自己的地址，刷新一下还能再打印一次。
+  const openPrint = () => {
+    if (!data) return
+    const opened = window.open(deliverablePrintUrl(data.project.id), '_blank')
+    if (!opened) {
+      onToast('新标签被浏览器拦下了：允许本站弹窗，或者先用「导出交付稿」拿 Markdown')
+      return
+    }
+    // 打印页不需要反过来操作作品页
+    try {
+      opened.opener = null
+    } catch {
+      // 跨源时改不了 opener，忽略
     }
   }
 
@@ -482,6 +500,15 @@ export default function ProjectPage({
             >
               <Download size={14} />
               {busy === 'export' ? '正在整理…' : '导出交付稿'}
+            </button>
+            <button
+              type="button"
+              className="vq-button vq-button--ghost"
+              onClick={openPrint}
+              title="A4 打印稿：新标签里排好版，打印对话框里直接存为 PDF"
+            >
+              <Printer size={14} />
+              打印稿
             </button>
             <button
               type="button"

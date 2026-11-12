@@ -99,3 +99,13 @@ export async function downloadProjectDeliverable(id: string): Promise<{ name: st
   setTimeout(() => URL.revokeObjectURL(url), 1000)
   return { name, bytes: blob.size }
 }
+
+/**
+ * 交付稿的 A4 打印版地址：新标签里打开一张排好版的纸，打印（存 PDF）交给浏览器。
+ * 走服务端出的 HTML 而不是前端排版：纸的样式只写一处，也不会把整页应用壳带进打印结果。
+ * 时区同理，跟着地址走，纸上的时间就是导出人本地的时间。
+ */
+export function deliverablePrintUrl(id: string): string {
+  const tz = String(-new Date().getTimezoneOffset())
+  return '/print/projects/' + encodeURIComponent(id) + '/deliverable?tz=' + encodeURIComponent(tz)
+}

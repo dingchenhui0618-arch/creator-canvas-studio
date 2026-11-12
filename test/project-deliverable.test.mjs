@@ -124,7 +124,7 @@ test('时间按导出人所在的时区写，不是 UTC', () => {
   // 同一份数据按 UTC 写就是 05:10，说明时区偏移真的用上了
   const utc = projectDeliverable(fixture(), { review: FULL_REVIEW, now: NOW, tzOffsetMinutes: 0 }).markdown
   assert.ok(utc.includes('最新一次（v2）：需人工确认 · 2026-11-12 05:10'))
-  assert.ok(utc.includes('导出时间 2026-11-12 13:40'))
+  assert.ok(utc.includes('导出时间：2026-11-12 13:40'))
 })
 
 test('时长对账：口径与页面一致，句子带句号', () => {
