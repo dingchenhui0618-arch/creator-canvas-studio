@@ -1115,6 +1115,55 @@
   color: var(--faint);
 }
 
+/* ---------- 分享链接的打开情况（v0.9.10） ----------
+   不是监控，只回答「发出去的链接被点开过几次」：次数 + 最近一次 + 客户端类别。
+   与弹窗其它行用同一套 4/8pt 间距，靠一条分隔线隔开，不再套第二层卡片。 */
+.vq-share-visits {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+}
+
+.vq-share-visits-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.vq-share-visits-label {
+  font-size: var(--text-meta);
+  color: var(--ink);
+}
+
+.vq-share-visits-head .vq-mono {
+  font-size: var(--text-mono);
+  color: var(--faint);
+}
+
+.vq-share-visits-main {
+  margin: 0;
+  font-size: var(--text-body);
+  line-height: var(--leading-meta);
+  color: var(--ink);
+}
+
+.vq-share-visits-main strong {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-medium);
+  font-variant-numeric: tabular-nums;
+  margin-right: var(--space-1);
+}
+
+.vq-share-visits-sub {
+  margin: 0;
+  font-size: var(--text-meta);
+  line-height: var(--leading-meta);
+  color: var(--faint);
+}
+
 /* 分享中：按钮右侧一个绿点，不改变按钮语义，只用来看状态 */
 .vq-share-live {
   width: 6px;

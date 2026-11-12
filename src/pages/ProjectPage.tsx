@@ -19,7 +19,7 @@ import {
   updateProject,
 } from '../api/projects'
 import { describeTiming, type ScriptBeat } from '../domain/radar'
-import { projectStep, reviewsForVersion, runsForVersion, type ProjectDetail } from '../domain/project'
+import { projectStep, reviewsForVersion, runsForVersion, type ProjectDetail, type ShareVisits } from '../domain/project'
 import '../styles/projects.css'
 
 // 保存脚本之后画布那边发生了什么：直接说人话，不把 reason 漏到界面上
@@ -43,6 +43,29 @@ function stamp(iso: string): string {
   return pad2(date.getMonth() + 1) + '-' + pad2(date.getDate()) + ' ' + pad2(date.getHours()) + ':' + pad2(date.getMinutes())
 }
 
+// 分享链接的打开记录：只给「多久之前」和「从哪儿打开」，不假装知道是谁
+const CLIENT_LABEL: Record<string, string> = {
+  wechat: '微信内打开',
+  mobile: '手机或平板',
+  desktop: '电脑浏览器',
+  other: '未知设备',
+}
+
+function ago(iso: string): string {
+  const time = Date.parse(iso)
+  if (!Number.isFinite(time)) return '—'
+  const minutes = Math.floor(Math.max(0, Date.now() - time) / 60000)
+  if (minutes < 1) return '刚刚'
+  if (minutes < 60) return minutes + ' 分钟前'
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return hours + ' 小时前'
+  return Math.floor(hours / 24) + ' 天前'
+}
+
+function visitLine(visits: ShareVisits): string {
+  const client = CLIENT_LABEL[visits.lastClient] || '未知设备'
+  return '最近 ' + ago(visits.lastAt) + '（' + client + '）'
+}
 function seconds(value: number | undefined): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '—'
   return value.toFixed(1) + 's'
@@ -168,6 +191,10 @@ export default function ProjectPage({
   const openShare = () => {
     setShareCopied(false)
     setShareOpen(true)
+    // 打开面板时拉一次最新数据：这一步就是来问「甲方看没看」的，不能拿开页面时的旧数字回答
+    void getProject(projectId)
+      .then((next) => setData((prev) => (prev ? { ...prev, share: next.share } : next)))
+      .catch(() => {})
   }
 
   const startShare = async () => {
@@ -1207,6 +1234,26 @@ export default function ProjectPage({
                   >
                     {shareBusy === 'disable' ? '正在停止…' : '停止分享'}
                   </button>
+                </div>
+                <div className="vq-share-visits">
+                  <div className="vq-share-visits-head">
+                    <span className="vq-share-visits-label">链接打开情况</span>
+                    <span className="vq-mono">只记次数与设备类型</span>
+                  </div>
+                  {data.share.visits && data.share.visits.opens > 0 ? (
+                    <>
+                      <p className="vq-share-visits-main">
+                        <strong>{data.share.visits.opens}</strong> 次打开 · {visitLine(data.share.visits)}
+                      </p>
+                      <p className="vq-share-visits-sub">
+                        第一次打开 {stamp(data.share.visits.firstAt)}。一分钟内的连续刷新算同一次；不记录是谁、也不记录 IP。
+                      </p>
+                    </>
+                  ) : (
+                    <p className="vq-share-visits-sub">
+                      还没有人打开过这条链接。发出去之后回这里看，就能知道对方点开过几次、最近一次是什么时候。
+                    </p>
+                  )}
                 </div>
                 <p className="vq-share-note">
                   停止后这个地址立即失效，已经发出去的链接打不开；再开一次会换一条新链接。链接是这个账号开的，只有你能停。

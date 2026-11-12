@@ -3,6 +3,8 @@
 // 链接本身就是凭证（18 字节随机 token），公开视图只走 project-share.mjs 的白名单：
 // 标题、脚本、分镜、评审与运行次数；不带账号、画布、模板 id 与原始素材。
 // 分镜帧图也走这条带 token 的地址——/media/frames 是要登录的，分享页拿不到。
+// 每打开一次分享页会记一次打开（60 秒内的连续打开算一次）：甲方看没看、什么时候看的，
+// 分享者自己能在作品的分享面板里看到。记的只是次数与客户端类别，不记 IP、不记是谁。
 // /print/share/project/<token>/review 是同一份凭证下的评审对照纸：
 // 拿到链接的人不用账号就能把「问题框在哪」打印或存 PDF，画面同样走带 token 的帧图接口。
 import fsp from 'node:fs/promises'
@@ -16,6 +18,7 @@ import { scriptView } from '../project-script.mjs'
 import { getReview, listReviews, reviewSummaryByVersion } from '../reviews.mjs'
 import { listRunsByFlows } from '../flows.mjs'
 import { frameFileOf, publicProjectView, shareFrameIndex } from '../project-share.mjs'
+import { recordShareOpen } from '../share-visits.mjs'
 
 const SHARED = /^\/api\/share\/project\/([\w-]+)$/
 const FRAME = /^\/api\/share\/project\/([\w-]+)\/frame\/(\d+)$/
@@ -154,6 +157,9 @@ export function createProjectShareRouter() {
         reviewSummaryByVersion(project.id, null),
         flows.length ? listRunsByFlows(flows, { limit: 1 }, null) : Promise.resolve({ total: 0 }),
       ])
+      // 分享页的数据请求就是一次「有人打开了这条链接」：只记这一处，
+      // 帧图不记（一次打开会带很多张图），对照纸也不另记。
+      await recordShareOpen(token, req.headers?.['user-agent'])
       // 跨版本合计：分享页给的是「这条作品一共评过几次」，不按版本拆（版本是内部概念）
       let count = 0
       let lastVerdict = ''

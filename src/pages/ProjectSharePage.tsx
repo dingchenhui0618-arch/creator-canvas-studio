@@ -279,7 +279,8 @@ export default function ProjectSharePage({ token }: { token: string }) {
             <strong>关于这个链接</strong>
             <p>
               只读分享：只展示这条作品的脚本、分镜，以及评审次数与评审对照纸，不展示账号、积分与画布内容。
-              分享者停止分享后，这个地址与对照纸会立即失效。
+              分享者停止分享后，这个地址与对照纸会立即失效。分享者能看到这条链接被打开的次数、最近一次的时间，
+              以及是从微信、手机还是电脑打开的；不记录 IP，也不记录具体是谁。
             </p>
           </div>
           <button type="button" className="pshare-button is-primary" onClick={openWorkbench}>

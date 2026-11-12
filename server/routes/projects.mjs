@@ -23,6 +23,7 @@ import { projectDeliverable } from '../project-deliverable.mjs'
 import { deliverablePrintHtml, printNoticeHtml } from '../project-deliverable-html.mjs'
 import { packageNote, parseShotRange, setSheetHtml, setSheetModel } from '../project-set-sheet.mjs'
 import { reviewImageRef, reviewSheetHtml, reviewSheetSelection } from '../project-review-sheet.mjs'
+import { getShareVisits } from '../share-visits.mjs'
 import { buildZip } from '../zip-store.mjs'
 import {
   listProjects,
@@ -165,10 +166,14 @@ async function projectDetailView(project, user, { snapshots = false } = {}) {
     runCounts[version] = (runCounts[version] || 0) + Number(amount)
   }
   const flowView = flowBrief(flow)
+  // 分享面板要显示「链接被打开过几次」：只在作品详情里带上，列表接口不返回 token 与打开记录
+  const share = project.share
+    ? { ...project.share, visits: await getShareVisits(project.share.token) }
+    : null
   return {
     project: projectBrief(project),
     // 作品页的分享面板读这里：列表接口不返回 token
-    share: project.share,
+    share,
     template: templateDetail(template),
     // 节点本身只在导出时带上：页面上十几版节点一起传过去没有用，还拖慢首屏
     flow: snapshots && flowView ? { ...flowView, nodeList: flow.nodes } : flowView,

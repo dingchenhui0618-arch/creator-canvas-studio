@@ -99,8 +99,17 @@ export type ProjectScript = {
   timing: TemplateTiming | null
 }
 
+/** 分享链接被打开过几次：只记次数与客户端类别，不记 IP、不区分是谁 */
+export type ShareVisits = {
+  opens: number
+  firstAt: string
+  lastAt: string
+  /** wechat 微信内打开 / mobile 手机或平板 / desktop 电脑浏览器 / other 未知 */
+  lastClient: 'wechat' | 'mobile' | 'desktop' | 'other' | ''
+}
+
 /** 作品级只读分享：token 只在作品页的分享面板与地址里出现，列表接口不返回 */
-export type ProjectShare = { token: string; createdAt: string }
+export type ProjectShare = { token: string; createdAt: string; visits?: ShareVisits }
 
 /** 分享页读到的公开视图：服务端白名单挑过，不含账号、画布与模板 id */
 export type SharedProjectShot = {
