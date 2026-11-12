@@ -203,7 +203,7 @@ export function LoginPage({ notice, onSignIn, onRegister }: Props) {
         <div className="vq-login-form-wrap">
           <div className="vq-login-form-head">
             <span className="vq-mono">{isSignup ? 'Create account' : 'Sign in'}</span>
-            <h2>{isSignup ? '创建账号' : '登录 Workbench'}</h2>
+            <h2>{isSignup ? '创建账号' : '登录 VisionQA'}</h2>
             <p>
               {isSignup
                 ? '注册完直接进入工作台。昵称只是显示名，可以稍后再补。'

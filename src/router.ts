@@ -19,7 +19,6 @@ export type Route =
   | { kind: 'page'; page: ShellPage; flowId?: string; canvasId?: string }
   | { kind: 'agent-editor'; agentRef: string | null }
   | { kind: 'legal'; doc: 'terms' | 'privacy' }
-  | { kind: 'welcome' }
   | { kind: 'admin'; section: AdminSection }
 
 export const DEFAULT_ROUTE: Route = { kind: 'page', page: 'overview' }
@@ -82,7 +81,7 @@ export function parseRoute(hash: string): Route {
   const [head, tail] = segments
   if (head === 'admin') return { kind: 'admin', section: parseAdminSection(tail) }
   if (head === 'legal') return { kind: 'legal', doc: tail === 'privacy' ? 'privacy' : 'terms' }
-  if (head === 'welcome') return { kind: 'welcome' }
+  // 旧的 #/welcome 链接不再单独成页：引导已改成工作台内的弹窗，落回工作台即可。
   if (head === 'agents') {
     if (!tail) return { kind: 'page', page: 'agents' }
     if (tail === 'new') return { kind: 'agent-editor', agentRef: null }
@@ -109,7 +108,6 @@ export function toHash(route: Route): string {
   }
   if (route.kind === 'admin') return '#/admin/' + route.section
   if (route.kind === 'legal') return '#/legal/' + route.doc
-  if (route.kind === 'welcome') return '#/welcome'
   return '#/agents/' + (route.agentRef ? encodeURIComponent(route.agentRef) : 'new')
 }
 
@@ -124,7 +122,6 @@ export function routeKey(route: Route): string {
   }
   if (route.kind === 'admin') return 'admin:' + route.section
   if (route.kind === 'legal') return 'legal:' + route.doc
-  if (route.kind === 'welcome') return 'welcome'
   return 'agent-editor:' + (route.agentRef ?? 'new')
 }
 

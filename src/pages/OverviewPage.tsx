@@ -30,6 +30,8 @@ type Props = {
   onNavigate: (page: Page) => void
   // 工作台列的是画布服务里的画布项目：点哪块就开哪块，不再只是跳到画布页
   onOpenCanvas: (canvasId: string) => void
+  // 引导是弹窗：页脚「上手指引」重新打开它，不再跳一个 #/welcome 页面
+  onOpenGuide: () => void
 }
 
 const pad2 = (value: number) => String(value).padStart(2, '0')
@@ -57,7 +59,7 @@ function secondsOf(ms?: number): string {
  * 工作台只看真实数据：画布来自画布服务，运行与模板来自工作台 API。
  * 任何一块没有数据就写空状态并给出下一步，不用示例行填充——上线后的首页不能靠假数据撑版面。
  */
-export function OverviewPage({ userName, onCreate, onNavigate, onOpenCanvas }: Props) {
+export function OverviewPage({ userName, onCreate, onNavigate, onOpenCanvas, onOpenGuide }: Props) {
   const { internal } = useUiMode()
   const site = useSiteInfo()
   const [now] = useState(() => new Date())
@@ -112,31 +114,18 @@ export function OverviewPage({ userName, onCreate, onNavigate, onOpenCanvas }: P
       <PageHead
         kicker={
           <>
-            {/* 不给问候语：这一屏的价值是「有什么、各多少」，不是寒暄 */}
             <span>工作台</span>
-            <span className="vq-head-sep" aria-hidden="true">·</span>
-            <span>{userName}</span>
             <span className="vq-head-sep" aria-hidden="true">·</span>
             <time dateTime={now.toISOString().slice(0, 10)}>{todayLabel(now)}</time>
           </>
         }
-        title={
-          loading ? (
-            '正在读取…'
-          ) : (
-            <>
-              <b>{canvases.length}</b> 块画布
-              <span className="vq-head-sep" aria-hidden="true">·</span>
-              <b>{runs.length}</b> 条运行
-              <span className="vq-head-sep" aria-hidden="true">·</span>
-              <b>{templates.length}</b> 个模板
-            </>
-          )
-        }
+        title={loading ? '正在读取…' : '欢迎回来，' + userName}
         desc={
           internal
-            ? '三个数字分别来自画布服务、/api/runs 与 /api/templates；没有数据的区块写空状态，不放示例数据。'
-            : '三个数字分别是画布、运行与模板的当前数量；没有数据时写清空状态。'
+            ? '画布、运行与模板三个数字分别来自画布服务、/api/runs 与 /api/templates；没有数据的区块写空状态，不放示例数据。'
+            : loading
+              ? '正在读取你账号下的画布、运行与模板。'
+              : canvases.length + ' 块画布 · ' + runs.length + ' 条运行 · ' + templates.length + ' 个模板，都在你的账号下；换浏览器登录同一账号即可看到。'
         }
         actions={
           <>
@@ -271,7 +260,7 @@ export function OverviewPage({ userName, onCreate, onNavigate, onOpenCanvas }: P
                 </button>
               ))}
               {/* 首进工作台要有一个明确的「从哪儿开始」：直接拿一条已解析模板 */}
-              <button type="button" className="vq-button vq-button--ghost" onClick={() => onNavigate('templates')}>
+              <button type="button" className="vq-button vq-button--ghost vq-template-cta" onClick={() => onNavigate('templates')}>
                 拿一条模板开始
                 <ArrowRight size={13} />
               </button>
@@ -298,7 +287,9 @@ export function OverviewPage({ userName, onCreate, onNavigate, onOpenCanvas }: P
         <span className="vq-overview-legal">
           <a className="vq-link" href="#/legal/terms">服务条款</a>
           <a className="vq-link" href="#/legal/privacy">隐私说明</a>
-          <a className="vq-link" href="#/welcome">上手指引</a>
+          <button type="button" className="vq-link" onClick={onOpenGuide}>
+            上手指引
+          </button>
           {site.icp ? <span className="vq-mono">{site.icp}</span> : null}
         </span>
       </footer>

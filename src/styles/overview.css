@@ -146,7 +146,8 @@
 .vq-table-head,
 .vq-table-row {
   display: grid;
-  grid-template-columns: minmax(160px, 1.7fr) minmax(112px, 1.1fr) 58px 62px 82px 66px;
+  /* 四列对应四格：流程 / 状态 / 耗时 / 开始。旧的六列会让「开始」掉到 62px 里换行 */
+  grid-template-columns: minmax(160px, 1.7fr) minmax(88px, 0.7fr) 64px 88px;
   gap: 12px;
   align-items: center;
   padding: 0 16px;
@@ -290,6 +291,21 @@
 
 .vq-overview-foot .vq-mono {
   font-size: 12px;
+}
+
+/* 页脚右侧三个入口：没有间距时「服务条款/隐私说明/上手指引」会挤成一句话 */
+.vq-overview-legal {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+/* 「拿一条模板开始」是列表之后的下一步，不是列表里的一行 */
+.vq-template-cta {
+  width: 100%;
+  justify-content: center;
+  margin-top: 12px;
 }
 
 

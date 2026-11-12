@@ -13,6 +13,58 @@ const fmtTime = (iso: string) => {
 
 // 运行记录页：筛选与分页都在服务端做（GET /api/runs?flowId=&status=&q=&limit=&offset=），
 // 前端只保留当前页，避免一次把几百条运行记录连节点输出全塞进浏览器。
+// 节点类型是服务端内部代号（input / kb / llm…），页面上给中文名，认不出的原样显示。
+const NODE_KIND_LABEL: Record<string, string> = {
+  input: '输入',
+  kb: '检索',
+  llm: '模型',
+  vision: '视觉',
+  output: '输出',
+  review: '评审',
+  agent: '智能体',
+}
+
+// 节点返回：用户要看的是「这一步拿回了什么」，不是一段 JSON。
+// 对象按字段展开成两列；原始 JSON 收进折叠区，排障时还能看。
+function NodeOutput({ output }: { output: unknown }) {
+  const raw = String(typeof output === 'string' ? output : JSON.stringify(output, null, 2)).slice(0, 2000)
+  const isRecord = Boolean(output) && typeof output === 'object' && !Array.isArray(output)
+  if (!isRecord) {
+    return <pre className="runs-node-output">{raw.slice(0, 900)}</pre>
+  }
+  const entries = Object.entries(output as Record<string, unknown>).slice(0, 8)
+  const cell = (value: unknown): string => {
+    if (value === null || value === undefined) return '—'
+    if (typeof value === 'string') return value.length > 180 ? value.slice(0, 180) + '…' : value
+    if (Array.isArray(value)) return value.length ? value.length + ' 项' : '空'
+    if (typeof value === 'object') {
+      // 嵌套对象别甩一段 JSON：拆成「键 值」用 · 连起来
+      const pairs = Object.entries(value as Record<string, unknown>)
+        .slice(0, 5)
+        .map(([key, inner]) => key + ' ' + cell(inner))
+        .join(' · ')
+      return pairs.length > 180 ? pairs.slice(0, 180) + '…' : pairs
+    }
+    return String(value)
+  }
+  return (
+    <div className="runs-output">
+      <dl className="runs-output-list">
+        {entries.map(([key, value]) => (
+          <div key={key}>
+            <dt>{key}</dt>
+            <dd>{cell(value)}</dd>
+          </div>
+        ))}
+      </dl>
+      <details className="runs-output-raw">
+        <summary>原始返回</summary>
+        <pre className="runs-node-output">{raw}</pre>
+      </details>
+    </div>
+  )
+}
+
 export function RunsPage({ onOpenFlow }: { onOpenFlow?: (flowId: string) => void }) {
   const [items, setItems] = useState<RunRecord[]>([])
   const [total, setTotal] = useState(0)
@@ -184,15 +236,13 @@ export function RunsPage({ onOpenFlow }: { onOpenFlow?: (flowId: string) => void
                 {current.nodes.map((node) => (
                   <li key={node.id} className={`runs-node is-${node.status}`}>
                     <div className="runs-node-head">
-                      <span className="vq-mono">{node.kind}</span>
+                      <span className="vq-mono">{NODE_KIND_LABEL[node.kind] ?? node.kind}</span>
                       <strong>{node.title}</strong>
                       <span className="vq-mono">{node.ms}ms</span>
                     </div>
                     {node.error ? <p className="runs-node-error">{node.error}</p> : null}
                     {node.message ? <p className="runs-node-error">{node.message}</p> : null}
-                    {node.output != null ? (
-                      <pre className="runs-node-output">{String(typeof node.output === 'string' ? node.output : JSON.stringify(node.output, null, 1)).slice(0, 900)}</pre>
-                    ) : null}
+                    {node.output != null ? <NodeOutput output={node.output} /> : null}
                   </li>
                 ))}
               </ol>

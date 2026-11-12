@@ -207,22 +207,22 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
           <div className="vq-card-body">
             <div className="vq-row">
               <div className="vq-row-copy">
-                <strong>会话存储</strong>
-                <span>{internal ? '客户端只持 cookie；服务端只存 token 的 sha256' : '登录凭证只保存在本机浏览器，平台不保存明文'}</span>
+                <strong>登录状态</strong>
+                <span>{internal ? '客户端只持 cookie；服务端只存 token 的 sha256' : '保存在这台设备上，换设备或清缓存后需要重新登录'}</span>
               </div>
               <span className="vq-row-value vq-mono">{internal ? 'vq_session · HttpOnly' : '已安全保存'}</span>
             </div>
             <div className="vq-row">
               <div className="vq-row-copy">
                 <strong>本次登录时间</strong>
-                <span>{internal ? '服务端会话的创建时间，用于会话过期判断' : '本次登录的时间，用于判断登录是否过期'}</span>
+                <span>{internal ? '服务端会话的创建时间，用于会话过期判断' : '这台设备本次登录的时间'}</span>
               </div>
               <span className="vq-row-value vq-mono">{signedInAt}</span>
             </div>
             <div className="vq-row">
               <div className="vq-row-copy">
                 <strong>工作区</strong>
-                <span>{internal ? '单工作区部署；多工作区切换还没有后端' : '当前账号所属的工作区'}</span>
+                <span>{internal ? '单工作区部署；多工作区切换还没有后端' : '这个账号所属的工作区'}</span>
               </div>
               <span className="vq-row-value">{session.user.workspace}</span>
             </div>
@@ -468,7 +468,7 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
             <div>
               <span className="vq-mono">可用性 / Status</span>
               <h2>功能可用性</h2>
-              <p>{internal ? '这里会真连数据库、数据目录、模板库、模型接口和检索接口，不是「环境变量填了没填」。' : '看一下检索、评审、模型与数据存储现在能不能用。细节在后台「系统」页。'}</p>
+              <p>{internal ? '这里会真连数据库、数据目录、模板库、模型接口和检索接口，不是「环境变量填了没填」。' : '检索、评审与数据存储现在能不能用；不正常时把这屏发给管理员。'}</p>
             </div>
             <div className="vq-account-actions">
               {health ? <MonoTag>{HEALTH_LABEL[health.status] || health.status}</MonoTag> : null}
@@ -500,7 +500,7 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
               <p className="vq-ledger-empty">检测中…</p>
             )}
             <p className="vq-billing-note">
-              {internal ? '结果缓存 10 秒，避免刷新把上游探活打成刷屏' : '结果缓存 10 秒'}
+              {internal ? '结果缓存 10 秒，避免刷新把上游探活打成刷屏' : '每 10 秒最多检测一次'}
               ；最后检测于 {health ? formatStamp(health.checkedAt) : '—'}。
             </p>
           </div>
@@ -509,7 +509,7 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
 
       <footer className="vq-settings-foot">
         <span>{internal ? '设置项不落浏览器；账号、积分与系统状态都由服务端校验。' : '设置项不保存在浏览器；账号、积分与运行状态都会实时校验。'}</span>
-        <span className="vq-mono">VisionQA · Workbench</span>
+        <span className="vq-mono">VisionQA</span>
       </footer>
     </div>
   )

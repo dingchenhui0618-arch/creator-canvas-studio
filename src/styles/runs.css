@@ -36,6 +36,14 @@
 .runs-node-head .vq-mono:first-child { color:var(--faint); font-size:12px; text-transform:uppercase; }
 .runs-node-head .vq-mono:last-child { margin-left:auto; color:var(--faint); font-size:12px; }
 .runs-node-error { margin:0; color:var(--fail); font-size:12px; }
+.runs-output-list { display: grid; gap: 0; margin: 8px 0 0; border: 1px solid var(--line-faint); border-radius: var(--radius-sm); background: var(--surface-raised); }
+.runs-output-list > div { display: grid; grid-template-columns: minmax(88px, 140px) minmax(0, 1fr); gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--line-faint); }
+.runs-output-list > div:last-child { border-bottom: 0; }
+.runs-output-list dt { color: var(--faint); font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; overflow-wrap: anywhere; }
+.runs-output-list dd { margin: 0; color: var(--ink); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.runs-output-raw { margin-top: 8px; font-size: 12px; color: var(--muted); }
+.runs-output-raw summary { cursor: pointer; padding: 4px 0; color: var(--faint); }
+.runs-output-raw summary:hover { color: var(--ink); }
 .runs-node-output { margin:0; max-height:160px; overflow:auto; padding:8px 12px; border:1px solid var(--line-faint); border-radius:var(--radius-sm); background:var(--surface-raised); font-family:var(--font-mono); font-size: 11px; line-height:1.6; color:var(--muted); white-space:pre-wrap; }
 .runs-note { margin:0; color:var(--faint); font-size:12px; }
 .runs-note.is-error { color:var(--fail); }

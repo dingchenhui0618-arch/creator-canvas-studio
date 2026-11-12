@@ -4,6 +4,7 @@ import {
   Bot,
   Check,
   ChevronRight,
+  Compass,
   Grid2X2,
   LayoutTemplate,
   Loader2,
@@ -23,6 +24,7 @@ import './App.css'
 import './styles/shell.css'
 import './styles/overview.css'
 import { CreateModal, NavItem } from './components/ui'
+import { WelcomeGuide } from './components/WelcomeGuide'
 import { ModelSwitch } from './components/ModelSwitch'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { PageSkeleton } from './components/PageSkeleton'
@@ -52,7 +54,6 @@ const TemplateLibraryPage = lazy(() =>
 )
 const AdminConsolePage = lazy(() => import('./pages/admin/AdminConsolePage'))
 const LegalPage = lazy(() => import('./pages/LegalPage').then((module) => ({ default: module.LegalPage })))
-const WelcomePage = lazy(() => import('./pages/WelcomePage').then((module) => ({ default: module.WelcomePage })))
 const AgentEditorPage = lazy(() => import('./pages/AgentEditorPage'))
 
 function sectionLabel(section: string): string {
@@ -155,6 +156,25 @@ function Workbench({
   const [updateMessage, setUpdateMessage] = useState('')
   const toastTimer = useRef<number | undefined>(undefined)
   const accountRef = useRef<HTMLDivElement>(null)
+
+  // 上手引导：第一次进工作台就弹出来（按账号记一次），关闭即记住；之后从账号菜单还能再看。
+  const seenKey = welcomeSeenKey(session.user.id)
+  const [guideOpen, setGuideOpen] = useState(() => {
+    if (!seenKey) return false
+    try {
+      return !window.localStorage.getItem(seenKey)
+    } catch {
+      return false
+    }
+  })
+  const closeGuide = useCallback(() => {
+    setGuideOpen(false)
+    try {
+      if (seenKey) window.localStorage.setItem(seenKey, '1')
+    } catch {
+      // 隐私模式下写不进去：下次进工作台会再弹一次，可以接受
+    }
+  }, [seenKey])
 
   // 侧栏高亮、面包屑和内容页都从 hash 路由推导，页面本身不再保存 activePage。
   const activePage = routeToPage(route)
@@ -284,8 +304,8 @@ function Workbench({
   }, [accountMenuOpen, updateOpen])
 
   const renderPage = () => {
-    // 合规页与引导页在 App 根部整屏渲染，不进侧栏外壳
-    if (route.kind === 'legal' || route.kind === 'welcome') return null
+    // 合规页在 App 根部整屏渲染，不进侧栏外壳；引导是工作台里的弹窗，不占路由
+    if (route.kind === 'legal') return null
     if (route.kind === 'admin') return <AdminConsolePage section={route.section} />
     if (route.kind === 'agent-editor') {
       return (
@@ -318,6 +338,7 @@ function Workbench({
             onCreate={() => setShowCreate(true)}
             onNavigate={go}
             onOpenCanvas={(canvasId) => navigate({ kind: 'page', page: 'canvas', canvasId })}
+            onOpenGuide={() => setGuideOpen(true)}
           />
         )
       case 'agents':
@@ -437,6 +458,17 @@ function Workbench({
                       <span className="vq-mono">{sessionKindLabel(session.user.kind)}</span>
                       <span className="vq-mono">{internal ? '服务端会话' : '已登录'}</span>
                     </div>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setAccountMenuOpen(false)
+                        setGuideOpen(true)
+                      }}
+                    >
+                      <Compass size={15} />
+                      使用引导
+                    </button>
                     <button type="button" role="menuitem" onClick={() => go('settings')}>
                       <Settings2 size={15} />
                       账号设置
@@ -615,6 +647,8 @@ function Workbench({
         </div>
       )}
 
+      {guideOpen && <WelcomeGuide onClose={closeGuide} onGo={go} />}
+
       {showCreate && (
         <CreateModal
           onClose={() => setShowCreate(false)}
@@ -637,29 +671,6 @@ function App() {
   // 服务条款 / 隐私说明：不登录也要能打开（登录页页脚可点进来）
   const route = useRoute()
   const [authNotice, setAuthNotice] = useState('')
-
-  // 新账号第一次进工作台：落到引导页；看过一次就不再自动打开（按账号记，换账号各算各的）
-  const seenKey = session ? welcomeSeenKey(session.user.id) : ''
-  const currentRouteKey = routeKey(route)
-  useEffect(() => {
-    if (!session || !seenKey) return
-    if (currentRouteKey !== 'page:overview') return
-    try {
-      if (window.localStorage.getItem(seenKey)) return
-    } catch {
-      return
-    }
-    navigate({ kind: 'welcome' }, { replace: true })
-  }, [session, seenKey, currentRouteKey])
-
-  const finishWelcome = useCallback(() => {
-    try {
-      if (seenKey) window.localStorage.setItem(seenKey, '1')
-    } catch {
-      // 隐私模式下写不进去：本次进工作台，下次还会打开引导，可以接受
-    }
-    navigate({ kind: 'page', page: 'overview' }, { replace: true })
-  }, [seenKey])
 
   const handleSignIn = useCallback(
     async (input: SignInInput) => {
@@ -686,14 +697,6 @@ function App() {
     },
     [signOut],
   )
-
-  if (route.kind === 'welcome' && session) {
-    return (
-      <Suspense fallback={<PageSkeleton label="正在准备引导" />}>
-        <WelcomePage name={session.user.name} onDone={finishWelcome} />
-      </Suspense>
-    )
-  }
 
   if (route.kind === 'legal') {
     return (
