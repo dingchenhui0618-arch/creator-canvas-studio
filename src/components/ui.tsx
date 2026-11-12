@@ -22,20 +22,23 @@ export function MonoTag({ children }: { children: ReactNode }) {
   return <span className="vq-tag">{children}</span>
 }
 
-export function NavItem({ icon: Icon, label, active, compact, utility, badge, onClick }: { icon: IconComponent; label: string; active?: boolean; compact?: boolean; utility?: boolean; badge?: string; onClick: () => void }) {
+export function NavItem({ icon: Icon, label, active, compact, utility, badge, badgeLabel, onClick }: { icon: IconComponent; label: string; active?: boolean; compact?: boolean; utility?: boolean; badge?: string; /** 角标的完整说法（给读屏与收起态 tooltip 用），如「3 条评审等你看」 */ badgeLabel?: string; onClick: () => void }) {
+  // 数字放不下时（收起侧栏 / 窄屏）只剩一个点，所以把「几条、是什么」写进可访问名，别让读屏的人丢掉这条信息
+  const spoken = badgeLabel ? label + '，' + badgeLabel : label
   return (
     <button
       type="button"
       className={`vq-nav-item${active ? ' is-active' : ''}${compact ? ' vq-nav-item--compact' : ''}${utility ? ' vq-nav-item--utility' : ''}`}
       onClick={onClick}
       // 窄屏会把文字藏起来（只剩图标），可访问名与图标态的 tooltip 都得由 label 兜住
-      aria-label={label}
-      title={compact ? label : undefined}
+      aria-label={spoken}
+      title={compact ? spoken : undefined}
       aria-current={active ? 'page' : undefined}
     >
       <Icon size={16} strokeWidth={1.5} />
       {!compact && <span>{label}</span>}
       {!compact && badge && <em>{badge}</em>}
+      {badge ? <i className="vq-nav-item-dot" aria-hidden="true" /> : null}
     </button>
   )
 }

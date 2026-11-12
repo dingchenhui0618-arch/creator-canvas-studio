@@ -93,6 +93,8 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
   // 人已经拍过板的：结论按人的走，工作台只留一行交代它去了哪（v0.9.21）
   const [decided, setDecided] = useState<ReviewQueueDecidedRow[]>([])
   const [decidedTotal, setDecidedTotal] = useState(0)
+  // 首屏只排 3 条，第 4 条以后不能凭空消失：给一行「还有 N 条」，点开排到服务端上限（20 条）
+  const [queueOpen, setQueueOpen] = useState(false)
   // 正在「已看过 / 撤销」的那条作品：按钮转圈并禁用，防连点
   const [ackBusy, setAckBusy] = useState('')
   const [queueError, setQueueError] = useState('')
@@ -108,7 +110,8 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
       request<{ items: TemplateRow[] }>('/api/templates'),
       listProjects(),
       listShares(),
-      listReviewQueue(3),
+      // 一次取到上限 20：首屏只渲染 3 条，展开时不必再打一次接口
+      listReviewQueue(20),
     ])
     if (canvasResult.status === 'fulfilled' && canvasResult.value.ok) {
       setCanvases(canvasResult.value.canvases ?? [])
@@ -172,7 +175,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
   // 队列单独刷新：看没看过只影响这一块，不必把整页六路请求重跑一遍
   const refreshQueue = useCallback(async () => {
     try {
-      const result = await listReviewQueue(3)
+      const result = await listReviewQueue(20)
       setQueue(result.items ?? [])
       setQueueTotal(result.total ?? 0)
       setSeen(result.seen ?? [])
@@ -215,6 +218,10 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
     },
     [refreshQueue],
   )
+
+  // 队列先在页面上排 3 条：total 照旧是全部，第 4 条以后由「还有 N 条」展开
+  const visibleQueue = queueOpen ? queue : queue.slice(0, 3)
+  const queueHidden = Math.max(0, queueTotal - visibleQueue.length)
 
   const recentRuns = runs.slice(0, 6)
   const recentTemplates = templates.slice(0, 4)
@@ -370,8 +377,9 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
         ) : null}
 
         {queue.length ? (
-          <div className="vq-review-queue-list">
-            {queue.map((row) => (
+          <>
+            <div className="vq-review-queue-list">
+              {visibleQueue.map((row) => (
               <div className="vq-review-queue-row" key={row.projectId}>
                 <button
                   type="button"
@@ -400,8 +408,22 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                   已看过
                 </button>
               </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          {/* 第 4 条以后不凭空消失：先写「还有 N 条」，点开排到服务端上限；
+              超过上限时如实写「只列最近 N 条」，不假装这一屏就是全部。 */}
+          {queueHidden ? (
+            <button type="button" className="vq-link vq-review-queue-more" onClick={() => setQueueOpen(true)}>
+              还有 {queueHidden} 条等你改
+              <ArrowRight size={12} />
+            </button>
+          ) : null}
+          {queueTotal > queue.length ? (
+            <p className="vq-review-queue-tail vq-mono">
+              只列了最近 {queue.length} 条，还有 {queueTotal - queue.length} 条更早的等你改
+            </p>
+          ) : null}
+          </>
         ) : (
           <div className="vq-empty vq-empty--inline">
             <strong>{decidedTotal && !seenTotal ? '这一版你拍过板了' : seenTotal ? '等你看的都看过了' : '没有等你改的评审'}</strong>

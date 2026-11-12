@@ -608,6 +608,20 @@
   background: var(--surface-raised);
 }
 
+/* 首屏只排 3 条：第 4 条以后由这一行交代「还有几条」，点开排到服务端上限（v0.9.24） */
+.vq-review-queue-more {
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+/* 超过上限时如实写「只列了最近 20 条」：这一屏不是全部，不装着是 */
+.vq-review-queue-tail {
+  margin: 4px 0 0;
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
 /* 一行两个动作：进作品（主体）+ 已看过（行尾），所以行本身不再是按钮——
    按钮里不能套按钮，整行可点改成「主体那颗按钮铺满左侧」。 */
 .vq-review-queue-row {

@@ -35,6 +35,12 @@ export type ProjectDecision = {
 }
 
 /**
+ * 「已看过」：人看过了、这一版先不改。
+ * 它只是待办上的便利贴：结论不动、胶囊不动；按「哪一版哪一次评审」认，时间对不上就作废。
+ */
+export type ProjectAck = { version: number; reviewAt: string; at: string }
+
+/**
  * 交付记录：一次「标记交付」= 哪一版、什么时候交出去。
  * 它是事实，不是开关：交付了 v2 又开 v3，v2 那条仍然在；老记录没有时间（at 是空串）。
  */
@@ -246,6 +252,11 @@ export type ProjectDetail = {
   /** 这条作品的拍板记录（按时间倒序）；管当前这一版的那条在 decision 里 */
   decisions?: ProjectDecision[]
   decision?: ProjectDecision | null
+  /**
+   * 当前这一版「已看过」的便利贴：版次与评审时间都对上才有，否则是 null。
+   * 它只把这条从待办里拿开，不改结论、不改胶囊——和 decision 是两回事。
+   */
+  ack?: ProjectAck | null
   /** 运行归集：当前版与归档版的运行合成一条时间线，按开始时间倒序 */
   runs: ProjectRun[]
   runTotal: number

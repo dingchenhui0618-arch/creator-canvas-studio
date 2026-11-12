@@ -102,7 +102,7 @@ fs.writeFileSync(
 )
 
 const { reviewQueue, reviewQueueRow } = await import('../server/review-queue.mjs')
-const { listAcks, ackReview, unackReview, dropAcksForProject } = await import('../server/review-acks.mjs')
+const { ackFor, listAcks, ackReview, unackReview, dropAcksForProject } = await import('../server/review-acks.mjs')
 const { projectStatus } = await import('../server/project-status.mjs')
 const { saveReview } = await import('../server/reviews.mjs')
 
@@ -245,6 +245,53 @@ test('接口：不是待办里的作品拒收「已看过」，缺作品 id 回 
   const undo = await call('DELETE', '/api/reviews/ack/prj_mismatch')
   assert.equal(undo.status, 200)
   assert.equal(undo.body.removed, 1)
+})
+
+test('看过的三样都得对上：作品、版次、评审时间；这一版还没评过就没有东西可对上', async () => {
+  const list = await listAcks(me)
+  assert.equal(
+    ackFor(list, { projectId: 'prj_oldrev', version: 1, reviewAt: at(12, 2) }),
+    null,
+    '预置的看过记的是更早那一次评审，时间对不上',
+  )
+  assert.equal(ackFor(list, { projectId: 'prj_see', version: 2, reviewAt: '' }), null, '没有评审时间就不算看过')
+  assert.equal(ackFor(list, { projectId: '', version: 1, reviewAt: at(12, 2) }), null, '没有作品就没有「看过」')
+  assert.equal(ackFor([], { projectId: 'prj_oldrev', version: 1, reviewAt: at(12, 2) }), null)
+})
+
+test('作品详情带「这一版看过了没有」：看过就有、撤销就没了，胶囊一句都不变', async () => {
+  const { createProjectsRouter } = await import('../server/routes/projects.mjs')
+  const router = createProjectsRouter()
+  const get = async (id) => {
+    const res = {
+      status: 0,
+      body: '',
+      writeHead(status, headers) {
+        this.status = status
+        this.headers = headers || {}
+      },
+      end(chunk) {
+        this.body = String(chunk ?? '')
+      },
+    }
+    const url = new URL('http://localhost/api/projects/' + id)
+    await router.handle({ method: 'GET', headers: {} }, res, url, url.pathname)
+    return { status: res.status, body: JSON.parse(res.body || '{}') }
+  }
+
+  const before = await get('prj_oldrev')
+  assert.equal(before.status, 200)
+  assert.equal(before.body.ack, null, '预置的看过记在更早一次评审上，作品页不该显示「已看过」')
+
+  await ackReview({ projectId: 'prj_oldrev', version: 1, reviewAt: at(12, 2), verdict: 'fail' }, me)
+  const after = await get('prj_oldrev')
+  assert.deepEqual(Object.keys(after.body.ack).sort(), ['at', 'reviewAt', 'version'])
+  assert.equal(after.body.ack.version, 1)
+  assert.equal(after.body.ack.reviewAt, at(12, 2), '对上的是当前这一版最近一次评审')
+  assert.equal(after.body.project.status, 'active', '看过只是便利贴，作品状态不动')
+
+  await unackReview('prj_oldrev', me)
+  assert.equal((await get('prj_oldrev')).body.ack, null, '撤销后作品页马上跟着变')
 })
 
 test('队列行接口：pending 的作品拿得到，通过 / 已交付的拿不到', async () => {

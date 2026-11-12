@@ -60,6 +60,27 @@ function normalize(item) {
   }
 }
 
+/**
+ * 这条作品「当前这一版、这一次评审」有没有被看过。
+ * 版次与评审时间都对上才算：同一版又评出新结论、或者开了新版，便利贴自动作废。
+ * 作品页要在原地显示「已看过 / 撤销」，读的就是这一处，不另算一遍。
+ */
+export function ackFor(acks, { projectId = '', version = 0, reviewAt = '' } = {}) {
+  if (!projectId) return null
+  const stamp = String(reviewAt || '')
+  // 没有评审时间就等于这一版还没评过：便利贴无从对上，不能拿空串去匹配
+  if (!stamp) return null
+  const n = Math.max(0, Math.round(Number(version) || 0))
+  const hit = (Array.isArray(acks) ? acks : []).find(
+    (item) =>
+      item.projectId === projectId &&
+      Math.max(0, Math.round(Number(item.version) || 0)) === n &&
+      String(item.reviewAt || '') === stamp,
+  )
+  if (!hit) return null
+  return { version: n, reviewAt: stamp, at: String(hit.at || '') }
+}
+
 /** 这个账号看过哪些（不含别的账号的）。 */
 export async function listAcks(user = null) {
   const list = await loadAll()

@@ -25,7 +25,7 @@ import { packageNote, parseShotRange, setSheetHtml, setSheetModel } from '../pro
 import { reviewImageRef, reviewSheetHtml, reviewSheetSelection } from '../project-review-sheet.mjs'
 import { getShareVisits, getShareVisitsByKey } from '../share-visits.mjs'
 import { shareBriefsByProject } from '../share-summary.mjs'
-import { dropAcksForProject } from '../review-acks.mjs'
+import { ackFor, dropAcksForProject, listAcks } from '../review-acks.mjs'
 import { dropDecisionsForProject, listDecisions } from '../review-decisions.mjs'
 import { decisionFor, reviewsForVersion } from '../project-status.mjs'
 import { projectListQuery } from '../project-list.mjs'
@@ -128,12 +128,13 @@ function flowBrief(flow) {
  */
 async function projectDetailView(project, user, { snapshots = false } = {}) {
   const projectFlows = [project.flowId, ...project.versions.map((entry) => entry.flowId)].filter(Boolean)
-  const [template, flow, reviews, versionCounts, runData] = await Promise.all([
+  const [template, flow, reviews, versionCounts, runData, acks] = await Promise.all([
     project.templateId ? getTemplate(project.templateId, user) : null,
     project.flowId ? getFlow(project.flowId, user) : null,
     listReviews({ projectId: project.id, limit: 20 }, user),
     reviewSummaryByVersion(project.id, user),
     listRunsByFlows(projectFlows, { limit: 20 }, user),
+    listAcks(user),
   ])
   // 归档的旧版本只存了 flowId：这里顺手确认画布还在，已删掉的版本按钮要禁用而不是点开报错。
   // 页面只要「这一版几段脚本」；交付稿要跟上一版对比，才把快照与节点一起带上（snapshots）。
@@ -178,6 +179,9 @@ async function projectDetailView(project, user, { snapshots = false } = {}) {
     .sort((a, b) => String(b.at).localeCompare(String(a.at)))
   const currentReview = reviewsForVersion(versionCounts, project.version)
   const decision = decisionFor(decisions, currentReview.lastAt)
+  // 「已看过」也按「哪一版、哪一次评审」认：作品页要能原地显示看过 / 撤销，
+  // 但看过的只是待办，胶囊与下一步一句都不动。
+  const ack = ackFor(acks, { projectId: project.id, version: project.version, reviewAt: currentReview.lastAt })
   // 分享面板要显示「链接被打开过几次」：只在作品详情里带上，列表接口不返回 token 与打开记录
   // 历史链接同理：token 清掉之后地址打不开，但那一轮被打开过几次还能回看（v0.9.11）
   const [share, shareHistory] = await Promise.all([
@@ -206,6 +210,8 @@ async function projectDetailView(project, user, { snapshots = false } = {}) {
     // 拍板记录按时间倒序（纸要按版次各印各的，胶囊只用其中管当前这一版的那条）
     decisions,
     decision,
+    // 当前这一版看过了没有：对不上就是 null（评出新结论或开了新版自动作废）
+    ack,
     versions,
     versionCounts,
     runs,

@@ -1,5 +1,15 @@
 import { request } from './client'
 
+/**
+ * 待办变了（评出新结论、看过、撤销、拍板）：外壳的「等你看」角标要马上跟着变，
+ * 不等下一次换页。事件很小，只带「变了」这件事，数字仍由服务端算。
+ */
+export function noteReviewQueueChanged() {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new Event('vq:queue-changed'))
+}
+
+
 export type ReviewObservation = {
   id: string
   dimension: string
@@ -70,8 +80,11 @@ export function getReviewStatus() {
   return request<ReviewStatus>('/api/review/health')
 }
 
-export function runReview(payload: { media?: string; imageUrl?: string; intent?: string; label?: string; projectId?: string }) {
-  return request<ReviewResult>('/api/review', { method: 'POST', body: JSON.stringify(payload) })
+export async function runReview(payload: { media?: string; imageUrl?: string; intent?: string; label?: string; projectId?: string }) {
+  const result = await request<ReviewResult>('/api/review', { method: 'POST', body: JSON.stringify(payload) })
+  // 评出新结论就可能新增或清掉一条待办（通过的那一版不再等你看）
+  if (payload.projectId) noteReviewQueueChanged()
+  return result
 }
 
 /** 评审记在哪条作品上：只带 id 与标题，版次在评审记录自己的 version 里。 */
@@ -184,27 +197,41 @@ export type ReviewDecisionRow = {
  * 已看过：把这条作品从「评审等你看的」待办里拿掉。
  * 服务端只认当前这一版最近一次评审；结论、胶囊、作品状态都不动，也不扣积分。
  */
-export const ackReview = (projectId: string) =>
-  request<{ ok: boolean; ack: { projectId: string; version: number; reviewAt: string; at: string } }>('/api/reviews/ack', {
-    method: 'POST',
-    body: JSON.stringify({ projectId }),
-  })
+export const ackReview = async (projectId: string) => {
+  const result = await request<{ ok: boolean; ack: { projectId: string; version: number; reviewAt: string; at: string } }>(
+    '/api/reviews/ack',
+    { method: 'POST', body: JSON.stringify({ projectId }) },
+  )
+  noteReviewQueueChanged()
+  return result
+}
 
 /** 撤销「已看过」：它回到待办。 */
-export const unackReview = (projectId: string) =>
-  request<{ ok: boolean; removed: number }>('/api/reviews/ack/' + projectId, { method: 'DELETE' })
+export const unackReview = async (projectId: string) => {
+  const result = await request<{ ok: boolean; removed: number }>('/api/reviews/ack/' + projectId, { method: 'DELETE' })
+  noteReviewQueueChanged()
+  return result
+}
 
 /**
  * 人工复核：人拍板这一版「能发 / 不能发」。
  * 落库记在「哪一次评审」上（服务端现算版次与评审时间），再评出新结论要重新拍板；不扣积分。
  * 它不改评审记录本身：模型写了什么还在评审历史里，人这一层单独记。
  */
-export const decideReview = (projectId: string, decision: 'pass' | 'reject', note = '') =>
-  request<{ ok: boolean; decision: ReviewDecisionRow; row: ReviewQueueRow }>('/api/reviews/decision', {
+export const decideReview = async (projectId: string, decision: 'pass' | 'reject', note = '') => {
+  const result = await request<{ ok: boolean; decision: ReviewDecisionRow; row: ReviewQueueRow }>('/api/reviews/decision', {
     method: 'POST',
     body: JSON.stringify({ projectId, decision, note }),
   })
+  noteReviewQueueChanged()
+  return result
+}
 
 /** 撤销拍板：这条作品的拍板记录清掉，它回到待办。 */
-export const clearReviewDecision = (projectId: string) =>
-  request<{ ok: boolean; removed: number }>('/api/reviews/decision/' + projectId, { method: 'DELETE' })
+export const clearReviewDecision = async (projectId: string) => {
+  const result = await request<{ ok: boolean; removed: number }>('/api/reviews/decision/' + projectId, {
+    method: 'DELETE',
+  })
+  noteReviewQueueChanged()
+  return result
+}

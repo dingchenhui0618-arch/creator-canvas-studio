@@ -20,7 +20,7 @@ import {
 } from '../api/projects'
 import { describeTiming, type ScriptBeat } from '../domain/radar'
 import { deliveredCurrent, deliveryOf, projectStep, reviewsForVersion, runsForVersion, type ProjectDetail } from '../domain/project'
-import { decideReview, clearReviewDecision } from '../api/review'
+import { ackReview, decideReview, clearReviewDecision, unackReview } from '../api/review'
 import { REVIEW_VERDICT_LABEL as VERDICT_LABEL, reviewTimeLabel, reviewsOfVersion } from '../domain/review'
 import { stampTime as stamp, visitLine } from '../domain/share'
 import '../styles/projects.css'
@@ -97,6 +97,8 @@ export default function ProjectPage({
   // null 表示「跟着这条拍板的备注走」：改判或撤销后不用手动清空，渲染时现算
   const [decisionNote, setDecisionNote] = useState<string | null>(null)
   const [decideBusy, setDecideBusy] = useState<'' | 'pass' | 'reject' | 'undo'>('')
+  // 「已看过」也在作品页原地做：人点进来看了，就不该再回工作台点一下
+  const [ackBusy, setAckBusy] = useState<'' | 'ack' | 'undo'>('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -254,6 +256,36 @@ export default function ProjectPage({
       onToast(caught instanceof Error ? caught.message : '撤销没成功，刷新再试')
     } finally {
       setDecideBusy('')
+    }
+  }
+
+  // 已看过：只是待办上的便利贴——从工作台队列里拿开，结论、胶囊与下一步一句都不动。
+  // 这一版再评出结论、或开了新版，它自己会回到待办（服务端按版次与评审时间认）。
+  const markSeen = async () => {
+    if (!data) return
+    setAckBusy('ack')
+    try {
+      await ackReview(data.project.id)
+      await load()
+      onToast('已看过：这一版先不改，工作台不再催它')
+    } catch (caught) {
+      onToast(caught instanceof Error ? caught.message : '「已看过」没记上，稍后再试')
+    } finally {
+      setAckBusy('')
+    }
+  }
+
+  const undoSeen = async () => {
+    if (!data) return
+    setAckBusy('undo')
+    try {
+      await unackReview(data.project.id)
+      await load()
+      onToast('已撤销：这条回到工作台的待办')
+    } catch (caught) {
+      onToast(caught instanceof Error ? caught.message : '撤销没成功，稍后再试')
+    } finally {
+      setAckBusy('')
     }
   }
 
@@ -505,6 +537,8 @@ export default function ProjectPage({
   const currentReviews = reviewsForVersion(data.versionCounts, project.version)
   // 人工复核：服务端已经按「当前这一版最近一次评审」挑好了，对不上就是 null（拍板自动失效）
   const decision = data.decision ?? null
+  // 「已看过」同理：版次与评审时间都对上才算
+  const ack = data.ack ?? null
   // 输入框显示哪句话：没动过就是这条拍板的备注，动过就是人正在打的字
   const noteValue = decisionNote ?? decision?.note ?? ''
   // 模型给了「需人工确认 / 不通过」的才需要拍板：通过的那一版不需要人再确认一次
@@ -1270,6 +1304,35 @@ export default function ProjectPage({
                     </div>
                   </>
                 ) : null}
+                {/* 第三个出口：看过了、这一版先不改。它不动结论，只把这条从工作台待办里拿开；
+                    这一版再评出结论、或开了新版，它自己会回来。 */}
+                {delivered || !canDecide || decision ? null : (
+                  <div className="vq-review-ack">
+                    {ack ? (
+                      <>
+                        <span className="vq-mono">你 {reviewTimeLabel(ack.at)} 看过这一版 · 先不改</span>
+                        <button
+                          type="button"
+                          className="vq-link"
+                          onClick={() => void undoSeen()}
+                          disabled={ackBusy !== ''}
+                        >
+                          {ackBusy === 'undo' ? '撤销中…' : '撤销已看过'}
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        className="vq-link"
+                        onClick={() => void markSeen()}
+                        disabled={ackBusy !== ''}
+                        title="看过了，这一版先不改：从工作台的待办里拿掉；结论不变，这一版再评出结论它会自己回来"
+                      >
+                        {ackBusy === 'ack' ? '记下中…' : '已看过 · 这一版先不改'}
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             ) : null}
             {reviews.length ? (

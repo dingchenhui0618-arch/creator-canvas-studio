@@ -41,6 +41,7 @@ import { useUiMode } from './api/app'
 import { initialsFor, sessionKindLabel, type RegisterInput, type Session, type SignInInput } from './auth/session'
 import { listAgents } from './api/agents'
 import { createBdcCanvas } from './api/bdc'
+import { listReviewQueue } from './api/review'
 import { navigate, pageToRoute, routeKey, routeToPage, useRoute } from './router'
 import { welcomeSeenKey } from './onboarding'
 import packageJsonRaw from '../package.json?raw'
@@ -161,6 +162,9 @@ function Workbench({
   const [paletteOpen, setPaletteOpen] = useState(false)
   // 画布专注模式：收起侧栏与顶栏，把屏幕让给画布本身（状态在壳里，画布页只负责切换）
   const [canvasFocus, setCanvasFocus] = useState(false)
+  // 「等你看」的角标：数字来自工作台评审队列的 total，外壳不另算一遍。
+  // null 表示这一次没取到——宁可没有角标，也不拿 0 冒充「没有等你改的」。
+  const [queuePending, setQueuePending] = useState<number | null>(null)
 
   const [toast, setToast] = useState('')
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
@@ -191,6 +195,8 @@ function Workbench({
 
   // 侧栏高亮、面包屑和内容页都从 hash 路由推导，页面本身不再保存 activePage。
   const activePage = routeToPage(route)
+  // 路由的稳定标识：换页时用它触发角标对一次数，不必把整个 route 对象塞进依赖
+  const routeId = routeKey(route)
   // 本地工作区只在桌面外壳里成立：网页版连这一项都不显示
   const desktopBridge = getDesktop()
 
@@ -234,6 +240,34 @@ function Workbench({
       setUpdateChecking(false)
     }
   }, [internal])
+
+  // 角标只读队列的 total：换页时对一次；评出新结论 / 看过 / 撤销 / 拍板后由事件再对一次。
+  // 管理后台与取数失败都不显示数字。
+  const refreshQueueBadge = useCallback(async () => {
+    try {
+      const result = await listReviewQueue(1)
+      const total = Number(result?.total)
+      setQueuePending(Number.isFinite(total) ? Math.max(0, Math.round(total)) : null)
+    } catch {
+      setQueuePending(null)
+    }
+  }, [])
+
+  useEffect(() => {
+    // 管理后台不渲染主线导航，角标不参与；它那套导航里也不该出现「等你看」
+    if (route.kind === 'admin') return
+    // 与列表页同一套写法：换页先让首屏渲染，再对一次数，不在 effect 里同步改状态
+    const timer = window.setTimeout(() => void refreshQueueBadge(), 0)
+    return () => window.clearTimeout(timer)
+  }, [refreshQueueBadge, routeId, route.kind, session.user.id])
+
+  useEffect(() => {
+    const onQueueChanged = () => void refreshQueueBadge()
+    window.addEventListener('vq:queue-changed', onQueueChanged)
+    return () => window.removeEventListener('vq:queue-changed', onQueueChanged)
+  }, [refreshQueueBadge])
+
+  const queueBadge = queuePending && queuePending > 0 ? (queuePending > 99 ? '99+' : String(queuePending)) : undefined
 
   const go = useCallback((page: Page) => {
     navigate(pageToRoute(page))
@@ -552,6 +586,8 @@ function Workbench({
                     label={entry.label}
                     active={isNavActive(entry, activePage)}
                     compact={!sidebarOpen}
+                    badge={entry.id === 'overview' ? queueBadge : undefined}
+                    badgeLabel={entry.id === 'overview' && queueBadge ? queueBadge + ' 条评审等你看' : undefined}
                     onClick={() => navTo(entry)}
                   />
                 ))}

@@ -739,16 +739,35 @@ select:focus-visible {
   white-space: nowrap;
 }
 
+/* 「等你看」的计数（v0.9.24）：数字用正文墨色——它是今天还剩几件事，不该比导航标签更淡 */
 .vq-nav-item em {
   min-width: 18px;
   padding: 1px 4px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   border-radius: var(--radius-xs);
-  color: var(--faint);
+  color: var(--ink);
   font-family: var(--font-mono);
   font-size: 11px;
   font-style: normal;
+  line-height: 1.4;
   text-align: center;
+}
+
+/* 数字放不下时（收起侧栏 / 窄屏）在图标右上角留一个 6px 的点；
+   几条、是什么仍在 aria-label 与 tooltip 里，不让一个点变成新的谜语 */
+.vq-nav-item-dot {
+  display: none;
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--ink);
+}
+
+.vq-nav-item--compact .vq-nav-item-dot {
+  display: block;
 }
 
 .vq-nav-item--compact {
@@ -2123,6 +2142,11 @@ select:focus-visible {
   .vq-version-label,
   .vq-version-action {
     display: none;
+  }
+
+  /* 窄屏侧栏只有 68px：数字换成图标上那个点，信息没丢（aria-label 里还在） */
+  .vq-nav-item-dot {
+    display: block;
   }
 
   .vq-sidebar-account-row {
