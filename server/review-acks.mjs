@@ -111,14 +111,19 @@ export async function ackReview({ projectId, version = 0, reviewAt = '', verdict
   return record
 }
 
-/** 撤销：把它从「已看过」里拿掉，它回到待办。返回撤销了几条。 */
+/**
+ * 撤销：把它从「已看过」里拿掉，它回到待办。返回撤销了几条。
+ *
+ * 看得见就撤得掉（v0.9.28）：与拍板记录的撤销同一口径（v0.9.26 定的规矩）。
+ * 以前按 ownerId 硬比，没有 ownerId 的公共便利贴（本地演示记的、迁移前的老数据）
+ * 管理员与看得见它的账号都撤不掉——点了撤销返回 200 但 removed 是 0，那一行原地不动，像按钮坏了。
+ */
 export async function unackReview(projectId, user = null) {
   if (!projectId) return 0
-  const ownerId = user?.id || ''
   let removed = 0
   await enqueueWrite(async () => {
     const list = await loadAll()
-    const keep = list.filter((item) => !(item.projectId === projectId && (item.ownerId || '') === ownerId))
+    const keep = list.filter((item) => !(canAccess(item, user) && item.projectId === projectId))
     removed = list.length - keep.length
     if (removed) await persist(keep)
   })

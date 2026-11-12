@@ -191,6 +191,19 @@ test('撤销：它回到待办，「已看过」那条被删掉', async () => {
   assert.equal(await unackReview('prj_spring', me), 0, '再撤销一次是 0，不报错')
 })
 
+test('看得见就撤得掉：没有 ownerId 的公共便利贴与管理员也撤得动', async () => {
+  // 本地演示（无登录）记下的便利贴没有 ownerId：账号看得见它，以前却撤不掉——
+  // 接口返回 200 但 removed 是 0，那一行原地不动，像是按钮坏了（v0.9.28 修）
+  await ackReview({ projectId: 'prj_spring', version: 1, reviewAt: at(11, 8), verdict: 'fail' }, null)
+  assert.ok((await reviewQueue(me, { limit: 20 })).seen.some((row) => row.projectId === 'prj_spring'), '公共记录看得见')
+  assert.equal(await unackReview('prj_spring', me), 1, '看得见的公共记录撤得掉')
+  assert.ok((await reviewQueue(me, { limit: 20 })).items.some((row) => row.projectId === 'prj_spring'), '撤完回到待办')
+
+  // 管理员同理：他看得见全部，就撤得掉全部（与拍板记录的撤销同一口径）
+  await ackReview({ projectId: 'prj_spring', version: 1, reviewAt: at(11, 8), verdict: 'fail' }, me)
+  assert.equal(await unackReview('prj_spring', { id: 'u_admin', kind: 'admin' }), 1)
+})
+
 test('同一条作品只留最新一条已看过，不越记越多', async () => {
   await ackReview({ projectId: 'prj_spring', version: 1, reviewAt: at(11, 8), verdict: 'fail' }, me)
   await ackReview({ projectId: 'prj_spring', version: 1, reviewAt: at(11, 8), verdict: 'fail' }, me)
@@ -236,15 +249,17 @@ test('接口：不是待办里的作品拒收「已看过」，缺作品 id 回 
   assert.equal(missing.status, 400)
   assert.equal(missing.body.code, 'PROJECT_REQUIRED')
 
-  // 这个用例没有登录态，归属按「未登录」记：单独一条，不污染上面 u_a 的数据
+  // 这个用例没有登录态，归属按「未登录」记（公共便利贴）
   const ok = await call('POST', '/api/reviews/ack', { projectId: 'prj_mismatch' })
   assert.equal(ok.status, 200)
   assert.equal(ok.body.ack.projectId, 'prj_mismatch')
   assert.equal(ok.body.ack.version, 2, '版次由服务端现算，不信客户端传的')
 
+  // 撤销按「看得见就撤得掉」（v0.9.28）：本地演示没有登录态时看得见全部，
+  // 这条作品上预置的 u_a 那条也在可见范围内，一起撤掉——这是演示模式，生产有登录门挡在前面。
   const undo = await call('DELETE', '/api/reviews/ack/prj_mismatch')
   assert.equal(undo.status, 200)
-  assert.equal(undo.body.removed, 1)
+  assert.equal(undo.body.removed, 2)
 })
 
 test('看过的三样都得对上：作品、版次、评审时间；这一版还没评过就没有东西可对上', async () => {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowRight, ArrowUpRight, Eye, LayoutTemplate, Plus, RefreshCw, Search, Workflow, X } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, Eye, LayoutTemplate, Plus, RefreshCw, RotateCcw, Search, Workflow, X } from 'lucide-react'
 import type { Page } from '../domain/types'
 import PageHead from '../components/PageHead'
 import { MonoTag } from '../components/ui'
@@ -122,9 +122,12 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
   // 看过了、这一版先不改的：还在作品里，但不催了（v0.9.20）
   const [seen, setSeen] = useState<ReviewQueueSeenRow[]>([])
   const [seenTotal, setSeenTotal] = useState(0)
-  // 人已经拍过板的：结论按人的走，工作台只留一行交代它去了哪（v0.9.21）
+  // 人已经拍过板的：结论按人的走，工作台留一行交代它去了哪（v0.9.21）
   const [decided, setDecided] = useState<ReviewQueueDecidedRow[]>([])
   const [decidedTotal, setDecidedTotal] = useState(0)
+  // 看过的 / 拍过板的点开就是整份清单（v0.9.28）：默认收着，不当成两串常驻列表
+  const [seenOpen, setSeenOpen] = useState(false)
+  const [decidedOpen, setDecidedOpen] = useState(false)
   // 首屏只排 3 条，第 4 条以后不能凭空消失：给一行「还有 N 条」，点开把已取回的行都排出来
   const [queueOpen, setQueueOpen] = useState(false)
   // 已经取到第几页（v0.9.27）：点一次「再看 N 条」加一页；换筛选回到第一页
@@ -291,7 +294,9 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
     async (projectId: string) => {
       setAckBusy(projectId)
       try {
-        await unackReview(projectId)
+        const result = await unackReview(projectId)
+        // 一条都没撤掉就别说撤了：多半是刚在作品页撤过（或者别人先撤了）
+        if (!result?.removed) setQueueError('撤销没撤掉：这条「已看过」已经不在了，可能刚在作品页撤过')
         await refreshQueue()
       } catch (error) {
         setQueueError('撤销没成功：' + String((error as Error)?.message || error))
@@ -651,34 +656,126 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
           </div>
         )}
 
-        {/* 看过的留在下面一行：还能撤销，也不是「改完了」 */}
+        {/* 看过的都留在这儿（v0.9.28）：以前只写「最近一条」、也只撤得掉最近一条，
+            其余几条要看哪条作品得去作品页翻——等于记不回来。现在点开就是整份清单，逐条撤销。 */}
         {seenTotal && seen[0] ? (
-          <div className="vq-review-queue-seen">
-            <span className="vq-review-queue-seen-text">
-              已看过 {seenTotal} 条，这一版先没改 · 最近：{seen[0].title}（第 {Math.max(1, seen[0].version)} 版 ·{' '}
-              {reviewTimeLabel(seen[0].seenAt)} 看过）
-            </span>
-            <button
-              type="button"
-              className="vq-link"
-              onClick={() => void undoSeen(seen[0].projectId)}
-              disabled={ackBusy === seen[0].projectId}
-            >
-              撤销
-            </button>
+          <div className="vq-review-queue-seen-block">
+            <div className="vq-review-queue-seen">
+              <span className="vq-review-queue-seen-text">
+                已看过 <strong className="vq-mono">{seenTotal}</strong> 条，这一版先没改 · 最近：{seen[0].title}（第{' '}
+                {Math.max(1, seen[0].version)} 版 · {reviewTimeLabel(seen[0].seenAt)} 看过）
+              </span>
+              <span className="vq-review-queue-seen-actions">
+                <button
+                  type="button"
+                  className="vq-link"
+                  onClick={() => setSeenOpen((open) => !open)}
+                  aria-expanded={seenOpen}
+                  aria-controls="vq-review-queue-seen-list"
+                >
+                  {seenOpen ? '收起' : '看这 ' + seenTotal + ' 条'}
+                </button>
+                {seenOpen ? null : (
+                  <button
+                    type="button"
+                    className="vq-link"
+                    onClick={() => void undoSeen(seen[0].projectId)}
+                    disabled={ackBusy === seen[0].projectId}
+                  >
+                    撤销最近一条
+                  </button>
+                )}
+              </span>
+            </div>
+            {seenOpen ? (
+              <div className="vq-review-queue-list vq-review-queue-seen-list" id="vq-review-queue-seen-list">
+                {seen.map((row) => (
+                  <div className="vq-review-queue-row" key={row.projectId}>
+                    <button
+                      type="button"
+                      className="vq-review-queue-open"
+                      onClick={() => onOpenProject(row.projectId)}
+                      aria-label={'打开作品：' + row.title + '，第 ' + Math.max(1, row.version) + ' 版'}
+                    >
+                      <span className={'vq-project-status is-' + row.status.tone}>{row.status.text}</span>
+                      <span className="vq-review-queue-copy">
+                        <strong>{row.title}</strong>
+                        <span className="vq-mono">
+                          第 {Math.max(1, row.version)} 版 · 评过 {row.count} 次 ·{' '}
+                          <span className="vq-review-queue-time">{reviewTimeLabel(row.seenAt)} 看过</span>
+                        </span>
+                      </span>
+                      <ArrowRight size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      className="vq-button vq-button--quiet vq-button--tiny vq-review-queue-ack"
+                      onClick={() => void undoSeen(row.projectId)}
+                      disabled={ackBusy === row.projectId}
+                      title="撤销「已看过」：它回到待办，这一版照旧要改"
+                    >
+                      <RotateCcw size={12} />
+                      {ackBusy === row.projectId ? '撤销中…' : '撤销'}
+                    </button>
+                  </div>
+                ))}
+                <p className="vq-review-queue-seen-note">
+                  撤销之后它回到上面的待办；这一版再评出新结论也会自己回来。
+                </p>
+              </div>
+            ) : null}
           </div>
         ) : null}
 
-        {/* 拍过板的也留一行：它不是「已看过」，胶囊与下一步已经按人的结论走了 */}
+        {/* 拍过板的也能点开（v0.9.28）：胶囊写人的那一句，点一行进作品撤销或改判 */}
         {decidedTotal && decided[0] ? (
-          <div className="vq-review-queue-seen is-decided">
-            <span className="vq-review-queue-seen-text">
-              你拍板过 {decidedTotal} 条 · 最近：{decided[0].title}（第 {Math.max(1, decided[0].version)} 版 ·{' '}
-              {decided[0].decision === 'pass' ? '通过' : '不通过'} · {reviewTimeLabel(decided[0].decidedAt)}）· 记录与撤销在作品页
-            </span>
-            <button type="button" className="vq-link" onClick={() => onOpenProject(decided[0].projectId)}>
-              打开
-            </button>
+          <div className="vq-review-queue-seen-block">
+            <div className="vq-review-queue-seen is-decided">
+              <span className="vq-review-queue-seen-text">
+                你拍板过 <strong className="vq-mono">{decidedTotal}</strong> 条 · 最近：{decided[0].title}（第{' '}
+                {Math.max(1, decided[0].version)} 版 · {decided[0].decision === 'pass' ? '通过' : '不通过'} ·{' '}
+                {reviewTimeLabel(decided[0].decidedAt)}）
+              </span>
+              <span className="vq-review-queue-seen-actions">
+                <button
+                  type="button"
+                  className="vq-link"
+                  onClick={() => setDecidedOpen((open) => !open)}
+                  aria-expanded={decidedOpen}
+                  aria-controls="vq-review-queue-decided-list"
+                >
+                  {decidedOpen ? '收起' : '看这 ' + decidedTotal + ' 条'}
+                </button>
+              </span>
+            </div>
+            {decidedOpen ? (
+              <div className="vq-review-queue-list vq-review-queue-seen-list" id="vq-review-queue-decided-list">
+                {decided.map((row) => (
+                  <div className="vq-review-queue-row" key={row.projectId}>
+                    <button
+                      type="button"
+                      className="vq-review-queue-open"
+                      onClick={() => onOpenProject(row.projectId)}
+                      aria-label={'打开作品：' + row.title + '，第 ' + Math.max(1, row.version) + ' 版'}
+                      title={row.note || undefined}
+                    >
+                      <span className={'vq-project-status is-' + row.status.tone}>{row.status.text}</span>
+                      <span className="vq-review-queue-copy">
+                        <strong>{row.title}</strong>
+                        <span className="vq-mono">
+                          第 {Math.max(1, row.version)} 版 · 模型「{REVIEW_VERDICT_LABEL[row.verdict] || '未记结论'}」·{' '}
+                          <span className="vq-review-queue-time">{reviewTimeLabel(row.decidedAt)} 拍板</span>
+                        </span>
+                      </span>
+                      <ArrowRight size={13} />
+                    </button>
+                  </div>
+                ))}
+                <p className="vq-review-queue-seen-note">
+                  这里只列还等在队列里的拍板；点一行进作品，撤销这一版与改判都在「拍板记录」里。
+                </p>
+              </div>
+            ) : null}
           </div>
         ) : null}
       </section>

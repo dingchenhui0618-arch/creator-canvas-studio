@@ -189,10 +189,10 @@ export type ReviewQueue = {
   hasMore: boolean
   /** 不跟着筛选变的那一条（最新的待办）：工作台的「下一步」读它 */
   lead: ReviewQueueRow | null
-  /** 看过了、先没改的（最多 10 条，够写一行「已看过 N 条」） */
+  /** 看过了、先没改的整份清单（只有第一页带；翻页时不重发）——工作台点开就逐条撤销 */
   seen: ReviewQueueSeenRow[]
   seenTotal: number
-  /** 人已经拍过板的（同样最多 10 条，工作台只写一行） */
+  /** 人已经拍过板的整份清单（同样只有第一页带）——每行的胶囊写人的结论，点进去撤销或改判 */
   decided: ReviewQueueDecidedRow[]
   decidedTotal: number
 }

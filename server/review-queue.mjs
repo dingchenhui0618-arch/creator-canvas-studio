@@ -17,6 +17,11 @@
 // v0.9.27 起队列翻得完：一页仍是 20 条，但多了 offset——工作台点「再看 7 条」就接着往下取。
 // 之前第 21 条以后只剩一句「只列了最近 20 条，还有 N 条更早的等你改」，点不动；
 // 现在每一页都如实写「已列 20 / 27 条」，翻到底才说「27 条都列出来了」。
+//
+// v0.9.28 起看过的也找得回来：seen / decided 不再只给最近 10 条，而是整份给第一页。
+// 工作台上那两行「已看过 N 条」「你拍板过 N 条」点开就是 N 行，逐条进作品、逐条撤销；
+// 之前只有最近一条能撤，其余几条要看哪条作品、去作品页翻，等于记不回来。
+// 这两份只在第一页带（offset=0）：翻页是为了待办，不必每页重发一份看过的。
 import { listProjects, getProject } from './projects.mjs'
 import { reviewCountsByProject } from './reviews.mjs'
 import { reviewsForVersion, projectStatus, decisionFor, deliveredCurrent } from './project-status.mjs'
@@ -92,7 +97,14 @@ export async function reviewQueue(user = null, { limit = 6, offset = 0, range = 
     if (!row) continue
     const decision = decisionFor(byProject.get(row.projectId), row.at)
     if (decision) {
-      decided.push({ ...row, decision: decision.decision, note: decision.note, decidedAt: decision.at })
+      decided.push({
+        ...row,
+        // 胶囊写人的那一句（评审 · 人工通过 / 人工不通过）：这一行与作品卡片、作品页对得上
+        status: projectStatus(project, { count: row.count, lastVerdict: row.verdict, lastAt: row.at }, decision),
+        decision: decision.decision,
+        note: decision.note,
+        decidedAt: decision.at,
+      })
       continue
     }
     const ack = acked.get(row.projectId)
@@ -144,11 +156,12 @@ export async function reviewQueue(user = null, { limit = 6, offset = 0, range = 
     hasMore: from + items.length < matched.length,
     // 不跟着筛选变的那一条（最新的待办）：工作台的「下一步」读它，筛列表不会把主卡换掉
     lead: rows[0] || null,
-    // 看过的只需给界面写一行「已看过 N 条」与撤销，最多 10 条够用
-    seen: seen.slice(0, 10),
+    // 看过的整份给第一页：工作台「已看过 N 条」点开就得有 N 行，少一条就是假话。
+    // 条数天然被「账号里还等在队列里的作品数」限住，不另设上限；翻页时不重发（见上）。
+    seen: from === 0 ? seen : [],
     seenTotal: seen.length,
-    // 拍过板的同理：工作台只写一行「你拍板过 N 条」，撤销在作品页
-    decided: decided.slice(0, 10),
+    // 拍过板的同理整份给第一页：每一行都能点进作品看那一次拍板、在作品页撤销或改判
+    decided: from === 0 ? decided : [],
     decidedTotal: decided.length,
   }
 }

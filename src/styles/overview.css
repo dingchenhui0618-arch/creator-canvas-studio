@@ -731,14 +731,22 @@
  * 看过的一行：写清楚「看过不等于改过」，并给撤销。
  * 拍过板的一行（is-decided）与它分开：那份是「先没改」，这份是人的结论已经生效，
  * 所以边框重一档、字用正文色——一眼能分出「我看过了」和「我拍板了」。
+ *
+ * v0.9.28 起这两行都能点开：右边「看这 N 条」把整份清单排出来（一行一条，与待办同一个形状），
+ * 看过的每行带撤销。以前只写得出「最近一条」、也只撤得掉最近一条，其余几条找不回来。
+ * 明细默认收着：它已经不是待办，不该占掉首屏高度。
  */
+.vq-review-queue-seen-block {
+  margin-top: 8px;
+}
+
 .vq-review-queue-seen {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
-  gap: 4px 12px;
-  margin-top: 8px;
+  /* 行间距 8px：窄屏两个小链接换到下一行时，离正文留一档，不贴着 */
+  gap: 8px 12px;
   padding: 8px 12px;
   border: 1px solid var(--line-faint);
   border-radius: var(--radius-sm);
@@ -755,6 +763,35 @@
 
 .vq-review-queue-seen-text {
   min-width: 0;
+}
+
+/* 条数用等宽数字：与下面清单里的版次、次数对齐 */
+.vq-review-queue-seen-text strong {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+/* 右边两个小链接（看这 N 条 / 撤销最近一条）：窄屏整体换到下一行，不挤断正文 */
+.vq-review-queue-seen-actions {
+  display: inline-flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+
+/* 点开的清单与待办列表同一个形状：一行一条，左边胶囊、中间作品名、行尾动作 */
+.vq-review-queue-seen-block .vq-review-queue-list {
+  margin-top: 8px;
+}
+
+/* 清单脚注：说明撤销之后去哪、这里列的是哪一份拍板 */
+.vq-review-queue-seen-note {
+  margin: 8px 0 0;
+  padding: 0 16px 12px;
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.6;
 }
 
 .vq-review-queue-copy {
@@ -824,6 +861,11 @@
   /* 一个图标 16px 换正文一行宽：11px 的「已看过」在窄屏够读，图标反而占掉作品名 */
   .vq-review-queue-row .vq-review-queue-ack svg {
     display: none;
+  }
+
+  /* 清单的行距在窄屏收到 12px，脚注跟着对齐，别比行右缩进还宽 */
+  .vq-review-queue-seen-note {
+    padding: 0 12px 12px;
   }
 }
 
