@@ -3,6 +3,7 @@ import type {
   Project,
   ProjectBucket,
   ProjectDetail,
+  ProjectFlowBrief,
   ProjectListFacets,
   ProjectScript,
   ProjectShare,
@@ -41,8 +42,24 @@ export const listShares = () => request<{ items: ShareSummaryRow[]; total: numbe
 
 export const getProject = (id: string) => request<ProjectDetail>('/api/projects/' + id)
 
-export const createProject = (payload: { templateId: string; title?: string }) =>
-  request<{ ok: boolean; project: Project }>('/api/projects', { method: 'POST', body: JSON.stringify(payload) })
+// 建作品有两条起点：一条模板（脚本与分镜先有），或者一块已经跑过的画布（v0.9.29）。
+// 从画布建的作品没有模板，脚本在作品页现写，画布已经在了所以一出生就是 v1。
+export const createProject = (payload: { templateId?: string; flowId?: string; title?: string }) =>
+  request<{ ok: boolean; project: Project; flow?: ProjectFlowBrief | null; runs?: { count: number } }>('/api/projects', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+
+// 把一块画布归到这条作品上：一接上，这块画布跑过的运行也一起归过来（运行只认 flowId，不复制记录）
+export const adoptProjectCanvas = (id: string, flowId: string) =>
+  request<{
+    ok: boolean
+    /** false = 这块画布本来就归这条作品，什么都没改 */
+    changed: boolean
+    project: Project
+    flow: ProjectFlowBrief | null
+    runs: { count: number }
+  }>('/api/projects/' + id + '/canvas', { method: 'PUT', body: JSON.stringify({ flowId }) })
 
 export const updateProject = (id: string, payload: { title?: string; flowId?: string; status?: 'active' | 'done' }) =>
   request<{ ok: boolean; project: Project }>('/api/projects/' + id, { method: 'PATCH', body: JSON.stringify(payload) })

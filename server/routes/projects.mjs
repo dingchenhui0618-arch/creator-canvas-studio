@@ -6,6 +6,7 @@
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { sendJson, readBody } from './_shared.mjs'
+import { flowBrief, projectBrief } from '../project-briefs.mjs'
 import { currentUser } from '../auth.mjs'
 import { config } from '../config.mjs'
 import { getTemplate, reuseTemplate } from '../templates.mjs'
@@ -29,6 +30,7 @@ import { ackFor, dropAcksForProject, listAcks } from '../review-acks.mjs'
 import { dropDecisionsForProject, listDecisions } from '../review-decisions.mjs'
 import { decisionFor, decisionHistory, reviewsForVersion } from '../project-status.mjs'
 import { projectListQuery } from '../project-list.mjs'
+import { adoptCanvasForProject, createProjectFromCanvas } from '../project-canvas.mjs'
 import { buildZip } from '../zip-store.mjs'
 import {
   listProjects,
@@ -58,13 +60,8 @@ const DELIVERABLE_PRINT = /^\/print\/projects\/([\w-]+)\/deliverable$/
 // 评审对照纸：评审把问题框在哪一块画面上，同一张 A4 里印出来（交付包里也有同一份）
 const REVIEW_PRINT = /^\/print\/projects\/([\w-]+)\/review$/
 
-// 详情 / 列表里的 project 不带原始脚本：脚本只从顶层 script 读（带来源、重算后的时长），
-// 否则同一份脚本在一页里有两个口径，界面迟早读到旧的那个。
-// 分享 token 同理：只有作品页自己的分享面板需要它，列表卡片不该带着一串能打开作品的凭证。
-function projectBrief(project) {
-  const { script: _script, share: _share, shareHistory: _shareHistory, ...brief } = project
-  return brief
-}
+// 详情 / 列表里的 project 只有一份形状（server/project-briefs.mjs）：
+// 不带原始脚本、不带分享 token。画布归作品那条路（v0.9.29）回执也用同一份。
 
 /**
  * 改完脚本把画布里自动生成的复刻提示词一起换掉。
@@ -109,16 +106,6 @@ function templateDetail(template) {
     timing: template.timing || null,
     cover: template.thumb || template.cover || '',
     reuseCount: Number(template.reuseCount) || 0,
-  }
-}
-
-function flowBrief(flow) {
-  if (!flow) return null
-  return {
-    id: flow.id,
-    name: flow.name,
-    nodes: Array.isArray(flow.nodes) ? flow.nodes.length : 0,
-    updatedAt: flow.updatedAt,
   }
 }
 
@@ -450,9 +437,23 @@ export function createProjectsRouter() {
 
       if (pathname === '/api/projects' && req.method === 'POST') {
         const body = await readBody(req)
+        // 从画布建作品（v0.9.29）：空白画布跑出来的东西也该能变成一条作品。
+        // 这条路没有模板，脚本在作品页现写，画布已经在了所以一出生就是 v1。
+        if (String(body.flowId || '')) {
+          const result = await createProjectFromCanvas({
+            flowId: String(body.flowId),
+            title: String(body.title || ''),
+            user,
+          })
+          sendJson(res, result.status, result.body)
+          return true
+        }
         const templateId = String(body.templateId || '')
         if (!templateId) {
-          sendJson(res, 400, { error: '作品要从一条模板开始：请先选模板再建作品', code: 'TEMPLATE_REQUIRED' })
+          sendJson(res, 400, {
+            error: '作品要么从一条模板开始，要么从一块画布开始：先选模板或选画布',
+            code: 'TEMPLATE_REQUIRED',
+          })
           return true
         }
         const template = await getTemplate(templateId, user)
@@ -472,8 +473,17 @@ export function createProjectsRouter() {
         return true
       }
 
-      // 作品页开画布：第一张画布用这条作品现在的脚本生成，不再绕到模板库的 apply
       const canvasPath = pathname.match(CANVAS)
+      // 画布归作品（v0.9.29）：把一块已经跑过的画布接到这条作品上。
+      // 一接上，这块画布以前的运行与之后的评审就都落进这条作品——运行记录那边也能「归到作品」。
+      if (canvasPath && req.method === 'PUT') {
+        const body = await readBody(req)
+        const result = await adoptCanvasForProject({ projectId: canvasPath[1], flowId: String(body.flowId || ''), user })
+        sendJson(res, result.status, result.body)
+        return true
+      }
+
+      // 作品页开画布：第一张画布用这条作品现在的脚本生成，不再绕到模板库的 apply
       if (canvasPath && req.method === 'POST') {
         const project = await getProject(canvasPath[1], user)
         if (!project) {

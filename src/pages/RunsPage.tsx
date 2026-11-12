@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Activity, ArrowRight, ChevronLeft, ChevronRight, RefreshCw, Search, Workflow } from 'lucide-react'
+import { Activity, ArrowRight, ChevronLeft, ChevronRight, Link2, RefreshCw, Search, Workflow } from 'lucide-react'
 import PageHead from '../components/PageHead'
 import { Select } from '../components/Select'
+import { adoptProjectCanvas, createProject, listProjects } from '../api/projects'
+import type { ProjectSummary } from '../domain/project'
 import { listFlows, listRuns, type ApiFlow, type RunRecord } from '../api/flows'
 import { runVersionLabel, runWorkLine } from '../domain/run'
 import '../styles/runs.css'
@@ -86,11 +88,28 @@ export function RunsPage({
   const [open, setOpen] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  // 归到作品（v0.9.29）：没挂在作品上的运行以前只有一句「作品页不会出现它」，
+  // 现在就地能把它收进一条作品——挂到已有作品，或者照这块画布新建一条。
+  const [projects, setProjects] = useState<ProjectSummary[]>([])
+  const [adoptOpen, setAdoptOpen] = useState(false)
+  const [adoptId, setAdoptId] = useState('')
+  const [adoptBusy, setAdoptBusy] = useState(false)
+  const [adoptError, setAdoptError] = useState('')
+  const [adoptDone, setAdoptDone] = useState('')
 
   useEffect(() => {
     const timer = window.setTimeout(() => setQuery(keyword.trim()), 350)
     return () => window.clearTimeout(timer)
   }, [keyword])
+
+  // 换一条运行就把这块面板收起来：上一条的「已归到…」不该挂在另一条运行下面。
+  // 不写成 effect（在 effect 里同步 setState 会多渲染一轮），就在切选中项的那两处调。
+  const resetAdopt = () => {
+    setAdoptOpen(false)
+    setAdoptId('')
+    setAdoptError('')
+    setAdoptDone('')
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -100,6 +119,7 @@ export function RunsPage({
       setItems(result.items || [])
       setTotal(result.total || 0)
       setOpen(result.items?.[0]?.id || null)
+      resetAdopt()
     } catch (reason) {
       setError(String((reason as Error)?.message || reason))
     } finally {
@@ -120,6 +140,18 @@ export function RunsPage({
     return () => { alive = false }
   }, [])
 
+  // 作品列表只在打开「归到作品」时取：运行记录页平时不需要它，
+  // 现取也保证刚建好的作品马上出现在下拉里。
+  useEffect(() => {
+    if (!adoptOpen) return undefined
+    let alive = true
+    void listProjects()
+      .then((result) => { if (alive) setProjects(result.items || []) })
+      .catch(() => { if (alive) setProjects([]) })
+    return () => { alive = false }
+  }, [adoptOpen])
+
+
   const pageStart = total === 0 ? 0 : Math.min(offset + 1, total)
   const pageEnd = Math.min(offset + items.length, total)
   const pageSuccess = items.filter((item) => item.status === 'success').length
@@ -132,6 +164,58 @@ export function RunsPage({
   const resetTo = (next: () => void) => {
     next()
     setOffset(0)
+  }
+
+  // 归到作品的两条路都把结果就地写回这一行：服务端回的版次就是作品现在的版次。
+  // 不整页重取——重取会把选中项跳回第一条，人刚做完的事当场就看不见了。
+  const attachProject = (project: { id: string; title: string; version: number }) => {
+    if (!current) return
+    const ref = { id: project.id, title: project.title, version: Math.max(1, Math.round(Number(project.version) || 1)), archived: false }
+    // 归的是整块画布，不是选中那一条运行：同一块画布上的其他运行也一起归过去了，
+    // 只改当前这一行会让旁边几行继续写着「没挂在作品上」——那是假话。
+    setItems((list) => list.map((item) => (item.flowId === current.flowId ? { ...item, project: ref } : item)))
+  }
+
+  const adoptedLine = (project: { title: string; version: number }, runs: number, how: 'bind' | 'new') => {
+    const version = '第 ' + Math.max(1, Math.round(Number(project.version) || 1)) + ' 版'
+    const runsText = runs > 0 ? '这块画布跑过的 ' + runs + ' 次运行一起归过去了' : '这块画布还没有运行记录'
+    const tail = runsText + '（运行不复制记录，只认这块画布）'
+    return how === 'bind'
+      ? '已归到《' + project.title + '》' + version + '：' + tail
+      : '照这块画布新建了《' + project.title + '》' + version + '：没有模板，脚本在作品页现写；' + tail
+  }
+
+  const adoptExisting = async () => {
+    if (!current || !adoptId) return
+    setAdoptBusy(true)
+    setAdoptError('')
+    try {
+      const result = await adoptProjectCanvas(adoptId, current.flowId)
+      attachProject(result.project)
+      setAdoptDone(adoptedLine(result.project, result.runs?.count ?? 0, 'bind'))
+      setAdoptOpen(false)
+      setAdoptId('')
+    } catch (reason) {
+      setAdoptError(reason instanceof Error ? reason.message : '归到作品没有成功，稍后再试一次')
+    } finally {
+      setAdoptBusy(false)
+    }
+  }
+
+  const adoptNew = async () => {
+    if (!current) return
+    setAdoptBusy(true)
+    setAdoptError('')
+    try {
+      const result = await createProject({ flowId: current.flowId, title: current.flowName })
+      attachProject(result.project)
+      setAdoptDone(adoptedLine(result.project, result.runs?.count ?? 0, 'new'))
+      setAdoptOpen(false)
+    } catch (reason) {
+      setAdoptError(reason instanceof Error ? reason.message : '新建作品没有成功，稍后再试一次')
+    } finally {
+      setAdoptBusy(false)
+    }
   }
 
   return (
@@ -215,7 +299,14 @@ export function RunsPage({
           <ol className="runs-list">
             {items.map((item) => (
               <li key={item.id}>
-                <button type="button" className={`runs-row ${open === item.id ? 'is-active' : ''}`} onClick={() => setOpen(item.id)}>
+                <button
+                  type="button"
+                  className={`runs-row ${open === item.id ? 'is-active' : ''}`}
+                  onClick={() => {
+                    setOpen(item.id)
+                    resetAdopt()
+                  }}
+                >
                   <span className={`runs-dot ${item.status === 'success' ? 'is-pass' : 'is-fail'}`} />
                   <span className="runs-row-main">
                     <strong>{item.flowName}</strong>
@@ -242,6 +333,21 @@ export function RunsPage({
                   <span className="vq-mono">{current.credits.refunded ? '已退回 ' + current.credits.cost + ' 积分' : '消耗 ' + current.credits.cost + ' 积分'}</span>
                 ) : null}
                 <span className="runs-detail-actions">
+                  {!current.project ? (
+                    <button
+                      type="button"
+                      className="button button--ghost button--tiny"
+                      aria-expanded={adoptOpen}
+                      onClick={() => {
+                        setAdoptOpen((value) => !value)
+                        setAdoptError('')
+                      }}
+                      title="把这次运行归到一条作品：挂到已有作品，或者照这块画布新建一条"
+                    >
+                      <Link2 size={13} />
+                      {adoptOpen ? '收起' : '归到作品'}
+                    </button>
+                  ) : null}
                   {current.project && onOpenProject ? (
                     <button
                       type="button"
@@ -269,9 +375,56 @@ export function RunsPage({
                 </p>
               ) : (
                 <p className="runs-detail-where is-orphan">
-                  这次运行没挂在作品上：空白画布直接跑的，作品页不会出现它。
+                  这次运行没挂在作品上：空白画布直接跑的，作品页不会出现它。点「归到作品」把它收进一条作品，跑过的记录一起跟过去。
                 </p>
               )}
+              {!current.project && adoptOpen ? (
+                <div className="runs-adopt">
+                  <div className="runs-adopt-row">
+                    <span className="runs-adopt-label">挂到已有作品</span>
+                    <Select
+                      size="sm"
+                      label="选择要归到的作品"
+                      value={adoptId}
+                      options={[
+                        { value: '', label: projects.length ? '选一条作品' : '账号下还没有作品' },
+                        ...projects.map((item) => ({
+                          value: item.id,
+                          label: item.title + ' · ' + (item.version ? '第 ' + item.version + ' 版' : '还没开画布'),
+                        })),
+                      ]}
+                      onChange={(value) => {
+                        setAdoptId(value)
+                        setAdoptError('')
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="button button--ghost button--tiny"
+                      disabled={!adoptId || adoptBusy}
+                      onClick={() => void adoptExisting()}
+                    >
+                      {adoptBusy ? '正在归…' : '挂到这条作品'}
+                    </button>
+                  </div>
+                  <div className="runs-adopt-row">
+                    <span className="runs-adopt-label">或者新建</span>
+                    <span className="runs-adopt-hint">
+                      照这块画布建一条《{current.flowName}》：没有模板，脚本在作品页现写
+                    </span>
+                    <button
+                      type="button"
+                      className="button button--ghost button--tiny"
+                      disabled={adoptBusy}
+                      onClick={() => void adoptNew()}
+                    >
+                      照这块画布建一条
+                    </button>
+                  </div>
+                  {adoptError ? <p className="runs-adopt-error">{adoptError}</p> : null}
+                </div>
+              ) : null}
+              {adoptDone ? <p className="runs-adopt-done">{adoptDone}</p> : null}
               <ol className="runs-nodes">
                 {current.nodes.map((node) => (
                   <li key={node.id} className={`runs-node is-${node.status}`}>

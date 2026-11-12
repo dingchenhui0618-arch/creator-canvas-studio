@@ -66,6 +66,22 @@
 .runs-pager { display:flex; align-items:center; justify-content:flex-end; gap:8px; padding-top:8px; border-top:1px solid var(--line); }
 .runs-pager .vq-mono { margin-right:8px; color:var(--faint); font-size:12px; }
 .runs-pager button:disabled { opacity:.45; cursor:not-allowed; }
+/* 归到作品（v0.9.29）：没挂在作品上的运行就地能收进一条作品。
+   面板两行「标签 + 控件」：一行挂到已有作品，一行照这块画布新建；间距只走 4/8pt。 */
+.runs-adopt { display:flex; flex-direction:column; gap:8px; padding:12px; border:1px solid var(--line); border-radius:var(--radius-md); background:var(--surface-raised); }
+.runs-adopt-row { display:flex; align-items:center; flex-wrap:wrap; gap:8px 12px; }
+.runs-adopt-label { min-width:72px; color:var(--faint); font-family:var(--font-mono); font-size:11px; letter-spacing:.05em; }
+.runs-adopt-hint { flex:1 1 240px; min-width:0; color:var(--muted); font-size:12px; }
+.runs-adopt-error { margin:0; color:var(--fail); font-size:12px; }
+.runs-adopt-done { margin:0; color:var(--muted); font-size:12px; }
 @media (max-width: 1100px) { .runs-body { grid-template-columns:minmax(0, 1fr); } }
 /* 窄屏这一行放不下「作品 · 标题 · 第 N 版（归档）」：让它换行成两行，宁可高 22px 也不把版次截掉 */
 @media (max-width: 700px) { .runs-row-main .runs-row-where { white-space:normal; overflow:visible; } }
+/* 窄屏：下拉与按钮各占一行、同一宽度，比让一个小按钮孤零零挂在标签旁边整齐 */
+@media (max-width: 700px) {
+  .runs-adopt { gap: 12px; }
+  .runs-adopt-row { align-items: stretch; }
+  .runs-adopt-row .vq-select { width: 100%; }
+  .runs-adopt-row .runs-adopt-hint { flex-basis: 100%; }
+  .runs-adopt-row .button { width: 100%; justify-content: center; }
+}

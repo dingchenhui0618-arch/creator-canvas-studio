@@ -187,7 +187,9 @@ export async function createProject({ title = '', templateId = '', flowId = '' }
     title: clip(title || '未命名作品', 80),
     templateId: String(templateId || ''),
     flowId: String(flowId || ''),
-    version: 0,
+    // 从模板建的作品还没有画布，等「开画布」才变成 v1；
+    // 从画布建的（v0.9.29）画布已经在了，一出生就是 v1——否则版本对照里会显示成 v0。
+    version: flowId ? 1 : 0,
     versions: [],
     // 先不复制模板脚本：复制发生在第一次保存脚本时（copy-on-write）
     script: null,
