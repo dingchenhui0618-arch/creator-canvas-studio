@@ -8,6 +8,11 @@ contextBridge.exposeInMainWorld('visionqaDesktop', {
     get: () => ipcRenderer.invoke('workspace:get'),
     choose: () => ipcRenderer.invoke('workspace:choose'),
   },
+  memory: {
+    list: () => ipcRenderer.invoke('memory:list'),
+    remove: (id) => ipcRenderer.invoke('memory:remove', id),
+    clear: () => ipcRenderer.invoke('memory:clear'),
+  },
   agent: {
     listThreads: () => ipcRenderer.invoke('agent:threads:list'),
     createThread: () => ipcRenderer.invoke('agent:threads:create'),

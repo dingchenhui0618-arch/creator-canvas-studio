@@ -8,6 +8,7 @@ export type DesktopInfo = {
   url: string
   workspace: string
   loop: { maxSteps: number; maxToolOutput: number }
+  memory: { maxEntries: number; maxEntryChars: number; injectEntries: number; injectChars: number }
   compaction: {
     contextTokens: number
     thresholdPercent: number
@@ -38,6 +39,16 @@ export type LocalThread = {
   compactions: number
   createdAt: string
   updatedAt: string
+}
+
+/** 一条长期记忆：跨会话保留，按工作区分别存 */
+export type MemoryEntry = {
+  id: string
+  text: string
+  source: string
+  createdAt: string
+  usedAt: string
+  uses: number
 }
 
 export type LocalThreadSummary = {
@@ -75,6 +86,14 @@ export type DesktopEvent =
       tokensBefore?: number
       tokensAfter?: number
     }
+  | {
+      type: 'memory'
+      /** recall：这一轮用到了哪几条；changed：记忆被改写（智能体记了一条，或用户删了） */
+      phase: 'recall' | 'changed'
+      entries?: { id: string; text: string }[]
+      total?: number
+    }
+  | { type: 'title'; text: string }
   | { type: 'note'; text: string }
   /** 一轮结束且已存盘：界面据此刷新会话列表 */
   | { type: 'turn-end' }
@@ -86,6 +105,11 @@ export type DesktopBridge = {
   workspace: {
     get: () => Promise<string>
     choose: () => Promise<string>
+  }
+  memory: {
+    list: () => Promise<MemoryEntry[]>
+    remove: (id: string) => Promise<{ ok: boolean; total?: number; output?: string }>
+    clear: () => Promise<{ ok: boolean; removed?: number }>
   }
   agent: {
     listThreads: () => Promise<LocalThreadSummary[]>

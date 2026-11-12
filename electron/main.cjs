@@ -13,22 +13,28 @@ const LOCAL_URL =
   (process.argv.includes('--local') ? 'http://127.0.0.1:5191' : 'https://visionqa.wavisionai.cn')
 
 let ThreadStore = null
+let MemoryStore = null
 let createTools = null
 let runTurn = null
 let DEFAULT_LIMITS = { maxSteps: 8, maxToolOutput: 8000 }
 let COMPACTION = null
+let MEMORY_LIMITS = { maxEntries: 40, maxEntryChars: 300, injectEntries: 8, injectChars: 1600 }
+let writeFileAtomic = null
 
 async function loadAgent() {
   ;({ ThreadStore } = await import('./agent/store.mjs'))
+  ;({ MemoryStore, MEMORY_LIMITS } = await import('./agent/memory.mjs'))
   ;({ createTools } = await import('./agent/tools.mjs'))
   ;({ runTurn, DEFAULT_LIMITS } = await import('./agent/loop.mjs'))
   ;({ COMPACTION } = await import('./agent/compaction.mjs'))
+  ;({ writeFileAtomic } = await import('./agent/atomic.mjs'))
 }
 
 const DEFAULT_WORKSPACE = path.join(app.getPath('documents'), 'VisionQA 工作区')
 
 let win = null
 let store = null
+let memory = null
 let settingsFile = ''
 let stateFile = ''
 const approvalQueue = new Map()
@@ -43,10 +49,7 @@ async function readJson(file, fallback) {
 }
 
 async function writeJson(file, value) {
-  await fsp.mkdir(path.dirname(file), { recursive: true })
-  const tmp = file + '.tmp'
-  await fsp.writeFile(tmp, JSON.stringify(value, null, 2), 'utf8')
-  await fsp.rename(tmp, file)
+  await writeFileAtomic(file, JSON.stringify(value, null, 2))
 }
 
 async function settings() {
@@ -112,23 +115,50 @@ async function handleSend({ threadId, text }) {
   const message = String(text || '').trim()
   if (!message) return { ok: false, error: '先输入要做的事' }
   const thread = await store.get(threadId)
+  const renamed = !thread.title || thread.title === '新的本地会话'
   thread.messages.push({ role: 'user', content: message })
-  if (!thread.title || thread.title === '新的本地会话') thread.title = message.slice(0, 24)
-  thread.turns = (thread.turns || 0) + 1
+  if (renamed) thread.title = message.slice(0, 24)
   await store.save(thread)
   emitEvent(thread.id, { type: 'user', text: message })
+  // 长一轮里会话栏不该一直写着「新的本地会话 / 0 条」：改名与条数在事件里就带上
+  if (renamed) emitEvent(thread.id, { type: 'title', text: thread.title })
 
   const workspace = await ensureWorkspace()
+
+  // 「记住：…」直接写进长期记忆，不调模型、不扣积分：记一句话不该花一次补全。
+  const rememberMatch = memory ? message.match(/^(?:\/记住|\/remember|记住[：:])\s*([\s\S]+)$/i) : null
+  if (rememberMatch) {
+    const outcome = await memory.add(workspace, { text: rememberMatch[1], source: 'user' })
+    const reply = outcome.ok
+      ? (outcome.action === 'updated' ? '这条以前记过，已更新原文：' : '已记住，这个工作区以后的会话都能看到：') + outcome.entry.text
+      : '没记下来：' + outcome.output
+    thread.messages.push({ role: 'assistant', content: reply })
+    await store.save(thread)
+    emitEvent(thread.id, { type: 'assistant', text: reply })
+    emitEvent(thread.id, { type: 'memory', phase: 'changed', total: outcome.total || 0 })
+    emitEvent(thread.id, { type: 'turn-end' })
+    return { ok: outcome.ok, remembered: outcome.ok }
+  }
+
+  thread.turns = (thread.turns || 0) + 1
+  await store.save(thread)
   const controller = new AbortController()
   activeRun = { threadId, controller }
   try {
     const result = await runTurn({
       thread,
       workspace,
-      tools: createTools({ root: workspace, maxOutput: DEFAULT_LIMITS.maxToolOutput }),
+      tools: createTools({ root: workspace, maxOutput: DEFAULT_LIMITS.maxToolOutput, memory, workspace }),
       complete: await makeComplete(thread.id),
+      memory,
       signal: controller.signal,
-      emit: (event) => emitEvent(thread.id, event),
+      emit: (event) => {
+        emitEvent(thread.id, event)
+        // 智能体自己记了一条：面板上的条数得跟着变，否则用户会以为没记上
+        if (event.type === 'tool' && event.tool === 'remember' && event.phase === 'done' && event.ok) {
+          emitEvent(thread.id, { type: 'memory', phase: 'changed' })
+        }
+      },
       approve: (request) => askApproval(thread.id, request),
     })
     await store.save(thread)
@@ -273,10 +303,14 @@ function registerIpc() {
     mode: process.argv.includes('--local') ? 'local' : 'remote',
     url: LOCAL_URL,
     workspace: await ensureWorkspace(),
-    // 界面上显示的「每轮几步 / 上下文多大 / 何时压缩」直接来自这里在用的值，不另写一份文案
+    // 界面上显示的「每轮几步 / 上下文多大 / 何时压缩 / 记忆多少条」直接来自这里在用的值，不另写一份文案
     loop: DEFAULT_LIMITS,
     compaction: COMPACTION,
+    memory: MEMORY_LIMITS,
   }))
+  ipcMain.handle('memory:list', async () => memory.list(await ensureWorkspace()))
+  ipcMain.handle('memory:remove', async (_event, id) => memory.remove(await ensureWorkspace(), String(id || '')))
+  ipcMain.handle('memory:clear', async () => memory.clear(await ensureWorkspace()))
   ipcMain.handle('workspace:get', () => ensureWorkspace())
   ipcMain.handle('workspace:choose', async () => {
     const picked = await dialog.showOpenDialog(win, {
@@ -319,6 +353,8 @@ async function start() {
   stateFile = path.join(app.getPath('userData'), 'window-state.json')
   await loadAgent()
   store = await new ThreadStore(path.join(app.getPath('userData'), 'local-agent')).ready()
+  // 长期记忆与会话文件放在同一个应用目录下，但按工作区分文件：换个目录就换一份记忆
+  memory = await new MemoryStore(path.join(app.getPath('userData'), 'local-agent')).ready()
   await ensureWorkspace()
   registerIpc()
   buildMenu()

@@ -1,12 +1,15 @@
 // 本地智能体每一步的回复协议：一步一个 JSON 决定「继续查」还是「收尾」。
+// 记忆那一块由 memoryBlock() 生成，这里只决定放在哪：压缩摘要之前，让「以前记的」比「上一段摘要」更靠近规矩。
 // 不用供应商的 function calling：平台文本链里不是每个模型都支持，
 // 而「一步一个 JSON」在任何纯文本模型上都能跑，出错时也能把原文给用户看。
+import { memoryBlock } from './memory.mjs'
+
 export const PROTOCOL_HINT = [
   '{"type":"tool","tool":"工具名","args":{...},"why":"一句话说明为什么需要它"}',
   '{"type":"final","text":"给用户看的回答"}',
 ].join('\n')
 
-export function buildSystemPrompt({ workspace, tools, summary = '', maxSteps = 8 }) {
+export function buildSystemPrompt({ workspace, tools, summary = '', maxSteps = 8, memory = [] }) {
   const lines = []
   lines.push('你是 VisionQA 桌面端的本地智能体。你在一台真实的本机工作区里干活：可以读目录、读文件、写文件、执行命令，用户会逐条批准有副作用的操作。')
   lines.push('工作区根目录：' + workspace)
@@ -29,6 +32,12 @@ export function buildSystemPrompt({ workspace, tools, summary = '', maxSteps = 8
   lines.push('- 工具结果只有真的执行完才会出现在对话里。不要自己写「工具 X 执行成功」，不要写假的文件内容，也不要用 <system> 之类的标签。')
   lines.push('- 没有真的执行过的事不要写成做过了。工具失败就把失败原因告诉用户。')
   lines.push('- 用户用中文，就用中文回答；回答给结论，再给关键证据（哪条命令、哪个文件、输出了什么）。')
+  lines.push('- 用户说出以后还用得上的约定（偏好、命名、路径、部署方式、结论），用 remember 记一条，一句话说完；临时任务内容、一次性的中间结果不要记。')
+  const memoryText = memoryBlock(memory)
+  if (memoryText) {
+    lines.push('')
+    lines.push(memoryText)
+  }
   if (summary) {
     lines.push('')
     lines.push('## 更早的对话（已压缩）')

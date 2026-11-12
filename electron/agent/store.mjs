@@ -2,6 +2,7 @@
 // 写入用临时文件 + rename：断电或强杀时不会留下半个 JSON。
 import fsp from 'node:fs/promises'
 import path from 'node:path'
+import { writeFileAtomic } from './atomic.mjs'
 
 const ID_PATTERN = /^[a-z0-9_-]{6,64}$/i
 
@@ -74,10 +75,7 @@ export class ThreadStore {
     await this.ready()
     const now = new Date().toISOString()
     thread.updatedAt = now
-    const file = this.file(thread.id)
-    const tmp = file + '.tmp'
-    await fsp.writeFile(tmp, JSON.stringify(thread, null, 2), 'utf8')
-    await fsp.rename(tmp, file)
+    await writeFileAtomic(this.file(thread.id), JSON.stringify(thread, null, 2))
     return thread
   }
 

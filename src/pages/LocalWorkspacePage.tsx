@@ -2,7 +2,7 @@
 // 服务端只负责「用平台 Key 做一次补全」，所以密钥不进安装包。
 // 网页版打开 #/local 会看到一页说明，而不是一个假界面。
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowRight, FolderOpen, Loader2, Plus, ShieldCheck, Square, Trash2 } from 'lucide-react'
+import { ArrowRight, Brain, FolderOpen, Loader2, Plus, ShieldCheck, Square, Trash2, X } from 'lucide-react'
 import PageHead from '../components/PageHead'
 import {
   getDesktop,
@@ -11,6 +11,7 @@ import {
   type DesktopInfo,
   type LocalThread,
   type LocalThreadSummary,
+  type MemoryEntry,
   type ThreadMessage,
 } from '../desktop/bridge'
 import '../styles/local-workspace.css'
@@ -53,7 +54,19 @@ const STARTERS = [
   '看看最近改过的文件，帮我总结这次改了什么',
 ]
 
-const ARG_LABELS: Record<string, string> = { path: '路径', content: '内容', command: '命令', cwd: '目录', offset: '起始行', limit: '行数' }
+const ARG_LABELS: Record<string, string> = {
+  path: '路径',
+  content: '内容',
+  command: '命令',
+  cwd: '目录',
+  offset: '起始行',
+  limit: '行数',
+  query: '找什么',
+  glob: '文件范围',
+  old: '原内容',
+  new: '新内容',
+  text: '记忆内容',
+}
 
 // 工具参数不整段 JSON 甩给用户：路径/命令直接看，长内容压成一行预览 + 体量说明。
 function ArgsView({ args }: { args?: Record<string, unknown> }) {
@@ -136,6 +149,9 @@ export default function LocalWorkspacePage() {
   const [busy, setBusy] = useState(false)
   const [running, setRunning] = useState(false)
   const [error, setError] = useState('')
+  const [memoryItems, setMemoryItems] = useState<MemoryEntry[]>([])
+  const [memoryOpen, setMemoryOpen] = useState(false)
+  const [recalled, setRecalled] = useState<{ id: string; text: string }[]>([])
   const activeRef = useRef<string | null>(null)
   const keyRef = useRef(0)
   const feedRef = useRef<HTMLDivElement | null>(null)
@@ -167,6 +183,15 @@ export default function LocalWorkspacePage() {
     [bridge],
   )
 
+  const refreshMemory = useCallback(async () => {
+    if (!bridge) return
+    try {
+      setMemoryItems(await bridge.memory.list())
+    } catch {
+      // 记忆读不到不影响对话：面板会显示「还没有记忆」
+    }
+  }, [bridge])
+
   const refreshThreads = useCallback(async () => {
     if (!bridge) return [] as LocalThreadSummary[]
     try {
@@ -182,7 +207,15 @@ export default function LocalWorkspacePage() {
     (payload: { threadId: string; event: DesktopEvent }) => {
       if (payload.threadId !== activeRef.current) return
       const event = payload.event
-      if (event.type === 'user') return // 发送时已经乐观上屏，服务端回声不重复显示
+      if (event.type === 'user') {
+        // 发送时已经乐观上屏，服务端回声不重复显示；但它确实多了一条，会话栏的条数跟着加
+        setThreads((items) => items.map((item) => (item.id === payload.threadId ? { ...item, messages: item.messages + 1 } : item)))
+        return
+      }
+      if (event.type === 'title') {
+        setThreads((items) => items.map((item) => (item.id === payload.threadId ? { ...item, title: event.text } : item)))
+        return
+      }
       if (event.type === 'assistant') {
         setFeed((items) => [...items, { kind: 'assistant', key: nextKey(), text: event.text }])
         setRunning(false)
@@ -246,6 +279,11 @@ export default function LocalWorkspacePage() {
         void refreshThreads()
         return
       }
+      if (event.type === 'memory') {
+        if (event.phase === 'changed') void refreshMemory()
+        else setRecalled(event.entries || [])
+        return
+      }
       if (event.type === 'turn-end') {
         void refreshThreads()
         return
@@ -264,7 +302,7 @@ export default function LocalWorkspacePage() {
         setRunning(false)
       }
     },
-    [nextKey, refreshThreads],
+    [nextKey, refreshMemory, refreshThreads],
   )
 
   useEffect(() => {
@@ -275,10 +313,11 @@ export default function LocalWorkspacePage() {
     })
     void (async () => {
       try {
-        const [desktopInfo, list] = await Promise.all([bridge.info(), bridge.agent.listThreads()])
+        const [desktopInfo, list, memories] = await Promise.all([bridge.info(), bridge.agent.listThreads(), bridge.memory.list()])
         if (!alive) return
         setInfo(desktopInfo)
         setThreads(list)
+        setMemoryItems(memories)
         if (list[0]) await openThread(list[0].id)
       } catch (caught) {
         if (alive) setError(caught instanceof Error ? caught.message : String(caught))
@@ -346,6 +385,7 @@ export default function LocalWorkspacePage() {
     }
     setDraft('')
     setRunning(true)
+    setRecalled([])
     void refreshThreads()
     setFeed((items) => [...items, { kind: 'user', key: nextKey(), text }])
     try {
@@ -400,6 +440,21 @@ export default function LocalWorkspacePage() {
     [activeId, bridge, openThread, refreshThreads],
   )
 
+  const removeMemory = useCallback(
+    async (id: string) => {
+      if (!bridge) return
+      const result = await bridge.memory.remove(id)
+      if (result.ok) setMemoryItems((items) => items.filter((item) => item.id !== id))
+    },
+    [bridge],
+  )
+
+  const clearMemory = useCallback(async () => {
+    if (!bridge) return
+    const result = await bridge.memory.clear()
+    if (result.ok) setMemoryItems([])
+  }, [bridge])
+
   const pending = feed.some((item) => item.kind === 'approval' && !item.decided)
   const status = pending ? '待批准' : running ? '运行中' : '就绪'
 
@@ -432,6 +487,63 @@ export default function LocalWorkspacePage() {
               <FolderOpen size={14} />
               <span className="lw-path" title={info?.workspace || ''}>{info?.workspace || '选择工作区目录'}</span>
             </button>
+            <div className="lw-memory-wrap">
+              <button
+                type="button"
+                className={'lw-btn lw-memory-btn' + (memoryOpen ? ' is-open' : '')}
+                onClick={() => setMemoryOpen((open) => !open)}
+                aria-expanded={memoryOpen}
+                title="这个工作区的长期记忆（跨会话保留）"
+              >
+                <Brain size={14} />
+                <span>记忆</span>
+                <span className="lw-count">{memoryItems.length}</span>
+              </button>
+              {memoryOpen ? (
+                <div className="lw-memory" role="dialog" aria-label="这个工作区的长期记忆">
+                  <header className="lw-memory-head">
+                    <strong>这个工作区的记忆</strong>
+                    <button type="button" className="lw-icon-btn" onClick={() => setMemoryOpen(false)} aria-label="关闭记忆面板">
+                      <X size={14} />
+                    </button>
+                  </header>
+                  <p className="lw-memory-note">跨会话保留，只在这台机器上；换工作区就是另一份。</p>
+                  {memoryItems.length === 0 ? (
+                    <p className="lw-memory-empty">还没有记忆。说一句「记住：…」直接记一条（不调模型），或者让它自己在需要时记住。</p>
+                  ) : (
+                    <ul className="lw-memory-list">
+                      {memoryItems.map((entry) => (
+                        <li key={entry.id} className="lw-memory-item">
+                          <p className="lw-memory-text">{entry.text}</p>
+                          <div className="lw-memory-meta">
+                            <span>
+                              召回 {entry.uses} 次 · {formatTime(entry.usedAt)}
+                            </span>
+                            <button
+                              type="button"
+                              className="lw-thread-del"
+                              onClick={() => void removeMemory(entry.id)}
+                              title="删掉这条记忆"
+                              aria-label={'删掉记忆 ' + entry.text.slice(0, 20)}
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <footer className="lw-memory-foot">
+                    <span>最多留 {info?.memory?.maxEntries ?? 40} 条，满后先淘汰最少召回的那条</span>
+                    {memoryItems.length > 0 ? (
+                      <button type="button" className="lw-btn lw-btn--quiet" onClick={() => void clearMemory()}>
+                        清空
+                      </button>
+                    ) : null}
+                  </footer>
+                </div>
+              ) : null}
+            </div>
           </div>
         }
       />
@@ -483,6 +595,11 @@ export default function LocalWorkspacePage() {
             <span className="lw-model">
               {meta?.enabled === false ? '模型未配置' : '模型 ' + (meta?.defaultModel || '未取到')}
             </span>
+            {recalled.length > 0 ? (
+              <span className="lw-recalled" title={recalled.map((entry) => entry.text).join('\n')}>
+                本轮用到 {recalled.length} 条记忆
+              </span>
+            ) : null}
             {error ? <span className="lw-top-error">{error}</span> : null}
           </div>
 

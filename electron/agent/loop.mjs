@@ -35,9 +35,33 @@ async function compactIfNeeded({ thread, complete, emit, signal }) {
   return true
 }
 
-export async function runTurn({ thread, workspace, tools, complete, emit = () => {}, approve = async () => false, limits = {}, signal }) {
+// 这一轮开始前，按用户刚说的这句话去长期记忆里召回几条：只放进系统提示，不改动会话历史。
+// 记忆读写失败不算这一轮失败——没有记忆也要能干活。
+function lastUserText(messages) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+    if (message.role === 'user' && !message.note && !message.tool) return String(message.content || '')
+  }
+  return ''
+}
+
+async function recallMemory({ memory, workspace, thread, emit }) {
+  if (!memory) return []
+  try {
+    const entries = await memory.recall(workspace, { query: lastUserText(thread.messages) })
+    if (entries.length > 0) {
+      emit({ type: 'memory', phase: 'recall', entries: entries.map((entry) => ({ id: entry.id, text: entry.text })) })
+    }
+    return entries
+  } catch {
+    return []
+  }
+}
+
+export async function runTurn({ thread, workspace, tools, complete, emit = () => {}, approve = async () => false, limits = {}, memory = null, signal }) {
   const limit = { ...DEFAULT_LIMITS, ...limits }
   const toolMap = new Map((tools || []).map((tool) => [tool.name, tool]))
+  const recalled = await recallMemory({ memory, workspace, thread, emit })
   let steps = 0
   let repairs = 0
   const startedAt = Date.now()
@@ -56,7 +80,7 @@ export async function runTurn({ thread, workspace, tools, complete, emit = () =>
       steps += 1
       await compactIfNeeded({ thread, complete, emit, signal })
       const messages = [
-        { role: 'system', content: buildSystemPrompt({ workspace, tools, summary: thread.summary, maxSteps: limit.maxSteps }) },
+        { role: 'system', content: buildSystemPrompt({ workspace, tools, summary: thread.summary, maxSteps: limit.maxSteps, memory: recalled }) },
         ...thread.messages,
       ]
       const reply = await complete(messages, { maxTokens: 2400, signal, step: steps })

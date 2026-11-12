@@ -1,5 +1,5 @@
 // 本地 agent loop 的纯逻辑测试：不启动 Electron、不连模型。
-// 覆盖：token 估算、压缩计划、协议解析、工作区边界、工具执行、审批与拒绝、一轮多步。
+// 覆盖：token 估算、压缩计划、协议解析、工作区边界、工具执行、审批与拒绝、一轮多步、跨会话记忆。
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import fsp from 'node:fs/promises'
@@ -8,6 +8,8 @@ import path from 'node:path'
 import { COMPACTION, estimateTokens, planCompaction, buildSummaryPrompt } from '../electron/agent/compaction.mjs'
 import { parseStep, buildSystemPrompt } from '../electron/agent/protocol.mjs'
 import { createTools, resolveInside } from '../electron/agent/tools.mjs'
+import { MemoryStore, MEMORY_LIMITS, memoryKey } from '../electron/agent/memory.mjs'
+import { writeFileAtomic } from '../electron/agent/atomic.mjs'
 import { runTurn } from '../electron/agent/loop.mjs'
 
 async function workspace() {
@@ -267,3 +269,176 @@ test('runTurn：上下文超预算时先压缩，再带着摘要继续', async (
   assert.match(finalCall.messages[0].content, /更早的对话（已压缩）/)
   assert.match(finalCall.messages[0].content, /十二段素材/)
 })
+
+test('长期记忆：同一件事只留一条，召回按词语重合度排，到上限先淘汰最少召回的', async () => {
+  const root = await fsp.mkdtemp(path.join(os.tmpdir(), 'vq-mem-'))
+  const store = await new MemoryStore(root).ready()
+  const workspaceDir = path.join(root, 'ws')
+  assert.deepEqual(await store.recall(workspaceDir, { query: '发布' }), [])
+
+  const first = await store.add(workspaceDir, { text: '部署脚本是 ops/deploy.sh，参数是包路径和版本号' })
+  assert.equal(first.action, 'added')
+  // 只是标点和空格不同的同一条：更新原文，不多出一条
+  const again = await store.add(workspaceDir, { text: '部署脚本是 ops/deploy.sh 参数是包路径和版本号' })
+  assert.equal(again.action, 'updated')
+  assert.equal((await store.list(workspaceDir)).length, 1)
+  assert.equal(memoryKey(workspaceDir), memoryKey(workspaceDir.toUpperCase()))
+
+  await store.add(workspaceDir, { text: '总览文件叫 SUMMARY.md' })
+  const picked = await store.recall(workspaceDir, { query: '这个工作区的总览文件叫什么' })
+  assert.equal(picked[0].text, '总览文件叫 SUMMARY.md')
+  assert.ok(picked[0].uses >= 1)
+
+  // 超长的一条会被截到上限，不让一句话吃掉整段提示
+  await store.add(workspaceDir, { text: '很长的约定'.repeat(80) })
+  const capped = (await store.list(workspaceDir)).find((entry) => entry.text.startsWith('很长的约定'))
+  assert.equal(capped.text.length, MEMORY_LIMITS.maxEntryChars)
+
+  for (let index = 0; index < MEMORY_LIMITS.maxEntries + 5; index += 1) {
+    await store.add(workspaceDir, { text: '第 ' + index + ' 条临时约定' })
+  }
+  assert.equal((await store.list(workspaceDir)).length, MEMORY_LIMITS.maxEntries)
+  // 召回的条数与总字数都有上限
+  assert.ok((await store.recall(workspaceDir, { query: '临时约定', limit: 3 })).length <= 3)
+  const short = await store.recall(workspaceDir, { query: '临时约定', limit: 20, chars: 40 })
+  assert.ok(short.reduce((sum, entry) => sum + entry.text.length, 0) <= 60)
+})
+
+test('buildSystemPrompt：召回的记忆单独成段，并说明与当次说法冲突时以当次为准', () => {
+  const prompt = buildSystemPrompt({
+    workspace: 'D:\\w',
+    tools: [],
+    memory: [{ id: 'm1', text: '部署脚本是 ops/deploy.sh' }],
+  })
+  assert.match(prompt, /这个工作区里你记得的事/)
+  assert.match(prompt, /ops\/deploy\.sh/)
+  assert.match(prompt, /以现在为准/)
+  // 没有记忆时不要留一个空标题
+  assert.doesNotMatch(buildSystemPrompt({ workspace: 'D:\\w', tools: [] }), /这个工作区里你记得的事/)
+})
+
+test('search_text 只读地找内容，edit_file 要求原文唯一', async () => {
+  const root = await workspace()
+  await fsp.mkdir(path.join(root, 'notes'), { recursive: true })
+  await fsp.writeFile(path.join(root, 'notes', 'todo.md'), '# 待办\n部署脚本 ops/deploy.sh\n', 'utf8')
+  await fsp.writeFile(path.join(root, 'b.txt'), '部署脚本 ops/deploy.sh\n部署脚本 ops/deploy.sh\n', 'utf8')
+  const tools = createTools({ root })
+  const byName = new Map(tools.map((item) => [item.name, item]))
+
+  assert.equal(byName.get('search_text').needsApproval, false)
+  const found = await byName.get('search_text').run({ query: 'deploy.sh' })
+  assert.equal(found.ok, true)
+  assert.match(found.output, /notes\/todo\.md:2/)
+  // glob 只看一类文件
+  const onlyMarkdown = await byName.get('search_text').run({ query: 'deploy', glob: '*.md' })
+  assert.match(onlyMarkdown.output, /notes\/todo\.md/)
+  assert.doesNotMatch(onlyMarkdown.output, /b\.txt/)
+  // 没找到要说清楚，不能给一段空白
+  assert.match((await byName.get('search_text').run({ query: '不存在的词' })).output, /没有找到/)
+
+  assert.equal(byName.get('edit_file').needsApproval, true)
+  const unique = await byName.get('edit_file').run({ path: 'a.txt', old: 'second line', new: 'third line' })
+  assert.equal(unique.ok, true)
+  assert.match(await fsp.readFile(path.join(root, 'a.txt'), 'utf8'), /third line/)
+  assert.equal((await byName.get('edit_file').run({ path: 'a.txt', old: '没有这段', new: 'x' })).ok, false)
+  const ambiguous = await byName.get('edit_file').run({ path: 'b.txt', old: '部署脚本', new: 'x' })
+  assert.equal(ambiguous.ok, false)
+  assert.match(ambiguous.output, /出现了 2 处/)
+})
+
+test('remember 工具：把约定写进这个工作区的记忆，不需要批准', async () => {
+  const root = await workspace()
+  const store = await new MemoryStore(root).ready()
+  const workspaceDir = path.join(root, 'ws')
+  const byName = new Map(createTools({ root: workspaceDir, memory: store, workspace: workspaceDir }).map((item) => [item.name, item]))
+  assert.equal(byName.get('remember').needsApproval, false)
+  const result = await byName.get('remember').run({ text: 'README 用中文写' })
+  assert.equal(result.ok, true)
+  assert.match(result.output, /已记住/)
+  assert.equal((await store.list(workspaceDir))[0].text, 'README 用中文写')
+  // 没有记忆层时说清楚，不要假装记住
+  const bare = createTools({ root: workspaceDir }).find((item) => item.name === 'remember')
+  assert.equal((await bare.run({ text: 'x' })).ok, false)
+})
+
+test('runTurn：开跑前按这句话召回记忆放进系统提示；记忆读坏了也不拖垮这一轮', async () => {
+  const root = await workspace()
+  const store = await new MemoryStore(root).ready()
+  const workspaceDir = path.join(root, 'ws')
+  await store.add(workspaceDir, { text: '发布前必须跑 npm test' })
+  const thread = { id: 't_mem', title: '记忆', summary: '', messages: [{ role: 'user', content: '发布前还要做什么' }] }
+  const prompts = []
+  const events = []
+  const result = await runTurn({
+    thread,
+    workspace: workspaceDir,
+    memory: store,
+    tools: createTools({ root: workspaceDir, memory: store, workspace: workspaceDir }),
+    complete: async (messages) => {
+      prompts.push(messages[0].content)
+      return JSON.stringify({ type: 'final', text: '先跑 npm test' })
+    },
+    emit: (event) => events.push(event),
+  })
+  assert.equal(result.ok, true)
+  assert.match(prompts[0], /发布前必须跑 npm test/)
+  assert.ok(events.some((event) => event.type === 'memory' && event.phase === 'recall'))
+
+  const broken = { recall: async () => { throw new Error('磁盘坏了') } }
+  const survived = await runTurn({
+    thread: { id: 't_mem2', summary: '', messages: [{ role: 'user', content: '继续' }] },
+    workspace: workspaceDir,
+    memory: broken,
+    tools: createTools({ root: workspaceDir }),
+    complete: async () => JSON.stringify({ type: 'final', text: '照样能答' }),
+    emit: () => {},
+  })
+  assert.equal(survived.ok, true)
+})
+
+test('原子写文件：rename 被占用时退避重试；真的写不进去就保持原文件', async () => {
+  const root = await fsp.mkdtemp(path.join(os.tmpdir(), 'vq-atomic-'))
+  const file = path.join(root, 'x.json')
+  await fsp.writeFile(file, 'old', 'utf8')
+
+  let calls = 0
+  const flaky = async (from, to) => {
+    calls += 1
+    if (calls < 3) {
+      const error = new Error('文件被占用')
+      error.code = 'EPERM'
+      throw error
+    }
+    await fsp.rename(from, to)
+  }
+  const result = await writeFileAtomic(file, 'new', { rename: flaky, sleep: async () => {} })
+  assert.equal(result.attempts, 3)
+  assert.equal(await fsp.readFile(file, 'utf8'), 'new')
+
+  const locked = async () => {
+    const error = new Error('一直占用')
+    error.code = 'EPERM'
+    throw error
+  }
+  await assert.rejects(writeFileAtomic(file, 'other', { rename: locked, sleep: async () => {}, attempts: 3 }), /一直占用/)
+  assert.equal(await fsp.readFile(file, 'utf8'), 'new')
+  // 重试用完后不留 .tmp 垃圾
+  assert.equal((await fsp.readdir(root)).filter((name) => name.endsWith('.tmp')).length, 0)
+
+  // 不是占用类的错误不重试，直接抛
+  let hardCalls = 0
+  const broken = async () => {
+    hardCalls += 1
+    const error = new Error('磁盘满了')
+    error.code = 'ENOSPC'
+    throw error
+  }
+  await assert.rejects(writeFileAtomic(file, 'x', { rename: broken, sleep: async () => {} }), /磁盘满了/)
+  assert.equal(hardCalls, 1)
+
+  // 目标目录不存在时自己建
+  const nested = path.join(root, 'a', 'b', 'c.json')
+  await writeFileAtomic(nested, '{}')
+  assert.equal(await fsp.readFile(nested, 'utf8'), '{}')
+})
+
