@@ -214,7 +214,7 @@ export default function SharePage({ token }: { token: string }) {
                       <p className={'timing-note timing-note--' + template.timing.fit}>
                         <strong>台词约需 {template.timing.estimatedSec}s</strong>
                         <span>
-                          原片 {template.timing.durationSec}s · 按{paceLabel(template.timing.pace)}速估（{template.timing.rate ?? 0} 字/秒）· {describeTiming(template.timing)}
+                          原片 {template.timing.durationSec}s · 按语速档「{paceLabel(template.timing.pace)}」估（{template.timing.rate ?? 0} 字/秒）· {describeTiming(template.timing)}
                         </span>
                       </p>
                     ) : null}

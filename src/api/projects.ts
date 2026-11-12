@@ -60,3 +60,42 @@ export const resetProjectScript = (id: string) =>
     '/api/projects/' + id + '/script',
     { method: 'DELETE' },
   )
+
+/**
+ * 交付稿：把这条作品压成一份 Markdown 附件（脚本、分镜、评审结论、版本、运行）。
+ * 走 fetch 而不是 <a href>：要把导出人所在的时区带上（稿子里的时间是本地时间），
+ * 也要读出服务端定下的文件名。只读接口，不扣积分。
+ */
+export async function downloadProjectDeliverable(id: string): Promise<{ name: string; bytes: number }> {
+  // getTimezoneOffset 是「UTC 减本地」的分钟数，取反才是东经为正
+  const tz = String(-new Date().getTimezoneOffset())
+  const response = await fetch('/api/projects/' + encodeURIComponent(id) + '/deliverable?tz=' + encodeURIComponent(tz), {
+    credentials: 'same-origin',
+  })
+  if (!response.ok) {
+    const text = await response.text()
+    let message = '交付稿没导出成功（HTTP ' + response.status + '）'
+    try {
+      const body = JSON.parse(text) as { error?: string }
+      if (body?.error) message = body.error
+    } catch {
+      // 非 JSON 错误体就用默认文案
+    }
+    throw new Error(message)
+  }
+  const disposition = response.headers.get('content-disposition') || ''
+  // 中文文件名在 filename*=UTF-8''… 里，老服务端只有 filename="…" 时退回它
+  const utf8 = disposition.match(/filename\*=UTF-8''([^;]+)/i)
+  const plain = disposition.match(/filename="([^"]+)"/)
+  const name = utf8 ? decodeURIComponent(utf8[1]) : plain?.[1] || 'visionqa-deliverable.md'
+  const blob = await response.blob()
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = name
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+  return { name, bytes: blob.size }
+}

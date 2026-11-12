@@ -12,10 +12,12 @@ import { normalizeProjectScript, scriptPace, scriptView } from '../project-scrip
 import { buildReplicateDraft, patchCanvasScript } from '../script-draft.mjs'
 import {
   listReviews,
+  getReview,
   reviewCountsByProject,
   reviewSummaryByVersion,
   detachReviewsFromProject,
 } from '../reviews.mjs'
+import { projectDeliverable } from '../project-deliverable.mjs'
 import {
   listProjects,
   getProject,
@@ -36,6 +38,7 @@ const VERSIONS = /^\/api\/projects\/([\w-]+)\/versions$/
 const SCRIPT = /^\/api\/projects\/([\w-]+)\/script$/
 const CANVAS = /^\/api\/projects\/([\w-]+)\/canvas$/
 const SHARE = /^\/api\/projects\/([\w-]+)\/share$/
+const DELIVERABLE = /^\/api\/projects\/([\w-]+)\/deliverable$/
 
 // 详情 / 列表里的 project 不带原始脚本：脚本只从顶层 script 读（带来源、重算后的时长），
 // 否则同一份脚本在一页里有两个口径，界面迟早读到旧的那个。
@@ -98,6 +101,62 @@ function flowBrief(flow) {
     name: flow.name,
     nodes: Array.isArray(flow.nodes) ? flow.nodes.length : 0,
     updatedAt: flow.updatedAt,
+  }
+}
+
+/**
+ * 作品详情：作品页与交付稿导出读同一个函数，避免两处口径分叉。
+ * 运行归集要跨版本：当前版 + 归档版的画布一起查，开新版之后旧版的运行记录仍在作品里。
+ */
+async function projectDetailView(project, user) {
+  const projectFlows = [project.flowId, ...project.versions.map((entry) => entry.flowId)].filter(Boolean)
+  const [template, flow, reviews, versionCounts, runData] = await Promise.all([
+    project.templateId ? getTemplate(project.templateId, user) : null,
+    project.flowId ? getFlow(project.flowId, user) : null,
+    listReviews({ projectId: project.id, limit: 20 }, user),
+    reviewSummaryByVersion(project.id, user),
+    listRunsByFlows(projectFlows, { limit: 20 }, user),
+  ])
+  // 归档的旧版本只存了 flowId：这里顺手确认画布还在，已删掉的版本按钮要禁用而不是点开报错
+  const versions = await Promise.all(project.versions.map(async (entry) => {
+    const archived = entry.flowId ? await getFlow(entry.flowId, user) : null
+    return {
+      ...entry,
+      available: Boolean(archived),
+      nodes: Array.isArray(archived?.nodes) ? archived.nodes.length : 0,
+    }
+  }))
+  const versionOfFlow = new Map()
+  for (const entry of project.versions) versionOfFlow.set(entry.flowId, entry.n)
+  if (project.flowId) versionOfFlow.set(project.flowId, project.version)
+  // 画布被删掉之后运行记录仍在（历史不该跟着消失），但「打开画布」要禁用而不是点开报错。
+  // 注意这里必须放在 versions 算好之后再建：顺序反了就是一个 ReferenceError（0.2.3 生产实测踩到）。
+  const liveFlows = new Set(versions.filter((entry) => entry.available).map((entry) => entry.flowId))
+  if (flow) liveFlows.add(flow.id)
+  const runs = runData.items.map((run) => ({
+    ...run,
+    version: versionOfFlow.get(run.flowId) || 0,
+    available: liveFlows.has(run.flowId),
+  }))
+  const runCounts = {}
+  for (const [flowId, amount] of Object.entries(runData.byFlow)) {
+    const version = versionOfFlow.get(flowId) || 0
+    runCounts[version] = (runCounts[version] || 0) + Number(amount)
+  }
+  return {
+    project: projectBrief(project),
+    // 作品页的分享面板读这里：列表接口不返回 token
+    share: project.share,
+    template: templateDetail(template),
+    flow: flowBrief(flow),
+    // 作品页的脚本：自己的版本优先（source: project），否则跟随模板
+    script: scriptView(project, template),
+    reviews: reviews.items,
+    versions,
+    versionCounts,
+    runs,
+    runTotal: runData.total,
+    runCounts,
   }
 }
 
@@ -319,6 +378,33 @@ export function createProjectsRouter() {
         return true
       }
 
+      // 交付稿：把这条作品压成一份 Markdown 附件（脚本、分镜、评审结论、版本、运行）。
+      // 只读、不扣积分；tz 是导出人所在的时区偏移（分钟，东经为正），稿子里的时间按它写。
+      const deliverablePath = pathname.match(DELIVERABLE)
+      if (deliverablePath && req.method === 'GET') {
+        const project = await getProject(deliverablePath[1], user)
+        if (!project) {
+          sendJson(res, 404, { error: '作品不存在或已被删除' })
+          return true
+        }
+        const detail = await projectDetailView(project, user)
+        // 评审全文（含问题与修正建议）只在导出时读一次：详情列表里不带这几十 KB
+        const latest = detail.reviews.find((item) => Number(item.version ?? 0) === project.version) || null
+        const review = latest ? await getReview(latest.id, user) : null
+        const rawTz = Number(url.searchParams.get('tz'))
+        const tz = Number.isFinite(rawTz) ? Math.max(-720, Math.min(840, Math.round(rawTz))) : 480
+        const { fileName, markdown } = projectDeliverable(detail, { review, tzOffsetMinutes: tz })
+        res.writeHead(200, {
+          'Content-Type': 'text/markdown; charset=utf-8',
+          // 中文文件名走 RFC 5987：老浏览器读不到 filename* 时退回 ASCII 的名字，不会得到一个空文件名
+          'Content-Disposition':
+            'attachment; filename="visionqa-deliverable-' + project.id + '.md"; filename*=UTF-8\'\'' + encodeURIComponent(fileName),
+          'Cache-Control': 'no-store',
+        })
+        res.end(markdown)
+        return true
+      }
+
       const item = pathname.match(ITEM)
       if (item && req.method === 'GET') {
         const project = await getProject(item[1], user)
@@ -326,57 +412,7 @@ export function createProjectsRouter() {
           sendJson(res, 404, { error: '作品不存在或已被删除' })
           return true
         }
-        // 运行归集：当前版 + 归档版的画布一起查，开新版之后旧版的运行记录仍在作品里
-        const projectFlows = [project.flowId, ...project.versions.map((entry) => entry.flowId)].filter(Boolean)
-        const [template, flow, reviews, versionCounts, runData] = await Promise.all([
-          project.templateId ? getTemplate(project.templateId, user) : null,
-          project.flowId ? getFlow(project.flowId, user) : null,
-          listReviews({ projectId: project.id, limit: 20 }, user),
-          reviewSummaryByVersion(project.id, user),
-          listRunsByFlows(projectFlows, { limit: 20 }, user),
-        ])
-        // 归档的旧版本只存了 flowId：这里顺手确认画布还在，已删掉的版本按钮要禁用而不是点开报错
-        const versions = await Promise.all(project.versions.map(async (entry) => {
-          const archived = entry.flowId ? await getFlow(entry.flowId, user) : null
-          return {
-            ...entry,
-            available: Boolean(archived),
-            nodes: Array.isArray(archived?.nodes) ? archived.nodes.length : 0,
-          }
-        }))
-        const versionOfFlow = new Map()
-        for (const entry of project.versions) versionOfFlow.set(entry.flowId, entry.n)
-        if (project.flowId) versionOfFlow.set(project.flowId, project.version)
-        // 画布被删掉之后运行记录仍在（历史不该跟着消失），但「打开画布」要禁用而不是点开报错。
-        // 注意这里必须放在 versions 算好之后再建：顺序反了就是一个 ReferenceError（0.2.3 生产实测踩到）。
-        const liveFlows = new Set(versions.filter((entry) => entry.available).map((entry) => entry.flowId))
-        if (flow) liveFlows.add(flow.id)
-        const runs = runData.items.map((run) => ({
-          ...run,
-          version: versionOfFlow.get(run.flowId) || 0,
-          available: liveFlows.has(run.flowId),
-        }))
-        const runCounts = {}
-        for (const [flowId, amount] of Object.entries(runData.byFlow)) {
-          const version = versionOfFlow.get(flowId) || 0
-          runCounts[version] = (runCounts[version] || 0) + Number(amount)
-        }
-        sendJson(res, 200, {
-          ok: true,
-          project: projectBrief(project),
-          // 作品页的分享面板读这里：列表接口不返回 token
-          share: project.share,
-          template: templateDetail(template),
-          flow: flowBrief(flow),
-          // 作品页的脚本：自己的版本优先（source: project），否则跟随模板
-          script: scriptView(project, template),
-          reviews: reviews.items,
-          versions,
-          versionCounts,
-          runs,
-          runTotal: runData.total,
-          runCounts,
-        })
+        sendJson(res, 200, { ok: true, ...(await projectDetailView(project, user)) })
         return true
       }
 

@@ -529,7 +529,7 @@ export function TemplateLibraryPage({
                           <p className={`timing-note timing-note--${detail.timing.fit}`}>
                             <strong>台词约需 {detail.timing.estimatedSec}s</strong>
                             <span>
-                              {detail.kind === 'agent' ? '分镜' : '原片'} {detail.timing.durationSec}s · 按{paceLabel(detail.timing.pace)}速估（{detail.timing.rate ?? 0} 字/秒）· {describeTiming(detail.timing)}
+                              {detail.kind === 'agent' ? '分镜' : '原片'} {detail.timing.durationSec}s · 按语速档「{paceLabel(detail.timing.pace)}」估（{detail.timing.rate ?? 0} 字/秒）· {describeTiming(detail.timing)}
                             </span>
                           </p>
                         ) : null}

@@ -100,7 +100,7 @@ function replicaMarkdown(template: ReplicaTemplate): string[] {
     out.push(
       '## 时长对账',
       '',
-      '台词约需 ' + timing.estimatedSec + ' 秒，原片 ' + timing.durationSec + ' 秒，按' + paceLabel(timing.pace) + '速估（' + (timing.rate ?? 0) + ' 字/秒）。' + describeTiming(timing),
+      '台词约需 ' + timing.estimatedSec + ' 秒，原片 ' + timing.durationSec + ' 秒，按语速档「' + paceLabel(timing.pace) + '」估（' + (timing.rate ?? 0) + ' 字/秒）。' + describeTiming(timing),
       '',
     )
   }

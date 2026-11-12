@@ -2,6 +2,8 @@
    改 token 即可影响工作台、智能体、运行记录、视觉评审、画布、模板库与编辑页。 */
 .vq-head {
   display: flex;
+  /* 动作多了会换到下一行：宁可让按钮独占一行，也不把标题压成三行（780 宽实测） */
+  flex-wrap: wrap;
   align-items: flex-end;
   justify-content: space-between;
   gap: var(--space-6);
@@ -11,7 +13,8 @@
 }
 
 .vq-head-main {
-  flex: 1 1 auto;
+  /* 24rem 是这条线：标题区放不下 24rem + 动作区时就分两行 */
+  flex: 1 1 24rem;
   min-width: 0;
 }
 

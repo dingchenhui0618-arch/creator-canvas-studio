@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ArrowLeft, ArrowRight, Check, Clapperboard, CopyPlus, Link2, Pencil, Plus, RefreshCw, RotateCcw, ScanEye, Share2, Trash2, Workflow, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Clapperboard, CopyPlus, Download, Link2, Pencil, Plus, RefreshCw, RotateCcw, ScanEye, Share2, Trash2, Workflow, X } from 'lucide-react'
 import PageHead from '../components/PageHead'
 import ProjectStatusPill from '../components/ProjectStatus'
 import {
   deleteProject,
   disableProjectShare,
+  downloadProjectDeliverable,
   enableProjectShare,
   getProject,
   openProjectCanvas,
@@ -75,7 +76,7 @@ export default function ProjectPage({
   const [data, setData] = useState<ProjectDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [busy, setBusy] = useState<'' | 'canvas' | 'done' | 'delete' | 'title' | 'version' | 'script'>('')
+  const [busy, setBusy] = useState<'' | 'canvas' | 'done' | 'delete' | 'title' | 'version' | 'script' | 'export'>('')
   const [renaming, setRenaming] = useState(false)
   const [draftTitle, setDraftTitle] = useState('')
   // 脚本就地编辑：草稿只在内存里，保存后才写进作品（copy-on-write）
@@ -197,6 +198,21 @@ export default function ProjectPage({
       onToast(next === 'done' ? '已标记为交付' : '已重新打开这条作品')
     } catch (caught) {
       onToast(caught instanceof Error ? caught.message : '状态没保存成功')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  // 交付稿：脚本、分镜、评审结论、版本与运行压成一份 Markdown，直接落盘。
+  // 只读接口，不扣积分；导出的是「当前这一版」，不是整条作品的历史合集。
+  const exportDeliverable = async () => {
+    if (!data) return
+    setBusy('export')
+    try {
+      const result = await downloadProjectDeliverable(data.project.id)
+      onToast('交付稿已导出：' + result.name)
+    } catch (caught) {
+      onToast(caught instanceof Error ? caught.message : '交付稿没导出成功')
     } finally {
       setBusy('')
     }
@@ -456,6 +472,16 @@ export default function ProjectPage({
             </button>
             <button type="button" className="vq-button vq-button--ghost" onClick={() => void toggleDone()} disabled={busy === 'done'}>
               {project.status === 'done' ? '重新打开' : '标记交付'}
+            </button>
+            <button
+              type="button"
+              className="vq-button vq-button--ghost"
+              onClick={() => void exportDeliverable()}
+              disabled={busy === 'export'}
+              title="把脚本、分镜、评审结论、版本与运行压成一份 Markdown"
+            >
+              <Download size={14} />
+              {busy === 'export' ? '正在整理…' : '导出交付稿'}
             </button>
             <button
               type="button"
