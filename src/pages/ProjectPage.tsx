@@ -202,7 +202,8 @@ export default function ProjectPage({
     {
       n: project.version,
       flowId: project.flowId,
-      name: flow ? flow.name : '当前画布',
+      // 当前版用作品名：画布名是建版本那一刻的标题，改名后拿它当行标题会显得对不上
+      name: project.title,
       archivedAt: '',
       available: Boolean(flow),
       nodes: flow ? flow.nodes : 0,
