@@ -116,7 +116,7 @@
   grid-template-columns: 132px 84px minmax(0, 1fr) 64px;
   align-items: center;
   gap: 12px;
-  padding: 10px 12px;
+  padding: 8px 12px;
   background: var(--surface-raised);
 }
 .vq-health-row strong {
@@ -154,7 +154,7 @@
 .radar-credit {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   height: 32px;
   padding: 0 12px;
   border: 1px solid var(--line);
@@ -222,7 +222,7 @@
 }
 .vq-input {
   height: 32px;
-  padding: 0 10px;
+  padding: 0 8px;
   color: var(--ink);
   background: var(--surface-raised);
   border: 1px solid var(--line-strong);
@@ -238,6 +238,6 @@
 
 @media (max-width: 720px) {
   .vq-price-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .vq-health-row { grid-template-columns: 1fr; gap: 4px; }
+  .vq-health-row { grid-template-columns: minmax(0, 1fr); gap: 4px; }
   .vq-health-row .ms { text-align: left; }
 }

@@ -167,7 +167,7 @@
   padding: 0 8px;
   border-radius: var(--radius-pill);
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 11px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -197,7 +197,7 @@
   border-radius: var(--radius-pill);
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 11px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -220,7 +220,7 @@
   gap: 8px;
   height: 34px;
   min-width: 96px;
-  padding: 0 10px 0 12px;
+  padding: 0 8px 0 12px;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
   background: var(--surface-raised);
@@ -538,7 +538,7 @@ select:focus-visible {
 .vq-lockup-text small {
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.14em;
   line-height: 1.1;
   text-transform: uppercase;
@@ -595,7 +595,7 @@ select:focus-visible {
   overflow: hidden;
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.06em;
   text-overflow: ellipsis;
   text-transform: uppercase;
@@ -692,7 +692,7 @@ select:focus-visible {
   border-radius: var(--radius-xs);
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   font-style: normal;
   text-align: center;
 }
@@ -802,7 +802,7 @@ select:focus-visible {
 .vq-sidebar-account-copy small {
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.02em;
 }
 
@@ -858,7 +858,7 @@ select:focus-visible {
   background: transparent;
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.04em;
   text-align: left;
 }
@@ -946,7 +946,7 @@ select:focus-visible {
   display: inline-flex;
   align-items: center;
   height: 24px;
-  padding: 0 10px;
+  padding: 0 8px;
   border: 1px dashed var(--line-strong);
   border-radius: var(--radius-pill);
   background: var(--surface);
@@ -1066,7 +1066,7 @@ select:focus-visible {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 3px 8px 3px 3px;
+  padding: 4px 8px 4px 4px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -1111,7 +1111,7 @@ select:focus-visible {
   overflow: hidden;
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.02em;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1338,7 +1338,7 @@ select:focus-visible {
 }
 
 .vq-login-facts p {
-  margin: 3px 0 0;
+  margin: 4px 0 0;
   color: rgba(255, 255, 255, 0.52);
   font-size: 12px;
   line-height: 1.65;
@@ -1367,7 +1367,7 @@ select:focus-visible {
   border-radius: var(--radius-xs);
   color: #e3bd7e;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.06em;
 }
 
@@ -1610,7 +1610,7 @@ select:focus-visible {
   overflow: hidden;
   color: var(--ink);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.02em;
   text-overflow: ellipsis;
 }
@@ -1728,7 +1728,7 @@ select:focus-visible {
 }
 
 .vq-card-head h2 {
-  margin: 3px 0 0;
+  margin: 4px 0 0;
   font-size: 14px;
   font-weight: 500;
   letter-spacing: -0.01em;
@@ -1777,11 +1777,10 @@ select:focus-visible {
 }
 
 .vq-account-meta span {
-  overflow: hidden;
   color: var(--faint);
   font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .vq-account-actions {
@@ -1950,7 +1949,7 @@ select:focus-visible {
   border: 1px solid var(--line);
   border-radius: var(--radius-xs);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .vq-update-message {
@@ -1980,13 +1979,13 @@ select:focus-visible {
 
 @media (max-width: 1180px) {
   .vq-settings-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
 @media (max-width: 980px) {
   .vq-login {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .vq-login-brand {
@@ -2098,11 +2097,38 @@ select:focus-visible {
 
 @media (max-width: 640px) {
   .vq-login-facts {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .vq-topbar {
     padding: 0 12px;
+    gap: 8px;
+  }
+
+  .vq-breadcrumb {
+    min-width: 0;
+    white-space: nowrap;
+  }
+
+  .vq-breadcrumb strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* 390 宽实测：模型按钮按内容宽度不收缩，把顶栏顶出视口 12px，整页跟着横向滚动。
+     窄屏只留图标 + 箭头（点开仍是完整列表），标题也不许换行。 */
+  .vq-model-trigger {
+    max-width: 48px;
+    padding: 0 8px;
+  }
+
+  .vq-model-name {
+    display: none;
+  }
+
+  .vq-model-pop {
+    width: min(288px, calc(100vw - 24px));
   }
 
   .vq-breadcrumb span {
@@ -2112,6 +2138,16 @@ select:focus-visible {
   .vq-settings-foot {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  /* 账号行在窄屏占不下三段（头像 / 邮箱 / 动作）：动作换到第二行，
+     邮箱才有整行宽度，不会被拆成 "admin@w / avisionai.c / n"。 */
+  .vq-account {
+    flex-wrap: wrap;
+  }
+
+  .vq-account > .vq-account-actions {
+    width: 100%;
   }
 }
 
@@ -2131,14 +2167,14 @@ select:focus-visible {
 }
 .vq-edition-kicker {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: .16em;
   text-transform: uppercase;
   color: var(--faint);
 }
 .vq-edition-mono {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: .12em;
   color: var(--ink);
   padding: 1px 4px;
@@ -2208,7 +2244,7 @@ select:focus-visible {
 .vq-console-card p { margin: 8px 0 12px; color: var(--muted); font-size: 12px; }
 .vq-console-card ul { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 8px; }
 .vq-console-card li {
-  padding: 3px 8px;
+  padding: 4px 8px;
   border: 1px solid var(--line);
   border-radius: 999px;
   color: var(--faint);
@@ -2370,7 +2406,7 @@ select:focus-visible {
   border-bottom: 1px solid var(--line);
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -2498,30 +2534,30 @@ select:focus-visible {
 
 /* 服务条款 / 隐私说明：公开阅读页，不登录也能打开 */
 .vq-legal { min-height: 100vh; background: var(--canvas); color: var(--ink); font-family: var(--font-ui); padding: 48px 24px 64px; }
-.vq-legal-inner { max-width: 720px; margin: 0 auto; background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 40px 40px 32px; box-shadow: var(--shadow-raise); }
+.vq-legal-inner { max-width: 720px; margin: 0 auto; background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 48px 48px 32px; box-shadow: var(--shadow-raise); }
 .vq-legal-back { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); background: none; border: 0; padding: 0; cursor: pointer; }
 .vq-legal-back:hover { color: var(--ink); }
 .vq-legal h1 { margin: 24px 0 4px; font-size: 26px; font-weight: 500; letter-spacing: -0.01em; }
 .vq-legal-meta { margin: 0 0 32px; font-size: 12px; color: var(--faint); }
 .vq-legal h2 { margin: 32px 0 8px; font-size: 15px; font-weight: 500; }
 .vq-legal p { margin: 0; font-size: 14px; line-height: 1.75; color: var(--muted); }
-.vq-legal-foot { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--line-faint); font-size: 12px; color: var(--faint); }
-@media (max-width: 640px) { .vq-legal { padding: 16px 12px 40px; } .vq-legal-inner { padding: 24px 20px; } .vq-legal h1 { font-size: 22px; } }
+.vq-legal-foot { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line-faint); font-size: 12px; color: var(--faint); }
+@media (max-width: 640px) { .vq-legal { padding: 16px 12px 48px; } .vq-legal-inner { padding: 24px 24px; } .vq-legal h1 { font-size: 22px; } }
 /* 上手引导弹窗：工作台内弹出，三步卡片 + 真实单价与余额 */
 .vq-guide {
   width: min(760px, 100%);
   max-height: calc(100vh - 80px);
   overflow: auto;
-  padding: 24px 28px 20px;
+  padding: 24px 24px 24px;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   background: var(--surface-raised);
   box-shadow: var(--shadow-raise);
 }
 .vq-guide-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-.vq-guide-head h2 { margin: 8px 0 6px; font-size: 22px; font-weight: 500; letter-spacing: -0.01em; }
+.vq-guide-head h2 { margin: 8px 0 8px; font-size: 22px; font-weight: 500; letter-spacing: -0.01em; }
 .vq-guide-head p { margin: 0; max-width: 560px; font-size: 13px; line-height: 1.7; color: var(--muted); }
-.vq-guide-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 20px; }
+.vq-guide-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 24px; }
 .vq-guide-step { display: flex; flex-direction: column; gap: 8px; padding: 16px; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); cursor: pointer; transition: border-color 0.15s ease, background 0.15s ease; }
 .vq-guide-step:hover { border-color: var(--line-strong); background: var(--surface-raised); }
 .vq-guide-step:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
@@ -2529,15 +2565,15 @@ select:focus-visible {
 .vq-guide-step strong { font-size: 14px; font-weight: 500; line-height: 1.4; }
 .vq-guide-step-body { font-size: 12.5px; line-height: 1.65; color: var(--muted); }
 .vq-guide-step-foot { display: flex; align-items: center; justify-content: space-between; margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line-faint); font-size: 12px; color: var(--faint); }
-.vq-guide-note { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; padding: 14px 16px; background: var(--canvas); border: 1px solid var(--line-faint); border-radius: var(--radius-md); font-size: 12.5px; line-height: 1.6; color: var(--muted); }
+.vq-guide-note { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; padding: 16px 16px; background: var(--canvas); border: 1px solid var(--line-faint); border-radius: var(--radius-md); font-size: 12.5px; line-height: 1.6; color: var(--muted); }
 .vq-guide-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-top: 16px; font-size: 12px; color: var(--faint); }
-.vq-guide-hint { display: inline-flex; align-items: center; gap: 6px; }
+.vq-guide-hint { display: inline-flex; align-items: center; gap: 8px; }
 .vq-guide-links { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
 @media (max-width: 760px) {
-  .vq-guide { max-height: calc(100vh - 32px); padding: 20px 16px 16px; }
+  .vq-guide { max-height: calc(100vh - 32px); padding: 24px 16px 16px; }
   .vq-guide-head h2 { font-size: 19px; }
-  .vq-guide-steps { grid-template-columns: 1fr; gap: 8px; margin-top: 16px; }
-  .vq-guide-step { padding: 12px 14px; }
+  .vq-guide-steps { grid-template-columns: minmax(0, 1fr); gap: 8px; margin-top: 16px; }
+  .vq-guide-step { padding: 12px 16px; }
   .vq-guide-step-foot { padding-top: 8px; }
 }
 /* 窄屏只提示，不假装做了移动端适配 */
@@ -2566,7 +2602,7 @@ select:focus-visible {
 }
 
 .vq-field--terms .vq-check input {
-  margin-top: 3px;
+  margin-top: 4px;
 }
 
 .vq-field--terms .vq-link {
@@ -2588,7 +2624,7 @@ select:focus-visible {
 
 .vq-2fa-enabled,
 .vq-2fa-setup { display: flex; flex-direction: column; gap: 16px; }
-.vq-2fa-facts { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 12.5px; color: var(--muted); }
+.vq-2fa-facts { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 12.5px; color: var(--muted); }
 .vq-2fa-facts strong { color: var(--ink); font-family: var(--font-mono); }
 .vq-2fa-warn { margin: 0; padding: 8px 12px; border: 1px solid rgba(163, 56, 56, .28); background: var(--fail-soft); color: var(--fail); border-radius: var(--radius-sm); font-size: 12px; line-height: 1.7; }
 .vq-2fa-off { display: flex; flex-direction: column; gap: 12px; max-width: 420px; }
@@ -2596,7 +2632,7 @@ select:focus-visible {
 .vq-2fa-secret { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .vq-2fa-secret code { padding: 8px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface-soft); font-family: var(--font-mono); font-size: 13px; letter-spacing: .06em; word-break: break-all; }
 .vq-2fa-codes { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
-.vq-2fa-codes code { padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius-xs); background: var(--surface-raised); font-family: var(--font-mono); font-size: 12px; text-align: center; }
+.vq-2fa-codes code { padding: 8px 8px; border: 1px solid var(--line); border-radius: var(--radius-xs); background: var(--surface-raised); font-family: var(--font-mono); font-size: 12px; text-align: center; }
 .vq-2fa-confirm { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .vq-2fa-confirm .vq-input { width: 140px; }
 .vq-2fa-note { margin: 0; font-size: 11.5px; line-height: 1.7; color: var(--faint); }
@@ -2607,7 +2643,7 @@ select:focus-visible {
 .vq-2fa-setup .vq-field > .vq-button,
 .vq-2fa-off .vq-button { align-self: flex-start; }
 /* 账号数据卡（D3）：导出与注销。注销区是危险区，用细红边框圈住，不铺大红底 */
-.vq-inline-error { display: flex; align-items: center; gap: 6px; }
+.vq-inline-error { display: flex; align-items: center; gap: 8px; }
 .vq-account-danger { margin-top: 8px; padding-top: 16px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 12px; }
 .vq-account-danger-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .vq-account-danger-head strong { font-size: 13px; }
@@ -2615,7 +2651,7 @@ select:focus-visible {
 .vq-account-danger-body { display: flex; flex-direction: column; gap: 12px; max-width: 520px; padding: 16px; border: 1px solid rgba(163, 56, 56, .24); border-radius: var(--radius-sm); background: var(--fail-soft); }
 .vq-account-danger-body .vq-field span { font-size: 12px; color: var(--ink-soft); }
 .vq-account-danger-check { align-items: flex-start; font-size: 12px; line-height: 1.7; color: var(--ink-soft); }
-.vq-account-danger-check input { margin-top: 3px; }
+.vq-account-danger-check input { margin-top: 4px; }
 /* 举报弹窗（D4）：字段间距与说明文字，比通用 modal 略宽 */
 .vq-report-modal { width: min(480px, 100%); }
 .vq-report-target { margin: 12px 0 4px; font-size: 12.5px; color: var(--muted); }
@@ -2623,10 +2659,10 @@ select:focus-visible {
 .vq-report-modal .vq-field { display: flex; flex-direction: column; gap: 4px; margin-top: 12px; }
 .vq-report-modal .vq-field > span { font-size: 12px; color: var(--ink-soft); }
 .vq-report-hint { margin: 4px 0 0; font-size: 11.5px; line-height: 1.6; color: var(--faint); }
-.vq-report-detail { min-height: 92px; resize: vertical; padding: 8px 10px; font-size: 13px; line-height: 1.7; }
+.vq-report-detail { min-height: 92px; resize: vertical; padding: 8px 8px; font-size: 13px; line-height: 1.7; }
 .vq-report-note { display: block; margin: 8px 0 0; font-size: 11.5px; line-height: 1.75; color: var(--faint); }
 .vq-report-done { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; font-size: 13px; line-height: 1.8; }
-.vq-report-done p { display: flex; align-items: center; gap: 6px; margin: 0; }
+.vq-report-done p { display: flex; align-items: center; gap: 8px; margin: 0; }
 .vq-report-done strong { font-family: var(--font-mono); }
 .share-foot-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 

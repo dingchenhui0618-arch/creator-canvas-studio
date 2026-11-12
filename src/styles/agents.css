@@ -202,7 +202,7 @@
 }
 .agx-history-item span {
   display: block;
-  margin-top: 3px;
+  margin-top: 4px;
   color: var(--faint);
   font-family: var(--font-mono);
   font-size: 11px;
@@ -286,13 +286,13 @@
   display: inline-flex;
   align-items: center;
   height: 18px;
-  padding: 0 6px;
+  padding: 0 8px;
   color: var(--muted);
   background: var(--surface-soft);
   border: 1px solid var(--line);
   border-radius: 999px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.04em;
 }
 .agx-run.is-error .agx-run-state {
@@ -312,13 +312,13 @@
   grid-column: 1 / -1;
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
 }
 .agx-run-detail {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 0 8px 10px;
+  padding: 0 8px 8px;
   color: var(--muted);
   font-size: 12px;
 }
@@ -372,13 +372,13 @@
   align-items: center;
   gap: 4px;
   min-height: 20px;
-  padding: 0 6px;
+  padding: 0 8px;
   color: var(--muted);
   background: var(--surface-soft);
   border: 1px solid var(--line-faint);
   border-radius: 999px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
 }
 .agx-msg-tools span.is-muted {
   color: var(--faint);
@@ -464,7 +464,7 @@
 .agx-msg-meta button {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   padding: 0;
   color: var(--faint);
   background: none;
@@ -633,9 +633,9 @@
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   height: 30px;
-  padding: 0 10px 0 12px;
+  padding: 0 8px 0 12px;
   color: var(--muted);
   background: var(--surface);
   border: 1px solid var(--line);
@@ -656,8 +656,10 @@
 }
 .agx-capsule-trigger {
   display: inline-flex;
+  /* 胶囊里这枚按钮只有 19px 高，点起来像针尖：撑满整颗胶囊（30px）再点 */
+  align-self: stretch;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   max-width: 190px;
   padding: 0;
   color: var(--ink);
@@ -694,7 +696,7 @@
   min-width: calc(100% + 2px);
   max-width: 264px;
   max-height: 240px;
-  padding: 6px;
+  padding: 8px;
   overflow: auto;
   background: var(--surface-raised);
   border: 1px solid var(--line-strong);
@@ -731,16 +733,16 @@
 .agx-composer-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   margin-left: auto;
 }
 .agx-shortcut {
-  padding: 2px 6px;
+  padding: 2px 8px;
   border: 1px solid var(--line-faint);
   border-radius: var(--radius-xs);
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 11px;
   letter-spacing: 0.02em;
   white-space: nowrap;
 }
@@ -915,7 +917,7 @@
 .agx-card-meta .agx-mono {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   max-width: 64%;
   overflow: hidden;
   color: var(--muted);
@@ -930,8 +932,8 @@
   border-top: 1px solid var(--line-faint);
 }
 .agx-icon-btn {
-  width: 26px;
-  height: 26px;
+  width: 32px;
+  height: 32px;
   display: grid;
   place-items: center;
   color: var(--faint);
@@ -1299,14 +1301,14 @@
     width: 100%;
   }
   .agx-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .agx-editor-side {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .agx-field-grid,
   .agx-tool-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .agx-msg {
     max-width: 94%;
@@ -1359,7 +1361,7 @@
   padding-left: 16px;
 }
 .agx-md-list li {
-  margin: 3px 0;
+  margin: 4px 0;
 }
 .agx-md-code {
   margin: 0 0 12px;
@@ -1482,7 +1484,7 @@
 .agx-draft-kicker {
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.08em;
 }
 .agx-draft-head strong {

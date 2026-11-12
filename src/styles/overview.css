@@ -495,12 +495,13 @@
 }
 
 .vq-start-copy span {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
   color: var(--muted);
   font-size: 12px;
   line-height: 1.5;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .vq-start-card > svg {
@@ -515,7 +516,7 @@
 
 @media (max-width: 1180px) {
   .vq-next {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--space-6);
     padding: var(--space-6);
   }
@@ -528,24 +529,24 @@
   }
 
   .vq-start {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
 @media (max-width: 960px) {
   /* 1180 还放得下三张入口卡；到平板才堆成一列 */
   .vq-start {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
 @media (max-width: 1180px) {
   .vq-task-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .vq-overview-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

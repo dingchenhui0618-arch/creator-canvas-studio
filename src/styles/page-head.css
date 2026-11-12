@@ -90,7 +90,14 @@
   .vq-head {
     align-items: flex-start;
     flex-direction: column;
+    /* 竖排时必须关掉换行：flex-wrap: wrap 会把 .vq-head-main 的 flex-basis: 24rem
+       当成高度，每页顶上凭空多出 280px 空白（390 / 520 / 640 三档实测都中） */
+    flex-wrap: nowrap;
     gap: var(--space-4);
+  }
+
+  .vq-head-main {
+    flex: none;
   }
 
   .vq-head-actions {
