@@ -60,7 +60,8 @@
   不是审计日志。
 - **停掉分享后记录不再显示**：面板随分享状态一起消失，记录仍在数据文件里。
   要做「历史链接」的界面，是下一轮的事。
-- 数据文件是 `DATA_DIR/share-visits.json`，结构：`{ "<16 位哈希>": { opens, firstAt, lastAt, lastClient } }`。
+- 数据文件是 `DATA_DIR/share-visits.json`，结构：`{ "<16 位哈希>": { opens, firstAt, lastAt, lastClient, countedAt } }`；
+  `countedAt` 是「上一次真正计数的时间」，60 秒窗口对着它算，界面不读它。
 
 ## 复验命令
 
