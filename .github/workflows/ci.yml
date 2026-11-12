@@ -1,0 +1,42 @@
+# 每次推到 master 或开 PR 都跑一遍：类型检查、代码检查、单元测试、构建。
+# 不跑任何要联网或要花积分的东西：单测全在临时 DATA_DIR 里跑，不碰生产数据。
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: 类型检查 / 代码检查 / 单元测试 / 构建
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      # ffmpeg-static / ffprobe-static 的 postinstall 会去 GitHub 下载二进制，
+      # CI 只做静态检查与单测，用不到它们，跳过安装脚本能少一个失败面。
+      - name: 安装依赖
+        run: npm ci --ignore-scripts
+
+      - name: 类型检查
+        run: npx tsc -b
+
+      - name: 代码检查
+        run: npm run lint
+
+      - name: 单元测试
+        run: npm test
+
+      - name: 构建
+        run: npm run build
