@@ -114,6 +114,34 @@ export const resetProjectScript = (id: string) =>
     { method: 'DELETE' },
   )
 
+export type ProjectTemplateSaveResult = {
+  ok: boolean
+  template: {
+    id: string
+    title: string
+    kind: string
+    /** 'project' = 从作品沉淀的（模板库里写「来自作品」） */
+    origin: string
+    adaptedFrom: string
+    projectId: string
+    projectTitle: string
+    projectVersion: number
+    beats: number
+    shots: number
+    scriptSource: string
+  }
+  /** 这一版的脚本还是模板那份：界面要先把「存出来几乎一样」说出来 */
+  sameAsTemplate: boolean
+}
+
+// 作品「存成模板」：把这一版做完的脚本 + 沿用绑定模板的分镜沉淀回模板库。
+// 只写模板库，不改作品、不改模板、不开版本；不调模型、不扣积分。
+export const saveProjectAsTemplate = (id: string, payload: { title?: string } = {}) =>
+  request<ProjectTemplateSaveResult>('/api/projects/' + id + '/template', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+
 // getTimezoneOffset 是「UTC 减本地」的分钟数，取反才是东经为正
 const tzOffset = () => String(-new Date().getTimezoneOffset())
 

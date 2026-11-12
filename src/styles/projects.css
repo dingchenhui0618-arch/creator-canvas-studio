@@ -395,13 +395,17 @@
 
 .vq-project-panel-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
   color: var(--faint);
 }
 
+/* 卡片标题不参与挤压：脚本头那一排小字变长时，「脚本」不该折成两行 */
 .vq-project-panel-head h2 {
+  flex: 0 0 auto;
+  white-space: nowrap;
   margin: 0;
   color: var(--ink);
   font-size: var(--text-md);
@@ -1310,6 +1314,7 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
    输入框与模板改编同一种圆角/描边，改完保存才落库（copy-on-write）。 */
 .vq-script-head {
   display: flex;
+  flex: 1 1 260px;
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
@@ -1420,6 +1425,108 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
   color: var(--faint);
   font-size: var(--text-meta);
   line-height: var(--leading-meta);
+}
+
+/* ---------- 存成模板（v0.9.31）：做完的这一版沉淀回模板库 ----------
+   面板就在脚本卡里：入口是小字按钮，展开之后先说清「存什么、分镜从哪来、会不会跟原模板一样」，
+   再说按钮。深色面板里一张浅一档的卡片，四个角只走 token 的圆角档。 */
+.vq-tpl-sheet {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+
+.vq-tpl-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.vq-tpl-sheet-head strong {
+  color: var(--ink);
+  font-size: var(--text-copy);
+  font-weight: var(--weight-medium);
+}
+
+.vq-tpl-field {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.vq-tpl-field > span {
+  color: var(--faint);
+  font-size: var(--text-meta);
+  letter-spacing: 0.04em;
+}
+
+.vq-tpl-sheet-line {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-meta);
+  line-height: var(--leading-meta);
+}
+
+.vq-tpl-sheet-line strong {
+  color: var(--ink);
+  font-weight: var(--weight-medium);
+}
+
+.vq-tpl-sheet-line .vq-mono {
+  margin-left: var(--space-2);
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.vq-tpl-check {
+  display: inline-block;
+  margin-right: var(--space-1);
+  vertical-align: -2px;
+  color: var(--pass);
+}
+
+.vq-tpl-sheet-note {
+  margin: 0;
+  color: var(--faint);
+  font-size: var(--text-meta);
+  line-height: var(--leading-meta);
+}
+
+.vq-tpl-sheet-note.is-warn {
+  color: var(--warn);
+}
+
+.vq-tpl-sheet-note.is-danger {
+  color: var(--fail);
+}
+
+.vq-tpl-sheet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line-faint);
+}
+
+@media (max-width: 700px) {
+  .vq-tpl-sheet {
+    padding: var(--space-3);
+  }
+
+  .vq-tpl-sheet-actions {
+    justify-content: stretch;
+  }
+
+  .vq-tpl-sheet-actions > * {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
 }
 
 .vq-project-empty-actions {

@@ -303,7 +303,7 @@ export function TemplateLibraryPage({
           {items.map((item) => (
             <article className="template-card" key={item.id} onClick={() => void openDetail(item.id)}>
               <div className="template-cover">
-                {coverFor(item) ? <img src={coverFor(item)} alt="" loading="lazy" /> : <span className="template-cover-empty">{item.platformLabel}</span>}
+                {coverFor(item) ? <img src={coverFor(item)} alt="" loading="lazy" /> : <span className="template-cover-empty">{item.platformLabel || '没有封面'}</span>}
                 <span className={'template-type' + (isParsed(item) ? '' : ' is-pending')}>{isParsed(item) ? item.contentType : '待解析'}</span>
                 <span className="radar-duration"><Film size={11} />{item.kind === 'flow' ? (item.flowNodes?.length ?? 0) + ' 节点' : formatDuration(item.durationSec)}</span>
               </div>
@@ -343,7 +343,9 @@ export function TemplateLibraryPage({
                   {/* 平台与作者单行省略：长作者名不再把脚注顶成两行 */}
                   <span className="template-foot-info">
                     {item.shared ? <span className="template-shared">官方示例</span> : null}
-                    {item.kind === 'adapted' ? <span className="template-shared">改编版</span> : null}
+                    {item.kind === 'adapted' ? (
+                      <span className="template-shared">{item.origin === 'project' ? '来自作品' : '改编版'}</span>
+                    ) : null}
                     {item.kind === 'agent' ? <span className="template-shared">智能体</span> : null}
                     {item.platformLabel}
                     {item.author ? ' · ' + item.author : ''}
@@ -383,7 +385,7 @@ export function TemplateLibraryPage({
                       {detail.kind === 'flow'
                         ? '工作流'
                         : detail.kind === 'adapted'
-                          ? '改编版 · ' + (detail.contentType || '脚本')
+                          ? (detail.origin === 'project' ? '来自作品 · ' : '改编版 · ') + (detail.contentType || '脚本')
                           : detail.kind === 'agent'
                             ? '智能体 · ' + (detail.contentType || '脚本')
                             : (isParsed(detail) ? detail.contentType : '待解析') + ' · ' + detail.platformLabel}
@@ -394,7 +396,11 @@ export function TemplateLibraryPage({
                         ? '来自画布 · 套用后开回一张新画布 · ' + (detail.flowNodes?.length || 0) + ' 个节点'
                         : detail.kind === 'agent'
                           ? '来自智能体' + (detail.agentName ? ' ' + detail.agentName : '') + ' · ' + detail.structure.length + ' 段 · ' + detail.storyboard.length + ' 镜'
-                          : (detail.author || '未知作者') + ' · ' + formatDuration(detail.durationSec)}
+                          : detail.kind === 'adapted' && detail.origin === 'project'
+                            ? '来自作品《' + (detail.projectTitle || '已删的作品') + '》' +
+                              (detail.projectVersion ? ' · 第 ' + detail.projectVersion + ' 版' : ' · 还没开画布') +
+                              ' · ' + detail.structure.length + ' 段 · ' + detail.storyboard.length + ' 镜'
+                            : (detail.author || '未知作者') + ' · ' + formatDuration(detail.durationSec)}
                       {' · 模板 ' + detail.id}
                       {detail.kind === 'adapted' && detail.adaptedFrom ? ' · 改编自 ' + detail.adaptedFrom : ''}
                     </span>

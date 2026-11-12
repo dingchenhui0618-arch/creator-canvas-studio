@@ -144,7 +144,12 @@ export type ReplicaTemplate = {
   /** 只读分享 token：开着分享才有；没有它就没有对外链接 */
   shareToken?: string
   shareCreatedAt?: string
-  origin: 'ai' | 'manual' | 'canvas' | 'agent'
+  /** project：从一条作品沉淀下来的（adapt 那条路的 origin 是 adapted） */
+  origin: 'ai' | 'manual' | 'canvas' | 'agent' | 'adapted' | 'project'
+  /** origin === 'project' 时才有：它是从哪条作品的第几版沉淀出来的 */
+  projectId?: string
+  projectTitle?: string
+  projectVersion?: number
   reuseCount: number
   /** 公共模板：运营放进来的示例，所有账号都看得见（ownerId 为空） */
   shared?: boolean

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowLeft, ArrowRight, Bot, Check, ChevronDown, Clapperboard, CopyPlus, Download, FileText, Link2, Package, Pencil, Plus, Printer, RefreshCw, RotateCcw, ScanEye, Share2, Trash2, Workflow, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, BookmarkPlus, Bot, Check, ChevronDown, Clapperboard, CopyPlus, Download, FileText, Link2, Package, Pencil, Plus, Printer, RefreshCw, RotateCcw, ScanEye, Share2, Trash2, Workflow, X } from 'lucide-react'
 import PageHead from '../components/PageHead'
 import ProjectStatusPill from '../components/ProjectStatus'
 import {
@@ -13,10 +13,12 @@ import {
   openProjectCanvas,
   resetProjectScript,
   reviewSheetUrl,
+  saveProjectAsTemplate,
   saveProjectScript,
   setSheetUrl,
   startProjectVersion,
   updateProject,
+  type ProjectTemplateSaveResult,
 } from '../api/projects'
 import { describeTiming, type ScriptBeat } from '../domain/radar'
 import { deliveredCurrent, deliveryOf, projectStep, reviewsForVersion, runsForVersion, type ProjectDetail } from '../domain/project'
@@ -102,6 +104,15 @@ export default function ProjectPage({
   const [decideBusy, setDecideBusy] = useState<'' | 'pass' | 'reject' | 'undo' | 'clear'>('')
   // 「清空拍板记录」要点两下：第一下只是把按钮换成「再点一次」，5 秒没有第二下就缩回去
   const [clearLogArmed, setClearLogArmed] = useState(false)
+  // 「存成模板」：把这一版做完的脚本 + 沿用模板的分镜沉淀回模板库。
+  // 面板先把「存什么、从哪来、会不会跟原模板一样」说清，再让人点下去。
+  const [tplSheet, setTplSheet] = useState<{
+    open: boolean
+    title: string
+    busy: boolean
+    error: string
+    done: ProjectTemplateSaveResult['template'] | null
+  }>({ open: false, title: '', busy: false, error: '', done: null })
   // 「已看过」也在作品页原地做：人点进来看了，就不该再回工作台点一下
   const [ackBusy, setAckBusy] = useState<'' | 'ack' | 'undo'>('')
 
@@ -544,6 +555,26 @@ export default function ProjectPage({
       setBusy('')
     }
   }
+
+  // 存成模板：只写模板库新的一条，作品与它绑定的模板一个字不动（服务端两道闸：没脚本 / 没分镜都不落库）
+  const openTemplateSheet = () => {
+    setTplSheet({ open: true, title: data?.project.title || '', busy: false, error: '', done: null })
+  }
+
+  const submitTemplate = async () => {
+    if (!data) return
+    setTplSheet((current) => ({ ...current, busy: true, error: '' }))
+    try {
+      const result = await saveProjectAsTemplate(data.project.id, { title: tplSheet.title.trim() })
+      setTplSheet((current) => ({ ...current, busy: false, done: result.template }))
+      onToast('已存成模板：《' + result.template.title + '》（' + result.template.beats + ' 段 · ' + result.template.shots + ' 镜）')
+      await load()
+    } catch (caught) {
+      setTplSheet((current) => ({ ...current, busy: false, error: caught instanceof Error ? caught.message : '存成模板失败' }))
+    }
+  }
+
+  const closeTemplateSheet = () => setTplSheet({ open: false, title: '', busy: false, error: '', done: null })
 
   if (loading && !data) {
     return (
@@ -1028,6 +1059,7 @@ export default function ProjectPage({
                 <span className="vq-mono">
                   {script ? script.structure.length + ' 段' : '没有脚本'}
                   {script ? (script.source === 'project' ? ' · 这条作品的版本' : ' · 来自模板') : ''}
+                  {data.templateSaves?.length ? ' · 沉淀过 ' + data.templateSaves.length + ' 条模板' : ''}
                 </span>
                 {scriptEditing ? (
                   // 8 段的脚本表单比一屏长：保存/取消在页头也留一份，改完一段不用滚到底
@@ -1059,6 +1091,15 @@ export default function ProjectPage({
                       <Bot size={12} />
                       让智能体写
                     </button>
+                    <button
+                      type="button"
+                      className="vq-script-link"
+                      onClick={openTemplateSheet}
+                      title="把这一版的脚本沉淀成模板库里的模板：脚本用这条作品的，分镜沿用绑定模板的取景；作品与模板都不动"
+                    >
+                      <BookmarkPlus size={12} />
+                      存成模板
+                    </button>
                     {script?.source === 'project' ? (
                       <button type="button" className="vq-script-link" onClick={() => void restoreScript()} disabled={busy === 'script'}>
                         <RotateCcw size={12} />
@@ -1069,6 +1110,88 @@ export default function ProjectPage({
                 )}
               </div>
             </div>
+            {tplSheet.open ? (
+              tplSheet.done ? (
+                <div className="vq-tpl-sheet" role="region" aria-label="已存成模板">
+                  <p className="vq-tpl-sheet-line">
+                    <Check size={14} className="vq-tpl-check" />
+                    <strong>已存成模板《{tplSheet.done.title}》</strong>
+                    <span className="vq-mono">
+                      {tplSheet.done.beats} 段 · {tplSheet.done.shots} 镜 ·{' '}
+                      {tplSheet.done.projectVersion ? '第 ' + tplSheet.done.projectVersion + ' 版' : '还没开画布'}
+                    </span>
+                  </p>
+                  <p className="vq-tpl-sheet-note">
+                    它在模板库里可以再改编、再套用；这条作品与它绑定的模板一个字没动，也不会多开一个版本。
+                  </p>
+                  <div className="vq-tpl-sheet-actions">
+                    <button type="button" className="vq-button vq-button--ghost" onClick={closeTemplateSheet}>
+                      知道了
+                    </button>
+                    <button type="button" className="vq-button vq-button--ghost" onClick={onBrowseTemplates}>
+                      去模板库
+                      <ArrowRight size={13} />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <form
+                  className="vq-tpl-sheet"
+                  aria-label="存成模板"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    void submitTemplate()
+                  }}
+                >
+                  <div className="vq-tpl-sheet-head">
+                    <strong>把这一版存成模板</strong>
+                    <button type="button" className="icon-button" onClick={closeTemplateSheet} aria-label="收起">
+                      <X size={14} />
+                    </button>
+                  </div>
+                  <label className="vq-tpl-field">
+                    <span>模板标题</span>
+                    <input
+                      className="vq-script-input"
+                      value={tplSheet.title}
+                      maxLength={120}
+                      placeholder="下一条作品从这条模板开始"
+                      onChange={(event) => setTplSheet((current) => ({ ...current, title: event.target.value }))}
+                    />
+                  </label>
+                  <p className="vq-tpl-sheet-line">
+                    存的是这一版的脚本 <strong>{script ? script.structure.length : 0} 段</strong>
+                    {script ? '（' + (script.source === 'project' ? '这条作品的版本' : '来自模板') + '）' : ''}
+                    {template ? '，分镜 ' : ''}
+                    {template ? <strong>{template.shots} 镜</strong> : null}
+                    {template ? '沿用《' + template.title + '》的取景文字（原片帧图与互动数据不复制）' : ''}
+                  </p>
+                  {!template ? (
+                    <p className="vq-tpl-sheet-note is-warn">
+                      这条作品没有分镜（它不是从模板起的），存不成模板：模板要能被再改编，分镜得有着落。从画布起的作品，用画布里的「另存为模板」。
+                    </p>
+                  ) : script?.source === 'project' ? null : (
+                    <p className="vq-tpl-sheet-note is-warn">
+                      这一版的脚本还是模板那份，没改过：存出来会是一条和《{template.title}》几乎一样的模板。要沉淀新东西，先改一版脚本。
+                    </p>
+                  )}
+                  {tplSheet.error ? <p className="vq-tpl-sheet-note is-danger">{tplSheet.error}</p> : null}
+                  <div className="vq-tpl-sheet-actions">
+                    <button type="button" className="vq-button vq-button--ghost" onClick={closeTemplateSheet}>
+                      取消
+                    </button>
+                    <button
+                      type="submit"
+                      className="vq-button vq-button--primary"
+                      disabled={tplSheet.busy || !template || !script?.structure.length}
+                      title={!template ? '这条作品没有分镜，存不成模板' : '存进模板库；作品与它绑定的模板都不动'}
+                    >
+                      {tplSheet.busy ? '保存中…' : '存成模板'}
+                    </button>
+                  </div>
+                </form>
+              )
+            ) : null}
             {scriptEditing && scriptDraft ? (
               <form
                 className="vq-script-edit"

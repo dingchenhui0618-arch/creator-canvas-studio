@@ -9,7 +9,8 @@ import { sendJson, readBody } from './_shared.mjs'
 import { flowBrief, projectBrief } from '../project-briefs.mjs'
 import { currentUser } from '../auth.mjs'
 import { config } from '../config.mjs'
-import { getTemplate, reuseTemplate } from '../templates.mjs'
+import { createTemplateFromProject, getTemplate, listTemplates, reuseTemplate } from '../templates.mjs'
+import { projectTemplateReply, projectTemplateSpec } from '../project-template.mjs'
 import { createFlow, getFlow, listRunsByFlows } from '../flows.mjs'
 import { normalizeProjectScript, scriptPace, scriptView } from '../project-script.mjs'
 import { buildReplicateDraft } from '../script-draft.mjs'
@@ -53,6 +54,8 @@ const VERSIONS = /^\/api\/projects\/([\w-]+)\/versions$/
 const SCRIPT = /^\/api\/projects\/([\w-]+)\/script$/
 const CANVAS = /^\/api\/projects\/([\w-]+)\/canvas$/
 const SHARE = /^\/api\/projects\/([\w-]+)\/share$/
+// 作品「存成模板」：做完的这一版沉淀回模板库（脚本是这一版的，分镜沿用绑定模板的取景）
+const TEMPLATE_FROM = /^\/api\/projects\/([\w-]+)\/template$/
 const DELIVERABLE = /^\/api\/projects\/([\w-]+)\/deliverable$/
 // 交付包：交付稿 + 现场页 + 帧图打成一个 zip，收件人解压就能看，不用登录
 const DELIVERABLE_ZIP = /^\/api\/projects\/([\w-]+)\/deliverable\.zip$/
@@ -170,10 +173,18 @@ async function projectDetailView(project, user, { snapshots = false } = {}) {
       })),
     ),
   ])
+  // 这条作品沉淀过哪几条模板（v0.9.31）：模板那边记着 projectId，这里现算，作品不存副本。
+  // 作品删掉之后模板还在（它已经是一条独立模板了），所以只按 id 反查，不要求作品还活着。
+  const templateSaves = (await listTemplates({}, user))
+    .filter((entry) => entry.projectId === project.id)
+    .map((entry) => ({ id: entry.id, title: entry.title, createdAt: entry.createdAt, beats: (entry.structure || []).length, shots: (entry.storyboard || []).length }))
+    .slice(0, 5)
   return {
     project: projectBrief(project),
     // 作品页的分享面板读这里：列表接口不返回 token
     share,
+    // 沉淀出去的模板：作品页写「已存成模板 N 条」，刷新还在
+    templateSaves,
     // 以前开过的链接：按停用时间倒序，每条带那一轮的打开次数与最近一次
     shareHistory,
     template: templateDetail(template),
@@ -550,6 +561,46 @@ export function createProjectsRouter() {
           ? await syncCanvasScript(cleared, template, view, prevHook, user)
           : { synced: false, flowId: cleared.flowId || '', reason: 'no-script' }
         sendJson(res, 200, { ok: true, project: projectBrief(cleared), script: view, canvas })
+        return true
+      }
+
+      // 作品「存成模板」（v0.9.31）：把这一版做完的脚本 + 沿用绑定模板的分镜沉淀回模板库。
+      // 模板库从此不只有「发现里抄来的」与「智能体写的」，还有自己做完沉淀下来的。
+      const templateFromPath = pathname.match(TEMPLATE_FROM)
+      if (templateFromPath && req.method === 'POST') {
+        const project = await getProject(templateFromPath[1], user)
+        const template = project?.templateId ? await getTemplate(project.templateId, user) : null
+        const script = project ? scriptView(project, template) : null
+        const spec = projectTemplateSpec({ project, template, script })
+        if (spec.status !== 200) {
+          sendJson(res, spec.status, spec.body)
+          return true
+        }
+        const body = await readBody(req)
+        const saved = await createTemplateFromProject({
+          source: template,
+          project,
+          script: spec.body.script,
+          title: String(body?.title || '').trim(),
+          user,
+        })
+        if (!saved) {
+          sendJson(res, 409, {
+            error: '模板没存成功：这条作品的脚本或分镜刚好被清掉了，刷新再试',
+            code: 'TEMPLATE_SAVE_FAILED',
+          })
+          return true
+        }
+        sendJson(res, 201, {
+          ok: true,
+          template: projectTemplateReply({ template: saved, project, script }),
+          sameAsTemplate: spec.body.sameAsTemplate,
+        })
+        return true
+      }
+
+      if (templateFromPath) {
+        sendJson(res, 405, { error: '存成模板用 POST：别的写法不改任何东西', code: 'METHOD_NOT_ALLOWED' })
         return true
       }
 

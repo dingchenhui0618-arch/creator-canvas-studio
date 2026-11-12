@@ -345,6 +345,75 @@ export async function createTemplateFromDraft({ draft, agent = null, user = null
   return template
 }
 
+// 作品「存成模板」：把做完的这一版沉淀回模板库，下一条作品从它开始。
+// 与「改编」共用同一套段 / 镜整理（同一处上限、同一套字段），区别只在来源与归属：
+//   - kind 仍是 adapted（它确实是以绑定模板为底改出来的），adaptedFrom 指向那条模板；
+//   - origin 标成 project，并记下是哪条作品的第几版——模板详情里能说清它从哪来；
+//   - 原片的作者、链接、互动数据与帧图一概不复制：那是那条视频的，不是这一版的。
+// 没有分镜就不落库（模板要能再被改编），判断在 server/project-template.mjs，这里只当第二道闸。
+export async function createTemplateFromProject({ source = null, project = null, script = null, title = '', user = null }) {
+  if (!project) return null
+  const beats = (Array.isArray(script?.structure) ? script.structure : []).slice(0, ADAPT_MAX_BEATS).map((beat, index) => ({
+    startSec: Number(beat?.startSec) || index * 3,
+    endSec: Number(beat?.endSec) || index * 3 + 3,
+    beat: adaptText(beat?.beat, 60),
+    voiceover: adaptText(beat?.voiceover, 600),
+    onScreen: adaptText(beat?.onScreen, 200),
+    purpose: adaptText(beat?.purpose, 200),
+  }))
+  const shots = (Array.isArray(source?.storyboard) ? source.storyboard : []).slice(0, ADAPT_MAX_SHOTS).map((shot, index) => ({
+    shotNo: Number(shot?.shotNo) || index + 1,
+    startSec: Number(shot?.startSec) || 0,
+    visual: adaptText(shot?.visual, 400),
+    camera: adaptText(shot?.camera, 60),
+    caption: adaptText(shot?.caption, 200),
+    audio: adaptText(shot?.audio, 200),
+    purpose: adaptText(shot?.purpose, 200),
+    frameUrl: '',
+  }))
+  if (!beats.length || !shots.length) return null
+
+  const list = await loadAll()
+  const now = new Date().toISOString()
+  const template = {
+    id: 'tpl_' + randomUUID().slice(0, 8),
+    kind: 'adapted',
+    adaptedFrom: source?.id || '',
+    origin: 'project',
+    projectId: project.id,
+    projectTitle: adaptText(project.title, 120),
+    projectVersion: Number(project.version) || 0,
+    title: adaptText(title, 120) || adaptText(project.title, 120) || '来自作品的模板',
+    contentType: adaptText(source?.contentType, 40) || '脚本',
+    tags: Array.isArray(source?.tags) ? source.tags.slice(0, 12) : [],
+    platform: source?.platform || '',
+    // 平台与作者属于原片，这一版不是它：留空，卡片脚注只说「来自作品」那一句
+    platformLabel: '',
+    sourceUrl: '',
+    sourceId: '',
+    author: '',
+    publishedAt: '',
+    stats: {},
+    durationSec: Number(source?.durationSec) || 0,
+    hook: adaptText(script?.hook, 400),
+    hookType: '',
+    structure: beats,
+    storyboard: shots,
+    timing: null,
+    analysis: null,
+    frames: [],
+    cover: '',
+    video: source?.video || { width: 0, height: 0, fps: 0, duration: 0 },
+    reuseCount: 0,
+    ownerId: user?.id || '',
+    createdAt: now,
+    updatedAt: now,
+  }
+  list.unshift(template)
+  await persist(list)
+  return template
+}
+
 const VERSION_CAP = 10
 const VERSION_KEYS = ['title', 'contentType', 'tags', 'sourceUrl']
 

@@ -239,6 +239,15 @@ export type SharedProject = {
   sharedAt: string
 }
 
+/** 这条作品沉淀出去的一条模板：作品只记「存过」，模板正文在模板库那边。 */
+export type ProjectTemplateSave = {
+  id: string
+  title: string
+  createdAt: string
+  beats: number
+  shots: number
+}
+
 export type ProjectDetail = {
   project: Project
   /** 这条作品的只读分享链接状态；没开就是 null */
@@ -246,6 +255,8 @@ export type ProjectDetail = {
   /** 以前开过的链接：按停用时间倒序，停用后地址打不开，打开记录还能回看 */
   shareHistory: ShareHistoryEntry[]
   template: ProjectTemplateDetail | null
+  /** 这条作品沉淀过哪几条模板（模板那边记着 projectId，这里现算；刷新还在） */
+  templateSaves?: ProjectTemplateSave[]
   flow: ProjectFlowBrief | null
   /** 作品页自己的脚本：自己的版本优先，没有则回退到模板 */
   script: ProjectScript | null
