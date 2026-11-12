@@ -80,6 +80,38 @@ export function getReviewStatus() {
   return request<ReviewStatus>('/api/review/health')
 }
 
+/**
+ * 评审页首屏先问「评哪条作品的哪一版」（v0.9.37）。
+ * 服务端现算：这一版评过几次、最近结论、人拍过板没有、有没有画布；
+ * 界面不自己算一遍，免得一处写「需人工确认」一处写「在做」。
+ */
+export type ReviewCandidateStatus = { text: string; tone: string; verdict: string; human?: string }
+
+export type ReviewCandidate = {
+  projectId: string
+  title: string
+  version: number
+  /** 第 N 版；还没开画布时是「还没开画布」，不写第 0 版 */
+  versionLabel: string
+  hasCanvas: boolean
+  delivered: boolean
+  reviews: { count: number; lastVerdict: string; lastAt: string }
+  /** 状态胶囊：文案与语气就是作品卡片上那一句 */
+  status: ReviewCandidateStatus
+  updatedAt: string
+}
+
+export type ReviewCandidates = {
+  /** 账号下全部作品数，不受 limit 影响 */
+  total: number
+  /** 其中还没开画布的条数 */
+  withoutCanvas: number
+  items: ReviewCandidate[]
+}
+
+export const getReviewCandidates = (limit = 4) =>
+  request<ReviewCandidates>('/api/reviews/candidates?limit=' + limit)
+
 export async function runReview(payload: { media?: string; imageUrl?: string; intent?: string; label?: string; projectId?: string }) {
   const result = await request<ReviewResult>('/api/review', { method: 'POST', body: JSON.stringify(payload) })
   // 评出新结论就可能新增或清掉一条待办（通过的那一版不再等你看）

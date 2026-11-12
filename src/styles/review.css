@@ -147,6 +147,10 @@
 @media (max-width: 1180px) {
   .review-body { grid-template-columns:minmax(0, 1fr); }
   .review-grid { grid-template-columns:repeat(3, 1fr); }
+  /* 窄屏只有一列：先给「评哪条作品的哪一版」，再给「单独评一张画面」与最近评审。
+     反过来就是手机首屏先看到 26 张别人的首帧，主角被挤到下面去了。 */
+  .review-stage { order: 1; }
+  .review-picker { order: 2; }
 }
 
 /* 视觉评审：页面留白与其它页对齐；空态从「三条说明堆在左上」改成「一个焦点 + 三段并列事实」 */
@@ -187,6 +191,69 @@
 .review-steps p { margin: 0; font-size: 12px; line-height: 1.62; }
 
 .review-empty-state { max-width: 780px; margin: 0 auto; }
+
+/* ---------- 评审页首屏：先选「哪条作品的哪一版」（v0.9.37）
+   评的是这一版能不能发，不是从 26 张别人的首帧里挑一张；
+   模板首帧降级成左栏可展开的「单独评一张画面」，只在没有作品或从作品页进来挑画面时铺开。 ---------- */
+.review-candidates { display:flex; flex-direction:column; gap:8px; margin:0; padding:0; list-style:none; }
+.review-candidate {
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto auto;
+  align-items:center;
+  gap:12px;
+  width:100%;
+  padding:12px;
+  border:1px solid var(--line);
+  border-radius:var(--radius-sm);
+  background:var(--surface);
+  color:var(--ink);
+  text-align:left;
+  cursor:pointer;
+  transition:border-color .15s ease, background .15s ease;
+}
+.review-candidate:hover { border-color:var(--ink); background:var(--surface-raised); }
+.review-candidate:active { transform:translateY(1px); }
+.review-candidate-main { display:flex; flex-direction:column; gap:4px; min-width:0; }
+.review-candidate-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; font-weight:500; }
+.review-candidate-meta { display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; color:var(--faint); font-size:12px; line-height:1.5; }
+.review-candidate-meta .vq-mono { color:var(--muted); }
+.review-candidate-go { display:inline-flex; align-items:center; gap:4px; flex:none; color:var(--ink); font-size:12px; white-space:nowrap; }
+.review-candidates-more { align-self:flex-start; display:inline-flex; align-items:center; gap:4px; padding:8px 0; margin:-8px 0; border:0; background:none; color:var(--muted); font-size:12px; cursor:pointer; }
+.review-candidates-more:hover { color:var(--ink); }
+/* 左栏折叠开关：标题行右侧，点开才铺开模板首帧；箭头只在展开态转向下 */
+.review-picker-toggle {
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  padding:4px 8px;
+  margin:-4px -8px -4px 0;
+  border:0;
+  border-radius:var(--radius-pill);
+  background:none;
+  color:var(--faint);
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:.04em;
+  white-space:nowrap;
+  cursor:pointer;
+}
+.review-picker-toggle:hover { background:var(--surface-raised); color:var(--ink); }
+.review-picker-toggle svg { transition:transform .15s ease; }
+.review-picker-toggle svg.is-open { transform:rotate(180deg); }
+@media (max-width: 700px) {
+  /* 手机上作品名独占一行，胶囊与出口在下面一行：不把标题挤成一条窄条 */
+  .review-candidate { grid-template-columns:minmax(0,1fr) auto; gap:8px; }
+  .review-candidate-main { grid-column:1 / -1; }
+  .review-candidate-go { justify-self:end; }
+  /* 390 宽里两层 32 内边距一扣只剩 192：一缩再缩。留 16 给内容，胶囊与出口才不黏在一起 */
+  .review-page { padding:16px 16px 32px; }
+  .review-empty-state { min-height:0; gap:16px; padding:16px; }
+  /* 三段说明在手机上一列排：三栏各 70px 会把字拆成一列一个 */
+  .review-steps { grid-template-columns:1fr; gap:16px; }
+  /* 标题折成两三行时，图标跟着顶到第一行开头，不悬在中间 */
+  .review-empty-head { align-items:flex-start; }
+}
+
 
 /* 模型服务不可用：页头下方一条，说清原因与「不扣积分」，重试由用户决定 */
 .review-model-note {

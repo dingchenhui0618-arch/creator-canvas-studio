@@ -2,6 +2,7 @@ import { sendJson, readBody } from './_shared.mjs'
 import { reviewVisual, reviewStatus } from '../review.mjs'
 import { saveReview, listReviews, getReview } from '../reviews.mjs'
 import { reviewQueue, reviewQueueRow } from '../review-queue.mjs'
+import { reviewCandidatesFor } from '../review-candidates.mjs'
 import { ackReview, unackReview } from '../review-acks.mjs'
 import { saveDecision, clearDecision, clearDecisions, DECISION_KINDS } from '../review-decisions.mjs'
 import { getProject, listProjects } from '../projects.mjs'
@@ -72,6 +73,25 @@ export function createReviewRouter() {
           q: url.searchParams.get('q') || '',
         })
         sendJson(res, 200, { ok: true, ...queue })
+        return true
+      }
+      // 评审候选（v0.9.37）：评审页首屏先问「评哪条作品的哪一版」，不再让人从模板首帧里挑。
+      // 只读现算，不检索、不扣积分；口径全在 review-candidates.mjs 与 project-status.mjs 两处。
+      // 必须排在 /api/reviews/<id> 之前，否则 candidates 会被当成一条评审 id。
+      if (pathname === '/api/reviews/candidates') {
+        if (req.method !== 'GET') {
+          sendJson(res, 405, { error: 'method not allowed' })
+          return true
+        }
+        // 生产必须登录；本地演示（VQ_REQUIRE_AUTH=0）与评审历史同一套：不认人但照常可用
+        if (!user && config.auth.requireAuth) {
+          sendJson(res, 401, { error: '未登录', loginRequired: true })
+          return true
+        }
+        const candidates = await reviewCandidatesFor(user, {
+          limit: url.searchParams.get('limit') || undefined,
+        })
+        sendJson(res, 200, { ok: true, ...candidates })
         return true
       }
       // 「已看过」：这条评审人看过了、这一版先不改，从待办里拿掉。

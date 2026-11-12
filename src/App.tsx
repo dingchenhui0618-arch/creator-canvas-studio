@@ -553,6 +553,7 @@ function Workbench({
             onOpenReview={(reviewId) => navigate({ kind: 'page', page: 'review', reviewId })}
             onReviewProject={(projectId) => navigate({ kind: 'page', page: 'review', projectId })}
             onClearReview={() => navigate({ kind: 'page', page: 'review' })}
+            onOpenProjects={() => navigate({ kind: 'page', page: 'projects' })}
           />
         )
       case 'settings':

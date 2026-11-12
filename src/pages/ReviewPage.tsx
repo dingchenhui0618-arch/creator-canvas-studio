@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowRight, Clapperboard, Crosshair, Loader2, Play, RefreshCw, ScanEye, TriangleAlert } from 'lucide-react'
-import { getReview, getReviewStatus, listReviews, runReview, type JudgeResult, type ReviewResult, type ReviewStatus, type ReviewSummary } from '../api/review'
+import { ArrowRight, ChevronDown, Clapperboard, Crosshair, Loader2, Play, RefreshCw, ScanEye, TriangleAlert } from 'lucide-react'
+import { getReview, getReviewCandidates, getReviewStatus, listReviews, runReview, type JudgeResult, type ReviewCandidates, type ReviewResult, type ReviewStatus, type ReviewSummary } from '../api/review'
 import { getCredits, getModelService, recheckModelService, type CreditsResponse, type ModelServiceState } from '../api/credits'
 import { listTemplates, coverSrc } from '../api/radar'
 import { getProject } from '../api/projects'
-import { REVIEW_VERDICT_LABEL as VERDICT_LABEL, reviewVersionLabel } from '../domain/review'
+import { REVIEW_VERDICT_LABEL as VERDICT_LABEL, reviewTimeLabel, reviewVersionLabel } from '../domain/review'
 import type { ReplicaTemplate } from '../domain/radar'
 import { consumeReviewTarget, onReviewRequest, type ReviewTarget } from '../state/review'
 import { useUiMode } from '../api/app'
@@ -84,6 +84,7 @@ export default function ReviewPage({
   onOpenReview,
   onReviewProject,
   onClearReview,
+  onOpenProjects,
 }: {
   projectId?: string
   reviewId?: string
@@ -94,6 +95,8 @@ export default function ReviewPage({
   onReviewProject?: (projectId: string) => void
   /** 回到不带记录的自由评审 */
   onClearReview?: () => void
+  /** 候选之外的「还有 N 条」去作品列表 */
+  onOpenProjects?: () => void
 } = {}) {
   const { internal } = useUiMode()
   // 从作品页进来时，这次评审的结论会挂在那条作品下；标题只为把话说清楚（读不到就不显示名字）
@@ -123,6 +126,11 @@ export default function ReviewPage({
   // 证据原图被删过（模板帧清理 / 远程图片失效）：说清楚，不留一张破图
   const [previewBroken, setPreviewBroken] = useState(false)
   const [manualUrl, setManualUrl] = useState('')
+  // 首屏先问「评哪条作品的哪一版」：没有作品、或从作品页进来要挑画面时，才回到挑一张图
+  const [candidates, setCandidates] = useState<ReviewCandidates | null>(null)
+  const [candidatesError, setCandidatesError] = useState('')
+  // 「单独评一张画面」默认收着；null = 用户没动过，按上下文自动定（见 pickerExpanded）
+  const [pickerOpen, setPickerOpen] = useState<boolean | null>(null)
   const timerRef = useRef<number | null>(null)
   const startedRef = useRef(0)
 
@@ -163,6 +171,10 @@ export default function ReviewPage({
         setHistoryTotal(data.total)
       })
       .catch((caught) => { if (alive) setHistoryError(caught instanceof Error ? caught.message : '评审历史读取失败') })
+    // 候选：按最近改动排的四条作品，口径在服务端（review-candidates.mjs）
+    getReviewCandidates(4)
+      .then((data) => { if (alive) setCandidates(data) })
+      .catch((caught) => { if (alive) setCandidatesError(caught instanceof Error ? caught.message : '作品列表读取失败') })
     Promise.all([getReviewStatus(), listTemplates({})])
       .then(([health, list]) => {
         if (!alive) return
@@ -310,12 +322,19 @@ export default function ReviewPage({
   // 正在打开地址里那条评审：打开的还是另一条（或还没打开）就算加载中，不用另存一个状态
   const recordLoading = Boolean(reviewId) && openedId !== reviewId && !openError
 
+  /**
+   * 左侧「单独评一张画面」展开还是收着。
+   * 从作品页进来要挑这一版的画面、库里还没有作品（不收就没得选）这两种必须展开；
+   * 其余先收着——首屏的主角是「评哪条作品」，不是 26 张别人的首帧。
+   */
+  const pickerExpanded = pickerOpen ?? (Boolean(projectId) || !candidates || candidates.total === 0)
+
   return (
     <div className="review-page">
       <PageHead
         kicker="VisionQA · visual-baseline"
         title="视觉评审"
-        desc="选一张画面，按 VisionQA 的 visual-baseline 规则出结论：每条判断都带证据锚点，没有证据的一律标记为「无法判断」。"
+        desc="评的是你这条作品的这一版能不能发：选这一版的画面、按 visual-baseline 出结论、逐条看证据锚点；也能单独评一张图，那种结论不挂作品。"
         actions={
           <div className="review-head-status">
             <span className={`vq-chip ${status?.service ? 'is-pass' : 'is-warn'}`}>
@@ -353,57 +372,74 @@ export default function ReviewPage({
               <Clapperboard size={14} strokeWidth={1.75} />
               <div>
                 <strong>记入作品：{projectTitle || '正在读取作品…'}</strong>
-                <span>这次结论会挂在这条作品下。要评审的是你这一版的画面，不是原片首帧。</span>
+                <span>这次结论会挂在这条作品下。把这一版要发的画面贴进来最准；没有截图时拿模板首帧也能评，但那是原片那一帧。</span>
               </div>
             </div>
           ) : null}
           <div className="review-picker-head">
-            <h2>被检视对象</h2>
-            <span className="vq-mono">{templates.length} 个模板</span>
+            <h2>{projectId ? '给这一版挑一张画面' : '单独评一张画面'}</h2>
+            <button
+              type="button"
+              className="review-picker-toggle"
+              aria-expanded={pickerExpanded}
+              title={pickerExpanded ? '收起模板首帧' : '展开模板首帧与图片地址'}
+              onClick={() => setPickerOpen(!pickerExpanded)}
+            >
+              {templates.length} 个模板首帧
+              <ChevronDown size={12} className={pickerExpanded ? 'is-open' : undefined} />
+            </button>
           </div>
 
-          <div className="review-grid">
-            {templates.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className={`review-thumb ${picked?.label === item.title ? 'is-active' : ''}`}
-                onClick={() => {
-                  if (reviewId) onClearReview?.()
-                  pick({ imageUrl: item.thumb ? undefined : coverSrc(item.cover), media: item.thumb ? item.thumb.replace(/^\/media\//, '') : undefined, label: item.title, preview: item.thumb || coverSrc(item.cover) })
-                }}
-                title={item.title}
-              >
-                {item.thumb || item.cover ? <img src={item.thumb || coverSrc(item.cover)} alt="" loading="lazy" /> : <span className="review-thumb-fallback">{item.contentType}</span>}
-                <span className="review-thumb-name">{item.title}</span>
-              </button>
-            ))}
-            {!templates.length ? <p className="review-empty">模板库还是空的，先去「发现」复刻一条。</p> : null}
-          </div>
+          {pickerExpanded ? (
+            <>
+              <div className="review-grid">
+                {templates.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={`review-thumb ${picked?.label === item.title ? 'is-active' : ''}`}
+                    onClick={() => {
+                      if (reviewId) onClearReview?.()
+                      pick({ imageUrl: item.thumb ? undefined : coverSrc(item.cover), media: item.thumb ? item.thumb.replace(/^\/media\//, '') : undefined, label: item.title, preview: item.thumb || coverSrc(item.cover) })
+                    }}
+                    title={item.title}
+                  >
+                    {item.thumb || item.cover ? <img src={item.thumb || coverSrc(item.cover)} alt="" loading="lazy" /> : <span className="review-thumb-fallback">{item.contentType}</span>}
+                    <span className="review-thumb-name">{item.title}</span>
+                  </button>
+                ))}
+                {!templates.length ? <p className="review-empty">模板库还是空的，先去「发现」复刻一条。</p> : null}
+              </div>
 
-          <div className="review-manual">
-            <label htmlFor="review-url">或粘贴图片地址</label>
-            <div className="review-manual-row">
-              <input
-                id="review-url"
-                value={manualUrl}
-                placeholder="https://…jpg"
-                onChange={(event) => setManualUrl(event.target.value)}
-              />
-              <button
-                type="button"
-                className="button button--ghost button--tiny"
-                onClick={() => {
-                  const value = manualUrl.trim()
-                  if (!value) return
-                  if (reviewId) onClearReview?.()
-                  pick({ imageUrl: value, label: value.split('/').pop() || '远程图片', preview: value })
-                }}
-              >
-                载入
-              </button>
-            </div>
-          </div>
+              <div className="review-manual">
+                <label htmlFor="review-url">或粘贴图片地址</label>
+                <div className="review-manual-row">
+                  <input
+                    id="review-url"
+                    value={manualUrl}
+                    placeholder="https://…jpg"
+                    onChange={(event) => setManualUrl(event.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="button button--ghost button--tiny"
+                    onClick={() => {
+                      const value = manualUrl.trim()
+                      if (!value) return
+                      if (reviewId) onClearReview?.()
+                      pick({ imageUrl: value, label: value.split('/').pop() || '远程图片', preview: value })
+                    }}
+                  >
+                    载入
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <p className="review-empty">
+              评的是你这条作品这一版能不能发；只想单独评一张图（结论不挂作品）时，点上面「{templates.length} 个模板首帧」展开。
+            </p>
+          )}
 
           <div className="review-history">
             <div className="review-picker-head">
@@ -516,14 +552,76 @@ export default function ReviewPage({
               <div className="review-empty-head">
                 <Crosshair size={18} strokeWidth={1.5} />
                 <div>
-                  <strong>先选一张要被检视的画面</strong>
-                  <span>左侧点模板首帧，或粘贴图片地址。</span>
+                  <strong>{projectId ? '给这条作品的这一版挑一张画面' : '先选一条作品：评的是这一版能不能发'}</strong>
+                  <span>
+                    {projectId
+                      ? '左侧挑模板首帧，或粘贴这一版的截图地址；结论会挂在这条作品下。'
+                      : '按最近改动排，点一行进那条作品的评审页；结论挂在这条作品下。'}
+                  </span>
                 </div>
               </div>
+
+              {/* 从作品进来时对象已经定了：这一步只挑画面，不再列作品 */}
+              {!projectId ? (
+                <>
+                  {candidatesError ? <p className="review-empty">作品列表读取失败：{candidatesError}</p> : null}
+                  {candidates?.items.length ? (
+                    <ul className="review-candidates">
+                      {candidates.items.map((row) => (
+                        <li key={row.projectId}>
+                          <button
+                            type="button"
+                            className="review-candidate"
+                            onClick={() => (row.hasCanvas ? onReviewProject?.(row.projectId) : onOpenProject?.(row.projectId))}
+                          >
+                            <span className="review-candidate-main">
+                              <span className="review-candidate-title">{row.title}</span>
+                              <span className="review-candidate-meta">
+                                <span className="vq-mono">{row.versionLabel}</span>
+                                <span aria-hidden="true">·</span>
+                                {row.reviews.count ? (
+                                  <>评过 {row.reviews.count} 次 · 最近 {reviewTimeLabel(row.reviews.lastAt)}</>
+                                ) : (
+                                  <>这一版还没评过</>
+                                )}
+                              </span>
+                            </span>
+                            <span className={'vq-project-status is-' + row.status.tone} title={row.status.text}>
+                              {row.status.text}
+                            </span>
+                            <span className="review-candidate-go">
+                              {row.hasCanvas ? '评这一版' : row.delivered ? '打开作品' : '先开画布'}
+                              <ArrowRight size={13} />
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : candidates ? (
+                    <p className="review-empty">
+                      库里还没有作品。先在模板库挑一条开成作品，评审结论才挂在一条作品上；眼下也能从左栏挑一张图单独评。
+                    </p>
+                  ) : null}
+                  {candidates && candidates.total > candidates.items.length ? (
+                    <button type="button" className="review-candidates-more" onClick={() => onOpenProjects?.()}>
+                      还有 {candidates.total - candidates.items.length} 条在作品里
+                      <ArrowRight size={13} />
+                    </button>
+                  ) : null}
+                </>
+              ) : null}
+
               <ol className="review-steps">
                 <li>
                   <span className="vq-mono">01</span>
-                  <div><strong>选对象</strong><p>模板首帧、远程图片都可以；画幅越接近投放尺寸，结论越可靠。</p></div>
+                  <div>
+                    <strong>{projectId ? '挑画面' : '选版本'}</strong>
+                    <p>
+                      {projectId
+                        ? '把这一版要发的截图贴进来最准；没有截图时模板首帧也能评（那是原片那一帧）。画幅越接近投放尺寸，结论越可靠。'
+                        : '评的是作品的某一版；还没开画布的作品先开画布，先有这一版才谈得上能不能发。'}
+                    </p>
+                  </div>
                 </li>
                 <li>
                   <span className="vq-mono">02</span>
