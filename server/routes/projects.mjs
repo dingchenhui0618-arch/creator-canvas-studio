@@ -21,7 +21,7 @@ import {
 } from '../reviews.mjs'
 import { projectDeliverable } from '../project-deliverable.mjs'
 import { deliverablePrintHtml, printNoticeHtml } from '../project-deliverable-html.mjs'
-import { packageNote, setSheetHtml, setSheetModel } from '../project-set-sheet.mjs'
+import { packageNote, parseShotRange, setSheetHtml, setSheetModel } from '../project-set-sheet.mjs'
 import { buildZip } from '../zip-store.mjs'
 import {
   listProjects,
@@ -270,6 +270,8 @@ export function createProjectsRouter() {
         // ?only=script 是现场页：只印脚本 + 分镜（带原片帧图），评审与逐版对照留在交付稿里
         if (String(url.searchParams.get('only') || '') === 'script') {
           const detail = await projectDetailView(printable, user)
+          // ?shots=2-4,7 只印这几镜（现场一天只拍其中几镜）；写法不认就印全部，纸不是表单，不拿报错拦人
+          const shotCount = Array.isArray(detail.template?.storyboard) ? detail.template.storyboard.length : 0
           res.writeHead(200, PRINT_HEAD)
           res.end(
             setSheetHtml({
@@ -277,6 +279,7 @@ export function createProjectsRouter() {
               script: detail.script,
               template: detail.template,
               projectId: printable.id,
+              onlyShots: parseShotRange(url.searchParams.get('shots'), shotCount),
               generatedAt: new Date().toISOString(),
               tzOffsetMinutes: printTz,
             }),

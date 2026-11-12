@@ -280,6 +280,8 @@ export function printToolbar({
   hint = '纸张选 A4；想要页码就在打印对话框里打开「页眉和页脚」',
   back = true,
   brand = 'img',
+  // 这一种纸自己要多带一个控件（现场页的「只印哪几镜」）：插在提示与返回之间，打印时整条顶栏都隐藏
+  extra = '',
 } = {}) {
   const backHref = projectId ? '/#/projects/' + encodeURIComponent(projectId) : '/#/projects'
   const mark =
@@ -295,6 +297,7 @@ export function printToolbar({
     '</div>' +
     '<div class="bar-right">' +
     '<span class="bar-hint">' + escapeHtml(hint) + '</span>' +
+    extra +
     (back ? '<a class="bar-link" href="' + escapeHtml(backHref) + '">返回作品</a>' : '') +
     '<button class="bar-print" type="button" data-print>打印 / 存为 PDF</button>' +
     '</div>' +
@@ -302,14 +305,17 @@ export function printToolbar({
   )
 }
 
-// 纸的外壳：extraCss 给需要自己版面的那一种纸（现场页）追加样式，仍然共用同一套纸张与字体
-export function paperShell(title, body, extraCss = '') {
+// 纸的外壳：extraCss / extraScript 给需要自己版面的那一种纸（现场页）追加样式与脚本，
+// 仍然共用同一套纸张与字体。extraScript 必须是可信的常量（这里只放我们自己写的那几行），
+// 不接任何用户内容——用户数据一律先过 escapeHtml 再进纸。
+export function paperShell(title, body, extraCss = '', extraScript = '') {
   return (
     '<!doctype html>\n<html lang="zh-CN">\n<head>\n<meta charset="utf-8">\n' +
     '<meta name="viewport" content="width=device-width, initial-scale=1">\n' +
     '<title>' + escapeHtml(title) + '</title>\n' +
     '<style>\n' + PAPER_CSS + (extraCss ? '\n' + extraCss : '') + '\n</style>\n</head>\n<body>\n' +
     body + '\n' +
+    (extraScript ? '<script>' + extraScript + '</script>\n' : '') +
     '<script>var b=document.querySelector("[data-print]");if(b){b.addEventListener("click",function(){window.print()})}</script>\n' +
     '</body>\n</html>\n'
   )

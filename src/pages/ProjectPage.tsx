@@ -604,7 +604,7 @@ export default function ProjectPage({
                     <Clapperboard size={15} />
                     <span className="vq-menu-copy">
                       <strong>现场页</strong>
-                      <small>只留脚本与分镜，带原片帧图，现场打印用</small>
+                      <small>只留脚本与分镜，带原片帧图；打开后可只印其中几镜</small>
                     </span>
                   </button>
                   <div className="vq-menu-sep" />

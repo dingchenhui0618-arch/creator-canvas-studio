@@ -2,7 +2,8 @@
 // 这里验的是「纸上写了什么」——口径对不对、帧图缺了怎么写、超过上限怎么裁、别人的台词会不会被当标签。
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { packageNote, setSheetHtml, setSheetModel } from '../server/project-set-sheet.mjs'
+import { packageNote, parseShotRange, setSheetHtml, setSheetModel, shotRangeLabel } from '../server/project-set-sheet.mjs'
+import { deliverablePrintHtml } from '../server/project-deliverable-html.mjs'
 
 const project = { id: 'prj_sheet', title: '咖啡 3 分钟', version: 2 }
 
@@ -118,6 +119,64 @@ test('超上限就只印前 N 条，并在纸上说还剩几条', () => {
   assert.equal(model.beatsHidden, 2)
   const html = setSheetHtml({ project, script: longScript, template: { ...template, storyboard: [] } })
   assert.match(html, /只印前 12 段/)
+})
+
+test('只印某几镜：写法容错、越界丢弃、一个都认不出就印全部', () => {
+  assert.deepEqual([...parseShotRange('2-4,7', 8)].sort(), [2, 3, 4, 7])
+  assert.deepEqual([...parseShotRange(' 3 、1 至 2 ', 8)].sort(), [1, 2, 3])
+  assert.deepEqual([...parseShotRange('7-5', 8)].sort(), [5, 6, 7], '写反的范围按两头夹住')
+  assert.deepEqual([...parseShotRange('99,0,3', 8)], [3], '越界的镜号不印、也不报错')
+  assert.equal(parseShotRange('abc', 8), null, '认不出就印全部')
+  assert.equal(parseShotRange('', 8), null)
+  assert.equal(parseShotRange('2-4', 0), null, '模板没有分镜时没有可选的镜号')
+  assert.equal(parseShotRange('2-40', 8).size, 7, '往大了写也不超过全片镜数')
+  assert.equal(shotRangeLabel([2, 3, 4, 7]), '2–4、7')
+  assert.equal(shotRangeLabel([5]), '5')
+  assert.equal(shotRangeLabel([1, 3]), '1、3')
+})
+
+test('现场页：「只印哪几镜」只藏卡片，抬头仍写全片镜数', () => {
+  const model = setSheetModel({ project, script, template, onlyShots: parseShotRange('2-3', 3) })
+  assert.equal(model.shotCards, 3, '三张卡都在 DOM 里，换选区才不用重新取数据')
+  assert.equal(model.shotPrinted, 2)
+  assert.equal(model.shotsOff, 1)
+  assert.equal(model.selected, '2–3')
+  assert.equal(model.shotTotal, 3)
+  assert.equal(model.withFrame, 2, '抬头说的是全片几张帧图')
+  assert.equal(model.shots.filter((shot) => shot.on).length, 2)
+
+  const html = setSheetHtml({ project, script, template, onlyShots: parseShotRange('2-3', 3), projectId: project.id })
+  assert.match(html, /data-shot="1"/, '没选中的卡也排进纸里')
+  assert.match(html, /class="set-shot is-off" data-shot="1"/, '没选中的卡带 is-off（屏幕与纸上都不占位）')
+  assert.match(html, /class="set-shot" data-shot="2"/)
+  assert.match(html, /本张只印第 <strong>2–3<\/strong> 镜（全片 3 镜，未印的 1 镜在作品页看）/)
+  assert.match(html, /data-range value="2–3"/, '顶栏要能看见当前选区')
+  assert.match(html, /印 2 \/ 3 镜/)
+  assert.match(html, /data-shot-total="3"/)
+})
+
+test('现场页：不选就印全部，顶栏留空、纸上不多一行字', () => {
+  const html = setSheetHtml({ project, script, template, projectId: project.id })
+  assert.match(html, /data-range value=""/)
+  assert.match(html, /印全部 3 镜/)
+  assert.match(html, /<p class="set-pick" data-pick hidden><\/p>/, '没选区时那一行不占位')
+  // 脚本里当然有「本张只印」这几个字（它是客户端改选区时要写的那行），纸上那一行不能有
+  assert.doesNotMatch(html, /data-pick>本张只印/)
+})
+
+test('选区脚本：随纸走（交付包里也带），只认 data-shot 那几张卡', () => {
+  const online = setSheetHtml({ project, script, template, onlyShots: parseShotRange('2-3', 3) })
+  assert.ok(online.includes('querySelectorAll("[data-shot]")'), '脚本按 data-shot 找卡')
+  assert.match(online, /history\.replaceState/, '改选区要能刷新回来')
+  const offline = setSheetHtml({ project, script, template, frameBase: 'frames/', availableFrames: new Set(['shot-01.jpg']), offline: true })
+  assert.match(offline, /data-range/, '交付包里的那张纸也能改选区')
+  assert.match(offline, /querySelector\("\[data-range\]"\)/)
+})
+
+test('交付稿的打印版不该带选区控件：它印的是全文，没有镜头卡片', () => {
+  const html = deliverablePrintHtml({ markdown: '# 标题\n\n正文', projectId: 'prj_sheet', title: '交付稿' })
+  assert.doesNotMatch(html, /data-range/)
+  assert.match(html, /data-print/)
 })
 
 test('交付包的说明：文件对应关系与帧图张数，没帧图就说明白', () => {
