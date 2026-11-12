@@ -113,6 +113,9 @@ export async function chatCompletion({
         const choice = parsed?.choices?.[0] || {}
         const finishReason = String(choice.finish_reason || '')
         if (finishReason === 'length') {
+          // 截断到底是「我们自己给少了」还是「上游把 max_tokens 打了折」，只能看 usage：
+          // completion_tokens 贴着请求值说明上限生效（加大有用），明显偏低说明被拦在更小的一档。
+          console.error('[chat] ' + model + ' finish_reason=length max_tokens=' + maxTokens + ' usage=' + JSON.stringify(parsed?.usage || null))
           reportKey(candidate.id, false, 'finish_reason=length')
           route({ ok: false, error: '输出被 max_tokens 截断（finish_reason=length）' })
           const error = new Error(model + ' 输出被 max_tokens 截断（finish_reason=length）')

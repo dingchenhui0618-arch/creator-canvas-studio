@@ -320,6 +320,42 @@ export async function getRun(id, user = null) {
   return list.find((run) => run.id === id && canAccess(run, user)) || null
 }
 
+/**
+ * 一行运行记录的摘要：作品页运行归集用它，不带 nodes 的逐节点输出（一次运行的 output 可能很大）。
+ * 失败原因、耗时、节点数、扣了多少积分都留着——归集要回答的是「这条作品跑过几次、成没成」。
+ */
+export function runSummary(run) {
+  return {
+    id: run.id,
+    flowId: run.flowId,
+    flowName: run.flowName,
+    status: run.status,
+    startedAt: run.startedAt,
+    finishedAt: run.finishedAt || '',
+    durationMs: Number(run.durationMs) || 0,
+    total: Number(run.total) || 0,
+    failed: (Array.isArray(run.nodes) ? run.nodes : []).filter((node) => node.status === 'error').length,
+    error: run.error || '',
+    credits: run.credits ? { cost: Number(run.credits.cost) || 0, refunded: Boolean(run.credits.refunded) } : null,
+  }
+}
+
+/**
+ * 一个作品的运行归集：当前版与归档版的所有画布一起取，按开始时间倒序。
+ * 以前运行记录只按 flowId 筛，开一版新的之后旧版的运行就再也找不回来了；
+ * 这里把作品名下所有版本画布的运行合成一条时间线，byFlow 再给版本对照提供每版跑了几次。
+ */
+export async function listRunsByFlows(flowIds = [], { limit = 20 } = {}, user = null) {
+  const wanted = new Set((Array.isArray(flowIds) ? flowIds : []).filter(Boolean))
+  if (!wanted.size) return { items: [], total: 0, byFlow: {} }
+  const list = (await loadRuns()).filter((run) => wanted.has(run.flowId) && canAccess(run, user))
+  list.sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)))
+  const count = Math.min(50, Math.max(1, Number(limit) || 20))
+  const byFlow = {}
+  for (const run of list) byFlow[run.flowId] = (byFlow[run.flowId] || 0) + 1
+  return { items: list.slice(0, count).map(runSummary), total: list.length, byFlow }
+}
+
 // ---------- 拓扑与执行 ----------
 
 function topoSort(nodes, edges) {
@@ -434,7 +470,10 @@ async function runLlm(node, ctx) {
   // 复用 server/llm.mjs：同一套重试 + 降级链（首选节点配置的模型，再走全局 fallbacks）
   const result = await callTextModel(messages, {
     temperature: Number(cfg.temperature),
-    maxTokens: 1200,
+    // 1200 对「写一整条脚本」太紧：推理型模型把预算花在思考上，正文会被截断（2026-11-12 生产实测两条运行都挂在这里）。
+    // 生产日志里 3000 / 4800 仍被截断，先把起点抬到 6000（truncation 时 llm.mjs 会放宽到 8000），
+    // max_tokens 只是上限，实际按生成量计费，抬高它不会让正常调用变贵。
+    maxTokens: 6000,
     // 节点没选模型时用画布主人的账号级首选模型；再后面才是全局降级链
     models: [cfg.model, ctx.ownerId ? preferenceModel(ctx.ownerId) : '', ...config.vision.fallbacks].filter(Boolean),
     log: (message) => console.log('[flows] ' + message),

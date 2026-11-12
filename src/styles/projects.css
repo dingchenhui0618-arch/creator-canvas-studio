@@ -106,7 +106,7 @@
 
 .vq-project-card-meta {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--space-2);
   margin-top: var(--space-1);
   padding-top: var(--space-3);
@@ -531,6 +531,158 @@
   flex: none;
 }
 
+/* ---------- 运行归集：一个作品的运行跨版本排成一条时间线 ---------- */
+
+.vq-project-runs {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+
+.vq-project-runs-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+.vq-project-runs-head h2 {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+.vq-project-runs-head h2 .vq-mono {
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.vq-project-runs-note {
+  flex: 1 1 260px;
+  margin: 0;
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.vq-run-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vq-run-row {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-top: 1px solid var(--line-faint);
+}
+
+.vq-run-row:first-child {
+  border-top: 0;
+}
+
+.vq-run-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--faint);
+}
+
+.vq-run-dot.is-pass {
+  background: var(--pass);
+}
+
+.vq-run-dot.is-fail {
+  background: var(--fail);
+}
+
+.vq-run-main {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.vq-run-title {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  min-width: 0;
+}
+
+.vq-run-title strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: var(--weight-normal);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vq-run-version {
+  height: 20px;
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.vq-run-status {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.vq-run-status.is-pass {
+  border-color: rgba(23, 107, 67, 0.24);
+  background: var(--pass-soft);
+  color: var(--pass);
+}
+
+.vq-run-status.is-fail {
+  border-color: rgba(163, 56, 56, 0.24);
+  background: var(--fail-soft);
+  color: var(--fail);
+}
+
+.vq-run-meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  color: var(--faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.vq-run-error {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--fail);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.vq-run-open {
+  flex: none;
+}
+
 /* 画布 / 评审 / 来源 */
 .vq-project-flow-name {
   font-size: var(--text-lg);
@@ -681,6 +833,15 @@
   }
 
   .vq-version-open {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+
+  .vq-run-row {
+    grid-template-columns: 8px minmax(0, 1fr);
+  }
+
+  .vq-run-open {
     grid-column: 1 / -1;
     justify-self: start;
   }

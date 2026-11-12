@@ -6,7 +6,7 @@ import { sendJson, readBody } from './_shared.mjs'
 import { currentUser } from '../auth.mjs'
 import { config } from '../config.mjs'
 import { getTemplate } from '../templates.mjs'
-import { createFlow, getFlow } from '../flows.mjs'
+import { createFlow, getFlow, listRunsByFlows } from '../flows.mjs'
 import {
   listReviews,
   reviewCountsByProject,
@@ -80,16 +80,23 @@ export function createProjectsRouter() {
 
       if (pathname === '/api/projects' && req.method === 'GET') {
         const [projects, reviews] = await Promise.all([listProjects(user), reviewCountsByProject(user)])
+        // 运行归集：所有作品名下（含归档版本）的画布一次取回来，卡片上就能写「跑过几次」。
+        // byFlow 把运行次数按画布分组，跨版本加总才有意义——只取一条记录，这里只要计数。
+        const projectFlows = projects.flatMap((project) => [project.flowId, ...project.versions.map((entry) => entry.flowId)])
+        const runAgg = projectFlows.filter(Boolean).length ? await listRunsByFlows(projectFlows, { limit: 1 }, user) : { byFlow: {} }
         const items = []
         for (const project of projects) {
           const template = project.templateId ? await getTemplate(project.templateId, user) : null
           const counters = reviews[project.id] || { count: 0, lastVerdict: '', lastAt: '', versions: {} }
+          const runs = [project.flowId, ...project.versions.map((entry) => entry.flowId)]
+            .reduce((sum, flowId) => sum + (flowId ? runAgg.byFlow[flowId] || 0 : 0), 0)
           items.push({
             ...project,
             template: templateBrief(template),
             // 总数给「评过几次」，按版本的分组给状态胶囊判断当前这一版
             reviews: { count: counters.count, lastVerdict: counters.lastVerdict, lastAt: counters.lastAt },
             versionCounts: counters.versions || {},
+            runs: { count: runs },
           })
         }
         sendJson(res, 200, { ok: true, items, total: items.length })
@@ -170,11 +177,14 @@ export function createProjectsRouter() {
           sendJson(res, 404, { error: '作品不存在或已被删除' })
           return true
         }
-        const [template, flow, reviews, versionCounts] = await Promise.all([
+        // 运行归集：当前版 + 归档版的画布一起查，开新版之后旧版的运行记录仍在作品里
+        const projectFlows = [project.flowId, ...project.versions.map((entry) => entry.flowId)].filter(Boolean)
+        const [template, flow, reviews, versionCounts, runData] = await Promise.all([
           project.templateId ? getTemplate(project.templateId, user) : null,
           project.flowId ? getFlow(project.flowId, user) : null,
           listReviews({ projectId: project.id, limit: 20 }, user),
           reviewSummaryByVersion(project.id, user),
+          listRunsByFlows(projectFlows, { limit: 20 }, user),
         ])
         // 归档的旧版本只存了 flowId：这里顺手确认画布还在，已删掉的版本按钮要禁用而不是点开报错
         const versions = await Promise.all(project.versions.map(async (entry) => {
@@ -185,6 +195,23 @@ export function createProjectsRouter() {
             nodes: Array.isArray(archived?.nodes) ? archived.nodes.length : 0,
           }
         }))
+        const versionOfFlow = new Map()
+        for (const entry of project.versions) versionOfFlow.set(entry.flowId, entry.n)
+        if (project.flowId) versionOfFlow.set(project.flowId, project.version)
+        // 画布被删掉之后运行记录仍在（历史不该跟着消失），但「打开画布」要禁用而不是点开报错。
+        // 注意这里必须放在 versions 算好之后再建：顺序反了就是一个 ReferenceError（0.2.3 生产实测踩到）。
+        const liveFlows = new Set(versions.filter((entry) => entry.available).map((entry) => entry.flowId))
+        if (flow) liveFlows.add(flow.id)
+        const runs = runData.items.map((run) => ({
+          ...run,
+          version: versionOfFlow.get(run.flowId) || 0,
+          available: liveFlows.has(run.flowId),
+        }))
+        const runCounts = {}
+        for (const [flowId, amount] of Object.entries(runData.byFlow)) {
+          const version = versionOfFlow.get(flowId) || 0
+          runCounts[version] = (runCounts[version] || 0) + Number(amount)
+        }
         sendJson(res, 200, {
           ok: true,
           project,
@@ -193,6 +220,9 @@ export function createProjectsRouter() {
           reviews: reviews.items,
           versions,
           versionCounts,
+          runs,
+          runTotal: runData.total,
+          runCounts,
         })
         return true
       }

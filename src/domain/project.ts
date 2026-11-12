@@ -37,11 +37,32 @@ export type Project = {
   updatedAt: string
 }
 
+/** 一次画布运行的摘要：运行记在画布服务里，作品页把名下所有版本的运行按时间归集成一条线 */
+export type ProjectRun = {
+  id: string
+  flowId: string
+  flowName: string
+  status: string
+  startedAt: string
+  finishedAt: string
+  durationMs: number
+  total: number
+  failed: number
+  error: string
+  credits: { cost: number; refunded: boolean } | null
+  /** 这次运行跑的是第几版画布 */
+  version: number
+  /** 那一版画布还在不在：被删掉后运行记录仍留着，但画布打不开 */
+  available: boolean
+}
+
 export type ProjectSummary = Project & {
   template: ProjectTemplateBrief | null
   reviews: ProjectReviews
   /** 按版本分组的评审计数：状态胶囊只看当前这一版 */
   versionCounts: Record<string, ProjectReviews>
+  /** 这条作品名下所有版本画布一共跑过几次 */
+  runs: { count: number }
 }
 
 export type ProjectTemplateDetail = ProjectTemplateBrief & {
@@ -66,6 +87,11 @@ export type ProjectDetail = {
   versions: ProjectVersionView[]
   /** 按版本分组的评审计数：键是版本号，用于版本对照 */
   versionCounts: Record<string, ProjectReviews>
+  /** 运行归集：当前版与归档版的运行合成一条时间线，按开始时间倒序 */
+  runs: ProjectRun[]
+  runTotal: number
+  /** 按版本分组的运行次数：版本对照里写「这一版跑过几次」 */
+  runCounts: Record<string, number>
 }
 
 /** 状态胶囊：文案 + 语气。语气只决定颜色，不改变语义。 */
@@ -88,6 +114,16 @@ export function reviewsForVersion(counts: Record<string, ProjectReviews>, versio
   if (!legacy) return own
   const latest = String(own.lastAt) >= String(legacy.lastAt) ? own : legacy
   return { count: own.count + legacy.count, lastVerdict: latest.lastVerdict, lastAt: latest.lastAt }
+}
+
+/**
+ * 某一版画布跑过几次：与评审同一套口径，版本划分之前留下的运行算进 v1，
+ * 否则老作品刚开版本视图时会显示「这一版没跑过」。
+ */
+export function runsForVersion(counts: Record<string, number>, version: number): number {
+  const own = Number(counts[String(version)]) || 0
+  const legacy = version === 1 ? Number(counts['0']) || 0 : 0
+  return own + legacy
 }
 
 export type ProjectStepKey = 'canvas' | 'review' | 'continue' | 'done'

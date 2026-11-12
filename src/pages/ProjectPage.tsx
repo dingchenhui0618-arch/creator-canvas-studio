@@ -5,7 +5,7 @@ import ProjectStatusPill from '../components/ProjectStatus'
 import { deleteProject, getProject, startProjectVersion, updateProject } from '../api/projects'
 import { applyTemplate } from '../api/radar'
 import { describeTiming } from '../domain/radar'
-import { projectStep, reviewsForVersion, type ProjectDetail } from '../domain/project'
+import { projectStep, reviewsForVersion, runsForVersion, type ProjectDetail } from '../domain/project'
 import '../styles/projects.css'
 
 const VERDICT_LABEL: Record<string, string> = { pass: '通过', needs_review: '需人工确认', fail: '不通过' }
@@ -22,6 +22,14 @@ function stamp(iso: string): string {
 function seconds(value: number | undefined): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '—'
   return value.toFixed(1) + 's'
+}
+
+// 运行耗时：超过一分钟写成「1 分 20 秒」，比 80.4 秒好读
+function duration(ms: number): string {
+  if (!Number.isFinite(ms) || ms <= 0) return '—'
+  const total = Math.round(ms / 1000)
+  if (total < 60) return (ms / 1000).toFixed(1) + ' 秒'
+  return Math.floor(total / 60) + ' 分 ' + (total % 60) + ' 秒'
 }
 
 /**
@@ -327,8 +335,8 @@ export default function ProjectPage({
             <dd>{reviews.length}</dd>
           </div>
           <div>
-            <dt>版本</dt>
-            <dd>{project.version ? 'v' + project.version : '—'}</dd>
+            <dt>运行</dt>
+            <dd>{data.runTotal}</dd>
           </div>
         </dl>
       </section>
@@ -354,6 +362,7 @@ export default function ProjectPage({
           <ol className="vq-version-list">
             {versionRows.map((row) => {
               const counter = reviewsForVersion(data.versionCounts, row.n)
+              const runCount = runsForVersion(data.runCounts || {}, row.n)
               const verdict = VERDICT_LABEL[counter.lastVerdict] || ''
               return (
                 <li className={'vq-version-row' + (row.current ? ' is-current' : '')} key={row.n}>
@@ -364,6 +373,7 @@ export default function ProjectPage({
                       <span className="vq-mono">{row.current ? '最新' : '归档 ' + stamp(row.archivedAt)}</span>
                       <span>{row.nodes} 节点</span>
                       <span>{counter.count ? counter.count + ' 次评审' : '未评审'}</span>
+                      <span>{runCount ? runCount + ' 次运行' : '没跑过'}</span>
                       {verdict ? <span className={'vq-project-verdict is-' + counter.lastVerdict}>{verdict}</span> : null}
                     </span>
                   </div>
@@ -381,6 +391,69 @@ export default function ProjectPage({
               )
             })}
           </ol>
+        </section>
+      ) : null}
+
+      {project.version ? (
+        <section className="vq-project-runs" aria-labelledby="vq-project-runs-head">
+          <div className="vq-project-runs-head">
+            <h2 id="vq-project-runs-head">
+              运行记录
+              <span className="vq-mono">{data.runTotal} 次</span>
+            </h2>
+            <p className="vq-project-runs-note">
+              一个作品的运行跨版本归集：旧版画布跑过的记录还在，开新版不会把它们藏起来。
+            </p>
+          </div>
+          {data.runs.length ? (
+            <ol className="vq-run-list">
+              {data.runs.map((run) => {
+                const ok = run.status === 'success'
+                return (
+                  <li className="vq-run-row" key={run.id}>
+                    <span className={'vq-run-dot is-' + (ok ? 'pass' : 'fail')} aria-hidden="true" />
+                    <div className="vq-run-main">
+                      <span className="vq-run-title">
+                        <strong className="vq-mono">{run.id}</strong>
+                        <span className="vq-version-n vq-mono vq-run-version">v{run.version}</span>
+                        <span className={'vq-run-status is-' + (ok ? 'pass' : 'fail')}>{ok ? '成功' : '失败'}</span>
+                      </span>
+                      <span className="vq-run-meta">
+                        <span>{run.total} 节点{run.failed ? ' · ' + run.failed + ' 个失败' : ''}</span>
+                        <span>{duration(run.durationMs)}</span>
+                        <span>
+                          {run.credits && run.credits.cost
+                            ? run.credits.cost + ' 积分' + (run.credits.refunded ? '（已退）' : '')
+                            : '不计费'}
+                        </span>
+                        <span className="vq-mono">{stamp(run.startedAt)}</span>
+                      </span>
+                      {run.error ? <p className="vq-run-error">{run.error}</p> : null}
+                    </div>
+                    <button
+                      type="button"
+                      className="vq-button vq-button--ghost vq-run-open"
+                      onClick={() => onOpenFlow(run.flowId)}
+                      disabled={!run.available}
+                      title={run.available ? '打开 v' + run.version + ' 的画布' : '这次运行的画布已被删除，记录仍留着'}
+                    >
+                      {run.available ? '打开画布' : '画布已删除'}
+                      {run.available ? <ArrowRight size={13} /> : null}
+                    </button>
+                  </li>
+                )
+              })}
+            </ol>
+          ) : (
+            <div className="vq-project-empty">
+              <strong>这条作品还没跑过画布</strong>
+              <span>打开画布点一次运行：每个节点的耗时、输出与失败原因都会记在这里，并按版本归集。</span>
+              <button type="button" className="vq-button vq-button--ghost" onClick={() => void openCanvas()}>
+                <Clapperboard size={13} />
+                打开画布去运行
+              </button>
+            </div>
+          )}
         </section>
       ) : null}
 

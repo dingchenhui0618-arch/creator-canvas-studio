@@ -21,6 +21,7 @@ const SYSTEM = [
   '6. 严重度只用 blocker / major / minor / info；info 只用于「看到但不确定算不算问题」。',
   '7. 修正建议必须是有界的（改字号、改对比、改裁切、改间距），写清改哪个元素的哪一项参数，不要写「重新设计」「优化视觉」。',
   '8. 每条 statement 控制在 60 个汉字内，不做设计理论科普。',
+  '9. 输出有上限：observations 最多 5 条（按严重度从高到低取前 5，多出来的不要写），fixes 最多 3 条，notAssessable 最多 3 条；同样的话不说第二遍。',
   '',
   '输出结构：',
   '{"verdict":"pass|needs_review|fail","summary":"一句话结论","observations":[{"dimension":"hierarchy|contrast|spacing|type|color|composition|legibility","severity":"blocker|major|minor|info","statement":"具体元素 + 数值/位置","evidence":{"x":0,"y":0,"w":0,"h":0},"confidence":0.0}],"fixes":[{"title":"动作","detail":"具体怎么改"}],"notAssessable":["缺什么信息导致无法判断"]}',
@@ -51,7 +52,8 @@ function toDataUrl(bytes, mime = 'image/jpeg') {
 
 function normalize(raw, provider, requestId) {
   const verdict = ['pass', 'needs_review', 'fail'].includes(raw?.verdict) ? raw.verdict : 'needs_review'
-  const observations = (Array.isArray(raw?.observations) ? raw.observations : []).slice(0, 12).map((item, index) => ({
+  // 上限与提示词里的一致（5 条问题 / 3 条修正）：服务端再兜一次，模型偶尔会多写
+  const observations = (Array.isArray(raw?.observations) ? raw.observations : []).slice(0, 6).map((item, index) => ({
     id: 'obs-' + (index + 1),
     dimension: String(item?.dimension || 'composition').slice(0, 24),
     severity: ['blocker', 'major', 'minor', 'info'].includes(item?.severity) ? item.severity : 'minor',
@@ -66,7 +68,7 @@ function normalize(raw, provider, requestId) {
       : null,
     confidence: Math.max(0, Math.min(1, Number(item?.confidence) || 0.6)),
   }))
-  const fixes = (Array.isArray(raw?.fixes) ? raw.fixes : []).slice(0, 8).map((item) => ({
+  const fixes = (Array.isArray(raw?.fixes) ? raw.fixes : []).slice(0, 4).map((item) => ({
     title: String(item?.title || '').slice(0, 60),
     detail: String(item?.detail || '').slice(0, 200),
   }))
@@ -78,7 +80,7 @@ function normalize(raw, provider, requestId) {
     summary: String(raw?.summary || '').slice(0, 240),
     observations,
     fixes,
-    notAssessable: (Array.isArray(raw?.notAssessable) ? raw.notAssessable : []).map((v) => String(v).slice(0, 160)).slice(0, 6),
+    notAssessable: (Array.isArray(raw?.notAssessable) ? raw.notAssessable : []).map((v) => String(v).slice(0, 160)).slice(0, 3),
   }
 }
 
@@ -159,7 +161,7 @@ export async function reviewVisual({ imageUrl, imageBytes, mime = 'image/jpeg', 
     {
       role: 'user',
       content: [
-        { type: 'text', text: (intent || '请评审这张画面') + '\n请按 visual-baseline 维度逐条给证据，只输出 JSON。' },
+        { type: 'text', text: (intent || '请评审这张画面') + '\n请按 visual-baseline 维度逐条给证据，只输出 JSON：问题最多 5 条、修正最多 3 条，这是硬上限。' },
         { type: 'image_url', image_url: { url: dataUrl, detail: 'low' } },
       ],
     },

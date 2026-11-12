@@ -45,17 +45,23 @@ export async function callTextModel(messages, options = {}) {
   if (!llmEnabled()) throw Object.assign(new Error('未配置模型凭证（VISION_API_KEY 或本地 OpenCodex）'), { code: 'NO_MODEL' })
   const chain = options.models?.length ? options.models : modelChain()
   const log = options.log
+  // 推理型模型的 reasoning_tokens 也算在 max_tokens 里：同一个预算重试一次只会拿到同样的半截 JSON。
+  // 因此被截断时把预算放宽一档再试，第二次还被截断才换模型（换模型可以从原预算重新开始）。
+  const baseTokens = Math.max(256, Number(options.maxTokens) || 2000)
+  const retryTokens = Math.min(8000, Math.round(baseTokens * 1.6))
   let lastError
   for (const model of chain) {
     for (let attempt = 0; attempt < 2; attempt += 1) {
+      const maxTokens = attempt === 0 ? baseTokens : retryTokens
       try {
-        log?.('模型：' + model)
-        return await callOnce(messages, model, options)
+        log?.(attempt === 0 ? '模型：' + model : '模型：' + model + ' · 截断后把 max_tokens 放宽到 ' + maxTokens + ' 再试一次')
+        return await callOnce(messages, model, { ...options, maxTokens })
       } catch (error) {
         lastError = error
-        const retryable = error?.retryable || error?.name === 'AbortError' || /fetch failed/i.test(String(error?.message))
+        const truncated = Boolean(error?.truncated)
+        const retryable = truncated || error?.retryable || error?.name === 'AbortError' || /fetch failed/i.test(String(error?.message))
         if (!retryable || attempt === 1) break
-        await sleep((attempt + 1) * 2500)
+        await sleep(truncated ? 400 : (attempt + 1) * 2500)
       }
     }
     log?.(model + ' 不可用，切换下一个候选模型')

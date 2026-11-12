@@ -122,6 +122,10 @@ export default function ProjectsPage({
                   <em>评审</em>
                   <b>{item.reviews.count ? item.reviews.count + ' 次' : '—'}</b>
                 </span>
+                <span>
+                  <em>运行</em>
+                  <b>{item.runs?.count ? item.runs.count + ' 次' : '—'}</b>
+                </span>
               </span>
               <span className="vq-project-card-go">
                 打开作品

@@ -138,3 +138,30 @@ test('评审按版本记账，版本对照的计数互不串', async () => {
   assert.deepEqual(scoped.items.map((item) => item.version).sort(), [1, 2], '每条评审都带版本号')
 })
 
+
+test('运行归集：作品名下各版画布的运行合成一条线，按时间倒序且互不越权', async () => {
+  const flows = await import('../server/flows.mjs')
+  // 直属运行存储的形态：一次运行一条，带 flowId / status / 节点结果 / ownerId
+  fs.writeFileSync(
+    path.join(dir, 'runs.json'),
+    JSON.stringify([
+      { id: 'run_a1', flowId: 'flow_a', flowName: 'A v1', status: 'success', startedAt: '2026-11-01T10:00:00.000Z', durationMs: 1200, total: 3, nodes: [{ status: 'success' }], output: 'x', error: null, ownerId: 'u_a' },
+      { id: 'run_b2', flowId: 'flow_b', flowName: 'B v2', status: 'error', startedAt: '2026-11-02T10:00:00.000Z', durationMs: 4200, total: 3, nodes: [{ status: 'success' }, { status: 'error' }], output: '', error: '节点失败', ownerId: 'u_a' },
+      { id: 'run_other', flowId: 'flow_a', flowName: 'A v1', status: 'success', startedAt: '2026-11-03T10:00:00.000Z', durationMs: 900, total: 3, nodes: [], ownerId: 'u_b' },
+      { id: 'run_unrelated', flowId: 'flow_z', flowName: 'Z', status: 'success', startedAt: '2026-11-04T10:00:00.000Z', durationMs: 900, total: 1, nodes: [], ownerId: 'u_a' },
+    ]),
+    'utf8',
+  )
+  const result = await flows.listRunsByFlows(['flow_a', 'flow_b'], { limit: 1 }, userA)
+  assert.equal(result.total, 2, '别人跑的和别的画布都不该进来')
+  assert.deepEqual(result.byFlow, { flow_a: 1, flow_b: 1 }, '按画布分组；当前版的运行不会串到归档版')
+  assert.equal(result.items.length, 1, 'limit 只限制返回条数，total 仍是作品全量')
+  assert.deepEqual((await flows.listRunsByFlows(['flow_a'], {}, userB)).items.map((run) => run.id), ['run_other'], '换一个账号只看得到自己的运行')
+
+  const all = await flows.listRunsByFlows(['flow_a', 'flow_b'], { limit: 10 }, userA)
+  assert.deepEqual(all.items.map((run) => run.id), ['run_b2', 'run_a1'], '按开始时间倒序，跨版本合成一条线')
+  assert.equal(all.items[0].failed, 1)
+  assert.equal(all.items[0].error, '节点失败')
+  assert.ok(!('nodes' in all.items[0]), '摘要不带逐节点输出')
+  assert.equal((await flows.listRunsByFlows([], {}, userA)).total, 0, '没有画布就没有运行')
+})
