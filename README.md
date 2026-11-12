@@ -913,7 +913,7 @@ oxlint **0 error / 7 warning**、`npm run build` 通过。
 顺手修了两处：**评审元信息粘行**（纸上「18:03 模型 …」连成一句，元信息行前补「· 」）；
 **抬头没有冒号**（「建立 / 导出时间」在事实表里落不到标签列，统一成「标签：值」，`最后更新` 独立一行）。
 
-验收：生产 **v0.9.3**、入口 `index-CarVCfDG.js`、release `20261112-135857-0.9.3.tar.gz`、
+验收：生产 **v0.9.3**、入口 `index-CarVCfDG.js`、release `20261112-140215-0.9.3.tar.gz`（含手机端那条媒体查询）、
 `/api/health` ok（templates 26）；`npm test` **114/114**（新增打印版 7 条）、
 oxlint **0 error / 7 warning**、构建通过。桌面端不用重装（外壳加载的就是这套网页，仍为 0.9.1）。
 细节见 [交付稿的 A4 打印版](./docs/project-deliverable-a4-2026-11-12.md)。

@@ -139,7 +139,7 @@ location ^~ /print/ {
 
 ## 六、验收
 
-- 生产 **v0.9.3**、入口 `index-CarVCfDG.js`、release `20261112-135857-0.9.3.tar.gz`、
+- 生产 **v0.9.3**、入口 `index-CarVCfDG.js`、release `20261112-140215-0.9.3.tar.gz`（含手机端那条媒体查询）、
   `/api/health` ok（templates 26）。
 - `npm test` **114/114**（新增打印版 7 条：抬头三件、表格、转义、列表引用、空输入、整份同文、出错页）。
 - oxlint **0 error / 7 warning**；`npm run build` 通过。
