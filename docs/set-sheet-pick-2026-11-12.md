@@ -75,7 +75,7 @@ node --test test/project-set-sheet.test.mjs
 
 # 全量
 npm test            # 146/146
-npx oxlint src server test   # 0 error / 7 warning
+npx oxlint src server test   # 0 error / 6 warning
 ```
 
 生产复验（本地无头 Chrome + 生产登录态）：全印 8 卡 → `?shots=2-4,6` 后 4 卡、文案与 URL 同步、

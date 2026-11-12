@@ -147,7 +147,7 @@ export function setSheetModel({ project = {}, script = null, template = null, on
   const tight = beats.filter((beat) => beat.tight).length
   // 抬头写的是「全片有几镜、几张帧图」；选了哪几镜由下面那行单独说，
   // 不然收件人看到「8 镜」会以为纸缺页。
-  const withFrame = cappedShots.filter((shot, index) => Boolean(frameOf(shot, template).url)).length
+  const withFrame = cappedShots.filter((shot) => Boolean(frameOf(shot, template).url)).length
   const timing = script?.timing || null
   return {
     id: String(project.id || ''),
