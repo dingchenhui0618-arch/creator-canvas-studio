@@ -6,17 +6,25 @@ import { sendJson, readBody } from './_shared.mjs'
 import { currentUser } from '../auth.mjs'
 import { config } from '../config.mjs'
 import { getTemplate } from '../templates.mjs'
-import { getFlow } from '../flows.mjs'
-import { listReviews, reviewCountsByProject, detachReviewsFromProject } from '../reviews.mjs'
+import { createFlow, getFlow } from '../flows.mjs'
+import {
+  listReviews,
+  reviewCountsByProject,
+  reviewSummaryByVersion,
+  detachReviewsFromProject,
+} from '../reviews.mjs'
 import {
   listProjects,
   getProject,
   createProject,
   updateProject,
+  archiveProjectVersion,
   deleteProject,
+  PROJECT_VERSION_LIMIT,
 } from '../projects.mjs'
 
 const ITEM = /^\/api\/projects\/([\w-]+)$/
+const VERSIONS = /^\/api\/projects\/([\w-]+)\/versions$/
 
 // 列表只给卡片要用的那几项：模板标题、流程名、评审计数
 function templateBrief(template) {
@@ -75,11 +83,13 @@ export function createProjectsRouter() {
         const items = []
         for (const project of projects) {
           const template = project.templateId ? await getTemplate(project.templateId, user) : null
-          const counters = reviews[project.id] || { count: 0, lastVerdict: '', lastAt: '' }
+          const counters = reviews[project.id] || { count: 0, lastVerdict: '', lastAt: '', versions: {} }
           items.push({
             ...project,
             template: templateBrief(template),
-            reviews: counters,
+            // 总数给「评过几次」，按版本的分组给状态胶囊判断当前这一版
+            reviews: { count: counters.count, lastVerdict: counters.lastVerdict, lastAt: counters.lastAt },
+            versionCounts: counters.versions || {},
           })
         }
         sendJson(res, 200, { ok: true, items, total: items.length })
@@ -110,6 +120,49 @@ export function createProjectsRouter() {
         return true
       }
 
+      // 开一版新的：复制当前画布（节点与连线都在），旧画布归档成 vN，作品指向新画布
+      const versionPath = pathname.match(VERSIONS)
+      if (versionPath && req.method === 'POST') {
+        const project = await getProject(versionPath[1], user)
+        if (!project) {
+          sendJson(res, 404, { error: '作品不存在或已被删除' })
+          return true
+        }
+        if (!project.flowId) {
+          sendJson(res, 409, { error: '这条作品还没有画布：先把第一版画布开出来，再往上开新版本', code: 'NO_CANVAS' })
+          return true
+        }
+        if (project.version >= PROJECT_VERSION_LIMIT) {
+          sendJson(res, 409, {
+            error: '一条作品最多保留 ' + PROJECT_VERSION_LIMIT + ' 个版本；先交付这一条，再开新的作品',
+            code: 'VERSION_LIMIT',
+          })
+          return true
+        }
+        const current = await getFlow(project.flowId, user)
+        if (!current) {
+          sendJson(res, 409, { error: '这条作品绑定的画布不见了；先重新开一张画布，再版本化', code: 'FLOW_MISSING' })
+          return true
+        }
+        const nextNo = project.version + 1
+        const copy = await createFlow({
+          name: (project.title || current.name).slice(0, 48) + ' v' + nextNo,
+          description: current.description || '',
+          nodes: current.nodes,
+          edges: current.edges,
+        }, user)
+        const updated = await archiveProjectVersion(project.id, {
+          flowId: copy.id,
+          prevName: current.name,
+        }, user)
+        if (!updated) {
+          sendJson(res, 409, { error: '开新版本没有成功：这一版没有归档，作品仍然指向原来的画布', code: 'VERSION_FAILED' })
+          return true
+        }
+        sendJson(res, 201, { ok: true, project: updated, flow: flowBrief(copy) })
+        return true
+      }
+
       const item = pathname.match(ITEM)
       if (item && req.method === 'GET') {
         const project = await getProject(item[1], user)
@@ -117,17 +170,29 @@ export function createProjectsRouter() {
           sendJson(res, 404, { error: '作品不存在或已被删除' })
           return true
         }
-        const [template, flow, reviews] = await Promise.all([
+        const [template, flow, reviews, versionCounts] = await Promise.all([
           project.templateId ? getTemplate(project.templateId, user) : null,
           project.flowId ? getFlow(project.flowId, user) : null,
           listReviews({ projectId: project.id, limit: 20 }, user),
+          reviewSummaryByVersion(project.id, user),
         ])
+        // 归档的旧版本只存了 flowId：这里顺手确认画布还在，已删掉的版本按钮要禁用而不是点开报错
+        const versions = await Promise.all(project.versions.map(async (entry) => {
+          const archived = entry.flowId ? await getFlow(entry.flowId, user) : null
+          return {
+            ...entry,
+            available: Boolean(archived),
+            nodes: Array.isArray(archived?.nodes) ? archived.nodes.length : 0,
+          }
+        }))
         sendJson(res, 200, {
           ok: true,
           project,
           template: templateDetail(template),
           flow: flowBrief(flow),
           reviews: reviews.items,
+          versions,
+          versionCounts,
         })
         return true
       }
@@ -142,7 +207,14 @@ export function createProjectsRouter() {
           }
         }
         const patch = {}
-        if ('title' in body) patch.title = String(body.title || '')
+        if ('title' in body) {
+          const title = String(body.title || '').trim().slice(0, 80)
+          if (!title) {
+            sendJson(res, 400, { error: '作品名不能是空的', code: 'TITLE_REQUIRED' })
+            return true
+          }
+          patch.title = title
+        }
         if ('status' in body) patch.status = String(body.status || '')
         if ('flowId' in body) patch.flowId = String(body.flowId || '')
         const project = await updateProject(item[1], patch, user)

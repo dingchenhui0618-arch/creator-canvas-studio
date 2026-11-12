@@ -18,11 +18,20 @@ export type ProjectTemplateBrief = {
 
 export type ProjectReviews = { count: number; lastVerdict: string; lastAt: string }
 
+/** 归档的旧版本：只存画布指针与名字，画布本身仍在流程服务里 */
+export type ProjectVersion = { n: number; flowId: string; name: string; archivedAt: string }
+
+/** 作品详情会顺手确认归档画布还在，并带上节点数 */
+export type ProjectVersionView = ProjectVersion & { available: boolean; nodes: number }
+
 export type Project = {
   id: string
   title: string
   templateId: string
   flowId: string
+  /** 第几版：0 还没开画布，开出来就是 v1 */
+  version: number
+  versions: ProjectVersion[]
   status: ProjectStatus
   createdAt: string
   updatedAt: string
@@ -31,6 +40,8 @@ export type Project = {
 export type ProjectSummary = Project & {
   template: ProjectTemplateBrief | null
   reviews: ProjectReviews
+  /** 按版本分组的评审计数：状态胶囊只看当前这一版 */
+  versionCounts: Record<string, ProjectReviews>
 }
 
 export type ProjectTemplateDetail = ProjectTemplateBrief & {
@@ -51,6 +62,10 @@ export type ProjectDetail = {
   template: ProjectTemplateDetail | null
   flow: ProjectFlowBrief | null
   reviews: ReviewSummary[]
+  /** 归档版本（不含当前版），按归档先后 */
+  versions: ProjectVersionView[]
+  /** 按版本分组的评审计数：键是版本号，用于版本对照 */
+  versionCounts: Record<string, ProjectReviews>
 }
 
 /** 状态胶囊：文案 + 语气。语气只决定颜色，不改变语义。 */
@@ -59,6 +74,20 @@ export function projectStatus(project: Project, reviewCount: number): { text: st
   if (!project.flowId) return { text: '待开画布', tone: 'idle' }
   if (!reviewCount) return { text: '在做', tone: 'live' }
   return { text: '已评审', tone: 'ok' }
+}
+
+/**
+ * 某一版评过没有：版本划分之前留下的评审记在版本 0 上，v1 要把它们算进来，
+ * 否则刚上线的老作品会突然显示「这一版还没进评审」。
+ */
+export function reviewsForVersion(counts: Record<string, ProjectReviews>, version: number): ProjectReviews {
+  const own = counts[String(version)]
+  const legacy = version === 1 ? counts['0'] : undefined
+  if (!own && !legacy) return { count: 0, lastVerdict: '', lastAt: '' }
+  if (!own) return legacy as ProjectReviews
+  if (!legacy) return own
+  const latest = String(own.lastAt) >= String(legacy.lastAt) ? own : legacy
+  return { count: own.count + legacy.count, lastVerdict: latest.lastVerdict, lastAt: latest.lastAt }
 }
 
 export type ProjectStepKey = 'canvas' | 'review' | 'continue' | 'done'

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ArrowLeft, ArrowRight, Clapperboard, RefreshCw, ScanEye, Trash2, Workflow } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Clapperboard, CopyPlus, Pencil, RefreshCw, ScanEye, Trash2, Workflow } from 'lucide-react'
 import PageHead from '../components/PageHead'
 import ProjectStatusPill from '../components/ProjectStatus'
-import { deleteProject, getProject, updateProject } from '../api/projects'
+import { deleteProject, getProject, startProjectVersion, updateProject } from '../api/projects'
 import { applyTemplate } from '../api/radar'
 import { describeTiming } from '../domain/radar'
-import { projectStep, type ProjectDetail } from '../domain/project'
+import { projectStep, reviewsForVersion, type ProjectDetail } from '../domain/project'
 import '../styles/projects.css'
 
 const VERDICT_LABEL: Record<string, string> = { pass: '通过', needs_review: '需人工确认', fail: '不通过' }
@@ -27,7 +27,8 @@ function seconds(value: number | undefined): string {
 /**
  * 作品页：一条内容的完整现场。
  * 首屏只回答「下一步点哪里」（套用模板开画布 → 送评审 → 继续改 → 交付），
- * 下面才是现场：脚本、分镜、画布、评审。脚本与分镜来自这条作品绑定的模板，页面不留副本。
+ * 然后是版本对照，下面才是现场：脚本、分镜、画布、评审。
+ * 脚本与分镜来自这条作品绑定的模板，页面不留副本；版本只存画布指针。
  */
 export default function ProjectPage({
   projectId,
@@ -47,7 +48,9 @@ export default function ProjectPage({
   const [data, setData] = useState<ProjectDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [busy, setBusy] = useState<'' | 'canvas' | 'done' | 'delete'>('')
+  const [busy, setBusy] = useState<'' | 'canvas' | 'done' | 'delete' | 'title' | 'version'>('')
+  const [renaming, setRenaming] = useState(false)
+  const [draftTitle, setDraftTitle] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -123,6 +126,51 @@ export default function ProjectPage({
     }
   }
 
+  const beginRename = () => {
+    if (!data) return
+    setDraftTitle(data.project.title)
+    setRenaming(true)
+  }
+
+  const saveTitle = async () => {
+    if (!data) return
+    const title = draftTitle.trim()
+    if (!title) {
+      onToast('作品名不能是空的')
+      return
+    }
+    if (title === data.project.title) {
+      setRenaming(false)
+      return
+    }
+    setBusy('title')
+    try {
+      const result = await updateProject(data.project.id, { title })
+      setData({ ...data, project: result.project })
+      setRenaming(false)
+      onToast('作品名已改成「' + result.project.title + '」')
+    } catch (caught) {
+      onToast(caught instanceof Error ? caught.message : '改名没保存成功')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  // 开新版＝复制当前画布；旧画布归档成 vN，作品立刻指向新画布。
+  const startVersion = async () => {
+    if (!data) return
+    setBusy('version')
+    try {
+      const result = await startProjectVersion(data.project.id)
+      await load()
+      onToast('已开 v' + result.project.version + '：画布从上一版复制过来，接着改这一版')
+    } catch (caught) {
+      onToast(caught instanceof Error ? caught.message : '开新版本失败')
+    } finally {
+      setBusy('')
+    }
+  }
+
   if (loading && !data) {
     return (
       <div className="page vq-page">
@@ -146,8 +194,22 @@ export default function ProjectPage({
   }
 
   const { project, template, flow, reviews } = data
-  const step = projectStep(project, reviews.length)
+  // 状态与「下一步」只看当前这一版评过没有：新版刚开出来时不能因为上一版评过就跳过评审
+  const currentReviews = reviewsForVersion(data.versionCounts, project.version)
+  const step = projectStep(project, currentReviews.count)
   const timingNote = template ? describeTiming(template.timing) : ''
+  const versionRows = [
+    {
+      n: project.version,
+      flowId: project.flowId,
+      name: flow ? flow.name : '当前画布',
+      archivedAt: '',
+      available: Boolean(flow),
+      nodes: flow ? flow.nodes : 0,
+      current: true,
+    },
+    ...data.versions.map((item) => ({ ...item, current: false })),
+  ].sort((a, b) => b.n - a.n)
 
   return (
     <div className="page vq-page vq-project-page">
@@ -162,13 +224,54 @@ export default function ProjectPage({
             <span>作品</span>
             <span className="vq-head-sep" aria-hidden="true">·</span>
             <span className="vq-mono">{project.id}</span>
+            {project.version ? (
+              <>
+                <span className="vq-head-sep" aria-hidden="true">·</span>
+                <span className="vq-mono">v{project.version}</span>
+              </>
+            ) : null}
           </>
         }
-        title={project.title}
+        title={
+          renaming ? (
+            <form
+              className="vq-rename"
+              onSubmit={(event) => {
+                event.preventDefault()
+                void saveTitle()
+              }}
+            >
+              <input
+                className="vq-rename-input"
+                value={draftTitle}
+                maxLength={80}
+                autoFocus
+                aria-label="作品名"
+                onChange={(event) => setDraftTitle(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') setRenaming(false)
+                }}
+              />
+              <button type="submit" className="vq-button vq-button--primary" disabled={busy === 'title'}>
+                保存
+              </button>
+              <button type="button" className="vq-button vq-button--ghost" onClick={() => setRenaming(false)}>
+                取消
+              </button>
+            </form>
+          ) : (
+            <span className="vq-title-edit">
+              {project.title}
+              <button type="button" className="vq-title-edit-btn" onClick={beginRename} aria-label="改作品名" title="改作品名">
+                <Pencil size={14} />
+              </button>
+            </span>
+          )
+        }
         desc={
           <>
             <span className="vq-project-headline">
-              <ProjectStatusPill project={project} reviewCount={reviews.length} />
+              <ProjectStatusPill project={project} reviewCount={currentReviews.count} />
               <span className="vq-mono">更新 {stamp(project.updatedAt)}</span>
               {template && template.title !== project.title ? <span className="vq-mono">模板 · {template.title}</span> : null}
             </span>
@@ -222,8 +325,63 @@ export default function ProjectPage({
             <dt>评审</dt>
             <dd>{reviews.length}</dd>
           </div>
+          <div>
+            <dt>版本</dt>
+            <dd>{project.version ? 'v' + project.version : '—'}</dd>
+          </div>
         </dl>
       </section>
+
+      {project.version ? (
+        <section className="vq-project-versions" aria-labelledby="vq-project-versions-head">
+          <div className="vq-project-versions-head">
+            <h2 id="vq-project-versions-head">
+              版本对照
+              <span className="vq-mono">{project.version} 版</span>
+            </h2>
+            <p className="vq-project-versions-note">旧版本的画布还能打开看，但再改它不会写回那一版：要改就在最新一版上改。</p>
+            <button
+              type="button"
+              className="vq-button vq-button--ghost"
+              onClick={() => void startVersion()}
+              disabled={busy === 'version'}
+            >
+              <CopyPlus size={14} />
+              {busy === 'version' ? '正在复制画布…' : '开一版新的'}
+            </button>
+          </div>
+          <ol className="vq-version-list">
+            {versionRows.map((row) => {
+              const counter = reviewsForVersion(data.versionCounts, row.n)
+              const verdict = VERDICT_LABEL[counter.lastVerdict] || ''
+              return (
+                <li className={'vq-version-row' + (row.current ? ' is-current' : '')} key={row.n}>
+                  <span className="vq-version-n vq-mono">v{row.n}</span>
+                  <div className="vq-version-main">
+                    <strong>{row.name}</strong>
+                    <span className="vq-version-meta">
+                      <span className="vq-mono">{row.current ? '最新' : '归档 ' + stamp(row.archivedAt)}</span>
+                      <span>{row.nodes} 节点</span>
+                      <span>{counter.count ? counter.count + ' 次评审' : '未评审'}</span>
+                      {verdict ? <span className={'vq-project-verdict is-' + counter.lastVerdict}>{verdict}</span> : null}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="vq-button vq-button--ghost vq-version-open"
+                    onClick={() => onOpenFlow(row.flowId)}
+                    disabled={!row.available}
+                    title={row.available ? '在画布里打开 v' + row.n : '这一版的画布已被删除'}
+                  >
+                    {row.available ? '打开画布' : '画布已删除'}
+                    {row.available ? <ArrowRight size={13} /> : null}
+                  </button>
+                </li>
+              )
+            })}
+          </ol>
+        </section>
+      ) : null}
 
       <div className="vq-project-body">
         <div className="vq-project-col">
@@ -335,9 +493,14 @@ export default function ProjectPage({
               <ul className="vq-project-reviews">
                 {reviews.map((review) => (
                   <li key={review.id}>
-                    <span className={'vq-project-verdict is-' + (review.verdict || 'none')}>
-                      {VERDICT_LABEL[review.verdict] || '未记录'}
-                    </span>
+                    <div className="vq-project-review-flags">
+                      <span className={'vq-project-verdict is-' + (review.verdict || 'none')}>
+                        {VERDICT_LABEL[review.verdict] || '未记录'}
+                      </span>
+                      {review.version ? (
+                        <span className="vq-mono vq-project-review-version">v{review.version}</span>
+                      ) : null}
+                    </div>
                     <div>
                       <p>{review.summary || review.intent || '这次评审没有留下结论摘要'}</p>
                       <span className="vq-mono">{stamp(review.createdAt)}</span>
@@ -353,7 +516,7 @@ export default function ProjectPage({
             )}
             <button type="button" className="vq-button vq-button--ghost vq-project-full" onClick={() => onOpenReview(project.id)}>
               <ScanEye size={13} />
-              {reviews.length ? '再评一次' : '用评审看这版'}
+              {currentReviews.count ? '再评一次' : '用评审看这版'}
             </button>
           </section>
 

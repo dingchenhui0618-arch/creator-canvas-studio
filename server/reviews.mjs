@@ -51,6 +51,8 @@ function toSummary(item) {
     observations: Array.isArray(item.result?.observations) ? item.result.observations.length : 0,
     source: item.source || {},
     projectId: item.projectId || '',
+    // 评审发生在作品的第几版：多版本对照靠这一个数分组，老记录没有就是 0
+    version: Math.max(0, Math.round(Number(item.version) || 0)),
     ms: item.result?.ms || 0,
     model: item.result?.model || '',
     credits: item.credits || null,
@@ -59,12 +61,13 @@ function toSummary(item) {
   }
 }
 
-export async function saveReview({ user = null, source = {}, intent = '', result = null, credits = null, projectId = '' }) {
+export async function saveReview({ user = null, source = {}, intent = '', result = null, credits = null, projectId = '', version = 0 }) {
   const record = {
     id: 'rev_' + randomUUID().slice(0, 8),
     ownerId: user?.id || '',
     // 作品关联是可选的：从作品页发起的评审才带上，普通评审留空
     projectId: clip(projectId, 40),
+    version: Math.max(0, Math.round(Number(version) || 0)),
     intent: clip(intent, 120),
     source: {
       kind: source.kind || 'unknown',
@@ -100,7 +103,32 @@ export async function reviewCountsByProject(user = null) {
   const list = (await loadAll()).filter((item) => canAccess(item, user) && item.projectId)
   const counts = {}
   for (const item of list) {
-    const entry = counts[item.projectId] || (counts[item.projectId] = { count: 0, lastVerdict: '', lastAt: '' })
+    const entry = counts[item.projectId] || (counts[item.projectId] = { count: 0, lastVerdict: '', lastAt: '', versions: {} })
+    entry.count += 1
+    if (String(item.createdAt) > entry.lastAt) {
+      entry.lastAt = String(item.createdAt)
+      entry.lastVerdict = item.result?.verdict || ''
+    }
+    // 列表上的状态胶囊只看当前这一版：新版刚开出来时不能因为上一版评过就显示「已评审」
+    const key = String(Math.max(0, Math.round(Number(item.version) || 0)))
+    const bucket = entry.versions[key] || (entry.versions[key] = { count: 0, lastVerdict: '', lastAt: '' })
+    bucket.count += 1
+    if (String(item.createdAt) > bucket.lastAt) {
+      bucket.lastAt = String(item.createdAt)
+      bucket.lastVerdict = item.result?.verdict || ''
+    }
+  }
+  return counts
+}
+
+/** 一条作品内按版本分组：作品页的「版本对照」要显示每一版评过几次、最后结论。 */
+export async function reviewSummaryByVersion(projectId, user = null) {
+  if (!projectId) return {}
+  const list = (await loadAll()).filter((item) => canAccess(item, user) && item.projectId === projectId)
+  const counts = {}
+  for (const item of list) {
+    const key = String(Math.max(0, Math.round(Number(item.version) || 0)))
+    const entry = counts[key] || (counts[key] = { count: 0, lastVerdict: '', lastAt: '' })
     entry.count += 1
     if (String(item.createdAt) > entry.lastAt) {
       entry.lastAt = String(item.createdAt)

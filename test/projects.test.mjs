@@ -87,3 +87,54 @@ test('删作品后评审留为历史，不再挂在任何作品上', async () =>
   assert.equal(await p.getProject(projectId, userA), null)
   assert.equal(await p.deleteProject(projectId, userA), null, '删过的不能再删一次')
 })
+
+test('第一张画布把作品推进 v1，开一版新的归档旧画布、版本号递增', async () => {
+  const project = await p.createProject({ title: '多版本', templateId: 'tpl_a' }, userA)
+  assert.equal(project.version, 0, '还没开画布是 v0')
+  const bound = await p.updateProject(project.id, { flowId: 'flow_a' }, userA)
+  assert.equal(bound.version, 1, '绑上第一张画布就是 v1')
+
+  // 改名、改状态都不该让版本号自己往上跳
+  const renamed = await p.updateProject(project.id, { title: '多版本 · 折叠收纳' }, userA)
+  assert.equal(renamed.version, 1)
+  assert.equal(renamed.title, '多版本 · 折叠收纳')
+
+  const next = await p.archiveProjectVersion(project.id, { flowId: 'flow_b', name: '折叠收纳 v2', prevName: '第一版画布' }, userA)
+  assert.equal(next.version, 2)
+  assert.equal(next.flowId, 'flow_b')
+  assert.equal(next.versions.length, 1)
+  assert.deepEqual(
+    { n: next.versions[0].n, flowId: next.versions[0].flowId, name: next.versions[0].name },
+    { n: 1, flowId: 'flow_a', name: '第一版画布' },
+  )
+  assert.ok(!('nodes' in next.versions[0]), '归档只存画布指针，不复制节点')
+
+  // 老数据没有 version 字段：按「归档几版 + 当前一版」推出来，不会显示成 v0
+  fs.writeFileSync(
+    path.join(dir, 'projects.json'),
+    JSON.stringify([{ ...next, version: undefined, versions: [{ n: 1, flowId: 'flow_a', name: '第一版' }] }]),
+    'utf8',
+  )
+  // 换一个模块实例读盘，确认老数据（没有 version 字段）也能推出 v2 而不是 v0
+  const fresh = await import('../server/projects.mjs?legacy-read')
+  const reloaded = await fresh.getProject(next.id, userA)
+  assert.equal(reloaded.version, 2)
+})
+
+test('评审按版本记账，版本对照的计数互不串', async () => {
+  const project = await p.createProject({ title: '对照', templateId: 'tpl_a' }, userA)
+  await p.updateProject(project.id, { flowId: 'flow_x' }, userA)
+  await r.saveReview({ user: userA, projectId: project.id, version: 1, result: { verdict: 'fail', summary: '', observations: [], ms: 1 } })
+  await p.archiveProjectVersion(project.id, { flowId: 'flow_y', prevName: '第一版' }, userA)
+  await r.saveReview({ user: userA, projectId: project.id, version: 2, result: { verdict: 'needs_review', summary: '', observations: [], ms: 1 } })
+
+  const counts = await r.reviewSummaryByVersion(project.id, userA)
+  assert.equal(counts['1'].count, 1)
+  assert.equal(counts['1'].lastVerdict, 'fail')
+  assert.equal(counts['2'].count, 1)
+  assert.equal(counts['2'].lastVerdict, 'needs_review')
+
+  const scoped = await r.listReviews({ projectId: project.id, limit: 10 }, userA)
+  assert.deepEqual(scoped.items.map((item) => item.version).sort(), [1, 2], '每条评审都带版本号')
+})
+

@@ -12,6 +12,9 @@ import { canAccess } from './owner.mjs'
 const projectsFile = path.join(config.dataDir, 'projects.json')
 const MAX_PROJECTS = 200
 const STATUSES = ['active', 'done']
+// 一条作品最多保留 20 版：再多就不是「对照」而是流水账，旧版本也不该无限长下去
+const MAX_VERSIONS = 20
+export const PROJECT_VERSION_LIMIT = MAX_VERSIONS
 
 let cache = null
 let writeChain = Promise.resolve()
@@ -46,13 +49,35 @@ async function persist(list) {
 
 const clip = (value, max) => String(value ?? '').slice(0, max)
 
+function normalizeVersion(raw, fallbackN) {
+  const n = Math.round(Number(raw?.n))
+  return {
+    n: Number.isFinite(n) && n > 0 ? n : fallbackN,
+    flowId: String(raw?.flowId || ''),
+    name: clip(raw?.name || '未命名画布', 60),
+    archivedAt: String(raw?.archivedAt || ''),
+  }
+}
+
 function normalize(item) {
+  const versions = (Array.isArray(item.versions) ? item.versions : [])
+    .filter((entry) => entry && entry.flowId)
+    .map((entry, index) => normalizeVersion(entry, index + 1))
+    .slice(-MAX_VERSIONS)
+  // 版本号是作品自己的计数：没存过就按「归档几版 + 当前一版」推出来，老数据不会显示成 v0
+  const derived = versions.length + (String(item.flowId || '') ? 1 : 0)
+  const stored = Math.round(Number(item.version))
+  const version = Number.isFinite(stored) ? Math.max(derived, Math.max(0, stored)) : derived
   return {
     id: String(item.id),
     ownerId: String(item.ownerId || ''),
     title: clip(item.title || '未命名作品', 80),
     templateId: String(item.templateId || ''),
     flowId: String(item.flowId || ''),
+    // 第几版：0 表示还没开过画布，开出来就是 v1
+    version,
+    // 归档的旧版本只存指针：画布还在流程服务里，这里不复制节点
+    versions,
     status: STATUSES.includes(item.status) ? item.status : 'active',
     createdAt: item.createdAt || new Date().toISOString(),
     updatedAt: item.updatedAt || item.createdAt || new Date().toISOString(),
@@ -84,6 +109,8 @@ export async function createProject({ title = '', templateId = '', flowId = '' }
     title: clip(title || '未命名作品', 80),
     templateId: String(templateId || ''),
     flowId: String(flowId || ''),
+    version: 0,
+    versions: [],
     status: 'active',
     createdAt: now,
     updatedAt: now,
@@ -111,6 +138,11 @@ export async function updateProject(id, patch = {}, user = null) {
     found[key] = value
     changed = true
   }
+  // 第一次绑上画布就是 v1：版本计数从这里开始，之后只有「开一版新的」才会加
+  if (found.flowId && !Number(found.version)) {
+    found.version = 1
+    changed = true
+  }
   if (changed) {
     found.updatedAt = new Date().toISOString()
     await persist(list)
@@ -121,6 +153,28 @@ export async function updateProject(id, patch = {}, user = null) {
 /** 只给「绑定画布」用：绑定后刷新时间，但不改标题/状态。 */
 export async function bindProjectFlow(id, flowId, user = null) {
   return updateProject(id, { flowId: String(flowId || '') }, user)
+}
+
+/**
+ * 开新版本：当前画布存成归档（只存 flowId 与名字，不复制节点），作品改指向新画布。
+ * 复制画布本身由路由做——存储层只认指针，不碰流程服务。
+ */
+export async function archiveProjectVersion(id, { flowId = '', prevName = '' } = {}, user = null) {
+  const list = await loadAll()
+  const found = list.find((item) => item.id === id && canAccess(item, user))
+  if (!found) return null
+  const current = normalize(found)
+  if (!current.flowId) return null
+  const now = new Date().toISOString()
+  found.versions = [
+    ...current.versions,
+    { n: current.version, flowId: current.flowId, name: clip(prevName || '上一版画布', 60), archivedAt: now },
+  ].slice(-MAX_VERSIONS)
+  found.flowId = String(flowId || '')
+  found.version = current.version + 1
+  found.updatedAt = now
+  await persist(list)
+  return normalize(found)
 }
 
 export async function deleteProject(id, user = null) {

@@ -79,6 +79,8 @@ export type ReviewSummary = {
   intent: string
   /** 从作品页发起的评审会带作品 id；普通评审为空 */
   projectId?: string
+  /** 评审发生在作品的第几版；0 表示作品还没有版本划分 */
+  version?: number
   verdict: 'pass' | 'needs_review' | 'fail' | ''
   summary: string
   observations: number

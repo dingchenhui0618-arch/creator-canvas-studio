@@ -3,7 +3,7 @@ import { ArrowRight, Clapperboard, RefreshCw } from 'lucide-react'
 import PageHead from '../components/PageHead'
 import ProjectStatusPill from '../components/ProjectStatus'
 import { listProjects } from '../api/projects'
-import type { ProjectSummary } from '../domain/project'
+import { reviewsForVersion, type ProjectSummary } from '../domain/project'
 import '../styles/projects.css'
 
 const pad2 = (value: number) => String(value).padStart(2, '0')
@@ -96,7 +96,10 @@ export default function ProjectsPage({
           {items.map((item) => (
             <button type="button" className="vq-project-card" key={item.id} onClick={() => onOpenProject(item.id)}>
               <span className="vq-project-card-head">
-                <ProjectStatusPill project={item} reviewCount={item.reviews.count} />
+                <span className="vq-project-card-tags">
+                  <ProjectStatusPill project={item} reviewCount={reviewsForVersion(item.versionCounts || {}, item.version).count} />
+                  {item.version > 1 ? <span className="vq-project-card-version vq-mono">v{item.version}</span> : null}
+                </span>
                 <span className="vq-mono">{updatedLabel(item.updatedAt)}</span>
               </span>
               <strong className="vq-project-card-title">{item.title}</strong>

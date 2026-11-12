@@ -59,12 +59,15 @@ export function createReviewRouter() {
         const body = await readBody(req)
         // 从作品页发起的评审：先确认作品还在，再扣积分——不能收完钱才发现记不进任何作品
         const projectId = body.projectId ? String(body.projectId) : ''
+        // 作品的第几版：评审落库时按当前版本记账，多版本对照才不会串
+        let projectVersion = 0
         if (projectId) {
-          const project = await getProject(projectId, user)
-          if (!project) {
+          const scopedProject = await getProject(projectId, user)
+          if (!scopedProject) {
             sendJson(res, 404, { error: '这次评审要记入的作品不见了，评审没有开始，也未扣积分', code: 'PROJECT_NOT_FOUND' })
             return true
           }
+          projectVersion = scopedProject.version
         }
         // 已知模型服务不可用（额度 / 凭证）：直接说明，不先扣再退
         const provider = modelServiceState()
@@ -122,6 +125,7 @@ export function createReviewRouter() {
             result,
             credits: { cost: paid.cost, balance: paid.balance },
             projectId,
+            version: projectVersion,
           })
           sendJson(res, 200, { ...result, reviewId: saved.id, credits: { cost: paid.cost, balance: paid.balance } })
         } catch (error) {
