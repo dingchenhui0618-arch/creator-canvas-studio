@@ -40,6 +40,7 @@ import { createPreferencesRouter } from './routes/preferences.mjs'
 import { createCanvasRouter } from './routes/canvas.mjs'
 import { createGatewayRouter } from './routes/gateway.mjs'
 import { currentUser, listUsers, clientIp, isAdmin } from './auth.mjs'
+import { recordClientError } from './client-errors.mjs'
 import { charge, refund, ensureWelcomeCredits } from './credits.mjs'
 import { enter, leave } from './gate.mjs'
 import { installProcessGuards, logEvent, logRequestError, startAccess } from './log.mjs'
@@ -73,7 +74,8 @@ const featureRoutes = [
 // /api/gateway 由平台服务令牌鉴权（画布服务端调用，没有浏览器会话），所以不走登录门；
 // 路由内部每一步都先验令牌，未配置时回 503，不会变成匿名可用。
 // /api/share 是只读分享链接：链接本身（24 字节随机 token）就是凭证，不需要登录态。
-const PUBLIC_API = ['/api/auth', '/api/health', '/api/version', '/api/app', '/api/gateway', '/api/share']
+const PUBLIC_API = ['/api/auth', '/api/health', '/api/version', '/api/app', '/api/gateway', '/api/share', '/api/client-errors']
+// 前端异常上报要能在登录页、分享页也生效，所以不要求登录；靠 IP 限流 + 体积上限挡住滥用。
 function needsLogin(pathname) {
   if (!config.auth.requireAuth) return false
   if (!pathname.startsWith('/api/')) return false
@@ -92,6 +94,25 @@ function sendJson(res, status, body) {
   const payload = JSON.stringify(body)
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
   res.end(payload)
+}
+
+// 公开接口用：超过上限直接抛（调用方回 413），不把整包读进内存
+async function readJsonLimited(req, maxBytes) {
+  const chunks = []
+  let size = 0
+  for await (const chunk of req) {
+    size += chunk.length
+    if (size > maxBytes) throw new Error('payload too large')
+    chunks.push(chunk)
+  }
+  if (!chunks.length) return {}
+  const text = Buffer.concat(chunks).toString('utf8').replace(/^\uFEFF/, '')
+  try {
+    const parsed = JSON.parse(text)
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
 }
 
 async function readBody(req) {
@@ -477,6 +498,20 @@ const server = http.createServer(async (req, res) => {
       const entry = await toggleSearchFavorite(user, favoriteMatch[1])
       if (!entry) return sendJson(res, 404, { error: '没有这条检索记录' })
       return sendJson(res, 200, { entry })
+    }
+
+    // 前端异常上报：浏览器里炸了的东西留一份给后台看。
+    // 入参只取白名单字段，体积封顶 16KB；同一条错误由存储层按 10 分钟去重累加。
+    if (pathname === '/api/client-errors' && req.method === 'POST') {
+      let body = {}
+      try {
+        body = await readJsonLimited(req, 16 * 1024)
+      } catch {
+        return sendJson(res, 413, { error: '上报内容过大' })
+      }
+      const entry = await recordClientError({ payload: body, ip: clientIp(req), user })
+      if (!entry) return sendJson(res, 202, { ok: true, stored: false })
+      return sendJson(res, 202, { ok: true, stored: true, id: entry.id })
     }
 
     if (pathname === '/api/search') {

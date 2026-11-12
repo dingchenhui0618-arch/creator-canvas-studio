@@ -2,6 +2,7 @@
 // 切页由 App 用路由 key 重新挂载；同一页里收到 vq:navigate 事件也会自动复位。
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { navigate } from '../router'
+import { reportReactError } from '../lib/clientErrors'
 
 type Props = {
   children: ReactNode
@@ -40,8 +41,9 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    // 开发时保留原始堆栈；生产构建里同样可从这里接入上报。
+    // 开发时保留原始堆栈；生产里同时上报，后台「系统」页能看到是哪一页炸了。
     console.error('[vq] 页面渲染出错：', error, info.componentStack)
+    reportReactError(error, info.componentStack)
   }
 
   private reset = () => {

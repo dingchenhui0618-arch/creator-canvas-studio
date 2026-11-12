@@ -13,6 +13,8 @@ const RULES = [
   { method: 'POST', match: (p) => p === '/api/agents', bucket: 'agents', limit: 30 },
   { method: 'POST', match: (p) => /^\/api\/flows\/[\w-]+\/run$/.test(p), bucket: 'flow_run', limit: 6 },
   { method: 'POST', match: (p) => p === '/api/credits/request', bucket: 'credit_request', limit: 3 },
+  // 前端异常上报是公开接口：一个坏页面一屏就能连发几十条，按 IP 压到每分钟 30 条
+  { method: 'POST', match: (p) => p === '/api/client-errors', bucket: 'client_error', limit: 30 },
 ]
 
 // 每 5 分钟清一次过期桶，避免长期运行时 Map 无限长

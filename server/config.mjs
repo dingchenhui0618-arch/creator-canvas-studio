@@ -54,6 +54,8 @@ export const config = {
   videosDir: path.join(dataDir, 'videos'),
   templatesFile: path.join(dataDir, 'templates.json'),
   searchHistoryFile: path.join(dataDir, 'search-history.json'),
+  // 前端异常上报（浏览器里炸的东西），后台「系统」页读它
+  clientErrorsFile: path.join(dataDir, 'client-errors.json'),
   redfox: {
     key: (process.env.REDFOX_API_KEY || '').trim(),
     baseUrl: process.env.REDFOX_BASE_URL || 'https://redfox.hk',

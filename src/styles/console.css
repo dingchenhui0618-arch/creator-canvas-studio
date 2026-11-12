@@ -1293,3 +1293,35 @@
   .admin-version-row { flex-wrap:wrap; }
   .admin-version-copy { flex-basis:100%; }
 }
+/* 前端异常（C3）：堆栈默认收起，展开看原文；等宽、可换行、不撑破卡片 */
+.admin-error-details {
+  margin-top: 4px;
+}
+
+.admin-error-details summary {
+  cursor: pointer;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint, #6f6f6f);
+}
+
+.admin-error-stack {
+  margin: 6px 0 0;
+  padding: 8px 12px;
+  max-height: 180px;
+  overflow: auto;
+  border: 1px solid var(--line, #e7e2d9);
+  border-radius: 4px;
+  background: var(--surface, #fbfbfb);
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  line-height: 1.65;
+  color: var(--ink-soft, #333);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* 前端异常行：没有右侧操作按钮，把徽标列固定宽度，几行文字才对得齐 */
+.admin-error-row {
+  grid-template-columns: 104px minmax(0, 1fr);
+  align-items: start;
+}

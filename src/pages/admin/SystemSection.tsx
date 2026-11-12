@@ -78,6 +78,32 @@ type AlertsInfo = {
   channel: { webhook: boolean; diskFreeMb: number }
 }
 
+type ClientErrorItem = {
+  id: string
+  at: string
+  lastAt: string
+  count: number
+  kind: string
+  message: string
+  stack: string
+  page: string
+  version: string
+}
+
+type ClientErrorsInfo = {
+  items: ClientErrorItem[]
+  total: number
+  last24h: number
+  limits: { cap: number; dedupeMin: number }
+}
+
+const CLIENT_ERROR_KIND: Record<string, string> = {
+  error: '脚本错误',
+  unhandledrejection: '未处理 Promise',
+  react: '页面渲染',
+  resource: '资源加载',
+}
+
 const ALERT_KIND_LABEL: Record<string, string> = {
   'server-5xx': '服务端 5xx',
   'model-blocked': '模型上游失败',
@@ -246,6 +272,8 @@ export default function SystemSection() {
         {alertNote ? <p className="admin-hint">{alertNote}</p> : null}
       </section>
 
+      <ClientErrorsCard />
+
       <div className="admin-grid admin-grid--two">
         <section className="admin-card admin-block">
           <div className="admin-block-head">
@@ -383,6 +411,104 @@ export default function SystemSection() {
 
       {internal ? <DiagnosticsCard /> : null}
     </>
+  )
+}
+
+// 前端异常：浏览器自己报上来的（脚本错误、未处理的 Promise、渲染抛错、资源加载失败）。
+// 和「告警」分开：告警是服务端 5xx / 上游失败 / 磁盘，这里是用户浏览器里发生的事。
+function ClientErrorsCard() {
+  const { data, error, loading, reload } = useApi<ClientErrorsInfo>('/api/admin/client-errors?limit=40')
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState('')
+
+  const clear = async () => {
+    setBusy(true)
+    setNote('')
+    try {
+      const result = await request<{ ok: boolean; removed: number }>('/api/admin/client-errors/clear', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      })
+      setNote('已清空 ' + result.removed + ' 条上报记录')
+      reload()
+    } catch (cause) {
+      setNote(cause instanceof Error ? cause.message : '清空失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className="admin-card admin-block">
+      <div className="admin-block-head">
+        <div>
+          <p className="admin-label">前端异常</p>
+          <p className="admin-sub">
+            用户在浏览器里遇到的脚本错误、未处理的 Promise、页面渲染失败与资源加载失败。
+            同一页面同一条错误 {data?.limits.dedupeMin ?? 10} 分钟内合并计数，只留最近 {data?.limits.cap ?? 300} 条。
+          </p>
+        </div>
+        <div className="admin-alert-actions">
+          <SourceTag kind="api" source="GET /api/admin/client-errors" />
+          <button type="button" className="admin-btn admin-btn--ghost" onClick={reload} disabled={loading}>
+            {loading ? '刷新中…' : '刷新'}
+          </button>
+          <button
+            type="button"
+            className="admin-btn admin-btn--ghost"
+            onClick={() => void clear()}
+            disabled={busy || !data?.total}
+          >
+            {busy ? '清空中…' : '清空'}
+          </button>
+        </div>
+      </div>
+
+      {error ? <ErrorBanner message={'GET /api/admin/client-errors：' + error} onRetry={reload} /> : null}
+      {loading && !data ? <LoadingLine label="/api/admin/client-errors" /> : null}
+
+      {data ? (
+        <>
+          <div className="admin-alert-facts">
+            <span>
+              <b>{data.total}</b> 条聚合记录
+            </span>
+            <span>
+              最近 24 小时 <b>{data.last24h}</b> 次上报
+            </span>
+          </div>
+
+          {data.items.length ? (
+            <ul className="admin-alert-list">
+              {data.items.map((item) => (
+                <li key={item.id} className="admin-alert-row admin-error-row">
+                  <Badge tone={item.kind === 'resource' ? 'warn' : 'fail'}>
+                    {CLIENT_ERROR_KIND[item.kind] || item.kind}
+                  </Badge>
+                  <div className="admin-alert-copy">
+                    <strong>{item.message}</strong>
+                    <span className="admin-cell-sub admin-mono">
+                      第 {item.count} 次 · 最近 {formatDateTime(item.lastAt)} · {item.page || '首页'}
+                      {item.version ? ' · v' + item.version : ''}
+                    </span>
+                    {item.stack ? (
+                      <details className="admin-error-details">
+                        <summary>堆栈</summary>
+                        <pre className="admin-error-stack">{item.stack}</pre>
+                      </details>
+                    ) : null}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="admin-hint admin-hint--ok">最近没有前端异常：页面报错、按钮点了没反应这类问题会出现在这里。</p>
+          )}
+        </>
+      ) : null}
+
+      {note ? <p className="admin-hint">{note}</p> : null}
+    </section>
   )
 }
 

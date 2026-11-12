@@ -19,6 +19,7 @@ import { listKeys, createKey, updateKey, deleteKey, testKey, listRoutes, preview
 import { gatewayStatus, modelCoverage } from '../gateway.mjs'
 import { canvasAdminConfigured, listCanvasUsers, setCanvasUserAccess } from '../canvas-admin.mjs'
 import { alertCounts, ackAlert, checkDisk, listAlerts, recordAlert } from '../alerts.mjs'
+import { clearClientErrors, listClientErrors } from '../client-errors.mjs'
 
 const MODEL_KEY = /^\/api\/admin\/model-keys\/([\w-]+)$/
 const MODEL_KEY_TEST = /^\/api\/admin\/model-keys\/([\w-]+)\/test$/
@@ -715,6 +716,20 @@ export function createAdminRouter() {
           disk,
           channel: { webhook: Boolean(config.alerts.webhook), diskFreeMb: config.alerts.diskFreeMb },
         })
+        return true
+      }
+
+      // 前端异常：浏览器上报的脚本错误 / 未处理 Promise / 渲染抛错，按页面聚合
+      if (pathname === '/api/admin/client-errors' && req.method === 'GET') {
+        const info = await listClientErrors({ limit: Number(url.searchParams.get('limit')) || 50 })
+        sendJson(res, 200, info)
+        return true
+      }
+
+      if (pathname === '/api/admin/client-errors/clear' && req.method === 'POST') {
+        const removed = await clearClientErrors()
+        recordAudit({ req, actor: user, action: 'client-errors.clear', targetType: 'client-errors', targetId: 'all', detail: { removed } })
+        sendJson(res, 200, { ok: true, removed })
         return true
       }
 
