@@ -53,6 +53,7 @@ export const config = {
   framesDir: path.join(dataDir, 'frames'),
   videosDir: path.join(dataDir, 'videos'),
   templatesFile: path.join(dataDir, 'templates.json'),
+  searchHistoryFile: path.join(dataDir, 'search-history.json'),
   redfox: {
     key: (process.env.REDFOX_API_KEY || '').trim(),
     baseUrl: process.env.REDFOX_BASE_URL || 'https://redfox.hk',

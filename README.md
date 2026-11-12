@@ -2013,3 +2013,19 @@ P1 八条、P2 六条见审计文。
 ![模板抽屉的导出区](docs/screenshot-template-export-2026-11-12.png)
 
 ![打印版式：A4 纯白稿，只留抽屉内容](docs/screenshot-template-print-2026-11-12.png)
+
+### 五十三.2 B2 雷达检索历史与关键词收藏
+
+雷达上方多一条「检索历史」：每个搜过的关键词是一枚 chip（平台 · 关键词 · 结果条数）+ 星标 + 右侧「清空」。
+
+| 行为 | 实测（生产） |
+| --- | --- |
+| 检索成功后自动落一条 | 搜「猫咪」→ 立即出现「全部 猫咪 127.2万 条」，74 条已加载 / 共 127.2 万 |
+| 点 chip | 只把条件填回表单并提示「已填回……确认后点检索」，**不自动检索**（自动重搜等于替用户扣 2 积分） |
+| 星标收藏 | 点一下变金，整页 reload 后仍是收藏态 |
+| 清空 | 只清没收藏的：有收藏时 removed 0 记录仍在；取消收藏后再清才 removed 1 |
+| 同条件重复搜 | 只更新时间，不堆重复条目；每账号最多留 40 条非收藏记录 |
+
+服务端按账号隔离存 data/search-history.json，接口 GET /api/search/history、POST /api/search/history/:id/favorite、DELETE /api/search/history；只在第 1 页落一条，翻页不重复记。
+
+![检索历史：收藏的关键词带星、点一下填回条件](docs/screenshot-radar-history-2026-11-12.png)

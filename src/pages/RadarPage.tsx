@@ -6,6 +6,7 @@ import {
   ExternalLink,
   Film,
   Heart,
+  History,
   MessageCircle,
   Play,
   RefreshCw,
@@ -14,8 +15,8 @@ import {
   Sparkles,
   Star,
 } from 'lucide-react'
-import { coverSrc, formatCount, formatDuration, getHealth, saveTemplate, searchMedia } from '../api/radar'
-import type { MediaItem } from '../domain/radar'
+import { clearSearchHistory, coverSrc, formatCount, formatDuration, getHealth, listSearchHistory, saveTemplate, searchMedia, toggleSearchFavorite } from '../api/radar'
+import type { MediaItem, SearchHistoryEntry } from '../domain/radar'
 import { ReplicateModal } from '../components/ReplicateModal'
 import PageHead from '../components/PageHead'
 import { getCredits, type CreditsResponse } from '../api/credits'
@@ -85,17 +86,48 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
   // 积分：检索前告诉用户这一下花多少，检索后显示扣了多少、还剩多少
   const [credits, setCredits] = useState<CreditsResponse | null>(null)
   const [insufficient, setInsufficient] = useState('')
+  const [history, setHistory] = useState<SearchHistoryEntry[]>([])
 
   // 积分余额是服务端账本，检索成功/失败后都重新拉一次，界面上的数字永远可信
   const refreshCredits = useCallback(() => {
     getCredits(1).then(setCredits).catch(() => setCredits(null))
   }, [])
 
+  // 历史只存条件：点一下把条件填回表单，不自动检索——每次检索 2 积分，不能替用户花
+  const loadHistory = useCallback(() => {
+    listSearchHistory()
+      .then((result) => setHistory(result.items || []))
+      .catch(() => setHistory([]))
+  }, [])
+
+  const applyHistory = useCallback((entry: SearchHistoryEntry) => {
+    setPlatform(entry.platform || 'all')
+    setKeyword(entry.keyword || '')
+    setSort(entry.sort || 'likes')
+    setRange(entry.range || '')
+    onToast('已填回「' + entry.keyword + '」的检索条件，确认后点检索')
+  }, [onToast])
+
+  const favoriteHistory = useCallback((entry: SearchHistoryEntry) => {
+    toggleSearchFavorite(entry.id)
+      .then(() => loadHistory())
+      .catch((caught) => onToast(caught instanceof Error ? caught.message : '收藏失败'))
+  }, [loadHistory, onToast])
+
+  const removeHistory = useCallback(() => {
+    clearSearchHistory()
+      .then((result) => {
+        loadHistory()
+        onToast(result.removed ? '已清空 ' + result.removed + ' 条历史，收藏的还留着' : '没有可清空的记录，收藏的还留着')
+      })
+      .catch((caught) => onToast(caught instanceof Error ? caught.message : '清空失败'))
+  }, [loadHistory, onToast])
+
   const runSearch = useCallback(async () => {
     setLoading(true)
     setError('')
     setInsufficient('')
-    const query = { platform, q: keyword.trim(), start: range ? dayOffset(Number(range)) : '', end: range ? dayOffset(0) : '' }
+    const query = { platform, q: keyword.trim(), range, start: range ? dayOffset(Number(range)) : '', end: range ? dayOffset(0) : '' }
     try {
       const result = await searchMedia({ ...query, page: 1, sort })
       setItems(result.items)
@@ -116,8 +148,9 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
     } finally {
       setLoading(false)
       refreshCredits()
+      loadHistory()
     }
-  }, [keyword, platform, range, sort, refreshCredits])
+  }, [keyword, platform, range, sort, refreshCredits, loadHistory])
 
   // 加载更多：沿用第一次检索的筛选快照，只把页码往后翻；同一批结果按 id 去重
   const loadMore = useCallback(async () => {
@@ -151,8 +184,9 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
       .then((health) => { setHasKey(health.redfox); setVisionReady(health.vision) })
       .catch(() => { setHasKey(false); setVisionReady(false) })
     refreshCredits()
-    // 首屏只读健康状态与积分余额，不检索：检索必须由用户点按钮触发
-  }, [refreshCredits])
+    loadHistory()
+    // 首屏只读健康状态、积分余额与检索历史，不检索：检索必须由用户点按钮触发
+  }, [refreshCredits, loadHistory])
 
   const sorted = useMemo(() => {
     const copy = [...items]
@@ -245,6 +279,38 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
         <p className="radar-credit-note">
           每次检索消耗 <strong>{credits.prices.search}</strong> {credits.unit}，检索失败会原路退回；示例结果不扣积分。
         </p>
+      ) : null}
+
+      {history.length ? (
+        <div className="radar-history">
+          <span className="radar-history-label"><History size={13} />检索历史</span>
+          <div className="radar-history-list">
+            {history.map((entry) => (
+              <span className={'radar-history-chip' + (entry.favorite ? ' is-favorite' : '')} key={entry.id}>
+                <button
+                  type="button"
+                  className="radar-history-main"
+                  onClick={() => applyHistory(entry)}
+                  title="点一下把这组条件填回上面，确认后再点检索（不会自动扣积分）"
+                >
+                  <em>{entry.platform === 'douyin' ? '抖音' : entry.platform === 'xiaohongshu' ? '小红书' : '全部'}</em>
+                  <b>{entry.keyword}</b>
+                  {entry.total ? <span>{formatCount(entry.total)} 条</span> : null}
+                </button>
+                <button
+                  type="button"
+                  className={'radar-history-star' + (entry.favorite ? ' is-on' : '')}
+                  onClick={() => favoriteHistory(entry)}
+                  aria-label={entry.favorite ? '取消收藏' : '收藏这组关键词'}
+                  title={entry.favorite ? '取消收藏' : '收藏这组关键词'}
+                >
+                  <Star size={12} fill={entry.favorite ? 'currentColor' : 'none'} />
+                </button>
+              </span>
+            ))}
+          </div>
+          <button type="button" className="radar-history-clear" onClick={removeHistory}>清空</button>
+        </div>
       ) : null}
 
       {quota ? (

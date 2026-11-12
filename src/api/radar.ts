@@ -1,4 +1,4 @@
-import type { MediaItem, ReplicaTemplate, ReplicateJob, SearchResult, TemplateList } from '../domain/radar'
+import type { MediaItem, ReplicaTemplate, ReplicateJob, SearchHistoryEntry, SearchResult, TemplateList } from '../domain/radar'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...init })
@@ -14,14 +14,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const getHealth = () => request<{ ok: boolean; redfox: boolean; vision: boolean; visionModel: string; templates: number }>('/api/health')
 
-export function searchMedia(params: { platform: string; q: string; start?: string; end?: string; page?: number; sort?: string }) {
+export function searchMedia(params: { platform: string; q: string; start?: string; end?: string; page?: number; sort?: string; range?: string }) {
   const query = new URLSearchParams({ platform: params.platform, q: params.q })
   if (params.start) query.set('start', params.start)
   if (params.end) query.set('end', params.end)
   if (params.page && params.page > 1) query.set('page', String(params.page))
   if (params.sort) query.set('sort', params.sort)
+  // range 是「近 7/30 天」的档位本身：历史要记它，才能原样填回表单
+  if (params.range) query.set('range', params.range)
   return request<SearchResult>('/api/search?' + query.toString())
 }
+
+export const listSearchHistory = () => request<{ items: SearchHistoryEntry[] }>('/api/search/history')
+export const toggleSearchFavorite = (id: string) =>
+  request<{ entry: SearchHistoryEntry }>('/api/search/history/' + id + '/favorite', { method: 'POST' })
+export const clearSearchHistory = () => request<{ ok: boolean; removed: number }>('/api/search/history', { method: 'DELETE' })
 
 export const startReplicate = (item: MediaItem, url: string) =>
   request<{ jobId: string; credits?: { cost: number; balance: number | null } }>('/api/replicate', { method: 'POST', body: JSON.stringify({ item, url }) })

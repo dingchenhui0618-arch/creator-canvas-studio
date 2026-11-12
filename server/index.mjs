@@ -3,6 +3,7 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { config, redfoxEnabled, visionEnabled } from './config.mjs'
 import { searchMedia } from './redfox.mjs'
+import { recordSearch, listSearchHistory, toggleSearchFavorite, clearSearchHistory } from './search-history.mjs'
 import { searchFixtures } from './fixtures.mjs'
 import { startReplicate, getJob } from './jobs.mjs'
 import {
@@ -447,6 +448,27 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true, cleared: true, model: { available: true } })
     }
 
+    // 检索历史与收藏：只存条件不存结果，点一下就填回表单（不自动检索，避免替用户扣积分）
+    if (pathname === '/api/search/history' && req.method === 'GET') {
+      if (!user) return sendJson(res, 401, { error: '需要登录' })
+      const items = await listSearchHistory(user)
+      return sendJson(res, 200, { items })
+    }
+
+    if (pathname === '/api/search/history' && req.method === 'DELETE') {
+      if (!user) return sendJson(res, 401, { error: '需要登录' })
+      const removedInfo = await clearSearchHistory(user)
+      return sendJson(res, 200, { ok: true, ...removedInfo })
+    }
+
+    const favoriteMatch = pathname.match(/^\/api\/search\/history\/([A-Za-z0-9_-]+)\/favorite$/)
+    if (favoriteMatch && req.method === 'POST') {
+      if (!user) return sendJson(res, 401, { error: '需要登录' })
+      const entry = await toggleSearchFavorite(user, favoriteMatch[1])
+      if (!entry) return sendJson(res, 404, { error: '没有这条检索记录' })
+      return sendJson(res, 200, { entry })
+    }
+
     if (pathname === '/api/search') {
       const platform = url.searchParams.get('platform') || 'all'
       const keyword = url.searchParams.get('q') || ''
@@ -464,6 +486,17 @@ const server = http.createServer(async (req, res) => {
       if (!paid) return
       try {
         const result = await searchMedia({ platform, keyword, startDate, endDate, pageNum: page, pageSize: 24, sort })
+        // 只记第一页：翻页是同一次检索的延续，逐页记会把历史刷满
+        if (page === 1) {
+          recordSearch({
+            user,
+            platform,
+            keyword,
+            range: url.searchParams.get('range') || '',
+            sort,
+            total: result.total,
+          }).catch(() => {})
+        }
         return sendJson(res, 200, {
           ...result,
           note: result.errors?.length ? result.errors.join('；') : '',

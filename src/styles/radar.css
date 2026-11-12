@@ -103,3 +103,28 @@
 }
 .radar-more-note { color:var(--muted); font-size:12px; line-height:1.7; }
 .radar-more .button { height:34px; gap:8px; font-size:12px; }
+
+
+/* ---------- 检索历史（B2）----------
+   只存条件不存结果：点一下填回表单，不自动检索（每次检索 2 积分）。
+   收藏的关键词排在前面，清空只清没收藏的。 */
+.radar-history { display:flex; align-items:center; flex-wrap:wrap; gap:8px 12px; margin:0 0 16px; padding:10px 12px; border:1px solid var(--line); border-radius:11px; background:rgba(255,254,250,.62); }
+.radar-history-label { display:inline-flex; align-items:center; gap:6px; color:var(--ink-faint); font-size:12px; font-weight:700; }
+.radar-history-list { display:flex; flex-wrap:wrap; gap:8px; flex:1; min-width:0; }
+.radar-history-chip { display:inline-flex; align-items:stretch; overflow:hidden; border:1px solid var(--line); border-radius:8px; background:var(--surface); }
+.radar-history-chip.is-favorite { border-color:#ddd0ae; background:#fdf8ec; }
+.radar-history-main { display:inline-flex; align-items:center; gap:8px; max-width:280px; padding:6px 10px; color:var(--ink-soft); background:transparent; border:0; font-size:12px; cursor:pointer; }
+.radar-history-main:hover { color:var(--ink); background:var(--surface-soft); }
+.radar-history-main em { flex:0 0 auto; font-style:normal; color:var(--ink-faint); font-size:11px; }
+.radar-history-main b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ink); font-weight:700; }
+.radar-history-main span { flex:0 0 auto; color:var(--ink-faint); font-family:var(--font-mono),monospace; font-size:11px; }
+.radar-history-star { display:grid; place-items:center; width:26px; color:var(--ink-faint); background:transparent; border:0; border-left:1px solid var(--line); cursor:pointer; }
+.radar-history-star:hover { color:var(--ink); }
+.radar-history-star.is-on { color:#a8802a; background:#fbf1dc; }
+.radar-history-clear { flex:0 0 auto; padding:4px 8px; color:var(--ink-faint); background:transparent; border:0; font-size:12px; cursor:pointer; }
+.radar-history-clear:hover { color:var(--ink); }
+@media (max-width:620px) {
+  .radar-history { align-items:flex-start; flex-direction:column; }
+  .radar-history-list { width:100%; }
+  .radar-history-main { max-width:200px; }
+}

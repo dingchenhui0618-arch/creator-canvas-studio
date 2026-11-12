@@ -143,6 +143,18 @@ export type ReplicaTemplate = {
   blueprint?: { nodes: unknown[]; edges: unknown[] }
 }
 
+/** 检索历史：只存条件与结果条数，不存结果本身（结果会过期，重搜要重新花钱）。 */
+export type SearchHistoryEntry = {
+  id: string
+  platform: string
+  keyword: string
+  range: string
+  sort: string
+  total: number
+  at: string
+  favorite: boolean
+}
+
 export type JobLog = { at: string; text: string }
 
 export type ReplicateJob = {
