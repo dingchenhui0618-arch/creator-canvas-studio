@@ -128,3 +128,27 @@
   .radar-history-list { width:100%; }
   .radar-history-main { max-width:200px; }
 }
+
+/* ---------- 模板回收站（B3）----------
+   删除先进回收站，30 天内可恢复；彻底删除才清抽帧，且要点两次。 */
+.trash-backdrop { position:fixed; inset:0; z-index:90; display:flex; align-items:center; justify-content:center; padding:24px; background:rgba(17,17,17,.34); backdrop-filter:blur(4px); }
+.trash-modal { width:min(640px,100%); max-height:calc(100vh - 80px); display:flex; flex-direction:column; overflow:hidden; background:var(--paper); border:1px solid var(--line); border-radius:16px; box-shadow:0 30px 80px rgba(30,26,20,.22); }
+.trash-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:20px 24px 8px; }
+.trash-head h2 { margin:6px 0 0; font-size:17px; letter-spacing:-.02em; }
+.trash-note { margin:0; padding:0 24px 12px; color:var(--ink-faint); font-size:12px; line-height:1.7; }
+.trash-list { flex:1; min-height:0; overflow:auto; padding:0 24px 12px; display:flex; flex-direction:column; gap:8px; }
+.trash-row { display:flex; align-items:center; gap:12px; padding:12px; border:1px solid var(--line); border-radius:11px; background:var(--surface); }
+.trash-thumb { width:48px; height:48px; flex:0 0 48px; display:grid; place-items:center; overflow:hidden; border-radius:8px; background:#efeeea; color:var(--ink-faint); }
+.trash-thumb img { width:100%; height:100%; object-fit:cover; }
+.trash-copy { flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }
+.trash-copy strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; }
+.trash-copy span { color:var(--ink-faint); font-size:12px; }
+.trash-actions { display:flex; align-items:center; gap:8px; flex:0 0 auto; }
+.trash-confirm { color:var(--danger); font-size:12px; }
+.trash-foot { display:flex; justify-content:flex-end; padding:12px 24px 16px; border-top:1px solid var(--line); }
+.trash-empty { display:grid; place-items:center; gap:8px; padding:48px 24px; color:var(--ink-faint); font-size:13px; text-align:center; }
+@media (max-width:620px) {
+  .trash-row { flex-wrap:wrap; }
+  .trash-actions { width:100%; justify-content:flex-end; }
+  .trash-backdrop { padding:12px; }
+}

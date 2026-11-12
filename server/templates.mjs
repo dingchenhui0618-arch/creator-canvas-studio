@@ -43,6 +43,7 @@ export async function listTemplates({ q = '', contentType = '', platform = '', k
   const keyword = q.trim()
   return list
     .filter((item) => canAccess(item, user))
+    .filter((item) => !item.deletedAt)
     .filter((item) => (kind ? item.kind === kind : true))
     .filter((item) => (contentType ? item.contentType === contentType : true))
     .filter((item) => (platform ? item.platform === platform : true))
@@ -255,17 +256,61 @@ export async function updateTemplate(id, patch = {}, user = null) {
   return next
 }
 
-export async function deleteTemplate(id) {
+// 删除先进回收站：一条解析过的模板要花 10 积分才拆得出来，误删不该只能重跑
+const TRASH_DAYS = 30
+const DAY_MS = 24 * 60 * 60 * 1000
+
+export async function deleteTemplate(id, user = null) {
   const list = await loadAll()
-  const next = list.filter((item) => item.id !== id)
-  if (next.length === list.length) return false
+  const index = list.findIndex((item) => item.id === id && !item.deletedAt && canAccess(item, user))
+  if (index < 0) return null
+  const next = [...list]
+  next[index] = { ...next[index], deletedAt: new Date().toISOString(), deletedBy: user?.id || '' }
   await persist(next)
+  return next[index]
+}
+
+// 回收站里的条目 30 天后自动清掉：不额外起定时任务，列的时候顺手清
+export async function listTrash(user = null) {
+  const list = await loadAll()
+  const now = Date.now()
+  const expired = list.filter((item) => item.deletedAt && now - Date.parse(item.deletedAt) > TRASH_DAYS * DAY_MS)
+  if (expired.length) {
+    const ids = new Set(expired.map((item) => item.id))
+    await persist(list.filter((item) => !ids.has(item.id)))
+    for (const item of expired) await fsp.rm(path.join(config.framesDir, item.id), { recursive: true, force: true })
+  }
+  const fresh = await loadAll()
+  return fresh
+    .filter((item) => item.deletedAt && canAccess(item, user))
+    .sort((a, b) => String(b.deletedAt).localeCompare(String(a.deletedAt)))
+    .map((item) => ({ ...item, thumb: item.frames?.[0]?.url || item.cover || '' }))
+}
+
+export async function restoreTemplate(id, user = null) {
+  const list = await loadAll()
+  const index = list.findIndex((item) => item.id === id && item.deletedAt && canAccess(item, user))
+  if (index < 0) return null
+  const next = [...list]
+  const copy = { ...next[index] }
+  delete copy.deletedAt
+  delete copy.deletedBy
+  next[index] = copy
+  await persist(next)
+  return next[index]
+}
+
+export async function purgeTemplate(id, user = null) {
+  const list = await loadAll()
+  const target = list.find((item) => item.id === id && item.deletedAt && canAccess(item, user))
+  if (!target) return false
+  await persist(list.filter((item) => item.id !== id))
   await fsp.rm(path.join(config.framesDir, id), { recursive: true, force: true })
   return true
 }
 
 export async function templateStats(user = null) {
-  const list = (await loadAll()).filter((item) => canAccess(item, user))
+  const list = (await loadAll()).filter((item) => canAccess(item, user)).filter((item) => !item.deletedAt)
   const byType = {}
   for (const item of list) {
     if (item.kind === 'saved') continue

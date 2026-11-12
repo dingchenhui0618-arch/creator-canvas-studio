@@ -133,6 +133,8 @@ export type ReplicaTemplate = {
   frames: { index: number; t: number; url: string }[]
   cover: string
   video: { width: number; height: number; fps: number; duration: number }
+  /** 进了回收站才有：删除时间（ISO），30 天后自动清空 */
+  deletedAt?: string
   origin: 'ai' | 'manual' | 'canvas'
   reuseCount: number
   /** 公共模板：运营放进来的示例，所有账号都看得见（ownerId 为空） */

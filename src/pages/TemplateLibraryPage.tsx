@@ -7,6 +7,7 @@ import { describeTiming, paceLabel } from '../domain/radar'
 import type { MediaItem, ReplicaTemplate } from '../domain/radar'
 import { requestReview } from '../state/review'
 import { ReplicateModal } from '../components/ReplicateModal'
+import { TrashModal } from '../components/TrashModal'
 import PageHead from '../components/PageHead'
 import '../styles/radar.css'
 
@@ -58,6 +59,7 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
   const [detailLoading, setDetailLoading] = useState(false)
   const [health, setHealth] = useState<{ redfox: boolean; vision: boolean }>({ redfox: false, vision: false })
   const [replicateItem, setReplicateItem] = useState<MediaItem | null>(null)
+  const [trashOpen, setTrashOpen] = useState(false)
 
   const totalReuse = useMemo(() => items.reduce((sum, item) => sum + (item.reuseCount || 0), 0), [items])
   const typeOptions = useMemo(() => pickTypes(byType, saved), [byType, saved])
@@ -113,6 +115,9 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
         actions={
           <>
             <button className="button button--ghost" onClick={onBack}>回到雷达</button>
+            <button className="button button--ghost" onClick={() => setTrashOpen(true)}>
+              <Trash2 size={15} />回收站
+            </button>
             <button className="button button--ghost" onClick={() => void load()} disabled={loading}>
               <RefreshCw size={15} className={loading ? 'spin' : ''} />刷新
             </button>
@@ -420,7 +425,7 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
                   >
                     <Layers size={14} />{detail.kind === 'flow' ? '在画布打开' : '套用到画布'}
                   </button>
-                  <button className="button button--danger button--tiny" onClick={() => { void deleteTemplate(detail.id).then(() => { setDetail(null); onToast('模板已删除'); void load() }) }}>
+                  <button className="button button--danger button--tiny" onClick={() => { void deleteTemplate(detail.id).then(() => { setDetail(null); onToast('已移到回收站，30 天内可以恢复'); void load() }) }}>
                     <Trash2 size={13} />删除
                   </button>
                 </footer>
@@ -429,6 +434,14 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
           </aside>
         </div>,
         document.body,
+      )}
+
+      {trashOpen && (
+        <TrashModal
+          onClose={() => setTrashOpen(false)}
+          onToast={onToast}
+          onRestored={() => { void load() }}
+        />
       )}
 
       {replicateItem && (

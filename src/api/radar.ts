@@ -58,7 +58,11 @@ export const applyTemplate = (id: string) =>
     body: JSON.stringify({}),
   })
 export const reuseTemplate = (id: string) => request<ReplicaTemplate>('/api/templates/' + id + '/reuse', { method: 'POST' })
-export const deleteTemplate = (id: string) => request<{ ok: boolean }>('/api/templates/' + id, { method: 'DELETE' })
+export const deleteTemplate = (id: string) => request<{ ok: boolean; trashed?: boolean }>('/api/templates/' + id, { method: 'DELETE' })
+export const listTemplateTrash = () => request<{ items: ReplicaTemplate[]; days: number }>('/api/templates/trash')
+export const restoreTemplate = (id: string) =>
+  request<{ ok: boolean; template: ReplicaTemplate }>('/api/templates/' + id + '/restore', { method: 'POST' })
+export const purgeTemplate = (id: string) => request<{ ok: boolean }>('/api/templates/' + id + '/purge', { method: 'POST' })
 
 export function formatCount(value: number) {
   if (!Number.isFinite(value) || value <= 0) return '0'

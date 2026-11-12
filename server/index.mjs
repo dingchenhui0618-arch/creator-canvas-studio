@@ -15,6 +15,9 @@ import {
   templateStats,
   saveTemplateFromItem,
   createTemplateFromFlow,
+  listTrash,
+  restoreTemplate,
+  purgeTemplate,
   adoptUnowned as adoptUnownedTemplates,
 } from './templates.mjs'
 import { adoptUnowned as adoptUnownedAgents } from './agents.mjs'
@@ -690,6 +693,25 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { items: list, ...stats })
     }
 
+    // 回收站：删除的模板留 30 天，可恢复；彻底删除时连同抽帧一起清掉
+    if (pathname === '/api/templates/trash' && req.method === 'GET') {
+      const items = await listTrash(user)
+      return sendJson(res, 200, { items, days: 30 })
+    }
+
+    const trashMatch = pathname.match(/^\/api\/templates\/([\w-]+)\/(restore|purge)$/)
+    if (trashMatch && req.method === 'POST') {
+      const [, id, action] = trashMatch
+      if (action === 'restore') {
+        const restored = await restoreTemplate(id, user)
+        if (!restored) return sendJson(res, 404, { error: '回收站里没有这条模板' })
+        return sendJson(res, 200, { ok: true, template: restored })
+      }
+      const done = await purgeTemplate(id, user)
+      if (!done) return sendJson(res, 404, { error: '回收站里没有这条模板' })
+      return sendJson(res, 200, { ok: true })
+    }
+
     const tplMatch = pathname.match(/^\/api\/templates\/([\w-]+)(\/reuse)?$/)
     if (tplMatch) {
       const id = tplMatch[1]
@@ -708,8 +730,10 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 200, updated)
       }
       if (req.method === 'DELETE') {
-        const done = await deleteTemplate(id)
-        return sendJson(res, done ? 200 : 404, { ok: done })
+        // 归属校验：别人的模板不能删（getTemplate 只返回当前账号能看见的条目）
+        if (!(await getTemplate(id, user))) return sendJson(res, 404, { error: '模板不存在' })
+        const trashed = await deleteTemplate(id, user)
+        return sendJson(res, trashed ? 200 : 404, { ok: Boolean(trashed), trashed: true })
       }
       const template = await getTemplate(id, user)
       if (!template) return sendJson(res, 404, { error: '模板不存在' })
