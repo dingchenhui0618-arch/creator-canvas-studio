@@ -152,6 +152,19 @@ export type ReplicaTemplate = {
   /** kind === 'flow' 时才有：画布节点摘要与可恢复的节点/连线 */
   flowNodes?: { title: string; kind: string }[]
   blueprint?: { nodes: unknown[]; edges: unknown[] }
+  /** 列表接口现算：这条模板名下有几条作品在用（不是复用次数的计数器） */
+  projectCount?: number
+  /** 详情接口才有：用这条模板的作品，最近改过的排前面 */
+  projects?: TemplateProjectRef[]
+}
+
+/** 模板详情里「用这条模板的作品」那一行：够认出是哪条、走到哪一步 */
+export type TemplateProjectRef = {
+  id: string
+  title: string
+  status: 'active' | 'done'
+  version: number
+  updatedAt: string
 }
 
 /** 公开分享的只读视图：服务端按白名单给出，不含归属、版本历史和画布 blueprint。 */
@@ -218,4 +231,6 @@ export type TemplateList = {
   /** 画布另存的工作流模板条数（不混进「已解析」） */
   flows?: number
   byType: Record<string, number>
+  /** 这批模板名下共有几条作品在用：作品是现算的，不是复用次数的计数器 */
+  projectTotal?: number
 }

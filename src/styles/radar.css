@@ -257,3 +257,94 @@
   color: var(--faint);
   cursor: default;
 }
+
+/* ---------- 模板详情「用这条模板的作品」（v0.9.14） ----------
+   一行一条作品：标题 + 第几版 / 在做或已交付，点一行直接进那条作品。
+   先回答「是不是已经做过了」，再决定接着改还是再开一条；没有作品就不显示这一块。
+   与抽屉里其它行同一套 4/8pt 间距，圆角只用 token 那档。 */
+.drawer-works {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.drawer-work {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease-out), background var(--dur-1) var(--ease-out);
+}
+
+.drawer-work:hover {
+  border-color: var(--line-strong);
+  background: var(--surface-soft);
+}
+
+.drawer-work:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.drawer-work-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.drawer-work-main strong {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: var(--weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drawer-work-main span {
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.drawer-work > svg {
+  flex: none;
+  color: var(--faint);
+}
+
+.drawer-work:hover > svg {
+  color: var(--ink);
+}
+
+/* ---------- 卡片脚注的两段（v0.9.14） ----------
+   平台与作者单行省略，「N 条作品在用」单独一格不被截断：
+   否则加了这句之后长作者名会把脚注顶成两行，卡片比同排的高一截。 */
+.template-foot > .template-foot-info {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 用量跟在「几段脚本 · 几个分镜」后面：同一排小字，颜色压到正文色以示这是当前事实 */
+.template-uses {
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.drawer-works-more {
+  margin: 0;
+  color: var(--faint);
+  font-size: 12px;
+  line-height: var(--leading-meta, 1.6);
+}

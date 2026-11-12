@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { AlertCircle, Check as CheckIcon, Clapperboard, Copy, Download, ExternalLink, Film, Heart, Layers, Link2, MessageCircle, PenLine, Play, Printer, RefreshCw, ScanEye, Search, Share2, Sparkles, Star, Trash2, X } from 'lucide-react'
+import { AlertCircle, ArrowRight, Check as CheckIcon, Clapperboard, Copy, Download, ExternalLink, Film, Heart, Layers, Link2, MessageCircle, PenLine, Play, Printer, RefreshCw, ScanEye, Search, Share2, Sparkles, Star, Trash2, X } from 'lucide-react'
 import {
   adaptTemplate as adaptTemplateApi,
   applyTemplate,
@@ -100,7 +100,8 @@ export function TemplateLibraryPage({
   const [adaptSaving, setAdaptSaving] = useState(false)
   const [projectSaving, setProjectSaving] = useState(false)
 
-  const totalReuse = useMemo(() => items.reduce((sum, item) => sum + (item.reuseCount || 0), 0), [items])
+  // 顶部汇总那格「作品在用」：直接用列表接口现算的总数，不再累加 reuseCount 那种只增不减的计数器
+  const [projectTotal, setProjectTotal] = useState(0)
   const typeOptions = useMemo(() => pickTypes(byType, saved), [byType, saved])
   // 分类被后台改名后，旧分类已经不在标签里：渲染时直接落回「全部」，不用再开一个 setState 副作用
   const activeType = type === '全部' || typeOptions.includes(type) ? type : '全部'
@@ -114,6 +115,7 @@ export function TemplateLibraryPage({
       setByType(result.byType || {})
       setParsed(result.parsed || 0)
       setSaved(result.saved || 0)
+      setProjectTotal(result.projectTotal || 0)
 
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
@@ -263,7 +265,7 @@ export function TemplateLibraryPage({
       <div className="asset-summary template-summary">
         <div><span className="section-kicker">模板总数</span><strong>{items.length}</strong><span>条</span></div>
         <div><span className="section-kicker">已解析</span><strong>{parsed}</strong><span>有脚本与分镜</span></div>
-        <div><span className="section-kicker">累计复用</span><strong>{totalReuse}</strong><span>次</span></div>
+        <div><span className="section-kicker">作品在用</span><strong>{projectTotal}</strong><span>条</span></div>
       </div>
 
       <div className="asset-toolbar">
@@ -334,15 +336,17 @@ export function TemplateLibraryPage({
                   ) : (
                     <span>点开可去解析</span>
                   )}
+                  {/* 用量的位置放在这排数字里，不挤脚注：脚注要留给平台、作者与「用这条改编」按钮 */}
+                  {item.projectCount ? <span className="template-uses">{item.projectCount} 条作品在用</span> : null}
                 </div>
                 <div className="template-foot">
-                  <span>
+                  {/* 平台与作者单行省略：长作者名不再把脚注顶成两行 */}
+                  <span className="template-foot-info">
                     {item.shared ? <span className="template-shared">官方示例</span> : null}
                     {item.kind === 'adapted' ? <span className="template-shared">改编版</span> : null}
                     {item.kind === 'agent' ? <span className="template-shared">智能体</span> : null}
                     {item.platformLabel}
                     {item.author ? ' · ' + item.author : ''}
-                    {item.reuseCount ? ' · 已复用 ' + item.reuseCount + ' 次' : ''}
                   </span>
                   {isParsed(item) ? (
                     <button
@@ -399,6 +403,40 @@ export function TemplateLibraryPage({
                 </header>
 
                 <div className="drawer-body">
+                  {/* 用这条模板的作品：先回答「是不是已经做过了」，再决定是接着做还是再开一条 */}
+                  {detail.projects && detail.projects.length ? (
+                    <section className="drawer-section drawer-section--works">
+                      <div className="drawer-section-head">
+                        <h3>用这条模板的作品</h3>
+                        <span>{detail.projectCount ?? detail.projects.length} 条 · 点一行进作品</span>
+                      </div>
+                      <div className="drawer-works">
+                        {detail.projects.map((project) => (
+                          <button
+                            type="button"
+                            className="drawer-work"
+                            key={project.id}
+                            onClick={() => onOpenProject(project.id)}
+                          >
+                            <span className="drawer-work-main">
+                              <strong>{project.title}</strong>
+                              <span>
+                                {project.version > 1 ? 'v' + project.version : '第 1 版'}
+                                {' · '}
+                                {project.status === 'done' ? '已交付' : '在做'}
+                              </span>
+                            </span>
+                            <ArrowRight size={13} />
+                          </button>
+                        ))}
+                      </div>
+                      {detail.projectCount && detail.projectCount > detail.projects.length ? (
+                        <p className="drawer-works-more">
+                          还有 {detail.projectCount - detail.projects.length} 条没列出来，去作品列表看全部
+                        </p>
+                      ) : null}
+                    </section>
+                  ) : null}
                   {adapt ? (
                     <section className="drawer-section drawer-section--adapt">
                       <div className="drawer-section-head">

@@ -538,7 +538,7 @@ button { cursor:pointer; }
   .drawer-body { display:block !important; height:auto !important; max-height:none !important; overflow:visible !important; padding:16px 0 0 !important; }
   .drawer-section { margin:0 0 16px !important; break-inside:avoid; }
   .drawer-section-head h3 { font-size:10.5pt !important; text-transform:none !important; letter-spacing:0 !important; }
-  .drawer-foot, .drawer-section--export, .icon-button { display:none !important; }
+  .drawer-foot, .drawer-section--export, .drawer-section--works, .icon-button { display:none !important; }
   .shot-row, .beat-item, .drawer-list li, .drawer-list--flow li { break-inside:avoid; }
   .shot-copy strong, .beat-item strong { font-size:10pt !important; }
   .drawer-source, .timing-note, .shot-tags span, .tag, .drawer-stats, .drawer-quote { background:#fff !important; }

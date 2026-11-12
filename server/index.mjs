@@ -27,6 +27,7 @@ import {
   publicTemplateView,
   adoptUnowned as adoptUnownedTemplates,
 } from './templates.mjs'
+import { projectsByTemplate, templateWorksView, totalProjectCount, withProjectCount } from './template-usage.mjs'
 import { adoptUnowned as adoptUnownedAgents } from './agents.mjs'
 import { adoptUnownedFlows, createFlow, getFlow } from './flows.mjs'
 import { adoptUnowned as adoptUnownedReviews } from './reviews.mjs'
@@ -797,14 +798,18 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === '/api/templates') {
-      const stats = await templateStats(user)
-      const list = await listTemplates({
-        q: url.searchParams.get('q') || '',
-        contentType: url.searchParams.get('type') || '',
-        platform: url.searchParams.get('platform') || '',
-        kind: url.searchParams.get('kind') || '',
-      }, user)
-      return sendJson(res, 200, { items: list, ...stats })
+      // 卡片上那句「几条作品在用」现算：模板库与作品是两组数据，计数器（reuseCount）不会因为删作品而回落
+      const [stats, list, byTemplate] = await Promise.all([
+        templateStats(user),
+        listTemplates({
+          q: url.searchParams.get('q') || '',
+          contentType: url.searchParams.get('type') || '',
+          platform: url.searchParams.get('platform') || '',
+          kind: url.searchParams.get('kind') || '',
+        }, user),
+        projectsByTemplate(user),
+      ])
+      return sendJson(res, 200, { items: withProjectCount(list, byTemplate), projectTotal: totalProjectCount(byTemplate), ...stats })
     }
 
     // 版本历史：每次改标题/类型/标签/原链接前留一版快照，最多 10 版，可回滚
@@ -916,7 +921,9 @@ const server = http.createServer(async (req, res) => {
       }
       const template = await getTemplate(id, user)
       if (!template) return sendJson(res, 404, { error: '模板不存在' })
-      return sendJson(res, 200, template)
+      // 详情多给一段：用这条模板的作品（最近改过的排前面），点一行就能进那条作品；最多列 8 条
+      const byTemplate = await projectsByTemplate(user)
+      return sendJson(res, 200, { ...template, ...templateWorksView(byTemplate.get(id) || []) })
     }
 
     if (pathname === '/api/cover') {
