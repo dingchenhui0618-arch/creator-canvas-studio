@@ -6,6 +6,20 @@ import { AdminHead, EmptyState, ErrorBanner, LoadingLine, RefreshButton, SourceT
 
 type EditForm = { title: string; contentType: string; tags: string; sourceUrl: string; shared: boolean }
 
+// 每次保存前的快照：改错了能退回上一版，不用重新解析一次（10 积分）
+type TemplateVersion = {
+  id: string
+  at: string
+  byName?: string
+  values: { title?: string; contentType?: string; tags?: string[]; sourceUrl?: string }
+}
+
+const versionLabel = (version: TemplateVersion) => {
+  const values = version.values || {}
+  const parts = [values.title, values.contentType].filter(Boolean)
+  return parts.length ? parts.join(' · ') : '这一版没有标题与类型'
+}
+
 export default function TemplatesSection() {
   const { internal } = useUiMode()
   const { data, error, loading, reload } = useApi<TemplatesResponse>('/api/templates')
@@ -19,6 +33,10 @@ export default function TemplatesSection() {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [savedNote, setSavedNote] = useState('')
+  const [versions, setVersions] = useState<TemplateVersion[]>([])
+  const [versionsFor, setVersionsFor] = useState('')
+  const [versionsLoading, setVersionsLoading] = useState(false)
+  const [restoring, setRestoring] = useState('')
 
   const items = data?.items ?? []
   const keyword = query.trim().toLowerCase()
@@ -50,11 +68,47 @@ export default function TemplatesSection() {
     }
   }
 
+  const loadVersions = async (item: TemplateItem) => {
+    if (versionsFor === item.id) {
+      setVersionsFor('')
+      return
+    }
+    setVersionsLoading(true)
+    setVersionsFor(item.id)
+    try {
+      const result = await request<{ versions: TemplateVersion[] }>('/api/templates/' + item.id + '/versions')
+      setVersions(result.versions || [])
+    } catch (cause) {
+      setVersions([])
+      setSaveError(cause instanceof Error ? cause.message : '读取历史版本失败')
+    } finally {
+      setVersionsLoading(false)
+    }
+  }
+
+  const restoreVersion = async (item: TemplateItem, version: TemplateVersion) => {
+    setRestoring(version.id)
+    setSaveError('')
+    try {
+      await request<{ ok: boolean }>('/api/templates/' + item.id + '/versions/' + version.id + '/restore', { method: 'POST' })
+      setSavedNote('已回滚到 ' + formatDateTime(version.at) + ' 的那一版，列表已重新请求')
+      setVersionsFor('')
+      setEditing(null)
+      reload()
+    } catch (cause) {
+      setSaveError(cause instanceof Error ? cause.message : '回滚失败')
+    } finally {
+      setRestoring('')
+    }
+  }
+
   const startEdit = (item: TemplateItem) => {
     setEditing(item)
     setSaveError('')
     setSavedNote('')
     setPending(null)
+    setVersionsFor('')
+    setVersions([])
     setForm({
       title: item.title || '',
       contentType: item.contentType || '',
@@ -160,6 +214,9 @@ export default function TemplatesSection() {
             </label>
           </div>
           <div className="admin-edit-actions">
+            <button type="button" className="admin-btn admin-btn--ghost" onClick={() => void loadVersions(editing)} disabled={saving || versionsLoading}>
+              {versionsFor === editing.id ? '收起历史版本' : '历史版本'}
+            </button>
             <button type="button" className="admin-btn admin-btn--ghost" onClick={() => setEditing(null)} disabled={saving}>
               取消
             </button>
@@ -172,6 +229,36 @@ export default function TemplatesSection() {
               {saving ? '保存中…' : '保存修改'}
             </button>
           </div>
+
+          {versionsFor === editing.id ? (
+            <div className="admin-versions">
+              <p className="admin-hint">
+                每次保存前留一版（最多 10 版）。回滚会把当前内容再存成一版，所以回滚本身也能退回。
+              </p>
+              {versionsLoading ? (
+                <LoadingLine label={'GET /api/templates/' + editing.id + '/versions'} />
+              ) : versions.length ? (
+                <ul className="admin-version-list">
+                  {versions.map((version) => (
+                    <li key={version.id} className="admin-version-row">
+                      <span className="admin-mono">{formatDateTime(version.at)}</span>
+                      <span className="admin-version-copy">{versionLabel(version)}</span>
+                      <button
+                        type="button"
+                        className="admin-btn admin-btn--ghost"
+                        onClick={() => void restoreVersion(editing, version)}
+                        disabled={Boolean(restoring)}
+                      >
+                        {restoring === version.id ? '回滚中…' : '回滚到这一版'}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="admin-hint">还没有历史版本：这条模板自创建以来没被改过。</p>
+              )}
+            </div>
+          ) : null}
         </section>
       ) : null}
 

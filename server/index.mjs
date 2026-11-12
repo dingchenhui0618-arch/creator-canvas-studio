@@ -18,6 +18,8 @@ import {
   listTrash,
   restoreTemplate,
   purgeTemplate,
+  listTemplateVersions,
+  restoreTemplateVersion,
   adoptUnowned as adoptUnownedTemplates,
 } from './templates.mjs'
 import { adoptUnowned as adoptUnownedAgents } from './agents.mjs'
@@ -691,6 +693,22 @@ const server = http.createServer(async (req, res) => {
         kind: url.searchParams.get('kind') || '',
       }, user)
       return sendJson(res, 200, { items: list, ...stats })
+    }
+
+    // 版本历史：每次改标题/类型/标签/原链接前留一版快照，最多 10 版，可回滚
+    const versionsMatch = pathname.match(/^\/api\/templates\/([\w-]+)\/versions(?:\/([\w-]+)\/restore)?$/)
+    if (versionsMatch) {
+      const [, id, versionId] = versionsMatch
+      if (!versionId && req.method === 'GET') {
+        const versions = await listTemplateVersions(id, user)
+        if (!versions) return sendJson(res, 404, { error: '模板不存在' })
+        return sendJson(res, 200, { versions })
+      }
+      if (versionId && req.method === 'POST') {
+        const restored = await restoreTemplateVersion(id, versionId, user)
+        if (!restored) return sendJson(res, 404, { error: '没有这一版历史' })
+        return sendJson(res, 200, { ok: true, template: restored })
+      }
     }
 
     // 回收站：删除的模板留 30 天，可恢复；彻底删除时连同抽帧一起清掉

@@ -232,6 +232,36 @@ export async function createTemplateFromFlow({ flow, title = '', contentType = '
 }
 
 // 后台治理与画布「另存为模板」共用：只允许改能决定展示与检索的字段
+// 每次改模板先留一版快照：标题/类型/标签/原链接被改错了，能退回上一版，不用重新解析
+const VERSION_CAP = 10
+const VERSION_KEYS = ['title', 'contentType', 'tags', 'sourceUrl']
+
+function snapshotOf(item, user) {
+  const values = {}
+  for (const key of VERSION_KEYS) values[key] = item[key]
+  return {
+    id: 'v_' + randomUUID().slice(0, 8),
+    at: new Date().toISOString(),
+    by: user?.id || '',
+    byName: user?.name || user?.email || '',
+    values,
+  }
+}
+
+export async function listTemplateVersions(id, user = null) {
+  const item = await getTemplate(id, user)
+  if (!item) return null
+  return (item.versions || []).slice(0, VERSION_CAP)
+}
+
+export async function restoreTemplateVersion(id, versionId, user = null) {
+  const item = await getTemplate(id, user)
+  if (!item) return null
+  const version = (item.versions || []).find((entry) => entry.id === versionId)
+  if (!version) return null
+  return updateTemplate(id, { ...version.values }, user)
+}
+
 export async function updateTemplate(id, patch = {}, user = null) {
   const list = await loadAll()
   const index = list.findIndex((item) => item.id === id && canAccess(item, user))
@@ -250,6 +280,9 @@ export async function updateTemplate(id, patch = {}, user = null) {
     next.shared = shared
     next.ownerId = shared ? '' : user?.id || current.ownerId || ''
   }
+  // 只有真改了受管字段才留快照：保存一次没动内容，不该在历史里多出一条
+  const changed = VERSION_KEYS.some((key) => JSON.stringify(current[key] ?? null) !== JSON.stringify(next[key] ?? null))
+  if (changed) next.versions = [snapshotOf(current, user), ...(current.versions || [])].slice(0, VERSION_CAP)
   next.updatedAt = new Date().toISOString()
   list[index] = next
   await persist(list)
