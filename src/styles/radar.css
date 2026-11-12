@@ -20,7 +20,7 @@
   padding:1px 6px;
   color:var(--pass);
   background:var(--pass-soft);
-  border-radius:4px;
+  border-radius:var(--radius-xs);
   font-family:var(--font-mono);
   font-size:11px;
   font-style:normal;
@@ -36,7 +36,7 @@
   gap:8px;
   padding:56px 24px;
   border:1px dashed var(--line-strong);
-  border-radius:16px;
+  border-radius:var(--radius-lg);
   color:var(--muted);
   text-align:center;
 }
@@ -55,7 +55,10 @@
 }
 .radar-idle-tag:hover { color:var(--ink); border-color:var(--line-strong); }
 /* ---------- 模板库：待解析条目与互动数据 ---------- */
+/* 五张统计卡：宽屏一行五张，1280 笔记本降成三张一行（不会剩一张孤零零挂在第二行），
+   再窄降到两张。以前写死 repeat(5, 1fr)，1280 上每张只剩 180px，标题被挤成「已解 / 析」。 */
 .template-summary { grid-template-columns:repeat(5,minmax(0,1fr)); }
+@media (max-width:1439px) { .template-summary { grid-template-columns:repeat(3,minmax(0,1fr)); } }
 .template-card { background:var(--surface-raised); border-color:var(--line); }
 .template-copy > strong { font-size:14px; font-weight:600; line-height:1.5; }
 .template-hook { color:var(--muted); font-size:12px; }
@@ -72,7 +75,7 @@
   color:var(--ink);
   background:var(--surface-subtle,#f4f2ed);
   border:1px solid var(--line-strong);
-  border-radius:3px;
+  border-radius:var(--radius-xs);
   font-family:var(--font-mono);
   font-size:10px;
   letter-spacing:.04em;
@@ -108,10 +111,10 @@
 /* ---------- 检索历史（B2）----------
    只存条件不存结果：点一下填回表单，不自动检索（每次检索 2 积分）。
    收藏的关键词排在前面，清空只清没收藏的。 */
-.radar-history { display:flex; align-items:center; flex-wrap:wrap; gap:8px 12px; margin:0 0 16px; padding:10px 12px; border:1px solid var(--line); border-radius:11px; background:rgba(255,254,250,.62); }
+.radar-history { display:flex; align-items:center; flex-wrap:wrap; gap:8px 12px; margin:0 0 16px; padding:10px 12px; border:1px solid var(--line); border-radius:var(--radius-md); background:rgba(255,254,250,.62); }
 .radar-history-label { display:inline-flex; align-items:center; gap:6px; color:var(--ink-faint); font-size:12px; font-weight:700; }
 .radar-history-list { display:flex; flex-wrap:wrap; gap:8px; flex:1; min-width:0; }
-.radar-history-chip { display:inline-flex; align-items:stretch; overflow:hidden; border:1px solid var(--line); border-radius:8px; background:var(--surface); }
+.radar-history-chip { display:inline-flex; align-items:stretch; overflow:hidden; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface); }
 .radar-history-chip.is-favorite { border-color:#ddd0ae; background:#fdf8ec; }
 .radar-history-main { display:inline-flex; align-items:center; gap:8px; max-width:280px; padding:6px 10px; color:var(--ink-soft); background:transparent; border:0; font-size:12px; cursor:pointer; }
 .radar-history-main:hover { color:var(--ink); background:var(--surface-soft); }
@@ -132,13 +135,13 @@
 /* ---------- 模板回收站（B3）----------
    删除先进回收站，30 天内可恢复；彻底删除才清抽帧，且要点两次。 */
 .trash-backdrop { position:fixed; inset:0; z-index:90; display:flex; align-items:center; justify-content:center; padding:24px; background:rgba(17,17,17,.34); backdrop-filter:blur(4px); }
-.trash-modal { width:min(640px,100%); max-height:calc(100vh - 80px); display:flex; flex-direction:column; overflow:hidden; background:var(--paper); border:1px solid var(--line); border-radius:16px; box-shadow:0 30px 80px rgba(30,26,20,.22); }
+.trash-modal { width:min(640px,100%); max-height:calc(100vh - 80px); display:flex; flex-direction:column; overflow:hidden; background:var(--paper); border:1px solid var(--line); border-radius:var(--radius-lg); box-shadow:0 30px 80px rgba(30,26,20,.22); }
 .trash-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:20px 24px 8px; }
 .trash-head h2 { margin:6px 0 0; font-size:17px; letter-spacing:-.02em; }
 .trash-note { margin:0; padding:0 24px 12px; color:var(--ink-faint); font-size:12px; line-height:1.7; }
 .trash-list { flex:1; min-height:0; overflow:auto; padding:0 24px 12px; display:flex; flex-direction:column; gap:8px; }
-.trash-row { display:flex; align-items:center; gap:12px; padding:12px; border:1px solid var(--line); border-radius:11px; background:var(--surface); }
-.trash-thumb { width:48px; height:48px; flex:0 0 48px; display:grid; place-items:center; overflow:hidden; border-radius:8px; background:#efeeea; color:var(--ink-faint); }
+.trash-row { display:flex; align-items:center; gap:12px; padding:12px; border:1px solid var(--line); border-radius:var(--radius-md); background:var(--surface); }
+.trash-thumb { width:48px; height:48px; flex:0 0 48px; display:grid; place-items:center; overflow:hidden; border-radius:var(--radius-sm); background:#efeeea; color:var(--ink-faint); }
 .trash-thumb img { width:100%; height:100%; object-fit:cover; }
 .trash-copy { flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }
 .trash-copy strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; }

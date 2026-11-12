@@ -79,7 +79,7 @@
   min-width: 0;
   padding: 16px 16px;
   border: 1px solid var(--line, #e6e3dd);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--surface, #ffffff);
 }
 
@@ -222,7 +222,7 @@
 .admin-table-wrap {
   overflow-x: auto;
   border: 1px solid var(--line, #e6e3dd);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: var(--surface, #ffffff);
 }
 
@@ -356,7 +356,7 @@
   min-height: 30px;
   padding: 0 12px;
   border: 1px solid var(--line, #e6e3dd);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: var(--surface, #ffffff);
   color: var(--ink, #111111);
   font-family: inherit;
@@ -414,7 +414,7 @@
   gap: 16px;
   padding: 12px 16px;
   border: 1px solid rgba(163, 56, 56, 0.22);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: rgba(163, 56, 56, 0.05);
   color: var(--fail, #a33838);
   font-size: 12px;
@@ -475,7 +475,7 @@
   min-height: 220px;
   padding: 32px 24px;
   border: 1px dashed var(--line, #e6e3dd);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   text-align: center;
 }
 
@@ -517,7 +517,7 @@
 .admin-hint code {
   padding: 1px 4px;
   border: 1px solid var(--line, #e6e3dd);
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   background: var(--canvas, #faf9f7);
   color: var(--muted, #5c5c5c);
   font-family: var(--font-mono, ui-monospace, monospace);
@@ -536,7 +536,7 @@
   color: var(--pass, #176b43);
   background: var(--pass-soft, #eef4f0);
   border: 1px solid rgba(23, 107, 67, 0.18);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .admin-row-actions {
@@ -579,7 +579,7 @@
   color: var(--ink, #111111);
   background: var(--surface, #ffffff);
   border: 1px solid var(--line-strong, #d8d3c9);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 13px;
 }
 
@@ -625,7 +625,7 @@
   gap: 12px;
   padding: 8px 12px;
   border: 1px solid var(--line, #e7e2d9);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: var(--surface-subtle, #f8f7f4);
 }
 
@@ -669,7 +669,7 @@
   padding: 0 6px;
   color: var(--muted, #6b6b6b);
   border: 1px solid var(--line, #e7e2d9);
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 10px;
   letter-spacing: 0.04em;
@@ -688,7 +688,7 @@
   color: var(--ink, #111111);
   background: var(--surface, #ffffff);
   border: 1px solid var(--line-strong, #d8d3c9);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 13px;
 }
 
@@ -770,7 +770,7 @@
   height: 32px;
   padding: 0 12px;
   border: 1px solid var(--line, #e6e3dd);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: var(--surface, #ffffff);
   color: var(--ink, #111111);
   font-family: inherit;
@@ -800,7 +800,7 @@
   height: 30px;
   overflow: hidden;
   border: 1px solid var(--line, #e6e3dd);
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   background: var(--line-faint, #f0eee9);
 }
 
@@ -862,7 +862,7 @@
 .admin-node {
   padding: 12px 12px;
   border: 1px solid var(--line, #e6e3dd);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: var(--surface, #ffffff);
 }
 
@@ -896,7 +896,7 @@
   padding: 12px;
   overflow: auto;
   border: 1px solid var(--line, #e6e3dd);
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   background: var(--canvas, #faf9f7);
   color: var(--muted, #5c5c5c);
   font-family: var(--font-mono, ui-monospace, monospace);
@@ -978,7 +978,7 @@
   margin: 0 0 16px;
   border: 1px solid var(--line, #e5e2db);
   border-left: 2px solid var(--ink, #111111);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--surface-raised, #ffffff);
 }
 
@@ -993,7 +993,7 @@
 .admin-reset-code {
   padding: 6px 12px;
   border: 1px dashed var(--line-strong, rgba(17, 17, 17, 0.2));
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 14px;
   letter-spacing: 0.04em;
@@ -1010,7 +1010,7 @@
   margin: 0 0 16px;
   border: 1px solid var(--line, #e5e2db);
   border-left: 2px solid var(--fail, #a33838);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--surface-raised, #ffffff);
 }
 
@@ -1071,7 +1071,7 @@
   height: 30px;
   padding: 0 24px 0 8px;
   border: 1px solid var(--line, #e5e2db);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--surface, #ffffff);
   color: var(--ink, #111111);
   font-family: inherit;
@@ -1273,7 +1273,7 @@
   padding: 8px 12px;
   border: 1px solid var(--line, #e6e3dd);
   border-left: 2px solid var(--ink, #111111);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   color: var(--ink, #111111);
   font-size: 13px;
   line-height: 1.6;
@@ -1285,7 +1285,7 @@
 /* 模板版本历史（B4）：保存前留一版，改错了能退回，不用重新解析 */
 .admin-versions { margin-top:16px; padding-top:16px; border-top:1px solid var(--line); }
 .admin-version-list { list-style:none; margin:12px 0 0; padding:0; display:flex; flex-direction:column; gap:8px; }
-.admin-version-row { display:flex; align-items:center; gap:12px; padding:10px 12px; border:1px solid var(--line); border-radius:9px; background:var(--surface-soft); }
+.admin-version-row { display:flex; align-items:center; gap:12px; padding:10px 12px; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface-soft); }
 .admin-version-row .admin-mono { flex:0 0 auto; color:var(--ink-faint); font-size:12px; }
 .admin-version-copy { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; color:var(--ink-soft); }
 .admin-version-row .admin-btn { flex:0 0 auto; }
@@ -1311,7 +1311,7 @@
   max-height: 180px;
   overflow: auto;
   border: 1px solid var(--line, #e7e2d9);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: var(--surface, #fbfbfb);
   font-family: var(--font-mono, monospace);
   font-size: 11px;
@@ -1327,11 +1327,11 @@
 }
 /* 举报处理（D5）：一条举报一张卡，类型 / 目标 / 次数 / 状态一行读懂 */
 .admin-report-list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.admin-report-row { display: flex; flex-direction: column; gap: 6px; padding: 12px 16px; border: 1px solid var(--line, #e7e2d9); border-radius: 6px; background: var(--surface-subtle, #f8f7f4); }
+.admin-report-row { display: flex; flex-direction: column; gap: 6px; padding: 12px 16px; border: 1px solid var(--line, #e7e2d9); border-radius: var(--radius-sm); background: var(--surface-subtle, #f8f7f4); }
 .admin-report-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 12px; }
 .admin-report-head strong { font-size: 13px; font-weight: 500; }
 .admin-report-detail { margin: 0; font-size: 12.5px; line-height: 1.7; color: var(--ink-soft, #333); }
 .admin-report-url { overflow-wrap: anywhere; }
 .admin-report-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
-.admin-report-actions .admin-input { flex: 1 1 260px; min-width: 0; height: 30px; padding: 0 10px; border: 1px solid var(--line-strong, #e0dbd2); border-radius: 4px; background: var(--surface, #fff); font-size: 12px; }
+.admin-report-actions .admin-input { flex: 1 1 260px; min-width: 0; height: 30px; padding: 0 10px; border: 1px solid var(--line-strong, #e0dbd2); border-radius: var(--radius-xs); background: var(--surface, #fff); font-size: 12px; }
 .admin-report-actions .admin-input:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(17, 17, 17, .28); }

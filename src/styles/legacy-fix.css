@@ -7,11 +7,76 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
 }
-.asset-summary strong { font-weight: 600; letter-spacing: -.02em; color: var(--ink) !important; }
+.asset-summary strong { font-weight: 600; letter-spacing: -.02em; color: var(--ink) !important; font-variant-numeric: tabular-nums; }
 .asset-summary .section-kicker, .asset-summary span:last-child { color: var(--faint) !important; }
+
+/* 统计卡内部：标签一行、数字+单位一行。
+   原来三者挤在一个 flex 行里，卡片一窄就从词中间断开（「已解 / 析」「有脚本与分 / 镜」）。 */
+.template-summary > div {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-2);
+  padding: var(--space-3) var(--space-4);
+}
+.template-summary > div > .section-kicker {
+  grid-column: 1 / -1;
+  white-space: nowrap;
+}
+.template-summary > div > strong {
+  grid-column: 1;
+  font-size: 22px;
+  line-height: 1.2;
+}
+.template-summary > div > span:last-child {
+  grid-column: 2;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .tab-count { background: rgba(17,17,17,.06) !important; color: var(--muted) !important; }
 .filter-tabs button.is-active .tab-count { background: rgba(255,255,255,.2) !important; color: #fff !important; }
 .template-card:hover { border-color: var(--line-strong); box-shadow: 0 1px 0 var(--line); }
+
+/* ---------- 模板库工具条（2026-11-12 收口）----------
+   搜索一行、类型一行。类型条以前被 align-items:center 挤成一行居中的孤零零胶囊，
+   而且底边下划线 + 圆角块两套视觉并存；现在统一成与全站一致的胶囊筛选条。 */
+.vq-content .page--templates .asset-toolbar {
+  align-items: stretch;
+  gap: var(--space-3);
+}
+.vq-content .page--templates .template-type-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  width: 100%;
+  padding: 0 0 var(--space-2);
+  border-bottom: 1px solid var(--line);
+}
+.vq-content .page--templates .template-type-tabs button {
+  border: 1px solid transparent;
+  border-bottom: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  padding: 6px 12px;
+  color: var(--muted);
+  background: transparent;
+  transition: background-color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out),
+    color var(--dur-1) var(--ease-out);
+}
+.vq-content .page--templates .template-type-tabs button:hover {
+  color: var(--ink);
+  background: var(--surface-raised);
+  border-color: var(--line);
+}
+.vq-content .page--templates .template-type-tabs button.is-active {
+  color: var(--ink);
+  background: var(--surface-raised);
+  border-color: var(--line-strong);
+  border-bottom-color: var(--line-strong);
+}
 
 /* ---------- 工具条：搜索一行、类型一行（之前两者挤在一行换行，边界是糊的） ---------- */
 .asset-toolbar {

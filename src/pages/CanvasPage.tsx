@@ -254,8 +254,12 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
     setFutureCount(future.current.length)
   }, [snapshot, setNodes, setEdges, toast])
 
+  // 已经装进页面的流程：applyFlow 会把 id 写回地址栏，路由再回灌进来时用它挡住第二次加载
+  const loadedFlowRef = useRef('')
+
   const applyFlow = useCallback((flow: ApiFlow) => {
     skipSave.current = true
+    loadedFlowRef.current = flow.id
     setFlowId(flow.id)
     setName(flow.name)
     setDescription(flow.description ?? '')
@@ -310,6 +314,11 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
     const load = async () => {
       // 目标是画布项目时不需要流程：不写地址、不创建「未命名流程」，直接留给下面的画布视图
       if (bdcTarget) {
+        setLoadState('ready')
+        return
+      }
+      // 地址里这个流程就是刚装好的那一张（applyFlow 自己回写的），不要再拉一次列表
+      if (initialFlowId && initialFlowId === loadedFlowRef.current) {
         setLoadState('ready')
         return
       }
@@ -1126,12 +1135,15 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
               >
                 <Background color="rgba(17,17,17,.12)" gap={22} size={1} />
                 <Controls showInteractive={false} />
-                <MiniMap
-                  pannable
-                  zoomable={false}
-                  nodeColor={(node) => (node.id === selectedId ? '#111111' : '#d5d5d5')}
-                  maskColor="rgba(244,244,244,.78)"
-                />
+                {/* 空画布不挂小地图：以前是一块空白白框浮在右下角，看着像没加载完 */}
+                {nodes.length ? (
+                  <MiniMap
+                    pannable
+                    zoomable={false}
+                    nodeColor={(node) => (node.id === selectedId ? '#111111' : '#d5d5d5')}
+                    maskColor="rgba(244,244,244,.78)"
+                  />
+                ) : null}
               </ReactFlow>
 
               {loadState === 'loading' && <div className="cv-overlay">{internal ? '正在读取 data/flows.json…' : '正在读取画布…'}</div>}

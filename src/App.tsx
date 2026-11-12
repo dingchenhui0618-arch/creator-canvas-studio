@@ -321,8 +321,10 @@ function Workbench({
     }
     switch (route.page) {
       case 'canvas':
-        // 每个画布目标一份页面状态：从工作台连点两块画布时整页重置，不带上一块的撤销栈
-        return <CanvasPage key={'canvas:' + (route.canvasId || route.flowId || '')} flowId={route.flowId} canvasId={route.canvasId} onToast={notify} />
+        // 只有「换了画布项目」才整页重挂（不带上一块的撤销栈）。
+        // flowId 故意不进 key：页面加载完会把它补进地址栏，进 key 就等于自己把自己重挂一次——
+        // 表现出来就是进画布闪一下、/api/flows 连打两遍。
+        return <CanvasPage key={'canvas:' + (route.canvasId || 'flow')} flowId={route.flowId} canvasId={route.canvasId} onToast={notify} />
       case 'radar':
         return <RadarPage onToast={notify} onOpenTemplates={() => go('templates')} />
       case 'templates':
@@ -401,7 +403,17 @@ function Workbench({
                 compact={!sidebarOpen}
                 onClick={() => go('agents')}
               />
-              <NavItem icon={Workflow} label="画布" active={activePage === 'canvas'} compact={!sidebarOpen} onClick={() => go('canvas')} />
+              <NavItem
+                icon={Workflow}
+                label="画布"
+                active={activePage === 'canvas'}
+                compact={!sidebarOpen}
+                // 已经在画布上再点一次「画布」不该把地址栏退回 #/canvas、把当前流程重载一遍
+                onClick={() => {
+                  if (route.kind === 'page' && route.page === 'canvas') return
+                  go('canvas')
+                }}
+              />
               <NavItem icon={ScanEye} label="视觉评审" active={activePage === 'review'} compact={!sidebarOpen} onClick={() => go('review')} />
             </nav>
           ) : (

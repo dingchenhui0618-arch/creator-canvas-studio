@@ -101,9 +101,18 @@ export const saveFlowAsTemplate = (flowId: string, title?: string) =>
     body: JSON.stringify({ from: 'flow', flowId, title }),
   })
 
-export async function listFlows(): Promise<ApiFlow[]> {
-  const body = await request<{ items: ApiFlow[]; total: number }>('/api/flows')
-  return body.items
+// 同时发出的同一份列表请求只打一次：进画布时页头和画布视图会各要一次列表，
+// 以前就是两条一模一样的 GET 并排飞出去。请求结束即释放，不做缓存，切回来仍拿最新数据。
+let listInFlight: Promise<ApiFlow[]> | null = null
+
+export function listFlows(): Promise<ApiFlow[]> {
+  if (listInFlight) return listInFlight
+  listInFlight = request<{ items: ApiFlow[]; total: number }>('/api/flows')
+    .then((body) => body.items)
+    .finally(() => {
+      listInFlight = null
+    })
+  return listInFlight
 }
 
 export async function getFlow(id: string): Promise<ApiFlow> {

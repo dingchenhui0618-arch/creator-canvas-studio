@@ -28,7 +28,7 @@
 .vq-price-item {
   padding: 12px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--surface);
 }
 .vq-price-item span {
@@ -108,7 +108,7 @@
   margin-top: 8px;
   background: var(--line-faint);
   border: 1px solid var(--line-faint);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   overflow: hidden;
 }
 .vq-health-row {
@@ -226,7 +226,7 @@
   color: var(--ink);
   background: var(--surface-raised);
   border: 1px solid var(--line-strong);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   font-size: 12.5px;
   font-family: inherit;
 }

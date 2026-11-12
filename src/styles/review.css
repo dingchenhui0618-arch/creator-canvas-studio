@@ -155,7 +155,7 @@
   background: var(--surface);
   border: 1px solid var(--line);
   border-left: 2px solid var(--fail);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
 }
 .review-model-note > svg {
   flex: none;

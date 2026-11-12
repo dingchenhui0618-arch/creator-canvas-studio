@@ -3,6 +3,12 @@
 .page.cv-page {
   max-width: 1760px;
   padding: 24px 32px 24px;
+  /* 画布是「整屏工具」，不是一页可以滚的文档：撑满内容区，滚动只发生在画布和右栏内部。
+     以前用 calc(100vh - 226px) 硬算高度，窄屏/放大后整页会多出一条滚动条，看起来像跳了一下。 */
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
 }
 
 /* ---------- 头部（版式由 PageHead 统一，这里只留可编辑流程名） ---------- */
@@ -14,7 +20,7 @@
   color: var(--ink);
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font: inherit;
   letter-spacing: inherit;
   line-height: inherit;
@@ -22,22 +28,32 @@
 .cv-flow-name:hover { border-color: var(--line); }
 .cv-flow-name:focus { outline: none; border-color: var(--line-strong); background: var(--surface-raised); }
 .cv-flow-name:disabled { color: var(--faint); }
+/* 保存状态与画布连接状态：跟全站状态胶囊同一套（--radius-pill + 发丝线 + 等宽微字），
+   不再各自长一个样子。 */
 .cv-save {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex: 0 0 auto;
-  color: var(--faint);
+  height: 24px;
+  padding: 0 10px;
+  color: var(--muted);
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 10.5px;
   letter-spacing: .04em;
   white-space: nowrap;
+  transition: color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out),
+    background-color var(--dur-1) var(--ease-out);
 }
-.cv-save-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--faint); }
+.cv-save-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--faint); transition: background-color var(--dur-1) var(--ease-out); }
 .cv-save.is-saved .cv-save-dot { background: var(--ink); }
+.cv-save.is-dirty { color: var(--warn); border-color: var(--warn-soft); background: var(--warn-soft); }
 .cv-save.is-dirty .cv-save-dot { background: var(--warn); }
 .cv-save.is-saving .cv-save-dot { background: var(--ink); animation: cv-pulse 1.2s ease-in-out infinite; }
-.cv-save.is-error { color: var(--fail); }
+.cv-save.is-error { color: var(--fail); border-color: rgba(163, 56, 56, .24); background: var(--fail-soft); }
 .cv-save.is-error .cv-save-dot { background: var(--fail); }
 .cv-head-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 /* 运行前的积分口径：按次扣，失败退回；数字用等宽，避免和按钮抢注意力 */
@@ -51,7 +67,7 @@
   color: var(--ink);
   background: var(--surface-raised);
   border: 1px solid var(--line-strong);
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   font-family: var(--font-ui);
   font-size: 12px;
 }
@@ -67,7 +83,7 @@
   color: var(--ink);
   background: var(--surface-raised);
   border: 1px solid var(--line-strong);
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   font-family: var(--font-ui);
   font-size: 12px;
   font-weight: 500;
@@ -88,7 +104,7 @@
   color: var(--muted);
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 .cv-icon-btn:hover:not(:disabled) { color: var(--ink); border-color: var(--line-strong); background: var(--surface-raised); }
@@ -103,7 +119,7 @@
   padding: 24px;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
 }
 .cv-state strong { display: block; font-size: 14px; }
 .cv-state p { margin: 4px 0 0; max-width: 560px; color: var(--muted); font-size: 12px; line-height: 1.6; }
@@ -114,8 +130,9 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) 316px;
   gap: 12px;
-  height: calc(100vh - 226px);
-  min-height: 460px;
+  flex: 1 1 auto;
+  min-height: 400px;
+  height: auto;
 }
 
 /* 节点面板默认收起，双击画布（或点工具栏「节点」）才出现 */
@@ -145,7 +162,7 @@
   overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
 }
 .cv-palette-head { display: flex; align-items: flex-start; gap: 8px; padding: 16px 16px 8px; }
 .cv-kicker {
@@ -178,7 +195,7 @@
   color: var(--ink);
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   text-align: left;
   cursor: grab;
 }
@@ -194,7 +211,7 @@
   color: var(--muted);
   background: var(--surface-raised);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 .cv-palette-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .cv-palette-copy strong { font-size: 12px; font-weight: 500; }
@@ -220,7 +237,7 @@
   overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
 }
 .cv-toolbar {
   height: 42px;
@@ -243,7 +260,7 @@
   color: var(--muted);
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
   white-space: nowrap;
   cursor: pointer;
@@ -256,7 +273,7 @@
 
 .cv-canvas { position: relative; flex: 1; min-height: 0; }
 .cv-canvas .react-flow { background: var(--canvas); }
-.cv-canvas .react-flow__controls { overflow: hidden; border: 1px solid var(--line); border-radius: 7px; box-shadow: none; }
+.cv-canvas .react-flow__controls { overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-sm); box-shadow: none; }
 .cv-canvas .react-flow__controls-button {
   width: 26px;
   height: 26px;
@@ -271,7 +288,7 @@
   height: 108px !important;
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, .88);
 }
 .cv-canvas .react-flow__edge-text { fill: var(--faint); font-family: var(--font-mono); font-size: 11px; }
@@ -291,9 +308,10 @@
   padding: 24px;
   text-align: center;
   color: var(--muted);
-  background: rgba(244, 244, 244, .74);
+  background: var(--surface);
   font-size: 12px;
   pointer-events: none;
+  animation: vq-page-in var(--dur-2) var(--ease-out) both;
 }
 .cv-overlay strong { color: var(--ink); font-size: 14px; font-weight: 600; }
 .cv-overlay p { margin: 0; max-width: 340px; line-height: 1.65; }
@@ -309,7 +327,7 @@
   color: var(--faint);
   background: rgba(255, 255, 255, .9);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
   pointer-events: none;
 }
@@ -324,7 +342,7 @@
   color: var(--ink);
   background: var(--surface-raised);
   border: 1px solid var(--line-strong);
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
   box-shadow: 0 1px 2px rgba(17, 17, 17, .03);
   transition: border-color .15s ease, box-shadow .15s ease;
 }
@@ -350,7 +368,7 @@
   place-items: center;
   color: var(--muted);
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: var(--radius-xs);
 }
 .cv-node-heading strong { font-size: 14px; font-weight: 600; letter-spacing: -.01em; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .cv-node-desc {
@@ -401,7 +419,7 @@
   overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
 }
 .cv-inspector--empty > .cv-kicker { padding: 16px 16px 0; }
 .cv-inspector-head { padding: 16px 16px 12px; border-bottom: 1px solid var(--line); }
@@ -412,7 +430,7 @@
   padding: 3px 4px;
   color: var(--muted);
   border: 1px solid var(--line-strong);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: .1em;
@@ -436,7 +454,7 @@
   color: var(--ink);
   background: var(--surface-raised);
   border: 1px solid var(--line-strong);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-family: var(--font-ui);
   font-size: 12px;
 }
@@ -451,7 +469,7 @@
 .cv-meta-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 12px; }
 .cv-meta-row strong { color: var(--ink); font-size: 12px; font-weight: 500; }
 .cv-mono { font-family: var(--font-mono); font-size: 11px; letter-spacing: .03em; }
-.cv-node-error { margin: 0; padding: 8px 8px; color: var(--fail); background: var(--fail-soft); border: 1px solid rgba(163, 56, 56, .2); border-radius: 5px; font-size: 12px; line-height: 1.5; word-break: break-word; }
+.cv-node-error { margin: 0; padding: 8px 8px; color: var(--fail); background: var(--fail-soft); border: 1px solid rgba(163, 56, 56, .2); border-radius: var(--radius-xs); font-size: 12px; line-height: 1.5; word-break: break-word; }
 .cv-inspector-foot { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
 .cv-inspector-empty { display: grid; justify-items: start; gap: 12px; padding: 24px 16px; }
 .cv-inspector-empty p { margin: 0; max-width: 250px; color: var(--muted); font-size: 12px; line-height: 1.65; }
@@ -462,7 +480,7 @@
   place-items: center;
   color: var(--faint);
   border: 1px dashed var(--line-strong);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   font-family: var(--font-mono);
   font-size: 12px;
 }
@@ -492,7 +510,7 @@
   padding: 3px 8px;
   color: var(--muted);
   border: 1px solid var(--line-strong);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: .12em;
@@ -504,11 +522,11 @@
 .cv-drawer-progress span { display: block; height: 100%; background: var(--ink); transition: width .2s ease; }
 .cv-drawer-body { flex: 1; min-height: 0; overflow: auto; padding: 12px 16px 16px; }
 .cv-drawer-empty { padding: 16px 0; color: var(--muted); font-size: 12px; line-height: 1.65; }
-.cv-drawer-error { display: flex; gap: 8px; margin-bottom: 12px; padding: 8px 12px; color: var(--fail); background: var(--fail-soft); border: 1px solid rgba(163, 56, 56, .22); border-radius: 6px; }
+.cv-drawer-error { display: flex; gap: 8px; margin-bottom: 12px; padding: 8px 12px; color: var(--fail); background: var(--fail-soft); border: 1px solid rgba(163, 56, 56, .22); border-radius: var(--radius-sm); }
 .cv-drawer-error strong { font-size: 12px; }
 .cv-drawer-error p { margin: 3px 0 0; font-size: 12px; line-height: 1.5; word-break: break-word; }
 .cv-run-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.cv-run-item { overflow: hidden; background: var(--surface-raised); border: 1px solid var(--line); border-radius: 7px; }
+.cv-run-item { overflow: hidden; background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-sm); }
 .cv-run-item.is-error { border-color: rgba(163, 56, 56, .3); }
 .cv-run-item-head {
   width: 100%;
@@ -548,7 +566,7 @@
   white-space: pre-wrap;
   word-break: break-word;
 }
-.cv-run-output--final { max-height: 220px; margin-top: 8px; background: var(--surface-raised); border: 1px solid var(--line); border-radius: 6px; }
+.cv-run-output--final { max-height: 220px; margin-top: 8px; background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-sm); }
 .cv-run-error { margin: 0; padding: 8px 12px; color: var(--fail); background: var(--fail-soft); border-top: 1px solid rgba(163, 56, 56, .18); font-size: 12px; line-height: 1.5; }
 .cv-run-message { margin: 0; padding: 8px 12px; color: var(--faint); border-top: 1px solid var(--line-faint); font-size: 12px; }
 .cv-run-final { margin-top: 16px; }
@@ -601,7 +619,7 @@
   margin: 0 0 12px;
   padding: 8px 12px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--surface);
 }
 .cv-bdc-bar p { flex: 1; margin: 0; color: var(--muted); font-size: 12px; }
@@ -611,7 +629,7 @@
   height: calc(100vh - 250px);
   min-height: 480px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--surface);
 }
 
@@ -647,10 +665,15 @@
 .cv-bdc-state {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  color: var(--faint);
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  color: var(--muted);
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 10.5px;
   letter-spacing: .04em;
   white-space: nowrap;
 }
@@ -704,7 +727,7 @@
   font-size: 12px;
   background: var(--surface-raised);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   outline: none;
 }
 .cv-bdc-select:focus-visible { border-color: var(--ink); }
@@ -719,7 +742,7 @@
   font-size: 12px;
   background: transparent;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 .cv-bdc-action:hover { color: var(--ink); border-color: var(--line-strong); }
@@ -741,7 +764,7 @@
   padding: 12px;
   background: var(--surface-raised);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-raise);
 }
 .cv-bdc-note-title {
@@ -758,7 +781,7 @@
   line-height: 1.5;
   background: var(--canvas);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   outline: none;
   resize: vertical;
 }

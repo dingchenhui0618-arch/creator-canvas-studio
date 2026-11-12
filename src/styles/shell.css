@@ -17,9 +17,12 @@
   --pass-soft: #eef4f0;
   --warn-soft: #f7f2e8;
   --fail-soft: #f6eeee;
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 24px;
+  --radius-pill: 999px;
   --font-ui: 'Geist', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   --font-mono: 'Geist Mono', 'SFMono-Regular', ui-monospace, monospace;
   --shadow-raise: 0 1px 2px rgba(17, 17, 17, 0.04), 0 10px 24px rgba(17, 17, 17, 0.05);
@@ -77,7 +80,8 @@
   font-weight: 500;
   line-height: 1;
   white-space: nowrap;
-  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+  transition: background-color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out),
+    color var(--dur-1) var(--ease-out), transform var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out);
 }
 
 .vq-button--primary {
@@ -128,6 +132,15 @@
   opacity: 0.55;
 }
 
+.vq-button:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+.vq-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(17, 17, 17, 0.16);
+}
+
 .vq-link {
   display: inline-flex;
   align-items: center;
@@ -150,12 +163,12 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  height: 17px;
+  height: 20px;
   padding: 0 8px;
-  border-radius: 3px;
+  border-radius: var(--radius-pill);
   font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.06em;
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   white-space: nowrap;
 }
@@ -178,14 +191,14 @@
 .vq-tag {
   display: inline-flex;
   align-items: center;
-  height: 17px;
+  height: 20px;
   padding: 0 8px;
   border: 1px solid var(--line);
-  border-radius: 3px;
+  border-radius: var(--radius-pill);
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.06em;
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   white-space: nowrap;
 }
@@ -257,7 +270,7 @@
   flex: none;
   width: 7px;
   height: 7px;
-  border-radius: 1px;
+  border-radius: var(--radius-xs);
   background: var(--ink);
 }
 
@@ -331,7 +344,7 @@
   place-items: center;
   width: 24px;
   height: 24px;
-  border-radius: 5px;
+  border-radius: var(--radius-xs);
   background: var(--ink);
   color: #ffffff;
   font-size: 12px;
@@ -371,7 +384,7 @@
 
 .vq-nav {
   display: grid;
-  gap: 1px;
+  gap: 2px;
 }
 
 .vq-nav-item {
@@ -397,7 +410,8 @@
 }
 
 .vq-nav-item.is-active {
-  background: rgba(17, 17, 17, 0.06);
+  background: rgba(17, 17, 17, 0.055);
+  box-shadow: inset 0 0 0 1px rgba(17, 17, 17, 0.045);
   color: var(--ink);
   font-weight: 500;
 }
@@ -408,7 +422,7 @@
   bottom: 8px;
   left: 0;
   width: 2px;
-  border-radius: 1px;
+  border-radius: var(--radius-xs);
   background: var(--ink);
   content: '';
 }
@@ -428,7 +442,7 @@
   min-width: 18px;
   padding: 1px 4px;
   border: 1px solid var(--line);
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   color: var(--faint);
   font-family: var(--font-mono);
   font-size: 10px;
@@ -685,9 +699,9 @@
   display: inline-flex;
   align-items: center;
   height: 24px;
-  padding: 0 8px;
+  padding: 0 10px;
   border: 1px dashed var(--line-strong);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   background: var(--surface);
   color: var(--muted);
   font-size: 11px;
@@ -769,7 +783,7 @@
 .vq-search kbd {
   padding: 1px 4px;
   border: 1px solid var(--line);
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   color: var(--faint);
   font-family: var(--font-mono);
   font-size: 10px;
@@ -983,7 +997,7 @@
 .vq-login-brand-dot {
   width: 7px;
   height: 7px;
-  border-radius: 1px;
+  border-radius: var(--radius-xs);
   background: #ffffff;
 }
 
@@ -1081,7 +1095,7 @@
 .vq-login-verdict {
   padding: 1px 8px;
   border: 1px solid rgba(224, 183, 118, 0.42);
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   color: #e3bd7e;
   font-family: var(--font-mono);
   font-size: 10px;
@@ -1244,7 +1258,7 @@
   width: 22px;
   height: 22px;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: transparent;
   color: var(--faint);
 }
@@ -1372,14 +1386,14 @@
   grid-template-columns: 1fr 1fr;
   gap: 2px;
   padding: 2px;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   background: rgba(17, 17, 17, 0.04);
 }
 
 .vq-login-mode {
   padding: 8px 8px;
   border: 1px solid transparent;
-  border-radius: 5px;
+  border-radius: var(--radius-xs);
   background: transparent;
   color: var(--muted);
   font-family: var(--font-ui);
@@ -1553,7 +1567,7 @@
   height: 19px;
   padding: 0;
   border: 1px solid var(--line-strong);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--line-faint);
 }
 
@@ -1665,7 +1679,7 @@
 .vq-update-note code {
   padding: 1px 4px;
   border: 1px solid var(--line);
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   font-family: var(--font-mono);
   font-size: 10px;
 }
@@ -1825,7 +1839,7 @@
   margin: 12px 12px 4px;
   padding: 8px 12px 12px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--surface);
 }
 .vq-edition-head {
@@ -1848,13 +1862,13 @@
   color: var(--ink);
   padding: 1px 4px;
   border: 1px solid var(--line-strong);
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
 }
 .vq-edition-track {
   display: grid;
   gap: 2px;
   padding: 2px;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   background: rgba(17, 17, 17, .04);
 }
 .vq-edition-option {
@@ -1863,7 +1877,7 @@
   gap: 8px;
   padding: 8px 8px;
   border: 1px solid transparent;
-  border-radius: 5px;
+  border-radius: var(--radius-xs);
   background: transparent;
   color: var(--muted);
   font-size: 12px;
@@ -1891,7 +1905,7 @@
   height: 34px;
   margin: 12px auto 4px;
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--muted);
   cursor: pointer;
@@ -1906,7 +1920,7 @@
 .vq-console-card {
   padding: 24px 24px;
   border: 1px dashed var(--line-strong);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--surface);
 }
 .vq-console-card strong { display: block; font-size: 14px; }
@@ -1954,14 +1968,14 @@
   margin: 12px 12px 8px;
   padding: 0 8px 0 12px;
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
   background: var(--surface);
 }
 .vq-edition-seg {
   display: inline-flex;
   gap: 1px;
   padding: 2px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: rgba(17, 17, 17, .05);
 }
 .vq-edition-seg-btn {
@@ -1970,7 +1984,7 @@
   width: 24px;
   height: 20px;
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: transparent;
   color: var(--faint);
   cursor: pointer;
@@ -2061,7 +2075,7 @@
   width: 288px;
   padding: 8px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--surface-raised);
   box-shadow: 0 8px 24px rgba(17, 17, 17, 0.08);
 }
@@ -2295,13 +2309,13 @@
 .vq-2fa-setup { display: flex; flex-direction: column; gap: 16px; }
 .vq-2fa-facts { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 12.5px; color: var(--muted); }
 .vq-2fa-facts strong { color: var(--ink); font-family: var(--font-mono); }
-.vq-2fa-warn { margin: 0; padding: 8px 12px; border: 1px solid rgba(163, 56, 56, .28); background: var(--fail-soft); color: var(--fail); border-radius: 6px; font-size: 12px; line-height: 1.7; }
+.vq-2fa-warn { margin: 0; padding: 8px 12px; border: 1px solid rgba(163, 56, 56, .28); background: var(--fail-soft); color: var(--fail); border-radius: var(--radius-sm); font-size: 12px; line-height: 1.7; }
 .vq-2fa-off { display: flex; flex-direction: column; gap: 12px; max-width: 420px; }
 .vq-2fa-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .vq-2fa-secret { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.vq-2fa-secret code { padding: 8px 12px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface-soft); font-family: var(--font-mono); font-size: 13px; letter-spacing: .06em; word-break: break-all; }
+.vq-2fa-secret code { padding: 8px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface-soft); font-family: var(--font-mono); font-size: 13px; letter-spacing: .06em; word-break: break-all; }
 .vq-2fa-codes { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
-.vq-2fa-codes code { padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-raised); font-family: var(--font-mono); font-size: 12px; text-align: center; }
+.vq-2fa-codes code { padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius-xs); background: var(--surface-raised); font-family: var(--font-mono); font-size: 12px; text-align: center; }
 .vq-2fa-confirm { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .vq-2fa-confirm .vq-input { width: 140px; }
 .vq-2fa-note { margin: 0; font-size: 11.5px; line-height: 1.7; color: var(--faint); }
@@ -2317,7 +2331,7 @@
 .vq-account-danger-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .vq-account-danger-head strong { font-size: 13px; }
 .vq-account-danger-head p { margin: 4px 0 0; max-width: 620px; font-size: 12px; line-height: 1.7; color: var(--muted); }
-.vq-account-danger-body { display: flex; flex-direction: column; gap: 12px; max-width: 520px; padding: 16px; border: 1px solid rgba(163, 56, 56, .24); border-radius: 8px; background: var(--fail-soft); }
+.vq-account-danger-body { display: flex; flex-direction: column; gap: 12px; max-width: 520px; padding: 16px; border: 1px solid rgba(163, 56, 56, .24); border-radius: var(--radius-sm); background: var(--fail-soft); }
 .vq-account-danger-body .vq-field span { font-size: 12px; color: var(--ink-soft); }
 .vq-account-danger-check { align-items: flex-start; font-size: 12px; line-height: 1.7; color: var(--ink-soft); }
 .vq-account-danger-check input { margin-top: 3px; }
