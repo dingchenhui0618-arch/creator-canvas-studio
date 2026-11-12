@@ -7,7 +7,9 @@ import { request } from '../api/client'
 import { listBdcCanvases, type BdcCanvas } from '../api/bdc'
 import type { RunProjectRef } from '../api/flows'
 import { listProjects, listShares } from '../api/projects'
-import { projectStatus, type ProjectSummary, type ShareSummaryRow } from '../domain/project'
+import { listReviewQueue, type ReviewQueueRow } from '../api/review'
+import { projectStatus, reviewsForVersion, type ProjectSummary, type ShareSummaryRow } from '../domain/project'
+import { REVIEW_VERDICT_LABEL, reviewTimeLabel } from '../domain/review'
 import { runWorkLine } from '../domain/run'
 import { stampTime, visitLine } from '../domain/share'
 import { useSiteInfo, useUiMode } from '../api/app'
@@ -82,18 +84,22 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
   // 工作台的分享汇总：一条作品一行，累计各轮打开情况（v0.9.12）
   const [shares, setShares] = useState<ShareSummaryRow[]>([])
   const [shareTotals, setShareTotals] = useState({ total: 0, opens: 0 })
+  // 评审队列：最近一次结论是需人工确认 / 不通过的作品，按评审时间倒序（v0.9.19）
+  const [queue, setQueue] = useState<ReviewQueueRow[]>([])
+  const [queueTotal, setQueueTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [errors, setErrors] = useState<string[]>([])
 
   const load = useCallback(async () => {
     setLoading(true)
     const problems: string[] = []
-    const [canvasResult, runResult, templateResult, projectResult, shareResult] = await Promise.allSettled([
+    const [canvasResult, runResult, templateResult, projectResult, shareResult, queueResult] = await Promise.allSettled([
       listBdcCanvases(),
       request<{ items: RunRow[] }>('/api/runs'),
       request<{ items: TemplateRow[] }>('/api/templates'),
       listProjects(),
       listShares(),
+      listReviewQueue(3),
     ])
     if (canvasResult.status === 'fulfilled' && canvasResult.value.ok) {
       setCanvases(canvasResult.value.canvases ?? [])
@@ -127,6 +133,14 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
       setShareTotals({ total: 0, opens: 0 })
       problems.push('分享记录：' + String((shareResult.reason as Error)?.message || shareResult.reason))
     }
+    if (queueResult.status === 'fulfilled') {
+      setQueue(queueResult.value.items ?? [])
+      setQueueTotal(queueResult.value.total ?? 0)
+    } else {
+      setQueue([])
+      setQueueTotal(0)
+      problems.push('评审队列：' + String((queueResult.reason as Error)?.message || queueResult.reason))
+    }
     setErrors(problems)
     setLoading(false)
   }, [])
@@ -150,15 +164,33 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
 
   const latestProject = useMemo(() => projects.find((item) => item.status !== 'done') ?? projects[0], [projects])
 
+  // 评审给了意见、还没改的那条最该先看：它比「最近改过的作品」更接近「下一步点哪里」。
+  // 队列里的第一条要和作品列表对得上（作品可能刚被删），对不上就往后找。
+  const queuedProject = useMemo(() => {
+    const byId = new Map(projects.map((item) => [item.id, item]))
+    const row = queue.find((entry) => byId.has(entry.projectId))
+    const project = row ? byId.get(row.projectId) : undefined
+    return row && project ? { row, project } : null
+  }, [queue, projects])
+
   const hero = useMemo(() => {
-    if (latestProject) {
-      const status = projectStatus(latestProject, latestProject.reviews.count)
+    const heroProject = queuedProject?.project ?? latestProject
+    if (heroProject) {
+      const reviews = reviewsForVersion(heroProject.versionCounts || {}, heroProject.version)
+      const status = projectStatus(heroProject, reviews)
+      // 待改的读队列那条（它是评审队列的口径），其余读这一版最近一次评审
+      const reviewNote =
+        queuedProject && queuedProject.project.id === heroProject.id
+          ? '最近评审 ' + (REVIEW_VERDICT_LABEL[queuedProject.row.verdict] || '有结论') + ' · ' + reviewTimeLabel(queuedProject.row.at)
+          : reviews.count
+            ? '最近评审 ' + (REVIEW_VERDICT_LABEL[reviews.lastVerdict] || '未记结论') + ' · ' + reviewTimeLabel(reviews.lastAt)
+            : '还没进评审'
       return {
         label: '下一步 · 作品 · ' + status.text,
-        title: latestProject.title,
-        meta: (latestProject.template ? '模板 · ' + latestProject.template.title + ' · ' : '') + '更新 ' + clockOf(latestProject.updatedAt),
-        cta: '继续这个作品',
-        go: () => onOpenProject(latestProject.id),
+        title: heroProject.title,
+        meta: (heroProject.template ? '模板 · ' + heroProject.template.title + ' · ' : '') + reviewNote,
+        cta: queuedProject && queuedProject.project.id === heroProject.id ? '按意见改这一版' : '继续这个作品',
+        go: () => onOpenProject(heroProject.id),
       }
     }
     if (latestCanvas) {
@@ -177,7 +209,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
       cta: '去检索',
       go: () => onNavigate('radar'),
     }
-  }, [latestProject, latestCanvas, onOpenProject, onOpenCanvas, onNavigate])
+  }, [latestProject, queuedProject, latestCanvas, onOpenProject, onOpenCanvas, onNavigate])
 
   return (
     <div className="vq-page">
@@ -241,6 +273,49 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
             <dd>{templates.length}</dd>
           </div>
         </dl>
+      </section>
+
+      <section className="vq-section vq-review-queue" aria-labelledby="vq-review-queue-title">
+        <div className="vq-section-head">
+          <div>
+            <h2 id="vq-review-queue-title">评审等你看的</h2>
+            <p className="vq-review-queue-sub">
+              {queueTotal
+                ? '最近一次结论是「需人工确认」或「不通过」的作品，按评审时间排；点一条进作品改一版。'
+                : '评审给出意见的作品会排在这里；点一条进作品改一版，改完可以再评一次。'}
+            </p>
+          </div>
+          <button type="button" className="vq-link" onClick={() => onNavigate('review')}>
+            全部评审
+            <ArrowUpRight size={13} />
+          </button>
+        </div>
+
+        {queue.length ? (
+          <div className="vq-review-queue-list">
+            {queue.map((row) => (
+              <button type="button" className="vq-review-queue-row" key={row.projectId} onClick={() => onOpenProject(row.projectId)}>
+                <span className={'vq-project-status is-' + row.status.tone}>{row.status.text}</span>
+                <span className="vq-review-queue-copy">
+                  <strong>{row.title}</strong>
+                  <span className="vq-mono">
+                    第 {Math.max(1, row.version)} 版 · 评过 {row.count} 次 · {reviewTimeLabel(row.at)}
+                  </span>
+                </span>
+                <ArrowRight size={13} />
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="vq-empty vq-empty--inline">
+            <strong>没有等你改的评审</strong>
+            <span>评审一版画面后，结论是「需人工确认」或「不通过」的作品会排在这里；通过的作品直接去交付。</span>
+            <button type="button" className="vq-button vq-button--ghost" onClick={() => onNavigate('review')}>
+              去视觉评审
+              <ArrowRight size={13} />
+            </button>
+          </div>
+        )}
       </section>
 
       <div className="vq-start">

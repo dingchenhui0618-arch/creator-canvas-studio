@@ -459,7 +459,7 @@ export default function ProjectPage({
   const script = data.script
   // 状态与「下一步」只看当前这一版评过没有：新版刚开出来时不能因为上一版评过就跳过评审
   const currentReviews = reviewsForVersion(data.versionCounts, project.version)
-  const step = projectStep(project, currentReviews.count)
+  const step = projectStep(project, currentReviews)
   const scriptBeats = script ? script.structure.length : 0
   const versionRows = [
     {
@@ -536,7 +536,7 @@ export default function ProjectPage({
         desc={
           <>
             <span className="vq-project-headline">
-              <ProjectStatusPill project={project} reviewCount={currentReviews.count} />
+              <ProjectStatusPill project={project} reviews={currentReviews} />
               <span className="vq-mono">更新 {stamp(project.updatedAt)}</span>
               {template && template.title !== project.title ? <span className="vq-mono">模板 · {template.title}</span> : null}
             </span>
@@ -680,6 +680,8 @@ export default function ProjectPage({
             disabled={busy === 'canvas'}
             onClick={() => {
               if (step.key === 'review') onOpenReview(project.id)
+              // 评审通过了：主卡直接把人带到「交付这一版」那个菜单，不再让人自己去找页头
+              else if (step.key === 'deliver') setDeliverOpen(true)
               else if (!project.flowId && !script) beginScript()
               else void openCanvas()
             }}

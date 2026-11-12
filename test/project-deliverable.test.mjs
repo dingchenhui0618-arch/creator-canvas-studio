@@ -115,7 +115,8 @@ test('完整稿：脚本、分镜、评审、版本、运行都在，且不写�
   const { markdown, fileName } = projectDeliverable(fixture(), { review: FULL_REVIEW, now: NOW, tzOffsetMinutes: TZ })
   assert.ok(markdown.startsWith('# 咖啡 3 分钟'))
   assert.ok(markdown.includes('- 作品编号：prj_a'))
-  assert.ok(markdown.includes('- 状态：已评审（当前第 2 版）'))
+  // v0.9.19：评过不等于过了，纸上写的是这一版最近一次结论
+  assert.ok(markdown.includes('- 状态：评审 · 需人工确认（当前第 2 版）'))
   assert.ok(markdown.includes('原片 18 秒 · 2 段 / 2 镜'))
   assert.ok(markdown.includes('| 0–3 秒 | 开场 | 三分钟做一杯手冲咖啡 |'))
   assert.ok(markdown.includes('### 镜头 02 · 3–8 秒'))

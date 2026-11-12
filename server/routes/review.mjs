@@ -1,6 +1,7 @@
 import { sendJson, readBody } from './_shared.mjs'
 import { reviewVisual, reviewStatus } from '../review.mjs'
 import { saveReview, listReviews, getReview } from '../reviews.mjs'
+import { reviewQueue } from '../review-queue.mjs'
 import { getProject, listProjects } from '../projects.mjs'
 import { projectsById, withReviewProject } from '../review-ownership.mjs'
 import fsp from 'node:fs/promises'
@@ -53,6 +54,13 @@ export function createReviewRouter() {
           items: withReviewProject(result.items, byId),
           facets: { ...result.facets, projects },
         })
+        return true
+      }
+      // 评审队列：还等你改的作品（当前这一版最近一次结论是需人工确认 / 不通过）。
+      // 必须排在 /api/reviews/<id> 之前，否则 queue 会被当成一条评审 id。
+      if (pathname === '/api/reviews/queue' && req.method === 'GET') {
+        const queue = await reviewQueue(user, { limit: url.searchParams.get('limit') || 6 })
+        sendJson(res, 200, { ok: true, ...queue })
         return true
       }
       const reviewItem = pathname.match(REVIEW_ITEM)

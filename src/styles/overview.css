@@ -581,6 +581,121 @@
     flex-direction: column;
   }
 }
+/* ---------- 评审等你看的（v0.9.19） ----------
+   工作台多一条线：评审给出了意见、还没改的作品。一条作品一行，左边是那张作品卡片上的同一枚状态胶囊，
+   中间是作品名与「第几版 / 评过几次 / 什么时候」，点一条进作品改一版。
+   整块用一条发丝线包住、行间走分隔线——比一排卡片更沉，不抢上面那张「下一步」主卡。 */
+.vq-review-queue {
+  margin: 32px 0;
+}
+
+.vq-review-queue .vq-section-head .vq-link {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.vq-review-queue-sub {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.vq-review-queue-list {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+
+.vq-review-queue-row {
+  display: grid;
+  /* 胶囊固定一列：三档文案长短不一（不通过 / 需人工确认），作品名必须从同一条竖线开始 */
+  grid-template-columns: 128px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 16px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  transition: background-color var(--dur-1) var(--ease-out);
+}
+
+.vq-review-queue-row + .vq-review-queue-row {
+  border-top: 1px solid var(--line-faint);
+}
+
+.vq-review-queue-row:hover {
+  background: var(--surface);
+}
+
+.vq-review-queue-row:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+}
+
+.vq-review-queue-row .vq-project-status {
+  justify-self: start;
+}
+
+.vq-review-queue-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.vq-review-queue-copy strong {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vq-review-queue-copy .vq-mono {
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.vq-review-queue-row > svg {
+  flex-shrink: 0;
+  color: var(--faint);
+}
+
+/* 窄屏：胶囊挪到作品名上面一行，把正文这一列让出来，
+   否则「第 1 版 · 评过 8 次 · 11/13 00:40」会被挤成三行。 */
+@media (max-width: 640px) {
+  .vq-review-queue-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'pill arrow' 'copy arrow';
+    align-items: start;
+    gap: 8px 12px;
+  }
+
+  .vq-review-queue-row .vq-project-status {
+    grid-area: pill;
+  }
+
+  .vq-review-queue-copy {
+    grid-area: copy;
+  }
+
+  .vq-review-queue-row > svg {
+    grid-area: arrow;
+    align-self: center;
+  }
+}
+
+.vq-review-queue-row:hover > svg {
+  color: var(--ink);
+}
+
 /* ---------- 分享出去的链接（v0.9.12） ----------
    工作台的第二条线：谁分享过、被点开过几次。一条作品一行，累计各轮；
    行距走 8px，行内两行文案（作品 + 状态/轮数），右侧是累计次数，不套第二层卡片。 */

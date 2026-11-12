@@ -196,12 +196,23 @@ export type ProjectDetail = {
   runCounts: Record<string, number>
 }
 
-/** 状态胶囊：文案 + 语气。语气只决定颜色，不改变语义。 */
-export function projectStatus(project: Project, reviewCount: number): { text: string; tone: 'idle' | 'live' | 'ok' | 'done' } {
-  if (project.status === 'done') return { text: '已交付', tone: 'done' }
-  if (!project.flowId) return { text: '待开画布', tone: 'idle' }
-  if (!reviewCount) return { text: '在做', tone: 'live' }
-  return { text: '已评审', tone: 'ok' }
+/**
+ * 状态胶囊：文案 + 语气。语气只决定颜色，不改变语义。
+ * 评过不等于过了：有结论时直接写结论，「已评审」只在没有结论的老记录上出现。
+ * 与服务端 server/project-status.mjs 同一口径——交付稿上写的状态和这里必须是一句话。
+ */
+export function projectStatus(
+  project: Project,
+  reviews: ProjectReviews,
+): { text: string; tone: 'idle' | 'live' | 'ok' | 'warn' | 'fail' | 'done'; verdict: string } {
+  if (project.status === 'done') return { text: '已交付', tone: 'done', verdict: '' }
+  if (!project.flowId) return { text: '待开画布', tone: 'idle', verdict: '' }
+  if (!reviews.count) return { text: '在做', tone: 'live', verdict: '' }
+  const verdict = reviews.lastVerdict || ''
+  if (verdict === 'pass') return { text: '评审 · 通过', tone: 'ok', verdict }
+  if (verdict === 'needs_review') return { text: '评审 · 需人工确认', tone: 'warn', verdict }
+  if (verdict === 'fail') return { text: '评审 · 不通过', tone: 'fail', verdict }
+  return { text: '已评审', tone: 'ok', verdict: '' }
 }
 
 /**
@@ -228,16 +239,16 @@ export function runsForVersion(counts: Record<string, number>, version: number):
   return own + legacy
 }
 
-export type ProjectStepKey = 'canvas' | 'review' | 'continue' | 'done'
+export type ProjectStepKey = 'canvas' | 'review' | 'continue' | 'deliver' | 'done'
 
 /**
  * 下一步只有一件事：
- *   没画布 → 用这条脚本开画布；有画布没评审 → 送一次评审；都做过了 → 回去按意见改；交付了 → 收尾。
- * 作品页主卡与工作台都读这一个函数，避免两处口径分叉。
+ *   没画布 → 用这条脚本开画布；有画布没评审 → 送一次评审；评过了看结论——通过就交出去，有意见就照着改；
+ *   交付了 → 收尾。作品页主卡与工作台都读这一个函数，避免两处口径分叉。
  */
 export function projectStep(
   project: Project,
-  reviewCount: number,
+  reviews: ProjectReviews,
 ): { key: ProjectStepKey; label: string; title: string; hint: string; cta: string } {
   if (project.status === 'done') {
     return {
@@ -257,7 +268,7 @@ export function projectStep(
       cta: '用这条脚本开画布',
     }
   }
-  if (!reviewCount) {
+  if (!reviews.count) {
     return {
       key: 'review',
       label: '下一步 · 送评审',
@@ -266,10 +277,20 @@ export function projectStep(
       cta: '用评审看这版',
     }
   }
+  // 这一版评审通过了：下一步不再是改，而是把这版交出去
+  if (reviews.lastVerdict === 'pass') {
+    return {
+      key: 'deliver',
+      label: '下一步 · 交付',
+      title: '这一版评审通过了',
+      hint: '把脚本、分镜、评审结论与运行记录打成交付稿或交付包，发给剪辑、制片或甲方',
+      cta: '交付这一版',
+    }
+  }
   return {
     key: 'continue',
     label: '下一步 · 继续做',
-    title: '按评审意见改一版',
+    title: reviews.lastVerdict === 'fail' ? '评审没过，按意见改一版' : '按评审意见改一版',
     hint: '评审结论里的修正建议逐条落到画布上，改完可以再评一次',
     cta: '继续画布',
   }

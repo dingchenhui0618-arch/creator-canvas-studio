@@ -126,3 +126,21 @@ export const listReviews = (query: { limit?: number; offset?: number; verdict?: 
 }
 
 export const getReview = (id: string) => request<ReviewRecord>('/api/reviews/' + id)
+
+/**
+ * 评审队列：还等你改的作品。
+ * 口径在服务端一处算：只看当前这一版，最近一次结论是「需人工确认」或「不通过」的才进队列，按评审时间倒序。
+ * status 是那枚状态胶囊（文案 + 语气），与作品卡片上的是同一句话。
+ */
+export type ReviewQueueRow = {
+  projectId: string
+  title: string
+  version: number
+  verdict: string
+  at: string
+  count: number
+  status: { text: string; tone: string; verdict: string }
+}
+
+export const listReviewQueue = (limit = 6) =>
+  request<{ ok: boolean; items: ReviewQueueRow[]; total: number }>('/api/reviews/queue?limit=' + limit)

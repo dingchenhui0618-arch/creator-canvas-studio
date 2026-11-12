@@ -10,10 +10,11 @@
 //     版本划分之前留下的评审与运行折进 v1（与 src/domain/project.ts 同一套规则）。
 import { describeTiming } from './speech.mjs'
 import { DIMENSION_LABEL, boxText, normalizeBox } from './project-review-sheet.mjs'
+// 状态与「某一版评过几次」读作品状态那一处：纸上写的状态与页面上那枚胶囊必须是同一句话
+import { VERDICT_TEXT as VERDICT_LABEL, projectStatus, reviewsForVersion as reviewsOf } from './project-status.mjs'
 
 export const DELIVERABLE_LIMITS = { runs: 8, observations: 8, fixes: 6, versions: 6 }
 
-const VERDICT_LABEL = { pass: '通过', needs_review: '需人工确认', fail: '不通过' }
 const SEVERITY_LABEL = { blocker: '阻断', major: '重要', minor: '轻微', info: '提示' }
 const PACE_LABEL = { fast: '快', slow: '慢', normal: '中' }
 
@@ -51,17 +52,6 @@ function stamp(value, tzOffsetMinutes) {
 
 const day = (value, tzOffsetMinutes) => stamp(value, tzOffsetMinutes).slice(0, 10)
 
-/** 某一版评过找几次：版本划分之前记在 0 上的评审算进 v1，否则老作品会显示成没评过。 */
-function reviewsOf(counts, version) {
-  const own = counts?.[String(version)]
-  const legacy = version === 1 ? counts?.['0'] : undefined
-  if (!own && !legacy) return { count: 0, lastVerdict: '', lastAt: '' }
-  if (!own) return legacy
-  if (!legacy) return own
-  const latest = String(own.lastAt) >= String(legacy.lastAt) ? own : legacy
-  return { count: (own.count || 0) + (legacy.count || 0), lastVerdict: latest.lastVerdict, lastAt: latest.lastAt }
-}
-
 /** 某一版跑过几次：与评审同一套折进规则。 */
 function runsOf(counts, version) {
   const own = Number(counts?.[String(version)]) || 0
@@ -69,13 +59,7 @@ function runsOf(counts, version) {
   return own + legacy
 }
 
-/** 状态胶囊：与作品页同一个口径（已交付 / 待开画布 / 在做 / 已评审）。 */
-function statusLabel(project, reviewCount) {
-  if (project.status === 'done') return '已交付'
-  if (!project.flowId) return '待开画布'
-  if (!reviewCount) return '在做'
-  return '已评审'
-}
+
 
 function header(detail, ctx) {
   const { project, template, flow, script, versionCounts } = detail
@@ -87,7 +71,7 @@ function header(detail, ctx) {
     '一条作品的完整稿：来源、脚本、分镜、评审结论、版本与运行。给剪辑、制片或自己归档，读这一份就够。',
     '',
     '- 作品编号：' + project.id,
-    '- 状态：' + statusLabel(project, currentReviews.count) + (project.version ? '（当前第 ' + project.version + ' 版）' : ''),
+    '- 状态：' + projectStatus(project, currentReviews).text + (project.version ? '（当前第 ' + project.version + ' 版）' : ''),
   ]
   if (flow) lines.push('- 画布：' + flow.name + '（' + flow.nodes + ' 个节点）')
   else lines.push('- 画布：还没开')
