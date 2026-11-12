@@ -11,7 +11,7 @@
 import { describeTiming } from './speech.mjs'
 import { DIMENSION_LABEL, boxText, normalizeBox } from './project-review-sheet.mjs'
 // 状态与「某一版评过几次」读作品状态那一处：纸上写的状态与页面上那枚胶囊必须是同一句话
-import { VERDICT_TEXT as VERDICT_LABEL, projectStatus, reviewsForVersion as reviewsOf } from './project-status.mjs'
+import { VERDICT_TEXT as VERDICT_LABEL, projectStatus, reviewsForVersion as reviewsOf, decisionFor } from './project-status.mjs'
 
 export const DELIVERABLE_LIMITS = { runs: 8, observations: 8, fixes: 6, versions: 6 }
 
@@ -65,13 +65,19 @@ function header(detail, ctx) {
   const { project, template, flow, script, versionCounts } = detail
   const { tz, now } = ctx
   const currentReviews = reviewsOf(versionCounts, project.version)
+  // 人拍板要写在抬头：收件人第一眼就该知道这份稿子的结论是谁拍的板，纸被转发也一样
+  const decision = decisionFor(detail.decisions, currentReviews.lastAt)
   const lines = [
     '# ' + (project.title || '未命名作品'),
     '',
     '一条作品的完整稿：来源、脚本、分镜、评审结论、版本与运行。给剪辑、制片或自己归档，读这一份就够。',
     '',
     '- 作品编号：' + project.id,
-    '- 状态：' + projectStatus(project, currentReviews).text + (project.version ? '（当前第 ' + project.version + ' 版）' : ''),
+    '- 状态：' + projectStatus(project, currentReviews, decision).text + (project.version ? '（当前第 ' + project.version + ' 版）' : ''),
+    // 没有拍板也照实写：读者会问「这结论谁定的」，答案就是模型 + 还没人复核
+    '- 人工复核：' + (decision
+      ? (decision.decision === 'pass' ? '人工通过' : '人工不通过') + ' · ' + stamp(decision.at, tz) + (decision.note ? ' · ' + flat(decision.note) : '')
+      : '没有（结论由模型给出，还没人拍板）'),
   ]
   if (flow) lines.push('- 画布：' + flow.name + '（' + flow.nodes + ' 个节点）')
   else lines.push('- 画布：还没开')
@@ -194,6 +200,15 @@ function reviewSection(detail, review, tz) {
   const meta = [model ? '模型 ' + model + (result.provider && result.provider !== model ? '（' + result.provider + '）' : '') : '', result.ms ? Math.round(result.ms / 100) / 10 + ' 秒' : ''].filter(Boolean)
   // 前面加「· 」：这一行在 Markdown 里紧跟上一行，渲染成一段时两个信息不会粘在一起
   if (meta.length) out.push('· ' + meta.join(' · '))
+  // 这条评审谁拍过板：模型说「需人工确认」时，人给的结论才是最后一句
+  const decision = decisionFor(detail.decisions, review.createdAt)
+  if (decision) {
+    out.push(
+      '',
+      '人拍板：' + (decision.decision === 'pass' ? '通过' : '不通过') + ' · ' + stamp(decision.at, tz) +
+        (decision.note ? '（' + flat(decision.note) + '）' : ''),
+    )
+  }
   if (result.summary) out.push('', '> ' + String(result.summary).replace(/\r?\n/g, ' '))
   const judge = result.judge
   if (judge && judge.status === 'ok') {

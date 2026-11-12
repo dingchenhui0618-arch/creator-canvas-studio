@@ -7,6 +7,7 @@ import { deleteAgent, listAgents } from './agents.mjs'
 import { deleteReviewsByOwner, listReviews, detachReviewsFromProject } from './reviews.mjs'
 import { deleteProjectsByOwner, listProjects } from './projects.mjs'
 import { deleteAcksByOwner } from './review-acks.mjs'
+import { deleteDecisionsByOwner, listDecisions } from './review-decisions.mjs'
 import { preferenceOf, removePreference } from './preferences.mjs'
 import { balanceOf, ledgerOf } from './credits.mjs'
 import { countAdmins, deleteUser, findUserById } from './auth.mjs'
@@ -44,6 +45,8 @@ export async function exportAccount(user) {
   const agents = (await listAgents({}, user)).filter((item) => (item.ownerId || '') === user.id)
   const reviews = (await listReviews({ limit: 50 }, user)).items.filter((item) => (item.ownerId || '') === user.id)
   const projects = (await listProjects(user)).filter((item) => (item.ownerId || '') === user.id)
+  // 人拍板是自己做的判断，导出里要看得见（不带别人账号的记录）
+  const decisions = (await listDecisions(user)).filter((item) => (item.ownerId || '') === user.id)
   const ledger = ledgerOf(user.id, 1000, 0)
   return {
     format: 'visionqa-account-export',
@@ -60,6 +63,7 @@ export async function exportAccount(user) {
     agents,
     reviews,
     projects,
+    reviewDecisions: decisions,
   }
 }
 
@@ -95,6 +99,7 @@ export async function deleteOwnAccount(user, { deleteContent = true } = {}) {
     removed.projects = await deleteProjectsByOwner(user.id)
     removed.reviews = await deleteReviewsByOwner(user.id)
     removed.reviewAcks = await deleteAcksByOwner(user.id)
+    removed.reviewDecisions = await deleteDecisionsByOwner(user.id)
   }
   removePreference(user.id)
   const deleted = deleteUser(user.id)

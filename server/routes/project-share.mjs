@@ -19,6 +19,7 @@ import { getReview, listReviews, reviewSummaryByVersion } from '../reviews.mjs'
 import { listRunsByFlows } from '../flows.mjs'
 import { frameFileOf, publicProjectView, shareFrameIndex } from '../project-share.mjs'
 import { recordShareOpen } from '../share-visits.mjs'
+import { listDecisions } from '../review-decisions.mjs'
 
 const SHARED = /^\/api\/share\/project\/([\w-]+)$/
 const FRAME = /^\/api\/share\/project\/([\w-]+)\/frame\/(\d+)$/
@@ -104,6 +105,8 @@ export function createProjectShareRouter() {
         const found = shared.templateId ? await getTemplate(shared.templateId, null) : null
         const template = found && !found.deletedAt ? found : null
         const records = await sharedReviewRecords(shared)
+        // 纸脚要写清哪一版人工复核过：公开链接上没有账号，拍板记录按作品取（本来就是同一个人的决定）
+        const decisions = (await listDecisions(null)).filter((entry) => entry.projectId === shared.id)
         const frameUrl = (block) => {
           const index = shareFrameIndex(template, block?.image)
           return index ? '/api/share/project/' + encodeURIComponent(token) + '/frame/' + index : ''
@@ -114,6 +117,7 @@ export function createProjectShareRouter() {
             // 公开链接上不印作品编号（那是内部 id）：分享页的白名单同样不给它
             project: { title: shared.title, version: shared.version },
             records,
+            decisions,
             now: new Date(),
             tzOffsetMinutes: clampTz(url.searchParams.get('tz')),
             backHref: '/#/share/project/' + encodeURIComponent(token),

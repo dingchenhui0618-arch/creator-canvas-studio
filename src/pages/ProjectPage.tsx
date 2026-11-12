@@ -20,7 +20,8 @@ import {
 } from '../api/projects'
 import { describeTiming, type ScriptBeat } from '../domain/radar'
 import { projectStep, reviewsForVersion, runsForVersion, type ProjectDetail } from '../domain/project'
-import { REVIEW_VERDICT_LABEL as VERDICT_LABEL, reviewsOfVersion } from '../domain/review'
+import { decideReview, clearReviewDecision } from '../api/review'
+import { REVIEW_VERDICT_LABEL as VERDICT_LABEL, reviewTimeLabel, reviewsOfVersion } from '../domain/review'
 import { stampTime as stamp, visitLine } from '../domain/share'
 import '../styles/projects.css'
 
@@ -92,6 +93,10 @@ export default function ProjectPage({
   // 页头就不会排到七个按钮；点空白处或 Esc 收起（和账号菜单同一套习惯）
   const [deliverOpen, setDeliverOpen] = useState(false)
   const deliverRef = useRef<HTMLDivElement | null>(null)
+  // 人工复核：一句话备注，加上正在提交的那一档（拍通过 / 拍不通过 / 撤销）
+  // null 表示「跟着这条拍板的备注走」：改判或撤销后不用手动清空，渲染时现算
+  const [decisionNote, setDecisionNote] = useState<string | null>(null)
+  const [decideBusy, setDecideBusy] = useState<'' | 'pass' | 'reject' | 'undo'>('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -112,6 +117,7 @@ export default function ProjectPage({
     }, 0)
     return () => window.clearTimeout(timer)
   }, [load])
+
 
   // 交付菜单：点别处、按 Esc 都收起
   useEffect(() => {
@@ -216,6 +222,38 @@ export default function ProjectPage({
       onToast('浏览器没给剪贴板权限：手动选中链接复制')
     } finally {
       setShareBusy('')
+    }
+  }
+
+  // 人拍板这一版：记在「哪一次评审」上（服务端现算版次与时间），模型写的评审记录一个字不改。
+  // 再评出新结论后拍板自动失效、这条回到待办——人拍的是那一次评审，不是「这条作品永远通过」。
+  const decide = async (kind: 'pass' | 'reject') => {
+    if (!data) return
+    setDecideBusy(kind)
+    try {
+      await decideReview(data.project.id, kind, (decisionNote ?? data.decision?.note ?? '').trim())
+      await load()
+      setDecisionNote(null)
+      onToast(kind === 'pass' ? '已拍板：这一版通过' : '已拍板：这一版不通过')
+    } catch (caught) {
+      onToast(caught instanceof Error ? caught.message : '拍板没记上，刷新再试')
+    } finally {
+      setDecideBusy('')
+    }
+  }
+
+  const undoDecision = async () => {
+    if (!data) return
+    setDecideBusy('undo')
+    try {
+      await clearReviewDecision(data.project.id)
+      await load()
+      setDecisionNote(null)
+      onToast('已撤销拍板，这一条回到待办')
+    } catch (caught) {
+      onToast(caught instanceof Error ? caught.message : '撤销没成功，刷新再试')
+    } finally {
+      setDecideBusy('')
     }
   }
 
@@ -459,7 +497,13 @@ export default function ProjectPage({
   const script = data.script
   // 状态与「下一步」只看当前这一版评过没有：新版刚开出来时不能因为上一版评过就跳过评审
   const currentReviews = reviewsForVersion(data.versionCounts, project.version)
-  const step = projectStep(project, currentReviews)
+  // 人工复核：服务端已经按「当前这一版最近一次评审」挑好了，对不上就是 null（拍板自动失效）
+  const decision = data.decision ?? null
+  // 输入框显示哪句话：没动过就是这条拍板的备注，动过就是人正在打的字
+  const noteValue = decisionNote ?? decision?.note ?? ''
+  // 模型给了「需人工确认 / 不通过」的才需要拍板：通过的那一版不需要人再确认一次
+  const canDecide = currentReviews.lastVerdict === 'needs_review' || currentReviews.lastVerdict === 'fail'
+  const step = projectStep(project, currentReviews, decision)
   const scriptBeats = script ? script.structure.length : 0
   const versionRows = [
     {
@@ -536,7 +580,7 @@ export default function ProjectPage({
         desc={
           <>
             <span className="vq-project-headline">
-              <ProjectStatusPill project={project} reviews={currentReviews} />
+              <ProjectStatusPill project={project} reviews={currentReviews} decision={decision} />
               <span className="vq-mono">更新 {stamp(project.updatedAt)}</span>
               {template && template.title !== project.title ? <span className="vq-mono">模板 · {template.title}</span> : null}
             </span>
@@ -1104,6 +1148,82 @@ export default function ProjectPage({
               <h2>评审</h2>
               <span className="vq-mono">{reviews.length ? reviews.length + ' 次' : '还没评过'}</span>
             </div>
+            {/* 人工复核：模型给结论，人拍板。拍板不改评审记录，只回答「这一版谁拍的板」，
+                胶囊、下一步、交付稿与两张纸都跟着换口径（v0.9.21） */}
+            {currentReviews.count ? (
+              <div className={'vq-review-decision' + (decision ? ' is-' + decision.decision : '')}>
+                <div className="vq-review-decision-head">
+                  <span className="vq-review-decision-kicker">人工复核</span>
+                  <span className="vq-mono">
+                    {decision
+                      ? '你 ' + reviewTimeLabel(decision.at) + ' 拍板' + (decision.decision === 'pass' ? '通过' : '不通过')
+                      : canDecide
+                        ? '模型结论：' + (VERDICT_LABEL[currentReviews.lastVerdict] || '需人工确认') + ' · 还没人拍板'
+                        : '模型说通过，不需要人工确认'}
+                  </span>
+                </div>
+                {canDecide || decision ? (
+                  <>
+                    <p className="vq-review-decision-hint">
+                      {decision
+                        ? '拍板会写在交付稿与评审对照纸上；再评出新结论后需要重新拍板。'
+                        : '看过证据再拍：拍板会写进交付稿与评审对照纸，状态胶囊与下一步跟着换。'}
+                    </p>
+                    <label className="vq-review-decision-field">
+                      <span>一句话备注（可选，会印在纸上）</span>
+                      <input
+                        value={noteValue}
+                        maxLength={80}
+                        placeholder="为什么放行 / 为什么不发"
+                        disabled={decideBusy !== ''}
+                        onChange={(event) => setDecisionNote(event.target.value)}
+                      />
+                    </label>
+                    <div className="vq-review-decision-actions">
+                      {decision ? (
+                        <>
+                          <button
+                            type="button"
+                            className="vq-button vq-button--ghost"
+                            onClick={() => void undoDecision()}
+                            disabled={decideBusy !== ''}
+                          >
+                            {decideBusy === 'undo' ? '正在撤销…' : '撤销拍板'}
+                          </button>
+                          <button
+                            type="button"
+                            className="vq-button vq-button--ghost"
+                            onClick={() => void decide(decision.decision === 'pass' ? 'reject' : 'pass')}
+                            disabled={decideBusy !== ''}
+                          >
+                            改判为{decision.decision === 'pass' ? '不通过' : '通过'}
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            className="vq-button vq-button--primary"
+                            onClick={() => void decide('pass')}
+                            disabled={decideBusy !== ''}
+                          >
+                            {decideBusy === 'pass' ? '正在记…' : '拍板通过'}
+                          </button>
+                          <button
+                            type="button"
+                            className="vq-button vq-button--ghost is-danger"
+                            onClick={() => void decide('reject')}
+                            disabled={decideBusy !== ''}
+                          >
+                            {decideBusy === 'reject' ? '正在记…' : '这一版不行'}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
             {reviews.length ? (
               <>
                 <p className="vq-project-review-hint">点一条看当时的证据原图与问题锚点。</p>

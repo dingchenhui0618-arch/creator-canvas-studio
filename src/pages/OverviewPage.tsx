@@ -7,7 +7,7 @@ import { request } from '../api/client'
 import { listBdcCanvases, type BdcCanvas } from '../api/bdc'
 import type { RunProjectRef } from '../api/flows'
 import { listProjects, listShares } from '../api/projects'
-import { ackReview, listReviewQueue, unackReview, type ReviewQueueRow, type ReviewQueueSeenRow } from '../api/review'
+import { ackReview, listReviewQueue, unackReview, type ReviewQueueDecidedRow, type ReviewQueueRow, type ReviewQueueSeenRow } from '../api/review'
 import { projectStatus, reviewsForVersion, type ProjectSummary, type ShareSummaryRow } from '../domain/project'
 import { REVIEW_VERDICT_LABEL, reviewTimeLabel } from '../domain/review'
 import { runWorkLine } from '../domain/run'
@@ -90,6 +90,9 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
   // 看过了、这一版先不改的：还在作品里，但不催了（v0.9.20）
   const [seen, setSeen] = useState<ReviewQueueSeenRow[]>([])
   const [seenTotal, setSeenTotal] = useState(0)
+  // 人已经拍过板的：结论按人的走，工作台只留一行交代它去了哪（v0.9.21）
+  const [decided, setDecided] = useState<ReviewQueueDecidedRow[]>([])
+  const [decidedTotal, setDecidedTotal] = useState(0)
   // 正在「已看过 / 撤销」的那条作品：按钮转圈并禁用，防连点
   const [ackBusy, setAckBusy] = useState('')
   const [queueError, setQueueError] = useState('')
@@ -144,11 +147,15 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
       setQueueTotal(queueResult.value.total ?? 0)
       setSeen(queueResult.value.seen ?? [])
       setSeenTotal(queueResult.value.seenTotal ?? 0)
+      setDecided(queueResult.value.decided ?? [])
+      setDecidedTotal(queueResult.value.decidedTotal ?? 0)
     } else {
       setQueue([])
       setQueueTotal(0)
       setSeen([])
       setSeenTotal(0)
+      setDecided([])
+      setDecidedTotal(0)
       problems.push('评审队列：' + String((queueResult.reason as Error)?.message || queueResult.reason))
     }
     setErrors(problems)
@@ -170,6 +177,8 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
       setQueueTotal(result.total ?? 0)
       setSeen(result.seen ?? [])
       setSeenTotal(result.seenTotal ?? 0)
+      setDecided(result.decided ?? [])
+      setDecidedTotal(result.decidedTotal ?? 0)
       setQueueError('')
     } catch (error) {
       setQueueError('评审队列：' + String((error as Error)?.message || error))
@@ -232,7 +241,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
     const heroProject = queuedProject?.project ?? latestProject
     if (heroProject) {
       const reviews = reviewsForVersion(heroProject.versionCounts || {}, heroProject.version)
-      const status = projectStatus(heroProject, reviews)
+      const status = projectStatus(heroProject, reviews, heroProject.decision ?? null)
       // 待改的读队列那条（它是评审队列的口径），其余读这一版最近一次评审
       const reviewNote =
         queuedProject && queuedProject.project.id === heroProject.id
@@ -339,7 +348,9 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                 ? '最近一次结论是「需人工确认」或「不通过」的作品，按评审时间排；点一条进作品改一版。'
                 : seenTotal
                   ? '没有新的等你看；下面这些你看过了、这一版先没改。'
-                  : '评审给出意见的作品会排在这里；点一条进作品改一版，改完可以再评一次。'}
+                  : decidedTotal
+                    ? '没有新的等你看；这一条你已经拍过板，状态胶囊与下一步按你的结论走。'
+                    : '评审给出意见的作品会排在这里；点一条进作品改一版，改完可以再评一次。'}
             </p>
           </div>
           <button type="button" className="vq-link" onClick={() => onNavigate('review')}>
@@ -389,13 +400,15 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
           </div>
         ) : (
           <div className="vq-empty vq-empty--inline">
-            <strong>{seenTotal ? '等你看的都看过了' : '没有等你改的评审'}</strong>
+            <strong>{decidedTotal && !seenTotal ? '这一版你拍过板了' : seenTotal ? '等你看的都看过了' : '没有等你改的评审'}</strong>
             <span>
               {seenTotal
                 ? '看过不等于改过：作品状态还是「评审 · 需人工确认 / 不通过」，评审证据也都在作品页；这一版再评一次会回到这里。'
-                : '评审一版画面后，结论是「需人工确认」或「不通过」的作品会排在这里；通过的作品直接去交付。'}
+                : decidedTotal
+                  ? '拍板不是「已看过」：胶囊与下一步按你的结论走，交付稿与评审对照纸上也写着谁拍的板；再评出新结论后要重新拍板。'
+                  : '评审一版画面后，结论是「需人工确认」或「不通过」的作品会排在这里；通过的作品直接去交付。'}
             </span>
-            {seenTotal ? null : (
+            {seenTotal || decidedTotal ? null : (
               <button type="button" className="vq-button vq-button--ghost" onClick={() => onNavigate('review')}>
                 去视觉评审
                 <ArrowRight size={13} />
@@ -418,6 +431,19 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
               disabled={ackBusy === seen[0].projectId}
             >
               撤销
+            </button>
+          </div>
+        ) : null}
+
+        {/* 拍过板的也留一行：它不是「已看过」，胶囊与下一步已经按人的结论走了 */}
+        {decidedTotal && decided[0] ? (
+          <div className="vq-review-queue-seen is-decided">
+            <span className="vq-review-queue-seen-text">
+              你拍板过 {decidedTotal} 条 · 最近：{decided[0].title}（第 {Math.max(1, decided[0].version)} 版 ·{' '}
+              {decided[0].decision === 'pass' ? '通过' : '不通过'} · {reviewTimeLabel(decided[0].decidedAt)}）· 撤销在作品页
+            </span>
+            <button type="button" className="vq-link" onClick={() => onOpenProject(decided[0].projectId)}>
+              打开
             </button>
           </div>
         ) : null}

@@ -5,10 +5,15 @@
 //
 // v0.9.20 起队列有出口：人看过、这一版先不改的可以「已看过」，它从待办挪到 seen，
 // 但结论不动、胶囊不动——看过的评审还在评审历史里，「看过」不等于「改过」。
+//
+// v0.9.21 起有第三个出口：人看过证据后拍板（通过 / 不通过）。拍过板的那一条从待办挪到 decided，
+// 状态胶囊改成「评审 · 人工通过 / 人工不通过」，下一步跟着换成交付或继续改。
+// 拍板按「哪一次评审」认：再评出新结论，时间对不上，它回到 items——人拍的是那一次，不是永远。
 import { listProjects, getProject } from './projects.mjs'
 import { reviewCountsByProject } from './reviews.mjs'
-import { reviewsForVersion, projectStatus } from './project-status.mjs'
+import { reviewsForVersion, projectStatus, decisionFor } from './project-status.mjs'
 import { listAcks } from './review-acks.mjs'
+import { listDecisions } from './review-decisions.mjs'
 
 /**
  * 一条作品当前是否还等着人动手：是就返回队列行，不是就 null。
@@ -44,13 +49,30 @@ export async function reviewQueueRow(projectId, user = null) {
  * 一条「已看过」只在版次与评审时间都对得上时才算数——同一版又评出新结论会自动回到 items。
  */
 export async function reviewQueue(user = null, { limit = 6 } = {}) {
-  const [projects, counts, acks] = await Promise.all([listProjects(user), reviewCountsByProject(user), listAcks(user)])
+  const [projects, counts, acks, decisions] = await Promise.all([
+    listProjects(user),
+    reviewCountsByProject(user),
+    listAcks(user),
+    listDecisions(user),
+  ])
   const acked = new Map(acks.map((entry) => [entry.projectId, entry]))
+  const byProject = new Map()
+  for (const entry of decisions) {
+    const bucket = byProject.get(entry.projectId)
+    if (bucket) bucket.push(entry)
+    else byProject.set(entry.projectId, [entry])
+  }
   const rows = []
   const seen = []
+  const decided = []
   for (const project of projects) {
     const row = pendingRow(project, counts)
     if (!row) continue
+    const decision = decisionFor(byProject.get(row.projectId), row.at)
+    if (decision) {
+      decided.push({ ...row, decision: decision.decision, note: decision.note, decidedAt: decision.at })
+      continue
+    }
     const ack = acked.get(row.projectId)
     if (ack && ack.version === row.version && ack.reviewAt === row.at) {
       seen.push({ ...row, seenAt: ack.at })
@@ -61,6 +83,7 @@ export async function reviewQueue(user = null, { limit = 6 } = {}) {
   // 越新越靠前：刚评出意见的那条最该先看
   rows.sort((a, b) => String(b.at).localeCompare(String(a.at)) || a.projectId.localeCompare(b.projectId))
   seen.sort((a, b) => String(b.seenAt).localeCompare(String(a.seenAt)) || a.projectId.localeCompare(b.projectId))
+  decided.sort((a, b) => String(b.decidedAt).localeCompare(String(a.decidedAt)) || a.projectId.localeCompare(b.projectId))
   const max = Math.min(20, Math.max(1, Math.round(Number(limit) || 6)))
   return {
     items: rows.slice(0, max),
@@ -68,5 +91,8 @@ export async function reviewQueue(user = null, { limit = 6 } = {}) {
     // 看过的只需给界面写一行「已看过 N 条」与撤销，最多 10 条够用
     seen: seen.slice(0, 10),
     seenTotal: seen.length,
+    // 拍过板的同理：工作台只写一行「你拍板过 N 条」，撤销在作品页
+    decided: decided.slice(0, 10),
+    decidedTotal: decided.length,
   }
 }

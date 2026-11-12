@@ -113,7 +113,9 @@ test('对照纸：框上的编号就是问题列表的编号，结论与判断�
   assert.match(html, /data-no="1" style="left:13\.00%;top:45\.00%;width:47\.00%;height:12\.00%"/)
   assert.equal((html.match(/data-no=/g) || []).length, 1, '第二条问题的框贴在画外，纸上只该有一个框')
   assert.match(html, /<span class="rev-sev is-major">重要 · 构图与裁切<\/span>红色标题/, '第 1 条与 1 号框对得上')
-  assert.match(html, /框是评审当时给出的位置（相对画面比例），不是人工复核/)
+  // v0.9.21 起纸脚把两件事分开写：框是谁给的 / 有没有人复核过。没人拍板时后半句才写「不是人工复核」
+  assert.match(html, /框是评审当时给出的位置（相对画面比例）/)
+  assert.match(html, /不是人工复核/)
   assert.match(html, /2026-11-12 23:20/, '纸脚按东八区写导出时间')
 })
 

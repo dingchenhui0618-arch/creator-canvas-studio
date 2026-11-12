@@ -8,6 +8,9 @@
 /** 结论的三种写法：与评审页、评审历史、分享页同一套字。 */
 export const VERDICT_TEXT = { pass: '通过', needs_review: '需人工确认', fail: '不通过' }
 
+/** 人拍板的两种写法：写在模型结论旁边时要分得清是谁说的。 */
+export const DECISION_TEXT = { pass: '人工通过', reject: '人工不通过' }
+
 /**
  * 某一版评过几次、最后一次结论是什么。
  * 版本划分之前留下的评审记在 0 上，v1 要把它们算进来，否则老作品刚开版本视图会显示「这一版没评过」。
@@ -27,16 +30,41 @@ export function reviewsForVersion(counts, version) {
 }
 
 /**
+ * 哪条拍板管这一次评审：按评审时间认（版次只是写给人看的）。
+ * 同一版又评出新结论、或开了新版，时间对不上，拍板自动失效——人拍的是那一次评审，不是「这条作品永远通过」。
+ */
+export function decisionFor(decisions, reviewAt) {
+  const at = String(reviewAt || '')
+  if (!at) return null
+  for (const entry of Array.isArray(decisions) ? decisions : []) {
+    if (entry && entry.decision && String(entry.reviewAt || '') === at) return entry
+  }
+  return null
+}
+
+/**
  * 状态胶囊：文案 + 语气 + 那条结论。
  * 语气只决定颜色，语义全在文案里，换皮不会改意思。
  *   idle 待开画布 / live 在做 / ok 评审通过 / warn 需人工确认 / fail 不通过 / done 已交付
+ *
+ * 有人的拍板时写人的那一句（评审 · 人工通过 / 人工不通过）：胶囊回答的是「谁能拍板」，
+ * 人拍过板就不再拿模型的「需人工确认」当结论。
  */
-export function projectStatus(project, reviews) {
+export function projectStatus(project, reviews, decision = null) {
   if (project?.status === 'done') return { text: '已交付', tone: 'done', verdict: '' }
   if (!project?.flowId) return { text: '待开画布', tone: 'idle', verdict: '' }
   const count = Number(reviews?.count) || 0
   if (!count) return { text: '在做', tone: 'live', verdict: '' }
   const verdict = reviews?.lastVerdict || ''
+  // 人拍板优先：它是结论之上的一层，模型写的结论仍然留在评审记录里
+  if (decision && DECISION_TEXT[decision.decision]) {
+    return {
+      text: '评审 · ' + DECISION_TEXT[decision.decision],
+      tone: decision.decision === 'pass' ? 'ok' : 'fail',
+      verdict,
+      human: decision.decision,
+    }
+  }
   if (verdict === 'pass') return { text: '评审 · 通过', tone: 'ok', verdict }
   if (verdict === 'needs_review') return { text: '评审 · 需人工确认', tone: 'warn', verdict }
   if (verdict === 'fail') return { text: '评审 · 不通过', tone: 'fail', verdict }

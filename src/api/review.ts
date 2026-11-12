@@ -145,6 +145,13 @@ export type ReviewQueueRow = {
 /** 已经看过、这一版先不改的一条：结论不变，只是从待办里挪开。 */
 export type ReviewQueueSeenRow = ReviewQueueRow & { seenAt: string }
 
+/** 人已经拍过板的一条：结论没变，但胶囊与下一步听人的。 */
+export type ReviewQueueDecidedRow = ReviewQueueRow & {
+  decision: 'pass' | 'reject'
+  note: string
+  decidedAt: string
+}
+
 export type ReviewQueue = {
   ok: boolean
   /** 还没看的 */
@@ -153,10 +160,25 @@ export type ReviewQueue = {
   /** 看过了、先没改的（最多 10 条，够写一行「已看过 N 条」） */
   seen: ReviewQueueSeenRow[]
   seenTotal: number
+  /** 人已经拍过板的（同样最多 10 条，工作台只写一行） */
+  decided: ReviewQueueDecidedRow[]
+  decidedTotal: number
 }
 
 export const listReviewQueue = (limit = 6) =>
   request<ReviewQueue>('/api/reviews/queue?limit=' + limit)
+
+/** 一条拍板记录：哪一版、哪一次评审、拍成什么、哪天拍的。 */
+export type ReviewDecisionRow = {
+  id: string
+  projectId: string
+  version: number
+  reviewAt: string
+  verdict: string
+  decision: 'pass' | 'reject'
+  note: string
+  at: string
+}
 
 /**
  * 已看过：把这条作品从「评审等你看的」待办里拿掉。
@@ -171,3 +193,18 @@ export const ackReview = (projectId: string) =>
 /** 撤销「已看过」：它回到待办。 */
 export const unackReview = (projectId: string) =>
   request<{ ok: boolean; removed: number }>('/api/reviews/ack/' + projectId, { method: 'DELETE' })
+
+/**
+ * 人工复核：人拍板这一版「能发 / 不能发」。
+ * 落库记在「哪一次评审」上（服务端现算版次与评审时间），再评出新结论要重新拍板；不扣积分。
+ * 它不改评审记录本身：模型写了什么还在评审历史里，人这一层单独记。
+ */
+export const decideReview = (projectId: string, decision: 'pass' | 'reject', note = '') =>
+  request<{ ok: boolean; decision: ReviewDecisionRow; row: ReviewQueueRow }>('/api/reviews/decision', {
+    method: 'POST',
+    body: JSON.stringify({ projectId, decision, note }),
+  })
+
+/** 撤销拍板：这条作品的拍板记录清掉，它回到待办。 */
+export const clearReviewDecision = (projectId: string) =>
+  request<{ ok: boolean; removed: number }>('/api/reviews/decision/' + projectId, { method: 'DELETE' })

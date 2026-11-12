@@ -11,6 +11,7 @@
 //  3. 每一版只印最近一次评审：同一版重评多次的中间结论在作品页里看，
 //     纸只回答「现在这一版被指出什么」。
 import { escapeHtml, paperShell, printToolbar } from './project-deliverable-html.mjs'
+import { decisionFor } from './project-status.mjs'
 
 export const REVIEW_SHEET_LIMITS = { blocks: 3, observations: 8, fixes: 3, notAssessable: 3 }
 
@@ -235,6 +236,8 @@ function factItem(label, value) {
 export function reviewSheetHtml({
   project = {},
   records = [],
+  // 人拍板的记录（可能只有一条，也可能一条都没有）：纸脚写「不是人工复核」只在真的没人复核时成立
+  decisions = [],
   now = new Date(),
   tzOffsetMinutes = 480,
   projectId = '',
@@ -319,6 +322,7 @@ export function reviewSheetHtml({
         : '这次评审的画面不在我们的帧图里（评的是外部图片）：框只能对着原图看，问题与编号仍按原文列出。'
       body.push('<span class="rev-shot is-missing">' + escapeHtml(missing) + '</span>')
     }
+    const decision = decisionFor(decisions, block.createdAt)
     const rows = [
       factRow('评审对象', block.sourceLabel),
       factRow('时间', stamp(block.createdAt, tz)),
@@ -359,8 +363,13 @@ export function reviewSheetHtml({
     // 纸脚写成一句话：框是谁给的、有没有人复核过、画面是包里的哪一张——这三件事不写清就会被人当成定论
     const notes = [
       src
-        ? (boxes.length ? '框是评审当时给出的位置（相对画面比例），不是人工复核' : '这次的问题没有一条带证据框')
+        ? (boxes.length ? '框是评审当时给出的位置（相对画面比例）' : '这次的问题没有一条带证据框')
         : (boxes.length ? '这次的问题带了框的位置，但画面不在这份产物里，框画不出来' : '这次的问题没有一条带证据框'),
+      // 人拍板就是把「不是人工复核」换成「谁在哪天拍了什么板」：纸会被转发，这一句不能省
+      decision
+        ? '这一版人工复核：' + (decision.decision === 'pass' ? '通过' : '不通过') + ' · ' +
+          stamp(decision.at, tz) + (decision.note ? ' · ' + String(decision.note) : '')
+        : '不是人工复核',
       noteOf(block) || '',
     ].filter(Boolean)
     body.push('<p class="rev-foot">' + escapeHtml(notes.join('；')) + '。</p>')

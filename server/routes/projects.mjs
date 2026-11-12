@@ -26,6 +26,8 @@ import { reviewImageRef, reviewSheetHtml, reviewSheetSelection } from '../projec
 import { getShareVisits, getShareVisitsByKey } from '../share-visits.mjs'
 import { shareBriefsByProject } from '../share-summary.mjs'
 import { dropAcksForProject } from '../review-acks.mjs'
+import { dropDecisionsForProject, listDecisions } from '../review-decisions.mjs'
+import { decisionFor, reviewsForVersion } from '../project-status.mjs'
 import { buildZip } from '../zip-store.mjs'
 import {
   listProjects,
@@ -168,6 +170,13 @@ async function projectDetailView(project, user, { snapshots = false } = {}) {
     runCounts[version] = (runCounts[version] || 0) + Number(amount)
   }
   const flowView = flowBrief(flow)
+  // 人工复核：这条作品名下的拍板记录，加上「管当前这一版最近一次评审」的那条。
+  // 状态胶囊、下一步、交付稿与两张纸都读同一处判断——人拍过板就不再拿模型的「需人工确认」当结论。
+  const decisions = (await listDecisions(user))
+    .filter((entry) => entry.projectId === project.id)
+    .sort((a, b) => String(b.at).localeCompare(String(a.at)))
+  const currentReview = reviewsForVersion(versionCounts, project.version)
+  const decision = decisionFor(decisions, currentReview.lastAt)
   // 分享面板要显示「链接被打开过几次」：只在作品详情里带上，列表接口不返回 token 与打开记录
   // 历史链接同理：token 清掉之后地址打不开，但那一轮被打开过几次还能回看（v0.9.11）
   const [share, shareHistory] = await Promise.all([
@@ -193,6 +202,9 @@ async function projectDetailView(project, user, { snapshots = false } = {}) {
     // 作品页的脚本：自己的版本优先（source: project），否则跟随模板
     script: scriptView(project, template),
     reviews: reviews.items,
+    // 拍板记录按时间倒序（纸要按版次各印各的，胶囊只用其中管当前这一版的那条）
+    decisions,
+    decision,
     versions,
     versionCounts,
     runs,
@@ -361,6 +373,8 @@ export function createProjectsRouter() {
           reviewSheetHtml({
             project: printable,
             records,
+            // 哪一版谁拍过板要印在纸上：纸脚写「不是人工复核」只在真的没人复核时成立
+            decisions: detail.decisions,
             now: new Date(),
             tzOffsetMinutes: reviewTz,
             projectId: printable.id,
@@ -376,7 +390,18 @@ export function createProjectsRouter() {
       }
 
       if (pathname === '/api/projects' && req.method === 'GET') {
-        const [projects, reviews] = await Promise.all([listProjects(user), reviewCountsByProject(user)])
+        const [projects, reviews, decisions] = await Promise.all([
+          listProjects(user),
+          reviewCountsByProject(user),
+          listDecisions(user),
+        ])
+        // 卡片上的状态胶囊要认得人工拍板：按作品分一次组，别在循环里 repeated 过滤
+        const decisionsByProject = new Map()
+        for (const entry of decisions) {
+          const bucket = decisionsByProject.get(entry.projectId)
+          if (bucket) bucket.push(entry)
+          else decisionsByProject.set(entry.projectId, [entry])
+        }
         // 运行归集：所有作品名下（含归档版本）的画布一次取回来，卡片上就能写「跑过几次」。
         // byFlow 把运行次数按画布分组，跨版本加总才有意义——只取一条记录，这里只要计数。
         const projectFlows = projects.flatMap((project) => [project.flowId, ...project.versions.map((entry) => entry.flowId)])
@@ -395,6 +420,11 @@ export function createProjectsRouter() {
             // 总数给「评过几次」，按版本的分组给状态胶囊判断当前这一版
             reviews: { count: counters.count, lastVerdict: counters.lastVerdict, lastAt: counters.lastAt },
             versionCounts: counters.versions || {},
+            // 管当前这一版最近一次评审的那条拍板；没有就是 null
+            decision: decisionFor(
+              decisionsByProject.get(project.id),
+              reviewsForVersion(counters.versions || {}, project.version).lastAt,
+            ),
             runs: { count: runs },
             share: shareBriefs.get(project.id) || null,
           })
@@ -661,6 +691,7 @@ export function createProjectsRouter() {
           ? reviewSheetHtml({
               project,
               records: reviewRecords,
+              decisions: detail.decisions,
               now,
               tzOffsetMinutes: zipTz,
               offline: true,
@@ -754,7 +785,9 @@ export function createProjectsRouter() {
         const detached = await detachReviewsFromProject(removed.id)
         // 「已看过」是待办上的便利贴：作品没了，便利贴一起撕掉
         const droppedAcks = await dropAcksForProject(removed.id)
-        sendJson(res, 200, { ok: true, removed: { id: removed.id, detachedReviews: detached, droppedAcks } })
+        // 人拍板是这条作品的结论，作品没了也不该留在盘上冒充别的作品的记录
+        const droppedDecisions = await dropDecisionsForProject(removed.id)
+        sendJson(res, 200, { ok: true, removed: { id: removed.id, detachedReviews: detached, droppedAcks, droppedDecisions } })
         return true
       }
 

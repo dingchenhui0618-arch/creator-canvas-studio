@@ -18,6 +18,22 @@ export type ProjectTemplateBrief = {
 
 export type ProjectReviews = { count: number; lastVerdict: string; lastAt: string }
 
+/**
+ * 人工复核：人看过证据后对某一次评审拍板的结果。
+ * 它不改评审记录本身（模型写了什么还是什么），只回答「这一版是谁拍的板、拍成什么」。
+ * 按 reviewAt 认那次评审：同一版又评出新结论，这条就失效了。
+ */
+export type ProjectDecision = {
+  id: string
+  projectId: string
+  version: number
+  reviewAt: string
+  verdict: string
+  decision: 'pass' | 'reject'
+  note: string
+  at: string
+}
+
 /** 归档的旧版本：只存画布指针与名字，画布本身仍在流程服务里 */
 export type ProjectVersion = { n: number; flowId: string; name: string; archivedAt: string }
 
@@ -73,6 +89,8 @@ export type ProjectSummary = Project & {
   runs: { count: number }
   /** 卡片上的分享状态；从没分享过就是 null */
   share: ProjectShareBrief | null
+  /** 管当前这一版最近一次评审的人工拍板；还没人拍板就是 null */
+  decision?: ProjectDecision | null
 }
 
 export type ProjectTemplateDetail = ProjectTemplateBrief & {
@@ -189,6 +207,9 @@ export type ProjectDetail = {
   versions: ProjectVersionView[]
   /** 按版本分组的评审计数：键是版本号，用于版本对照 */
   versionCounts: Record<string, ProjectReviews>
+  /** 这条作品的拍板记录（按时间倒序）；管当前这一版的那条在 decision 里 */
+  decisions?: ProjectDecision[]
+  decision?: ProjectDecision | null
   /** 运行归集：当前版与归档版的运行合成一条时间线，按开始时间倒序 */
   runs: ProjectRun[]
   runTotal: number
@@ -199,16 +220,26 @@ export type ProjectDetail = {
 /**
  * 状态胶囊：文案 + 语气。语气只决定颜色，不改变语义。
  * 评过不等于过了：有结论时直接写结论，「已评审」只在没有结论的老记录上出现。
+ * 有人拍过板时写人的那一句：胶囊回答「这一版谁拍的板」，人拍过就不再拿模型的「需人工确认」当结论。
  * 与服务端 server/project-status.mjs 同一口径——交付稿上写的状态和这里必须是一句话。
  */
 export function projectStatus(
   project: Project,
   reviews: ProjectReviews,
-): { text: string; tone: 'idle' | 'live' | 'ok' | 'warn' | 'fail' | 'done'; verdict: string } {
+  decision: ProjectDecision | null = null,
+): { text: string; tone: 'idle' | 'live' | 'ok' | 'warn' | 'fail' | 'done'; verdict: string; human?: 'pass' | 'reject' } {
   if (project.status === 'done') return { text: '已交付', tone: 'done', verdict: '' }
   if (!project.flowId) return { text: '待开画布', tone: 'idle', verdict: '' }
   if (!reviews.count) return { text: '在做', tone: 'live', verdict: '' }
   const verdict = reviews.lastVerdict || ''
+  if (decision && (decision.decision === 'pass' || decision.decision === 'reject')) {
+    return {
+      text: decision.decision === 'pass' ? '评审 · 人工通过' : '评审 · 人工不通过',
+      tone: decision.decision === 'pass' ? 'ok' : 'fail',
+      verdict,
+      human: decision.decision,
+    }
+  }
   if (verdict === 'pass') return { text: '评审 · 通过', tone: 'ok', verdict }
   if (verdict === 'needs_review') return { text: '评审 · 需人工确认', tone: 'warn', verdict }
   if (verdict === 'fail') return { text: '评审 · 不通过', tone: 'fail', verdict }
@@ -249,6 +280,7 @@ export type ProjectStepKey = 'canvas' | 'review' | 'continue' | 'deliver' | 'don
 export function projectStep(
   project: Project,
   reviews: ProjectReviews,
+  decision: ProjectDecision | null = null,
 ): { key: ProjectStepKey; label: string; title: string; hint: string; cta: string } {
   if (project.status === 'done') {
     return {
@@ -275,6 +307,25 @@ export function projectStep(
       title: '画布有了，送一次评审',
       hint: '拿你这一版的画面跑一遍视觉评审，结论会记在这条作品下',
       cta: '用评审看这版',
+    }
+  }
+  // 人拍过板就听人的：拍板通过 → 交出去；拍板不通过 → 回去改。模型结论只是它下面的那一层。
+  if (decision?.decision === 'pass') {
+    return {
+      key: 'deliver',
+      label: '下一步 · 交付',
+      title: '这一版你拍板通过了',
+      hint: '人已经拍过板：把脚本、分镜、评审结论与运行记录打成交付稿或交付包发出去',
+      cta: '交付这一版',
+    }
+  }
+  if (decision?.decision === 'reject') {
+    return {
+      key: 'continue',
+      label: '下一步 · 继续改',
+      title: '你拍板这一版不行，按意见改',
+      hint: '人已经否了这一版：按评审里指出的问题改完，再评一次；再评出新结论后需要重新拍板',
+      cta: '继续画布',
     }
   }
   // 这一版评审通过了：下一步不再是改，而是把这版交出去

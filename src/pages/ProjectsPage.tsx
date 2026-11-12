@@ -110,7 +110,7 @@ export default function ProjectsPage({
             <button type="button" className="vq-project-card" key={item.id} onClick={() => onOpenProject(item.id)}>
               <span className="vq-project-card-head">
                 <span className="vq-project-card-tags">
-                  <ProjectStatusPill project={item} reviews={reviewsForVersion(item.versionCounts || {}, item.version)} />
+                  <ProjectStatusPill project={item} reviews={reviewsForVersion(item.versionCounts || {}, item.version)} decision={item.decision ?? null} />
                   {item.share ? (
                     <span className={'vq-project-share' + (item.share.live ? ' is-live' : '')} title={shareHint(item.share)}>
                       {item.share.live ? <span className="vq-project-share-dot" aria-hidden="true" /> : null}

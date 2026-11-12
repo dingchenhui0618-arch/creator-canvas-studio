@@ -3,6 +3,7 @@ import { reviewVisual, reviewStatus } from '../review.mjs'
 import { saveReview, listReviews, getReview } from '../reviews.mjs'
 import { reviewQueue, reviewQueueRow } from '../review-queue.mjs'
 import { ackReview, unackReview } from '../review-acks.mjs'
+import { saveDecision, clearDecisions, DECISION_KINDS } from '../review-decisions.mjs'
 import { getProject, listProjects } from '../projects.mjs'
 import { projectsById, withReviewProject } from '../review-ownership.mjs'
 import fsp from 'node:fs/promises'
@@ -27,6 +28,7 @@ async function readLocalMedia(mediaPath) {
 
 const REVIEW_ITEM = /^\/api\/reviews\/([\w-]+)$/
 const ACK_ITEM = /^\/api\/reviews\/ack\/([\w-]+)$/
+const DECISION_ITEM = /^\/api\/reviews\/decision\/([\w-]+)$/
 
 export function createReviewRouter() {
   return {
@@ -89,6 +91,47 @@ export function createReviewRouter() {
       const ackItem = pathname.match(ACK_ITEM)
       if (ackItem && req.method === 'DELETE') {
         const removed = await unackReview(ackItem[1], user)
+        sendJson(res, 200, { ok: true, removed })
+        return true
+      }
+      // 人工复核：人看过证据后拍板「这一版能发 / 不能发」。
+      // 与已看过的区别：已看过只把待办挪开，结论不动；拍板是人的结论，会盖过模型结论出现在胶囊、下一步与纸上。
+      // 落库仍不改评审记录本身：模型写了什么还是什么，人这一层单独记。不扣积分。
+      if (pathname === '/api/reviews/decision' && req.method === 'POST') {
+        const body = await readBody(req)
+        const projectId = body.projectId ? String(body.projectId).slice(0, 40) : ''
+        if (!projectId) {
+          sendJson(res, 400, { error: '要说清是哪条作品', code: 'PROJECT_REQUIRED' })
+          return true
+        }
+        const decision = String(body.decision || '')
+        if (!DECISION_KINDS.includes(decision)) {
+          sendJson(res, 400, { error: '拍板只有「通过」和「不通过」两种', code: 'DECISION_INVALID' })
+          return true
+        }
+        const row = await reviewQueueRow(projectId, user)
+        if (!row) {
+          sendJson(res, 409, {
+            error: '这条现在没有等你拍板的评审：结论是通过、已经交付，或者这一版还没评过',
+            code: 'NO_PENDING_REVIEW',
+          })
+          return true
+        }
+        const record = await saveDecision({
+          projectId,
+          // 版次与评审时间都由服务端现算：界面上的时间只用来显示，不参与记账
+          version: row.version,
+          reviewAt: row.at,
+          verdict: row.verdict,
+          decision,
+          note: body.note ? String(body.note).slice(0, 80) : '',
+        }, user)
+        sendJson(res, 200, { ok: true, decision: record, row })
+        return true
+      }
+      const decisionItem = pathname.match(DECISION_ITEM)
+      if (decisionItem && req.method === 'DELETE') {
+        const removed = await clearDecisions(decisionItem[1], user)
         sendJson(res, 200, { ok: true, removed })
         return true
       }

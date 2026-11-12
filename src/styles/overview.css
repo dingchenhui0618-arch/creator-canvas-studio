@@ -666,7 +666,11 @@
   color: var(--ink);
 }
 
-/* 看过的一行：写清楚「看过不等于改过」，并给撤销 */
+/*
+ * 看过的一行：写清楚「看过不等于改过」，并给撤销。
+ * 拍过板的一行（is-decided）与它分开：那份是「先没改」，这份是人的结论已经生效，
+ * 所以边框重一档、字用正文色——一眼能分出「我看过了」和「我拍板了」。
+ */
 .vq-review-queue-seen {
   display: flex;
   flex-wrap: wrap;
@@ -681,6 +685,11 @@
   color: var(--muted);
   font-size: 12px;
   line-height: 1.6;
+}
+
+.vq-review-queue-seen.is-decided {
+  border-color: var(--line-strong);
+  color: var(--ink);
 }
 
 .vq-review-queue-seen-text {
