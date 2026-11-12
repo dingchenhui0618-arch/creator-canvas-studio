@@ -279,11 +279,14 @@ export function printToolbar({
   meta = '210 x 297 mm',
   hint = '纸张选 A4；想要页码就在打印对话框里打开「页眉和页脚」',
   back = true,
+  // 返回地址默认回作品页；分享出去的纸要回分享页（那里没有登录态，回作品页只会撞上登录页）
+  backHref = '',
+  backLabel = '返回作品',
   brand = 'img',
   // 这一种纸自己要多带一个控件（现场页的「只印哪几镜」）：插在提示与返回之间，打印时整条顶栏都隐藏
   extra = '',
 } = {}) {
-  const backHref = projectId ? '/#/projects/' + encodeURIComponent(projectId) : '/#/projects'
+  const href = backHref || (projectId ? '/#/projects/' + encodeURIComponent(projectId) : '/#/projects')
   const mark =
     brand === 'img'
       ? '<img class="bar-brand" src="/brand/visionqa-lockup.svg" alt="VisionQA">'
@@ -298,7 +301,7 @@ export function printToolbar({
     '<div class="bar-right">' +
     '<span class="bar-hint">' + escapeHtml(hint) + '</span>' +
     extra +
-    (back ? '<a class="bar-link" href="' + escapeHtml(backHref) + '">返回作品</a>' : '') +
+    (back ? '<a class="bar-link" href="' + escapeHtml(href) + '">' + escapeHtml(backLabel) + '</a>' : '') +
     '<button class="bar-print" type="button" data-print>打印 / 存为 PDF</button>' +
     '</div>' +
     '</header>'

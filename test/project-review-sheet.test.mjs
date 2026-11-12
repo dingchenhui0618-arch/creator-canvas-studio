@@ -9,6 +9,7 @@ import {
   reviewImageRef,
   reviewSheetBlocks,
   reviewSheetHtml,
+  reviewSheetSelection,
 } from '../server/project-review-sheet.mjs'
 import { packageNote } from '../server/project-set-sheet.mjs'
 import { projectDeliverable } from '../server/project-deliverable.mjs'
@@ -67,6 +68,21 @@ test('每版取最近一次：v0 折进 v1，按版本从新到旧，最多三�
   assert.equal(shown, REVIEW_SHEET_LIMITS.blocks)
   assert.deepEqual(blocks.map((block) => block.version), [4, 3, 2], '从新到旧，超出上限的旧版不印')
   assert.equal(blocks[2].id, 'new', '同一版重评多次只印最近那一次')
+})
+
+test('挑评审的规则只有一份：摘要和全文都走 reviewSheetSelection', () => {
+  const records = [
+    { id: 'v2-old', version: 2, createdAt: '2026-11-12T10:00:00.000Z' },
+    { id: 'v2-new', version: 2, createdAt: '2026-11-12T12:00:00.000Z' },
+    { id: 'v0', version: 0, createdAt: '2026-11-11T10:00:00.000Z' },
+    { id: 'v1', version: 1, createdAt: '2026-11-11T12:00:00.000Z' },
+    { id: 'v3', version: 3, createdAt: '2026-11-12T13:00:00.000Z' },
+    { id: 'v4', version: 4, createdAt: '2026-11-12T14:00:00.000Z' },
+  ]
+  const { records: selected, total } = reviewSheetSelection(records)
+  assert.equal(total, 4, 'v0 与 v1 算同一版')
+  assert.deepEqual(selected.map((item) => item.id), ['v4', 'v3', 'v2-new'], '从新到旧、每版最近一次、最多三版')
+  assert.deepEqual(reviewSheetSelection([]), { records: [], total: 0 })
 })
 
 test('证据框：压边裁进画面，整块出画面的丢掉，位置写成人能照着找的百分比', () => {
@@ -154,6 +170,37 @@ test('交付稿：问题后面带框的百分比，并指向交付包里的对�
   assert.match(markdown, /2\. \*\*轻微 · 对齐与间距\*\*/)
   assert.match(markdown, /证据框：1 条问题在画面上框了位置/)
   assert.match(markdown, /评审对照页\.html/)
+})
+
+test('分享页的对照纸：回分享页、画面走带 token 的帧图、不印作品内部 id', () => {
+  const html = reviewSheetHtml({
+    project: { title: '毛衣折叠收纳法', version: 2 },
+    records: [record()],
+    backHref: '/#/share/project/tok_share_1234567890',
+    backLabel: '返回分享页',
+    originNote: '来自只读分享链接：链接停用后这个地址会打不开，已经存下来的 PDF 不受影响。',
+    imageSrc: () => '/api/share/project/tok_share_1234567890/frame/1',
+  })
+  assert.match(html, /返回分享页/)
+  assert.match(html, /#\/share\/project\/tok_share_1234567890/)
+  assert.match(html, /<img src="\/api\/share\/project\/tok_share_1234567890\/frame\/1"/, '画面走分享链接自己的帧图接口')
+  assert.doesNotMatch(html, /\/media\/frames/, '分享页拿不到要登录的帧图，纸上不能留着那个地址')
+  assert.match(html, /来自只读分享链接/)
+  assert.doesNotMatch(html, /作品编号/, '内部作品 id 不跟着分享出去')
+  assert.match(html, /data-no="1"/)
+})
+
+test('分享页的对照纸：帧图不在分享里时照实写，不替它去别处取图', () => {
+  const html = reviewSheetHtml({
+    project: { title: '毛衣折叠收纳法' },
+    records: [record()],
+    imageSrc: () => '',
+    missingText: '这次评审评的那张帧图不在这个分享里：分享只给这条作品分镜里的帧。问题与编号仍按原文列出。',
+  })
+  assert.match(html, /不在这个分享里/)
+  assert.doesNotMatch(html, /\/media\/frames/)
+  assert.doesNotMatch(html, /data-no=/, '没有画面就不画框：无图的框只会指向空气')
+  assert.match(html, /这次的问题带了框的位置，但画面不在这份产物里，框画不出来/)
 })
 
 test('交付包的说明：有评审对照页才写这一行', () => {

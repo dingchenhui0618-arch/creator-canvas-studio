@@ -140,3 +140,11 @@ export function setSheetUrl(id: string): string {
 export function reviewSheetUrl(id: string): string {
   return '/print/projects/' + encodeURIComponent(id) + '/review?tz=' + encodeURIComponent(tzOffset())
 }
+
+/**
+ * 分享页里的评审对照纸：不用登录，凭证就是分享链接里的 token。
+ * 画面走带 token 的帧图接口（分享页拿不到要登录的 /media/frames），纸的其余部分与作品页那份同一份渲染。
+ */
+export function sharedReviewSheetUrl(token: string): string {
+  return '/print/share/project/' + encodeURIComponent(token) + '/review?tz=' + encodeURIComponent(tzOffset())
+}

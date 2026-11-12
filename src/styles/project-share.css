@@ -225,6 +225,27 @@
 .pshare-verdict.is-fail { background: var(--fail-soft); color: var(--fail); }
 .pshare-verdict.is-none { background: var(--surface); border-color: var(--line); color: var(--muted); }
 
+/* 评审对照纸的入口：评审块里的一张横条，点开是新标签里的 A4 纸 */
+.pshare-paper {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  text-decoration: none;
+  transition: border-color var(--dur-1) var(--ease-out), background-color var(--dur-1) var(--ease-out);
+}
+.pshare-paper:hover { border-color: var(--ink); background: var(--surface-raised); }
+.pshare-paper:focus-visible { outline: none; box-shadow: var(--ring-soft); }
+.pshare-paper-icon { flex: none; margin-top: 2px; color: var(--muted); }
+.pshare-paper-main { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; flex: 1; }
+.pshare-paper-main strong { font-size: var(--text-copy); font-weight: var(--weight-semibold); line-height: var(--leading-meta); }
+.pshare-paper-main span { font-size: var(--text-meta); line-height: var(--leading-meta); color: var(--muted); }
+.pshare-paper > svg:last-child { flex: none; margin-top: 2px; color: var(--faint); }
+
 /* ---------- 页脚 ---------- */
 .pshare-foot {
   display: flex;
@@ -269,7 +290,10 @@
   .pshare-quote { font-size: var(--text-lg); }
   .pshare-shot-frame img { max-width: 88px; max-height: 108px; }
   .pshare-foot { flex-direction: column; align-items: flex-start; gap: var(--space-4); }
-  .pshare-page .pshare-actions .pshare-button:not(.is-primary) { display: none; }
+  /* 窄屏顶栏只留「评审对照」：甲方在手机上看，这是唯一要点的东西；
+     「打印」和「打开 VisionQA」留在桌面，手机上空间不够 */
+  .pshare-page .pshare-actions .pshare-act-print,
+  .pshare-page .pshare-actions .pshare-act-open { display: none; }
 }
 
 /* ---------- 打印：只留纸面 ----------
@@ -284,4 +308,6 @@
   .pshare-beats li, .pshare-shots li { break-inside: avoid; }
   .pshare-foot { break-inside: avoid; }
   .pshare-foot .pshare-button { display: none !important; }
+  /* 纸上的链接点了也打不开：分享页打印时只留内容，不留入口 */
+  .pshare-paper { display: none !important; }
 }

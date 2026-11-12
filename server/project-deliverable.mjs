@@ -530,7 +530,9 @@ function deliverySection(detail) {
   const out = ['', '## 交付', '']
   out.push('- 标记交付：' + (project.status === 'done' ? '已标记' : '还没标记'))
   out.push(
-    '- 只读分享：' + (detail.share ? '已开启（链接不写进这份稿：它会让人不用登录就能看，只在作品页复制）' : '没开启'),
+    '- 只读分享：' + (detail.share
+      ? '已开启（拿到链接的人不用登录就能看脚本、分镜、评审次数与评审对照纸；链接不写进这份稿，只在作品页复制）'
+      : '没开启'),
   )
   return out
 }

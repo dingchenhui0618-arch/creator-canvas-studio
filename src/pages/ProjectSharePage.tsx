@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { ArrowUpRight, Link2Off, Loader2, Printer } from 'lucide-react'
-import { getSharedProject } from '../api/projects'
+import { ArrowUpRight, Link2Off, Loader2, Printer, ScanEye } from 'lucide-react'
+import { getSharedProject, sharedReviewSheetUrl } from '../api/projects'
 import type { SharedProject } from '../domain/project'
 import { describeTiming } from '../domain/radar'
 import '../styles/project-share.css'
@@ -89,6 +89,9 @@ export default function ProjectSharePage({ token }: { token: string }) {
   const script = view.script
   const beats = script?.structure || []
   const verdict = VERDICT_LABEL[view.stats.lastVerdict] || ''
+  // 评审对照纸：评审把每条问题框在当时的画面上，编号对到问题列表。
+  // 走 <a> 而不是 window.open：新标签由浏览器自己开，不会被弹窗拦截器吃掉。
+  const paperUrl = view.stats.reviews ? sharedReviewSheetUrl(token) : ''
 
   return (
     <div className="pshare-page">
@@ -99,11 +102,17 @@ export default function ProjectSharePage({ token }: { token: string }) {
           <span className="pshare-badge">只读分享</span>
         </div>
         <div className="pshare-actions">
-          <button type="button" className="pshare-button" onClick={() => window.print()}>
+          {paperUrl ? (
+            <a className="pshare-button pshare-act-paper" href={paperUrl} target="_blank" rel="noreferrer">
+              <ScanEye size={14} />
+              评审对照
+            </a>
+          ) : null}
+          <button type="button" className="pshare-button pshare-act-print" onClick={() => window.print()}>
             <Printer size={14} />
             打印
           </button>
-          <button type="button" className="pshare-button is-primary" onClick={openWorkbench}>
+          <button type="button" className="pshare-button is-primary pshare-act-open" onClick={openWorkbench}>
             打开 VisionQA
             <ArrowUpRight size={14} />
           </button>
@@ -241,13 +250,25 @@ export default function ProjectSharePage({ token }: { token: string }) {
             <span>结论由视觉模型给出，只作参考</span>
           </div>
           {view.stats.reviews ? (
-            <div className="pshare-review-row">
-              <span className={'pshare-verdict is-' + (view.stats.lastVerdict || 'none')}>{verdict || '有记录'}</span>
-              <span>
-                评过 {view.stats.reviews} 次
-                {view.stats.lastAt ? ' · 最近 ' + dayLabel(view.stats.lastAt) : ''}
-              </span>
-            </div>
+            <>
+              <div className="pshare-review-row">
+                <span className={'pshare-verdict is-' + (view.stats.lastVerdict || 'none')}>{verdict || '有记录'}</span>
+                <span>
+                  评过 {view.stats.reviews} 次
+                  {view.stats.lastAt ? ' · 最近 ' + dayLabel(view.stats.lastAt) : ''}
+                </span>
+              </div>
+              {paperUrl ? (
+                <a className="pshare-paper" href={paperUrl} target="_blank" rel="noreferrer">
+                  <ScanEye size={16} className="pshare-paper-icon" />
+                  <span className="pshare-paper-main">
+                    <strong>评审对照 · 问题框在画面上</strong>
+                    <span>评审说的问题一条一条框回当时的画面，框上的编号对到问题列表；A4 一页，可打印或存成 PDF。</span>
+                  </span>
+                  <ArrowUpRight size={14} />
+                </a>
+              ) : null}
+            </>
           ) : (
             <p className="pshare-empty">这条作品还没有进过评审。</p>
           )}
@@ -257,8 +278,8 @@ export default function ProjectSharePage({ token }: { token: string }) {
           <div>
             <strong>关于这个链接</strong>
             <p>
-              只读分享：只展示这条作品的脚本、分镜与评审次数，不展示账号、积分与画布内容。
-              分享者停止分享后，这个地址会立即失效。
+              只读分享：只展示这条作品的脚本、分镜，以及评审次数与评审对照纸，不展示账号、积分与画布内容。
+              分享者停止分享后，这个地址与对照纸会立即失效。
             </p>
           </div>
           <button type="button" className="pshare-button is-primary" onClick={openWorkbench}>

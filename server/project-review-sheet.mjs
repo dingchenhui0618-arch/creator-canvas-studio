@@ -95,20 +95,36 @@ function judgeLine(judge) {
 }
 
 /**
- * 从评审全文里挑出要印的那几次，并把每条问题整理成纸上要的样子。
- * 返回 { blocks, total, shown }：total 是这条作品评过的版数，shown 是纸上印了几版。
+ * 每一版只留最近一次评审（版本 0 折进 v1），按版本从新到旧，最多 3 版。
+ * 列表摘要和评审全文都走这一条选择：纸上印的是哪几次，这里说了算，两个入口不会各挑一套。
+ * 返回 { records, total }：total 是这条作品评过的版数（用于抬头写「印了 2 / 7 版」）。
  */
-export function reviewSheetBlocks(records) {
+export function reviewSheetSelection(records) {
   const latest = new Map()
   for (const record of Array.isArray(records) ? records : []) {
     if (!record) continue
     // 版本 0 是版本划分之前记的评审，按页面同一套规则折进 v1，否则纸上会写「v0」
     const version = Math.max(1, Math.round(Number(record.version) || 0))
     const seen = latest.get(version)
-    if (!seen || String(record.createdAt || '') > String(seen.record.createdAt || '')) latest.set(version, { record, version })
+    if (!seen || String(record.createdAt || '') > String(seen.createdAt || '')) latest.set(version, record)
   }
-  const ordered = [...latest.values()].sort((a, b) => b.version - a.version)
-  const blocks = ordered.slice(0, REVIEW_SHEET_LIMITS.blocks).map(({ record, version }) => {
+  return {
+    records: [...latest.values()]
+      .sort((a, b) => Math.max(1, Math.round(Number(b.version) || 0)) - Math.max(1, Math.round(Number(a.version) || 0)))
+      .slice(0, REVIEW_SHEET_LIMITS.blocks),
+    total: latest.size,
+  }
+}
+
+/**
+ * 从评审全文里挑出要印的那几次，并把每条问题整理成纸上要的样子。
+ * 返回 { blocks, total, shown }：total 是这条作品评过的版数，shown 是纸上印了几版。
+ */
+export function reviewSheetBlocks(records) {
+  const selection = reviewSheetSelection(records)
+  const total = selection.total
+  const blocks = selection.records.map((record) => {
+    const version = Math.max(1, Math.round(Number(record.version) || 0))
     const result = record.result || {}
     const observations = (Array.isArray(result.observations) ? result.observations : [])
       .slice(0, REVIEW_SHEET_LIMITS.observations)
@@ -149,7 +165,7 @@ export function reviewSheetBlocks(records) {
         .map((line) => String(line || '')),
     }
   })
-  return { blocks, total: latest.size, shown: blocks.length }
+  return { blocks, total, shown: blocks.length }
 }
 
 // ---------------------------------------------------------------------------
@@ -161,6 +177,7 @@ export function reviewSheetBlocks(records) {
 const REVIEW_SHEET_CSS = [
   '.bar-textbrand, .sheet-textbrand { font-family: var(--font); font-size: 13pt; font-weight: 600; letter-spacing: -0.01em; }',
   '.rev-intro { margin: 0 0 8pt; font-size: 9pt; line-height: 1.6; color: var(--muted); }',
+  '.rev-origin { margin: -4pt 0 8pt; font-size: 8pt; line-height: 1.55; color: var(--faint); }',
   '.rev-block { margin: 16pt 0 0; break-inside: avoid; }',
   '.rev-block h2 { margin-top: 14pt; padding-top: 8pt; }',
   '.rev-body { display: grid; grid-template-columns: 74mm 1fr; gap: 12pt; align-items: start; }',
@@ -224,6 +241,13 @@ export function reviewSheetHtml({
   offline = false,
   imageSrc = null,
   imageNote = null,
+  // 分享出去的纸要回分享页（没有登录态），并写清它来自哪条链接；两处都只影响顶栏与一句话
+  backHref = '',
+  backLabel = '返回作品',
+  hint = '',
+  originNote = '',
+  // 分享页拿不到交付包里那份帧图清单时的说法；离线包的文案不改
+  missingText = '',
 } = {}) {
   const tz = Number.isFinite(Number(tzOffsetMinutes)) ? Math.max(-720, Math.min(840, Math.round(Number(tzOffsetMinutes)))) : 480
   const { blocks, total, shown } = reviewSheetBlocks(records)
@@ -237,8 +261,10 @@ export function reviewSheetHtml({
       projectId,
       tag: '评审对照 / A4',
       meta: '210 x 297 mm',
-      hint: offline ? '解压后直接打印 / 存为 PDF；框只在纸上有' : '纸张选 A4；框与问题编号一一对应',
-      back: !offline && Boolean(projectId),
+      hint: hint || (offline ? '解压后直接打印 / 存为 PDF；框只在纸上有' : '纸张选 A4；框与问题编号一一对应'),
+      back: !offline && Boolean(backHref || projectId),
+      backHref,
+      backLabel,
       brand: offline ? 'text' : 'img',
     }),
   )
@@ -262,6 +288,7 @@ export function reviewSheetHtml({
         '评审按版本记，上一版的结论不搬到这一版上。</p>',
     )
   }
+  if (originNote) body.push('<p class="rev-origin">' + escapeHtml(originNote) + '</p>')
   // 抬头事实表：复用交付稿那张纸的 .sheet-facts（标签一列、值一列），扫读比一串「- 标签：值」快
   const facts = [
     factItem('作品编号', project.id || ''),
@@ -272,9 +299,12 @@ export function reviewSheetHtml({
   ].join('')
   if (facts) body.push('<ul class="sheet-facts">' + facts + '</ul>')
 
+  // 纸上到底画了几个框：没有画面就不画框，纸脚也只能数画出来的那些
+  let boxed = 0
   for (const block of blocks) {
     const src = srcOf(block) || ''
     const boxes = block.observations.filter((item) => item.box)
+    if (src) boxed += boxes.length
     body.push('<section class="rev-block">')
     body.push('<h2>v' + block.version + ' · ' + escapeHtml(block.verdictLabel) + '</h2>')
     body.push('<div class="rev-body">')
@@ -285,7 +315,7 @@ export function reviewSheetHtml({
       )
     } else {
       const missing = block.image
-        ? '这次评审的帧图不在这份产物里：离线包只放这条作品分镜里的帧。问题与编号仍按原文列出。'
+        ? (missingText || '这次评审的帧图不在这份产物里：离线包只放这条作品分镜里的帧。问题与编号仍按原文列出。')
         : '这次评审的画面不在我们的帧图里（评的是外部图片）：框只能对着原图看，问题与编号仍按原文列出。'
       body.push('<span class="rev-shot is-missing">' + escapeHtml(missing) + '</span>')
     }
@@ -328,14 +358,15 @@ export function reviewSheetHtml({
     body.push('</div></div>')
     // 纸脚写成一句话：框是谁给的、有没有人复核过、画面是包里的哪一张——这三件事不写清就会被人当成定论
     const notes = [
-      boxes.length ? '框是评审当时给出的位置（相对画面比例），不是人工复核' : '这次的问题没有一条带证据框',
+      src
+        ? (boxes.length ? '框是评审当时给出的位置（相对画面比例），不是人工复核' : '这次的问题没有一条带证据框')
+        : (boxes.length ? '这次的问题带了框的位置，但画面不在这份产物里，框画不出来' : '这次的问题没有一条带证据框'),
       noteOf(block) || '',
     ].filter(Boolean)
     body.push('<p class="rev-foot">' + escapeHtml(notes.join('；')) + '。</p>')
     body.push('</section>')
   }
 
-  const boxed = blocks.reduce((sum, block) => sum + block.observations.filter((item) => item.box).length, 0)
   const totalObs = blocks.reduce((sum, block) => sum + block.observations.length, 0)
   body.push(
     '<p class="sheet-foot">由 VisionQA 导出 · ' + escapeHtml(stamp(now.toISOString(), tz)) + ' · ' +

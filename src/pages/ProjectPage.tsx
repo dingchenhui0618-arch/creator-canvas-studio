@@ -176,7 +176,7 @@ export default function ProjectPage({
     try {
       const result = await enableProjectShare(data.project.id)
       setData({ ...data, share: { token: result.token, createdAt: result.createdAt } })
-      onToast('分享链接已生成：拿到链接的人不用登录就能看')
+      onToast('分享链接已生成：拿到链接的人不用登录就能看脚本、分镜和评审对照')
     } catch (caught) {
       onToast(caught instanceof Error ? caught.message : '分享链接没生成成功')
     } finally {
@@ -1157,7 +1157,8 @@ export default function ProjectPage({
             </div>
 
             <p className="vq-share-copy">
-              拿到链接的人不用登录就能看：开头钩子、脚本分段与口播时长、分镜，以及评审和运行的次数。
+              拿到链接的人不用登录就能看：开头钩子、脚本分段与口播时长、分镜、评审与运行的次数，
+              还有一张评审对照纸（评审说的问题框在当时的画面上，可打印或存 PDF）。
               看不到账号、积分与画布内容。
             </p>
 

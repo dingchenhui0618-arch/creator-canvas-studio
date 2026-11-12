@@ -53,7 +53,7 @@ fs.writeFileSync(
 )
 
 const p = await import('../server/projects.mjs')
-const { publicProjectView, frameFileOf } = await import('../server/project-share.mjs')
+const { publicProjectView, frameFileOf, shareFrameIndex } = await import('../server/project-share.mjs')
 
 test('分享链接能开能停，停止后旧 token 立即失效，重新开启换一条', async () => {
   const first = await p.enableProjectShare('prj_share', { id: 'u_a' })
@@ -160,6 +160,21 @@ test('模板被删掉时分享页仍能看作品自己的脚本，分镜与帧�
   assert.equal(view.stats.reviews, 0)
   assert.equal(view.stats.runs, 0)
   assert.equal(view.project.status, 'active')
+})
+
+test('评审评的那一帧：只在模板自己的帧记录里找序号，找不到就不给图', () => {
+  const template = {
+    id: 'tpl_a',
+    frames: [
+      { index: 3, url: '/media/frames/tpl_a/frame-03.jpg' },
+      { index: 5, url: '/media/frames/tpl_a/frame-05.jpg' },
+    ],
+  }
+  assert.equal(shareFrameIndex(template, { templateId: 'tpl_a', file: 'frame-05.jpg' }), 5)
+  assert.equal(shareFrameIndex(template, { templateId: 'tpl_a', file: 'frame-01.jpg' }), 0, '记录里没有这一帧就不猜')
+  assert.equal(shareFrameIndex(template, { templateId: 'tpl_b', file: 'frame-05.jpg' }), 0, '别的模板的帧不给')
+  assert.equal(shareFrameIndex(null, { templateId: 'tpl_a', file: 'frame-05.jpg' }), 0)
+  assert.equal(shareFrameIndex(template, null), 0)
 })
 
 test('帧图路径只从模板的帧记录里取，不认外部拼的路径', () => {

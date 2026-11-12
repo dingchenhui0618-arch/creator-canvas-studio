@@ -22,7 +22,7 @@ import {
 import { projectDeliverable } from '../project-deliverable.mjs'
 import { deliverablePrintHtml, printNoticeHtml } from '../project-deliverable-html.mjs'
 import { packageNote, parseShotRange, setSheetHtml, setSheetModel } from '../project-set-sheet.mjs'
-import { REVIEW_SHEET_LIMITS, reviewImageRef, reviewSheetHtml } from '../project-review-sheet.mjs'
+import { reviewImageRef, reviewSheetHtml, reviewSheetSelection } from '../project-review-sheet.mjs'
 import { buildZip } from '../zip-store.mjs'
 import {
   listProjects,
@@ -240,15 +240,10 @@ async function storyboardFrames(template) {
  * 列表给的是摘要，正文（问题与框）按 id 再读一次——纸上要框，就需要那几条坐标。
  */
 async function reviewSheetRecords(detail, user) {
-  const latest = new Map()
-  for (const item of Array.isArray(detail?.reviews) ? detail.reviews : []) {
-    const version = Math.max(1, Math.round(Number(item.version) || 0))
-    const seen = latest.get(version)
-    if (!seen || String(item.createdAt || '') > String(seen.createdAt || '')) latest.set(version, item)
-  }
-  const ordered = [...latest.values()].sort((a, b) => Number(b.version) - Number(a.version))
+  // 挑哪几次评审由 reviewSheetSelection 决定：分享页的对照纸也走同一条规则，两处不会各印一套
+  const selection = reviewSheetSelection(detail?.reviews)
   const records = []
-  for (const item of ordered.slice(0, REVIEW_SHEET_LIMITS.blocks)) {
+  for (const item of selection.records) {
     const full = await getReview(item.id, user)
     if (full) records.push(full)
   }

@@ -58,6 +58,19 @@ function shotView(shot, token, framesByIndex) {
   }
 }
 
+/**
+ * 评审评的那张帧图，在分享页的帧图接口里是第几帧。
+ * 只认模板自己记下的帧记录（文件基线名要比得上），绝不按文件名拼地址：
+ * 分享页的 /frame/<n> 是按帧序号取图，拼错一个数就是别人的画面。
+ */
+export function shareFrameIndex(template, image) {
+  if (!template?.id || !image || image.templateId !== template.id) return 0
+  const frames = Array.isArray(template.frames) ? template.frames : []
+  const frame = frames.find((entry) => path.basename(String(entry?.url || '')) === image.file)
+  const index = Math.round(Number(frame?.index) || 0)
+  return index > 0 ? index : 0
+}
+
 /** 分镜帧图落在 framesDir/<模板 id>/<文件名>：路径只从画布帧记录里取，不接受外部拼路径。 */
 export function frameFileOf(template, frameIndex) {
   const frames = Array.isArray(template?.frames) ? template.frames : []
