@@ -517,6 +517,7 @@ export default function UsersSection() {
                   <th>角色</th>
                   <th className="num-col">积分</th>
                   <th>上次登录</th>
+                  <th>条款同意</th>
                   <th>状态</th>
                   <th>操作</th>
                 </tr>
@@ -529,6 +530,16 @@ export default function UsersSection() {
                     <td>{roleLabel(item.kind as SessionKind)}</td>
                     <td className="admin-mono num-col">{item.credits}</td>
                     <td className="admin-mono">{formatDateTime(item.lastLoginAt)}</td>
+                    <td className="admin-mono">
+                      {item.termsVersion === 'admin-created'
+                        ? '管理员开通'
+                        : item.termsAcceptedAt
+                          ? formatDateTime(item.termsAcceptedAt)
+                          : '未留痕'}
+                      {item.termsVersion && item.termsVersion !== 'admin-created' ? (
+                        <span className="admin-cell-sub">v{item.termsVersion}</span>
+                      ) : null}
+                    </td>
                     <td>
                       <Badge tone={item.active ? 'ok' : 'fail'}>{item.active ? '在用' : '停用'}</Badge>
                     </td>
@@ -574,6 +585,10 @@ export default function UsersSection() {
                 ))}
               </tbody>
             </table>
+            <p className="admin-hint">
+              「条款同意」是注册时勾选同意的条款版本与时间，注册接口要求真的勾选并匹配当前版本；
+              管理员开通的账号显示「管理员开通」，本功能上线前创建的账号显示「未留痕」——不补造同意记录。
+            </p>
           </div>
         ) : (
           <EmptyState title="还没有账号" description={internal ? '注册开关默认关闭；用 npm run adduser 加第一个账号。' : '注册入口默认关闭；需要新账号时通过管理员创建。'} />

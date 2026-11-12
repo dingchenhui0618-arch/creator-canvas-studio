@@ -57,6 +57,9 @@ export function openDb() {
   `)
   ensureColumn(db, 'users', 'credits', 'INTEGER NOT NULL DEFAULT 0')
   ensureColumn(db, 'users', 'kind', "TEXT NOT NULL DEFAULT 'account'")
+  // 注册留痕：同意的条款版本与时间（管理员开通的账号标 admin-created，不假称用户同意过）
+  ensureColumn(db, 'users', 'terms_version', 'TEXT')
+  ensureColumn(db, 'users', 'terms_accepted_at', 'TEXT')
   seedFirstAccount()
   ensureAnAdmin()
   pruneSessions()
@@ -148,19 +151,24 @@ export function countAdmins() {
   return Number(row?.n || 0)
 }
 
-export function createUser({ email, password, name, kind = 'account' }) {
+export function createUser({ email, password, name, kind = 'account', terms = null }) {
   const normalized = String(email).trim().toLowerCase()
   const id = 'usr_' + crypto.randomBytes(9).toString('base64url')
   const displayName = (name || '').trim() || normalized.split('@')[0] || 'VisionQA 用户'
   const welcome = Math.max(0, Math.round(Number(config.credits.welcome) || 0))
   const createdAt = nowIso()
+  // 自助注册必须带条款版本；管理员开通的账号没有「用户点击同意」这一步，如实标成 admin-created
+  const termsVersion = terms?.version ? String(terms.version).slice(0, 40) : 'admin-created'
+  const termsAcceptedAt = terms?.at || createdAt
   const database = openDb()
   // 初始额度也要记一条流水：否则新账号的余额是 100，账本却是空的，用户会以为积分来路不明
   database.exec('BEGIN IMMEDIATE')
   try {
     database
-      .prepare('INSERT INTO users (id, email, name, workspace, password_hash, kind, is_active, credits, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)')
-      .run(id, normalized, displayName, '个人工作区', hashPassword(password), kind, welcome, createdAt)
+      .prepare(
+        'INSERT INTO users (id, email, name, workspace, password_hash, kind, is_active, credits, created_at, terms_version, terms_accepted_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)',
+      )
+      .run(id, normalized, displayName, '个人工作区', hashPassword(password), kind, welcome, createdAt, termsVersion, termsAcceptedAt)
     if (welcome > 0) {
       database
         .prepare('INSERT INTO credit_ledger (id, user_id, delta, balance_after, kind, ref, meta, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
@@ -342,7 +350,7 @@ export function ensureAnAdmin() {
 // 管理台用：真实账号列表（含余额），不返回口令哈希
 export function listUsers() {
   return openDb()
-    .prepare('SELECT id, email, name, workspace, kind, is_active, credits, created_at, last_login_at FROM users ORDER BY created_at')
+    .prepare('SELECT id, email, name, workspace, kind, is_active, credits, created_at, last_login_at, terms_version, terms_accepted_at FROM users ORDER BY created_at')
     .all()
     .map((row) => ({
       id: row.id,
@@ -354,6 +362,8 @@ export function listUsers() {
       credits: Number(row.credits || 0),
       createdAt: row.created_at,
       lastLoginAt: row.last_login_at,
+      termsVersion: row.terms_version || '',
+      termsAcceptedAt: row.terms_accepted_at || '',
     }))
 }
 

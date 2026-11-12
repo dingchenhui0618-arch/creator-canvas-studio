@@ -35,9 +35,11 @@ export type RegisterInput = {
   email: string
   password: string
   name?: string
+  acceptedTerms: boolean
+  termsVersion: string
 }
 
-export type AuthField = 'email' | 'password' | 'name' | 'form'
+export type AuthField = 'email' | 'password' | 'name' | 'terms' | 'form'
 
 export class AuthError extends Error {
   field: AuthField
@@ -219,7 +221,13 @@ export async function register(input: RegisterInput): Promise<Session> {
   const name = input.name?.trim() ?? ''
   assertName(name)
   try {
-    const user = await requestRegister({ email, password: input.password, name: name || undefined })
+    const user = await requestRegister({
+      email,
+      password: input.password,
+      name: name || undefined,
+      acceptedTerms: input.acceptedTerms,
+      termsVersion: input.termsVersion,
+    })
     const session = createSession(user, true)
     persistSession(session)
     return session

@@ -2154,3 +2154,21 @@ push 到 master 与所有 PR 都会跑一条流水线，任何一步非零这次
 实测：0.1.1 上线后回滚到 0.1.0（入口 index-gSJGxnIY.js、/api/version 0.1.0）→ 再滚回来（index-Slf2XRR5.js、0.1.1），两次都重启并自检通过；KEEP_RELEASES=2 连打 4 个快照只剩 2 个。
 
 运维脚本放 /opt/visionqa/ops/：`scripts/` 是版本内容，回滚会把它换回旧版，回滚工具自己不能放在里面（第一版踩过，回滚后 rollback.sh 消失）。
+
+### 五十三.11 D1 注册「已读条款」留痕
+
+注册必须真的勾选同意，服务端把「同意的条款版本 + 时间」记到账号上；后台账号表能直接查到。
+
+| 环节 | 实测（生产，入口 index-CUhTFkEM.js） |
+| --- | --- |
+| 条款版本 | 服务端 VQ_TERMS_VERSION（默认 2026-11-12），/api/app 下发，登录页/条款页/注册接口同一份 |
+| 未勾选 | 400 `{field:"terms", error:"请先阅读并勾选同意服务条款与隐私说明"}` |
+| 版本过期 | 400「服务条款已更新，请刷新页面后重新阅读并确认」 |
+| 留痕 | users 表 terms_version / terms_accepted_at；自助注册写真实版本与时间，管理员开通记 admin-created |
+| 后台 | 账号表「条款同意」列：时间 + 版本 / 管理员开通 / 未留痕；表下写明口径，不补造记录 |
+
+注册默认关闭；验证时临时打开、验证完恢复并删掉自测账号。
+
+![注册页的条款勾选](docs/screenshot-register-terms-2026-11-12.png)
+
+![后台账号表的条款同意列](docs/screenshot-admin-terms-2026-11-12.png)

@@ -2260,6 +2260,26 @@
     line-height: 1.6;
   }
 }
+/* 注册条款勾选：文案有换行与两个链接，起点要和上面的输入框对齐 */
+.vq-field--terms {
+  margin: 4px 0 16px;
+}
 
+.vq-field--terms .vq-check {
+  align-items: flex-start;
+  line-height: 1.7;
+}
 
+.vq-field--terms .vq-check input {
+  margin-top: 3px;
+}
 
+.vq-field--terms .vq-link {
+  margin: 0 2px;
+}
+
+.vq-check-note {
+  margin-left: 4px;
+  font-style: normal;
+  color: var(--faint, #6f6f6f);
+}

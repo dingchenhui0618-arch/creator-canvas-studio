@@ -36,6 +36,9 @@ export type AdminUser = {
   credits: number
   createdAt: string
   lastLoginAt: string | null
+  /** 注册留痕：同意的条款版本与时间；管理员开通的账号是 admin-created */
+  termsVersion?: string
+  termsAcceptedAt?: string
 }
 
 export type HealthCheck = {

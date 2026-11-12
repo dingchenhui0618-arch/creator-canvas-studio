@@ -164,6 +164,9 @@ export const config = {
   site: {
     icp: (process.env.VQ_ICP || '').trim(),
     supportEmail: (process.env.VQ_SUPPORT_EMAIL || '').trim(),
+    // 条款版本：注册时必须把「勾选同意的版本」记到账号上，改条款就改这个版本号
+    termsVersion: (process.env.VQ_TERMS_VERSION || '2026-11-12').trim(),
+    termsUpdatedAt: (process.env.VQ_TERMS_UPDATED_AT || '2026-11-12').trim(),
   },
   // 告警：本站队列（后台「系统」页）永远可用；配了 VQ_ALERT_WEBHOOK 才往外推。
   // 没有通道时至少「坏了能在后台看到」，不会像以前一样只有 journalctl。

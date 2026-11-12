@@ -15,7 +15,7 @@ import '../styles/shell.css'
 
 type Mode = 'signin' | 'signup'
 
-type FormErrors = { email?: string; password?: string; name?: string; form?: string }
+type FormErrors = { email?: string; password?: string; name?: string; terms?: string; form?: string }
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -37,6 +37,8 @@ export function LoginPage({ notice, onSignIn, onRegister }: Props) {
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
   const [remember, setRemember] = useState(true)
+  // 条款同意：注册必须真的勾上，服务端会把「同意的版本 + 时间」记到账号上
+  const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [busy, setBusy] = useState(false)
   const [errors, setErrors] = useState<FormErrors>({})
@@ -92,12 +94,13 @@ export function LoginPage({ notice, onSignIn, onRegister }: Props) {
       else if (password.length < minPasswordLength) nextErrors.password = `密码至少 ${minPasswordLength} 位`
       else if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) nextErrors.password = '密码要同时包含字母和数字'
       if (trimmedName.length > NAME_MAX_LENGTH) nextErrors.name = `昵称最多 ${NAME_MAX_LENGTH} 字`
+      if (!acceptedTerms) nextErrors.terms = '请先阅读并勾选同意服务条款与隐私说明'
     } else if (!password) {
       nextErrors.password = '请输入密码'
     }
 
     setInfo('')
-    if (nextErrors.email || nextErrors.password || nextErrors.name) {
+    if (nextErrors.email || nextErrors.password || nextErrors.name || nextErrors.terms) {
       setErrors(nextErrors)
       return
     }
@@ -108,9 +111,21 @@ export function LoginPage({ notice, onSignIn, onRegister }: Props) {
     try {
       if (mode === 'signup') {
         if (onRegister) {
-          await onRegister({ email: trimmedEmail, password, name: trimmedName || undefined })
+          await onRegister({
+            email: trimmedEmail,
+            password,
+            name: trimmedName || undefined,
+            acceptedTerms,
+            termsVersion: site.termsVersion,
+          })
         } else {
-          await registerAccount({ email: trimmedEmail, password, name: trimmedName || undefined })
+          await registerAccount({
+            email: trimmedEmail,
+            password,
+            name: trimmedName || undefined,
+            acceptedTerms,
+            termsVersion: site.termsVersion,
+          })
           created = true
           setInfo('账号已创建，正在建立会话…')
           await onSignIn({ email: trimmedEmail, password, remember })
@@ -130,6 +145,7 @@ export function LoginPage({ notice, onSignIn, onRegister }: Props) {
         if (error.field === 'email') setErrors({ email: error.message })
         else if (error.field === 'password') setErrors({ password: error.message })
         else if (error.field === 'name') setErrors({ name: error.message })
+        else if (error.field === 'terms') setErrors({ terms: error.message })
         else setErrors({ form: error.message })
       } else {
         setErrors({ form: isSignup ? '注册没有完成，请稍后重试。' : '登录没有完成，请稍后重试。' })
@@ -379,6 +395,31 @@ export function LoginPage({ notice, onSignIn, onRegister }: Props) {
                 >
                   忘记密码？
                 </button>
+              </div>
+            )}
+
+            {isSignup && (
+              <div className="vq-field vq-field--terms">
+                <label className="vq-check">
+                  <input
+                    type="checkbox"
+                    checked={acceptedTerms}
+                    onChange={(event) => setAcceptedTerms(event.target.checked)}
+                    disabled={busy}
+                  />
+                  <span>
+                    我已阅读并同意
+                    <a className="vq-link" href="#/legal/terms" target="_blank" rel="noreferrer">
+                      服务条款
+                    </a>
+                    与
+                    <a className="vq-link" href="#/legal/privacy" target="_blank" rel="noreferrer">
+                      隐私说明
+                    </a>
+                    {site.termsVersion ? <em className="vq-check-note">版本 {site.termsVersion}</em> : null}
+                  </span>
+                </label>
+                {errors.terms ? <span className="vq-field-error">{errors.terms}</span> : null}
               </div>
             )}
 

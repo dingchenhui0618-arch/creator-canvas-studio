@@ -5,7 +5,16 @@ import { request } from './client'
 
 export type UiMode = 'prod' | 'internal'
 
-export type AppInfo = { ok: boolean; mode: UiMode; internal: boolean; version?: string; icp?: string; supportEmail?: string }
+export type AppInfo = {
+  ok: boolean
+  mode: UiMode
+  internal: boolean
+  version?: string
+  icp?: string
+  supportEmail?: string
+  /** 服务条款版本：注册时要把「同意的是哪一版」回传给服务端 */
+  terms?: { version: string; updatedAt: string }
+}
 
 let cached: AppInfo | null = null
 let pending: Promise<AppInfo> | null = null
@@ -27,7 +36,13 @@ function loadAppInfo(): Promise<AppInfo> {
 }
 
 // 站点信息（备案号 / 客服邮箱）：登录页与页脚都要用，公开可读，失败按空处理。
-export function useSiteInfo(): { icp: string; supportEmail: string; version: string } {
+export function useSiteInfo(): {
+  icp: string
+  supportEmail: string
+  version: string
+  termsVersion: string
+  termsUpdatedAt: string
+} {
   const [info, setInfo] = useState<AppInfo | null>(cached)
   useEffect(() => {
     if (info) return
@@ -43,7 +58,13 @@ export function useSiteInfo(): { icp: string; supportEmail: string; version: str
       alive = false
     }
   }, [info])
-  return { icp: info?.icp || '', supportEmail: info?.supportEmail || '', version: info?.version || '' }
+  return {
+    icp: info?.icp || '',
+    supportEmail: info?.supportEmail || '',
+    version: info?.version || '',
+    termsVersion: info?.terms?.version || '',
+    termsUpdatedAt: info?.terms?.updatedAt || '',
+  }
 }
 
 export function useUiMode(): { mode: UiMode; internal: boolean; loading: boolean } {

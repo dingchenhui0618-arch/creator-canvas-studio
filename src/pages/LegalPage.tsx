@@ -20,7 +20,10 @@ export function LegalPage({ doc }: Props) {
           返回 VisionQA
         </button>
         <h1>{TITLE[doc]}</h1>
-        <p className="vq-legal-meta">最后更新：2026-11-11</p>
+        <p className="vq-legal-meta">
+          最后更新：{site.termsUpdatedAt || '2026-11-12'}
+          {site.termsVersion ? ' · 版本 v' + site.termsVersion : ''}
+        </p>
         {doc === 'terms' ? <Terms /> : <Privacy />}
         <footer className="vq-legal-foot">
           <a className="vq-link" href="#/legal/terms">服务条款</a>
@@ -40,7 +43,7 @@ function Terms() {
       <h2>一、这是什么</h2>
       <p>VisionQA 是一个做画面评审与内容复用的工作台：检索公开平台上的内容数据、把一条爆款拆成可拍的脚本与分镜、对画面给出带证据的评审结论。</p>
       <h2>二、账号</h2>
-      <p>账号由管理员开通，不开放自助注册。请保管好自己的口令；多人共用账号会被限制，因为积分、模板与运行记录都按账号隔离。</p>
+      <p>账号可以由管理员开通，也可以在开放自助注册时自己创建。自助注册需要勾选同意本条款与隐私说明，平台会在这个账号上记下同意的版本与时间；条款改版后再次确认的记录也会保留。请保管好自己的口令；多人共用账号会被限制，因为积分、模板与运行记录都按账号隔离。</p>
       <h2>三、积分与使用限制</h2>
       <p>检索、复刻、评审与对话都按次消耗积分，失败的请求会原路退回。积分目前由管理员发放，充值通道尚未开通；积分不是货币，不能提现或转赠。同一账号的并发请求有上限，用来保护上游额度。</p>
       <h2>四、你上传的内容</h2>

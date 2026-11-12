@@ -310,6 +310,8 @@ const server = http.createServer(async (req, res) => {
         version: PKG.version,
         icp: config.site.icp,
         supportEmail: config.site.supportEmail,
+        // 注册页要展示「同意的是哪一版」，条款改版只改服务端配置
+        terms: { version: config.site.termsVersion, updatedAt: config.site.termsUpdatedAt },
       })
     }
 

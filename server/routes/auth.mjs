@@ -111,7 +111,15 @@ export function createAuthRouter() {
         if (passwordError) return (fail(res, 400, passwordError, 'password'), true)
         if (findUserByEmail(email)) return (fail(res, 409, '这个邮箱已经注册过了', 'email'), true)
 
-        const user = createUser({ email, password, name })
+        // 条款留痕：必须真的勾了，且同意的就是当前这一版；版本对不上说明页面是旧的，让用户刷新重看。
+        const acceptedTerms = body.acceptedTerms === true
+        const termsVersion = String(body.termsVersion || '').trim()
+        if (!acceptedTerms) return (fail(res, 400, '请先阅读并勾选同意服务条款与隐私说明', 'terms'), true)
+        if (termsVersion !== config.site.termsVersion) {
+          return (fail(res, 400, '服务条款已更新，请刷新页面后重新阅读并确认', 'terms'), true)
+        }
+
+        const user = createUser({ email, password, name, terms: { version: termsVersion, at: new Date().toISOString() } })
         const { token } = createSession(user, {
           userAgent: req.headers['user-agent'] || '',
           ip: clientIp(req),

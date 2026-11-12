@@ -13,11 +13,18 @@ export type AuthUser = {
 }
 
 /** 后端 4xx 里指向前端字段的标记；没有 field 时归到表单级错误。 */
-export type AuthErrorField = 'email' | 'password' | 'name' | 'form'
+export type AuthErrorField = 'email' | 'password' | 'name' | 'terms' | 'form'
 
 export type LoginPayload = { email: string; password: string; remember: boolean }
 
-export type RegisterPayload = { email: string; password: string; name?: string }
+export type RegisterPayload = {
+  email: string
+  password: string
+  name?: string
+  /** 注册必须带：真的勾选了，且同意的是当前这一版条款 */
+  acceptedTerms: boolean
+  termsVersion: string
+}
 
 export type AuthConfig = {
   registrationEnabled: boolean
@@ -31,7 +38,7 @@ type AuthErrorBody = { error?: string; field?: unknown }
 
 export type AuthRequestError = Error & { status?: number; field: AuthErrorField; body?: AuthErrorBody }
 
-const AUTH_ERROR_FIELDS: readonly AuthErrorField[] = ['email', 'password', 'name', 'form']
+const AUTH_ERROR_FIELDS: readonly AuthErrorField[] = ['email', 'password', 'name', 'terms', 'form']
 
 function toField(value: unknown): AuthErrorField {
   return AUTH_ERROR_FIELDS.includes(value as AuthErrorField) ? (value as AuthErrorField) : 'form'
