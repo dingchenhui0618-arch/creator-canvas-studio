@@ -1,7 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { AlertCircle, Copy, Download, ExternalLink, Film, Heart, Layers, MessageCircle, Play, Printer, RefreshCw, ScanEye, Search, Share2, Sparkles, Star, Trash2, X } from 'lucide-react'
-import { applyTemplate, coverSrc, deleteTemplate, formatCount, formatDuration, getHealth, getTemplate, listTemplates } from '../api/radar'
+import { AlertCircle, Copy, Download, ExternalLink, Film, Heart, Layers, Link2, MessageCircle, Play, Printer, RefreshCw, ScanEye, Search, Share2, Sparkles, Star, Trash2, X } from 'lucide-react'
+import {
+  applyTemplate,
+  coverSrc,
+  createTemplateShare,
+  deleteTemplate,
+  formatCount,
+  formatDuration,
+  getHealth,
+  getTemplate,
+  listTemplates,
+  revokeTemplateShare,
+} from '../api/radar'
 import { downloadTemplateMarkdown } from '../lib/templateExport'
 import { describeTiming, paceLabel } from '../domain/radar'
 import type { MediaItem, ReplicaTemplate } from '../domain/radar'
@@ -60,6 +71,7 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
   const [health, setHealth] = useState<{ redfox: boolean; vision: boolean }>({ redfox: false, vision: false })
   const [replicateItem, setReplicateItem] = useState<MediaItem | null>(null)
   const [trashOpen, setTrashOpen] = useState(false)
+  const [shareBusy, setShareBusy] = useState(false)
 
   const totalReuse = useMemo(() => items.reduce((sum, item) => sum + (item.reuseCount || 0), 0), [items])
   const typeOptions = useMemo(() => pickTypes(byType, saved), [byType, saved])
@@ -92,6 +104,44 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
       .then((result) => setHealth({ redfox: result.redfox, vision: result.vision }))
       .catch(() => setHealth({ redfox: false, vision: false }))
   }, [])
+
+  // 分享的目标读者是没有账号的人（剪辑、客户）：链接在服务端生成，这里只管显示、复制和停用
+  const shareUrl = (token?: string) => (token ? window.location.origin + '/#/share/' + token : '')
+
+  const startShare = async (template: ReplicaTemplate) => {
+    setShareBusy(true)
+    try {
+      const result = await createTemplateShare(template.id)
+      setDetail({ ...template, shareToken: result.token, shareCreatedAt: result.createdAt })
+      onToast('已生成只读链接，拿到链接的人不用登录就能看')
+    } catch (caught) {
+      onToast(caught instanceof Error ? caught.message : '生成分享链接失败')
+    } finally {
+      setShareBusy(false)
+    }
+  }
+
+  const stopShare = async (template: ReplicaTemplate) => {
+    setShareBusy(true)
+    try {
+      await revokeTemplateShare(template.id)
+      setDetail({ ...template, shareToken: undefined, shareCreatedAt: undefined })
+      onToast('已停止分享，旧链接立即失效')
+    } catch (caught) {
+      onToast(caught instanceof Error ? caught.message : '停止分享失败')
+    } finally {
+      setShareBusy(false)
+    }
+  }
+
+  const copyShare = async (token?: string) => {
+    try {
+      await navigator.clipboard.writeText(shareUrl(token))
+      onToast('链接已复制，可以直接发给剪辑或客户')
+    } catch {
+      onToast('复制失败，请手动选中链接复制')
+    }
+  }
 
   const openDetail = async (id: string) => {
     setDetailLoading(true)
@@ -381,6 +431,41 @@ export function TemplateLibraryPage({ onToast, onBack, onOpenCanvas }: { onToast
                     <p className="drawer-export-note">
                       Markdown 里是分镜表、口播和每镜建议秒数；打印出来是纯白 A4 稿，在打印对话框里选「另存为 PDF」就能归档或发给剪辑。
                     </p>
+                  </section>
+
+                  <section className="drawer-section drawer-section--share">
+                    <div className="drawer-section-head"><h3>分享</h3><span>只读链接</span></div>
+                    {detail.shareToken ? (
+                      <>
+                        <div className="drawer-share-row">
+                          <input
+                            className="drawer-share-input"
+                            readOnly
+                            value={shareUrl(detail.shareToken)}
+                            onFocus={(event) => event.currentTarget.select()}
+                            aria-label="模板只读分享链接"
+                          />
+                          <button className="button button--ghost" onClick={() => void copyShare(detail.shareToken)}>
+                            <Copy size={14} />复制
+                          </button>
+                          <button className="button button--ghost" onClick={() => void stopShare(detail)} disabled={shareBusy}>
+                            {shareBusy ? <RefreshCw size={14} className="spin" /> : <X size={14} />}停止分享
+                          </button>
+                        </div>
+                        <p className="drawer-share-note">
+                          拿到链接的人不用登录就能看这条模板，只能看，不能改也不能套用。停止分享后旧链接立即失效，重新开启会生成一条新链接。
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <button className="button button--ghost" onClick={() => void startShare(detail)} disabled={shareBusy}>
+                          {shareBusy ? <RefreshCw size={14} className="spin" /> : <Link2 size={14} />}生成只读链接
+                        </button>
+                        <p className="drawer-share-note">
+                          给剪辑或客户看这条拆解结果，不用给他们开账号；链接随时可以停用。
+                        </p>
+                      </>
+                    )}
                   </section>
                 </div>
 

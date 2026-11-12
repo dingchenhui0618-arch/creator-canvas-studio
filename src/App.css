@@ -499,6 +499,16 @@ button { cursor:pointer; }
 .drawer-export-actions { display:flex; flex-wrap:wrap; gap:8px; }
 .drawer-export-note { margin:0; font-size:12px; line-height:1.7; color:var(--ink-faint); }
 
+/* ---------- 模板只读分享（B5）---------- */
+.drawer-share-row { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+.drawer-share-input {
+  flex:1 1 240px; min-width:0; height:34px; padding:0 8px;
+  border:1px solid var(--line-strong); border-radius:8px; background:var(--surface-soft);
+  font-family:var(--font-mono),monospace; font-size:11px; color:var(--ink-soft);
+}
+.drawer-share-input:focus-visible { outline:none; box-shadow:var(--focus); background:var(--surface-raised); }
+.drawer-share-note { margin:0; font-size:12px; line-height:1.7; color:var(--ink-faint); }
+
 @media print {
   @page { size:A4; margin:14mm; }
   /* 纸面用深色墨、浅色线，不去挪用屏幕上的灰 */

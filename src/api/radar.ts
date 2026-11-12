@@ -1,4 +1,4 @@
-import type { MediaItem, ReplicaTemplate, ReplicateJob, SearchHistoryEntry, SearchResult, TemplateList } from '../domain/radar'
+import type { MediaItem, ReplicaTemplate, ReplicateJob, SearchHistoryEntry, SearchResult, SharedTemplate, TemplateList } from '../domain/radar'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...init })
@@ -63,6 +63,14 @@ export const listTemplateTrash = () => request<{ items: ReplicaTemplate[]; days:
 export const restoreTemplate = (id: string) =>
   request<{ ok: boolean; template: ReplicaTemplate }>('/api/templates/' + id + '/restore', { method: 'POST' })
 export const purgeTemplate = (id: string) => request<{ ok: boolean }>('/api/templates/' + id + '/purge', { method: 'POST' })
+
+// 只读分享：管理端（带登录态）开/停，公开端（不带登录态）读
+export const createTemplateShare = (id: string) =>
+  request<{ ok: boolean; token: string; createdAt: string }>('/api/templates/' + id + '/share', { method: 'POST' })
+export const revokeTemplateShare = (id: string) =>
+  request<{ ok: boolean }>('/api/templates/' + id + '/share', { method: 'DELETE' })
+export const getSharedTemplate = (token: string) =>
+  request<{ template: SharedTemplate; sharedAt: string }>('/api/share/' + encodeURIComponent(token))
 
 export function formatCount(value: number) {
   if (!Number.isFinite(value) || value <= 0) return '0'

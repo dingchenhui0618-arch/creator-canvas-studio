@@ -2060,3 +2060,24 @@ P1 八条、P2 六条见审计文。
 接口：GET /api/templates/:id/versions、POST /api/templates/:id/versions/:versionId/restore。
 
 ![后台模板治理：历史版本与一键回滚](docs/screenshot-template-versions-2026-11-12.png)
+
+### 五十三.5 B5 模板只读分享链接
+
+拆好的脚本分镜要发给剪辑、客户或甲方，对方不一定有账号：模板抽屉里点「生成只读链接」拿到一条 `#/share/<token>`，对方不用登录就能看，只能看、不能改也不能套用；随时「停止分享」，旧链接当场失效。
+
+| 环节 | 实测（生产，入口 index-Lx5AM7-3.js） |
+| --- | --- |
+| 生成 | 18 字节随机 token（24 字符）落在模板记录上，抽屉里显示链接 + 复制 + 停止分享 |
+| 未登录访问 | GET /api/share/<token> 不带 cookie → 200；白名单 24 个字段，ownerId / versions / blueprint / shareToken / deletedAt 全部不在里面 |
+| 页面 | h1 + 元信息 + 互动数据 / 开头钩子 / 脚本结构 / 分镜表 / 爆款分析 / 来源，8/8 帧图正常解码；没有登录框、没有侧栏 |
+| 帧图与封面 | 走 /api/share/<token>/frame/:index 与 /cover，不借要登录的 /media/frames、/api/cover |
+| 停用 | DELETE /api/templates/:id/share → 旧地址 404 SHARE_NOT_FOUND，新开页面显示「这个分享链接已经失效」 |
+| 布局 | 1440 宽正文 880px 居中；390 宽 scrollWidth 390，无横向溢出 |
+
+只存链接的条目显示「还没解析」，画布工作流显示节点清单。页面上还有「下载 Markdown」「打印」两个出口。
+
+已知边界：`/media/frames` 与 `/api/cover` 仍是按 id 可取（历史实现只挡了 `/api/*`），分享页没有依赖它；已打开的分享页在停用后重新加载才失效。
+
+![模板只读分享页：不登录也能看脚本结构与分镜](docs/screenshot-template-share-2026-11-12.png)
+
+![模板抽屉的分享区：生成、复制、停止分享](docs/screenshot-template-share-drawer-2026-11-12.png)

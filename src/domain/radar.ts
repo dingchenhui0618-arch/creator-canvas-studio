@@ -135,6 +135,9 @@ export type ReplicaTemplate = {
   video: { width: number; height: number; fps: number; duration: number }
   /** 进了回收站才有：删除时间（ISO），30 天后自动清空 */
   deletedAt?: string
+  /** 只读分享 token：开着分享才有；没有它就没有对外链接 */
+  shareToken?: string
+  shareCreatedAt?: string
   origin: 'ai' | 'manual' | 'canvas'
   reuseCount: number
   /** 公共模板：运营放进来的示例，所有账号都看得见（ownerId 为空） */
@@ -143,6 +146,37 @@ export type ReplicaTemplate = {
   /** kind === 'flow' 时才有：画布节点摘要与可恢复的节点/连线 */
   flowNodes?: { title: string; kind: string }[]
   blueprint?: { nodes: unknown[]; edges: unknown[] }
+}
+
+/** 公开分享的只读视图：服务端按白名单给出，不含归属、版本历史和画布 blueprint。 */
+export type SharedTemplate = Pick<
+  ReplicaTemplate,
+  | 'id'
+  | 'kind'
+  | 'title'
+  | 'contentType'
+  | 'tags'
+  | 'platform'
+  | 'platformLabel'
+  | 'sourceUrl'
+  | 'author'
+  | 'publishedAt'
+  | 'stats'
+  | 'durationSec'
+  | 'hook'
+  | 'hookType'
+  | 'structure'
+  | 'storyboard'
+  | 'timing'
+  | 'analysis'
+  | 'frames'
+  | 'cover'
+  | 'video'
+  | 'reuseCount'
+  | 'flowNodes'
+> & {
+  /** 分享建立时间（ISO） */
+  sharedAt: string
 }
 
 /** 检索历史：只存条件与结果条数，不存结果本身（结果会过期，重搜要重新花钱）。 */

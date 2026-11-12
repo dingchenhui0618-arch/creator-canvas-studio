@@ -54,6 +54,8 @@ const TemplateLibraryPage = lazy(() =>
 )
 const AdminConsolePage = lazy(() => import('./pages/admin/AdminConsolePage'))
 const LegalPage = lazy(() => import('./pages/LegalPage').then((module) => ({ default: module.LegalPage })))
+// 只读分享页单独拆包：外部访客只下载这一屏，不需要工作台那一整套
+const SharePage = lazy(() => import('./pages/SharePage'))
 const AgentEditorPage = lazy(() => import('./pages/AgentEditorPage'))
 
 function sectionLabel(section: string): string {
@@ -304,8 +306,8 @@ function Workbench({
   }, [accountMenuOpen, updateOpen])
 
   const renderPage = () => {
-    // 合规页在 App 根部整屏渲染，不进侧栏外壳；引导是工作台里的弹窗，不占路由
-    if (route.kind === 'legal') return null
+    // 合规页与只读分享页在 App 根部整屏渲染，不进侧栏外壳；引导是工作台里的弹窗，不占路由
+    if (route.kind === 'legal' || route.kind === 'share') return null
     if (route.kind === 'admin') return <AdminConsolePage section={route.section} />
     if (route.kind === 'agent-editor') {
       return (
@@ -702,6 +704,15 @@ function App() {
     return (
       <Suspense fallback={<PageSkeleton label="正在打开条款" />}>
         <LegalPage doc={route.doc} />
+      </Suspense>
+    )
+  }
+
+  // 分享链接是发给没有账号的人的：不经过 RequireSession，否则打开就先去登录页
+  if (route.kind === 'share') {
+    return (
+      <Suspense fallback={<PageSkeleton label="正在打开分享内容" />}>
+        <SharePage key={route.token} token={route.token} />
       </Suspense>
     )
   }

@@ -20,6 +20,10 @@ import {
   purgeTemplate,
   listTemplateVersions,
   restoreTemplateVersion,
+  enableTemplateShare,
+  disableTemplateShare,
+  getSharedTemplate,
+  publicTemplateView,
   adoptUnowned as adoptUnownedTemplates,
 } from './templates.mjs'
 import { adoptUnowned as adoptUnownedAgents } from './agents.mjs'
@@ -68,7 +72,8 @@ const featureRoutes = [
 // 本地演示（VQ_REQUIRE_AUTH=0）不受影响，仍然公开。
 // /api/gateway 由平台服务令牌鉴权（画布服务端调用，没有浏览器会话），所以不走登录门；
 // 路由内部每一步都先验令牌，未配置时回 503，不会变成匿名可用。
-const PUBLIC_API = ['/api/auth', '/api/health', '/api/version', '/api/app', '/api/gateway']
+// /api/share 是只读分享链接：链接本身（24 字节随机 token）就是凭证，不需要登录态。
+const PUBLIC_API = ['/api/auth', '/api/health', '/api/version', '/api/app', '/api/gateway', '/api/share']
 function needsLogin(pathname) {
   if (!config.auth.requireAuth) return false
   if (!pathname.startsWith('/api/')) return false
@@ -728,6 +733,55 @@ const server = http.createServer(async (req, res) => {
       const done = await purgeTemplate(id, user)
       if (!done) return sendJson(res, 404, { error: '回收站里没有这条模板' })
       return sendJson(res, 200, { ok: true })
+    }
+
+    // 分享管理：只有模板的可见者（归属账号 / 管理员 / 公共模板）能开和停
+    const shareOwnerMatch = pathname.match(/^\/api\/templates\/([\w-]+)\/share$/)
+    if (shareOwnerMatch) {
+      const id = shareOwnerMatch[1]
+      if (req.method === 'POST') {
+        const result = await enableTemplateShare(id, user)
+        if (!result) return sendJson(res, 404, { error: '模板不存在' })
+        return sendJson(res, 200, { ok: true, token: result.token, createdAt: result.createdAt })
+      }
+      if (req.method === 'DELETE') {
+        const done = await disableTemplateShare(id, user)
+        if (!done) return sendJson(res, 404, { error: '模板不存在' })
+        return sendJson(res, 200, { ok: true })
+      }
+    }
+
+    // 只读分享：链接本身就是凭证，不需要登录；只能读，不能改、套用或删除。
+    // 帧图和封面也走这里，/media/frames 与 /api/cover 是要登录的。
+    const shareViewMatch = pathname.match(/^\/api\/share\/([\w-]+)(?:\/(frame)\/(\d+)|\/(cover))?$/)
+    if (shareViewMatch && req.method === 'GET') {
+      const [, token, frameKind, frameIndex, coverKind] = shareViewMatch
+      const shared = await getSharedTemplate(token)
+      if (!shared) return sendJson(res, 404, { error: '这个分享链接已失效，或分享者已停止分享', code: 'SHARE_NOT_FOUND' })
+      if (coverKind) {
+        const cover = String(shared.cover || '')
+        if (!cover) {
+          res.writeHead(404, { 'Content-Type': 'text/plain' })
+          res.end('no cover')
+          return
+        }
+        if (cover.startsWith('/media/frames/')) {
+          if (await serveFile(res, path.join(config.framesDir, shared.id, cover.split('/').pop()))) return
+          res.writeHead(404, { 'Content-Type': 'text/plain' })
+          res.end('no cover')
+          return
+        }
+        return proxyImage(res, cover)
+      }
+      if (frameKind) {
+        const frame = (shared.frames || []).find((entry) => String(entry.index) === String(frameIndex))
+        const file = frame ? path.join(config.framesDir, shared.id, String(frame.url || '').split('/').pop()) : ''
+        if (file && (await serveFile(res, file))) return
+        res.writeHead(404, { 'Content-Type': 'text/plain' })
+        res.end('no frame')
+        return
+      }
+      return sendJson(res, 200, { template: publicTemplateView(shared, token), sharedAt: shared.shareCreatedAt || '' })
     }
 
     const tplMatch = pathname.match(/^\/api\/templates\/([\w-]+)(\/reuse)?$/)

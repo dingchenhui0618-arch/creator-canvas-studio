@@ -1,6 +1,6 @@
 import fsp from 'node:fs/promises'
 import path from 'node:path'
-import { randomUUID } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 import { config } from './config.mjs'
 import { canAccess } from './owner.mjs'
 
@@ -356,6 +356,90 @@ export async function templateStats(user = null) {
     saved: list.filter((item) => item.kind === 'saved').length,
     flows: list.filter((item) => item.kind === 'flow').length,
     byType,
+  }
+}
+
+// ---------- 只读分享链接 ----------
+// 分享给外部看（剪辑、客户），所以链接本身就是凭证：24 字节随机 token，
+// 公开视图只走白名单字段，不带归属、版本历史、回收站状态和画布 blueprint。
+// 停止分享就直接把 token 清掉，旧链接当场失效；重新开启会换一个新 token。
+const SHARE_TOKEN_MIN = 16
+
+function newShareToken() {
+  return randomBytes(18).toString('base64url')
+}
+
+export async function enableTemplateShare(id, user = null) {
+  const list = await loadAll()
+  const index = list.findIndex((item) => item.id === id && !item.deletedAt && canAccess(item, user))
+  if (index < 0) return null
+  const next = [...list]
+  const token = newShareToken()
+  const createdAt = new Date().toISOString()
+  next[index] = { ...next[index], shareToken: token, shareCreatedAt: createdAt, shareBy: user?.id || '' }
+  await persist(next)
+  return { token, createdAt }
+}
+
+export async function disableTemplateShare(id, user = null) {
+  const list = await loadAll()
+  const index = list.findIndex((item) => item.id === id && canAccess(item, user))
+  if (index < 0) return false
+  if (!list[index].shareToken) return true
+  const next = [...list]
+  const copy = { ...next[index] }
+  delete copy.shareToken
+  delete copy.shareCreatedAt
+  delete copy.shareBy
+  next[index] = copy
+  await persist(next)
+  return true
+}
+
+/** 按分享 token 找模板：只认未删除、仍然开着分享的条目。 */
+export async function getSharedTemplate(token) {
+  if (!token || typeof token !== 'string' || token.length < SHARE_TOKEN_MIN) return null
+  const list = await loadAll()
+  return list.find((item) => !item.deletedAt && item.shareToken === token) || null
+}
+
+/** 公开视图：逐字段挑出来，不做「整条对象去掉几个 key」——新加的内部字段不会自动漏出去。 */
+export function publicTemplateView(item, token) {
+  const frames = (item.frames || []).map((frame) => ({
+    index: frame.index,
+    t: frame.t,
+    url: '/api/share/' + token + '/frame/' + frame.index,
+  }))
+  const frameUrlOf = (frameIndex) => {
+    const found = frames.find((frame) => frame.index === frameIndex)
+    return found ? found.url : ''
+  }
+  return {
+    id: item.id,
+    kind: item.kind,
+    title: item.title,
+    contentType: item.contentType,
+    tags: item.tags || [],
+    platform: item.platform,
+    platformLabel: item.platformLabel,
+    sourceUrl: item.sourceUrl || '',
+    author: item.author || '',
+    publishedAt: item.publishedAt || '',
+    stats: item.stats || { plays: 0, likes: 0, comments: 0, shares: 0, collects: 0 },
+    durationSec: item.durationSec || 0,
+    hook: item.hook || '',
+    hookType: item.hookType || '',
+    structure: item.structure || [],
+    // 分镜里的帧图也换成带 token 的地址：/media/frames 要登录才能取
+    storyboard: (item.storyboard || []).map((shot) => ({ ...shot, frameUrl: frameUrlOf(shot.frameIndex) })),
+    timing: item.timing || null,
+    analysis: item.analysis || { pacing: '', viralPoints: [], reusableRules: [], targetAudience: '' },
+    frames,
+    cover: item.cover ? '/api/share/' + token + '/cover' : '',
+    video: item.video || { width: 0, height: 0, fps: 0, duration: 0 },
+    reuseCount: item.reuseCount || 0,
+    flowNodes: item.flowNodes || [],
+    sharedAt: item.shareCreatedAt || '',
   }
 }
 

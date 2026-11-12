@@ -19,6 +19,8 @@ export type Route =
   | { kind: 'page'; page: ShellPage; flowId?: string; canvasId?: string }
   | { kind: 'agent-editor'; agentRef: string | null }
   | { kind: 'legal'; doc: 'terms' | 'privacy' }
+  // 只读分享：链接里带随机 token，不登录也能打开（App 根部整屏渲染，不进工作台外壳）
+  | { kind: 'share'; token: string }
   | { kind: 'admin'; section: AdminSection }
 
 export const DEFAULT_ROUTE: Route = { kind: 'page', page: 'overview' }
@@ -43,6 +45,11 @@ export function routeToPage(route: Route): Page {
   if (route.kind === 'page') return route.page
   if (route.kind === 'agent-editor') return 'agent-editor'
   return 'overview'
+}
+
+/** 不进工作台外壳的路由：条款页与只读分享页整屏渲染，工作台骨架不参与。 */
+export function isBareRoute(route: Route): boolean {
+  return route.kind === 'legal' || route.kind === 'share'
 }
 
 /** Page 转向量：列表页跳转、事件兼容都走这里，避免各页面自己拼 hash。 */
@@ -81,6 +88,8 @@ export function parseRoute(hash: string): Route {
   const [head, tail] = segments
   if (head === 'admin') return { kind: 'admin', section: parseAdminSection(tail) }
   if (head === 'legal') return { kind: 'legal', doc: tail === 'privacy' ? 'privacy' : 'terms' }
+  // 分享链接：token 是整条路径的余下部分，缺了就落回工作台
+  if (head === 'share') return tail ? { kind: 'share', token: tail } : DEFAULT_ROUTE
   // 旧的 #/welcome 链接不再单独成页：引导已改成工作台内的弹窗，落回工作台即可。
   if (head === 'agents') {
     if (!tail) return { kind: 'page', page: 'agents' }
@@ -108,6 +117,7 @@ export function toHash(route: Route): string {
   }
   if (route.kind === 'admin') return '#/admin/' + route.section
   if (route.kind === 'legal') return '#/legal/' + route.doc
+  if (route.kind === 'share') return '#/share/' + encodeURIComponent(route.token)
   return '#/agents/' + (route.agentRef ? encodeURIComponent(route.agentRef) : 'new')
 }
 
@@ -122,6 +132,7 @@ export function routeKey(route: Route): string {
   }
   if (route.kind === 'admin') return 'admin:' + route.section
   if (route.kind === 'legal') return 'legal:' + route.doc
+  if (route.kind === 'share') return 'share:' + route.token
   return 'agent-editor:' + (route.agentRef ?? 'new')
 }
 

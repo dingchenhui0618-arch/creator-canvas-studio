@@ -9,7 +9,7 @@
 | B2 | 雷达检索历史与关键词收藏 | 已上线 2026-11-12 |
 | B3 | 模板回收站（软删除 / 恢复 / 彻底删除） | 已上线 2026-11-12 |
 | B4 | 模板编辑版本历史（快照 / 回看 / 回滚） | 已上线 2026-11-12 |
-| B5 | 模板只读分享链接 | 待做 |
+| B5 | 模板只读分享链接 | 已上线 2026-11-12 |
 | C1 | GitHub Actions CI（类型检查 / 构建 / 代码检查 / 单测） | 待做 |
 | C2 | 回归测试入库、可离线跑 | 待做 |
 | C3 | 前端异常上报 + 后台可见 | 待做 |
@@ -115,3 +115,37 @@
 
 ### 产物
 ![后台模板治理：历史版本与一键回滚](screenshot-template-versions-2026-11-12.png)
+
+---
+
+## B5 模板只读分享链接
+
+### 问题
+拆解结果只能给「有账号的人」看：编导要把脚本分镜发给剪辑、客户或甲方时，只能截图，或者让对方注册一个账号。审计里「分享」这一项是空的。
+
+### 做法
+1. 链接就是凭证：POST /api/templates/:id/share 生成 18 字节随机 token（base64url，24 字符）存在模板记录上；DELETE 同一路径把 token 清掉，旧链接当场失效；重新开启换一个新 token，不复用旧地址。
+2. 公开读接口进 PUBLIC_API：GET /api/share/:token 返回白名单视图，帧图走 /api/share/:token/frame/:index、封面走 /api/share/:token/cover——/media/frames 与 /api/cover 都要登录，分享页不能借那两个口子。停止分享、进回收站或彻底删除之后，这三个地址一起 404。
+3. 公开视图逐字段挑（publicTemplateView），不做「整条对象删几个 key」：ownerId、versions、deletedAt、shareToken、blueprint 这些内部字段不在白名单里，以后新加的内部字段也不会自动漏出去。
+4. 前端新路由 #/share/:token：在 App 根部整屏渲染、不经过 RequireSession（否则打开就先跳登录页），单独拆包（SharePage 9.44 kB / gzip 3.38 kB）。页面是一张纸：品牌行 + 只读徽标、标题、类型/平台/作者/时长/分享日期、标签，然后是互动数据、开头钩子、脚本结构、分镜表（带帧图与时长对账）、爆款分析、来源；页脚写明「只读、不能改也不能套用」，并给「下载 Markdown」「打印」两个出口。只存链接的条目显示「还没解析」，画布工作流显示节点清单。
+5. 模板抽屉里加「分享」区：没有链接时一个「生成只读链接」；有链接时只读输入框 + 复制 + 停止分享，附一句「拿到链接的人不用登录就能看，只能看不能改，停止分享后旧链接立即失效」。
+6. 打印：App.css 的打印规则只保留抽屉，分享页在这里把 #root 放回来、隐藏工具栏，导出的就是这份文档本身。
+
+### 验证（生产 https://visionqa.wavisionai.cn，入口 index-Lx5AM7-3.js）
+- 真实模板「兔兔那么可爱…真香」（8 分镜 / 8 帧）开分享：token 24 字符；不带任何 cookie 请求 GET /api/share/<token> → 200，字段只有 id、kind、title、contentType、tags、platform、platformLabel、sourceUrl、author、publishedAt、stats、durationSec、hook、hookType、structure、storyboard、timing、analysis、frames、cover、video、reuseCount、flowNodes、sharedAt。
+- 泄漏检查：ownerId / versions / blueprint / shareToken / deletedAt 五项全部 false。
+- 匿名取帧图 GET /api/share/<token>/frame/0 → 200 image/jpeg 33317 字节。
+- 匿名打开 #/share/<token>：h1「兔兔那么可爱…真香」，元信息「宠物日常 / 抖音 / 郡*乐宝 / 0:19 / 分享于 2026-11-12」，6 个分节、8 行分镜、8/8 帧图真的解码出来（naturalWidth > 0），页面上没有登录表单、没有侧栏。
+- 390 宽：scrollWidth 390 = 视口，无横向溢出；1440 宽：正文 880px 居中（x=275，两侧各 275）。
+- 只存链接的条目：分节只有「互动数据 / 还没解析 / 来源」，说明文案指向「由账号主人跑一次解析」。
+- 停止分享：DELETE → 200；随后匿名 GET 同一地址 → 404 SHARE_NOT_FOUND；新开页面显示「这个分享链接已经失效」，没有登录框；模板记录里 shareToken 已清空。自测条目已删除并彻底清理，模板总数回到 25。
+- 全程 0 未捕获异常（唯一一条 401 是匿名访问 /api/auth/me 的正常探针）。
+
+### 已知边界
+- /media/frames 与 /api/cover 本身不校验登录（历史实现只挡了 /api/*），所以抽帧图片按模板 id 可匿名猜取。分享页没有依赖这个口子，但它是既有状况，本次不动（改了会影响画布与其它服务的取图），记在这里待办。
+- 已经打开的分享页在停止分享后仍显示已下发的内容（内容已经到浏览器了），重新加载即失效；要更强就得做短时签名 URL，本次不做。
+
+### 产物
+![模板只读分享页：不登录也能看脚本结构与分镜](screenshot-template-share-2026-11-12.png)
+
+![模板抽屉的分享区：生成、复制、停止分享](screenshot-template-share-drawer-2026-11-12.png)
