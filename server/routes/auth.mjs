@@ -3,6 +3,7 @@ import { sendJson, readBody } from './_shared.mjs'
 import { config } from '../config.mjs'
 import {
   findUserByEmail,
+  findUserById,
   createUser,
   createSession,
   currentUser,
@@ -18,7 +19,18 @@ import {
   verifyPassword,
   changePassword,
   destroyOtherSessions,
+  signTotpChallenge,
+  readTotpChallenge,
+  totpInfo,
+  startTotpSetup,
+  pendingTotp,
+  activateTotp,
+  clearTotp,
+  totpMaterial,
+  saveTotpCounter,
+  saveTotpBackup,
 } from '../auth.mjs'
+import { generateBackupCodes, generateSecret, matchBackupCode, otpauthUrl, verifyTotp } from '../totp.mjs'
 import { logEvent } from '../log.mjs'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
@@ -156,6 +168,19 @@ export function createAuthRouter() {
         }
 
         clearFailures(key)
+
+        // 开了两步验证：这一步只发一个 5 分钟有效的 challenge，不建会话。
+        // 口令正确但验证码不对，同样拿不到任何 cookie。
+        if (row.totp_enabled_at) {
+          logEvent('login-2fa-challenge', { email: row.email })
+          sendJson(res, 200, {
+            twoFactorRequired: true,
+            challenge: signTotpChallenge(row.id, remember),
+            expiresInSec: 300,
+          })
+          return true
+        }
+
         const days = remember ? config.auth.rememberDays : config.auth.sessionDays
         const { token } = createSession(row, {
           userAgent: req.headers['user-agent'] || '',
@@ -164,6 +189,124 @@ export function createAuthRouter() {
         })
         setCookie(res, sessionCookie(token, days * 24 * 3600))
         sendJson(res, 200, { user: publicUser(row) })
+        return true
+      }
+
+
+      // 登录第二步：6 位 TOTP 或一次性备用码，验过才建会话
+      if (pathname === '/api/auth/login/totp' && req.method === 'POST') {
+        const body = await readBody(req)
+        const challenge = readTotpChallenge(body.challenge)
+        if (!challenge) return (fail(res, 401, '验证步骤已过期，请重新登录', 'form'), true)
+        const row = findUserById(challenge.userId)
+        if (!row || !row.is_active) return (fail(res, 401, '账号不可用', 'form'), true)
+        if (!row.totp_enabled_at) return (fail(res, 400, '这个账号没有开启两步验证，请重新登录', 'form'), true)
+
+        const limitKey = clientIp(req) + '|totp|' + row.id
+        if (tooManyAttempts(limitKey)) return (fail(res, 429, '验证码错误次数过多，请 10 分钟后再试'), true)
+
+        const material = totpMaterial(row.id)
+        if (!material?.secret) return (fail(res, 400, '两步验证状态异常，请重新登录后再试', 'form'), true)
+
+        const verified = verifyTotp(material.secret, String(body.code || ''), { lastCounter: material.lastCounter })
+        let passed = verified.ok
+        let backupUsed = false
+        if (!passed) {
+          const backup = matchBackupCode(material.backup, String(body.code || ''))
+          if (backup.ok) {
+            passed = true
+            backupUsed = true
+            saveTotpBackup(row.id, backup.remaining)
+          }
+        }
+        if (!passed) {
+          recordFailure(limitKey)
+          return (fail(res, 401, '验证码不正确，请用认证器里的 6 位数字或一枚备用码', 'code'), true)
+        }
+
+        clearFailures(limitKey)
+        if (verified.ok) saveTotpCounter(row.id, verified.counter)
+        logEvent('login-2fa', { email: row.email, backup: backupUsed })
+        const { token } = createSession(row, {
+          userAgent: req.headers['user-agent'] || '',
+          ip: clientIp(req),
+          remember: challenge.remember,
+        })
+        const days = challenge.remember ? config.auth.rememberDays : config.auth.sessionDays
+        setCookie(res, sessionCookie(token, days * 24 * 3600))
+        sendJson(res, 200, { user: publicUser(row), backupCodeUsed: backupUsed })
+        return true
+      }
+
+      // 两步验证状态：只回布尔、时间与剩余备用码数量，永不回 secret
+      if (pathname === '/api/auth/totp' && req.method === 'GET') {
+        const row = currentUser(req)
+        if (!row) return (fail(res, 401, '请先登录'), true)
+        sendJson(res, 200, totpInfo(row.id))
+        return true
+      }
+
+      // 第一步：生成 secret 与备用码，先存成 pending（此时 2FA 还没生效）
+      if (pathname === '/api/auth/totp/setup' && req.method === 'POST') {
+        const row = currentUser(req)
+        if (!row) return (fail(res, 401, '请先登录'), true)
+        if (row.totp_enabled_at) return (fail(res, 400, '两步验证已经开启，先关闭再重新设置'), true)
+        const secret = generateSecret()
+        const backupCodes = generateBackupCodes()
+        startTotpSetup(row.id, { secret, backupCodes })
+        logEvent('totp-setup', { email: row.email })
+        sendJson(res, 200, {
+          secret,
+          otpauth: otpauthUrl({ issuer: 'VisionQA', account: row.email, secret }),
+          backupCodes,
+        })
+        return true
+      }
+
+      // 第二步：用认证器里的 6 位确认，确认后才真正生效
+      if (pathname === '/api/auth/totp/enable' && req.method === 'POST') {
+        const row = currentUser(req)
+        if (!row) return (fail(res, 401, '请先登录'), true)
+        const body = await readBody(req)
+        const pending = pendingTotp(row.id)
+        if (!pending?.secret) return (fail(res, 400, '没有待确认的两步验证设置，请重新开始', 'form'), true)
+        const verified = verifyTotp(pending.secret, String(body.code || ''), { lastCounter: 0 })
+        if (!verified.ok) return (fail(res, 400, '验证码不正确：确认认证器里是「VisionQA」这一条，再输入当前 6 位数字', 'code'), true)
+        activateTotp(row.id)
+        // 确认用的这一步不算「登录已用过的步长」：否则当场验证完，30 秒内第一次登录会
+        // 因为同一个步长被当成重放而失败。真正的重放保护从第一次登录开始记。
+        saveTotpCounter(row.id, 0)
+        const info = totpInfo(row.id)
+        logEvent('totp-enable', { email: row.email })
+        sendJson(res, 200, { ok: true, ...info })
+        return true
+      }
+
+      // 关闭：口令 + 当前验证码（或备用码）双要素，防止会话被劫持后直接关掉
+      if (pathname === '/api/auth/totp/disable' && req.method === 'POST') {
+        const row = currentUser(req)
+        if (!row) return (fail(res, 401, '请先登录'), true)
+        if (!row.totp_enabled_at) return (fail(res, 400, '这个账号没有开启两步验证'), true)
+        const body = await readBody(req)
+        if (!verifyPassword(String(body.password || ''), row.password_hash)) {
+          return (fail(res, 400, '口令不正确', 'password'), true)
+        }
+        const material = totpMaterial(row.id)
+        // 关闭不再套「同一步长不能复用」：这一步已经有会话 + 口令两道，且验证码用完即失效；
+        // 真按重放规则卡，用户刚登录完 30 秒内想关掉会被自己的码挡回来。
+        const verified = material ? verifyTotp(material.secret, String(body.code || ''), { lastCounter: 0 }) : { ok: false }
+        let passed = Boolean(verified.ok)
+        if (!passed && material) {
+          const backup = matchBackupCode(material.backup, String(body.code || ''))
+          if (backup.ok) {
+            passed = true
+            saveTotpBackup(row.id, backup.remaining)
+          }
+        }
+        if (!passed) return (fail(res, 400, '验证码不正确，请用认证器里的 6 位数字或一枚备用码', 'code'), true)
+        clearTotp(row.id)
+        logEvent('totp-disable', { email: row.email })
+        sendJson(res, 200, { ok: true, enabled: false })
         return true
       }
 

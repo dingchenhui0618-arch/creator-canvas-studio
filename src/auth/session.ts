@@ -3,6 +3,7 @@
 // 供首屏渲染，任何「当前是谁」的判断都以 /api/auth/me 为准。
 import {
   login as requestLogin,
+  loginTotp as requestLoginTotp,
   logout as requestLogout,
   register as requestRegister,
 } from '../api/auth'
@@ -39,7 +40,21 @@ export type RegisterInput = {
   termsVersion: string
 }
 
-export type AuthField = 'email' | 'password' | 'name' | 'terms' | 'form'
+export type AuthField = 'email' | 'password' | 'name' | 'terms' | 'code' | 'form'
+
+/**
+ * 口令通过、但账号开了两步验证：此时还没有会话，只拿到一个 5 分钟有效的 challenge。
+ * 登录页捕获它切成第二步，而不是当成登录失败。
+ */
+export class TwoFactorRequired extends Error {
+  challenge: string
+
+  constructor(challenge: string) {
+    super('这个账号开启了两步验证')
+    this.name = 'TwoFactorRequired'
+    this.challenge = challenge
+  }
+}
 
 export class AuthError extends Error {
   field: AuthField
@@ -202,12 +217,28 @@ export async function signIn(input: SignInInput): Promise<Session> {
   assertPasswordPresent(input.password)
 
   try {
-    const user = await requestLogin({ email, password: input.password, remember: input.remember })
-    const session = createSession(user, input.remember)
+    const result = await requestLogin({ email, password: input.password, remember: input.remember })
+    if ('twoFactorRequired' in result) throw new TwoFactorRequired(result.challenge)
+    const session = createSession(result.user, input.remember)
     persistSession(session)
     return session
   } catch (error) {
+    if (error instanceof TwoFactorRequired) throw error
     throw toAuthError(error, '登录没有完成，请稍后重试。')
+  }
+}
+
+/** 两步验证第二步：6 位数字或备用码换会话。remember 决定本地缓存放哪，cookie 时长由服务端按 challenge 里的值给。 */
+export async function verifyTwoFactor(challenge: string, code: string, remember: boolean): Promise<Session> {
+  const trimmed = code.trim()
+  if (!trimmed) throw new AuthError('code', '请输入验证码')
+  try {
+    const result = await requestLoginTotp(challenge, trimmed)
+    const session = createSession(result.user, remember)
+    persistSession(session)
+    return session
+  } catch (error) {
+    throw toAuthError(error, '验证没有完成，请稍后重试。')
   }
 }
 

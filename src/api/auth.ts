@@ -10,12 +10,32 @@ export type AuthUser = {
   name: string
   workspace: string
   kind: AuthUserKind
+  /** 是否开启了两步验证：只给状态，secret 与备用码永远不下发 */
+  twoFactor?: boolean
 }
 
 /** 后端 4xx 里指向前端字段的标记；没有 field 时归到表单级错误。 */
-export type AuthErrorField = 'email' | 'password' | 'name' | 'terms' | 'form'
+export type AuthErrorField = 'email' | 'password' | 'name' | 'terms' | 'code' | 'form'
 
 export type LoginPayload = { email: string; password: string; remember: boolean }
+
+/** 口令通过但账号开了两步验证：先拿 challenge，再换会话 */
+export type LoginResult =
+  | { user: AuthUser }
+  | { twoFactorRequired: true; challenge: string; expiresInSec: number }
+
+export type TwoFactorStatus = {
+  enabled: boolean
+  enabledAt: string
+  backupCodesLeft: number
+  pending: boolean
+}
+
+export type TotpSetup = {
+  secret: string
+  otpauth: string
+  backupCodes: string[]
+}
 
 export type RegisterPayload = {
   email: string
@@ -38,7 +58,7 @@ type AuthErrorBody = { error?: string; field?: unknown }
 
 export type AuthRequestError = Error & { status?: number; field: AuthErrorField; body?: AuthErrorBody }
 
-const AUTH_ERROR_FIELDS: readonly AuthErrorField[] = ['email', 'password', 'name', 'terms', 'form']
+const AUTH_ERROR_FIELDS: readonly AuthErrorField[] = ['email', 'password', 'name', 'terms', 'code', 'form']
 
 function toField(value: unknown): AuthErrorField {
   return AUTH_ERROR_FIELDS.includes(value as AuthErrorField) ? (value as AuthErrorField) : 'form'
@@ -61,12 +81,41 @@ export function getAuthConfig(signal?: AbortSignal): Promise<AuthConfig> {
   return request<AuthConfig>('/api/auth/config', { signal })
 }
 
-export async function login(payload: LoginPayload): Promise<AuthUser> {
-  const body = await request<{ user: AuthUser }>('/api/auth/login', {
+export function login(payload: LoginPayload): Promise<LoginResult> {
+  return request<LoginResult>('/api/auth/login', {
     method: 'POST',
     body: JSON.stringify(payload),
   })
-  return body.user
+}
+
+/** 两步验证第二步：6 位 TOTP 或一枚备用码，成功后服务端下发会话 cookie。 */
+export async function loginTotp(challenge: string, code: string): Promise<{ user: AuthUser; backupCodeUsed: boolean }> {
+  return request<{ user: AuthUser; backupCodeUsed: boolean }>('/api/auth/login/totp', {
+    method: 'POST',
+    body: JSON.stringify({ challenge, code }),
+  })
+}
+
+export function getTwoFactor(): Promise<TwoFactorStatus> {
+  return request<TwoFactorStatus>('/api/auth/totp')
+}
+
+export function startTwoFactorSetup(): Promise<TotpSetup> {
+  return request<TotpSetup>('/api/auth/totp/setup', { method: 'POST', body: JSON.stringify({}) })
+}
+
+export function enableTwoFactor(code: string): Promise<TwoFactorStatus & { ok: boolean }> {
+  return request<TwoFactorStatus & { ok: boolean }>('/api/auth/totp/enable', {
+    method: 'POST',
+    body: JSON.stringify({ code }),
+  })
+}
+
+export function disableTwoFactor(password: string, code: string): Promise<{ ok: boolean; enabled: boolean }> {
+  return request<{ ok: boolean; enabled: boolean }>('/api/auth/totp/disable', {
+    method: 'POST',
+    body: JSON.stringify({ password, code }),
+  })
 }
 
 export async function register(payload: RegisterPayload): Promise<AuthUser> {

@@ -6,6 +6,7 @@ import {
   DEFAULT_MIN_PASSWORD_LENGTH,
   EXAMPLE_EMAIL,
   NAME_MAX_LENGTH,
+  TwoFactorRequired,
   register as registerAccount,
 } from '../auth/session'
 import type { RegisterInput, Session, SignInInput } from '../auth/session'
@@ -15,7 +16,7 @@ import '../styles/shell.css'
 
 type Mode = 'signin' | 'signup'
 
-type FormErrors = { email?: string; password?: string; name?: string; terms?: string; form?: string }
+type FormErrors = { email?: string; password?: string; name?: string; terms?: string; code?: string; form?: string }
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -27,9 +28,11 @@ type Props = {
    * 后端注册已下发 cookie，回退路径只是为了让页面在宿主补齐之前也能用。
    */
   onRegister?: (input: RegisterInput) => Promise<Session>
+  /** 两步验证第二步：拿到 challenge 后换会话 */
+  onVerifyTwoFactor?: (challenge: string, code: string, remember: boolean) => Promise<Session>
 }
 
-export function LoginPage({ notice, onSignIn, onRegister }: Props) {
+export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: Props) {
   const { internal } = useUiMode()
   const site = useSiteInfo()
   const [mode, setMode] = useState<Mode>('signin')
@@ -39,6 +42,8 @@ export function LoginPage({ notice, onSignIn, onRegister }: Props) {
   const [remember, setRemember] = useState(true)
   // 条款同意：注册必须真的勾上，服务端会把「同意的版本 + 时间」记到账号上
   const [acceptedTerms, setAcceptedTerms] = useState(false)
+  // 两步验证第二步：口令通过但账号开了 2FA 时，先停在这一步
+  const [twoFactor, setTwoFactor] = useState<{ challenge: string; remember: boolean; email: string } | null>(null)
   const [showPassword, setShowPassword] = useState(false)
   const [busy, setBusy] = useState(false)
   const [errors, setErrors] = useState<FormErrors>({})
@@ -141,6 +146,13 @@ export function LoginPage({ notice, onSignIn, onRegister }: Props) {
         setErrors({ form: `账号已创建，但自动登录没有完成${detail ? `（${detail}）` : ''}，请直接用该邮箱登录。` })
         return
       }
+      // 不是失败：换到第二步输入验证码，页面别报「登录没有完成」
+      if (error instanceof TwoFactorRequired) {
+        setTwoFactor({ challenge: error.challenge, remember, email: trimmedEmail })
+        setErrors({})
+        setInfo('')
+        return
+      }
       if (error instanceof AuthError) {
         if (error.field === 'email') setErrors({ email: error.message })
         else if (error.field === 'password') setErrors({ password: error.message })
@@ -149,6 +161,29 @@ export function LoginPage({ notice, onSignIn, onRegister }: Props) {
         else setErrors({ form: error.message })
       } else {
         setErrors({ form: isSignup ? '注册没有完成，请稍后重试。' : '登录没有完成，请稍后重试。' })
+      }
+    }
+  }
+
+  // 第二步：6 位 TOTP 或一枚备用码
+  const submitTotp = async (code: string) => {
+    if (busy || !twoFactor || !onVerifyTwoFactor) return
+    const trimmed = code.trim()
+    if (!trimmed) {
+      setErrors({ code: '请输入验证码' })
+      return
+    }
+    setErrors({})
+    setInfo('')
+    setBusy(true)
+    try {
+      await onVerifyTwoFactor(twoFactor.challenge, trimmed, twoFactor.remember)
+    } catch (error) {
+      setBusy(false)
+      if (error instanceof AuthError) {
+        setErrors(error.field === 'code' ? { code: error.message } : { form: error.message })
+      } else {
+        setErrors({ form: '验证没有完成，请稍后重试。' })
       }
     }
   }
@@ -217,6 +252,20 @@ export function LoginPage({ notice, onSignIn, onRegister }: Props) {
 
       <main className="vq-login-panel">
         <div className="vq-login-form-wrap">
+          {twoFactor ? (
+            <TwoFactorStep
+              email={twoFactor.email}
+              busy={busy}
+              error={errors.code || errors.form || ''}
+              onSubmit={(code) => void submitTotp(code)}
+              onCancel={() => {
+                setTwoFactor(null)
+                setErrors({})
+                setInfo('')
+              }}
+            />
+          ) : (
+            <>
           <div className="vq-login-form-head">
             <span className="vq-mono">{isSignup ? 'Create account' : 'Sign in'}</span>
             <h2>{isSignup ? '创建账号' : '登录 VisionQA'}</h2>
@@ -447,8 +496,93 @@ export function LoginPage({ notice, onSignIn, onRegister }: Props) {
             <Lock size={12} />
             <span>{internal ? '会话保存在服务端下发的 HttpOnly cookie 里；浏览器只缓存用户名与邮箱，用于首屏渲染。' : '登录状态会安全保存；浏览器只记住用户名与邮箱，用来加快下次打开。'}</span>
           </p>
+            </>
+          )}
         </div>
       </main>
     </div>
+  )
+}
+
+/** 登录第二步：认证器 6 位数字，或一枚一次性备用码。 */
+function TwoFactorStep({
+  email,
+  busy,
+  error,
+  onSubmit,
+  onCancel,
+}: {
+  email: string
+  busy: boolean
+  error: string
+  onSubmit: (code: string) => void
+  onCancel: () => void
+}) {
+  const [code, setCode] = useState('')
+  return (
+    <>
+      <div className="vq-login-form-head">
+        <span className="vq-mono">Two-factor</span>
+        <h2>两步验证</h2>
+        <p>
+          {email ? email + ' 已开启两步验证。' : '这个账号已开启两步验证。'}
+          输入认证器 App 里「VisionQA」这一条的 6 位数字；换了手机就用一枚一次性备用码。
+        </p>
+      </div>
+
+      {error ? (
+        <div className="vq-banner vq-banner--error" role="alert">
+          <Lock size={14} />
+          <span>{error}</span>
+        </div>
+      ) : null}
+
+      <form
+        className="vq-login-form"
+        onSubmit={(event) => {
+          event.preventDefault()
+          onSubmit(code)
+        }}
+        noValidate
+      >
+        <div className="vq-field">
+          <label className="vq-field-label" htmlFor="vq-totp">
+            验证码 <em className="vq-mono">code</em>
+          </label>
+          <span className="vq-input">
+            <ShieldCheck size={15} />
+            <input
+              id="vq-totp"
+              name="code"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              autoFocus
+              placeholder="6 位数字，或 XXXXX-XXXXX 备用码"
+              value={code}
+              onChange={(event) => setCode(event.target.value)}
+              disabled={busy}
+            />
+          </span>
+          <span className="vq-field-hint">验证码每 30 秒变一次；备用码每枚只能用一次。</span>
+        </div>
+
+        <button className="vq-button vq-button--primary vq-button--block" type="submit" disabled={busy}>
+          {busy ? (
+            <>
+              <Loader2 size={15} className="vq-spin" />
+              正在验证…
+            </>
+          ) : (
+            <>
+              验证并进入
+              <ArrowRight size={15} />
+            </>
+          )}
+        </button>
+        <button type="button" className="vq-link vq-login-back" onClick={onCancel} disabled={busy}>
+          返回，换一个账号登录
+        </button>
+      </form>
+    </>
   )
 }

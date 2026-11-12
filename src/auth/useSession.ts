@@ -6,6 +6,7 @@ import {
   register as requestRegister,
   signIn as requestSignIn,
   signOut as requestSignOut,
+  verifyTwoFactor as requestVerifyTwoFactor,
   type RegisterInput,
   type Session,
   type SignInInput,
@@ -18,6 +19,8 @@ export type SessionController = {
   loading: boolean
   signIn: (input: SignInInput) => Promise<Session>
   register: (input: RegisterInput) => Promise<Session>
+  /** 两步验证第二步：challenge 来自 signIn 抛出的 TwoFactorRequired */
+  verifyTwoFactor: (challenge: string, code: string, remember: boolean) => Promise<Session>
   signOut: () => void
 }
 
@@ -95,6 +98,13 @@ export function useSession(): SessionController {
     return next
   }, [])
 
+  const verifyTwoFactor = useCallback(async (challenge: string, code: string, remember: boolean) => {
+    const next = await requestVerifyTwoFactor(challenge, code, remember)
+    epoch.current += 1
+    setState({ session: next, loading: false })
+    return next
+  }, [])
+
   const register = useCallback(async (input: RegisterInput) => {
     const next = await requestRegister(input)
     epoch.current += 1
@@ -109,5 +119,5 @@ export function useSession(): SessionController {
     void requestSignOut()
   }, [])
 
-  return { session: state.session, loading: state.loading, signIn, register, signOut }
+  return { session: state.session, loading: state.loading, signIn, verifyTwoFactor, register, signOut }
 }

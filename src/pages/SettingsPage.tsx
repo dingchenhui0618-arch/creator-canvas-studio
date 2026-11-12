@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Activity, CreditCard, KeyRound, LogOut, RefreshCw } from 'lucide-react'
 import { MonoTag } from '../components/ui'
+import { TwoFactorCard } from '../components/TwoFactorCard'
 import PageHead from '../components/PageHead'
 import { getBillingOverview, type BillingOverview } from '../api/billing'
 import { useUiMode } from '../api/app'
@@ -290,6 +291,8 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
               : '口令只用于你本人登录，平台不会以明文保存。'}
           </p>
         </section>
+
+        <TwoFactorCard />
 
         <section className="vq-card vq-card--wide">
           <div className="vq-card-head">

@@ -2283,3 +2283,31 @@
   font-style: normal;
   color: var(--faint, #6f6f6f);
 }
+/* 两步验证（D2）：状态徽标、密钥与备用码展示、关闭确认 */
+.vq-badge { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 999px; border: 1px solid var(--line-strong); color: var(--muted); font-size: 11px; letter-spacing: .04em; white-space: nowrap; }
+.vq-badge--pass { color: var(--pass); border-color: rgba(23, 107, 67, .3); background: var(--pass-soft); }
+.vq-badge--warn { color: var(--warn); border-color: rgba(138, 91, 8, .3); background: var(--warn-soft); }
+.vq-button--tiny { height: 26px; padding: 0 8px; font-size: 11px; gap: 4px; }
+.vq-inline-error { margin: 0 0 12px; font-size: 12px; color: var(--fail); }
+.vq-inline-ok { margin: 0 0 12px; font-size: 12px; color: var(--pass); }
+
+.vq-2fa-enabled,
+.vq-2fa-setup { display: flex; flex-direction: column; gap: 16px; }
+.vq-2fa-facts { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 12.5px; color: var(--muted); }
+.vq-2fa-facts strong { color: var(--ink); font-family: var(--font-mono); }
+.vq-2fa-warn { margin: 0; padding: 8px 12px; border: 1px solid rgba(163, 56, 56, .28); background: var(--fail-soft); color: var(--fail); border-radius: 6px; font-size: 12px; line-height: 1.7; }
+.vq-2fa-off { display: flex; flex-direction: column; gap: 12px; max-width: 420px; }
+.vq-2fa-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.vq-2fa-secret { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.vq-2fa-secret code { padding: 8px 12px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface-soft); font-family: var(--font-mono); font-size: 13px; letter-spacing: .06em; word-break: break-all; }
+.vq-2fa-codes { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+.vq-2fa-codes code { padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-raised); font-family: var(--font-mono); font-size: 12px; text-align: center; }
+.vq-2fa-confirm { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.vq-2fa-confirm .vq-input { width: 140px; }
+.vq-2fa-note { margin: 0; font-size: 11.5px; line-height: 1.7; color: var(--faint); }
+.vq-login-back { margin-top: 12px; align-self: center; font-size: 12px; background: none; border: 0; cursor: pointer; }
+/* 两步验证卡片：按钮按内容宽度靠左，不要被卡片的 flex column 拉成整行 */
+.vq-2fa-enabled > .vq-button,
+.vq-2fa-setup > .vq-button,
+.vq-2fa-setup .vq-field > .vq-button,
+.vq-2fa-off .vq-button { align-self: flex-start; }

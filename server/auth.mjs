@@ -5,6 +5,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { config } from './config.mjs'
+import { sealSecret, openSecret } from './keyvault.mjs'
+import { hashBackupCode } from './totp.mjs'
 
 const SCRYPT_N = 16384
 const SCRYPT_R = 8
@@ -60,6 +62,15 @@ export function openDb() {
   // 注册留痕：同意的条款版本与时间（管理员开通的账号标 admin-created，不假称用户同意过）
   ensureColumn(db, 'users', 'terms_version', 'TEXT')
   ensureColumn(db, 'users', 'terms_accepted_at', 'TEXT')
+  // 两步验证（TOTP）：secret 用 Key 池那把 AES-GCM 密钥封存后落库；
+  // pending_* 是「扫了码、还没输入 6 位确认」的中间态，确认后才搬到正式列。
+  ensureColumn(db, 'users', 'totp_secret', 'TEXT')
+  ensureColumn(db, 'users', 'totp_enabled_at', 'TEXT')
+  ensureColumn(db, 'users', 'totp_last_counter', 'INTEGER')
+  ensureColumn(db, 'users', 'totp_backup', 'TEXT')
+  ensureColumn(db, 'users', 'totp_pending_secret', 'TEXT')
+  ensureColumn(db, 'users', 'totp_pending_backup', 'TEXT')
+  ensureColumn(db, 'users', 'totp_pending_at', 'TEXT')
   seedFirstAccount()
   ensureAnAdmin()
   pruneSessions()
@@ -101,6 +112,8 @@ function publicUser(row) {
     workspace: row.workspace,
     kind: row.kind,
     credits: Number(row.credits || 0),
+    // 只给「有没有开」：secret、备用码永远不出接口
+    twoFactor: Boolean(row.totp_enabled_at),
   }
 }
 
@@ -282,6 +295,139 @@ export function currentUser(req) {
 }
 
 export { publicUser }
+
+
+// ---- 两步验证（TOTP）----
+// 落库的只有密文与备用码哈希；明文 secret 只在「开启那一次」出现在响应里。
+// 登录分两步：口令正确但开了 2FA 时只发一个 5 分钟有效、HMAC 签名的 challenge，
+// 6 位码（或备用码）验过之后才真正建会话。
+
+const CHALLENGE_TTL_MS = 5 * 60 * 1000
+let challengeKeyCache = ''
+
+function totpChallengeKey() {
+  if (challengeKeyCache) return challengeKeyCache
+  const file = path.join(config.dataDir, '.totp-challenge.key')
+  try {
+    const stored = fs.readFileSync(file, 'utf8').trim()
+    if (/^[0-9a-f]{64}$/.test(stored)) {
+      challengeKeyCache = stored
+      return stored
+    }
+  } catch {
+    // 第一次用：下面生成
+  }
+  challengeKeyCache = crypto.randomBytes(32).toString('hex')
+  try {
+    fs.mkdirSync(config.dataDir, { recursive: true })
+    fs.writeFileSync(file, challengeKeyCache, { mode: 0o600 })
+  } catch {
+    // 写不进去就只在本次进程里有效（重启后需要重新登录输入验证码），不影响安全
+  }
+  return challengeKeyCache
+}
+
+function sign(payload) {
+  return crypto.createHmac('sha256', Buffer.from(totpChallengeKey(), 'hex')).update(payload).digest('base64url')
+}
+
+export function signTotpChallenge(userId, remember = false) {
+  // remember 也签进去：第二步没法改「记住我」，否则等于让人挑会话时长
+  const payload = Buffer.from(
+    JSON.stringify({ u: userId, exp: Date.now() + CHALLENGE_TTL_MS, r: Boolean(remember) }),
+  ).toString('base64url')
+  return payload + '.' + sign(payload)
+}
+
+/** 校验 challenge：只回 userId 与 remember；过期或被改过一律 null。 */
+export function readTotpChallenge(token) {
+  const [payload, signature] = String(token || '').split('.')
+  if (!payload || !signature) return null
+  const expected = sign(payload)
+  if (expected.length !== signature.length) return null
+  if (!crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature))) return null
+  try {
+    const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'))
+    if (!data?.u || Date.now() > Number(data.exp || 0)) return null
+    return { userId: String(data.u), remember: Boolean(data.r) }
+  } catch {
+    return null
+  }
+}
+
+const parseBackup = (value) => {
+  try {
+    const list = JSON.parse(String(value || '[]'))
+    return Array.isArray(list) ? list : []
+  } catch {
+    return []
+  }
+}
+
+/** 当前账号的 2FA 状态：只回布尔、时间与剩余备用码数量。 */
+export function totpInfo(userId) {
+  const row = findUserById(userId)
+  if (!row) return null
+  const backup = parseBackup(row.totp_backup)
+  return {
+    enabled: Boolean(row.totp_enabled_at),
+    enabledAt: row.totp_enabled_at || '',
+    backupCodesLeft: backup.filter((item) => item && !item.usedAt).length,
+    pending: Boolean(row.totp_pending_secret),
+  }
+}
+
+export function startTotpSetup(userId, { secret, backupCodes }) {
+  const backup = backupCodes.map((code) => ({ hash: hashBackupCode(code), usedAt: null }))
+  openDb()
+    .prepare('UPDATE users SET totp_pending_secret = ?, totp_pending_backup = ?, totp_pending_at = ? WHERE id = ?')
+    .run(sealSecret(secret), JSON.stringify(backup), nowIso(), userId)
+}
+
+export function pendingTotp(userId) {
+  const row = findUserById(userId)
+  if (!row?.totp_pending_secret) return null
+  return { secret: openSecret(row.totp_pending_secret), backup: parseBackup(row.totp_pending_backup) }
+}
+
+/** 确认码验过之后才把 pending 搬成正式：这一步之前，2FA 对登录不生效。 */
+export function activateTotp(userId) {
+  const row = findUserById(userId)
+  if (!row?.totp_pending_secret) return false
+  openDb()
+    .prepare(
+      'UPDATE users SET totp_secret = ?, totp_backup = ?, totp_enabled_at = ?, totp_last_counter = 0, totp_pending_secret = NULL, totp_pending_backup = NULL, totp_pending_at = NULL WHERE id = ?',
+    )
+    .run(row.totp_pending_secret, row.totp_pending_backup || '[]', nowIso(), userId)
+  return true
+}
+
+export function clearTotp(userId) {
+  openDb()
+    .prepare(
+      'UPDATE users SET totp_secret = NULL, totp_backup = NULL, totp_enabled_at = NULL, totp_last_counter = NULL, totp_pending_secret = NULL, totp_pending_backup = NULL, totp_pending_at = NULL WHERE id = ?',
+    )
+    .run(userId)
+}
+
+/** 登录第二步要用：解密后的 secret、上次用过的步长、备用码。只在服务端内部使用。 */
+export function totpMaterial(userId) {
+  const row = findUserById(userId)
+  if (!row?.totp_secret) return null
+  return {
+    secret: openSecret(row.totp_secret),
+    lastCounter: Number(row.totp_last_counter || 0),
+    backup: parseBackup(row.totp_backup),
+  }
+}
+
+export function saveTotpCounter(userId, counter) {
+  openDb().prepare('UPDATE users SET totp_last_counter = ? WHERE id = ?').run(Number(counter) || 0, userId)
+}
+
+export function saveTotpBackup(userId, backup) {
+  openDb().prepare('UPDATE users SET totp_backup = ? WHERE id = ?').run(JSON.stringify(backup || []), userId)
+}
 
 // ---- 登录失败限流（进程内滑动窗口，够单机用） ----
 const attempts = new Map()
