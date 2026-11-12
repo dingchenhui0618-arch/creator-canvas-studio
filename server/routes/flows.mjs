@@ -3,7 +3,7 @@ import { listFlows, getFlow, createFlow, updateFlow, deleteFlow, runFlow, listRu
 import { currentUser } from '../auth.mjs'
 import { config } from '../config.mjs'
 import { listProjects } from '../projects.mjs'
-import { projectsByFlow, projectFlowsMatching, withRunProject } from '../run-ownership.mjs'
+import { projectsByFlow, projectFlowsMatching, withRunProject, withFlowProject } from '../run-ownership.mjs'
 import { charge, refund, balanceOf } from '../credits.mjs'
 import { enter, leave } from '../gate.mjs'
 import { publicError } from '../public-error.mjs'
@@ -83,8 +83,15 @@ export function createFlowsRouter() {
         return true
       }
 
+      // 画布也挂上它属于哪条作品的第几版：画布页据此写「在帮《X》· 第 N 版」并给入口。
+      // 与运行记录同一张索引（projectsByFlow）、同一个 ref，三处说同一件事。
+      const projectOf = async (items) => {
+        const byFlow = projectsByFlow(await listProjects(user))
+        return withFlowProject(items, byFlow)
+      }
+
       if (pathname === '/api/flows' && req.method === 'GET') {
-        const items = await listFlows(user)
+        const items = await projectOf(await listFlows(user))
         sendJson(res, 200, { items, total: items.length })
         return true
       }
@@ -92,7 +99,8 @@ export function createFlowsRouter() {
       if (pathname === '/api/flows' && req.method === 'POST') {
         const body = await readBody(req)
         const flow = await createFlow(body, user)
-        sendJson(res, 201, flow)
+        // 新建的流程还没归任何作品：带上 project: null，前端不必区分「没有这个字段」和「没归谁」
+        sendJson(res, 201, { ...flow, project: null })
         return true
       }
 
@@ -199,7 +207,7 @@ export function createFlowsRouter() {
             notFound(res, '流程不存在')
             return true
           }
-          sendJson(res, 200, flow)
+          sendJson(res, 200, (await projectOf([flow]))[0])
           return true
         }
         if (req.method === 'PATCH') {
@@ -213,7 +221,8 @@ export function createFlowsRouter() {
             notFound(res, '流程不存在')
             return true
           }
-          sendJson(res, 200, updated)
+          // 保存回来的画布同样带着作品：前端把这条替换进列表时不会把「在帮哪条作品」丢掉
+          sendJson(res, 200, (await projectOf([updated]))[0])
           return true
         }
         if (req.method === 'DELETE') {

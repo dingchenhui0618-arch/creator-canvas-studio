@@ -61,6 +61,15 @@ export function withRunProject(runs = [], byFlow = new Map()) {
 }
 
 /**
+ * 给一块画布挂上「属于哪条作品的第几版」：画布页据此写「在帮《X》· 第 N 版」，
+ * 并给「打开作品 / 去评审这一版」。没归作品（空白画布）就是 null，页面据此什么也不写。
+ * 与运行、评审同一张索引、同一个 ref——三处口径不分叉。
+ */
+export function withFlowProject(flows = [], byFlow = new Map()) {
+  return (Array.isArray(flows) ? flows : []).map((flow) => ({ ...flow, project: runProjectRef(byFlow, flow?.id) }))
+}
+
+/**
  * 按作品名搜索运行：运行自己只记 flowName（画布名可以改、也可能是「画布 3」），
  * 搜「毛衣」要能搜到这条作品的运行——这里把作品的当前版与归档版画布一起交回给查询。
  */

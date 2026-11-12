@@ -29,6 +29,11 @@ export type ApiFlow = {
   lastRunAt: string | null
   createdAt: string
   updatedAt: string
+  /**
+   * 这块画布挂在哪条作品的第几版：画布页据此写「在帮《X》· 第 N 版」。
+   * 空白画布（还没归作品的）是 null，页面什么也不写——不编一个「未命名作品」出来。
+   */
+  project?: RunProjectRef | null
 }
 
 export type FlowPayload = {

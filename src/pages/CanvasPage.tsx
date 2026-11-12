@@ -25,6 +25,7 @@ import {
   updateFlow,
   type ApiFlow,
   type RunNodeResult,
+  type RunProjectRef,
   type RunRecord,
 } from '../api/flows'
 import { getCredits } from '../api/credits'
@@ -105,6 +106,8 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
   const [flowId, setFlowId] = useState('')
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  // 这块画布挂在哪条作品的第几版：服务端按画布指针现算，空白画布为 null
+  const [flowProject, setFlowProject] = useState<RunProjectRef | null>(null)
   const [selectedId, setSelectedId] = useState('')
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading')
   const [loadError, setLoadError] = useState('')
@@ -273,6 +276,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
     setFlowId(flow.id)
     setName(flow.name)
     setDescription(flow.description ?? '')
+    setFlowProject(flow.project ?? null)
     const nextNodes = fromFlowNodes(flow.nodes)
     const first = nextNodes[0]
     if (first) first.selected = true
@@ -1089,6 +1093,39 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
           ) : null}
 
           <section className="cv-stage" aria-label="流程画布">
+            {/* 画布是从作品某一步被带进来的能力：先写清在帮哪条作品、哪一版，再给两个出口。
+                空白画布不写——没有作品就别编一条出来。 */}
+            {flowProject ? (
+              <div className="cv-project">
+                <span className="cv-project-kicker">{flowProject.archived ? '归档画布' : '在帮'}</span>
+                <strong className="cv-project-title">
+                  《{flowProject.title}》· 第 {flowProject.version} 版{flowProject.archived ? '（已归档）' : ''}
+                </strong>
+                <span className="cv-project-meta">
+                  {flowProject.archived
+                    ? '这条作品现在用的是新的一版；这一版留着查看，跑出来的运行仍记在第 ' + flowProject.version + ' 版上'
+                    : '这块画布就是这条作品当前这一版，跑出来的运行与评审都记在它下面'}
+                </span>
+                <div className="cv-project-actions">
+                  <button
+                    className="cv-btn"
+                    type="button"
+                    onClick={() => navigate({ kind: 'page', page: 'projects', projectId: flowProject.id })}
+                  >
+                    打开作品
+                  </button>
+                  {flowProject.archived ? null : (
+                    <button
+                      className="cv-btn"
+                      type="button"
+                      onClick={() => navigate({ kind: 'page', page: 'review', projectId: flowProject.id })}
+                    >
+                      去评审这一版
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : null}
             <div className="cv-toolbar">
               <div className="cv-toolbar-group">
                 <button className="cv-tool" type="button" onClick={relayout} disabled={!nodes.length}>

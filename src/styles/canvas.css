@@ -239,6 +239,51 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
 }
+/* ---------- 画布属于哪条作品的哪一版（v0.9.34） ---------- */
+/* 画布是从作品某一步被带进来的能力。以前进来就只剩一块画布：不知道在帮哪条作品、
+   也回不去。这一条写在画布卡片顶上——上下文归画布，不挤页头那一排按钮，也不占页面高度。 */
+.cv-project {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-soft);
+}
+.cv-project-kicker {
+  flex: 0 0 auto;
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .08em;
+}
+.cv-project-title {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cv-project-meta {
+  /* 收窄时先让这句说明变短，别为了它把标题挤成省略号；wrap 按 flex 基准算行，基准给小的 */
+  flex: 1 1 140px;
+  min-width: 0;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cv-project-actions { display: flex; gap: 8px; margin-left: auto; }
+.cv-project-actions .cv-btn { height: 28px; padding: 0 8px; }
+
 .cv-toolbar {
   height: 42px;
   flex: 0 0 42px;
@@ -580,19 +625,37 @@
 
 @media (max-width: 1280px) {
   .page.cv-page { padding: 24px 24px 16px; }
-  .cv-workspace { grid-template-columns: 188px minmax(0, 1fr) 288px; height: calc(100vh - 214px); }
+  /* 这里的 188px 左栏是「节点面板打开时」的宽度：以前不分有没有面板一律三栏，
+     1280 宽的屏幕上画布就被压成左边 188px 一条。现在跟基础规则一样按面板在不在分。 */
+  .cv-workspace { grid-template-columns: minmax(0, 1fr) 288px; height: calc(100vh - 214px); }
+  .cv-workspace:has(.cv-palette) { grid-template-columns: 188px minmax(0, 1fr) 288px; }
   .cv-flow-name { width: min(420px, 36vw); }
   .cv-head-actions .cv-btn { padding: 0 8px; }
 }
 
 @media (max-width: 1024px) {
-  .cv-page .vq-head { flex-direction: column; align-items: stretch; }
+  /* 页头在 1024 以下竖排：必须同时关掉换行并放开 main 的 flex-basis，
+     否则 24rem 会被当成高度，标题与动作之间凭空多出 300px 空白（v0.9.6 只在 760 以下修过） */
+  .cv-page .vq-head { flex-direction: column; align-items: stretch; flex-wrap: nowrap; }
+  .cv-page .vq-head-main { flex: none; }
   .cv-head-actions { justify-content: flex-start; }
+  /* 一条装不下：两个动作留在第一行，说明文字另起一行，不把标题挤成省略号 */
+  .cv-project-meta { flex: 1 1 100%; order: 3; white-space: normal; }
+  /* 中屏以下画布卡片以前会缩成一条 42px 的工具栏：行高由内容决定，画布 flex:1 拿到 0。
+     给它一个下限，画布才有地方显示（1440 不受影响，那里由整屏高度撑开）。 */
+  .cv-stage { min-height: 440px; }
   .cv-workspace {
     grid-template-columns: minmax(0, 1fr) 272px;
-    grid-template-rows: auto minmax(440px, 1fr);
+    /* 画布是第一行：以前写成 auto，行高只等于「横幅 + 工具栏」，画布 flex:1 拿到 0 高 */
+    grid-template-rows: minmax(440px, 1fr);
     height: auto;
     min-height: 620px;
+  }
+  /* 节点面板在同一行上方铺满，画布与右栏仍在第二行并排：
+     这里要连列一起写，否则会沿用中屏那份三栏（188 / 1fr / 288），画布又被压成一条。 */
+  .cv-workspace:has(.cv-palette) {
+    grid-template-columns: minmax(0, 1fr) 272px;
+    grid-template-rows: auto minmax(440px, 1fr);
   }
   .cv-palette { grid-column: 1 / -1; flex-direction: row; align-items: stretch; }
   .cv-palette-head { display: none; }
@@ -609,6 +672,12 @@
   .cv-inspector { max-height: 420px; }
   .cv-flow-name { width: 100%; }
   .cv-head-actions .cv-btn { flex: 1; justify-content: center; }
+  .cv-project { gap: 4px 8px; }
+  /* 窄屏只留「在帮 / 归档画布 + 第几版 + 两个动作」：说明文字收进标题的（已归档）里 */
+  .cv-project-meta { display: none; }
+  .cv-project-actions { flex: 1 1 100%; margin-left: 0; }
+  .cv-project-actions .cv-btn { flex: 1; justify-content: center; }
+  .cv-stage { min-height: 400px; }
 }
 
 /* ---------- VisionQA Canvas 接入条 ---------- */
@@ -623,6 +692,13 @@
   background: var(--surface);
 }
 .cv-bdc-bar p { flex: 1; margin: 0; color: var(--muted); font-size: 12px; }
+/* 窄屏这条说明会把自己挤成一根竖条、按钮还被裁到屏幕外：整条改折行，说明独占一行 */
+@media (max-width: 760px) {
+  .cv-bdc-bar { flex-wrap: wrap; gap: 8px; }
+  .cv-bdc-bar p { flex: 1 1 100%; }
+  .cv-bdc-url { display: none; }
+  .cv-bdc-bar .cv-btn { flex: 1; justify-content: center; }
+}
 .cv-bdc-bar .vq-mono { color: var(--faint); }
 .cv-bdc-frame {
   width: 100%;
