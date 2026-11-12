@@ -362,3 +362,226 @@
   font-size: 12px;
   line-height: var(--leading-meta, 1.6);
 }
+
+/* ---------- 带走的原片（v0.9.36） ----------
+   发现页开场先说清你从这条赛道带走过什么：一行一条原片，右边是它的模板与作品。
+   只读现算、不检索，所以这一块不该看起来像检索结果——没有卡片网格，只有一排薄行。 */
+.radar-taken {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 254, 250, 0.62);
+}
+
+.radar-taken-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+/* 右上的「模板库」按钮不参与压缩：390 宽下它被挤成一列竖排的「模 / 板 / 库」 */
+.radar-taken-head > a,
+.radar-taken-head > button {
+  flex: none;
+  white-space: nowrap;
+}
+
+.radar-taken-head h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.radar-taken-sub {
+  max-width: 640px;
+  margin: var(--space-1) 0 0;
+  color: var(--ink-faint);
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+
+.radar-taken-list {
+  display: flex;
+  flex-direction: column;
+  margin-top: var(--space-2);
+  border-top: 1px solid var(--line);
+}
+
+.radar-taken-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.radar-taken-row:last-child {
+  border-bottom: 0;
+}
+
+.radar-taken-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-1) 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.radar-taken-main > svg {
+  flex: none;
+  color: var(--faint);
+}
+
+.radar-taken-main:hover .radar-taken-copy strong {
+  text-decoration: underline;
+}
+
+.radar-taken-main:hover > svg {
+  color: var(--ink);
+}
+
+.radar-taken-platform {
+  flex: none;
+  padding: 2px var(--space-2);
+  color: var(--faint);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.radar-taken-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.radar-taken-copy strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.radar-taken-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+/* 每一项都不许内部折行：390 宽下「评论 11」被劈成两行比省空间更重要 */
+.radar-taken-meta > span {
+  white-space: nowrap;
+}
+
+/* 官方示例：一行小标签，用界面字体（中文别走等宽），只是标明来处，不抢原片数据 */
+.radar-taken-flag {
+  padding: 0 var(--space-1);
+  color: var(--ink);
+  background: var(--surface-soft);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-ui);
+  font-size: 11px;
+}
+
+.radar-taken-work {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  color: var(--ink-soft);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.radar-taken-work:hover {
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+
+.radar-taken-more {
+  margin: var(--space-2) 0 0;
+  color: var(--ink-faint);
+  font-size: 11.5px;
+}
+
+/* 上次检索的结果还在（v0.9.36）：一条安静的说明行，别做成警告条——它不是错误 */
+.radar-restored {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  margin: 0 0 var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  color: var(--ink-soft);
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+}
+
+.radar-restored > svg {
+  flex: none;
+  color: var(--faint);
+}
+
+.radar-restored-copy {
+  flex: 1;
+  min-width: 200px;
+  line-height: 1.6;
+}
+
+.radar-restored-clear {
+  padding: var(--space-1) var(--space-2);
+  color: var(--faint);
+  background: transparent;
+  border: 0;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.radar-restored-clear:hover {
+  color: var(--ink);
+}
+
+@media (max-width: 760px) {
+  /* 有作品的行走两行：标题与互动数占满一行，作品按钮单独一行靠右。
+     挤在一行时标题只剩 90px，互动数被压成四行——比多一行更难看。 */
+  .radar-taken-row {
+    flex-wrap: wrap;
+  }
+
+  .radar-taken-main {
+    flex: 1 0 100%;
+  }
+
+  .radar-taken-work {
+    margin-left: auto;
+  }
+
+  .radar-restored-copy {
+    min-width: 0;
+    flex-basis: 100%;
+  }
+}
+

@@ -31,6 +31,8 @@ import {
   adoptUnowned as adoptUnownedTemplates,
 } from './templates.mjs'
 import { projectsByTemplate, templateWorksView, totalProjectCount, withProjectCount } from './template-usage.mjs'
+import { takenOrigins, ORIGIN_LIMIT } from './taken-origins.mjs'
+import { listProjects } from './projects.mjs'
 import { adoptUnowned as adoptUnownedAgents } from './agents.mjs'
 import { adoptUnownedFlows, createFlow, getFlow } from './flows.mjs'
 import { adoptUnowned as adoptUnownedReviews } from './reviews.mjs'
@@ -511,6 +513,21 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/system/service/recheck' && req.method === 'POST') {
       clearModelBlock()
       return sendJson(res, 200, { ok: true, cleared: true, model: { available: true } })
+    }
+
+    // 发现页开场：库里已经有哪些原片、哪一条已经开成作品（v0.9.36）。
+    // 只读现算：模板上有原片链接与互动数据，作品那侧只有模板指针，两边都不复制。
+    // 不按「来源」筛：官方示例也有原片（shared 照实标），筛掉就等于假装库里没有它们。
+    // 不检索、不扣积分：这是看库，不是查平台。
+    if (pathname === '/api/taken-origins') {
+      if (req.method !== 'GET') return sendJson(res, 405, { error: 'method not allowed' })
+      if (!user) return sendJson(res, 401, { error: '需要登录' })
+      const limit = Number(url.searchParams.get('limit') || ORIGIN_LIMIT) || ORIGIN_LIMIT
+      const [templates, projects] = await Promise.all([
+        listTemplates({}, user),
+        listProjects(user),
+      ])
+      return sendJson(res, 200, takenOrigins(templates, projects, { limit }))
     }
 
     // 检索历史与收藏：只存条件不存结果，点一下就填回表单（不自动检索，避免替用户扣积分）

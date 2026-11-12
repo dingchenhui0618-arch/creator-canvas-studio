@@ -16,6 +16,38 @@ export type MediaItem = {
   mock?: boolean
 }
 
+// 发现页开场「带走的原片」（v0.9.36）：模板上留着原片链接，作品那侧只有模板指针，服务端现算。
+export type TakenOriginStats = { plays: number; likes: number; comments: number; shares: number; collects: number }
+
+export type TakenOrigin = {
+  templateId: string
+  title: string
+  platform: Platform | ''
+  /** 抖音 / 小红书；认不出的平台是空串，界面兜底写「原片」 */
+  platformLabel: string
+  author: string
+  /** 一件互动都没有时是 null：不拿一排 0 冒充原片数据 */
+  stats: TakenOriginStats | null
+  savedAt: string
+  /** 官方示例（运营给的样例）：照实标出来，不冒充「你带回来的」 */
+  official: boolean
+  /** 同一条原片存成了几条模板（改编版继承原链接） */
+  templates: number
+  /** 这条原片开出的最近一条作品；没开成作品是 null */
+  project: { id: string; title: string; version: number } | null
+  /** 这条原片开出了几条作品（一条作品多版只算一条） */
+  works: number
+}
+
+export type TakenOrigins = {
+  total: number
+  withProject: number
+  works: number
+  official: number
+  lastAt: string
+  items: TakenOrigin[]
+}
+
 export type QuotaNotice = {
   code: string
   message: string

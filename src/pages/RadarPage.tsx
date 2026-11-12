@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertCircle,
+  ArrowRight,
   BookmarkPlus,
   Check,
+  Clock,
   ExternalLink,
   Film,
   Heart,
@@ -15,8 +17,9 @@ import {
   Sparkles,
   Star,
 } from 'lucide-react'
-import { clearSearchHistory, coverSrc, formatCount, formatDuration, getHealth, listSearchHistory, saveTemplate, searchMedia, toggleSearchFavorite } from '../api/radar'
-import type { MediaItem, SearchHistoryEntry } from '../domain/radar'
+import { clearSearchHistory, coverSrc, formatCount, formatDuration, getHealth, getTakenOrigins, listSearchHistory, saveTemplate, searchMedia, toggleSearchFavorite } from '../api/radar'
+import type { MediaItem, SearchHistoryEntry, TakenOrigins } from '../domain/radar'
+import { ago, stampTime } from '../domain/share'
 import { ReplicateModal } from '../components/ReplicateModal'
 import { Select } from '../components/Select'
 import PageHead from '../components/PageHead'
@@ -60,24 +63,78 @@ function interactionRate(item: MediaItem) {
 
 const statValue = (value: number | undefined) => formatCount(value || 0)
 
-export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: string) => void; onOpenTemplates: () => void }) {
-  const [platform, setPlatform] = useState('all')
-  const [keyword, setKeyword] = useState('')
-  const [range, setRange] = useState('')
-  const [sort, setSort] = useState('likes')
-  const [items, setItems] = useState<MediaItem[]>([])
-  const [mode, setMode] = useState<'live' | 'mock'>('mock')
-  const [note, setNote] = useState('')
+// 「上次检索的结果还在」：回到发现页不用重查一遍（重查就是再花一次检索费）。
+// 只留最近一次、最多 48 条；超过 7 天就丢掉——平台上的数字早变了，留着反而骗人。
+// 放在 sessionStorage：关掉标签页就没了，不占长期存储，也不往服务端写。
+const LAST_SEARCH_KEY = 'vq.radar.lastSearch.v1'
+const LAST_SEARCH_MAX_AGE = 7 * 24 * 60 * 60 * 1000
+const LAST_SEARCH_ITEMS = 48
+
+type LastSearch = {
+  at: string
+  platform: string
+  keyword: string
+  range: string
+  sort: string
+  mode: 'live' | 'mock'
+  items: MediaItem[]
+  total: number
+  page: number
+  hasMore: boolean
+  snapshot: { platform: string; q: string; start: string; end: string } | null
+  note: string
+}
+
+function readLastSearch(): LastSearch | null {
+  try {
+    const raw = window.sessionStorage.getItem(LAST_SEARCH_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as LastSearch
+    if (!parsed || !Array.isArray(parsed.items) || !parsed.items.length) return null
+    const at = Date.parse(parsed.at)
+    if (!Number.isFinite(at) || Date.now() - at > LAST_SEARCH_MAX_AGE) return null
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+// 存不下（隐私模式 / 配额满）就当没记住：记不住一次检索是小事，挡住检索本身是大事
+function writeLastSearch(value: LastSearch | null) {
+  try {
+    if (value) window.sessionStorage.setItem(LAST_SEARCH_KEY, JSON.stringify(value))
+    else window.sessionStorage.removeItem(LAST_SEARCH_KEY)
+  } catch {
+    /* 忽略：见上 */
+  }
+}
+
+export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProject }: {
+  onToast: (message: string) => void
+  onOpenTemplates: () => void
+  onOpenTemplate?: (templateId: string) => void
+  onOpenProject?: (projectId: string) => void
+}) {
+  // 上一次检索的条件与条目：初始化时就取（不是进页面再补发请求），所以回来这一屏是现成的
+  const [restored] = useState(readLastSearch)
+  const [platform, setPlatform] = useState(restored?.platform || 'all')
+  const [keyword, setKeyword] = useState(restored?.keyword || '')
+  const [range, setRange] = useState(restored?.range || '')
+  const [sort, setSort] = useState(restored?.sort || 'likes')
+  const [items, setItems] = useState<MediaItem[]>(restored?.items.slice(0, LAST_SEARCH_ITEMS) || [])
+  const [mode, setMode] = useState<'live' | 'mock'>(restored?.mode === 'live' ? 'live' : 'mock')
+  const [note, setNote] = useState(restored?.note || '')
   // 分页：每次「加载更多」都是一次真实检索（按次计费），所以页码、快照和是否还有下一页都要记住
-  const [page, setPage] = useState(1)
-  const [total, setTotal] = useState(0)
-  const [hasMore, setHasMore] = useState(false)
+  const [page, setPage] = useState(Number(restored?.page) || 1)
+  const [total, setTotal] = useState(Number(restored?.total) || restored?.items.length || 0)
+  const [hasMore, setHasMore] = useState(Boolean(restored?.hasMore))
   const [loadingMore, setLoadingMore] = useState(false)
-  const [snapshot, setSnapshot] = useState<{ platform: string; q: string; start: string; end: string } | null>(null)
+  const [snapshot, setSnapshot] = useState<{ platform: string; q: string; start: string; end: string } | null>(restored?.snapshot || null)
   const [quota, setQuota] = useState<{ code: string; message: string; rechargeUrl?: string; goodsName?: string } | null>(null)
   const [loading, setLoading] = useState(false)
-  // 进页面不自动检索：红狐按次计费，必须由用户点「检索」才发请求
-  const [searched, setSearched] = useState(false)
+  // 进页面不自动检索：红狐按次计费，必须由用户点「检索」才发请求。
+  // 但「上次检索的结果」不算检索：那是已经付过费的条目，原样放回来，不重新请求
+  const [searched, setSearched] = useState(Boolean(restored))
   const [error, setError] = useState('')
   const [hasKey, setHasKey] = useState(false)
   const [visionReady, setVisionReady] = useState(false)
@@ -88,10 +145,21 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
   const [credits, setCredits] = useState<CreditsResponse | null>(null)
   const [insufficient, setInsufficient] = useState('')
   const [history, setHistory] = useState<SearchHistoryEntry[]>([])
+  // 发现页开场那块「带走的原片」：只读现算，不检索、不扣积分
+  const [taken, setTaken] = useState<TakenOrigins | null>(null)
+  // 这一屏结果是不是「上次检索」留下的（有时间就写着，重新检索或清掉才没了）
+  const [restoredAt, setRestoredAt] = useState(restored?.at || '')
 
   // 积分余额是服务端账本，检索成功/失败后都重新拉一次，界面上的数字永远可信
   const refreshCredits = useCallback(() => {
     getCredits(1).then(setCredits).catch(() => setCredits(null))
+  }, [])
+
+  // 库里带走过什么：模板上留着原片链接，作品那侧只有模板指针，服务端现算
+  const loadTaken = useCallback(() => {
+    getTakenOrigins(4)
+      .then(setTaken)
+      .catch(() => setTaken(null))
   }, [])
 
   // 历史只存条件：点一下把条件填回表单，不自动检索——每次检索 2 积分，不能替用户花
@@ -124,11 +192,29 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
       .catch((caught) => onToast(caught instanceof Error ? caught.message : '清空失败'))
   }, [loadHistory, onToast])
 
-  const runSearch = useCallback(async () => {
+  // 清掉这一屏（不动服务端的检索历史：历史存的是条件，不存结果）
+  const clearLastSearch = useCallback(() => {
+    writeLastSearch(null)
+    setRestoredAt('')
+    setSearched(false)
+    setItems([])
+    setTotal(0)
+    setPage(1)
+    setHasMore(false)
+    setSnapshot(null)
+    setNote('')
+    setError('')
+    setInsufficient('')
+    onToast('已清掉上次检索的结果，检索历史还留着')
+  }, [onToast])
+
+  // override：点子里的建议关键词要按那个词搜——setKeyword 之后同一个事件里读到的还是旧 keyword，
+  // 以前「点建议」实际搜的是上一次的关键词（首屏就是个空关键词），等于把建议做成了摆设
+  const runSearch = useCallback(async (override?: string) => {
     setLoading(true)
     setError('')
     setInsufficient('')
-    const query = { platform, q: keyword.trim(), range, start: range ? dayOffset(Number(range)) : '', end: range ? dayOffset(0) : '' }
+    const query = { platform, q: (override ?? keyword).trim(), range, start: range ? dayOffset(Number(range)) : '', end: range ? dayOffset(0) : '' }
     try {
       const result = await searchMedia({ ...query, page: 1, sort })
       setItems(result.items)
@@ -140,6 +226,22 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
       setNote(result.note || '')
       setQuota(result.quota ? { code: result.quota.code, message: result.quota.message, rechargeUrl: result.quota.rechargeUrl, goodsName: result.quota.goodsName } : null)
       setSearched(true)
+      // 这一屏是刚查的：把「上次检索」的旧标签换掉，并记下这次（下次回来不用再花一次检索费）
+      setRestoredAt('')
+      writeLastSearch({
+        at: new Date().toISOString(),
+        platform,
+        keyword: query.q,
+        range,
+        sort,
+        mode: result.mode,
+        items: result.items.slice(0, LAST_SEARCH_ITEMS),
+        total: Number(result.total) || result.items.length,
+        page: 1,
+        hasMore: Boolean(result.hasMore),
+        snapshot: query,
+        note: result.note || '',
+      })
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : String(caught)
       setError(message)
@@ -161,14 +263,28 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
     setInsufficient('')
     try {
       const result = await searchMedia({ ...snapshot, page: page + 1, sort })
-      setItems((current) => {
-        const seen = new Set(current.map((entry) => entry.id))
-        return [...current, ...result.items.filter((entry) => !seen.has(entry.id))]
-      })
+      const seen = new Set(items.map((entry) => entry.id))
+      const merged = [...items, ...result.items.filter((entry) => !seen.has(entry.id))]
+      setItems(merged)
       setTotal(Number(result.total) || total)
       setPage((value) => value + 1)
       setHasMore(Boolean(result.hasMore))
       if (result.note) setNote(result.note)
+      // 翻页也是这一屏的一部分：连着上次的条件一起存，回来后页码与「还有没有下一页」都对得上
+      writeLastSearch({
+        at: restoredAt || new Date().toISOString(),
+        platform,
+        keyword: keyword.trim(),
+        range,
+        sort,
+        mode: result.mode,
+        items: merged.slice(0, LAST_SEARCH_ITEMS),
+        total: Number(result.total) || total,
+        page: page + 1,
+        hasMore: Boolean(result.hasMore),
+        snapshot,
+        note: result.note || note,
+      })
       if (result.quota) setQuota({ code: result.quota.code, message: result.quota.message, rechargeUrl: result.quota.rechargeUrl, goodsName: result.quota.goodsName })
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : String(caught)
@@ -178,7 +294,7 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
       setLoadingMore(false)
       refreshCredits()
     }
-  }, [snapshot, page, sort, hasMore, loadingMore, total, refreshCredits])
+  }, [snapshot, page, sort, hasMore, loadingMore, total, refreshCredits, items, restoredAt, platform, keyword, range, note])
 
   useEffect(() => {
     getHealth()
@@ -186,8 +302,10 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
       .catch(() => { setHasKey(false); setVisionReady(false) })
     refreshCredits()
     loadHistory()
-    // 首屏只读健康状态、积分余额与检索历史，不检索：检索必须由用户点按钮触发
-  }, [refreshCredits, loadHistory])
+    loadTaken()
+    // 首屏只读健康状态、积分余额、检索历史与库里带走的原片，不检索：检索必须由用户点按钮触发
+  }, [refreshCredits, loadHistory, loadTaken])
+
 
   const sorted = useMemo(() => {
     const copy = [...items]
@@ -211,6 +329,7 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
       try {
         const result = await saveTemplate(item)
         setSavedIds((current) => (current.includes(item.id) ? current : [...current, item.id]))
+        loadTaken()
         onToast(result.created ? '已加入模板库：只存了原链接与互动数据' : '这条已经在模板库里了')
       } catch (caught) {
         onToast(caught instanceof Error ? caught.message : '加入模板库失败')
@@ -218,7 +337,7 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
         setSavingId('')
       }
     },
-    [onToast],
+    [onToast, loadTaken],
   )
 
   return (
@@ -318,6 +437,84 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
         </div>
       ) : null}
 
+      {/* 库里的原片（v0.9.36）：开场先说清库里已经有哪些原片、哪条已经开成作品。
+          只是看库，不检索、不扣积分；有结果时让位给结果。 */}
+      {!searched && taken && taken.total ? (
+        <section className="radar-taken" aria-labelledby="radar-taken-title">
+          <div className="radar-taken-head">
+            <div>
+              <h2 id="radar-taken-title">库里的原片</h2>
+              <p className="radar-taken-sub">
+                {'库里 ' + taken.total + ' 条原片'}
+                {taken.official === taken.total
+                  ? '，都是官方示例'
+                  : taken.official
+                    ? '（其中 ' + taken.official + ' 条是官方示例）'
+                    : ''}
+                {taken.withProject ? '，' + taken.withProject + ' 条已经开成作品' : '，都还没开成作品'}
+                {taken.lastAt ? '；最近一条 ' + ago(taken.lastAt) + '。' : '。'}
+                {'点一行打开它的模板。'}
+              </p>
+            </div>
+            <button type="button" className="vq-link" onClick={onOpenTemplates}>
+              模板库
+              <ArrowRight size={13} />
+            </button>
+          </div>
+          <div className="radar-taken-list">
+            {taken.items.map((row) => (
+              <div className="radar-taken-row" key={row.templateId}>
+                <button
+                  type="button"
+                  className="radar-taken-main"
+                  onClick={() => onOpenTemplate?.(row.templateId)}
+                  aria-label={'打开这条原片存成的模板：' + (row.title || '（无标题）')}
+                  title="打开这条原片存成的模板（里面能看到用它的作品）"
+                >
+                  <span className="radar-taken-platform">{row.platformLabel || '原片'}</span>
+                  <span className="radar-taken-copy">
+                    <strong>{row.title || '（无标题）'}</strong>
+                    <span className="radar-taken-meta">
+                      {row.official ? <span className="radar-taken-flag">官方示例</span> : null}
+                      <span>{row.author || '作者没记下'}</span>
+                      {row.templates > 1 ? <span>{'存成 ' + row.templates + ' 条模板'}</span> : null}
+                      {row.stats ? (
+                        <>
+                          <span>点赞 {formatCount(row.stats.likes)}</span>
+                          <span>收藏 {formatCount(row.stats.collects)}</span>
+                          <span>评论 {formatCount(row.stats.comments)}</span>
+                        </>
+                      ) : (
+                        <span>没记互动数据</span>
+                      )}
+                    </span>
+                  </span>
+                  <ArrowRight size={13} />
+                </button>
+                {row.project ? (
+                  <button
+                    type="button"
+                    className="radar-taken-work"
+                    onClick={() => onOpenProject?.(row.project?.id || '')}
+                    aria-label={'打开作品：' + row.project.title + (row.project.version ? '，第 ' + row.project.version + ' 版' : '，还没开画布')}
+                    title={'打开作品《' + row.project.title + '》'}
+                  >
+                    {/* 版本 0 是「照模板开了作品、还没开画布」：不写「第 0 版」（v0.9.30 同一口径） */}
+                    {'作品 · ' + (row.project.version ? '第 ' + row.project.version + ' 版' : '还没开画布')}
+                    <ArrowRight size={12} />
+                  </button>
+                ) : null}
+              </div>
+            ))}
+          </div>
+          {taken.total > taken.items.length ? (
+            <p className="radar-taken-more">
+              {'另外 ' + (taken.total - taken.items.length) + ' 条在模板库里。'}
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+
       {quota ? (
         <div className="radar-banner radar-banner--quota">
           <AlertCircle size={15} />
@@ -345,6 +542,27 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
         <div className="radar-banner radar-banner--error">
           <AlertCircle size={15} />
           <span>{error}</span>
+        </div>
+      ) : null}
+
+      {/* 这一屏是上次检索留下的：说清是什么时候的、没重新扣费，给「重新检索」与「清掉」两个出口 */}
+      {restoredAt ? (
+        <div className="radar-restored">
+          <Clock size={14} />
+          <span className="radar-restored-copy">
+            {'这是 '}
+            <b>{stampTime(restoredAt)}</b>
+            {' 那次检索留下的结果，没有重新请求，也没再扣积分；平台上的数字可能已经变了。'}
+          </span>
+          <button
+            type="button"
+            className="button button--ghost button--tiny"
+            onClick={() => void runSearch()}
+            disabled={loading || Boolean(insufficient)}
+          >
+            {loading ? '检索中' : '重新检索'}
+          </button>
+          <button type="button" className="radar-restored-clear" onClick={clearLastSearch}>清掉</button>
         </div>
       ) : null}
 
@@ -467,7 +685,7 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
           </span>
           <div className="radar-idle-tags">
             {['春季通勤穿搭', '咖啡开箱', '租房改造', '护肤台收纳'].map((value) => (
-              <button key={value} className="radar-idle-tag" onClick={() => { setKeyword(value); void runSearch() }}>{value}</button>
+              <button key={value} className="radar-idle-tag" onClick={() => { setKeyword(value); void runSearch(value) }}>{value}</button>
             ))}
           </div>
         </div>
@@ -485,7 +703,7 @@ export function RadarPage({ onToast, onOpenTemplates }: { onToast: (message: str
           hasKey={hasKey}
           visionReady={visionReady}
           onClose={() => setModalItem(null)}
-          onDone={(title) => { setModalItem(null); onToast('复刻完成，已存入模板库：' + title) }}
+          onDone={(title) => { setModalItem(null); loadTaken(); onToast('复刻完成，已存入模板库：' + title) }}
           onOpenTemplates={() => { setModalItem(null); onOpenTemplates() }}
         />
       )}

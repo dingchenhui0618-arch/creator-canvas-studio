@@ -489,7 +489,14 @@ function Workbench({
           />
         )
       case 'radar':
-        return <RadarPage onToast={notify} onOpenTemplates={() => go('templates')} />
+        return (
+          <RadarPage
+            onToast={notify}
+            onOpenTemplates={() => go('templates')}
+            onOpenTemplate={(templateId) => navigate({ kind: 'page', page: 'templates', templateId })}
+            onOpenProject={(projectId) => navigate({ kind: 'page', page: 'projects', projectId })}
+          />
+        )
       case 'templates':
         return (
           <TemplateLibraryPage
