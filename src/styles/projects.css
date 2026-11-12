@@ -1564,6 +1564,95 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
   white-space: nowrap;
 }
 
+/* 来源面板：模板名点得开（v0.9.35 起模板有单条地址 #/templates/<id>），
+   下面是这条模板的原片——有地址才给「打开原片」，画布 / 智能体来的如实说没有。 */
+.vq-project-source-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: right;
+  cursor: pointer;
+}
+
+.vq-project-source-link > svg {
+  flex: none;
+  color: var(--faint);
+}
+
+.vq-project-source-link:hover {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.vq-project-origin {
+  display: grid;
+  gap: var(--space-1);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line-faint);
+}
+
+.vq-project-origin-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  color: var(--faint);
+  font-size: var(--text-meta);
+}
+
+.vq-project-origin-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--ink);
+  font-size: var(--text-meta);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.vq-project-origin-link:hover {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+/* 时长不跟 .vq-mono 的大写走：12.0S 会读成「12 秒的复数」 */
+.vq-project-source-num {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.vq-project-origin-line {
+  margin: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vq-project-origin-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  margin: 0;
+  color: var(--faint);
+  font-size: var(--text-meta);
+}
+
+/* 每一样互动数不拆行：390 宽宁可在两样之间换行，也不把「评论」和数字分开 */
+.vq-project-origin-stats > span {
+  white-space: nowrap;
+}
+
 /* 按钮语义：删除是危险动作，不用主色 */
 .vq-button.is-danger {
   color: var(--fail);

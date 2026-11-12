@@ -2,6 +2,7 @@
 // 约定：#/overview #/projects #/radar #/templates #/agents #/runs #/review #/canvas #/settings
 //      作品：#/projects/<作品 id>；评审带作品：#/review/project/<作品 id>
 //      单条历史评审：#/review/<评审 id>（作品页点一条评审就走到这里，刷新与后退都能回到那条）
+//      单条模板：#/templates/<模板 id>（作品页「来源」里点模板名走进来，刷新与后退都还在这条模板上）
 //      智能体编辑：#/agents/new 与 #/agents/<id 或唯一名称>
 //      后台管理：#/admin/<section>，section 取自 editions.ts 的后台导航。
 //
@@ -18,7 +19,16 @@ export type Route =
   // 画布有两个可寻址对象：
   //   #/canvas/<flowId>            内置编排的流程（模板库、运行记录跳转都走它）
   //   #/canvas/project/<画布ID>    画布服务里的画布项目（工作台「继续上次的画布」走它）
-  | { kind: 'page'; page: ShellPage; flowId?: string; canvasId?: string; projectId?: string; reviewId?: string }
+  | {
+      kind: 'page'
+      page: ShellPage
+      flowId?: string
+      canvasId?: string
+      projectId?: string
+      reviewId?: string
+      /** 模板库里的单条模板：#/templates/<模板 id>（v0.9.35 起作品页的「模板 · X」点得开） */
+      templateId?: string
+    }
   | { kind: 'agent-editor'; agentRef: string | null }
   | { kind: 'legal'; doc: 'terms' | 'privacy' }
   // 只读分享：链接里带随机 token，不登录也能打开（App 根部整屏渲染，不进工作台外壳）
@@ -118,6 +128,10 @@ export function parseRoute(hash: string): Route {
     if (tail === 'new') return { kind: 'agent-editor', agentRef: null }
     return { kind: 'agent-editor', agentRef: tail }
   }
+  // 模板也有单条地址：#/templates 是列表，#/templates/<模板 id> 直接开那一条
+  if (head === 'templates') {
+    return tail ? { kind: 'page', page: 'templates', templateId: tail } : { kind: 'page', page: 'templates' }
+  }
   if ((USER_PAGES as readonly string[]).includes(head)) {
     if (head === 'canvas') {
       if (tail === 'project' && segments[2]) return { kind: 'page', page: 'canvas', canvasId: segments[2] }
@@ -138,6 +152,7 @@ export function toHash(route: Route): string {
     if (route.page === 'projects' && route.projectId) return '#/projects/' + encodeURIComponent(route.projectId)
     if (route.page === 'review' && route.reviewId) return '#/review/' + encodeURIComponent(route.reviewId)
     if (route.page === 'review' && route.projectId) return '#/review/project/' + encodeURIComponent(route.projectId)
+    if (route.page === 'templates' && route.templateId) return '#/templates/' + encodeURIComponent(route.templateId)
     return '#/' + route.page
   }
   if (route.kind === 'admin') return '#/admin/' + route.section
@@ -157,6 +172,7 @@ export function routeKey(route: Route): string {
     if (route.page === 'projects' && route.projectId) return 'page:projects:' + route.projectId
     if (route.page === 'review' && route.reviewId) return 'page:review:record:' + route.reviewId
     if (route.page === 'review' && route.projectId) return 'page:review:project:' + route.projectId
+    if (route.page === 'templates' && route.templateId) return 'page:templates:' + route.templateId
     return 'page:' + route.page
   }
   if (route.kind === 'admin') return 'admin:' + route.section

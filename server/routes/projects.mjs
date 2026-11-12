@@ -11,6 +11,7 @@ import { currentUser } from '../auth.mjs'
 import { config } from '../config.mjs'
 import { createTemplateFromProject, getTemplate, listTemplates, reuseTemplate } from '../templates.mjs'
 import { projectTemplateReply, projectTemplateSpec } from '../project-template.mjs'
+import { templateOrigin } from '../project-source.mjs'
 import { createFlow, getFlow, listRunsByFlows } from '../flows.mjs'
 import { normalizeProjectScript, scriptPace, scriptView } from '../project-script.mjs'
 import { buildReplicateDraft } from '../script-draft.mjs'
@@ -94,6 +95,8 @@ function templateDetail(template) {
     timing: template.timing || null,
     cover: template.thumb || template.cover || '',
     reuseCount: Number(template.reuseCount) || 0,
+    // 这条模板「从哪来」：原片链接、作者与互动数（画布/智能体来的如实说没有原片）
+    origin: templateOrigin(template),
   }
 }
 

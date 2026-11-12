@@ -21,6 +21,7 @@ import {
   type ProjectTemplateSaveResult,
 } from '../api/projects'
 import { describeTiming, type ScriptBeat } from '../domain/radar'
+import { formatCount } from '../api/radar'
 import { deliveredCurrent, deliveryOf, projectStep, reviewsForVersion, runsForVersion, type ProjectDetail } from '../domain/project'
 import { ackReview, decideReview, clearReviewDecision, unackReview } from '../api/review'
 import { REVIEW_VERDICT_LABEL as VERDICT_LABEL, reviewTimeLabel, reviewsOfVersion } from '../domain/review'
@@ -68,6 +69,7 @@ export default function ProjectPage({
   onOpenReviewRecord,
   onOpenAgents,
   onBrowseTemplates,
+  onOpenTemplate,
   onToast,
 }: {
   projectId: string
@@ -79,6 +81,8 @@ export default function ProjectPage({
   /** 让智能体起草这一版脚本：带着这条作品的上下文去智能体页，草稿写完能直接写回这一版 */
   onOpenAgents: (projectId: string) => void
   onBrowseTemplates: () => void
+  /** 打开这条作品用的那条模板：来源面板里点模板名就走这里（地址是 #/templates/<模板 id>） */
+  onOpenTemplate?: (templateId: string) => void
   onToast: (message: string) => void
 }) {
   const [data, setData] = useState<ProjectDetail | null>(null)
@@ -1640,24 +1644,72 @@ export default function ProjectPage({
               <span className="vq-mono">{template ? KIND_LABEL[template.kind] || template.kind : '—'}</span>
             </div>
             {template ? (
-              <dl className="vq-project-source">
-                <div>
-                  <dt>模板</dt>
-                  <dd>{template.title}</dd>
-                </div>
-                <div>
-                  <dt>内容类型</dt>
-                  <dd>{template.contentType || '—'}</dd>
-                </div>
-                <div>
-                  <dt>原片时长</dt>
-                  <dd className="vq-mono">{seconds(template.durationSec)}</dd>
-                </div>
-                <div>
-                  <dt>复用</dt>
-                  <dd className="vq-mono">{template.reuseCount} 次</dd>
-                </div>
-              </dl>
+              <>
+                <dl className="vq-project-source">
+                  <div>
+                    <dt>模板</dt>
+                    <dd>
+                      {onOpenTemplate ? (
+                        <button
+                          type="button"
+                          className="vq-project-source-link"
+                          onClick={() => onOpenTemplate(template.id)}
+                          title="在模板库打开这条模板：脚本、分镜与它的原片都在那儿"
+                        >
+                          {template.title}
+                          <ArrowRight size={12} />
+                        </button>
+                      ) : (
+                        template.title
+                      )}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>内容类型</dt>
+                    <dd>{template.contentType || '—'}</dd>
+                  </div>
+                  {/* 只有真原片才写原片时长：画布 / 智能体来的模板没有原片，写 0.0s 是编的 */}
+                  {template.origin?.kind === 'original' ? (
+                    <div>
+                      <dt>原片时长</dt>
+                      <dd className="vq-project-source-num">{seconds(template.durationSec)}</dd>
+                    </div>
+                  ) : null}
+                  <div>
+                    <dt>复用</dt>
+                    <dd className="vq-mono">{template.reuseCount} 次</dd>
+                  </div>
+                </dl>
+                {template.origin?.kind === 'original' ? (
+                  <div className="vq-project-origin">
+                    <div className="vq-project-origin-head">
+                      <span className="vq-mono">原片</span>
+                      <a className="vq-project-origin-link" href={template.origin.url} target="_blank" rel="noreferrer">
+                        打开原片
+                        <ArrowRight size={12} />
+                      </a>
+                    </div>
+                    <p className="vq-project-origin-line">
+                      {[template.origin.platformLabel || template.origin.platform, template.origin.author]
+                        .filter(Boolean)
+                        .join(' · ') || '平台与作者未记录'}
+                    </p>
+                    {template.origin.stats ? (
+                      <p className="vq-project-origin-stats vq-mono">
+                        <span>点赞 {formatCount(template.origin.stats.likes)}</span>
+                        <span>收藏 {formatCount(template.origin.stats.collects)}</span>
+                        <span>评论 {formatCount(template.origin.stats.comments)}</span>
+                      </p>
+                    ) : null}
+                  </div>
+                ) : template.origin ? (
+                  <p className="vq-project-note">
+                    {template.origin.kind === 'canvas'
+                      ? '这条模板是从画布另存的，没有原片可回看。'
+                      : '这条模板是智能体草稿存的，没有原片可回看。'}
+                  </p>
+                ) : null}
+              </>
             ) : (
               <p className="vq-project-note">绑定的模板已被删除或不在当前账号下；作品本身还在，画布与评审不受影响。</p>
             )}

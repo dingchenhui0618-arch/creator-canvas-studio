@@ -479,6 +479,7 @@ function Workbench({
               go('agents')
             }}
             onBrowseTemplates={() => go('templates')}
+            onOpenTemplate={(templateId) => navigate({ kind: 'page', page: 'templates', templateId })}
             onToast={notify}
           />
         ) : (
@@ -496,6 +497,11 @@ function Workbench({
             onBack={() => go('radar')}
             onOpenCanvas={(flowId) => navigate({ kind: 'page', page: 'canvas', flowId })}
             onOpenProject={(projectId) => navigate({ kind: 'page', page: 'projects', projectId })}
+            // 单条模板有地址：刷新、后退、从作品页的「来源」点进来都落在同一条上。
+            // 关抽屉用 replace：后退回到进来之前那一页，而不是重新打开刚关掉的模板。
+            templateId={route.templateId}
+            onOpenTemplate={(templateId) => navigate({ kind: 'page', page: 'templates', templateId })}
+            onCloseTemplate={() => navigate({ kind: 'page', page: 'templates' }, { replace: true })}
           />
         )
       case 'overview':

@@ -178,6 +178,23 @@ export type ProjectSummary = Project & {
   decision?: ProjectDecision | null
 }
 
+/**
+ * 这条作品的模板「从哪来」（v0.9.35）：
+ * original 是平台上的原片（有地址、作者、互动数）；canvas / agent 是自己产出的模板，本来就没有原片。
+ * 老数据没有来源信息时整个 origin 是 null，页面不显示这一块，也不编一个「来源未知」。
+ */
+export type ProjectTemplateOrigin = {
+  kind: 'original' | 'canvas' | 'agent'
+  platform: string
+  platformLabel: string
+  author: string
+  /** 原片地址；canvas / agent 一律空串 */
+  url: string
+  publishedAt: string
+  /** 互动数；一样都抓不到时是 null（不是全 0，也不能拿 0 冒充「没人看」） */
+  stats: { plays: number; likes: number; comments: number; shares: number; collects: number } | null
+}
+
 export type ProjectTemplateDetail = ProjectTemplateBrief & {
   hook: string
   hookType: string
@@ -187,6 +204,8 @@ export type ProjectTemplateDetail = ProjectTemplateBrief & {
   timing: TemplateTiming | null
   cover: string
   reuseCount: number
+  /** 来源：原片还是自己产出的模板；服务端现算，不落库 */
+  origin?: ProjectTemplateOrigin | null
 }
 
 export type ProjectFlowBrief = { id: string; name: string; nodes: number; updatedAt: string }

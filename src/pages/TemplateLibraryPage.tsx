@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertCircle, ArrowRight, Check as CheckIcon, Clapperboard, Copy, Download, ExternalLink, Film, Heart, Layers, Link2, MessageCircle, PenLine, Play, Printer, RefreshCw, ScanEye, Search, Share2, Sparkles, Star, Trash2, X } from 'lucide-react'
 import {
@@ -83,11 +83,20 @@ export function TemplateLibraryPage({
   onBack,
   onOpenCanvas,
   onOpenProject,
+  templateId,
+  onOpenTemplate,
+  onCloseTemplate,
 }: {
   onToast: (message: string) => void
   onBack: () => void
   onOpenCanvas: (flowId?: string) => void
   onOpenProject: (projectId: string) => void
+  /** 地址里的单条模板（#/templates/<id>）：刷新、后退、从作品页点进来都落在这条上 */
+  templateId?: string
+  /** 打开某条模板：只改地址，详情按地址取（页面自己不另存一份「开着哪条」） */
+  onOpenTemplate?: (templateId: string) => void
+  /** 关掉抽屉：把地址换回列表（replace，后退回到进来之前那一页） */
+  onCloseTemplate?: () => void
 }) {
   const [items, setItems] = useState<ReplicaTemplate[]>([])
   const [byType, setByType] = useState<Record<string, number>>({})
@@ -105,6 +114,8 @@ export function TemplateLibraryPage({
   const [error, setError] = useState('')
   const [detail, setDetail] = useState<ReplicaTemplate | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
+  // 正在为哪条模板取详情：点得快时，慢的那次回来不许盖住刚点的那条
+  const lastRequested = useRef('')
   const [health, setHealth] = useState<{ redfox: boolean; vision: boolean }>({ redfox: false, vision: false })
   const [replicateItem, setReplicateItem] = useState<MediaItem | null>(null)
   const [trashOpen, setTrashOpen] = useState(false)
@@ -203,19 +214,52 @@ export function TemplateLibraryPage({
   }
 
   const openDetail = async (id: string, options?: { adapt?: boolean }) => {
+    lastRequested.current = id
     setAdapt(null)
     setDetailLoading(true)
     try {
       const next = await getTemplate(id)
+      if (lastRequested.current !== id) return
       setDetail(next)
       // 卡片上的「用这条改编」：详情一到位就直接进改编模式，不用再点一次
       if (options?.adapt && next.structure?.length) enterAdapt(next)
     } catch (caught) {
+      if (lastRequested.current !== id) return
       onToast(caught instanceof Error ? caught.message : String(caught))
+      // 地址里那条打不开（删了、或不在这个账号下）：把地址换回列表，别让地址栏说一条不存在的模板
+      lastRequested.current = ''
+      onCloseTemplate?.()
     } finally {
-      setDetailLoading(false)
+      if (lastRequested.current === id) setDetailLoading(false)
     }
   }
+
+  // 点卡片：先改地址，详情交给下面的 effect；没有路由（组件单用时）就直接取
+  const openTemplate = (id: string, options?: { adapt?: boolean }) => {
+    if (onOpenTemplate) onOpenTemplate(id)
+    void openDetail(id, options)
+  }
+
+  const closeDetail = () => {
+    lastRequested.current = ''
+    setDetail(null)
+    setAdapt(null)
+    onCloseTemplate?.()
+  }
+
+  // 地址是唯一真源：地址里有 id 就开那一条，地址里没了就收起抽屉（后退、前进都跟着走）
+  useEffect(() => {
+    if (!templateId) {
+      if (lastRequested.current) {
+        lastRequested.current = ''
+        setDetail(null)
+      }
+      return
+    }
+    if (lastRequested.current !== templateId) void openDetail(templateId)
+    // openDetail / onCloseTemplate 每次渲染都是新函数，进依赖会重复取详情；真源只有地址这一项
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [templateId])
 
   const enterAdapt = (template: ReplicaTemplate) => {
     setAdapt({
@@ -263,6 +307,7 @@ export function TemplateLibraryPage({
     setProjectSaving(true)
     try {
       const result = await createProject({ templateId: template.id, title: template.title })
+      lastRequested.current = ''
       setDetail(null)
       onToast('已建作品：' + result.project.title)
       onOpenProject(result.project.id)
@@ -389,7 +434,7 @@ export function TemplateLibraryPage({
       ) : (
         <div className="template-grid">
           {items.map((item) => (
-            <article className="template-card" key={item.id} onClick={() => void openDetail(item.id)}>
+            <article className="template-card" key={item.id} onClick={() => openTemplate(item.id)}>
               <div className="template-cover">
                 {coverFor(item) ? <img src={coverFor(item)} alt="" loading="lazy" /> : <span className="template-cover-empty">{item.platformLabel || '没有封面'}</span>}
                 <span className={'template-type' + (isParsed(item) ? '' : ' is-pending')}>{isParsed(item) ? item.contentType : '待解析'}</span>
@@ -442,7 +487,7 @@ export function TemplateLibraryPage({
                       title="以这条为底，改脚本与分镜，存成你自己的模板"
                       onClick={(event) => {
                         event.stopPropagation()
-                        void openDetail(item.id, { adapt: true })
+                        openTemplate(item.id, { adapt: true })
                       }}
                     >
                       <PenLine size={12} />用这条改编
@@ -458,7 +503,7 @@ export function TemplateLibraryPage({
       )}
 
       {(detail || detailLoading) && createPortal(
-        <div className="drawer-backdrop" onMouseDown={() => setDetail(null)}>
+        <div className="drawer-backdrop" onMouseDown={closeDetail}>
           <aside className="template-drawer" onMouseDown={(event) => event.stopPropagation()}>
             {detailLoading && !detail ? (
               <div className="drawer-loading"><RefreshCw size={16} className="spin" />加载模板详情</div>
@@ -490,7 +535,7 @@ export function TemplateLibraryPage({
                       {detail.kind === 'adapted' && detail.adaptedFrom ? ' · 改编自 ' + detail.adaptedFrom : ''}
                     </span>
                   </div>
-                  <button className="icon-button" onClick={() => setDetail(null)} aria-label="关闭"><X size={16} /></button>
+                  <button className="icon-button" onClick={closeDetail} aria-label="关闭"><X size={16} /></button>
                 </header>
 
                 <div className="drawer-body">
@@ -770,6 +815,7 @@ export function TemplateLibraryPage({
                               className="button button--ghost button--tiny"
                               onClick={() => {
                                 const target = detail.projectId
+                                lastRequested.current = ''
                                 setDetail(null)
                                 if (target) onOpenProject(target)
                               }}
@@ -937,7 +983,7 @@ export function TemplateLibraryPage({
                     >
                       <Layers size={14} />{detail.kind === 'flow' ? '在画布打开' : '套用到画布'}
                     </button>
-                    <button className="button button--danger button--tiny" onClick={() => { void deleteTemplate(detail.id).then(() => { setDetail(null); onToast('已移到回收站，30 天内可以恢复'); void load() }) }}>
+                    <button className="button button--danger button--tiny" onClick={() => { void deleteTemplate(detail.id).then(() => { closeDetail(); onToast('已移到回收站，30 天内可以恢复'); void load() }) }}>
                       <Trash2 size={13} />删除
                     </button>
                     </>
@@ -975,8 +1021,8 @@ export function TemplateLibraryPage({
           hasKey={health.redfox}
           visionReady={health.vision}
           onClose={() => setReplicateItem(null)}
-          onDone={(title) => { setReplicateItem(null); setDetail(null); onToast('解析完成，模板已更新：' + title); void load() }}
-          onOpenTemplates={() => { setReplicateItem(null); setDetail(null); void load() }}
+          onDone={(title) => { setReplicateItem(null); closeDetail(); onToast('解析完成，模板已更新：' + title); void load() }}
+          onOpenTemplates={() => { setReplicateItem(null); closeDetail(); void load() }}
         />
       )}
     </div>
