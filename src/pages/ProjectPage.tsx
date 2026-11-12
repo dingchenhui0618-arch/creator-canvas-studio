@@ -19,7 +19,8 @@ import {
   updateProject,
 } from '../api/projects'
 import { describeTiming, type ScriptBeat } from '../domain/radar'
-import { projectStep, reviewsForVersion, runsForVersion, type ProjectDetail, type ShareVisits } from '../domain/project'
+import { projectStep, reviewsForVersion, runsForVersion, type ProjectDetail } from '../domain/project'
+import { stampTime as stamp, visitLine } from '../domain/share'
 import '../styles/projects.css'
 
 // 保存脚本之后画布那边发生了什么：直接说人话，不把 reason 漏到界面上
@@ -37,35 +38,6 @@ const KIND_LABEL: Record<string, string> = { replica: '原片拆解', adapted: '
 
 const pad2 = (value: number) => String(value).padStart(2, '0')
 
-function stamp(iso: string): string {
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return '—'
-  return pad2(date.getMonth() + 1) + '-' + pad2(date.getDate()) + ' ' + pad2(date.getHours()) + ':' + pad2(date.getMinutes())
-}
-
-// 分享链接的打开记录：只给「多久之前」和「从哪儿打开」，不假装知道是谁
-const CLIENT_LABEL: Record<string, string> = {
-  wechat: '微信内打开',
-  mobile: '手机或平板',
-  desktop: '电脑浏览器',
-  other: '未知设备',
-}
-
-function ago(iso: string): string {
-  const time = Date.parse(iso)
-  if (!Number.isFinite(time)) return '—'
-  const minutes = Math.floor(Math.max(0, Date.now() - time) / 60000)
-  if (minutes < 1) return '刚刚'
-  if (minutes < 60) return minutes + ' 分钟前'
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return hours + ' 小时前'
-  return Math.floor(hours / 24) + ' 天前'
-}
-
-function visitLine(visits: ShareVisits): string {
-  const client = CLIENT_LABEL[visits.lastClient] || '未知设备'
-  return '最近 ' + ago(visits.lastAt) + '（' + client + '）'
-}
 function seconds(value: number | undefined): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '—'
   return value.toFixed(1) + 's'

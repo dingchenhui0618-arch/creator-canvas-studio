@@ -114,6 +114,19 @@ export type ProjectShare = { token: string; createdAt: string; visits?: ShareVis
 /** 一轮已经停用的分享：地址打不开，但那次被打开过几次还留着（只留最近 8 轮） */
 export type ShareHistoryEntry = { createdAt: string; closedAt: string; visits: ShareVisits }
 
+/** 工作台的分享汇总：一条作品一行，visits 是各轮累计（次数相加，最近一次取最晚的那轮） */
+export type ShareSummaryRow = {
+  projectId: string
+  title: string
+  /** 当前是否有链接正在分享 */
+  live: boolean
+  /** 分享过几轮：正在分享的那条也算一轮 */
+  rounds: number
+  /** 最近一轮停用时间；正在分享且没有历史时为空串 */
+  lastClosedAt: string
+  visits: ShareVisits
+}
+
 /** 分享页读到的公开视图：服务端白名单挑过，不含账号、画布与模板 id */
 export type SharedProjectShot = {
   shotNo: number

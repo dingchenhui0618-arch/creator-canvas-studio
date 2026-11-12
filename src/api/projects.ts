@@ -1,7 +1,10 @@
 import { request } from './client'
-import type { Project, ProjectDetail, ProjectScript, ProjectShare, ProjectSummary, SharedProject } from '../domain/project'
+import type { Project, ProjectDetail, ProjectScript, ProjectShare, ProjectSummary, ShareSummaryRow, SharedProject } from '../domain/project'
 
 export const listProjects = () => request<{ ok: boolean; items: ProjectSummary[]; total: number }>('/api/projects')
+
+// 工作台的「分享出去的链接」：跨作品汇总，一条作品一行，不带 token 与记录键
+export const listShares = () => request<{ items: ShareSummaryRow[]; total: number; opens: number }>('/api/shares')
 
 export const getProject = (id: string) => request<ProjectDetail>('/api/projects/' + id)
 

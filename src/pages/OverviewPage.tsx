@@ -5,8 +5,9 @@ import PageHead from '../components/PageHead'
 import { MonoTag } from '../components/ui'
 import { request } from '../api/client'
 import { listBdcCanvases, type BdcCanvas } from '../api/bdc'
-import { listProjects } from '../api/projects'
-import { projectStatus, type ProjectSummary } from '../domain/project'
+import { listProjects, listShares } from '../api/projects'
+import { projectStatus, type ProjectSummary, type ShareSummaryRow } from '../domain/project'
+import { stampTime, visitLine } from '../domain/share'
 import { useSiteInfo, useUiMode } from '../api/app'
 import '../styles/overview.css'
 
@@ -74,17 +75,21 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
   const [projects, setProjects] = useState<ProjectSummary[]>([])
   const [runs, setRuns] = useState<RunRow[]>([])
   const [templates, setTemplates] = useState<TemplateRow[]>([])
+  // 工作台的分享汇总：一条作品一行，累计各轮打开情况（v0.9.12）
+  const [shares, setShares] = useState<ShareSummaryRow[]>([])
+  const [shareTotals, setShareTotals] = useState({ total: 0, opens: 0 })
   const [loading, setLoading] = useState(true)
   const [errors, setErrors] = useState<string[]>([])
 
   const load = useCallback(async () => {
     setLoading(true)
     const problems: string[] = []
-    const [canvasResult, runResult, templateResult, projectResult] = await Promise.allSettled([
+    const [canvasResult, runResult, templateResult, projectResult, shareResult] = await Promise.allSettled([
       listBdcCanvases(),
       request<{ items: RunRow[] }>('/api/runs'),
       request<{ items: TemplateRow[] }>('/api/templates'),
       listProjects(),
+      listShares(),
     ])
     if (canvasResult.status === 'fulfilled' && canvasResult.value.ok) {
       setCanvases(canvasResult.value.canvases ?? [])
@@ -109,6 +114,14 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
     } else {
       setProjects([])
       problems.push('作品：' + String((projectResult.reason as Error)?.message || projectResult.reason))
+    }
+    if (shareResult.status === 'fulfilled') {
+      setShares(shareResult.value.items ?? [])
+      setShareTotals({ total: shareResult.value.total ?? 0, opens: shareResult.value.opens ?? 0 })
+    } else {
+      setShares([])
+      setShareTotals({ total: 0, opens: 0 })
+      problems.push('分享记录：' + String((shareResult.reason as Error)?.message || shareResult.reason))
     }
     setErrors(problems)
     setLoading(false)
@@ -342,6 +355,59 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
           )}
         </section>
       </div>
+
+      <section className="vq-section vq-share-summary" aria-labelledby="vq-share-summary-title">
+        <div className="vq-section-head">
+          <div>
+            <h2 id="vq-share-summary-title">分享出去的链接</h2>
+            <p className="vq-share-summary-sub">
+              {shares.length
+                ? '共 ' + shareTotals.total + ' 条作品分享过 · ' + shareTotals.opens + ' 次打开。点开作品看每一轮。'
+                : '发出去的链接，这里汇总有没有人点开。'}
+            </p>
+          </div>
+          <button type="button" className="vq-link" onClick={() => onNavigate('projects')}>
+            全部作品
+            <ArrowUpRight size={13} />
+          </button>
+        </div>
+
+        {shares.length ? (
+          <div className="vq-share-summary-list">
+            {shares.map((row) => (
+              <button type="button" className="vq-share-summary-row" key={row.projectId} onClick={() => onOpenProject(row.projectId)}>
+                <span className="vq-share-summary-copy">
+                  <strong>{row.title}</strong>
+                  <span className="vq-share-summary-meta">
+                    <span className={'vq-share-summary-state' + (row.live ? ' is-live' : '')}>
+                      {row.live ? <span className="vq-share-summary-dot" aria-hidden="true" /> : null}
+                      {row.live ? '分享中' : '已停用'}
+                    </span>
+                    <span>
+                      {row.rounds} 轮链接
+                      {!row.live && row.lastClosedAt ? ' · 最近停用 ' + stampTime(row.lastClosedAt) : ''}
+                    </span>
+                  </span>
+                </span>
+                <span className="vq-share-summary-visits">
+                  <b>{row.visits.opens}</b>
+                  <span>{row.visits.opens ? '次打开 · ' + visitLine(row.visits) : '次打开 · 还没人点开'}</span>
+                </span>
+                <ArrowRight size={13} />
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="vq-empty vq-empty--inline">
+            <strong>还没有分享出去的链接</strong>
+            <span>在作品页点「分享」，把链接发给甲方；这里会汇总每条被打开过几次，停用后也留着。</span>
+            <button type="button" className="vq-button vq-button--ghost" onClick={() => onNavigate('projects')}>
+              去作品列表
+              <ArrowRight size={13} />
+            </button>
+          </div>
+        )}
+      </section>
 
       <footer className="vq-overview-foot">
         <span className="vq-overview-legal">

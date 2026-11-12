@@ -40,6 +40,7 @@ import { createAdminRouter } from './routes/admin.mjs'
 import { createPreferencesRouter } from './routes/preferences.mjs'
 import { createCanvasRouter } from './routes/canvas.mjs'
 import { createProjectsRouter } from './routes/projects.mjs'
+import { createSharesRouter } from './routes/shares.mjs'
 import { createProjectShareRouter } from './routes/project-share.mjs'
 import { createGatewayRouter } from './routes/gateway.mjs'
 import { createAccountRouter } from './routes/account.mjs'
@@ -74,6 +75,7 @@ const featureRoutes = [
   createPreferencesRouter(),
   createCanvasRouter(),
   createProjectsRouter(),
+  createSharesRouter(),
   createGatewayRouter(),
   createAccountRouter(),
   // 桌面端本地工作区的模型入口：密钥留在服务端，循环与工具在客户端

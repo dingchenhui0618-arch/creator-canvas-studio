@@ -581,3 +581,137 @@
     flex-direction: column;
   }
 }
+/* ---------- 分享出去的链接（v0.9.12） ----------
+   工作台的第二条线：谁分享过、被点开过几次。一条作品一行，累计各轮；
+   行距走 8px，行内两行文案（作品 + 状态/轮数），右侧是累计次数，不套第二层卡片。 */
+.vq-share-summary {
+  margin-top: 32px;
+}
+
+.vq-share-summary .vq-section-head .vq-link {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.vq-share-summary-sub {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.vq-share-summary-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vq-share-summary-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--ink);
+  text-align: left;
+  transition: border-color 0.15s ease;
+}
+
+.vq-share-summary-row:hover {
+  border-color: var(--line-strong);
+}
+
+.vq-share-summary-row:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.vq-share-summary-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.vq-share-summary-copy strong {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vq-share-summary-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--faint);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.vq-share-summary-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.vq-share-summary-state.is-live {
+  color: var(--pass);
+}
+
+.vq-share-summary-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--pass);
+}
+
+.vq-share-summary-visits {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  flex-shrink: 0;
+  color: var(--faint);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.vq-share-summary-visits b {
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: var(--weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+.vq-share-summary-row > svg {
+  flex-shrink: 0;
+  color: var(--faint);
+}
+
+.vq-share-summary-row:hover > svg {
+  color: var(--ink);
+}
+
+@media (max-width: 640px) {
+  .vq-share-summary-row {
+    flex-wrap: wrap;
+    gap: 8px 12px;
+  }
+
+  .vq-share-summary-copy {
+    flex-basis: 100%;
+  }
+
+  .vq-share-summary-visits {
+    flex: 1;
+    white-space: normal;
+  }
+}
