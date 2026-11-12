@@ -14,7 +14,7 @@
 | C2 | 回归测试入库、可离线跑 | 已完成 2026-11-12 |
 | C3 | 前端异常上报 + 后台可见 | 已上线 2026-11-12 |
 | C4 | 日志保留策略（轮转 + 保留天数） | 已上线 2026-11-12 |
-| C5 | 部署回滚（保留多个 release + 一键回滚） | 待做 |
+| C5 | 部署回滚（保留多个 release + 一键回滚） | 已上线 2026-11-12 |
 | D1 | 注册「已读条款」留痕 | 待做 |
 | D2 | TOTP 双因素 | 待做 |
 | D3 | 自助数据导出 + 注销账号 | 待做 |
@@ -239,3 +239,42 @@
 
 ### 产物
 ![后台「系统」页的服务端日志：保留天数、占用与文件列表](screenshot-log-retention-2026-11-12.png)
+---
+
+## C5 部署回滚（保留 N 个 release + 一键回滚）
+
+### 问题
+部署一直是「scp 一个包 → rm -rf dist → 解包 → 重启」：服务器上不留上一版的副本。新版本一出问题只能靠本地重新打包上传，而本地那份包可能已经不是当时那一版（工作区在动、依赖在变）。回退窗口实质上取决于「你还记不记得当时发了什么」。
+
+### 做法
+1. scripts/release.sh：把当前 dist / server / scripts / package.json 打成一个带 UTC 时间戳的快照，同时写同名 .json 元数据（时间、标签、入口 index-*.js、大小）。默认保留最近 5 个，超出的连元数据一起删。data（模板、账号、日志）不打包——回滚版本不该回滚数据。
+2. scripts/rollback.sh：`--list` 列快照（序号 / UTC 时间 / 大小 / 入口文件）；默认回到第 1 个，`--to N` 指定。回滚前先给「现在这一版」也打一个快照，所以滚错了能滚回来；还原后重启两个服务、自检健康、打印入口文件。
+3. scripts/deploy.sh：一个发布包一次落盘——解开到临时目录 → 先打快照 → 替换 dist/server/scripts/package.json（data 不动）→ 重启 → 健康自检。脚本从临时目录执行，替换 scripts/ 时不会把自己删掉。
+4. 运维脚本另放 /opt/visionqa/ops/：scripts/ 属于版本内容，回滚会被旧版本覆盖；ops/ 每次部署同步一次，回滚不会把回滚工具自己删掉（第一版放 scripts/ 下，实测被回滚删掉，已改）。
+
+### 验证（生产）
+```
+$ bash /opt/visionqa/scripts/release.sh list
+1   20261112-033954    528K     index-gSJGxnIY.js
+
+$ bash /opt/visionqa/ops/rollback.sh --to 1
+回滚目标：20261112-034101-v0.1.1.tar.gz
+已为当前版本留档：20261112-034117-before-rollback.tar.gz
+active / active
+入口：index-gSJGxnIY.js
+$ curl .../api/version → {"version":"0.1.0"}
+
+$ bash /opt/visionqa/ops/rollback.sh --to 1        # 滚回来
+回滚目标：20261112-034117-before-rollback.tar.gz
+入口：index-Slf2XRR5.js
+$ curl .../api/version → {"version":"0.1.1"}
+```
+- 版本号随这次发布从 0.1.0 升到 0.1.1，回滚后 /api/version 真的回到 0.1.0，再滚回来又是 0.1.1。
+- 两次回滚之间 /opt/visionqa/ops/ 三个脚本都在（deploy.sh / release.sh / rollback.sh）。
+- 每次回滚都重启两个服务并自检：两个 active、/api/health ok、templates 25、入口文件与快照元数据一致。
+- 保留策略实测：KEEP_RELEASES=2 连打 4 个快照 → 目录里只剩 2 个 .tar.gz + 2 个 .json；生产保留最近 5 个（当前 5 个）。
+- 回滚只还原程序：data/logs、templates.json、auth.db 全程未动，健康检查里 templates 一直是 25。
+
+### 产物
+- scripts/release.sh、scripts/rollback.sh、scripts/deploy.sh（部署时同步到 /opt/visionqa/ops/）
+- 生产 /opt/visionqa/releases/ 保留最近 5 个快照

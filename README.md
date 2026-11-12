@@ -2138,3 +2138,19 @@ push 到 master 与所有 PR 都会跑一条流水线，任何一步非零这次
 | 单测 | test/log-files.test.mjs：轮转命名、过期删除、总量从旧删、列表统计 |
 
 ![后台「系统」页的服务端日志](docs/screenshot-log-retention-2026-11-12.png)
+
+### 五十三.10 C5 部署回滚（保留 N 个 release + 一键回滚）
+
+服务器上现在留着最近 5 个可回滚的快照，出事一条命令回退；回滚前会自动给当前版本留档，滚错了还能滚回来。
+
+| 命令 | 做什么 |
+| --- | --- |
+| `bash scripts/deploy.sh /tmp/vqdeploy.tgz "标签"` | 解包 → 先给当前版本打快照 → 替换 dist/server/scripts/package.json（data 不动）→ 重启两个服务 → 健康自检 |
+| `bash /opt/visionqa/ops/rollback.sh --list` | 列出快照：序号、UTC 时间、大小、入口 index-*.js |
+| `bash /opt/visionqa/ops/rollback.sh` | 回到上一个版本（= 最近一个快照） |
+| `bash /opt/visionqa/ops/rollback.sh --to 2` | 回到列表里第 2 个 |
+| `bash scripts/release.sh "标签"` | 只打一个快照（部署前的可选步骤，deploy.sh 会自动做） |
+
+实测：0.1.1 上线后回滚到 0.1.0（入口 index-gSJGxnIY.js、/api/version 0.1.0）→ 再滚回来（index-Slf2XRR5.js、0.1.1），两次都重启并自检通过；KEEP_RELEASES=2 连打 4 个快照只剩 2 个。
+
+运维脚本放 /opt/visionqa/ops/：`scripts/` 是版本内容，回滚会把它换回旧版，回滚工具自己不能放在里面（第一版踩过，回滚后 rollback.sh 消失）。
