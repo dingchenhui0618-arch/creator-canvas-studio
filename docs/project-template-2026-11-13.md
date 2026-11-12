@@ -3,7 +3,7 @@
 - 版本：**0.9.31**
 - 发布包：`20261112-214438-v0.9.31-project-template.tar.gz`
 - 前端入口：`index-8WxmRoT1.js`（486,250 字节，含「存成模板」「把这一版存成模板」「来自作品」）
-- 提交：`afa0083`（代码）+ `文档提交见文末`；CI 见下
+- 提交：`afa0083`（代码）+ `75fb61c`（文档）；CI run **43315058538 success**
 - 生产：`https://visionqa.wavisionai.cn`，两服务 active，`/api/health` ok（templates 26）
 
 ## 一、为什么要做
