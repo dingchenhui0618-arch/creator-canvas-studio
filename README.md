@@ -2399,3 +2399,26 @@ v0.9.10 让「甲方看没看」第一次有了答案，这一轮让这个答案
 ![生产 390：模板库的关键词与筛出的 4 条都在，页宽 390 无横向滚动](docs/screenshot-filter-prod-390-2026-11-13.png)
 
 验收：生产 **v0.9.44**、入口 index-9xtxvngg.js（512,562 字节）、release 20261113-015258-20261113-0.9.44-filter-n.tar.gz、/api/version 0.9.44、/api/health ok（templates 26）、两服务 active；1440 与 390 都是 scrollWidth == clientWidth。生产实测：模板库搜「收纳」4 条 → 去作品 → 回模板库仍是 4 条 + 关键词，清空后 26 条、键为空；运行记录「成功」4 条 → 去作品 → 回来仍是「成功」4 条，清空筛选后 7 条、键为空。**本轮生产零写入**：界面只发只读 GET，截图前后各取一次快照（作品 1 · 模板 26 · 画布 7 · 原片 25（1 已开成作品 / 24 没开成）· 交付 0 · 余额 9954），六路逐字段比对 identical: true。npm test **411/411**（新增 6 条）、oxlint **0 error / 6 warning**、tsc -b 干净、构建通过。提交 **a2d8b49**（代码 + 测试）+ **b2e3167**（文档 + 6 张截图）已推 origin/master，CI **43348582366 success**。细节与实测数字见 docs/list-filter-memory-2026-11-13.md。
+
+## 一百一十四、按钮归队：字号回到 11/12/13 阶（v0.9.45）
+
+- ✅ **根因**：`src/styles/shell.css` 里 `.vq-scope button, .vq-scope input { font: inherit }` 是 0-1-1，比 `.vq-button`、`.button`、`.vq-button--tiny`（都是 0-1-0）高一级，全站按钮的字号 / 字重被顶回 16px / 400——设计里的 11 / 12 / 13px 三档一个都没生效。改成 `:where(.vq-scope) button / input`（0-0-1）：仍然继承字体族，但字号字重交回各自的类。
+- ✅ **实测（生产 v0.9.44，1440）**：模板库 56 个可见按钮里 29 个 16px；运行记录 28 个里 25 个 16px，其中 6 个 26–28px 高的小按钮里塞着 16px 字；视觉评审 20 个里 19 个 16px。`overview.css` 里早就有两处「这里压回 11px」的补丁注释——这次动的是根因。
+- ✅ **四个页面换到同一套按钮**：模板库、发现、视觉评审、运行记录共 46 处旧类名（`button` / `button--ghost` / `button--primary` / `button--tiny` / `button--danger`）换成 `vq-button…`，两处动态拼类名也在内；13 条页面级选择器（`.radar-actions`、`.drawer-foot`、`.review-scope-bar`、`.runs-adopt-row` 等）改成 `:is(.button,.vq-button)`，布局规则不失配。旧的 `.button` 是 36px / 12px / 700 + 暖色阴影，和主线 32px / 13px / 500 并排就是两个系统。
+- ✅ **顺手修**：同一条 reset 也压着输入框——模板库 / 发现页搜索框、账号页输入框从 16px 回到 12–12.5px，与所在页的元数据同级。
+- ✅ **实测（生产 v0.9.45）**：三页 16px 按钮 29 / 25 / 19 → 3 / 10 / 7（都是整行当按钮的容器，字由子元素定），小按钮里 16px 字 1 / 6 / 1 → 0 / 0 / 0，旧 `.button` 类 0 个；本地抽屉 12 个按钮全部落在 32px / 26px 两档；1440 与 390 都无横向滚动（1194/1194、322/322）。
+- ✅ 测试 415/415（新增 `test/button-system.test.mjs` 4 条，钉住 reset 权重、组件字号、四页类名与页面级选择器）、oxlint 0 error / 6 warning、`tsc -b` 干净、构建通过；生产只发只读 GET，截图前后六路快照 `identical: true`（1 / 26 / 7 / 25·1·24 / 0 / 9954），**0 积分**。
+
+![生产改之前（v0.9.44）：模板库页头三颗按钮 16px / 400、盒高 36px，和下面的 12px 筛选胶囊不在一个体系](docs/screenshot-buttons-before-prod-2026-11-13.png)
+
+![生产（v0.9.45）：同样三颗按钮回到 13px / 500、32px 高](docs/screenshot-buttons-after-prod-2026-11-13.png)
+
+![生产改之前（v0.9.44）：运行记录 28px 高的「回作品 / 在画布打开」里塞着 16px 字](docs/screenshot-buttons-runs-before-prod-2026-11-13.png)
+
+![生产（v0.9.45）：运行记录按钮 13px / 26px，行里的小按钮 11px](docs/screenshot-buttons-runs-after-prod-2026-11-13.png)
+
+![本地演示：模板抽屉底栏四颗按钮换成同一套后是 32px 与 26px 两档](docs/screenshot-buttons-drawer-local-2026-11-13.png)
+
+![生产 390：内容区 322，按钮与筛选胶囊都不横向溢出](docs/screenshot-buttons-prod-390-2026-11-13.png)
+
+验收：版本 0.9.45、入口 `index-BLX4ZMUw.js`（512,784 字节）、release `20261113-021050-buttons.tar.gz`、`/api/version` 0.9.45、health ok（templates 26）、两服务 active；生产 1440 与 390 实测无横向滚动，只读不扣积分。细节与判断见 [按钮归队](docs/button-system-2026-11-13.md)。
