@@ -18,7 +18,14 @@ SECURE_COOKIES=${SECURE_COOKIES:-0}
 ACME_DIR=${ACME_DIR:-/www/wwwroot/wavisionai.cn/acme}
 # 部署引导账号（库里没有该邮箱时建一条普通账号；口令不写入日志、不下发给访客）
 SEED_EMAIL=${SEED_EMAIL:-admin@visionqa.local}
-SEED_PASSWORD=${SEED_PASSWORD:-Changes-Me-2026}
+# 口令不留默认值：以前写死一个 Changes-Me-2026，谁部署完忘了改，站上就有一个公开口令的账号。
+# 没给 SEED_PASSWORD 就现生成一条随机口令，只在安装时打印一次（之后请自己改）。
+SEED_PASSWORD=${SEED_PASSWORD:-}
+GENERATED_SEED_PASSWORD=0
+if [ -z "$SEED_PASSWORD" ]; then
+  SEED_PASSWORD=$(head -c 18 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-20)
+  GENERATED_SEED_PASSWORD=1
+fi
 
 log() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 
@@ -111,6 +118,11 @@ EOF
   chown "$APP_USER":"$APP_USER" "$APP_DIR/.env"
   chmod 600 "$APP_DIR/.env"
   echo "已生成 $APP_DIR/.env（模型 Key 仍是空的，填好再启动）"
+  if [ "$GENERATED_SEED_PASSWORD" = "1" ]; then
+    echo "引导账号 $SEED_EMAIL 的初始口令：$SEED_PASSWORD （只显示这一次，登录后请改掉）"
+  else
+    echo "引导账号 $SEED_EMAIL 的口令由 SEED_PASSWORD 指定（这里不打印）"
+  fi
 else
   echo "保留已有 $APP_DIR/.env"
 fi
@@ -136,6 +148,16 @@ Environment=NODE_OPTIONS=--max-old-space-size=384
 [Install]
 WantedBy=multi-user.target
 EOF
+# 监听套接字：把 8799 交给 systemd 一直握着，发版重启时端口不断开（B3 发布不中断）。
+# 服务进程会通过 LISTEN_FDS 拿到这个套接字（见 server/listen.mjs）；
+# 没有 socket 单元的老部署照样按端口监听，两种方式都在。
+if [ -f "$APP_DIR/deploy/production/visionqa.socket" ]; then
+  sed "s|__API_PORT__|${API_PORT}|g" "$APP_DIR/deploy/production/visionqa.socket" > /etc/systemd/system/visionqa.socket
+  chmod 644 /etc/systemd/system/visionqa.socket
+  systemctl daemon-reload
+  systemctl enable --now visionqa.socket >/dev/null 2>&1 || echo "socket 单元启用失败，按普通端口监听" >&2
+fi
+
 systemctl daemon-reload
 systemctl enable visionqa >/dev/null
 systemctl restart visionqa

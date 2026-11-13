@@ -1,0 +1,21 @@
+# VisionQA 的监听套接字（systemd socket 激活）
+#
+# 作用：把 127.0.0.1:8799 这个监听端口交给 systemd 一直握着。
+# 发版时 systemctl restart visionqa 只换进程，端口不断开：
+# 新连接进监听队列排队，新进程起来后接手 accept——用户看到的是「慢了一两秒」，
+# 而不是以前那 3–10 秒的 502。
+#
+# 安装 / 同步：bash deploy/production/install-socket.sh（幂等，失败会自己退回普通监听）
+# 想退回普通监听：
+#   systemctl disable --now visionqa.socket && systemctl restart visionqa
+[Unit]
+Description=VisionQA Workbench listening socket (survives service restarts)
+
+[Socket]
+# 端口只写这一处：nginx 的 proxy_pass 也指同一个端口
+ListenStream=127.0.0.1:__API_PORT__
+# 发版那一两秒里的连接先排在这里，别直接拒掉
+Backlog=128
+
+[Install]
+WantedBy=sockets.target

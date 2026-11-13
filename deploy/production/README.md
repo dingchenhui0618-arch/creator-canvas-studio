@@ -79,6 +79,31 @@ nginx -t && nginx -s reload
 ```
 数据都在 `/var/lib/visionqa`，删目录前先备份 `templates.json` 与 `frames/`。
 
+## 发版不中断：socket 激活（v0.9.71）
+
+发版走 `systemctl restart` 时，进程退出会让 8799 端口短暂关闭，nginx 那一瞬间连不上 → 用户看到 **502**。
+现在这个端口由 systemd 的 `visionqa.socket` 一直握着，重启只换进程：
+
+`~bash
+# 开启 / 同步（幂等；第一次会多停一次服务让出端口，之后发版都不断端口）
+cd /opt/visionqa && bash deploy/production/install-socket.sh
+
+# 确认听法：listen 事件里 systemd-socket，且端口同时挂在 systemd 与 node 上
+journalctl -u visionqa --no-pager -o cat | grep -e listen | tail -3
+systemctl is-active visionqa.socket
+ss -ltnp | grep 8799
+`~
+
+- 端口从 socket unit 来：改 `API_PORT` 要连着改 unit（脚本会按 env 重写），并 `systemctl daemon-reload && systemctl restart visionqa`。
+- 想退回普通端口监听（不需要重装）：`systemctl disable --now visionqa.socket && systemctl restart visionqa`。
+- 发版期可用性探针（在本地跑，另一台机器上也行）：
+
+`~bash
+node scripts/deploy-hammer.mjs --url https://<域名>/api/version --seconds 45
+`~
+
+  输出里 `failed` 必须是 0；端口模式下同一时间会抓到几条 502。
+
 ## 数据备份（v0.9.49）
 
 安装/更新定时任务（幂等；第一次会生成口令文件）：

@@ -47,6 +47,15 @@ if [ -f "$APP_DIR/deploy/production/install-backup.sh" ]; then
   bash "$APP_DIR/deploy/production/install-backup.sh" > /tmp/vq-backup-install.log 2>&1 || echo "备份定时任务安装失败，详见 /tmp/vq-backup-install.log" >&2
 fi
 
+# 监听端口交给 systemd（B3 发布不中断）：socket 单元握着 127.0.0.1:8799，
+# 重启只换进程、端口不断开，新连接排队等新进程接手，不再是 3–10 秒 502。
+# 幂等：已经开启时这里什么都不做；第一次会多停一次服务（让出端口给 socket 单元）。
+# 装不上不影响这次发布，只是这一版仍按普通端口监听（后台日志里能看到失败原因）。
+if [ -f "$APP_DIR/deploy/production/install-socket.sh" ]; then
+  chmod +x "$APP_DIR/deploy/production/install-socket.sh" 2>/dev/null || true
+  bash "$APP_DIR/deploy/production/install-socket.sh" > /tmp/vq-socket-install.log 2>&1 || echo "socket 激活安装失败，本版仍按端口监听，详见 /tmp/vq-socket-install.log" >&2
+fi
+
 systemctl restart visionqa visionqa-internal
 
 # 启动自检要真的等到 /api/health 就绪：只看 systemctl is-active 会拿到 activating，

@@ -78,6 +78,7 @@ import { deepHealth } from './health.mjs'
 import { sitePublicView } from './site-info.mjs'
 import { storageRoom } from './storage.mjs'
 import { admit, capacityFor } from './waterline.mjs'
+import { inheritedListenFd, listenMode } from './listen.mjs'
 import { clearModelBlock, modelServiceState } from './service-state.mjs'
 import { fetchPublic } from './media.mjs'
 import { bdcStatus, canvasErrorMessage, listCanvases, createCanvas, appendCanvasNote } from './bdc.mjs'
@@ -1079,11 +1080,21 @@ if (recoveredRuns.recovered) logEvent('runs.recovered', recoveredRuns)
 const prunedLogs = await startLogRetention()
 if (prunedLogs.removed.length) logEvent('logs.prune', { removed: prunedLogs.removed.length, bytesFreed: prunedLogs.bytesFreed })
 
-server.listen(config.port, '127.0.0.1', () => {
+const listenFd = inheritedListenFd()
+const onListening = () => {
   // 告警哨兵：磁盘水位每 5 分钟看一次（5xx 与上游失败是事件驱动，不用轮询）
   startAlertWatch()
-  logEvent('listen', { port: config.port, redfox: redfoxEnabled() ? 'on' : 'mock', vision: visionEnabled() ? config.vision.model : 'off', auth: config.auth.requireAuth ? 'on' : 'off' })
-})
+  logEvent('listen', {
+    port: config.port,
+    // 有 socket 激活时端口由 systemd 握着，重启不断开——发版不再有几秒 502
+    listen: listenMode(listenFd),
+    redfox: redfoxEnabled() ? 'on' : 'mock',
+    vision: visionEnabled() ? config.vision.model : 'off',
+    auth: config.auth.requireAuth ? 'on' : 'off',
+  })
+}
+if (listenFd === null) server.listen(config.port, '127.0.0.1', onListening)
+else server.listen({ fd: listenFd }, onListening)
 
 // 停机收尾：systemd 重启（发版）发的是 SIGTERM，以前进程立刻死掉，
 // 在跑的任务连同已扣积分一起消失。现在先标中断 + 按账本退款，再关服务退出；
