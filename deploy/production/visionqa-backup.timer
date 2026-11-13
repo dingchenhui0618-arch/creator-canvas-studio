@@ -2,7 +2,7 @@
 Description=VisionQA data backup (daily)
 
 [Timer]
-OnCalendar=*-*-* 04:10:00
+OnCalendar=*-*-* 03:30:00
 Persistent=true
 RandomizedDelaySec=300
 

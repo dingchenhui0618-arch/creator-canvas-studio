@@ -2492,3 +2492,21 @@ v0.9.10 让「甲方看没看」第一次有了答案，这一轮让这个答案
 ![积分流水 390 宽：时间/类型不拆字、变动单独一列](docs/screenshot-jobs-ledger-prod-390-2026-11-13.png)
 
 提交 `c0d5b8a`（代码 + 测试）+ `7f4de59`（文档 + 4 张截图），CI 43372307894 success。细节与边界见 [复刻任务落库与扣费一致](docs/job-recovery-2026-11-13.md)：这轮只修「服务重启 / 进程崩溃」这一类中断（不做到断点续跑），流程运行（`/api/flows/:id/run`）仍走进程内退款，systemd `MemoryMax` 与备份（A2）没有动。
+
+## 一百一十八、备份从「有个文件」变成「真能恢复」：一致性快照、整体加密、每次都演练（v0.9.49）
+
+- **痛点**：定时任务每天 tar 一次活数据目录就算备完了。可 `auth.db` 是 WAL 模式，tar 按「主库 → -wal」读文件，中间只要发生一次 checkpoint，备份就停在旧页、wal 又被截断——最近提交的账号与积分没了；备份还和数据库在同一块盘（`/dev/vda3`），机器一坏两样一起没；更糟的是那份 19 MB 明文归档里同时有 `model-keys.json` 和 `.model-keys.secret`，拿到备份文件的人能解出全部上游 Key。自检只有一句 `tar -tzf` 能列出文件名，坏归档照样报成功。
+- **一致性快照**：每个 `*.db` 用 SQLite 自己的 `VACUUM INTO` 生成单文件快照，归档里不含 `-wal`/`-shm`；`manifest.json` 记下 `integrity_check` 与每张表行数（这次 `users 1 / sessions 168 / credit_ledger 109 / admin_audit 81 / replicate_jobs 1`）。测试里按 v1 的读文件顺序做了对照：同一份 3 条已提交数据，v1 顺序恢复出来 0 条，新快照 3 条都在。
+- **整体加密**：归档是 `.tgz.enc`（文件头 `VQBACK1`，`scrypt(N=2^15)` 派生密钥 + AES-256-GCM）。口令只在 `/etc/visionqa/backup.key`（`root:visionqa 0640`，目录 `0750`），状态文件里只有指纹 `904e0887c02d`；口令错时恢复直接 GCM 认证失败退出 6，不会给出半份数据。
+- **每次备份都做恢复演练**：解密 → 解包 → 打开 `auth.db` 跑 `integrity_check` → 核对账号行数与 `templates.json` 条数 → 从 `.model-keys.secret` 真解一把 Key（只看非空，不打印）。任何一项不过退出码 5，systemd 把服务标红，后台卡片同时亮失败；异地副本写不进去退出码 4，本地归档保留。
+- **unit 进仓库**：`deploy/production/visionqa-backup.service` / `.timer` / `install-backup.sh`，`deploy.sh` 部署时幂等同步（口令只生成一次）。踩到两个真坑：`/usr/bin/node` 是不带 `node:sqlite` 的旧版本，要用服务的 `/usr/local/bin/node`；`/etc/visionqa` 必须 `root:visionqa 0750`，否则备份进程读不到口令。
+- **生产实测**：`systemctl start visionqa-backup.service` 2.0 秒产出 18,918,389 字节加密归档，演练 `users 1 / templates 28 / keys 2 / keyDecrypt ok`；另起 `restore-backup.mjs` 还原到 `/tmp` 再验一遍 `ok`；`/var/backups/visionqa` 里 3 份加密归档（各带 sha256），5 份旧明文归档在新归档演练通过后删除。
+- **看得见**：后台「系统与版本 → 数据备份」显示最近一次的时间/大小/耗时/是否加密/口令指纹/演练结果/异地副本/在盘份数，以及每份归档大小与时间；390 宽只换行不横向滚动。
+- **验收**：生产 v0.9.49、入口 `index-D69VFl_B.js`、`/api/version` 0.9.49、两服务 active、release `20261113-061108-20261113-v0.9.49-backup5.tar.gz`；`npm test` **442/442**（新增 12 条备份用例）、oxlint 0 error / 6 warning、`tsc -b` 干净、构建通过。
+
+![生产：数据备份卡片——最近一次 18 MB / 2.1 秒 / 已加密 / 演练通过（1440）](docs/screenshot-backup-prod-2026-11-13.png)
+
+![生产：同一张卡片在 390 宽——归档名换行，不横向滚动](docs/screenshot-backup-prod-390-2026-11-13.png)
+
+细节与边界见 [备份一致性、加密与可恢复性](docs/backup-consistency-2026-11-13.md)：**异地副本还没有目的地**（代码通了，线上 `VQ_BACKUP_OFFSITE` 为空，整机故障仍会丢全部备份），口令托管在「服务器 + 本机各一份」，两处都丢就打不开归档；这不是跨文件时间点一致（JSON 逐文件复制，可能差几毫秒），恢复演练也没有把整个服务在恢复数据上启动一遍。
+

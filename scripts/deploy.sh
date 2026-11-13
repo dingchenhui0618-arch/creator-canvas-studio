@@ -39,6 +39,14 @@ cp "$STAGE/scripts/release.sh" "$STAGE/scripts/rollback.sh" "$STAGE/scripts/depl
 chmod +x "$APP_DIR"/ops/*.sh
 chown -R visionqa:visionqa "$APP_DIR"
 
+# 备份定时任务跟着仓库走：unit 内容变了就同步，避免线上跑着一份和仓库不一致的备份配置。
+# 装不上不影响这次发布（备份失败会在后台「数据备份」卡片里亮出来），所以只告警。
+# Windows 上打包的脚本没有可执行位，所以这里按「文件存在」判断，并用 bash 显式执行。
+if [ -f "$APP_DIR/deploy/production/install-backup.sh" ]; then
+  chmod +x "$APP_DIR/deploy/production/install-backup.sh" 2>/dev/null || true
+  bash "$APP_DIR/deploy/production/install-backup.sh" > /tmp/vq-backup-install.log 2>&1 || echo "备份定时任务安装失败，详见 /tmp/vq-backup-install.log" >&2
+fi
+
 systemctl restart visionqa visionqa-internal
 
 # 启动自检要真的等到 /api/health 就绪：只看 systemctl is-active 会拿到 activating，

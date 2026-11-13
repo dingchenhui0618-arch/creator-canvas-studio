@@ -1,10 +1,19 @@
 [Unit]
-Description=VisionQA data backup
-After=visionqa.service
+Description=VisionQA data backup (SQLite snapshot + encrypted archive + restore drill)
+After=visionqa.service local-fs.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/visionqa-backup.sh
+User=visionqa
+WorkingDirectory=/opt/visionqa
+Environment=DATA_DIR=/var/lib/visionqa
+Environment=VQ_BACKUP_DIR=/var/backups/visionqa
+Environment=VQ_BACKUP_KEEP=14
+Environment=VQ_BACKUP_PASSPHRASE_FILE=/etc/visionqa/backup.key
+# 异地副本：有第二块盘 / 另一台机器时再打开这一行（见 deploy/production/README.md）
+#Environment=VQ_BACKUP_OFFSITE=/mnt/vq-backups
+# 必须用带 node:sqlite 的那个 node：这台机器 /usr/bin/node 是旧版本，/usr/local/bin/node 才是服务的运行时
+ExecStart=/usr/local/bin/node --experimental-sqlite /opt/visionqa/scripts/backup.mjs
 Nice=10
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7

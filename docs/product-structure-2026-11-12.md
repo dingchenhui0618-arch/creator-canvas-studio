@@ -495,3 +495,12 @@ Electron 只负责把同一外壳套进本地窗口、多一个「本地工作�
 - ✅ 测试 `test/taken-origins.test.mjs` 9 条；生产零写入只读核对（截图前后 projects / templates / flows 的 `updatedAt` 一致），1440 / 390 均无横向滚动。
 
 **v0.9.37（2026-11-13）视觉评审先问「评哪条作品的哪一版」**：
+**v0.9.49（2026-11-13）备份从「有个文件」变成「真能恢复」**：
+
+- ✅ 一致性：每个 `*.db` 用 `VACUUM INTO` 出单文件快照，归档不含 `-wal`/`-shm`；`manifest.json` 记每张表行数与 `integrity_check`。
+- ✅ 加密：归档整体加密（`VQBACK1` + scrypt + AES-256-GCM），口令在 `/etc/visionqa/backup.key`，状态文件只留指纹；旧明文归档（含 Key 池 secret）在新归档演练通过后删除。
+- ✅ 自证：每次备份后立刻解密、解包、`integrity_check`、核对账号/模板条数、真解一把 Key；不过就退出码 5 让 systemd 与后台都亮红。
+- ✅ 异地：`--offsite` / `VQ_BACKUP_OFFSITE` 已实现（复制 + sha256 + 独立保留），线上还缺目的地——**整机故障仍会丢备份**，这是 A2 唯一剩下的硬缺口。
+- ✅ 后台「系统与版本 → 数据备份」：最近一次时间/大小/耗时/加密/演练结果/异地副本/在盘份数，390 宽不横向滚动。
+- ✅ 生产：18 MB 加密归档、2.0 秒、演练 `users 1 / templates 28 / keys 2 / keyDecrypt ok`、独立恢复到 `/tmp` 再验一次、错口令退出 6；442/442 测试通过。
+

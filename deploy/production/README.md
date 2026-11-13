@@ -78,3 +78,36 @@ rm -f /www/server/panel/vhost/nginx/VisionQA.wavisionai.cn.conf   # 或 /etc/ngi
 nginx -t && nginx -s reload
 ```
 数据都在 `/var/lib/visionqa`，删目录前先备份 `templates.json` 与 `frames/`。
+
+## 数据备份（v0.9.49）
+
+安装/更新定时任务（幂等；第一次会生成口令文件）：
+
+```bash
+cd /opt/visionqa && bash deploy/production/install-backup.sh
+```
+
+- 归档：`/var/backups/visionqa/visionqa-<时间>.tgz.enc`（+ `.sha256`），默认留 14 份。
+- 口令：`/etc/visionqa/backup.key`（`root:visionqa 0640`，目录 `0750`）。**它不在备份里**——丢了就打不开归档，务必另存一份到口令管理器。
+- 手动跑一次并看结果：
+
+```bash
+systemctl start visionqa-backup.service
+journalctl -u visionqa-backup.service -n 30 --no-pager   # 一行 JSON：encrypted / verify / offsite
+```
+
+- 异地副本：有第二块盘或另一台机器时，在 unit 里打开
+  `Environment=VQ_BACKUP_OFFSITE=/mnt/vq-backups` 再 `systemctl daemon-reload`。
+  复制后会按 sha256 校验；写不进去退出码 4。
+- 恢复演练（另起一个进程，不碰线上目录）：
+
+```bash
+/usr/local/bin/node --experimental-sqlite scripts/restore-backup.mjs \
+  /var/backups/visionqa/visionqa-<时间>.tgz.enc \
+  --target /tmp/vq-restore --passphrase-file /etc/visionqa/backup.key
+```
+
+真恢复时：停服务 → 把 `/var/lib/visionqa` 改名留档 → 用上面的命令还原到 `/var/lib/visionqa`
+→ `chown -R visionqa:visionqa` → 起服务 → 验账号、模板、Key。
+
+注意：prod 的 `/usr/bin/node` 不带 `node:sqlite`，必须用 `/usr/local/bin/node`（unit 里已经写好）。

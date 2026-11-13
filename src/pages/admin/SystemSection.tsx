@@ -125,6 +125,57 @@ const JOB_STEP: Record<string, string> = {
   done: '完成',
 }
 
+
+// 数据备份（v0.9.49）：备份是 systemd 独立进程，服务挂了也要能跑。
+// 后台只读状态文件：上一次成不成、是不是加密、恢复演练过没过、有没有异地副本。
+type BackupVerify = {
+  ok: boolean
+  ms: number
+  integrityCheck: string
+  users: number | null
+  templates: number | null
+  keys: number | null
+  keyDecrypt: string
+  errors: string[]
+}
+
+type BackupStatus = {
+  at: string
+  ok: boolean
+  file: string
+  bytes: number
+  sha256: string
+  encrypted: boolean
+  passphraseFingerprint: string
+  format: number
+  durationMs: number
+  kept: number
+  errors: string[]
+  verify: BackupVerify | null
+  offsite: { ok: boolean; dir: string; bytes: number; sha256: string; error: string } | null
+  previousOkAt: string | null
+}
+
+type BackupArchive = { name: string; bytes: number; mtime: string; encrypted: boolean }
+
+type BackupsInfo = {
+  ok: boolean
+  status: BackupStatus | null
+  dir: string
+  keep: number
+  offsiteConfigured: boolean
+  items: BackupArchive[]
+  counts: { total: number; encrypted: number; plaintext: number; bytes: number }
+}
+
+const KEY_DECRYPT_LABEL: Record<string, string> = {
+  ok: '可解密',
+  empty: 'Key 池为空',
+  none: '没有 Key 文件',
+  'empty-plaintext': '解出来是空',
+  failed: '解不开',
+}
+
 type ClientErrorItem = {
   id: string
   at: string
@@ -211,6 +262,7 @@ export default function SystemSection() {
   const storage = useApi<StorageInfo>('/api/admin/storage')
   const alerts = useApi<AlertsInfo>('/api/admin/alerts')
   const jobs = useApi<JobsInfo>('/api/admin/jobs')
+  const backups = useApi<BackupsInfo>('/api/admin/backups')
   const [alertNote, setAlertNote] = useState('')
   const [busy, setBusy] = useState('')
 
@@ -399,6 +451,93 @@ export default function SystemSection() {
             ) : (
               <p className="admin-hint">还没有复刻任务：从「发现」里选一条内容、或在雷达页粘贴视频直链发起复刻，这里会出现任务进度与扣退记录。</p>
             )}
+          </>
+        ) : null}
+      </section>
+
+      <section className="admin-card admin-block">
+        <div className="admin-block-head">
+          <div>
+            <p className="admin-label">数据备份</p>
+            <p className="admin-sub">
+              每天由系统定时任务导出一次：库用 SQLite 自己的快照、归档整体加密、写完立刻做一次恢复演练。备份是独立进程，服务挂了也照样跑。
+            </p>
+          </div>
+          <SourceTag kind="api" source="GET /api/admin/backups" />
+        </div>
+
+        {backups.loading && !backups.data ? <LoadingLine label="/api/admin/backups" /> : null}
+
+        {backups.data ? (
+          <>
+            <div className="admin-alert-facts">
+              <span>
+                最近备份{' '}
+                <b>{backups.data.status ? formatDateTime(backups.data.status.at) : '还没有跑过'}</b>
+              </span>
+              <span>
+                大小 <b>{backups.data.status ? formatBytes(backups.data.status.bytes) : '—'}</b>
+                {backups.data.status ? ' · 耗时 ' + formatDuration(backups.data.status.durationMs) : ''}
+              </span>
+              <span>
+                加密 <b>{backups.data.status ? (backups.data.status.encrypted ? '已加密' : '未加密') : '—'}</b>
+                {backups.data.status?.encrypted && backups.data.status.passphraseFingerprint
+                  ? ' · 口令指纹 ' + backups.data.status.passphraseFingerprint
+                  : ''}
+              </span>
+              <span>
+                恢复演练{' '}
+                <b>{backups.data.status?.verify ? (backups.data.status.verify.ok ? '通过' : '失败') : '—'}</b>
+                {backups.data.status?.verify?.ok
+                  ? ' · 账号 ' + (backups.data.status.verify.users ?? '—') + ' / 模板 ' + (backups.data.status.verify.templates ?? '—') + ' / Key ' + (KEY_DECRYPT_LABEL[backups.data.status.verify.keyDecrypt] || backups.data.status.verify.keyDecrypt)
+                  : ''}
+              </span>
+              <span>
+                异地副本{' '}
+                <b>
+                  {backups.data.status?.offsite
+                    ? backups.data.status.offsite.ok
+                      ? '已写入'
+                      : '失败'
+                    : backups.data.offsiteConfigured
+                      ? '已配置未写入'
+                      : '未配置'}
+                </b>
+                {backups.data.status?.offsite?.ok ? ' · ' + backups.data.status.offsite.dir : ''}
+              </span>
+              <span>
+                在盘 <b>{backups.data.counts.total}</b> 份 · 保留 {backups.data.keep}
+              </span>
+            </div>
+
+            {backups.data.status && !backups.data.status.ok && backups.data.status.errors.length ? (
+              <p className="admin-hint admin-hint--fail">
+                上一次备份没过：{backups.data.status.errors.join('；')}
+              </p>
+            ) : null}
+
+            {backups.data.items.length ? (
+              // 与复刻任务同一套行样式：标题 + 一串等宽元信息，390 宽只换行不横向滚。
+              <ul className="admin-alert-list">
+                {backups.data.items.map((item) => (
+                  <li key={item.name} className="admin-alert-row admin-backup-row">
+                    <div className="admin-alert-copy">
+                      <span className="admin-job-head">
+                        <Badge tone={item.encrypted ? 'ok' : 'warn'}>{item.encrypted ? '已加密' : '明文'}</Badge>
+                        <strong className="admin-mono">{item.name}</strong>
+                      </span>
+                      <span className="admin-cell-sub admin-mono">
+                        {formatBytes(item.bytes)} · {formatDateTime(item.mtime)}
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="admin-hint">还没有备份归档：定时任务跑过一次后，这里会出现每一份的大小、时间与是否加密。</p>
+            )}
+
+            <p className="admin-hint admin-mono">备份目录 {backups.data.dir}</p>
           </>
         ) : null}
       </section>

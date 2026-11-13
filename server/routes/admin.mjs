@@ -24,6 +24,7 @@ import { listLogs, pruneLogs } from '../log-files.mjs'
 import { listReports, reportCounts, resolveReport } from '../reports.mjs'
 import { disableTemplateShare, getTemplate, updateTemplate } from '../templates.mjs'
 import { listJobs } from '../jobs.mjs'
+import { backupSummary } from '../backup-status.mjs'
 
 const MODEL_KEY = /^\/api\/admin\/model-keys\/([\w-]+)$/
 const MODEL_KEY_TEST = /^\/api\/admin\/model-keys\/([\w-]+)\/test$/
@@ -595,6 +596,13 @@ export function createAdminRouter() {
           items: data.items.map((job) => ({ ...job, userEmail: emails.get(job.ownerId) || '' })),
           counts: data.counts,
         })
+        return true
+      }
+
+      // 数据备份：备份由 systemd 定时进程跑，这里只读它留下的状态与目录清单。
+      // 后台要能回答「上一次备份成不成、是不是加密、恢复演练过没过、有没有异地副本」。
+      if (pathname === '/api/admin/backups' && req.method === 'GET') {
+        sendJson(res, 200, await backupSummary())
         return true
       }
 
