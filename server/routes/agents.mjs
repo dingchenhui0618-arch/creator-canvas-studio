@@ -20,6 +20,7 @@ import { clearAgentRuns, listAgentRuns, recordAgentRun } from '../agent-history.
 import { config, visionEnabled } from '../config.mjs'
 import { currentUser } from '../auth.mjs'
 import { charge, refund } from '../credits.mjs'
+import { quotaRefusal } from '../quota.mjs'
 import { enter, leave } from '../gate.mjs'
 import { publicError } from '../public-error.mjs'
 import { preferenceModel } from '../preferences.mjs'
@@ -155,6 +156,11 @@ export function createAgentsRouter() {
           const paid = user?.id ? charge(user.id, 'chat', { ref: agent.name }) : { ok: true, cost: 0, balance: null }
           if (!paid.ok) {
             if (user?.id) leave(user.id, 'chat')
+            if (paid.code === 'MONTHLY_QUOTA') {
+              const refusal = quotaRefusal(paid)
+              sendJson(res, refusal.status, refusal.body)
+              return true
+            }
             sendJson(res, 402, {
               error: '积分不足：本次对话需要 ' + paid.cost + ' 积分，当前余额 ' + paid.balance + ' 积分',
               code: 'CREDIT_INSUFFICIENT',

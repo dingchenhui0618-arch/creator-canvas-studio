@@ -8,6 +8,7 @@ import {
   type AdminPlan,
   type PlanInput,
 } from '../../api/plans'
+import QuotaCard from './QuotaCard'
 import { formatDateTime } from './data'
 import { AdminHead, Badge, EmptyState, ErrorBanner, LoadingLine, RefreshButton } from './ui'
 
@@ -143,7 +144,7 @@ export default function BillingSection() {
       <AdminHead
         kicker="计费"
         title="定价档位"
-        description="「多少钱换多少积分」由你在这里定。价格只是档位，不等于支付已开通：付款通道没接入之前，用户提交的是开通申请，管理员确认到账后在「账号」页发放积分。"
+        description="「多少钱换多少积分」和「一个账号一个月最多花多少」，都在这一页定。价格只是档位，不等于支付已开通：付款通道没接入之前，用户提交的是开通申请，管理员确认到账后在「账号」页发放积分。"
         actions={<RefreshButton onClick={load} busy={loading} />}
       />
 
@@ -166,50 +167,52 @@ export default function BillingSection() {
           <EmptyState title="还没有定价档位" description="价格由你定：填档位名、积分数量与价格（元）即可，代码里没有任何写死的价格。" />
         ) : null}
         {items.length ? (
-          <table className="admin-table">
-            <thead>
-              <tr>
-                <th>档位</th>
-                <th style={{ textAlign: 'right' }}>积分</th>
-                <th style={{ textAlign: 'right' }}>价格</th>
-                <th style={{ textAlign: 'right' }}>每积分</th>
-                <th>状态</th>
-                <th>最近修改</th>
-                <th style={{ textAlign: 'right' }}>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((plan) => (
-                <tr key={plan.id}>
-                  <td>
-                    <strong>{plan.name}</strong>
-                    {plan.note ? <span className="admin-cell-note">{plan.note}</span> : null}
-                  </td>
-                  <td className="admin-mono num-col">{plan.credits.toLocaleString('zh-CN')}</td>
-                  <td className="admin-mono num-col">¥{yuan(plan.priceCents)}</td>
-                  <td className="admin-mono num-col">{perCredit(plan)}</td>
-                  <td>
-                    <Badge tone={plan.enabled ? 'ok' : 'neutral'}>{plan.enabled ? '在售' : '停用'}</Badge>
-                  </td>
-                  <td className="admin-cell-time">
-                    {formatDateTime(plan.updatedAt)}
-                    {plan.updatedBy ? <span className="admin-cell-note">{plan.updatedBy}</span> : null}
-                  </td>
-                  <td style={{ textAlign: 'right' }}>
-                    <div className="admin-row-actions">
-                      <button type="button" className="vq-button vq-button--ghost" onClick={() => setForm(formFromPlan(plan))} disabled={busy}>
-                        编辑
-                      </button>
-                      <button type="button" className="vq-button vq-button--ghost" onClick={() => void remove(plan)} disabled={busy}>
-                        <Trash2 size={14} />
-                        删除
-                      </button>
-                    </div>
-                  </td>
+          <div className="admin-table-wrap">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>档位</th>
+                  <th style={{ textAlign: 'right' }}>积分</th>
+                  <th style={{ textAlign: 'right' }}>价格</th>
+                  <th style={{ textAlign: 'right' }}>每积分</th>
+                  <th>状态</th>
+                  <th>最近修改</th>
+                  <th style={{ textAlign: 'right' }}>操作</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {items.map((plan) => (
+                  <tr key={plan.id}>
+                    <td>
+                      <strong>{plan.name}</strong>
+                      {plan.note ? <span className="admin-cell-note">{plan.note}</span> : null}
+                    </td>
+                    <td className="admin-mono num-col">{plan.credits.toLocaleString('zh-CN')}</td>
+                    <td className="admin-mono num-col">¥{yuan(plan.priceCents)}</td>
+                    <td className="admin-mono num-col">{perCredit(plan)}</td>
+                    <td>
+                      <Badge tone={plan.enabled ? 'ok' : 'neutral'}>{plan.enabled ? '在售' : '停用'}</Badge>
+                    </td>
+                    <td className="admin-cell-time">
+                      {formatDateTime(plan.updatedAt)}
+                      {plan.updatedBy ? <span className="admin-cell-note">{plan.updatedBy}</span> : null}
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <div className="admin-row-actions">
+                        <button type="button" className="vq-button vq-button--ghost" onClick={() => setForm(formFromPlan(plan))} disabled={busy}>
+                          编辑
+                        </button>
+                        <button type="button" className="vq-button vq-button--ghost" onClick={() => void remove(plan)} disabled={busy}>
+                          <Trash2 size={14} />
+                          删除
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : null}
       </section>
 
@@ -282,6 +285,8 @@ export default function BillingSection() {
         </div>
         {note ? <p className="admin-cell-note" role="status">{note}</p> : null}
       </section>
+
+      <QuotaCard />
     </>
   )
 }

@@ -12,6 +12,7 @@ import path from 'node:path'
 import { config } from '../config.mjs'
 import { currentUser } from '../auth.mjs'
 import { charge, refund } from '../credits.mjs'
+import { quotaRefusal } from '../quota.mjs'
 import { enter, leave } from '../gate.mjs'
 import { publicError } from '../public-error.mjs'
 import { modelServiceState, noteModelFailure, noteModelSuccess } from '../service-state.mjs'
@@ -214,6 +215,11 @@ export function createReviewRouter() {
         const paid = user?.id ? charge(user.id, 'review', { ref: body.intent ? String(body.intent).slice(0, 60) : '视觉评审' }) : { ok: true, cost: 0, balance: null }
         if (!paid.ok) {
           if (user?.id) leave(user.id, 'review')
+          if (paid.code === 'MONTHLY_QUOTA') {
+            const refusal = quotaRefusal(paid)
+            sendJson(res, refusal.status, refusal.body)
+            return true
+          }
           sendJson(res, 402, {
             error: '积分不足：本次评审需要 ' + paid.cost + ' 积分，当前余额 ' + paid.balance + ' 积分',
             code: 'CREDIT_INSUFFICIENT',

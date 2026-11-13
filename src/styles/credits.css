@@ -19,6 +19,32 @@
   font-size: 12px;
 }
 
+
+/* 每月用量（v0.9.64）：一行「本月已用 / 上限」，再加一条细进度条。
+   只在管理员设了上限时出现进度条；不限时不画条，避免让人误以为有配额。 */
+.vq-credit-balance--used b {
+  font-size: 20px;
+}
+.vq-quota-bar {
+  height: 6px;
+  margin: -4px 0 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--line-faint);
+}
+.vq-quota-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ink);
+}
+.vq-quota-bar.is-warn > span {
+  background: var(--warn, #b8860b);
+}
+.vq-quota-bar.is-full > span {
+  background: var(--fail, #a33838);
+}
+
 .vq-price-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

@@ -15,6 +15,20 @@ export type CreditEntry = {
   createdAt: string
 }
 
+/** 每月额度：unlimited 为真时 remaining 是 -1，界面照实显示「未设上限」，不编数字。 */
+export type CreditQuota = {
+  limit: number
+  used: number
+  remaining: number
+  unlimited: boolean
+  overridden: boolean
+  month: string
+  resetAt: string
+  defaultLimit: number
+  updatedAt: string
+  updatedBy: string
+}
+
 export type CreditsResponse = {
   ok: boolean
   unit: string
@@ -26,6 +40,7 @@ export type CreditsResponse = {
   ledgerOffset?: number
   ledgerLimit?: number
   billingEnabled: boolean
+  quota?: CreditQuota
 }
 
 export type AdminUser = {

@@ -7,6 +7,7 @@
 import crypto from 'node:crypto'
 import { config } from './config.mjs'
 import { openDb as getDb } from './auth.mjs'
+import { checkQuota, quotaOf } from './quota.mjs'
 
 const nowIso = () => new Date().toISOString()
 
@@ -46,7 +47,10 @@ function writeLedger(db, { userId, delta, balanceAfter, kind, ref, meta }) {
   )
 }
 
-// 扣费：返回 { ok, balance, cost } 或 { ok:false, code:'CREDIT_INSUFFICIENT', balance, cost, needed }
+// 扣费：返回 { ok, balance, cost }；
+// 余额不够返回 { ok:false, code:'CREDIT_INSUFFICIENT', balance, cost, needed }；
+// 这个账号本月额度用完返回 { ok:false, code:'MONTHLY_QUOTA', limit, used, remaining, cost, resetAt, message }。
+// 两道闸门都在扣费之前：超了就是整单不做，余额原样、上游没被调用。
 export function charge(userId, kind, { ref = '', amount = null, meta = null } = {}) {
   if (!userId) return { ok: true, anonymous: true, balance: null, cost: 0 }
   const cost = amount === null ? priceOf(kind) : Math.round(Number(amount) || 0)
@@ -63,6 +67,12 @@ export function charge(userId, kind, { ref = '', amount = null, meta = null } = 
     if (balance < cost) {
       db.exec('ROLLBACK')
       return { ok: false, code: 'CREDIT_INSUFFICIENT', balance, cost, needed: cost - balance }
+    }
+    // 余额够、但这个账号本月的额度用完了：同样整单不做，跳过上游
+    const quota = checkQuota(userId, cost)
+    if (!quota.ok) {
+      db.exec('ROLLBACK')
+      return quota
     }
     const after = balance - cost
     db.prepare('UPDATE users SET credits = ? WHERE id = ?').run(after, String(userId))
@@ -219,5 +229,7 @@ export function creditsFor(user, { limit = 20, offset = 0 } = {}) {
     ledgerOffset: start,
     ledgerLimit: count,
     billingEnabled: false,
+    // 每月额度：不设上限时 unlimited=true、remaining=-1，界面照实显示「未设上限」
+    quota: quotaOf(user?.id),
   }
 }

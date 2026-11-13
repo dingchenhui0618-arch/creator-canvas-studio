@@ -305,6 +305,86 @@
   min-width: 820px;
 }
 
+/* 每月额度（v0.9.64）：默认额度一行、单独额度与用量表各一张卡。
+   输入 + 按钮 + 说明同一行，窄屏自动换行；行内改额度的输入框只占 96px，不抢表格。 */
+
+/* 卡片头（计费 / 每月额度）：左边标题与说明、右边状态与动作。
+   v0.9.63 起这两张卡用了 .admin-card-head 这个类名却没写样式，
+   胶囊与刷新按钮会掉到说明下面一行；这里一次补齐，标题也压到与其他卡片一致的 17px。 */
+.admin-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.admin-card-head > div {
+  min-width: 0;
+}
+.admin-card-head h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+}
+.admin-card-head p {
+  max-width: 72ch;
+  margin: 4px 0 0;
+  color: var(--faint, #8a8a8a);
+  font-size: 12px;
+  line-height: 1.6;
+}
+@media (max-width: 720px) {
+  .admin-card-head {
+    flex-direction: column;
+    gap: 8px;
+  }
+}
+
+.admin-quota-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin: 16px 0 12px;
+}
+.admin-quota-form .vq-field {
+  flex: 0 1 240px;
+  min-width: 0;
+}
+.admin-quota-form .admin-cell-note {
+  flex: 1 1 260px;
+  margin-top: 0;
+}
+.admin-quota-limit {
+  flex: 0 1 140px;
+}
+.admin-quota-input {
+  width: 96px;
+  padding: 8px;
+  font-size: 12px;
+}
+.admin-row-actions--end {
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+}
+@media (max-width: 720px) {
+  .admin-quota-form {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .admin-quota-form .vq-field,
+  .admin-quota-form .vq-button {
+    flex: 1 1 auto;
+    width: 100%;
+  }
+  .admin-quota-form .admin-cell-note {
+    flex: 1 1 auto;
+  }
+}
+
 /* 计费页（v0.9.63）：档位表的备注列与新增/编辑表单。
    备注是表里的第二行解释，字号比正文小一档；表单四个字段一排，窄屏两排、手机一排。 */
 .admin-cell-note {

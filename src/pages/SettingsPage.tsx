@@ -221,6 +221,7 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
   const plans = billing?.plans ?? []
   const balance = credits?.balance
   const prices = credits?.prices
+  const quota = credits?.quota
   const lowBalance = typeof balance === 'number' && prices ? balance < prices.search : false
 
   return (
@@ -375,6 +376,34 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
                 <span>{credits?.unit || '积分'}</span>
               </span>
             </div>
+
+            {quota ? (
+              <div className="vq-row">
+                <div className="vq-row-copy">
+                  <strong>本月用量</strong>
+                  <span>
+                    {quota.unlimited
+                      ? '管理员没有设每月上限：消耗只受余额限制。'
+                      : '每月上限 ' + quota.limit.toLocaleString('zh-CN') + ' 积分 · ' + quota.month + ' 月，额度在 ' +
+                        String(quota.resetAt).slice(0, 10) + ' 00:00 UTC 重置；超出会直接拒绝，不扣积分。'}
+                  </span>
+                </div>
+                <span className="vq-credit-balance vq-credit-balance--used">
+                  <b>{quota.used.toLocaleString('zh-CN')}</b>
+                  <span>{quota.unlimited ? '本月已用' : '/ ' + quota.limit.toLocaleString('zh-CN') + ' 上限'}</span>
+                </span>
+              </div>
+            ) : null}
+            {quota && !quota.unlimited ? (
+              <div
+                className={
+                  'vq-quota-bar' +
+                  (quota.used >= quota.limit ? ' is-full' : quota.used / Math.max(1, quota.limit) >= 0.8 ? ' is-warn' : '')
+                }
+              >
+                <span style={{ width: Math.min(100, Math.round((quota.used / Math.max(1, quota.limit)) * 100)) + '%' }} />
+              </div>
+            ) : null}
 
             <div className="vq-price-grid">
               <div className="vq-price-item">

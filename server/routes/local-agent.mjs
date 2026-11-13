@@ -7,6 +7,7 @@ import { callTextModel, llmEnabled } from '../llm.mjs'
 import { config } from '../config.mjs'
 import { currentUser } from '../auth.mjs'
 import { charge, refund } from '../credits.mjs'
+import { quotaRefusal } from '../quota.mjs'
 import { publicError } from '../public-error.mjs'
 import { modelCatalog } from '../models.mjs'
 
@@ -84,6 +85,11 @@ export function createLocalAgentRouter() {
         const cached = turnCharges.get(key)
         const paid = cached || (user?.id ? charge(user.id, 'chat', { ref: '本地工作区' }) : { ok: true, cost: 0, balance: null })
         if (!paid.ok) {
+          if (paid.code === 'MONTHLY_QUOTA') {
+            const refusal = quotaRefusal(paid)
+            sendJson(res, refusal.status, refusal.body)
+            return true
+          }
           sendJson(res, 402, {
             error: '积分不足：本次对话需要 ' + paid.cost + ' 积分，当前余额 ' + paid.balance + ' 积分',
             code: 'CREDIT_INSUFFICIENT',

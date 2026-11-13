@@ -21,6 +21,7 @@ import { config } from '../config.mjs'
 import { listProjects } from '../projects.mjs'
 import { projectsByFlow, projectFlowsMatching, withRunProject, withFlowProject } from '../run-ownership.mjs'
 import { charge, balanceOf } from '../credits.mjs'
+import { quotaRefusal } from '../quota.mjs'
 import { enter, leave } from '../gate.mjs'
 import { publicError } from '../public-error.mjs'
 
@@ -64,6 +65,11 @@ function beginRunCharge(res, user, ref, label = '') {
   const paid = charge(user.id, 'flow_run', { ref, meta: label ? { label } : null })
   if (!paid.ok) {
     leave(user.id, 'flow_run')
+    if (paid.code === 'MONTHLY_QUOTA') {
+      const refusal = quotaRefusal(paid)
+      sendJson(res, refusal.status, refusal.body)
+      return null
+    }
     sendJson(res, 402, {
       error: '积分不足：本次需要 ' + paid.cost + ' 积分，当前余额 ' + paid.balance + ' 积分',
       code: 'CREDIT_INSUFFICIENT',

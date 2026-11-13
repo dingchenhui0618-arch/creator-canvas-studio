@@ -16,6 +16,7 @@ const ACTIONS = {
   'report.resolve': '处理举报',
   'plan.save': '定价档位',
   'plan.delete': '删除档位',
+  'quota.save': '每月额度',
 }
 
 let schemaReady = false

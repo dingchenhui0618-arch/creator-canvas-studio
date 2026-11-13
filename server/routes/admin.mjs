@@ -32,6 +32,7 @@ import { listJobs } from '../jobs.mjs'
 import { backupSummary } from '../backup-status.mjs'
 import { createInvite, inviteSummary, revokeInvite } from '../invites.mjs'
 import { deletePlan, listPlans, savePlan } from '../plans.mjs'
+import { clearQuotaOverride, quotaOverview, saveQuota, setQuotaOverride } from '../quota.mjs'
 import { saveUsagePrices, usagePrices, usageSummary } from '../usage-meter.mjs'
 
 const MODEL_KEY = /^\/api\/admin\/model-keys\/([\w-]+)$/
@@ -318,6 +319,55 @@ export function createAdminRouter() {
         logEvent('plan-delete', { by: user.email, plan: result.plan.id, name: result.plan.name })
         recordAudit({ req, actor: user, action: 'plan.delete', targetType: 'plan', targetId: result.plan.id, targetLabel: result.plan.name, detail: { credits: result.plan.credits, priceCents: result.plan.priceCents } })
         sendJson(res, 200, { ok: true, deleted: result.plan.id })
+        return true
+      }
+      // ── 每月额度（v0.9.64）─────────────────────────────────────
+      // 配额是「一个账号一个月最多花多少积分」，数字由管理员定；0 = 不限，是默认值。
+      // 超额的请求在扣费前就返回 429，不扣积分、也不调用上游——所以这里改数字立刻生效。
+      if (pathname === '/api/admin/quota' && req.method === 'GET') {
+        sendJson(res, 200, { ok: true, ...quotaOverview() })
+        return true
+      }
+
+      if (pathname === '/api/admin/quota' && req.method === 'PUT') {
+        const body = await readBody(req)
+        const result = saveQuota(body, user.email)
+        if (!result.ok) {
+          sendJson(res, 400, { error: result.error })
+          return true
+        }
+        logEvent('quota-save', { by: user.email, monthlyLimit: result.monthlyLimit })
+        recordAudit({ req, actor: user, action: 'quota.save', targetType: 'quota', targetId: 'monthly', targetLabel: '每月额度', detail: { monthlyLimit: result.monthlyLimit } })
+        sendJson(res, 200, { ok: true, ...quotaOverview() })
+        return true
+      }
+
+      const QUOTA_MATCH = /^\/api\/admin\/quota\/overrides\/([\w-]+)$/
+      const quotaMatch = pathname.match(QUOTA_MATCH)
+      if (quotaMatch && req.method === 'PUT') {
+        const body = await readBody(req)
+        const result = setQuotaOverride(quotaMatch[1], body.limit, user.email)
+        if (!result.ok) {
+          sendJson(res, result.code === 'NOT_FOUND' ? 404 : 400, { error: result.error })
+          return true
+        }
+        const account = findUserById(quotaMatch[1])
+        logEvent('quota-override', { by: user.email, userId: quotaMatch[1], limit: result.limit })
+        recordAudit({ req, actor: user, action: 'quota.save', targetType: 'user', targetId: quotaMatch[1], targetLabel: account?.email || quotaMatch[1], detail: { limit: result.limit, scope: 'override' } })
+        sendJson(res, 200, { ok: true, ...quotaOverview() })
+        return true
+      }
+
+      if (quotaMatch && req.method === 'DELETE') {
+        const result = clearQuotaOverride(quotaMatch[1])
+        if (!result.ok) {
+          sendJson(res, 404, { error: result.error })
+          return true
+        }
+        const account = findUserById(quotaMatch[1])
+        logEvent('quota-override-clear', { by: user.email, userId: quotaMatch[1] })
+        recordAudit({ req, actor: user, action: 'quota.save', targetType: 'user', targetId: quotaMatch[1], targetLabel: account?.email || quotaMatch[1], detail: { scope: 'override-cleared' } })
+        sendJson(res, 200, { ok: true, ...quotaOverview() })
         return true
       }
       // ── 平台 Key 池 ────────────────────────────────────────────────

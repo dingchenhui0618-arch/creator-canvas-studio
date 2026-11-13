@@ -67,6 +67,7 @@ import { currentUser, listUsers, clientIp, isAdmin } from './auth.mjs'
 import { recordClientError } from './client-errors.mjs'
 import { createReport } from './reports.mjs'
 import { charge, refund, priceOf, ensureWelcomeCredits } from './credits.mjs'
+import { quotaRefusal } from './quota.mjs'
 import { enter, leave } from './gate.mjs'
 import { installProcessGuards, logEvent, logRequestError, startAccess } from './log.mjs'
 import { startLogRetention } from './log-files.mjs'
@@ -253,6 +254,12 @@ function beginPaid(res, user, kind, ref, { meta = null } = {}) {
   const paid = charge(user.id, kind, { ref, meta })
   if (!paid.ok) {
     leave(user.id, kind)
+    // 本月额度用完：429 + 一句能照着做的提示，不扣积分、不调上游
+    if (paid.code === 'MONTHLY_QUOTA') {
+      const refusal = quotaRefusal(paid)
+      sendJson(res, refusal.status, refusal.body)
+      return null
+    }
     sendJson(res, 402, {
       error: '积分不足：本次需要 ' + paid.cost + ' 积分，当前余额 ' + paid.balance + ' 积分',
       code: 'CREDIT_INSUFFICIENT',
