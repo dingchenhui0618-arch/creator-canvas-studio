@@ -2472,3 +2472,23 @@ v0.9.10 让「甲方看没看」第一次有了答案，这一轮让这个答案
 ![本地回收站弹窗：36px 的旧按钮换成 32px 的 vq-button](docs/screenshot-buttons-modal-local-2026-11-13.png)
 
 提交 `5726616`（代码 + 测试）+ `5e012db`（文档 + 7 张截图），CI 43359481970 success。细节与边界见 [按钮归一](docs/button-unify-2026-11-13.md)：可点胶囊（`vq-filter-chip` / `template-adapt` / `review-picker-toggle` / `radar-taken-work`）、工具栏开关 `cv-tool`、圆形发送键 `agx-send`、工作台 CTA `vq-next-cta` 都**没有**并进来，留给下一轮。
+## 一百一十七、复刻任务落库、扣费一致（v0.9.48）
+
+- **痛点**：复刻任务只存在进程内存里（`server/jobs.mjs` 的 `Map`），发版或 OOM 一杀进程，任务凭空消失、`/api/jobs/:id` 变 404，已经扣掉的 10 积分没有人退。发一次版就可能漏一次钱。
+- **任务落库**：新建 SQLite 表 `replicate_jobs`（与账号、积分同一个库），一行记状态 / 步骤 / 进度 / 日志 / 错误 / 模板 / 说明 / 积分 / 是否已退 / 时间；内存只留正在跑的和最近 60 条，重启后的真源是表。
+- **先落草稿再扣费**：路由先生成 jobId、写一条 `queued` 草稿，再扣积分（账本 `ref` = jobId）；并发闸门或积分不足时撤掉草稿。
+- **退款按账本算**：新增 `outstandingCharge()`，同一 ref 的扣费与退款求和，还欠多少退多少；启动恢复、停机收尾、路由兜底三条路共用一条幂等退款，跑第二遍算出 0。
+- **重启恢复 + 停机收尾**：启动时把上次留下的 `queued` / `running` 标成失败、按账本退款、清掉崩溃留下的临时目录；`SIGTERM` / `SIGINT` 先标中断退款再退出，流水线里的 `aborted` 守卫保证已退款的任务不会再建模板。
+- **看得见**：后台「系统与版本 → 复刻任务」列出状态、停在哪个步骤、进度、积分与「已退回」、失败原因；复刻弹窗失败时多一句「本次 10 积分已原样退回」；积分流水的说明列显示这条复刻的标题（退款行同一标题），390 宽把「余额」让位给说明，不再五列挤成一字一行。
+- **生产实测**：真账号发起一条复刻（停在「解析链接」时 `systemctl restart visionqa`）——停机日志 `shutdown SIGTERM interrupted:1`，重启后任务 `error` + `refunded:true`，余额 9954 不变，流水 −10 / +10（ref 都是 `job_3cced49f`）；本地直接强杀进程同样恢复，`jobs.recovered` 落日志。
+- **验收**：生产 v0.9.48、入口 `index-C686z1TW.js`、`/api/version` 0.9.48、health ok（templates 26）、两个服务 active；`npm test` **430/430**（新增 8 条任务一致性用例）、oxlint 0 error / 6 warning、`tsc -b` 干净、构建通过；release `20261113-052226-20261113-v0.9.48-jobs6.tar.gz`。
+
+![后台「复刻任务」：已中断、停在解析链接、10 积分已退回（生产，1440）](docs/screenshot-jobs-admin-prod-2026-11-13.png)
+
+![同一张卡片在 390 宽：徽标跟标题走、内容换行不横向滚](docs/screenshot-jobs-admin-prod-390-2026-11-13.png)
+
+![积分流水：一扣一退，说明列是这条复刻的标题（生产，1440）](docs/screenshot-jobs-ledger-prod-2026-11-13.png)
+
+![积分流水 390 宽：时间/类型不拆字、变动单独一列](docs/screenshot-jobs-ledger-prod-390-2026-11-13.png)
+
+提交号与 CI 号在下一条提交补齐。细节与边界见 [复刻任务落库与扣费一致](docs/job-recovery-2026-11-13.md)：这轮只修「服务重启 / 进程崩溃」这一类中断（不做到断点续跑），流程运行（`/api/flows/:id/run`）仍走进程内退款，systemd `MemoryMax` 与备份（A2）没有动。
