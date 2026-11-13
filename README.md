@@ -2447,3 +2447,28 @@ v0.9.10 让「甲方看没看」第一次有了答案，这一轮让这个答案
 ![生产 390：评审页头三颗胶囊整行换行，内容区 322 不横向溢出](docs/screenshot-pills-prod-390-2026-11-13.png)
 
 验收：版本 0.9.46、入口 `index-DX_GJ8WV.js`（513,017 字节）、样式 `index-BAKeXmWI.css`（250,089 字节）、release `20261113-023724-v0.9.46-pills.tar.gz`、`/api/version` 0.9.46、health ok（templates 26）、两服务 active；1440 与 390 实测无横向滚动，只读不扣积分。提交 `0deb41b`（代码 + 测试）+ `60928be`（文档 + 7 张截图 + README），CI 43354848681 success。细节与判断见 [胶囊归队](docs/pill-system-2026-11-13.md)。
+## 一百一十六、按钮归一：九个家族收回一个（v0.9.47）
+
+上一轮把 13 种像胶囊的东西收回三档，这一轮处理同一个毛病的另一半。生产 v0.9.46 实测，矩形动作按钮有**九个家族**：主站 `.vq-button`（32 / 10 / 13）、`.vq-button--tiny`（26 / 10 / 11）、后台 `.admin-btn`（30 / **6** / 12）、智能体 `.agx-btn`（**34** / 10 / 12）、画布 `.cv-btn`（32 / 10 / 12）、本地工作区 `.lw-btn`（32 / 10 / 12）、三个弹窗的 `.button`（**36** / 10 / 12）、顶栏与弹窗的 `.vq-icon-button`（30×30）和 v1 遗留的 `.icon-button`（30×30）。同一个「关闭」，在弹窗里 36px、在抽屉里 30px、在页面里 32px。
+
+- **一个家族**：`.vq-button` 成为唯一定义，三档高度（28 / 32 / 40）、两档字号（12 / 13）、圆角一律 `--radius-sm`（10px），尺寸全部进 `--btn-*` token；语气 `primary / ghost / quiet / danger` 只换颜色不写尺寸，`:active` 下落 1px、`:focus-visible` 一圈 3px 柔光、`:disabled` 0.55 + `not-allowed` 都只在这一处。
+- **165 处调用迁移**：31 个文件里 152 处自动替换 + 13 处动态拼类名手工改（`ReportsSection`、`LocalWorkspacePage`、`AgentEditorPage`、`AgentsPage`、`RadarPage`）；删掉 `console.css` / `local-workspace.css` / `canvas.css` / `agents.css` / `shell.css` / `App.css` 里 11 段旧家族定义，页面级只留布局、尺寸改回 token。
+- **顺手修一枚野按钮**：后台形态条上的「返回生产版」是浏览器原生按钮（2px outset 边框、16px 字、96px 宽），全站唯一的例外，收进 `vq-button--quiet --sm`。
+- **生产实测**（1440，抽样工作台 / 模板库 / 智能体 / 画布 / 后台账号）：动作按钮几何 **5 种 → 2 种**（32/10/13 ×32、28/10/12 ×2），390 同样 5 → 2，两个视口都无横向滚动；本地 13 条路由 1440 是 8 → 2、390 是 9 → 2。
+- **验收**：生产 v0.9.47、入口 `index-azz8GptM.js`、`/api/version` 0.9.47、health ok（templates 26）、两个服务 active；只发只读 GET，前后快照与上一轮逐字段相同（作品 1 · 模板 26 · 画布 7 · 原片 25 · 交付 0 · 余额 9954，0 积分）；`npm test` 422/422、oxlint 0 error / 6 warning、`tsc -b` 干净；样式 250,089 → 246,961 字节。
+
+![后台账号页改前（v0.9.46）：行内动作 30px 高、6px 方角](docs/screenshot-buttons-admin-before-prod-2026-11-13.png)
+
+![后台账号页改后（v0.9.47）：同一排动作 32px 高、10px 圆角、13px 字](docs/screenshot-buttons-admin-after-prod-2026-11-13.png)
+
+![智能体页改前（v0.9.46）：页头两枚 34px、12px 字](docs/screenshot-buttons-agents-before-prod-2026-11-13.png)
+
+![智能体页改后（v0.9.47）：与工作台同一套 32px、13px 字](docs/screenshot-buttons-agents-after-prod-2026-11-13.png)
+
+![后台行内动作 3 倍放大：上排 30px / 6px 方角，下排 32px / 10px 圆角](docs/screenshot-buttons-zoom-2026-11-13.png)
+
+![生产 390：模板库页头动作同一套三档，无横向滚动](docs/screenshot-buttons-prod-390-2026-11-13.png)
+
+![本地回收站弹窗：36px 的旧按钮换成 32px 的 vq-button](docs/screenshot-buttons-modal-local-2026-11-13.png)
+
+细节与边界见 [按钮归一](docs/button-unify-2026-11-13.md)：可点胶囊（`vq-filter-chip` / `template-adapt` / `review-picker-toggle` / `radar-taken-work`）、工具栏开关 `cv-tool`、圆形发送键 `agx-send`、工作台 CTA `vq-next-cta` 都**没有**并进来，留给下一轮。
