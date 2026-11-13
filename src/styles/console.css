@@ -305,6 +305,64 @@
   min-width: 820px;
 }
 
+/* 计费页（v0.9.63）：档位表的备注列与新增/编辑表单。
+   备注是表里的第二行解释，字号比正文小一档；表单四个字段一排，窄屏两排、手机一排。 */
+.admin-cell-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  color: var(--faint, #8a8a8a);
+  font-size: 11.5px;
+  font-weight: 400;
+  line-height: 1.55;
+}
+.admin-cell-note svg {
+  flex: 0 0 auto;
+}
+.admin-cell-time {
+  color: var(--muted, #6b6b6b);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.admin-cell-time .admin-cell-note {
+  display: block;
+  margin-top: 2px;
+  font-family: inherit;
+}
+.admin-form-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 16px 0 12px;
+}
+.admin-form-grid .vq-field {
+  min-width: 0;
+}
+.admin-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: var(--muted, #6b6b6b);
+  font-size: 12px;
+}
+.admin-check input {
+  accent-color: var(--ink, #18181b);
+}
+@media (max-width: 900px) {
+  .admin-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 560px) {
+  .admin-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .admin-cell-sub {
   display: block;
   margin-top: 4px;

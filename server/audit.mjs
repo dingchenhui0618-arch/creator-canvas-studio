@@ -14,6 +14,8 @@ const ACTIONS = {
   'client-errors.clear': '清空前端异常',
   'logs.prune': '清理服务端日志',
   'report.resolve': '处理举报',
+  'plan.save': '定价档位',
+  'plan.delete': '删除档位',
 }
 
 let schemaReady = false

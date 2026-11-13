@@ -45,6 +45,11 @@ function normalize(row) {
     resolvedAt: row.resolvedAt ? String(row.resolvedAt) : null,
     resolvedBy: row.resolvedBy ? String(row.resolvedBy) : null,
     grantedAmount: row.grantedAmount === undefined ? null : Number(row.grantedAmount) || 0,
+    // 档位快照（v0.9.63）：申请时把「哪个档、多少钱、多少积分」抄一份进来。
+    // 之后档位改名、改价甚至删掉，这张单据显示的都还是当时谈定的那一笔。
+    planId: String(row.planId || ''),
+    planName: String(row.planName || ''),
+    priceCents: row.priceCents === undefined ? null : Math.trunc(Number(row.priceCents) || 0),
   }
 }
 
@@ -62,16 +67,31 @@ export function pendingRequestOf(userId) {
   return listRequests({ status: 'pending' }).find((item) => item.userId === id) || null
 }
 
+/** 某个账号自己提交过的申请（设置页的「开通单据」列表）：最近 5 条，含已处理。 */
+export function requestsOf(userId, limit = 5) {
+  const id = String(userId || '')
+  if (!id) return []
+  return listRequests({ limit: 200 })
+    .filter((item) => item.userId === id)
+    .slice(0, Math.max(1, Math.min(50, Number(limit) || 5)))
+}
+
 // 同一账号同时只留一条待处理申请：重复提交返回那条已有的，不制造一堆重复项。
-export function createRequest({ user, amount, reason = '' }) {
+export function createRequest({ user, amount, reason = '', plan = null }) {
   const existing = pendingRequestOf(user.id)
   if (existing) return { request: existing, created: false }
+  // 带档位时积分数量以档位为准：申请页只传 planId，数量与价格都由服务端决定，
+  // 避免「申请 100 万积分、付 0 元」这种客户端自己写的数字。
+  const planCredits = plan ? Math.max(1, Math.min(10000, Math.trunc(Number(plan.credits) || 0))) : 0
   const next = {
     id: 'cr_' + crypto.randomBytes(8).toString('base64url'),
     userId: String(user.id),
     email: String(user.email || ''),
     name: String(user.name || ''),
-    amount: Math.max(1, Math.min(10000, Math.trunc(Number(amount) || 0) || 100)),
+    amount: planCredits || Math.max(1, Math.min(10000, Math.trunc(Number(amount) || 0) || 100)),
+    planId: plan ? String(plan.id || '') : '',
+    planName: plan ? String(plan.name || '').slice(0, 40) : '',
+    priceCents: plan ? Math.trunc(Number(plan.priceCents) || 0) : null,
     reason: String(reason || '').trim().slice(0, 120),
     status: 'pending',
     createdAt: new Date().toISOString(),

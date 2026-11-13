@@ -463,7 +463,9 @@ export default function UsersSection() {
               <thead>
                 <tr>
                   <th>邮箱</th>
+                  <th>档位</th>
                   <th className="num-col">申请积分</th>
+                  <th className="num-col">金额</th>
                   <th>用途</th>
                   <th>提交时间</th>
                   <th>操作</th>
@@ -473,7 +475,10 @@ export default function UsersSection() {
                 {requests.map((item) => (
                   <tr key={item.id}>
                     <td>{item.email}</td>
+                    {/* 档位快照：申请时谈定的那一笔，删档位/改价都不影响这里显示的数字 */}
+                    <td className="admin-cell-sub">{item.planName || '自定义'}</td>
                     <td className="admin-mono num-col">{item.amount}</td>
+                    <td className="admin-mono num-col">{typeof item.priceCents === 'number' && item.priceCents > 0 ? '¥' + (item.priceCents / 100).toFixed(2) : '—'}</td>
                     <td className="admin-cell-sub">{item.reason || '—'}</td>
                     <td className="admin-mono admin-nowrap">{formatDateTime(item.createdAt)}</td>
                     <td>

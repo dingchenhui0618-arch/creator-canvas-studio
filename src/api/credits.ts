@@ -114,16 +114,34 @@ export type CreditRequest = {
   resolvedAt: string | null
   resolvedBy: string | null
   grantedAmount: number | null
+  /** 档位快照：申请时谈定的那一笔（档位后来改名/改价/删除都不影响已提交的单据） */
+  planId: string
+  planName: string
+  priceCents: number | null
 }
 
-// 额度申请：积分不够时的出口（充值通道还没接，定价未定）
-export const getMyCreditRequest = () => request<{ ok: boolean; pending: CreditRequest | null }>('/api/credits/request')
+// 额度申请：积分不够时的出口。带档位时数量与价格以服务端为准，客户端只传 planId。
+export const getMyCreditRequest = () =>
+  request<{ ok: boolean; pending: CreditRequest | null; items: CreditRequest[] }>('/api/credits/request')
 
 export const requestCredits = (amount: number, reason: string) =>
-  request<{ ok: boolean; created: boolean; request: CreditRequest; pending: CreditRequest | null }>('/api/credits/request', {
-    method: 'POST',
-    body: JSON.stringify({ amount, reason }),
-  })
+  request<{ ok: boolean; created: boolean; request: CreditRequest; pending: CreditRequest | null; items: CreditRequest[] }>(
+    '/api/credits/request',
+    {
+      method: 'POST',
+      body: JSON.stringify({ amount, reason }),
+    },
+  )
+
+/** 按后台档位申请开通：服务端用档位里的积分与价格，不接受客户端改数量。 */
+export const requestPlan = (planId: string, reason = '') =>
+  request<{ ok: boolean; created: boolean; request: CreditRequest; pending: CreditRequest | null; items: CreditRequest[] }>(
+    '/api/credits/request',
+    {
+      method: 'POST',
+      body: JSON.stringify({ planId, reason }),
+    },
+  )
 
 export const listCreditRequests = (status = '') =>
   request<{ items: CreditRequest[]; total: number; pending: number }>('/api/admin/credit-requests' + (status ? '?status=' + status : ''))

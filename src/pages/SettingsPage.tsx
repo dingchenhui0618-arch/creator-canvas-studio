@@ -7,7 +7,8 @@ import { AccountDataCard } from '../components/AccountDataCard'
 import PageHead from '../components/PageHead'
 import { getBillingOverview, type BillingOverview } from '../api/billing'
 import { useUiMode } from '../api/app'
-import { creditKindLabel, getCredits, getMyCreditRequest, requestCredits, getSystemHealth, type CreditEntry, type CreditRequest, type CreditsResponse, type SystemHealth } from '../api/credits'
+import { creditKindLabel, getCredits, getMyCreditRequest, requestCredits, requestPlan, getSystemHealth, type CreditEntry, type CreditRequest, type CreditsResponse, type SystemHealth } from '../api/credits'
+import type { BillingPlan } from '../api/billing'
 import { changePassword } from '../api/auth'
 import { listMyFeedback, type FeedbackItem } from '../api/feedback'
 import { FeedbackModal } from '../components/FeedbackModal'
@@ -25,6 +26,8 @@ type Props = {
 const HEALTH_LABEL: Record<string, string> = { ok: '正常', warn: '注意', fail: '异常' }
 const FEEDBACK_STATUS_LABEL: Record<string, string> = { new: '待处理', reading: '处理中', done: '已处理' }
 const FEEDBACK_KIND_LABEL: Record<string, string> = { problem: '功能问题', idea: '改进建议', other: '其他' }
+// 开通单据的三种状态：待确认（已提交）/ 已开通（管理员发放了积分）/ 已取消（管理员忽略）
+const RECEIPT_STATUS: Record<string, string> = { pending: '待确认', granted: '已开通', ignored: '已取消' }
 
 function formatStamp(value?: string | null) {
   if (!value) return '—'
@@ -70,6 +73,9 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
   const [reqBusy, setReqBusy] = useState(false)
   const [reqError, setReqError] = useState('')
   const [reqMessage, setReqMessage] = useState('')
+  // 最近的开通单据（含已处理的）：按档位申请之后，这里能看到「提交了哪一档、多少钱、到哪一步」
+  const [reqItems, setReqItems] = useState<CreditRequest[]>([])
+  const [planBusyId, setPlanBusyId] = useState('')
   // 反馈：提交入口 + 自己那几条的处理状态（管理员回复也在这里看）
   const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [feedback, setFeedback] = useState<FeedbackItem[]>([])
@@ -100,8 +106,14 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
       .catch((caught) => setBillingError(caught instanceof Error ? caught.message : '充值状态读取失败'))
     loadCredits()
     getMyCreditRequest()
-      .then((data) => setReqPending(data.pending))
-      .catch(() => setReqPending(null))
+      .then((data) => {
+        setReqPending(data.pending)
+        setReqItems(data.items || [])
+      })
+      .catch(() => {
+        setReqPending(null)
+        setReqItems([])
+      })
     loadFeedback()
   }, [loadCredits, loadFeedback])
 
@@ -148,6 +160,28 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
       setReqBusy(false)
     }
   }
+  // 按后台档位申请开通：积分与价格都由服务端取自档位，前端只传档位 id
+  const requestPlanNow = async (plan: BillingPlan) => {
+    if (planBusyId || reqPending) return
+    setPlanBusyId(plan.id)
+    setReqError('')
+    setReqMessage('')
+    try {
+      const result = await requestPlan(plan.id, '按档位申请开通：' + plan.name)
+      setReqPending(result.pending || result.request)
+      setReqItems(result.items || [])
+      setReqMessage(
+        result.created
+          ? '已提交开通申请：' + plan.name + ' · ¥' + plan.price.toFixed(2) + ' / ' + plan.credits.toLocaleString('zh-CN') + ' 积分。管理员确认收款后积分到账。'
+          : '你已经有一条待处理的申请，管理员处理前不用重复提交。',
+      )
+    } catch (caught) {
+      setReqError(caught instanceof Error ? caught.message : '提交失败')
+    } finally {
+      setPlanBusyId('')
+    }
+  }
+
   const submitPassword = async () => {
     if (pwBusy) return
     setPwError('')
@@ -183,6 +217,8 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
     timeStyle: 'short',
   }).format(new Date(session.signedInAt))
 
+  // 档位来自后台「计费」页：没有配置就是空数组，界面保持「未开通」，不摆假档位
+  const plans = billing?.plans ?? []
   const balance = credits?.balance
   const prices = credits?.prices
   const lowBalance = typeof balance === 'number' && prices ? balance < prices.search : false
@@ -455,39 +491,92 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
           </div>
         </section>
 
-        <section className="vq-card vq-card--wide">
+        <section className="vq-card vq-card--wide" id="billing">
           <div className="vq-card-head">
             <div>
               <span className="vq-mono">充值 / Billing</span>
-              <h2>余额与充值</h2>
-              <p>计费方式与价格还没定，暂时不能下单，也不显示额度。开通后这里会出现档位与支付入口。</p>
+              <h2>档位与开通</h2>
+              <p>
+                {plans.length
+                  ? '价格由管理员在后台维护。付款通道还没接入：「申请开通」提交的是一条开通申请，管理员确认收款后把积分放到你的账号——这里不会假装支付成功。'
+                  : '计费方式与价格还没定，暂时不能下单，也不显示额度。定价之后这里会出现档位与开通入口。'}
+              </p>
             </div>
-            <Tag>{billing?.enabled ? '已开通' : '未开通'}</Tag>
+            <Tag tone={billing?.enabled ? 'ink' : plans.length ? 'warn' : 'plain'}>
+              {billing?.enabled ? '已开通' : plans.length ? '待付款' : '未开通'}
+            </Tag>
           </div>
           <div className="vq-card-body">
+            {plans.length ? (
+              <div className="vq-plan-grid">
+                {plans.map((plan) => {
+                  const active = reqPending?.planId === plan.id
+                  return (
+                    <article key={plan.id} className={'vq-plan-card' + (active ? ' is-active' : '')}>
+                      <span className="vq-plan-name">{plan.name}</span>
+                      <span className="vq-plan-price">
+                        ¥{plan.price.toFixed(2)}
+                        <span> / {plan.credits.toLocaleString('zh-CN')} 积分</span>
+                      </span>
+                      <span className="vq-plan-meta">
+                        {plan.priceCents > 0 && plan.credits > 0
+                          ? '每积分约 ¥' + (plan.price / plan.credits).toFixed(4).replace(/0+$/, '').replace(/\.$/, '')
+                          : '赠送额度：不收费'}
+                      </span>
+                      {plan.note ? <span className="vq-plan-note">{plan.note}</span> : null}
+                      <button
+                        type="button"
+                        className="vq-button vq-button--ghost"
+                        onClick={() => void requestPlanNow(plan)}
+                        disabled={Boolean(planBusyId) || Boolean(reqPending)}
+                      >
+                        {active ? '已申请，等确认' : reqPending ? '已有待处理申请' : planBusyId === plan.id ? '提交中…' : '申请开通'}
+                      </button>
+                    </article>
+                  )
+                })}
+              </div>
+            ) : null}
             <div className="vq-row">
               <div className="vq-row-copy">
-                <strong>充值通道</strong>
+                <strong>付款通道</strong>
                 <span>{billing?.message || billingError || '读取中…'}</span>
               </div>
               <span className="vq-row-value vq-mono">{billing?.provider || '未接入'}</span>
             </div>
-            <div className="vq-row">
-              <div className="vq-row-copy">
-                <strong>充值档位</strong>
-                <span>{billing?.plans?.length ? '价格以下单页为准' : '档位与价格待定，暂不开放购买'}</span>
-              </div>
-              <span className="vq-row-value">{billing?.plans?.length ?? 0} 个档位</span>
-            </div>
             <div className="vq-billing-actions">
-              <button type="button" className="vq-button vq-button--primary" disabled={!billing?.enabled || !billing?.plans?.length}>
+              <button type="button" className="vq-button vq-button--primary" disabled>
                 <CreditCard size={14} />
-                充值
+                立即购买
               </button>
               <span className="vq-billing-note">
-                {billing?.enabled ? '选择一个档位后进入支付' : '充值通道未开通，按钮暂不可用；积分由管理员发放'}
+                {billing?.enabled ? '选择一个档位后进入支付' : '通道未接入，下单会明确失败；现在只能走「申请开通」'}
               </span>
             </div>
+            {reqError ? <p className="vq-billing-note" role="alert">{reqError}</p> : null}
+            {reqMessage ? <p className="vq-billing-note">{reqMessage}</p> : null}
+            {reqItems.length ? (
+              <>
+                <p className="vq-plan-note vq-plan-note--lead">最近的开通单据 · {reqItems.length} 张</p>
+                <div className="vq-receipts">
+                  {reqItems.map((item) => (
+                    <div className="vq-receipt" key={item.id}>
+                      <span className="vq-receipt-main">
+                        {item.planName || item.reason || '额度申请'}
+                        <em>{formatStamp(item.createdAt)}</em>
+                      </span>
+                      <span className="vq-receipt-meta">
+                        {typeof item.priceCents === 'number' && item.priceCents > 0 ? '¥' + (item.priceCents / 100).toFixed(2) + ' · ' : ''}
+                        {item.amount.toLocaleString('zh-CN')} 积分
+                      </span>
+                      <Pill tone={item.status === 'granted' ? 'pass' : item.status === 'pending' ? 'warn' : 'plain'}>
+                        {RECEIPT_STATUS[item.status] || item.status}
+                      </Pill>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : null}
           </div>
         </section>
 

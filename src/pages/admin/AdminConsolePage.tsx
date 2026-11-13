@@ -1,6 +1,7 @@
 import '../../styles/console.css'
 import type { AdminSection } from '../../editions'
 import AuditSection from './AuditSection'
+import BillingSection from './BillingSection'
 import CanvasSection from './CanvasSection'
 import KeysSection from './KeysSection'
 import OverviewSection from './OverviewSection'
@@ -20,6 +21,7 @@ export default function AdminConsolePage({ section }: { section: AdminSection })
       {section === 'keys' ? <KeysSection /> : null}
       {section === 'templates' ? <TemplatesSection /> : null}
       {section === 'usage' ? <UsageSection /> : null}
+      {section === 'billing' ? <BillingSection /> : null}
       {section === 'reports' ? <ReportsSection /> : null}
       {section === 'feedback' ? <FeedbackSection /> : null}
       {section === 'audit' ? <AuditSection /> : null}

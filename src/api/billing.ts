@@ -5,7 +5,10 @@ import { request } from './client'
 export type BillingPlan = {
   id: string
   name: string
+  /** 元（由服务端把「分」折算好），例如 99.5 */
   price: number
+  /** 分：整数，避免前端算钱时出现浮点尾巴 */
+  priceCents: number
   credits: number
   note: string
 }

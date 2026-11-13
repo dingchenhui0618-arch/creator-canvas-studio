@@ -31,6 +31,7 @@ import { disableTemplateShare, getTemplate, updateTemplate } from '../templates.
 import { listJobs } from '../jobs.mjs'
 import { backupSummary } from '../backup-status.mjs'
 import { createInvite, inviteSummary, revokeInvite } from '../invites.mjs'
+import { deletePlan, listPlans, savePlan } from '../plans.mjs'
 import { saveUsagePrices, usagePrices, usageSummary } from '../usage-meter.mjs'
 
 const MODEL_KEY = /^\/api\/admin\/model-keys\/([\w-]+)$/
@@ -269,6 +270,54 @@ export function createAdminRouter() {
         logEvent('credit-request-grant', { by: user.email, to: account.email, amount, balance: result.balance })
         recordAudit({ req, actor: user, action: 'credits.grant', targetType: 'user', targetId: account.id, targetLabel: account.email, detail: { amount, note: '额度申请 ' + target.id, balance: result.balance } })
         sendJson(res, 200, { ok: true, request: resolved, balance: result.balance })
+        return true
+      }
+      // ── 定价档位（v0.9.63）─────────────────────────────────────
+      // 价格是商务决定：以前写死在 billing.mjs 的空数组里，改价要发版；
+      // 现在后台直接维护，设置页按这里的档位渲染，改完下一次刷新就生效。
+      if (pathname === '/api/admin/plans' && req.method === 'GET') {
+        const items = listPlans({})
+        sendJson(res, 200, { ok: true, items, total: items.length })
+        return true
+      }
+
+      if (pathname === '/api/admin/plans' && req.method === 'POST') {
+        const body = await readBody(req)
+        const result = savePlan(body, user.email)
+        if (!result.ok) {
+          sendJson(res, 400, { error: result.error })
+          return true
+        }
+        logEvent('plan-create', { by: user.email, plan: result.plan.id, name: result.plan.name, priceCents: result.plan.priceCents, credits: result.plan.credits })
+        recordAudit({ req, actor: user, action: 'plan.save', targetType: 'plan', targetId: result.plan.id, targetLabel: result.plan.name, detail: { credits: result.plan.credits, priceCents: result.plan.priceCents, enabled: result.plan.enabled } })
+        sendJson(res, 201, { ok: true, plan: result.plan })
+        return true
+      }
+
+      const PLAN_MATCH = /^\/api\/admin\/plans\/([\w-]+)$/
+      const planMatch = pathname.match(PLAN_MATCH)
+      if (planMatch && req.method === 'PUT') {
+        const body = await readBody(req)
+        const result = savePlan({ ...body, id: planMatch[1] }, user.email)
+        if (!result.ok) {
+          sendJson(res, result.code === 'NOT_FOUND' ? 404 : 400, { error: result.error })
+          return true
+        }
+        logEvent('plan-update', { by: user.email, plan: result.plan.id, name: result.plan.name, priceCents: result.plan.priceCents, credits: result.plan.credits })
+        recordAudit({ req, actor: user, action: 'plan.save', targetType: 'plan', targetId: result.plan.id, targetLabel: result.plan.name, detail: { credits: result.plan.credits, priceCents: result.plan.priceCents, enabled: result.plan.enabled } })
+        sendJson(res, 200, { ok: true, plan: result.plan })
+        return true
+      }
+
+      if (planMatch && req.method === 'DELETE') {
+        const result = deletePlan(planMatch[1])
+        if (!result.ok) {
+          sendJson(res, 404, { error: result.error })
+          return true
+        }
+        logEvent('plan-delete', { by: user.email, plan: result.plan.id, name: result.plan.name })
+        recordAudit({ req, actor: user, action: 'plan.delete', targetType: 'plan', targetId: result.plan.id, targetLabel: result.plan.name, detail: { credits: result.plan.credits, priceCents: result.plan.priceCents } })
+        sendJson(res, 200, { ok: true, deleted: result.plan.id })
         return true
       }
       // ── 平台 Key 池 ────────────────────────────────────────────────

@@ -150,6 +150,101 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* 定价档位（v0.9.63）：设置页按后台维护的档位渲染。
+   付款通道没接，所以每张卡的动作是「申请开通」而不是「立即购买」。
+   间距 8/12/16，价格用等宽数字占主角，备注压到 11.5px 只做解释。 */
+.vq-plan-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(208px, 1fr));
+  gap: 12px;
+  margin: 16px 0 8px;
+}
+.vq-plan-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.vq-plan-card.is-active {
+  border-color: var(--line-strong);
+  background: var(--surface-raised);
+}
+.vq-plan-name {
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+.vq-plan-price {
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+.vq-plan-price span {
+  color: var(--faint);
+  font-family: inherit;
+  font-size: 12px;
+  letter-spacing: 0;
+}
+.vq-plan-meta {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.vq-plan-note {
+  color: var(--faint);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+.vq-plan-note--lead {
+  display: block;
+  margin: 16px 0 0;
+  letter-spacing: 0.04em;
+}
+.vq-plan-card .vq-button {
+  margin-top: auto;
+  justify-content: center;
+}
+/* 开通单据：只列自己最近几张，状态用全站胶囊，不做第二套徽标 */
+.vq-receipts {
+  margin-top: 8px;
+  border-top: 1px solid var(--line-faint);
+}
+.vq-receipt {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line-faint);
+  font-size: 12px;
+}
+.vq-receipt-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+.vq-receipt-main em {
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-style: normal;
+}
+.vq-receipt-meta {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .vq-health {
   display: grid;
   gap: 1px;
@@ -276,6 +371,9 @@
 
 @media (max-width: 720px) {
   .vq-price-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* 390 宽：档位卡改成两列太挤，一列铺满；单据三列压成三行 */
+  .vq-plan-grid { grid-template-columns: minmax(0, 1fr); }
+  .vq-receipt { grid-template-columns: minmax(0, 1fr); gap: 4px; }
   .vq-health-row { grid-template-columns: minmax(0, 1fr); gap: 4px; }
   .vq-health-row .ms { text-align: left; }
 }

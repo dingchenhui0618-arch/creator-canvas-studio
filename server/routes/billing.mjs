@@ -1,22 +1,29 @@
-// /api/billing/*：充值通道的接口位，先把契约定下来，支付与计费还没接入。
+// /api/billing/*：充值通道的接口位。支付还没接入，但「档位」从 v0.9.63 起是后台维护的数据，
+// 不再是代码里的空数组——价格由人来定，代码只负责如实渲染和如实拒绝。
 // 规则：没接通的通道一律如实说「未开通」，不返回假余额、假订单、假价格。
 import { readBody, sendJson } from './_shared.mjs'
+import { publicPlans } from '../plans.mjs'
 
 const PREFIX = '/api/billing'
 
-// 计费模型还没定（按次 / 按月 / 企业合同都没拍板），所以档位返回空数组，
-// 界面只展示「未开通」，等定价确定后往这里加 plan 即可。
-const PLANS = []
+function overviewMessage(plans) {
+  if (plans.length) {
+    return '付款通道还没接入：在这个页面按档位提交开通申请，管理员确认收款后人工把积分放到账号里；下单接口仍然不会成功。'
+  }
+  return '充值通道尚未接入：价格与支付方式还没定，当前使用不产生任何扣费。'
+}
 
 export function billingOverview() {
+  const plans = publicPlans()
   return {
     ok: true,
+    // 支付没接，就永远是 false：界面据此把「立即购买」按钮留成不可用，只放「申请开通」
     enabled: false,
     currency: 'CNY',
     provider: null,
-    plans: PLANS,
+    plans,
     balance: { credits: null, unit: '次', updatedAt: null },
-    message: '充值通道尚未接入：价格与支付方式还没定，当前使用不产生任何扣费。',
+    message: overviewMessage(plans),
   }
 }
 

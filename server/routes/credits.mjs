@@ -3,7 +3,8 @@
 import { readBody, sendJson } from './_shared.mjs'
 import { currentUser } from '../auth.mjs'
 import { creditsFor } from '../credits.mjs'
-import { createRequest, pendingRequestOf } from '../credit-requests.mjs'
+import { createRequest, pendingRequestOf, requestsOf } from '../credit-requests.mjs'
+import { planById } from '../plans.mjs'
 import { logEvent } from '../log.mjs'
 
 export function createCreditsRouter() {
@@ -18,8 +19,8 @@ export function createCreditsRouter() {
           return true
         }
         if (req.method === 'GET') {
-          // 只回自己的那条：设置页据此显示「已提交，等管理员处理」
-          sendJson(res, 200, { ok: true, pending: pendingRequestOf(user.id) })
+          // 只回自己的：设置页据此显示「已提交，等管理员处理」与最近几张单据
+          sendJson(res, 200, { ok: true, pending: pendingRequestOf(user.id), items: requestsOf(user.id, 5) })
           return true
         }
         if (req.method !== 'POST') {
@@ -27,13 +28,29 @@ export function createCreditsRouter() {
           return true
         }
         const body = await readBody(req)
-        const result = createRequest({ user, amount: body.amount, reason: body.reason })
-        logEvent('credit-request', { user: user.email, amount: result.request.amount, created: result.created })
+        // 带 planId 时数量与价格以服务端档位为准；档位不存在就直接拒绝（不许客户端自己写价格）
+        let plan = null
+        if (body.planId) {
+          plan = planById(body.planId)
+          if (!plan || !plan.enabled) {
+            sendJson(res, 404, { error: '这个档位不存在或已停用，刷新后再看' })
+            return true
+          }
+        }
+        const result = createRequest({ user, amount: body.amount, reason: body.reason, plan })
+        logEvent('credit-request', {
+          user: user.email,
+          amount: result.request.amount,
+          plan: result.request.planId || '',
+          price: result.request.priceCents,
+          created: result.created,
+        })
         sendJson(res, result.created ? 201 : 200, {
           ok: true,
           created: result.created,
           request: result.request,
           pending: pendingRequestOf(user.id),
+          items: requestsOf(user.id, 5),
         })
         return true
       }
