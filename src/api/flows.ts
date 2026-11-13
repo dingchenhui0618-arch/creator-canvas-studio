@@ -72,7 +72,8 @@ export type RunRecord = {
   id: string
   flowId: string
   flowName: string
-  status: 'success' | 'error' | 'running'
+  // interrupted = 进程重启 / 停机打断，已按账本退回积分
+  status: 'success' | 'error' | 'running' | 'interrupted'
   startedAt: string
   finishedAt: string | null
   durationMs: number
@@ -90,7 +91,7 @@ export type RunList = { items: RunRecord[]; total: number; offset: number; limit
 
 export type RunQuery = {
   flowId?: string
-  status?: '' | 'success' | 'error'
+  status?: '' | 'success' | 'error' | 'interrupted'
   q?: string
   limit?: number
   offset?: number

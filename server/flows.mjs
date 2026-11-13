@@ -8,6 +8,7 @@ import { reviewVisual } from './review.mjs'
 import { listTemplates, templateStats } from './templates.mjs'
 import { publicError } from './public-error.mjs'
 import { preferenceModel } from './preferences.mjs'
+import { outstandingCharge, refund } from './credits.mjs'
 
 // 画布流程：存储（data/flows.json）+ 运行记录（data/runs.json）+ 拓扑执行引擎。
 // 原子写范式与 server/templates.mjs 一致：先写 .tmp，再 rename 覆盖。
@@ -71,6 +72,8 @@ function defaultConfig(kind) {
 let flowCache = null
 let runCache = null
 let writeChain = Promise.resolve()
+// 正在进程里跑的运行：停机时按这张表标中断 + 退款；跑完就从表里摘掉。
+const activeRuns = new Map()
 
 /** 串行化所有写盘操作，避免并发请求互相覆盖。 */
 function enqueueWrite(task) {
@@ -309,8 +312,8 @@ export async function listRuns({ flowId = '', status = '', q = '', ownerId = '',
   // __none__ 是后台「未归属」筛选：积分制之前或本地演示产生的记录没有 ownerId
   if (ownerId === '__none__') filtered = filtered.filter((run) => !run.ownerId)
   else if (ownerId) filtered = filtered.filter((run) => (run.ownerId || '') === ownerId)
-  // 运行状态只有 success / error 两种落库值，running 只在流式过程中出现
-  if (status === 'success' || status === 'error') filtered = filtered.filter((run) => run.status === status)
+  // 落库终态：success / error / interrupted（进程重启或停机打断，钱已按账本退回）
+  if (status === 'success' || status === 'error' || status === 'interrupted') filtered = filtered.filter((run) => run.status === status)
   const extraFlows = new Set((Array.isArray(flowIds) ? flowIds : []).filter(Boolean).map(String))
   if (keyword) {
     filtered = filtered.filter(
@@ -627,10 +630,12 @@ export async function adoptUnownedFlows(ownerId) {
   return adopted
 }
 
+// 同一条运行会写两次（开始时落一笔、结束时落终态），所以按 id 覆盖而不是直接往前插：
+// 否则一次运行在列表里会出现两条，一条永远挂在 running 上。
 async function saveRun(run) {
   await enqueueWrite(async () => {
     const list = await loadRuns()
-    await persistRuns([run, ...list].slice(0, MAX_RUNS))
+    await persistRuns([run, ...list.filter((item) => item.id !== run.id)].slice(0, MAX_RUNS))
   })
 }
 
@@ -650,11 +655,92 @@ async function touchFlowRun(flowId, run) {
   })
 }
 
+/** 一次运行的 id 在扣积分之前就要定下来：账本 ref 与运行记录用同一个 id，
+ *  这样重启恢复能按账本净额退，而不用猜「这条扣费是哪次运行」。 */
+export function newRunId() {
+  return 'run_' + randomUUID().slice(0, 8)
+}
+
+/** 运行刚建出来、还没执行任何节点时的模样（落盘用的初始态）。 */
+function blankRun(flow, id, cost = 0) {
+  const amount = Math.max(0, Math.round(Number(cost) || 0))
+  return {
+    id,
+    flowId: flow.id,
+    flowName: flow.name,
+    status: 'running',
+    startedAt: new Date().toISOString(),
+    finishedAt: null,
+    durationMs: 0,
+    total: 0,
+    nodes: [],
+    output: '',
+    ownerId: flow.ownerId || '',
+    credits: amount > 0 ? { cost: amount, refunded: false } : null,
+  }
+}
+
+/** 扣积分之前先把运行记录落一笔：扣完马上断电也留得下这条单，恢复时按账本退。 */
+export async function startFlowRun(flow, runId, { cost = 0 } = {}) {
+  const run = blankRun(flow, String(runId || '') || newRunId(), cost)
+  await saveRun(run)
+  return run
+}
+
+/** 只给「记录建了、钱还没扣成功」这一刻用：撤掉占位记录，不留一条永远 running 的空单。 */
+export async function dropRunRecord(runId) {
+  const id = String(runId || '')
+  if (!id) return false
+  const list = await loadRuns()
+  const next = list.filter((item) => item.id !== id)
+  if (next.length === list.length) return false
+  await persistRuns(next)
+  return true
+}
+
+/** 运行还没真正跑起来就抛错（例如有环）：占位记录标成失败，并按账本退款。 */
+export async function abandonRun(runId, reason = '运行失败') {
+  const id = String(runId || '')
+  if (!id) return 0
+  const list = await loadRuns()
+  const run = list.find((item) => item.id === id)
+  if (!run) return 0
+  if (run.status === 'running') {
+    run.status = 'error'
+    run.finishedAt = new Date().toISOString()
+    run.error = String(reason || '运行失败').slice(0, 500)
+  }
+  refundRunCredits(run)
+  await persistRuns(list)
+  return 1
+}
+
+/** 按账本净额退这次运行还欠的积分：重复调用算出 0，不会多退。 */
+export function refundRunCredits(run) {
+  if (!run || !run.ownerId || !run.id) return 0
+  let owed = 0
+  try {
+    owed = outstandingCharge(run.ownerId, 'flow_run', run.id)
+  } catch (error) {
+    console.error('[flows] 核对运行账本失败：' + String(error && error.message ? error.message : error))
+    return 0
+  }
+  if (owed <= 0) return 0
+  try {
+    refund(run.ownerId, 'flow_run', { ref: run.id, amount: owed })
+    run.credits = { ...(run.credits || {}), cost: Math.max(Number(run.credits?.cost) || 0, owed), refunded: true }
+    return owed
+  } catch (error) {
+    console.error('[flows] 运行积分退回失败（' + owed + ' 积分）：' + String(error && error.message ? error.message : error))
+    return 0
+  }
+}
+
 /**
  * 按拓扑序执行整张画布。
  * onEvent 用于流式输出：run-start / node-start / node-end / run-end / run-error。
  */
-export async function runFlow(flow, { onEvent, credits = null } = {}) {
+export async function runFlow(flow, { onEvent, credits = null, runId = '' } = {}) {
   const emit = typeof onEvent === 'function' ? onEvent : () => {}
   const order = topoSort(flow.nodes, flow.edges)
   const nodesById = new Map(flow.nodes.map((node) => [node.id, node]))
@@ -667,7 +753,7 @@ export async function runFlow(flow, { onEvent, credits = null } = {}) {
 
   const startedAt = Date.now()
   const run = {
-    id: 'run_' + randomUUID().slice(0, 8),
+    id: String(runId || '') || newRunId(),
     flowId: flow.id,
     flowName: flow.name,
     status: 'running',
@@ -681,6 +767,10 @@ export async function runFlow(flow, { onEvent, credits = null } = {}) {
     // 本次运行实际扣了多少积分；失败会由路由层退回，refunded 在结束时标真
     credits: credits ? { cost: Math.round(Number(credits.cost) || 0), refunded: false } : null,
   }
+  // 先落盘再执行：以前只在结束时写运行记录，进程被杀就什么也不剩，
+  // 已扣的积分在账本里也永远对不上是哪次运行。
+  activeRuns.set(run.id, run)
+  await saveRun(run)
   emit({ type: 'run-start', run: { id: run.id, flowId: run.flowId, flowName: run.flowName, total: order.length } })
 
   const results = new Map()
@@ -688,6 +778,8 @@ export async function runFlow(flow, { onEvent, credits = null } = {}) {
   let errorCount = 0
 
   for (let index = 0; index < order.length; index += 1) {
+    // 停机收尾已经把这次运行标成中断并退了钱：后面的节点不再执行，别再产生上游费用
+    if (run.aborted) break
     const node = nodesById.get(order[index])
     if (!node) continue
     const inEdges = incoming.get(node.id) || []
@@ -757,8 +849,12 @@ export async function runFlow(flow, { onEvent, credits = null } = {}) {
     emit({ type: 'node-end', node: result, index, total: order.length })
   }
 
-  run.status = errorCount > 0 ? 'error' : 'success'
-  if (run.credits) run.credits.refunded = run.status === 'error'
+  if (run.aborted) {
+    run.status = 'interrupted'
+    run.error = run.error || '服务重启，运行中断；' + (run.ownerId ? '已扣积分已退回，重新运行即可。' : '重新运行即可。')
+  } else {
+    run.status = errorCount > 0 ? 'error' : 'success'
+  }
   run.finishedAt = new Date().toISOString()
   run.durationMs = Date.now() - startedAt
   const outputResults = run.nodes.filter((item) => item.kind === 'output' && item.output)
@@ -766,10 +862,60 @@ export async function runFlow(flow, { onEvent, credits = null } = {}) {
   run.output = outputResults.length
     ? clip(outputResults.map((item) => item.output.text).filter(Boolean).join('\n\n'))
     : clip(lastWithText?.output?.text || '')
-  run.error = errorCount > 0 ? run.nodes.filter((item) => item.status === 'error').map((item) => item.title + '：' + item.error).join('；') : null
-
+  if (run.status === 'error') {
+    run.error = errorCount > 0 ? run.nodes.filter((item) => item.status === 'error').map((item) => item.title + '：' + item.error).join('；') : null
+  }
+  // 失败与中断都按账本净额退回：路由、重启恢复、停机收尾三条路径谁先跑都只退一次
+  if (run.status !== 'success') refundRunCredits(run)
   await saveRun(run)
   await touchFlowRun(flow.id, run)
+  activeRuns.delete(run.id)
   emit({ type: 'run-end', run })
   return run
+}
+
+// ---------- 中断与恢复 ----------
+// 发一次版就是一次重启：以前运行记录只在跑完才写、退款靠内存里的回调，重启后
+// 已扣的积分没人退、这次运行也查不到。现在运行一开始就落盘，重启 / 停机按账本净额退。
+
+/** 启动恢复：上次进程没跑完的运行标成中断并按账本退款；重复启动不会多退。 */
+export async function recoverInterruptedRuns() {
+  let recovered = 0
+  let refunded = 0
+  const list = await loadRuns()
+  let changed = false
+  for (const run of list) {
+    if (run.status !== 'running') continue
+    run.status = 'interrupted'
+    run.finishedAt = new Date().toISOString()
+    const started = Date.parse(String(run.startedAt || ''))
+    run.durationMs = Number.isFinite(started) ? Math.max(0, Date.now() - started) : Number(run.durationMs) || 0
+    run.error = '服务重启，运行中断（进程已退出）；' + (run.ownerId ? '已扣积分已退回，重新运行即可。' : '重新运行即可。')
+    if (refundRunCredits(run) > 0) refunded += 1
+    recovered += 1
+    changed = true
+  }
+  if (changed) await persistRuns(list)
+  return { recovered, refunded }
+}
+
+/** 停机收尾：给正在跑的运行标中断 + 退款，再让调用方关服务。重复调用无副作用。 */
+export async function interruptRunningRuns(reason = '服务停止') {
+  const running = [...activeRuns.values()].filter((run) => run.status === 'running')
+  if (!running.length) return 0
+  for (const run of running) {
+    run.aborted = true
+    run.status = 'interrupted'
+    run.finishedAt = new Date().toISOString()
+    const started = Date.parse(String(run.startedAt || ''))
+    run.durationMs = Number.isFinite(started) ? Math.max(0, Date.now() - started) : Number(run.durationMs) || 0
+    run.error = reason + '，运行中断；' + (run.ownerId ? '已扣积分已退回，重新运行即可。' : '重新运行即可。')
+    refundRunCredits(run)
+  }
+  await enqueueWrite(async () => {
+    const list = await loadRuns()
+    const byId = new Map(running.map((run) => [run.id, run]))
+    await persistRuns(list.map((run) => byId.get(run.id) || run))
+  })
+  return running.length
 }

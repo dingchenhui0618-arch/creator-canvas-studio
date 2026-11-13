@@ -10,6 +10,7 @@ type UsersResponse = { items: AdminUser[]; total: number }
 function statusOf(status: string): { tone: 'neutral' | 'ok' | 'warn' | 'fail'; label: string } {
   if (status === 'success') return { tone: 'ok', label: '成功' }
   if (status === 'failed' || status === 'error') return { tone: 'fail', label: '失败' }
+  if (status === 'interrupted') return { tone: 'warn', label: '已中断' }
   if (status === 'running') return { tone: 'warn', label: '运行中' }
   if (status === 'skipped') return { tone: 'neutral', label: '跳过' }
   if (status === 'pending' || status === 'idle') return { tone: 'neutral', label: '等待' }
@@ -198,6 +199,7 @@ function RunsPanel({ refreshKey }: { refreshKey: number }) {
               <option value="">全部</option>
               <option value="success">成功</option>
               <option value="error">失败</option>
+              <option value="interrupted">已中断</option>
             </select>
           </label>
           {filtering ? (

@@ -20,6 +20,7 @@ type RunDrawerProps = {
 const STATUS_LABEL: Record<string, string> = {
   success: '完成',
   error: '失败',
+  interrupted: '中断',
   skipped: '已跳过',
   unsupported: '不支持',
 }
@@ -32,7 +33,7 @@ function formatMs(ms: number): string {
 
 function StatusIcon({ status }: { status: string }) {
   if (status === 'success') return <Check size={13} strokeWidth={2} />
-  if (status === 'error') return <CircleAlert size={13} strokeWidth={1.5} />
+  if (status === 'error' || status === 'interrupted') return <CircleAlert size={13} strokeWidth={1.5} />
   if (status === 'skipped') return <CircleSlash size={13} strokeWidth={1.5} />
   if (status === 'unsupported') return <CircleDashed size={13} strokeWidth={1.5} />
   return <Loader size={13} strokeWidth={1.5} />
@@ -48,8 +49,8 @@ export function RunDrawer({ open, running, flowName, runId, total, nodes, record
   const { internal } = useUiMode()
   const progress = total > 0 ? Math.round((nodes.length / total) * 100) : 0
   const duration = record ? record.durationMs : nodes.reduce((sum, node) => sum + (node.ms || 0), 0)
-  const statusText = running ? 'RUNNING' : record ? (record.status === 'success' ? 'DONE' : 'ERROR') : error ? 'ERROR' : 'IDLE'
-  const statusTone = running ? 'live' : record?.status === 'error' || error ? 'fail' : record ? 'pass' : 'idle'
+  const statusText = running ? 'RUNNING' : record ? (record.status === 'success' ? 'DONE' : record.status === 'interrupted' ? 'INTERRUPTED' : 'ERROR') : error ? 'ERROR' : 'IDLE'
+  const statusTone = running ? 'live' : record?.status === 'error' || record?.status === 'interrupted' || error ? 'fail' : record ? 'pass' : 'idle'
 
   return (
     <aside className={`cv-drawer ${open ? 'is-open' : ''}`} aria-label="运行结果" aria-hidden={!open}>

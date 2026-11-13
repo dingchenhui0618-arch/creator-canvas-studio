@@ -36,7 +36,7 @@ export interface RunsView {
   keyword: string
   /** 只看某块画布；空串表示全部流程 */
   flowId: string
-  status: '' | 'success' | 'error'
+  status: '' | 'success' | 'error' | 'interrupted'
 }
 
 export const EMPTY_RUNS_VIEW: RunsView = { keyword: '', flowId: '', status: '' }
@@ -144,7 +144,7 @@ export function readRunsView(storage: ViewStorage): RunsView {
   return {
     keyword: text(parsed.keyword, KEYWORD_MAX),
     flowId: text(parsed.flowId, LABEL_MAX),
-    status: oneOf<RunsView['status']>(parsed.status, ['', 'success', 'error'], ''),
+    status: oneOf<RunsView['status']>(parsed.status, ['', 'success', 'error', 'interrupted'], ''),
   }
 }
 

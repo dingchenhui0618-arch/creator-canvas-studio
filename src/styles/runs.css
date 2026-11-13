@@ -20,6 +20,7 @@
 .runs-dot { width:6px; height:6px; border-radius:50%; background:var(--faint); }
 .runs-dot.is-pass { background:var(--pass); }
 .runs-dot.is-fail { background:var(--fail); }
+.runs-dot.is-warn { background:var(--warn); }
 .runs-row-main { display:flex; flex-direction:column; gap:4px; min-width:0; }
 .runs-row-main strong { font-size:12px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .runs-row-main small { color:var(--faint); font-size:12px; }

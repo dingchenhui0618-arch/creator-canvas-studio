@@ -84,7 +84,7 @@ export function RunsPage({
   // 上次在这张页面上筛过的条件（v0.9.44）：去作品看一眼再回来，流程 / 状态 / 搜索词都还在
   const [savedView] = useState<RunsView>(() => readRunsView(window.sessionStorage))
   const [flowId, setFlowId] = useState(savedView.flowId)
-  const [status, setStatus] = useState<'' | 'success' | 'error'>(savedView.status)
+  const [status, setStatus] = useState<'' | 'success' | 'error' | 'interrupted'>(savedView.status)
   const [keyword, setKeyword] = useState(savedView.keyword)
   // 流程清单读成功过没有：只在「读到了、但里面没有这块画布」时才清掉记下来的流程
   const [flowsLoaded, setFlowsLoaded] = useState(false)
@@ -173,7 +173,9 @@ export function RunsPage({
   const pageStart = total === 0 ? 0 : Math.min(offset + 1, total)
   const pageEnd = Math.min(offset + items.length, total)
   const pageSuccess = items.filter((item) => item.status === 'success').length
-  const pageFailed = items.filter((item) => item.status !== 'success').length
+  // 中断不是失败：分开数，页面上第三格写「本页未完成」，不把重启打断算成运行出错
+  const pageFailed = items.filter((item) => item.status === 'error').length
+  const pageInterrupted = items.filter((item) => item.status === 'interrupted').length
   const current = items.find((item) => item.id === open) || null
   const filtered = Boolean(activeFlowId || status || query)
   const hasPrev = offset > 0
@@ -252,7 +254,7 @@ export function RunsPage({
       <div className="runs-stats">
         <div><strong>{total}</strong><span>{filtered ? '筛选结果' : '总运行'}</span></div>
         <div><strong>{pageSuccess}</strong><span>本页成功</span></div>
-        <div><strong>{pageFailed}</strong><span>本页失败</span></div>
+        <div><strong>{pageFailed + pageInterrupted}</strong><span>{pageInterrupted ? '本页未完成' : '本页失败'}</span></div>
         <div><strong>{total ? pageStart + '–' + pageEnd : '0'}</strong><span>当前区间</span></div>
       </div>
 
@@ -286,8 +288,9 @@ export function RunsPage({
               { value: '', label: '全部状态' },
               { value: 'success', label: '成功' },
               { value: 'error', label: '失败' },
+              { value: 'interrupted', label: '已中断' },
             ]}
-            onChange={(value) => resetTo(() => setStatus(value as '' | 'success' | 'error'))}
+            onChange={(value) => resetTo(() => setStatus(value as '' | 'success' | 'error' | 'interrupted'))}
           />
         </label>
         {filtered ? (
@@ -325,14 +328,14 @@ export function RunsPage({
                     resetAdopt()
                   }}
                 >
-                  <span className={`runs-dot ${item.status === 'success' ? 'is-pass' : 'is-fail'}`} />
+                  <span className={`runs-dot ${item.status === 'success' ? 'is-pass' : item.status === 'interrupted' ? 'is-warn' : 'is-fail'}`} />
                   <span className="runs-row-main">
                     <strong>{item.flowName}</strong>
                     <small className={'runs-row-where' + (item.project ? '' : ' is-orphan')}>{runWorkLine(item)}</small>
                     <small className="vq-mono">{item.id} · {item.total} 个节点</small>
                   </span>
                   <span className="runs-row-meta">
-                    <span className="vq-mono">{item.status === 'success' ? '成功' : '失败'}</span>
+                    <span className="vq-mono">{item.status === 'success' ? '成功' : item.status === 'interrupted' ? '已中断' : '失败'}</span>
                     <span className="vq-mono">{(item.durationMs / 1000).toFixed(1)}s</span>
                     <span className="vq-mono">{fmtTime(item.startedAt)}</span>
                   </span>

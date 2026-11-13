@@ -1,10 +1,26 @@
 import { sendJson, readBody, notFound } from './_shared.mjs'
-import { listFlows, getFlow, createFlow, updateFlow, deleteFlow, runFlow, listRuns, getRun, NODE_KINDS, TOOLS, REVIEW_PROFILES } from '../flows.mjs'
+import {
+  listFlows,
+  getFlow,
+  createFlow,
+  updateFlow,
+  deleteFlow,
+  runFlow,
+  listRuns,
+  getRun,
+  newRunId,
+  startFlowRun,
+  dropRunRecord,
+  abandonRun,
+  NODE_KINDS,
+  TOOLS,
+  REVIEW_PROFILES,
+} from '../flows.mjs'
 import { currentUser } from '../auth.mjs'
 import { config } from '../config.mjs'
 import { listProjects } from '../projects.mjs'
 import { projectsByFlow, projectFlowsMatching, withRunProject, withFlowProject } from '../run-ownership.mjs'
-import { charge, refund, balanceOf } from '../credits.mjs'
+import { charge, balanceOf } from '../credits.mjs'
 import { enter, leave } from '../gate.mjs'
 import { publicError } from '../public-error.mjs'
 
@@ -31,10 +47,11 @@ function sendStreamHead(res) {
   })
 }
 
-// 画布整条流程按次扣积分：先扣后跑，跑挂了全额退回，和检索/复刻/评审同一套账。
+// 画布整条流程按次扣积分：先扣后跑，跑挂了 / 被重启打断全额退回，和检索/复刻/评审同一套账。
+// 扣费单据 ref = 运行 id（不是画布名）：账本、运行记录、恢复退款三处说同一件事。
 // 未登录（本地演示）时 charge 返回匿名结果，不扣费也不限流。
-function beginRunCharge(res, user, ref) {
-  if (!user?.id) return { cost: 0, balance: null, refund: () => {}, release: () => {} }
+function beginRunCharge(res, user, ref, label = '') {
+  if (!user?.id) return { cost: 0, balance: null, release: () => {} }
   const max = Number(config.credits.concurrency.flow_run || 0)
   if (max && !enter(user.id, 'flow_run', max)) {
     sendJson(res, 429, {
@@ -44,7 +61,7 @@ function beginRunCharge(res, user, ref) {
     })
     return null
   }
-  const paid = charge(user.id, 'flow_run', { ref })
+  const paid = charge(user.id, 'flow_run', { ref, meta: label ? { label } : null })
   if (!paid.ok) {
     leave(user.id, 'flow_run')
     sendJson(res, 402, {
@@ -56,15 +73,9 @@ function beginRunCharge(res, user, ref) {
     })
     return null
   }
-  let refunded = false
   return {
     cost: paid.cost,
     balance: paid.balance,
-    refund: () => {
-      if (refunded || paid.cost <= 0) return
-      refunded = true
-      refund(user.id, 'flow_run', { ref, amount: paid.cost })
-    },
     release: () => leave(user.id, 'flow_run'),
   }
 }
@@ -152,8 +163,15 @@ export function createFlowsRouter() {
           return true
         }
         const body = await readBody(req)
-        const paid = beginRunCharge(res, user, flow.name)
-        if (!paid) return true
+        // 运行 id 先定、记录先落盘、再扣费：扣完立刻断电也留得下这条单，重启时按账本退。
+        const runId = newRunId()
+        await startFlowRun(flow, runId, { cost: user?.id ? Number(config.credits.prices.flow_run) || 0 : 0 })
+        const paid = beginRunCharge(res, user, runId, flow.name)
+        if (!paid) {
+          // 并发闸门 / 积分不足：钱没扣、运行也不会发生，占位记录撤掉
+          await dropRunRecord(runId)
+          return true
+        }
         const creditNote = paid.cost > 0 ? { cost: paid.cost } : null
         try {
           if (body.stream) {
@@ -162,7 +180,6 @@ export function createFlowsRouter() {
               if (res.writableEnded) return
               // 结束时把余额和退款结论一起推给前端，运行抽屉不用再额外请求
               if (event.type === 'run-end') {
-                if (event.run?.status === 'error') paid.refund()
                 const withCredits = event.run?.credits
                   ? { ...event.run, credits: { ...event.run.credits, balance: balanceOf(user?.id) } }
                   : event.run
@@ -172,24 +189,23 @@ export function createFlowsRouter() {
               res.write(JSON.stringify(event) + '\n')
             }
             try {
-              const record = await runFlow(flow, { onEvent: write, credits: creditNote })
-              if (record.status === 'error') paid.refund()
+              // 失败 / 中断的退款在 runFlow 收尾时按账本退一次，这里不再重复退
+              await runFlow(flow, { onEvent: write, credits: creditNote, runId })
             } catch (error) {
-              paid.refund()
+              await abandonRun(runId, publicError(error, '运行失败，请稍后重试'))
               write({ type: 'run-error', error: publicError(error, '运行失败，请稍后重试'), code: error?.code || 'FLOW_RUN_FAILED' })
             }
             res.end()
             return true
           }
-          const run = await runFlow(flow, { credits: creditNote })
-          if (run.status === 'error') paid.refund()
+          const run = await runFlow(flow, { credits: creditNote, runId })
           sendJson(res, 200, {
             ...run,
             credits: run.credits ? { ...run.credits, balance: balanceOf(user?.id) } : null,
           })
         } catch (error) {
-          // 抛到这里说明连运行记录都没建起来（例如有环），不收费
-          paid.refund()
+          // 抛到这里说明运行没跑起来（例如有环）：记录标失败、按账本退钱
+          await abandonRun(runId, publicError(error, '运行失败，请稍后重试'))
           const status = error?.code === 'FLOW_CYCLE' ? 400 : 500
           sendJson(res, status, { error: publicError(error, '运行失败，请稍后重试'), code: error?.code || 'FLOW_RUN_FAILED' })
         } finally {

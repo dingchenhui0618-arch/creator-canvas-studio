@@ -44,7 +44,7 @@ import { takenOrigins, ORIGIN_LIMIT } from './taken-origins.mjs'
 import { originFootprint, libraryMarks } from './source-footprint.mjs'
 import { listProjects } from './projects.mjs'
 import { adoptUnowned as adoptUnownedAgents } from './agents.mjs'
-import { adoptUnownedFlows, createFlow, getFlow } from './flows.mjs'
+import { adoptUnownedFlows, createFlow, getFlow, recoverInterruptedRuns, interruptRunningRuns } from './flows.mjs'
 import { adoptUnowned as adoptUnownedReviews } from './reviews.mjs'
 import { createBillingRouter } from './routes/billing.mjs'
 import { createAgentsRouter } from './routes/agents.mjs'
@@ -1030,6 +1030,9 @@ await migrateOwnership()
 // 顺手清掉崩溃时留下的任务临时目录。发版 = 重启 = 以前每次都可能白扣 10 积分。
 const recoveredJobs = recoverInterruptedJobs()
 if (recoveredJobs.recovered) logEvent('jobs.recovered', recoveredJobs)
+// 画布运行同一套：上次没跑完的运行标中断，并按账本把已扣积分退回（重复启动不会多退）
+const recoveredRuns = await recoverInterruptedRuns()
+if (recoveredRuns.recovered) logEvent('runs.recovered', recoveredRuns)
 // 启动先清一次过期日志（停机久了不会把过期文件一直留着），之后每小时最多再清一次
 const prunedLogs = await startLogRetention()
 if (prunedLogs.removed.length) logEvent('logs.prune', { removed: prunedLogs.removed.length, bytesFreed: prunedLogs.bytesFreed })
@@ -1044,16 +1047,23 @@ server.listen(config.port, '127.0.0.1', () => {
 // 在跑的任务连同已扣积分一起消失。现在先标中断 + 按账本退款，再关服务退出；
 // 1.5 秒的兜底是给 keep-alive 连接留的，ffmpeg 子进程由 systemd 的 cgroup 一起收走。
 let shuttingDown = false
-function shutdown(signal) {
+async function shutdown(signal) {
   if (shuttingDown) return
   shuttingDown = true
   let interrupted = 0
+  let runsInterrupted = 0
   try {
     interrupted = interruptRunningJobs(signal === 'SIGTERM' ? '服务重启' : '服务停止')
   } catch (error) {
     logRequestError('shutdown', error, { signal })
   }
-  logEvent('shutdown', { signal, interrupted })
+  try {
+    // 画布运行也要先标中断 + 退款再退进程：否则这条运行和它的积分一起消失
+    runsInterrupted = await interruptRunningRuns(signal === 'SIGTERM' ? '服务重启' : '服务停止')
+  } catch (error) {
+    logRequestError('shutdown', error, { signal, kind: 'runs' })
+  }
+  logEvent('shutdown', { signal, interrupted, runsInterrupted })
   server.close(() => {})
   setTimeout(() => process.exit(0), 1500).unref()
 }

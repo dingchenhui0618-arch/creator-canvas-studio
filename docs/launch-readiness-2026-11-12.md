@@ -44,7 +44,7 @@
 - 先落草稿再扣费（账本 `ref` = jobId）；新增 `outstandingCharge()` 按账本净额退款，启动恢复 / 停机收尾 / 路由兜底共用一条幂等退款，连续重启不会多退。
 - `SIGTERM` / `SIGINT` 先标中断 + 退款再退出；启动时把上次的 `queued` / `running` 标失败、退款、清临时目录；流水线 `aborted` 守卫避免已退款任务再建模板。
 - 生产实测：任务停在「解析链接」时 `systemctl restart visionqa`，停机日志 `shutdown SIGTERM interrupted:1`，重启后 `error` + `refunded:true`，余额 9954 → 9954、流水 −10 / +10（ref 同为 jobId）。见 [复刻任务落库与扣费一致](job-recovery-2026-11-13.md)。
-- 仍留一半：流程运行（`/api/flows/:id/run`）还在用进程内回调退款，同一套 `outstandingCharge` 可直接复用。
+- 流程运行那一半已在 v0.9.59（2026-11-13）补上：运行开始先落盘、扣费 `ref` = 运行 id、启动恢复与停机收尾都按账本净额退，失败 / 中断 / 幂等退三条路径共用 `refundRunCredits()`。生产实测：重启后 `runs.recovered {recovered:1, refunded:1}`，运行状态 `interrupted`，余额 9948 → 9950。见 [画布运行的钱与记录](flow-run-recovery-2026-11-13.md)。
 
 **修之前的现状证据（留档）**
 - `server/jobs.mjs:12` 任务表是进程内 `Map`，上限 40 条；进程退出即全部消失。
