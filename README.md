@@ -592,5 +592,7 @@ DOMAIN=visionqa.wavisionai.cn bash deploy/production/enable-https.sh            
 
 ![生产：运行记录里「已中断」与「失败」分开显示，中断详情写明「已退回 2 积分」与重启原因（v0.9.59）](docs/screenshot-runs-interrupted-2026-11-13.png)
 
+提交 `a572ef6`（代码 + 6 条测试 + 文档 + 1 张生产截图），CI 43433338020 success。
+
 细节见 [画布运行的钱与记录](docs/flow-run-recovery-2026-11-13.md)。
 
