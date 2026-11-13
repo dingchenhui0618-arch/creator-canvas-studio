@@ -1,17 +1,17 @@
-/* 视觉评审页：VisionQA 检视语言 */
+/* è§†è§‰è¯„å®¡é¡µï¼šVisionQA æ£€è§†è¯­è¨€ */
 .review-page { display:flex; flex-direction:column; gap:24px; }
 .review-page > .vq-head { margin-bottom: 0; }
-/* 三颗胶囊（引擎 / 模型 / 积分）在窄屏排不下就换行：胶囊自己不折行，
-   整行折（v0.9.46 起 .vq-pill 是 nowrap + flex:none，以前是把字挤成两行来躲溢出） */
+/* ä¸‰é¢—èƒ¶å›Šï¼ˆå¼•æ“Ž / æ¨¡åž‹ / ç§¯åˆ†ï¼‰åœ¨çª„å±æŽ’ä¸ä¸‹å°±æ¢è¡Œï¼šèƒ¶å›Šè‡ªå·±ä¸æŠ˜è¡Œï¼Œ
+   æ•´è¡ŒæŠ˜ï¼ˆv0.9.46 èµ· .vq-pill æ˜¯ nowrap + flex:noneï¼Œä»¥å‰æ˜¯æŠŠå­—æŒ¤æˆä¸¤è¡Œæ¥èº²æº¢å‡ºï¼‰ */
 .review-head-status { display:flex; flex-wrap:wrap; gap:8px; padding-top:4px; }
 
-/* 评审页的胶囊（服务 / 模型 / 积分 / 结论 / 严重度）自 v0.9.46 起统一用 shell.css 的 .vq-pill，这里只剩布局。 */
+/* è¯„å®¡é¡µçš„èƒ¶å›Šï¼ˆæœåŠ¡ / æ¨¡åž‹ / ç§¯åˆ† / ç»“è®º / ä¸¥é‡åº¦ï¼‰è‡ª v0.9.46 èµ·ç»Ÿä¸€ç”¨ shell.css çš„ .vq-pillï¼Œè¿™é‡Œåªå‰©å¸ƒå±€ã€‚ */
 
 .review-body { display:grid; grid-template-columns:300px minmax(0,1fr); gap:24px; align-items:start; }
 .review-picker { display:flex; flex-direction:column; gap:16px; padding:16px; border:1px solid var(--line); border-radius:var(--radius-md); background:var(--surface); }
 .review-picker-head { display:flex; align-items:baseline; justify-content:space-between; }
 .review-picker-head h2 { margin:0; font-size:14px; font-weight: 500; }
-/* 模板多的时候（生产 26 条）不把整页撑高：候选自己滚，下面的「最近评审」才不用翻半天 */
+/* æ¨¡æ¿å¤šçš„æ—¶å€™ï¼ˆç”Ÿäº§ 26 æ¡ï¼‰ä¸æŠŠæ•´é¡µæ’‘é«˜ï¼šå€™é€‰è‡ªå·±æ»šï¼Œä¸‹é¢çš„ã€Œæœ€è¿‘è¯„å®¡ã€æ‰ä¸ç”¨ç¿»åŠå¤© */
 .review-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; max-height:480px; overflow-y:auto; padding-right:4px; }
 .review-thumb { position:relative; display:block; padding:0; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface-raised); overflow:hidden; text-align:left; }
 .review-thumb img { display:block; width:100%; aspect-ratio:16/10; object-fit:cover; }
@@ -34,19 +34,19 @@
 .review-history-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; }
 .review-history-time { color:var(--faint); font-size:11px; }
 .review-history-flag { margin-left:8px; color:var(--faint); font-size:11px; }
-/* 「查看全部」：历史存 200 条，左侧那 6 条只够看最近发生过什么。
-   入口放在「最近评审」标题行右侧——不往下翻到底也看得见。 */
+/* ã€ŒæŸ¥çœ‹å…¨éƒ¨ã€ï¼šåŽ†å²å­˜ 200 æ¡ï¼Œå·¦ä¾§é‚£ 6 æ¡åªå¤Ÿçœ‹æœ€è¿‘å‘ç”Ÿè¿‡ä»€ä¹ˆã€‚
+   å…¥å£æ”¾åœ¨ã€Œæœ€è¿‘è¯„å®¡ã€æ ‡é¢˜è¡Œå³ä¾§â€”â€”ä¸å¾€ä¸‹ç¿»åˆ°åº•ä¹Ÿçœ‹å¾—è§ã€‚ */
 .review-history-more { display:inline-flex; align-items:center; gap:4px; padding:8px; margin:-8px -8px -8px 0; border:0; border-radius:var(--radius-sm); background:none; color:var(--muted); font-size:12px; cursor:pointer; }
 .review-history-more:hover { background:var(--surface-raised); color:var(--ink); }
 
-/* ---------- 评审历史弹层（v0.9.18）
-   按结论 / 作品筛、一页 20 条往下翻，点一条回到那次评审的证据页。 ---------- */
+/* ---------- è¯„å®¡åŽ†å²å¼¹å±‚ï¼ˆv0.9.18ï¼‰
+   æŒ‰ç»“è®º / ä½œå“ç­›ã€ä¸€é¡µ 20 æ¡å¾€ä¸‹ç¿»ï¼Œç‚¹ä¸€æ¡å›žåˆ°é‚£æ¬¡è¯„å®¡çš„è¯æ®é¡µã€‚ ---------- */
 .review-history-backdrop { position:fixed; inset:0; z-index:90; display:flex; align-items:center; justify-content:center; padding:24px; background:rgba(17,17,17,.34); backdrop-filter:blur(4px); }
 .review-history-modal { width:min(720px,100%); max-height:min(760px,calc(100vh - 80px)); display:flex; flex-direction:column; overflow:hidden; background:var(--paper); border:1px solid var(--line); border-radius:var(--radius-lg); box-shadow:0 30px 80px rgba(30,26,20,.22); }
-/* 弹层里结论胶囊占固定一列：短标签（通过）与长标签（需人工确认）后面，标题从同一条竖线开始 */
+/* å¼¹å±‚é‡Œç»“è®ºèƒ¶å›Šå å›ºå®šä¸€åˆ—ï¼šçŸ­æ ‡ç­¾ï¼ˆé€šè¿‡ï¼‰ä¸Žé•¿æ ‡ç­¾ï¼ˆéœ€äººå·¥ç¡®è®¤ï¼‰åŽé¢ï¼Œæ ‡é¢˜ä»ŽåŒä¸€æ¡ç«–çº¿å¼€å§‹ */
 .review-history-modal .review-history-item { grid-template-columns:96px minmax(0,1fr) auto; gap:2px 8px; padding:4px 8px; }
 .review-history-modal .review-history-item .vq-pill { justify-content:center; width:100%; white-space:nowrap; }
-/* 弹层里一屏能多放几条：历史是拿来扫的，不是拿来读的 */
+/* å¼¹å±‚é‡Œä¸€å±èƒ½å¤šæ”¾å‡ æ¡ï¼šåŽ†å²æ˜¯æ‹¿æ¥æ‰«çš„ï¼Œä¸æ˜¯æ‹¿æ¥è¯»çš„ */
 .review-history-modal .review-history-where { font-size:11px; line-height:1.5; }
 .review-history-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:24px 24px 8px; }
 .review-history-head h2 { margin:8px 0 0; font-size:17px; letter-spacing:-.02em; }
@@ -76,7 +76,7 @@
 .review-canvas-frame { display:flex; justify-content:center; padding:12px; border:1px solid var(--line); background:#0f0f0f; }
 .review-canvas-shot { position:relative; display:inline-block; max-width:100%; line-height:0; }
 .review-canvas-frame img { display:block; max-width:100%; max-height:400px; width:auto; height:auto; }
-/* 证据原图被清理过：给一块说明，不留破图；结论与锚点照旧在下方 */
+/* è¯æ®åŽŸå›¾è¢«æ¸…ç†è¿‡ï¼šç»™ä¸€å—è¯´æ˜Žï¼Œä¸ç•™ç ´å›¾ï¼›ç»“è®ºä¸Žé”šç‚¹ç…§æ—§åœ¨ä¸‹æ–¹ */
 .review-canvas-missing { display:grid; justify-items:center; gap:8px; width:min(520px,100%); padding:32px 24px; border:1px dashed var(--line); border-radius:var(--radius-sm); background:var(--surface-raised); color:var(--muted); line-height:1.6; text-align:center; }
 .review-canvas-missing strong { color:var(--ink); font-size:13px; font-weight:500; }
 .review-canvas-missing span { max-width:36em; color:var(--faint); font-size:12px; }
@@ -85,6 +85,41 @@
 .review-anchor.is-major { border-color:rgba(212,164,71,.9); background:rgba(212,164,71,.1); }
 .review-anchor.is-blocker { border-color:rgba(163,56,56,.95); background:rgba(163,56,56,.14); }
 .review-anchor.is-active { background:rgba(255,255,255,.2); border-color:#fff; }
+/* è¯æ®é”šç‚¹ï¼ˆv0.9.75ï¼‰ï¼šæ¡†ä¸Šçš„ç¼–å·ä¸Žå³ä¾§é—®é¢˜åºå·ä¸€ä¸€å¯¹åº”ï¼›æ‚¬åœåªæ˜¯é¢„è§ˆï¼Œç‚¹ä¸€ä¸‹é’‰ä½ï¼ˆå†ç‚¹æˆ– Esc å–æ¶ˆï¼‰ */
+.review-anchor {
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.review-anchor:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.review-anchor-no {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border: 1px solid rgba(255,255,255,.42);
+  border-radius: var(--radius-xs);
+  background: rgba(10,10,11,.78);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: .02em;
+  font-variant-numeric: tabular-nums;
+}
+.review-anchor.is-active .review-anchor-no { background: #fff; border-color: #fff; color: #0a0a0b; }
+/* é’‰ä½ä¸€æ¡æ—¶å…¶ä½™æ¡†åŽ‹æš—ï¼šä¸€çœ¼çœ‹å‡ºçŽ°åœ¨è¯´çš„æ˜¯å“ªä¸€å— */
+/* 钉住一条时其余框压暗：只压边框与底色，编号仍可读（对照时还要靠它认位置） */
+.review-canvas-shot.is-pinned .review-anchor:not(.is-active) { background: transparent; border-color: rgba(255,255,255,.16); }
+.review-canvas-shot.is-pinned .review-anchor:not(.is-active) .review-anchor-no { opacity: .6; }
+.review-canvas-hint { margin: 0; color: var(--faint); font-size: 12px; line-height: 1.6; }
 .review-canvas-meta { display:flex; align-items:center; justify-content:space-between; gap:12px; }
 
 .review-empty-state { display:flex; flex-direction:column; gap:24px; padding:24px; border:1px solid var(--line); border-radius:var(--radius-md); background:var(--surface); }
@@ -107,8 +142,26 @@
 
 
 .review-observations { display:flex; flex-direction:column; gap:1px; margin:0; padding:0; list-style:none; border-top:1px solid var(--line); }
-.review-obs { display:flex; flex-direction:column; gap:4px; padding:12px 12px; border-bottom:1px solid var(--line); border-left:2px solid transparent; cursor:default; }
+.review-obs { display:flex; flex-direction:column; gap:4px; padding:12px 12px; border-bottom:1px solid var(--line); border-left:2px solid transparent; cursor:pointer; transition:background .15s ease, border-color .15s ease; }
+.review-obs:hover { background:var(--surface-raised); }
+.review-obs:focus-visible { outline: 1px solid var(--line-strong); outline-offset: -1px; }
 .review-obs.is-active { background:var(--surface-raised); border-left-color:var(--ink); }
+.review-obs.is-pinned { background:var(--surface-raised); border-left-color:var(--ink); }
+.review-obs-no {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.review-obs-no.has-anchor { border-color: var(--line-strong); color: var(--ink); }
+.review-obs.is-pinned .review-obs-no { background: var(--ink); border-color: var(--ink); color: var(--surface-raised); }
 .review-obs.sev-blocker { border-left-color:var(--fail); }
 .review-obs.sev-major { border-left-color:var(--warn); }
 .review-obs-head { display:flex; align-items:center; gap:8px; }
@@ -123,7 +176,7 @@
 .review-gaps li { font-size:12px; color:var(--muted); line-height:1.6; }
 .review-note { margin:0; padding-top:12px; border-top:1px solid var(--line); color:var(--faint); font-size:12px; line-height:1.6; }
 
-/* 判断层（Jev）：与结论并排，回答「这份结论站不站得住」，不抢结论的位置 */
+/* åˆ¤æ–­å±‚ï¼ˆJevï¼‰ï¼šä¸Žç»“è®ºå¹¶æŽ’ï¼Œå›žç­”ã€Œè¿™ä»½ç»“è®ºç«™ä¸ç«™å¾—ä½ã€ï¼Œä¸æŠ¢ç»“è®ºçš„ä½ç½® */
 .review-judge { display:flex; flex-direction:column; gap:12px; padding:12px 16px; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface); }
 .review-judge.is-off { background:transparent; border-style:dashed; }
 .review-judge-head { display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
@@ -140,13 +193,13 @@
 @media (max-width: 1180px) {
   .review-body { grid-template-columns:minmax(0, 1fr); }
   .review-grid { grid-template-columns:repeat(3, 1fr); }
-  /* 窄屏只有一列：先给「评哪条作品的哪一版」，再给「单独评一张画面」与最近评审。
-     反过来就是手机首屏先看到 26 张别人的首帧，主角被挤到下面去了。 */
+  /* çª„å±åªæœ‰ä¸€åˆ—ï¼šå…ˆç»™ã€Œè¯„å“ªæ¡ä½œå“çš„å“ªä¸€ç‰ˆã€ï¼Œå†ç»™ã€Œå•ç‹¬è¯„ä¸€å¼ ç”»é¢ã€ä¸Žæœ€è¿‘è¯„å®¡ã€‚
+     åè¿‡æ¥å°±æ˜¯æ‰‹æœºé¦–å±å…ˆçœ‹åˆ° 26 å¼ åˆ«äººçš„é¦–å¸§ï¼Œä¸»è§’è¢«æŒ¤åˆ°ä¸‹é¢åŽ»äº†ã€‚ */
   .review-stage { order: 1; }
   .review-picker { order: 2; }
 }
 
-/* 视觉评审：页面留白与其它页对齐；空态从「三条说明堆在左上」改成「一个焦点 + 三段并列事实」 */
+/* è§†è§‰è¯„å®¡ï¼šé¡µé¢ç•™ç™½ä¸Žå…¶å®ƒé¡µå¯¹é½ï¼›ç©ºæ€ä»Žã€Œä¸‰æ¡è¯´æ˜Žå †åœ¨å·¦ä¸Šã€æ”¹æˆã€Œä¸€ä¸ªç„¦ç‚¹ + ä¸‰æ®µå¹¶åˆ—äº‹å®žã€ */
 .review-page {
   width: 100%;
   max-width: 1280px;
@@ -185,9 +238,9 @@
 
 .review-empty-state { max-width: 780px; margin: 0 auto; }
 
-/* ---------- 评审页首屏：先选「哪条作品的哪一版」（v0.9.37）
-   评的是这一版能不能发，不是从 26 张别人的首帧里挑一张；
-   模板首帧降级成左栏可展开的「单独评一张画面」，只在没有作品或从作品页进来挑画面时铺开。 ---------- */
+/* ---------- è¯„å®¡é¡µé¦–å±ï¼šå…ˆé€‰ã€Œå“ªæ¡ä½œå“çš„å“ªä¸€ç‰ˆã€ï¼ˆv0.9.37ï¼‰
+   è¯„çš„æ˜¯è¿™ä¸€ç‰ˆèƒ½ä¸èƒ½å‘ï¼Œä¸æ˜¯ä»Ž 26 å¼ åˆ«äººçš„é¦–å¸§é‡ŒæŒ‘ä¸€å¼ ï¼›
+   æ¨¡æ¿é¦–å¸§é™çº§æˆå·¦æ å¯å±•å¼€çš„ã€Œå•ç‹¬è¯„ä¸€å¼ ç”»é¢ã€ï¼Œåªåœ¨æ²¡æœ‰ä½œå“æˆ–ä»Žä½œå“é¡µè¿›æ¥æŒ‘ç”»é¢æ—¶é“ºå¼€ã€‚ ---------- */
 .review-candidates { display:flex; flex-direction:column; gap:8px; margin:0; padding:0; list-style:none; }
 .review-candidate {
   display:grid;
@@ -213,7 +266,7 @@
 .review-candidate-go { display:inline-flex; align-items:center; gap:4px; flex:none; color:var(--ink); font-size:12px; white-space:nowrap; }
 .review-candidates-more { align-self:flex-start; display:inline-flex; align-items:center; gap:4px; padding:8px 0; margin:-8px 0; border:0; background:none; color:var(--muted); font-size:12px; cursor:pointer; }
 .review-candidates-more:hover { color:var(--ink); }
-/* 左栏折叠开关：标题行右侧，点开才铺开模板首帧；箭头只在展开态转向下 */
+/* å·¦æ æŠ˜å å¼€å…³ï¼šæ ‡é¢˜è¡Œå³ä¾§ï¼Œç‚¹å¼€æ‰é“ºå¼€æ¨¡æ¿é¦–å¸§ï¼›ç®­å¤´åªåœ¨å±•å¼€æ€è½¬å‘ä¸‹ */
 .review-picker-toggle {
   display:inline-flex;
   align-items:center;
@@ -234,21 +287,21 @@
 .review-picker-toggle svg { transition:transform .15s ease; }
 .review-picker-toggle svg.is-open { transform:rotate(180deg); }
 @media (max-width: 700px) {
-  /* 手机上作品名独占一行，胶囊与出口在下面一行：不把标题挤成一条窄条 */
+  /* æ‰‹æœºä¸Šä½œå“åç‹¬å ä¸€è¡Œï¼Œèƒ¶å›Šä¸Žå‡ºå£åœ¨ä¸‹é¢ä¸€è¡Œï¼šä¸æŠŠæ ‡é¢˜æŒ¤æˆä¸€æ¡çª„æ¡ */
   .review-candidate { grid-template-columns:minmax(0,1fr) auto; gap:8px; }
   .review-candidate-main { grid-column:1 / -1; }
   .review-candidate-go { justify-self:end; }
-  /* 390 宽里两层 32 内边距一扣只剩 192：一缩再缩。留 16 给内容，胶囊与出口才不黏在一起 */
+  /* 390 å®½é‡Œä¸¤å±‚ 32 å†…è¾¹è·ä¸€æ‰£åªå‰© 192ï¼šä¸€ç¼©å†ç¼©ã€‚ç•™ 16 ç»™å†…å®¹ï¼Œèƒ¶å›Šä¸Žå‡ºå£æ‰ä¸é»åœ¨ä¸€èµ· */
   .review-page { padding:16px 16px 32px; }
   .review-empty-state { min-height:0; gap:16px; padding:16px; }
-  /* 三段说明在手机上一列排：三栏各 70px 会把字拆成一列一个 */
+  /* ä¸‰æ®µè¯´æ˜Žåœ¨æ‰‹æœºä¸Šä¸€åˆ—æŽ’ï¼šä¸‰æ å„ 70px ä¼šæŠŠå­—æ‹†æˆä¸€åˆ—ä¸€ä¸ª */
   .review-steps { grid-template-columns:1fr; gap:16px; }
-  /* 标题折成两三行时，图标跟着顶到第一行开头，不悬在中间 */
+  /* æ ‡é¢˜æŠ˜æˆä¸¤ä¸‰è¡Œæ—¶ï¼Œå›¾æ ‡è·Ÿç€é¡¶åˆ°ç¬¬ä¸€è¡Œå¼€å¤´ï¼Œä¸æ‚¬åœ¨ä¸­é—´ */
   .review-empty-head { align-items:flex-start; }
 }
 
 
-/* 模型服务不可用：页头下方一条，说清原因与「不扣积分」，重试由用户决定 */
+/* æ¨¡åž‹æœåŠ¡ä¸å¯ç”¨ï¼šé¡µå¤´ä¸‹æ–¹ä¸€æ¡ï¼Œè¯´æ¸…åŽŸå› ä¸Žã€Œä¸æ‰£ç§¯åˆ†ã€ï¼Œé‡è¯•ç”±ç”¨æˆ·å†³å®š */
 .review-model-note {
   display: flex;
   align-items: flex-start;
@@ -283,7 +336,7 @@
   overflow-wrap: anywhere;
 }
 
-/* 作品模式的评审：先说清这次结论记在哪条作品下，再要求选「你这一版」的画面 */
+/* ä½œå“æ¨¡å¼çš„è¯„å®¡ï¼šå…ˆè¯´æ¸…è¿™æ¬¡ç»“è®ºè®°åœ¨å“ªæ¡ä½œå“ä¸‹ï¼Œå†è¦æ±‚é€‰ã€Œä½ è¿™ä¸€ç‰ˆã€çš„ç”»é¢ */
 .review-project-scope {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -311,23 +364,25 @@
   font-size: 11px;
   line-height: 1.7;
 }
-/* 历次评审：第二行写「记入哪条作品的第几版」，普通评审如实写「没记入作品」 */
+/* åŽ†æ¬¡è¯„å®¡ï¼šç¬¬äºŒè¡Œå†™ã€Œè®°å…¥å“ªæ¡ä½œå“çš„ç¬¬å‡ ç‰ˆã€ï¼Œæ™®é€šè¯„å®¡å¦‚å®žå†™ã€Œæ²¡è®°å…¥ä½œå“ã€ */
 .review-history-where { grid-column:1 / -1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted); font-size:12px; }
 .review-history-where.is-orphan { color:var(--faint); }
 
-/* 打开一条历史评审：先说清它记在哪条作品下，再给一条回作品的路 */
+/* æ‰“å¼€ä¸€æ¡åŽ†å²è¯„å®¡ï¼šå…ˆè¯´æ¸…å®ƒè®°åœ¨å“ªæ¡ä½œå“ä¸‹ï¼Œå†ç»™ä¸€æ¡å›žä½œå“çš„è·¯ */
 .review-scope-bar { grid-template-columns:auto minmax(0,1fr) auto; align-items:center; margin-bottom:0; }
 .review-scope-bar .vq-button { white-space:nowrap; }
 
 @media (max-width: 700px) {
   .review-scope-bar { grid-template-columns:auto minmax(0,1fr); }
   .review-scope-bar .vq-button { grid-column:1 / -1; justify-self:start; }
-  /* 手机上一行两张就够，三张缩到 78px 宽连标题都读不出 */
+  /* æ‰‹æœºä¸Šä¸€è¡Œä¸¤å¼ å°±å¤Ÿï¼Œä¸‰å¼ ç¼©åˆ° 78px å®½è¿žæ ‡é¢˜éƒ½è¯»ä¸å‡º */
   .review-grid { grid-template-columns:repeat(2, 1fr); }
-  /* 报告发到手机上也要读得下去：结论与修正建议不再并排挤成两条窄栏 */
+  /* æŠ¥å‘Šå‘åˆ°æ‰‹æœºä¸Šä¹Ÿè¦è¯»å¾—ä¸‹åŽ»ï¼šç»“è®ºä¸Žä¿®æ­£å»ºè®®ä¸å†å¹¶æŽ’æŒ¤æˆä¸¤æ¡çª„æ  */
   .review-canvas-meta { flex-wrap:wrap; }
   .review-verdict { grid-template-columns:1fr; }
   .review-verdict .vq-pill { justify-self:start; }
   .review-verdict p { grid-column:1 / -1; }
   .review-fixes li { grid-template-columns:1fr; gap:4px; }
 }
+
+

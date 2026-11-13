@@ -5,6 +5,7 @@ import { getCredits, getModelService, recheckModelService, type CreditsResponse,
 import { listTemplates, coverSrc } from '../api/radar'
 import { getProject } from '../api/projects'
 import { REVIEW_VERDICT_LABEL as VERDICT_LABEL, reviewTimeLabel, reviewVersionLabel } from '../domain/review'
+import { anchorNumber, reviewAnchorMarks } from '../domain/review-anchors'
 import type { ReplicaTemplate } from '../domain/radar'
 import { consumeReviewTarget, onReviewRequest, type ReviewTarget } from '../state/review'
 import { useUiMode } from '../api/app'
@@ -112,6 +113,8 @@ export default function ReviewPage({
   const [elapsed, setElapsed] = useState(0)
   const [error, setError] = useState('')
   const [active, setActive] = useState<string | null>(null)
+  // 钉住：悬停只是预览，钉住才是「现在就看这一条」；再点一次或按 Esc 取消
+  const [pinned, setPinned] = useState<string | null>(null)
   const [credits, setCredits] = useState<CreditsResponse | null>(null)
   // 模型服务状态：额度 / 凭证故障时先说明，不让人点一次再退一次积分
   const [modelState, setModelState] = useState<ModelServiceState | null>(null)
@@ -136,6 +139,8 @@ export default function ReviewPage({
   const [pickerOpen, setPickerOpen] = useState<boolean | null>(null)
   const timerRef = useRef<number | null>(null)
   const startedRef = useRef(0)
+  // 钉住锚点时把画面滚进视野（窄屏上问题行在画面下面）
+  const canvasRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     if (!projectId) return
@@ -155,6 +160,7 @@ export default function ReviewPage({
     setResult(null)
     setError('')
     setActive(null)
+    setPinned(null)
     setOpenedScope(null)
     setOpenedId(null)
     setOpenError('')
@@ -248,6 +254,7 @@ export default function ReviewPage({
       })
       setResult(next)
       setActive(next.observations[0]?.id ?? null)
+      setPinned(null)
       // 评审已落库：刷新历史与余额，不靠本地缓存假装有记录
       void listReviews({ limit: 6 })
         .then((data) => {
@@ -284,6 +291,7 @@ export default function ReviewPage({
       })
       setResult(record.result)
       setActive(record.result.observations?.[0]?.id ?? null)
+      setPinned(null)
       setOpenedId(record.id)
       setOpenedScope(record.project ? { id: record.project.id, title: record.project.title, version: record.version || 0 } : null)
       setOpenError('')
@@ -313,6 +321,7 @@ export default function ReviewPage({
     setPicked(null)
     setResult(null)
     setActive(null)
+    setPinned(null)
     setOpenedScope(null)
     setOpenedId(null)
     setOpenError('')
@@ -320,7 +329,30 @@ export default function ReviewPage({
     onClearReview?.()
   }, [onClearReview])
 
-  const anchors = useMemo(() => (result?.observations || []).filter((item) => item.evidence && (item.evidence.w > 0 || item.evidence.h > 0)), [result])
+  // 图上的编号与右侧问题行共用一套序号：没有证据的问题不画框，但序号不跳（否则和模型给的顺序错位）
+  const marks = useMemo(() => reviewAnchorMarks(result?.observations), [result])
+  const markedIds = useMemo(() => new Set(marks.map((mark) => mark.id)), [marks])
+  // 钉住优先于悬停：悬停只是预览，钉住才是「正看这一条」
+  const focusId = pinned ?? active
+
+  /** 钉住一条问题的锚点：再点一次或按 Esc 取消；顺手把画面滚进视野 */
+  const togglePin = useCallback((id: string) => {
+    setPinned((current) => (current === id ? null : id))
+    setActive(id)
+    window.setTimeout(() => {
+      canvasRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    }, 0)
+  }, [])
+
+  // Esc 取消钉住：键盘用户不用再摸鼠标回到那个框上
+  useEffect(() => {
+    if (!pinned) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setPinned(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [pinned])
 
   // 正在打开地址里那条评审：打开的还是另一条（或还没打开）就算加载中，不用另存一个状态
   const recordLoading = Boolean(reviewId) && openedId !== reviewId && !openError
@@ -488,23 +520,32 @@ export default function ReviewPage({
             </div>
           ) : null}
           {picked ? (
-            <div className="review-canvas">
+            <div className="review-canvas" ref={canvasRef}>
               <div className="review-canvas-frame vq-frame">
-                <div className="review-canvas-shot">
+                <div className={`review-canvas-shot${pinned ? ' is-pinned' : ''}`}>
                   {picked.preview && !previewBroken ? (
                     <>
                       <img src={picked.preview} alt={picked.label} onError={() => setPreviewBroken(true)} />
-                      {anchors.map((item) => (
-                        <span
-                          key={item.id}
-                          className={`review-anchor is-${item.severity} ${active === item.id ? 'is-active' : ''}`}
+                      {marks.map((mark) => (
+                        <button
+                          key={mark.id}
+                          type="button"
+                          className={`review-anchor is-${mark.severity} ${focusId === mark.id ? 'is-active' : ''}`}
                           style={{
-                            left: (item.evidence as { x: number }).x * 100 + '%',
-                            top: (item.evidence as { y: number }).y * 100 + '%',
-                            width: (item.evidence as { w: number }).w * 100 + '%',
-                            height: (item.evidence as { h: number }).h * 100 + '%',
+                            left: mark.evidence.x * 100 + '%',
+                            top: mark.evidence.y * 100 + '%',
+                            width: mark.evidence.w * 100 + '%',
+                            height: mark.evidence.h * 100 + '%',
                           }}
-                        />
+                          title={anchorNumber(mark.index) + ' ' + mark.statement}
+                          aria-label={'定位问题 ' + mark.index + '：' + mark.statement}
+                          aria-pressed={pinned === mark.id}
+                          onClick={() => togglePin(mark.id)}
+                          onFocus={() => setActive(mark.id)}
+                          onMouseEnter={() => setActive(mark.id)}
+                        >
+                          <span className="review-anchor-no">{anchorNumber(mark.index)}</span>
+                        </button>
                       ))}
                     </>
                   ) : (
@@ -539,6 +580,11 @@ export default function ReviewPage({
                   )}
                 </div>
               </div>
+              {marks.length ? (
+                <p className="review-canvas-hint">
+                  图上的编号与右侧问题一一对应：点编号或问题行钉住这一处，再点一下或按 Esc 取消。
+                </p>
+              ) : null}
             </div>
           ) : recordLoading ? (
             <div className="review-empty-state">
@@ -632,7 +678,7 @@ export default function ReviewPage({
                 </li>
                 <li>
                   <span className="vq-mono">03</span>
-                  <div><strong>看证据</strong><p>每条判断带像素锚点，右侧高亮对应区域；没有证据的写进「无法判断」。</p></div>
+                  <div><strong>看证据</strong><p>每条判断带像素锚点：点问题行或图上编号钉住对应区域，再点一下或按 Esc 取消；没有证据的写进「无法判断」。</p></div>
                 </li>
               </ol>
               <p className="review-empty-note">
@@ -679,17 +725,29 @@ export default function ReviewPage({
               {result.judge ? <JudgePanel judge={result.judge} /> : null}
 
               <ol className="review-observations">
-                {result.observations.map((item) => (
+                {result.observations.map((item, position) => (
                   <li
                     key={item.id}
-                    className={`review-obs ${active === item.id ? 'is-active' : ''} sev-${item.severity}`}
+                    className={`review-obs ${focusId === item.id ? 'is-active' : ''} ${pinned === item.id ? 'is-pinned' : ''} sev-${item.severity}`}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={pinned === item.id}
+                    title={pinned === item.id ? '再点一次（或按 Esc）取消定位' : '点一下钉住图上对应区域'}
+                    onClick={() => togglePin(item.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        togglePin(item.id)
+                      }
+                    }}
                     onMouseEnter={() => setActive(item.id)}
                     onFocus={() => setActive(item.id)}
                   >
                     <div className="review-obs-head">
+                      <span className={`review-obs-no${markedIds.has(item.id) ? ' has-anchor' : ''}`}>{anchorNumber(position + 1)}</span>
                       <span className="vq-mono">{item.dimension}</span>
                       <Tag tone={SEVERITY_TONE[item.severity] || 'plain'}>{SEVERITY_LABEL[item.severity]}</Tag>
-                      {item.evidence ? <span className="vq-mono">锚点 {Math.round(item.confidence * 100)}%</span> : <span className="vq-mono">无锚点</span>}
+                      {item.evidence ? <span className="vq-mono" title="模型对这条判断的置信度">置信 {Math.round(item.confidence * 100)}%</span> : <span className="vq-mono">无锚点</span>}
                     </div>
                     <p>{item.statement}</p>
                   </li>
