@@ -701,7 +701,7 @@ DOMAIN=visionqa.wavisionai.cn bash deploy/production/enable-https.sh            
 
 ![生产：作品列表卡片上的「花费」格，与作品页同一份数（v0.9.65）](docs/screenshot-spend-cards-2026-11-13.png)
 
-提交 `__COMMIT__`（代码 + 7 条测试 + 文档 + 3 张生产截图），CI `__CI__` success。
+提交 `3ca7935`（代码 + 7 条测试 + 文档 + 3 张生产截图），CI 43468833243 success。
 
 细节见 [钱花在哪](docs/spend-visibility-2026-11-13.md)。
 
