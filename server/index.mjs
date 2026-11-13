@@ -74,6 +74,7 @@ import { startLogRetention } from './log-files.mjs'
 import { rateLimit } from './ratelimit.mjs'
 import { startAlertWatch } from './alerts.mjs'
 import { deepHealth } from './health.mjs'
+import { sitePublicView } from './site-info.mjs'
 import { clearModelBlock, modelServiceState } from './service-state.mjs'
 import { fetchPublic } from './media.mjs'
 import { bdcStatus, canvasErrorMessage, listCanvases, createCanvas, appendCanvasNote } from './bdc.mjs'
@@ -358,13 +359,17 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/app') {
       // 界面口径：生产环境只讲产品语言；内部测试环境（VQ_UI_MODE=internal）多显示排障详情。
       // 这个字段只影响展示，不参与权限判断，所以公开可读，登录页也能用。
+      const site = await sitePublicView()
       return sendJson(res, 200, {
         ok: true,
         mode: config.ui.mode,
         internal: config.ui.mode === 'internal',
         version: PKG.version,
-        icp: config.site.icp,
-        supportEmail: config.site.supportEmail,
+        // 备案号与客服邮箱保留在顶层：老前端只认这两个字段，不能因为加了 site 对象就让它们消失
+        icp: site.icp,
+        supportEmail: site.supportEmail,
+        // 公示信息（v0.9.67）：后台「系统 → 站点公示」填，环境变量兜底；没填就是空串，页面不摆空壳
+        site,
         // 注册页要展示「同意的是哪一版」，条款改版只改服务端配置
         terms: { version: config.site.termsVersion, updatedAt: config.site.termsUpdatedAt },
       })

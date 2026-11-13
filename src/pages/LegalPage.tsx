@@ -12,6 +12,15 @@ const TITLE: Record<Props['doc'], string> = { terms: '服务条款', privacy: '�
 
 export function LegalPage({ doc }: Props) {
   const site = useSiteInfo()
+  // 运营主体（v0.9.67）：后台「系统 → 站点公示」填了才显示；六项全空时整块不出现，页面不摆空壳。
+  const facts: [string, string][] = [
+    ['运营主体', site.operator],
+    ['联系地址', site.address],
+    ['统一社会信用代码', site.creditCode],
+    ['客服邮箱', site.supportEmail],
+    ['投诉与举报', site.complaint],
+    ['备案号', site.icp],
+  ].filter((entry): entry is [string, string] => Boolean(entry[1]))
   return (
     <main className="vq-legal">
       <div className="vq-legal-inner">
@@ -24,12 +33,23 @@ export function LegalPage({ doc }: Props) {
           最后更新：{site.termsUpdatedAt || '2026-11-13'}
           {site.termsVersion ? ' · 版本 v' + site.termsVersion : ''}
         </p>
+        {facts.length ? (
+          <dl className="vq-legal-facts">
+            {facts.map(([label, value]) => (
+              <div key={label}>
+                <dt>{label}</dt>
+                <dd>{value}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : null}
         {doc === 'terms' ? <Terms /> : <Privacy />}
         <footer className="vq-legal-foot">
           <a className="vq-link" href="#/help">帮助</a>
           <a className="vq-link" href="#/legal/terms">服务条款</a>
           <a className="vq-link" href="#/legal/privacy">隐私说明</a>
           {site.supportEmail ? <span>联系：{site.supportEmail}</span> : <span>联系：工作区管理员</span>}
+          {site.operator ? <span>{site.operator}</span> : null}
           {site.icp ? <span>{site.icp}</span> : null}
           <span>VisionQA</span>
         </footer>

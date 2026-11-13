@@ -2817,6 +2817,12 @@ select:focus-visible {
 .vq-legal-list { margin: 8px 0 8px; padding-left: 24px; display: grid; gap: 4px; font-size: 14px; line-height: 1.75; color: var(--muted); }
 .vq-legal-list strong { color: var(--ink); font-weight: 500; }
 .vq-legal-foot { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line-faint); font-size: 12px; color: var(--faint); }
+/* 运营主体（v0.9.67）：后台「站点公示」填的对外信息，只在有值时渲染，不摆空壳 */
+.vq-legal-facts { display: grid; gap: 1px; margin: 0 0 8px; padding: 0; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; background: var(--line-faint); }
+.vq-legal-facts > div { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 16px; padding: 8px 12px; background: var(--surface-raised); }
+.vq-legal-facts dt { margin: 0; font-size: 12px; color: var(--faint); }
+.vq-legal-facts dd { margin: 0; font-size: 13px; line-height: 1.6; color: var(--ink); overflow-wrap: anywhere; }
+@media (max-width: 640px) { .vq-legal-facts > div { grid-template-columns: minmax(0, 1fr); gap: 2px; } }
 @media (max-width: 640px) { .vq-legal { padding: 16px 12px 48px; } .vq-legal-inner { padding: 24px 24px; } .vq-legal h1 { font-size: 22px; } }
 /* ---------- 找回密码（邮件链接落地页） ---------- */
 .vq-reset { min-height: 100vh; display: grid; place-items: center; padding: 48px 24px; background: var(--canvas); color: var(--ink); font-family: var(--font-ui); }

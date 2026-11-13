@@ -1,6 +1,7 @@
 import { useUiMode } from '../../api/app'
 import { useApi, type Health, type RunsResponse, type TemplatesResponse } from './data'
 import { AdminHead, Badge, ErrorBanner, LoadingLine, RefreshButton, SourceTag } from './ui'
+import ReadinessCard from './ReadinessCard'
 
 export default function OverviewSection() {
   const health = useApi<Health>('/api/health')
@@ -79,6 +80,8 @@ export default function OverviewSection() {
           </p>
         </article>
       </div>
+
+      <ReadinessCard />
 
       <section className="admin-card admin-block">
         <div className="admin-block-head">

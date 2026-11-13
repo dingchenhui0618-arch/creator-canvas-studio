@@ -1566,3 +1566,38 @@
 .admin-report-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
 .admin-report-actions .admin-input { flex: 1 1 260px; min-width: 0; height: 30px; padding: 0 8px; border: 1px solid var(--line-strong, #e0dbd2); border-radius: var(--radius-xs); background: var(--surface, #fff); font-size: 12px; }
 .admin-report-actions .admin-input:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(17, 17, 17, .28); }
+
+/* ---------- 上线就绪 + 站点公示（v0.9.67） ----------
+   两道门用同一套行：左边一个状态点、名字 + 状态胶囊、一句「缺什么」、右边「去哪填」。
+   颜色只表达状态（就绪 / 一半 / 未配），不做装饰；间距只走 8 / 12 / 24。 */
+.admin-readiness { display: grid; margin-top: 12px; border-top: 1px solid var(--line); }
+.admin-readiness-row {
+  display: grid;
+  grid-template-columns: 8px minmax(120px, 168px) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line-faint);
+}
+.admin-readiness-row:last-child { border-bottom: 0; }
+.admin-readiness-dot { width: 8px; height: 8px; border-radius: 999px; background: var(--line-strong); }
+.admin-readiness-row[data-state='ready'] .admin-readiness-dot { background: var(--pass); }
+.admin-readiness-row[data-state='partial'] .admin-readiness-dot { background: var(--warn); }
+.admin-readiness-row[data-state='todo'] .admin-readiness-dot { background: var(--fail); }
+.admin-readiness-name { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 14px; font-weight: 500; color: var(--ink); }
+.admin-readiness-note { color: var(--muted); font-size: 12px; line-height: 1.6; }
+.admin-readiness-row .vq-button { justify-self: end; white-space: nowrap; }
+
+.admin-site-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 24px; margin: 12px 0 16px; }
+.admin-site-field { min-width: 0; }
+.admin-site-field--wide { grid-column: 1 / -1; }
+
+@media (max-width: 720px) {
+  /* 这两张卡在窄屏把标题与说明竖排：横排时右侧胶囊会把说明挤成一条十几行的窄柱 */
+  .admin-block--readiness .admin-block-head,
+  .admin-block--site .admin-block-head { flex-direction: column; align-items: flex-start; }
+  .admin-readiness-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .admin-readiness-note { flex: 1 1 100%; }
+  .admin-readiness-row .vq-button { margin-left: auto; }
+  .admin-site-form { grid-template-columns: minmax(0, 1fr); }
+}

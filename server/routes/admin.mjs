@@ -34,6 +34,8 @@ import { createInvite, inviteSummary, revokeInvite } from '../invites.mjs'
 import { deletePlan, listPlans, savePlan } from '../plans.mjs'
 import { clearQuotaOverride, quotaOverview, saveQuota, setQuotaOverride } from '../quota.mjs'
 import { saveUsagePrices, usagePrices, usageSummary } from '../usage-meter.mjs'
+import { clearSiteInfo, resolveSiteInfo, saveSiteInfo, SITE_FIELDS } from '../site-info.mjs'
+import { launchReadiness } from '../readiness.mjs'
 
 const MODEL_KEY = /^\/api\/admin\/model-keys\/([\w-]+)$/
 const MODEL_KEY_TEST = /^\/api\/admin\/model-keys\/([\w-]+)\/test$/
@@ -1037,6 +1039,59 @@ export function createAdminRouter() {
           recordAudit({ req, actor: user, action: 'mail.test', targetType: 'mail', targetId: 'channel', targetLabel: '邮件通道', detail: { to, error: String(error?.message || '') } })
           sendJson(res, 502, { ok: false, error: String(error?.message || '发信失败'), ms: Date.now() - started })
         }
+        return true
+      }
+
+      // 站点公示：备案号、运营主体、客服邮箱这些「对外必须写清楚」的信息，后台直接填，不用改环境变量重启。
+      // 公开页只读 /api/app 的 site 字段；这里给后台表单看来源与更新时间。
+      if (pathname === '/api/admin/site' && req.method === 'GET') {
+        const site = await resolveSiteInfo()
+        sendJson(res, 200, {
+          ok: true,
+          site,
+          fields: Object.entries(SITE_FIELDS).map(([key, meta]) => ({ key, ...meta })),
+        })
+        return true
+      }
+
+      if (pathname === '/api/admin/site' && req.method === 'PUT') {
+        const body = await readBody(req)
+        const saved = await saveSiteInfo(
+          {
+            icp: body.icp,
+            operator: body.operator,
+            address: body.address,
+            creditCode: body.creditCode,
+            supportEmail: body.supportEmail,
+            complaint: body.complaint,
+          },
+          { by: user.email },
+        )
+        if (!saved.ok) return (sendJson(res, 400, { ok: false, error: saved.error }), true)
+        recordAudit({
+          req,
+          actor: user,
+          action: 'site.save',
+          targetType: 'site',
+          targetId: 'public',
+          targetLabel: '站点公示',
+          // 值本身不算机密，但审计不该变成第二个公示页：只记哪几项有值
+          detail: { filled: Object.entries(saved.site).filter(([key, value]) => SITE_FIELDS[key] && value).map(([key]) => key) },
+        })
+        sendJson(res, 200, { ok: true, site: await resolveSiteInfo() })
+        return true
+      }
+
+      if (pathname === '/api/admin/site' && req.method === 'DELETE') {
+        await clearSiteInfo()
+        recordAudit({ req, actor: user, action: 'site.clear', targetType: 'site', targetId: 'public', targetLabel: '站点公示' })
+        sendJson(res, 200, { ok: true, site: await resolveSiteInfo() })
+        return true
+      }
+
+      // 上线就绪：六道门（收钱 / 合规 / 邮件 / 告警 / 备份 / 额度）各自从真实配置现算，不存快照
+      if (pathname === '/api/admin/readiness' && req.method === 'GET') {
+        sendJson(res, 200, await launchReadiness())
         return true
       }
 

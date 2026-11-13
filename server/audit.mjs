@@ -17,6 +17,8 @@ const ACTIONS = {
   'plan.save': '定价档位',
   'plan.delete': '删除档位',
   'quota.save': '每月额度',
+  'site.save': '站点公示',
+  'site.clear': '清空公示',
 }
 
 let schemaReady = false

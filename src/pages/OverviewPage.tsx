@@ -1235,6 +1235,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
           <button type="button" className="vq-link" onClick={onOpenGuide}>
             上手指引
           </button>
+          {site.operator ? <span>{site.operator}</span> : null}
           {site.icp ? <span className="vq-mono">{site.icp}</span> : null}
         </span>
       </footer>

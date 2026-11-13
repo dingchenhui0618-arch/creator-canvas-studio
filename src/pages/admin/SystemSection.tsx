@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { request } from '../../api/client'
 import { useUiMode } from '../../api/app'
 import { formatDateTime, formatDuration, useApi, type BdcPort, type BdcStatus, type VersionInfo } from './data'
+import SiteInfoCard from './SiteInfoCard'
 import { AdminHead, Badge, ErrorBanner, LoadingLine, RefreshButton, SourceTag } from './ui'
 
 type StorageItem = { name: string; bytes: number; files: number }
@@ -939,6 +940,8 @@ export default function SystemSection() {
           </>
         ) : null}
       </section>
+
+      <SiteInfoCard />
 
       <section className="admin-card admin-block">
         <div className="admin-block-head">
