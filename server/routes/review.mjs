@@ -15,18 +15,53 @@ import { charge, refund } from '../credits.mjs'
 import { quotaRefusal } from '../quota.mjs'
 import { enter, leave } from '../gate.mjs'
 import { admit, capacityFor } from '../waterline.mjs'
-import { publicError } from '../public-error.mjs'
+import { publicError, refusal } from '../public-error.mjs'
 import { modelServiceState, noteModelFailure, noteModelSuccess } from '../service-state.mjs'
 
 const MEDIA_MIME = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' }
+// 评审只读图。8 MB 与「外部图片地址」那条路的上限一致，也与前端压缩后的截图相符。
+const MAX_MEDIA_BYTES = 8 * 1024 * 1024
 
-// 本地媒体文件（模板库帧图）→ 字节
-async function readLocalMedia(mediaPath) {
-  const absolute = path.join(config.dataDir, mediaPath.replace(/^\/+/, ''))
+const mediaError = (code, status, message) => refusal(status, code, message)
+
+/**
+ * 扣费之前先看：这个 media 到底是不是一张能评审的图。
+ *
+ * 以前这里只做路径校验，然后 fsp.readFile 整个读进来 —— 指到数据目录里的源视频（最大 160 MB）
+ * 就是一个请求把进程顶穿。压测已经证明这条路的杀伤力：10 个并发评审就能把 384 MB 的堆打爆，
+ * 进程 FATAL OOM，所有人的会话一起断（docs/load-test-2026-11-14.md）。
+ * 所以先按扩展名与文件大小拒，连字节都不读；被拒的这单不扣积分。
+ */
+async function probeLocalMedia(mediaPath) {
+  const absolute = path.join(config.dataDir, String(mediaPath).replace(/^\/+/, ''))
   const normalized = path.normalize(absolute)
-  if (!normalized.startsWith(path.normalize(config.dataDir))) throw new Error('非法路径')
-  const bytes = await fsp.readFile(normalized)
-  return { bytes, mime: MEDIA_MIME[path.extname(normalized).toLowerCase()] || 'image/jpeg' }
+  if (!normalized.startsWith(path.normalize(config.dataDir))) throw mediaError('MEDIA_PATH', 400, '非法路径')
+  const ext = path.extname(normalized).toLowerCase()
+  const mime = MEDIA_MIME[ext]
+  if (!mime) {
+    throw mediaError('MEDIA_TYPE', 415, '评审只接受 jpg / png / webp 图片，这个来源是「' + (ext || '没有扩展名') + '」：先截一张图再来评审，这次没扣积分')
+  }
+  let stat
+  try {
+    stat = await fsp.stat(normalized)
+  } catch {
+    throw mediaError('MEDIA_MISSING', 404, '要评审的图片不见了（可能已被清理）：换一个来源再试，这次没扣积分')
+  }
+  if (!stat.isFile()) throw mediaError('MEDIA_MISSING', 404, '要评审的不是一个文件：换一个来源再试，这次没扣积分')
+  if (stat.size > MAX_MEDIA_BYTES) {
+    const mb = Math.round((stat.size / 1024 / 1024) * 10) / 10
+    throw mediaError('MEDIA_TOO_LARGE', 413, '这张图 ' + mb + ' MB，超过 ' + MAX_MEDIA_BYTES / 1024 / 1024 + ' MB 上限：先压一下再评审，这次没扣积分')
+  }
+  return { file: normalized, mime, bytes: stat.size }
+}
+
+// 本地媒体文件（模板库帧图）→ 字节。大小已在 probeLocalMedia 里挡过一次，这里再兜一次。
+async function readLocalMedia(probe) {
+  const bytes = await fsp.readFile(probe.file)
+  if (bytes.length > MAX_MEDIA_BYTES) {
+    throw mediaError('MEDIA_TOO_LARGE', 413, '这张图超过了 ' + MAX_MEDIA_BYTES / 1024 / 1024 + ' MB 上限：先压一下再评审，这次没扣积分')
+  }
+  return { bytes, mime: probe.mime }
 }
 
 const REVIEW_ITEM = /^\/api\/reviews\/([\w-]+)$/
@@ -184,6 +219,8 @@ export function createReviewRouter() {
       }
       if (pathname === '/api/review' && req.method === 'POST') {
         const body = await readBody(req)
+        // 素材先过一道：类型 / 大小不对就在扣费、占名额之前拒掉（被拒的这单不扣积分）
+        const mediaProbe = body.media ? await probeLocalMedia(String(body.media)) : null
         // 从作品页发起的评审：先确认作品还在，再扣积分——不能收完钱才发现记不进任何作品
         const projectId = body.projectId ? String(body.projectId) : ''
         // 作品的第几版：评审落库时按当前版本记账，多版本对照才不会串
@@ -239,8 +276,8 @@ export function createReviewRouter() {
         try {
           let imageBytes
           let mime = 'image/jpeg'
-          if (body.media) {
-            const local = await readLocalMedia(String(body.media))
+          if (mediaProbe) {
+            const local = await readLocalMedia(mediaProbe)
             imageBytes = local.bytes
             mime = local.mime
           }

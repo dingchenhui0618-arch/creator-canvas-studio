@@ -2,6 +2,26 @@
 // 直接透出既不专业也等于把内部配置亮给客户。排障细节仍然写服务端日志。
 const MODEL_NAME = /deepseek[-a-z0-9.]*|qwen[-a-z0-9.]*|doubao[-a-z0-9.]*|gpt-[a-z0-9.-]*|glm[-a-z0-9.]*|claude[-a-z0-9.]*/gi
 
+/**
+ * 我方主动的拒绝（不是上游故障）：错误对象上带 status + code 的都按它回。
+ * 目前有两处：请求体超过 8 MB（413 BODY_TOO_LARGE）、评审图片类型/大小不对（415 / 413）。
+ * 返回 null 表示「这不是可预期的拒绝」，交给调用方按 500 处理。
+ */
+/** 构造一条「我方主动拒绝」的错误：带 status + code，路由层抛出去由 refusalResponse 转成响应。 */
+export function refusal(status, code, message) {
+  const error = new Error(message)
+  error.status = status
+  error.code = code
+  return error
+}
+
+export function refusalResponse(error) {
+  const status = Number(error && error.status)
+  const code = String((error && error.code) || '')
+  if (!status || status < 400 || status >= 500 || !code) return null
+  return { status, body: { error: String((error && error.message) || '请求被拒绝'), code } }
+}
+
 export function publicError(error, fallback = '服务暂时不可用，请稍后重试') {
   // 只认 Error.message 或字符串本身：以前 message 为空时会把 Error 对象整个 String 成 "Error"，
   // 用户看到的就是一句「Error」（测试里发现的）

@@ -4,17 +4,9 @@ export function sendJson(res, status, body) {
   res.end(JSON.stringify(body))
 }
 
-export async function readBody(req) {
-  const chunks = []
-  for await (const chunk of req) chunks.push(chunk)
-  if (!chunks.length) return {}
-  const text = Buffer.concat(chunks).toString('utf8').replace(/^\uFEFF/, '')
-  try {
-    return JSON.parse(text)
-  } catch {
-    return {}
-  }
-}
+// 请求体的读取口径写在 server/body-reader.mjs：这里只转发，
+// 各路由原来的 import { readBody } 不用改（67 处调用点一个都没动）。
+export { readJsonBody as readBody } from '../body-reader.mjs'
 
 export function notFound(res, message = 'not found') {
   sendJson(res, 404, { error: message })

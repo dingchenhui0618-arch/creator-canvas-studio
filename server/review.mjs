@@ -1,6 +1,7 @@
 import { callTextModel, extractJson, llmEnabled, visionChain } from './llm.mjs'
 import { assertPublicHttpUrl } from './media.mjs'
 import { judgeReview, judgeStatus } from './judge.mjs'
+import { refusal } from './public-error.mjs'
 
 // VisionQA 视觉评审：优先接 VisionQA 插件服务（同一套 VisualReview 契约），
 // 服务不可用时退到本地模型的 visual-baseline 评审，并如实标注 provider。
@@ -44,6 +45,12 @@ async function serviceHealth() {
 async function attachJudge(mapped, intent, meter = null) {
   const judge = await judgeReview(mapped, { intent, meter })
   return { ...mapped, judge }
+}
+
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024
+
+function tooBigImage() {
+  return refusal(413, 'MEDIA_TOO_LARGE', '这张图超过 8 MB 上限：先压一下再评审，这次没扣积分')
 }
 
 function toDataUrl(bytes, mime = 'image/jpeg') {
@@ -152,8 +159,21 @@ export async function reviewVisual({ imageUrl, imageBytes, mime = 'image/jpeg', 
     await assertPublicHttpUrl(imageUrl)
     const response = await fetch(imageUrl, { signal: AbortSignal.timeout(15_000) })
     if (!response.ok) throw new Error('取不到这张图（HTTP ' + response.status + '）')
-    const buffer = Buffer.from(await response.arrayBuffer())
-    if (buffer.length > 8 * 1024 * 1024) throw new Error('图片超过 8 MB，先压缩再评审')
+    // 先看声明的大小，再边读边卡：以前是整段 arrayBuffer 下来之后才判 8 MB，
+    // 一个 100 MB 的图床地址就是一次 OOM（与请求体上限是同一个道理）
+    const declared = Number(response.headers.get('content-length') || 0)
+    if (declared > MAX_IMAGE_BYTES) throw tooBigImage()
+    const chunks = []
+    let received = 0
+    for await (const chunk of response.body) {
+      received += chunk.length
+      if (received > MAX_IMAGE_BYTES) {
+        try { await response.body.cancel() } catch { /* 已经结束 */ }
+        throw tooBigImage()
+      }
+      chunks.push(chunk)
+    }
+    const buffer = Buffer.concat(chunks)
     const type = String(response.headers.get('content-type') || '').split(';')[0]
     dataUrl = toDataUrl(buffer, type.startsWith('image/') ? type : 'image/jpeg')
   }

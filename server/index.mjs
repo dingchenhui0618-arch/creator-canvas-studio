@@ -50,6 +50,8 @@ import { listProjects } from './projects.mjs'
 import { adoptUnowned as adoptUnownedAgents } from './agents.mjs'
 import { adoptUnownedFlows, createFlow, getFlow, recoverInterruptedRuns, interruptRunningRuns } from './flows.mjs'
 import { adoptUnowned as adoptUnownedReviews } from './reviews.mjs'
+import { readJsonBody as readBody } from './body-reader.mjs'
+import { refusalResponse } from './public-error.mjs'
 import { createBillingRouter } from './routes/billing.mjs'
 import { createAgentsRouter } from './routes/agents.mjs'
 import { createFlowsRouter } from './routes/flows.mjs'
@@ -175,14 +177,6 @@ async function readJsonLimited(req, maxBytes) {
   } catch {
     return {}
   }
-}
-
-async function readBody(req) {
-  const chunks = []
-  for await (const chunk of req) chunks.push(chunk)
-  if (!chunks.length) return {}
-  const text = Buffer.concat(chunks).toString('utf8').replace(/^\uFEFF/, '')
-  try { return JSON.parse(text) } catch { return {} }
 }
 
 async function serveFile(res, file) {
@@ -1075,6 +1069,13 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' })
     res.end('not found: ' + pathname)
   } catch (error) {
+    // 我们主动拒掉的请求（请求体过大、图片格式/尺寸不对）不是服务端故障：
+    // 状态码与文案由抛错处给，日志只记一行，不去触发 5xx 告警。
+    const refusal = refusalResponse(error)
+    if (refusal) {
+      logEvent('request.refused', { path: pathname, method: req.method, status: refusal.status, code: refusal.body.code })
+      return sendJson(res, refusal.status, refusal.body)
+    }
     logRequestError(trace.traceId, error, { path: pathname, method: req.method })
     sendJson(res, 500, { error: String(error?.message || error), traceId: trace.traceId })
   }
