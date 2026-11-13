@@ -73,6 +73,7 @@
 - 测试：**430 / 430**（新增 `test/replicate-jobs.test.mjs` 8 条：落库可查、重启恢复退款、扣费后断电按净扣款退、已完成不退款、草稿撤销、后台列表、停机收尾、无链接立刻失败并退款）。
 - 静态：`npx oxlint src server test` **0 error / 6 warning**（既有）；`npx tsc -b` 干净；`npm run build` 通过。
 - 生产：v0.9.48，入口 `index-C686z1TW.js`，`/api/version` 0.9.48，health ok（templates 26），`visionqa` / `visionqa-internal` 都 active；release `20261113-052226-20261113-v0.9.48-jobs6.tar.gz`。
+- 提交：`c0d5b8a`（代码 + 测试）+`7f4de59`（文档 + 4 张截图），CI 43372307894 success。
 - 数据：发版与验证过程中生产的作品 / 模板 / 画布 / 原片 / 交付没有变化（templates 26），余额 9954；验证用的 2 条流水净额为 0。
 
 ## 六、边界（这轮没做的）
