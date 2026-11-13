@@ -747,6 +747,8 @@ DOMAIN=visionqa.wavisionai.cn bash deploy/production/enable-https.sh            
 
 ![生产：390 宽的就绪卡，标题与说明竖排，无横向溢出](docs/screenshot-readiness-mobile-2026-11-14.png)
 
+提交 `70a2ef5`（代码 + 11 条测试 + 文档 + 5 张生产截图），CI 43476962763 success。
+
 细节见 [上线就绪与站点公示](docs/readiness-and-site-info-2026-11-14.md)。
 
 
