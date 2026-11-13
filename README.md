@@ -2349,6 +2349,6 @@ v0.9.10 让「甲方看没看」第一次有了答案，这一轮让这个答案
 
 ![生产 390 全页：主卡、评审队列、交出去的、三张开始卡、最近运行、模板库、分享汇总都在，页宽 390 无横向滚动](docs/screenshot-first-run-prod-390-2026-11-13.png)
 
-验收：生产 **v0.9.42**、入口 index-CLQVCHTK.js（510,313 字节）、release 20261113-010520-2026-11-13-first-run.tar.gz、/api/version 0.9.42、/api/health ok（templates 26）、两服务 active；1440 与 390 都是 scrollWidth == clientWidth。生产账号手上是有数据的（1 条作品 / 26 条模板），线上截图证明的是**没被这一轮改坏**：页头按钮降级、五块内容原样；空账号那一支在生产上没有账号可演，是在本地起了一个全新账号验的，**没有为了截图在生产造账号**。**本轮生产零写入**：界面只发只读 GET，截图前后各取一次快照（作品 1 · 模板 26 · 画布 7 · 原片 25（1 已开成作品 / 24 没开成）· 交付 0 · 余额 9954），六路数据逐字段比对 identical: true。npm test **394/394**（新增 test/first-run.test.mjs 7 条）、oxlint **0 error / 6 warning**、tsc -b 干净、构建通过。
+验收：生产 **v0.9.42**、入口 index-CLQVCHTK.js（510,313 字节）、release 20261113-010520-2026-11-13-first-run.tar.gz、/api/version 0.9.42、/api/health ok（templates 26）、两服务 active；1440 与 390 都是 scrollWidth == clientWidth。生产账号手上是有数据的（1 条作品 / 26 条模板），线上截图证明的是**没被这一轮改坏**：页头按钮降级、五块内容原样；空账号那一支在生产上没有账号可演，是在本地起了一个全新账号验的，**没有为了截图在生产造账号**。**本轮生产零写入**：界面只发只读 GET，截图前后各取一次快照（作品 1 · 模板 26 · 画布 7 · 原片 25（1 已开成作品 / 24 没开成）· 交付 0 · 余额 9954），六路数据逐字段比对 identical: true。npm test **394/394**（新增 test/first-run.test.mjs 7 条）、oxlint **0 error / 6 warning**、tsc -b 干净、构建通过。提交 **ed6bdad**（代码 + 测试）+ **d4b5016**（文档 + 6 截图）已推 origin/master，CI **43343130833 success**。
 
 细节见 [新账号的第一屏：不铺空盒子、不把人送进空库](./docs/first-run-2026-11-13.md)。
