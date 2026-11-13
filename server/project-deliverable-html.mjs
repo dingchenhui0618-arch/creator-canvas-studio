@@ -8,6 +8,9 @@
 //     也不用在服务器上装 Chromium。
 //
 // 安全：所有文本先转义再拼标签。作品标题或台词里写着 <script> 也只显示成字。
+//
+// AI 生成内容标识（显式 + 隐式）在 ./ai-label.mjs：三张纸共用同一句措辞，不各写一套。
+import { aiLabelBadge, aiLabelMetaTags } from './ai-label.mjs'
 
 export const escapeHtml = (value) =>
   String(value ?? '')
@@ -213,7 +216,13 @@ export const PAPER_CSS = [
   '.sheet { width: 210mm; min-height: 297mm; margin: 24px auto 48px; padding: 16mm 14mm; background: var(--paper); border-radius: 6px; box-shadow: 0 1px 2px rgba(17, 17, 17, 0.05), 0 12px 32px rgba(17, 17, 17, 0.08); }',
   '.sheet-brand { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 10pt; border-bottom: 0.75pt solid var(--line-strong); margin-bottom: 18pt; }',
   '.sheet-mark { display: block; height: 14pt; width: auto; }',
+  '.sheet-textbrand { font-family: var(--font); font-size: 13pt; font-weight: 600; letter-spacing: -0.01em; }',
+  '.sheet-brand-right { display: flex; align-items: center; gap: 8pt; }',
   '.sheet-kind { font-family: var(--mono); font-size: 7.5pt; letter-spacing: 0.1em; color: var(--faint); white-space: nowrap; }',
+  // AI 生成标识：显式标识里最小的一枚，跟着品牌行印在每一张纸上（隐式标识在 <head> 的 meta）
+  '.sheet-ai { display: inline-block; padding: 1.5pt 5pt; border: 0.5pt solid var(--line-strong); border-radius: 999px; font-family: var(--mono); font-size: 7pt; letter-spacing: 0.04em; color: var(--muted); white-space: nowrap; }',
+  '/* 显式标识那句说明：紧跟抬头事实，读完抬头就知道这份产物的来源与边界 */',
+  '.sheet-ai-note { margin: 0 0 12pt; font-size: 8pt; line-height: 1.6; color: var(--faint); }',
   '',
   '/* 版面：正文 10pt / 1.7；标题三阶 22 / 13 / 10.5 */',
   '.sheet-body { counter-reset: sheet-sec; font-size: 10pt; line-height: 1.7; color: var(--ink); }',
@@ -308,13 +317,32 @@ export function printToolbar({
   )
 }
 
+// 品牌行：左边是署名，右边是这张纸的种类（+ AI 生成标识）。四种纸共用，位置与间距不会各偏一点。
+// mark='text' 用于离线包里的纸：没有登录态、也不保证 /brand 下那张图在，就写名字。
+export function brandRow({ mark = 'img', kind = '', aiLabel = false } = {}) {
+  const markHtml =
+    mark === 'text'
+      ? '<span class="sheet-textbrand">VisionQA</span>'
+      : '<img class="sheet-mark" src="/brand/visionqa-lockup.svg" alt="VisionQA">'
+  return (
+    '<div class="sheet-brand">' + markHtml +
+    '<span class="sheet-brand-right">' +
+    (aiLabel ? aiLabelBadge() : '') +
+    (kind ? '<span class="sheet-kind">' + escapeHtml(kind) + '</span>' : '') +
+    '</span></div>'
+  )
+}
+
 // 纸的外壳：extraCss / extraScript 给需要自己版面的那一种纸（现场页）追加样式与脚本，
 // 仍然共用同一套纸张与字体。extraScript 必须是可信的常量（这里只放我们自己写的那几行），
 // 不接任何用户内容——用户数据一律先过 escapeHtml 再进纸。
-export function paperShell(title, body, extraCss = '', extraScript = '') {
+// aiLabel：这张纸是不是 AI 生成内容（交付稿 / 现场页 / 评审对照都是；出错提示页不是），
+// 是就往 <head> 里补隐式标识的 meta。
+export function paperShell(title, body, extraCss = '', extraScript = '', { aiLabel = false } = {}) {
   return (
     '<!doctype html>\n<html lang="zh-CN">\n<head>\n<meta charset="utf-8">\n' +
     '<meta name="viewport" content="width=device-width, initial-scale=1">\n' +
+    (aiLabel ? aiLabelMetaTags() + '\n' : '') +
     '<title>' + escapeHtml(title) + '</title>\n' +
     '<style>\n' + PAPER_CSS + (extraCss ? '\n' + extraCss : '') + '\n</style>\n</head>\n<body>\n' +
     body + '\n' +
@@ -332,10 +360,9 @@ export function deliverablePrintHtml({ markdown, projectId = '', title = '交付
   const body =
     printToolbar({ projectId }) +
     '\n<main class="sheet">\n' +
-    '<div class="sheet-brand"><img class="sheet-mark" src="/brand/visionqa-lockup.svg" alt="VisionQA">' +
-    '<span class="sheet-kind">DELIVERABLE / A4</span></div>\n' +
-    '<div class="sheet-body">\n' + renderDeliverableBody(markdown) + '\n</div>\n</main>'
-  return paperShell((title || '交付稿') + ' · 交付稿 · VisionQA', body)
+    brandRow({ kind: 'DELIVERABLE / A4', aiLabel: true }) +
+    '\n<div class="sheet-body">\n' + renderDeliverableBody(markdown) + '\n</div>\n</main>'
+  return paperShell((title || '交付稿') + ' · 交付稿 · VisionQA', body, '', '', { aiLabel: true })
 }
 
 /**
@@ -345,9 +372,9 @@ export function deliverablePrintHtml({ markdown, projectId = '', title = '交付
 export function printNoticeHtml({ title = '打不开这张稿', message = '', href = '/#/projects', label = '返回作品' }) {
   const body =
     '<main class="sheet">\n' +
-    '<div class="sheet-brand"><img class="sheet-mark" src="/brand/visionqa-lockup.svg" alt="VisionQA">' +
-    '<span class="sheet-kind">DELIVERABLE / A4</span></div>\n' +
-    '<div class="sheet-body">\n<h1 class="sheet-title">' + escapeHtml(title) + '</h1>\n' +
+    // 这是一张「打不开」的提示纸，不是生成内容：不带 AI 标识，免得读者以为错误页也是模型写的
+    brandRow({ kind: 'DELIVERABLE / A4' }) +
+    '\n<div class="sheet-body">\n<h1 class="sheet-title">' + escapeHtml(title) + '</h1>\n' +
     '<p class="lede">' + escapeHtml(message) + '</p>\n' +
     '<p><a class="bar-print cta" href="' + escapeHtml(href) + '">' + escapeHtml(label) + '</a></p>\n' +
     '</div>\n</main>'

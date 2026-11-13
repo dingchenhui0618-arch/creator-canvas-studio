@@ -43,6 +43,7 @@
   color: var(--muted);
   white-space: nowrap;
 }
+.pshare-badge.is-ai { border-color: var(--line-strong); color: var(--ink); }
 .pshare-actions { display: flex; gap: var(--space-2); flex: none; }
 
 .pshare-button {
@@ -245,6 +246,24 @@
 .pshare-paper-main strong { font-size: var(--text-copy); font-weight: var(--weight-semibold); line-height: var(--leading-meta); }
 .pshare-paper-main span { font-size: var(--text-meta); line-height: var(--leading-meta); color: var(--muted); }
 .pshare-paper > svg:last-child { flex: none; margin-top: 2px; color: var(--faint); }
+
+/* ---------- AI 生成内容标识 ---------- */
+.pshare-ai {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-3);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--line);
+}
+.pshare-ai p {
+  flex: 1 1 320px;
+  margin: 0;
+  font-size: var(--text-meta);
+  line-height: var(--leading-meta);
+  color: var(--muted);
+}
+.pshare-ai-rule { font-size: var(--text-mono); color: var(--faint); white-space: nowrap; }
 
 /* ---------- 页脚 ---------- */
 .pshare-foot {

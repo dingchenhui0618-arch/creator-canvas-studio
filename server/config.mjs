@@ -165,8 +165,9 @@ export const config = {
     icp: (process.env.VQ_ICP || '').trim(),
     supportEmail: (process.env.VQ_SUPPORT_EMAIL || '').trim(),
     // 条款版本：注册时必须把「勾选同意的版本」记到账号上，改条款就改这个版本号
-    termsVersion: (process.env.VQ_TERMS_VERSION || '2026-11-12').trim(),
-    termsUpdatedAt: (process.env.VQ_TERMS_UPDATED_AT || '2026-11-12').trim(),
+    // 2026-11-13：补 AI 生成内容标识与第三方处理者清单，版本跟着改（注册时记下同意的就是这一版）
+    termsVersion: (process.env.VQ_TERMS_VERSION || '2026-11-13').trim(),
+    termsUpdatedAt: (process.env.VQ_TERMS_UPDATED_AT || '2026-11-13').trim(),
     // 站点的对外地址：找回密码邮件里的链接要靠它拼；分享链接也用它。
     publicBaseUrl: (process.env.VQ_PUBLIC_BASE_URL || 'https://visionqa.wavisionai.cn').trim().replace(/\/+$/, ''),
   },

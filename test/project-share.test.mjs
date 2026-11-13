@@ -121,7 +121,8 @@ test('公开视图只给白名单字段：没有账号、画布、模板 id 与�
     token: 'tok_secret',
   })
 
-  assert.deepEqual(Object.keys(view).sort(), ['project', 'script', 'sharedAt', 'stats', 'storyboard', 'template'])
+  // aiLabel 是 AI 生成内容标识（公开的合规信息，同样走白名单），不是内部字段
+  assert.deepEqual(Object.keys(view).sort(), ['aiLabel', 'project', 'script', 'sharedAt', 'stats', 'storyboard', 'template'])
   assert.ok(!('ownerId' in view.project) && !('id' in view.project), '公开视图不带账号与作品 id')
   assert.equal(view.project.title, '毛衣叠放')
   assert.equal(view.project.status, 'done')

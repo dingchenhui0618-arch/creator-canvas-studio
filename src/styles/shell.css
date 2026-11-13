@@ -2813,6 +2813,9 @@ select:focus-visible {
 .vq-legal-meta { margin: 0 0 32px; font-size: 12px; color: var(--faint); }
 .vq-legal h2 { margin: 32px 0 8px; font-size: 15px; font-weight: 500; }
 .vq-legal p { margin: 0; font-size: 14px; line-height: 1.75; color: var(--muted); }
+/* 第三方处理者清单：列表与段落同一套字号与行高，缩进只走 4/8 栅格 */
+.vq-legal-list { margin: 8px 0 8px; padding-left: 24px; display: grid; gap: 4px; font-size: 14px; line-height: 1.75; color: var(--muted); }
+.vq-legal-list strong { color: var(--ink); font-weight: 500; }
 .vq-legal-foot { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line-faint); font-size: 12px; color: var(--faint); }
 @media (max-width: 640px) { .vq-legal { padding: 16px 12px 48px; } .vq-legal-inner { padding: 24px 24px; } .vq-legal h1 { font-size: 22px; } }
 /* ---------- 找回密码（邮件链接落地页） ---------- */

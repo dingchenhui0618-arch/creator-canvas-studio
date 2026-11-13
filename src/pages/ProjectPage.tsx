@@ -771,6 +771,10 @@ export default function ProjectPage({
                       导出不会改状态：交出去之后点页头「标记交付」，会记下这一版与交付时间；开新版也查得到。
                     </p>
                   )}
+                  {/* 合规标识是产物的固定一部分：先说清楚，收件人才不会把稿子当成人工复核过的结论 */}
+                  <p className="vq-export-note">
+                    每份产物都带「AI 生成」标识与说明：交付稿在文首，三张纸在品牌行与纸脚，只读分享页在顶部与底部。
+                  </p>
                   <button
                     type="button"
                     role="menuitem"

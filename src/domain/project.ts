@@ -267,6 +267,19 @@ export type ShareSummaryRow = {
   visits: ShareVisits
 }
 
+/**
+ * AI 生成内容标识（《人工智能生成合成内容标识办法》）：分享与导出都带它。
+ * label 是给人看的显式标识，notice 是一句边界说明，regulation 只在说明里引用。
+ */
+export type AiLabel = {
+  label: string
+  generator: string
+  aiGenerated: boolean
+  regulation: string
+  notice: string
+  version: string
+}
+
 /** 分享页读到的公开视图：服务端白名单挑过，不含账号、画布与模板 id */
 export type SharedProjectShot = {
   shotNo: number
@@ -294,6 +307,8 @@ export type SharedProject = {
   storyboard: SharedProjectShot[]
   stats: { beats: number; shots: number; reviews: number; lastVerdict: string; lastAt: string; runs: number }
   sharedAt: string
+  /** 这份公开视图里有 AI 生成内容：页面上要有看得见的标识 */
+  aiLabel: AiLabel
 }
 
 /** 这条作品沉淀出去的一条模板：作品只记「存过」，模板正文在模板库那边。 */

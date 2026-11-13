@@ -9,6 +9,7 @@
 //  3. 口径跟页面一致：脚本用作品自己的版本优先（scriptView 已算好），
 //     版本划分之前留下的评审与运行折进 v1（与 src/domain/project.ts 同一套规则）。
 import { describeTiming } from './speech.mjs'
+import { aiLabelFootText, aiLabelMarkdown } from './ai-label.mjs'
 import { DIMENSION_LABEL, boxText, normalizeBox } from './project-review-sheet.mjs'
 // 状态与「某一版评过几次」读作品状态那一处：纸上写的状态与页面上那枚胶囊必须是同一句话
 import {
@@ -93,6 +94,9 @@ function header(detail, ctx) {
     '# ' + (project.title || '未命名作品'),
     '',
     '一条作品的完整稿：来源、脚本、分镜、评审结论、版本与运行。给剪辑、制片或自己归档，读这一份就够。',
+    '',
+    // AI 生成内容标识（显式）：放在抬头第一段后面，读完第一句就知道这份稿子该怎样用
+    aiLabelMarkdown(),
     '',
     '- 作品编号：' + project.id,
     '- 状态：' + projectStatus(project, currentReviews, decision).text + (project.version ? '（当前第 ' + project.version + ' 版）' : ''),
@@ -592,7 +596,9 @@ export function projectDeliverable(detail, { review = null, now = new Date(), tz
     '---',
     '',
     '由 VisionQA 导出 · ' + (script?.structure?.length || 0) + ' 段脚本 / ' + (detail?.template?.shots || 0) + ' 个镜头' +
-      (project.flowId ? ' · 画布 ' + (detail?.flow?.nodes || 0) + ' 个节点' : ''),
+      (project.flowId ? ' · 画布 ' + (detail?.flow?.nodes || 0) + ' 个节点' : '') +
+      // 落款也带标识：稿子被截一段转发出去，标识还在
+      ' · ' + aiLabelFootText(),
   ]
   // 空段落不占位；连续空行压成一行，免得某些 Markdown 渲染器把空行堆成空白页
   const markdown = lines.filter((line, index, all) => !(line === '' && all[index - 1] === '')).join('\n').trim() + '\n'

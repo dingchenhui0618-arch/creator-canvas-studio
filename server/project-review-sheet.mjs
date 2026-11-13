@@ -10,7 +10,8 @@
 //     写「这张图不在包里」——导出时联网取图等于开了个出口，也说不清取回来的是哪一张。
 //  3. 每一版只印最近一次评审：同一版重评多次的中间结论在作品页里看，
 //     纸只回答「现在这一版被指出什么」。
-import { escapeHtml, paperShell, printToolbar } from './project-deliverable-html.mjs'
+import { brandRow, escapeHtml, paperShell, printToolbar } from './project-deliverable-html.mjs'
+import { AI_LABEL_NOTICE, aiLabelFootText } from './ai-label.mjs'
 import { decisionFor } from './project-status.mjs'
 
 export const REVIEW_SHEET_LIMITS = { blocks: 3, observations: 8, fixes: 3, notAssessable: 3 }
@@ -272,11 +273,7 @@ export function reviewSheetHtml({
     }),
   )
   body.push('<main class="sheet">')
-  body.push(
-    '<div class="sheet-brand">' +
-      (offline ? '<span class="sheet-textbrand">VisionQA</span>' : '<img class="sheet-mark" src="/brand/visionqa-lockup.svg" alt="VisionQA">') +
-      '<span class="sheet-kind">REVIEW / A4</span></div>',
-  )
+  body.push(brandRow({ mark: offline ? 'text' : 'img', kind: 'REVIEW / A4', aiLabel: true }))
   body.push('<div class="sheet-body">')
   body.push('<h1 class="sheet-title">评审对照 · ' + escapeHtml(project.title || '未命名作品') + '</h1>')
   if (shown) {
@@ -301,6 +298,8 @@ export function reviewSheetHtml({
     factItem('导出时间', stamp(now.toISOString(), tz)),
   ].join('')
   if (facts) body.push('<ul class="sheet-facts">' + facts + '</ul>')
+  // 评审结论是模型给的：纸上有框、有证据，也要写清「这不是人工复核」
+  body.push('<p class="sheet-ai-note">' + escapeHtml(AI_LABEL_NOTICE) + '</p>')
 
   // 纸上到底画了几个框：没有画面就不画框，纸脚也只能数画出来的那些
   let boxed = 0
@@ -379,9 +378,10 @@ export function reviewSheetHtml({
   const totalObs = blocks.reduce((sum, block) => sum + block.observations.length, 0)
   body.push(
     '<p class="sheet-foot">由 VisionQA 导出 · ' + escapeHtml(stamp(now.toISOString(), tz)) + ' · ' +
-      (shown ? totalObs + ' 条问题（' + boxed + ' 条带框） / ' + shown + ' 版' : '没有可印的评审') + '</p>',
+      (shown ? totalObs + ' 条问题（' + boxed + ' 条带框） / ' + shown + ' 版' : '没有可印的评审') + ' · ' +
+      escapeHtml(aiLabelFootText()) + '</p>',
   )
   body.push('</div>')
   body.push('</main>')
-  return paperShell((project.title || '未命名作品') + ' · 评审对照 · VisionQA', body.join('\n'), REVIEW_SHEET_CSS)
+  return paperShell((project.title || '未命名作品') + ' · 评审对照 · VisionQA', body.join('\n'), REVIEW_SHEET_CSS, '', { aiLabel: true })
 }

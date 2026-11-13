@@ -6,6 +6,7 @@
 import path from 'node:path'
 import { config } from './config.mjs'
 import { deliveredCurrent } from './project-status.mjs'
+import { aiLabelMeta } from './ai-label.mjs'
 
 // 分镜最多展示 12 镜：再多读者不会看，页面也会变成一条无限长的清单
 const MAX_STORYBOARD = 12
@@ -131,5 +132,7 @@ export function publicProjectView({ project, template, script, reviews, runs, to
       runs: Math.max(0, Math.round(num(runs))),
     },
     sharedAt: String(project.share?.createdAt || ''),
+    // AI 生成内容标识：分享页是「作品出了工作台」的入口，标识跟着数据走，前端不自己拼文案
+    aiLabel: aiLabelMeta(),
   }
 }

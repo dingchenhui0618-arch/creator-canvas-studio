@@ -10,7 +10,8 @@
 //  3. 打印：浏览器自己的 PDF 引擎，纸张 A4，镜头卡片不跨页。
 //
 // 边界：没写脚本 / 模板没分镜 / 帧图没存，都照实写，不拿别的数据顶。
-import { escapeHtml, paperShell, printToolbar } from './project-deliverable-html.mjs'
+import { brandRow, escapeHtml, paperShell, printToolbar } from './project-deliverable-html.mjs'
+import { AI_LABEL_NOTICE, aiLabelFootText } from './ai-label.mjs'
 
 export const SET_SHEET_LIMITS = { beats: 12, shots: 24 }
 
@@ -347,15 +348,14 @@ export function setSheetHtml({
       extra: rangeField(model),
     }) +
     '\n<main class="sheet">\n' +
-    '<div class="sheet-brand">' +
-    (offline ? '<span class="sheet-textbrand">VisionQA</span>' : '<img class="sheet-mark" src="/brand/visionqa-lockup.svg" alt="VisionQA">') +
-    '<span class="sheet-kind">SET SHEET / A4</span></div>\n' +
-    '<div class="sheet-body">\n' +
+    brandRow({ mark: offline ? 'text' : 'img', kind: 'SET SHEET / A4', aiLabel: true }) +
+    '\n<div class="sheet-body">\n' +
     '<h1 class="sheet-title">' + escapeHtml(model.title) + '</h1>\n' +
     (model.hook
       ? '<p class="lede">开头钩子：<strong>' + escapeHtml(model.hook) + '</strong>' + (model.hookType ? '（' + escapeHtml(model.hookType) + '）' : '') + '</p>\n'
       : '') +
     '<ul class="sheet-facts">' + facts(model) + '</ul>\n' +
+    '<p class="sheet-ai-note">' + escapeHtml(AI_LABEL_NOTICE) + '</p>\n' +
     pickLine(model) +
     '<h2>脚本</h2>\n' +
     (model.beats.length
@@ -368,9 +368,10 @@ export function setSheetHtml({
         '<div class="set-shots" data-shot-total="' + model.shotTotal + '">' + shotCards(model, { frameBase, availableFrames }) + '</div>\n'
       : '<p class="set-empty">模板没有分镜表：按上面的脚本直接拍，或者换一条已解析的模板。</p>\n') +
     '<p class="set-foot">VisionQA · 现场页 · v' + (model.version || 0) + ' · ' +
-    escapeHtml(stampText(generatedAt, tzOffsetMinutes)) + ' · ' + escapeHtml(model.id || projectId) + '</p>\n' +
+    escapeHtml(stampText(generatedAt, tzOffsetMinutes)) + ' · ' + escapeHtml(model.id || projectId) + ' · ' +
+    escapeHtml(aiLabelFootText()) + '</p>\n' +
     '</div>\n</main>'
-  return paperShell(model.title + ' · 现场页 · VisionQA', body, EXTRA_CSS, RANGE_SCRIPT)
+  return paperShell(model.title + ' · 现场页 · VisionQA', body, EXTRA_CSS, RANGE_SCRIPT, { aiLabel: true })
 }
 
 /** 顶栏的「只印哪几镜」：现场改一行字就换一版纸。留空 = 全部。 */

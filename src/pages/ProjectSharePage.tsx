@@ -130,6 +130,11 @@ export default function ProjectSharePage({ token }: { token: string }) {
             <span>更新 {dayLabel(view.project.updatedAt)}</span>
             {view.template ? <span>模板 · {view.template.title}</span> : null}
             {view.sharedAt ? <span>分享于 {dayLabel(view.sharedAt)}</span> : null}
+            {view.aiLabel ? (
+              <span className="pshare-badge is-ai" title={view.aiLabel.regulation}>
+                {view.aiLabel.label}
+              </span>
+            ) : null}
           </div>
         </section>
 
@@ -272,6 +277,15 @@ export default function ProjectSharePage({ token }: { token: string }) {
             <p className="pshare-empty">这条作品还没有进过评审。</p>
           )}
         </section>
+
+        {/* AI 生成内容标识（显式）：链接发给别人也照样带着，收件人不用登录就知道这份内容的来源 */}
+        {view.aiLabel ? (
+          <section className="pshare-ai" aria-label="AI 生成内容标识">
+            <span className="pshare-badge is-ai">{view.aiLabel.label}</span>
+            <p>{view.aiLabel.notice}</p>
+            <span className="pshare-ai-rule">{view.aiLabel.regulation}</span>
+          </section>
+        ) : null}
 
         <footer className="pshare-foot">
           <div>
