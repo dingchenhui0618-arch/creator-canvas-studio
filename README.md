@@ -2273,3 +2273,28 @@ v0.9.10 让「甲方看没看」第一次有了答案，这一轮让这个答案
 验收：生产 **v0.9.39**、入口 index-BbqLyg6N.js（503,007 字节）、release 20261113-000948-2026-11-13-origin-entry.tar.gz、/api/version 0.9.39、/api/health ok（templates 26）、两服务 active。生产 `GET /api/taken-origins?limit=6`：25 条原片 · 1 条已开成作品 · 还有 24 条没开成；第一行 tpl_5323f485 → open-work「作品 · 第 2 版」（prj_f38d68c6），其余四行是官方示例 → create-work「开成作品」，hint 写明「官方那条不动」。**生产一次可逆写入**：点第二行「开成作品」→ 建成 prj_050eeb36《兔兔那么可爱…真香》（8 段脚本带过来，下一步「先开一张画布」）→ 截图 → `DELETE /api/projects/prj_050eeb36` 归零；核对截图前后 /api/projects、/api/templates、/api/flows 的 id/version/updatedAt **完全一致**（1 / 26 / 7），删完 taken 回到 1 条已开成作品、24 条没开。生产 `POST /api/library/marks` 用 tpl_5323f485 真实的平台 id → open-work「作品 · 第 2 版」+ project prj_f38d68c6 v2；另外三条没作品的 → create-work；未登录 401、GET 405；1440 与 390 都是 scrollWidth == clientWidth。本地演示数据（.tmp-qa/r50data，示例数据、不扣积分）：7 条原片 · 2 条已开成作品 · 还有 5 条没开成，四行分别是「作品 · 还没开画布」「作品 · 第 2 版」「开成作品」「还没解析」；检索「收纳」两条卡片一条给「开成作品」、一条（只存了链接）仍给「打开模板」；检索「通勤」主按钮是「作品 · 第 2 版」；点「开成作品」落到 #/projects/prj_2155cc37，脚本 2 段跟着来；390 上「库里已有」胶囊与时长互不重叠。**这一轮没有发起真实检索**（按次 2 积分），卡片下一步在本地示例数据上验、生产用真实平台 id 打接口验；不调模型、不花积分。npm test **380/380**（新增 test/origin-entry.test.mjs 11 条）、oxlint **0 error / 6 warning**、tsc -b 干净、构建通过。提交 a39f29b + 6b65b81，CI **43335216601 success**。
 
 细节见 [「开成作品」：原片往下走的一步](docs/origin-entry-2026-11-13.md)。
+## 一百零九、「去解析」：只存了链接的那条，现在一步就能往下走（v0.9.40）
+
+上一版把「还没解析」写成了一枚点不动的虚线胶囊，理由写着「去模板里点『去解析这条』」——用户得自己跑去模板库找那一条。这一版把这条路接通：**发现页那一行、模板库那张卡片，各自都有一个「去解析」按钮**，点下去就是解析弹窗；解析完成时这条模板**原地升级成已解析模板**（不新开一条），回到发现页，那一行的下一步直接变成「开成作品」。
+
+- **两个入口一个弹窗**：发现页那一行的「去解析」→ 打开这条模板的抽屉（#/templates/<id>，落在「还没解析」那一段）；模板库卡片的「去解析」→ 直接开解析弹窗，不用先进抽屉。
+- **抽屉底部的主操作换成「去解析这条」**：以前这里是一枚**禁用**的「套用到画布」，黑色实心占着主按钮位，把真正的下一步挤到上面去。待解析时整块换成解析；段里那句改成指路，不摆第二枚一样的按钮。
+- **弹窗跟着入口改名**：从待解析的模板进来叫「解析这条原片 / 开始解析」，从检索卡片进来仍是「一键复刻 / 开始复刻」。已经点开「去解析」的人，弹窗标题不该再叫「一键复刻」。
+- **解析是原地升级，不是再存一条**（createTemplate 既有口径，这一版钉进测试）：同账号同 sourceId 的 kind: 'saved' 条目被替换成 replica，createdAt、reuseCount、ownerId、shared、原链接与互动数据都带过来。不去重的后果是库里同一条原片占两格，发现页按 sourceId 认原片时下一步会指回那条没脚本的旧条目，永远停在「还没解析」。
+- **顺手修两处**：从抽屉里点「去解析这条」，解析弹窗被抽屉遮罩压住（document.elementsFromPoint() 在弹窗中心第一个拿到的是 drawer-backdrop，弹窗发灰、点击落到遮罩上把抽屉关了）——弹窗改成和抽屉一样 portal 到 body，举报弹窗同样处理；解析完成把抽屉切到升级后的那条（onDone 带回新的 templateId），不再关掉抽屉什么都不留下。
+
+![生产 1440：发现页「库里的原片」——验收那一行的下一步是一枚虚线「去解析」，其余三行照旧是「作品 · 第 2 版 / 开成作品」（截图用的临时条目，截完已删净）](docs/screenshot-parse-taken-2026-11-13.png)
+
+![生产 1440：模板库卡片脚注的「去解析」——封面上是「待解析」胶囊，正文写「解析后才能改编与开作品」](docs/screenshot-parse-card-2026-11-13.png)
+
+![生产 1440：点「去解析」打开的弹窗——标题「解析这条原片」、主按钮「开始解析」、解析服务与视觉模型就绪、本次 10 积分（只开弹窗不扣分）](docs/screenshot-parse-modal-2026-11-13.png)
+
+![生产 390：同一块折成三行，按钮右对齐，页宽 390 无横向滚动](docs/screenshot-parse-taken-390-2026-11-13.png)
+
+![本地演示数据（非生产）1440：从发现页点「去解析」落到的抽屉——底部主操作是「去解析这条」，段里说明解析后会原地升级、不多出一格](docs/screenshot-parse-drawer-2026-11-13.png)
+
+![本地演示数据 390：「待解析」卡片上的「去解析」与「用这条改编」同位置同尺寸，只把描边改成虚线](docs/screenshot-parse-card-390-2026-11-13.png)
+
+验收：生产 **v0.9.40**、入口 index-7QG7Y75s.js（503,358 字节）、release 20261113-002702-2026-11-13-parse-path.tar.gz、/api/version 0.9.40、/api/health ok（templates 26）、两服务 active。**生产一次可逆写入**：POST /api/templates/from-radar 造一条只有链接的验收条目（tpl_b3d9c863）→ GET /api/taken-origins 那一行 entry.kind = blocked、按钮是「去解析」→ 截图「发现页 / 模板库卡片 / 解析弹窗（解析服务已配置、视觉模型就绪、本次 10 积分 · 当前余额 9954）」→ DELETE 进回收站 + POST /api/templates/tpl_b3d9c863/purge 彻底删 → 回收站里没有它，核对前后 /api/projects（1）、/api/templates（26）、/api/flows（7）的 id/version/updatedAt **完全一致**，taken 回到 25 条原片 · 1 条已开成作品 · 24 条没开成；1440 与 390 都是 scrollWidth == clientWidth。**这一轮没有真的跑解析**（解析要下载视频、抽帧、调视觉模型，按次 10 积分）：弹窗是打开的，「开始解析」没点；生产这次可逆写入只写了「一条只有链接的模板」并删净。本地演示数据（.tmp-qa/r50data，示例数据、不扣积分）：7 条原片 · 2 条已开成作品 · 5 条没开成，其中两行是「还没解析」但现在都给了「去解析」；点发现页那枚 → 落到 #/templates/tpl_r_saved 的抽屉，弹窗中心 elementsFromPoint 第一层是 replicate-head（弹窗在遮罩之上）；模板库两张「待解析」卡片脚注都是「去解析」。npm test **384/384**（新增 test/template-parse-upgrade.test.mjs 4 条：原地升级只留一格、带过 createdAt/reuseCount/互动数据、升级后立刻能开成作品、别人的同源条目不动）、oxlint **0 error / 6 warning**、tsc -b 干净、构建通过。提交 COMMITS_PLACEHOLDER，CI CI_PLACEHOLDER success。
+
+细节见 [「去解析」：只存了链接的那条，现在一步就能往下走](./docs/parse-path-2026-11-13.md)。
