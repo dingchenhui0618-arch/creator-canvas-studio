@@ -78,6 +78,7 @@
   两服务 active。
 - **本轮生产零写入**：截图前后各取一次快照，六路逐字段 `identical: true`
   （作品 1 · 模板 26 · 画布 7 · 原片 25（1 已开成作品 / 24 没开成）· 交付 0 · 余额 9954）。
+- 提交 **a2d8b49**（代码 + 测试）+ **b2e3167**（文档 + 6 张截图），CI **43348582366 success**。
 - `npm test` **411/411**（`test/list-view.test.mjs` 5 → 11 条），`npx oxlint src server test` **0 error / 6 warning**，
   `npx tsc -b` 干净，构建通过。
 
