@@ -31,6 +31,55 @@ export type ProjectSpend = {
   lastAt?: string
 }
 
+/** 花费明细里的一笔：评审或画布运行（v0.9.66）。退款的那笔照样列出，但不计入合计。 */
+export type ProjectSpendEntry = {
+  kind: 'review' | 'run'
+  id: string
+  at: string
+  version: number
+  credits: number
+  /** 这一笔真的扣了积分没有；画布探活之类的运行是 false（金额写 0） */
+  charged?: boolean
+  refunded: boolean
+  /** 评审结论（review）或运行状态（run），老记录可能是空串 */
+  verdict?: string
+  status?: string
+  /** 评审意图或画布名：一行里说清「这笔是哪一次」 */
+  note: string
+}
+
+export type ProjectSpendVersion = {
+  version: number
+  reviews: { count: number; credits: number }
+  runs: { count: number; credits: number }
+  total: number
+  lastAt: string
+}
+
+export type ProjectSpendMonth = { month: string; total: number; reviews: number; runs: number; count: number }
+
+/**
+ * 一条作品的花费明细（v0.9.66）：口径与 ProjectSpend 同源，多给按版本、按月份与逐笔。
+ * 传入 month 时只看那一个月（YYYY-MM），byMonth 与月份切换仍按全部记录算。
+ */
+export type ProjectSpendDetail = {
+  unit: string
+  /** 'all' 或 'YYYY-MM' */
+  scope: string
+  /** 服务端认为的「本月」，页面不按浏览器时钟猜 */
+  month: string
+  total: number
+  reviews: { count: number; credits: number }
+  runs: { count: number; credits: number }
+  refunded: { count: number; credits: number }
+  lastAt: string
+  byVersion: ProjectSpendVersion[]
+  byMonth: ProjectSpendMonth[]
+  count: number
+  shown: number
+  items: ProjectSpendEntry[]
+}
+
 /**
  * 人工复核：人看过证据后对某一次评审拍板的结果。
  * 它不改评审记录本身（模型写了什么还是什么），只回答「这一版是谁拍的板、拍成什么」。

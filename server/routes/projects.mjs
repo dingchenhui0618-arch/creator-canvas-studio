@@ -25,6 +25,7 @@ import {
   detachReviewsFromProject,
 } from '../reviews.mjs'
 import { projectDeliverable } from '../project-deliverable.mjs'
+import { projectSpendDetail } from '../project-spend.mjs'
 import { deliverablePrintHtml, printNoticeHtml } from '../project-deliverable-html.mjs'
 import { packageNote, parseShotRange, setSheetHtml, setSheetModel } from '../project-set-sheet.mjs'
 import { reviewImageRef, reviewSheetHtml, reviewSheetSelection } from '../project-review-sheet.mjs'
@@ -53,6 +54,8 @@ import {
 } from '../projects.mjs'
 
 const ITEM = /^\/api\/projects\/([\w-]+)$/
+// 作品的花费明细（v0.9.66）：合计在详情里，明细单独取，点开才读
+const SPEND = /^\/api\/projects\/([\w-]+)\/spend$/
 const VERSIONS = /^\/api\/projects\/([\w-]+)\/versions$/
 const SCRIPT = /^\/api\/projects\/([\w-]+)\/script$/
 const CANVAS = /^\/api\/projects\/([\w-]+)\/canvas$/
@@ -824,6 +827,18 @@ export function createProjectsRouter() {
           'Cache-Control': 'no-store',
         })
         res.end(archive)
+        return true
+      }
+
+      // 花费明细：一条作品花了哪些笔、按版本各多少；?month=YYYY-MM 只看那个月
+      const spendPath = pathname.match(SPEND)
+      if (spendPath && req.method === 'GET') {
+        const project = await getProject(spendPath[1], user)
+        if (!project) {
+          sendJson(res, 404, { error: '作品不存在或已被删除' })
+          return true
+        }
+        sendJson(res, 200, await projectSpendDetail(project, user, { month: String(url.searchParams.get('month') || '') }))
         return true
       }
 

@@ -1348,6 +1348,209 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
   white-space: nowrap;
 }
 
+/* 花费明细（v0.9.66）：面板头右边多一个「明细」，点开才读接口。
+   版本一行回答「改一版花多少」，逐笔一行回答「这笔是哪一次」；
+   退过款的那笔灰掉、金额划掉，合计与列出来的几笔因此对得上。 */
+.vq-project-spend-head {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.vq-spend-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out),
+    color var(--dur-1) var(--ease-out);
+}
+
+.vq-spend-toggle:hover,
+.vq-spend-toggle:focus-visible {
+  background: var(--surface-raised);
+  color: var(--ink);
+}
+
+.vq-spend-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(17, 17, 17, 0.12);
+}
+
+.vq-spend-toggle svg {
+  transition: transform var(--dur-1) var(--ease-out);
+}
+
+.vq-spend-toggle svg.is-open {
+  transform: rotate(180deg);
+}
+
+.vq-project-spend-detail {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.vq-spend-scope {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.vq-spend-scope-line {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-meta);
+  line-height: var(--leading-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+.vq-spend-versions {
+  display: grid;
+}
+
+/* 退款那份单独成块：换行时整段一起走，别把「共 6」的 6 掉到下一行孤零零的 */
+.vq-spend-refunded {
+  white-space: nowrap;
+}
+
+.vq-spend-version {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: var(--text-meta);
+}
+
+.vq-spend-version:first-child {
+  border-top: 0;
+}
+
+.vq-spend-version-n {
+  color: var(--ink);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+}
+
+.vq-spend-version b {
+  color: var(--ink);
+  font-weight: var(--weight-normal);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.vq-spend-items {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vq-spend-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+  font-size: var(--text-meta);
+}
+
+.vq-spend-item:first-child {
+  border-top: 0;
+}
+
+.vq-spend-item-time {
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+.vq-spend-item-text {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vq-spend-item-credits {
+  color: var(--ink);
+  font-weight: var(--weight-normal);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.vq-spend-item.is-refunded .vq-spend-item-text,
+.vq-spend-item.is-refunded .vq-spend-item-credits {
+  color: var(--faint);
+}
+
+.vq-spend-item.is-refunded .vq-spend-item-credits {
+  text-decoration: line-through;
+}
+
+/* 窄屏：一行放不下三列，改成「时间 + 金额」在上、说明整行在下，
+   否则「画布运行 · 第 1 版 · 毛衣快速折叠收纳法」会被挤成四行。 */
+@media (max-width: 520px) {
+  .vq-spend-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'time credits'
+      'text text';
+    row-gap: 4px;
+  }
+
+  .vq-spend-item-time {
+    grid-area: time;
+  }
+
+  .vq-spend-item-text {
+    grid-area: text;
+    white-space: normal;
+  }
+
+  .vq-spend-item-credits {
+    grid-area: credits;
+  }
+
+  /* 版本行窄下来同样两行：版次与合计在上，评审/运行在下一行 */
+  .vq-spend-version {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      'n total'
+      'text text';
+    row-gap: 4px;
+  }
+
+  .vq-spend-version-n {
+    grid-area: n;
+  }
+
+  .vq-spend-version span:not(.vq-spend-version-n) {
+    grid-area: text;
+    white-space: normal;
+  }
+
+  .vq-spend-version b {
+    grid-area: total;
+    text-align: right;
+  }
+}
+
 /* ---------- 作品页直接改脚本（2026-11-12，P1） ----------
    入口是小字按钮，不和「下一步」抢主按钮；编辑态沿用节拍列表的 24px 序号列，
    输入框与模板改编同一种圆角/描边，改完保存才落库（copy-on-write）。 */

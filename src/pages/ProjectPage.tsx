@@ -11,6 +11,7 @@ import {
   enableProjectShare,
   getProject,
   openProjectCanvas,
+  projectSpend,
   resetProjectScript,
   reviewSheetUrl,
   saveProjectAsTemplate,
@@ -22,7 +23,7 @@ import {
 } from '../api/projects'
 import { describeTiming, type ScriptBeat } from '../domain/radar'
 import { formatCount } from '../api/radar'
-import { deliveredCurrent, deliveryOf, projectStep, reviewsForVersion, runsForVersion, type ProjectDetail } from '../domain/project'
+import { deliveredCurrent, deliveryOf, projectStep, reviewsForVersion, runsForVersion, type ProjectDetail, type ProjectSpendDetail } from '../domain/project'
 import { ackReview, decideReview, clearReviewDecision, unackReview } from '../api/review'
 import { REVIEW_VERDICT_LABEL as VERDICT_LABEL, reviewTimeLabel, reviewsOfVersion } from '../domain/review'
 import { stampTime as stamp, visitLine } from '../domain/share'
@@ -41,6 +42,18 @@ const SCRIPT_CANVAS_NOTE: Record<string, string> = {
 const KIND_LABEL: Record<string, string> = { replica: '原片拆解', adapted: '改编版', flow: '工作流', saved: '待解析' }
 
 const pad2 = (value: number) => String(value).padStart(2, '0')
+
+// 花费明细里的时间：只到分钟，年份省掉——同一屏里不会有跨年的几笔
+function shortStamp(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '—'
+  return `${pad2(date.getMonth() + 1)}-${pad2(date.getDate())} ${pad2(date.getHours())}:${pad2(date.getMinutes())}`
+}
+
+function monthLabel(month: string): string {
+  const index = Number(month.slice(5, 7))
+  return Number.isFinite(index) && index >= 1 && index <= 12 ? index + ' 月' : month
+}
 
 function seconds(value: number | undefined): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '—'
@@ -119,6 +132,12 @@ export default function ProjectPage({
   }>({ open: false, title: '', busy: false, error: '', done: null })
   // 「已看过」也在作品页原地做：人点进来看了，就不该再回工作台点一下
   const [ackBusy, setAckBusy] = useState<'' | 'ack' | 'undo'>('')
+  // 花费明细（v0.9.66）：合计在详情里已有，点「明细」才读逐笔；scope 为空是累计，否则是 YYYY-MM
+  const [spendOpen, setSpendOpen] = useState(false)
+  const [spendScope, setSpendScope] = useState('')
+  const [spendDetail, setSpendDetail] = useState<ProjectSpendDetail | null>(null)
+  const [spendBusy, setSpendBusy] = useState(false)
+  const [spendError, setSpendError] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -139,6 +158,34 @@ export default function ProjectPage({
     }, 0)
     return () => window.clearTimeout(timer)
   }, [load])
+
+  // 花费明细：读一次就留着，切月份才重新取；点「收起」不清缓存，再点开还是同一份
+  const loadSpend = useCallback(async (scope: string) => {
+    setSpendBusy(true)
+    setSpendError('')
+    try {
+      setSpendDetail(await projectSpend(projectId, scope))
+    } catch (caught) {
+      setSpendError(caught instanceof Error ? caught.message : '花费明细读取失败')
+    } finally {
+      setSpendBusy(false)
+    }
+  }, [projectId])
+
+  const toggleSpend = () => {
+    if (spendOpen) {
+      setSpendOpen(false)
+      return
+    }
+    setSpendOpen(true)
+    void loadSpend(spendScope)
+  }
+
+  const pickSpendScope = (scope: string) => {
+    if (scope === spendScope) return
+    setSpendScope(scope)
+    void loadSpend(scope)
+  }
 
 
   // 交付菜单：点别处、按 Esc 都收起
@@ -605,6 +652,10 @@ export default function ProjectPage({
   const { project, template, flow, reviews } = data
   // 这条作品花掉的积分（v0.9.65）：评审与画布运行分开记，退过款的那次运行不算
   const spend = data.spend
+  // 明细里的「累计 / 本月」两枚胶囊上的数字：byMonth 按全部记录算，切范围时上面的数字不跟着缩水
+  const spendByMonth = spendDetail?.byMonth || []
+  const spendTotalAll = spendByMonth.reduce((sum, row) => sum + row.total, 0)
+  const spendTotalMonth = spendByMonth.find((row) => row.month === spendDetail?.month)?.total || 0
   // 脚本是作品页自己的视图：改过就是这条作品自己的版本，没改过则跟随模板
   const script = data.script
   // 状态与「下一步」只看当前这一版评过没有：新版刚开出来时不能因为上一版评过就跳过评审
@@ -1423,8 +1474,20 @@ export default function ProjectPage({
             <section className="vq-project-panel vq-project-spend" aria-labelledby="vq-project-spend-head">
               <div className="vq-project-panel-head">
                 <h2 id="vq-project-spend-head">花费</h2>
-                <span className="vq-mono">
-                  {spend.total.toLocaleString('zh-CN')} {spend.unit}
+                <span className="vq-project-spend-head">
+                  <span className="vq-mono">
+                    {spend.total.toLocaleString('zh-CN')} {spend.unit}
+                  </span>
+                  <button
+                    type="button"
+                    className="vq-spend-toggle"
+                    aria-expanded={spendOpen}
+                    aria-controls="vq-project-spend-detail"
+                    onClick={toggleSpend}
+                  >
+                    {spendOpen ? '收起' : '明细'}
+                    <ChevronDown size={12} className={spendOpen ? 'is-open' : ''} />
+                  </button>
                 </span>
               </div>
               {spend.total > 0 ? (
@@ -1453,6 +1516,102 @@ export default function ProjectPage({
               <p className="vq-project-note">
                 退过款的运行不算（钱已经退回）；检索、复刻与智能体对话记在账号上，去设置页「本月花在哪」看。
               </p>
+              {spendOpen ? (
+                <div className="vq-project-spend-detail" id="vq-project-spend-detail">
+                  {spendBusy ? <p className="vq-project-note">正在读明细…</p> : null}
+                  {spendError ? <p className="vq-project-note">明细没读出来：{spendError}</p> : null}
+                  {spendDetail ? (
+                    <>
+                      <div className="vq-spend-scope" role="group" aria-label="花费时间范围">
+                        <button
+                          type="button"
+                          className={'vq-filter-chip' + (spendScope === '' ? ' is-active' : '')}
+                          aria-pressed={spendScope === ''}
+                          onClick={() => pickSpendScope('')}
+                        >
+                          累计
+                          <span className="vq-filter-chip__count">{spendTotalAll.toLocaleString('zh-CN')}</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={'vq-filter-chip' + (spendScope !== '' ? ' is-active' : '')}
+                          aria-pressed={spendScope !== ''}
+                          onClick={() => pickSpendScope(spendDetail.month)}
+                        >
+                          {monthLabel(spendDetail.month)}
+                          <span className="vq-filter-chip__count">{spendTotalMonth.toLocaleString('zh-CN')}</span>
+                        </button>
+                      </div>
+                      <p className="vq-spend-scope-line">
+                        {spendScope === '' ? '累计 · ' : monthLabel(spendScope) + ' · '}
+                        {spendDetail.total.toLocaleString('zh-CN')} {spendDetail.unit} · 评审{' '}
+                        {spendDetail.reviews.credits.toLocaleString('zh-CN')} · 运行{' '}
+                        {spendDetail.runs.credits.toLocaleString('zh-CN')}
+                        {spendDetail.refunded.count ? (
+                          <span className="vq-spend-refunded">
+                            {' · 已退回 '}
+                            {spendDetail.refunded.count}
+                            {' 次共 '}
+                            {spendDetail.refunded.credits.toLocaleString('zh-CN')}
+                          </span>
+                        ) : null}
+                      </p>
+                      {spendDetail.byVersion.length ? (
+                        <div className="vq-spend-versions">
+                          {spendDetail.byVersion.map((row) => (
+                            <p className="vq-spend-version" key={row.version}>
+                              <span className="vq-spend-version-n">第 {row.version} 版</span>
+                              <span>
+                                评审 {row.reviews.count} 次 {row.reviews.credits.toLocaleString('zh-CN')} · 运行{' '}
+                                {row.runs.count} 次 {row.runs.credits.toLocaleString('zh-CN')}
+                              </span>
+                              <b>
+                                合计 {row.total.toLocaleString('zh-CN')} {spendDetail.unit}
+                              </b>
+                            </p>
+                          ))}
+                        </div>
+                      ) : null}
+                      {spendDetail.items.length ? (
+                        <ol className="vq-spend-items">
+                          {spendDetail.items.map((entry) => (
+                            <li
+                              className={'vq-spend-item' + (entry.refunded ? ' is-refunded' : '')}
+                              key={entry.kind + ':' + entry.id}
+                            >
+                              <span className="vq-spend-item-time vq-mono">{shortStamp(entry.at)}</span>
+                              <span className="vq-spend-item-text">
+                                {entry.kind === 'review' ? '视觉评审' : '画布运行'}
+                                {entry.version ? ' · 第 ' + entry.version + ' 版' : ''}
+                                {entry.kind === 'review'
+                                  ? ' · ' + (VERDICT_LABEL[entry.verdict || ''] || '结论未记录')
+                                  : entry.note
+                                    ? ' · ' + entry.note
+                                    : ''}
+                              </span>
+                              <b className="vq-spend-item-credits">
+                                {entry.credits
+                                  ? entry.credits.toLocaleString('zh-CN') + ' ' + spendDetail.unit
+                                  : '未扣积分'}
+                                {entry.refunded ? ' · 已退回' : ''}
+                              </b>
+                            </li>
+                          ))}
+                        </ol>
+                      ) : (
+                        <p className="vq-project-note">
+                          {spendScope === '' ? '这条作品还没花过积分。' : monthLabel(spendScope) + '还没花过积分。'}
+                        </p>
+                      )}
+                      {spendDetail.count > spendDetail.shown ? (
+                        <p className="vq-project-note">
+                          只列最近 {spendDetail.shown} 笔（共 {spendDetail.count} 笔），更早的按月切换看。
+                        </p>
+                      ) : null}
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
             </section>
           ) : null}
 

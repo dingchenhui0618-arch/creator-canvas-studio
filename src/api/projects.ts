@@ -8,6 +8,7 @@ import type {
   ProjectListFacets,
   ProjectScript,
   ProjectShare,
+  ProjectSpendDetail,
   ProjectSummary,
   ShareSummaryRow,
   SharedProject,
@@ -49,6 +50,11 @@ export const listDeliveries = (offset = 0) =>
   request<DeliveryLedger>('/api/deliveries' + (offset > 0 ? '?offset=' + encodeURIComponent(offset) : ''))
 
 export const getProject = (id: string) => request<ProjectDetail>('/api/projects/' + id)
+
+// 花费明细（v0.9.66）：合计在作品详情里，点开「明细」才读这一份。
+// month 给 YYYY-MM 只看那个月；不给就是累计。
+export const projectSpend = (id: string, month = '') =>
+  request<ProjectSpendDetail>('/api/projects/' + id + '/spend' + (month ? '?month=' + encodeURIComponent(month) : ''))
 
 // 建作品有两条起点：一条模板（脚本与分镜先有），或者一块已经跑过的画布（v0.9.29）。
 // 从画布建的作品没有模板，脚本在作品页现写，画布已经在了所以一出生就是 v1。

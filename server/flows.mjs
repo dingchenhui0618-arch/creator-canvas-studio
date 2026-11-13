@@ -359,7 +359,7 @@ export function runSummary(run) {
  * 以前运行记录只按 flowId 筛，开一版新的之后旧版的运行就再也找不回来了；
  * 这里把作品名下所有版本画布的运行合成一条时间线，byFlow 再给版本对照提供每版跑了几次。
  */
-export async function listRunsByFlows(flowIds = [], { limit = 20 } = {}, user = null) {
+export async function listRunsByFlows(flowIds = [], { limit = 20, all = false } = {}, user = null) {
   const wanted = new Set((Array.isArray(flowIds) ? flowIds : []).filter(Boolean))
   if (!wanted.size) return { items: [], total: 0, byFlow: {}, creditsByFlow: {} }
   const list = (await loadRuns()).filter((run) => wanted.has(run.flowId) && canAccess(run, user))
@@ -375,7 +375,8 @@ export async function listRunsByFlows(flowIds = [], { limit = 20 } = {}, user = 
       creditsByFlow[run.flowId] = (creditsByFlow[run.flowId] || 0) + Math.max(0, Number(run.credits.cost) || 0)
     }
   }
-  return { items: list.slice(0, count).map(runSummary), total: list.length, byFlow, creditsByFlow }
+  // all：花费明细要每一笔（作品页的运行归集只取前 20 条摘要），页面摘要仍按 limit 封顶
+  return { items: (all ? list : list.slice(0, count)).map(runSummary), total: list.length, byFlow, creditsByFlow }
 }
 
 // ---------- 拓扑与执行 ----------

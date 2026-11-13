@@ -183,6 +183,24 @@ export async function reviewSpend(projectId, user = null) {
   return out
 }
 
+/**
+ * 一条作品上每一笔评审花费（v0.9.66）：花费明细要按笔排，不能只给合计。
+ * 与 reviewSpend 同一套口径：只认记着 projectId 的评审，普通首帧评审不属于任何作品。
+ */
+export async function reviewSpendItems(projectId, user = null) {
+  if (!projectId) return []
+  const list = (await loadAll()).filter((item) => canAccess(item, user) && item.projectId === String(projectId))
+  return list.map((item) => ({
+    id: item.id,
+    at: String(item.createdAt || ''),
+    // 版本划分之前的老评审记的是 0：与作品页、交付稿同一套规则折进 v1
+    version: Math.max(1, Math.round(Number(item.version) || 0)),
+    verdict: item.result?.verdict || '',
+    credits: Math.max(0, Number(item.credits?.cost) || 0),
+    note: String(item.intent || '').slice(0, 80),
+  }))
+}
+
 /** 一条作品内按版本分组：作品页的「版本对照」要显示每一版评过几次、最后结论。 */
 export async function reviewSummaryByVersion(projectId, user = null) {
   if (!projectId) return {}
