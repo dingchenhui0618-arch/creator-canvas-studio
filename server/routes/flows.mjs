@@ -60,8 +60,11 @@ function beginRunCharge(res, user, ref, label = '') {
     sendJson(res, water.status, water.body)
     return null
   }
+  // 名额是 admit 占的（v0.9.78：跨进程租约），扣费失败这条路径要先还回去
+  const releaseAdmission = () => { try { water.lease.release() } catch { /* 还名额不该影响响应 */ } }
   const max = capacityFor('flow_run', Number(config.credits.concurrency.flow_run || 0), water.level)
   if (max && !enter(user.id, 'flow_run', max)) {
+    releaseAdmission()
     sendJson(res, 429, {
       error: '这个账号还有一条流程在跑，等它结束再试',
       code: 'CONCURRENCY_LIMIT',
@@ -71,6 +74,7 @@ function beginRunCharge(res, user, ref, label = '') {
   }
   const paid = charge(user.id, 'flow_run', { ref, meta: label ? { label } : null })
   if (!paid.ok) {
+    releaseAdmission()
     leave(user.id, 'flow_run')
     if (paid.code === 'MONTHLY_QUOTA') {
       const refusal = quotaRefusal(paid)
@@ -89,7 +93,7 @@ function beginRunCharge(res, user, ref, label = '') {
   return {
     cost: paid.cost,
     balance: paid.balance,
-    release: () => leave(user.id, 'flow_run'),
+    release: () => { leave(user.id, 'flow_run'); releaseAdmission() },
   }
 }
 

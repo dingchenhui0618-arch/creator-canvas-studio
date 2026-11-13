@@ -5,6 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import http from 'node:http'
 import { Readable } from 'node:stream'
+import { isolateLeaseDir } from './lease-isolation.mjs'
 
 // 画布运行的钱与记录：这一组盯住四条不变量——
 //   1) 运行一开始就落盘，进程被杀也查得到这次运行；
@@ -13,6 +14,8 @@ import { Readable } from 'node:stream'
 //   4) 同一次运行无论被收尾多少次，退款只发生一次。
 process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'vq-run-recovery-'))
 process.env.VQ_KEY_SECRET = 'test-secret-run-recovery'
+// 跨进程租约（v0.9.78）：测试文件并行跑，名额必须各算各的
+isolateLeaseDir('vq-lease-run-recovery-')
 process.env.VISION_API_KEY = ''
 
 const auth = await import('../server/auth.mjs')

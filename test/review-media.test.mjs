@@ -8,9 +8,12 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { Readable } from 'node:stream'
+import { isolateLeaseDir } from './lease-isolation.mjs'
 
 process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'vq-review-media-'))
 process.env.VQ_KEY_SECRET = 'test-secret-review-media'
+// 跨进程租约（v0.9.78）：测试文件并行跑，名额必须各算各的
+isolateLeaseDir('vq-lease-review-media-')
 // 单测不许碰真实上游：把模型地址指向一个必定连不上的端口，第 4 条用例只用来看「前置闸放行」，
 // 走到模型那一步报什么错都不影响结论。
 process.env.VISION_BASE_URL = 'http://127.0.0.1:9/v1'

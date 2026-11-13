@@ -251,14 +251,18 @@ export function createReviewRouter() {
           sendJson(res, water.status, water.body)
           return true
         }
+        // 名额是 admit 占的（v0.9.78：跨进程租约），每条提前返回的路径都要还回去
+        const releaseAdmission = () => { try { water.lease.release() } catch { /* 还名额不该影响响应 */ } }
         // 评审按次扣积分：先扣后调，失败退款
         const limit = capacityFor('review', Number(config.credits.concurrency.review || 0), water.level)
         if (user?.id && !enter(user.id, 'review', limit)) {
+          releaseAdmission()
           sendJson(res, 429, { error: '这个账号还有评审在跑，等它结束再试', code: 'CONCURRENCY_LIMIT', limit })
           return true
         }
         const paid = user?.id ? charge(user.id, 'review', { ref: body.intent ? String(body.intent).slice(0, 60) : '视觉评审' }) : { ok: true, cost: 0, balance: null }
         if (!paid.ok) {
+          releaseAdmission()
           if (user?.id) leave(user.id, 'review')
           if (paid.code === 'MONTHLY_QUOTA') {
             const refusal = quotaRefusal(paid)
@@ -331,6 +335,7 @@ export function createReviewRouter() {
           sendJson(res, 500, { error: publicError(error, '评审服务暂时不可用，积分已退回') })
         } finally {
           if (user?.id) leave(user.id, 'review')
+          releaseAdmission()
         }
         return true
       }

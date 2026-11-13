@@ -21,6 +21,7 @@ import v8 from 'node:v8'
 import { config } from './config.mjs'
 import { recordAlert } from './alerts.mjs'
 import { activeFor } from './gate.mjs'
+import { acquireHeavyLease, heavyLeaseStatus } from './heavy-lease.mjs'
 
 const MB = 1048576
 export const HEAVY_KINDS = ['replicate', 'review', 'flow_run']
@@ -153,8 +154,9 @@ export function waterlineReport() {
     // 守卫关掉时不做折算：那一屏要如实显示「现在会按几条放行」
     capacity[kind] = limits.guard ? capacityFor(kind, baseCapacity[kind], verdict.level) : baseCapacity[kind]
   }
-  // 在跑的重活：跨账号的真实计数（来自并发闸门的进程内计数，不是任务表里的历史行）
-  const active = activeFor(HEAVY_KINDS)
+  // 在跑的重活：整机的真实计数（v0.9.78 起来自共享目录的租约，跨两个实例；不是任务表里的历史行）
+  const lease = heavyLeaseStatus()
+  const active = lease.source === 'lease' ? { total: lease.total, byKind: lease.byKind } : activeFor(HEAVY_KINDS)
   const globalLimit = limits.guard ? globalHeavyCap(verdict.level) : 0
   return {
     ok: true,
@@ -170,6 +172,9 @@ export function waterlineReport() {
       unlimited: globalLimit === 0,
       configLimit: Math.max(0, Math.round(Number(config.credits.globalHeavy) || 0)),
       full: globalLimit > 0 && active.total >= globalLimit,
+      // scope=lease 表示这个数整机共用（两个实例同一个数）；process 表示退回进程内计数
+      scope: lease.source,
+      lease,
     },
     memory,
     heap,
@@ -196,58 +201,105 @@ function alertOnce(kind, verdict, reason) {
   }).catch(() => {})
 }
 
-/** 扣费前的闸门：返回 ok 或一条可以直接回给前端的 503。 */
-export function admit(kind) {
-  const limits = thresholds()
-  if (!limits.guard || !HEAVY.has(kind)) return { ok: true, level: 'ok' }
-  const memory = readMemoryFacts()
-  const heap = readHeapFacts()
-  const verdict = assessWaterline({ memory, heap }, limits)
-  if (verdict.level !== 'critical') {
-    // 全站重活已满：这一单不接（走到这里说明内存还没到红线，只是同时在跑的活太多了）。
-    // 检查与后面 enter() 的加一在同一段同步代码里，中间没有 await，
-    // 所以单线程下不会出现两个请求都看见「还差一个空位」然后一起挤进去。
-    const cap = globalHeavyCap(verdict.level)
-    if (cap > 0) {
-      const active = activeFor(HEAVY_KINDS)
-      if (active.total >= cap) {
-        const internal = config.ui.mode === 'internal'
-        return {
-          ok: false,
-          level: verdict.level,
-          status: 503,
-          body: {
-            error: internal
-              ? '服务器正在同时跑 ' + active.total + ' 条重活（上限 ' + cap + ' 条），这条任务没有开始（没有扣积分）。等一分钟再试。'
-              : '服务器正忙，这条任务没有开始（没有扣积分）；等一分钟再试，或者稍后挑个空的时候再跑。',
-            code: 'SERVER_BUSY',
-            level: verdict.level,
-            active: active.total,
-            limit: cap,
-            retryAfterSec: RETRY_AFTER_SEC,
-            ...(internal ? { busyKinds: active.byKind } : {}),
-          },
-        }
-      }
-    }
-    return { ok: true, level: verdict.level }
-  }
-  const reason = verdict.reasons.join('；')
-  alertOnce(String(kind), verdict, reason)
+/** 名额满时回给前端的那一条：生产口径不带内部读数，内部环境才给按类型的明细。 */
+function busyBody(active, cap, level, extra = {}) {
   const internal = config.ui.mode === 'internal'
   return {
-    ok: false,
-    level: 'critical',
-    status: 503,
-    body: {
-      error: internal
-        ? '服务器内存紧张，这条任务没有开始（没有扣积分）：' + reason + '。等一分钟再试。'
-        : '服务器内存紧张，这条任务没有开始（没有扣积分）；等一分钟再试，或者稍后挑个空的时候再跑。',
-      code: 'MEMORY_PRESSURE',
-      level: 'critical',
-      retryAfterSec: RETRY_AFTER_SEC,
-      ...(internal ? { reasons: verdict.reasons, availableMb: verdict.availableMb, heapPercent: verdict.heapPercent } : {}),
-    },
+    error: internal
+      ? '服务器正在同时跑 ' + active.total + ' 条重活（上限 ' + cap + ' 条），这条任务没有开始（没有扣积分）。等一分钟再试。'
+      : '服务器正忙，这条任务没有开始（没有扣积分）；等一分钟再试，或者稍后挑个空的时候再跑。',
+    code: 'SERVER_BUSY',
+    level,
+    active: active.total,
+    limit: cap,
+    retryAfterSec: RETRY_AFTER_SEC,
+    ...(internal ? { busyKinds: active.byKind, ...extra } : {}),
+  }
+}
+
+/**
+ * 扣费前的闸门：返回 ok（带一个必须 release 的名额）或一条可以直接回给前端的 503。
+ *
+ * v0.9.78 起「数名额」和「占名额」是同一件事：重活在共享目录里占一条租约，
+ * 两个实例（对外 + 内部版）看到的是同一个数。租约写不进去时退回进程内计数，
+ * 行为和 v0.9.77 一样——宁可少一层保护，也不能因为目录权限把重活全拒了。
+ */
+export function admit(kind) {
+  const limits = thresholds()
+  if (!HEAVY.has(kind)) return { ok: true, level: 'ok', lease: null }
+  let level = 'ok'
+  let reasons = []
+  if (limits.guard) {
+    const memory = readMemoryFacts()
+    const heap = readHeapFacts()
+    const verdict = assessWaterline({ memory, heap }, limits)
+    level = verdict.level
+    if (level === 'critical') {
+      const reason = verdict.reasons.join('；')
+      alertOnce(String(kind), verdict, reason)
+      const internal = config.ui.mode === 'internal'
+      return {
+        ok: false,
+        level: 'critical',
+        status: 503,
+        lease: null,
+        body: {
+          error: internal
+            ? '服务器内存紧张，这条任务没有开始（没有扣积分）：' + reason + '。等一分钟再试。'
+            : '服务器内存紧张，这条任务没有开始（没有扣积分）；等一分钟再试，或者稍后挑个空的时候再跑。',
+          code: 'MEMORY_PRESSURE',
+          level: 'critical',
+          retryAfterSec: RETRY_AFTER_SEC,
+          ...(internal ? { reasons: verdict.reasons, availableMb: verdict.availableMb, heapPercent: verdict.heapPercent } : {}),
+        },
+      }
+    }
+    reasons = verdict.reasons
+  }
+  // 守卫关掉时也占租约：后台那一屏要能看见「整机在跑几条」，只是不拦
+  const cap = limits.guard ? globalHeavyCap(level) : 0
+  const got = acquireHeavyLease(kind, { limit: cap })
+  if (!got.ok) {
+    return {
+      ok: false,
+      level,
+      status: 503,
+      lease: null,
+      scope: got.source,
+      body: busyBody({ total: got.active, byKind: got.byKind || {} }, cap, level, got.leases ? { busyLeases: got.leases.length } : {}),
+    }
+  }
+  if (got.source !== 'lease' && cap > 0) {
+    // 共享目录用不了：退回进程内的计数，也就是 v0.9.77 的判定
+    const active = activeFor(HEAVY_KINDS)
+    if (active.total >= cap) {
+      got.lease.release()
+      return { ok: false, level, status: 503, lease: null, scope: got.source, body: busyBody(active, cap, level) }
+    }
+  }
+  return { ok: true, level, reasons, lease: got.lease, active: got.active, scope: got.source }
+}
+
+/**
+ * 后台的「现在能接一条重活吗」预检：走和真实请求完全一样的 admit，
+ * 占到的名额立刻还回去，所以不扣积分、不调上游、不落记录。
+ */
+export function admissionCheck(kind) {
+  const started = Date.now()
+  const water = admit(kind)
+  if (water.lease) water.lease.release()
+  return {
+    ok: water.ok,
+    kind,
+    level: water.level,
+    status: water.ok ? 200 : water.status,
+    code: water.ok ? '' : (water.body && water.body.code) || '',
+    active: water.ok ? (water.active || 0) : water.body.active,
+    limit: water.ok ? null : water.body.limit,
+    scope: water.scope || (water.body && water.body.scope) || null,
+    byKind: water.ok ? null : water.body.busyKinds || null,
+    ms: Date.now() - started,
+    checkedAt: new Date().toISOString(),
   }
 }
 

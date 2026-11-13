@@ -10,10 +10,13 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { Readable } from 'node:stream'
+import { isolateLeaseDir } from './lease-isolation.mjs'
 
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vq-water-'))
 process.env.DATA_DIR = dataDir
 process.env.VQ_KEY_SECRET = 'test-secret-waterline'
+// 跨进程租约（v0.9.78）：测试文件并行跑，名额必须各算各的
+isolateLeaseDir('vq-lease-waterline-')
 
 const { config } = await import('../server/config.mjs')
 const water = await import('../server/waterline.mjs')
@@ -96,8 +99,10 @@ test('读数：来自真实系统与真实 V8 堆，不是编的', () => {
   // 全站重活在跑几条：真实计数（不是任务表里的历史行），默认上限 3 条
   assert.equal(typeof report.heavy.active, 'number')
   assert.equal(report.heavy.configLimit, 3)
-  assert.equal(report.heavy.limit, report.heavy.configLimit)
-  assert.equal(report.heavy.unlimited, false)
+  // 上限会随水位收紧（偏紧时 3 → 2）：这一屏要说的是「现在会按几条放行」，不是配置原值
+  assert.equal(report.heavy.limit, water.globalHeavyCap(report.level))
+  assert.equal(report.heavy.unlimited, report.heavy.limit === 0)
+  assert.equal(report.heavy.scope, 'lease')
 })
 
 test('到红线：重活被拒且说清没扣积分，轻活照常，生产口径不带内部读数', async () => {
@@ -136,12 +141,13 @@ test('到红线会进站内告警，且同一段时间不刷屏', async () => {
 })
 
 test('全站重活上限：跨账号合计满了就拒，放手后立刻放行，写 0 等于不限', async () => {
-  const gate = await import('../server/gate.mjs')
   const previous = config.credits.globalHeavy
   try {
     config.credits.globalHeavy = 1
-    // 另一个账号正在复刻：并发闸门的计数就是这里唯一的口径
-    assert.equal(gate.enter('ghost-a', 'replicate', 2), true)
+    // 另一个账号正在复刻：整机名额被它占着（v0.9.78 起是一份跨进程租约，不是进程内计数）
+    const held = water.admit('replicate')
+    assert.equal(held.ok, true)
+    assert.equal(held.scope, 'lease')
     try {
       const refusal = water.admit('replicate')
       assert.equal(refusal.ok, false)
@@ -158,20 +164,27 @@ test('全站重活上限：跨账号合计满了就拒，放手后立刻放行�
       assert.equal(report.heavy.active, 1)
       assert.equal(report.heavy.byKind.replicate, 1)
       assert.equal(report.heavy.full, true)
+      // 这一屏数的是整机（两个实例共用），不是本进程
+      assert.equal(report.heavy.scope, 'lease')
+      assert.equal(report.heavy.lease.enabled, true)
+      assert.equal(typeof report.heavy.lease.dir, 'string')
     } finally {
-      gate.leave('ghost-a', 'replicate')
+      held.lease.release()
     }
     // 那条活跑完，立刻能接新的
-    assert.equal(water.admit('replicate').ok, true)
+    const again = water.admit('replicate')
+    assert.equal(again.ok, true)
+    again.lease.release()
     assert.equal(water.waterlineReport().heavy.full, false)
-    // 写 0 = 不限：这一层整个不生效（改配置就恢复旧行为）
+    // 写 0 = 不限：这一层整个不生效（改配置就恢复旧行为），但在跑几条照样数得出来
     config.credits.globalHeavy = 0
-    assert.equal(gate.enter('ghost-b', 'flow_run', 1), true)
+    const free = water.admit('flow_run')
+    assert.equal(free.ok, true)
     try {
-      assert.equal(water.admit('flow_run').ok, true)
       assert.equal(water.waterlineReport().heavy.unlimited, true)
+      assert.equal(water.waterlineReport().heavy.active, 1)
     } finally {
-      gate.leave('ghost-b', 'flow_run')
+      free.lease.release()
     }
   } finally {
     config.credits.globalHeavy = previous
@@ -196,12 +209,19 @@ test('全站上限随水位收紧：偏紧 2 条，配置更严时听配置，�
 
 test('守卫可以整条关掉：只量不拦', async () => {
   await withWaterline({ guard: false, criticalAvailableMb: 10 ** 9 }, async () => {
-    assert.equal(water.admit('replicate').ok, true)
-    const report = water.waterlineReport()
-    assert.equal(report.guard, false)
-    // 关掉的是「拦」，等级照样如实报出来；并发不折算，如实显示会放行几条
-    assert.equal(report.level, 'critical')
-    assert.equal(report.capacity.replicate, report.baseCapacity.replicate)
+    // 守卫关掉时只量不拦：名额照样占（后台看得见），只是不看水位也不看上限
+    const free = water.admit('replicate')
+    assert.equal(free.ok, true)
+    try {
+      const report = water.waterlineReport()
+      assert.equal(report.guard, false)
+      // 关掉的是「拦」，等级照样如实报出来；并发不折算，如实显示会放行几条
+      assert.equal(report.level, 'critical')
+      assert.equal(report.capacity.replicate, report.baseCapacity.replicate)
+      assert.equal(report.heavy.limit, 0)
+    } finally {
+      free.lease.release()
+    }
   })
 })
 
@@ -240,9 +260,45 @@ function mockRes() {
 
 const call = async (router, req, pathname) => {
   const res = mockRes()
-  await router.handle(req, res, new URL('http://127.0.0.1' + pathname), pathname)
+  // 和真实服务器一致：参数里带查询串，pathname 是不带查询串的那一段
+  const url = new URL('http://127.0.0.1' + pathname)
+  await router.handle(req, res, url, url.pathname)
   return res
 }
+
+test('后台预检：和真实请求同一个判定，占到的名额立刻还回去', async () => {
+  const router = createAdminRouter()
+  const previous = config.credits.globalHeavy
+  try {
+    config.credits.globalHeavy = 1
+    const held = water.admit('review')
+    try {
+      const busy = await call(router, mockReq({ cookie: adminCookie }), '/api/admin/waterline/admission?kind=review')
+      assert.equal(busy.statusCode, 200)
+      const payload = JSON.parse(busy.body)
+      assert.equal(payload.ok, false)
+      assert.equal(payload.code, 'SERVER_BUSY')
+      assert.equal(payload.active, 1)
+      assert.equal(payload.limit, 1)
+      assert.equal(payload.scope, 'lease')
+      assert.equal(typeof payload.ms, 'number')
+    } finally {
+      held.lease.release()
+    }
+    const free = await call(router, mockReq({ cookie: adminCookie }), '/api/admin/waterline/admission?kind=review')
+    assert.equal(free.statusCode, 200)
+    const payload = JSON.parse(free.body)
+    assert.equal(payload.ok, true)
+    // 预检占的名额必须还回去：否则每查一次就少一个名额
+    assert.equal(payload.active, 0)
+    assert.equal(water.waterlineReport().heavy.active, 0)
+    // 只认三种重活：检索不占名额，问它没有意义
+    const bad = await call(router, mockReq({ cookie: adminCookie }), '/api/admin/waterline/admission?kind=search')
+    assert.equal(bad.statusCode, 400)
+  } finally {
+    config.credits.globalHeavy = previous
+  }
+})
 
 test('后台只读：非管理员 403，管理员读到真实读数，没有写入入口', async () => {
   const router = createAdminRouter()

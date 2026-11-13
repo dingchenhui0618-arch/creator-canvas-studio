@@ -37,7 +37,7 @@ import { saveUsagePrices, usagePrices, usageSummary } from '../usage-meter.mjs'
 import { clearSiteInfo, resolveSiteInfo, saveSiteInfo, SITE_FIELDS } from '../site-info.mjs'
 import { launchReadiness } from '../readiness.mjs'
 import { cleanOrphanFrames, clearStorageOverride, saveStorageLimit, setStorageOverride, storageOverview } from '../storage.mjs'
-import { waterlineReport } from '../waterline.mjs'
+import { admissionCheck, HEAVY_KINDS, waterlineReport } from '../waterline.mjs'
 
 const MODEL_KEY = /^\/api\/admin\/model-keys\/([\w-]+)$/
 const MODEL_KEY_TEST = /^\/api\/admin\/model-keys\/([\w-]+)\/test$/
@@ -748,6 +748,19 @@ export function createAdminRouter() {
       // 不接受任何写入——阈值是部署时定的，后台不提供「偷偷调高红线」的按钮。
       if (pathname === '/api/admin/waterline' && req.method === 'GET') {
         sendJson(res, 200, waterlineReport())
+        return true
+      }
+
+      // 预检：现在能不能接一条重活？走的是和真实请求同一个 admit（水位 + 整机名额），
+      // 占到的名额立刻还回去——所以不扣积分、不调上游、不落记录。
+      // 两个实例（对外 + 内部版）问这个问题会得到同一个答案，因为名额是共享目录里的租约。
+      if (pathname === '/api/admin/waterline/admission' && req.method === 'GET') {
+        const kind = String(url.searchParams.get('kind') || 'review')
+        if (!HEAVY_KINDS.includes(kind)) {
+          sendJson(res, 400, { error: 'kind 只能是 ' + HEAVY_KINDS.join(' / '), code: 'BAD_KIND' })
+          return true
+        }
+        sendJson(res, 200, admissionCheck(kind))
         return true
       }
 

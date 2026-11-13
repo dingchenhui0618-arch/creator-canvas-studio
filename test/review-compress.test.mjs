@@ -10,6 +10,7 @@ import os from 'node:os'
 import path from 'node:path'
 import http from 'node:http'
 import { Readable } from 'node:stream'
+import { isolateLeaseDir } from './lease-isolation.mjs'
 import ffmpegPath from 'ffmpeg-static'
 
 const run = promisify(execFile)
@@ -44,6 +45,8 @@ test.after(() => upstream.close())
 
 process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'vq-review-compress-'))
 process.env.VQ_KEY_SECRET = 'test-secret-review-compress'
+// 跨进程租约（v0.9.78）：测试文件并行跑，名额必须各算各的
+isolateLeaseDir('vq-lease-review-compress-')
 process.env.VISION_BASE_URL = 'http://127.0.0.1:' + port + '/v1'
 process.env.VISION_API_KEY = 'test-key-not-real'
 process.env.VISION_MODEL = 'fake-vision'
