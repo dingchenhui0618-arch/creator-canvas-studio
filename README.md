@@ -797,6 +797,8 @@ DOMAIN=visionqa.wavisionai.cn bash deploy/production/enable-https.sh            
 
 ![本地：把红线抬到天上时的「到红线 · 重活已暂停」——三条重活 0 条，并给出低于红线的具体读数（生产不造低内存）](docs/screenshot-waterline-critical-local-2026-11-14.png)
 
+提交 `e70f763`（代码 + 8 条测试 + 文档 + 3 张截图），CI 43482810634 success。
+
 细节见 [运行水位](docs/runtime-waterline-2026-11-14.md)。
 
 
