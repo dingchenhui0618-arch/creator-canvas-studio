@@ -141,6 +141,15 @@ test('未指名具体条目的下架申请也能进队列（material），后台
   assert.equal(again.report.count, 2)
 })
 
+test('公开接口不能被登录门挡住：/api/sources 必须在 PUBLIC_API 白名单里', () => {
+  // 这条是给 v0.9.82 自己留的：接口先写好了，白名单忘了加，生产上匿名访问 401，
+  // 页面只能显示「数字没读到」——本地没开 VQ_REQUIRE_AUTH，测不出来。
+  const text = fs.readFileSync(new URL('../server/index.mjs', import.meta.url), 'utf8')
+  const block = text.slice(text.indexOf('const PUBLIC_API = ['), text.indexOf(']', text.indexOf('const PUBLIC_API = [')))
+  assert.match(block, /'\/api\/sources'/, 'PUBLIC_API 里要有 /api/sources，否则素材来源页对匿名访客是空的')
+  assert.match(block, /'\/api\/reports'/, '举报入口本来就是公开的，别被这次改动带掉')
+})
+
 test('页面上的「已处理下架」来自举报队列状态：驳回不算，下架才算', async () => {
   const open = (await reports.listReports({ status: 'open' })).items[0]
   const dismissed = await reports.createReport({
