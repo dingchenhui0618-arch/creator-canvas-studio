@@ -91,6 +91,26 @@ jobs:
 - CI 矩阵 = **22.12.0 + 24**：一个生产、一个开发；两个都绿才算过。
 - `deploy/production/install.sh` 装完 Node 先比一次版本（`sort -V`），低于下限直接停，别装到一半才发现。
 
+### 第一次在 22.12.0 上跑，就抓到 5 个文件
+
+矩阵第一次跑：`验证（Node 24）` 637/637 绿，`验证（Node 22.12.0）` **604 个测试、5 个文件挂掉**：
+
+```
+not ok 12 - test/first-run.test.mjs
+  TypeError [ERR_UNKNOWN_FILE_EXTENSION]: Unknown file extension ".ts" for .../src/domain/first-run.ts
+```
+
+（同样中招：`help-center`、`list-view`、`scroll`、`sessions`——都是直接 `import '../src/domain/*.ts'` 的纯函数单测。）
+
+原因：**Node 内置的 TS 类型擦除是 22.18 起才默认开启的**。本机 24 和 CI 的「22 最新」都默认能跑，
+唯独生产钉的 22.12.0 不行——这正是加矩阵的意义：不加它，这 5 个文件会一直「看起来绿」。
+
+修法：测试脚本加 `--experimental-strip-types`（22.6 起可用；24 已默认，带上是无害的）。**不是**把生产升到 22.18——
+生产运行时跑的是构建后的 JS，不需要 TS 能力，为了测试去动生产版本是本末倒置。
+
+也试过写自定义 loader（`module.register` + `typescript.transpileModule`）：项目里的 **TypeScript 7** 包根入口
+只导出 `lib/version.cjs`（版本号），`transpileModule` 不在根导出里，要引 `typescript/unstable/*`。为一条测试路径引不稳定入口不值，放弃。
+
 ### 启动守门：退出码 78，不是裸栈
 
 `server/index.mjs` 的**第一个 import** 是 `./node-guard.mjs`。ESM 按 import 顺序求值，所以它在 `config` / `storage` / `node:sqlite` 之前跑：
@@ -117,6 +137,7 @@ jobs:
 ## 验证
 
 - 本机（Node 24.15.0）：`npm test` **637/637**（本轮 +16：密钥扫描 9、Node 版本 7）；oxlint 0 error / 7 warning（既有）、`tsc -b` 干净、`npm run build` 通过。
+- CI：`验证（Node 22.12.0）` 与 `验证（Node 24）` 都是 **637/637**（22.12.0 第一次跑挂 5 个文件，见上一节），`安全扫描` 两个步骤通过。
 - 密钥扫描：`node scripts/scan-secrets.mjs` → **538 个文本文件、0 处命中**（另 554 个二进制/超限文件跳过：截图、字体、压缩包）。
 - 生产依赖：`npm audit --omit=dev --audit-level=high` → **0 条漏洞**。
 - 生产（v0.9.72）：`/api/version` = 0.9.72，登录后 `runtime.node` = **22.12.0**、`level` = `supported`；`/api/health` ok；后台系统页那一行见截图。
@@ -131,6 +152,7 @@ jobs:
 - `npm audit` 依赖 npm registry 的漏洞库：它只报**已知**漏洞，0 条不等于安全。
 - Node 版本锁不是运行时隔离：更新到 25 以上会继续跑（只打警告），真出问题靠启动时的 `node:sqlite` 探测。
 - CI 的 22.12.0 与生产是同一个二进制版本，但**不是同一台机器**：数据库 / 文件系统行为仍以生产为准。
+- 单测跑在 `--experimental-strip-types` 上：只擦类型，不转 enum / namespace / 参数属性。`src/domain` 现在没有这类写法，以后加会被这把开关挡住（挡在测试里，不是挡在线上）。
 
 ## 复验命令
 

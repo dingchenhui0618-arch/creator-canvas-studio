@@ -18,7 +18,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "test": "node --experimental-sqlite --test \"test/*.test.mjs\"",
+    "test": "node --experimental-sqlite --experimental-strip-types --test \"test/*.test.mjs\"",
     "check:node": "node scripts/check-node.mjs",
     "scan:secrets": "node scripts/scan-secrets.mjs",
     "preview": "vite preview",
