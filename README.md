@@ -2421,4 +2421,4 @@ v0.9.10 让「甲方看没看」第一次有了答案，这一轮让这个答案
 
 ![生产 390：内容区 322，按钮与筛选胶囊都不横向溢出](docs/screenshot-buttons-prod-390-2026-11-13.png)
 
-验收：版本 0.9.45、入口 `index-BLX4ZMUw.js`（512,784 字节）、release `20261113-021050-buttons.tar.gz`、`/api/version` 0.9.45、health ok（templates 26）、两服务 active；生产 1440 与 390 实测无横向滚动，只读不扣积分。细节与判断见 [按钮归队](docs/button-system-2026-11-13.md)。
+验收：版本 0.9.45、入口 `index-BLX4ZMUw.js`（512,784 字节）、release `20261113-021050-buttons.tar.gz`、`/api/version` 0.9.45、health ok（templates 26）、两服务 active；生产 1440 与 390 实测无横向滚动，只读不扣积分。提交 `8781813`（代码 + 测试）+ `2071ba0`（文档 + 6 截图），CI 43350775569 success。细节与判断见 [按钮归队](docs/button-system-2026-11-13.md)。

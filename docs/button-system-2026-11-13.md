@@ -49,7 +49,7 @@
 
 本地演示账号（7 条作品 / 12 条模板 / 3 块画布）量抽屉：12 个按钮全部落在 32px 与 26px 两档；「待解析」抽屉里那颗隐藏按钮的规则（`.drawer-section--pending`）也一起换了选择器。
 
-测试 415/415（`npm test`，含新增的 `test/button-system.test.mjs` 4 条：reset 权重、组件字号、四页类名、页面级选择器）、oxlint 0 error / 6 warning、`tsc -b` 干净、构建通过。生产只发只读 GET，截图前后六路快照 `identical: true`（作品 1 · 模板 26 · 画布 7 · 原片 25（1 已开成作品 / 24 没开成）· 交付 0 · 余额 9954）。
+测试 415/415（`npm test`，含新增的 `test/button-system.test.mjs` 4 条：reset 权重、组件字号、四页类名、页面级选择器）、oxlint 0 error / 6 warning、`tsc -b` 干净、构建通过。提交 `8781813`（代码 + 测试）+ `2071ba0`（文档 + 6 截图），CI 43350775569 success。生产只发只读 GET，截图前后六路快照 `identical: true`（作品 1 · 模板 26 · 画布 7 · 原片 25（1 已开成作品 / 24 没开成）· 交付 0 · 余额 9954）。
 
 ![生产改之前（v0.9.44）：模板库页头三颗按钮 16px / 400、盒高 36px，和下面的筛选胶囊（12px）不在一个体系](screenshot-buttons-before-prod-2026-11-13.png)
 
