@@ -855,7 +855,7 @@ export default function ProjectPage({
               分享
               {data.share ? <span className="vq-share-live" aria-label="分享中" /> : null}
             </button>
-            <button type="button" className="vq-button vq-button--ghost is-danger" onClick={() => void remove()} disabled={busy === 'delete'}>
+            <button type="button" className="vq-button vq-button--danger" onClick={() => void remove()} disabled={busy === 'delete'}>
               <Trash2 size={14} />
               删除
             </button>
@@ -1149,7 +1149,7 @@ export default function ProjectPage({
                 >
                   <div className="vq-tpl-sheet-head">
                     <strong>把这一版存成模板</strong>
-                    <button type="button" className="icon-button" onClick={closeTemplateSheet} aria-label="收起">
+                    <button type="button" className="vq-button vq-button--icon" onClick={closeTemplateSheet} aria-label="收起">
                       <X size={14} />
                     </button>
                   </div>
@@ -1480,7 +1480,7 @@ export default function ProjectPage({
                           </button>
                           <button
                             type="button"
-                            className="vq-button vq-button--ghost is-danger"
+                            className="vq-button vq-button--danger"
                             onClick={() => void decide('reject')}
                             disabled={decideBusy !== ''}
                           >
@@ -1731,7 +1731,7 @@ export default function ProjectPage({
                 <span className="vq-mono">只读分享 / READ ONLY</span>
                 <h2 id="vq-share-title">把这条作品发给别人看</h2>
               </div>
-              <button type="button" className="vq-icon-button" aria-label="关闭分享" onClick={() => setShareOpen(false)}>
+              <button type="button" className="vq-button vq-button--icon" aria-label="关闭分享" onClick={() => setShareOpen(false)}>
                 <X size={16} />
               </button>
             </div>
@@ -1781,7 +1781,7 @@ export default function ProjectPage({
                   </a>
                   <button
                     type="button"
-                    className="vq-button vq-button--ghost is-danger"
+                    className="vq-button vq-button--danger"
                     onClick={() => void stopShare()}
                     disabled={shareBusy === 'disable'}
                   >

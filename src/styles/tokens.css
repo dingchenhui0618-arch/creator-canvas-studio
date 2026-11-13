@@ -106,6 +106,19 @@
   --chip-font: 11px;
   --chip-font-lg: 12px;
 
+  /* ---------- 按钮（v0.9.47 归一）：全站只三档 ----------
+     小 28px（列表行 / 密集工具条）· 默认 32px · 表单 40px；圆角一律 --radius-sm，
+     字号只两档 13 / 12。页面不再自己写 height / padding / font-size。 ---------- */
+  --btn-h-sm: 28px;
+  --btn-h: 32px;
+  --btn-h-lg: 40px;
+  --btn-pad-sm: 12px;
+  --btn-pad: 16px;
+  --btn-font: 13px;
+  --btn-font-sm: 12px;
+  --btn-gap: 8px;
+  --btn-gap-sm: 4px;
+
   /* ---------- 动效：只三档时长，缓动统一；切页面不许弹跳 ---------- */
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
   --dur-1: 120ms;
@@ -151,14 +164,14 @@ button, input, select, textarea { font-family: inherit; }
 /* ---------- 交互一致性（2026-11-12）----------
    以前每个模块自己写一遍 transition，按下去有的位移、有的没反应。
    现在只在这里定两条：按下去统一 1px、键盘聚焦统一一圈柔光。 */
-:where(.vq-button, .cv-btn, .agx-btn, .cv-icon-btn, .vq-icon-button, .cv-bdc-action, .cv-palette-item) {
+:where(.vq-button, .cv-bdc-action, .cv-palette-item) {
   transition: background-color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out),
     color var(--dur-1) var(--ease-out), transform var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out);
 }
-:where(.vq-button, .cv-btn, .agx-btn, .cv-icon-btn, .vq-icon-button, .cv-bdc-action, .cv-palette-item):not(:disabled):active {
+:where(.vq-button, .cv-bdc-action, .cv-palette-item):not(:disabled):active {
   transform: translateY(1px);
 }
-:where(.vq-button, .cv-btn, .agx-btn, .cv-icon-btn, .vq-icon-button, .cv-bdc-action):focus-visible {
+:where(.vq-button, .cv-bdc-action):focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px rgba(17, 17, 17, 0.16);
 }
@@ -183,7 +196,7 @@ button, input, select, textarea { font-family: inherit; }
   .vq-content > .admin-page {
     animation: none;
   }
-  :where(.vq-button, .cv-btn, .agx-btn, .cv-icon-btn, .vq-icon-button, .cv-bdc-action, .cv-palette-item):not(:disabled):active {
+  :where(.vq-button, .cv-bdc-action, .cv-palette-item):not(:disabled):active {
     transform: none;
   }
 }

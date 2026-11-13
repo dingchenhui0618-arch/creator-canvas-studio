@@ -316,13 +316,13 @@ export default function UsersSection() {
           <div className="admin-doc-actions">
             <button
               type="button"
-              className="admin-btn admin-btn--danger"
+              className="vq-button vq-button--danger"
               disabled={deleteBusy || deleteConfirm.trim().toLowerCase() !== deleteTarget.email.toLowerCase()}
               onClick={() => void confirmDelete()}
             >
               {deleteBusy ? '删除中…' : '确认删除'}
             </button>
-            <button type="button" className="admin-btn admin-btn--ghost" disabled={deleteBusy} onClick={cancelDelete}>
+            <button type="button" className="vq-button vq-button--ghost" disabled={deleteBusy} onClick={cancelDelete}>
               取消
             </button>
           </div>
@@ -339,10 +339,10 @@ export default function UsersSection() {
           </div>
           <code className="admin-reset-code">{resetResult.password}</code>
           <div className="admin-doc-actions">
-            <button type="button" className="admin-btn admin-btn--ghost" onClick={() => void copyPassword()}>
+            <button type="button" className="vq-button vq-button--ghost" onClick={() => void copyPassword()}>
               {copied ? '已复制' : '复制'}
             </button>
-            <button type="button" className="admin-btn admin-btn--ghost" onClick={() => setResetResult(null)}>
+            <button type="button" className="vq-button vq-button--ghost" onClick={() => setResetResult(null)}>
               关闭
             </button>
           </div>
@@ -361,7 +361,7 @@ export default function UsersSection() {
           </div>
           {requests.length ? (
             <div className="admin-row-actions">
-              <button type="button" className="admin-btn admin-btn--primary" disabled={Boolean(requestBusy)} onClick={() => void grantAllRequests()}>
+              <button type="button" className="vq-button vq-button--primary" disabled={Boolean(requestBusy)} onClick={() => void grantAllRequests()}>
                 {requestBusy === 'all' ? '发放中…' : '全部按申请发放'}
               </button>
             </div>
@@ -392,7 +392,7 @@ export default function UsersSection() {
                       <div className="admin-row-actions">
                         <button
                           type="button"
-                          className="admin-btn admin-btn--primary"
+                          className="vq-button vq-button--primary"
                           disabled={Boolean(requestBusy)}
                           onClick={() => void decideRequest(item, 'grant')}
                         >
@@ -400,7 +400,7 @@ export default function UsersSection() {
                         </button>
                         <button
                           type="button"
-                          className="admin-btn admin-btn--ghost"
+                          className="vq-button vq-button--ghost"
                           disabled={Boolean(requestBusy)}
                           onClick={() => void decideRequest(item, 'ignore')}
                         >
@@ -470,7 +470,7 @@ export default function UsersSection() {
           </label>
         </div>
         <div className="admin-edit-actions">
-          <button type="button" className="admin-btn admin-btn--primary" disabled={creating} onClick={() => void createAccount()}>
+          <button type="button" className="vq-button vq-button--primary" disabled={creating} onClick={() => void createAccount()}>
             {creating ? '创建中…' : '创建账号'}
           </button>
         </div>
@@ -485,10 +485,10 @@ export default function UsersSection() {
             </div>
             <code className="admin-reset-code">{created.password}</code>
             <div className="admin-doc-actions">
-              <button type="button" className="admin-btn admin-btn--ghost" onClick={() => void copyCreatedPassword()}>
+              <button type="button" className="vq-button vq-button--ghost" onClick={() => void copyCreatedPassword()}>
                 {createdCopied ? '已复制' : '复制'}
               </button>
-              <button type="button" className="admin-btn admin-btn--ghost" onClick={() => setCreated(null)}>
+              <button type="button" className="vq-button vq-button--ghost" onClick={() => setCreated(null)}>
                 关闭
               </button>
             </div>
@@ -547,7 +547,7 @@ export default function UsersSection() {
                       <div className="admin-doc-actions">
                         <button
                           type="button"
-                          className="admin-btn admin-btn--ghost"
+                          className="vq-button vq-button--ghost"
                           disabled={accessBusy === item.id}
                           onClick={() => void changeAccess(item, { active: !item.active })}
                         >
@@ -555,7 +555,7 @@ export default function UsersSection() {
                         </button>
                         <button
                           type="button"
-                          className="admin-btn admin-btn--ghost"
+                          className="vq-button vq-button--ghost"
                           disabled={accessBusy === item.id}
                           onClick={() => void changeAccess(item, { kind: item.kind === 'admin' ? 'account' : 'admin' })}
                         >
@@ -563,7 +563,7 @@ export default function UsersSection() {
                         </button>
                         <button
                           type="button"
-                          className="admin-btn admin-btn--ghost"
+                          className="vq-button vq-button--ghost"
                           disabled={resetBusy === item.id}
                           title="生成一次性临时口令，该账号所有旧会话会退出"
                           onClick={() => void resetPassword(item)}
@@ -572,7 +572,7 @@ export default function UsersSection() {
                         </button>
                         <button
                           type="button"
-                          className="admin-btn admin-btn--danger"
+                          className="vq-button vq-button--danger"
                           disabled={deleteBusy || item.id === currentUserId}
                           title={item.id === currentUserId ? '不能删除当前登录账号' : '删除账号：登录、会话与积分记录一并删除'}
                           onClick={() => askDelete(item)}

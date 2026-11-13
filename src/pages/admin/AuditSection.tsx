@@ -203,7 +203,7 @@ function RunsPanel({ refreshKey }: { refreshKey: number }) {
           {filtering ? (
             <button
               type="button"
-              className="admin-btn admin-btn--ghost"
+              className="vq-button vq-button--ghost"
               onClick={() => {
                 setStatus('')
                 setOwnerId('')
@@ -213,7 +213,7 @@ function RunsPanel({ refreshKey }: { refreshKey: number }) {
               清除筛选
             </button>
           ) : null}
-          <button type="button" className="admin-btn admin-btn--ghost" onClick={() => exportCsv(runs, accountOf)} disabled={!runs.length}>
+          <button type="button" className="vq-button vq-button--ghost" onClick={() => exportCsv(runs, accountOf)} disabled={!runs.length}>
             导出 CSV（当前筛选）
           </button>
         </div>
@@ -347,14 +347,14 @@ function OpsPanel({ refreshKey }: { refreshKey: number }) {
               placeholder="按账号、对象或详情搜索"
               onChange={(event) => setQInput(event.target.value)}
             />
-            <button type="submit" className="admin-btn admin-btn--ghost">
+            <button type="submit" className="vq-button vq-button--ghost">
               筛选
             </button>
           </form>
           {filtering ? (
             <button
               type="button"
-              className="admin-btn admin-btn--ghost"
+              className="vq-button vq-button--ghost"
               onClick={() => {
                 setAction('')
                 setQ('')

@@ -84,7 +84,7 @@ export function TrashModal({ onClose, onToast, onRestored }: { onClose: () => vo
             <span className="section-kicker">模板库 · 回收站</span>
             <h2>删掉的模板还能捡回来</h2>
           </div>
-          <button className="icon-button" onClick={onClose} aria-label="关闭回收站"><X size={16} /></button>
+          <button className="vq-button vq-button--icon" onClick={onClose} aria-label="关闭回收站"><X size={16} /></button>
         </header>
         <p className="trash-note">
           删除的模板在这里留 {days} 天，期间可以恢复；过期或彻底删除后，抽出来的帧也会一起清掉，不能撤销。
@@ -110,15 +110,15 @@ export function TrashModal({ onClose, onToast, onRestored }: { onClose: () => vo
                   {confirmId === item.id ? (
                     <div className="trash-actions">
                       <span className="trash-confirm">彻底删除后不能恢复</span>
-                      <button className="button button--danger button--tiny" disabled={busyId === item.id} onClick={() => purge(item)}>确认删除</button>
-                      <button className="button button--ghost button--tiny" onClick={() => setConfirmId('')}>取消</button>
+                      <button className="vq-button vq-button--danger vq-button--sm" disabled={busyId === item.id} onClick={() => purge(item)}>确认删除</button>
+                      <button className="vq-button vq-button--ghost vq-button--sm" onClick={() => setConfirmId('')}>取消</button>
                     </div>
                   ) : (
                     <div className="trash-actions">
-                      <button className="button button--ghost button--tiny" disabled={busyId === item.id} onClick={() => restore(item)}>
+                      <button className="vq-button vq-button--ghost vq-button--sm" disabled={busyId === item.id} onClick={() => restore(item)}>
                         <ArchiveRestore size={13} />恢复
                       </button>
-                      <button className="button button--danger button--tiny" disabled={busyId === item.id} onClick={() => setConfirmId(item.id)}>
+                      <button className="vq-button vq-button--danger vq-button--sm" disabled={busyId === item.id} onClick={() => setConfirmId(item.id)}>
                         <Trash2 size={13} />彻底删除
                       </button>
                     </div>
@@ -132,7 +132,7 @@ export function TrashModal({ onClose, onToast, onRestored }: { onClose: () => vo
         )}
 
         <footer className="trash-foot">
-          <button className="button button--ghost" onClick={onClose}>关闭</button>
+          <button className="vq-button vq-button--ghost" onClick={onClose}>关闭</button>
         </footer>
       </div>
     </div>

@@ -420,7 +420,7 @@ export function TemplateLibraryPage({
             {activeType !== '全部' ? ' · 类型：' + activeType : ''}
             {total > 0 ? ' · 全库 ' + total + ' 条' : ''}
           </span>
-          <button type="button" className="vq-button vq-button--ghost vq-button--tiny" onClick={clearFilters}>清空条件</button>
+          <button type="button" className="vq-button vq-button--ghost vq-button--sm" onClick={clearFilters}>清空条件</button>
         </div>
       ) : null}
 
@@ -563,7 +563,7 @@ export function TemplateLibraryPage({
                       {detail.kind === 'adapted' && detail.adaptedFrom ? ' · 改编自 ' + detail.adaptedFrom : ''}
                     </span>
                   </div>
-                  <button className="icon-button" onClick={closeDetail} aria-label="关闭"><X size={16} /></button>
+                  <button className="vq-button vq-button--icon" onClick={closeDetail} aria-label="关闭"><X size={16} /></button>
                 </header>
 
                 <div className="drawer-body">
@@ -839,7 +839,7 @@ export function TemplateLibraryPage({
                           {detail.projectId ? (
                             <button
                               type="button"
-                              className="vq-button vq-button--ghost vq-button--tiny"
+                              className="vq-button vq-button--ghost vq-button--sm"
                               onClick={() => {
                                 const target = detail.projectId
                                 lastRequested.current = ''
@@ -865,7 +865,7 @@ export function TemplateLibraryPage({
                       {detail.shared ? (
                         <button
                           type="button"
-                          className="vq-button vq-button--ghost vq-button--tiny"
+                          className="vq-button vq-button--ghost vq-button--sm"
                           onClick={() => setReportTarget({ kind: 'template', id: detail.id, title: detail.title, url: detail.sourceUrl })}
                         >
                           举报
@@ -1073,7 +1073,7 @@ export function TemplateLibraryPage({
                       <Layers size={14} />{detail.kind === 'flow' ? '在画布打开' : '套用到画布'}
                     </button>
                     )}
-                    <button className="vq-button vq-button--danger vq-button--tiny" onClick={() => { void deleteTemplate(detail.id).then(() => { closeDetail(); onToast('已移到回收站，30 天内可以恢复'); void load() }) }}>
+                    <button className="vq-button vq-button--danger vq-button--sm" onClick={() => { void deleteTemplate(detail.id).then(() => { closeDetail(); onToast('已移到回收站，30 天内可以恢复'); void load() }) }}>
                       <Trash2 size={13} />删除
                     </button>
                     </>

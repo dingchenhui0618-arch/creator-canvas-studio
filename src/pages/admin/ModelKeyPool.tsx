@@ -341,7 +341,7 @@ export default function ModelKeyPool() {
           {message ? <p className="admin-hint">{message}</p> : null}
 
           <div className="admin-edit-actions">
-            <button type="button" className="admin-btn admin-btn--primary" onClick={submit} disabled={busy === 'create'}>
+            <button type="button" className="vq-button vq-button--primary" onClick={submit} disabled={busy === 'create'}>
               {busy === 'create' ? '保存中…' : '加入 Key 池'}
             </button>
           </div>
@@ -406,20 +406,20 @@ export default function ModelKeyPool() {
                           <div className="admin-row-actions">
                             <button
                               type="button"
-                              className="admin-btn admin-btn--ghost"
+                              className="vq-button vq-button--ghost"
                               disabled={busy === key.id || busy === 'edit:' + key.id}
                               onClick={() => (editingId === key.id ? cancelEdit() : startEdit(key))}
                             >
                               {editingId === key.id ? '收起' : '编辑'}
                             </button>
-                            <button type="button" className="admin-btn admin-btn--ghost" disabled={busy === key.id} onClick={() => runTest(key)}>测试</button>
-                            <button type="button" className="admin-btn admin-btn--ghost" disabled={busy === key.id} onClick={() => toggle(key)}>
+                            <button type="button" className="vq-button vq-button--ghost" disabled={busy === key.id} onClick={() => runTest(key)}>测试</button>
+                            <button type="button" className="vq-button vq-button--ghost" disabled={busy === key.id} onClick={() => toggle(key)}>
                               {key.enabled ? '停用' : '启用'}
                             </button>
                             {confirmDelete === key.id ? (
-                              <button type="button" className="admin-btn admin-btn--danger" disabled={busy === key.id} onClick={() => remove(key)}>确认删除</button>
+                              <button type="button" className="vq-button vq-button--danger" disabled={busy === key.id} onClick={() => remove(key)}>确认删除</button>
                             ) : (
-                              <button type="button" className="admin-btn admin-btn--ghost" onClick={() => { setConfirmDelete(key.id); setEditingId('') }}>删除</button>
+                              <button type="button" className="vq-button vq-button--ghost" onClick={() => { setConfirmDelete(key.id); setEditingId('') }}>删除</button>
                             )}
                           </div>
                         </td>
@@ -441,10 +441,10 @@ export default function ModelKeyPool() {
                             />
                             {editError ? <p className="admin-hint" role="alert">{editError}</p> : null}
                             <div className="admin-edit-actions">
-                              <button type="button" className="admin-btn admin-btn--ghost" onClick={cancelEdit} disabled={busy === 'edit:' + key.id}>
+                              <button type="button" className="vq-button vq-button--ghost" onClick={cancelEdit} disabled={busy === 'edit:' + key.id}>
                                 取消
                               </button>
-                              <button type="button" className="admin-btn admin-btn--primary" onClick={() => saveEdit(key)} disabled={busy === 'edit:' + key.id}>
+                              <button type="button" className="vq-button vq-button--primary" onClick={() => saveEdit(key)} disabled={busy === 'edit:' + key.id}>
                                 {busy === 'edit:' + key.id ? '保存中…' : '保存修改'}
                               </button>
                             </div>

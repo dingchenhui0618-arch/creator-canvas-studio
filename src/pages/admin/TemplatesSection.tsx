@@ -214,15 +214,15 @@ export default function TemplatesSection() {
             </label>
           </div>
           <div className="admin-edit-actions">
-            <button type="button" className="admin-btn admin-btn--ghost" onClick={() => void loadVersions(editing)} disabled={saving || versionsLoading}>
+            <button type="button" className="vq-button vq-button--ghost" onClick={() => void loadVersions(editing)} disabled={saving || versionsLoading}>
               {versionsFor === editing.id ? '收起历史版本' : '历史版本'}
             </button>
-            <button type="button" className="admin-btn admin-btn--ghost" onClick={() => setEditing(null)} disabled={saving}>
+            <button type="button" className="vq-button vq-button--ghost" onClick={() => setEditing(null)} disabled={saving}>
               取消
             </button>
             <button
               type="button"
-              className="admin-btn admin-btn--primary"
+              className="vq-button vq-button--primary"
               onClick={() => void saveEdit()}
               disabled={saving || !form.title.trim() || !form.contentType.trim()}
             >
@@ -245,7 +245,7 @@ export default function TemplatesSection() {
                       <span className="admin-version-copy">{versionLabel(version)}</span>
                       <button
                         type="button"
-                        className="admin-btn admin-btn--ghost"
+                        className="vq-button vq-button--ghost"
                         onClick={() => void restoreVersion(editing, version)}
                         disabled={Boolean(restoring)}
                       >
@@ -324,7 +324,7 @@ export default function TemplatesSection() {
                         <span className="admin-confirm">
                           <button
                             type="button"
-                            className="admin-btn admin-btn--danger"
+                            className="vq-button vq-button--danger"
                             onClick={() => void remove(item)}
                             disabled={deleting === item.id}
                           >
@@ -332,7 +332,7 @@ export default function TemplatesSection() {
                           </button>
                           <button
                             type="button"
-                            className="admin-btn admin-btn--ghost"
+                            className="vq-button vq-button--ghost"
                             onClick={() => setPending(null)}
                             disabled={deleting === item.id}
                           >
@@ -343,7 +343,7 @@ export default function TemplatesSection() {
                         <span className="admin-row-actions">
                           <button
                             type="button"
-                            className="admin-btn admin-btn--ghost admin-btn--icon"
+                            className="vq-button vq-button--ghost vq-button--icon"
                             onClick={() => startEdit(item)}
                             title="编辑模板"
                           >
@@ -351,7 +351,7 @@ export default function TemplatesSection() {
                           </button>
                           <button
                             type="button"
-                            className="admin-btn admin-btn--ghost admin-btn--icon"
+                            className="vq-button vq-button--ghost vq-button--icon"
                             onClick={() => setPending(item.id)}
                             title="删除模板"
                           >

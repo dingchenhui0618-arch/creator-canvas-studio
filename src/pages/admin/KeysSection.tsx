@@ -165,7 +165,7 @@ export default function KeysSection() {
             </div>
 
             <div className="admin-doc-actions">
-              <button type="button" className="admin-btn admin-btn--ghost" onClick={runProbe} disabled={probing || !data.vision.enabled}>
+              <button type="button" className="vq-button vq-button--ghost" onClick={runProbe} disabled={probing || !data.vision.enabled}>
                 {probing ? '探测中…' : '连通性自检'}
               </button>
               {probe ? (
@@ -217,10 +217,10 @@ export default function KeysSection() {
               <div className="admin-doc-row">
                 <code>{DOC_PATH}</code>
                 <div className="admin-doc-actions">
-                  <button type="button" className="admin-btn admin-btn--ghost" onClick={copyDocPath}>
+                  <button type="button" className="vq-button vq-button--ghost" onClick={copyDocPath}>
                     复制路径
                   </button>
-                  <a className="admin-btn admin-btn--ghost" href={docUrl} target="_blank" rel="noreferrer">
+                  <a className="vq-button vq-button--ghost" href={docUrl} target="_blank" rel="noreferrer">
                     打开文档
                   </a>
                 </div>

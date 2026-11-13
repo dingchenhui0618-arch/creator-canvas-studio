@@ -515,14 +515,14 @@ export default function LocalWorkspacePage() {
         desc="本机读写文件、执行命令；模型补全走 VisionQA 账号，密钥不在安装包里。"
         actions={
           <div className="lw-head-actions">
-            <button type="button" className="lw-btn" onClick={() => void pickWorkspace()}>
+            <button type="button" className="vq-button vq-button--ghost" onClick={() => void pickWorkspace()}>
               <FolderOpen size={14} />
               <span className="lw-path" title={info?.workspace || ''}>{info?.workspace || '选择工作区目录'}</span>
             </button>
             <div className="lw-memory-wrap">
               <button
                 type="button"
-                className={'lw-btn lw-memory-btn' + (memoryOpen ? ' is-open' : '')}
+                className={'vq-button vq-button--ghost lw-memory-btn' + (memoryOpen ? ' is-open' : '')}
                 onClick={() => setMemoryOpen((open) => !open)}
                 aria-expanded={memoryOpen}
                 title="这个工作区的长期记忆（跨会话保留）"
@@ -535,7 +535,7 @@ export default function LocalWorkspacePage() {
                 <div className="lw-memory" role="dialog" aria-label="这个工作区的长期记忆">
                   <header className="lw-memory-head">
                     <strong>这个工作区的记忆</strong>
-                    <button type="button" className="lw-icon-btn" onClick={() => setMemoryOpen(false)} aria-label="关闭记忆面板">
+                    <button type="button" className="vq-button vq-button--icon vq-button--sm" onClick={() => setMemoryOpen(false)} aria-label="关闭记忆面板">
                       <X size={14} />
                     </button>
                   </header>
@@ -575,7 +575,7 @@ export default function LocalWorkspacePage() {
                   <footer className="lw-memory-foot">
                     <span>最多留 {info?.memory?.maxEntries ?? 40} 条，满后先淘汰最少召回的那条</span>
                     {memoryItems.length > 0 ? (
-                      <button type="button" className="lw-btn lw-btn--quiet" onClick={() => void clearMemory()}>
+                      <button type="button" className="vq-button vq-button--ghost vq-button--sm" onClick={() => void clearMemory()}>
                         清空
                       </button>
                     ) : null}
@@ -591,7 +591,7 @@ export default function LocalWorkspacePage() {
         <aside className="lw-rail">
           <div className="lw-rail-head">
             <span className="lw-rail-label">会话</span>
-            <button type="button" className="lw-icon-btn" onClick={() => void createThread()} disabled={busy} title="新建会话">
+            <button type="button" className="vq-button vq-button--icon vq-button--sm" onClick={() => void createThread()} disabled={busy} title="新建会话">
               <Plus size={15} />
             </button>
           </div>
@@ -720,10 +720,10 @@ export default function LocalWorkspacePage() {
                     {item.why ? <p className="lw-approval-why">{item.why}</p> : null}
                     <ArgsView args={item.args} />
                     <div className="lw-approval-actions">
-                      <button type="button" className="lw-btn lw-btn--primary" onClick={() => void decide(item, true)}>
+                      <button type="button" className="vq-button vq-button--primary" onClick={() => void decide(item, true)}>
                         允许执行
                       </button>
-                      <button type="button" className="lw-btn" onClick={() => void decide(item, false)}>
+                      <button type="button" className="vq-button vq-button--ghost" onClick={() => void decide(item, false)}>
                         拒绝
                       </button>
                     </div>
@@ -772,11 +772,11 @@ export default function LocalWorkspacePage() {
             <div className="lw-composer-foot">
               <span className="lw-composer-hint">有副作用的操作会先停下来等你批准</span>
               {running ? (
-                <button type="button" className="lw-btn" onClick={() => void stop()}>
+                <button type="button" className="vq-button vq-button--ghost" onClick={() => void stop()}>
                   <Square size={13} /> 停止
                 </button>
               ) : (
-                <button type="button" className="lw-btn lw-btn--primary" onClick={() => void send()} disabled={!draft.trim()}>
+                <button type="button" className="vq-button vq-button--primary" onClick={() => void send()} disabled={!draft.trim()}>
                   发送
                 </button>
               )}

@@ -147,7 +147,7 @@ export default function GatewaySection() {
           <div className="admin-doc-row">
             <code>{data.baseUrl}</code>
             <div className="admin-doc-actions">
-              <button type="button" className="admin-btn admin-btn--ghost" onClick={() => copy(data.baseUrl)}>
+              <button type="button" className="vq-button vq-button--ghost" onClick={() => copy(data.baseUrl)}>
                 复制接入地址
               </button>
             </div>

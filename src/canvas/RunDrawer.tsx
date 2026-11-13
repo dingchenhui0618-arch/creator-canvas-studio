@@ -60,7 +60,7 @@ export function RunDrawer({ open, running, flowName, runId, total, nodes, record
         </div>
         <div className="cv-drawer-head-right">
           <Pill tone={statusTone}>{statusText}</Pill>
-          <button className="cv-icon-btn" type="button" onClick={onClose} aria-label="关闭运行结果"><X size={14} /></button>
+          <button className="vq-button vq-button--icon" type="button" onClick={onClose} aria-label="关闭运行结果"><X size={14} /></button>
         </div>
       </header>
 

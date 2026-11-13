@@ -93,7 +93,7 @@ export default function ModelRoutePanel() {
               placeholder="例如 deepseek-flash"
             />
           </label>
-          <button type="button" className="admin-btn admin-btn--primary" onClick={runPreview} disabled={busy}>
+          <button type="button" className="vq-button vq-button--primary" onClick={runPreview} disabled={busy}>
             {busy ? '预演中…' : '预演路由'}
           </button>
         </div>

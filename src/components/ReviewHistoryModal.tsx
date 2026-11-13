@@ -153,7 +153,7 @@ export default function ReviewHistoryModal({
             <span className="section-kicker">视觉评审 · 历史</span>
             <h2 id="review-history-title">每一次评审，都能翻到当时的画面</h2>
           </div>
-          <button ref={closeRef} type="button" className="icon-button" onClick={onClose} aria-label="关闭评审历史">
+          <button ref={closeRef} type="button" className="vq-button vq-button--icon" onClick={onClose} aria-label="关闭评审历史">
             <X size={16} />
           </button>
         </header>
@@ -222,7 +222,7 @@ export default function ReviewHistoryModal({
               {filtered ? (
                 <button
                   type="button"
-                  className="button button--ghost button--tiny"
+                  className="vq-button vq-button--ghost vq-button--sm"
                   onClick={() => {
                     setVerdict('')
                     setScope('')
@@ -241,12 +241,12 @@ export default function ReviewHistoryModal({
           </span>
           <div className="review-history-foot-actions">
             {items.length < total ? (
-              <button type="button" className="button button--ghost button--tiny" disabled={loadingMore} onClick={loadMore}>
+              <button type="button" className="vq-button vq-button--ghost vq-button--sm" disabled={loadingMore} onClick={loadMore}>
                 {loadingMore ? <Loader2 size={12} className="spin" /> : null}
                 {loadingMore ? '正在读' : '再看 ' + Math.min(PAGE, total - items.length) + ' 条'}
               </button>
             ) : null}
-            <button type="button" className="button button--ghost button--tiny" onClick={onClose}>
+            <button type="button" className="vq-button vq-button--ghost vq-button--sm" onClick={onClose}>
               关闭
             </button>
           </div>

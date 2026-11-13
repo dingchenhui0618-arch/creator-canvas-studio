@@ -217,8 +217,8 @@ export function Inspector({ node, onPatch, onConfig, onDuplicate, onDelete }: In
       </div>
 
       <footer className="cv-inspector-foot">
-        <button className="cv-btn" type="button" onClick={onDuplicate}><Copy size={13} />复制</button>
-        <button className="cv-btn cv-btn--danger" type="button" onClick={onDelete}><Trash size={13} />删除</button>
+        <button className="vq-button vq-button--ghost" type="button" onClick={onDuplicate}><Copy size={13} />复制</button>
+        <button className="vq-button vq-button--danger" type="button" onClick={onDelete}><Trash size={13} />删除</button>
       </footer>
     </aside>
   )

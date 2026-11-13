@@ -472,7 +472,7 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
               </div>
             )}
 
-            <button className="vq-button vq-button--primary vq-button--block" type="submit" disabled={busy}>
+            <button className="vq-button vq-button--primary vq-button--lg" type="submit" disabled={busy}>
               {busy ? (
                 <>
                   <Loader2 size={15} className="vq-spin" />
@@ -566,7 +566,7 @@ function TwoFactorStep({
           <span className="vq-field-hint">验证码每 30 秒变一次；备用码每枚只能用一次。</span>
         </div>
 
-        <button className="vq-button vq-button--primary vq-button--block" type="submit" disabled={busy}>
+        <button className="vq-button vq-button--primary vq-button--lg" type="submit" disabled={busy}>
           {busy ? (
             <>
               <Loader2 size={15} className="vq-spin" />

@@ -204,7 +204,7 @@ export function WelcomeGuide({ onClose, onGo }: Props) {
               画布、视觉评审、运行记录在工具区，它们是这条作品里的步骤。
             </p>
           </div>
-          <button ref={closeRef} type="button" className="vq-icon-button" aria-label="关闭引导" onClick={onClose}>
+          <button ref={closeRef} type="button" className="vq-button vq-button--icon" aria-label="关闭引导" onClick={onClose}>
             <X size={16} />
           </button>
         </header>

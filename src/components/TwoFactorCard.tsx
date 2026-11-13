@@ -164,7 +164,7 @@ export function TwoFactorCard() {
               <code>{setup.secret}</code>
               <button
                 type="button"
-                className="vq-button vq-button--ghost vq-button--tiny"
+                className="vq-button vq-button--ghost vq-button--sm"
                 onClick={() => void copyText(setup.secret).then((ok) => setMessage(ok ? '密钥已复制' : '复制失败，请手动选中'))}
               >
                 <Copy size={13} />
@@ -188,7 +188,7 @@ export function TwoFactorCard() {
             </div>
             <button
               type="button"
-              className="vq-button vq-button--ghost vq-button--tiny"
+              className="vq-button vq-button--ghost vq-button--sm"
               onClick={() => void copyText(setup.backupCodes.join('\n')).then((ok) => setMessage(ok ? '备用码已复制' : '复制失败，请手动复制'))}
             >
               <Copy size={13} />

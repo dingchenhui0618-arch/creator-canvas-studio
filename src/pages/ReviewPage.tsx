@@ -362,7 +362,7 @@ export default function ReviewPage({
             <span>{modelState?.message || '模型服务暂时不可用。本次未扣积分，请稍后再试。'}</span>
             {internal && modelState?.detail ? <small>{modelState.detail}</small> : null}
           </div>
-          <button type="button" className="vq-button vq-button--ghost vq-button--tiny" onClick={() => void recheckModel()} disabled={rechecking}>
+          <button type="button" className="vq-button vq-button--ghost vq-button--sm" onClick={() => void recheckModel()} disabled={rechecking}>
             <RefreshCw size={12} /> {rechecking ? '检测中' : '重新检测'}
           </button>
         </div>
@@ -425,7 +425,7 @@ export default function ReviewPage({
                   />
                   <button
                     type="button"
-                    className="vq-button vq-button--ghost vq-button--tiny"
+                    className="vq-button vq-button--ghost vq-button--sm"
                     onClick={() => {
                       const value = manualUrl.trim()
                       if (!value) return
@@ -482,7 +482,7 @@ export default function ReviewPage({
                 <strong>这条评审记入：{openedScope.title} · {reviewVersionLabel(openedScope.version)}</strong>
                 <span>历史记录，结论不会再变；想接着评这一版，用「评这一版」进那条作品的评审页。</span>
               </div>
-              <button type="button" className="vq-button vq-button--ghost vq-button--tiny" onClick={() => onOpenProject?.(openedScope.id)}>
+              <button type="button" className="vq-button vq-button--ghost vq-button--sm" onClick={() => onOpenProject?.(openedScope.id)}>
                 回作品 <ArrowRight size={12} />
               </button>
             </div>
@@ -523,16 +523,16 @@ export default function ReviewPage({
                   {openedId ? (
                     // 历史评审只读：在这里再评一次会是一条没归属的新记录，所以要评就回那条作品
                     openedScope ? (
-                      <button type="button" className="vq-button vq-button--ghost vq-button--tiny" onClick={() => onReviewProject?.(openedScope.id)}>
+                      <button type="button" className="vq-button vq-button--ghost vq-button--sm" onClick={() => onReviewProject?.(openedScope.id)}>
                         评这一版 <ArrowRight size={12} />
                       </button>
                     ) : (
-                      <button type="button" className="vq-button vq-button--ghost vq-button--tiny" onClick={clearRecord}>
+                      <button type="button" className="vq-button vq-button--ghost vq-button--sm" onClick={clearRecord}>
                         回到评审页 <ArrowRight size={12} />
                       </button>
                     )
                   ) : (
-                    <button type="button" className="vq-button vq-button--primary button--tiny" disabled={running || !status?.model || modelBlocked} onClick={run}>
+                    <button type="button" className="vq-button vq-button--primary vq-button--sm" disabled={running || !status?.model || modelBlocked} onClick={run}>
                       {running ? <Loader2 size={13} className="spin" /> : <Play size={13} />}
                       {running ? '评审中 ' + elapsed + 's' : result ? '重新评审' : '开始评审'}
                     </button>
@@ -651,7 +651,7 @@ export default function ReviewPage({
             <div className="review-error">
               <TriangleAlert size={14} />
               <span>{error}</span>
-              <button type="button" className="vq-button vq-button--ghost vq-button--tiny" onClick={run}>
+              <button type="button" className="vq-button vq-button--ghost vq-button--sm" onClick={run}>
                 <RefreshCw size={12} /> 重试
               </button>
             </div>
@@ -662,7 +662,7 @@ export default function ReviewPage({
             <div className="review-error">
               <TriangleAlert size={14} />
               <span>{openError}</span>
-              <button type="button" className="vq-button vq-button--ghost vq-button--tiny" onClick={clearRecord}>
+              <button type="button" className="vq-button vq-button--ghost vq-button--sm" onClick={clearRecord}>
                 回到评审页
               </button>
             </div>

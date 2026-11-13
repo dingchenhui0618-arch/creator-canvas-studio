@@ -239,15 +239,15 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
         actions={
           <div className="agx-head-actions">
           {editingId && (
-            <button className={'agx-btn ' + (armedDelete ? 'agx-btn--danger' : 'agx-btn--quiet')} onClick={() => void remove()}>
+            <button className={'vq-button ' + (armedDelete ? 'vq-button--danger' : 'vq-button--quiet')} onClick={() => void remove()}>
               <Trash2 size={14} />
               {armedDelete ? '确认删除' : '删除'}
             </button>
           )}
-          <button className="agx-btn" onClick={onBack}>
+          <button className="vq-button vq-button--ghost" onClick={onBack}>
             取消
           </button>
-            <button className="agx-btn agx-btn--ink" onClick={() => void save()} disabled={saving || !ready}>
+            <button className="vq-button vq-button--primary" onClick={() => void save()} disabled={saving || !ready}>
               <Check size={14} />
               {saving ? '保存中…' : editingId ? '保存修改' : '创建智能体'}
             </button>
@@ -451,10 +451,10 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
               <span className="agx-mono">{editingId ? '编辑已有智能体' : '新建智能体'}</span>
             )}
             <div>
-              <button className="agx-btn" onClick={onBack}>
+              <button className="vq-button vq-button--ghost" onClick={onBack}>
                 取消
               </button>
-              <button className="agx-btn agx-btn--ink" onClick={() => void save()} disabled={saving || !ready}>
+              <button className="vq-button vq-button--primary" onClick={() => void save()} disabled={saving || !ready}>
                 <Check size={14} />
                 {saving ? '保存中…' : editingId ? '保存修改' : '创建智能体'}
               </button>
@@ -511,7 +511,7 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
             <p className="agx-side-copy">
               保存后回到列表，选中这个智能体，写清要做的事就能开始。
             </p>
-            <button className="agx-btn" onClick={startChat} disabled={!editingId}>
+            <button className="vq-button vq-button--ghost" onClick={startChat} disabled={!editingId}>
               <MessageSquareText size={14} />
               用它开始对话
             </button>

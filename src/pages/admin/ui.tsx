@@ -53,7 +53,7 @@ export function ErrorBanner({ message, onRetry, title = '数据加载失败' }: 
         <p>{internal ? message : stripApiPrefix(message)}</p>
       </div>
       {onRetry ? (
-        <button type="button" className="admin-btn admin-btn--ghost" onClick={onRetry}>
+        <button type="button" className="vq-button vq-button--ghost" onClick={onRetry}>
           重试
         </button>
       ) : null}
@@ -92,7 +92,7 @@ export function Badge({
 
 export function RefreshButton({ onClick, busy }: { onClick: () => void; busy?: boolean }) {
   return (
-    <button type="button" className="admin-btn admin-btn--ghost" onClick={onClick} disabled={busy}>
+    <button type="button" className="vq-button vq-button--ghost" onClick={onClick} disabled={busy}>
       {busy ? '刷新中…' : '刷新'}
     </button>
   )

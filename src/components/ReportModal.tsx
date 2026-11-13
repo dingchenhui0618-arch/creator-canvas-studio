@@ -56,7 +56,7 @@ export function ReportModal({
             <span className="vq-mono">Report / 举报</span>
             <h2 id="vq-report-title">举报侵权或不当内容</h2>
           </div>
-          <button type="button" className="vq-icon-button" aria-label="关闭" onClick={onClose}>
+          <button type="button" className="vq-button vq-button--icon" aria-label="关闭" onClick={onClose}>
             <X size={16} />
           </button>
         </div>

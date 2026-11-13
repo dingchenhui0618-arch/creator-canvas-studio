@@ -62,63 +62,6 @@
 }
 
 /* ---------- 按钮 / 胶囊 ---------- */
-.agx-btn {
-  height: 34px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 0 12px;
-  color: var(--ink);
-  background: var(--surface-raised);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
-  font-size: 12px;
-  font-weight: 500;
-  white-space: nowrap;
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
-}
-.agx-btn:hover {
-  background: var(--surface);
-}
-.agx-btn:active {
-  transform: translateY(1px);
-}
-.agx-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-.agx-btn--ink {
-  color: #fff;
-  background: var(--ink);
-  border-color: var(--ink);
-}
-.agx-btn--ink:hover {
-  background: #000;
-}
-.agx-btn--quiet {
-  color: var(--muted);
-  background: transparent;
-  border-color: transparent;
-}
-.agx-btn--quiet:hover {
-  color: var(--ink);
-  background: var(--surface-soft);
-}
-.agx-btn--danger {
-  color: var(--fail);
-  background: var(--fail-soft);
-  border-color: rgba(163, 56, 56, 0.28);
-}
-.agx-btn em {
-  padding: 1px 4px;
-  color: var(--faint);
-  background: var(--line-faint);
-  border-radius: var(--radius-xs);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-style: normal;
-}
 .agx-mono {
   color: var(--faint);
   font-family: var(--font-mono);
@@ -343,10 +286,10 @@
   line-height: 1.6;
   white-space: pre-wrap;
 }
-.agx-run-detail .agx-btn {
+.agx-run-detail .vq-button {
   align-self: flex-start;
-  height: 24px;
-  font-size: 11px;
+  height: var(--btn-h-sm);
+  font-size: var(--btn-font-sm);
 }
 .agx-runs-more {
   margin: 4px 8px 0;
@@ -406,10 +349,10 @@
   padding-bottom: 12px;
   border-bottom: 1px solid var(--line-faint);
 }
-.agx-thread-head .agx-btn {
-  height: 28px;
-  padding: 0 8px;
-  font-size: 12px;
+.agx-thread-head .vq-button {
+  height: var(--btn-h-sm);
+  padding: 0 var(--btn-pad-sm);
+  font-size: var(--btn-font-sm);
 }
 .agx-thread {
   display: flex;
@@ -551,10 +494,10 @@
   gap: 8px;
   margin-top: 4px;
 }
-.agx-failure .agx-btn {
-  height: 28px;
+.agx-failure .vq-button {
+  height: var(--btn-h-sm);
   color: var(--fail);
-  font-size: 12px;
+  font-size: var(--btn-font-sm);
 }
 
 /* composer：一块卡片，输入区在上，参数与发送收在底部同一行。
@@ -922,25 +865,6 @@
   padding: 8px 8px 8px;
   border-top: 1px solid var(--line-faint);
 }
-.agx-icon-btn {
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  color: var(--faint);
-  background: none;
-  border: 0;
-  border-radius: var(--radius-sm);
-  transition: background 0.15s ease, color 0.15s ease;
-}
-.agx-icon-btn:hover {
-  color: var(--ink);
-  background: var(--surface-soft);
-}
-.agx-icon-btn.is-armed {
-  color: var(--fail);
-  background: var(--fail-soft);
-}
 .agx-empty {
   display: grid;
   justify-items: center;
@@ -972,7 +896,7 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
 }
-.agx-empty .agx-btn {
+.agx-empty .vq-button {
   margin-top: 4px;
 }
 .agx-skeleton-card {
@@ -997,11 +921,11 @@
 .agx-alert span {
   flex: 1;
 }
-.agx-alert .agx-btn {
-  height: 26px;
-  padding: 0 8px;
+.agx-alert .vq-button {
+  height: var(--btn-h-sm);
+  padding: 0 var(--btn-pad-sm);
   color: var(--fail);
-  font-size: 12px;
+  font-size: var(--btn-font-sm);
 }
 
 /* ---------- 编辑器 ---------- */
@@ -1266,9 +1190,9 @@
   font-size: 12px;
   line-height: 1.7;
 }
-.agx-side-panel .agx-btn {
-  height: 30px;
-  font-size: 12px;
+.agx-side-panel .vq-button {
+  height: var(--btn-h-sm);
+  font-size: var(--btn-font-sm);
 }
 
 /* ---------- 响应式 ---------- */
@@ -1313,7 +1237,7 @@
     animation: none;
   }
   .agx-card,
-  .agx-btn,
+  .vq-button,
   .agx-send,
   .agx-composer {
     transition: none;
@@ -1448,9 +1372,9 @@
   font-size: 11px;
   overflow-wrap: anywhere;
 }
-.agx-model-note .agx-btn {
+.agx-model-note .vq-button {
   flex: none;
-  height: 24px;
+  height: var(--btn-h-sm);
   color: var(--fail);
   font-size: 11.5px;
 }
@@ -1506,10 +1430,10 @@
   padding-top: 8px;
   border-top: 1px solid var(--line-faint);
 }
-.agx-draft-actions .agx-btn {
-  height: 28px;
-  padding: 0 8px;
-  font-size: 12px;
+.agx-draft-actions .vq-button {
+  height: var(--btn-h-sm);
+  padding: 0 var(--btn-pad-sm);
+  font-size: var(--btn-font-sm);
 }
 .agx-draft-done {
   display: inline-flex;
@@ -1602,10 +1526,10 @@
   flex-wrap: wrap;
   gap: 8px;
 }
-.agx-draft-pick-actions .agx-btn {
-  height: 28px;
-  padding: 0 8px;
-  font-size: 12px;
+.agx-draft-pick-actions .vq-button {
+  height: var(--btn-h-sm);
+  padding: 0 var(--btn-pad-sm);
+  font-size: var(--btn-font-sm);
 }
 
 /* 从作品页「让智能体写」过来：一条横幅写明在帮哪条作品、这一版现在是什么 */
@@ -1644,10 +1568,10 @@
   gap: 8px;
   margin-left: auto;
 }
-.agx-project-actions .agx-btn {
-  height: 28px;
-  padding: 0 8px;
-  font-size: 12px;
+.agx-project-actions .vq-button {
+  height: var(--btn-h-sm);
+  padding: 0 var(--btn-pad-sm);
+  font-size: var(--btn-font-sm);
 }
 
 @media (max-width: 700px) {

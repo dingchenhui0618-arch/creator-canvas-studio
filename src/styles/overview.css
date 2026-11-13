@@ -748,8 +748,6 @@
 
 .vq-review-queue-pager .vq-button {
   flex: none;
-  /* 全局 .vq-scope button { font: inherit } 会把字号顶回 16px，这里压回 11px */
-  font-size: 11px;
 }
 
 /* 翻到底之后的一句：这一页就是全部，不用再找 */
@@ -802,14 +800,11 @@
   justify-self: start;
 }
 
-/* 「已看过」：11px 的小动作，平时是灰的，别和作品名抢注意力 */
+/* 「已看过」：小档按钮（--sm），平时是灰的，别和作品名抢注意力 */
 .vq-review-queue-row .vq-review-queue-ack {
   flex: none;
   margin-right: 16px;
   color: var(--faint);
-  /* 全局 .vq-scope button { font: inherit } 比 .vq-button 更具体，会把这些按钮的字号顶回 16px；
-     行尾这个小动作要 11px，只能在这条更具体的选择器上写。 */
-  font-size: 11px;
   font-weight: 400;
   transition: color var(--dur-1) var(--ease-out), background-color var(--dur-1) var(--ease-out);
 }
@@ -944,12 +939,10 @@
   }
 
   .vq-review-queue-row .vq-review-queue-ack {
-    height: 32px;
     margin-right: 8px;
-    padding: 0 8px;
   }
 
-  /* 一个图标 16px 换正文一行宽：11px 的「已看过」在窄屏够读，图标反而占掉作品名 */
+  /* 一个图标 16px 换正文一行宽：小档字号的「已看过」在窄屏够读，图标反而占掉作品名 */
   .vq-review-queue-row .vq-review-queue-ack svg {
     display: none;
   }
@@ -1077,13 +1070,12 @@
   color: var(--ink);
 }
 
-/* 「交付稿」：11px 的小动作，与行尾的「已看过」同一档，不跟作品名抢注意力 */
+/* 「交付稿」：小档按钮（--sm），与行尾的「已看过」同一档，不跟作品名抢注意力 */
 .vq-delivery-row .vq-delivery-paper {
   flex: none;
   margin-right: 16px;
   /* 它是这一行真正能做的事（取回那一版交付稿），比旁边的状态字要显眼一档 */
   color: var(--muted);
-  font-size: 11px;
   font-weight: 400;
   transition: color var(--dur-1) var(--ease-out), background-color var(--dur-1) var(--ease-out);
 }
@@ -1173,9 +1165,7 @@
   }
 
   .vq-delivery-row .vq-delivery-paper {
-    height: 32px;
     margin-right: 8px;
-    padding: 0 8px;
   }
 }
 

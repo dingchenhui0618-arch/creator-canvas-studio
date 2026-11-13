@@ -715,7 +715,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                 </button>
                 <button
                   type="button"
-                  className="vq-button vq-button--quiet vq-button--tiny vq-review-queue-ack"
+                  className="vq-button vq-button--quiet vq-button--sm vq-review-queue-ack"
                   onClick={() => void markSeen(row.projectId)}
                   disabled={ackBusy === row.projectId}
                   title="看过了，这一版先不改：从待办里拿掉；这一版再评出结论，它会自己回来"
@@ -748,7 +748,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
               ) : (
                 <button
                   type="button"
-                  className="vq-button vq-button--quiet vq-button--tiny"
+                  className="vq-button vq-button--quiet vq-button--sm"
                   onClick={() => setQueuePages((pages) => Math.min(QUEUE_MAX_PAGES, pages + 1))}
                   disabled={queueBusy}
                   title="接着往下排：一页 20 条"
@@ -852,7 +852,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                     </button>
                     <button
                       type="button"
-                      className="vq-button vq-button--quiet vq-button--tiny vq-review-queue-ack"
+                      className="vq-button vq-button--quiet vq-button--sm vq-review-queue-ack"
                       onClick={() => void undoSeen(row.projectId)}
                       disabled={ackBusy === row.projectId}
                       title="撤销「已看过」：它回到待办，这一版照旧要改"
@@ -993,7 +993,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                   {row.current ? (
                     <button
                       type="button"
-                      className="vq-button vq-button--quiet vq-button--tiny vq-delivery-paper"
+                      className="vq-button vq-button--quiet vq-button--sm vq-delivery-paper"
                       onClick={() => openDeliverable(row.projectId)}
                       title="在新标签里打开这一版的交付稿（A4，可存 PDF）"
                     >
@@ -1020,7 +1020,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                 {deliveryHasMore ? (
                   <button
                     type="button"
-                    className="vq-button vq-button--quiet vq-button--tiny"
+                    className="vq-button vq-button--quiet vq-button--sm"
                     onClick={() => void loadMoreDeliveries()}
                     disabled={deliveryBusy}
                     title="接着往下取：一页 8 条"

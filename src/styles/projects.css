@@ -1661,14 +1661,7 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
 }
 
 /* 按钮语义：删除是危险动作，不用主色 */
-.vq-button.is-danger {
-  color: var(--fail);
-}
 
-.vq-button.is-danger:hover:not(:disabled) {
-  border-color: rgba(163, 56, 56, 0.3);
-  background: var(--fail-soft);
-}
 
 @media (max-width: 1080px) {
   .vq-project-body {

@@ -966,7 +966,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
             </button>
           ) : null}
           <a
-            className="cv-icon-btn"
+            className="vq-button vq-button--icon"
             href={bdc.web.embedUrl || bdc.web.url}
             target="_blank"
             rel="noreferrer"
@@ -976,7 +976,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
             <Maximize2 size={14} />
           </a>
           <button
-            className="cv-icon-btn"
+            className="vq-button vq-button--icon"
             type="button"
             onClick={() => {
               // 从画布项目链接进来的页面没有加载内置流程：回内置编排要走一次路由，让它正常拉流程
@@ -1021,13 +1021,13 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
             </select>
             <ChevronDown size={14} />
           </label>
-          <button className="cv-btn" type="button" onClick={() => { void createNewFlow() }} disabled={running} title="新建流程">
+          <button className="vq-button vq-button--ghost" type="button" onClick={() => { void createNewFlow() }} disabled={running} title="新建流程">
             <Plus size={14} />新建
           </button>
-          <button className="cv-btn" type="button" onClick={() => { void saveAsTemplate() }} disabled={running} title="把当前画布另存为一个新流程">
+          <button className="vq-button vq-button--ghost" type="button" onClick={() => { void saveAsTemplate() }} disabled={running} title="把当前画布另存为一个新流程">
             <Copy size={14} />另存为模板
           </button>
-          <button className="cv-btn" type="button" onClick={() => { void saveNow().then((ok) => toast(ok ? (internal ? '已保存到 data/flows.json' : '已保存') : '保存失败：' + saveError)) }} disabled={running || saveState === 'saving'} title="Ctrl+S">
+          <button className="vq-button vq-button--ghost" type="button" onClick={() => { void saveNow().then((ok) => toast(ok ? (internal ? '已保存到 data/flows.json' : '已保存') : '保存失败：' + saveError)) }} disabled={running || saveState === 'saving'} title="Ctrl+S">
             <Save size={14} />保存
           </button>
           {runCredit && runCredit.price > 0 ? (
@@ -1036,7 +1036,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
             </span>
           ) : null}
           <button
-            className="cv-btn cv-btn--primary"
+            className="vq-button vq-button--primary"
             type="button"
             onClick={() => { void handleRun() }}
             disabled={running || loadState !== 'ready' || (runCredit != null && runCredit.balance != null && runCredit.balance < runCredit.price)}
@@ -1044,7 +1044,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
           >
             <Play size={14} fill="currentColor" />{running ? '运行中…' : '运行流程'}
           </button>
-          <button className="cv-icon-btn" type="button" onClick={() => { void removeFlow() }} disabled={running || loadState !== 'ready'} aria-label="删除流程" title="删除流程">
+          <button className="vq-button vq-button--icon" type="button" onClick={() => { void removeFlow() }} disabled={running || loadState !== 'ready'} aria-label="删除流程" title="删除流程">
             <Trash size={14} />
           </button>
           </div>
@@ -1056,8 +1056,8 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
         <div className="cv-bdc-bar">
           <span className="vq-mono">BD CANVAS · {bdcLocalOnly ? '本机已部署' : '已部署'}</span>
           <p>画布由 VisionQA Canvas 接管（{bdc.web.url}）；这里的流程编排保留作备选，数据各存各的。</p>
-          <button className="cv-btn" type="button" onClick={() => setBdcView(true)}>在这里打开</button>
-          <a className="cv-btn" href={bdc.web.url} target="_blank" rel="noreferrer">新窗口</a>
+          <button className="vq-button vq-button--ghost" type="button" onClick={() => setBdcView(true)}>在这里打开</button>
+          <a className="vq-button vq-button--ghost" href={bdc.web.url} target="_blank" rel="noreferrer">新窗口</a>
         </div>
       ) : null}
 
@@ -1071,7 +1071,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
               <p>VisionQA Canvas 现在只监听本机（{bdc.web.url}），从别的电脑打开会连到访客自己的机器。</p>
               <p className="cv-muted">{internal ? '把它部署到独立子域并把 BDC_WEB_URL 指过去，这里就会直接显示画布。' : '发布到独立域名后，这里就会直接显示画布。'}</p>
             </div>
-            <button className="cv-btn" type="button" onClick={() => setBdcView(false)}>用内置编排</button>
+            <button className="vq-button vq-button--ghost" type="button" onClick={() => setBdcView(false)}>用内置编排</button>
           </div>
         ) : (
           <iframe key={frameKey} ref={bdcFrameRef} className="cv-bdc-frame" src={bdcFrameSrc} title="VisionQA Canvas" />
@@ -1084,7 +1084,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
             <p>{loadError}</p>
             <p className="cv-muted">{internal ? '确认 API 服务（127.0.0.1:8787）已启动，然后重新加载页面。' : '稍后重新加载页面；如果仍未恢复，请联系平台维护人员。'}</p>
           </div>
-          <button className="cv-btn" type="button" onClick={() => window.location.reload()}>重新加载</button>
+          <button className="vq-button vq-button--ghost" type="button" onClick={() => window.location.reload()}>重新加载</button>
         </div>
       ) : (
         <div className="cv-workspace">
@@ -1108,7 +1108,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
                 </span>
                 <div className="cv-project-actions">
                   <button
-                    className="cv-btn"
+                    className="vq-button vq-button--ghost"
                     type="button"
                     onClick={() => navigate({ kind: 'page', page: 'projects', projectId: flowProject.id })}
                   >
@@ -1116,7 +1116,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
                   </button>
                   {flowProject.archived ? null : (
                     <button
-                      className="cv-btn"
+                      className="vq-button vq-button--ghost"
                       type="button"
                       onClick={() => navigate({ kind: 'page', page: 'review', projectId: flowProject.id })}
                     >

@@ -110,7 +110,7 @@ export function ReplicateModal({ item, hasKey, visionReady, onClose, onDone, onO
             <strong>{item.title || '（无标题）'}</strong>
             <span className="replicate-sub">{item.platformLabel}{item.author ? ' · ' + item.author : ''}</span>
           </div>
-          <button className="icon-button" onClick={onClose} aria-label="关闭"><X size={16} /></button>
+          <button className="vq-button vq-button--icon" onClick={onClose} aria-label="关闭"><X size={16} /></button>
         </header>
 
         {phase === 'idle' && (
@@ -142,8 +142,8 @@ export function ReplicateModal({ item, hasKey, visionReady, onClose, onDone, onO
               ) : null}
             </div>
             <div className="replicate-foot">
-              <button className="button button--ghost" onClick={onClose}>取消</button>
-              <button className="button button--primary" disabled={!canRun || insufficient} onClick={() => void begin()}>
+              <button className="vq-button vq-button--ghost" onClick={onClose}>取消</button>
+              <button className="vq-button vq-button--primary" disabled={!canRun || insufficient} onClick={() => void begin()}>
                 <Sparkles size={15} />{parseMode ? '开始解析' : '开始复刻'}
               </button>
             </div>
@@ -201,8 +201,8 @@ export function ReplicateModal({ item, hasKey, visionReady, onClose, onDone, onO
               </div>
             )}
             <div className="replicate-foot">
-              <button className="button button--ghost" onClick={() => { onDone(template?.title || (parseMode ? '解析完成' : '复刻完成'), template?.id || job?.templateId || '') }}>完成</button>
-              <button className="button button--primary" onClick={onOpenTemplates}>查看模板库<ArrowRight size={15} /></button>
+              <button className="vq-button vq-button--ghost" onClick={() => { onDone(template?.title || (parseMode ? '解析完成' : '复刻完成'), template?.id || job?.templateId || '') }}>完成</button>
+              <button className="vq-button vq-button--primary" onClick={onOpenTemplates}>查看模板库<ArrowRight size={15} /></button>
             </div>
           </div>
         )}
@@ -217,8 +217,8 @@ export function ReplicateModal({ item, hasKey, visionReady, onClose, onDone, onO
               <p className="replicate-note">解析服务还没接入：平台链接无法解析。可以先粘贴一条 mp4 直链验证拆帧与模板流程，或先让管理员接入解析服务。</p>
             )}
             <div className="replicate-foot">
-              <button className="button button--ghost" onClick={onClose}>关闭</button>
-              <button className="button button--primary" onClick={() => setPhase('idle')}>重试</button>
+              <button className="vq-button vq-button--ghost" onClick={onClose}>关闭</button>
+              <button className="vq-button vq-button--primary" onClick={() => setPhase('idle')}>重试</button>
             </div>
           </div>
         )}

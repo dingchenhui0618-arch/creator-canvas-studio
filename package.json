@@ -1,7 +1,7 @@
 {
   "name": "creator-canvas-studio",
   "private": true,
-  "version": "0.9.46",
+  "version": "0.9.47",
   "description": "VisionQA 桌面端：网页外壳 + 本地工作区（agent loop 在本机运行）",
   "productName": "VisionQA",
   "author": "Wavision",

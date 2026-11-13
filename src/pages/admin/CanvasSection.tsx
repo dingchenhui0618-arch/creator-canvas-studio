@@ -108,7 +108,7 @@ export default function CanvasSection() {
                       <td>
                         <button
                           type="button"
-                          className="admin-btn admin-btn--ghost"
+                          className="vq-button vq-button--ghost"
                           disabled={busyId === item.id}
                           onClick={() => void toggle(item)}
                         >

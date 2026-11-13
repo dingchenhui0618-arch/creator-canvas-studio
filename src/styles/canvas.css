@@ -74,41 +74,6 @@
 .cv-flow-select select:focus { outline: none; border-color: var(--ink); }
 .cv-flow-select svg { position: absolute; right: 8px; color: var(--faint); pointer-events: none; }
 
-.cv-btn {
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 12px;
-  color: var(--ink);
-  background: var(--surface-raised);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
-  font-family: var(--font-ui);
-  font-size: 12px;
-  font-weight: 500;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: background .15s ease, border-color .15s ease, color .15s ease;
-}
-.cv-btn:hover:not(:disabled) { border-color: var(--ink); }
-.cv-btn:disabled { opacity: .42; cursor: not-allowed; }
-.cv-btn--primary { color: #fff; background: var(--ink); border-color: var(--ink); }
-.cv-btn--primary:hover:not(:disabled) { background: #000; }
-.cv-btn--danger { color: var(--fail); border-color: rgba(163, 56, 56, .28); }
-.cv-icon-btn {
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  color: var(--muted);
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-.cv-icon-btn:hover:not(:disabled) { color: var(--ink); border-color: var(--line-strong); background: var(--surface-raised); }
-.cv-icon-btn:disabled { opacity: .42; cursor: not-allowed; }
 .cv-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 /* ---------- 加载 / 失败 ---------- */
@@ -123,7 +88,7 @@
 }
 .cv-state strong { display: block; font-size: 14px; }
 .cv-state p { margin: 4px 0 0; max-width: 560px; color: var(--muted); font-size: 12px; line-height: 1.6; }
-.cv-state .cv-btn { margin-left: auto; }
+.cv-state .vq-button { margin-left: auto; }
 
 /* ---------- 三栏工作区 ---------- */
 .cv-workspace {
@@ -282,7 +247,7 @@
   text-overflow: ellipsis;
 }
 .cv-project-actions { display: flex; gap: 8px; margin-left: auto; }
-.cv-project-actions .cv-btn { height: 28px; padding: 0 8px; }
+.cv-project-actions .vq-button { height: var(--btn-h-sm); padding: 0 var(--btn-pad-sm); font-size: var(--btn-font-sm); }
 
 .cv-toolbar {
   height: 42px;
@@ -620,7 +585,7 @@
   .cv-workspace { grid-template-columns: minmax(0, 1fr) 288px; height: calc(100vh - 214px); }
   .cv-workspace:has(.cv-palette) { grid-template-columns: 188px minmax(0, 1fr) 288px; }
   .cv-flow-name { width: min(420px, 36vw); }
-  .cv-head-actions .cv-btn { padding: 0 8px; }
+  .cv-head-actions .vq-button { padding: 0 var(--btn-pad-sm); }
 }
 
 @media (max-width: 1024px) {
@@ -661,12 +626,12 @@
   .cv-workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(420px, 1fr) auto; min-height: 0; }
   .cv-inspector { max-height: 420px; }
   .cv-flow-name { width: 100%; }
-  .cv-head-actions .cv-btn { flex: 1; justify-content: center; }
+  .cv-head-actions .vq-button { flex: 1; justify-content: center; }
   .cv-project { gap: 4px 8px; }
   /* 窄屏只留「在帮 / 归档画布 + 第几版 + 两个动作」：说明文字收进标题的（已归档）里 */
   .cv-project-meta { display: none; }
   .cv-project-actions { flex: 1 1 100%; margin-left: 0; }
-  .cv-project-actions .cv-btn { flex: 1; justify-content: center; }
+  .cv-project-actions .vq-button { flex: 1; justify-content: center; }
   .cv-stage { min-height: 400px; }
 }
 
@@ -687,7 +652,7 @@
   .cv-bdc-bar { flex-wrap: wrap; gap: 8px; }
   .cv-bdc-bar p { flex: 1 1 100%; }
   .cv-bdc-url { display: none; }
-  .cv-bdc-bar .cv-btn { flex: 1; justify-content: center; }
+  .cv-bdc-bar .vq-button { flex: 1; justify-content: center; }
 }
 .cv-bdc-bar .vq-mono { color: var(--faint); }
 .cv-bdc-frame {

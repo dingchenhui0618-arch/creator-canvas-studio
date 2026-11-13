@@ -89,7 +89,7 @@ export default function ReportsSection() {
               <button
                 key={tab.value}
                 type="button"
-                className={'admin-btn ' + (status === tab.value ? 'admin-btn--primary' : 'admin-btn--ghost')}
+                className={'vq-button ' + (status === tab.value ? 'vq-button--primary' : 'vq-button--ghost')}
                 onClick={() => setStatus(tab.value)}
                 disabled={loading}
               >
@@ -138,21 +138,21 @@ export default function ReportsSection() {
                       value={note}
                       onChange={(event) => setNote(event.target.value)}
                     />
-                    <button type="button" className="admin-btn admin-btn--danger" onClick={() => void resolve(item, 'takedown')} disabled={busy === item.id}>
+                    <button type="button" className="vq-button vq-button--danger" onClick={() => void resolve(item, 'takedown')} disabled={busy === item.id}>
                       {busy === item.id ? <Loader2 size={13} className="vq-spin" /> : <ShieldOff size={13} />}
                       确认下架
                     </button>
-                    <button type="button" className="admin-btn admin-btn--ghost" onClick={() => void resolve(item, 'dismiss')} disabled={busy === item.id}>
+                    <button type="button" className="vq-button vq-button--ghost" onClick={() => void resolve(item, 'dismiss')} disabled={busy === item.id}>
                       <CheckCircle2 size={13} />
                       驳回
                     </button>
-                    <button type="button" className="admin-btn admin-btn--ghost" onClick={() => { setOpen(''); setNote('') }} disabled={busy === item.id}>
+                    <button type="button" className="vq-button vq-button--ghost" onClick={() => { setOpen(''); setNote('') }} disabled={busy === item.id}>
                       取消
                     </button>
                   </div>
                 ) : (
                   <div className="admin-report-actions">
-                    <button type="button" className="admin-btn admin-btn--ghost" onClick={() => setOpen(item.id)}>
+                    <button type="button" className="vq-button vq-button--ghost" onClick={() => setOpen(item.id)}>
                       <AlertTriangle size={13} />
                       处理这条
                     </button>

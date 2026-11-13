@@ -52,7 +52,7 @@
 
 /* 按钮与输入框只「继承字体族」，字号与字重交回各自的类。
    这里必须用 :where() 把权重降到 0：原来的 .vq-scope button 是 0-1-1，比 .vq-button（0-1-0）、
-   .button（0-1-0）、.vq-button--tiny（0-1-0）都高，全站按钮的字号被顶回 16px/400——
+   .vq-button--sm（0-1-0）都高，全站按钮的字号被顶回 16px/400——
    32px 高的按钮里塞 16px 字、28px 的「小按钮」里塞 16px 字，11/12/13px 的阶全死了。 */
 :where(.vq-scope) button,
 :where(.vq-scope) input {
@@ -69,18 +69,22 @@
 
 /* ---------- 通用控件 ---------- */
 
+/* 按钮（v0.9.47 归一）：全站只有一个按钮家族，尺寸只三档 —— 小 28 / 默认 32 / 表单 40。
+   圆角一律 --radius-sm，字号只两档 13 / 12；语气（primary / ghost / quiet / danger）只换颜色不换尺寸。
+   图标按钮是同一家族的正方形形态（--icon），宽高都取档位里的同一个 token。 */
 .vq-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  height: 32px;
-  padding: 0 16px;
+  gap: var(--btn-gap);
+  height: var(--btn-h);
+  padding: 0 var(--btn-pad);
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--ink);
-  font-size: 13px;
+  font-family: var(--font-ui);
+  font-size: var(--btn-font);
   font-weight: 500;
   line-height: 1;
   white-space: nowrap;
@@ -88,63 +92,83 @@
     color var(--dur-1) var(--ease-out), transform var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out);
 }
 
+/* 小档：列表行、密集工具条、弹窗里的次要动作 */
+.vq-button--sm {
+  height: var(--btn-h-sm);
+  padding: 0 var(--btn-pad-sm);
+  gap: var(--btn-gap-sm);
+  font-size: var(--btn-font-sm);
+}
+
+/* 表单档：登录 / 注册这类整宽主按钮 */
+.vq-button--lg {
+  width: 100%;
+  height: var(--btn-h-lg);
+}
+
+.vq-button--icon {
+  width: var(--btn-h);
+  padding: 0;
+  gap: 0;
+}
+
+.vq-button--icon.vq-button--sm {
+  width: var(--btn-h-sm);
+}
+
 .vq-button--primary {
   background: var(--ink);
   color: #ffffff;
 }
-
 .vq-button--primary:hover:not(:disabled) {
   background: #000000;
 }
-
 .vq-button--ghost {
   border-color: var(--line-strong);
   background: var(--surface-raised);
   color: var(--ink);
 }
-
 .vq-button--ghost:hover:not(:disabled) {
   border-color: var(--ink);
 }
-
 .vq-button--quiet {
   color: var(--muted);
 }
-
 .vq-button--quiet:hover:not(:disabled) {
   background: var(--line-faint);
   color: var(--ink);
 }
-
 .vq-button--danger {
-  border-color: var(--line);
+  border-color: rgba(163, 56, 56, 0.28);
   color: var(--fail);
 }
-
 .vq-button--danger:hover:not(:disabled) {
   background: var(--fail-soft);
-  border-color: rgba(163, 56, 56, 0.28);
+  border-color: rgba(163, 56, 56, 0.4);
 }
-
-.vq-button--block {
-  width: 100%;
-  height: 40px;
-  font-size: 13px;
-}
-
 .vq-button:disabled {
   opacity: 0.55;
+  cursor: not-allowed;
 }
-
 .vq-button:not(:disabled):active {
   transform: translateY(1px);
 }
-
 .vq-button:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px rgba(17, 17, 17, 0.16);
 }
 
+/* 按钮里的计数徽标（历史条数）：属于按钮内部，不进胶囊体系 */
+.vq-btn-count {
+  padding: 1px 4px;
+  border-radius: var(--radius-xs);
+  background: var(--line-faint);
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.4;
+}
 .vq-link {
   display: inline-flex;
   align-items: center;
@@ -1210,23 +1234,6 @@ select:focus-visible {
 .vq-breadcrumb strong {
   color: var(--ink);
   font-weight: 500;
-}
-
-.vq-icon-button {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--muted);
-}
-
-.vq-icon-button:hover {
-  border-color: var(--line);
-  background: var(--surface-raised);
-  color: var(--ink);
 }
 
 .vq-has-dot {
@@ -2880,7 +2887,6 @@ select:focus-visible {
 }
 /* 两步验证（D2）：状态徽标、密钥与备用码展示、关闭确认 */
 
-.vq-button--tiny { height: 26px; padding: 0 8px; font-size: 11px; gap: 4px; }
 .vq-inline-error { margin: 0 0 12px; font-size: 12px; color: var(--fail); }
 .vq-inline-ok { margin: 0 0 12px; font-size: 12px; color: var(--pass); }
 

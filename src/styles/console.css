@@ -316,64 +316,14 @@
 
 /* 后台徽标（v0.9.46）：改用全站 .vq-pill，这里不再自带宽高与圆角。 */
 
-.admin-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 30px;
-  padding: 0 12px;
-  border: 1px solid var(--line, #e6e3dd);
-  border-radius: var(--radius-xs);
-  background: var(--surface, #ffffff);
-  color: var(--ink, #111111);
-  font-family: inherit;
-  font-size: 12px;
-  line-height: 1;
-  text-decoration: none;
-  white-space: nowrap;
-  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
-}
 
-.admin-btn:hover {
-  border-color: var(--faint, #8a8a8a);
-  background: var(--line-faint, #f0eee9);
-}
 
-.admin-btn:focus-visible {
-  outline: 2px solid var(--ink, #111111);
-  outline-offset: 2px;
-}
 
-.admin-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
 
-.admin-btn--primary {
-  border-color: var(--ink, #111111);
-  background: var(--ink, #111111);
-  color: var(--surface, #ffffff);
-}
 
-.admin-btn--primary:hover {
-  background: #000000;
-  color: #ffffff;
-}
 
-.admin-btn--danger {
-  border-color: rgba(163, 56, 56, 0.24);
-  color: var(--fail, #a33838);
-}
 
-.admin-btn--danger:hover {
-  border-color: var(--fail, #a33838);
-  background: rgba(163, 56, 56, 0.06);
-}
 
-.admin-btn--icon {
-  padding: 0 8px;
-}
 
 .admin-error {
   display: flex;
@@ -400,7 +350,7 @@
   word-break: break-word;
 }
 
-.admin-error .admin-btn {
+.admin-error .vq-button {
   flex: none;
   border-color: rgba(163, 56, 56, 0.24);
   color: var(--fail, #a33838);
@@ -1256,7 +1206,7 @@
 .admin-version-row { display:flex; align-items:center; gap:12px; padding:8px 12px; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface-soft); }
 .admin-version-row .admin-mono { flex:0 0 auto; color:var(--ink-faint); font-size:12px; }
 .admin-version-copy { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; color:var(--ink-soft); }
-.admin-version-row .admin-btn { flex:0 0 auto; }
+.admin-version-row .vq-button { flex:0 0 auto; }
 @media (max-width:820px) {
   .admin-version-row { flex-wrap:wrap; }
   .admin-version-copy { flex-basis:100%; }

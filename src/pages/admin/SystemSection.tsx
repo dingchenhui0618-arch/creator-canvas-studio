@@ -232,7 +232,7 @@ export default function SystemSection() {
           </div>
           <div className="admin-alert-actions">
             <SourceTag kind="api" source="GET /api/admin/alerts" />
-            <button type="button" className="admin-btn admin-btn--ghost" onClick={() => void sendTestAlert()} disabled={busy === 'test'}>
+            <button type="button" className="vq-button vq-button--ghost" onClick={() => void sendTestAlert()} disabled={busy === 'test'}>
               {busy === 'test' ? '发送中…' : '发一条测试告警'}
             </button>
           </div>
@@ -273,7 +273,7 @@ export default function SystemSection() {
                     </div>
                     <button
                       type="button"
-                      className="admin-btn admin-btn--ghost admin-btn--icon"
+                      className="vq-button vq-button--ghost vq-button--icon"
                       onClick={() => void ack(item)}
                       disabled={busy === item.id}
                     >
@@ -471,12 +471,12 @@ function ClientErrorsCard() {
         </div>
         <div className="admin-alert-actions">
           <SourceTag kind="api" source="GET /api/admin/client-errors" />
-          <button type="button" className="admin-btn admin-btn--ghost" onClick={reload} disabled={loading}>
+          <button type="button" className="vq-button vq-button--ghost" onClick={reload} disabled={loading}>
             {loading ? '刷新中…' : '刷新'}
           </button>
           <button
             type="button"
-            className="admin-btn admin-btn--ghost"
+            className="vq-button vq-button--ghost"
             onClick={() => void clear()}
             disabled={busy || !data?.total}
           >
@@ -573,10 +573,10 @@ function LogsCard({ internal }: { internal: boolean }) {
         </div>
         <div className="admin-alert-actions">
           <SourceTag kind="api" source="GET /api/admin/logs" />
-          <button type="button" className="admin-btn admin-btn--ghost" onClick={reload} disabled={loading}>
+          <button type="button" className="vq-button vq-button--ghost" onClick={reload} disabled={loading}>
             {loading ? '刷新中…' : '刷新'}
           </button>
-          <button type="button" className="admin-btn admin-btn--ghost" onClick={() => void prune()} disabled={busy}>
+          <button type="button" className="vq-button vq-button--ghost" onClick={() => void prune()} disabled={busy}>
             {busy ? '清理中…' : '立即清理'}
           </button>
         </div>
@@ -655,7 +655,7 @@ function DiagnosticsCard() {
         </div>
         <div className="admin-diag-actions">
           <SourceTag kind="api" source="GET /api/admin/diagnostics" />
-          <button type="button" className="admin-btn admin-btn--ghost" onClick={reload} disabled={loading}>
+          <button type="button" className="vq-button vq-button--ghost" onClick={reload} disabled={loading}>
             {loading ? '刷新中…' : '刷新'}
           </button>
         </div>

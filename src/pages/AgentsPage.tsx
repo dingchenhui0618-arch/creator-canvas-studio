@@ -511,7 +511,7 @@ function DraftCard({
         ) : (
           <button
             type="button"
-            className="agx-btn agx-btn--ink"
+            className="vq-button vq-button--primary"
             onClick={onSaveTemplate}
             disabled={busy}
             title="存成一条可套用的脚本模板，模板库和作品页都能用"
@@ -531,7 +531,7 @@ function DraftCard({
         ) : (
           <button
             type="button"
-            className="agx-btn"
+            className="vq-button vq-button--ghost"
             onClick={onSendCanvas}
             disabled={busy}
             title="开一张新画布：脚本进了复刻提示词，可以接着改、接着跑"
@@ -556,7 +556,7 @@ function DraftCard({
         ) : draft.stats.beats > 0 ? (
           <button
             type="button"
-            className="agx-btn"
+            className="vq-button vq-button--ghost"
             onClick={onOpenPicker}
             disabled={busy || Boolean(picker?.open)}
             title="把这份草稿写进一条作品这一版的脚本；写进去之后模板与别的作品不动"
@@ -590,10 +590,10 @@ function DraftCard({
           </label>
           <p className="agx-draft-pick-note">{note}</p>
           <div className="agx-draft-pick-actions">
-            <button type="button" className="agx-btn agx-btn--ink" onClick={onWriteProject} disabled={!canWrite}>
+            <button type="button" className="vq-button vq-button--primary" onClick={onWriteProject} disabled={!canWrite}>
               {action.busy === 'project' ? '写入中' : picked?.beats ? '覆盖这一版脚本' : '写进这一版'}
             </button>
-            <button type="button" className="agx-btn agx-btn--quiet" onClick={onCancelPicker} disabled={busy}>
+            <button type="button" className="vq-button vq-button--ghost" onClick={onCancelPicker} disabled={busy}>
               取消
             </button>
           </div>
@@ -1270,10 +1270,10 @@ export function AgentsPage({
         actions={
           <div className="agx-head-actions">
           <div className="agx-history-wrap">
-            <button className="agx-btn" onClick={() => setHistoryOpen((open) => !open)} aria-expanded={historyOpen}>
+            <button className="vq-button vq-button--ghost" onClick={() => setHistoryOpen((open) => !open)} aria-expanded={historyOpen}>
               <History size={15} />
               历史
-              {history.length > 0 && <em>{history.length}</em>}
+              {history.length > 0 && <em className="vq-btn-count">{history.length}</em>}
             </button>
             {historyOpen && (
               <>
@@ -1299,7 +1299,7 @@ export function AgentsPage({
                         {runsLoadedId === selectedId && runsTotal > 0 && <em>{runsTotal}</em>}
                       </button>
                     </div>
-                    <button className="agx-icon-btn" onClick={() => setHistoryOpen(false)} aria-label="关闭">
+                    <button className="vq-button vq-button--icon" onClick={() => setHistoryOpen(false)} aria-label="关闭">
                       <X size={13} />
                     </button>
                   </div>
@@ -1368,7 +1368,7 @@ export function AgentsPage({
                                 ) : (
                                   <pre className="agx-run-reply">{run.reply}</pre>
                                 )}
-                                <button type="button" className="agx-btn agx-btn--quiet" onClick={() => void copyRun(run)}>
+                                <button type="button" className="vq-button vq-button--ghost" onClick={() => void copyRun(run)}>
                                   {copiedRun === run.id ? <Check size={12} /> : <Copy size={12} />}
                                   {copiedRun === run.id ? '已复制' : run.status === 'error' ? '复制原因' : '复制回复'}
                                 </button>
@@ -1394,7 +1394,7 @@ export function AgentsPage({
               </>
             )}
           </div>
-            <button className="agx-btn agx-btn--ink" onClick={onCreate}>
+            <button className="vq-button vq-button--primary" onClick={onCreate}>
               <Plus size={15} />
               新建智能体
             </button>
@@ -1415,12 +1415,12 @@ export function AgentsPage({
                 : '还没有脚本'}
             </span>
             <div className="agx-project-actions">
-              <button type="button" className="agx-btn" onClick={() => onOpenProject(projectContext.id)}>
+              <button type="button" className="vq-button vq-button--ghost" onClick={() => onOpenProject(projectContext.id)}>
                 打开作品
               </button>
               <button
                 type="button"
-                className="agx-btn agx-btn--quiet"
+                className="vq-button vq-button--ghost"
                 onClick={() => setProjectContext(null)}
                 title="不帮这条作品了：草稿照样能存为模板、送到画布，或写进别的作品"
               >
@@ -1432,7 +1432,7 @@ export function AgentsPage({
         <div className="agx-composer-wrap">
           {messages.length > 0 && (
             <div className="agx-thread-head">
-              <button className="agx-btn agx-btn--quiet" onClick={resetConversation} disabled={Boolean(pending)}>
+              <button className="vq-button vq-button--ghost" onClick={resetConversation} disabled={Boolean(pending)}>
                 <ArrowLeft size={13} />
                 新建对话
               </button>
@@ -1523,7 +1523,7 @@ export function AgentsPage({
                   {internal && failure.detail ? <small>{failure.detail}</small> : null}
                   <div>
                     <button
-                      className="agx-btn agx-btn--quiet"
+                      className="vq-button vq-button--ghost"
                       onClick={() => void submit(failure.prompt, { appendUser: false })}
                       disabled={Boolean(pending)}
                     >
@@ -1551,7 +1551,7 @@ export function AgentsPage({
                   <span>{modelState?.message || '模型服务暂时不可用。本次未扣积分，请稍后再试。'}</span>
                   {internal && modelState?.detail ? <small>{modelState.detail}</small> : null}
                 </div>
-                <button type="button" className="agx-btn agx-btn--quiet" onClick={() => void recheckModel()} disabled={rechecking}>
+                <button type="button" className="vq-button vq-button--ghost" onClick={() => void recheckModel()} disabled={rechecking}>
                   {rechecking ? '检测中' : '重新检测'}
                 </button>
               </div>
@@ -1644,7 +1644,7 @@ export function AgentsPage({
           <div className="agx-alert" role="alert">
             <AlertCircle size={14} />
             <span>{loadError}</span>
-            <button className="agx-btn agx-btn--quiet" onClick={() => void load()}>
+            <button className="vq-button vq-button--ghost" onClick={() => void load()}>
               <RotateCcw size={13} />
               重试
             </button>
@@ -1658,7 +1658,7 @@ export function AgentsPage({
             </div>
             <strong>还没有自建智能体</strong>
             <p>把一次性的创作判断写成系统提示词和知识，保存后就能在这里反复调用。</p>
-            <button className="agx-btn agx-btn--ink" onClick={onCreate}>
+            <button className="vq-button vq-button--primary" onClick={onCreate}>
               <Plus size={14} />
               新建智能体
             </button>
@@ -1672,7 +1672,7 @@ export function AgentsPage({
             </div>
             <strong>这个分类还没有智能体</strong>
             <p>换一个分类看看，或者新建一个「{category}」方向的智能体。</p>
-            <button className="agx-btn" onClick={onCreate}>
+            <button className="vq-button vq-button--ghost" onClick={onCreate}>
               <Plus size={14} />
               新建智能体
             </button>
@@ -1707,11 +1707,11 @@ export function AgentsPage({
                   </div>
                 </button>
                 <div className="agx-card-actions">
-                  <button className="agx-icon-btn" onClick={() => openAgentEditor(agent)} aria-label={'编辑 ' + agent.name} title="编辑">
+                  <button className="vq-button vq-button--icon" onClick={() => openAgentEditor(agent)} aria-label={'编辑 ' + agent.name} title="编辑">
                     <Pencil size={13} />
                   </button>
                   <button
-                    className={'agx-icon-btn' + (armedDelete === agent.id ? ' is-armed' : '')}
+                    className={'vq-button vq-button--icon' + (armedDelete === agent.id ? ' is-armed' : '')}
                     onClick={() => void removeAgent(agent)}
                     aria-label={armedDelete === agent.id ? '再次点击确认删除' : '删除 ' + agent.name}
                     title={armedDelete === agent.id ? '再次点击确认删除' : '删除'}

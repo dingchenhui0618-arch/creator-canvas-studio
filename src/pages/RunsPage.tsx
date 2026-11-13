@@ -243,7 +243,7 @@ export function RunsPage({
         title="运行记录"
         desc="每次画布执行都以真实模型调用为单位记录：哪个节点、多久、返回了什么、在哪一步失败；每条都写着属于哪条作品的第几版。"
         actions={
-          <button type="button" className="vq-button vq-button--ghost vq-button--tiny" onClick={() => void load()}>
+          <button type="button" className="vq-button vq-button--ghost vq-button--sm" onClick={() => void load()}>
             <RefreshCw size={13} />刷新
           </button>
         }
@@ -293,7 +293,7 @@ export function RunsPage({
         {filtered ? (
           <button
             type="button"
-            className="vq-button vq-button--ghost vq-button--tiny"
+            className="vq-button vq-button--ghost vq-button--sm"
             onClick={() => resetTo(() => { setKeyword(''); setFlowId(''); setStatus('') })}
           >
             清空筛选
@@ -354,7 +354,7 @@ export function RunsPage({
                   {!current.project ? (
                     <button
                       type="button"
-                      className="vq-button vq-button--ghost vq-button--tiny"
+                      className="vq-button vq-button--ghost vq-button--sm"
                       aria-expanded={adoptOpen}
                       onClick={() => {
                         setAdoptOpen((value) => !value)
@@ -369,7 +369,7 @@ export function RunsPage({
                   {current.project && onOpenProject ? (
                     <button
                       type="button"
-                      className="vq-button vq-button--ghost vq-button--tiny"
+                      className="vq-button vq-button--ghost vq-button--sm"
                       onClick={() => onOpenProject(current.project?.id || '')}
                     >
                       回作品
@@ -379,7 +379,7 @@ export function RunsPage({
                   {onOpenFlow ? (
                     <button
                       type="button"
-                      className="vq-button vq-button--ghost vq-button--tiny"
+                      className="vq-button vq-button--ghost vq-button--sm"
                       onClick={() => onOpenFlow(current.flowId)}
                     >
                       在画布打开
@@ -418,7 +418,7 @@ export function RunsPage({
                     />
                     <button
                       type="button"
-                      className="vq-button vq-button--ghost vq-button--tiny"
+                      className="vq-button vq-button--ghost vq-button--sm"
                       disabled={!adoptId || adoptBusy}
                       onClick={() => void adoptExisting()}
                     >
@@ -432,7 +432,7 @@ export function RunsPage({
                     </span>
                     <button
                       type="button"
-                      className="vq-button vq-button--ghost vq-button--tiny"
+                      className="vq-button vq-button--ghost vq-button--sm"
                       disabled={adoptBusy}
                       onClick={() => void adoptNew()}
                     >
@@ -466,10 +466,10 @@ export function RunsPage({
       {total > 0 ? (
         <div className="runs-pager">
           <span className="vq-mono">{pageStart}–{pageEnd} / {total}</span>
-          <button type="button" className="vq-button vq-button--ghost vq-button--tiny" disabled={!hasPrev} onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}>
+          <button type="button" className="vq-button vq-button--ghost vq-button--sm" disabled={!hasPrev} onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}>
             <ChevronLeft size={13} />上一页
           </button>
-          <button type="button" className="vq-button vq-button--ghost vq-button--tiny" disabled={!hasNext} onClick={() => setOffset(offset + PAGE_SIZE)}>
+          <button type="button" className="vq-button vq-button--ghost vq-button--sm" disabled={!hasNext} onClick={() => setOffset(offset + PAGE_SIZE)}>
             下一页<ChevronRight size={13} />
           </button>
         </div>

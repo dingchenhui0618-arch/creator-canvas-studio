@@ -620,7 +620,7 @@ function Workbench({
               <span className="vq-edition-kicker" title={EDITION_BY_ID.admin.hint}>
                 后台管理版
               </span>
-              <button type="button" className="vq-edition-exit" onClick={leaveAdmin}>
+              <button type="button" className="vq-button vq-button--quiet vq-button--sm" onClick={leaveAdmin}>
                 返回生产版
               </button>
             </div>
@@ -805,7 +805,7 @@ function Workbench({
           <div className="vq-topbar-left">
             <button
               type="button"
-              className="vq-icon-button"
+              className="vq-button vq-button--icon"
               onClick={() => setSidebarOpen((value) => !value)}
               aria-label={sidebarOpen ? '收起侧栏' : '展开侧栏'}
             >
@@ -881,7 +881,7 @@ function Workbench({
                 <span className="vq-mono">{internal ? 'Build / Version' : '发布版本'}</span>
                 <h2 id="vq-update-title">版本信息</h2>
               </div>
-              <button type="button" className="vq-icon-button" aria-label="关闭" onClick={() => setUpdateOpen(false)}>
+              <button type="button" className="vq-button vq-button--icon" aria-label="关闭" onClick={() => setUpdateOpen(false)}>
                 <X size={16} />
               </button>
             </div>
