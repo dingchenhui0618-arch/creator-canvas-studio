@@ -625,7 +625,7 @@ DOMAIN=visionqa.wavisionai.cn bash deploy/production/enable-https.sh            
 
 ![生产：设置页「帮助与反馈」顶上的三篇入口，分别是积分 / 排障 / 素材（v0.9.61）](docs/screenshot-help-settings-2026-11-13.png)
 
-提交 `待补`，CI 待补。
+提交 `9e8f6dc`（代码 + 8 条测试 + 文档 + 2 张生产截图），CI 43443478421 success。
 
 细节见 [帮助中心](docs/help-center-2026-11-13.md)。
 
