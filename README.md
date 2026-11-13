@@ -660,6 +660,8 @@ DOMAIN=visionqa.wavisionai.cn bash deploy/production/enable-https.sh            
 
 ![生产：后台「计费」页——档位表、每积分单价与新增/编辑表单（v0.9.63）](docs/screenshot-plans-admin-2026-11-13.png)
 
+提交 `60b9502`（代码 + 10 条测试 + 文档 + 2 张生产截图），CI 43459154232 success。
+
 细节见 [定价档位](docs/pricing-plans-2026-11-13.md)。
 
 
