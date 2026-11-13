@@ -12,6 +12,8 @@ import path from 'node:path'
 process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'vq-gw-idem-'))
 process.env.VQ_KEY_SECRET = 'test-secret-for-idempotency'
 process.env.VISION_API_KEY = ''
+process.env.VQ_GATEWAY_TOKEN = 'test-gateway-token'
+process.env.VQ_GATEWAY_OPEN = '1'
 
 const calls = []
 let mode = 'ok'
@@ -185,6 +187,37 @@ test('重放还是不知道结果：明确报「结果不明」，绝不换另�
   assert.ok(calls.every((call) => call.url.startsWith('/seeapi-unknown-forever/')), '备用 Key 一次都不能碰：那是新的一次提交')
   deleteKey(stuck.id)
   deleteKey(backup.id)
+})
+
+test('路由层：画布带的 Idempotency-Key 请求头要原样传给上游（它真就是这么发的）', async () => {
+  const key = cgcmKey({ models: ['image-2-pro'] })
+  calls.length = 0
+  const { createGatewayRouter } = await import('../server/routes/gateway.mjs')
+  const { Readable } = await import('node:stream')
+  const router = createGatewayRouter()
+  const pathname = '/api/gateway/v1/images/generations'
+  const req = Readable.from([Buffer.from(JSON.stringify({ model: 'image-2-pro', prompt: '路由这一层' }))])
+  Object.assign(req, {
+    method: 'POST',
+    url: pathname,
+    headers: { authorization: 'Bearer test-gateway-token', 'idempotency-key': 'bd-canvas-from-header' },
+  })
+  const res = {
+    status: 0,
+    payload: '',
+    writeHead(status) {
+      this.status = status
+    },
+    end(chunk) {
+      this.payload = String(chunk)
+    },
+  }
+  await router.handle(req, res, new URL('http://local' + pathname), pathname)
+  assert.equal(res.status, 200)
+  assert.equal(calls[0].header, 'bd-canvas-from-header', '画布直连 SeeAPI 时用请求头，平台不能把它吞掉')
+  assert.equal(JSON.parse(calls[0].body).idempotency_key, undefined)
+  assert.deepEqual(JSON.parse(res.payload).urls, ['https://example.invalid/seeapi.png'])
+  deleteKey(key.id)
 })
 
 test('异步出图同样用正文里的幂等键，正文里不再重复转发', async () => {

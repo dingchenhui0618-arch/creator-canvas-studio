@@ -356,11 +356,13 @@ async function attemptImage(key, requestBody, started, model, extraHeaders = {})
 /**
  * 上游幂等键。SeeAPI 的同步出图属于「计费请求」，不带 Idempotency-Key 会直接 400
  * invalid_idempotency_key（2026-11-13 生产实测，画布上表现为「出图失败：上游凭证无效（HTTP 400）」）。
- * 画布本来就把 idempotency_key 放在正文里（bd-canvas-<uuid>），这里把它提到请求头上：
- * 同一个画布节点重试时上游能认出是同一次请求，不会重复计费；调用方没给就按这次请求生成一个。
+ * 键的来源按优先级：正文里的 idempotency_key（部分调用方写法）→ 调用方自己的
+ * Idempotency-Key 请求头（画布直连 SeeAPI 时就是这么发的，见 generation_image2.py:158-162）→
+ * 平台按这次请求生成一个。前两种都要留住：同一个画布节点重试时上游才认得出是同一次请求，
+ * 不会重复计费。
  */
-function idempotencyKeyFor(payload = {}) {
-  const given = payload?.idempotencyKey || payload?.idempotency_key || ''
+function idempotencyKeyFor(payload = {}, incoming = '') {
+  const given = payload?.idempotencyKey || payload?.idempotency_key || incoming || ''
   return String(given || '').trim() || 'vq-' + crypto.randomUUID()
 }
 
@@ -381,7 +383,7 @@ function idempotencyHeaders(key, value) {
  * 出图：按「优先级 → 权重」排出一串出图 Key，一把失败就换下一把（最多 3 把）。
  * 单把 Key 坏掉不该让整次生成失败，这就是「故障回退」。
  */
-export async function generateImage(payload = {}) {
+export async function generateImage(payload = {}, options = {}) {
   const started = Date.now()
   const model = String(payload.model || '')
   const candidates = resolveKeyCandidates({ capability: 'image', model, acceptModels: acceptedModels(model), limit: MAX_ATTEMPTS })
@@ -392,7 +394,7 @@ export async function generateImage(payload = {}) {
   }
   const body = businessBody(payload)
   // 一次请求一个幂等键，换把重试也沿用：上游按 (账号, 幂等键) 去重，同一次生成不会被扣两次。
-  const idempotencyKey = idempotencyKeyFor(payload)
+  const idempotencyKey = idempotencyKeyFor(payload, options.idempotencyKey)
   let lastError = null
   for (const key of candidates) {
     const requestBody = { ...body, model: upstreamModelFor(key, model) }
@@ -541,7 +543,7 @@ export async function pollVideoTask(taskId) {
  * 出图（异步任务形态）：SeeAPI 的 /v1/images/generations/async 只回任务 id，
  * 画布拿 id 轮询 /v1/tasks/<id> 取成品；方舟是同步出图，走 generateImage 那条路，没有这一步。
  */
-export async function createImageTask(payload = {}) {
+export async function createImageTask(payload = {}, options = {}) {
   pruneJobs()
   const started = Date.now()
   const model = String(payload.model || '')
@@ -552,7 +554,7 @@ export async function createImageTask(payload = {}) {
     throw error
   }
   const body = businessBody(payload)
-  const idempotencyKey = idempotencyKeyFor(payload)
+  const idempotencyKey = idempotencyKeyFor(payload, options.idempotencyKey)
   let lastError = null
   for (const key of candidates) {
     const requestBody = { ...body, model: upstreamModelFor(key, model) }

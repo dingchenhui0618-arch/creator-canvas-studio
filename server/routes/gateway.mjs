@@ -57,9 +57,13 @@ export function createGatewayRouter() {
         return true
       }
 
+      // 画布直连 SeeAPI 时把幂等键放在请求头里（它自己的 generation_image2.py:158-162 就这么发），
+      // 接到平台通道后这个头要接着往下传：否则上游每次都看到一个新键，画布重试就可能重复扣费。
+      const callerIdempotency = String(req.headers['idempotency-key'] || '')
+
       if (IMAGE_CREATE.has(pathname) && req.method === 'POST') {
         try {
-          sendJson(res, 200, await generateImage(await readBody(req)))
+          sendJson(res, 200, await generateImage(await readBody(req), { idempotencyKey: callerIdempotency }))
         } catch (error) {
           fail(res, error)
         }
@@ -68,7 +72,7 @@ export function createGatewayRouter() {
 
       if (IMAGE_CREATE_ASYNC.has(pathname) && req.method === 'POST') {
         try {
-          sendJson(res, 200, await createImageTask(await readBody(req)))
+          sendJson(res, 200, await createImageTask(await readBody(req), { idempotencyKey: callerIdempotency }))
         } catch (error) {
           fail(res, error)
         }
