@@ -83,5 +83,5 @@
   .runs-adopt-row { align-items: stretch; }
   .runs-adopt-row .vq-select { width: 100%; }
   .runs-adopt-row .runs-adopt-hint { flex-basis: 100%; }
-  .runs-adopt-row .button { width: 100%; justify-content: center; }
+  .runs-adopt-row :is(.button,.vq-button) { width: 100%; justify-content: center; }
 }

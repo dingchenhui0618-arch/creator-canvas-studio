@@ -50,8 +50,12 @@
   box-sizing: border-box;
 }
 
-.vq-scope button,
-.vq-scope input {
+/* 按钮与输入框只「继承字体族」，字号与字重交回各自的类。
+   这里必须用 :where() 把权重降到 0：原来的 .vq-scope button 是 0-1-1，比 .vq-button（0-1-0）、
+   .button（0-1-0）、.vq-button--tiny（0-1-0）都高，全站按钮的字号被顶回 16px/400——
+   32px 高的按钮里塞 16px 字、28px 的「小按钮」里塞 16px 字，11/12/13px 的阶全死了。 */
+:where(.vq-scope) button,
+:where(.vq-scope) input {
   font: inherit;
 }
 

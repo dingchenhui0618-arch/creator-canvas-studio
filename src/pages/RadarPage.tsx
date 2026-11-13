@@ -431,7 +431,7 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
               余额 <strong>{credits?.balance ?? '—'}</strong> {credits?.unit || '积分'}
               {credits ? ' · 每次 ' + credits.prices.search : ''}
             </span>
-            <button className="button button--ghost" onClick={onOpenTemplates}>模板库</button>
+            <button className="vq-button vq-button--ghost" onClick={onOpenTemplates}>模板库</button>
           </>
         }
       />
@@ -462,7 +462,7 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
         <Select value={range} options={RANGES} onChange={setRange} label="时间范围" />
         <Select value={sort} options={SORTS} onChange={setSort} label="排序方式" />
         <button
-          className="button button--primary"
+          className="vq-button vq-button--primary"
           onClick={() => void runSearch()}
           disabled={loading || Boolean(insufficient)}
           title={insufficient ? '积分不足，先让管理员发放积分' : ''}
@@ -655,7 +655,7 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
           </span>
           <button
             type="button"
-            className="button button--ghost button--tiny"
+            className="vq-button vq-button--ghost vq-button--tiny"
             onClick={() => void runSearch()}
             disabled={loading || Boolean(insufficient)}
           >
@@ -731,14 +731,14 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
                   </div>
                 </div>
                 <div className="radar-actions">
-                  <button className="button button--ghost button--tiny" disabled={!item.url} onClick={() => item.url && window.open(item.url, '_blank', 'noopener')}>
+                  <button className="vq-button vq-button--ghost vq-button--tiny" disabled={!item.url} onClick={() => item.url && window.open(item.url, '_blank', 'noopener')}>
                     <ExternalLink size={13} />原视频
                   </button>
                   {mark && entry ? (
                     // 已经在库里、下一步清楚的，第二格直接给下一步（v0.9.39）：
                     // 开过作品的进作品，没开过的照这条模板开一条。还不清楚（没解析）的仍是「打开模板」。
                     <button
-                      className="button button--primary button--tiny"
+                      className="vq-button vq-button--primary button--tiny"
                       title={entry.hint}
                       disabled={workSaving === mark.templateId}
                       onClick={() => {
@@ -751,7 +751,7 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
                     </button>
                   ) : mark ? (
                     <button
-                      className="button button--ghost button--tiny"
+                      className="vq-button vq-button--ghost vq-button--tiny"
                       title={'已经在模板库里：打开「' + mark.title + '」'}
                       onClick={() => onOpenTemplate?.(mark.templateId)}
                       disabled={!onOpenTemplate}
@@ -760,7 +760,7 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
                     </button>
                   ) : (
                     <button
-                      className="button button--ghost button--tiny"
+                      className="vq-button vq-button--ghost vq-button--tiny"
                       disabled={!item.url || savingId === item.id}
                       title={!item.url ? '示例数据没有原链接，无法加入模板库' : '只存原链接与互动数据，不下载视频'}
                       onClick={() => void addToLibrary(item)}
@@ -770,7 +770,7 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
                   )}
                   {/* 一张卡片只有一个主按钮：已经在库里、下一步清楚的，主按钮是「往下做」，复刻降成次要动作 */}
                   <button
-                    className={'button button--tiny ' + (mark && entry ? 'button--ghost' : 'button--primary')}
+                    className={'vq-button vq-button--tiny ' + (mark && entry ? 'vq-button--ghost' : 'vq-button--primary')}
                     disabled={mode === 'mock'}
                     title={mode === 'mock' ? '示例数据没有原视频，无法复刻' : undefined}
                     onClick={() => setModalItem(item)}
@@ -795,7 +795,7 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
             {!sortHasData ? ' 当前结果缺少' + sortLabel + '所需的数据，顺序不会变化。' : ''}
           </span>
           <button
-            className="button button--ghost"
+            className="vq-button vq-button--ghost"
             disabled={loadingMore || stale || !hasMore || Boolean(insufficient)}
             title={stale ? '先点「重新检索」' : hasMore ? '每次加载一页，和检索一样按次计费' : '没有更多了'}
             onClick={() => void loadMore()}

@@ -89,11 +89,11 @@
 .template-facet__label { flex:none; width:32px; color:var(--faint); font-size:11px; letter-spacing:.08em; }
 .template-filter-note { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; margin:0 0 16px; color:var(--muted); font-size:12.5px; }
 .template-filter-note b { color:var(--ink); font-family:var(--font-mono); font-weight:500; }
-.template-filter-note .button { height:28px; }
+.template-filter-note :is(.button,.vq-button) { height:28px; }
 /* 抽屉里的「来源」：一句说明 + 一个动作（打开原视频 / 打开那条作品），以前是一串没有样式的行内元素 */
 .drawer-source { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; color:var(--muted); font-size:12.5px; line-height:1.7; }
 .drawer-source a { display:inline-flex; align-items:center; gap:4px; color:var(--ink); }
-.drawer-source .button { height:28px; }
+.drawer-source :is(.button,.vq-button) { height:28px; }
 /* 这条原片在库里（v0.9.38）：同源的改编版与跨模板开出的作品。
    改编版一多，光看「这条模板名下的作品」会以为它们是两条不相干的来源。 */
 .drawer-origin { margin-top:12px; padding:12px; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface); }
@@ -149,12 +149,12 @@
 .drawer-stats b { color:var(--ink); font-family:var(--font-mono); font-size:13px; font-weight:500; }
 .drawer-section--pending .drawer-pending-copy { margin:0 0 8px; color:var(--muted); font-size:12.5px; line-height:1.75; }
 .drawer-section--pending .drawer-pending-hint { margin:0; color:var(--ink-soft); font-size:12px; line-height:1.7; }
-.drawer-section--pending .button { height:34px; }
+.drawer-section--pending :is(.button,.vq-button) { height:34px; }
 @media (max-width:900px) { .template-summary { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 /* 卡片底部三个操作等宽一行，避免「一键复刻」被挤到卡片外面 */
 .radar-actions { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; align-items:center; }
-.radar-actions .button { width:100%; min-width:0; justify-content:center; padding:0 8px; font-size:12px; white-space:nowrap; }
-.radar-actions .button svg { flex:0 0 auto; }
+.radar-actions :is(.button,.vq-button) { width:100%; min-width:0; justify-content:center; padding:0 8px; white-space:nowrap; }
+.radar-actions :is(.button,.vq-button) svg { flex:0 0 auto; }
 /* ---------- 2026-11-10：加载更多（每页都是一次真实检索，说明计费与已加载范围） ---------- */
 .radar-more {
   display:flex;
@@ -167,7 +167,7 @@
   border-top:1px solid var(--line);
 }
 .radar-more-note { color:var(--muted); font-size:12px; line-height:1.7; }
-.radar-more .button { height:34px; gap:8px; font-size:12px; }
+.radar-more :is(.button,.vq-button) { height:34px; gap:8px; }
 
 
 /* ---------- 检索历史（B2）----------

@@ -339,11 +339,11 @@ export function TemplateLibraryPage({
         desc="只存原链接、互动数据和解析出来的脚本与分镜，不保存原视频文件。雷达里点「加入模板库」先存一条待解析条目，点「解析」才补上脚本与分镜；解析结果可直接交给拍摄，平台当前不出成片。"
         actions={
           <>
-            <button className="button button--ghost" onClick={onBack}>回到雷达</button>
-            <button className="button button--ghost" onClick={() => setTrashOpen(true)}>
+            <button className="vq-button vq-button--ghost" onClick={onBack}>回到雷达</button>
+            <button className="vq-button vq-button--ghost" onClick={() => setTrashOpen(true)}>
               <Trash2 size={15} />回收站
             </button>
-            <button className="button button--ghost" onClick={() => void load()} disabled={loading}>
+            <button className="vq-button vq-button--ghost" onClick={() => void load()} disabled={loading}>
               <RefreshCw size={15} className={loading ? 'spin' : ''} />刷新
             </button>
           </>
@@ -419,7 +419,7 @@ export function TemplateLibraryPage({
             {activeType !== '全部' ? ' · 类型：' + activeType : ''}
             {total > 0 ? ' · 全库 ' + total + ' 条' : ''}
           </span>
-          <button type="button" className="button button--ghost button--tiny" onClick={clearFilters}>清空条件</button>
+          <button type="button" className="vq-button vq-button--ghost vq-button--tiny" onClick={clearFilters}>清空条件</button>
         </div>
       ) : null}
 
@@ -435,14 +435,14 @@ export function TemplateLibraryPage({
               {[keyword.trim() ? '搜索「' + keyword.trim() + '」' : '', activeSource ? '来源「' + sourceLabel(activeSource) + '」' : '', activeType !== '全部' ? '类型「' + activeType + '」' : ''].filter(Boolean).join(' · ') || '当前条件'}
               {' 一条都没匹配上；全库 ' + total + ' 条，清掉条件就能看到。'}
             </span>
-            <button className="button button--ghost" onClick={clearFilters}>清空条件</button>
+            <button className="vq-button vq-button--ghost" onClick={clearFilters}>清空条件</button>
           </div>
         ) : (
           <div className="radar-empty">
             <Layers size={22} />
             <strong>模板库还是空的</strong>
             <span>去「发现」检索一条：点「加入模板库」先存链接与互动数据，点「解析」再拆脚本和分镜（出成片要自己拍）。</span>
-            <button className="button button--primary" onClick={onBack}>去检索一条</button>
+            <button className="vq-button vq-button--primary" onClick={onBack}>去检索一条</button>
           </div>
         )
       ) : (
@@ -838,7 +838,7 @@ export function TemplateLibraryPage({
                           {detail.projectId ? (
                             <button
                               type="button"
-                              className="button button--ghost button--tiny"
+                              className="vq-button vq-button--ghost vq-button--tiny"
                               onClick={() => {
                                 const target = detail.projectId
                                 lastRequested.current = ''
@@ -864,7 +864,7 @@ export function TemplateLibraryPage({
                       {detail.shared ? (
                         <button
                           type="button"
-                          className="button button--ghost button--tiny"
+                          className="vq-button vq-button--ghost vq-button--tiny"
                           onClick={() => setReportTarget({ kind: 'template', id: detail.id, title: detail.title, url: detail.sourceUrl })}
                         >
                           举报
@@ -930,7 +930,7 @@ export function TemplateLibraryPage({
                       {adapt || detail.kind === 'flow' ? null : (
                         <>
                           <button
-                            className="button button--ghost"
+                            className="vq-button vq-button--ghost"
                             title="打开视觉评审页并用这条的首帧预填；在评审页点「开始评审」才会扣积分"
                             onClick={() => {
                               const firstFrame = detail.frames?.[0]?.url || ''
@@ -945,7 +945,7 @@ export function TemplateLibraryPage({
                             <ScanEye size={14} />去评审
                           </button>
                           <button
-                            className="button button--ghost"
+                            className="vq-button vq-button--ghost"
                             disabled={!isParsed(detail)}
                             onClick={() => {
                               const list = [detail.hook, ...detail.structure.map((beat) => beat.beat + '：' + beat.voiceover), 'CTA：' + (detail.structure.at(-1)?.purpose || '')].join('\n')
@@ -956,14 +956,14 @@ export function TemplateLibraryPage({
                         </>
                       )}
                       <button
-                        className="button button--ghost"
+                        className="vq-button vq-button--ghost"
                         onClick={() => {
                           const name = downloadTemplateMarkdown(detail)
                           onToast('已下载 ' + name + '，可直接贴进飞书或 Notion')
                         }}>
                         <Download size={14} />下载 Markdown
                       </button>
-                      <button className="button button--ghost" onClick={() => window.print()}>
+                      <button className="vq-button vq-button--ghost" onClick={() => window.print()}>
                         <Printer size={14} />打印或存 PDF
                       </button>
                     </div>
@@ -984,10 +984,10 @@ export function TemplateLibraryPage({
                             onFocus={(event) => event.currentTarget.select()}
                             aria-label="模板只读分享链接"
                           />
-                          <button className="button button--ghost" onClick={() => void copyShare(detail.shareToken)}>
+                          <button className="vq-button vq-button--ghost" onClick={() => void copyShare(detail.shareToken)}>
                             <Copy size={14} />复制
                           </button>
-                          <button className="button button--ghost" onClick={() => void stopShare(detail)} disabled={shareBusy}>
+                          <button className="vq-button vq-button--ghost" onClick={() => void stopShare(detail)} disabled={shareBusy}>
                             {shareBusy ? <RefreshCw size={14} className="spin" /> : <X size={14} />}停止分享
                           </button>
                         </div>
@@ -997,7 +997,7 @@ export function TemplateLibraryPage({
                       </>
                     ) : (
                       <>
-                        <button className="button button--ghost" onClick={() => void startShare(detail)} disabled={shareBusy}>
+                        <button className="vq-button vq-button--ghost" onClick={() => void startShare(detail)} disabled={shareBusy}>
                           {shareBusy ? <RefreshCw size={14} className="spin" /> : <Link2 size={14} />}生成只读链接
                         </button>
                         <p className="drawer-share-note">
@@ -1011,10 +1011,10 @@ export function TemplateLibraryPage({
                 <footer className="drawer-foot">
                   {adapt ? (
                     <>
-                      <button type="button" className="button button--ghost" onClick={() => setAdapt(null)} disabled={adaptSaving}>
+                      <button type="button" className="vq-button vq-button--ghost" onClick={() => setAdapt(null)} disabled={adaptSaving}>
                         取消
                       </button>
-                      <button type="button" className="button button--primary" onClick={() => void saveAdapt()} disabled={adaptSaving}>
+                      <button type="button" className="vq-button vq-button--primary" onClick={() => void saveAdapt()} disabled={adaptSaving}>
                         {adaptSaving ? <RefreshCw size={14} className="spin" /> : <CheckIcon size={14} />}
                         {adaptSaving ? '保存中' : '存为我的模板'}
                       </button>
@@ -1025,7 +1025,7 @@ export function TemplateLibraryPage({
                     {detail.kind === 'flow' || !isParsed(detail) || !detail.storyboard?.length ? null : (
                       <button
                         type="button"
-                        className="button button--ghost"
+                        className="vq-button vq-button--ghost"
                         title="以这条为底改脚本与分镜，存成你自己的模板（原模板不动）"
                         onClick={() => enterAdapt(detail)}
                       >
@@ -1035,7 +1035,7 @@ export function TemplateLibraryPage({
                     {detail.kind !== 'flow' && isParsed(detail) ? (
                       <button
                         type="button"
-                        className="button button--primary"
+                        className="vq-button vq-button--primary"
                         disabled={projectSaving}
                         title="把这条模板变成一条作品：脚本与分镜跟着走，之后在作品页开画布、送评审"
                         onClick={() => void startProject(detail)}
@@ -1048,7 +1048,7 @@ export function TemplateLibraryPage({
                     {detail.kind !== 'flow' && !isParsed(detail) ? (
                       <button
                         type="button"
-                        className="button button--primary"
+                        className="vq-button vq-button--primary"
                         disabled={!detail.sourceUrl}
                         title="跑一次解析：拆出脚本与分镜，这条原地变成已解析模板"
                         onClick={() => setReplicateItem(asMedia(detail))}
@@ -1057,7 +1057,7 @@ export function TemplateLibraryPage({
                       </button>
                     ) : (
                     <button
-                      className={'button ' + (detail.kind !== 'flow' && isParsed(detail) ? 'button--ghost' : 'button--primary')}
+                      className={'vq-button ' + (detail.kind !== 'flow' && isParsed(detail) ? 'vq-button--ghost' : 'vq-button--primary')}
                       disabled={detail.kind !== 'flow' && !isParsed(detail)}
                       onClick={() => {
                         void applyTemplate(detail.id)
@@ -1072,7 +1072,7 @@ export function TemplateLibraryPage({
                       <Layers size={14} />{detail.kind === 'flow' ? '在画布打开' : '套用到画布'}
                     </button>
                     )}
-                    <button className="button button--danger button--tiny" onClick={() => { void deleteTemplate(detail.id).then(() => { closeDetail(); onToast('已移到回收站，30 天内可以恢复'); void load() }) }}>
+                    <button className="vq-button vq-button--danger vq-button--tiny" onClick={() => { void deleteTemplate(detail.id).then(() => { closeDetail(); onToast('已移到回收站，30 天内可以恢复'); void load() }) }}>
                       <Trash2 size={13} />删除
                     </button>
                     </>
