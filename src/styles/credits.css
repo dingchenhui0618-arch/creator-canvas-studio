@@ -137,18 +137,7 @@
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
-.vq-health-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 1px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  line-height: 18px;
-}
-.vq-health-tag.ok { color: var(--pass); background: var(--pass-soft); }
-.vq-health-tag.warn { color: var(--warn); background: rgba(138, 91, 8, 0.1); }
-.vq-health-tag.fail { color: var(--fail); background: var(--fail-soft); }
+/* 健康徽标（v0.9.46）：改用全站 .vq-pill。 */
 
 /* 雷达页：检索前告诉用户这一下要花多少积分，检索后显示扣了多少、还剩多少 */
 .radar-credit {

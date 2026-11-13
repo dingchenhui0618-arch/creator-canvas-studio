@@ -2,6 +2,7 @@ import { Check, CircleAlert, CircleDashed, CircleSlash, Loader, X } from 'lucide
 import { NODE_META } from './catalog'
 import type { RunNodeResult, RunRecord } from '../api/flows'
 import { useUiMode } from '../api/app'
+import { Pill } from '../components/ui'
 
 type RunDrawerProps = {
   open: boolean
@@ -48,7 +49,7 @@ export function RunDrawer({ open, running, flowName, runId, total, nodes, record
   const progress = total > 0 ? Math.round((nodes.length / total) * 100) : 0
   const duration = record ? record.durationMs : nodes.reduce((sum, node) => sum + (node.ms || 0), 0)
   const statusText = running ? 'RUNNING' : record ? (record.status === 'success' ? 'DONE' : 'ERROR') : error ? 'ERROR' : 'IDLE'
-  const statusClass = running ? 'is-running' : record?.status === 'error' || error ? 'is-error' : record ? 'is-done' : 'is-idle'
+  const statusTone = running ? 'live' : record?.status === 'error' || error ? 'fail' : record ? 'pass' : 'idle'
 
   return (
     <aside className={`cv-drawer ${open ? 'is-open' : ''}`} aria-label="运行结果" aria-hidden={!open}>
@@ -58,7 +59,7 @@ export function RunDrawer({ open, running, flowName, runId, total, nodes, record
           <strong>{flowName || '当前流程'}</strong>
         </div>
         <div className="cv-drawer-head-right">
-          <span className={`cv-run-badge ${statusClass}`}>{statusText}</span>
+          <Pill tone={statusTone}>{statusText}</Pill>
           <button className="cv-icon-btn" type="button" onClick={onClose} aria-label="关闭运行结果"><X size={14} /></button>
         </div>
       </header>

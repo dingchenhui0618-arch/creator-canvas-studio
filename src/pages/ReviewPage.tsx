@@ -11,9 +11,12 @@ import { useUiMode } from '../api/app'
 import PageHead from '../components/PageHead'
 import ReviewHistoryModal from '../components/ReviewHistoryModal'
 import { ReviewHistoryRow } from '../components/ReviewHistoryRow'
+import { Pill, Tag } from '../components/ui'
 import '../styles/review.css'
 
 const SEVERITY_LABEL: Record<string, string> = { blocker: '阻塞', major: '主要', minor: '次要', info: '信息' }
+// 严重度是元数据，不是结论：只借标签的语气色，尺寸仍走 20px 那一档
+const SEVERITY_TONE: Record<string, 'fail' | 'warn' | 'plain'> = { blocker: 'fail', major: 'warn', minor: 'plain', info: 'plain' }
 const SUPPORT_LABEL: Record<string, string> = {
   supported: '一致',
   too_strict: '偏严',
@@ -337,16 +340,16 @@ export default function ReviewPage({
         desc="评的是你这条作品的这一版能不能发：选这一版的画面、按 visual-baseline 出结论、逐条看证据锚点；也能单独评一张图，那种结论不挂作品。"
         actions={
           <div className="review-head-status">
-            <span className={`vq-chip ${status?.service ? 'is-pass' : 'is-warn'}`}>
+            <Pill tone={status?.service ? 'pass' : 'warn'}>
               <ScanEye size={13} /> 评审引擎 {status?.service ? '本地服务' : '平台模型'}
-            </span>
-            <span className={`vq-chip ${status?.model && !modelBlocked ? 'is-pass' : 'is-fail'}`}>
+            </Pill>
+            <Pill tone={status?.model && !modelBlocked ? 'pass' : 'fail'}>
               评审模型 {status?.model ? (modelBlocked ? '暂时不可用' : '可用') : '未配置'}
-            </span>
+            </Pill>
             {credits ? (
-              <span className="vq-chip" title="评审按次扣积分，失败原路退回">
+              <Pill title="评审按次扣积分，失败原路退回">
                 每次 {credits.prices.review} {credits.unit} · 余额 {credits.balance ?? '—'}
-              </span>
+              </Pill>
             ) : null}
           </div>
         }
@@ -586,9 +589,9 @@ export default function ReviewPage({
                                 )}
                               </span>
                             </span>
-                            <span className={'vq-project-status is-' + row.status.tone} title={row.status.text}>
+                            <Pill tone={row.status.tone} title={row.status.text}>
                               {row.status.text}
-                            </span>
+                            </Pill>
                             <span className="review-candidate-go">
                               {row.hasCanvas ? '评这一版' : row.delivered ? '打开作品' : '先开画布'}
                               <ArrowRight size={13} />
@@ -668,7 +671,7 @@ export default function ReviewPage({
           {result ? (
             <div className="review-result">
               <div className="review-verdict">
-                <span className={`vq-chip is-verdict is-${result.verdict}`}>{VERDICT_LABEL[result.verdict]}</span>
+                <Pill lg tone={result.verdict}>{VERDICT_LABEL[result.verdict]}</Pill>
                 <p>{result.summary}</p>
                 <span className="vq-mono">{result.provider} · {(result.ms / 1000).toFixed(1)}s</span>
               </div>
@@ -685,7 +688,7 @@ export default function ReviewPage({
                   >
                     <div className="review-obs-head">
                       <span className="vq-mono">{item.dimension}</span>
-                      <span className={`vq-chip is-sev sev-${item.severity}`}>{SEVERITY_LABEL[item.severity]}</span>
+                      <Tag tone={SEVERITY_TONE[item.severity] || 'plain'}>{SEVERITY_LABEL[item.severity]}</Tag>
                       {item.evidence ? <span className="vq-mono">锚点 {Math.round(item.confidence * 100)}%</span> : <span className="vq-mono">无锚点</span>}
                     </div>
                     <p>{item.statement}</p>

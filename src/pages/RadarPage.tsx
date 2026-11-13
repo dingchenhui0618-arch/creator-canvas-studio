@@ -26,6 +26,7 @@ import { ReplicateModal } from '../components/ReplicateModal'
 import { Select } from '../components/Select'
 import PageHead from '../components/PageHead'
 import { getCredits, type CreditsResponse } from '../api/credits'
+import { Pill } from '../components/ui'
 import '../styles/radar.css'
 import '../styles/credits.css'
 
@@ -420,10 +421,9 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
         desc="按关键词检索抖音与小红书的内容与互动数据：点赞、收藏、评论、转发、播放都取原始值。挑一条加进模板库只存链接，或者直接拆成脚本与分镜。"
         actions={
           <>
-            <span className={`status-pill ${hasKey ? (quota ? 'is-error' : 'is-live') : 'is-mock'}`}>
-              <span className="status-dot" />
+            <Pill dot tone={hasKey ? (quota ? 'fail' : 'live') : 'mock'}>
               {hasKey ? (quota ? '检索服务异常' : '检索服务已连接') : '示例数据模式'}
-            </span>
+            </Pill>
             <span
               className={'radar-credit' + (insufficient || (credits && credits.balance !== null && credits.balance < credits.prices.search) ? ' is-low' : '')}
               title="积分余额来自服务端记录；示例结果不扣积分"

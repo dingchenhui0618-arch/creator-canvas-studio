@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { useUiMode } from '../../api/app'
+import { Pill } from '../../components/ui'
 
 // 生产环境不显示接口路径：错误提示只说哪块数据没取到，路径留给内部环境排障
 function stripApiPrefix(message: string) {
@@ -86,7 +87,7 @@ export function Badge({
   tone?: 'neutral' | 'ok' | 'warn' | 'fail'
   children: ReactNode
 }) {
-  return <span className={`admin-badge admin-badge--${tone}`}>{children}</span>
+  return <Pill tone={tone}>{children}</Pill>
 }
 
 export function RefreshButton({ onClick, busy }: { onClick: () => void; busy?: boolean }) {

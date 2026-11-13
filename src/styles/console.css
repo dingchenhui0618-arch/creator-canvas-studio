@@ -314,39 +314,7 @@
   line-height: 1.55;
 }
 
-.admin-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border: 1px solid var(--line, #e6e3dd);
-  border-radius: 999px;
-  color: var(--muted, #5c5c5c);
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 11px;
-  letter-spacing: 0.03em;
-  line-height: 1.5;
-  white-space: nowrap;
-  vertical-align: middle;
-}
-
-.admin-badge--ok {
-  border-color: var(--line, #e6e3dd);
-  background: rgba(23, 107, 67, 0.06);
-  color: var(--pass, #176b43);
-}
-
-.admin-badge--warn {
-  border-color: var(--line, #e6e3dd);
-  background: rgba(138, 91, 8, 0.07);
-  color: var(--warn, #8a5b08);
-}
-
-.admin-badge--fail {
-  border-color: var(--line, #e6e3dd);
-  background: rgba(163, 56, 56, 0.07);
-  color: var(--fail, #a33838);
-}
+/* 后台徽标（v0.9.46）：改用全站 .vq-pill，这里不再自带宽高与圆角。 */
 
 .admin-btn {
   display: inline-flex;

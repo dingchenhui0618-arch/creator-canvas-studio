@@ -14,6 +14,7 @@ import type { Page } from '../domain/types'
 import PageHead from '../components/PageHead'
 import { Select } from '../components/Select'
 import { useModelOptions } from '../components/ModelSwitch'
+import { Tag } from '../components/ui'
 import { useUiMode } from '../api/app'
 import { getPreferences } from '../api/preferences'
 import '../styles/agents.css'
@@ -467,7 +468,7 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
             <div className="agx-preview">
               <div className="agx-card-top">
                 <span className="agx-card-name">{form.name || '未命名智能体'}</span>
-                <span className="agx-tag">{form.category}</span>
+                <Tag>{form.category}</Tag>
               </div>
               <p className="agx-card-role">{form.role || '一句话职责会显示在这里。'}</p>
               <div className="agx-card-meta">

@@ -280,14 +280,7 @@ button { cursor:pointer; }
 .button--tiny { height:28px; padding:0 12px; border-radius:var(--radius-sm); font-size:12px; gap:4px; }
 .button--danger { color:var(--danger); border-color:#e8cfcc; background:#fbf1f0; }
 .button--danger:hover { background:#f8e7e5; }
-/* 状态胶囊：全站只有这一套（雷达、画布、后台共用 --radius-pill 与同一圈发丝线），
-   先前的 30px/999 + 17px 小方角两套已经合并。 */
-.status-pill { height:28px; display:inline-flex; align-items:center; gap:8px; padding:0 12px; border:1px solid var(--line); border-radius:var(--radius-pill); background:var(--surface-raised); font-size:11.5px; font-weight:500; letter-spacing:.01em; color:var(--muted); white-space:nowrap; transition:background-color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out); }
-.status-pill .status-dot { width:6px; height:6px; border-radius:50%; background:var(--ink-faint); transition:background-color var(--dur-1) var(--ease-out); }
-.status-pill.is-live .status-dot { background:#4b7959; box-shadow:0 0 0 3px rgba(75,121,89,.14); }
-.status-pill.is-mock .status-dot { background:var(--gold); box-shadow:0 0 0 3px rgba(212,164,71,.16); }
-.status-pill.is-error { color:var(--fail); border-color:rgba(163,56,56,.24); background:var(--fail-soft); }
-.status-pill.is-error .status-dot { background:var(--fail); box-shadow:0 0 0 3px rgba(163,56,56,.16); }
+
 .select--compact { height:34px; padding:0 24px 0 12px; border:1px solid var(--line-strong); border-radius:var(--radius-sm); background:var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%239d978b' stroke-width='1.4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 10px center; appearance:none; font-size:12px; color:var(--ink-soft); }
 
 .radar-toolbar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:12px 12px; margin-bottom:16px; background:rgba(255,254,250,.72); border:1px solid var(--line); border-radius:var(--radius-lg); }

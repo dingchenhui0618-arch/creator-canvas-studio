@@ -163,48 +163,121 @@
   text-underline-offset: 3px;
 }
 
+/* ---------- 状态胶囊与中性标签（v0.9.46 归队） ----------
+   全站只有三档：状态胶囊 22px、结论胶囊 26px、中性标签 20px，圆角一律 999。
+   以前有 13 个长得像胶囊的东西：高度散在 16 / 20 / 22 / 23 / 24 / 26 / 28，圆角散在 6 与 999，
+   并排时一眼就看得出不是同一套。尺寸收进 --chip-* token，页面只剩语气与布局。
+   语气只换颜色，不换尺寸：idle 灰、live 黑、pass 绿、warn 琥珀、fail 红、done 反白、mock 金点。 */
+
 .vq-pill {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  height: 20px;
-  padding: 0 8px;
+  flex: none;
+  /* 网格/弹性里的胶囊不跟着拉长：胶囊只包住自己的字，不然窄屏会被抻成一条空长条 */
+  width: fit-content;
+  height: var(--chip-pill-h);
+  padding: 0 var(--chip-pad);
+  border: 1px solid var(--line);
   border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  color: var(--muted);
   font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  font-size: var(--chip-font);
+  letter-spacing: 0.04em;
   white-space: nowrap;
 }
 
+/* 结论胶囊：评审结论这种「一页只有一个」的判断，比其它状态大一档 */
+.vq-pill--lg {
+  height: var(--chip-pill-h-lg);
+  font-size: var(--chip-font-lg);
+}
+
+.vq-pill__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.85;
+}
+
+.vq-pill.is-pass,
 .vq-pill--pass {
-  color: var(--pass);
+  border-color: rgba(23, 107, 67, 0.24);
   background: var(--pass-soft);
+  color: var(--pass);
 }
 
+.vq-pill.is-warn,
 .vq-pill--warn {
-  color: var(--warn);
+  border-color: rgba(138, 91, 8, 0.26);
   background: var(--warn-soft);
+  color: var(--warn);
 }
 
+.vq-pill.is-fail,
 .vq-pill--fail {
-  color: var(--fail);
+  border-color: rgba(163, 56, 56, 0.26);
   background: var(--fail-soft);
+  color: var(--fail);
 }
 
+.vq-pill.is-idle {
+  color: var(--faint);
+}
+
+.vq-pill.is-live {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.vq-pill.is-done {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: #ffffff;
+}
+
+.vq-pill.is-mock .vq-pill__dot {
+  background: var(--gold);
+  opacity: 1;
+}
+
+/* 中性标签：版次、分类、公共模板这类元数据——有框、没语气色，不抢标题 */
 .vq-tag {
   display: inline-flex;
   align-items: center;
-  height: 20px;
-  padding: 0 8px;
+  gap: 4px;
+  flex: none;
+  width: fit-content;
+  height: var(--chip-tag-h);
+  padding: 0 var(--chip-pad-tight);
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.05em;
+  font-size: var(--chip-font);
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   white-space: nowrap;
+}
+
+.vq-tag--ink {
+  border-color: var(--line-strong);
+  background: var(--surface-subtle, #f4f2ed);
+  color: var(--ink);
+}
+
+.vq-tag--warn {
+  border-color: rgba(138, 91, 8, 0.26);
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.vq-tag--fail {
+  border-color: rgba(163, 56, 56, 0.26);
+  background: var(--fail-soft);
+  color: var(--fail);
 }
 
 /* ---------- 下拉选择（2026-11-12）
@@ -578,59 +651,7 @@
   }
 }
 
-/* ---------- 作品状态胶囊（作品卡片 / 作品页 / 工作台共用） ----------
-   文案由 projectStatus 决定：待开画布 / 在做 / 评审 · 通过 / 评审 · 需人工确认 / 评审 · 不通过 / 已交付。
-   语言在文案里，颜色只表示语气：ok 绿、warn 琥珀、fail 红，与评审结论胶囊同一套色。 */
-
-.vq-project-status {
-  display: inline-flex;
-  align-items: center;
-  flex: none;
-  height: 22px;
-  padding: 0 var(--space-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-pill);
-  background: var(--surface-raised);
-  color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  white-space: nowrap;
-}
-
-.vq-project-status.is-idle {
-  border-color: var(--line);
-  color: var(--faint);
-}
-
-.vq-project-status.is-live {
-  border-color: var(--line-strong);
-  color: var(--ink);
-}
-
-.vq-project-status.is-ok {
-  border-color: rgba(23, 107, 67, 0.24);
-  background: var(--pass-soft);
-  color: var(--pass);
-}
-
-.vq-project-status.is-warn {
-  border-color: rgba(138, 91, 8, 0.26);
-  background: var(--warn-soft);
-  color: var(--warn);
-}
-
-.vq-project-status.is-fail {
-  border-color: rgba(163, 56, 56, 0.26);
-  background: var(--fail-soft);
-  color: var(--fail);
-}
-
-.vq-project-status.is-done {
-  border-color: var(--ink);
-  background: var(--ink);
-  color: #ffffff;
-}
+/* 作品状态胶囊（v0.9.46）：语义仍由 projectStatus 决定，样子并进上面的 .vq-pill，不再单开一套尺寸。 */
 
 /* 原生 select 兜底：后台几张表单还在用，至少把系统直角聚焦框换成品牌描边 */
 select:focus-visible {
@@ -2858,9 +2879,7 @@ select:focus-visible {
   color: var(--faint, #6f6f6f);
 }
 /* 两步验证（D2）：状态徽标、密钥与备用码展示、关闭确认 */
-.vq-badge { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 999px; border: 1px solid var(--line-strong); color: var(--muted); font-size: 11px; letter-spacing: .04em; white-space: nowrap; }
-.vq-badge--pass { color: var(--pass); border-color: rgba(23, 107, 67, .3); background: var(--pass-soft); }
-.vq-badge--warn { color: var(--warn); border-color: rgba(138, 91, 8, .3); background: var(--warn-soft); }
+
 .vq-button--tiny { height: 26px; padding: 0 8px; font-size: 11px; gap: 4px; }
 .vq-inline-error { margin: 0 0 12px; font-size: 12px; color: var(--fail); }
 .vq-inline-ok { margin: 0 0 12px; font-size: 12px; color: var(--pass); }

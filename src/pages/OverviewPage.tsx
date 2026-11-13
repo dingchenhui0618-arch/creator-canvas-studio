@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowRight, ArrowUpRight, Eye, History, LayoutTemplate, Plus, RefreshCw, RotateCcw, Search, Send, Share2, Workflow, X } from 'lucide-react'
 import type { Page } from '../domain/types'
 import PageHead from '../components/PageHead'
-import { MonoTag } from '../components/ui'
+import { Pill, Tag } from '../components/ui'
 import { request } from '../api/client'
 import { listBdcCanvases, type BdcCanvas } from '../api/bdc'
 import type { RunProjectRef } from '../api/flows'
@@ -703,7 +703,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                   onClick={() => onOpenProject(row.projectId)}
                   aria-label={'打开作品：' + row.title + '，第 ' + Math.max(1, row.version) + ' 版'}
                 >
-                  <span className={'vq-project-status is-' + row.status.tone}>{row.status.text}</span>
+                  <Pill tone={row.status.tone}>{row.status.text}</Pill>
                   <span className="vq-review-queue-copy">
                     <strong>{row.title}</strong>
                     <span className="vq-mono">
@@ -840,7 +840,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                       onClick={() => onOpenProject(row.projectId)}
                       aria-label={'打开作品：' + row.title + '，第 ' + Math.max(1, row.version) + ' 版'}
                     >
-                      <span className={'vq-project-status is-' + row.status.tone}>{row.status.text}</span>
+                      <Pill tone={row.status.tone}>{row.status.text}</Pill>
                       <span className="vq-review-queue-copy">
                         <strong>{row.title}</strong>
                         <span className="vq-mono">
@@ -902,7 +902,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                       aria-label={'打开作品：' + row.title + '，第 ' + Math.max(1, row.version) + ' 版'}
                       title={row.note || undefined}
                     >
-                      <span className={'vq-project-status is-' + row.status.tone}>{row.status.text}</span>
+                      <Pill tone={row.status.tone}>{row.status.text}</Pill>
                       <span className="vq-review-queue-copy">
                         <strong>{row.title}</strong>
                         <span className="vq-mono">
@@ -966,7 +966,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                     onClick={() => onOpenProject(row.projectId)}
                     aria-label={'打开作品：' + row.title + '，第 ' + row.version + ' 版'}
                   >
-                    <span className="vq-delivery-tag vq-mono">v{row.version}</span>
+                    <Tag className="vq-delivery-tag">v{row.version}</Tag>
                     <span className="vq-delivery-copy">
                       <strong>{row.title}</strong>
                       {/* 时间与结论各自成段：窄屏换行只在「·」处断，不会把「通过」劈成两行 */}
@@ -1112,7 +1112,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                     <span className="vq-mono">{runWorkLine(run)}</span>
                   </div>
                   <span role="cell">
-                    <MonoTag>{run.status === 'success' ? '成功' : '失败'}</MonoTag>
+                    <Tag tone={run.status === 'success' ? 'plain' : 'fail'}>{run.status === 'success' ? '成功' : '失败'}</Tag>
                   </span>
                   <span className="vq-mono" role="cell">
                     {secondsOf(run.durationMs)}

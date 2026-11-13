@@ -126,21 +126,7 @@
 .template-stats { display:flex; flex-wrap:wrap; gap:4px 12px; margin-top:2px; color:var(--muted); font-family:var(--font-mono); font-size:11.5px; }
 .template-stats span { display:inline-flex; align-items:center; gap:4px; }
 .template-type.is-pending { color:var(--warn); background:var(--warn-soft); }
-/* 公共模板（运营种子内容）标记：不抢标题，只在来源行前面点一下身份 */
-.template-shared {
-  display:inline-flex;
-  align-items:center;
-  height:16px;
-  margin-right:8px;
-  padding:0 4px;
-  color:var(--ink);
-  background:var(--surface-subtle,#f4f2ed);
-  border:1px solid var(--line-strong);
-  border-radius:var(--radius-xs);
-  font-family:var(--font-mono);
-  font-size:11px;
-  letter-spacing:.04em;
-}
+/* 公共模板（运营种子内容）标记：不抢标题，只在来源行前面点一下身份；样子走全站 .vq-tag--ink（v0.9.46）。 */
 .drawer-stats { display:flex; flex-wrap:wrap; gap:8px 16px; color:var(--muted); font-size:12px; }
 .drawer-list--flow { padding-left:0; list-style:none; }
 .drawer-list--flow li { display:flex; align-items:baseline; gap:12px; padding:8px 0; border-bottom:1px solid var(--line-faint); }

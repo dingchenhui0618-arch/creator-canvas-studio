@@ -12,14 +12,61 @@ export function NodeIcon({ icon }: { icon?: 'image' | 'text' | 'bot' }) {
   return <FileImage size={15} />
 }
 
-/** 评审结论徽标：只允许 pass / warn / fail 三种语义，不用装饰色。 */
-export function StatusPill({ tone, children }: { tone: 'pass' | 'warn' | 'fail'; children: ReactNode }) {
-  return <span className={`vq-pill vq-pill--${tone}`}>{children}</span>
+/**
+ * 状态胶囊（v0.9.46）：全站只有这一档 22px，语气只换颜色、不换尺寸。
+ * 旧名字（ok / error / running / needs_review …）在 pillTone 里归一，调用处继续用业务语义。
+ */
+export type PillTone = 'idle' | 'live' | 'pass' | 'warn' | 'fail' | 'done' | 'mock'
+
+const PILL_TONE: Record<string, PillTone> = {
+  idle: 'idle',
+  live: 'live',
+  running: 'live',
+  pass: 'pass',
+  ok: 'pass',
+  success: 'pass',
+  warn: 'warn',
+  needs_review: 'warn',
+  fail: 'fail',
+  error: 'fail',
+  done: 'done',
+  mock: 'mock',
+  neutral: 'idle',
 }
 
-/** 中性状态标签：流程状态（已入库 / 演示账号 / 演示模式）不用语义色。 */
-export function MonoTag({ children }: { children: ReactNode }) {
-  return <span className="vq-tag">{children}</span>
+function pillTone(tone: string): PillTone {
+  return PILL_TONE[tone] || 'idle'
+}
+
+export function Pill({
+  tone = 'idle',
+  lg,
+  dot,
+  title,
+  className,
+  children,
+}: {
+  tone?: string
+  /** 结论胶囊：评审结论这种一页只有一个的判断，大一号（26px） */
+  lg?: boolean
+  /** 前面带一颗语气点（服务连没连上、示例数据模式） */
+  dot?: boolean
+  title?: string
+  className?: string
+  children: ReactNode
+}) {
+  const cls = 'vq-pill is-' + pillTone(tone) + (lg ? ' vq-pill--lg' : '') + (className ? ' ' + className : '')
+  return (
+    <span className={cls} title={title}>
+      {dot ? <i className="vq-pill__dot" aria-hidden="true" /> : null}
+      {children}
+    </span>
+  )
+}
+
+/** 中性标签（版次 / 分类 / 公共模板）：有框、没语气色，不抢标题。 */
+export function Tag({ tone = 'plain', className, children }: { tone?: 'plain' | 'ink' | 'warn' | 'fail'; className?: string; children: ReactNode }) {
+  return <span className={'vq-tag' + (tone === 'plain' ? '' : ' vq-tag--' + tone) + (className ? ' ' + className : '')}>{children}</span>
 }
 
 export function NavItem({ icon: Icon, label, active, compact, utility, badge, badgeLabel, onClick }: { icon: IconComponent; label: string; active?: boolean; compact?: boolean; utility?: boolean; badge?: string; /** 角标的完整说法（给读屏与收起态 tooltip 用），如「3 条评审等你看」 */ badgeLabel?: string; onClick: () => void }) {

@@ -798,7 +798,7 @@
   outline-offset: -2px;
 }
 
-.vq-review-queue-open .vq-project-status {
+.vq-review-queue-open .vq-pill {
   justify-self: start;
 }
 
@@ -931,7 +931,7 @@
     padding: 12px;
   }
 
-  .vq-review-queue-open .vq-project-status {
+  .vq-review-queue-open .vq-pill {
     grid-area: pill;
   }
 
@@ -1022,15 +1022,10 @@
   outline-offset: -2px;
 }
 
-/* 版次：等宽 + 一枚细框，读起来像台账的一列，不像第二枚状态胶囊 */
+/* 版次：样子走全站中性标签（.vq-tag），这里只留它在台账行里的位置——
+   读起来像台账的一列，不像第二枚状态胶囊 */
 .vq-delivery-tag {
   justify-self: start;
-  padding: 0 4px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-xs);
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 20px;
 }
 
 .vq-delivery-copy {

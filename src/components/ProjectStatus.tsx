@@ -1,4 +1,5 @@
 import { deliveryOf, projectStatus, type Project, type ProjectDecision, type ProjectReviews } from '../domain/project'
+import { Pill } from './ui'
 import { REVIEW_VERDICT_LABEL, reviewTimeLabel } from '../domain/review'
 import { stampTime } from '../domain/share'
 
@@ -32,8 +33,8 @@ export default function ProjectStatusPill({
         ? REVIEW_VERDICT_LABEL[status.verdict] + ' · ' + reviewTimeLabel(reviews.lastAt) + ' · 评过 ' + reviews.count + ' 次'
         : undefined
   return (
-    <span className={'vq-project-status is-' + status.tone} title={note}>
+    <Pill tone={status.tone} title={note}>
       {status.text}
-    </span>
+    </Pill>
   )
 }

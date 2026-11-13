@@ -40,7 +40,7 @@
 .template-card:hover { border-color: var(--line-strong); box-shadow: 0 1px 0 var(--line); }
 
 /* ---------- 模板库工具条（2026-11-12 收口）----------
-   搜索一行、分类一行。分类条改用全站统一的 .vq-chiprow / .vq-chip（见 shell.css）。 */
+   搜索一行、分类一行。分类条改用全站统一的 .vq-filter-row / .vq-filter-chip（见 shell.css）。 */
 .vq-content .page--templates .asset-toolbar {
   align-items: stretch;
   gap: var(--space-3);

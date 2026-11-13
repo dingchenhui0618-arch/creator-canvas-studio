@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Activity, CreditCard, KeyRound, LogOut, RefreshCw } from 'lucide-react'
-import { MonoTag } from '../components/ui'
+import { Pill, Tag } from '../components/ui'
 import { TwoFactorCard } from '../components/TwoFactorCard'
 import { AccountDataCard } from '../components/AccountDataCard'
 import PageHead from '../components/PageHead'
@@ -187,7 +187,7 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
               <h2>当前会话</h2>
               <p>{internal ? '会话保存在服务端，凭据是 HttpOnly cookie；关掉浏览器再打开仍是登录状态。' : '登录状态会安全保存，关掉浏览器再打开仍然是登录状态。'}</p>
             </div>
-            <MonoTag>{sessionKindLabel(session.user.kind)}</MonoTag>
+            <Tag>{sessionKindLabel(session.user.kind)}</Tag>
           </div>
           <div className="vq-account">
             <span className="vq-account-avatar">{initialsFor(session.user.name)}</span>
@@ -242,7 +242,7 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
                   : '修改后，其它设备上的登录会自动退出，当前设备保持登录。'}
               </p>
             </div>
-            <MonoTag>口令</MonoTag>
+            <Tag>口令</Tag>
           </div>
           <div className="vq-inline-form vq-password-form">
             <label className="vq-field">
@@ -304,7 +304,7 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
               <h2>积分余额与消耗</h2>
               <p>检索、复刻、评审、对话都按次扣积分；失败会原路退回。充值通道未开通，积分由管理员发放。</p>
             </div>
-            <MonoTag>{lowBalance ? '余额偏低' : '按次计费'}</MonoTag>
+            <Tag tone={lowBalance ? 'warn' : 'plain'}>{lowBalance ? '余额偏低' : '按次计费'}</Tag>
           </div>
           <div className="vq-card-body">
             <div className="vq-row">
@@ -440,7 +440,7 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
               <h2>余额与充值</h2>
               <p>计费方式与价格还没定，暂时不能下单，也不显示额度。开通后这里会出现档位与支付入口。</p>
             </div>
-            <MonoTag>{billing?.enabled ? '已开通' : '未开通'}</MonoTag>
+            <Tag>{billing?.enabled ? '已开通' : '未开通'}</Tag>
           </div>
           <div className="vq-card-body">
             <div className="vq-row">
@@ -477,7 +477,7 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
               <p>{internal ? '这里会真连数据库、数据目录、模板库、模型接口和检索接口，不是「环境变量填了没填」。' : '检索、评审与数据存储现在能不能用；不正常时把这屏发给管理员。'}</p>
             </div>
             <div className="vq-account-actions">
-              {health ? <MonoTag>{HEALTH_LABEL[health.status] || health.status}</MonoTag> : null}
+              {health ? <Pill tone={health.status}>{HEALTH_LABEL[health.status] || health.status}</Pill> : null}
               <button type="button" className="vq-button vq-button--ghost" onClick={loadHealth} disabled={healthLoading}>
                 <Activity size={14} />
                 {healthLoading ? '检测中…' : '重新检测'}
@@ -492,7 +492,7 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
                 {health.checks.map((check) => (
                   <div className="vq-health-row" key={check.id}>
                     <strong>{check.label}</strong>
-                    <span className={'vq-health-tag ' + check.status}>{HEALTH_LABEL[check.status] || check.status}</span>
+                    <Pill tone={check.status}>{HEALTH_LABEL[check.status] || check.status}</Pill>
                     {internal ? (
                       <span className="detail" title={check.detail}>
                         {check.detail}

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Check, Copy, Loader2, ShieldCheck, ShieldOff } from 'lucide-react'
+import { Pill } from './ui'
 import {
   disableTwoFactor,
   enableTwoFactor,
@@ -112,9 +113,9 @@ export function TwoFactorCard() {
             开启时会给你 10 枚一次性备用码，换手机时用它登录。
           </p>
         </div>
-        <span className={'vq-badge ' + (status?.enabled ? 'vq-badge--pass' : 'vq-badge--warn')}>
+        <Pill tone={status?.enabled ? 'pass' : status?.enabled === false ? 'idle' : 'warn'}>
           {loading ? '读取中' : status?.enabled ? '已开启' : '未开启'}
-        </span>
+        </Pill>
       </div>
 
       {error ? <p className="vq-inline-error" role="alert">{error}</p> : null}

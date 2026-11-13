@@ -551,17 +551,7 @@
 .cv-drawer-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 16px 16px 12px; border-bottom: 1px solid var(--line); }
 .cv-drawer-head strong { display: block; margin-top: 8px; font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
 .cv-drawer-head-right { display: flex; align-items: center; gap: 8px; }
-.cv-run-badge {
-  padding: 4px 8px;
-  color: var(--muted);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-xs);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: .12em;
-}
-.cv-run-badge.is-running, .cv-run-badge.is-done { color: var(--ink); }
-.cv-run-badge.is-error { color: var(--fail); border-color: rgba(163, 56, 56, .35); }
+/* 运行状态徽标（v0.9.46）：改用全站 .vq-pill。 */
 .cv-drawer-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 16px 8px; color: var(--faint); font-size: 12px; }
 .cv-drawer-progress { height: 2px; margin: 0 16px; background: var(--line); }
 .cv-drawer-progress span { display: block; height: 100%; background: var(--ink); transition: width .2s ease; }

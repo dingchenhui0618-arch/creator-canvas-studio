@@ -45,6 +45,7 @@ import { getPreferences } from '../api/preferences'
 import { useUiMode } from '../api/app'
 import PageHead from '../components/PageHead'
 import { useModelOptions } from '../components/ModelSwitch'
+import { Tag } from '../components/ui'
 import '../styles/agents.css'
 
 type ChatMessage = {
@@ -1685,7 +1686,7 @@ export function AgentsPage({
                 <button className="agx-card-main" onClick={() => selectFromCard(agent.id)} aria-label={'选择 ' + agent.name}>
                   <div className="agx-card-top">
                     <span className="agx-card-name">{agent.name}</span>
-                    <span className="agx-tag">{agent.category}</span>
+                    <Tag>{agent.category}</Tag>
                   </div>
                   <p className="agx-card-role">{agent.role}</p>
                   <div className="agx-card-meta">

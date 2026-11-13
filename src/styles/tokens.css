@@ -95,6 +95,17 @@
   --radius-xl: 24px;
   --radius-pill: 999px;
 
+  /* ---------- 胶囊与标签（v0.9.46 归队）：全站只三档 ----------
+     状态胶囊 22px · 结论胶囊 26px · 中性标签 20px，圆角一律 999。
+     页面不再自己写 height / padding / font-size，语气只换颜色。 ---------- */
+  --chip-pill-h: 22px;
+  --chip-pill-h-lg: 26px;
+  --chip-tag-h: 20px;
+  --chip-pad: 8px;
+  --chip-pad-tight: 6px;
+  --chip-font: 11px;
+  --chip-font-lg: 12px;
+
   /* ---------- 动效：只三档时长，缓动统一；切页面不许弹跳 ---------- */
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
   --dur-1: 120ms;

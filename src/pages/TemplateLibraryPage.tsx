@@ -25,6 +25,7 @@ import { TrashModal } from '../components/TrashModal'
 import { ReportModal } from '../components/ReportModal'
 import type { ReportTarget } from '../api/reports'
 import PageHead from '../components/PageHead'
+import { Tag } from '../components/ui'
 import '../styles/radar.css'
 
 // 类型标签按库里真实的内容类型生成：写死一份清单，一旦运营改了分类就会出现「点了没结果」的空标签
@@ -490,7 +491,7 @@ export function TemplateLibraryPage({
                   {/* 平台与作者单行省略：长作者名不再把脚注顶成两行 */}
                   <span className="template-foot-info">
                     {/* 来源标签由服务端的 source 决定：卡片、抽屉、来源胶囊说的是一件事 */}
-                    {item.source && SOURCE_TAG[item.source] ? <span className="template-shared">{SOURCE_TAG[item.source]}</span> : null}
+                    {item.source && SOURCE_TAG[item.source] ? <Tag tone="ink">{SOURCE_TAG[item.source]}</Tag> : null}
                     {item.platformLabel}
                     {item.author ? ' · ' + item.author : ''}
                   </span>

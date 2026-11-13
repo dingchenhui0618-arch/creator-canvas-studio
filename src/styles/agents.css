@@ -881,16 +881,7 @@
   font-weight: 600;
   letter-spacing: -0.01em;
 }
-.agx-tag {
-  flex: 0 0 auto;
-  padding: 2px 8px;
-  color: var(--faint);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-xs);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.04em;
-}
+/* 分类标签（v0.9.46）：改用全站 .vq-tag。 */
 .agx-card-role {
   display: -webkit-box;
   min-height: 40px;

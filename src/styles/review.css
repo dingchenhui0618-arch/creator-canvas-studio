@@ -1,12 +1,11 @@
 /* 视觉评审页：VisionQA 检视语言 */
 .review-page { display:flex; flex-direction:column; gap:24px; }
 .review-page > .vq-head { margin-bottom: 0; }
-.review-head-status { display:flex; gap:8px; padding-top:4px; }
+/* 三颗胶囊（引擎 / 模型 / 积分）在窄屏排不下就换行：胶囊自己不折行，
+   整行折（v0.9.46 起 .vq-pill 是 nowrap + flex:none，以前是把字挤成两行来躲溢出） */
+.review-head-status { display:flex; flex-wrap:wrap; gap:8px; padding-top:4px; }
 
-.vq-chip { display:inline-flex; align-items:center; gap:4px; padding:4px 8px; border:1px solid var(--line); border-radius:999px; font-family:var(--font-mono); font-size: 11px; letter-spacing:.04em; color:var(--muted); background:var(--surface-raised); text-transform:uppercase; }
-.vq-chip.is-pass { border-color:rgba(23,107,67,.28); color:var(--pass); background:var(--pass-soft); }
-.vq-chip.is-warn { border-color:rgba(138,91,8,.28); color:var(--warn); background:var(--warn-soft); }
-.vq-chip.is-fail { border-color:rgba(163,56,56,.28); color:var(--fail); background:var(--fail-soft); }
+/* 评审页的胶囊（服务 / 模型 / 积分 / 结论 / 严重度）自 v0.9.46 起统一用 shell.css 的 .vq-pill，这里只剩布局。 */
 
 .review-body { display:grid; grid-template-columns:300px minmax(0,1fr); gap:24px; align-items:start; }
 .review-picker { display:flex; flex-direction:column; gap:16px; padding:16px; border:1px solid var(--line); border-radius:var(--radius-md); background:var(--surface); }
@@ -46,7 +45,7 @@
 .review-history-modal { width:min(720px,100%); max-height:min(760px,calc(100vh - 80px)); display:flex; flex-direction:column; overflow:hidden; background:var(--paper); border:1px solid var(--line); border-radius:var(--radius-lg); box-shadow:0 30px 80px rgba(30,26,20,.22); }
 /* 弹层里结论胶囊占固定一列：短标签（通过）与长标签（需人工确认）后面，标题从同一条竖线开始 */
 .review-history-modal .review-history-item { grid-template-columns:96px minmax(0,1fr) auto; gap:2px 8px; padding:4px 8px; }
-.review-history-modal .review-history-item .vq-chip { justify-content:center; width:100%; white-space:nowrap; }
+.review-history-modal .review-history-item .vq-pill { justify-content:center; width:100%; white-space:nowrap; }
 /* 弹层里一屏能多放几条：历史是拿来扫的，不是拿来读的 */
 .review-history-modal .review-history-where { font-size:11px; line-height:1.5; }
 .review-history-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:24px 24px 8px; }
@@ -105,10 +104,7 @@
 .review-verdict { display:grid; grid-template-columns:auto 1fr; gap:8px 12px; align-items:center; }
 .review-verdict p { margin:0; font-size:14px; line-height:1.7; color:var(--ink); }
 .review-verdict .vq-mono { grid-column:1 / -1; }
-.vq-chip.is-verdict { font-size:12px; padding:4px 12px; }
-.vq-chip.is-verdict.is-pass { border-color:rgba(23,107,67,.3); color:var(--pass); }
-.vq-chip.is-verdict.is-needs_review { border-color:rgba(138,91,8,.3); color:var(--warn); background:var(--warn-soft); }
-.vq-chip.is-verdict.is-fail { border-color:rgba(163,56,56,.3); color:var(--fail); background:var(--fail-soft); }
+
 
 .review-observations { display:flex; flex-direction:column; gap:1px; margin:0; padding:0; list-style:none; border-top:1px solid var(--line); }
 .review-obs { display:flex; flex-direction:column; gap:4px; padding:12px 12px; border-bottom:1px solid var(--line); border-left:2px solid transparent; cursor:default; }
@@ -117,10 +113,7 @@
 .review-obs.sev-major { border-left-color:var(--warn); }
 .review-obs-head { display:flex; align-items:center; gap:8px; }
 .review-obs p { margin:0; font-size:12px; line-height:1.68; color:var(--ink); }
-.vq-chip.is-sev { padding:2px 8px; font-size:12px; }
-.vq-chip.is-sev.sev-blocker { color:var(--fail); border-color:rgba(163,56,56,.3); background:var(--fail-soft); }
-.vq-chip.is-sev.sev-major { color:var(--warn); border-color:rgba(138,91,8,.3); background:var(--warn-soft); }
-.vq-chip.is-sev.sev-minor, .vq-chip.is-sev.sev-info { color:var(--muted); }
+
 
 .review-fixes h3, .review-gaps h3 { margin:0 0 8px; font-size:12px; font-weight: 500; }
 .review-fixes ul, .review-gaps ul { display:flex; flex-direction:column; gap:8px; margin:0; padding:0; list-style:none; }
@@ -334,7 +327,7 @@
   /* 报告发到手机上也要读得下去：结论与修正建议不再并排挤成两条窄栏 */
   .review-canvas-meta { flex-wrap:wrap; }
   .review-verdict { grid-template-columns:1fr; }
-  .review-verdict .vq-chip { justify-self:start; }
+  .review-verdict .vq-pill { justify-self:start; }
   .review-verdict p { grid-column:1 / -1; }
   .review-fixes li { grid-template-columns:1fr; gap:4px; }
 }
