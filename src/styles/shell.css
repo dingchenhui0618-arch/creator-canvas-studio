@@ -2774,9 +2774,9 @@ select:focus-visible {
 .vq-legal p { margin: 0; font-size: 14px; line-height: 1.75; color: var(--muted); }
 .vq-legal-foot { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line-faint); font-size: 12px; color: var(--faint); }
 @media (max-width: 640px) { .vq-legal { padding: 16px 12px 48px; } .vq-legal-inner { padding: 24px 24px; } .vq-legal h1 { font-size: 22px; } }
-/* 上手引导弹窗：工作台内弹出，三步卡片 + 真实单价与余额 */
+/* 上手引导弹窗：工作台内弹出，四步卡片（一条作品的主线）+ 真实单价、余额与「你已经走到哪」 */
 .vq-guide {
-  width: min(760px, 100%);
+  width: min(800px, 100%);
   max-height: calc(100vh - 80px);
   overflow: auto;
   padding: 24px 24px 24px;
@@ -2788,24 +2788,32 @@ select:focus-visible {
 .vq-guide-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .vq-guide-head h2 { margin: 8px 0 8px; font-size: 22px; font-weight: 500; letter-spacing: -0.01em; }
 .vq-guide-head p { margin: 0; max-width: 560px; font-size: 13px; line-height: 1.7; color: var(--muted); }
-.vq-guide-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 24px; }
+.vq-guide-steps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 24px; }
 .vq-guide-step { display: flex; flex-direction: column; gap: 8px; padding: 16px; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); cursor: pointer; transition: border-color 0.15s ease, background 0.15s ease; }
 .vq-guide-step:hover { border-color: var(--line-strong); background: var(--surface-raised); }
 .vq-guide-step:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .vq-guide-step-head { display: flex; align-items: center; gap: 8px; color: var(--muted); }
 .vq-guide-step strong { font-size: 14px; font-weight: 500; line-height: 1.4; }
 .vq-guide-step-body { font-size: 12.5px; line-height: 1.65; color: var(--muted); }
-.vq-guide-step-foot { display: flex; align-items: center; justify-content: space-between; margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line-faint); font-size: 12px; color: var(--faint); }
-.vq-guide-note { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; padding: 16px 16px; background: var(--canvas); border: 1px solid var(--line-faint); border-radius: var(--radius-md); font-size: 12.5px; line-height: 1.6; color: var(--muted); }
+.vq-guide-step-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line-faint); font-size: 12px; color: var(--faint); }
+/* 卡片脚注右侧：箭头永远在（每张卡都能点进去），「已有 N 条」只在真读到计数时才出现 */
+.vq-guide-step-go { display: inline-flex; flex: none; align-items: center; gap: 8px; }
+.vq-guide-step-count { color: var(--ink-soft); }
+/* 弹窗自己会滚（四张卡在窄屏放不下）：这一条贴在底部，主按钮永远够得着，不用先滑到底 */
+.vq-guide-note { position: sticky; bottom: 0; z-index: 1; box-shadow: var(--shadow-raise); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; padding: 16px 16px; background: var(--canvas); border: 1px solid var(--line-faint); border-radius: var(--radius-md); font-size: 12.5px; line-height: 1.6; color: var(--muted); }
+.vq-guide-state { flex: 1 1 380px; min-width: 0; }
 .vq-guide-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-top: 16px; font-size: 12px; color: var(--faint); }
 .vq-guide-hint { display: inline-flex; align-items: center; gap: 8px; }
 .vq-guide-links { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
 @media (max-width: 760px) {
-  .vq-guide { max-height: calc(100vh - 32px); padding: 24px 16px 16px; }
+  .vq-guide { max-height: calc(100vh - 32px); padding: 24px 16px 12px; }
   .vq-guide-head h2 { font-size: 19px; }
-  .vq-guide-steps { grid-template-columns: minmax(0, 1fr); gap: 8px; margin-top: 16px; }
-  .vq-guide-step { padding: 12px 16px; }
+  .vq-guide-head p { font-size: 12.5px; line-height: 1.65; }
+  .vq-guide-steps { grid-template-columns: minmax(0, 1fr); gap: 8px; margin-top: 12px; }
+  .vq-guide-step { padding: 12px 16px; gap: 8px; }
+  .vq-guide-step-body { font-size: 12px; line-height: 1.55; }
   .vq-guide-step-foot { padding-top: 8px; }
+  .vq-guide-note { margin-top: 12px; padding: 12px; }
 }
 /* 窄屏只提示，不假装做了移动端适配 */
 .vq-mobile-note { display: none; }
