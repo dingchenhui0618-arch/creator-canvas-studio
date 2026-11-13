@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Activity, CreditCard, KeyRound, LogOut, MessageSquare, RefreshCw } from 'lucide-react'
 import { Pill, Tag } from '../components/ui'
 import { TwoFactorCard } from '../components/TwoFactorCard'
+import { SessionsCard } from '../components/SessionsCard'
 import { AccountDataCard } from '../components/AccountDataCard'
 import PageHead from '../components/PageHead'
 import { getBillingOverview, type BillingOverview } from '../api/billing'
@@ -313,6 +314,8 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
         </section>
 
         <TwoFactorCard />
+
+        <SessionsCard />
 
         <AccountDataCard email={session.user.email} onSignedOut={onSignOut} />
 

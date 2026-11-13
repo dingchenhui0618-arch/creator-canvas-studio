@@ -274,6 +274,60 @@ export function destroyOtherSessions(userId, keepToken = '') {
   return Number(result?.changes || 0)
 }
 
+
+// ---- 登录设备（v0.9.62）----
+// 只给账号主人看自己的会话。对外的 id 是 token_hash 的派生值：不能反推出 token，
+// 也不能当作凭据使用——它只用于「挑一条会话踢掉」。
+function sessionPublicId(tokenHash) {
+  return crypto.createHash('sha256').update('session:' + String(tokenHash)).digest('hex').slice(0, 16)
+}
+
+function tokenHashOf(token) {
+  return token ? crypto.createHash('sha256').update(String(token)).digest('hex') : ''
+}
+
+// 只列最近这么多条：老会话可能积到上百条（自动化脚本每登录一次一条），
+// 一条条铺出来谁也读不完；更早的统一用「退出其它设备」清理。
+const SESSION_LIST_LIMIT = 10
+
+export function listLoginSessions(userId, currentToken = '', limit = SESSION_LIST_LIMIT) {
+  pruneSessions()
+  const now = Date.now()
+  const currentHash = tokenHashOf(currentToken)
+  const rows = openDb()
+    .prepare('SELECT token_hash, created_at, expires_at, user_agent, ip FROM sessions WHERE user_id = ? ORDER BY created_at DESC')
+    .all(String(userId))
+  const active = rows.filter((row) => Number(row.expires_at) > now)
+  // 当前这一条永远排第一：它可能是最早建的那条，按时间截断时不能把它截掉，
+  // 否则用户看不见「自己」，也分不清该不该点「退出其它设备」。
+  const current = currentHash ? active.find((row) => row.token_hash === currentHash) : null
+  const rest = active.filter((row) => row !== current)
+  const size = Math.max(1, Number(limit) || SESSION_LIST_LIMIT)
+  const picked = [...(current ? [current] : []), ...rest].slice(0, size)
+  return {
+    total: active.length,
+    sessions: picked.map((row) => ({
+      id: sessionPublicId(row.token_hash),
+      createdAt: row.created_at,
+      expiresAt: Number(row.expires_at),
+      userAgent: row.user_agent || '',
+      ip: row.ip || '',
+      current: Boolean(currentHash) && row.token_hash === currentHash,
+    })),
+  }
+}
+
+/** 踢掉指定的一条会话。当前这一条不许从这里踢：退出当前设备走的是「退出登录」。 */
+export function revokeLoginSession(userId, sessionId, currentToken = '') {
+  const currentHash = tokenHashOf(currentToken)
+  const rows = openDb().prepare('SELECT token_hash FROM sessions WHERE user_id = ?').all(String(userId))
+  const hit = rows.find((row) => sessionPublicId(row.token_hash) === String(sessionId || ''))
+  if (!hit) return { ok: false, code: 'NOT_FOUND' }
+  if (currentHash && hit.token_hash === currentHash) return { ok: false, code: 'CURRENT' }
+  openDb().prepare('DELETE FROM sessions WHERE token_hash = ?').run(hit.token_hash)
+  return { ok: true }
+}
+
 export function destroySession(token) {
   if (!token) return
   const tokenHash = crypto.createHash('sha256').update(String(token)).digest('hex')

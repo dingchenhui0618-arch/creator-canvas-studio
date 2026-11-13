@@ -20,6 +20,8 @@ import {
   changePassword,
   setPassword,
   destroyOtherSessions,
+  listLoginSessions,
+  revokeLoginSession,
   signTotpChallenge,
   readTotpChallenge,
   totpInfo,
@@ -520,6 +522,47 @@ export function createAuthRouter() {
         const signedOut = destroyOtherSessions(row.id)
         logEvent('password-reset', { email: row.email, by: 'email-link', signedOut })
         sendJson(res, 200, { ok: true, signedOut })
+        return true
+      }
+
+      // 登录设备：只回本账号的会话，id 是派生值；当前这一条单独标出来。
+      if (pathname === '/api/auth/sessions' && req.method === 'GET') {
+        const row = currentUser(req)
+        if (!row) return (sendJson(res, 401, { error: '未登录' }), true)
+        const token = parseCookies(req)[config.auth.cookieName]
+        const { sessions, total } = listLoginSessions(row.id, token)
+        sendJson(res, 200, { sessions, total, current: sessions.find((item) => item.current)?.id || '' })
+        return true
+      }
+
+      // 一键退出其它所有设备：改口令之外，用户自己也该有这条路。
+      if (pathname === '/api/auth/sessions/revoke-others' && req.method === 'POST') {
+        const row = currentUser(req)
+        if (!row) return (sendJson(res, 401, { error: '未登录' }), true)
+        const token = parseCookies(req)[config.auth.cookieName]
+        const signedOut = destroyOtherSessions(row.id, token)
+        logEvent('session-revoke-others', { email: row.email, signedOut })
+        sendJson(res, 200, { ok: true, signedOut })
+        return true
+      }
+
+      // 退出指定设备：当前设备不允许从这里踢，避免按钮点错把自己踢下线。
+      const sessionMatch = /^\/api\/auth\/sessions\/([0-9a-f]{8,32})$/.exec(pathname)
+      if (sessionMatch && req.method === 'DELETE') {
+        const row = currentUser(req)
+        if (!row) return (sendJson(res, 401, { error: '未登录' }), true)
+        const token = parseCookies(req)[config.auth.cookieName]
+        const result = revokeLoginSession(row.id, sessionMatch[1], token)
+        if (!result.ok && result.code === 'NOT_FOUND') {
+          sendJson(res, 404, { error: '这台设备已经不在登录列表里' })
+          return true
+        }
+        if (!result.ok && result.code === 'CURRENT') {
+          sendJson(res, 400, { error: '当前设备请用「退出登录」' })
+          return true
+        }
+        logEvent('session-revoke', { email: row.email })
+        sendJson(res, 200, { ok: true })
         return true
       }
 
