@@ -2422,3 +2422,28 @@ v0.9.10 让「甲方看没看」第一次有了答案，这一轮让这个答案
 ![生产 390：内容区 322，按钮与筛选胶囊都不横向溢出](docs/screenshot-buttons-prod-390-2026-11-13.png)
 
 验收：版本 0.9.45、入口 `index-BLX4ZMUw.js`（512,784 字节）、release `20261113-021050-buttons.tar.gz`、`/api/version` 0.9.45、health ok（templates 26）、两服务 active；生产 1440 与 390 实测无横向滚动，只读不扣积分。提交 `8781813`（代码 + 测试）+ `2071ba0`（文档 + 6 截图），CI 43350775569 success。细节与判断见 [按钮归队](docs/button-system-2026-11-13.md)。
+
+## 一百一十五、胶囊归队：13 种像胶囊的东西收回三档（v0.9.46）
+
+- ✅ **问题**：上一轮是按钮的字号，这一轮是同族的胶囊。`.vq-pill` / `.vq-tag` 早就收在 `shell.css`，但页面上另有 9 个长得像胶囊的类各写各的：生产 v0.9.45 实测（1440）模板库 26 枚公共模板标记是 **16px 高 / 6px 方角**，视觉评审 3 枚 `vq-chip` 24px、3 枚结论 26px，发现页 `status-pill` **28px / 11.5px**，设置页 11 枚 20px + 1 枚 `vq-badge` 22px，画布运行徽标与智能体分类是 **6px 方角**。最刺眼的是圆角在表达「这是什么」时是反的：运行状态是方角，中性元数据却是全圆。
+- ✅ **改法**：`tokens.css` 新增 `--chip-pill-h` 22px / `--chip-pill-h-lg` 26px / `--chip-tag-h` 20px 与 8 / 6px 内边距、11 / 12px 字；`shell.css` 重写 `.vq-pill`（22px、999、`width: fit-content`、nowrap、七种语气只换颜色）与 `.vq-tag`（20px、999、元数据），语气规则里不写任何尺寸；`components/ui.tsx` 用 `Pill` / `Tag` 替掉 `StatusPill` / `MonoTag`，业务侧继续写 `ok` / `error` / `running` / `needs_review`，`pillTone()` 负责归一。
+- ✅ **26 处调用搬到同一套**：作品状态、评审页六处（引擎 / 模型 / 积分 / 结论 / 严重度 / 历史行）、发现页引擎状态、画布运行徽标、后台徽标、设置页健康与标签、两步验证徽标、智能体分类、模板公共标记、工作台版次；9 个旧类名的尺寸定义整段删掉，页面级 CSS 只留布局。
+- ✅ **顺手修两处窄屏**：旧 `.vq-chip` 没有 nowrap，390 上是靠把「评审引擎 平台模型」折成两行来躲溢出；新胶囊 nowrap 后页头三颗会把页面顶出 94px 横向滚动，改成整行换行（`.review-head-status { flex-wrap: wrap }`）。胶囊作为网格项默认 `stretch`，390 上「待开画布」被拉成一条空长条，加 `width: fit-content` 后只包住自己的字。
+- ✅ **实测（生产 v0.9.46）**：模板库 26 枚 16px / 6px 方角 → **20px / 999**；视觉评审 7 枚 24 / 26 / 22 三档 → **22px ×7**；发现 28px / 11.5px → 22px / 11px；设置 20px ×11 + 22px ×1 → 22px ×8 + 20px ×4；旧胶囊类残留 1 / 26 / 7 / 1 / 7 → **0 / 0 / 0 / 0 / 0**；全站从「7 种高度 × 2 种圆角 × 3 种字号」收回「**3 种高度 × 1 种圆角 × 2 种字号**」。390 五页 322/322 无横向滚动。
+- ✅ 测试 420/420（新增 `test/pill-system.test.mjs` 5 条：尺寸必须走 token、七种语气齐全且不写尺寸、9 个旧类名在 `src` 里归零、胶囊必须 `fit-content + nowrap + flex: none`、评审页头必须允许换行）、oxlint 0 error / 6 warning、`tsc -b` 干净、构建通过；生产只发只读 GET，截图前后六路快照 `identical: true`（1 / 26 / 7 / 25·1·24 / 0 / 9954），**0 积分**。
+
+![生产模板库同一排标签放大对比（上：v0.9.45 方角 16px；下：v0.9.46 圆角 20px）](docs/screenshot-pills-tags-zoom-2026-11-13.png)
+
+![生产改之前（v0.9.45）：模板库 26 枚「官方示例」是 16px 高、6px 方角，比标题低一档还带直角](docs/screenshot-pills-templates-before-prod-2026-11-13.png)
+
+![生产（v0.9.46）：同一批标记回到 20px 高、999 圆角，与类型标签同一套](docs/screenshot-pills-templates-after-prod-2026-11-13.png)
+
+![生产改之前（v0.9.45）：视觉评审页头三颗 24px、左栏结论 26px、右栏作品状态 22px 并排](docs/screenshot-pills-review-before-prod-2026-11-13.png)
+
+![生产（v0.9.46）：同一批胶囊统一 22px，结论那一档单独留 26px](docs/screenshot-pills-review-after-prod-2026-11-13.png)
+
+![本地演示：设置页标签与健康徽标同档（22px 胶囊 / 20px 标签）](docs/screenshot-pills-settings-local-2026-11-13.png)
+
+![生产 390：评审页头三颗胶囊整行换行，内容区 322 不横向溢出](docs/screenshot-pills-prod-390-2026-11-13.png)
+
+验收：版本 0.9.46、入口 `index-DX_GJ8WV.js`（513,017 字节）、样式 `index-BAKeXmWI.css`（250,089 字节）、release `20261113-023724-v0.9.46-pills.tar.gz`、`/api/version` 0.9.46、health ok（templates 26）、两服务 active；1440 与 390 实测无横向滚动，只读不扣积分。提交待补。细节与判断见 [胶囊归队](docs/pill-system-2026-11-13.md)。
