@@ -773,6 +773,8 @@ DOMAIN=visionqa.wavisionai.cn bash deploy/production/enable-https.sh            
 
 ![生产：390 宽的素材占用卡，表单与清理按钮竖排满宽，账号表在卡内横向滚动](docs/screenshot-storage-guard-mobile-2026-11-14.png)
 
+提交 `11a155b`（代码 + 9 条测试 + 文档 + 4 张生产截图），CI 43479834904 success。
+
 细节见 [素材占用上限](docs/storage-limits-2026-11-14.md)。
 
 
