@@ -2555,4 +2555,8 @@ v0.9.10 让「甲方看没看」第一次有了答案，这一轮让这个答案
 - **根因（两处叠加）**：① 画布把 `canvas.wavisionai.cn` 当「本机安装」（`TRUSTED_HOSTS`），下载走 `/api/workspace/download-asset`，文件存进**服务器**的 `workspace/downloads`，浏览器这边自然看不到；② 真走浏览器下载分支时 `fetch(url, { credentials: 'omit' })` 主动丢 cookie，被 nginx 的 Basic Auth 打成 401（实测同一 URL：omit → 401，include → 200）。
 - **改法**：新增 `deploy/bd-canvas/patch-download-credentials.mjs`，三处幂等补丁：下载 fetch 带上 cookie 与企业令牌；https 页面一律走浏览器下载；浏览器里藏掉「打开本地位置」（那是服务器目录）。脚本会留 `.bak-vq-download`、保留 CRLF、画布源码变了就退出 1 不瞎改。
 - **验证**：真实浏览器里调用画布同一个下载函数 → `{ok:true, path:''}`，下载目录出现 `probe-video.mp4` **973,822 字节**与源文件一致；画布下载框显示「完成：1 个成功」；仓库新增 6 条补丁测试，`npm test` **470/470** 通过。
+
+![生产：画布下载框——完成：1 个成功，文件落在这台电脑上（v0.9.52）](docs/screenshot-canvas-download-prod-2026-11-13.png)
 - **边界**：这是对第三方源码（BD Canvas）的最小补丁，画布升级覆盖 `src/main.ts` 后要重跑脚本；nginx 的 Basic Auth 门没动；桌面版（127.0.0.1）行为不变。细节与回滚见 [画布下载](docs/canvas-download-auth-2026-11-13.md)。
+
+提交 `cf973ce`（补丁脚本 + 6 条测试 + 文档 + 1 张生产截图），CI 43409171292 success。

@@ -76,6 +76,8 @@ location / { auth_basic $bdc_realm; auth_basic_user_file /etc/htpasswd-canvas; p
 3. 走画布自己的下载框（`_downloadWithProgress`）：
    文案「完成：1 个成功 ✓ AI 生视频-视频-20261113.mp4」，
    下载目录里同名文件 **973,822 字节**。
+![生产：画布下载框「完成：1 个成功」，文件落到本机（VisionQA v0.9.52 内嵌画布）](screenshot-canvas-download-prod-2026-11-13.png)
+
 4. 仓库回归：`test/patch-bd-canvas-download.test.mjs` 6 条（检查/写入/幂等/CRLF/源码变了要报错/目录不对要报错）。
 
 ## 五、边界
