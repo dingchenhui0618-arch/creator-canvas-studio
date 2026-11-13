@@ -210,6 +210,9 @@ export function ReplicateModal({ item, hasKey, visionReady, onClose, onDone, onO
         {phase === 'error' && (
           <div className="replicate-body">
             <div className="replicate-error"><AlertCircle size={15} /><span>{error}</span></div>
+            {job?.refunded && job.cost ? (
+              <p className="replicate-note">本次 {job.cost} 积分已原样退回，没有产生消耗。</p>
+            ) : null}
             {/积分不足/.test(error) ? (
               <p className="replicate-note">积分可以在「设置 → 积分」查看；充值通道还没开通，需要管理员在后台发放。</p>
             ) : null}

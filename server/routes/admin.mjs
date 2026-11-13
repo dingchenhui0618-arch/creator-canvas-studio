@@ -23,6 +23,7 @@ import { clearClientErrors, listClientErrors } from '../client-errors.mjs'
 import { listLogs, pruneLogs } from '../log-files.mjs'
 import { listReports, reportCounts, resolveReport } from '../reports.mjs'
 import { disableTemplateShare, getTemplate, updateTemplate } from '../templates.mjs'
+import { listJobs } from '../jobs.mjs'
 
 const MODEL_KEY = /^\/api\/admin\/model-keys\/([\w-]+)$/
 const MODEL_KEY_TEST = /^\/api\/admin\/model-keys\/([\w-]+)\/test$/
@@ -581,6 +582,19 @@ export function createAdminRouter() {
 
       if (pathname === '/api/admin/health' && req.method === 'GET') {
         sendJson(res, 200, await deepHealth({ force: url.searchParams.get('force') === '1' }))
+        return true
+      }
+
+      // 复刻任务：真源是 SQLite（replicate_jobs），所以发版重启后历史还在。
+      // 后台要能回答两个问题：「刚才那条为什么没跑完」「扣的积分退没退」。
+      if (pathname === '/api/admin/jobs' && req.method === 'GET') {
+        const data = listJobs({ limit: url.searchParams.get('limit') || 20 })
+        const emails = new Map(listUsers().map((item) => [item.id, item.email]))
+        sendJson(res, 200, {
+          ok: true,
+          items: data.items.map((job) => ({ ...job, userEmail: emails.get(job.ownerId) || '' })),
+          counts: data.counts,
+        })
         return true
       }
 

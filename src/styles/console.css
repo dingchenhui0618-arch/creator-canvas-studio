@@ -553,6 +553,20 @@
   min-width: 0;
 }
 
+/* 复刻任务（v0.9.48）：一条任务有「标题 + 账号/进度/扣退 + 错误说明」三段长文本。
+   徽标跟着标题走、内容占满整行，390 宽只换行不横向滚（后台其余表格仍是横向滚动）。 */
+.admin-job-row {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+.admin-job-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
 .admin-alert-copy strong {
   font-size: 13px;
   font-weight: 500;

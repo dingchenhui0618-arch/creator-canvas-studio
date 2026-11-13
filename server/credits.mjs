@@ -47,7 +47,7 @@ function writeLedger(db, { userId, delta, balanceAfter, kind, ref, meta }) {
 }
 
 // 扣费：返回 { ok, balance, cost } 或 { ok:false, code:'CREDIT_INSUFFICIENT', balance, cost, needed }
-export function charge(userId, kind, { ref = '', amount = null } = {}) {
+export function charge(userId, kind, { ref = '', amount = null, meta = null } = {}) {
   if (!userId) return { ok: true, anonymous: true, balance: null, cost: 0 }
   const cost = amount === null ? priceOf(kind) : Math.round(Number(amount) || 0)
   if (cost <= 0) return { ok: true, balance: balanceOf(userId), cost: 0 }
@@ -66,7 +66,7 @@ export function charge(userId, kind, { ref = '', amount = null } = {}) {
     }
     const after = balance - cost
     db.prepare('UPDATE users SET credits = ? WHERE id = ?').run(after, String(userId))
-    writeLedger(db, { userId: String(userId), delta: -cost, balanceAfter: after, kind, ref })
+    writeLedger(db, { userId: String(userId), delta: -cost, balanceAfter: after, kind, ref, meta })
     db.exec('COMMIT')
     return { ok: true, balance: after, cost }
   } catch (error) {
@@ -79,8 +79,19 @@ export function charge(userId, kind, { ref = '', amount = null } = {}) {
   }
 }
 
+// 一条业务单据还欠用户多少积分：同一 ref 的扣费与退款都在账本里，求和取反就是这个数。
+// 复刻任务用它来保证「退多少由账本决定」——重启恢复、路由兜底、正常失败三条路径
+// 谁先跑都退一次，跑第二遍算出 0，不会多退。
+export function outstandingCharge(userId, kind, ref) {
+  if (!userId || !ref) return 0
+  const row = getDb()
+    .prepare('SELECT COALESCE(SUM(delta), 0) AS net FROM credit_ledger WHERE user_id = ? AND ref = ? AND (kind = ? OR kind LIKE ?)')
+    .get(String(userId), String(ref), String(kind), String(kind) + '-%')
+  return Math.max(0, -Number(row?.net || 0))
+}
+
 // 退款：上游失败、参数不合法、任务没跑起来都要把积分还回去，否则等于「失败也收费」
-export function refund(userId, kind, { ref = '', amount = null } = {}) {
+export function refund(userId, kind, { ref = '', amount = null, meta = null } = {}) {
   if (!userId) return { ok: true, anonymous: true, balance: null, cost: 0 }
   const amountBack = amount === null ? priceOf(kind) : Math.round(Number(amount) || 0)
   if (amountBack <= 0) return { ok: true, balance: balanceOf(userId), cost: 0 }
@@ -91,7 +102,7 @@ export function refund(userId, kind, { ref = '', amount = null } = {}) {
     const balance = Number(row?.credits || 0)
     const after = balance + amountBack
     db.prepare('UPDATE users SET credits = ? WHERE id = ?').run(after, String(userId))
-    writeLedger(db, { userId: String(userId), delta: amountBack, balanceAfter: after, kind: kind + '-refund', ref })
+    writeLedger(db, { userId: String(userId), delta: amountBack, balanceAfter: after, kind: kind + '-refund', ref, meta })
     db.exec('COMMIT')
     return { ok: true, balance: after, cost: amountBack }
   } catch (error) {
@@ -170,16 +181,26 @@ export function ledgerCountOf(userId) {
 export function ledgerOf(userId, limit = 20, offset = 0) {
   if (!userId) return []
   const rows = getDb()
-    .prepare('SELECT id, delta, balance_after, kind, ref, created_at FROM credit_ledger WHERE user_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ? OFFSET ?')
+    .prepare('SELECT id, delta, balance_after, kind, ref, meta, created_at FROM credit_ledger WHERE user_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ? OFFSET ?')
     .all(String(userId), Math.max(1, Math.min(200, Number(limit) || 20)), Math.max(0, Math.round(Number(offset) || 0)))
-  return rows.map((row) => ({
-    id: row.id,
-    delta: Number(row.delta),
-    balance: Number(row.balance_after),
-    kind: row.kind,
-    ref: row.ref || '',
-    createdAt: row.created_at,
-  }))
+  return rows.map((row) => {
+    let label = ''
+    try {
+      label = String(JSON.parse(row.meta || '{}')?.label || '')
+    } catch {
+      label = ''
+    }
+    return {
+      id: row.id,
+      delta: Number(row.delta),
+      balance: Number(row.balance_after),
+      kind: row.kind,
+      ref: row.ref || '',
+      // 说明列给用户看的是「这条复刻的标题」，ref 里的 jobId 只给排查用
+      label,
+      createdAt: row.created_at,
+    }
+  })
 }
 
 // 一次请求的完整视角：余额 + 单价 + 一页流水（带总数，前端才能做「加载更多」）

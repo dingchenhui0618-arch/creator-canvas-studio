@@ -56,7 +56,30 @@ export function openDb() {
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_credit_user ON credit_ledger(user_id, created_at);
+    -- 复刻任务：任务的每一步都落库，进程重启 / 发版后还能看见「这条为什么没跑完、积分退没退」。
+    -- 以前任务只在内存 Map 里，重启后 jobId 直接 404，扣掉的积分留在平台账上。
+    CREATE TABLE IF NOT EXISTS replicate_jobs (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'queued',
+      step TEXT NOT NULL DEFAULT 'queued',
+      progress INTEGER NOT NULL DEFAULT 0,
+      logs TEXT,
+      error TEXT,
+      template_id TEXT,
+      -- 用户看得懂的说明（这条复刻的标题）：账本里的 ref 是 jobId，说明列靠它显示
+      label TEXT,
+      shared INTEGER NOT NULL DEFAULT 0,
+      cost INTEGER NOT NULL DEFAULT 0,
+      refunded INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_replicate_jobs_user ON replicate_jobs(user_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_replicate_jobs_status ON replicate_jobs(status);
   `)
+  // 复刻任务是本轮新建的表：生产上先建过一次、后来才补了 label 列，老库要能补上
+  ensureColumn(db, 'replicate_jobs', 'label', 'TEXT')
   ensureColumn(db, 'users', 'credits', 'INTEGER NOT NULL DEFAULT 0')
   ensureColumn(db, 'users', 'kind', "TEXT NOT NULL DEFAULT 'account'")
   // 注册留痕：同意的条款版本与时间（管理员开通的账号标 admin-created，不假称用户同意过）

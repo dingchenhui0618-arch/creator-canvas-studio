@@ -52,7 +52,7 @@
   font-size: 12px;
 }
 .vq-ledger th {
-  padding: 8px 0;
+  padding: 8px 12px 8px 0;
   color: var(--faint);
   font-size: 11px;
   font-weight: 500;
@@ -61,7 +61,8 @@
   border-bottom: 1px solid var(--line);
 }
 .vq-ledger td {
-  padding: 8px 0;
+  /* 列间留 12px：390 宽时「变动」和「余额」两列数字会贴成 +109954 */
+  padding: 8px 12px 8px 0;
   border-bottom: 1px solid var(--line-faint);
   color: var(--ink-soft);
 }
@@ -82,6 +83,53 @@
 }
 .vq-ledger td.minus {
   color: var(--ink);
+}
+/* 390 宽：五列挤在一起时「类型」会被拆成一字一行。手机上列间距收到 8px，
+   类型不拆字，长说明自己换行。 */
+@media (max-width: 480px) {
+  /* 手机上的流水：固定列宽，把剩下的宽度都留给「说明」。
+     不固定的话表格自动布局会把说明压成一条竖排（一个汉字一行）。 */
+  .vq-ledger {
+    table-layout: fixed;
+    /* 固定列宽后要显式 100%：否则表格按「各列指定宽度 + 说明的最小宽度」缩成 246px */
+    width: 100%;
+  }
+  .vq-ledger td,
+  .vq-ledger th {
+    padding-right: 8px;
+  }
+  .vq-ledger th:nth-child(1),
+  .vq-ledger td:nth-child(1) {
+    width: 78px;
+  }
+  .vq-ledger th:nth-child(2),
+  .vq-ledger td:nth-child(2) {
+    width: 58px;
+  }
+  .vq-ledger th:nth-child(4),
+  .vq-ledger td:nth-child(4) {
+    width: 40px;
+  }
+  /* 余额在手机上让位给「说明」：本行变动已经说清这次扣退，余额桌面能看 */
+  .vq-ledger th:nth-child(5),
+  .vq-ledger td:nth-child(5) {
+    display: none;
+  }
+  /* 表头都很短：一律一行，免得「余额」被拆成竖排 */
+  .vq-ledger th {
+    white-space: nowrap;
+  }
+  /* 手机列窄：时间与类型用 11px，否则「11/13 12:28」「智能体对话」会互相压到 */
+  .vq-ledger td:nth-child(1),
+  .vq-ledger td:nth-child(2) {
+    font-size: 11px;
+  }
+  .vq-ledger td:nth-child(2) {
+    white-space: nowrap;
+  }
+  .vq-ledger td:nth-child(3) {
+    overflow-wrap: anywhere;
+  }
 }
 .vq-ledger-empty {
   padding: 16px 0;

@@ -78,6 +78,53 @@ type AlertsInfo = {
   channel: { webhook: boolean; diskFreeMb: number }
 }
 
+// 复刻任务：以前任务只存内存，发版重启就 404、扣掉的积分也不退。
+// 现在真源是 SQLite，后台能看到「这条停在哪一步、退没退」。
+type JobItem = {
+  id: string
+  userEmail: string
+  status: string
+  step: string
+  progress: number
+  error: string | null
+  templateId: string | null
+  label: string
+  cost: number
+  refunded: boolean
+  createdAt: string
+}
+
+type JobsInfo = {
+  ok: boolean
+  items: JobItem[]
+  counts: Record<string, number>
+}
+
+const JOB_STATUS: Record<string, { label: string; tone: 'neutral' | 'ok' | 'warn' | 'fail' }> = {
+  queued: { label: '排队中', tone: 'neutral' },
+  running: { label: '进行中', tone: 'neutral' },
+  done: { label: '已完成', tone: 'ok' },
+  error: { label: '失败', tone: 'fail' },
+}
+
+// 「失败」和「中断」分开：前者是链接/素材问题，后者是服务重启——两者的下一步动作不一样
+function jobStatusOf(item: JobItem) {
+  if (item.status === 'error' && /重启|中断/.test(item.error || '')) return { label: '已中断', tone: 'fail' as const }
+  return JOB_STATUS[item.status] || { label: item.status, tone: 'neutral' as const }
+}
+
+const JOB_STEP: Record<string, string> = {
+  queued: '等待开始',
+  resolve: '解析链接',
+  remote: '远端算力',
+  probe: '读视频信息',
+  scene: '检测镜头',
+  frames: '抽帧',
+  vision: '逐帧分析',
+  save: '写入模板库',
+  done: '完成',
+}
+
 type ClientErrorItem = {
   id: string
   at: string
@@ -163,6 +210,7 @@ export default function SystemSection() {
   const bdc = useApi<BdcStatus>('/api/bdc/status')
   const storage = useApi<StorageInfo>('/api/admin/storage')
   const alerts = useApi<AlertsInfo>('/api/admin/alerts')
+  const jobs = useApi<JobsInfo>('/api/admin/jobs')
   const [alertNote, setAlertNote] = useState('')
   const [busy, setBusy] = useState('')
 
@@ -171,6 +219,7 @@ export default function SystemSection() {
     bdc.error ? `GET /api/bdc/status：${bdc.error}` : '',
     storage.error ? `GET /api/admin/storage：${storage.error}` : '',
     alerts.error ? `GET /api/admin/alerts：${alerts.error}` : '',
+    jobs.error ? `GET /api/admin/jobs：${jobs.error}` : '',
   ].filter(Boolean)
 
   const reload = () => {
@@ -178,6 +227,7 @@ export default function SystemSection() {
     bdc.reload()
     storage.reload()
     alerts.reload()
+    jobs.reload()
   }
 
   const sendTestAlert = async () => {
@@ -289,6 +339,68 @@ export default function SystemSection() {
         ) : null}
 
         {alertNote ? <p className="admin-hint">{alertNote}</p> : null}
+      </section>
+
+      <section className="admin-card admin-block">
+        <div className="admin-block-head">
+          <div>
+            <p className="admin-label">复刻任务</p>
+            <p className="admin-sub">
+              任务的每一步都落在库里，发版重启后历史还在。上次没跑完的任务会被标成「已中断」，并按积分账本把净扣款退回——同一笔只退一次。
+            </p>
+          </div>
+          <SourceTag kind="api" source="GET /api/admin/jobs" />
+        </div>
+
+        {jobs.loading && !jobs.data ? <LoadingLine label="/api/admin/jobs" /> : null}
+
+        {jobs.data ? (
+          <>
+            <div className="admin-alert-facts">
+              <span>
+                <b>{(jobs.data.counts.running || 0) + (jobs.data.counts.queued || 0)}</b> 进行中
+              </span>
+              <span>
+                <b>{jobs.data.counts.done || 0}</b> 已完成
+              </span>
+              <span>
+                <b>{jobs.data.counts.error || 0}</b> 失败或中断
+              </span>
+              <span>
+                已退款 <b>{jobs.data.items.filter((item) => item.refunded).reduce((sum, item) => sum + item.cost, 0)}</b> 积分
+              </span>
+            </div>
+
+            {jobs.data.items.length ? (
+              // 用列表而不是表格：一条任务有「说明 + 账号 + 扣退」三段长文本，
+              // 表格在 390 宽只能横向滚，列表会自己换行（与上面「告警」同一套行样式）。
+              <ul className="admin-alert-list">
+                {jobs.data.items.map((item) => {
+                  const status = jobStatusOf(item)
+                  return (
+                    <li key={item.id} className="admin-alert-row admin-job-row">
+                      <div className="admin-alert-copy">
+                        <span className="admin-job-head">
+                          <Badge tone={status.tone}>{status.label}</Badge>
+                          <strong>{item.label || '复刻任务'}</strong>
+                        </span>
+                        <span className="admin-cell-sub admin-mono">
+                          {formatDateTime(item.createdAt)} · {item.userEmail || '未登录'} · 停在 {JOB_STEP[item.step] || item.step} ·{' '}
+                          {item.progress}% · {item.cost ? item.cost + ' 积分' + (item.refunded ? '（已退回）' : '') : '不计费'}
+                        </span>
+                        <span className="admin-cell-sub">
+                          {item.templateId ? '已入库 ' + item.templateId : item.error || (item.status === 'done' ? '完成' : '进行中')}
+                        </span>
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            ) : (
+              <p className="admin-hint">还没有复刻任务：从「发现」里选一条内容、或在雷达页粘贴视频直链发起复刻，这里会出现任务进度与扣退记录。</p>
+            )}
+          </>
+        ) : null}
       </section>
 
       <ClientErrorsCard />

@@ -315,13 +315,17 @@ export type JobLog = { at: string; text: string }
 
 export type ReplicateJob = {
   id: string
-  status: 'running' | 'done' | 'error'
+  status: 'queued' | 'running' | 'done' | 'error'
   step: string
   progress: number
   logs: JobLog[]
   error: string | null
   templateId: string | null
   createdAt: string
+  updatedAt?: string
+  // 计价与退款：任务中断（服务重启）时服务端按账本原样退回，这里只负责如实显示
+  cost?: number
+  refunded?: boolean
 }
 
 /** 模板来源：一张卡片只属于一个来源（官方示例优先，其次是作品 / 智能体 / 画布 / 改编，其余算发现） */

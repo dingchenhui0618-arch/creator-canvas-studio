@@ -5,7 +5,16 @@ import { config, redfoxEnabled, visionEnabled } from './config.mjs'
 import { searchMedia } from './redfox.mjs'
 import { recordSearch, listSearchHistory, toggleSearchFavorite, clearSearchHistory } from './search-history.mjs'
 import { searchFixtures } from './fixtures.mjs'
-import { startReplicate, getJob } from './jobs.mjs'
+import {
+  startReplicate,
+  getJob,
+  newJobId,
+  createJobDraft,
+  dropJobDraft,
+  abortJob,
+  recoverInterruptedJobs,
+  interruptRunningJobs,
+} from './jobs.mjs'
 import {
   listTemplates,
   getTemplate,
@@ -56,7 +65,7 @@ import { createLocalAgentRouter } from './routes/local-agent.mjs'
 import { currentUser, listUsers, clientIp, isAdmin } from './auth.mjs'
 import { recordClientError } from './client-errors.mjs'
 import { createReport } from './reports.mjs'
-import { charge, refund, ensureWelcomeCredits } from './credits.mjs'
+import { charge, refund, priceOf, ensureWelcomeCredits } from './credits.mjs'
 import { enter, leave } from './gate.mjs'
 import { installProcessGuards, logEvent, logRequestError, startAccess } from './log.mjs'
 import { startLogRetention } from './log-files.mjs'
@@ -225,7 +234,7 @@ async function proxyImage(res, target) {
 // ---- 积分与并发：一次「要花钱」的请求进来，先过并发闸门，再扣积分 ----
 // 返回 { cost, release }；余额不足/并发超限时直接写响应并返回 null。
 // 未登录（本地演示）时既不扣费也不限流。
-function beginPaid(res, user, kind, ref) {
+function beginPaid(res, user, kind, ref, { meta = null } = {}) {
   if (!user?.id) return { cost: 0, release: () => {} }
   const max = Number(config.credits.concurrency[kind] || 0)
   if (!enter(user.id, kind, max)) {
@@ -236,7 +245,7 @@ function beginPaid(res, user, kind, ref) {
     })
     return null
   }
-  const paid = charge(user.id, kind, { ref })
+  const paid = charge(user.id, kind, { ref, meta })
   if (!paid.ok) {
     leave(user.id, kind)
     sendJson(res, 402, {
@@ -673,26 +682,32 @@ const server = http.createServer(async (req, res) => {
       const item = body.item || {}
       // 公共模板：只有管理员能落成「所有账号可见」的种子内容
       const shared = body.shared === true && isAdmin(user)
-      const paid = beginPaid(res, user, 'replicate', String(item.title || body.url || '').slice(0, 80))
-      if (!paid) return
+      // 先把任务草稿落库、再扣费：万一进程在「扣完费、还没开始跑」之间退出，
+      // 下次启动的恢复逻辑能按积分账本把这笔退回去（只建内存任务时这笔钱就找不回来了）。
+      // 账本里的 ref 用 jobId，退款金额也从这条 ref 的净扣款算，重复收尾不会多退。
+      const jobId = newJobId()
+      // 说明列给用户看标题；账本 ref 留 jobId（唯一、可对账），两者都记下来
+      const jobLabel = String(item.title || body.url || '').slice(0, 80)
+      createJobDraft({ id: jobId, ownerId: user?.id || '', shared, cost: priceOf('replicate'), label: jobLabel })
+      const paid = beginPaid(res, user, 'replicate', jobId, { meta: { label: jobLabel } })
+      if (!paid) {
+        dropJobDraft(jobId)
+        return
+      }
       try {
         const job = await startReplicate(item, body.url || '', {
+          jobId,
           ownerId: user?.id || '',
           shared,
-          onSettled: (status) => {
-            paid.release()
-            if (status === 'error') paid.refund()
-          },
+          cost: paid.cost,
+          label: jobLabel,
+          // 结算只负责放开并发闸门：退款在任务层按账本做，失败与中断走同一条路径
+          onSettled: () => paid.release(),
         })
-        // 连链接都没有时任务立刻失败，不再等回调
-        if (job.status === 'error') {
-          paid.release()
-          paid.refund()
-        }
         return sendJson(res, 200, { jobId: job.id, credits: { cost: paid.cost, balance: paid.balance } })
       } catch (error) {
+        abortJob(jobId, String(error?.message || error))
         paid.release()
-        paid.refund()
         throw error
       }
     }
@@ -1007,6 +1022,10 @@ const server = http.createServer(async (req, res) => {
 
 installProcessGuards()
 await migrateOwnership()
+// 上次进程没跑完的复刻任务：标成中断并按积分账本退款（重复启动不会重复退），
+// 顺手清掉崩溃时留下的任务临时目录。发版 = 重启 = 以前每次都可能白扣 10 积分。
+const recoveredJobs = recoverInterruptedJobs()
+if (recoveredJobs.recovered) logEvent('jobs.recovered', recoveredJobs)
 // 启动先清一次过期日志（停机久了不会把过期文件一直留着），之后每小时最多再清一次
 const prunedLogs = await startLogRetention()
 if (prunedLogs.removed.length) logEvent('logs.prune', { removed: prunedLogs.removed.length, bytesFreed: prunedLogs.bytesFreed })
@@ -1016,3 +1035,23 @@ server.listen(config.port, '127.0.0.1', () => {
   startAlertWatch()
   logEvent('listen', { port: config.port, redfox: redfoxEnabled() ? 'on' : 'mock', vision: visionEnabled() ? config.vision.model : 'off', auth: config.auth.requireAuth ? 'on' : 'off' })
 })
+
+// 停机收尾：systemd 重启（发版）发的是 SIGTERM，以前进程立刻死掉，
+// 在跑的任务连同已扣积分一起消失。现在先标中断 + 按账本退款，再关服务退出；
+// 1.5 秒的兜底是给 keep-alive 连接留的，ffmpeg 子进程由 systemd 的 cgroup 一起收走。
+let shuttingDown = false
+function shutdown(signal) {
+  if (shuttingDown) return
+  shuttingDown = true
+  let interrupted = 0
+  try {
+    interrupted = interruptRunningJobs(signal === 'SIGTERM' ? '服务重启' : '服务停止')
+  } catch (error) {
+    logRequestError('shutdown', error, { signal })
+  }
+  logEvent('shutdown', { signal, interrupted })
+  server.close(() => {})
+  setTimeout(() => process.exit(0), 1500).unref()
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'))
+process.on('SIGINT', () => shutdown('SIGINT'))

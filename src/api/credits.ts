@@ -10,6 +10,8 @@ export type CreditEntry = {
   balance: number
   kind: string
   ref: string
+  // 说明列：服务端从 meta 里取的用户可读说明（例如这条复刻的标题）
+  label?: string
   createdAt: string
 }
 

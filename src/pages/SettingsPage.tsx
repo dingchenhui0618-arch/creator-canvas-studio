@@ -404,7 +404,7 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
                     <tr key={entry.id}>
                       <td className="time">{formatStamp(entry.createdAt)}</td>
                       <td>{creditKindLabel(entry.kind)}</td>
-                      <td>{entry.ref || '—'}</td>
+                      <td>{entry.label || entry.ref || '—'}</td>
                       <td className={'num ' + (entry.delta > 0 ? 'plus' : 'minus')}>
                         {entry.delta > 0 ? '+' : ''}
                         {entry.delta}
