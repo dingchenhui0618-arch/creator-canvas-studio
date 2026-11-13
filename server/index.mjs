@@ -77,6 +77,7 @@ import { startAlertWatch } from './alerts.mjs'
 import { deepHealth } from './health.mjs'
 import { sitePublicView } from './site-info.mjs'
 import { storageRoom } from './storage.mjs'
+import { admit, capacityFor } from './waterline.mjs'
 import { clearModelBlock, modelServiceState } from './service-state.mjs'
 import { fetchPublic } from './media.mjs'
 import { bdcStatus, canvasErrorMessage, listCanvases, createCanvas, appendCanvasNote } from './bdc.mjs'
@@ -247,7 +248,14 @@ async function proxyImage(res, target) {
 // 未登录（本地演示）时既不扣费也不限流。
 function beginPaid(res, user, kind, ref, { meta = null } = {}) {
   if (!user?.id) return { cost: 0, release: () => {} }
-  const max = Number(config.credits.concurrency[kind] || 0)
+  // 运行水位（v0.9.69）：内存到红线时在扣费之前拒绝——这一单不扣积分、不调上游。
+  // 水位偏紧时并发上限压到 1：宁可慢一点，也不要两条重活一起把进程顶穿。
+  const water = admit(kind)
+  if (!water.ok) {
+    sendJson(res, water.status, water.body)
+    return null
+  }
+  const max = capacityFor(kind, Number(config.credits.concurrency[kind] || 0), water.level)
   if (!enter(user.id, kind, max)) {
     sendJson(res, 429, {
       error: '这个账号还有同类型任务在跑，等它结束再试',

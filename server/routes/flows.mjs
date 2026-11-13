@@ -23,6 +23,7 @@ import { projectsByFlow, projectFlowsMatching, withRunProject, withFlowProject }
 import { charge, balanceOf } from '../credits.mjs'
 import { quotaRefusal } from '../quota.mjs'
 import { enter, leave } from '../gate.mjs'
+import { admit, capacityFor } from '../waterline.mjs'
 import { publicError } from '../public-error.mjs'
 
 // /api/flows 与 /api/runs 共用一个 router：
@@ -53,7 +54,13 @@ function sendStreamHead(res) {
 // 未登录（本地演示）时 charge 返回匿名结果，不扣费也不限流。
 function beginRunCharge(res, user, ref, label = '') {
   if (!user?.id) return { cost: 0, balance: null, release: () => {} }
-  const max = Number(config.credits.concurrency.flow_run || 0)
+  // 画布运行要下载并分析多张图，是这里最重的一条：内存到红线就不接（不扣积分、不调上游）。
+  const water = admit('flow_run')
+  if (!water.ok) {
+    sendJson(res, water.status, water.body)
+    return null
+  }
+  const max = capacityFor('flow_run', Number(config.credits.concurrency.flow_run || 0), water.level)
   if (max && !enter(user.id, 'flow_run', max)) {
     sendJson(res, 429, {
       error: '这个账号还有一条流程在跑，等它结束再试',

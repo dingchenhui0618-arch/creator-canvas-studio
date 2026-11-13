@@ -24,6 +24,16 @@ function loadDotEnv() {
 }
 
 loadDotEnv()
+
+// 数字型环境变量：空字符串按「没配」处理。
+// 以前直接 Number(process.env.X || 默认)，写一个空值会被当成 0，等于把闸门悄悄关掉。
+const numEnv = (raw, fallback) => {
+  const text = String(raw ?? '').trim()
+  if (!text) return fallback
+  const value = Number(text)
+  return Number.isFinite(value) ? value : fallback
+}
+
 const dataDir = process.env.DATA_DIR || path.join(root, 'data')
 
 function readLocalToken() {
@@ -178,6 +188,16 @@ export const config = {
     webhook: (process.env.VQ_ALERT_WEBHOOK || '').trim(),
     secret: (process.env.VQ_ALERT_SECRET || '').trim(),
     diskFreeMb: Number(process.env.VQ_ALERT_DISK_FREE_MB || 1024),
+  },
+  // 运行水位：这台机器还剩多少内存能接活（v0.9.69）。
+  // 两条判定都来自真实读数：系统 MemAvailable（含可回收缓存）与 V8 堆占比。
+  // 阈值可用环境变量覆盖，写 0 等于关掉那一条；VQ_WATER_GUARD=0 只量不拦（后台照样能看到数字）。
+  waterline: {
+    guard: process.env.VQ_WATER_GUARD !== '0',
+    tightAvailableMb: numEnv(process.env.VQ_WATER_TIGHT_MB, 320),
+    criticalAvailableMb: numEnv(process.env.VQ_WATER_CRITICAL_MB, 128),
+    tightHeapPercent: numEnv(process.env.VQ_WATER_TIGHT_HEAP, 80),
+    criticalHeapPercent: numEnv(process.env.VQ_WATER_CRITICAL_HEAP, 92),
   },
   // 邮件通道（找回密码用）：后台「系统 → 邮件通道」保存后优先于环境变量；
   // 环境变量只是兜底，老部署不改也能用。口令只落在数据目录的 mail.json（0600）。

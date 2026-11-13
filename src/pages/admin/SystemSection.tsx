@@ -4,6 +4,7 @@ import { useUiMode } from '../../api/app'
 import { formatDateTime, formatDuration, useApi, type BdcPort, type BdcStatus, type VersionInfo } from './data'
 import SiteInfoCard from './SiteInfoCard'
 import StorageGuard from './StorageGuard'
+import WaterlineCard from './WaterlineCard'
 import { AdminHead, Badge, ErrorBanner, LoadingLine, RefreshButton, SourceTag } from './ui'
 
 type StorageItem = { name: string; bytes: number; files: number }
@@ -291,6 +292,7 @@ const ALERT_KIND_LABEL: Record<string, string> = {
   'server-5xx': '服务端 5xx',
   'model-blocked': '模型上游失败',
   'disk-low': '磁盘不足',
+  memory: '内存水位',
   test: '测试',
 }
 
@@ -1229,6 +1231,8 @@ export default function SystemSection() {
           <p className="admin-hint">占用读取失败：{internal ? storage.error : '稍后刷新再试；如果一直失败，请联系维护人员。'}</p>
         ) : null}
       </section>
+
+      <WaterlineCard />
 
       <StorageGuard />
 

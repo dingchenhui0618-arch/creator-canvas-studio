@@ -14,6 +14,7 @@ import { currentUser } from '../auth.mjs'
 import { charge, refund } from '../credits.mjs'
 import { quotaRefusal } from '../quota.mjs'
 import { enter, leave } from '../gate.mjs'
+import { admit, capacityFor } from '../waterline.mjs'
 import { publicError } from '../public-error.mjs'
 import { modelServiceState, noteModelFailure, noteModelSuccess } from '../service-state.mjs'
 
@@ -206,8 +207,14 @@ export function createReviewRouter() {
           })
           return true
         }
+        // 内存到红线时不接这一单（不扣积分、不调模型）；水位偏紧时评审只放一条并行。
+        const water = admit('review')
+        if (!water.ok) {
+          sendJson(res, water.status, water.body)
+          return true
+        }
         // 评审按次扣积分：先扣后调，失败退款
-        const limit = Number(config.credits.concurrency.review || 0)
+        const limit = capacityFor('review', Number(config.credits.concurrency.review || 0), water.level)
         if (user?.id && !enter(user.id, 'review', limit)) {
           sendJson(res, 429, { error: '这个账号还有评审在跑，等它结束再试', code: 'CONCURRENCY_LIMIT', limit })
           return true

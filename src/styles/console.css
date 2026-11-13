@@ -1638,3 +1638,82 @@
   .admin-storage-orphans .vq-button { width: 100%; justify-content: center; }
 }
 
+/* 运行水位（v0.9.69）：一张只读卡。数字沿用 .admin-kv，条沿用全站「细进度条」口径
+   （6px、圆头、超 80% 变黄、到红线变红），不另造一套视觉。
+   条左边写清楚它在量什么（Node 堆），右边给百分数：一条没有标签的细条等于没说明。 */
+.admin-waterline-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: -8px 0 0;
+}
+
+.admin-waterline-bar-row > .admin-cell-note {
+  flex: none;
+  margin: 0;
+}
+
+.admin-waterline-bar-row > .admin-waterline-bar {
+  flex: 1;
+  min-width: 0;
+}
+
+.admin-waterline-bar-row > .admin-mono {
+  flex: none;
+  color: var(--muted);
+}
+
+.admin-waterline-bar {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--line-faint);
+}
+
+.admin-waterline-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ink);
+}
+
+.admin-waterline-bar.is-warn > span { background: var(--warn); }
+
+.admin-waterline-bar.is-full > span { background: var(--fail); }
+
+.admin-waterline-capacity {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.admin-waterline-capacity > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-md);
+}
+
+.admin-waterline-capacity > div > span:first-child {
+  color: var(--faint);
+  font-size: 12px;
+}
+
+.admin-waterline-capacity b {
+  color: var(--ink);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.admin-waterline-capacity .admin-cell-note { margin-top: 0; }
+
+@media (max-width: 720px) {
+  .admin-block--waterline .admin-block-head { flex-direction: column; align-items: flex-start; }
+  .admin-waterline-capacity { grid-template-columns: 1fr; }
+}
+
+

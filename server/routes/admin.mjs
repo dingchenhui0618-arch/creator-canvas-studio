@@ -37,6 +37,7 @@ import { saveUsagePrices, usagePrices, usageSummary } from '../usage-meter.mjs'
 import { clearSiteInfo, resolveSiteInfo, saveSiteInfo, SITE_FIELDS } from '../site-info.mjs'
 import { launchReadiness } from '../readiness.mjs'
 import { cleanOrphanFrames, clearStorageOverride, saveStorageLimit, setStorageOverride, storageOverview } from '../storage.mjs'
+import { waterlineReport } from '../waterline.mjs'
 
 const MODEL_KEY = /^\/api\/admin\/model-keys\/([\w-]+)$/
 const MODEL_KEY_TEST = /^\/api\/admin\/model-keys\/([\w-]+)\/test$/
@@ -739,6 +740,14 @@ export function createAdminRouter() {
           signedOut,
           user: { id: target.id, email: target.email, name: target.name, kind: target.kind, active: Boolean(target.is_active) },
         })
+        return true
+      }
+
+      // ── 运行水位（v0.9.69）──────────────────────────────────────
+      // 只读：内存读数、判定等级、阈值，以及按水位折算后的重活并发上限。
+      // 不接受任何写入——阈值是部署时定的，后台不提供「偷偷调高红线」的按钮。
+      if (pathname === '/api/admin/waterline' && req.method === 'GET') {
+        sendJson(res, 200, waterlineReport())
         return true
       }
 
