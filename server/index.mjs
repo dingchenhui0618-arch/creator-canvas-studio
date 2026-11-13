@@ -1038,3 +1038,107 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, trashed ? 200 : 404, { ok: Boolean(trashed), trashed: true })
       }
       const template = await getTemplate(id, user)
+      if (!template) return sendJson(res, 404, { error: '模板不存在' })
+      // 详情多给两段：用这条模板的作品（最近改过的排前面），和这条原片在库里的全貌
+      // （同源改编版、跨模板开出的作品）。两块都现算，不落库。
+      const [templates, byTemplate] = await Promise.all([listTemplates({}, user), projectsByTemplate(user)])
+      // 来源跟着详情一起给：抽屉里那句「这条从哪来」与卡片、筛选胶囊用同一套口径
+      return sendJson(res, 200, {
+        ...template,
+        source: templateSource(template),
+        ...templateWorksView(byTemplate.get(id) || []),
+        footprint: originFootprint(templates, flattenTemplateWorks(byTemplate), template),
+      })
+    }
+
+    if (pathname === '/api/cover') {
+      const target = url.searchParams.get('url') || ''
+      return proxyImage(res, target)
+    }
+
+    const frameMatch = pathname.match(/^\/media\/frames\/([\w-]+)\/([\w.-]+)$/)
+    if (frameMatch) {
+      const file = path.join(config.framesDir, frameMatch[1], frameMatch[2])
+      const ok = await serveFile(res, file)
+      if (!ok) { res.writeHead(404); res.end('frame not found') }
+      return
+    }
+
+    // 生产环境静态托管 dist
+    const distDir = path.join(process.cwd(), 'dist')
+    const candidate = pathname === '/' ? path.join(distDir, 'index.html') : path.join(distDir, pathname)
+    if (await serveFile(res, candidate)) return
+    if (await serveFile(res, path.join(distDir, 'index.html'))) return
+
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' })
+    res.end('not found: ' + pathname)
+  } catch (error) {
+    // 我们主动拒掉的请求（请求体过大、图片格式/尺寸不对）不是服务端故障：
+    // 状态码与文案由抛错处给，日志只记一行，不去触发 5xx 告警。
+    const refusal = refusalResponse(error)
+    if (refusal) {
+      logEvent('request.refused', { path: pathname, method: req.method, status: refusal.status, code: refusal.body.code })
+      return sendJson(res, refusal.status, refusal.body)
+    }
+    logRequestError(trace.traceId, error, { path: pathname, method: req.method })
+    sendJson(res, 500, { error: String(error?.message || error), traceId: trace.traceId })
+  }
+})
+
+installProcessGuards()
+await migrateOwnership()
+// 上次进程没跑完的复刻任务：标成中断并按积分账本退款（重复启动不会重复退），
+// 顺手清掉崩溃时留下的任务临时目录。发版 = 重启 = 以前每次都可能白扣 10 积分。
+const recoveredJobs = recoverInterruptedJobs()
+if (recoveredJobs.recovered) logEvent('jobs.recovered', recoveredJobs)
+// 画布运行同一套：上次没跑完的运行标中断，并按账本把已扣积分退回（重复启动不会多退）
+const recoveredRuns = await recoverInterruptedRuns()
+if (recoveredRuns.recovered) logEvent('runs.recovered', recoveredRuns)
+// 启动先清一次过期日志（停机久了不会把过期文件一直留着），之后每小时最多再清一次
+const prunedLogs = await startLogRetention()
+if (prunedLogs.removed.length) logEvent('logs.prune', { removed: prunedLogs.removed.length, bytesFreed: prunedLogs.bytesFreed })
+
+const listenFd = inheritedListenFd()
+const onListening = () => {
+  // 告警哨兵：磁盘水位每 5 分钟看一次（5xx 与上游失败是事件驱动，不用轮询）
+  startAlertWatch()
+  logEvent('listen', {
+    port: config.port,
+    // 有 socket 激活时端口由 systemd 握着，重启不断开——发版不再有几秒 502
+    listen: listenMode(listenFd),
+    redfox: redfoxEnabled() ? 'on' : 'mock',
+    vision: visionEnabled() ? config.vision.model : 'off',
+    auth: config.auth.requireAuth ? 'on' : 'off',
+    // 运行时版本一起落到启动事件里：换 Node 之后翻日志就能看到当时跑的是哪个版本
+    node: process.versions.node,
+  })
+}
+if (listenFd === null) server.listen(config.port, '127.0.0.1', onListening)
+else server.listen({ fd: listenFd }, onListening)
+
+// 停机收尾：systemd 重启（发版）发的是 SIGTERM，以前进程立刻死掉，
+// 在跑的任务连同已扣积分一起消失。现在先标中断 + 按账本退款，再关服务退出；
+// 1.5 秒的兜底是给 keep-alive 连接留的，ffmpeg 子进程由 systemd 的 cgroup 一起收走。
+let shuttingDown = false
+async function shutdown(signal) {
+  if (shuttingDown) return
+  shuttingDown = true
+  let interrupted = 0
+  let runsInterrupted = 0
+  try {
+    interrupted = interruptRunningJobs(signal === 'SIGTERM' ? '服务重启' : '服务停止')
+  } catch (error) {
+    logRequestError('shutdown', error, { signal })
+  }
+  try {
+    // 画布运行也要先标中断 + 退款再退进程：否则这条运行和它的积分一起消失
+    runsInterrupted = await interruptRunningRuns(signal === 'SIGTERM' ? '服务重启' : '服务停止')
+  } catch (error) {
+    logRequestError('shutdown', error, { signal, kind: 'runs' })
+  }
+  logEvent('shutdown', { signal, interrupted, runsInterrupted })
+  server.close(() => {})
+  setTimeout(() => process.exit(0), 1500).unref()
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'))
+process.on('SIGINT', () => shutdown('SIGINT'))
