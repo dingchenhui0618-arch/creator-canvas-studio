@@ -579,3 +579,5 @@ DOMAIN=visionqa.wavisionai.cn bash deploy/production/enable-https.sh            
 
 ![生产：后台「成本」页按真实用量统计——89 次历史调用、按能力 / 按天 / 按模型分布、单价未填时显示「未定价」（v0.9.58）](docs/screenshot-usage-2026-11-13.png)
 
+
+提交 `9be3e69`（代码 + 10 条测试 + 文档 + 2 张生产截图），CI 43427876217 success。
