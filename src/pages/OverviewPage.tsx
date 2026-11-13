@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowRight, ArrowUpRight, Eye, LayoutTemplate, Plus, RefreshCw, RotateCcw, Search, Workflow, X } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, Eye, History, LayoutTemplate, Plus, RefreshCw, RotateCcw, Search, Send, Share2, Workflow, X } from 'lucide-react'
 import type { Page } from '../domain/types'
 import PageHead from '../components/PageHead'
 import { MonoTag } from '../components/ui'
@@ -25,6 +25,7 @@ import {
   type ProjectSummary,
   type ShareSummaryRow,
 } from '../domain/project'
+import { isFirstRun } from '../domain/first-run'
 import { REVIEW_VERDICT_LABEL, reviewTimeLabel } from '../domain/review'
 import { runWorkLine } from '../domain/run'
 import { stampTime, visitLine } from '../domain/share'
@@ -76,6 +77,15 @@ const QUEUE_PAGE_SIZE = 20
 const QUEUE_MAX_PAGES = 10
 
 const pad2 = (value: number) => String(value).padStart(2, '0')
+
+// 新账号第一屏（v0.9.42）：这四块都挂在作品上，手上还没有作品时必然是空的。
+// 与其在空账号上铺四个「还没有」，不如先说清它们什么时候出现——顺序就是主线的顺序。
+const FIRST_RUN_BLOCKS = [
+  { key: 'review', icon: Eye, title: '评审等你看的', when: '评过一版画面、结论是「需人工确认」或「不通过」的作品排在这里；点一行进作品改一版。' },
+  { key: 'delivery', icon: Send, title: '交出去的', when: '在作品页点「交付这一版」；每一版按时间留在这儿，交付稿随时能打开。' },
+  { key: 'runs', icon: History, title: '最近运行', when: '画布跑一次运行，这里列出节点耗时与返回，并标出它挂在哪条作品上。' },
+  { key: 'shares', icon: Share2, title: '分享出去的链接', when: '发给甲方的只读链接，这里汇总每条被打开过几次，停用之后也留着。' },
+] as const
 
 // 页头日期用「2026-11-10 周二」：等宽数字对齐，比「2026 年 11 月 10 日 · 星期二」短一半，
 // 也不会因为中文和数字混排被拉出一段虚的字距。
@@ -457,6 +467,20 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
     }
   }, [latestProject, queuedProject, latestCanvas, onOpenProject, onOpenCanvas, onNavigate])
 
+  // 空账号的判定（v0.9.42）：六路都读到、并且都是 0 才算。读失败的时候宁可多铺一块空状态，
+  // 也不能把一次服务故障说成「你还没做过」——判据在 domain/first-run.ts，那边有单测。
+  const firstRun = !loading && isFirstRun({
+    counts: {
+      projects: projects.length,
+      canvases: canvases.length,
+      templates: templates.length,
+      runs: runs.length,
+      deliveries: deliveryTotal,
+      shares: shares.length,
+    },
+    failed: errors.length,
+  })
+
   return (
     <div className="vq-page">
       <PageHead
@@ -467,13 +491,15 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
             <time dateTime={now.toISOString().slice(0, 10)}>{todayLabel(now)}</time>
           </>
         }
-        title={loading ? '正在读取…' : '欢迎回来，' + userName}
+        title={loading ? '正在读取…' : firstRun ? '还没有作品' : '欢迎回来，' + userName}
         desc={
           loading
             ? '正在读取你账号下的画布、运行与模板。'
-            : internal
-              ? '首屏主卡读的是画布服务的最近改动；运行与模板分别来自 /api/runs 与 /api/templates。没有数据的区块写空状态，不放示例数据。'
-              : '先看「下一步」，或者从下面三种方式开始一条新内容。'
+            : firstRun
+              ? '一条内容从「发现」进来：检索一条 → 在模板库拆成脚本与分镜 → 开成作品改到能拍 → 交付这一版。今天先挑一条值得抄的，做完第一条，下面那些区块会自己出现。'
+              : internal
+                ? '首屏主卡读的是画布服务的最近改动；运行与模板分别来自 /api/runs 与 /api/templates。没有数据的区块写空状态，不放示例数据。'
+                : '先看「下一步」，或者从下面三种方式开始一条新内容。'
         }
         actions={
           <>
@@ -485,7 +511,10 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
               <RefreshCw size={14} />
               刷新
             </button>
-            <button type="button" className="vq-button vq-button--primary" onClick={onCreateCanvas}>
+            {/* 页头不再摆实心主按钮（v0.9.42）：工作台这一屏要回答「下一步点哪里」，
+                而画布是作品里的一步。主按钮让给下面主卡的「去检索 / 继续这个作品」，
+                建画布降成次要动作——它仍然在页头，只是不抢主位。 */}
+            <button type="button" className="vq-button vq-button--ghost" onClick={onCreateCanvas}>
               <Plus size={14} />
               新建画布
             </button>
@@ -525,6 +554,43 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
         </dl>
       </section>
 
+      {/* 空账号第一屏（v0.9.42）：评审 / 交付 / 运行 / 分享都挂在作品上，手上没有作品时必然是空的。
+          与其铺四块「还没有」加三张空心开始卡，不如把「它们什么时候出现」讲清楚，主卡说下一步。 */}
+      {firstRun ? (
+        <section className="vq-section vq-first-run" aria-labelledby="vq-first-run-title">
+          <div className="vq-section-head">
+            <div>
+              <h2 id="vq-first-run-title">做完第一条，这几块会自己出现</h2>
+              <p className="vq-first-run-sub">
+                它们不用先配好：评审、交付、运行、分享都挂在作品上——手上还没有作品，所以这里先不铺空的。
+              </p>
+            </div>
+            <button type="button" className="vq-link" onClick={onOpenGuide}>
+              看四步主线
+              <ArrowUpRight size={13} />
+            </button>
+          </div>
+          <div className="vq-first-run-list">
+            {FIRST_RUN_BLOCKS.map((entry) => {
+              const Icon = entry.icon
+              return (
+                <div className="vq-first-run-row" key={entry.key}>
+                  <span className="vq-first-run-icon"><Icon size={14} strokeWidth={1.75} /></span>
+                  <span className="vq-first-run-copy">
+                    <strong>{entry.title}</strong>
+                    <span>{entry.when}</span>
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+          <p className="vq-first-run-note">
+            这一屏现在能做的只有一件事：从上面那张主卡进「发现」，按关键词检索一条值得抄的。
+            检索与解析按次扣积分；开画布、导出与分享不扣积分。
+          </p>
+        </section>
+      ) : (
+        <>
       <section className="vq-section vq-review-queue" aria-labelledby="vq-review-queue-title">
         <div className="vq-section-head">
           <div>
@@ -1159,6 +1225,8 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
           </div>
         )}
       </section>
+        </>
+      )}
 
       <footer className="vq-overview-foot">
         <span className="vq-overview-legal">

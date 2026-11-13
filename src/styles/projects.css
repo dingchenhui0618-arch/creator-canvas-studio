@@ -274,6 +274,13 @@
   margin-top: var(--space-2);
 }
 
+/* 模板库条数没读到时给两条路并排（v0.9.42）：先看模板库，或者直接从发现开始 */
+.vq-projects-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
 /* ---------- 作品页 ---------- */
 
 /* 改名：标题点笔就变成输入框，回车保存、Esc 取消 */

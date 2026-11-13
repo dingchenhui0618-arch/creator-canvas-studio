@@ -486,6 +486,7 @@ function Workbench({
           <ProjectsPage
             onOpenProject={(projectId) => navigate({ kind: 'page', page: 'projects', projectId })}
             onBrowseTemplates={() => go('templates')}
+            onDiscover={() => go('radar')}
           />
         )
       case 'radar':

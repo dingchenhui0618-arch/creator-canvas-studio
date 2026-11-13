@@ -54,6 +54,17 @@ async function canvasFetch(url, init = {}) {
   return json ?? {}
 }
 
+// 画布服务（本机 5312）没起来时，fetch 抛的是英文的「fetch failed」/ECONNREFUSED，
+// 界面上会原样出现「画布列表：fetch failed」——这不是给用户看的话（v0.9.42）。
+// 翻成一句能行动的中文；原始那串留在 detail 里给排障用，不丢线索。
+export function canvasErrorMessage(error) {
+  const raw = String(error?.message || error || '') || '未知错误'
+  if (!/fetch failed|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|socket hang up|aborted|timeout/i.test(raw)) {
+    return raw.slice(0, 160)
+  }
+  return '画布服务没有连上（本机 5312）：作品、模板、评审、交付都不受影响；稍后刷新，或确认画布服务已启动。'
+}
+
 function canvasName(raw) {
   const name = String(raw || '').trim().slice(0, 60)
   return name || ('未命名画布 ' + new Date().toISOString().slice(0, 16).replace('T', ' '))
@@ -71,7 +82,12 @@ export async function listCanvases() {
     }))
     return { ok: true, canvases }
   } catch (error) {
-    return { ok: false, canvases: [], error: String(error?.message || error).slice(0, 160) }
+    return {
+      ok: false,
+      canvases: [],
+      error: canvasErrorMessage(error),
+      detail: String(error?.message || error).slice(0, 160),
+    }
   }
 }
 

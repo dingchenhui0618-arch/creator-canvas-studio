@@ -514,6 +514,96 @@
   transform: translateX(2px);
 }
 
+
+/* ---------- 新账号第一屏（v0.9.42）
+   空账号上不再铺四块「还没有」：这四块都挂在作品上，先说清它们什么时候出现。
+   四块按主线的顺序排（评审 → 交付 → 运行 → 分享），一屏之内看完。 ---------- */
+
+.vq-first-run {
+  margin: var(--space-6) 0 var(--space-8);
+}
+
+.vq-first-run .vq-section-head {
+  align-items: flex-start;
+}
+
+.vq-first-run .vq-section-head .vq-link {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.vq-first-run-sub {
+  margin: var(--space-1) 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.vq-first-run-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.vq-first-run-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+
+.vq-first-run-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: var(--line-faint);
+  color: var(--ink);
+}
+
+.vq-first-run-copy {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.vq-first-run-copy strong {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.vq-first-run-copy span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.vq-first-run-note {
+  margin: var(--space-4) 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+@media (max-width: 760px) {
+  .vq-first-run-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* 窄屏把「看四步主线」放到标题下面：并排时标题被挤成两截（390 实测） */
+  .vq-first-run .vq-section-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
+}
+
 @media (max-width: 1180px) {
   .vq-next {
     grid-template-columns: minmax(0, 1fr);

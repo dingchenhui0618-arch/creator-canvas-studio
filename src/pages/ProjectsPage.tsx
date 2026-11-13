@@ -3,6 +3,7 @@ import { ArrowRight, Clapperboard, RefreshCw, Search, X } from 'lucide-react'
 import PageHead from '../components/PageHead'
 import ProjectStatusPill from '../components/ProjectStatus'
 import { listProjects } from '../api/projects'
+import { listTemplates } from '../api/radar'
 import { reviewsForVersion, type ProjectBucket, type ProjectListFacets, type ProjectShareBrief, type ProjectSummary } from '../domain/project'
 import { CLIENT_LABEL, stampTime } from '../domain/share'
 import '../styles/projects.css'
@@ -50,9 +51,12 @@ const EMPTY_FACETS: ProjectListFacets = { all: 0, active: 0, delivered: 0 }
 export default function ProjectsPage({
   onOpenProject,
   onBrowseTemplates,
+  onDiscover,
 }: {
   onOpenProject: (id: string) => void
   onBrowseTemplates: () => void
+  // 模板库也是空的时，这一屏的下一步是「去发现检索一条」，不是把人送进一个空库（v0.9.42）
+  onDiscover: () => void
 }) {
   const [items, setItems] = useState<ProjectSummary[]>([])
   const [facets, setFacets] = useState<ProjectListFacets>(EMPTY_FACETS)
@@ -62,6 +66,8 @@ export default function ProjectsPage({
   const [bucket, setBucket] = useState<ProjectBucket>('all')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  // 空作品页的下一步要看模板库有没有东西：只问总条数，不拉整库（v0.9.42）
+  const [templateTotal, setTemplateTotal] = useState<number | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async (filter: { q: string; state: ProjectBucket }) => {
@@ -78,6 +84,16 @@ export default function ProjectsPage({
     } finally {
       setLoading(false)
     }
+  }, [])
+
+  // 模板库总条数只取一次：作品列表刷新不重拉它，人也不会在这一屏看见它变。
+  // 读失败就留 null——空作品页会同时给两条路，而不是断言「模板库是空的」。
+  useEffect(() => {
+    let alive = true
+    listTemplates({})
+      .then((data) => { if (alive) setTemplateTotal(Number(data.total ?? data.items?.length ?? 0)) })
+      .catch(() => { if (alive) setTemplateTotal(null) })
+    return () => { alive = false }
   }, [])
 
   // 输入时等一下（220ms）再问服务端；切状态是点击，立刻问。
@@ -130,10 +146,20 @@ export default function ProjectsPage({
               <RefreshCw size={14} className={loading ? 'vq-spin' : undefined} />
               刷新
             </button>
-            <button type="button" className="vq-button vq-button--primary" onClick={onBrowseTemplates}>
-              <Clapperboard size={14} />
-              从模板开始
-            </button>
+            {/* 页头这个主按钮也按模板库分流（v0.9.42）：模板库是空的，「从模板开始」就是把人送进空库 */}
+            {templateTotal === 0 ? (
+              // 一屏只留一个实心主按钮：还没有作品时它在下面的空状态里（那条路才是这一屏的下一步），
+              // 这里就跟着降成次要，别和它抢
+              <button type="button" className={'vq-button' + (total > 0 ? ' vq-button--primary' : ' vq-button--ghost')} onClick={onDiscover}>
+                <Search size={14} />
+                去发现检索一条
+              </button>
+            ) : (
+              <button type="button" className="vq-button vq-button--primary" onClick={onBrowseTemplates}>
+                <Clapperboard size={14} />
+                从模板开始
+              </button>
+            )}
           </>
         }
       />
@@ -221,11 +247,42 @@ export default function ProjectsPage({
         ) : (
           <div className="vq-empty vq-projects-empty">
             <strong>还没有作品</strong>
-            <span>作品要从一条拆好的模板开始：在模板库挑一条，点「用它做作品」，脚本和分镜会跟着进这条作品。</span>
-            <button type="button" className="vq-button vq-button--primary" onClick={onBrowseTemplates}>
-              去模板库挑一条
-              <ArrowRight size={13} />
-            </button>
+            {/* 空作品页的下一步得看模板库有没有东西（v0.9.42）：
+                模板库也是空的，还写「去模板库挑一条」就是一个把人送进空库的假出口。 */}
+            {templateTotal === 0 ? (
+              <>
+                <span>
+                  作品要从一条拆好的模板开始，模板库现在也还是空的：先去「发现」检索一条，把脚本与分镜拆出来，再回这里点「用它做作品」。
+                </span>
+                <button type="button" className="vq-button vq-button--primary" onClick={onDiscover}>
+                  去发现检索一条
+                  <ArrowRight size={13} />
+                </button>
+              </>
+            ) : templateTotal === null ? (
+              <>
+                <span>
+                  作品要从一条拆好的模板开始。模板库的条数这次没读到：先看模板库有没有能用的那条；模板库也是空的，就从「发现」检索一条。
+                </span>
+                <span className="vq-projects-empty-actions">
+                  <button type="button" className="vq-button" onClick={onBrowseTemplates}>
+                    去模板库
+                    <ArrowRight size={13} />
+                  </button>
+                  <button type="button" className="vq-button vq-button--ghost" onClick={onDiscover}>
+                    去发现检索一条
+                  </button>
+                </span>
+              </>
+            ) : (
+              <>
+                <span>作品要从一条拆好的模板开始：在模板库挑一条，点「用它做作品」，脚本和分镜会跟着进这条作品。</span>
+                <button type="button" className="vq-button vq-button--primary" onClick={onBrowseTemplates}>
+                  去模板库挑一条
+                  <ArrowRight size={13} />
+                </button>
+              </>
+            )}
           </div>
         )
       ) : null}

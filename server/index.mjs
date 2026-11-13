@@ -65,7 +65,7 @@ import { startAlertWatch } from './alerts.mjs'
 import { deepHealth } from './health.mjs'
 import { clearModelBlock, modelServiceState } from './service-state.mjs'
 import { fetchPublic } from './media.mjs'
-import { bdcStatus, listCanvases, createCanvas, appendCanvasNote } from './bdc.mjs'
+import { bdcStatus, canvasErrorMessage, listCanvases, createCanvas, appendCanvasNote } from './bdc.mjs'
 import { modelCatalog } from './models.mjs'
 
 // 功能路由：每个模块自己处理 /api/<prefix> 下的请求，index.mjs 只管分发
@@ -364,7 +364,8 @@ const server = http.createServer(async (req, res) => {
       try {
         return sendJson(res, 200, await createCanvas(body.name))
       } catch (error) {
-        return sendJson(res, 502, { ok: false, error: String(error?.message || error).slice(0, 160) })
+        // 502 的 error 是会出现在界面上的那句话：翻成中文，原始串留在 detail（v0.9.42）
+        return sendJson(res, 502, { ok: false, error: canvasErrorMessage(error), detail: String(error?.message || error).slice(0, 160) })
       }
     }
 
@@ -373,7 +374,7 @@ const server = http.createServer(async (req, res) => {
       try {
         return sendJson(res, 200, await appendCanvasNote(body.canvasId, body.text, body.title))
       } catch (error) {
-        return sendJson(res, 502, { ok: false, error: String(error?.message || error).slice(0, 160) })
+        return sendJson(res, 502, { ok: false, error: canvasErrorMessage(error), detail: String(error?.message || error).slice(0, 160) })
       }
     }
 
