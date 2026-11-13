@@ -123,7 +123,19 @@ npm run build       通过（入口未变：index-DoNQ3EI0.js）
 
 ## 生产实测
 
-（部署后填）
+部署：release `20261113-213240-r89-lease2`（第一次 `r89-lease` 带了被截断的 index.mjs，已回滚并重发，见「踩到的坑」）。
+
+| 观测 | 结果 |
+| --- | --- |
+| 版本 | 对外 8799 与内部版 8800 都是 `0.9.78`；`/api/health` ok（模板 26）、三个 unit active、journal 6 分钟内无 error |
+| 计数来源 | `/api/admin/waterline` → `heavy.scope = "lease"`、`lease.dir = "/tmp/visionqa-heavy-leases-v1"`、`ttlMs = 1800000`、`heartbeatMs = 15000`、空闲时 `lease.total = 0` |
+| 第三进程占 3 条 | 在机器上以 root 起一个独立 node 进程占 3 条 `review` 租约（pid 1460752）；**跑在 visionqa 用户下的对外实例**读到 `active = 3`、`byKind.review = 3`、`full = true`、`otherPids = [1460752]` |
+| 三种重活都被拦 | 预检 `admission?kind=review / flow_run / replicate` → 全部 `503 SERVER_BUSY`、`active 3 / limit 3`，耗时 1–3 ms |
+| SIGKILL 后立刻归还 | `kill -9` 后租约文件仍在盘上；下一次扫描 `pruned = 3`，`active = 0`、`otherPids = []`，预检回到 `ok: true`（1 ms），没等 30 分钟 TTL |
+| 其它 | `stats = {created:1, released:1, refused:3, pruned:3, lockMiss:0, dirFail:0, parseFail:0}`；余额 **9950 未变**（本轮零扣费调用） |
+
+内部版 8800 有自己的账号库（`DATA_DIR=/var/lib/visionqa-internal`），没有为这次验收造测试账号；它跑同一份代码（版本一致）、用同一个默认目录，
+计数来源相同。真正实测过的是「root 起的第三进程 ↔ visionqa 用户下的服务进程」这一对——恰好是权限更难的那个方向（目录必须 0777 才成立）。
 
 ## 边界
 
