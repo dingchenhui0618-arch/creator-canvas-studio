@@ -1029,5 +1029,5 @@ DOMAIN=visionqa.wavisionai.cn bash deploy/production/enable-https.sh            
 
 ![本地演示数据：完整毛利率，复刻 30%、画布运行 −20%、画布出图按张倒贴（不是生产）](docs/unit-economics-demo-2026-11-14.png)
 
-提交 `cac7116`（`server/pricing.mjs` + 接口 + 卡片 + 6 条测试 + usage 汇总补 `measuredCalls`），CI **43521586909** success（三个 job 全绿）；部署等 CI 绿了才发：`r93-pricing` → `r93-pricing2`。
+提交 `cac7116`（`server/pricing.mjs` + 接口 + 卡片 + 6 条测试 + usage 汇总补 `measuredCalls`）+ `9c60d2f`（窗口没有带用量的调用时总量写 null、画布两行改按张/秒），CI **43521586909** / **43522377678** success（三个 job 全绿）；部署等 CI 绿了才发：`r93-pricing` → `r93-pricing2`；文档提交 CI **43522377678** success。
 
