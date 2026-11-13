@@ -1601,3 +1601,40 @@
   .admin-readiness-row .vq-button { margin-left: auto; }
   .admin-site-form { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* 素材占用上限（v0.9.68）：孤立帧图是「左说明、右动作」一行，窄屏竖排。
+   数字沿用表格的等宽列，动作沿用 .admin-row-actions，不另造一套按钮样式。 */
+.admin-storage-orphans {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.admin-storage-orphans > div {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.admin-storage-orphans strong {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.admin-storage-orphans .admin-cell-note { margin-top: 0; }
+
+@media (max-width: 720px) {
+  .admin-block--storage .admin-block-head { flex-direction: column; align-items: flex-start; }
+  .admin-storage-orphans { align-items: stretch; flex-direction: column; }
+  .admin-storage-orphans .vq-button { width: 100%; justify-content: center; }
+}
+

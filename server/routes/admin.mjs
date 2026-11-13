@@ -36,6 +36,7 @@ import { clearQuotaOverride, quotaOverview, saveQuota, setQuotaOverride } from '
 import { saveUsagePrices, usagePrices, usageSummary } from '../usage-meter.mjs'
 import { clearSiteInfo, resolveSiteInfo, saveSiteInfo, SITE_FIELDS } from '../site-info.mjs'
 import { launchReadiness } from '../readiness.mjs'
+import { cleanOrphanFrames, clearStorageOverride, saveStorageLimit, setStorageOverride, storageOverview } from '../storage.mjs'
 
 const MODEL_KEY = /^\/api\/admin\/model-keys\/([\w-]+)$/
 const MODEL_KEY_TEST = /^\/api\/admin\/model-keys\/([\w-]+)\/test$/
@@ -741,8 +742,64 @@ export function createAdminRouter() {
         return true
       }
 
+      // ── 数据存储与素材占用上限（v0.9.68）────────────────────────
+      // 同一个接口回答两件事：东西占了多少盘（storageSummary）、谁的模板最多、
+      // 上限是多少、有没有删了模板还留着图的目录。数字都是现算的，不缓存。
       if (pathname === '/api/admin/storage' && req.method === 'GET') {
-        sendJson(res, 200, await storageSummary())
+        sendJson(res, 200, { ...(await storageSummary()), ...(await storageOverview()) })
+        return true
+      }
+
+      if (pathname === '/api/admin/storage' && req.method === 'PUT') {
+        const body = await readBody(req)
+        const result = saveStorageLimit(body.defaultMb, user.email)
+        if (!result.ok) {
+          sendJson(res, 400, { error: result.error })
+          return true
+        }
+        logEvent('storage-limit-save', { by: user.email, defaultMb: result.defaultMb })
+        recordAudit({ req, actor: user, action: 'storage.save', targetType: 'storage', targetId: 'default', targetLabel: '素材默认上限', detail: { defaultMb: result.defaultMb } })
+        sendJson(res, 200, { ok: true, ...(await storageOverview()) })
+        return true
+      }
+
+      const STORAGE_OVERRIDE = /^\/api\/admin\/storage\/overrides\/([\w-]+)$/
+      const storageMatch = pathname.match(STORAGE_OVERRIDE)
+      if (storageMatch && req.method === 'PUT') {
+        const body = await readBody(req)
+        const result = setStorageOverride(storageMatch[1], body.limitMb, user.email)
+        if (!result.ok) {
+          sendJson(res, result.code === 'NOT_FOUND' ? 404 : 400, { error: result.error })
+          return true
+        }
+        const account = findUserById(storageMatch[1])
+        logEvent('storage-override', { by: user.email, userId: storageMatch[1], limitMb: result.overrides[storageMatch[1]] })
+        recordAudit({ req, actor: user, action: 'storage.save', targetType: 'user', targetId: storageMatch[1], targetLabel: account?.email || storageMatch[1], detail: { limitMb: result.overrides[storageMatch[1]], scope: 'override' } })
+        sendJson(res, 200, { ok: true, ...(await storageOverview()) })
+        return true
+      }
+
+      if (storageMatch && req.method === 'DELETE') {
+        const result = clearStorageOverride(storageMatch[1])
+        if (!result.ok) {
+          sendJson(res, 404, { error: result.error })
+          return true
+        }
+        const account = findUserById(storageMatch[1])
+        logEvent('storage-override-clear', { by: user.email, userId: storageMatch[1] })
+        recordAudit({ req, actor: user, action: 'storage.save', targetType: 'user', targetId: storageMatch[1], targetLabel: account?.email || storageMatch[1], detail: { scope: 'override-cleared' } })
+        sendJson(res, 200, { ok: true, ...(await storageOverview()) })
+        return true
+      }
+
+      // 删了模板却留下帧图目录：内容已经不在了，图还占着盘。清理只删没有任何模板指向的目录。
+      if (pathname === '/api/admin/storage/clean' && req.method === 'POST') {
+        const result = await cleanOrphanFrames()
+        if (result.dirs > 0) {
+          logEvent('storage-clean', { by: user.email, dirs: result.dirs, bytes: result.bytes })
+          recordAudit({ req, actor: user, action: 'storage.clean', targetType: 'storage', targetId: 'orphans', targetLabel: '孤立帧图', detail: { dirs: result.dirs, bytes: result.bytes } })
+        }
+        sendJson(res, 200, { ok: true, ...result, ...(await storageOverview()) })
         return true
       }
 

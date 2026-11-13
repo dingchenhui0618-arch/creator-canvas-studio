@@ -63,6 +63,7 @@ import { createProjectShareRouter } from './routes/project-share.mjs'
 import { createGatewayRouter } from './routes/gateway.mjs'
 import { createAccountRouter } from './routes/account.mjs'
 import { createLocalAgentRouter } from './routes/local-agent.mjs'
+import { createStorageRouter } from './routes/storage.mjs'
 import { currentUser, listUsers, clientIp, isAdmin } from './auth.mjs'
 import { recordClientError } from './client-errors.mjs'
 import { createReport } from './reports.mjs'
@@ -75,6 +76,7 @@ import { rateLimit } from './ratelimit.mjs'
 import { startAlertWatch } from './alerts.mjs'
 import { deepHealth } from './health.mjs'
 import { sitePublicView } from './site-info.mjs'
+import { storageRoom } from './storage.mjs'
 import { clearModelBlock, modelServiceState } from './service-state.mjs'
 import { fetchPublic } from './media.mjs'
 import { bdcStatus, canvasErrorMessage, listCanvases, createCanvas, appendCanvasNote } from './bdc.mjs'
@@ -91,6 +93,8 @@ const featureRoutes = [
   createReviewRouter(),
   createBillingRouter(),
   createCreditsRouter(),
+  // 素材占用：设置页要看「自己的帧图占了多少盘」（v0.9.68）
+  createStorageRouter(),
   createAdminRouter(),
   createPreferencesRouter(),
   createCanvasRouter(),
@@ -706,6 +710,19 @@ const server = http.createServer(async (req, res) => {
       // 先把任务草稿落库、再扣费：万一进程在「扣完费、还没开始跑」之间退出，
       // 下次启动的恢复逻辑能按积分账本把这笔退回去（只建内存任务时这笔钱就找不回来了）。
       // 账本里的 ref 用 jobId，退款金额也从这条 ref 的净扣款算，重复收尾不会多退。
+      // 存储闸门（v0.9.68）：素材已经到上限时不再接新任务。
+      // 放在扣费与上游调用之前——被拒的这一单不扣积分、不落任务、也不碰来源链接。
+      const room = await storageRoom(user?.id)
+      if (!room.ok) {
+        sendJson(res, 429, {
+          error: room.message,
+          code: 'STORAGE_LIMIT',
+          usedBytes: room.bytes,
+          limitBytes: room.limitBytes,
+          limitMb: room.limitMb,
+        })
+        return
+      }
       const jobId = newJobId()
       // 说明列给用户看标题；账本 ref 留 jobId（唯一、可对账），两者都记下来
       const jobLabel = String(item.title || body.url || '').slice(0, 80)

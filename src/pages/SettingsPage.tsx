@@ -6,6 +6,7 @@ import { SessionsCard } from '../components/SessionsCard'
 import { AccountDataCard } from '../components/AccountDataCard'
 import PageHead from '../components/PageHead'
 import { getBillingOverview, type BillingOverview } from '../api/billing'
+import { formatSize, getStorage, type StorageUsage } from '../api/storage'
 import { useUiMode } from '../api/app'
 import { creditKindLabel, getCredits, getMyCreditRequest, requestCredits, requestPlan, getSystemHealth, type CreditEntry, type CreditRequest, type CreditsResponse, type SystemHealth } from '../api/credits'
 import type { BillingPlan } from '../api/billing'
@@ -53,6 +54,7 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
   const [billing, setBilling] = useState<BillingOverview | null>(null)
   const [billingError, setBillingError] = useState('')
   const [credits, setCredits] = useState<CreditsResponse | null>(null)
+  const [storage, setStorage] = useState<StorageUsage | null>(null)
   const [creditsError, setCreditsError] = useState('')
   const [ledgerMore, setLedgerMore] = useState<CreditEntry[]>([])
   const [ledgerLoading, setLedgerLoading] = useState(false)
@@ -105,6 +107,10 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
       .then(setBilling)
       .catch((caught) => setBillingError(caught instanceof Error ? caught.message : '充值状态读取失败'))
     loadCredits()
+    // 素材占用跟着积分一起读：一屏就能回答「我还能放多少自己的东西」
+    getStorage()
+      .then(setStorage)
+      .catch(() => setStorage(null))
     getMyCreditRequest()
       .then((data) => {
         setReqPending(data.pending)
@@ -404,6 +410,29 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
                 }
               >
                 <span style={{ width: Math.min(100, Math.round((quota.used / Math.max(1, quota.limit)) * 100)) + '%' }} />
+              </div>
+            ) : null}
+
+            {storage ? (
+              <div className="vq-row">
+                <div className="vq-row-copy">
+                  <strong>素材占用</strong>
+                  <span>
+                    {storage.unlimited
+                      ? '管理员没有设素材上限：帧图随模板保留，删除模板后进回收站，彻底删除时一并清理。'
+                      : '上限 ' + formatSize(storage.limitBytes) +
+                        '；到顶之后「一键复刻」在扣费前就会被拒绝（不扣积分），删掉不用的模板、或在回收站里彻底删除就能继续。'}
+                  </span>
+                </div>
+                <span className="vq-credit-balance vq-credit-balance--used">
+                  <b>{formatSize(storage.bytes)}</b>
+                  <span>{storage.unlimited ? '素材占用' : '/ ' + formatSize(storage.limitBytes) + ' 上限'}</span>
+                </span>
+              </div>
+            ) : null}
+            {storage && !storage.unlimited ? (
+              <div className={'vq-quota-bar' + (storage.over ? ' is-full' : (storage.percent ?? 0) >= 80 ? ' is-warn' : '')}>
+                <span style={{ width: (storage.percent ?? 0) + '%' }} />
               </div>
             ) : null}
 

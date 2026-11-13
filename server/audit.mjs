@@ -19,6 +19,8 @@ const ACTIONS = {
   'quota.save': '每月额度',
   'site.save': '站点公示',
   'site.clear': '清空公示',
+  'storage.save': '素材占用上限',
+  'storage.clean': '清理孤立帧图',
 }
 
 let schemaReady = false

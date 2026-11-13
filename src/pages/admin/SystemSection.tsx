@@ -3,6 +3,7 @@ import { request } from '../../api/client'
 import { useUiMode } from '../../api/app'
 import { formatDateTime, formatDuration, useApi, type BdcPort, type BdcStatus, type VersionInfo } from './data'
 import SiteInfoCard from './SiteInfoCard'
+import StorageGuard from './StorageGuard'
 import { AdminHead, Badge, ErrorBanner, LoadingLine, RefreshButton, SourceTag } from './ui'
 
 type StorageItem = { name: string; bytes: number; files: number }
@@ -1228,6 +1229,8 @@ export default function SystemSection() {
           <p className="admin-hint">占用读取失败：{internal ? storage.error : '稍后刷新再试；如果一直失败，请联系维护人员。'}</p>
         ) : null}
       </section>
+
+      <StorageGuard />
 
       <LogsCard internal={internal} />
 
