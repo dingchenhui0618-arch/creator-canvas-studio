@@ -3,6 +3,7 @@ import { assertPublicHttpUrl } from './media.mjs'
 import { judgeReview, judgeStatus } from './judge.mjs'
 import { refusal } from './public-error.mjs'
 import { compressForReview } from './image-scale.mjs'
+import { isolateStatus } from './isolate.mjs'
 
 // VisionQA 视觉评审：优先接 VisionQA 插件服务（同一套 VisualReview 契约），
 // 服务不可用时退到本地模型的 visual-baseline 评审，并如实标注 provider。
@@ -222,5 +223,7 @@ export async function reviewStatus() {
     profiles: PROFILES,
     // 判断层是否启用：评审页据此决定要不要显示「判断模型」区块
     judge: judgeStatus(),
+    // 重活隔离（v0.9.77）：有没有开、上限多少、跑过几次——不用真发一次评审也能确认它在工作
+    isolate: isolateStatus(),
   }
 }

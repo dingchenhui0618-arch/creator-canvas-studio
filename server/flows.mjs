@@ -5,6 +5,7 @@ import { config } from './config.mjs'
 import { canAccess } from './owner.mjs'
 import { callTextModel } from './llm.mjs'
 import { reviewVisual } from './review.mjs'
+import { reviewIsolateConfig, runReviewIsolated } from './isolate.mjs'
 import { listTemplates, templateStats } from './templates.mjs'
 import { publicError } from './public-error.mjs'
 import { preferenceModel } from './preferences.mjs'
@@ -524,8 +525,13 @@ async function runReview(node, ctx = {}) {
   const cfg = node.data.config
   const profile = REVIEW_PROFILES.find((item) => item.id === cfg.profile) || REVIEW_PROFILES[0]
   const media = await loadReviewMedia(cfg.image)
-  // 复用 server/review.mjs：优先 VisionQA 插件服务，不可用再走本地模型，并如实标注 provider
-  const result = await reviewVisual({ ...media, intent: profile.intent, log: (message) => console.log('[flows] ' + message), ref: ctx.runId || '' })
+  // 复用 server/review.mjs：优先 VisionQA 插件服务，不可用再走本地模型，并如实标注 provider。
+  // 画布运行里的评审同样吃内存，和 /api/review 一样放进独立 worker（v0.9.77）。
+  const job = { ...media, intent: profile.intent, ref: ctx.runId || '' }
+  const writeLog = (message) => console.log('[flows] ' + message)
+  const result = reviewIsolateConfig().enabled
+    ? await runReviewIsolated(job, { log: writeLog })
+    : await reviewVisual({ ...job, log: writeLog })
   const observations = Array.isArray(result.observations) ? result.observations : []
   const blockers = observations.filter((item) => item.severity === 'blocker').length
   const verdictLabel = { pass: '通过', needs_review: '待确认', fail: '有问题' }[result.verdict] || result.verdict

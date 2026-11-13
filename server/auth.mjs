@@ -22,6 +22,9 @@ export function openDb() {
   fs.mkdirSync(path.dirname(file), { recursive: true })
   db = new DatabaseSync(file)
   db.exec('PRAGMA journal_mode = WAL')
+  // 评审 worker（v0.9.77）与后台脚本会和主线程同时写：WAL 允许多读一写，
+  // 撞上别人在写时等 3 秒而不是立刻 SQLITE_BUSY —— 用量台账不该因为并发丢行。
+  db.exec('PRAGMA busy_timeout = 3000')
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,

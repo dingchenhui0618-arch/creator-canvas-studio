@@ -356,6 +356,8 @@ async function run(options) {
   const guardEnv = options.guard === 'off'
     ? { VQ_WATER_GUARD: '0', VQ_GLOBAL_HEAVY: '0' }
     : { VQ_GLOBAL_HEAVY: '3' }
+  // 评审在独立 worker 里跑（默认）还是退回同进程：两臂只差这一个变量
+  guardEnv.VQ_REVIEW_ISOLATE = options.isolate === 'off' ? '0' : '1'
   const server = await startServer({
     dataDir,
     port: options.port,
@@ -526,6 +528,17 @@ async function run(options) {
       aliveAfter = false
     }
 
+    // 隔离层自己的计数：这一轮到底有几单进了 worker（/api/review/health 只读，不扣费）
+    let isolateAfter = null
+    if (options.kind === 'review') {
+      try {
+        const response = await fetch(base + '/api/review/health', { headers: { Cookie: seed.admin.cookie }, signal: AbortSignal.timeout(3000) })
+        if (response.ok) isolateAfter = (await response.json()).isolate || null
+      } catch (error) {
+        // 量不到就空着，不编数字
+      }
+    }
+
     const statuses = summarizeStatuses(responses)
     const observedLimit = waterAfter && waterAfter.heavy ? waterAfter.heavy.configLimit : null
     const finite = (values) => values.filter((value) => Number.isFinite(value))
@@ -583,6 +596,7 @@ async function run(options) {
         max: healths.reduce((max, item) => Math.max(max, item.ms), 0),
         failures: healths.filter((item) => item.status !== 200).length,
       },
+      isolate: options.kind === 'review' ? { mode: options.isolate, report: isolateAfter } : null,
       aliveAfter,
       drainedActive,
       observedLimit,
@@ -657,7 +671,9 @@ function readOptions(argv) {
     out: args.out ? path.resolve(String(args.out)) : '',
     keep: args.keep === 'true',
     keepSamples: args['keep-samples'] === 'true',
-    label: String(args.label || (kind + '-n' + n + '-guard-' + guard)),
+    // 评审隔离开关（v0.9.77）：默认开；--isolate=off 量「退回同进程」那一臂
+    isolate: args.isolate === 'off' ? 'off' : 'on',
+    label: String(args.label || (kind + '-n' + n + '-guard-' + guard + (args.isolate === 'off' ? '-iso-off' : ''))),
   }
 }
 
@@ -674,6 +690,10 @@ function formatReport(summary) {
   lines.push('  系统：可用内存最低 ' + mb(m.minAvailableMb) + ' / 共 ' + mb(m.totalMb) + '，交换已用峰值 ' + mb(m.peakSwapUsedMb))
   lines.push('  闸门：在跑峰值 ' + summary.waterline.maxActive + ' 条 · 水位档位 ' + JSON.stringify(summary.waterline.levels) + ' · 假上游并发峰值 ' + summary.upstream.peakConcurrent)
   lines.push('  健康探针：p50 ' + summary.health.p50 + ' ms / p95 ' + summary.health.p95 + ' ms / 最慢 ' + summary.health.max + ' ms（失败 ' + summary.health.failures + '）')
+  if (summary.isolate) {
+    const report = summary.isolate.report
+    lines.push('  评审隔离：' + (summary.isolate.mode === 'on' ? '开（独立 worker）' : '关（同进程）') + (report ? ' · 进 worker ' + report.runs + ' 单（成功 ' + report.ok + ' / 失败 ' + report.failed + '）· 堆上限 ' + report.heapMb + ' MB' : ' · 没读到计数'))
+  }
   lines.push('  收尾：实例存活 ' + (summary.aliveAfter ? '是' : '否') + ' · 名额还回 ' + (summary.drainedActive === 0 ? '是' : '否（剩 ' + summary.drainedActive + '）'))
   lines.push('  判定：' + (summary.verdict.ok ? '通过' : '不通过 · ' + summary.verdict.problems.join('；')))
   return lines.join('\n')

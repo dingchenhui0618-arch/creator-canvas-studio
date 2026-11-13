@@ -17,6 +17,7 @@ import { enter, leave } from '../gate.mjs'
 import { admit, capacityFor } from '../waterline.mjs'
 import { publicError, refusal } from '../public-error.mjs'
 import { modelServiceState, noteModelFailure, noteModelSuccess } from '../service-state.mjs'
+import { IsolateError, reviewIsolateConfig, runReviewIsolated } from '../isolate.mjs'
 
 const MEDIA_MIME = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' }
 // 评审只读图。8 MB 与「外部图片地址」那条路的上限一致，也与前端压缩后的截图相符。
@@ -281,16 +282,21 @@ export function createReviewRouter() {
             imageBytes = local.bytes
             mime = local.mime
           }
-          const result = await reviewVisual({
+          // 评审那一段放进独立 worker（v0.9.77）：一份吃内存的活儿撞上限只杀它自己，
+          // 站点照常接别人的请求。VQ_REVIEW_ISOLATE=0 可退回原来的同进程执行。
+          const job = {
             imageUrl: body.imageUrl ? String(body.imageUrl) : undefined,
             imageBytes,
             mime,
             intent: body.intent ? String(body.intent).slice(0, 300) : '',
-            log: (message) => console.log('[review] ' + message),
             // 作品页发起的评审要能在成本页按作品回看：作品 id 只用于计量，不写进评审结论
             projectId,
             ref: projectId ? 'project:' + projectId : '',
-          })
+          }
+          const writeLog = (message) => console.log('[review] ' + message)
+          const result = reviewIsolateConfig().enabled
+            ? await runReviewIsolated(job, { log: writeLog })
+            : await reviewVisual({ ...job, log: writeLog })
           // 插件服务出结论时没有用到平台模型，不清除模型侧状态
           if (result.mode === 'local-model') noteModelSuccess()
           const source = body.media
@@ -307,6 +313,18 @@ export function createReviewRouter() {
           })
           sendJson(res, 200, { ...result, reviewId: saved.id, credits: { cost: paid.cost, balance: paid.balance } })
         } catch (error) {
+          // 隔离层的失败与「模型调不通」不是一回事：模型状态不能被它带黑，状态码也要说清是
+          // 超时（504）还是进程没了（503），让前端知道「再试一次」有没有意义。
+          if (error instanceof IsolateError) {
+            if (user?.id && paid.cost > 0) refund(user.id, 'review', { amount: paid.cost, ref: '评审失败退款' })
+            console.error('[review] ' + error.code + ' ' + error.message)
+            sendJson(res, error.status || 503, {
+              error: error.message + '，积分已退回',
+              code: error.code,
+              retryAfterSec: error.code === 'REVIEW_TIMEOUT' ? 30 : 10,
+            })
+            return true
+          }
           noteModelFailure(error)
           if (user?.id && paid.cost > 0) refund(user.id, 'review', { amount: paid.cost, ref: '评审失败退款' })
           console.error('[review] ' + (error?.stack || error?.message || error))

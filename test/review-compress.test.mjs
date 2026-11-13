@@ -52,6 +52,9 @@ const { config } = await import('../server/config.mjs')
 const auth = await import('../server/auth.mjs')
 const credits = await import('../server/credits.mjs')
 const { createReviewRouter } = await import('../server/routes/review.mjs')
+const { isolateStatus, resetIsolateStats, resetReviewPool } = await import('../server/isolate.mjs')
+// 路由用的是常驻池：测试结束时收掉，省得 idle worker 拖住测试进程
+test.after(() => resetReviewPool())
 
 const me = auth.createUser({ email: '[EMAIL:RC1]', password: 'Passw0rd!demo', name: '缩图用例' })
 const cookie = auth.sessionCookie(auth.createSession(me, { userAgent: 'test', ip: '10.0.6.1' }).token).split(';')[0]
@@ -105,6 +108,7 @@ test('3 MB 的图：发给模型的是缩过的 JPEG，结论照旧落库', asyn
   const core = fs.readFileSync(source)
   fs.writeFileSync(source, Buffer.concat([core, Buffer.alloc(Math.max(0, 3 * MB - core.length))]))
   const before = balance()
+  resetIsolateStats()
   const result = await postReview({ media: 'media/big.jpg', intent: '缩图验收' })
   assert.equal(result.status, 200, JSON.stringify(result.payload))
   assert.equal(result.payload.compression?.applied, true)
@@ -121,4 +125,33 @@ test('3 MB 的图：发给模型的是缩过的 JPEG，结论照旧落库', asyn
   assert.ok(image, '请求里没有图')
   assert.match(image.image_url.url, /^data:image\/jpeg;base64,/)
   assert.ok(image.image_url.url.length < 700 * 1024, '发给模型的 data URL 应该只有几百 KB，实际 ' + image.image_url.url.length)
+  // 这一单必须真的在独立 worker 里跑过（v0.9.77）：路由改回同进程时这里会掉到 0
+  const isolate = isolateStatus()
+  assert.equal(isolate.enabled, true)
+  assert.equal(isolate.runs, 1)
+  assert.equal(isolate.ok, 1)
+  assert.equal(isolate.failed, 0)
+})
+
+test('VQ_REVIEW_ISOLATE=0：退回同进程执行，结论与扣费口径不变', async (t) => {
+  const source = path.join(mediaDir, 'big.jpg')
+  if (!fs.existsSync(source)) {
+    t.skip('上一单没有造出测试图')
+    return
+  }
+  const previous = process.env.VQ_REVIEW_ISOLATE
+  process.env.VQ_REVIEW_ISOLATE = '0'
+  try {
+    const before = balance()
+    resetIsolateStats()
+    const result = await postReview({ media: 'media/big.jpg', intent: '退回同进程' })
+    assert.equal(result.status, 200, JSON.stringify(result.payload))
+    assert.equal(result.payload.verdict, 'pass')
+    assert.equal(balance(), before - 5, '退回同进程也照常扣 5 积分')
+    // 没走隔离：计数不动，说明开关真的在起作用
+    assert.equal(isolateStatus().runs, 0)
+  } finally {
+    if (previous === undefined) delete process.env.VQ_REVIEW_ISOLATE
+    else process.env.VQ_REVIEW_ISOLATE = previous
+  }
 })
