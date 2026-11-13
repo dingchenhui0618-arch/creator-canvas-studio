@@ -204,6 +204,16 @@ export const config = {
     tightHeapPercent: numEnv(process.env.VQ_WATER_TIGHT_HEAP, 80),
     criticalHeapPercent: numEnv(process.env.VQ_WATER_CRITICAL_HEAP, 92),
   },
+  // 评审发模型前先缩图（v0.9.74）：堆占用跟着「送审字节数」走——8 MB × 3 并发 = 27% 堆、
+  // 8 MB × 10 并发 = 81%、17.9 MB × 10 直接 OOM（docs/load-test-2026-11-14.md）。
+  // 默认缩到长边 1600px，超过 1.5 MB 才动；maxEdge 写 0 等于关掉缩图，minKb 写 0 等于所有图都重压。
+  reviewImage: {
+    maxEdge: numEnv(process.env.VQ_REVIEW_MAX_EDGE, 1600),
+    minBytes: numEnv(process.env.VQ_REVIEW_SCALE_MIN_KB, 1536) * 1024,
+    maxPixels: numEnv(process.env.VQ_REVIEW_MAX_PIXELS, 40 * 1000 * 1000),
+    quality: numEnv(process.env.VQ_REVIEW_JPEG_Q, 4),
+    timeoutMs: numEnv(process.env.VQ_REVIEW_SCALE_TIMEOUT_MS, 20000),
+  },
   // 邮件通道（找回密码用）：后台「系统 → 邮件通道」保存后优先于环境变量；
   // 环境变量只是兜底，老部署不改也能用。口令只落在数据目录的 mail.json（0600）。
   mail: {
