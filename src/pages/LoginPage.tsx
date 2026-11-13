@@ -13,6 +13,7 @@ import type { RegisterInput, Session, SignInInput } from '../auth/session'
 import { checkInvite, forgotPassword, getAuthConfig } from '../api/auth'
 import type { InviteState } from '../api/auth'
 import { useSiteInfo, useUiMode } from '../api/app'
+import { FeedbackModal } from '../components/FeedbackModal'
 import '../styles/shell.css'
 
 type Mode = 'signin' | 'signup'
@@ -89,6 +90,8 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
   // 服务端配了邮件通道才提供自助找回；没配就如实说「找管理员」，不摆一个点了没用的入口。
   const [passwordReset, setPasswordReset] = useState(false)
   const [forgotOpen, setForgotOpen] = useState(false)
+  // 登录进不来时也要有一条求助路径：反馈不需要登录，留联系方式即可
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
   // 密码长度以后端配置为准，这里只放一个兜底值；登录不校验长度。
   const [minPasswordLength, setMinPasswordLength] = useState(DEFAULT_MIN_PASSWORD_LENGTH)
   const [passwordPolicy, setPasswordPolicy] = useState('')
@@ -631,6 +634,9 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
           <p className="vq-login-foot vq-login-foot--legal">
             <a className="vq-link" href="#/legal/terms">服务条款</a>
             <a className="vq-link" href="#/legal/privacy">隐私说明</a>
+            <button type="button" className="vq-link" onClick={() => setFeedbackOpen(true)}>
+              反馈问题
+            </button>
           </p>
 
           <p className="vq-login-foot">
@@ -641,6 +647,8 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
           )}
         </div>
       </main>
+
+      {feedbackOpen ? <FeedbackModal onClose={() => setFeedbackOpen(false)} page="#/login" /> : null}
     </div>
   )
 }

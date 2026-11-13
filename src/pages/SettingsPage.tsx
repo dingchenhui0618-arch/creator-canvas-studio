@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Activity, CreditCard, KeyRound, LogOut, RefreshCw } from 'lucide-react'
+import { Activity, CreditCard, KeyRound, LogOut, MessageSquare, RefreshCw } from 'lucide-react'
 import { Pill, Tag } from '../components/ui'
 import { TwoFactorCard } from '../components/TwoFactorCard'
 import { AccountDataCard } from '../components/AccountDataCard'
@@ -8,6 +8,8 @@ import { getBillingOverview, type BillingOverview } from '../api/billing'
 import { useUiMode } from '../api/app'
 import { creditKindLabel, getCredits, getMyCreditRequest, requestCredits, getSystemHealth, type CreditEntry, type CreditRequest, type CreditsResponse, type SystemHealth } from '../api/credits'
 import { changePassword } from '../api/auth'
+import { listMyFeedback, type FeedbackItem } from '../api/feedback'
+import { FeedbackModal } from '../components/FeedbackModal'
 import { initialsFor, sessionKindLabel, type Session } from '../auth/session'
 import '../styles/shell.css'
 import '../styles/credits.css'
@@ -19,6 +21,8 @@ type Props = {
 }
 
 const HEALTH_LABEL: Record<string, string> = { ok: '正常', warn: '注意', fail: '异常' }
+const FEEDBACK_STATUS_LABEL: Record<string, string> = { new: '待处理', reading: '处理中', done: '已处理' }
+const FEEDBACK_KIND_LABEL: Record<string, string> = { problem: '功能问题', idea: '改进建议', other: '其他' }
 
 function formatStamp(value?: string | null) {
   if (!value) return '—'
@@ -64,6 +68,19 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
   const [reqBusy, setReqBusy] = useState(false)
   const [reqError, setReqError] = useState('')
   const [reqMessage, setReqMessage] = useState('')
+  // 反馈：提交入口 + 自己那几条的处理状态（管理员回复也在这里看）
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
+  const [feedback, setFeedback] = useState<FeedbackItem[]>([])
+  const [feedbackError, setFeedbackError] = useState('')
+
+  const loadFeedback = useCallback(() => {
+    listMyFeedback(6)
+      .then((data) => {
+        setFeedback(data.items)
+        setFeedbackError('')
+      })
+      .catch((caught) => setFeedbackError(caught instanceof Error ? caught.message : '反馈记录读取失败'))
+  }, [])
 
   const loadCredits = useCallback(() => {
     getCredits(LEDGER_PAGE)
@@ -83,7 +100,8 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
     getMyCreditRequest()
       .then((data) => setReqPending(data.pending))
       .catch(() => setReqPending(null))
-  }, [loadCredits])
+    loadFeedback()
+  }, [loadCredits, loadFeedback])
 
   const ledger = credits ? [...credits.ledger, ...ledgerMore] : []
   const ledgerTotal = credits?.ledgerTotal ?? ledger.length
@@ -469,6 +487,50 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
           </div>
         </section>
 
+        <section className="vq-card vq-card--wide" id="feedback">
+          <div className="vq-card-head">
+            <div>
+              <span className="vq-mono">支持 / Feedback</span>
+              <h2>帮助与反馈</h2>
+              <p>遇到问题或想要什么能力，直接写在这里。没有客服邮箱之前，这是最快找到管理员的方式；处理状态与回复会回到这一屏。</p>
+            </div>
+            <div className="vq-account-actions">
+              <button type="button" className="vq-button vq-button--ghost" onClick={() => setFeedbackOpen(true)}>
+                <MessageSquare size={14} />
+                提交反馈
+              </button>
+            </div>
+          </div>
+          <div className="vq-card-body">
+            {feedbackError ? <p className="vq-ledger-empty">{feedbackError}</p> : null}
+            {feedback.length ? (
+              <ul className="vq-feedback-list">
+                {feedback.map((item) => (
+                  <li className="vq-feedback-row" key={item.id}>
+                    <div className="vq-feedback-row-head">
+                      <Pill tone={item.status === 'done' ? 'done' : item.status === 'reading' ? 'warn' : 'idle'}>
+                        {FEEDBACK_STATUS_LABEL[item.status] || item.status}
+                      </Pill>
+                      <Tag>{FEEDBACK_KIND_LABEL[item.kind] || item.kind}</Tag>
+                      <span className="vq-feedback-row-id vq-mono">{item.id}</span>
+                      <span className="vq-feedback-row-time">{formatStamp(item.createdAt)}</span>
+                    </div>
+                    <p className="vq-feedback-row-body">{item.body}</p>
+                    {item.reply ? (
+                      <p className="vq-feedback-reply">
+                        <strong>管理员回复</strong>
+                        {item.reply}
+                      </p>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="vq-ledger-empty">还没有提交过反馈。遇到问题、想要新能力，都可以从这里写一条。</p>
+            )}
+          </div>
+        </section>
+
         <section className="vq-card vq-card--wide" id="system-status">
           <div className="vq-card-head">
             <div>
@@ -517,6 +579,18 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
         <span>{internal ? '设置项不落浏览器；账号、积分与系统状态都由服务端校验。' : '设置项不保存在浏览器；账号、积分与运行状态都会实时校验。'}</span>
         <span className="vq-mono">VisionQA</span>
       </footer>
+
+      {feedbackOpen ? (
+        <FeedbackModal
+          onClose={() => {
+            setFeedbackOpen(false)
+            loadFeedback()
+          }}
+          signedIn
+          defaultContact={session.user.email}
+          page="#/settings"
+        />
+      ) : null}
     </div>
   )
 }

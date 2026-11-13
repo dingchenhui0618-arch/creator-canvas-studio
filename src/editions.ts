@@ -6,6 +6,7 @@ import {
   Gauge,
   KeyRound,
   LayoutTemplate,
+  MessageSquare,
   ScrollText,
   Settings2,
   Users,
@@ -17,7 +18,7 @@ import {
 // 那一整个人面全是未接线的开关和示例数据，对外发布时属于演示残留。
 export type EditionId = 'user' | 'admin'
 
-export type AdminSection = 'overview' | 'users' | 'canvas' | 'keys' | 'templates' | 'usage' | 'reports' | 'audit' | 'system'
+export type AdminSection = 'overview' | 'users' | 'canvas' | 'keys' | 'templates' | 'usage' | 'reports' | 'feedback' | 'audit' | 'system'
 
 export type EditionNavItem = {
   id: string
@@ -55,6 +56,7 @@ export const EDITIONS: EditionMeta[] = [
       { id: 'templates', label: '模板治理', icon: LayoutTemplate, section: 'templates' },
       { id: 'usage', label: '成本', icon: Coins, section: 'usage' },
       { id: 'reports', label: '举报处理', icon: Flag, section: 'reports' },
+      { id: 'feedback', label: '反馈', icon: MessageSquare, section: 'feedback' },
       { id: 'audit', label: '运行审计', icon: ScrollText, section: 'audit' },
       { id: 'system', label: '系统', icon: Settings2, section: 'system' },
     ],

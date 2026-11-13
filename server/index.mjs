@@ -54,6 +54,7 @@ import { createAuthRouter } from './routes/auth.mjs'
 import { createCreditsRouter } from './routes/credits.mjs'
 import { createAdminRouter } from './routes/admin.mjs'
 import { createPreferencesRouter } from './routes/preferences.mjs'
+import { createFeedbackRouter } from './routes/feedback.mjs'
 import { createCanvasRouter } from './routes/canvas.mjs'
 import { createProjectsRouter } from './routes/projects.mjs'
 import { createSharesRouter } from './routes/shares.mjs'
@@ -93,6 +94,8 @@ const featureRoutes = [
   createCanvasRouter(),
   createProjectsRouter(),
   createSharesRouter(),
+  // 应用内反馈：提交不要求登录（登录页也要能求助），读自己的条目要登录
+  createFeedbackRouter(),
   // 工作台的交付流水：跨作品把每一次交付摊成一条线（v0.9.32）
   createDeliveriesRouter(),
   createGatewayRouter(),
@@ -118,6 +121,8 @@ const PUBLIC_API = [
   '/api/client-errors',
   // 举报侵权不要求登录：被侵权的人不一定有账号；靠 IP 限流 + 内容校验挡住滥用
   '/api/reports',
+  // 反馈不要求登录：登录进不来时最需要它；匿名必须留联系方式，且按 IP 限流
+  '/api/feedback',
 ]
 // 前端异常上报要能在登录页、分享页也生效，所以不要求登录；靠 IP 限流 + 体积上限挡住滥用。
 function needsLogin(pathname) {

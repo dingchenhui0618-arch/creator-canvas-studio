@@ -6,6 +6,7 @@ import KeysSection from './KeysSection'
 import OverviewSection from './OverviewSection'
 import SystemSection from './SystemSection'
 import ReportsSection from './ReportsSection'
+import FeedbackSection from './FeedbackSection'
 import TemplatesSection from './TemplatesSection'
 import UsageSection from './UsageSection'
 import UsersSection from './UsersSection'
@@ -20,6 +21,7 @@ export default function AdminConsolePage({ section }: { section: AdminSection })
       {section === 'templates' ? <TemplatesSection /> : null}
       {section === 'usage' ? <UsageSection /> : null}
       {section === 'reports' ? <ReportsSection /> : null}
+      {section === 'feedback' ? <FeedbackSection /> : null}
       {section === 'audit' ? <AuditSection /> : null}
       {section === 'system' ? <SystemSection /> : null}
     </div>

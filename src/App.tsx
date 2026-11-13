@@ -42,6 +42,7 @@ import { initialsFor, sessionKindLabel, type RegisterInput, type Session, type S
 import { listAgents, setPendingAgentProject } from './api/agents'
 import { createBdcCanvas } from './api/bdc'
 import { listReviewQueue } from './api/review'
+import { listFeedback } from './api/feedback'
 import { navigate, pageToRoute, routeKey, routeToPage, useRoute, type Route } from './router'
 import { planScroll } from './domain/scroll'
 import { welcomeSeenKey } from './onboarding'
@@ -168,6 +169,8 @@ function Workbench({
   // 「等你看」的角标：数字来自工作台评审队列的 total，外壳不另算一遍。
   // null 表示这一次没取到——宁可没有角标，也不拿 0 冒充「没有等你改的」。
   const [queuePending, setQueuePending] = useState<number | null>(null)
+  // 后台「反馈」的待处理角标：只在管理后台里取，进后台就对一次数
+  const [feedbackPending, setFeedbackPending] = useState(0)
 
   const [toast, setToast] = useState('')
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
@@ -291,6 +294,27 @@ function Workbench({
     const timer = window.setTimeout(() => void refreshQueueBadge(), 0)
     return () => window.clearTimeout(timer)
   }, [refreshQueueBadge, routeId, route.kind, session.user.id])
+
+  const refreshFeedbackBadge = useCallback(async () => {
+    try {
+      const data = await listFeedback('new')
+      setFeedbackPending(Number(data.counts?.new) || 0)
+    } catch {
+      setFeedbackPending(0)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (route.kind !== 'admin') return
+    const timer = window.setTimeout(() => void refreshFeedbackBadge(), 0)
+    return () => window.clearTimeout(timer)
+  }, [refreshFeedbackBadge, routeId, route.kind])
+
+  useEffect(() => {
+    const onFeedbackChanged = () => void refreshFeedbackBadge()
+    window.addEventListener('vq:feedback-changed', onFeedbackChanged)
+    return () => window.removeEventListener('vq:feedback-changed', onFeedbackChanged)
+  }, [refreshFeedbackBadge])
 
   useEffect(() => {
     const onQueueChanged = () => void refreshQueueBadge()
@@ -687,6 +711,8 @@ function Workbench({
                     label={item.label}
                     active={route.kind === 'admin' && route.section === item.section}
                     compact={!sidebarOpen}
+                    badge={item.section === 'feedback' && feedbackPending > 0 ? (feedbackPending > 99 ? '99+' : String(feedbackPending)) : undefined}
+                    badgeLabel={item.section === 'feedback' && feedbackPending > 0 ? feedbackPending + ' 条反馈待处理' : undefined}
                     onClick={() => {
                       if (item.section) navigate({ kind: 'admin', section: item.section as AdminSection })
                     }}

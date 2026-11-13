@@ -17,6 +17,8 @@ const RULES = [
   { method: 'POST', match: (p) => p === '/api/client-errors', bucket: 'client_error', limit: 30 },
   // 举报同样公开：一分钟 5 条足够正常人用，脚本会被挡住
   { method: 'POST', match: (p) => p === '/api/reports', bucket: 'report', limit: 5 },
+  // 反馈也是公开入口：写一条反馈是低频动作，一分钟 3 条足够，连续刷会被 429
+  { method: 'POST', match: (p) => p === '/api/feedback', bucket: 'feedback', limit: 3 },
 ]
 
 // 每 5 分钟清一次过期桶，避免长期运行时 Map 无限长

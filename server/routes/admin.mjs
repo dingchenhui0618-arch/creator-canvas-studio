@@ -26,6 +26,7 @@ import { resetTtlMinutes } from '../password-reset.mjs'
 import { clearClientErrors, listClientErrors } from '../client-errors.mjs'
 import { listLogs, pruneLogs } from '../log-files.mjs'
 import { listReports, reportCounts, resolveReport } from '../reports.mjs'
+import { listFeedback, updateFeedback, feedbackCounts } from '../feedback.mjs'
 import { disableTemplateShare, getTemplate, updateTemplate } from '../templates.mjs'
 import { listJobs } from '../jobs.mjs'
 import { backupSummary } from '../backup-status.mjs'
@@ -1006,6 +1007,40 @@ export function createAdminRouter() {
           detail: { action, takedown, note: String(body.note || '').slice(0, 200) },
         })
         sendJson(res, 200, { ok: true, report, takedown })
+        return true
+      }
+
+      // 应用内反馈：登录用户与匿名用户（登录页）都能交，后台在这里读到、改状态、写回复。
+      // 回复会随条目回到提交者的「设置 → 帮助与反馈」里；匿名条目没有账号可回，靠 contact 字段联系。
+      if (pathname === '/api/admin/feedback' && req.method === 'GET') {
+        const status = String(url.searchParams.get('status') || 'new')
+        const info = await listFeedback({ status, limit: Number(url.searchParams.get('limit')) || 50 })
+        sendJson(res, 200, { ...info, counts: await feedbackCounts() })
+        return true
+      }
+
+      const feedbackUpdate = pathname.match(/^\/api\/admin\/feedback\/([\w-]+)$/)
+      if (feedbackUpdate && req.method === 'POST') {
+        const body = await readBody(req)
+        const result = await updateFeedback(feedbackUpdate[1], {
+          status: String(body.status || ''),
+          reply: body.reply === undefined ? null : String(body.reply),
+          by: user.email,
+        })
+        if (!result.ok) {
+          if (result.code === 'NOT_FOUND') return (sendJson(res, 404, { error: '没有这条反馈' }), true)
+          return (sendJson(res, 400, { error: '处理状态只支持待处理 / 处理中 / 已处理' }), true)
+        }
+        recordAudit({
+          req,
+          actor: user,
+          action: 'feedback.update',
+          targetType: 'feedback',
+          targetId: result.item.id,
+          targetLabel: result.item.body.slice(0, 40),
+          detail: { status: result.item.status, replied: Boolean(result.item.reply) },
+        })
+        sendJson(res, 200, { ok: true, item: result.item, counts: await feedbackCounts() })
         return true
       }
 
