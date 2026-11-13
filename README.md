@@ -608,7 +608,7 @@ DOMAIN=visionqa.wavisionai.cn bash deploy/production/enable-https.sh            
 
 ![生产：设置页「帮助与反馈」——自己提交的三条、状态与管理员回复都在这一屏（v0.9.60）](docs/screenshot-feedback-settings-2026-11-13.png)
 
-提交 `PENDING`（代码 + 7 条测试 + 文档 + 2 张生产截图），CI PENDING success。
+提交 `1066697`（代码 + 7 条测试 + 文档 + 2 张生产截图），CI 43437908906 success。
 
 细节见 [应用内反馈](docs/feedback-2026-11-13.md)。
 
