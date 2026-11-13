@@ -337,6 +337,10 @@ export default function ProjectsPage({
                   <em>运行</em>
                   <b>{item.runs?.count ? item.runs.count + ' 次' : '—'}</b>
                 </span>
+                <span title={item.spend ? '评审 ' + item.spend.reviews.credits + ' · 画布 ' + item.spend.runs.credits : undefined}>
+                  <em>花费</em>
+                  <b>{item.spend?.total ? item.spend.total.toLocaleString('zh-CN') + ' 积分' : '—'}</b>
+                </span>
                 <span>
                   <em>打开</em>
                   <b>{item.share?.opens ? item.share.opens + ' 次' : '—'}</b>

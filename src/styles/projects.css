@@ -165,8 +165,9 @@
 
 .vq-project-card-meta {
   display: grid;
-  /* 脚本 / 分镜 / 评审 / 运行 / 打开：分享次数也算一格，卡片上不用再点进去问「有人看过吗」 */
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  /* 脚本 / 分镜 / 评审 / 运行 / 花费 / 打开：花费与打开也算一格，
+     卡片上就能回答「这条花了多少、有人看过吗」，不用点进去问 */
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: var(--space-2);
   margin-top: var(--space-1);
   padding-top: var(--space-3);
@@ -1316,6 +1317,37 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
   line-height: var(--leading-meta);
 }
 
+/* 作品的花费（v0.9.65）：面板头右边是合计，下面两行分开写评审与画布运行。
+   数字用等宽、右对齐——这一块回答「花了多少」，不是文案。 */
+.vq-project-spend-split {
+  display: grid;
+  gap: 8px;
+}
+
+.vq-project-spend-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-meta);
+}
+
+.vq-project-spend-row b {
+  color: var(--ink);
+  font-weight: var(--weight-normal);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.vq-project-spend-row i {
+  color: var(--faint);
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 /* ---------- 作品页直接改脚本（2026-11-12，P1） ----------
    入口是小字按钮，不和「下一步」抢主按钮；编辑态沿用节拍列表的 24px 序号列，
    输入框与模板改编同一种圆角/描边，改完保存才落库（copy-on-write）。 */
@@ -1672,6 +1704,11 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
 @media (max-width: 780px) {
   .vq-projects-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* 六格在名片宽的一列里会被挤成两行字：手机上排成 3 × 2 */
+  .vq-project-card-meta {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   /* 评审面板在手机上只有 240px 正文宽：结论与版次先排一行，摘要独占下一行 */

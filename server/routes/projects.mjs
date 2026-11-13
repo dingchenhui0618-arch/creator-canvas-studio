@@ -20,6 +20,7 @@ import {
   listReviews,
   getReview,
   reviewCountsByProject,
+  reviewSpend,
   reviewSummaryByVersion,
   detachReviewsFromProject,
 } from '../reviews.mjs'
@@ -107,10 +108,12 @@ function templateDetail(template) {
  */
 async function projectDetailView(project, user, { snapshots = false } = {}) {
   const projectFlows = [project.flowId, ...project.versions.map((entry) => entry.flowId)].filter(Boolean)
-  const [template, flow, reviews, versionCounts, runData, acks] = await Promise.all([
+  const [template, flow, reviews, reviewCost, versionCounts, runData, acks] = await Promise.all([
     project.templateId ? getTemplate(project.templateId, user) : null,
     project.flowId ? getFlow(project.flowId, user) : null,
     listReviews({ projectId: project.id, limit: 20 }, user),
+    // 花费要算全部评审，不能只按上面那 20 条摘要：翻过页的老评审也是花过的钱
+    reviewSpend(project.id, user),
     reviewSummaryByVersion(project.id, user),
     listRunsByFlows(projectFlows, { limit: 20 }, user),
     listAcks(user),
@@ -149,6 +152,17 @@ async function projectDetailView(project, user, { snapshots = false } = {}) {
   for (const [flowId, amount] of Object.entries(runData.byFlow)) {
     const version = versionOfFlow.get(flowId) || 0
     runCounts[version] = (runCounts[version] || 0) + Number(amount)
+  }
+  // 这条作品上花掉的积分（v0.9.65）：评审记录自己记着成本，运行记录跨版本按画布归集，
+  // 退过款的那次运行不算（钱已经回去了，再算一遍等于把退回的钱又花一次）。
+  // 检索、复刻与智能体对话记在账号上：账本里没有作品，不硬摊过来。
+  const runCredits = projectFlows.reduce((sum, flowId) => sum + Number(runData.creditsByFlow?.[flowId] || 0), 0)
+  const spend = {
+    unit: config.credits.unit,
+    total: Number(reviewCost.credits) + runCredits,
+    reviews: { count: Number(reviewCost.count) || 0, credits: Number(reviewCost.credits) || 0 },
+    runs: { count: Number(runData.total) || 0, credits: runCredits },
+    lastAt: [reviewCost.lastAt, runs[0]?.startedAt].filter(Boolean).sort().pop() || '',
   }
   const flowView = flowBrief(flow)
   // 人工复核：这条作品名下的拍板记录，加上「管当前这一版最近一次评审」的那条。
@@ -207,6 +221,8 @@ async function projectDetailView(project, user, { snapshots = false } = {}) {
     runs,
     runTotal: runData.total,
     runCounts,
+    // 这条作品花了多少积分：合计、评审与运行各多少、最近一次是什么时候
+    spend,
   }
 }
 
@@ -402,21 +418,31 @@ export function createProjectsRouter() {
         // 运行归集：所有作品名下（含归档版本）的画布一次取回来，卡片上就能写「跑过几次」。
         // byFlow 把运行次数按画布分组，跨版本加总才有意义——只取一条记录，这里只要计数。
         const projectFlows = projects.flatMap((project) => [project.flowId, ...project.versions.map((entry) => entry.flowId)])
-        const runAgg = projectFlows.filter(Boolean).length ? await listRunsByFlows(projectFlows, { limit: 1 }, user) : { byFlow: {} }
+        const runAgg = projectFlows.filter(Boolean).length
+          ? await listRunsByFlows(projectFlows, { limit: 1 }, user)
+          : { byFlow: {}, creditsByFlow: {} }
         // 卡片上的分享状态：只挂一条摘要（还在分享吗、几轮、打开几次），token 与每轮明细都不出这个接口
         const shareBriefs = await shareBriefsByProject(projects)
         const items = []
         for (const project of projects) {
           const template = project.templateId ? await getTemplate(project.templateId, user) : null
-          const counters = reviews[project.id] || { count: 0, lastVerdict: '', lastAt: '', versions: {} }
-          const runs = [project.flowId, ...project.versions.map((entry) => entry.flowId)]
-            .reduce((sum, flowId) => sum + (flowId ? runAgg.byFlow[flowId] || 0 : 0), 0)
+          const counters = reviews[project.id] || { count: 0, credits: 0, lastVerdict: '', lastAt: '', versions: {} }
+          const ownFlows = [project.flowId, ...project.versions.map((entry) => entry.flowId)].filter(Boolean)
+          const runs = ownFlows.reduce((sum, flowId) => sum + (runAgg.byFlow[flowId] || 0), 0)
+          const runCredits = ownFlows.reduce((sum, flowId) => sum + Number(runAgg.creditsByFlow?.[flowId] || 0), 0)
           items.push({
             ...projectBrief(project),
             template: templateBrief(template),
             // 总数给「评过几次」，按版本的分组给状态胶囊判断当前这一版
             reviews: { count: counters.count, lastVerdict: counters.lastVerdict, lastAt: counters.lastAt },
             versionCounts: counters.versions || {},
+            // 卡片上的花费与作品页同一套口径（评审 + 画布运行，退款不算）
+            spend: {
+              unit: config.credits.unit,
+              total: Number(counters.credits || 0) + runCredits,
+              reviews: { count: counters.count, credits: Number(counters.credits || 0) },
+              runs: { count: runs, credits: runCredits },
+            },
             // 管当前这一版最近一次评审的那条拍板；没有就是 null
             decision: decisionFor(
               decisionsByProject.get(project.id),

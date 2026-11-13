@@ -361,13 +361,21 @@ export function runSummary(run) {
  */
 export async function listRunsByFlows(flowIds = [], { limit = 20 } = {}, user = null) {
   const wanted = new Set((Array.isArray(flowIds) ? flowIds : []).filter(Boolean))
-  if (!wanted.size) return { items: [], total: 0, byFlow: {} }
+  if (!wanted.size) return { items: [], total: 0, byFlow: {}, creditsByFlow: {} }
   const list = (await loadRuns()).filter((run) => wanted.has(run.flowId) && canAccess(run, user))
   list.sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)))
   const count = Math.min(50, Math.max(1, Number(limit) || 20))
   const byFlow = {}
-  for (const run of list) byFlow[run.flowId] = (byFlow[run.flowId] || 0) + 1
-  return { items: list.slice(0, count).map(runSummary), total: list.length, byFlow }
+  // 这条作品上真正花掉的积分（v0.9.65）：退款的那几次不算——失败了钱已经回去了，
+  // 再把它算进「花了多少」等于把退回来的钱又花一遍。
+  const creditsByFlow = {}
+  for (const run of list) {
+    byFlow[run.flowId] = (byFlow[run.flowId] || 0) + 1
+    if (run.credits && !run.credits.refunded) {
+      creditsByFlow[run.flowId] = (creditsByFlow[run.flowId] || 0) + Math.max(0, Number(run.credits.cost) || 0)
+    }
+  }
+  return { items: list.slice(0, count).map(runSummary), total: list.length, byFlow, creditsByFlow }
 }
 
 // ---------- 拓扑与执行 ----------

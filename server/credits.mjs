@@ -7,7 +7,7 @@
 import crypto from 'node:crypto'
 import { config } from './config.mjs'
 import { openDb as getDb } from './auth.mjs'
-import { checkQuota, quotaOf } from './quota.mjs'
+import { checkQuota, monthWindow, quotaOf } from './quota.mjs'
 
 const nowIso = () => new Date().toISOString()
 
@@ -214,6 +214,59 @@ export function ledgerOf(userId, limit = 20, offset = 0) {
   })
 }
 
+// 账本里的动作名：与 config.credits.prices 的键一一对应，新增动作时这里补一行。
+export const SPEND_KIND_LABEL = {
+  search: '检索',
+  replicate: '一键复刻',
+  review: '视觉评审',
+  chat: '智能体对话',
+  flow_run: '画布运行',
+}
+
+/**
+ * 本月消耗按动作拆开（v0.9.65）：与每月额度读同一份账本、同一套口径——
+ * 扣费减退款算消耗，管理员扣减（deduct）与赠送（grant / welcome / invite）不算。
+ * 只拆到动作，不猜「这笔花在哪个作品」：账本里没记作品，编一个反而对不上账。
+ * 合计与 quota.used 是同一个数（同一笔退款只抵它自己那个动作）。
+ */
+export function spendBreakdown(userId, now = Date.now()) {
+  const window = monthWindow(now)
+  const view = { month: window.month, unit: config.credits.unit, total: 0, items: [] }
+  if (!userId) return view
+  const rows = getDb()
+    .prepare('SELECT kind, COUNT(*) AS n, SUM(delta) AS net FROM credit_ledger WHERE user_id = ? AND created_at >= ? GROUP BY kind')
+    .all(String(userId), window.from)
+  const charged = new Map()
+  const refunded = new Map()
+  const calls = new Map()
+  for (const row of rows) {
+    const kind = String(row.kind || '')
+    const net = Number(row.net || 0)
+    // 管理员扣减是「从余额里拿走」，不是花掉的；赠送是进账，两者都不进这份消耗
+    if (kind === 'deduct' || kind === 'grant' || kind === 'welcome') continue
+    if (kind.endsWith('-refund')) {
+      const base = kind.slice(0, -'-refund'.length)
+      refunded.set(base, (refunded.get(base) || 0) + Math.max(0, net))
+      continue
+    }
+    if (net < 0) {
+      charged.set(kind, (charged.get(kind) || 0) - net)
+      calls.set(kind, (calls.get(kind) || 0) + Number(row.n || 0))
+    }
+  }
+  const items = [...charged.keys()]
+    .map((kind) => ({
+      kind,
+      label: SPEND_KIND_LABEL[kind] || kind,
+      calls: calls.get(kind) || 0,
+      // 退得比扣得多（少见）时按 0 算：不显示负数消耗
+      credits: Math.max(0, (charged.get(kind) || 0) - (refunded.get(kind) || 0)),
+    }))
+    .filter((item) => item.credits > 0 || item.calls > 0)
+    .sort((a, b) => b.credits - a.credits || a.kind.localeCompare(b.kind))
+  return { ...view, total: items.reduce((sum, item) => sum + item.credits, 0), items }
+}
+
 // 一次请求的完整视角：余额 + 单价 + 一页流水（带总数，前端才能做「加载更多」）
 export function creditsFor(user, { limit = 20, offset = 0 } = {}) {
   const count = Math.max(1, Math.min(200, Number(limit) || 20))
@@ -231,5 +284,7 @@ export function creditsFor(user, { limit = 20, offset = 0 } = {}) {
     billingEnabled: false,
     // 每月额度：不设上限时 unlimited=true、remaining=-1，界面照实显示「未设上限」
     quota: quotaOf(user?.id),
+    // 本月花在哪：按动作拆开的消耗，合计与 quota.used 同一个数
+    spend: spendBreakdown(user?.id),
   }
 }

@@ -146,8 +146,10 @@ export async function reviewCountsByProject(user = null) {
   const list = (await loadAll()).filter((item) => canAccess(item, user) && item.projectId)
   const counts = {}
   for (const item of list) {
-    const entry = counts[item.projectId] || (counts[item.projectId] = { count: 0, lastVerdict: '', lastAt: '', versions: {} })
+    const entry = counts[item.projectId] || (counts[item.projectId] = { count: 0, credits: 0, lastVerdict: '', lastAt: '', versions: {} })
     entry.count += 1
+    // 评审记录里自己记着这次扣了多少积分：作品花费直接从这里加，不再回账本里猜
+    entry.credits += Math.max(0, Number(item.credits?.cost) || 0)
     if (String(item.createdAt) > entry.lastAt) {
       entry.lastAt = String(item.createdAt)
       entry.lastVerdict = item.result?.verdict || ''
@@ -162,6 +164,23 @@ export async function reviewCountsByProject(user = null) {
     }
   }
   return counts
+}
+
+/**
+ * 一条作品上的评审花费（v0.9.65）：次数、积分合计与最近一次时间。
+ * 只认记着 projectId 的评审——普通首帧评审不属于任何作品，不硬塞进来。
+ */
+export async function reviewSpend(projectId, user = null) {
+  const empty = { count: 0, credits: 0, lastAt: '' }
+  if (!projectId) return empty
+  const list = (await loadAll()).filter((item) => canAccess(item, user) && item.projectId === String(projectId))
+  const out = { ...empty }
+  for (const item of list) {
+    out.count += 1
+    out.credits += Math.max(0, Number(item.credits?.cost) || 0)
+    if (String(item.createdAt) > out.lastAt) out.lastAt = String(item.createdAt)
+  }
+  return out
 }
 
 /** 一条作品内按版本分组：作品页的「版本对照」要显示每一版评过几次、最后结论。 */

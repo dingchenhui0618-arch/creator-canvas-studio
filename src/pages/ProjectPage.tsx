@@ -603,6 +603,8 @@ export default function ProjectPage({
   }
 
   const { project, template, flow, reviews } = data
+  // 这条作品花掉的积分（v0.9.65）：评审与画布运行分开记，退过款的那次运行不算
+  const spend = data.spend
   // 脚本是作品页自己的视图：改过就是这条作品自己的版本，没改过则跟随模板
   const script = data.script
   // 状态与「下一步」只看当前这一版评过没有：新版刚开出来时不能因为上一版评过就跳过评审
@@ -1414,6 +1416,45 @@ export default function ProjectPage({
               </div>
             )}
           </section>
+
+          {/* 花费（v0.9.65）：钱花在这条作品的哪一步。只算评审与画布运行——
+              检索、复刻与智能体对话记在账号上，账本里没有作品，不摊过来 */}
+          {spend ? (
+            <section className="vq-project-panel vq-project-spend" aria-labelledby="vq-project-spend-head">
+              <div className="vq-project-panel-head">
+                <h2 id="vq-project-spend-head">花费</h2>
+                <span className="vq-mono">
+                  {spend.total.toLocaleString('zh-CN')} {spend.unit}
+                </span>
+              </div>
+              {spend.total > 0 ? (
+                <div className="vq-project-spend-split">
+                  <p className="vq-project-spend-row">
+                    <span>评审</span>
+                    <b>{spend.reviews.count} 次</b>
+                    <i>
+                      {spend.reviews.credits.toLocaleString('zh-CN')} {spend.unit}
+                    </i>
+                  </p>
+                  <p className="vq-project-spend-row">
+                    <span>画布运行</span>
+                    <b>{spend.runs.count} 次</b>
+                    <i>
+                      {spend.runs.credits.toLocaleString('zh-CN')} {spend.unit}
+                    </i>
+                  </p>
+                </div>
+              ) : (
+                <p className="vq-project-note">这条作品还没花过积分：评一次或跑一次画布，这里就会出现数字。</p>
+              )}
+              {spend.lastAt ? (
+                <p className="vq-project-note vq-mono">最近一次 · {stamp(spend.lastAt)}</p>
+              ) : null}
+              <p className="vq-project-note">
+                退过款的运行不算（钱已经退回）；检索、复刻与智能体对话记在账号上，去设置页「本月花在哪」看。
+              </p>
+            </section>
+          ) : null}
 
           <section className="vq-project-panel">
             <div className="vq-project-panel-head">

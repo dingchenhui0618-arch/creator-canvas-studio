@@ -29,6 +29,13 @@ export type CreditQuota = {
   updatedBy: string
 }
 
+/**
+ * 本月花在哪（v0.9.65）：按动作拆开的消耗，和每月额度读同一份账本。
+ * 合计与 quota.used 是同一个数；item.label 由服务端给，界面不另写一份动作名。
+ */
+export type CreditSpendItem = { kind: string; label: string; calls: number; credits: number }
+export type CreditSpend = { month: string; unit: string; total: number; items: CreditSpendItem[] }
+
 export type CreditsResponse = {
   ok: boolean
   unit: string
@@ -41,6 +48,7 @@ export type CreditsResponse = {
   ledgerLimit?: number
   billingEnabled: boolean
   quota?: CreditQuota
+  spend?: CreditSpend
 }
 
 export type AdminUser = {

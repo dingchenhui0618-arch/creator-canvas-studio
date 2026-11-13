@@ -19,6 +19,19 @@ export type ProjectTemplateBrief = {
 export type ProjectReviews = { count: number; lastVerdict: string; lastAt: string }
 
 /**
+ * 这条作品上花掉的积分（v0.9.65）：评审与画布运行分开记。
+ * 退过款的那次运行不算（钱已经回去了），检索 / 复刻 / 智能体对话记在账号上，不摊到作品。
+ */
+export type ProjectSpend = {
+  unit: string
+  total: number
+  reviews: { count: number; credits: number }
+  runs: { count: number; credits: number }
+  /** 最近一次花钱的时间；一次都没花过是空串（列表接口不返回这一项） */
+  lastAt?: string
+}
+
+/**
  * 人工复核：人看过证据后对某一次评审拍板的结果。
  * 它不改评审记录本身（模型写了什么还是什么），只回答「这一版是谁拍的板、拍成什么」。
  * 按 reviewAt 认那次评审：同一版又评出新结论，这条就失效了。
@@ -172,6 +185,8 @@ export type ProjectSummary = Project & {
   versionCounts: Record<string, ProjectReviews>
   /** 这条作品名下所有版本画布一共跑过几次 */
   runs: { count: number }
+  /** 卡片上的花费：评审与画布运行加在一起，退过款的不算 */
+  spend?: ProjectSpend
   /** 卡片上的分享状态；从没分享过就是 null */
   share: ProjectShareBrief | null
   /** 管当前这一版最近一次评审的人工拍板；还没人拍板就是 null */
@@ -350,6 +365,8 @@ export type ProjectDetail = {
   runTotal: number
   /** 按版本分组的运行次数：版本对照里写「这一版跑过几次」 */
   runCounts: Record<string, number>
+  /** 这条作品花了多少积分：合计、评审与运行各多少、最近一次是什么时候 */
+  spend?: ProjectSpend
 }
 
 /**

@@ -222,6 +222,8 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
   const balance = credits?.balance
   const prices = credits?.prices
   const quota = credits?.quota
+  // 本月花在哪（v0.9.65）：按动作拆开的消耗，合计与「本月已用」是同一个数
+  const spend = credits?.spend
   const lowBalance = typeof balance === 'number' && prices ? balance < prices.search : false
 
   return (
@@ -405,6 +407,29 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
               </div>
             ) : null}
 
+            {spend && spend.items.length ? (
+              <div className="vq-spend">
+                <div className="vq-spend-head">
+                  <strong>本月花在哪</strong>
+                  <span className="vq-mono">
+                    {spend.month} · 合计 {spend.total.toLocaleString('zh-CN')} {spend.unit}
+                  </span>
+                </div>
+                <div className="vq-spend-chips">
+                  {spend.items.map((item) => (
+                    <span className="vq-spend-chip" key={item.kind}>
+                      <em>{item.label}</em>
+                      <b>{item.credits.toLocaleString('zh-CN')}</b>
+                      <i>{item.calls} 次</i>
+                    </span>
+                  ))}
+                </div>
+                <p className="vq-spend-note">
+                  按积分账本算：退款已经抵回去，管理员扣减与赠送不算消耗。合计与上面的「本月已用」是同一个数。
+                </p>
+              </div>
+            ) : null}
+
             <div className="vq-price-grid">
               <div className="vq-price-item">
                 <span>检索（一页）</span>
@@ -421,6 +446,10 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
               <div className="vq-price-item">
                 <span>智能体对话</span>
                 <strong>{prices ? prices.chat : '—'}</strong>
+              </div>
+              <div className="vq-price-item">
+                <span>画布运行</span>
+                <strong>{prices ? prices.flow_run : '—'}</strong>
               </div>
             </div>
 

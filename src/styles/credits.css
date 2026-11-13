@@ -3,8 +3,11 @@
    颜色全部来自 tokens.css，间距按 4/8pt 栅格。 */
 .vq-credit-balance {
   display: flex;
+  /* 金额与单位不参与挤压：390 宽时右列一窄，「积分」「本月已用」会被拆成竖排 */
+  flex: none;
   align-items: baseline;
   gap: 8px;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 .vq-credit-balance b {
@@ -45,9 +48,76 @@
   background: var(--fail, #a33838);
 }
 
+/* 本月花在哪（v0.9.65）：按动作拆开的消耗。合计与上面的「本月已用」是同一个数，
+   所以这里不再放大数字，只让每个动作一枚小胶囊，扫一眼就知道钱花在哪种活上。 */
+.vq-spend {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.vq-spend-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.vq-spend-head strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+}
+.vq-spend-head span {
+  color: var(--faint);
+  font-size: 11px;
+}
+.vq-spend-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.vq-spend-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  font-variant-numeric: tabular-nums;
+}
+.vq-spend-chip em {
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+}
+.vq-spend-chip b {
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 500;
+}
+.vq-spend-chip i {
+  color: var(--faint);
+  font-size: 11px;
+  font-style: normal;
+}
+.vq-spend-note {
+  margin: 0;
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
 .vq-price-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  /* 五个动作（检索 / 复刻 / 评审 / 对话 / 画布运行）一行放得下：按可用宽度自动收成 2 列，
+     窄屏交给下面 720px 的规则。 */
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 8px;
   margin: 16px 0 0;
 }
