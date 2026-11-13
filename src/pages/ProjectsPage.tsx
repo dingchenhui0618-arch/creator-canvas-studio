@@ -5,6 +5,7 @@ import ProjectStatusPill from '../components/ProjectStatus'
 import { listProjects } from '../api/projects'
 import { listTemplates } from '../api/radar'
 import { reviewsForVersion, type ProjectBucket, type ProjectListFacets, type ProjectShareBrief, type ProjectSummary } from '../domain/project'
+import { readProjectsView, writeProjectsView, type ProjectsView } from '../domain/list-view'
 import { CLIENT_LABEL, stampTime } from '../domain/share'
 import '../styles/projects.css'
 
@@ -62,8 +63,11 @@ export default function ProjectsPage({
   const [facets, setFacets] = useState<ProjectListFacets>(EMPTY_FACETS)
   const [total, setTotal] = useState(0)
   const [shown, setShown] = useState(0)
-  const [keyword, setKeyword] = useState('')
-  const [bucket, setBucket] = useState<ProjectBucket>('all')
+  // 筛选条件跟着标签页走：点进作品再回来，搜索词与「在做 / 已交付」还在（v0.9.43）。
+  // 读的时候逐字段校验、写的时候空条件就删键，判断都在 src/domain/list-view.ts。
+  const [savedView] = useState<ProjectsView>(() => readProjectsView(window.sessionStorage))
+  const [keyword, setKeyword] = useState(savedView.keyword)
+  const [bucket, setBucket] = useState<ProjectBucket>(savedView.bucket)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   // 空作品页的下一步要看模板库有没有东西：只问总条数，不拉整库（v0.9.42）
@@ -104,6 +108,11 @@ export default function ProjectsPage({
     }, keyword ? 220 : 0)
     return () => window.clearTimeout(timer)
   }, [bucket, keyword, load])
+
+  // 条件一变就记下来（含「清空条件」的那一次：空条件会把记录删掉）
+  useEffect(() => {
+    writeProjectsView(window.sessionStorage, { keyword, bucket })
+  }, [keyword, bucket])
 
   const filtered = keyword.trim() !== '' || bucket !== 'all'
 

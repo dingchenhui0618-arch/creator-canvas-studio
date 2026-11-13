@@ -152,12 +152,26 @@ button, input, select, textarea { font-family: inherit; }
   box-shadow: 0 0 0 3px rgba(17, 17, 17, 0.16);
 }
 
-/* 切页面只淡入、不位移：以前整屏重挂会让人以为「跳了一下」 */
+/* 切页面只淡入、不位移：以前整屏重挂会让人以为「跳了一下」。
+   v0.9.43 补齐另外四种页面根节点（工作台 / 运行记录 / 视觉评审 / 后台）：它们不带 .page，
+   以前切过去是硬切，和带 .page 的几屏不一致。 */
 @keyframes vq-page-in { from { opacity: 0 } to { opacity: 1 } }
-.page { animation: vq-page-in var(--dur-2) var(--ease-out) both; }
+.page,
+.vq-content > .vq-page,
+.vq-content > .runs-page,
+.vq-content > .review-page,
+.vq-content > .admin-page {
+  animation: vq-page-in var(--dur-2) var(--ease-out) both;
+}
 
 @media (prefers-reduced-motion: reduce) {
-  .page { animation: none; }
+  .page,
+  .vq-content > .vq-page,
+  .vq-content > .runs-page,
+  .vq-content > .review-page,
+  .vq-content > .admin-page {
+    animation: none;
+  }
   :where(.vq-button, .cv-btn, .agx-btn, .cv-icon-btn, .vq-icon-button, .cv-bdc-action, .cv-palette-item):not(:disabled):active {
     transform: none;
   }

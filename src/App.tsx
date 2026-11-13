@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   Check,
   ChevronRight,
@@ -42,7 +42,8 @@ import { initialsFor, sessionKindLabel, type RegisterInput, type Session, type S
 import { listAgents, setPendingAgentProject } from './api/agents'
 import { createBdcCanvas } from './api/bdc'
 import { listReviewQueue } from './api/review'
-import { navigate, pageToRoute, routeKey, routeToPage, useRoute } from './router'
+import { navigate, pageToRoute, routeKey, routeToPage, useRoute, type Route } from './router'
+import { planScroll } from './domain/scroll'
 import { welcomeSeenKey } from './onboarding'
 import packageJsonRaw from '../package.json?raw'
 import { EDITION_BY_ID, EDITION_STORAGE_KEY, type AdminSection } from './editions'
@@ -173,6 +174,10 @@ function Workbench({
   const [updateMessage, setUpdateMessage] = useState('')
   const toastTimer = useRef<number | undefined>(undefined)
   const accountRef = useRef<HTMLDivElement>(null)
+  // 换页的落地位置：真的换了页面就回到页头（v0.9.43）。
+  // 该不该回、哪几种不算换页，判断只在 src/domain/scroll.ts 一处；这里只负责把 scrollTop 归零。
+  const contentRef = useRef<HTMLDivElement | null>(null)
+  const previousRoute = useRef<Route | null>(null)
 
   // 上手引导：第一次进工作台就弹出来（按账号记一次），关闭即记住；之后从账号菜单还能再看。
   const seenKey = welcomeSeenKey(session.user.id)
@@ -197,6 +202,30 @@ function Workbench({
   const activePage = routeToPage(route)
   // 路由的稳定标识：换页时用它触发角标对一次数，不必把整个 route 对象塞进依赖
   const routeId = routeKey(route)
+
+  // 错误边界按「页」隔离，而不是按整条地址（v0.9.43）：
+  // 同一页里发生的地址变化——打开单条模板的抽屉、打开一条历史评审、作品参数变化——
+  // 以前会把整页重挂一遍，重挂连列表的搜索词、来源筛选和滚动位置一起清掉。
+  // （画布页与作品页各自还留着自己的 key：换画布项目、换作品仍然要从头挂。）
+  const pageBoundaryKey =
+    route.kind === 'page'
+      ? 'page:' + route.page
+      : route.kind === 'admin'
+        ? 'admin:' + route.section
+        : route.kind === 'legal'
+          ? 'legal:' + route.doc
+          : route.kind
+
+  // 换页后内容区停在哪儿：从页头开始（判断在 src/domain/scroll.ts）。
+  // 在浏览器绘制前改 scrollTop（useLayoutEffect），换页不会先闪一下旧位置。
+  // 淡入不在这里做：页面根节点挂载时由 tokens.css 的 vq-page-in 负责，换页才重挂，抽屉不会。
+  useLayoutEffect(() => {
+    const node = contentRef.current
+    const previous = previousRoute.current
+    previousRoute.current = route
+    if (!node || planScroll(previous, route) !== 'top') return
+    node.scrollTop = 0
+  }, [route])
   // 本地工作区只在桌面外壳里成立：网页版连这一项都不显示
   const desktopBridge = getDesktop()
 
@@ -826,11 +855,11 @@ function Workbench({
           </div>
         </header>
 
-        <div className="vq-content">
+        <div className="vq-content" ref={contentRef}>
           <p className="vq-mobile-note" role="note">
             这是一个桌面工作台。手机上能查看，但检索、拆解与评审建议在电脑上做。
           </p>
-          <ErrorBoundary key={routeKey(route)}>
+          <ErrorBoundary key={pageBoundaryKey}>
             <Suspense fallback={<PageSkeleton />}>{renderPage()}</Suspense>
           </ErrorBoundary>
         </div>
