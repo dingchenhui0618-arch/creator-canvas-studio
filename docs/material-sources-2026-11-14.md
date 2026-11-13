@@ -49,9 +49,48 @@
 | 下架申请（页面真点） | 弹窗 → 填情况 → 提交：页面顶条「举报已提交，受理编号 `rep_95a4cb95`」，弹窗留在「已收到受理编号」那一屏；落在 `reports.json` 的 `target.kind = material`、状态 `open` |
 | 数字没读到 | 接口失败时页面写「数字没读到（/api/sources/summary 没有响应）」而不是摆 0 |
 
+![本地：提交下架申请后的受理编号（指名不了具体模板也能提交，`target.kind=material`）](material-sources-takedown-2026-11-14.png)
+
 ## 五、生产实测（v0.9.82）
 
-PROD_SECTION
+### 接口（匿名，不带 cookie）
+
+`curl -s https://visionqa.wavisionai.cn/api/sources/summary`
+
+| 字段 | 生产值 |
+| --- | --- |
+| `public.total` | **25**（生产 26 条模板里 25 条是公共模板，与就绪清单 C4 那句「25 条含第三方平台封面与作者名」对上） |
+| `public.platforms` | 抖音 25（这一批全是抖音） |
+| `withSourceUrl / withAuthor / withCover` | 25 / 25 · 25 / 25 · 25 / 25 |
+| `parsed / linkOnly` | 25 / 0（这批都解析过，有分镜） |
+| `addedFrom → addedTo` | 2026-11-11 → 2026-11-11 |
+| `takedown.handled` | 0（还没人走过下架，照实回 0，不写「已保护 25 条」这种话） |
+
+### 页面（匿名，真渲染）
+
+- `https://visionqa.wavisionai.cn/#/sources` 不登录直接打开，页面上的数字与接口一致（25 / 25/25 / 25/25 / 0），下面是这张截图
+- 发布版本 **0.9.82**、入口 `index-BqXIAE66.js`；release `20261113-230509-20261114-r94-sources` → `20261113-230729-20261114-r94-sources2`
+- 两个实例同版本（`/api/version` 与内网 `:8800/api/version` 都是 0.9.82）、三个 unit active、journal 近 4 分钟无 warning 以上条目、`/api/sources/summary` 内网也 200
+
+![生产：素材来源与下架通道（不登录可读；25 条公共模板、25/25 留着原片地址与作者、已处理下架 0）](material-sources-2026-11-14.png)
+
+### 出处闸（生产：不误拦）
+
+- 管理员对一条已公开的模板（`tpl_b1246a9f`「兔兔那么可爱…真香」，带原片链接）再次提交 `{shared:true}` → **200**，返回 `shared:true`，没有 `NO_SOURCE`。
+- 「没有原链接 → 400」这一步**没在生产造数据**：那需要临时造一条无链接的平台素材。同一个闸在本地用管理员会话跑完四步——清空原链接 → **400 `NO_SOURCE`**；同一次提交里补链接 + 打开发布 → **200 `shared:true`**；收回 → 200。
+
+### 一次真实失败（部署当场抓到的）
+
+第一版（`…-r94-sources`）上线后 `GET /api/sources/summary` 匿名返回 **401**：接口写好了，却忘了把 `'/api/sources'` 放进 `PUBLIC_API` 白名单——
+页面自己是公开路由，数据接口却要登录，匿名访客只会看到「数字没读到」。本地没开 `VQ_REQUIRE_AUTH` 所以测不出来。
+补上白名单 + 一条断言（白名单里必须有 `'/api/sources'`，且原有 `'/api/reports'` 别被带掉）后重新发布（`…-r94-sources2`），
+并在本地用 `VQ_REQUIRE_AUTH=1` 复验：`/api/sources/summary` 匿名 **200**，`/api/templates` 仍 **401**。
+
+### 没有在生产造的数据（说明白）
+
+下架申请的端到端是**本地**跑的（弹窗 → 提交 → 受理编号 `rep_95a4cb95` → 落在 `reports.json` 的 `target.kind=material`）。
+生产只验了匿名读接口与页面渲染，没有往生产的举报队列里塞测试单——那会留在审计里，也会占一个真实处理位。
+
 
 ## 六、踩到的坑（如实记）
 
