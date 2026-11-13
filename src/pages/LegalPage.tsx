@@ -26,6 +26,7 @@ export function LegalPage({ doc }: Props) {
         </p>
         {doc === 'terms' ? <Terms /> : <Privacy />}
         <footer className="vq-legal-foot">
+          <a className="vq-link" href="#/help">帮助</a>
           <a className="vq-link" href="#/legal/terms">服务条款</a>
           <a className="vq-link" href="#/legal/privacy">隐私说明</a>
           {site.supportEmail ? <span>联系：{site.supportEmail}</span> : <span>联系：工作区管理员</span>}

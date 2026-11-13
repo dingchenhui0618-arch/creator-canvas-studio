@@ -216,6 +216,10 @@ export function ReplicateModal({ item, hasKey, visionReady, onClose, onDone, onO
             {/积分不足/.test(error) ? (
               <p className="replicate-note">积分可以在「设置 → 积分」查看；充值通道还没开通，需要管理员在后台发放。</p>
             ) : null}
+            <p className="replicate-note">
+              先按「复刻、画布与出图失败了怎么办」对一遍：
+              <a className="vq-link" href="#/help/replicate-failed">打开排查说明</a>
+            </p>
             {!hasKey && (
               <p className="replicate-note">解析服务还没接入：平台链接无法解析。可以先粘贴一条 mp4 直链验证拆帧与模板流程，或先让管理员接入解析服务。</p>
             )}

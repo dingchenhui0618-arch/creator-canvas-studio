@@ -4,6 +4,7 @@
 //      单条历史评审：#/review/<评审 id>（作品页点一条评审就走到这里，刷新与后退都能回到那条）
 //      单条模板：#/templates/<模板 id>（作品页「来源」里点模板名走进来，刷新与后退都还在这条模板上）
 //      智能体编辑：#/agents/new 与 #/agents/<id 或唯一名称>
+//      帮助中心：#/help 是目录，#/help/<slug> 是单篇（公开可读，不登录也能看）
 //      后台管理：#/admin/<section>，section 取自 editions.ts 的后台导航。
 //
 // 说明：本文件不碰登录态。RequireSession 仍然决定有没有工作台；
@@ -11,6 +12,7 @@
 import { useSyncExternalStore } from 'react'
 import type { Page } from './domain/types'
 import { EDITION_BY_ID, type AdminSection, type EditionId } from './editions'
+import { isHelpSlug, type HelpSlug } from './domain/help'
 
 /** 外壳里真正占一屏的用户页面；登录与编辑器各自有独立入口。 */
 export type ShellPage = Exclude<Page, 'login' | 'agent-editor'>
@@ -31,6 +33,8 @@ export type Route =
     }
   | { kind: 'agent-editor'; agentRef: string | null }
   | { kind: 'legal'; doc: 'terms' | 'privacy' }
+  // 帮助中心：slug 认不出就落回目录页，坏链接不挡人
+  | { kind: 'help'; slug: HelpSlug | null }
   // 只读分享：链接里带随机 token，不登录也能打开（App 根部整屏渲染，不进工作台外壳）
   | { kind: 'share'; token: string }
   // 作品级分享：#/share/project/<token>，读的是脚本 + 分镜的公开视图
@@ -67,7 +71,13 @@ export function routeToPage(route: Route): Page {
 
 /** 不进工作台外壳的路由：条款页与只读分享页整屏渲染，工作台骨架不参与。 */
 export function isBareRoute(route: Route): boolean {
-  return route.kind === 'legal' || route.kind === 'share' || route.kind === 'shared-project' || route.kind === 'reset'
+  return (
+    route.kind === 'legal' ||
+    route.kind === 'help' ||
+    route.kind === 'share' ||
+    route.kind === 'shared-project' ||
+    route.kind === 'reset'
+  )
 }
 
 /** Page 转向量：列表页跳转、事件兼容都走这里，避免各页面自己拼 hash。 */
@@ -111,6 +121,8 @@ export function parseRoute(hash: string): Route {
   const [head, tail] = segments
   if (head === 'admin') return { kind: 'admin', section: parseAdminSection(tail) }
   if (head === 'legal') return { kind: 'legal', doc: tail === 'privacy' ? 'privacy' : 'terms' }
+  // 帮助：一篇一个地址，方便从失败提示直接链到对应那一篇
+  if (head === 'help') return { kind: 'help', slug: isHelpSlug(tail) ? tail : null }
   // 分享链接：token 是整条路径的余下部分，缺了就落回工作台。
   // 作品分享多一段 /project/，必须排在模板分享前面判断。
   if (head === 'share') {
@@ -165,6 +177,7 @@ export function toHash(route: Route): string {
   if (route.kind === 'admin') return '#/admin/' + route.section
   if (route.kind === 'reset') return '#/reset' + (route.token ? '?token=' + encodeURIComponent(route.token) : '')
   if (route.kind === 'legal') return '#/legal/' + route.doc
+  if (route.kind === 'help') return route.slug ? '#/help/' + route.slug : '#/help'
   if (route.kind === 'share') return '#/share/' + encodeURIComponent(route.token)
   if (route.kind === 'shared-project') return '#/share/project/' + encodeURIComponent(route.token)
   return '#/agents/' + (route.agentRef ? encodeURIComponent(route.agentRef) : 'new')
@@ -186,6 +199,7 @@ export function routeKey(route: Route): string {
   if (route.kind === 'admin') return 'admin:' + route.section
   if (route.kind === 'reset') return 'reset:' + route.token
   if (route.kind === 'legal') return 'legal:' + route.doc
+  if (route.kind === 'help') return 'help:' + (route.slug ?? '')
   if (route.kind === 'share') return 'share:' + route.token
   if (route.kind === 'shared-project') return 'shared-project:' + route.token
   return 'agent-editor:' + (route.agentRef ?? 'new')

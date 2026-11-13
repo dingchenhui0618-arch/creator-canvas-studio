@@ -632,6 +632,7 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
           </form>
 
           <p className="vq-login-foot vq-login-foot--legal">
+            <a className="vq-link" href="#/help">帮助</a>
             <a className="vq-link" href="#/legal/terms">服务条款</a>
             <a className="vq-link" href="#/legal/privacy">隐私说明</a>
             <button type="button" className="vq-link" onClick={() => setFeedbackOpen(true)}>

@@ -2995,3 +2995,72 @@ select:focus-visible {
 .vq-shell.is-focus .vq-content {
   overflow: hidden;
 }
+
+/* 帮助中心（v0.9.61）：三篇公开说明。左目录、右正文；单篇有地址，失败提示能直接链过来。
+   字体与间距沿用条款页的尺子：正文 14 / 1.8，标题 15 / 500，间距只走 4 的倍数。 */
+.vq-help { min-height: 100vh; padding: 48px 24px 64px; background: var(--canvas); color: var(--ink); font-family: var(--font-ui); }
+.vq-help-inner { display: grid; grid-template-columns: 216px minmax(0, 1fr); gap: 32px; max-width: 1000px; margin: 0 auto; align-items: start; }
+.vq-help-side { position: sticky; top: 48px; display: flex; flex-direction: column; gap: 8px; }
+.vq-help-back { display: inline-flex; align-items: center; gap: 4px; align-self: flex-start; padding: 0 12px; font-size: 12px; color: var(--muted); background: none; border: 0; cursor: pointer; }
+.vq-help-back:hover { color: var(--ink); }
+.vq-help-side-title { margin: 8px 0 0 12px; font-family: var(--font-mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+.vq-help-nav { display: flex; flex-direction: column; gap: 4px; }
+.vq-help-nav-item { display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; border: 1px solid transparent; border-radius: var(--radius-sm); text-decoration: none; }
+.vq-help-nav-item strong { font-size: 13px; font-weight: 500; line-height: 1.5; color: var(--ink); }
+.vq-help-nav-item span { font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em; color: var(--faint); }
+.vq-help-nav-item:hover { background: var(--surface-soft); }
+.vq-help-nav-item.is-active { background: var(--violet-soft); border-color: var(--line); }
+.vq-help-side-cta { display: inline-flex; align-items: center; justify-content: center; gap: 8px; margin-top: 8px; padding: 8px 12px; font-size: 12px; color: var(--muted); background: none; border: 1px dashed var(--line-strong); border-radius: var(--radius-sm); cursor: pointer; }
+.vq-help-side-cta:hover { color: var(--ink); border-color: var(--ink-faint); }
+.vq-help-card { padding: 48px; background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow-raise); }
+.vq-help-kicker { display: block; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+.vq-help-card h1 { margin: 8px 0 4px; font-size: 26px; font-weight: 500; line-height: 1.35; letter-spacing: -.01em; }
+.vq-help-meta { margin: 0 0 32px; font-size: 12px; color: var(--faint); }
+.vq-help-lead { max-width: 620px; margin: 0 0 24px; font-size: 14px; line-height: 1.8; color: var(--muted); }
+.vq-help-index { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.vq-help-index-item { display: grid; gap: 8px; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius-md); text-decoration: none; }
+.vq-help-index-item:hover { border-color: var(--line-strong); background: var(--surface-soft); }
+.vq-help-index-kicker { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+.vq-help-index-item strong { font-size: 15px; font-weight: 500; line-height: 1.5; color: var(--ink); }
+.vq-help-index-summary { font-size: 13px; line-height: 1.7; color: var(--muted); }
+.vq-help-index-more { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
+.vq-help-section h2 { margin: 32px 0 8px; font-size: 15px; font-weight: 500; color: var(--ink); }
+.vq-help-section p { max-width: 620px; margin: 0 0 8px; font-size: 14px; line-height: 1.8; color: var(--muted); }
+.vq-help-list { display: grid; gap: 8px; max-width: 620px; margin: 8px 0; padding-left: 24px; }
+.vq-help-list li { font-size: 14px; line-height: 1.8; color: var(--muted); }
+.vq-help-steps { display: grid; gap: 8px; margin: 8px 0; padding: 0; list-style: none; }
+.vq-help-step { display: flex; gap: 12px; padding: 12px 16px; border: 1px solid var(--line-faint); border-radius: var(--radius-sm); }
+.vq-help-step-no { flex: 0 0 auto; font-size: 11px; line-height: 1.9; color: var(--faint); }
+.vq-help-step div { display: flex; flex-direction: column; gap: 2px; }
+.vq-help-step strong { font-size: 13px; font-weight: 500; color: var(--ink); }
+.vq-help-step span { font-size: 13px; line-height: 1.7; color: var(--muted); }
+.vq-help-related { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--line-faint); }
+.vq-help-related-label { font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em; color: var(--faint); }
+.vq-help-related a { padding: 4px 12px; font-size: 12px; color: var(--muted); text-decoration: none; border: 1px solid var(--line); border-radius: var(--radius-pill); }
+.vq-help-related a:hover { color: var(--ink); border-color: var(--line-strong); }
+.vq-help-cta { display: flex; align-items: center; gap: 12px; margin-top: 32px; padding: 16px; background: var(--surface-soft); border-radius: var(--radius-md); }
+.vq-help-cta > svg { flex: 0 0 auto; color: var(--muted); }
+.vq-help-cta div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.vq-help-cta strong { font-size: 13px; font-weight: 500; color: var(--ink); }
+.vq-help-cta span { font-size: 12.5px; line-height: 1.7; color: var(--muted); }
+.vq-help-cta .vq-button { margin-left: auto; flex: 0 0 auto; }
+.vq-help-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line-faint); font-size: 12px; color: var(--faint); }
+.vq-help-foot .vq-mono { margin-left: auto; }
+
+/* 设置页「帮助与反馈」顶部的三篇入口：一行胶囊，点进帮助中心对应那一篇 */
+.vq-help-links { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 16px; }
+.vq-help-links-label { font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em; color: var(--faint); }
+.vq-help-link { padding: 4px 12px; font-size: 12px; line-height: 1.6; color: var(--muted); text-decoration: none; border: 1px solid var(--line); border-radius: var(--radius-pill); }
+.vq-help-link:hover { color: var(--ink); border-color: var(--line-strong); }
+
+@media (max-width: 760px) {
+  .vq-help { padding: 16px 12px 48px; }
+  .vq-help-inner { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .vq-help-side { position: static; }
+  .vq-help-side-cta { margin-top: 0; }
+  .vq-help-card { padding: 24px; }
+  .vq-help-card h1 { font-size: 22px; }
+  .vq-help-cta { flex-wrap: wrap; }
+  .vq-help-cta .vq-button { margin-left: 0; }
+}
+

@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
+  BookOpen,
   Check,
   ChevronRight,
   Compass,
@@ -68,6 +69,8 @@ const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage').then((m
 const SharePage = lazy(() => import('./pages/SharePage'))
 // 作品分享页也单独拆包：它读的是脚本与分镜，不依赖工作台组件
 const ProjectSharePage = lazy(() => import('./pages/ProjectSharePage'))
+// 帮助中心也是公开可读的一屏：不登录的人先来这里找答案，而不是卡在登录页
+const HelpPage = lazy(() => import('./pages/HelpPage').then((module) => ({ default: module.HelpPage })))
 const AgentEditorPage = lazy(() => import('./pages/AgentEditorPage'))
 
 function sectionLabel(section: string): string {
@@ -402,6 +405,15 @@ function Workbench({
         run: () => setGuideOpen(true),
       },
       {
+        id: 'action-help',
+        label: '帮助中心',
+        hint: '积分、失败排查、素材边界',
+        group: '动作',
+        icon: BookOpen,
+        keywords: 'help 帮助 文档 积分 失败 版权',
+        run: () => navigate({ kind: 'help', slug: null }),
+      },
+      {
         id: 'action-sidebar',
         label: sidebarOpen ? '收起侧栏' : '展开侧栏',
         hint: '把屏幕让给内容',
@@ -491,7 +503,15 @@ function Workbench({
 
   const renderPage = () => {
     // 合规页与只读分享页在 App 根部整屏渲染，不进侧栏外壳；引导是工作台里的弹窗，不占路由
-    if (route.kind === 'legal' || route.kind === 'share' || route.kind === 'shared-project' || route.kind === 'reset') return null
+    if (
+      route.kind === 'legal' ||
+      route.kind === 'help' ||
+      route.kind === 'share' ||
+      route.kind === 'shared-project' ||
+      route.kind === 'reset'
+    ) {
+      return null
+    }
     if (route.kind === 'admin') return <AdminConsolePage section={route.section} />
     if (route.kind === 'agent-editor') {
       return (
@@ -1015,6 +1035,15 @@ function App() {
     },
     [signOut],
   )
+
+  // 帮助中心：没有账号也能看。放在 RequireSession 之前，和条款页一样整屏渲染。
+  if (route.kind === 'help') {
+    return (
+      <Suspense fallback={<PageSkeleton label="正在打开帮助" />}>
+        <HelpPage slug={route.slug} />
+      </Suspense>
+    )
+  }
 
   if (route.kind === 'legal') {
     return (

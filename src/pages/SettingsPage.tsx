@@ -10,6 +10,7 @@ import { creditKindLabel, getCredits, getMyCreditRequest, requestCredits, getSys
 import { changePassword } from '../api/auth'
 import { listMyFeedback, type FeedbackItem } from '../api/feedback'
 import { FeedbackModal } from '../components/FeedbackModal'
+import { HELP_ARTICLES } from '../domain/help'
 import { initialsFor, sessionKindLabel, type Session } from '../auth/session'
 import '../styles/shell.css'
 import '../styles/credits.css'
@@ -502,6 +503,14 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
             </div>
           </div>
           <div className="vq-card-body">
+            <div className="vq-help-links">
+              <span className="vq-help-links-label">先看说明</span>
+              {HELP_ARTICLES.map((item) => (
+                <a key={item.slug} className="vq-help-link" href={'#/help/' + item.slug}>
+                  {item.title}
+                </a>
+              ))}
+            </div>
             {feedbackError ? <p className="vq-ledger-empty">{feedbackError}</p> : null}
             {feedback.length ? (
               <ul className="vq-feedback-list">

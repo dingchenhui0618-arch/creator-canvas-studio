@@ -446,6 +446,16 @@ export function RunsPage({
                 </div>
               ) : null}
               {adoptDone ? <p className="runs-adopt-done">{adoptDone}</p> : null}
+              {current.status !== 'success' ? (
+                <p className="runs-note">
+                  {current.status === 'interrupted'
+                    ? '这次运行被中断，积分按账本退回。'
+                    : '这次运行失败了，积分原路退回。'}
+                  <a className="vq-link" href="#/help/replicate-failed">
+                    看常见原因
+                  </a>
+                </p>
+              ) : null}
               <ol className="runs-nodes">
                 {current.nodes.map((node) => (
                   <li key={node.id} className={`runs-node is-${node.status}`}>
