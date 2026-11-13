@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, CircleAlert, Copy, Expand, LayoutGrid, Maximize2, Minimize2, Play, Plus, RotateCcw, RotateCw, Save, Trash } from 'lucide-react'
+import { Check, ChevronDown, CircleAlert, Copy, Expand, Hourglass, LayoutGrid, Maximize2, Minimize2, Play, Plus, RotateCcw, RotateCw, Save, Trash } from 'lucide-react'
 import {
   Background,
   Controls,
@@ -30,6 +30,7 @@ import {
 } from '../api/flows'
 import { getCredits } from '../api/credits'
 import { getCanvasSessionTicket } from '../api/canvasSession'
+import { getCanvasQueue, type CanvasQueueView } from '../api/canvasQueue'
 import { useUiMode } from '../api/app'
 import { navigate, replaceRoute } from '../router'
 import {
@@ -143,6 +144,12 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
   const [futureCount, setFutureCount] = useState(0)
   // 画布运行按次扣积分：运行前就把单价和余额摆出来，402 时不用去猜
   const [runCredit, setRunCredit] = useState<{ price: number; balance: number | null } | null>(null)
+  // 画布出图的排队位（v0.9.83）：出图发生在画布 iframe 里，等的时候这边什么也看不见。
+  // 轮询只读接口，把「几张在跑、几张在排队、最久的等了多久」挂到状态条上；空闲时不显示。
+  const [queueView, setQueueView] = useState<CanvasQueueView | null>(null)
+  const [queueIdleAt, setQueueIdleAt] = useState(0)
+  const queueWasBusy = useRef(false)
+  const queueIdleTimer = useRef<number | undefined>(undefined)
   // 画布 iframe：画布加载完会要一张信任票据，拿到后它自己换会话，用户不用在画布里再登一次
   const bdcFrameRef = useRef<HTMLIFrameElement | null>(null)
   // 进页面时地址里点名的那块内置流程（只影响「默认进哪个视图」，之后切流程不动它）
@@ -180,6 +187,43 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
   useEffect(() => {
     refreshRunCredit()
   }, [refreshRunCredit])
+
+  // 排队位：页面可见时每 3 秒问一次，切到后台就停（别在看不见的标签页里空转）。
+  // 刚忙完那一阵要留在屏幕上几秒——「出完了」也是个结论，不该一瞬间消失。
+  useEffect(() => {
+    let alive = true
+    const tick = async () => {
+      if (typeof document !== 'undefined' && document.hidden) return
+      try {
+        const view = await getCanvasQueue()
+        if (!alive) return
+        setQueueView(view)
+        const busy = view.active > 0 || view.waiting > 0
+        if (busy) {
+          setQueueIdleAt(0)
+        } else if (queueWasBusy.current) {
+          // 刚忙完：先留一句「刚刚那批出完了」，8 秒后自己收起来（不在渲染里读时钟）
+          setQueueIdleAt(1)
+          if (queueIdleTimer.current) window.clearTimeout(queueIdleTimer.current)
+          queueIdleTimer.current = window.setTimeout(() => setQueueIdleAt(0), 8000)
+        }
+        queueWasBusy.current = busy
+      } catch {
+        // 未登录 / 接口暂时不通：状态条就不显示，不在这条路径上报错
+        if (alive) setQueueView(null)
+      }
+    }
+    void tick()
+    const timer = window.setInterval(() => { void tick() }, 3000)
+    const onVisible = () => { if (!document.hidden) void tick() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      alive = false
+      window.clearInterval(timer)
+      if (queueIdleTimer.current) window.clearTimeout(queueIdleTimer.current)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [])
 
   const graphSignature = useMemo(
     () =>
@@ -900,6 +944,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
             <span className="cv-save-dot" />
             {bdcLocalOnly ? '本机已连接' : '已连接'}
           </span>
+          <CanvasQueueChip view={queueView} idleAt={queueIdleAt} />
           <span className="cv-bdc-sep" aria-hidden="true" />
           <div className="cv-bdc-picker">
             <span className="cv-bdc-picker-label">画布项目</span>
@@ -1056,6 +1101,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
         <div className="cv-bdc-bar">
           <span className="vq-mono">BD CANVAS · {bdcLocalOnly ? '本机已部署' : '已部署'}</span>
           <p>画布由 VisionQA Canvas 接管（{bdc.web.url}）；这里的流程编排保留作备选，数据各存各的。</p>
+          <CanvasQueueChip view={queueView} idleAt={queueIdleAt} />
           <button className="vq-button vq-button--ghost" type="button" onClick={() => setBdcView(true)}>在这里打开</button>
           <a className="vq-button vq-button--ghost" href={bdc.web.url} target="_blank" rel="noreferrer">新窗口</a>
         </div>
@@ -1242,3 +1288,39 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
     </div>
   )
 }
+
+
+// 排队位小胶囊（v0.9.83）：画布出图发生在 iframe 里，等的时候这边只有一片安静——
+// 它回答「几张在跑 / 几张在排队 / 最久的等了多久」，忙完 8 秒后显示一次「刚刚那批出完了」再消失。
+// 数字全由服务端现算；空闲时整个不渲染，不在顶栏上挂一个常驻的 0。
+function CanvasQueueChip({ view, idleAt }: { view: CanvasQueueView | null; idleAt: number }) {
+  if (!view) return null
+  const busy = view.active > 0 || view.waiting > 0
+  // idleAt 是「刚刚忙完」的标记，8 秒后由轮询那边清掉——这里不读时钟，渲染才是纯的
+  const justDone = !busy && idleAt > 0
+  if (!busy && !justDone) return null
+  if (!busy) {
+    return (
+      <span className="cv-bdc-queue is-done" title="这一批画布出图都已经结束：名额都还回去了">
+        <Check size={12} strokeWidth={2} />刚刚那批出完了
+      </span>
+    )
+  }
+  // 小于 10 秒保留一位小数（0.4 秒不该写成「0 秒」），再长就取整
+  const seconds = (ms: number) => (ms >= 10000 ? String(Math.round(ms / 1000)) : String(Math.round(ms / 100) / 10))
+  const hint = view.waitMs > 0
+    ? '每条最多等 ' + seconds(view.waitMs) + ' 秒、最多 ' + view.maxWaiting + ' 条同时排（' + (view.queueScope === 'process' ? '按进程算' : '整机') + '）'
+    : '名额满时直接拒，这类没有排队'
+  return (
+    <span
+      className={'cv-bdc-queue' + (view.waiting > 0 ? ' is-waiting' : '') + (view.full ? ' is-full' : '')}
+      title={'画布出图的排队位：' + hint + '。在跑 ' + view.active + ' / 上限 ' + (view.limit || '不限') + '，排队 ' + view.waiting + '。'}
+    >
+      {view.waiting > 0 ? <Hourglass size={12} strokeWidth={2} /> : <span className="cv-bdc-queue-dot" />}
+      在跑 {view.active}
+      {view.waiting > 0 ? ' · 排队 ' + view.waiting + '（最久 ' + seconds(view.oldestWaitMs) + 's）' : ''}
+      {view.full ? ' · 排队位已满' : ''}
+    </span>
+  )
+}
+

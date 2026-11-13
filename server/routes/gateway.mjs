@@ -11,7 +11,7 @@
 import { readBody, sendJson } from './_shared.mjs'
 import { authorizeGateway, createImageTask, createVideoTask, generateImage, listPoolModels, pollVideoTask } from '../gateway.mjs'
 import { config } from '../config.mjs'
-import { admitWaiting } from '../waterline.mjs'
+import { admitWaiting, canvasQueueView } from '../waterline.mjs'
 
 const IMAGE_CREATE = new Set(['/api/gateway/v1/images/generations'])
 const IMAGE_CREATE_ASYNC = new Set(['/api/gateway/v1/images/generations/async'])
@@ -53,6 +53,8 @@ async function withHeavy(req, res, run) {
   }
   const water = await admitWaiting('canvas_gen', {
     isAborted: () => gone || res.writableEnded === true || res.destroyed === true || req.destroyed === true,
+    // 画布可以把节点 id / 幂等键当排队票带进来：等待期间它能问「我排第几」（v0.9.83）
+    ticket: String(req.headers['x-vq-queue-ticket'] || ''),
   })
   // 画布已经断开：不写响应、不调上游，这一张不花钱
   if (water.aborted) return
@@ -76,9 +78,14 @@ async function withHeavy(req, res, run) {
     })
     return
   }
-  // 排过队的请求：把等待时间带回给画布（节点上能显示「排了 3 秒」）
+  // 排过队的请求：把等待时间与名次带回给画布（节点上能显示「排了 3 秒、当时第 3 位」）
   if (water.waitedMs) {
-    try { res.setHeader('X-VQ-Queue-Ms', String(water.waitedMs)) } catch { /* 响应头已发出 */ }
+    try {
+      res.setHeader('X-VQ-Queue-Ms', String(water.waitedMs))
+      // v0.9.83：票号还回去——画布拿着它就能在等待期间问「我排第几」，不用等到响应回来才知道
+      if (water.ticket) res.setHeader('X-VQ-Queue-Ticket', String(water.ticket))
+      if (water.position) res.setHeader('X-VQ-Queue-Position', String(water.position))
+    } catch { /* 响应头已发出 */ }
   }
   const releaseAdmission = () => { try { water.lease.release() } catch { /* 还名额不该影响响应 */ } }
   try {
@@ -116,6 +123,14 @@ export function createGatewayRouter() {
       // 画布直连 SeeAPI 时把幂等键放在请求头里（它自己的 generation_image2.py:158-162 就这么发），
       // 接到平台通道后这个头要接着往下传：否则上游每次都看到一个新键，画布重试就可能重复扣费。
       const callerIdempotency = String(req.headers['idempotency-key'] || '')
+
+      // 排队位（v0.9.83）：画布在等的时候问「我排第几」。只读——不占名额、不调上游、不花钱。
+      // 票号从 ?ticket= 或请求头取，没带就只回聚合数（几条在跑、几条在等、最久的等了多久）。
+      if (pathname === '/api/gateway/v1/queue' && req.method === 'GET') {
+        const ticket = url.searchParams.get('ticket') || String(req.headers['x-vq-queue-ticket'] || '') || callerIdempotency
+        sendJson(res, 200, canvasQueueView({ ticket }))
+        return true
+      }
 
       if (IMAGE_CREATE.has(pathname) && req.method === 'POST') {
         await withHeavy(req, res, async () => {

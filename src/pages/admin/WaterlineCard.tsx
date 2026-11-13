@@ -152,7 +152,9 @@ export default function WaterlineCard() {
                 {NO_USER_KINDS.has(kind) && view.heavy.queue ? (
                   view.heavy.queue.waitMs > 0 ? (
                     <span className="admin-cell-note">
-                      排队 {view.heavy.queue.waiting} / {view.heavy.queue.maxWaiting} 条 · 满了先等 {secondsText(view.heavy.queue.waitMs)} 秒
+                      排队 {view.heavy.queue.waiting} / {view.heavy.queue.maxWaiting} 条
+                      {view.heavy.queue.waiting > 0 ? '（最久 ' + secondsText(view.heavy.queue.oldestWaitMs) + ' 秒）' : ''}
+                      {' '}· 满了先等 {secondsText(view.heavy.queue.waitMs)} 秒
                     </span>
                   ) : (
                     <span className="admin-cell-note">没开排队 · 名额满时立刻拒</span>
@@ -176,6 +178,11 @@ export default function WaterlineCard() {
                 画布出图没开排队（VQ_CANVAS_QUEUE_MS=0）：名额满时后面的几张立刻被拒，一次批量出图会「先到的 2 张成功、其余失败」。
               </p>
             )
+          ) : null}
+          {view.heavy.queue && view.heavy.queue.waiting > 0 ? (
+            <p className="admin-hint">
+              现在在等：{view.heavy.queue.queue?.map((slot) => '第 ' + slot.position + ' 位 ' + secondsText(slot.waitedMs) + ' 秒').join(' · ')}
+            </p>
           ) : null}
 
           {view.reasons.length ? <p className="admin-hint admin-hint--fail">{view.reasons.join('；')}</p> : null}

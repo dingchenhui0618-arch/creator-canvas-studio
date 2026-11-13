@@ -45,6 +45,10 @@ export interface WaterlineReport {
       maxWaiting: number
       /** 现在几条在等 */
       waiting: number
+      /** 最久的那条等了多久（毫秒）：90 秒的等待上限够不够就看这个数（v0.9.83） */
+      oldestWaitMs: number
+      /** 排队明细：第几位、等了多久（不含票号，v0.9.83） */
+      queue?: { position: number; waitedMs: number }[]
       entered: number
       served: number
       timedOut: number

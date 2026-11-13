@@ -709,6 +709,53 @@
   white-space: nowrap;
 }
 .cv-bdc-state .cv-save-dot { background: var(--ink); }
+/* 排队位胶囊（v0.9.83）：和连接状态同一套做法（发丝线 + 等宽微字 + 全站状态胶囊的圆角），
+   忙的时候才出现——空闲时顶栏上不该挂一个常驻的 0。 */
+.cv-bdc-queue {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 24px;
+  max-width: 320px;
+  padding: 0 8px;
+  overflow: hidden;
+  color: var(--muted);
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .02em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.cv-bdc-queue svg { flex: none; }
+.cv-bdc-queue-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  background: var(--ink);
+  border-radius: 50%;
+}
+.cv-bdc-queue.is-waiting {
+  color: var(--warn);
+  background: var(--warn-soft);
+  border-color: rgba(138, 91, 8, .22);
+}
+.cv-bdc-queue.is-full {
+  color: var(--fail);
+  background: var(--fail-soft);
+  border-color: rgba(163, 56, 56, .22);
+}
+.cv-bdc-queue.is-done { color: var(--muted); }
+@media (max-width: 720px) {
+  /* 小屏状态条先留住排队位：第三方署名在面包屑里已经说了，地址在「新窗口」里也看得到，
+     所以这两项让位，好让「在跑 2 · 排队 4（最久 6.3s）」整句都放得下。 */
+  .cv-bdc-label,
+  .cv-bdc-url { display: none; }
+  .cv-bdc-queue { max-width: 200px; }
+}
 .cv-bdc-spacer { flex: 1 1 auto; }
 .cv-bdc-url {
   margin-right: 4px;

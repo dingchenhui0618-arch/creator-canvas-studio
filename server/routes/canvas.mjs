@@ -3,6 +3,7 @@
 import { sendJson } from './_shared.mjs'
 import { currentUser } from '../auth.mjs'
 import { canvasTrustEnabled, mintCanvasTicket } from '../canvas-session.mjs'
+import { canvasQueueView } from '../waterline.mjs'
 
 export function createCanvasRouter() {
   return {
@@ -32,6 +33,13 @@ export function createCanvasRouter() {
         } catch (error) {
           sendJson(res, error?.status || 500, { error: error?.message || '票据签发失败', code: error?.code })
         }
+        return true
+      }
+
+      // 画布出图的排队位（v0.9.83）：画布页的状态条轮询它，只读、不扣积分、不调上游。
+      // 只回聚合数（在跑几条、在等几条、最久的等了多久），票号不进这条响应。
+      if (pathname === '/api/canvas/queue' && req.method === 'GET') {
+        sendJson(res, 200, canvasQueueView())
         return true
       }
 

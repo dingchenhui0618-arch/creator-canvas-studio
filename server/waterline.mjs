@@ -15,6 +15,7 @@
 //   1) 只拦重活（复刻 / 评审 / 画布运行 / 画布出图）；检索只是转发一个 HTTP、对话只有几十 KB 上下文，不跟着拦；
 //   2) 阈值可用环境变量覆盖：写 0 等于关掉那一条，VQ_WATER_GUARD=0 只量不拦；
 //   3) 判定是纯函数、读数是注入的——测试不依赖跑测试这台机器的内存大小。
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import v8 from 'node:v8'
@@ -236,7 +237,10 @@ export function kindLimitFor(kind, level = 'ok', guard = true) {
 //   3) 内存到红线不排队：等一分钟也不会变好，直接拒（admit 已经记过告警）。
 const QUEUE_TICK_MS = 350
 const QUEUE_STARTED_AT = new Date().toISOString()
-const queueWaiting = new Map()
+// 排队位里现在有谁（v0.9.83）：v0.9.80 只数「几条在等」，这一版连「谁、什么时候进来的」一起记，
+// 于是「我排第几、前面还有几张、最久的那条等了多久」都能答，画布、后台和画布服务读的是同一份。
+// 票号由调用方带（画布可以用自己的节点 id 或幂等键）；没带就自己发一张，随响应头还回去。
+const queueWaiters = new Map()
 const queueStats = new Map()
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -256,6 +260,34 @@ export function queueLimitsFor(kind) {
   }
 }
 
+/** 排队票：最长 120 字符，空值就自己发一张（画布据此问「我排第几」）。 */
+function ticketOf(raw) {
+  const value = String(raw || '').trim().slice(0, 120)
+  return value || crypto.randomUUID()
+}
+
+/**
+ * 把这张票登记进排队位：同一张票重复进来不重复占位（客户端重试不该把队列撑长），
+ * 返回它此刻的名次与入场时间——名次是排队那一刻的快照，等待期间的最新名次走 queuePositionFor。
+ */
+function joinQueue(kind, ticket) {
+  const list = queueWaiters.get(kind) || []
+  const existing = list.findIndex((entry) => entry.ticket === ticket)
+  if (existing >= 0) return { entry: list[existing], position: existing + 1 }
+  const entry = { ticket, enteredAt: Date.now() }
+  list.push(entry)
+  queueWaiters.set(kind, list)
+  return { entry, position: list.length }
+}
+
+/** 从排队位里划掉这张票：排到 / 等超时 / 客户端断开都走这里，漏一条就是漏一个名额。 */
+function leaveQueue(kind, ticket) {
+  const list = queueWaiters.get(kind) || []
+  const next = list.filter((entry) => entry.ticket !== ticket)
+  if (next.length) queueWaiters.set(kind, next)
+  else queueWaiters.delete(kind)
+}
+
 function queueStat(kind) {
   let stat = queueStats.get(kind)
   if (!stat) {
@@ -265,16 +297,76 @@ function queueStat(kind) {
   return stat
 }
 
-/** 后台看的一行排队位：现在几条在等、这一轮排到了几条、超时/排满/客户端走了各几次。 */
+/** 后台看的一行排队位：现在几条在等、各排第几、这一轮排到了几条、超时/排满/客户端走了各几次。 */
 export function admissionQueueReport(kind = 'canvas_gen') {
   const limits = queueLimitsFor(kind)
+  const list = queueWaiters.get(kind) || []
+  const now = Date.now()
   return {
     kind,
     waitMs: limits.waitMs,
     maxWaiting: limits.maxWaiting,
-    waiting: queueWaiting.get(kind) || 0,
+    waiting: list.length,
+    // 最久的那条等了多久：90 秒的等待上限够不够，就看这个数
+    oldestWaitMs: list.length ? now - list[0].enteredAt : 0,
+    // 名次明细只给序号与等了多久：票号是「查自己」的凭据，不跟聚合数一起出去
+    queue: list.map((entry, index) => ({ position: index + 1, waitedMs: now - entry.enteredAt })),
     ...queueStat(kind),
     since: QUEUE_STARTED_AT,
+  }
+}
+
+/** 我问的那张票现在排第几；不在队里（已经排到、还没进来、票不存在）就回 null。 */
+export function queuePositionFor(kind, ticket) {
+  const id = String(ticket || '').trim()
+  if (!id) return null
+  const list = queueWaiters.get(kind) || []
+  const index = list.findIndex((entry) => entry.ticket === id)
+  if (index < 0) return null
+  return { position: index + 1, ahead: index, waiting: list.length, waitedMs: Date.now() - list[index].enteredAt }
+}
+
+/**
+ * 画布出图这一刻的样子（v0.9.83）：画布页的状态条、后台卡片、画布服务自己都读这一份。
+ * 只回聚合数——几条在跑、几条在排队、最久的等了多久、每条最多等多久；票号不出去，
+ * 除非调用方点名要查自己的那一张（options.ticket），那时多回一个「你排第几」。
+ */
+export function canvasQueueView(options = {}) {
+  const kind = 'canvas_gen'
+  const limits = thresholds()
+  const report = admissionQueueReport(kind)
+  const level = assessWaterline({ memory: readMemoryFacts(), heap: readHeapFacts() }, limits).level
+  const lease = heavyLeaseStatus()
+  const active = (lease.byKind && lease.byKind[kind]) || 0
+  const base = Math.max(0, Math.round(Number(config.credits.concurrency[kind]) || 0))
+  const limit = limits.guard ? capacityFor(kind, base, level) : base
+  const mine = options.ticket ? queuePositionFor(kind, options.ticket) : null
+  return {
+    ok: true,
+    at: new Date().toISOString(),
+    kind,
+    level,
+    active,
+    limit,
+    slots: Math.max(0, limit - active),
+    waiting: report.waiting,
+    oldestWaitMs: report.oldestWaitMs,
+    waitMs: report.waitMs,
+    maxWaiting: report.maxWaiting,
+    full: report.maxWaiting > 0 && report.waiting >= report.maxWaiting,
+    queue: report.queue,
+    ...(mine ? { mine } : {}),
+    // 在跑几条是整机口径（两个实例同一个数，来自共享租约）；排队位目前还是本进程的
+    scope: lease.source,
+    queueScope: 'process',
+    counts: {
+      entered: report.entered,
+      served: report.served,
+      timedOut: report.timedOut,
+      full: report.full,
+      abandoned: report.abandoned,
+      maxWaitMs: report.maxWaitMs,
+    },
   }
 }
 
@@ -285,7 +377,10 @@ function queueGone(kind) {
 
 /**
  * 带排队的名额申请：先试一次 admit（不排队时这就是全部），满了再按 tick 轮询到 deadline。
- * 返回和 admit 同形状，多三个字段：queued（排过队）、waitedMs（等了多久）、aborted（客户端已经走了）。
+ * 返回和 admit 同形状，多几个字段：queued（排过队）、waitedMs（等了多久）、aborted（客户端已经走了）、
+ * ticket（排队票，调用方没带就自己发一张）、position/ahead（入场名次与前面还有几张）。
+ * v0.9.83 起这张票会登记进排队位，所以等待期间画布能问出「我排第几」——
+ * 以前只有一条连接在等，画布上什么也看不到。
  * aborted 时调用方不要写响应、更不要调上游。
  */
 export async function admitWaiting(kind, options = {}) {
@@ -297,7 +392,7 @@ export async function admitWaiting(kind, options = {}) {
     return { ...first, queued: false, waitedMs: 0 }
   }
   const stat = queueStat(kind)
-  const waiting = queueWaiting.get(kind) || 0
+  const waiting = (queueWaiters.get(kind) || []).length
   if (waiting >= limits.maxWaiting) {
     // 排队位也满了：这一单直接拒，别把连接堆在这里
     stat.full += 1
@@ -320,10 +415,12 @@ export async function admitWaiting(kind, options = {}) {
     }
   }
 
-  queueWaiting.set(kind, waiting + 1)
-  stat.entered += 1
-  const startedAt = Date.now()
+  // 登记进排队位：名次在入场这一刻算出来，等待期间的最新名次走 queuePositionFor
+  const ticket = ticketOf(options.ticket)
+  const joined = joinQueue(kind, ticket)
+  const startedAt = joined.entry.enteredAt
   const deadline = startedAt + limits.waitMs
+  stat.entered += 1
   const isAborted = typeof options.isAborted === 'function' ? options.isAborted : () => false
   const tickMs = Math.max(20, Math.round(Number(options.tickMs) || QUEUE_TICK_MS))
   let last = first
@@ -331,7 +428,7 @@ export async function admitWaiting(kind, options = {}) {
     while (true) {
       if (isAborted()) {
         queueGone(kind)
-        return { ok: false, aborted: true, status: 499, level: last.level, lease: null, queued: false, waitedMs: Date.now() - startedAt, body: { code: 'CLIENT_GONE', error: '客户端已经断开' } }
+        return { ok: false, aborted: true, status: 499, level: last.level, lease: null, queued: false, waitedMs: Date.now() - startedAt, ticket, body: { code: 'CLIENT_GONE', error: '客户端已经断开' } }
       }
       const left = deadline - Date.now()
       if (left <= 0) break
@@ -339,17 +436,18 @@ export async function admitWaiting(kind, options = {}) {
       await sleep(Math.min(left, tickMs + Math.round(Math.random() * 120)))
       if (isAborted()) {
         queueGone(kind)
-        return { ok: false, aborted: true, status: 499, level: last.level, lease: null, queued: false, waitedMs: Date.now() - startedAt, body: { code: 'CLIENT_GONE', error: '客户端已经断开' } }
+        return { ok: false, aborted: true, status: 499, level: last.level, lease: null, queued: false, waitedMs: Date.now() - startedAt, ticket, body: { code: 'CLIENT_GONE', error: '客户端已经断开' } }
       }
       last = admit(kind)
       if (last.ok) {
         const waitedMs = Date.now() - startedAt
         stat.served += 1
         stat.maxWaitMs = Math.max(stat.maxWaitMs, waitedMs)
-        return { ...last, queued: true, waitedMs }
+        // position 是入场名次（排到之后已经没意义，留着让画布知道「它当时排第几」）
+        return { ...last, queued: true, waitedMs, ticket, position: joined.position, ahead: Math.max(0, joined.position - 1) }
       }
       // 排队期间水位掉到红线：别等了，直接把红线那条回给它
-      if (last.level === 'critical') return { ...last, queued: false, waitedMs: Date.now() - startedAt }
+      if (last.level === 'critical') return { ...last, queued: false, waitedMs: Date.now() - startedAt, ticket }
     }
     const waitedMs = Date.now() - startedAt
     stat.timedOut += 1
@@ -362,6 +460,7 @@ export async function admitWaiting(kind, options = {}) {
       queued: true,
       timedOut: true,
       waitedMs,
+      ticket,
       body: {
         ...body,
         code: 'SERVER_BUSY',
@@ -369,11 +468,11 @@ export async function admitWaiting(kind, options = {}) {
           ? '排队等了 ' + waitText(waitedMs) + ' 秒还没轮到（同时最多 ' + (last.kindLimit || 0) + ' 条），这次生成没有开始（没有产生费用）。少发几张，或者等一分钟再试。'
           : '这次生成没有开始（没有产生费用）：排队等了 ' + waitText(waitedMs) + ' 秒还没轮到。少发几张，或者等一分钟再试。',
         retryAfterSec: RETRY_AFTER_SEC,
-        ...(internal ? { waitedMs, queueWaiting: queueWaiting.get(kind) || 0, kindActive: last.kindActive ?? null, kindLimit: last.kindLimit || null } : {}),
+        ...(internal ? { waitedMs, queueWaiting: (queueWaiters.get(kind) || []).length, kindActive: last.kindActive ?? null, kindLimit: last.kindLimit || null } : {}),
       },
     }
   } finally {
-    queueWaiting.set(kind, Math.max(0, (queueWaiting.get(kind) || 1) - 1))
+    leaveQueue(kind, ticket)
   }
 }
 
