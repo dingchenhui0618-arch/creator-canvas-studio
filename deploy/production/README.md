@@ -173,3 +173,39 @@ curl -s -X POST -H "Cookie: $SESSION" http://127.0.0.1:8799/api/admin/alerts/tes
 - 推失败进 `alert-outbox.json`，按 1 / 5 / 15 分钟退避重试，四次仍失败标 `dead`，后台可手动补发；
 - 签名头 `x-vq-signature: sha256=<HMAC-SHA256(密钥, 请求体原文)>`，密钥只在保存通道那一次回明文；
 - 回滚：后台「清掉通道」即回到环境变量；两个数据文件（`alert-channel.json` / `alert-outbox.json`）删掉即回到「没有通道、没有待重试」。
+
+## 邮件通道与找回密码（2026-11-13，v0.9.54）
+
+后台「系统 → 邮件通道」直接填 SMTP，保存即可生效，**不用改 .env、不用重启**。环境变量只是兜底：
+`VQ_SMTP_HOST` / `VQ_SMTP_PORT` / `VQ_SMTP_SECURE=1`（直连 TLS 465）/ `VQ_SMTP_STARTTLS=0`（关掉 STARTTLS）/ `VQ_SMTP_USER` / `VQ_SMTP_PASS` / `VQ_SMTP_FROM` / `VQ_SMTP_FROM_NAME`。
+
+自检（把 cookie 换成管理员会话）：
+
+```sh
+BASE=https://visionqa.wavisionai.cn
+COOKIE='vq_session=…'
+
+# 现在的通道（口令只回「有没有」，账号是掩码）
+curl -s -H "cookie: $COOKIE" $BASE/api/admin/mail
+
+# 保存一条通道（口令留空 = 沿用旧口令；这里示例是 465 直连 TLS）
+curl -s -X PUT -H "cookie: $COOKIE" -H 'content-type: application/json' \
+  -d '{"host":"smtp.example.com","port":465,"secure":true,"user":"bot","pass":"换成真实口令","fromName":"VisionQA","fromAddress":"发件地址"}' \
+  $BASE/api/admin/mail/channel
+
+# 真的发一封，等 SMTP 的结果
+curl -s -X POST -H "cookie: $COOKIE" -H 'content-type: application/json' -d '{}' $BASE/api/admin/mail/test
+
+# 清掉后台配置（回落到环境变量；都没有就关闭自助找回）
+curl -s -X DELETE -H "cookie: $COOKIE" $BASE/api/admin/mail/channel
+```
+
+行为约定：
+
+- 登录页「忘记密码」是否出现，由 `GET /api/auth/config` 的 `passwordReset` 决定；没配通道时不摆死入口。
+- 链接是**一次性**、**30 分钟**有效（`VQ_RESET_TTL_MINUTES` 可调 5–120）；申请新的会让旧链接立即失效。
+- 改完口令会注销这个账号的全部会话（返回 `signedOut` 数）。
+- 限流：同一邮箱 3 次/小时、同一来源 10 次/小时（进程内，重启清零）。
+- 发信失败只进日志（`mail-failed`）与后台审计，不会主动告警；邮件在后台发，「申请成功」只表示已排队。
+
+回滚：`/opt/visionqa/ops/rollback.sh`。只想关掉找回就「清掉通道」。
