@@ -943,5 +943,5 @@ DOMAIN=visionqa.wavisionai.cn bash deploy/production/enable-https.sh            
 
 细节见 [评审证据编号不再挤成一串](docs/review-anchor-badges-2026-11-14.md)。
 
-提交 `（待填）`（换角避让 + 面积旁证 + 7 条测试 + 3 张生产截图 + 文档），CI `（待填）` success。
+提交 `ffa6c18`（换角避让 + 面积旁证 + 7 条测试 + 3 张生产截图 + 文档）+ 本条提交（提交号与 CI 号），CI **43504302276** success（`验证（Node 22.12.0）` / `验证（Node 24）` / `安全扫描` 三个 job 全绿）。
 
