@@ -667,6 +667,43 @@
   overflow-wrap: anywhere;
 }
 
+/* 外推通道（v0.9.53）：地址只给掩码，配置就地改。用与告警行相同的卡片语言。 */
+.admin-channel {
+  margin: 8px 0 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--line, #e7e2d9);
+  border-radius: var(--radius-xs);
+  background: var(--surface-subtle, #f8f7f4);
+}
+
+.admin-channel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.admin-channel-head .admin-sub {
+  max-width: 640px;
+}
+
+.admin-channel-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.admin-channel-field {
+  flex: 1 1 280px;
+  min-width: 0;
+}
+
+.admin-channel-form .admin-doc-actions {
+  flex: 0 0 auto;
+}
+
 /* 公共模板勾选：整行、复选框与说明基线对齐，不用浏览器默认 13px 挤压行高 */
 .admin-edit-check {
   grid-template-columns: auto minmax(0, 1fr);

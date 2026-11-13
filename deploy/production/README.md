@@ -157,3 +157,19 @@ ssh root@<host> "node /tmp/patch-download-credentials.mjs --root /opt/bdcanvas -
 - 画布由 Vite dev 直接读源码，**刷新画布页面即生效**，不需要重新构建；
 - 画布升级覆盖 `src/main.ts` 后重跑一次；`--check` 退出码 1 就表示没打上；
 - 回滚：`cp /opt/bdcanvas/src/main.ts.bak-vq-download /opt/bdcanvas/src/main.ts`。
+
+## 告警外推通道（2026-11-13，v0.9.53）
+
+通道在后台「系统 → 告警 → 外推通道」直接配，地址与签名密钥落在数据目录 `alert-channel.json`（0600），**不用改 .env、不用重启**。
+环境变量 `VQ_ALERT_WEBHOOK` 只作兜底（后台没配时用它），`VQ_ALERT_SECRET` 给环境变量通道加签名。
+
+```bash
+# 看当前通道（只回掩码）、投递计数与待重试条目
+curl -s -H "Cookie: $SESSION" http://127.0.0.1:8799/api/admin/alerts | head -c 600
+# 自检：记一条测试告警，并等这次外推的结果（notify.status / ms）
+curl -s -X POST -H "Cookie: $SESSION" http://127.0.0.1:8799/api/admin/alerts/test -d '{}'
+```
+
+- 推失败进 `alert-outbox.json`，按 1 / 5 / 15 分钟退避重试，四次仍失败标 `dead`，后台可手动补发；
+- 签名头 `x-vq-signature: sha256=<HMAC-SHA256(密钥, 请求体原文)>`，密钥只在保存通道那一次回明文；
+- 回滚：后台「清掉通道」即回到环境变量；两个数据文件（`alert-channel.json` / `alert-outbox.json`）删掉即回到「没有通道、没有待重试」。

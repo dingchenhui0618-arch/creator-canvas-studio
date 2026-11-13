@@ -168,10 +168,12 @@ export const config = {
     termsVersion: (process.env.VQ_TERMS_VERSION || '2026-11-12').trim(),
     termsUpdatedAt: (process.env.VQ_TERMS_UPDATED_AT || '2026-11-12').trim(),
   },
-  // 告警：本站队列（后台「系统」页）永远可用；配了 VQ_ALERT_WEBHOOK 才往外推。
-  // 没有通道时至少「坏了能在后台看到」，不会像以前一样只有 journalctl。
+  // 告警：本站队列（后台「系统」页）永远可用。
+  // 外推通道可以在后台直接配（存在数据目录的 alert-channel.json），环境变量只是兜底：
+  // 老部署不改也能用；VQ_ALERT_SECRET 给环境变量通道加 HMAC 签名。
   alerts: {
     webhook: (process.env.VQ_ALERT_WEBHOOK || '').trim(),
+    secret: (process.env.VQ_ALERT_SECRET || '').trim(),
     diskFreeMb: Number(process.env.VQ_ALERT_DISK_FREE_MB || 1024),
   },
   auth: {

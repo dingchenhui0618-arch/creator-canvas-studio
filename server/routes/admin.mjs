@@ -18,7 +18,8 @@ import { lastWebRead, readWebPage } from '../webread.mjs'
 import { listKeys, createKey, updateKey, deleteKey, testKey, listRoutes, previewRoute, vaultModels, PROVIDER_PRESETS, CAPABILITIES } from '../keyvault.mjs'
 import { gatewayReadiness, gatewayStatus, modelCoverage } from '../gateway.mjs'
 import { canvasAdminConfigured, listCanvasUsers, setCanvasUserAccess } from '../canvas-admin.mjs'
-import { alertCounts, ackAlert, checkDisk, listAlerts, recordAlert } from '../alerts.mjs'
+import { alertCounts, ackAlert, checkDisk, flushAlertDeliveries, listAlerts, listOutbox, outboxStats, recordAlert, retryOutboxItem } from '../alerts.mjs'
+import { channelView, clearChannel, maskUrl, saveChannel } from '../alert-channel.mjs'
 import { clearClientErrors, listClientErrors } from '../client-errors.mjs'
 import { listLogs, pruneLogs } from '../log-files.mjs'
 import { listReports, reportCounts, resolveReport } from '../reports.mjs'
@@ -797,8 +798,52 @@ export function createAdminRouter() {
           items,
           counts,
           disk,
-          channel: { webhook: Boolean(config.alerts.webhook), diskFreeMb: config.alerts.diskFreeMb },
+          // 通道只给掩码：机器人地址本身就是凭证，不进浏览器明文
+          channel: { ...(await channelView()), diskFreeMb: config.alerts.diskFreeMb },
+          outbox: await outboxStats(),
+          outboxItems: await listOutbox({ limit: 10 }),
         })
+        return true
+      }
+
+      // 配置外推通道：换了地址不用登服务器改 .env，也不用重启。
+      // 保存时不给钥匙就沿用旧的；rotate 才换一把（换了要同步改接收端）。
+      if (pathname === '/api/admin/alerts/channel' && req.method === 'PUT') {
+        const body = await readBody(req)
+        const saved = await saveChannel({ url: body.url, enabled: body.enabled !== false, rotate: Boolean(body.rotate), by: user.email })
+        if (!saved.ok) return (sendJson(res, 400, { ok: false, error: saved.error }), true)
+        recordAudit({
+          req,
+          actor: user,
+          action: 'alert.channel.save',
+          targetType: 'alert',
+          targetId: 'channel',
+          targetLabel: '告警外推通道',
+          detail: { urlMasked: maskUrl(saved.channel.url), enabled: saved.channel.enabled, rotated: saved.secretCreated },
+        })
+        sendJson(res, 200, {
+          ok: true,
+          channel: await channelView(),
+          // 签名密钥只在这一刻回明文：接收端要配它，之后接口只给掩码
+          secret: saved.secretCreated ? saved.channel.secret : '',
+        })
+        return true
+      }
+
+      if (pathname === '/api/admin/alerts/channel' && req.method === 'DELETE') {
+        await clearChannel()
+        recordAudit({ req, actor: user, action: 'alert.channel.clear', targetType: 'alert', targetId: 'channel', targetLabel: '告警外推通道' })
+        sendJson(res, 200, { ok: true, channel: await channelView() })
+        return true
+      }
+
+      // 手动重试一条没推出去的通知：不用等 30 分钟的定时器
+      const outboxRetry = pathname.match(/^\/api\/admin\/alerts\/outbox\/([\w-]+)\/retry$/)
+      if (outboxRetry && req.method === 'POST') {
+        const item = await retryOutboxItem(outboxRetry[1])
+        if (!item) return (sendJson(res, 404, { ok: false, error: '没有这条待重试通知' }), true)
+        recordAudit({ req, actor: user, action: 'alert.retry', targetType: 'alert', targetId: outboxRetry[1], targetLabel: item.title })
+        sendJson(res, 200, { ok: true, item, outbox: await outboxStats() })
         return true
       }
 
@@ -872,6 +917,7 @@ export function createAdminRouter() {
         return true
       }
 
+      // 测试告警：记一条真的（后台队列里能看到），并等这一次外推的结果
       if (pathname === '/api/admin/alerts/test' && req.method === 'POST') {
         const alert = await recordAlert({
           kind: 'test',
@@ -879,7 +925,8 @@ export function createAdminRouter() {
           title: '测试告警：后台链路正常',
           detail: '由 ' + user.email + ' 手动触发，用来确认告警队列与外推通道是通的',
         })
-        sendJson(res, 201, { ok: true, alert })
+        await flushAlertDeliveries()
+        sendJson(res, 201, { ok: true, alert, notify: alert?.notify || null, outbox: await outboxStats() })
         return true
       }
 

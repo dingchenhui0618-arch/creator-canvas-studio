@@ -59,6 +59,8 @@ type DiagnosticsInfo = {
   }
 }
 
+type AlertNotify = { at: string; ok: boolean; status: number; ms: number; error: string }
+
 type AlertItem = {
   id: string
   kind: string
@@ -69,13 +71,51 @@ type AlertItem = {
   firstAt: string
   lastAt: string
   ackAt: string | null
+  notify?: AlertNotify
+}
+
+type AlertChannel = {
+  configured: boolean
+  source: 'admin' | 'env' | 'none'
+  urlMasked: string
+  secretMasked: string
+  signed: boolean
+  enabled: boolean
+  updatedAt: string
+  updatedBy: string
+  canEdit: boolean
+  diskFreeMb: number
+}
+
+type OutboxStats = {
+  pending: number
+  dead: number
+  total: number
+  sentCount: number
+  lastSentAt: string
+  lastSentStatus: number
+  lastAttempt: { at: string; status: number; attempts: number; error: string; state: string } | null
+}
+
+type OutboxItem = {
+  id: string
+  title: string
+  kind: string
+  attempts: number
+  nextAt: string
+  lastStatus: number
+  lastError: string
+  state: string
+  createdAt: string
 }
 
 type AlertsInfo = {
   items: AlertItem[]
   counts: { open: number; total: number; byKind: Record<string, number> }
   disk: { ok: boolean; freeBytes: number; totalBytes: number; thresholdBytes: number }
-  channel: { webhook: boolean; diskFreeMb: number }
+  channel: AlertChannel
+  outbox: OutboxStats
+  outboxItems: OutboxItem[]
 }
 
 // 复刻任务：以前任务只存内存，发版重启就 404、扣掉的积分也不退。
@@ -265,6 +305,11 @@ export default function SystemSection() {
   const backups = useApi<BackupsInfo>('/api/admin/backups')
   const [alertNote, setAlertNote] = useState('')
   const [busy, setBusy] = useState('')
+  // 外推通道：地址本身是凭证，输入框不预填；保存后接口只回掩码
+  const [channelUrl, setChannelUrl] = useState('')
+  const [channelNote, setChannelNote] = useState('')
+  const [channelSecret, setChannelSecret] = useState('')
+  const [channelBusy, setChannelBusy] = useState('')
 
   const errors = [
     version.error ? `GET /api/version：${version.error}` : '',
@@ -282,17 +327,77 @@ export default function SystemSection() {
     jobs.reload()
   }
 
+  // 测试告警会真的记一条，并等这一次外推的结果回来——只写「已发送」等于没验
   const sendTestAlert = async () => {
     setBusy('test')
     setAlertNote('')
     try {
-      await request('/api/admin/alerts/test', { method: 'POST', body: JSON.stringify({}) })
-      setAlertNote('已记一条测试告警；外推通道' + (alerts.data?.channel.webhook ? '已配置，会同步推送' : '未配置，只留在本站队列'))
+      const result = await request<{ notify: AlertNotify | null }>('/api/admin/alerts/test', { method: 'POST', body: JSON.stringify({}) })
+      const notify = result.notify
+      setAlertNote(
+        !notify
+          ? '已记一条测试告警：现在没有外推通道，只留在本站队列'
+          : notify.ok
+            ? '已记一条测试告警，外推成功（HTTP ' + notify.status + '，' + notify.ms + ' ms）'
+            : '已记一条测试告警，但外推失败（' + (notify.status || '连不上') + '）：' + (notify.error || '接收端没接受') + '；已进重试队列',
+      )
       alerts.reload()
     } catch (cause) {
       setAlertNote(cause instanceof Error ? cause.message : '发送失败')
     } finally {
       setBusy('')
+    }
+  }
+
+  const saveAlertChannel = async () => {
+    setChannelBusy('save')
+    setChannelNote('')
+    setChannelSecret('')
+    try {
+      const result = await request<{ channel: AlertChannel; secret: string }>('/api/admin/alerts/channel', {
+        method: 'PUT',
+        body: JSON.stringify({ url: channelUrl.trim(), enabled: true }),
+      })
+      setChannelUrl('')
+      setChannelSecret(result.secret || '')
+      setChannelNote(result.secret ? '通道已保存。签名密钥只显示这一次，请现在填到接收端。' : '通道已保存，签名密钥沿用旧的。')
+      alerts.reload()
+    } catch (cause) {
+      setChannelNote(cause instanceof Error ? cause.message : '保存失败')
+    } finally {
+      setChannelBusy('')
+    }
+  }
+
+  const clearAlertChannel = async () => {
+    setChannelBusy('clear')
+    setChannelNote('')
+    setChannelSecret('')
+    try {
+      await request('/api/admin/alerts/channel', { method: 'DELETE' })
+      setChannelNote('已清掉后台配置的通道；如果环境变量里有 VQ_ALERT_WEBHOOK，会继续用它。')
+      alerts.reload()
+    } catch (cause) {
+      setChannelNote(cause instanceof Error ? cause.message : '清除失败')
+    } finally {
+      setChannelBusy('')
+    }
+  }
+
+  const retryOutbox = async (item: OutboxItem) => {
+    setChannelBusy(item.id)
+    setChannelNote('')
+    try {
+      const result = await request<{ item: OutboxItem }>('/api/admin/alerts/outbox/' + item.id + '/retry', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      })
+      setChannelNote(result.item.state === 'sent' ? '这条已经补发成功，队列里不再留。' : '这次还是没发出去，已按退避时间再排一次。')
+      alerts.reload()
+    } catch (cause) {
+      setChannelNote(cause instanceof Error ? cause.message : '重试失败')
+    } finally {
+      setChannelBusy('')
     }
   }
 
@@ -330,6 +435,7 @@ export default function SystemSection() {
             <p className="admin-label">告警</p>
             <p className="admin-sub">
               5xx、模型上游失败、磁盘剩余不足三类会落到这里：同一条 30 分钟内只累加次数；服务重启后仍然在，不靠人盯日志。
+              外推通道可以在下面直接配，推失败会进重试队列。
             </p>
           </div>
           <div className="admin-alert-actions">
@@ -355,8 +461,108 @@ export default function SystemSection() {
                 磁盘剩余 <b>{formatBytes(alerts.data.disk.freeBytes)}</b>，阈值 {formatBytes(alerts.data.disk.thresholdBytes)}
               </span>
               <span>
-                外推通道 <b>{alerts.data.channel.webhook ? '已配置' : '未配置'}</b>
+                外推通道 <b>{alerts.data.channel.configured ? '已配置' : '未配置'}</b>
               </span>
+            </div>
+
+            {/* 外推通道：地址本身是凭证，页面只给掩码；保存后换了一把签名密钥才回明文 */}
+            <div className="admin-channel">
+              <div className="admin-channel-head">
+                <div>
+                  <p className="admin-label">外推通道</p>
+                  <p className="admin-sub">
+                    机器人或自建接收端都行，POST 一条 JSON：<code className="admin-mono">{'{ text, alert, source }'}</code>。
+                    配了签名就带 <code className="admin-mono">x-vq-signature: sha256=…</code>（HMAC-SHA256，对请求体原文）。
+                    推失败不会丢：按 1 / 5 / 15 分钟重试，四次都不成才标「已失败」。
+                  </p>
+                </div>
+                <Badge tone={alerts.data.channel.configured ? 'ok' : 'warn'}>
+                  {alerts.data.channel.configured ? '已配置' : '未配置'}
+                </Badge>
+              </div>
+
+              <dl className="admin-kv">
+                <div>
+                  <dt>接收地址</dt>
+                  <dd>
+                    <code className="admin-mono">{alerts.data.channel.urlMasked || '—'}</code>
+                    {alerts.data.channel.source === 'env' ? <span className="admin-cell-sub">来自环境变量 VQ_ALERT_WEBHOOK</span> : null}
+                    {alerts.data.channel.source === 'admin' ? <span className="admin-cell-sub">后台配置{alerts.data.channel.updatedBy ? ' · ' + alerts.data.channel.updatedBy : ''}</span> : null}
+                  </dd>
+                </div>
+                <div>
+                  <dt>签名</dt>
+                  <dd>
+                    <Badge tone={alerts.data.channel.signed ? 'ok' : 'neutral'}>{alerts.data.channel.signed ? '已开启' : '未开启'}</Badge>
+                    <code className="admin-mono">{alerts.data.channel.secretMasked || '—'}</code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>投递</dt>
+                  <dd>
+                    成功 {alerts.data.outbox.sentCount} 次
+                    {alerts.data.outbox.lastSentAt ? ' · 最近 ' + formatDateTime(alerts.data.outbox.lastSentAt) + '（HTTP ' + alerts.data.outbox.lastSentStatus + '）' : ''}
+                    {' · '}待重试 {alerts.data.outbox.pending} · 已失败 {alerts.data.outbox.dead}
+                  </dd>
+                </div>
+                {alerts.data.outbox.lastAttempt ? (
+                  <div>
+                    <dt>最近一次尝试</dt>
+                    <dd>
+                      <Badge tone={alerts.data.outbox.lastAttempt.state === 'dead' ? 'fail' : alerts.data.outbox.lastAttempt.state === 'pending' ? 'warn' : 'ok'}>
+                        {alerts.data.outbox.lastAttempt.state === 'dead' ? '已失败' : alerts.data.outbox.lastAttempt.state === 'pending' ? '等重试' : '已发出'}
+                      </Badge>
+                      <span className="admin-cell-sub">
+                        第 {alerts.data.outbox.lastAttempt.attempts} 次 · {alerts.data.outbox.lastAttempt.status ? 'HTTP ' + alerts.data.outbox.lastAttempt.status : '连不上'}
+                        {alerts.data.outbox.lastAttempt.error ? ' · ' + alerts.data.outbox.lastAttempt.error : ''}
+                      </span>
+                    </dd>
+                  </div>
+                ) : null}
+              </dl>
+
+              {alerts.data.channel.canEdit ? (
+                <div className="admin-channel-form">
+                  <label className="vq-field admin-channel-field">
+                    <span>机器人 / webhook 地址</span>
+                    <input
+                      className="vq-input"
+                      value={channelUrl}
+                      onChange={(event) => setChannelUrl(event.target.value)}
+                      placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/…"
+                      autoComplete="off"
+                      spellCheck={false}
+                      disabled={channelBusy === 'save'}
+                    />
+                  </label>
+                  <div className="admin-doc-actions">
+                    <button
+                      type="button"
+                      className="vq-button"
+                      onClick={() => void saveAlertChannel()}
+                      disabled={channelBusy === 'save' || !channelUrl.trim()}
+                    >
+                      {channelBusy === 'save' ? '保存中…' : '保存通道'}
+                    </button>
+                    {alerts.data.channel.source === 'admin' ? (
+                      <button type="button" className="vq-button vq-button--ghost" onClick={() => void clearAlertChannel()} disabled={channelBusy === 'clear'}>
+                        {channelBusy === 'clear' ? '清除中…' : '清掉通道'}
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+
+              {alerts.data.channel.source === 'env' ? (
+                <p className="admin-hint">现在用的是服务器环境变量 VQ_ALERT_WEBHOOK。要换地址可以先在上面保存一条，后台配置优先于环境变量。</p>
+              ) : null}
+
+              {channelSecret ? (
+                <p className="admin-hint admin-hint--ok">
+                  签名密钥（只显示这一次）：<code className="admin-mono">{channelSecret}</code>
+                </p>
+              ) : null}
+              {channelNote ? <p className="admin-hint">{channelNote}</p> : null}
             </div>
 
             {alerts.data.items.length ? (
@@ -371,6 +577,9 @@ export default function SystemSection() {
                       <span className="admin-cell-sub admin-mono">
                         第 {item.count} 次 · 最近 {formatDateTime(item.lastAt)}
                         {item.detail ? ' · ' + item.detail : ''}
+                        {item.notify
+                          ? ' · 外推' + (item.notify.ok ? ' HTTP ' + item.notify.status + '（' + item.notify.ms + ' ms）' : '失败（' + (item.notify.status || '连不上') + '）')
+                          : ''}
                       </span>
                     </div>
                     <button
@@ -387,6 +596,37 @@ export default function SystemSection() {
             ) : (
               <p className="admin-hint admin-hint--ok">没有未确认的告警：5xx、上游失败与磁盘水位都正常。</p>
             )}
+
+            {alerts.data.outboxItems.length ? (
+              <div className="admin-block">
+                <p className="admin-label">没推出去的通知</p>
+                <p className="admin-sub">接收端自己也会挂，所以失败不丢：按 1 / 5 / 15 分钟退避重试，四次都不成才标「已失败」。</p>
+                <ul className="admin-alert-list">
+                  {alerts.data.outboxItems.map((item) => (
+                    <li key={item.id} className="admin-alert-row">
+                      <Badge tone={item.state === 'dead' ? 'fail' : 'warn'}>{item.state === 'dead' ? '已失败' : '等重试'}</Badge>
+                      <div className="admin-alert-copy">
+                        <strong>{item.title}</strong>
+                        <span className="admin-cell-sub admin-mono">
+                          第 {item.attempts} 次 ·{' '}
+                          {item.state === 'dead' ? '不再自动重试' : '下次 ' + formatDateTime(item.nextAt)} ·{' '}
+                          {item.lastStatus ? 'HTTP ' + item.lastStatus : '连不上'}
+                          {item.lastError ? ' · ' + item.lastError : ''}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        className="vq-button vq-button--ghost vq-button--icon"
+                        onClick={() => void retryOutbox(item)}
+                        disabled={channelBusy === item.id}
+                      >
+                        {channelBusy === item.id ? '重试中…' : '重试'}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           </>
         ) : null}
 
