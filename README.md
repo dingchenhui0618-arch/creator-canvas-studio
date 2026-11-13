@@ -721,7 +721,7 @@ DOMAIN=visionqa.wavisionai.cn bash deploy/production/enable-https.sh            
 
 ![生产：手机 390 宽的同一块明细——版本行与逐笔各两行，不横向溢出（v0.9.66）](docs/screenshot-spend-detail-mobile-2026-11-13.png)
 
-提交 `PENDING`（代码 + 5 条测试 + 文档 + 2 张生产截图），CI `PENDING`。
+提交 `28c7a26`（代码 + 5 条测试 + 文档 + 2 张生产截图），CI 43472158773 success。
 
 细节见 [作品的花费明细](docs/spend-detail-2026-11-13.md)。
 
