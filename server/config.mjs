@@ -152,6 +152,11 @@ export const config = {
       // 同账号同时只允许一条画布流程在跑，避免连点把上游配额打光
       flow_run: Number(process.env.VQ_CONCURRENCY_FLOW_RUN ?? 1),
     },
+    // 全站（不分账号）同时在跑的重活条数上限（v0.9.70）。
+    // 按账号的上限管不住「两个账号各来两条」：这台机器只有 2 核 / 1.86 GB，
+    // 重活撞在一起就是 OOM，进程一死所有人的会话一起断。
+    // 0 = 不限（写 0 就恢复旧行为）；偏紧时按水位再折到 2 条，到红线时重活整体拒绝。
+    globalHeavy: numEnv(process.env.VQ_GLOBAL_HEAVY, 3),
   },
   // 界面口径：生产环境只讲产品语言（不出现模型标识、上游地址、环境变量）；
   // 内部测试环境显式设 VQ_UI_MODE=internal 后，后台保留完整技术详情用于排障。

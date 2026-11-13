@@ -23,6 +23,24 @@ export function leave(userId, kind) {
   else inflight.set(k, current - 1)
 }
 
+// 全站视角：把某几个 kind 的在跑数加起来（跨账号）。
+// 按账号的上限管不住「两个人各来两条」——这台机器只有 2 核 / 1.86 GB，
+// 重活撞在一起就是 OOM，进程一死所有人的会话一起断。
+// 这里只读计数，不做判断：判断（上限多少、要不要拒）留给 waterline，
+// 因为它还取决于当前水位——同一份数字，两处别各算一遍。
+export function activeFor(kinds) {
+  const wanted = new Set(kinds || [])
+  const byKind = {}
+  let total = 0
+  for (const [k, count] of inflight) {
+    const kind = k.slice(k.lastIndexOf('|') + 1)
+    if (!wanted.has(kind)) continue
+    total += count
+    byKind[kind] = (byKind[kind] || 0) + count
+  }
+  return { total, byKind }
+}
+
 export function snapshot() {
   const out = {}
   for (const [k, v] of inflight) out[k] = v

@@ -93,6 +93,20 @@ export default function WaterlineCard() {
               </dd>
             </div>
             <div>
+              <dt>全站重活</dt>
+              <dd>
+                <span className="admin-mono">
+                  {view.heavy.active} 条在跑
+                  {view.heavy.unlimited ? ' · 不限' : ' / 上限 ' + view.heavy.limit + ' 条'}
+                </span>
+                <span className="admin-cell-sub">
+                  {view.heavy.unlimited
+                    ? '这一层没开（VQ_GLOBAL_HEAVY=' + view.heavy.configLimit + '），只按账号限'
+                    : '跨账号合计；排满后新的重活在扣费前被拒（不扣积分）'}
+                </span>
+              </dd>
+            </div>
+            <div>
               <dt>CPU 负载</dt>
               <dd>
                 <span className="admin-mono">{view.cpu.load1.toFixed(2)}</span>
@@ -126,6 +140,11 @@ export default function WaterlineCard() {
           </div>
 
           {view.reasons.length ? <p className="admin-hint admin-hint--fail">{view.reasons.join('；')}</p> : null}
+          {view.heavy.full ? (
+            <p className="admin-hint admin-hint--fail">
+              全站重活已经排满（{view.heavy.active} / {view.heavy.limit} 条）：现在的新重活会在扣费前被拒，这一单不扣积分。
+            </p>
+          ) : null}
 
           <p className="admin-hint">
             {view.guard
@@ -139,7 +158,9 @@ export default function WaterlineCard() {
                 view.thresholds.tightAvailableMb +
                 ' MB 或 ' +
                 view.thresholds.tightHeapPercent +
-                '% 时并发降到 1。阈值由部署时的环境变量决定，这里只读。'
+                '% 时并发降到 1。' +
+                (view.heavy.unlimited ? '' : '全站重活上限 ' + view.heavy.limit + ' 条，排满时同样在扣费前拒。') +
+                '阈值与上限都由部署时的环境变量决定，这里只读。'
               : '当前部署关掉了守卫（VQ_WATER_GUARD=0）：这里只量、不拦，重活按配置的并发原样放行。'}
             {' 检查时间 '}
             {formatDateTime(view.checkedAt)}。

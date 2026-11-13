@@ -5,10 +5,11 @@
 // 真被顶穿时进程会被内核或 V8 直接杀掉——所有人的会话一起断，正在跑的任务只能靠重启恢复退款，
 // 钱是退回来了，但用户看到的是一句「任务被系统中断」。
 //
-// 所以这里只做三件很朴素的事：
+// 所以这里只做四件很朴素的事：
 //   量：读 /proc/meminfo 的 MemAvailable（含可回收缓存）与 V8 的真实堆用量，不拿 RSS 猜；
 //   降：水位偏紧时把重活的并发上限压到 1，宁可慢一点，不要两条一起死；
-//   拒：真到红线就在扣费之前拒绝，并说清「没扣积分、多久后再试」。
+//   限：全站（不分账号）同时在跑的重活有条数上限——按账号的并发管不住「两个账号各来两条」；
+//   拒：真到红线、或全站重活已经满了，就在扣费之前拒绝，并说清「没扣积分、多久后再试」。
 //
 // 三条边界：
 //   1) 只拦重活（复刻 / 评审 / 画布运行）；检索只是转发一个 HTTP、对话只有几十 KB 上下文，不跟着拦；
@@ -19,6 +20,7 @@ import os from 'node:os'
 import v8 from 'node:v8'
 import { config } from './config.mjs'
 import { recordAlert } from './alerts.mjs'
+import { activeFor } from './gate.mjs'
 
 const MB = 1048576
 export const HEAVY_KINDS = ['replicate', 'review', 'flow_run']
@@ -125,7 +127,19 @@ export function capacityFor(kind, max, level = 'ok') {
   return cap
 }
 
-/** 给后台看的一屏：读数、判定、阈值、折算后的并发上限。 */
+/**
+ * 全站重活上限（不分账号）：0 表示不限（配置写 0 即恢复旧行为）。
+ * 水位偏紧时收紧到 2 条，到红线时由 admit 整体拒绝，这里回 0 只是为了让后台那一屏不矛盾。
+ */
+export function globalHeavyCap(level = 'ok') {
+  const raw = Math.max(0, Math.round(Number(config.credits.globalHeavy) || 0))
+  if (!raw) return 0
+  if (level === 'critical') return 0
+  if (level === 'tight') return Math.min(raw, 2)
+  return raw
+}
+
+/** 给后台看的一屏：读数、判定、阈值、折算后的并发上限、全站正在跑几条。 */
 export function waterlineReport() {
   const limits = thresholds()
   const memory = readMemoryFacts()
@@ -139,12 +153,24 @@ export function waterlineReport() {
     // 守卫关掉时不做折算：那一屏要如实显示「现在会按几条放行」
     capacity[kind] = limits.guard ? capacityFor(kind, baseCapacity[kind], verdict.level) : baseCapacity[kind]
   }
+  // 在跑的重活：跨账号的真实计数（来自并发闸门的进程内计数，不是任务表里的历史行）
+  const active = activeFor(HEAVY_KINDS)
+  const globalLimit = limits.guard ? globalHeavyCap(verdict.level) : 0
   return {
     ok: true,
     checkedAt: new Date().toISOString(),
     level: verdict.level,
     reasons: verdict.reasons,
     guard: limits.guard,
+    heavy: {
+      active: active.total,
+      byKind: active.byKind,
+      // limit = 0 表示不限：配置没开这一层，或者整条守卫被关掉
+      limit: globalLimit,
+      unlimited: globalLimit === 0,
+      configLimit: Math.max(0, Math.round(Number(config.credits.globalHeavy) || 0)),
+      full: globalLimit > 0 && active.total >= globalLimit,
+    },
     memory,
     heap,
     cpu: { cores: os.cpus().length || 1, load1: round2(load[0]), load5: round2(load[1]), load15: round2(load[2]) },
@@ -177,7 +203,35 @@ export function admit(kind) {
   const memory = readMemoryFacts()
   const heap = readHeapFacts()
   const verdict = assessWaterline({ memory, heap }, limits)
-  if (verdict.level !== 'critical') return { ok: true, level: verdict.level }
+  if (verdict.level !== 'critical') {
+    // 全站重活已满：这一单不接（走到这里说明内存还没到红线，只是同时在跑的活太多了）。
+    // 检查与后面 enter() 的加一在同一段同步代码里，中间没有 await，
+    // 所以单线程下不会出现两个请求都看见「还差一个空位」然后一起挤进去。
+    const cap = globalHeavyCap(verdict.level)
+    if (cap > 0) {
+      const active = activeFor(HEAVY_KINDS)
+      if (active.total >= cap) {
+        const internal = config.ui.mode === 'internal'
+        return {
+          ok: false,
+          level: verdict.level,
+          status: 503,
+          body: {
+            error: internal
+              ? '服务器正在同时跑 ' + active.total + ' 条重活（上限 ' + cap + ' 条），这条任务没有开始（没有扣积分）。等一分钟再试。'
+              : '服务器正忙，这条任务没有开始（没有扣积分）；等一分钟再试，或者稍后挑个空的时候再跑。',
+            code: 'SERVER_BUSY',
+            level: verdict.level,
+            active: active.total,
+            limit: cap,
+            retryAfterSec: RETRY_AFTER_SEC,
+            ...(internal ? { busyKinds: active.byKind } : {}),
+          },
+        }
+      }
+    }
+    return { ok: true, level: verdict.level }
+  }
   const reason = verdict.reasons.join('；')
   alertOnce(String(kind), verdict, reason)
   const internal = config.ui.mode === 'internal'

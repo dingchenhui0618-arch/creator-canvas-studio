@@ -26,6 +26,15 @@ export interface WaterlineReport {
     tightHeapPercent: number
     criticalHeapPercent: number
   }
+  // 全站（不分账号）正在跑的重活：active 是真实计数，limit 为 0 表示不限
+  heavy: {
+    active: number
+    byKind: Record<string, number>
+    limit: number
+    unlimited: boolean
+    configLimit: number
+    full: boolean
+  }
   capacity: Record<string, number>
   baseCapacity: Record<string, number>
   retryAfterSec: number

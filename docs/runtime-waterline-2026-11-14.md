@@ -64,7 +64,7 @@
 | 检查 | 结果 |
 | --- | --- |
 | 版本 / 入口 | `/api/version` **0.9.69**，入口 `index-BZI9mBvu.js`（第一次发版是 `index-DexqNzoA.js`，补了堆进度条标签后重发） |
-| 健康 | `/api/health` ok（templates 26），部署后 0 个 5xx |
+| 健康 | `/api/health` ok（templates 26），部署后 0 个 5xx —— **口径已更正**：当时用 `grep -c -e ,s.:5` 数，那个模式一条都匹配不到（真实字段是 `,"s":500`），0 是「没数到」；v0.9.70 起改用 `scripts/log-status.mjs` 解析 JSON 逐条统计，补数的结果是 186 条访问记录全为 200、0 个 5xx（见 [全站重活上限](global-heavy-2026-11-14.md)） |
 | 判定 | `level: ok`、`reasons: []`、`guard: true` |
 | 系统内存 | 可用 **859 MB** / 共 1866 MB；交换已用 **1624 / 6144 MB**（历史压力留下的，不是现在在换页） |
 | 进程 | RSS **86–89 MB**，Node 堆 **12 / 408 MB（3%）**（上限就是 systemd 里的 384 MB） |

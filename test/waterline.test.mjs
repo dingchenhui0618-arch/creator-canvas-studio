@@ -93,6 +93,11 @@ test('读数：来自真实系统与真实 V8 堆，不是编的', () => {
     assert.equal(typeof report.capacity[kind], 'number')
     assert.equal(typeof report.baseCapacity[kind], 'number')
   }
+  // 全站重活在跑几条：真实计数（不是任务表里的历史行），默认上限 3 条
+  assert.equal(typeof report.heavy.active, 'number')
+  assert.equal(report.heavy.configLimit, 3)
+  assert.equal(report.heavy.limit, report.heavy.configLimit)
+  assert.equal(report.heavy.unlimited, false)
 })
 
 test('到红线：重活被拒且说清没扣积分，轻活照常，生产口径不带内部读数', async () => {
@@ -128,6 +133,65 @@ test('到红线会进站内告警，且同一段时间不刷屏', async () => {
   const memory = items.filter((item) => item.kind === 'memory')
   assert.equal(memory.length, 1, '同一条红线只记一条，不按每次拒绝刷屏')
   assert.match(memory[0].title, /内存/)
+})
+
+test('全站重活上限：跨账号合计满了就拒，放手后立刻放行，写 0 等于不限', async () => {
+  const gate = await import('../server/gate.mjs')
+  const previous = config.credits.globalHeavy
+  try {
+    config.credits.globalHeavy = 1
+    // 另一个账号正在复刻：并发闸门的计数就是这里唯一的口径
+    assert.equal(gate.enter('ghost-a', 'replicate', 2), true)
+    try {
+      const refusal = water.admit('replicate')
+      assert.equal(refusal.ok, false)
+      assert.equal(refusal.status, 503)
+      assert.equal(refusal.body.code, 'SERVER_BUSY')
+      assert.equal(refusal.body.active, 1)
+      assert.equal(refusal.body.limit, 1)
+      assert.equal(refusal.body.retryAfterSec, 60)
+      assert.match(refusal.body.error, /没有扣积分/)
+      // 轻活不跟着拦：检索只是转发一个 HTTP
+      assert.equal(water.admit('search').ok, true)
+      assert.equal(water.admit('chat').ok, true)
+      const report = water.waterlineReport()
+      assert.equal(report.heavy.active, 1)
+      assert.equal(report.heavy.byKind.replicate, 1)
+      assert.equal(report.heavy.full, true)
+    } finally {
+      gate.leave('ghost-a', 'replicate')
+    }
+    // 那条活跑完，立刻能接新的
+    assert.equal(water.admit('replicate').ok, true)
+    assert.equal(water.waterlineReport().heavy.full, false)
+    // 写 0 = 不限：这一层整个不生效（改配置就恢复旧行为）
+    config.credits.globalHeavy = 0
+    assert.equal(gate.enter('ghost-b', 'flow_run', 1), true)
+    try {
+      assert.equal(water.admit('flow_run').ok, true)
+      assert.equal(water.waterlineReport().heavy.unlimited, true)
+    } finally {
+      gate.leave('ghost-b', 'flow_run')
+    }
+  } finally {
+    config.credits.globalHeavy = previous
+  }
+})
+
+test('全站上限随水位收紧：偏紧 2 条，配置更严时听配置，红线回 0', () => {
+  const previous = config.credits.globalHeavy
+  try {
+    config.credits.globalHeavy = 5
+    assert.equal(water.globalHeavyCap('ok'), 5)
+    assert.equal(water.globalHeavyCap('tight'), 2)
+    assert.equal(water.globalHeavyCap('critical'), 0)
+    config.credits.globalHeavy = 1
+    assert.equal(water.globalHeavyCap('tight'), 1)
+    config.credits.globalHeavy = 0
+    assert.equal(water.globalHeavyCap('ok'), 0)
+  } finally {
+    config.credits.globalHeavy = previous
+  }
 })
 
 test('守卫可以整条关掉：只量不拦', async () => {
