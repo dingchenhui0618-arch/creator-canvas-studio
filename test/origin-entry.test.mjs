@@ -57,7 +57,7 @@ test('只存了原链接（kind: saved）的不能开作品：给「还没解析
   const entry = originEntry({ template: saved, templateId: 'tpl_a' })
   assert.equal(entry.kind, 'blocked')
   assert.equal(entry.label, '还没解析')
-  assert.match(entry.hint, /去解析这条/)
+  assert.match(entry.hint, /去解析/)
   // 与 POST /api/projects 的 400 是同一个判断：脚本和分镜都没有就是不能开
   assert.equal(canStartProject(template({ structure: [], storyboard: [] })), false)
   assert.equal(canStartProject(null), false)

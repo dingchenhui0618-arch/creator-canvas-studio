@@ -38,7 +38,7 @@ function workHint(project) {
  * 返回值：{ kind, label, hint, projectId }，kind 三种——
  *   open-work   已经开过作品，点一下进那条作品
  *   create-work 还没开过，点一下照这条模板开一条（脚本与分镜跟着走）
- *   blocked     还没解析出脚本与分镜，先去解析（按钮点不动，理由写在 hint 里）
+ *   blocked     还没解析出脚本与分镜，先去解析（界面给「去解析」，理由写在 hint 里）
  * 没有模板 id（不该发生）时返回 null：不给一个指向不存在东西的按钮。
  */
 export function originEntry({ template = null, templateId = '', project = null, title = '', official = false } = {}) {
@@ -56,7 +56,7 @@ export function originEntry({ template = null, templateId = '', project = null, 
     return {
       kind: 'blocked',
       label: '还没解析',
-      hint: '这条只存了原链接，还没解析出脚本与分镜：打开模板点「去解析这条」，解析完就能开成作品',
+      hint: '这条只存了原链接，还没解析出脚本与分镜：点「去解析」跑一次，解析完就能开成作品',
       projectId: '',
     }
   }

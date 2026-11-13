@@ -147,7 +147,8 @@
 .drawer-list--flow li .vq-mono { color:var(--faint); font-size:11px; }
 .drawer-list--flow li em { margin-left:auto; font-style:normal; font-family:var(--font-mono); font-size:11px; letter-spacing:.04em; color:var(--faint); text-transform:uppercase; }
 .drawer-stats b { color:var(--ink); font-family:var(--font-mono); font-size:13px; font-weight:500; }
-.drawer-section--pending .drawer-pending-copy { margin:0 0 12px; color:var(--muted); font-size:12.5px; line-height:1.75; }
+.drawer-section--pending .drawer-pending-copy { margin:0 0 8px; color:var(--muted); font-size:12.5px; line-height:1.75; }
+.drawer-section--pending .drawer-pending-hint { margin:0; color:var(--ink-soft); font-size:12px; line-height:1.7; }
 .drawer-section--pending .button { height:34px; }
 @media (max-width:900px) { .template-summary { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 /* 卡片底部三个操作等宽一行，避免「一键复刻」被挤到卡片外面 */
@@ -307,16 +308,23 @@
     color var(--dur-1) var(--ease-out);
 }
 
-.template-adapt:hover:not(.is-muted) {
+.template-adapt:hover:not(:disabled) {
   background: var(--ink);
   border-color: var(--ink);
   color: #ffffff;
 }
 
-.template-adapt.is-muted {
+/* 待解析的卡片（v0.9.40）：同样是这条卡片的主操作，虚线表示「还没拆过」，
+   尺寸、圆角、hover 与旁边「用这条改编」完全一致，不另起一套。 */
+.template-adapt--parse {
+  border-style: dashed;
+  color: var(--ink-soft);
+}
+
+.template-adapt--parse:disabled {
   border-color: var(--line);
   color: var(--faint);
-  cursor: default;
+  cursor: not-allowed;
 }
 
 /* ---------- 模板详情「用这条模板的作品」（v0.9.14） ----------
@@ -587,12 +595,18 @@
   border-color: var(--ink);
 }
 
-/* 还没解析的：写清为什么点不动，不做成灰掉但看着还能点的按钮 */
-.radar-taken-work.is-blocked {
-  color: var(--faint);
+/* 还没解析的（v0.9.40）：这条路线本来就存在，所以它是一枚真按钮——
+   虚线表示「这一步还没做」，hover 才变成实线，与「开成作品」那种已就绪的动作分开。 */
+.radar-taken-work--parse {
+  color: var(--ink-soft);
   background: transparent;
   border-style: dashed;
-  cursor: default;
+}
+
+.radar-taken-work--parse:hover:not(:disabled) {
+  color: var(--ink);
+  border-style: solid;
+  border-color: var(--line-strong);
 }
 
 .radar-taken-work:disabled {

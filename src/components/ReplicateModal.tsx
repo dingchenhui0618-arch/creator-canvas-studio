@@ -21,14 +21,20 @@ const stepIndex = (step: string) => {
   return STEPS.findIndex((item) => item.key === step)
 }
 
-export function ReplicateModal({ item, hasKey, visionReady, onClose, onDone, onOpenTemplates }: {
+export function ReplicateModal({ item, hasKey, visionReady, onClose, onDone, onOpenTemplates, mode = 'replicate' }: {
   item: MediaItem
   hasKey: boolean
   visionReady: boolean
   onClose: () => void
-  onDone: (title: string) => void
+  // templateId：解析完成时这条模板可能已经在原地换了 id（saved → replica），
+  // 调用方要能直接打开它，而不是猜一条新的
+  onDone: (title: string, templateId?: string) => void
   onOpenTemplates: () => void
+  // 同一套流程两个入口名（v0.9.40）：从只存了链接的模板进来叫「解析」，从检索卡片叫「一键复刻」。
+  // 已经点开「去解析这条」的人，弹窗标题不该再叫「一键复刻」。
+  mode?: 'replicate' | 'parse'
 }) {
+  const parseMode = mode === 'parse'
   const { internal } = useUiMode()
   const [url, setUrl] = useState('')
   const [phase, setPhase] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
@@ -100,7 +106,7 @@ export function ReplicateModal({ item, hasKey, visionReady, onClose, onDone, onO
       <div className="replicate-modal" onMouseDown={(event) => event.stopPropagation()}>
         <header className="replicate-head">
           <div>
-            <span className="section-kicker">一键复刻</span>
+            <span className="section-kicker">{parseMode ? '解析这条原片' : '一键复刻'}</span>
             <strong>{item.title || '（无标题）'}</strong>
             <span className="replicate-sub">{item.platformLabel}{item.author ? ' · ' + item.author : ''}</span>
           </div>
@@ -138,7 +144,7 @@ export function ReplicateModal({ item, hasKey, visionReady, onClose, onDone, onO
             <div className="replicate-foot">
               <button className="button button--ghost" onClick={onClose}>取消</button>
               <button className="button button--primary" disabled={!canRun || insufficient} onClick={() => void begin()}>
-                <Sparkles size={15} />开始复刻
+                <Sparkles size={15} />{parseMode ? '开始解析' : '开始复刻'}
               </button>
             </div>
           </div>
@@ -177,7 +183,7 @@ export function ReplicateModal({ item, hasKey, visionReady, onClose, onDone, onO
             <div className="replicate-done">
               <span className="replicate-done-icon"><Check size={16} /></span>
               <div>
-                <strong>{template?.title || '已存入模板库'}</strong>
+                <strong>{template?.title || (parseMode ? '解析完成' : '已存入模板库')}</strong>
                 <span>{template ? template.contentType + ' · ' + template.structure.length + ' 个段落 · ' + template.storyboard.length + ' 个分镜 · ' + formatDuration(template.durationSec) : '正在刷新模板库'}</span>
                 {spent ? <span className="replicate-credit">本次消耗 {spent.cost} 积分 · 余额 {spent.balance ?? '—'}</span> : null}
               </div>
@@ -195,7 +201,7 @@ export function ReplicateModal({ item, hasKey, visionReady, onClose, onDone, onO
               </div>
             )}
             <div className="replicate-foot">
-              <button className="button button--ghost" onClick={() => { onDone(template?.title || '复刻完成') }}>完成</button>
+              <button className="button button--ghost" onClick={() => { onDone(template?.title || (parseMode ? '解析完成' : '复刻完成'), template?.id || job?.templateId || '') }}>完成</button>
               <button className="button button--primary" onClick={onOpenTemplates}>查看模板库<ArrowRight size={15} /></button>
             </div>
           </div>

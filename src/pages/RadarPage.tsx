@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   AlertCircle,
   ArrowRight,
@@ -589,9 +590,18 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
                     {workSaving === row.templateId ? null : <ArrowRight size={12} />}
                   </button>
                 ) : (
-                  <span className="radar-taken-work is-blocked" title={row.entry?.hint || '这条还没解析'}>
-                    {row.entry?.label || '还没解析'}
-                  </span>
+                  // 还没解析的（v0.9.40）：上一版这里是一枚点不动的虚线胶囊，把用户推去模板库自己找。
+                  // 这一步本来就有出口——打开这条模板去解析，所以就在这里给出来。
+                  <button
+                    type="button"
+                    className="radar-taken-work radar-taken-work--parse"
+                    disabled={!onOpenTemplate}
+                    onClick={() => onOpenTemplate?.(row.templateId)}
+                    aria-label={row.entry?.hint || '这条还没解析，打开模板去解析'}
+                    title={row.entry?.hint || '打开这条模板，跑一次解析'}
+                  >
+                    <Sparkles size={11} />去解析
+                  </button>
                 )}
               </div>
             ))}
@@ -819,7 +829,7 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
         </div>
       ) : null}
 
-      {modalItem && (
+      {modalItem && createPortal(
         <ReplicateModal
           item={modalItem}
           hasKey={hasKey}
@@ -834,7 +844,8 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
       if (done) refreshMark(done)
     }}
           onOpenTemplates={() => { setModalItem(null); onOpenTemplates() }}
-        />
+        />,
+        document.body,
       )}
     </div>
   )

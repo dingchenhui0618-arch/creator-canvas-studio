@@ -467,7 +467,7 @@ export function TemplateLibraryPage({
                       <span>{item.storyboard.length} 个分镜</span>
                     </>
                   ) : (
-                    <span>点开可去解析</span>
+                    <span>解析后才能改编与开作品</span>
                   )}
                   {/* 用量的位置放在这排数字里，不挤脚注：脚注要留给平台、作者与「用这条改编」按钮 */}
                   {item.projectCount ? <span className="template-uses">{item.projectCount} 条作品在用</span> : null}
@@ -493,7 +493,20 @@ export function TemplateLibraryPage({
                       <PenLine size={12} />用这条改编
                     </button>
                   ) : (
-                    <span className="template-adapt is-muted">待解析</span>
+                    // 只存了链接的卡片（v0.9.40）：以前这一格是灰字「待解析」，等于告诉用户
+                    // 「这里没东西」。现在它是这条卡片自己的下一步——原地跑一次解析。
+                    <button
+                      type="button"
+                      className="template-adapt template-adapt--parse"
+                      title={item.sourceUrl ? '跑一次解析：拆出脚本与分镜，这条原地变成已解析模板' : '这条没有原链接：先贴一条视频直链再解析'}
+                      disabled={!item.sourceUrl}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        setReplicateItem(asMedia(item))
+                      }}
+                    >
+                      <Sparkles size={12} />去解析
+                    </button>
                   )}
                 </div>
               </div>
@@ -784,14 +797,13 @@ export function TemplateLibraryPage({
                       <p className="drawer-pending-copy">
                         这条是你在雷达里点「加入模板库」存下来的：原链接、作者、互动数据都在，
                         脚本结构和分镜需要跑一次解析才有。解析要下载视频抽帧，所以单独点一次。
+                        解析完这条会<strong>原地升级</strong>成已解析模板（还是这一条，不多出一格），接着就能开成作品。
                       </p>
-                      <button
-                        className="button button--primary"
-                        disabled={!detail.sourceUrl}
-                        onClick={() => setReplicateItem(asMedia(detail))}
-                      >
-                        <Sparkles size={14} />去解析这条
-                      </button>
+                      {/* 一个界面只留一个主按钮（v0.9.40）：解析这件事由底部「去解析这条」承担，
+                          这里说清入口在哪，不再摆第二枚一样的按钮。 */}
+                      <p className="drawer-pending-hint">
+                        {detail.sourceUrl ? '底部「去解析这条」会打开解析弹窗，先说清积分再开始。' : '这条没有原链接：要解析得先有一条视频直链。'}
+                      </p>
                     </section>
                   )}
 
@@ -1017,6 +1029,19 @@ export function TemplateLibraryPage({
                         <Clapperboard size={14} />{projectSaving ? '建作品中' : '用它做作品'}
                       </button>
                     ) : null}
+                    {/* 只存了链接的这条（v0.9.40）：主操作是解析。以前这里是一枚**禁用**的
+                        「套用到画布」还占着主按钮的位置——点不动，却把真正的下一步挤到上面去。 */}
+                    {detail.kind !== 'flow' && !isParsed(detail) ? (
+                      <button
+                        type="button"
+                        className="button button--primary"
+                        disabled={!detail.sourceUrl}
+                        title="跑一次解析：拆出脚本与分镜，这条原地变成已解析模板"
+                        onClick={() => setReplicateItem(asMedia(detail))}
+                      >
+                        <Sparkles size={14} />去解析这条
+                      </button>
+                    ) : (
                     <button
                       className={'button ' + (detail.kind !== 'flow' && isParsed(detail) ? 'button--ghost' : 'button--primary')}
                       disabled={detail.kind !== 'flow' && !isParsed(detail)}
@@ -1032,6 +1057,7 @@ export function TemplateLibraryPage({
                     >
                       <Layers size={14} />{detail.kind === 'flow' ? '在画布打开' : '套用到画布'}
                     </button>
+                    )}
                     <button className="button button--danger button--tiny" onClick={() => { void deleteTemplate(detail.id).then(() => { closeDetail(); onToast('已移到回收站，30 天内可以恢复'); void load() }) }}>
                       <Trash2 size={13} />删除
                     </button>
@@ -1045,7 +1071,7 @@ export function TemplateLibraryPage({
         document.body,
       )}
 
-      {reportTarget ? (
+      {reportTarget ? createPortal(
         <ReportModal
           target={reportTarget}
           onClose={() => setReportTarget(null)}
@@ -1053,7 +1079,8 @@ export function TemplateLibraryPage({
             setReportTarget(null)
             onToast(message)
           }}
-        />
+        />,
+        document.body,
       ) : null}
 
       {trashOpen && (
@@ -1064,15 +1091,30 @@ export function TemplateLibraryPage({
         />
       )}
 
-      {replicateItem && (
+      {/* 弹窗挂在 body 上（v0.9.40）：抽屉也是 portal 到 body 的，弹窗留在页面树里
+          会被抽屉遮罩压住——从抽屉里点「去解析这条」，弹窗发灰、点击还会落到遮罩上。 */}
+      {replicateItem && createPortal(
         <ReplicateModal
           item={replicateItem}
+          mode="parse"
           hasKey={health.redfox}
           visionReady={health.vision}
           onClose={() => setReplicateItem(null)}
-          onDone={(title) => { setReplicateItem(null); closeDetail(); onToast('解析完成，模板已更新：' + title); void load() }}
+          onDone={(title, upgradedId) => {
+            setReplicateItem(null)
+            void load()
+            if (upgradedId) {
+              // 解析把这条原地升级了新 id：抽屉跟着换到升级后的那条，用户眼前就是脚本与分镜
+              onToast('解析完成，这条已升级成已解析模板：' + title)
+              openTemplate(upgradedId)
+              return
+            }
+            closeDetail()
+            onToast('解析完成，模板已更新：' + title)
+          }}
           onOpenTemplates={() => { setReplicateItem(null); closeDetail(); void load() }}
-        />
+        />,
+        document.body,
       )}
     </div>
   )
