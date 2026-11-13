@@ -2471,4 +2471,4 @@ v0.9.10 让「甲方看没看」第一次有了答案，这一轮让这个答案
 
 ![本地回收站弹窗：36px 的旧按钮换成 32px 的 vq-button](docs/screenshot-buttons-modal-local-2026-11-13.png)
 
-细节与边界见 [按钮归一](docs/button-unify-2026-11-13.md)：可点胶囊（`vq-filter-chip` / `template-adapt` / `review-picker-toggle` / `radar-taken-work`）、工具栏开关 `cv-tool`、圆形发送键 `agx-send`、工作台 CTA `vq-next-cta` 都**没有**并进来，留给下一轮。
+提交 `5726616`（代码 + 测试）+ `5e012db`（文档 + 7 张截图），CI 43359481970 success。细节与边界见 [按钮归一](docs/button-unify-2026-11-13.md)：可点胶囊（`vq-filter-chip` / `template-adapt` / `review-picker-toggle` / `radar-taken-work`）、工具栏开关 `cv-tool`、圆形发送键 `agx-send`、工作台 CTA `vq-next-cta` 都**没有**并进来，留给下一轮。

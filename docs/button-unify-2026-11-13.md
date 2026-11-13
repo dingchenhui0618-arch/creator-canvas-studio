@@ -122,6 +122,7 @@
 - `npm test` **422/422**（`test/button-system.test.mjs` 重写为 6 条：reset 降权、三档只走 token、语气不写尺寸、九个旧家族在 src 归零、反馈只有一处、页面级规则不再兼容 `.button`）。
 - `npx oxlint src server test` **0 error / 6 warning**、`tsc -b` 干净、构建通过。
 - 生产样式 `index-*.css` 250,089 → **246,961 字节**（少 3,128 字节）；`App.css` 81,465 → 79,358 字节。
+- 提交 `5726616`（代码 + 测试）+ `5e012db`（文档 + 7 张截图），已推 `origin/master`；CI **43359481970 success**（两个提交一起推送，CI 跑在分支头上）。
 
 ## 八、下一轮候选
 
