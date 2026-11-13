@@ -76,7 +76,7 @@
 .review-canvas-frame { display:flex; justify-content:center; padding:12px; border:1px solid var(--line); background:#0f0f0f; }
 .review-canvas-shot { position:relative; display:inline-block; max-width:100%; line-height:0; }
 .review-canvas-frame img { display:block; max-width:100%; max-height:400px; width:auto; height:auto; }
-/* è¯æ®åŽŸå›¾è¢«æ¸…ç†è¿‡ï¼šç»™ä¸€å—è¯´æ˜Žï¼Œä¸ç•™ç ´å›¾ï¼›ç»“è®ºä¸Žé”šç‚¹ç…§æ—§åœ¨ä¸‹æ–¹ */
+/* 证据原图被清理过：给一块说明，不留破图；结论与锚点照旧在下方 */
 .review-canvas-missing { display:grid; justify-items:center; gap:8px; width:min(520px,100%); padding:32px 24px; border:1px dashed var(--line); border-radius:var(--radius-sm); background:var(--surface-raised); color:var(--muted); line-height:1.6; text-align:center; }
 .review-canvas-missing strong { color:var(--ink); font-size:13px; font-weight:500; }
 .review-canvas-missing span { max-width:36em; color:var(--faint); font-size:12px; }
@@ -85,7 +85,7 @@
 .review-anchor.is-major { border-color:rgba(212,164,71,.9); background:rgba(212,164,71,.1); }
 .review-anchor.is-blocker { border-color:rgba(163,56,56,.95); background:rgba(163,56,56,.14); }
 .review-anchor.is-active { background:rgba(255,255,255,.2); border-color:#fff; }
-/* è¯æ®é”šç‚¹ï¼ˆv0.9.75ï¼‰ï¼šæ¡†ä¸Šçš„ç¼–å·ä¸Žå³ä¾§é—®é¢˜åºå·ä¸€ä¸€å¯¹åº”ï¼›æ‚¬åœåªæ˜¯é¢„è§ˆï¼Œç‚¹ä¸€ä¸‹é’‰ä½ï¼ˆå†ç‚¹æˆ– Esc å–æ¶ˆï¼‰ */
+/* 证据锚点（v0.9.75）：框上的编号与右侧问题序号一一对应；悬停只是预览，点一下钉住（再点或 Esc 取消） */
 .review-anchor {
   padding: 0;
   color: inherit;
@@ -98,6 +98,9 @@
   position: absolute;
   top: 2px;
   left: 2px;
+  /* v0.9.76：角位与错开位移由 domain 算（--badge-dx / --badge-dy），样式只负责摆 */
+  transform: translate(var(--badge-dx, 0px), var(--badge-dy, 0px));
+  transition: transform .12s ease;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -115,7 +118,10 @@
   font-variant-numeric: tabular-nums;
 }
 .review-anchor.is-active .review-anchor-no { background: #fff; border-color: #fff; color: #0a0a0b; }
-/* é’‰ä½ä¸€æ¡æ—¶å…¶ä½™æ¡†åŽ‹æš—ï¼šä¸€çœ¼çœ‹å‡ºçŽ°åœ¨è¯´çš„æ˜¯å“ªä¸€å— */
+/* 编号默认贴左上；被占了才换角（tr / bl / br），四个角都占满再按圈错开 */
+.review-anchor-no.is-tr { left: auto; right: 2px; }
+.review-anchor-no.is-bl { top: auto; bottom: 2px; }
+.review-anchor-no.is-br { top: auto; bottom: 2px; left: auto; right: 2px; }
 /* 钉住一条时其余框压暗：只压边框与底色，编号仍可读（对照时还要靠它认位置） */
 .review-canvas-shot.is-pinned .review-anchor:not(.is-active) { background: transparent; border-color: rgba(255,255,255,.16); }
 .review-canvas-shot.is-pinned .review-anchor:not(.is-active) .review-anchor-no { opacity: .6; }
@@ -164,7 +170,9 @@
 .review-obs.is-pinned .review-obs-no { background: var(--ink); border-color: var(--ink); color: var(--surface-raised); }
 .review-obs.sev-blocker { border-left-color:var(--fail); }
 .review-obs.sev-major { border-left-color:var(--warn); }
-.review-obs-head { display:flex; align-items:center; gap:8px; }
+.review-obs-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+/* 面积是旁证，不是结论：用最轻的一档颜色，钉住/悬停时不抢眼 */
+.review-obs-area { color:var(--faint); }
 .review-obs p { margin:0; font-size:12px; line-height:1.68; color:var(--ink); }
 
 

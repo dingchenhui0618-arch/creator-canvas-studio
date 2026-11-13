@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { ArrowRight, ChevronDown, Clapperboard, Crosshair, Loader2, Play, RefreshCw, ScanEye, TriangleAlert } from 'lucide-react'
 import { getReview, getReviewCandidates, getReviewStatus, listReviews, runReview, type JudgeResult, type ReviewCandidates, type ReviewResult, type ReviewStatus, type ReviewSummary } from '../api/review'
 import { getCredits, getModelService, recheckModelService, type CreditsResponse, type ModelServiceState } from '../api/credits'
 import { listTemplates, coverSrc } from '../api/radar'
 import { getProject } from '../api/projects'
 import { REVIEW_VERDICT_LABEL as VERDICT_LABEL, reviewTimeLabel, reviewVersionLabel } from '../domain/review'
-import { anchorNumber, reviewAnchorMarks } from '../domain/review-anchors'
+import { anchorNumber, evidenceAreaLabel, reviewAnchorBadges, reviewAnchorMarks } from '../domain/review-anchors'
 import type { ReplicaTemplate } from '../domain/radar'
 import { consumeReviewTarget, onReviewRequest, type ReviewTarget } from '../state/review'
 import { useUiMode } from '../api/app'
@@ -332,6 +332,8 @@ export default function ReviewPage({
   // 图上的编号与右侧问题行共用一套序号：没有证据的问题不画框，但序号不跳（否则和模型给的顺序错位）
   const marks = useMemo(() => reviewAnchorMarks(result?.observations), [result])
   const markedIds = useMemo(() => new Set(marks.map((mark) => mark.id)), [marks])
+  // 编号落点：两块证据重合时把编号挪到别的角/错开一圈，不叠成一串
+  const badges = useMemo(() => new Map(reviewAnchorBadges(marks).map((badge) => [badge.id, badge])), [marks])
   // 钉住优先于悬停：悬停只是预览，钉住才是「正看这一条」
   const focusId = pinned ?? active
 
@@ -544,7 +546,17 @@ export default function ReviewPage({
                           onFocus={() => setActive(mark.id)}
                           onMouseEnter={() => setActive(mark.id)}
                         >
-                          <span className="review-anchor-no">{anchorNumber(mark.index)}</span>
+                          <span
+                            className={'review-anchor-no is-' + (badges.get(mark.id)?.corner || 'tl')}
+                            style={
+                              {
+                                '--badge-dx': (badges.get(mark.id)?.dx || 0) + 'px',
+                                '--badge-dy': (badges.get(mark.id)?.dy || 0) + 'px',
+                              } as CSSProperties
+                            }
+                          >
+                            {anchorNumber(mark.index)}
+                          </span>
                         </button>
                       ))}
                     </>
@@ -582,7 +594,7 @@ export default function ReviewPage({
               </div>
               {marks.length ? (
                 <p className="review-canvas-hint">
-                  图上的编号与右侧问题一一对应：点编号或问题行钉住这一处，再点一下或按 Esc 取消。
+                  图上的编号与右侧问题一一对应：点编号或问题行钉住这一处，再点一下或按 Esc 取消。两块证据几乎重合时编号会自动错开。
                 </p>
               ) : null}
             </div>
@@ -747,7 +759,19 @@ export default function ReviewPage({
                       <span className={`review-obs-no${markedIds.has(item.id) ? ' has-anchor' : ''}`}>{anchorNumber(position + 1)}</span>
                       <span className="vq-mono">{item.dimension}</span>
                       <Tag tone={SEVERITY_TONE[item.severity] || 'plain'}>{SEVERITY_LABEL[item.severity]}</Tag>
-                      {item.evidence ? <span className="vq-mono" title="模型对这条判断的置信度">置信 {Math.round(item.confidence * 100)}%</span> : <span className="vq-mono">无锚点</span>}
+                      {item.evidence ? (
+                        <>
+                          <span className="vq-mono" title="模型对这条判断的置信度">置信 {Math.round(item.confidence * 100)}%</span>
+                          <span
+                            className="vq-mono review-obs-area"
+                            title={'框住的区域约占画面 ' + evidenceAreaLabel(item.evidence) + '；框越小越能指到具体位置'}
+                          >
+                            面积 {evidenceAreaLabel(item.evidence)}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="vq-mono">无锚点</span>
+                      )}
                     </div>
                     <p>{item.statement}</p>
                   </li>
