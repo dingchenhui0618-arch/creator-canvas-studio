@@ -176,13 +176,14 @@
   background: var(--fail-soft);
 }
 .radar-credit.is-low strong { color: var(--fail); }
+/* 一句完整的话，不是一排控件：以前是 flex，句子的三段各占一个格子，
+   390 宽下被拆成「每次检索 / 2 积分 / 检索失败会原路退回」三列（v0.9.39 顺手修） */
 .radar-credit-note {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  display: block;
   margin-top: 8px;
   color: var(--faint);
   font-size: 12px;
+  line-height: 1.7;
 }
 /* 表单：管理台发放积分用，样式跟 vq-button 一族对齐 */
 .vq-inline-form {

@@ -20,6 +20,7 @@ import {
 import { clearSearchHistory, coverSrc, formatCount, formatDuration, getHealth, getTakenOrigins, listSearchHistory, lookupLibrary, saveTemplate, searchMedia, toggleSearchFavorite } from '../api/radar'
 import type { LibraryMark, MediaItem, SearchHistoryEntry, TakenOrigins } from '../domain/radar'
 import { ago, stampTime } from '../domain/share'
+import { createProject } from '../api/projects'
 import { ReplicateModal } from '../components/ReplicateModal'
 import { Select } from '../components/Select'
 import PageHead from '../components/PageHead'
@@ -142,6 +143,8 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
   // 这一屏里哪几条已经在库里：按平台 id 认（链接带分享参数也认得出来），只读现查，不检索、不扣积分
   const [marks, setMarks] = useState<Record<string, LibraryMark>>({})
   const [savingId, setSavingId] = useState('')
+  // 正在照哪条模板开作品：按钮当场写「正在建」，不给第二次点击再开一条
+  const [workSaving, setWorkSaving] = useState('')
   // 积分：检索前告诉用户这一下花多少，检索后显示扣了多少、还剩多少
   const [credits, setCredits] = useState<CreditsResponse | null>(null)
   const [insufficient, setInsufficient] = useState('')
@@ -343,6 +346,39 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
   const totalLikes = sorted.reduce((sum, item) => sum + item.stats.likes, 0)
   const totalPlays = sorted.reduce((sum, item) => sum + (item.stats.plays || 0), 0)
 
+  // 复刻完成之后这张卡片当场变成「库里已有」：不刷新的话按钮还是「加入模板库」，
+  // 再点一次只会被去重成一句「这条已经在模板库里了」（v0.9.39 顺手修）
+  const refreshMark = useCallback((item: MediaItem) => {
+    lookupLibrary([{ id: item.id, platform: item.platform, url: item.url || '' }])
+      .then((result) => {
+        const mark = result.items[0]
+        if (!mark) return
+        setMarks((current) => ({ ...current, [item.id]: mark }))
+      })
+      .catch(() => undefined)
+  }, [])
+
+  // 照一条已解析的模板开成作品（v0.9.39）：建完直接进作品页——下一步（开画布）由作品页统一给，
+  // 发现页不另写一套流程。能不能开由服务端的 entry 判断（kind: blocked 时按钮点不动），这里不重复一份。
+  const startWork = useCallback(
+    async (templateId: string, title: string) => {
+      if (!templateId || workSaving) return
+      setWorkSaving(templateId)
+      try {
+        const result = await createProject({ templateId, title })
+        onToast('已开成作品：' + result.project.title)
+        // 回到发现页时这一行已经是「作品 · …」：先把这块刷新一遍，导航被拦下也看得到结果
+        loadTaken()
+        if (onOpenProject) onOpenProject(result.project.id)
+      } catch (caught) {
+        onToast(caught instanceof Error ? caught.message : '开成作品没有成功，稍后再试一次')
+      } finally {
+        setWorkSaving('')
+      }
+    },
+    [onOpenProject, onToast, loadTaken, workSaving],
+  )
+
   const addToLibrary = useCallback(
     async (item: MediaItem) => {
       setSavingId(item.id)
@@ -359,8 +395,11 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
             shared: false,
             workCount: 0,
             project: null,
+            entry: null,
           },
         }))
+        // 再问一次服务端：这一条的下一步（还没解析 / 开成作品）由同一个口径给出，界面不自己编
+        refreshMark(item)
         loadTaken()
         onToast(result.created ? '已加入模板库：只存了原链接与互动数据' : '这条已经在模板库里了')
       } catch (caught) {
@@ -369,7 +408,7 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
         setSavingId('')
       }
     },
-    [onToast, loadTaken],
+    [onToast, loadTaken, refreshMark],
   )
 
   return (
@@ -484,8 +523,9 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
                     ? '（其中 ' + taken.official + ' 条是官方示例）'
                     : ''}
                 {taken.withProject ? '，' + taken.withProject + ' 条已经开成作品' : '，都还没开成作品'}
-                {taken.lastAt ? '；最近一条 ' + ago(taken.lastAt) + '。' : '。'}
-                {'点一行打开它的模板。'}
+                {taken.pending ? '，还有 ' + taken.pending + ' 条没开成作品' : ''}
+                {taken.lastAt ? '；最近一条：' + ago(taken.lastAt) + '。' : '。'}
+                {'点一行打开它的模板；还没开成作品的那行可以直接开一条。'}
               </p>
             </div>
             <button type="button" className="vq-link" onClick={onOpenTemplates}>
@@ -523,19 +563,36 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
                   </span>
                   <ArrowRight size={13} />
                 </button>
-                {row.project ? (
+                {/* 每一行的下一步（v0.9.39）：已经开过作品就进那条，没开就照这条模板开一条。
+                    文案与能不能开都由服务端的 entry 给，界面不另写一份判断。 */}
+                {row.entry?.kind === 'open-work' ? (
                   <button
                     type="button"
                     className="radar-taken-work"
-                    onClick={() => onOpenProject?.(row.project?.id || '')}
-                    aria-label={'打开作品：' + row.project.title + (row.project.version ? '，第 ' + row.project.version + ' 版' : '，还没开画布')}
-                    title={'打开作品《' + row.project.title + '》'}
+                    onClick={() => onOpenProject?.(row.entry?.projectId || '')}
+                    aria-label={row.entry.hint}
+                    title={row.entry.hint}
                   >
-                    {/* 版本 0 是「照模板开了作品、还没开画布」：不写「第 0 版」（v0.9.30 同一口径） */}
-                    {'作品 · ' + (row.project.version ? '第 ' + row.project.version + ' 版' : '还没开画布')}
+                    {row.entry.label}
                     <ArrowRight size={12} />
                   </button>
-                ) : null}
+                ) : row.entry?.kind === 'create-work' ? (
+                  <button
+                    type="button"
+                    className="radar-taken-work radar-taken-work--start"
+                    disabled={workSaving === row.templateId}
+                    onClick={() => void startWork(row.templateId, row.title)}
+                    aria-label={row.entry.hint}
+                    title={row.entry.hint}
+                  >
+                    {workSaving === row.templateId ? '正在建' : row.entry.label}
+                    {workSaving === row.templateId ? null : <ArrowRight size={12} />}
+                  </button>
+                ) : (
+                  <span className="radar-taken-work is-blocked" title={row.entry?.hint || '这条还没解析'}>
+                    {row.entry?.label || '还没解析'}
+                  </span>
+                )}
               </div>
             ))}
           </div>
@@ -619,6 +676,8 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
           {sorted.map((item) => {
             const rate = interactionRate(item)
             const mark = marks[item.id]
+            // 下一步只认「能点得动的两种」：还没解析的不抢「打开模板」那一格
+            const entry = mark && (mark.entry?.kind === 'open-work' || mark.entry?.kind === 'create-work') ? mark.entry : null
             return (
               <article className="radar-card" key={item.id}>
                 <div className="radar-cover">
@@ -665,7 +724,22 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
                   <button className="button button--ghost button--tiny" disabled={!item.url} onClick={() => item.url && window.open(item.url, '_blank', 'noopener')}>
                     <ExternalLink size={13} />原视频
                   </button>
-                  {mark ? (
+                  {mark && entry ? (
+                    // 已经在库里、下一步清楚的，第二格直接给下一步（v0.9.39）：
+                    // 开过作品的进作品，没开过的照这条模板开一条。还不清楚（没解析）的仍是「打开模板」。
+                    <button
+                      className="button button--primary button--tiny"
+                      title={entry.hint}
+                      disabled={workSaving === mark.templateId}
+                      onClick={() => {
+                        if (entry.kind === 'open-work') onOpenProject?.(entry.projectId)
+                        else void startWork(mark.templateId, mark.title)
+                      }}
+                    >
+                      {workSaving === mark.templateId ? <RefreshCw size={13} className="spin" /> : <ArrowRight size={13} />}
+                      {workSaving === mark.templateId ? '正在建' : entry.label}
+                    </button>
+                  ) : mark ? (
                     <button
                       className="button button--ghost button--tiny"
                       title={'已经在模板库里：打开「' + mark.title + '」'}
@@ -684,8 +758,9 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
                       <BookmarkPlus size={13} />{savingId === item.id ? '加入中' : '加入模板库'}
                     </button>
                   )}
+                  {/* 一张卡片只有一个主按钮：已经在库里、下一步清楚的，主按钮是「往下做」，复刻降成次要动作 */}
                   <button
-                    className="button button--primary button--tiny"
+                    className={'button button--tiny ' + (mark && entry ? 'button--ghost' : 'button--primary')}
                     disabled={mode === 'mock'}
                     title={mode === 'mock' ? '示例数据没有原视频，无法复刻' : undefined}
                     onClick={() => setModalItem(item)}
@@ -750,7 +825,14 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
           hasKey={hasKey}
           visionReady={visionReady}
           onClose={() => setModalItem(null)}
-          onDone={(title) => { setModalItem(null); loadTaken(); onToast('复刻完成，已存入模板库：' + title) }}
+          onDone={(title) => {
+      const done = modalItem
+      setModalItem(null)
+      loadTaken()
+      onToast('复刻完成，已存入模板库：' + title)
+      // 这张卡片当场翻成「库里已有」：再点「加入模板库」只会被去重成一句「已经在库里了」
+      if (done) refreshMark(done)
+    }}
           onOpenTemplates={() => { setModalItem(null); onOpenTemplates() }}
         />
       )}

@@ -19,6 +19,20 @@ export type MediaItem = {
 // 发现页开场「带走的原片」（v0.9.36）：模板上留着原片链接，作品那侧只有模板指针，服务端现算。
 export type TakenOriginStats = { plays: number; likes: number; comments: number; shares: number; collects: number }
 
+/**
+ * 这一行的下一步（v0.9.39）：服务端算出「点一下会发生什么」，界面只照着渲染。
+ *   open-work   已经开过作品，点一下进那条作品（projectId）
+ *   create-work 还没开过，点一下照这条模板开一条
+ *   blocked     还没解析出脚本与分镜，按钮点不动，理由在 hint 里
+ */
+export type OriginEntry = {
+  kind: 'open-work' | 'create-work' | 'blocked'
+  label: string
+  hint: string
+  /** open-work 才有；别的 kind 是空串 */
+  projectId: string
+}
+
 export type TakenOrigin = {
   templateId: string
   title: string
@@ -37,11 +51,15 @@ export type TakenOrigin = {
   project: { id: string; title: string; version: number } | null
   /** 这条原片开出了几条作品（一条作品多版只算一条） */
   works: number
+  /** 这一行的下一步：开成作品 / 打开作品 / 还没解析 */
+  entry: OriginEntry | null
 }
 
 export type TakenOrigins = {
   total: number
   withProject: number
+  /** 还没开成作品的有几条（按全部原片算，不是只算列出来的那几行） */
+  pending: number
   works: number
   official: number
   lastAt: string
@@ -233,7 +251,10 @@ export type LibraryMark = {
   shared: boolean
   /** 这条原片开出了几条作品 */
   workCount: number
+  /** 版本 0 = 照模板开了作品、还没开画布 */
   project: { id: string; title: string; version: number } | null
+  /** 卡片第二格的下一步：与「库里的原片」那一行同一个口径 */
+  entry?: OriginEntry | null
 }
 
 /** 模板详情里「用这条模板的作品」那一行：够认出是哪条、走到哪一步 */

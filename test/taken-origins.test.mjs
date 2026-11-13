@@ -131,5 +131,5 @@ test('互动数只认正数：一件都没有就是 null，别拿一排 0 冒充
     plays: 0, likes: 12, comments: 0, shares: 0, collects: 4,
   })
   assert.equal(originRow([template({ platform: 'bilibili' })]).platformLabel, '', '认不出的平台不冒充抖音小红书')
-  assert.deepEqual(takenOrigins([], []), { total: 0, withProject: 0, works: 0, official: 0, lastAt: '', items: [] })
+  assert.deepEqual(takenOrigins([], []), { total: 0, withProject: 0, pending: 0, works: 0, official: 0, lastAt: '', items: [] })
 })

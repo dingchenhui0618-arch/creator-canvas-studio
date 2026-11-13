@@ -33,6 +33,7 @@ import { ackFor, dropAcksForProject, listAcks } from '../review-acks.mjs'
 import { dropDecisionsForProject, listDecisions } from '../review-decisions.mjs'
 import { decisionFor, decisionHistory, reviewsForVersion } from '../project-status.mjs'
 import { projectListQuery } from '../project-list.mjs'
+import { canStartProject } from '../origin-entry.mjs'
 import { adoptCanvasForProject, createProjectFromCanvas } from '../project-canvas.mjs'
 import { buildZip } from '../zip-store.mjs'
 import {
@@ -460,7 +461,8 @@ export function createProjectsRouter() {
           sendJson(res, 404, { error: '模板不存在或不属于当前账号' })
           return true
         }
-        if (template.kind === 'saved' || (!template.structure?.length && !template.storyboard?.length)) {
+        // 能不能开作品只在这个函数里判断：界面上的「开成作品」也读它，不各写一份（v0.9.39）
+        if (!canStartProject(template)) {
           sendJson(res, 400, { error: '这条模板还没解析出脚本与分镜，先解析再建作品', code: 'TEMPLATE_UNPARSED' })
           return true
         }

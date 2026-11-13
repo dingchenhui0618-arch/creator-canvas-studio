@@ -483,17 +483,23 @@
   cursor: pointer;
 }
 
+/* 行尾的箭头只在这一行被指着时出现（v0.9.39）：右边已经有一枚「开成作品 / 作品 · 第 N 版」，
+   两个箭头并排会看成两个方向。留着位置不挪动，鼠标过来才亮。 */
 .radar-taken-main > svg {
   flex: none;
   color: var(--faint);
+  opacity: 0;
+  transition: opacity .18s var(--ease-out);
 }
 
 .radar-taken-main:hover .radar-taken-copy strong {
   text-decoration: underline;
 }
 
-.radar-taken-main:hover > svg {
+.radar-taken-main:hover > svg,
+.radar-taken-main:focus-visible > svg {
   color: var(--ink);
+  opacity: 1;
 }
 
 .radar-taken-platform {
@@ -564,6 +570,34 @@
 .radar-taken-work:hover {
   color: var(--ink);
   border-color: var(--line-strong);
+}
+
+/* 「开成作品」（v0.9.39）：这一行唯一会造出新东西的动作，比「打开」那枚重一档，
+   仍然是一枚安静的小按钮——不加第二套颜色，靠字重与描边分主次。 */
+.radar-taken-work--start {
+  color: var(--ink);
+  border-color: var(--line-strong);
+  background: var(--surface);
+  font-weight: 600;
+}
+
+.radar-taken-work--start:hover:not(:disabled) {
+  color: var(--surface-raised);
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+/* 还没解析的：写清为什么点不动，不做成灰掉但看着还能点的按钮 */
+.radar-taken-work.is-blocked {
+  color: var(--faint);
+  background: transparent;
+  border-style: dashed;
+  cursor: default;
+}
+
+.radar-taken-work:disabled {
+  color: var(--faint);
+  cursor: wait;
 }
 
 .radar-taken-more {

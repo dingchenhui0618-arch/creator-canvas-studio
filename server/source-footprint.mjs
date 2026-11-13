@@ -8,6 +8,7 @@
 //   1) 平台 + 平台 id（模板的 sourceId / 检索条目的 id）：链接会被加分享参数、末尾斜杠或 #，id 不会；
 //   2) 没有平台 id 时退回规范化链接——与发现页「库里的原片」同一套 originKey，不另写一份规则。
 // 画布 / 智能体 / 作品沉淀出来的模板本来就没有原片，identity 为 null，两个地方都不出现。
+import { originEntry } from './origin-entry.mjs'
 import { originKey } from './taken-origins.mjs'
 import { deliveredCurrent } from './project-status.mjs'
 
@@ -146,6 +147,8 @@ export function libraryMarks(templates = [], projects = [], entries = []) {
     const works = uniqueWorks(projects, ids)
     const chosen = pickRepresentative(group, works)
     if (!chosen) continue
+    // 版本 0 要留住：照模板开了作品、还没开画布的作品是 v0，不能在这里被写成「第 1 版」
+    const project = works.length ? { id: works[0].id, title: works[0].title, version: Number(works[0].version) || 0 } : null
     items.push({
       id: String(entry?.id || ''),
       templateId: chosen.id,
@@ -153,7 +156,9 @@ export function libraryMarks(templates = [], projects = [], entries = []) {
       source: String(chosen.source || ''),
       shared: Boolean(chosen.shared),
       workCount: works.length,
-      project: works.length ? { id: works[0].id, title: works[0].title, version: Number(works[0].version) || 1 } : null,
+      project,
+      // 卡片上的第二格（v0.9.39）：与「库里的原片」那一行同一个下一步口径
+      entry: originEntry({ template: chosen, templateId: chosen.id, project, title: chosen.title, official: Boolean(chosen.shared) }),
     })
   }
   return { total: asked.length, matched: items.length, items }

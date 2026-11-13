@@ -6,6 +6,7 @@
 //   - 官方示例照实标出来（shared），不冒充「你带回来的」；
 //   - 作品那侧只有模板指针：按 templateId 现查，一条作品多版只算一条，多版取最近改过的那条；
 //   - 原片是谁、多少互动，直接读模板上存的原始值（不拿复用次数那种计数器凑）。
+import { originEntry, originPending } from './origin-entry.mjs'
 import { originStats } from './project-source.mjs'
 
 export const ORIGIN_PLATFORM_LABEL = { douyin: '抖音', xiaohongshu: '小红书' }
@@ -28,6 +29,7 @@ export function originRow(group = [], projects = []) {
   const chosen = sorted.find(hasWork) || sorted.find((item) => originStats(item.stats)) || sorted[0] || {}
   const withStats = sorted.find((item) => originStats(item.stats))
   const stats = originStats(withStats?.stats)
+  const project = latest ? { id: latest.id, title: latest.title, version: latest.version } : null
   return {
     templateId: chosen.id || '',
     title: chosen.title || '',
@@ -41,8 +43,11 @@ export function originRow(group = [], projects = []) {
     // 同一条原片存成了几条模板（改编版也继承原链接）
     templates: group.length,
     // 这条原片开出了几条作品：一条作品多版只算一条
-    project: latest ? { id: latest.id, title: latest.title, version: latest.version } : null,
+    project,
     works: projects.length,
+    // 这一行的下一步（v0.9.39）：已经开过作品就进那条，没开就照这条模板开一条，没解析就指向解析。
+    // 与卡片上的第二格、POST /api/projects 的 400 同一个口径（server/origin-entry.mjs）。
+    entry: originEntry({ template: chosen, templateId: chosen.id, project, title: chosen.title, official: Boolean(chosen.shared) }),
   }
 }
 
@@ -88,6 +93,8 @@ export function takenOrigins(templates = [], projects = [], { limit = ORIGIN_LIM
   return {
     total: rows.length,
     withProject: rows.filter((row) => row.project).length,
+    // 还没开成作品的有几条：按全部原片算（不是只算列出来的 4 行），界面上那句「还有 N 条」才是真的
+    pending: originPending(rows),
     works: rows.reduce((sum, row) => sum + row.works, 0),
     official: rows.filter((row) => row.official).length,
     lastAt: rows.reduce((latest, row) => (row.savedAt > latest ? row.savedAt : latest), ''),
