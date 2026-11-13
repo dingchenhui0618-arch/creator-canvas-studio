@@ -142,3 +142,18 @@ https://<域名>/#/register?code=VQ-XXXX-XXXX
 - 反滥用只到来源计数：同一 NAT 出口的同事共享 3 个名额。
 - 赠送积分在注册时到账；「首次成功任务后解锁」与新账号 24h 复刻并发限制还没做。
 - 核查接口：`GET /api/admin/invites`（管理员 cookie），返回状态、已用/上限与最近使用者。
+
+## 画布下载补丁（2026-11-13）
+
+画布（BD Canvas）把 `canvas.wavisionai.cn` 当「本机安装」，下载会把文件存到**服务器**；
+改走浏览器下载后又要过 nginx 的 Basic Auth。补丁脚本在仓库 `deploy/bd-canvas/patch-download-credentials.mjs`：
+
+```bash
+scp deploy/bd-canvas/patch-download-credentials.mjs root@<host>:/tmp/
+ssh root@<host> "node /tmp/patch-download-credentials.mjs --root /opt/bdcanvas --check"   # 1 = 未打
+ssh root@<host> "node /tmp/patch-download-credentials.mjs --root /opt/bdcanvas --write"   # 首次留 .bak-vq-download
+```
+
+- 画布由 Vite dev 直接读源码，**刷新画布页面即生效**，不需要重新构建；
+- 画布升级覆盖 `src/main.ts` 后重跑一次；`--check` 退出码 1 就表示没打上；
+- 回滚：`cp /opt/bdcanvas/src/main.ts.bak-vq-download /opt/bdcanvas/src/main.ts`。

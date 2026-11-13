@@ -2548,3 +2548,11 @@ v0.9.10 让「甲方看没看」第一次有了答案，这一轮让这个答案
 细节与边界见 [生成通道的两层开关](docs/gateway-readiness-2026-11-13.md)：后台不能一键开关（额度是外部事实，只显示状态与改法）；开关全局生效；readiness 只看配置、不探上游；模型覆盖仍不完整。
 
 提交 `1b39692`（代码 + 测试 + 文档 + 2 张截图），CI 43398361902 success。
+
+## 一百二十一、画布点下载没反应：文件被存到了服务器（v0.9.52）
+
+- **现象**：画布出视频成功（16:55 的 Seedance 任务，973,822 字节），点「下载」本机一个文件都没有。
+- **根因（两处叠加）**：① 画布把 `canvas.wavisionai.cn` 当「本机安装」（`TRUSTED_HOSTS`），下载走 `/api/workspace/download-asset`，文件存进**服务器**的 `workspace/downloads`，浏览器这边自然看不到；② 真走浏览器下载分支时 `fetch(url, { credentials: 'omit' })` 主动丢 cookie，被 nginx 的 Basic Auth 打成 401（实测同一 URL：omit → 401，include → 200）。
+- **改法**：新增 `deploy/bd-canvas/patch-download-credentials.mjs`，三处幂等补丁：下载 fetch 带上 cookie 与企业令牌；https 页面一律走浏览器下载；浏览器里藏掉「打开本地位置」（那是服务器目录）。脚本会留 `.bak-vq-download`、保留 CRLF、画布源码变了就退出 1 不瞎改。
+- **验证**：真实浏览器里调用画布同一个下载函数 → `{ok:true, path:''}`，下载目录出现 `probe-video.mp4` **973,822 字节**与源文件一致；画布下载框显示「完成：1 个成功」；仓库新增 6 条补丁测试，`npm test` **470/470** 通过。
+- **边界**：这是对第三方源码（BD Canvas）的最小补丁，画布升级覆盖 `src/main.ts` 后要重跑脚本；nginx 的 Basic Auth 门没动；桌面版（127.0.0.1）行为不变。细节与回滚见 [画布下载](docs/canvas-download-auth-2026-11-13.md)。
