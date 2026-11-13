@@ -143,9 +143,34 @@ export default function WaterlineCard() {
                       ? '按水位从 ' + view.baseCapacity[kind] + ' 条收紧'
                       : '同时最多 ' + (view.baseCapacity[kind] || 0) + ' 条'}
                 </span>
+                {NO_USER_KINDS.has(kind) && view.heavy.queue ? (
+                  view.heavy.queue.waitMs > 0 ? (
+                    <span className="admin-cell-note">
+                      排队 {view.heavy.queue.waiting} / {view.heavy.queue.maxWaiting} 条 · 满了先等 {Math.round(view.heavy.queue.waitMs / 1000)} 秒
+                    </span>
+                  ) : (
+                    <span className="admin-cell-note">没开排队 · 名额满时立刻拒</span>
+                  )
+                ) : null}
               </div>
             ))}
           </div>
+
+          {view.heavy.queue ? (
+            view.heavy.queue.waitMs > 0 ? (
+              <p className="admin-hint">
+                画布出图排队位：这条通道没有账号可挂，一次批量出图会连发好几张。名额满时先排着——
+                每条最多等 {Math.round(view.heavy.queue.waitMs / 1000)} 秒，最多 {view.heavy.queue.maxWaiting} 条同时排；
+                排到了照常出图（响应头 X-VQ-Queue-Ms 带回等了多久），排不到才拒，拒绝发生在调上游之前，不花钱。
+                本次启动以来：排到 {view.heavy.queue.served} 条 · 等超时 {view.heavy.queue.timedOut} 条 · 排满拒 {view.heavy.queue.full} 条 ·
+                客户端提前断开 {view.heavy.queue.abandoned} 条 · 最长等了 {Math.round(view.heavy.queue.maxWaitMs / 1000)} 秒。
+              </p>
+            ) : (
+              <p className="admin-hint">
+                画布出图没开排队（VQ_CANVAS_QUEUE_MS=0）：名额满时后面的几张立刻被拒，一次批量出图会「先到的 2 张成功、其余失败」。
+              </p>
+            )
+          ) : null}
 
           {view.reasons.length ? <p className="admin-hint admin-hint--fail">{view.reasons.join('；')}</p> : null}
           {view.heavy.full ? (

@@ -156,6 +156,15 @@ export const config = {
       // 画布点「批量出图」会连发，8 张一起冲进来时整机只放 2 张，其余立刻拒（不碰上游、不花钱）。
       canvas_gen: Number(process.env.VQ_CONCURRENCY_CANVAS_GEN ?? 2),
     },
+    // 画布出图的排队位（v0.9.80）：一次「批量出图」会连发 8 张，整机只放 2 张。
+    // 以前第 3 张起立刻 503，画布上就是「6 张失败」；现在名额满时先排一会儿再拒。
+    // 画布自己等得起：它的同步出图超时是 1800 秒（generation_image2.py:72），
+    // 异步提交是 120 秒（:245）——所以这一档默认 90 秒，别把异步提交拖到超时。
+    // waitMs 写 0（或 maxWaiting 写 0）= 关掉排队，退回 v0.9.79 的「立刻拒」。
+    canvasQueue: {
+      waitMs: numEnv(process.env.VQ_CANVAS_QUEUE_MS, 90000),
+      maxWaiting: numEnv(process.env.VQ_CANVAS_QUEUE_MAX, 8),
+    },
     // 全站（不分账号）同时在跑的重活条数上限（v0.9.70）。
     // 按账号的上限管不住「两个账号各来两条」：这台机器只有 2 核 / 1.86 GB，
     // 重活撞在一起就是 OOM，进程一死所有人的会话一起断。

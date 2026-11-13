@@ -18,6 +18,8 @@ process.env.DATA_DIR = dataDir
 process.env.VQ_KEY_SECRET = 'test-secret-gateway-heavy'
 process.env.VQ_GATEWAY_TOKEN = 'test-gateway-token'
 process.env.VQ_GATEWAY_OPEN = '1'
+// 这一组要的是「排满就拒」本身（v0.9.79 的行为）；排队那层在 gateway-queue.test.mjs 里单独验
+process.env.VQ_CANVAS_QUEUE_MS = '0'
 process.env.VISION_API_KEY = ''
 // 名额按测试文件各算各的（测试文件是各自独立的进程）
 isolateLeaseDir('vq-lease-gw-heavy-')

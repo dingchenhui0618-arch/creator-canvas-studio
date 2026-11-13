@@ -88,6 +88,28 @@ test('实例死掉 / 名额没还回 / 出现 500 / 主线程被打死：都算�
   assert.match(evaluate({ summary: summaryOf({ health: { count: 20, p50: 3, p95: 900, max: 6200, failures: 0 } }), guard: 'on', n: 10, cap: 3 }).problems.join('；'), /健康探针最慢/)
 })
 
+test('排队臂：整批都排到才通过（放行数可以超过同时上限）', () => {
+  const base = {
+    kind: 'canvas',
+    n: 8,
+    requests: { total: 8, accepted: 8, rejected: 0, byStatus: { 200: 8 }, byCode: {}, durations: [] },
+    upstream: { calls: 8, peakConcurrent: 2, byPath: {} },
+    kindLimit: 2,
+    queue: { waitMs: 90000, queued: 6, maxWaitMs: 4200, report: { served: 6, timedOut: 0, full: 0 } },
+  }
+  const ok = evaluate({ summary: summaryOf(base), guard: 'on', n: 8, cap: 2 })
+  assert.equal(ok.ok, true, ok.problems.join('；'))
+  // 只放进来 6 条：排队这一层没把剩下 2 条接住
+  const short = summaryOf({ ...base, requests: { ...base.requests, accepted: 6, rejected: 2, byStatus: { 200: 6, 503: 2 }, byCode: { SERVER_BUSY: 2 } }, upstream: { calls: 6, peakConcurrent: 2, byPath: {} } })
+  assert.match(evaluate({ summary: short, guard: 'on', n: 8, cap: 2 }).problems.join('；'), /没排到/)
+  // 8 条都 200、但一条都没真排过队：说明这条臂没量到排队（上限没生效或流水线太快）
+  const noQueue = summaryOf({ ...base, queue: { waitMs: 90000, queued: 0, maxWaitMs: 0 } })
+  assert.match(evaluate({ summary: noQueue, guard: 'on', n: 8, cap: 2 }).problems.join('；'), /真排过队/)
+  // 排队臂也要求「上游被调用数 = 放行数」：排到之后再发一次才算
+  const doubleCall = summaryOf({ ...base, upstream: { calls: 9, peakConcurrent: 2, byPath: {} } })
+  assert.match(evaluate({ summary: doubleCall, guard: 'on', n: 8, cap: 2 }).problems.join('；'), /上游被调用/)
+})
+
 test('参数解析：默认值与显式覆盖', () => {
   const defaults = parseArgs(['--kind=review'])
   assert.equal(defaults.kind, 'review')

@@ -36,6 +36,23 @@ export interface WaterlineReport {
     full: boolean
     // 按类型的整机上限（v0.9.79）：目前只有画布出图这一类（平台令牌通道，没有账号可挂）
     kindLimits?: Record<string, number>
+    // 排队位（v0.9.80）：名额满时先排一会儿再拒；计数是本进程自启动以来的累计
+    queue?: {
+      kind: string
+      /** 每条最多等多久；0 = 没开排队 */
+      waitMs: number
+      /** 最多几条同时排着；0 = 没开排队 */
+      maxWaiting: number
+      /** 现在几条在等 */
+      waiting: number
+      entered: number
+      served: number
+      timedOut: number
+      full: number
+      abandoned: number
+      maxWaitMs: number
+      since: string
+    }
   }
   capacity: Record<string, number>
   baseCapacity: Record<string, number>

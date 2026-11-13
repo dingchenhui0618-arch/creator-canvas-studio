@@ -11,7 +11,7 @@
 import { readBody, sendJson } from './_shared.mjs'
 import { authorizeGateway, createImageTask, createVideoTask, generateImage, listPoolModels, pollVideoTask } from '../gateway.mjs'
 import { config } from '../config.mjs'
-import { admit } from '../waterline.mjs'
+import { admitWaiting } from '../waterline.mjs'
 
 const IMAGE_CREATE = new Set(['/api/gateway/v1/images/generations'])
 const IMAGE_CREATE_ASYNC = new Set(['/api/gateway/v1/images/generations/async'])
@@ -38,9 +38,24 @@ function fail(res, error) {
  * 画布一次点「批量出图」就能连着发 8 张，每张都在等上游、每张都在花钱。
  * 现在先占整机名额（canvas_gen）再调上游：占不到就 503，**根本不会碰上游**，
  * 这一单没花钱。占到的名额在 finally 里还，超时、上游报错也一样还。
+ *
+ * v0.9.80 起名额满时先排队（admitWaiting）：画布等得起（同步出图超时 1800 秒），
+ * 8 张一起进来时前 2 张先跑、其余排着，排到了照常出图，排不到才拒。
+ * 有一条必须自己盯：客户端断开（画布节点被删 / 页面关了）就立刻退出排队，
+ * 既不写响应也不调上游——否则排到最后再发现没人要，钱已经花了。
  */
-async function withHeavy(res, run) {
-  const water = admit('canvas_gen')
+async function withHeavy(req, res, run) {
+  let gone = false
+  try {
+    if (typeof res.on === 'function') res.on('close', () => { if (!res.writableEnded) gone = true })
+  } catch {
+    // 测试里的假 res 没有 on：靠 writableEnded / destroyed 判断
+  }
+  const water = await admitWaiting('canvas_gen', {
+    isAborted: () => gone || res.writableEnded === true || res.destroyed === true || req.destroyed === true,
+  })
+  // 画布已经断开：不写响应、不调上游，这一张不花钱
+  if (water.aborted) return
   if (!water.ok) {
     const body = water.body || {}
     sendJson(res, water.status || 503, {
@@ -52,8 +67,18 @@ async function withHeavy(res, run) {
       ...(body.retryAfterSec ? { retryAfterSec: body.retryAfterSec } : {}),
       // 画布的出图节点会把这些原样显示在节点上：把「机器在跑几条」和「多久后再试」一起给它
       ...(body.active != null ? { active: body.active, limit: body.limit } : {}),
+      // 排队（v0.9.80）：等了多久、是不是排满 / 排超时——画布可以据此少发几张
+      ...(water.queued ? { queued: true } : {}),
+      ...(water.waitedMs ? { waitedMs: water.waitedMs } : {}),
+      ...(water.queueFull ? { queueFull: true } : {}),
+      ...(water.timedOut ? { timedOut: true } : {}),
+      ...(body.queueWaiting != null ? { queueWaiting: body.queueWaiting, queueMax: body.queueMax } : {}),
     })
     return
+  }
+  // 排过队的请求：把等待时间带回给画布（节点上能显示「排了 3 秒」）
+  if (water.waitedMs) {
+    try { res.setHeader('X-VQ-Queue-Ms', String(water.waitedMs)) } catch { /* 响应头已发出 */ }
   }
   const releaseAdmission = () => { try { water.lease.release() } catch { /* 还名额不该影响响应 */ } }
   try {
@@ -93,7 +118,7 @@ export function createGatewayRouter() {
       const callerIdempotency = String(req.headers['idempotency-key'] || '')
 
       if (IMAGE_CREATE.has(pathname) && req.method === 'POST') {
-        await withHeavy(res, async () => {
+        await withHeavy(req, res, async () => {
           try {
             sendJson(res, 200, await generateImage(await readBody(req), { idempotencyKey: callerIdempotency }))
           } catch (error) {
@@ -104,7 +129,7 @@ export function createGatewayRouter() {
       }
 
       if (IMAGE_CREATE_ASYNC.has(pathname) && req.method === 'POST') {
-        await withHeavy(res, async () => {
+        await withHeavy(req, res, async () => {
           try {
             sendJson(res, 200, await createImageTask(await readBody(req), { idempotencyKey: callerIdempotency }))
           } catch (error) {
@@ -115,7 +140,7 @@ export function createGatewayRouter() {
       }
 
       if (VIDEO_CREATE.has(pathname) && req.method === 'POST') {
-        await withHeavy(res, async () => {
+        await withHeavy(req, res, async () => {
           try {
             sendJson(res, 200, await createVideoTask(await readBody(req)))
           } catch (error) {

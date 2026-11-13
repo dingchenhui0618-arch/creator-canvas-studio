@@ -183,6 +183,8 @@ export function waterlineReport() {
       full: globalLimit > 0 && active.total >= globalLimit,
       // 按类型的整机上限：目前只有画布出图（没有账号可挂的那一类）
       kindLimits,
+      // 排队位（v0.9.80）：画布出图名额满时先排一会儿再拒——那一次「批量出图」还会不会整批失败，看这里
+      queue: admissionQueueReport('canvas_gen'),
       // scope=lease 表示这个数整机共用（两个实例同一个数）；process 表示退回进程内计数
       scope: lease.source,
       lease,
@@ -222,6 +224,151 @@ export function kindLimitFor(kind, level = 'ok', guard = true) {
   if (!guard) return 0
   if (!NO_USER_KINDS.has(kind)) return 0
   return capacityFor(kind, config.credits.concurrency[kind], level)
+}
+
+// ─── 画布出图的排队位（v0.9.80） ──────────────────────────────────────────────
+// 一次「批量出图」会连发 8 张，整机只放 2 张。v0.9.79 是第 3 张起立刻 503，
+// 画布上看到的就是「6 张失败」；可画布其实等得起（同步出图超时 1800 秒）。
+// 所以名额满时先排一会儿：排到了照常出图，排不到才拒——拒绝仍然发生在调上游之前，
+// 这一单不花钱。三件事刻意做成这样：
+//   1) 只给没有账号可挂的那一类排队（现在只有画布出图）；其余重活有账号，客户端自己重试更合适；
+//   2) 排队位是本进程的（两个实例各排各的），但占名额仍走共享租约——整机不会因此超放；
+//   3) 内存到红线不排队：等一分钟也不会变好，直接拒（admit 已经记过告警）。
+const QUEUE_TICK_MS = 350
+const QUEUE_STARTED_AT = new Date().toISOString()
+const queueWaiting = new Map()
+const queueStats = new Map()
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/** 这一类的排队位参数；0 表示不排队（立刻拒，v0.9.79 的行为）。 */
+export function queueLimitsFor(kind) {
+  const raw = (config.credits && config.credits.canvasQueue) || {}
+  if (!HEAVY_KINDS.includes(kind) || !NO_USER_KINDS.has(kind)) return { waitMs: 0, maxWaiting: 0 }
+  return {
+    waitMs: Math.max(0, Math.round(Number(raw.waitMs) || 0)),
+    maxWaiting: Math.max(0, Math.round(Number(raw.maxWaiting) || 0)),
+  }
+}
+
+function queueStat(kind) {
+  let stat = queueStats.get(kind)
+  if (!stat) {
+    stat = { entered: 0, served: 0, timedOut: 0, full: 0, abandoned: 0, maxWaitMs: 0 }
+    queueStats.set(kind, stat)
+  }
+  return stat
+}
+
+/** 后台看的一行排队位：现在几条在等、这一轮排到了几条、超时/排满/客户端走了各几次。 */
+export function admissionQueueReport(kind = 'canvas_gen') {
+  const limits = queueLimitsFor(kind)
+  return {
+    kind,
+    waitMs: limits.waitMs,
+    maxWaiting: limits.maxWaiting,
+    waiting: queueWaiting.get(kind) || 0,
+    ...queueStat(kind),
+    since: QUEUE_STARTED_AT,
+  }
+}
+
+function queueGone(kind) {
+  const stat = queueStat(kind)
+  stat.abandoned += 1
+}
+
+/**
+ * 带排队的名额申请：先试一次 admit（不排队时这就是全部），满了再按 tick 轮询到 deadline。
+ * 返回和 admit 同形状，多三个字段：queued（排过队）、waitedMs（等了多久）、aborted（客户端已经走了）。
+ * aborted 时调用方不要写响应、更不要调上游。
+ */
+export async function admitWaiting(kind, options = {}) {
+  const first = admit(kind)
+  const limits = queueLimitsFor(kind)
+  if (first.ok) return { ...first, queued: false, waitedMs: 0 }
+  // 排队关掉、或者内存到红线：立刻拒（红线再等也不会变好）
+  if (!limits.waitMs || !limits.maxWaiting || first.level === 'critical') {
+    return { ...first, queued: false, waitedMs: 0 }
+  }
+  const stat = queueStat(kind)
+  const waiting = queueWaiting.get(kind) || 0
+  if (waiting >= limits.maxWaiting) {
+    // 排队位也满了：这一单直接拒，别把连接堆在这里
+    stat.full += 1
+    const body = first.body || {}
+    const internal = config.ui.mode === 'internal'
+    return {
+      ...first,
+      queued: false,
+      waitedMs: 0,
+      queueFull: true,
+      body: {
+        ...body,
+        code: 'SERVER_BUSY',
+        error: internal
+          ? '排队位已经满了（' + waiting + ' / ' + limits.maxWaiting + ' 条在等），这次生成没有开始（没有产生费用）。少发几张，或者等一分钟再试。'
+          : '这次生成没有开始（没有产生费用）：前面排的几张还没排到，这次排不进来了。少发几张，或者等一分钟再试。',
+        retryAfterSec: RETRY_AFTER_SEC,
+        ...(internal ? { queueWaiting: waiting, queueMax: limits.maxWaiting } : {}),
+      },
+    }
+  }
+
+  queueWaiting.set(kind, waiting + 1)
+  stat.entered += 1
+  const startedAt = Date.now()
+  const deadline = startedAt + limits.waitMs
+  const isAborted = typeof options.isAborted === 'function' ? options.isAborted : () => false
+  const tickMs = Math.max(20, Math.round(Number(options.tickMs) || QUEUE_TICK_MS))
+  let last = first
+  try {
+    while (true) {
+      if (isAborted()) {
+        queueGone(kind)
+        return { ok: false, aborted: true, status: 499, level: last.level, lease: null, queued: false, waitedMs: Date.now() - startedAt, body: { code: 'CLIENT_GONE', error: '客户端已经断开' } }
+      }
+      const left = deadline - Date.now()
+      if (left <= 0) break
+      // 抖动：同一刻进来的几条别每 350 毫秒一起去撞租约目录的锁
+      await sleep(Math.min(left, tickMs + Math.round(Math.random() * 120)))
+      if (isAborted()) {
+        queueGone(kind)
+        return { ok: false, aborted: true, status: 499, level: last.level, lease: null, queued: false, waitedMs: Date.now() - startedAt, body: { code: 'CLIENT_GONE', error: '客户端已经断开' } }
+      }
+      last = admit(kind)
+      if (last.ok) {
+        const waitedMs = Date.now() - startedAt
+        stat.served += 1
+        stat.maxWaitMs = Math.max(stat.maxWaitMs, waitedMs)
+        return { ...last, queued: true, waitedMs }
+      }
+      // 排队期间水位掉到红线：别等了，直接把红线那条回给它
+      if (last.level === 'critical') return { ...last, queued: false, waitedMs: Date.now() - startedAt }
+    }
+    const waitedMs = Date.now() - startedAt
+    stat.timedOut += 1
+    stat.maxWaitMs = Math.max(stat.maxWaitMs, waitedMs)
+    const body = last.body || {}
+    const internal = config.ui.mode === 'internal'
+    return {
+      ...last,
+      ok: false,
+      queued: true,
+      timedOut: true,
+      waitedMs,
+      body: {
+        ...body,
+        code: 'SERVER_BUSY',
+        error: internal
+          ? '排队等了 ' + Math.round(waitedMs / 1000) + ' 秒还没轮到（同时最多 ' + (last.kindLimit || 0) + ' 条），这次生成没有开始（没有产生费用）。少发几张，或者等一分钟再试。'
+          : '这次生成没有开始（没有产生费用）：排队等了 ' + Math.round(waitedMs / 1000) + ' 秒还没轮到。少发几张，或者等一分钟再试。',
+        retryAfterSec: RETRY_AFTER_SEC,
+        ...(internal ? { waitedMs, queueWaiting: queueWaiting.get(kind) || 0, kindActive: last.kindActive ?? null, kindLimit: last.kindLimit || null } : {}),
+      },
+    }
+  } finally {
+    queueWaiting.set(kind, Math.max(0, (queueWaiting.get(kind) || 1) - 1))
+  }
 }
 
 /** 按类型的名额排满时回的那一条：和「整机排满」分开说，下一步动作不一样（等一分钟 vs 少发几张）。 */

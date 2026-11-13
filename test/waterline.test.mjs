@@ -108,6 +108,13 @@ test('读数：来自真实系统与真实 V8 堆，不是编的', () => {
   assert.equal(report.heavy.limit, water.globalHeavyCap(report.level))
   assert.equal(report.heavy.unlimited, report.heavy.limit === 0)
   assert.equal(report.heavy.scope, 'lease')
+  // 排队位（v0.9.80）：只有画布出图这一类排队，默认每条最多等 90 秒、最多 8 条同时排
+  assert.equal(report.heavy.queue.kind, 'canvas_gen')
+  assert.equal(report.heavy.queue.waitMs, config.credits.canvasQueue.waitMs)
+  assert.equal(report.heavy.queue.maxWaiting, config.credits.canvasQueue.maxWaiting)
+  assert.equal(report.heavy.queue.waiting, 0)
+  assert.equal(water.queueLimitsFor('review').waitMs, 0, '其它重活不排队：它们有账号，客户端自己重试更合适')
+  assert.equal(water.admissionQueueReport('review').waiting, 0)
 })
 
 test('到红线：重活被拒且说清没扣积分，轻活照常，生产口径不带内部读数', async () => {

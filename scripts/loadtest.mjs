@@ -14,12 +14,14 @@
 //   node scripts/loadtest.mjs --kind=replicate --n=10 --guard=off  # 再加上 ffmpeg 子进程那条路
 //   node scripts/loadtest.mjs --kind=review --n=3                  # 上限以内的正常路径
 //   node scripts/loadtest.mjs --kind=canvas --n=10                   # 画布出图通道：只放整机上限那么多张，其余不碰上游
+//   node scripts/loadtest.mjs --kind=canvas --n=8 --queue=90000      # 同一批，但名额满时先排队：8 张都出图，只是慢一点
 //
 // 参数：
 //   --kind=review|replicate|canvas  重活类型（默认 review：整个流程都在本机，不依赖外网；
 //                             canvas = 画布调平台出图通道 /api/gateway，假上游假装出一张图）
 //   --n=10                    同时提交几条（每个账号一条：评审按账号只放 1 条并行）
 //   --upstream-ms=4000        假上游延迟（让任务重叠，而不是排队）
+//   --queue=90000             canvas 专用：画布出图的排队位（每条最多等多久）。不填 = 0 = 立刻拒（v0.9.79 的行为）
 //   --guard=on|off            on=按生产默认（水位 + 全站上限 3）；off=VQ_WATER_GUARD=0 + VQ_GLOBAL_HEAVY=0
 //   --image-mb=2.5            review 用的图多大（本机生成，不联网）
 //   --video-url=...           replicate 用的视频直链（默认 test-videos.co.uk 的 720p 10s）
@@ -391,11 +393,16 @@ function memoryPeak(samples, key) {
 function evaluate({ summary, guard, n, cap }) {
   const problems = []
   const accepted = Number(summary.requests.accepted || 0)
+  // 排队臂（v0.9.80）：放行数可以合法地超过同时上限——多出来的在服务端排着，不是「放多了」
+  const queuedArm = summary.kind === 'canvas' && Number((summary.queue || {}).waitMs || 0) > 0
   if (!summary.aliveAfter) problems.push('压测结束后实例已经不在了（进程退出 / 被杀）')
   if (summary.drainedActive !== 0) problems.push('跑完名额没还回来：闸门里还挂着 ' + summary.drainedActive + ' 条')
   if (summary.requests.byStatus['500']) problems.push('出现 ' + summary.requests.byStatus['500'] + ' 个 500：重活失败会退款，但这不是预期路径')
   if (guard === 'off') {
     if (accepted !== n) problems.push('闸门关着却有请求被拒：accepted=' + accepted + ' / n=' + n + '，拒绝原因 ' + JSON.stringify(summary.requests.byCode))
+  } else if (queuedArm) {
+    // 排队臂：上限管的是「同时在跑几条」，不是「一共放进来几条」；这里只看有没有全部排到
+    if (accepted < 1) problems.push('一条都没放进来：闸门可能把正常请求也拒了')
   } else {
     if (accepted > cap) problems.push('放进来的活超过全站上限：accepted=' + accepted + ' > cap=' + cap)
     if (accepted < 1) problems.push('一条都没放进来：闸门可能把正常请求也拒了')
@@ -405,11 +412,24 @@ function evaluate({ summary, guard, n, cap }) {
   if (summary.health.max > 5000) problems.push('压测期间健康探针最慢 ' + summary.health.max + ' ms：主线程被打到不可用')
   if (summary.kind === 'canvas') {
     // 这条通道最要紧的不是「快」，而是「被拒的那几张一张都没发出去」——发出去就是钱。
-    if (summary.upstream.calls !== accepted) {
+    if (!queuedArm && summary.upstream.calls !== accepted) {
       problems.push('被拒的请求也碰到了上游：上游被调用 ' + summary.upstream.calls + ' 次，放行 ' + accepted + ' 次')
     }
-    if (Number(summary.upstream.peakConcurrent) > accepted) {
+    if (Number(summary.upstream.peakConcurrent) > Math.max(accepted, Number(cap) || 0)) {
       problems.push('上游同时跑了 ' + summary.upstream.peakConcurrent + ' 张，比放行的 ' + accepted + ' 张还多')
+    }
+    if (queuedArm) {
+      // 排队臂要证明的是「一次批量出图不再整批失败」：全部出图、全部只发一次上游、确有排队
+      if (accepted !== n) {
+        problems.push('排队臂里还有 ' + (n - accepted) + ' 条没排到（放行 ' + accepted + ' / ' + n + '）：排队位或等待上限不够')
+      }
+      if (Number(summary.upstream.calls) !== accepted) {
+        problems.push('排队臂：上游被调用 ' + summary.upstream.calls + ' 次，与放行的 ' + accepted + ' 条不一致')
+      }
+      const expectedQueued = Math.max(0, n - Math.max(1, Number(cap) || 1))
+      if (Number((summary.queue || {}).queued || 0) < expectedQueued) {
+        problems.push('排队臂里只有 ' + (summary.queue || {}).queued + ' 条真排过队（上限 ' + cap + ' 条，至少该有 ' + expectedQueued + ' 条）')
+      }
     }
     if (guard !== 'off' && summary.rateLimitProbe && summary.rateLimitProbe.firstLimitedIndex !== 21) {
       problems.push('入口限流没在第 21 次生效：' + JSON.stringify(summary.rateLimitProbe))
@@ -459,7 +479,9 @@ async function run(options) {
       // 名额目录跟着这次一次性实例走：压测要量的是「这个实例会不会放超」，
       // 不是去跟生产那两个实例抢同一批名额（那会把真实用户的任务挤成 503）。
       VQ_HEAVY_LEASE_DIR: path.join(dataDir, 'heavy-leases'),
-      ...(options.kind === 'canvas' ? { VQ_GATEWAY_TOKEN: gatewayToken, VQ_GATEWAY_OPEN: '1' } : {}),
+      ...(options.kind === 'canvas'
+        ? { VQ_GATEWAY_TOKEN: gatewayToken, VQ_GATEWAY_OPEN: '1', VQ_CANVAS_QUEUE_MS: String(options.queueMs) }
+        : {}),
       NODE_OPTIONS: '--max-old-space-size=' + options.heapMb,
     },
   })
@@ -567,6 +589,9 @@ async function run(options) {
           error: parsed && parsed.error ? String(parsed.error).slice(0, 160) : '',
           ms: Date.now() - started,
           jobId: (parsed && parsed.jobId) || null,
+          // 排过队的响应会带这个头（v0.9.80）：量「这批图一共排了多久」
+          queueMs: Number(response.headers.get('x-vq-queue-ms') || 0) || 0,
+          queued: Boolean(parsed && parsed.queued),
         })
       } catch (error) {
         responses.push({ index, status: 0, code: 'NETWORK', error: String(error && error.message || error).slice(0, 160), ms: Date.now() - started })
@@ -720,6 +745,13 @@ async function run(options) {
       },
       isolate: options.kind === 'review' ? { mode: options.isolate, report: isolateAfter } : null,
       kindLimit,
+      // 排队位（v0.9.80）：这一批里有几条真排过队、最长等了多久；实例侧的计数也一起收
+      queue: {
+        waitMs: options.kind === 'canvas' ? options.queueMs : 0,
+        queued: responses.filter((item) => item.queued || item.queueMs > 0).length,
+        maxWaitMs: responses.reduce((max, item) => Math.max(max, item.queueMs || 0), 0),
+        report: waterAfter && waterAfter.heavy ? waterAfter.heavy.queue || null : null,
+      },
       rateLimitProbe: rateProbe,
       aliveAfter,
       drainedActive,
@@ -799,7 +831,9 @@ function readOptions(argv) {
     keepSamples: args['keep-samples'] === 'true',
     // 评审隔离开关（v0.9.77）：默认开；--isolate=off 量「退回同进程」那一臂
     isolate: args.isolate === 'off' ? 'off' : 'on',
-    label: String(args.label || (kind + '-n' + n + '-guard-' + guard + (args.isolate === 'off' ? '-iso-off' : ''))),
+    // 画布出图的排队位（v0.9.80）：不填就是不排队（v0.9.79 的行为）；--queue=90000 量「整批都出图」那一臂
+    queueMs: Math.max(0, Math.min(180000, Number(args.queue || 0))),
+    label: String(args.label || (kind + '-n' + n + '-guard-' + guard + (args.isolate === 'off' ? '-iso-off' : '') + (Number(args.queue || 0) > 0 ? '-queue' : ''))),
   }
 }
 
@@ -822,6 +856,10 @@ function formatReport(summary) {
   }
   if (summary.kind === 'canvas') {
     lines.push('  画布出图：放行 ' + summary.requests.accepted + ' 张 / 整机上限 ' + (summary.kindLimit ?? '—') + ' 张 · 上游被调用 ' + summary.upstream.calls + ' 次（被拒的一次都没发出去）')
+    const queue = summary.queue || {}
+    if (Number(queue.waitMs) > 0) {
+      lines.push('  排队位：' + queue.queued + ' 条排过队 · 最长等了 ' + queue.maxWaitMs + ' ms · 实例侧：排到 ' + ((queue.report && queue.report.served) ?? '—') + ' 条 / 超时 ' + ((queue.report && queue.report.timedOut) ?? '—') + ' 条 / 排满拒 ' + ((queue.report && queue.report.full) ?? '—') + ' 条')
+    }
     if (summary.rateLimitProbe) {
       lines.push('  入口限流：' + summary.rateLimitProbe.attempted + ' 次里' + (summary.rateLimitProbe.firstLimitedIndex ? '第 ' + summary.rateLimitProbe.firstLimitedIndex + ' 次开始 429（' + summary.rateLimitProbe.code + '）' : '一次都没限到'))
     }
