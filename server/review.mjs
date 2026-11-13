@@ -41,8 +41,8 @@ async function serviceHealth() {
  * 它只加一块「依据」，不改 verdict —— 两个模型口径不同，改结论就说不清是谁的责任。
  * 判断层没配 / 调不通时原样返回，评审不因此失败。
  */
-async function attachJudge(mapped, intent) {
-  const judge = await judgeReview(mapped, { intent })
+async function attachJudge(mapped, intent, meter = null) {
+  const judge = await judgeReview(mapped, { intent, meter })
   return { ...mapped, judge }
 }
 
@@ -84,9 +84,12 @@ function normalize(raw, provider, requestId) {
   }
 }
 
-export async function reviewVisual({ imageUrl, imageBytes, mime = 'image/jpeg', intent = '', log }) {
+export async function reviewVisual({ imageUrl, imageBytes, mime = 'image/jpeg', intent = '', log, projectId = '', ref = '' }) {
   const requestId = 'vr_' + Math.random().toString(36).slice(2, 10)
   const started = Date.now()
+  // 计量口径：kind 由各调用点自己定（视觉=vision、判断=judge），这里只负责把
+  // 「哪条作品、哪次请求」带下去，后台成本页才能按作品回看一次评审花了多少。
+  const meter = { projectId: String(projectId || ''), ref: String(ref || requestId) }
 
   // 1) VisionQA 插件服务：同一套契约，能连上就用它的结果
   if (await serviceHealth()) {
@@ -114,7 +117,7 @@ export async function reviewVisual({ imageUrl, imageBytes, mime = 'image/jpeg', 
       const response = await fetch(SERVICE_URL + '/api/visual-review', { method: 'POST', body: form, signal: AbortSignal.timeout(60000) })
       const json = await response.json()
       if (response.ok) {
-        const mapped = await attachJudge(normalize(json, 'visionqa-plugin@' + SERVICE_URL.replace(/^https?:\/\//, ''), requestId), intent)
+        const mapped = await attachJudge(normalize(json, 'visionqa-plugin@' + SERVICE_URL.replace(/^https?:\/\//, ''), requestId), intent, meter)
         return { ...mapped, ms: Date.now() - started, mode: 'service', note: '由 VisionQA 插件服务返回（fixture provider 时只证明链路可用，不代表模型准确率）' }
       }
     } catch (error) {
@@ -165,10 +168,10 @@ export async function reviewVisual({ imageUrl, imageBytes, mime = 'image/jpeg', 
         { type: 'image_url', image_url: { url: dataUrl, detail: 'low' } },
       ],
     },
-  ], { temperature: 0.2, maxTokens: 3000, json: true, log, models: visionChain() })
+  ], { temperature: 0.2, maxTokens: 3000, json: true, log, models: visionChain(), meter })
 
   const parsed = extractJson(result.text)
-  const mapped = await attachJudge(normalize(parsed, 'local-model:' + result.model, requestId), intent)
+  const mapped = await attachJudge(normalize(parsed, 'local-model:' + result.model, requestId), intent, meter)
   return { ...mapped, ms: Date.now() - started, mode: 'local-model', note: '由本地视觉模型按 VisionQA visual-baseline 规则评审' }
 }
 

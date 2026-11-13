@@ -237,6 +237,9 @@ export function createReviewRouter() {
             mime,
             intent: body.intent ? String(body.intent).slice(0, 300) : '',
             log: (message) => console.log('[review] ' + message),
+            // 作品页发起的评审要能在成本页按作品回看：作品 id 只用于计量，不写进评审结论
+            projectId,
+            ref: projectId ? 'project:' + projectId : '',
           })
           // 插件服务出结论时没有用到平台模型，不清除模型侧状态
           if (result.mode === 'local-model') noteModelSuccess()

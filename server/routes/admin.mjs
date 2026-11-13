@@ -30,6 +30,7 @@ import { disableTemplateShare, getTemplate, updateTemplate } from '../templates.
 import { listJobs } from '../jobs.mjs'
 import { backupSummary } from '../backup-status.mjs'
 import { createInvite, inviteSummary, revokeInvite } from '../invites.mjs'
+import { saveUsagePrices, usagePrices, usageSummary } from '../usage-meter.mjs'
 
 const MODEL_KEY = /^\/api\/admin\/model-keys\/([\w-]+)$/
 const MODEL_KEY_TEST = /^\/api\/admin\/model-keys\/([\w-]+)\/test$/
@@ -940,6 +941,32 @@ export function createAdminRouter() {
       }
 
       // 举报处理：队列、计数，以及「驳回 / 下架」两个动作
+      // 成本页：窗口内的真实用量 + 管理员填的估算单价。
+      // 单价没填时只回用量，不编一个金额出来（priced=false，前端据此显示「未定价」）。
+      if (pathname === '/api/admin/usage' && req.method === 'GET') {
+        const days = Number(url.searchParams.get('days')) || 14
+        sendJson(res, 200, usageSummary({ days }))
+        return true
+      }
+
+      // 保存估算单价：只改给了的字段，换价不用重启；每条都进审计，事后能追是谁改的。
+      if (pathname === '/api/admin/usage/prices' && req.method === 'PUT') {
+        const body = await readBody(req)
+        const saved = saveUsagePrices(body, { by: user.email })
+        if (!saved.ok) return (sendJson(res, 400, { ok: false, error: saved.error }), true)
+        recordAudit({
+          req,
+          actor: user,
+          action: 'usage.prices.save',
+          targetType: 'usage',
+          targetId: 'prices',
+          targetLabel: '成本估算单价',
+          detail: { prices: saved.prices },
+        })
+        sendJson(res, 200, { ok: true, ...usagePrices(), prices: saved.prices })
+        return true
+      }
+
       if (pathname === '/api/admin/reports' && req.method === 'GET') {
         const status = String(url.searchParams.get('status') || 'open')
         const info = await listReports({ status, limit: Number(url.searchParams.get('limit')) || 50 })

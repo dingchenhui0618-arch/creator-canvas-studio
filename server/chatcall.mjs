@@ -1,5 +1,6 @@
 import { config } from './config.mjs'
 import { recordRoute, reportKey, resolveKeyCandidates } from './keyvault.mjs'
+import { recordUsage } from './usage-meter.mjs'
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -34,6 +35,10 @@ export async function chatCompletion({
   timeoutMs = config.vision.timeoutMs,
   capability = 'text',
   maxKeys = 3,
+  // 计量上下文：kind 默认跟能力走（多模态=visual），ref 是这一次业务的单据 id。
+  // 只在成功拿到上游 usage 时记一条；拿不到 usage 也记（tokensKnown=false），
+  // 否则「调了多少次」会少算。
+  meter = null,
 }) {
   const candidates = resolveKeyCandidates({ capability, model, limit: maxKeys })
   // 池里没有任何可用 Key 时，仍按老规矩回落环境变量凭证；来源在路由日志里标 env / none。
@@ -127,6 +132,17 @@ export async function chatCompletion({
         }
         reportKey(candidate.id, true)
         route({ ok: true })
+        const usage = parsed?.usage || null
+        recordUsage({
+          kind: (meter && meter.kind) || (capability === 'vision' ? 'vision' : 'text'),
+          model: String(parsed?.model || model),
+          projectId: (meter && meter.projectId) || '',
+          ref: (meter && meter.ref) || '',
+          tokensIn: Number(usage?.prompt_tokens) || 0,
+          tokensOut: Number(usage?.completion_tokens) || 0,
+          tokensKnown: Boolean(usage),
+          detail: String(parsed?.model || model) + ' · ' + capability,
+        })
         return { message: choice.message || {}, finishReason, usage: parsed?.usage, jsonMode: useJson }
       } catch (error) {
         if (error?.code === 'NO_MODEL' || error?.status || error?.truncated) {

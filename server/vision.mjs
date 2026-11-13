@@ -32,7 +32,7 @@ function extractJson(text) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
-async function callModel(messages, model) {
+async function callModel(messages, model, meter = null) {
   // 18 帧的逐帧 JSON 实测 4800 token 上下（含推理 token），给 4000 会被截断成半截 JSON；
   // 走 response_format=json_object 让推理型模型直接吐纯 JSON，省掉一次修复重试。
   const { message } = await chatCompletion({
@@ -42,6 +42,7 @@ async function callModel(messages, model) {
     maxTokens: 8000,
     json: true,
     capability: 'vision',
+    meter,
   })
   // 推理型多模态模型可能把 JSON 写进 reasoning_content（content 为空），这里兜住
   const content = String(message.content || '').trim() || String(message.reasoning_content || '').trim()
@@ -50,11 +51,11 @@ async function callModel(messages, model) {
 }
 
 // 同一个模型最多试 2 次（上游 overloaded 属于瞬时故障），再换下一个候选模型
-async function callWithRetry(messages, model, log) {
+async function callWithRetry(messages, model, log, meter = null) {
   let lastError
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      return await callModel(messages, model)
+      return await callModel(messages, model, meter)
     } catch (error) {
       lastError = error
       const retryable = error?.retryable || error?.name === 'AbortError' || /fetch failed/i.test(String(error?.message))
@@ -66,14 +67,14 @@ async function callWithRetry(messages, model, log) {
   throw lastError
 }
 
-async function callWithFallback(messages, log) {
+async function callWithFallback(messages, log, meter = null) {
   // 后台 Key 池声明的视觉模型也进候选链，加一把多模态 Key 即可换模型
   const candidates = [...new Set([config.vision.model, ...config.vision.fallbacks, ...vaultModels('vision')].filter(Boolean))]
   let lastError
   for (const model of candidates) {
     try {
       log?.('视觉模型：' + model)
-      return { text: await callWithRetry(messages, model, log), model }
+      return { text: await callWithRetry(messages, model, log, meter), model }
     } catch (error) {
       lastError = error
       log?.(model + ' 失败：' + String(error?.message || error).slice(0, 120))
@@ -148,7 +149,7 @@ export function normalizeResult(raw, frames, videoDuration = 0) {
   }
 }
 
-export async function analyzeFrames({ frames, meta, sceneCuts, log }) {
+export async function analyzeFrames({ frames, meta, sceneCuts, log, meter = null }) {
   if (!visionEnabled()) throw Object.assign(new Error('未配置视觉模型凭证'), { code: 'NO_VISION' })
   const payload = []
   for (const frame of frames) {
@@ -166,7 +167,7 @@ export async function analyzeFrames({ frames, meta, sceneCuts, log }) {
     { role: 'system', content: SYSTEM_PROMPT },
     { role: 'user', content: [{ type: 'text', text: summary }, ...payload] },
   ]
-  const first = await callWithFallback(messages, log)
+  const first = await callWithFallback(messages, log, meter)
   let parsed
   try {
     parsed = extractJson(first.text)
@@ -175,7 +176,7 @@ export async function analyzeFrames({ frames, meta, sceneCuts, log }) {
     const repaired = await callWithFallback([
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: [{ type: 'text', text: summary + '\n上一次输出无法解析，请只输出 JSON。' }, ...payload] },
-    ], log)
+    ], log, meter)
     parsed = extractJson(repaired.text)
   }
   return normalizeResult(parsed, frames, meta.duration)

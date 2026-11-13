@@ -12,6 +12,7 @@
 // Key 走平台 Key 池（能力标「判断」），与出图 / 出视频同一套「优先级 → 权重 → 故障回退」。
 // 没配 Key 时返回 status=disabled，评审照常出结论，不因为判断层缺席就把评审卡住。
 import { recordRoute, reportKey, resolveKeyCandidates } from './keyvault.mjs'
+import { recordUsage } from './usage-meter.mjs'
 
 // 判断层在评审请求里是最后一段，给推理型判断模型留够时间：实测 gpt-5.6-luna 一次判断
 // 单次调用 12–25 秒（含推理 token），原先的 12 秒会在模型正常可用时误判成失败。
@@ -313,7 +314,7 @@ export async function callJudge(key, state, questions, model) {
  * 评审本身照常返回 —— 判断层是加值，不是新的故障点。
  * 失败会记进路由日志并计入那把 Key 的健康度，后台看得到「判断模型调不通」。
  */
-export async function judgeReview(review, { intent = '' } = {}) {
+export async function judgeReview(review, { intent = '', meter = null } = {}) {
   const started = Date.now()
   const candidates = resolveKeyCandidates({ capability: 'judge', limit: MAX_ATTEMPTS })
   if (!candidates.length) {
@@ -346,6 +347,18 @@ export async function judgeReview(review, { intent = '' } = {}) {
       const result = await callJudge(key, state, questions, model)
       reportKey(key.id, true)
       recordRoute({ capability: 'judge', model: result.model, keyId: key.id, keyName: key.name, source: 'pool', reason: key.reason, attempt: key.attempt, ms: Date.now() - started, ok: true })
+      // 判断层按次计价（不少上游不给 token 明细），token 有就一起记，页面按次折算
+      recordUsage({
+        kind: 'judge',
+        model: result.model,
+        projectId: (meter && meter.projectId) || '',
+        ref: (meter && meter.ref) || '',
+        units: 1,
+        tokensIn: Number(result.usage && result.usage.prompt_tokens) || 0,
+        tokensOut: Number(result.usage && result.usage.completion_tokens) || 0,
+        tokensKnown: Boolean(result.usage),
+        detail: result.protocol,
+      })
       return {
         status: 'ok',
         model: result.model,

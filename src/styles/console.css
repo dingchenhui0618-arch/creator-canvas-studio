@@ -710,6 +710,29 @@
 .admin-mail-field--check { flex: 0 0 auto; padding-bottom: 8px; }
 .admin-mail-form .admin-doc-actions { flex: 1 1 100%; }
 
+/* 成本页：单价表单、按天柱状与数字列。
+   数字列统一等宽 + 右对齐，扫一眼就能比较大小；柱子只用一行高的轨道，不加大面积色块。 */
+.admin-usage-range { flex: 0 0 auto; justify-content: flex-end; }
+.admin-usage-range .vq-input { height: 30px; padding: 0 8px; }
+.admin-price-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
+  margin-top: 12px;
+}
+.admin-price-field { flex: 0 1 calc(25% - 9px); min-width: 96px; }
+.admin-price-field small { color: var(--faint, #8a8a8a); font-size: 11px; line-height: 1.4; }
+.admin-price-form .admin-doc-actions { flex: 1 1 100%; }
+.admin-usage-days { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.admin-bar { display: grid; grid-template-columns: 56px minmax(0, 1fr) 64px; align-items: center; gap: 12px; }
+.admin-bar > .admin-mono { color: var(--muted, #5d5d5d); font-size: 11px; }
+.admin-bar-track { display: block; height: 6px; border-radius: 999px; background: var(--line-faint, rgba(17, 17, 17, .06)); overflow: hidden; }
+.admin-bar-fill { display: block; height: 100%; border-radius: 999px; background: var(--ink, #111111); opacity: .72; }
+.admin-num { text-align: right; font-variant-numeric: tabular-nums; }
+.admin-value-unit { margin-left: 4px; color: var(--muted, #5d5d5d); font-size: 16px; font-weight: 500; }
+
+
 
 /* 公共模板勾选：整行、复选框与说明基线对齐，不用浏览器默认 13px 挤压行高 */
 .admin-edit-check {

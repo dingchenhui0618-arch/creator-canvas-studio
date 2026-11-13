@@ -488,6 +488,8 @@ async function runLlm(node, ctx) {
     // 节点没选模型时用画布主人的账号级首选模型；再后面才是全局降级链
     models: [cfg.model, ctx.ownerId ? preferenceModel(ctx.ownerId) : '', ...config.vision.fallbacks].filter(Boolean),
     log: (message) => console.log('[flows] ' + message),
+    // 计量挂在「这次运行」上：同一张画布跑十遍，后台能看出十遍各花了多少 token
+    meter: { ref: ctx.runId || '', projectId: ctx.projectId || '' },
   })
   return { text: clip(result.text), model: result.model, temperature: cfg.temperature }
 }
@@ -506,12 +508,12 @@ async function loadReviewMedia(reference) {
   return { imageBytes: bytes, mime: MEDIA_MIME[path.extname(absolute).toLowerCase()] || 'image/jpeg' }
 }
 
-async function runReview(node) {
+async function runReview(node, ctx = {}) {
   const cfg = node.data.config
   const profile = REVIEW_PROFILES.find((item) => item.id === cfg.profile) || REVIEW_PROFILES[0]
   const media = await loadReviewMedia(cfg.image)
   // 复用 server/review.mjs：优先 VisionQA 插件服务，不可用再走本地模型，并如实标注 provider
-  const result = await reviewVisual({ ...media, intent: profile.intent, log: (message) => console.log('[flows] ' + message) })
+  const result = await reviewVisual({ ...media, intent: profile.intent, log: (message) => console.log('[flows] ' + message), ref: ctx.runId || '' })
   const observations = Array.isArray(result.observations) ? result.observations : []
   const blockers = observations.filter((item) => item.severity === 'blocker').length
   const verdictLabel = { pass: '通过', needs_review: '待确认', fail: '有问题' }[result.verdict] || result.verdict
@@ -596,7 +598,7 @@ async function executeNode(node, ctx) {
     case 'output':
       return { status: 'success', output: runOutput(ctx) }
     case 'review':
-      return { status: 'success', output: await runReview(node) }
+      return { status: 'success', output: await runReview(node, ctx) }
     default:
       throw new Error('未知节点类型：' + node.type)
   }
@@ -714,7 +716,7 @@ export async function runFlow(flow, { onEvent, credits = null } = {}) {
     const nodeStartedAt = Date.now()
     let result
     try {
-      const ctx = { ...collectContext(activeIn, results, nodesById), ownerId: flow.ownerId || '' }
+      const ctx = { ...collectContext(activeIn, results, nodesById), ownerId: flow.ownerId || '', runId: run.id }
       const executed = await executeNode(node, ctx)
       result = {
         id: node.id,

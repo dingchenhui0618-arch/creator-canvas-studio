@@ -16,6 +16,7 @@ import crypto from 'node:crypto'
 import { config } from './config.mjs'
 import { countRunning, finishTask, getTask, listTasks, pruneTasks, rememberTask, resetTaskStore } from './gateway-tasks.mjs'
 import { keyMaterial, listKeys, openSecret, recordRoute, reportKey, resolveKeyCandidates, sealSecret, vaultModels } from './keyvault.mjs'
+import { recordUsage } from './usage-meter.mjs'
 
 // 画布出图节点会发过来的真实模型名（来源：画布源码里的 CHANNEL_MODEL 常量，2026-11-11 核对）。
 // 后台拿它做「画布要的模型现在有没有人接」的对账，避免 Key 加上了却因为模型名对不上而用不了。
@@ -379,6 +380,19 @@ function idempotencyHeaders(key, value) {
   return keyProtocol(key) === 'cgcm' ? { 'Idempotency-Key': value } : {}
 }
 
+/** 出图张数：请求里明确要几张就记几张，没写按 1 张（画布默认一次一张）。 */
+function imageUnits(payload = {}) {
+  const count = Math.round(Number(payload.n) || 1)
+  return Math.max(1, Math.min(8, count))
+}
+
+/** 出视频秒数：不同协议字段名不一样（duration / durationSeconds / seconds），认第一个有效值。 */
+function videoSeconds(payload = {}) {
+  const raw = payload.duration ?? payload.durationSeconds ?? payload.duration_seconds ?? payload.seconds
+  const seconds = Number(raw)
+  return Number.isFinite(seconds) && seconds > 0 ? Math.min(600, seconds) : 0
+}
+
 /**
  * 出图：按「优先级 → 权重」排出一串出图 Key，一把失败就换下一把（最多 3 把）。
  * 单把 Key 坏掉不该让整次生成失败，这就是「故障回退」。
@@ -401,13 +415,20 @@ export async function generateImage(payload = {}, options = {}) {
     // SeeAPI 同步出图默认回 base64（一张图几 MB），画布要的是地址，所以不指定时按 url 要
     if (keyProtocol(key) === 'cgcm' && !requestBody.response_format) requestBody.response_format = 'url'
     try {
-      return await attemptImage(key, requestBody, started, model, idempotencyHeaders(key, idempotencyKey))
+      const result = await attemptImage(key, requestBody, started, model, idempotencyHeaders(key, idempotencyKey))
+      // 真实的花钱点在这里：上游已经接了单、回了图地址，按张数记账（幂等键就是这次单据号）
+      recordUsage({ kind: 'image', model: String(result.model || model), ref: idempotencyKey, units: imageUnits(payload), detail: '同步出图' })
+      return result
     } catch (error) {
       // 结果不明不换 Key：换一把就是重新提交一次，可能重复扣费
-      if (error?.code === 'UPSTREAM_OUTCOME_UNKNOWN') throw error
+      if (error?.code === 'UPSTREAM_OUTCOME_UNKNOWN') {
+        recordUsage({ kind: 'image', model, ref: idempotencyKey, ok: false, detail: '结果不明：上游可能已计费，等对账' })
+        throw error
+      }
       lastError = error
     }
   }
+  recordUsage({ kind: 'image', model, ref: idempotencyKey, ok: false, detail: '同步出图失败，未确认是否计费' })
   throw gatewayError(lastError?.status || 502, lastError?.code || 'UPSTREAM_REJECTED', failoverMessage('出图', candidates, lastError), {
     ...(lastError?.upstreamStatus ? { upstreamStatus: lastError.upstreamStatus } : {}),
     ...(lastError?.upstreamCode ? { upstreamCode: lastError.upstreamCode } : {}),
@@ -479,6 +500,8 @@ export async function createVideoTask(payload = {}) {
       continue
     }
     rememberTask({ id: created.taskId, kind: 'video', keyId: key.id, keyName: key.name, baseUrl: key.baseUrl, model: requestBody.model, sealedKey: sealSecret(key.apiKey) })
+    // 出视频按秒计价：建任务成功就按请求里的时长记一笔（上游失败会退款，页面按提交口径说清楚）
+    recordUsage({ kind: 'video', model: String(requestBody.model || model), ref: created.taskId, units: videoSeconds(payload), detail: '建任务成功，提交口径' })
     return { ...(created.data && typeof created.data === 'object' ? created.data : {}), ok: true, id: created.taskId, key: { id: key.id, name: key.name }, attempt: key.attempt, ms: Date.now() - started }
   }
   throw gatewayError(lastError?.status || 502, lastError?.code || 'UPSTREAM_REJECTED', failoverMessage('出视频', candidates, lastError), {
@@ -568,6 +591,7 @@ export async function createImageTask(payload = {}, options = {}) {
       continue
     }
     rememberTask({ id: created.taskId, kind: 'image', keyId: key.id, keyName: key.name, baseUrl: key.baseUrl, model: requestBody.model, sealedKey: sealSecret(key.apiKey) })
+    recordUsage({ kind: 'image', model: String(requestBody.model || model), ref: created.taskId, units: imageUnits(payload), detail: '异步出图任务已建' })
     return { ...(created.data && typeof created.data === 'object' ? created.data : {}), ok: true, id: created.taskId, key: { id: key.id, name: key.name }, attempt: key.attempt, ms: Date.now() - started }
   }
   throw gatewayError(lastError?.status || 502, lastError?.code || 'UPSTREAM_REJECTED', failoverMessage('出图', candidates, lastError), {

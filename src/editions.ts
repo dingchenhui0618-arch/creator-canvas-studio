@@ -1,5 +1,6 @@
 import {
   Activity,
+  Coins,
   Flag,
   Frame,
   Gauge,
@@ -16,7 +17,7 @@ import {
 // 那一整个人面全是未接线的开关和示例数据，对外发布时属于演示残留。
 export type EditionId = 'user' | 'admin'
 
-export type AdminSection = 'overview' | 'users' | 'canvas' | 'keys' | 'templates' | 'reports' | 'audit' | 'system'
+export type AdminSection = 'overview' | 'users' | 'canvas' | 'keys' | 'templates' | 'usage' | 'reports' | 'audit' | 'system'
 
 export type EditionNavItem = {
   id: string
@@ -52,6 +53,7 @@ export const EDITIONS: EditionMeta[] = [
       { id: 'canvas', label: '画布', icon: Frame, section: 'canvas' },
       { id: 'keys', label: '模型 Key', icon: KeyRound, section: 'keys' },
       { id: 'templates', label: '模板治理', icon: LayoutTemplate, section: 'templates' },
+      { id: 'usage', label: '成本', icon: Coins, section: 'usage' },
       { id: 'reports', label: '举报处理', icon: Flag, section: 'reports' },
       { id: 'audit', label: '运行审计', icon: ScrollText, section: 'audit' },
       { id: 'system', label: '系统', icon: Settings2, section: 'system' },
