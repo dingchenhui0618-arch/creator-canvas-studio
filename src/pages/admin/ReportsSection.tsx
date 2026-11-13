@@ -48,7 +48,12 @@ export default function ReportsSection() {
       const result = await resolveReport(item.id, action, note)
       setMessage(
         action === 'takedown'
-          ? '已下架：' + (result.takedown ? result.takedown.title + ' 已从公共模板收回并停掉分享链接' : '模板可能已被删除，只更新了举报状态')
+          ? '已下架：' +
+            (result.takedown
+              ? result.takedown.title + ' 已从公共模板收回并停掉分享链接'
+              : item.target.kind === 'material'
+                ? '这条举报没指名具体模板，状态已记为下架；去模板库把那条收回并停掉分享，模板治理会记进审计'
+                : '模板可能已被删除，只更新了举报状态')
           : '已驳回这条举报，内容保留',
       )
       setNote('')
@@ -111,7 +116,12 @@ export default function ReportsSection() {
                   </Badge>
                   <strong>{item.target.title || item.target.id}</strong>
                   <span className="admin-cell-sub admin-mono">
-                    {item.target.kind === 'share' ? '分享链接' : '模板'} {item.target.id} · 第 {item.count} 次 · {formatDateTime(item.lastAt)}
+                    {item.target.kind === 'share'
+                      ? '分享链接 ' + item.target.id
+                      : item.target.kind === 'material'
+                        ? '素材页 · 未指名模板'
+                        : '模板 ' + item.target.id}
+                    {' · 第 ' + item.count + ' 次 · ' + formatDateTime(item.lastAt)}
                   </span>
                   <Badge tone={item.status === 'open' ? 'warn' : item.status === 'takedown' ? 'fail' : 'ok'}>
                     {item.status === 'open' ? '待处理' : item.status === 'takedown' ? '已下架' : '已驳回'}

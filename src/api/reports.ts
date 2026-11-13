@@ -3,7 +3,9 @@ import { request } from './client'
 
 export type ReportCategory = 'copyright' | 'portrait' | 'abuse' | 'other'
 
-export type ReportTarget = { kind: 'template' | 'share'; id: string; title: string; url?: string }
+// material：「素材来源与下架通道」页提交、但指名不了具体模板的那种（v0.9.82）；
+// 管理员在后台看到的是「素材页 · 未指名模板」，照详情人工找到那条再收回。
+export type ReportTarget = { kind: 'template' | 'share' | 'material'; id: string; title: string; url?: string }
 
 export type ReportItem = {
   id: string

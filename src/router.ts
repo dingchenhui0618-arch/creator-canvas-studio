@@ -35,6 +35,8 @@ export type Route =
   | { kind: 'legal'; doc: 'terms' | 'privacy' }
   // 帮助中心：slug 认不出就落回目录页，坏链接不挡人
   | { kind: 'help'; slug: HelpSlug | null }
+  // 素材来源与下架通道（v0.9.82）：公开可读，被收录的人不用先注册就能提交下架
+  | { kind: 'sources' }
   // 只读分享：链接里带随机 token，不登录也能打开（App 根部整屏渲染，不进工作台外壳）
   | { kind: 'share'; token: string }
   // 作品级分享：#/share/project/<token>，读的是脚本 + 分镜的公开视图
@@ -74,6 +76,7 @@ export function isBareRoute(route: Route): boolean {
   return (
     route.kind === 'legal' ||
     route.kind === 'help' ||
+    route.kind === 'sources' ||
     route.kind === 'share' ||
     route.kind === 'shared-project' ||
     route.kind === 'reset'
@@ -123,6 +126,8 @@ export function parseRoute(hash: string): Route {
   if (head === 'legal') return { kind: 'legal', doc: tail === 'privacy' ? 'privacy' : 'terms' }
   // 帮助：一篇一个地址，方便从失败提示直接链到对应那一篇
   if (head === 'help') return { kind: 'help', slug: isHelpSlug(tail) ? tail : null }
+  // 素材来源与下架：一个地址，页脚、模板库、举报弹窗都链到这里
+  if (head === 'sources') return { kind: 'sources' }
   // 分享链接：token 是整条路径的余下部分，缺了就落回工作台。
   // 作品分享多一段 /project/，必须排在模板分享前面判断。
   if (head === 'share') {
@@ -178,6 +183,7 @@ export function toHash(route: Route): string {
   if (route.kind === 'reset') return '#/reset' + (route.token ? '?token=' + encodeURIComponent(route.token) : '')
   if (route.kind === 'legal') return '#/legal/' + route.doc
   if (route.kind === 'help') return route.slug ? '#/help/' + route.slug : '#/help'
+  if (route.kind === 'sources') return '#/sources'
   if (route.kind === 'share') return '#/share/' + encodeURIComponent(route.token)
   if (route.kind === 'shared-project') return '#/share/project/' + encodeURIComponent(route.token)
   return '#/agents/' + (route.agentRef ? encodeURIComponent(route.agentRef) : 'new')
@@ -200,6 +206,7 @@ export function routeKey(route: Route): string {
   if (route.kind === 'reset') return 'reset:' + route.token
   if (route.kind === 'legal') return 'legal:' + route.doc
   if (route.kind === 'help') return 'help:' + (route.slug ?? '')
+  if (route.kind === 'sources') return 'sources'
   if (route.kind === 'share') return 'share:' + route.token
   if (route.kind === 'shared-project') return 'shared-project:' + route.token
   return 'agent-editor:' + (route.agentRef ?? 'new')

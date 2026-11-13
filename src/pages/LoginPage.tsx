@@ -635,6 +635,7 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
             <a className="vq-link" href="#/help">帮助</a>
             <a className="vq-link" href="#/legal/terms">服务条款</a>
             <a className="vq-link" href="#/legal/privacy">隐私说明</a>
+            <a className="vq-link" href="#/sources">素材来源</a>
             <button type="button" className="vq-link" onClick={() => setFeedbackOpen(true)}>
               反馈问题
             </button>

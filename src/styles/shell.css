@@ -2960,7 +2960,10 @@ select:focus-visible {
 .vq-report-detail { min-height: 92px; resize: vertical; padding: 8px 8px; font-size: 13px; line-height: 1.7; }
 .vq-report-note { display: block; margin: 8px 0 0; font-size: 11.5px; line-height: 1.75; color: var(--faint); }
 .vq-report-done { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; font-size: 13px; line-height: 1.8; }
-.vq-report-done p { display: flex; align-items: center; gap: 8px; margin: 0; }
+.vq-report-done p { margin: 0; }
+/* 成功那一屏要把「已收到受理编号 rep_x（…）」连成一句话读。
+   以前这里是 flex：图标、编号、括号里的说明各自成了 flex item，全被压成窄条竖着断行（v0.9.82 修）。 */
+.vq-report-done p > svg { margin-right: 8px; vertical-align: -2px; }
 .vq-report-done strong { font-family: var(--font-mono); }
 /* 应用内反馈（v0.9.60）：登录页与设置页共用同一个弹窗。 */
 .vq-feedback-modal { width: min(520px, 100%); }
@@ -3070,6 +3073,62 @@ select:focus-visible {
   .vq-help-cta .vq-button { margin-left: 0; }
 }
 
+/* 素材来源与下架通道（v0.9.82）：公开合规页。和条款页同一把尺子——
+   近黑正文、发丝线、等宽元数据；间距只走 4 的倍数，圆角只用 token 的四档。 */
+.vq-src { min-height: 100vh; padding: 48px 24px 64px; background: var(--canvas); color: var(--ink); font-family: var(--font-ui); }
+.vq-src-inner { max-width: 800px; margin: 0 auto; padding: 48px; background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow-raise); }
+.vq-src-back { display: inline-flex; align-items: center; gap: 4px; margin: 0 0 24px -12px; padding: 0 12px; font-size: 12px; color: var(--muted); background: none; border: 0; cursor: pointer; }
+.vq-src-back:hover { color: var(--ink); }
+.vq-src-kicker { display: block; font-family: var(--font-mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+.vq-src-inner h1 { margin: 8px 0 12px; font-size: 26px; font-weight: 500; line-height: 1.35; letter-spacing: -.01em; }
+.vq-src-lead { max-width: 620px; margin: 0 0 32px; font-size: 14px; line-height: 1.8; color: var(--muted); }
+.vq-src-toast { display: flex; align-items: center; gap: 8px; margin: 0 0 24px; padding: 12px 16px; font-size: 13px; color: var(--pass); background: var(--pass-soft); border: 1px solid var(--line-faint); border-radius: var(--radius-sm); }
+.vq-src-section + .vq-src-section { margin-top: 32px; padding-top: 32px; border-top: 1px solid var(--line-faint); }
+.vq-src-section h2 { margin: 0 0 8px; font-size: 15px; font-weight: 500; }
+.vq-src-text { max-width: 620px; margin: 0 0 16px; font-size: 14px; line-height: 1.8; color: var(--muted); }
+.vq-src-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+.vq-src-card { display: flex; flex-direction: column; gap: 8px; padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); }
+.vq-src-card-no { font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em; color: var(--faint); }
+.vq-src-card strong { font-size: 13px; font-weight: 500; line-height: 1.5; }
+.vq-src-card p { margin: 0; font-size: 13px; line-height: 1.7; color: var(--muted); }
+.vq-src-card-keeps { margin-top: auto; padding-top: 8px; font-family: var(--font-mono); font-size: 11px; line-height: 1.6; color: var(--faint); border-top: 1px solid var(--line-faint); }
+.vq-src-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+.vq-src-col { padding: 16px; border: 1px solid var(--line); border-radius: var(--radius-md); }
+.vq-src-col--mute { background: var(--surface); }
+.vq-src-col-label { display: block; margin-bottom: 12px; font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+.vq-src-col ul { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.vq-src-col li { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; line-height: 1.6; color: var(--muted); }
+.vq-src-col li svg { flex: 0 0 auto; margin-top: 4px; color: var(--pass); }
+.vq-src-col--mute li svg { color: var(--faint); }
+.vq-src-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 16px 0; }
+.vq-src-stats div { display: flex; flex-direction: column; gap: 4px; padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); }
+.vq-src-stats strong { font-family: var(--font-mono); font-size: 24px; font-weight: 500; letter-spacing: -.02em; }
+.vq-src-stats span { font-size: 12px; color: var(--muted); }
+.vq-src-platforms { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+.vq-src-platforms .vq-src-col-label { margin: 0 4px 0 0; }
+.vq-src-pill { display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px; font-size: 12px; color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius-pill); }
+.vq-src-pill em { font-family: var(--font-mono); font-style: normal; color: var(--faint); }
+.vq-src-pill--quiet { color: var(--muted); }
+.vq-src-note { max-width: 620px; margin: 8px 0 0; font-size: 12px; line-height: 1.7; color: var(--faint); }
+.vq-src-steps { display: grid; gap: 8px; margin: 16px 0; padding: 0; list-style: none; }
+.vq-src-steps li { display: flex; gap: 12px; padding: 12px 16px; border: 1px solid var(--line-faint); border-radius: var(--radius-sm); }
+.vq-src-step-no { flex: 0 0 auto; font-family: var(--font-mono); font-size: 11px; line-height: 1.9; color: var(--faint); }
+.vq-src-steps div { display: flex; flex-direction: column; gap: 2px; }
+.vq-src-steps strong { font-size: 13px; font-weight: 500; color: var(--ink); }
+.vq-src-steps span { font-size: 13px; line-height: 1.7; color: var(--muted); }
+.vq-src-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 16px 0 8px; }
+.vq-src-list { display: grid; gap: 8px; max-width: 620px; margin: 12px 0; padding-left: 24px; }
+.vq-src-list li { font-size: 13.5px; line-height: 1.8; color: var(--muted); }
+.vq-src-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line-faint); font-size: 12px; color: var(--faint); }
+.vq-src-foot .vq-mono { margin-left: auto; }
+
+@media (max-width: 760px) {
+  .vq-src { padding: 16px 12px 48px; }
+  .vq-src-inner { padding: 24px; }
+  .vq-src-inner h1 { font-size: 22px; }
+  .vq-src-grid, .vq-src-columns { grid-template-columns: minmax(0, 1fr); }
+  .vq-src-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 
 /* 登录设备（v0.9.62）：一行一台，当前设备单独标出来；踢设备的按钮只在别的行出现。 */
 .vq-session-list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }

@@ -48,6 +48,7 @@ export function LegalPage({ doc }: Props) {
           <a className="vq-link" href="#/help">帮助</a>
           <a className="vq-link" href="#/legal/terms">服务条款</a>
           <a className="vq-link" href="#/legal/privacy">隐私说明</a>
+          <a className="vq-link" href="#/sources">素材来源与下架</a>
           {site.supportEmail ? <span>联系：{site.supportEmail}</span> : <span>联系：工作区管理员</span>}
           {site.operator ? <span>{site.operator}</span> : null}
           {site.icp ? <span>{site.icp}</span> : null}

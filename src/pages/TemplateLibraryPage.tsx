@@ -871,6 +871,12 @@ export function TemplateLibraryPage({
                           举报
                         </button>
                       ) : null}
+                      {/* 公共模板的来源与下架口径（v0.9.82）：抽屉里直接给出口，不用先回首页找页脚 */}
+                      {detail.shared ? (
+                        <a className="vq-link" href="#/sources">
+                          来源与下架
+                        </a>
+                      ) : null}
                     </div>
                     {/* 这条原片在库里的全貌（v0.9.38）：同源的改编版、跨模板开出的作品。
                         以前只看得见「这条模板」自己的作品，改编版一多就不知道它们其实是同一条原片。 */}

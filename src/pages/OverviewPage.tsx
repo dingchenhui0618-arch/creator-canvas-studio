@@ -1232,6 +1232,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
         <span className="vq-overview-legal">
           <a className="vq-link" href="#/legal/terms">服务条款</a>
           <a className="vq-link" href="#/legal/privacy">隐私说明</a>
+          <a className="vq-link" href="#/sources">素材来源</a>
           <button type="button" className="vq-link" onClick={onOpenGuide}>
             上手指引
           </button>

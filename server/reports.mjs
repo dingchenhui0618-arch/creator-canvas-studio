@@ -57,7 +57,9 @@ const clean = (value, max) =>
     .slice(0, max)
 
 export async function createReport({ target = {}, category = 'other', detail = '', contact = '', user = null, ip = '' }) {
-  const kind = ['template', 'share'].includes(target.kind) ? target.kind : 'template'
+  // material：从「素材来源与下架通道」页提交、但指名不了具体是哪条模板的那种（v0.9.82）。
+  // 被侵权的人常常只知道「你们库里有我这条片子」，要求他先找到模板编号等于把人挡在门外。
+  const kind = ['template', 'share', 'material'].includes(target.kind) ? target.kind : 'template'
   const targetId = clean(target.id, 60)
   const text = clean(detail, 1000)
   if (!targetId) return { ok: false, code: 'NO_TARGET' }

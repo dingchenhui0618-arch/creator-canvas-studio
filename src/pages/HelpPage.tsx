@@ -72,6 +72,9 @@ export function HelpPage({ slug }: { slug: string | null }) {
               <a className="vq-link" href="#/legal/privacy">
                 隐私说明
               </a>
+              <a className="vq-link" href="#/sources">
+                素材来源与下架
+              </a>
               <span>{site.supportEmail ? '联系：' + site.supportEmail : '联系：工作区管理员'}</span>
               <span className="vq-mono">VisionQA</span>
             </footer>

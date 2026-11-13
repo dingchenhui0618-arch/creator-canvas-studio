@@ -92,6 +92,75 @@ export async function listTemplates({ q = '', contentType = '', platform = '', k
     .map((item) => ({ ...item, source: templateSource(item), thumb: item.frames?.[0]?.url || item.cover || '' }))
 }
 
+// 平台名兜底：模板上通常存了 platformLabel，老条目没有时按常见平台补一个，别把 douyin 直接甩到页面上。
+const PLATFORM_FALLBACK_LABEL = { douyin: '抖音', xiaohongshu: '小红书' }
+
+/**
+ * 素材来源体检（v0.9.82）：「素材来源与下架通道」那一页要讲清楚公共模板里到底存了什么。
+ *
+ * 只回计数与分布，不回标题、作者与链接——公共模板的正文不该被匿名访客批量抓走；
+ * 想逐条看的人先进模板库（要登录），那才是能逐条举报下架的地方。
+ * 全部现算不落库：每发布一次公共模板，这一页的数字自己就变了。
+ */
+export async function publicSourceStats() {
+  const list = await loadAll()
+  const live = list.filter((item) => item.shared && !item.deletedAt)
+  const platforms = new Map()
+  let withSourceUrl = 0
+  let withAuthor = 0
+  let withCover = 0
+  let parsed = 0
+  for (const item of live) {
+    const key = String(item.platform || 'unknown').trim() || 'unknown'
+    const label = String(item.platformLabel || '').trim() || PLATFORM_FALLBACK_LABEL[key] || key
+    const row = platforms.get(key) || { key, label, count: 0 }
+    row.count += 1
+    platforms.set(key, row)
+    if (String(item.sourceUrl || '').trim()) withSourceUrl += 1
+    if (String(item.author || '').trim()) withAuthor += 1
+    if (String(item.cover || '').trim() || (item.frames || []).length) withCover += 1
+    if ((item.storyboard || []).length) parsed += 1
+  }
+  const stamps = live
+    .map((item) => String(item.createdAt || ''))
+    .filter(Boolean)
+    .sort()
+  return {
+    total: live.length,
+    platforms: [...platforms.values()].sort((a, b) => b.count - a.count),
+    withSourceUrl,
+    withAuthor,
+    withCover,
+    parsed,
+    linkOnly: live.length - parsed,
+    addedFrom: stamps.length ? stamps[0].slice(0, 10) : '',
+    addedTo: stamps.length ? stamps[stamps.length - 1].slice(0, 10) : '',
+  }
+}
+
+/**
+ * 公共模板的出处闸（v0.9.82）：没有原作品地址的平台素材不能进公共库。
+ *
+ * 为什么值得拦：公共模板是所有人可见的那一面，「素材来源与下架通道」承诺了每条都点得回原片。
+ * 一条没有源地址的记录放进去，被侵权的人连「这是哪条」都指不出来，下架也就无从谈起。
+ * 画布与智能体自己产出的模板本来就没有原片，不适用这条。
+ */
+export function publicPublishBlocked(current, patch = {}) {
+  // 按「这次保存之后的样子」判断：后台往往把「补上原链接」和「打开发布」一次提交，
+  // 只看库里的旧值会把正当操作也拦掉（自测时踩到过）。
+  const item = { ...(current || {}), ...(patch || {}) }
+  if (!item.id && !current) return ''
+  const platformSourced = ['saved', 'replica', 'adapted'].includes(String(item.kind || 'saved'))
+  if (!platformSourced) return ''
+  if (!String(item.sourceUrl || '').trim()) {
+    return '这条模板没有原作品地址，不能放进公共模板：公共模板要让被侵权的人能点回原片。先在「原链接」里补上再发布。'
+  }
+  if (!String(item.platform || '').trim() && !String(item.platformLabel || '').trim()) {
+    return '这条模板没有记平台名，不能放进公共模板：来源页要按平台写清楚素材从哪来。'
+  }
+  return ''
+}
+
 // 只存「链接 + 互动数据」的条目：在爆款雷达点「加入模板库」立刻落库，
 // 不下载视频、不抽帧、不建本地目录；解析（脚本/分镜）仍然靠「一键复刻」补上。
 export async function saveTemplateFromItem({ item, user = null, shared = false }) {

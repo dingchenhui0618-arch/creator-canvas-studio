@@ -41,8 +41,10 @@ import {
   disableTemplateShare,
   getSharedTemplate,
   publicTemplateView,
+  publicPublishBlocked,
   adoptUnowned as adoptUnownedTemplates,
 } from './templates.mjs'
+import { sourcesSummary } from './sources.mjs'
 import { flattenTemplateWorks, projectsByTemplate, templateWorksView, totalProjectCount, withProjectCount } from './template-usage.mjs'
 import { takenOrigins, ORIGIN_LIMIT } from './taken-origins.mjs'
 import { originFootprint, libraryMarks } from './source-footprint.mjs'
@@ -656,6 +658,12 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 201, { ok: true, id: result.report.id, duplicate: result.duplicate })
     }
 
+    // 素材来源与下架通道（v0.9.82）：公开只读，不登录也能看。
+    // 只回计数与平台分布；标题、作者与原链接要登录进模板库才看得到。
+    if (pathname === '/api/sources/summary' && req.method === 'GET') {
+      return sendJson(res, 200, await sourcesSummary())
+    }
+
     if (pathname === '/api/search') {
       const platform = url.searchParams.get('platform') || 'all'
       const keyword = url.searchParams.get('q') || ''
@@ -1027,6 +1035,14 @@ const server = http.createServer(async (req, res) => {
         // 后台模板治理：改标题、内容类型、标签与原链接；权限在管理后台，接口这里再校验一次
         if (!isAdmin(user)) return sendJson(res, 403, { error: '只有管理员可以改模板', code: 'NOT_ADMIN' })
         const body = await readBody(req)
+        // 发布进公共模板前的出处闸（v0.9.82）：没有原作品地址的平台素材不许进公共库，
+        // 否则「素材来源与下架通道」那句「每条都点得回原片」当场就不成立了。
+        if (body.shared === true || body.shared === 'true') {
+          const current = await getTemplate(id, user)
+          if (!current) return sendJson(res, 404, { error: '模板不存在' })
+          const blocked = publicPublishBlocked(current, body)
+          if (blocked) return sendJson(res, 400, { error: blocked, code: 'NO_SOURCE' })
+        }
         const updated = await updateTemplate(id, body, user)
         if (!updated) return sendJson(res, 404, { error: '模板不存在' })
         return sendJson(res, 200, updated)

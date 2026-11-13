@@ -71,6 +71,8 @@ const SharePage = lazy(() => import('./pages/SharePage'))
 const ProjectSharePage = lazy(() => import('./pages/ProjectSharePage'))
 // 帮助中心也是公开可读的一屏：不登录的人先来这里找答案，而不是卡在登录页
 const HelpPage = lazy(() => import('./pages/HelpPage').then((module) => ({ default: module.HelpPage })))
+// 素材来源与下架通道（v0.9.82）：公开可读的一屏，和帮助中心一样不进工作台外壳
+const SourcesPage = lazy(() => import('./pages/SourcesPage').then((module) => ({ default: module.SourcesPage })))
 const AgentEditorPage = lazy(() => import('./pages/AgentEditorPage'))
 
 function sectionLabel(section: string): string {
@@ -506,6 +508,7 @@ function Workbench({
     if (
       route.kind === 'legal' ||
       route.kind === 'help' ||
+      route.kind === 'sources' ||
       route.kind === 'share' ||
       route.kind === 'shared-project' ||
       route.kind === 'reset'
@@ -1041,6 +1044,14 @@ function App() {
     return (
       <Suspense fallback={<PageSkeleton label="正在打开帮助" />}>
         <HelpPage slug={route.slug} />
+      </Suspense>
+    )
+  }
+
+  if (route.kind === 'sources') {
+    return (
+      <Suspense fallback={<PageSkeleton label="正在打开素材来源" />}>
+        <SourcesPage />
       </Suspense>
     )
   }
