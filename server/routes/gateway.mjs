@@ -27,6 +27,7 @@ function fail(res, error) {
     error: error?.message || '生成失败',
     code: error?.code,
     ...(error?.upstreamStatus ? { upstreamStatus: error.upstreamStatus } : {}),
+    ...(error?.upstreamCode ? { upstreamCode: error.upstreamCode } : {}),
     ...(error?.detail ? { detail: error.detail } : {}),
   })
 }

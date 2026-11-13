@@ -534,3 +534,15 @@ DOMAIN=visionqa.wavisionai.cn bash deploy/production/enable-https.sh            
 - **下一轮**：仍回到画布出图 502——上一轮已确认是我们自己的生成通道转发上游后拿了 502（视频通道同时刻 200），方向是 SeeAPI 对这个出图模型的拒绝原因（余额 / 模型名 / 参数），只做只读排查，不发起生成调用。
 
 提交 `8d5460e`（代码 + 18 条测试 + 文档 + 3 张生产截图 + 部署说明），CI 43416928542 success。
+
+## 一百二十四、画布出图 502 的根因：平台漏发幂等键（v0.9.55）
+
+- **起因**：上一轮留的尾巴——画布 16:51 出图 502、同一分钟视频 200。这轮只做只读排查，不发起生成调用。
+- **根因**：网关路由日志 r112 记的是上游 `HTTP 400 invalid_idempotency_key`——SeeAPI 的同步出图是**计费请求**，必须带 `Idempotency-Key`。画布把幂等键放在正文 `idempotency_key` 里发过来（它直连 SeeAPI 时自己会塞进请求头，见 `enterprise_server/generation_image2.py:158-162`），平台转发时只转了正文、没提成请求头。更糟的是后台把这次 400 报成「上游凭证无效」，把排查方向带偏了一轮。
+- **改法**：幂等键提到请求头（没给就补 `vq-<uuid>`，方舟不发）、换把重试沿用同一个键（同一次生成不重复扣费）、上游「接单了但没确认结果」时同键重放一次且**绝不换 Key**、报错固定带上游 code、后台对账表补 SeeAPI 的 4 个出图模型名（`image-2-pro` / `image-2.5` / `nano-banana-flash` / `nano-banana-pro`）。
+- **生产实测**（本机假上游，未调真实 SeeAPI）：画布同款请求 **200 / 59 ms**，假上游收到 `idempotency-key: bd-canvas-r67-canary`、正文里已没有这个字段；不带给时平台补 `vq-4576510c-…`；假上游回 `400 invalid_idempotency_key` 时网关 502，话术是「上游要求带幂等键，平台这次没带上（HTTP 400 invalid_idempotency_key）」，不再冒充凭证问题。
+- **验收**：生产 v0.9.55（`/api/version` 0.9.55、health ok 模板 26）；`npm test` **505/505**（新增 8 条）；oxlint 0 error / 6 warning、`tsc -b` 干净、构建通过。
+- **边界**：真 SeeAPI 的一次出图没跑（你的规则：不自行消耗上游额度），所以「改完真能出图」还差这一次；`provider_submit_outcome_unknown` 的重放路径按 SeeAPI 语义实现并单测，真实触发要等线上遇到。
+- **下一轮**：你点头后用一次真实出图给 502 收尾（只出一张）；不点头就继续下一个上线缺口（A4 定价 / A7 备案与 AI 标识）。细节见 [画布出图 502](docs/canvas-image-502-2026-11-13.md)。
+
+![生产：后台「生成通道」对账表新增 SeeAPI 的 4 个出图模型名，画布 CGCM 渠道真正在用的 image-2-pro 现在算「已接入」（v0.9.55）](docs/screenshot-gateway-coverage-2026-11-13.png)

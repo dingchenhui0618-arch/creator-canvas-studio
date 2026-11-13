@@ -23,6 +23,13 @@ export const CANVAS_IMAGE_MODELS = [
   { model: 'doubao-seedream-4-5-251128', label: 'Seedream 4.5' },
   { model: 'doubao-seedream-5-0-pro-260628', label: 'Seedream 5.0 Pro' },
   { model: 'doubao-seedream-5-0-flash-260915', label: 'Seedream 5.0 Flash' },
+  // 画布走 SeeAPI（CGCM）那几条渠道时，发的是 SeeAPI 自己的模型名（见 deploy/bd-canvas/wire_cgcm.py
+  // 的 CGCM_MODELS），不是方舟名。2026-11-13 画布出图用的就是 image-2-pro，对账表里却没有它，
+  // 后台只能看到「Seedream 缺 Key」这种和实际失败无关的提示。
+  { model: 'image-2-pro', label: 'SeeAPI Image 2 Pro' },
+  { model: 'image-2.5', label: 'SeeAPI Image 2.5' },
+  { model: 'nano-banana-flash', label: 'SeeAPI Nano Banana Flash' },
+  { model: 'nano-banana-pro', label: 'SeeAPI Nano Banana Pro' },
 ]
 
 // 画布按方舟的真实模型名发请求，SeeAPI 用的却是自己的叫法；同一款模型两个名字，
@@ -178,12 +185,31 @@ function extractUrls(data) {
   return urls
 }
 
+/** 上游错误体里的机器可读 code（SeeAPI 与方舟都是 { error: { code, message } }）。 */
+function upstreamErrorCode(text) {
+  const parsed = parseJson(text)
+  const code = parsed?.error?.code || parsed?.code || parsed?.error?.type || ''
+  return String(code || '').slice(0, 60)
+}
+
+/**
+ * 上游拒绝时对人怎么说。suffix 一定带上游自己的 code：
+ * 2026-11-13 生产那次出图 502，后台只写「上游凭证无效（HTTP 400）」，
+ * 真因是 SeeAPI 的 invalid_idempotency_key（平台漏发幂等键），为此白查了一轮 Key。
+ * 之后再被拒，看一眼 code 就知道该修哪：幂等键、模型名、额度还是凭证。
+ */
 function friendlyUpstream(status, text) {
-  const suffix = status ? '（HTTP ' + status + '）' : ''
   const body = String(text || '')
+  const code = upstreamErrorCode(body)
+  const suffix = '（HTTP ' + (status || '?') + (code ? ' ' + code : '') + '）'
+  // 幂等键要排在凭证前面：invalid_idempotency_key 里也带「invalid … key」，
+  // 早先的宽匹配就是把它误报成「凭证无效」的。
+  if (/invalid_idempotency_key|idempotency.?key/i.test(body)) return '上游要求带幂等键，平台这次没带上' + suffix
+  if (/^(invalid_api_key|invalid_token|unauthorized|forbidden|authentication_failed|permission_denied)$/i.test(code) || /invalid[_ ]?api[_ ]?key|unauthorized|forbidden|凭证/i.test(body)) return '上游凭证无效' + suffix
   if (/insufficient|quota|balance|余额|额度/i.test(body)) return '上游额度不足' + suffix
-  if (/invalid.*key|unauthorized|forbidden|401|403/i.test(body)) return '上游凭证无效' + suffix
-  if (/rate.?limit|429/i.test(body)) return '上游限流' + suffix
+  if (/rate.?limit|429|too many requests/i.test(body)) return '上游限流' + suffix
+  if (/provider_submit_outcome_unknown|outcome_unknown/i.test(code)) return '上游接单了但没确认结果' + suffix
+  if (/model_not_found|invalid_model|does not exist|unserved/i.test(body)) return '上游不认识这个模型名' + suffix
   if (status >= 500) return '上游暂不可用' + suffix
   return '上游拒绝了这次生成' + suffix
 }
@@ -272,20 +298,41 @@ function upstreamModelFor(key, model) {
  * 成功返回上游 data（画布按 data[].url 取图）。每次尝试都单独记一条路由，
  * 后台才看得出「第 1 把挂了、第 2 把接上」，而不是只留一条含糊的失败。
  */
-async function attemptImage(key, requestBody, started, model) {
+/** SeeAPI：502/503/504 + provider_submit_outcome_unknown = 上游接了单但没确认结果（钱可能已经扣了）。 */
+function outcomeUnknown(response, text) {
+  if (![502, 503, 504].includes(response?.status)) return false
+  return /provider_submit_outcome_unknown|outcome_unknown/i.test(String(text || ''))
+}
+
+async function attemptImage(key, requestBody, started, model, extraHeaders = {}) {
+  const url = upstreamUrl(key, 'image')
+  const send = () => postJson(url, key.apiKey, requestBody, config.gateway.imageTimeoutMs, extraHeaders)
   let upstream
   try {
-    upstream = await postJson(upstreamUrl(key, 'image'), key.apiKey, requestBody, config.gateway.imageTimeoutMs)
+    upstream = await send()
   } catch (error) {
     reportKey(key.id, false, String(error?.message || error))
     recordRoute({ capability: 'image', model, keyId: key.id, keyName: key.name, source: 'pool', reason: key.reason, attempt: key.attempt, ms: Date.now() - started, ok: false, error: String(error?.message || error) })
     throw gatewayError(502, 'UPSTREAM_UNREACHABLE', '连不上出图上游：' + friendlyNetwork(error))
   }
+  // 结果不明的重试只能拿同一个幂等键重放：SeeAPI 保证同键同 body 重放会回原结果、不重复扣费。
+  // 换成池里另一把 Key 就是一次全新提交，等于让用户为同一张图付两次钱——所以这里不换 Key。
+  if (!upstream.response.ok && outcomeUnknown(upstream.response, upstream.text)) {
+    try {
+      upstream = await send()
+    } catch {
+      // 重放本身失败就按下面「结果不明」处理，不再换 Key
+    }
+  }
   if (!upstream.response.ok) {
     const message = friendlyUpstream(upstream.response.status, upstream.text)
+    const upstreamCode = upstreamErrorCode(upstream.text)
     reportKey(key.id, false, 'HTTP ' + upstream.response.status + ' ' + upstream.text.slice(0, 160))
     recordRoute({ capability: 'image', model, keyId: key.id, keyName: key.name, source: 'pool', reason: key.reason, attempt: key.attempt, ms: Date.now() - started, ok: false, error: 'HTTP ' + upstream.response.status + ' ' + upstream.text.slice(0, 160) })
-    throw gatewayError(502, 'UPSTREAM_REJECTED', message, { upstreamStatus: upstream.response.status, detail: upstream.text.slice(0, 300) })
+    if (outcomeUnknown(upstream.response, upstream.text)) {
+      throw gatewayError(502, 'UPSTREAM_OUTCOME_UNKNOWN', '上游说这单还没确认结果（可能已经扣费）：拿同一个幂等键重放一次也没拿回来，先别重复生成，过一会儿再看', { upstreamStatus: upstream.response.status, upstreamCode, detail: upstream.text.slice(0, 300) })
+    }
+    throw gatewayError(502, 'UPSTREAM_REJECTED', message, { upstreamStatus: upstream.response.status, upstreamCode, detail: upstream.text.slice(0, 300) })
   }
   const data = parseJson(upstream.text)
   if (!data) {
@@ -307,6 +354,30 @@ async function attemptImage(key, requestBody, started, model) {
 }
 
 /**
+ * 上游幂等键。SeeAPI 的同步出图属于「计费请求」，不带 Idempotency-Key 会直接 400
+ * invalid_idempotency_key（2026-11-13 生产实测，画布上表现为「出图失败：上游凭证无效（HTTP 400）」）。
+ * 画布本来就把 idempotency_key 放在正文里（bd-canvas-<uuid>），这里把它提到请求头上：
+ * 同一个画布节点重试时上游能认出是同一次请求，不会重复计费；调用方没给就按这次请求生成一个。
+ */
+function idempotencyKeyFor(payload = {}) {
+  const given = payload?.idempotencyKey || payload?.idempotency_key || ''
+  return String(given || '').trim() || 'vq-' + crypto.randomUUID()
+}
+
+/** 正文只留业务参数：幂等键只该出现在请求头里，不该被当成业务字段转发给上游。 */
+function businessBody(payload = {}) {
+  const body = { ...(payload || {}) }
+  delete body.idempotencyKey
+  delete body.idempotency_key
+  return body
+}
+
+/** 这次请求要不要带幂等键：只有 SeeAPI（CGCM）形态要，方舟没有这个要求。 */
+function idempotencyHeaders(key, value) {
+  return keyProtocol(key) === 'cgcm' ? { 'Idempotency-Key': value } : {}
+}
+
+/**
  * 出图：按「优先级 → 权重」排出一串出图 Key，一把失败就换下一把（最多 3 把）。
  * 单把 Key 坏掉不该让整次生成失败，这就是「故障回退」。
  */
@@ -319,19 +390,25 @@ export async function generateImage(payload = {}) {
     recordRoute({ capability: 'image', model, source: 'none', reason: '池里没有可用的出图 Key', ms: Date.now() - started, ok: false, error: error.detail })
     throw error
   }
+  const body = businessBody(payload)
+  // 一次请求一个幂等键，换把重试也沿用：上游按 (账号, 幂等键) 去重，同一次生成不会被扣两次。
+  const idempotencyKey = idempotencyKeyFor(payload)
   let lastError = null
   for (const key of candidates) {
-    const requestBody = { ...payload, model: upstreamModelFor(key, model) }
+    const requestBody = { ...body, model: upstreamModelFor(key, model) }
     // SeeAPI 同步出图默认回 base64（一张图几 MB），画布要的是地址，所以不指定时按 url 要
     if (keyProtocol(key) === 'cgcm' && !requestBody.response_format) requestBody.response_format = 'url'
     try {
-      return await attemptImage(key, requestBody, started, model)
+      return await attemptImage(key, requestBody, started, model, idempotencyHeaders(key, idempotencyKey))
     } catch (error) {
+      // 结果不明不换 Key：换一把就是重新提交一次，可能重复扣费
+      if (error?.code === 'UPSTREAM_OUTCOME_UNKNOWN') throw error
       lastError = error
     }
   }
   throw gatewayError(lastError?.status || 502, lastError?.code || 'UPSTREAM_REJECTED', failoverMessage('出图', candidates, lastError), {
     ...(lastError?.upstreamStatus ? { upstreamStatus: lastError.upstreamStatus } : {}),
+    ...(lastError?.upstreamCode ? { upstreamCode: lastError.upstreamCode } : {}),
     ...(lastError?.detail ? { detail: lastError.detail } : {}),
     attempts: candidates.length,
   })
@@ -360,7 +437,7 @@ async function attemptTask(key, upstreamKind, requestBody, started, capability, 
     const message = friendlyUpstream(upstream.response.status, upstream.text)
     reportKey(key.id, false, 'HTTP ' + upstream.response.status + ' ' + upstream.text.slice(0, 160))
     recordRoute({ capability, model, keyId: key.id, keyName: key.name, source: 'pool', reason: key.reason, attempt: key.attempt, ms: Date.now() - started, ok: false, error: 'HTTP ' + upstream.response.status + ' ' + upstream.text.slice(0, 160) })
-    throw gatewayError(502, 'UPSTREAM_REJECTED', message, { upstreamStatus: upstream.response.status, detail: upstream.text.slice(0, 300) })
+    throw gatewayError(502, 'UPSTREAM_REJECTED', message, { upstreamStatus: upstream.response.status, upstreamCode: upstreamErrorCode(upstream.text), detail: upstream.text.slice(0, 300) })
   }
   const data = parseJson(upstream.text)
   const taskId = String(data?.id || data?.task_id || '')
@@ -404,6 +481,7 @@ export async function createVideoTask(payload = {}) {
   }
   throw gatewayError(lastError?.status || 502, lastError?.code || 'UPSTREAM_REJECTED', failoverMessage('出视频', candidates, lastError), {
     ...(lastError?.upstreamStatus ? { upstreamStatus: lastError.upstreamStatus } : {}),
+    ...(lastError?.upstreamCode ? { upstreamCode: lastError.upstreamCode } : {}),
     ...(lastError?.detail ? { detail: lastError.detail } : {}),
     attempts: candidates.length,
   })
@@ -473,14 +551,16 @@ export async function createImageTask(payload = {}) {
     recordRoute({ capability: 'image', model, source: 'none', reason: '池里没有可用的出图 Key', ms: Date.now() - started, ok: false, error: error.detail })
     throw error
   }
+  const body = businessBody(payload)
+  const idempotencyKey = idempotencyKeyFor(payload)
   let lastError = null
   for (const key of candidates) {
-    const requestBody = { ...payload, model: upstreamModelFor(key, model) }
+    const requestBody = { ...body, model: upstreamModelFor(key, model) }
     if (!requestBody.response_format) requestBody.response_format = 'url'
     let created
     try {
-      // SeeAPI 的异步出图强制要 Idempotency-Key：调用方没给就按这次请求生成一个
-      created = await attemptTask(key, 'imageAsync', requestBody, started, 'image', model, '出图', { 'Idempotency-Key': String(payload.idempotencyKey || crypto.randomUUID()) })
+      // SeeAPI 的异步出图同样强制要 Idempotency-Key，口径与同步出图一致
+      created = await attemptTask(key, 'imageAsync', requestBody, started, 'image', model, '出图', idempotencyHeaders(key, idempotencyKey))
     } catch (error) {
       lastError = error
       continue
@@ -490,6 +570,7 @@ export async function createImageTask(payload = {}) {
   }
   throw gatewayError(lastError?.status || 502, lastError?.code || 'UPSTREAM_REJECTED', failoverMessage('出图', candidates, lastError), {
     ...(lastError?.upstreamStatus ? { upstreamStatus: lastError.upstreamStatus } : {}),
+    ...(lastError?.upstreamCode ? { upstreamCode: lastError.upstreamCode } : {}),
     ...(lastError?.detail ? { detail: lastError.detail } : {}),
     attempts: candidates.length,
   })

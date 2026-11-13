@@ -24,7 +24,7 @@ const upstream = http.createServer((req, res) => {
   req.on('data', (chunk) => chunks.push(chunk))
   req.on('end', () => {
     const body = Buffer.concat(chunks).toString('utf8')
-    seen.push({ method: req.method, url: req.url, auth: req.headers.authorization, body })
+    seen.push({ method: req.method, url: req.url, auth: req.headers.authorization, idempotencyKey: req.headers['idempotency-key'], body })
     const send = (status, payload) => {
       res.writeHead(status, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify(payload))
@@ -42,6 +42,16 @@ const upstream = http.createServer((req, res) => {
     // SeeAPI / CGCM 形态（baseUrl 里带 cgcm 的 Key 走这一套）
     if (req.method === 'POST' && req.url === '/cgcm/v1/images/generations') {
       if (imageMode === 'fail') return send(500, { error: { message: 'cgcm boom' } })
+      // 真 SeeAPI 对同步计费请求强制要幂等键，这里照它的行为卡住，漏发就会红
+      if (!req.headers['idempotency-key']) {
+        return send(400, {
+          error: {
+            code: 'invalid_idempotency_key',
+            message: 'Idempotency-Key is required for synchronous billable requests.',
+            type: 'invalid_request_error',
+          },
+        })
+      }
       return send(200, { data: [{ url: 'https://example.invalid/cgcm-sync.png' }] })
     }
     if (req.method === 'POST' && req.url === '/cgcm/v1/images/generations/async') {
@@ -268,8 +278,11 @@ assert.ok(/unserved-model/.test(String(listRoutes(20).items[0].error)), '模型�
 
 // 9.4) 画布要的模型有没有 Key 接得住：缺 Key / 通用 Key / 精确声明 三种口径
 const { modelCoverage, keyProtocol, upstreamUrl } = await import('../server/gateway.mjs')
+const { CANVAS_IMAGE_MODELS } = await import('../server/gateway.mjs')
 const imageRows = () => modelCoverage().filter((row) => row.capability === 'image')
-assert.deepEqual(imageRows().map((row) => row.coveredBy), ['none', 'none', 'none'], '池里只有声明了别的模型的 Key 时，画布的模型都算缺')
+const IMAGE_COUNT = CANVAS_IMAGE_MODELS.length
+assert.equal(IMAGE_COUNT, 7, '出图对账表：方舟 3 个 + SeeAPI（CGCM）4 个')
+assert.deepEqual(imageRows().map((row) => row.coveredBy), Array(IMAGE_COUNT).fill('none'), '池里只有声明了别的模型的 Key 时，画布的模型都算缺')
 assert.equal(modelCoverage().filter((row) => row.capability === 'video').length, 8, '出视频的 8 个模型也要在对账表里')
 const genericKey = createKey({
   name: '通用出图 Key',
@@ -281,7 +294,7 @@ const genericKey = createKey({
   priority: 20,
   weight: 100,
 })
-assert.deepEqual(imageRows().map((row) => row.coveredBy), ['generic', 'generic', 'generic'], '模型清单留空算通用 Key')
+assert.deepEqual(imageRows().map((row) => row.coveredBy), Array(IMAGE_COUNT).fill('generic'), '模型清单留空算通用 Key')
 assert.deepEqual(
   modelCoverage().filter((row) => row.capability === 'video').map((row) => row.coveredBy),
   Array(8).fill('none'),
@@ -301,7 +314,7 @@ const covered = imageRows()
 assert.equal(covered[0].model, 'doubao-seedream-4-5-251128')
 assert.equal(covered[0].coveredBy, 'model', '精确声明了模型名的 Key 优先算它')
 assert.equal(covered[0].keys[0].name, 'Seedream 4.5 专用')
-assert.deepEqual(covered.slice(1).map((row) => row.coveredBy), ['generic', 'generic'])
+assert.deepEqual(covered.slice(1).map((row) => row.coveredBy), Array(IMAGE_COUNT - 1).fill('generic'), '其余几个模型仍靠通用 Key 接')
 const videoExact = createKey({
   name: 'Seedance 2.0 Mini 专用',
   provider: 'cgcm',
@@ -346,11 +359,14 @@ const cgcmImageKey = createKey({
   priority: 5,
   weight: 100,
 })
-const cgcmImage = await generateImage({ model: 'image-2-pro', prompt: '白底产品主图' })
+// 画布发的是正文里的 idempotency_key（bd-canvas-<uuid>），平台要把它提到请求头上
+const cgcmImage = await generateImage({ model: 'image-2-pro', prompt: '白底产品主图', idempotency_key: 'bd-canvas-sync-1' })
 assert.deepEqual(cgcmImage.urls, ['https://example.invalid/cgcm-sync.png'])
 const cgcmSyncCall = seen.find((item) => item.url === '/cgcm/v1/images/generations')
 assert.equal(cgcmSyncCall.auth, 'Bearer sk-cgcm-image-1234567890', 'SeeAPI 形态也要用平台 Key 转发')
+assert.equal(cgcmSyncCall.idempotencyKey, 'bd-canvas-sync-1', '画布的幂等键要出现在请求头上')
 assert.equal(JSON.parse(cgcmSyncCall.body).response_format, 'url', 'SeeAPI 同步出图默认回 base64，平台要的是地址')
+assert.equal(JSON.parse(cgcmSyncCall.body).idempotency_key, undefined, '幂等键只该在头里，别当业务字段转发')
 
 const cgcmImageTask = await createImageTask({ model: 'image-2-pro', prompt: '异步出图' })
 assert.equal(cgcmImageTask.id, 'img-job-1')

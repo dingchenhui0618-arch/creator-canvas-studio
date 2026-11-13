@@ -209,3 +209,48 @@ curl -s -X DELETE -H "cookie: $COOKIE" $BASE/api/admin/mail/channel
 - 发信失败只进日志（`mail-failed`）与后台审计，不会主动告警；邮件在后台发，「申请成功」只表示已排队。
 
 回滚：`/opt/visionqa/ops/rollback.sh`。只想关掉找回就「清掉通道」。
+
+
+## 生成通道的幂等键（2026-11-13，v0.9.55）
+
+画布走平台生成通道时，SeeAPI 的**同步出图是计费请求**，必须带 `Idempotency-Key`。平台现在从正文 `idempotency_key` 取值提到请求头，没给就补 `vq-<uuid>`；方舟（Ark）不发这个头。
+
+- 同一次请求换下一把 Key 重试时沿用同一个幂等键：同一次生成不会在上游被扣两次。
+- 上游回 `502/503/504 + provider_submit_outcome_unknown`（接了单但没确认结果）：只拿同一个键重放一次，**不换 Key**（换一把就是新的一次提交）；仍然不明就回 `UPSTREAM_OUTCOME_UNKNOWN`，等一会儿再看，不要重复点生成。
+- 上游拒绝时回包固定带 `upstreamStatus` 与 `upstreamCode`，例如 `invalid_idempotency_key`，照着 code 修，不要再从「凭证无效」猜。
+
+自检（本机假上游，不消耗上游额度）：
+
+```sh
+# 1) 起个假 SeeAPI：要求幂等键，收到就回 200
+mkdir -p /tmp/r67 && cat > /tmp/r67/sink.mjs <<'EOF'
+import http from 'node:http'
+http.createServer((req, res) => {
+  let body = ''
+  req.on('data', (c) => (body += c))
+  req.on('end', () => {
+    console.log(JSON.stringify({ url: req.url, idem: req.headers['idempotency-key'] || '', body }))
+    if (!req.headers['idempotency-key']) {
+      res.writeHead(400, { 'content-type': 'application/json' })
+      return res.end(JSON.stringify({ error: { code: 'invalid_idempotency_key', message: 'Idempotency-Key is required for synchronous billable requests.' } }))
+    }
+    res.writeHead(200, { 'content-type': 'application/json' })
+    res.end(JSON.stringify({ data: [{ url: 'https://example.invalid/canary.png' }] }))
+  })
+}).listen(2588, '127.0.0.1', () => console.log('sink ready'))
+EOF
+node /tmp/r67/sink.mjs > /tmp/r67/sink.log 2>&1 &
+
+# 2) 后台加一把只认 canary 模型、指向假上游的临时 Key（贴 key 时地址里带 seeapi 就按 SeeAPI 协议走）
+#    baseUrl = http://127.0.0.1:2588/seeapi，models = ["vq-canary"]
+
+# 3) 用平台令牌打一次（TOKEN 取 /opt/visionqa/.env 里的 VQ_GATEWAY_TOKEN）
+curl -s -X POST http://127.0.0.1:8799/api/gateway/v1/images/generations \
+  -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"model":"vq-canary","prompt":"canary","idempotency_key":"bd-canvas-canary"}'
+
+# 4) 假上游日志里应看到 idempotency-key: bd-canvas-canary，正文里没有这个字段
+cat /tmp/r67/sink.log
+```
+
+验完把临时 Key 删掉、假上游停掉；生产不该留多余 Key。
