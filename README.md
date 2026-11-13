@@ -680,6 +680,8 @@ DOMAIN=visionqa.wavisionai.cn bash deploy/production/enable-https.sh            
 
 ![生产：后台「计费 → 每月额度」——默认上限、单独额度与「账号用量与额度」表（v0.9.64）](docs/screenshot-quota-admin-2026-11-13.png)
 
+提交 `6126b6a`（代码 + 10 条测试 + 文档 + 2 张生产截图），CI 43464533412 success。
+
 细节见 [每月额度](docs/monthly-quota-2026-11-13.md)。
 
 
