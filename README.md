@@ -565,3 +565,5 @@ DOMAIN=visionqa.wavisionai.cn bash deploy/production/enable-https.sh            
 ![生产：现场页同一枚标识，抬头事实下多一句说明，纸脚落款「AI 生成 · VisionQA」](docs/screenshot-ai-label-sheet-2026-11-13.png)
 
 ![生产：隐私说明的第三方处理者清单与 AI 生成内容章节，条款版本 v2026-11-13](docs/screenshot-ai-label-privacy-2026-11-13.png)
+
+提交 `19fab5b`（代码 + 6 条测试 + 文档 + 4 张生产截图），CI 43423776012 success。
