@@ -183,7 +183,8 @@ test('等太久会超时拒绝，而且全程不碰上游', async () => {
   assert.equal(payload.code, 'SERVER_BUSY')
   assert.equal(payload.timedOut, true)
   assert.ok(Number(payload.waitedMs) >= 250, '要说清等了多久：' + payload.waitedMs)
-  assert.match(payload.error, /排队等了/)
+  // 等待时长要写成好读的秒：这次等了约 0.3 秒，不能写成「0 秒」
+  assert.match(payload.error, /排队等了 0\.[3-9] 秒/)
   assert.match(payload.error, /没有产生费用/)
   assert.equal(upstream.calls, 0, '排到超时的这一张一次上游都没发（发出去就是钱）')
   assert.equal(queue().timedOut, 1)

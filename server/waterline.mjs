@@ -240,6 +240,12 @@ const queueWaiting = new Map()
 const queueStats = new Map()
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
+// 等待时长写成好读的秒：0.4 秒 / 3.4 秒 / 90 秒——别把 400 毫秒写成「0 秒」
+function waitText(ms) {
+  const seconds = Math.max(0, Number(ms) || 0) / 1000
+  return seconds >= 10 ? String(Math.round(seconds)) : String(Math.round(seconds * 10) / 10)
+}
+
 /** 这一类的排队位参数；0 表示不排队（立刻拒，v0.9.79 的行为）。 */
 export function queueLimitsFor(kind) {
   const raw = (config.credits && config.credits.canvasQueue) || {}
@@ -360,8 +366,8 @@ export async function admitWaiting(kind, options = {}) {
         ...body,
         code: 'SERVER_BUSY',
         error: internal
-          ? '排队等了 ' + Math.round(waitedMs / 1000) + ' 秒还没轮到（同时最多 ' + (last.kindLimit || 0) + ' 条），这次生成没有开始（没有产生费用）。少发几张，或者等一分钟再试。'
-          : '这次生成没有开始（没有产生费用）：排队等了 ' + Math.round(waitedMs / 1000) + ' 秒还没轮到。少发几张，或者等一分钟再试。',
+          ? '排队等了 ' + waitText(waitedMs) + ' 秒还没轮到（同时最多 ' + (last.kindLimit || 0) + ' 条），这次生成没有开始（没有产生费用）。少发几张，或者等一分钟再试。'
+          : '这次生成没有开始（没有产生费用）：排队等了 ' + waitText(waitedMs) + ' 秒还没轮到。少发几张，或者等一分钟再试。',
         retryAfterSec: RETRY_AFTER_SEC,
         ...(internal ? { waitedMs, queueWaiting: queueWaiting.get(kind) || 0, kindActive: last.kindActive ?? null, kindLimit: last.kindLimit || null } : {}),
       },
