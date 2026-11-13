@@ -904,6 +904,8 @@ DOMAIN=visionqa.wavisionai.cn bash deploy/production/enable-https.sh            
 
 细节见 [评审先缩图](docs/review-image-downscale-2026-11-14.md)。
 
+提交 `5f71fd7`（缩图模块 + 两条路的取图上限 + 6 条测试 + 文档）+ 本条提交（提交号与 CI 号），CI **43498823868** success（`验证（Node 22.12.0）` / `验证（Node 24）` / `安全扫描` 三个 job 全绿）。
+
 
 
 
