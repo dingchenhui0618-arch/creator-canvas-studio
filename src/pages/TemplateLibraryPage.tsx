@@ -16,6 +16,7 @@ import {
 } from '../api/radar'
 import { downloadTemplateMarkdown } from '../lib/templateExport'
 import { describeTiming, paceLabel } from '../domain/radar'
+import { readTemplatesView, writeTemplatesView, type TemplatesView } from '../domain/list-view'
 import type { MediaItem, ReplicaTemplate, ScriptBeat, StoryboardShot, TemplateSourceCount, TemplateSourceKey } from '../domain/radar'
 import { requestReview } from '../state/review'
 import { createProject } from '../api/projects'
@@ -107,9 +108,12 @@ export function TemplateLibraryPage({
   // 每个来源各有几条：胶囊由服务端给，前端不另写一份分类表
   const [sources, setSources] = useState<TemplateSourceCount[]>([])
 
-  const [type, setType] = useState('全部')
-  const [source, setSource] = useState<TemplateSourceKey | ''>('')
-  const [keyword, setKeyword] = useState('')
+  // 上次在这张页面上筛过的条件（v0.9.44）：去作品看一眼再回来，搜索词与来源都还在。
+  // 只跟着这一个标签页（sessionStorage），关掉就忘；坏数据由 domain/list-view 退回「全部」。
+  const [savedView] = useState<TemplatesView>(() => readTemplatesView(window.sessionStorage))
+  const [type, setType] = useState(savedView.type || '全部')
+  const [source, setSource] = useState<TemplateSourceKey | ''>(savedView.source as TemplateSourceKey | '')
+  const [keyword, setKeyword] = useState(savedView.keyword)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [detail, setDetail] = useState<ReplicaTemplate | null>(null)
@@ -138,7 +142,16 @@ export function TemplateLibraryPage({
     (key?: string) => sources.find((entry) => entry.key === key)?.label || '',
     [sources],
   )
-  const filtering = activeType !== '全部' || Boolean(activeSource)
+  const searching = keyword.trim()
+  // 只有搜索词也是一次筛选：以前这一行只在选了类型/来源时出现，搜完想清掉只能手动删字
+  const filtering = activeType !== '全部' || Boolean(activeSource) || Boolean(searching)
+
+  // 条件一变就记下来；三样都空就把键删掉（「清空条件」= 不留一条空记录）。
+  // 记的是上面那三个原始值，不写 activeType：首屏数据还没到、类型清单只有一个「全部」时，
+  // 写 activeType 会把刚读出来的类型当场抹掉。
+  useEffect(() => {
+    writeTemplatesView(window.sessionStorage, { keyword, type, source })
+  }, [keyword, type, source])
   const clearFilters = () => {
     setType('全部')
     setSource('')
@@ -397,10 +410,11 @@ export function TemplateLibraryPage({
         </div>
       </div>
 
-      {filtering ? (
+      {filtering && total > 0 ? (
         <div className="template-filter-note">
           <span>
             筛到 <b>{items.length}</b> 条
+            {searching ? ' · 搜索「' + searching + '」' : ''}
             {activeSource ? ' · 来源：' + sourceLabel(activeSource) : ''}
             {activeType !== '全部' ? ' · 类型：' + activeType : ''}
             {total > 0 ? ' · 全库 ' + total + ' 条' : ''}

@@ -6,6 +6,7 @@ import { adoptProjectCanvas, createProject, listProjects } from '../api/projects
 import type { ProjectSummary } from '../domain/project'
 import { listFlows, listRuns, type ApiFlow, type RunRecord } from '../api/flows'
 import { runVersionLabel, runWorkLine } from '../domain/run'
+import { readRunsView, resolveFlowFilter, writeRunsView, type RunsView } from '../domain/list-view'
 import '../styles/runs.css'
 
 const PAGE_SIZE = 12
@@ -80,9 +81,13 @@ export function RunsPage({
   const [items, setItems] = useState<RunRecord[]>([])
   const [total, setTotal] = useState(0)
   const [flows, setFlows] = useState<ApiFlow[]>([])
-  const [flowId, setFlowId] = useState('')
-  const [status, setStatus] = useState<'' | 'success' | 'error'>('')
-  const [keyword, setKeyword] = useState('')
+  // 上次在这张页面上筛过的条件（v0.9.44）：去作品看一眼再回来，流程 / 状态 / 搜索词都还在
+  const [savedView] = useState<RunsView>(() => readRunsView(window.sessionStorage))
+  const [flowId, setFlowId] = useState(savedView.flowId)
+  const [status, setStatus] = useState<'' | 'success' | 'error'>(savedView.status)
+  const [keyword, setKeyword] = useState(savedView.keyword)
+  // 流程清单读成功过没有：只在「读到了、但里面没有这块画布」时才清掉记下来的流程
+  const [flowsLoaded, setFlowsLoaded] = useState(false)
   const [query, setQuery] = useState('')
   const [offset, setOffset] = useState(0)
   const [open, setOpen] = useState<string | null>(null)
@@ -102,6 +107,15 @@ export function RunsPage({
     return () => window.clearTimeout(timer)
   }, [keyword])
 
+  // 记住的那块画布可能已经删了、或不是这个账号的：判据在 domain/list-view 的 resolveFlowFilter，
+  // 在渲染里算，不另开一个 effect 去改 state——那会多一轮渲染，也是「effect 里 setState」的坏味道。
+  const activeFlowId = resolveFlowFilter(flowId, flows.map((flow) => flow.id), flowsLoaded)
+
+  // 条件一变就记下来；三样都空就把键删掉（「清空筛选」= 不留一条空记录）
+  useEffect(() => {
+    writeRunsView(window.sessionStorage, { keyword, flowId: activeFlowId, status })
+  }, [activeFlowId, keyword, status])
+
   // 换一条运行就把这块面板收起来：上一条的「已归到…」不该挂在另一条运行下面。
   // 不写成 effect（在 effect 里同步 setState 会多渲染一轮），就在切选中项的那两处调。
   const resetAdopt = () => {
@@ -115,7 +129,7 @@ export function RunsPage({
     setLoading(true)
     setError('')
     try {
-      const result = await listRuns({ flowId, status, q: query, limit: PAGE_SIZE, offset })
+      const result = await listRuns({ flowId: activeFlowId, status, q: query, limit: PAGE_SIZE, offset })
       setItems(result.items || [])
       setTotal(result.total || 0)
       setOpen(result.items?.[0]?.id || null)
@@ -125,7 +139,7 @@ export function RunsPage({
     } finally {
       setLoading(false)
     }
-  }, [flowId, offset, query, status])
+  }, [activeFlowId, offset, query, status])
 
   useEffect(() => {
     const timer = window.setTimeout(() => { void load() }, 0)
@@ -135,7 +149,11 @@ export function RunsPage({
   useEffect(() => {
     let alive = true
     void listFlows()
-      .then((list) => { if (alive) setFlows(list) })
+      .then((list) => {
+        if (!alive) return
+        setFlows(list)
+        setFlowsLoaded(true)
+      })
       .catch(() => undefined)
     return () => { alive = false }
   }, [])
@@ -157,7 +175,7 @@ export function RunsPage({
   const pageSuccess = items.filter((item) => item.status === 'success').length
   const pageFailed = items.filter((item) => item.status !== 'success').length
   const current = items.find((item) => item.id === open) || null
-  const filtered = Boolean(flowId || status || query)
+  const filtered = Boolean(activeFlowId || status || query)
   const hasPrev = offset > 0
   const hasNext = offset + items.length < total
 
@@ -253,7 +271,7 @@ export function RunsPage({
           <Select
             size="sm"
             label="按流程筛选"
-            value={flowId}
+            value={activeFlowId}
             options={[{ value: '', label: '全部流程' }, ...flows.map((flow) => ({ value: flow.id, label: flow.name }))]}
             onChange={(value) => resetTo(() => setFlowId(value))}
           />
