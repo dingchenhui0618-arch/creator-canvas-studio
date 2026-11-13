@@ -548,4 +548,4 @@ DOMAIN=visionqa.wavisionai.cn bash deploy/production/enable-https.sh            
 
 ![生产：后台「生成通道」对账表新增 SeeAPI 的 4 个出图模型名，画布 CGCM 渠道真正在用的 image-2-pro 现在算「已接入」（v0.9.56）](docs/screenshot-gateway-coverage-2026-11-13.png)
 
-提交 `d1b06fa`（代码 + 8 条测试 + 文档 + 1 张生产截图 + 部署说明），CI 43420342497 success。
+提交 `77e7830`（代码 + 9 条测试 + 文档 + 1 张生产截图 + 部署说明），CI 43421415646 success。
