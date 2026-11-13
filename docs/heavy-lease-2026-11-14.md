@@ -112,9 +112,11 @@ npm run build       通过（入口未变：index-DoNQ3EI0.js）
 ## 踩到的坑（如实记）
 
 第一次部署（release `r89-lease`）带了**被截断的 `server/index.mjs`**：一次整文件写入把最后约 90 行吞掉了。
-692 条测试全绿、CI 也绿——因为没有任何测试 import `server/index.mjs`（测试只 import 路由与模块）。
-直到 `systemctl restart visionqa` 时 journal 才炸出 `SyntaxError: Unexpected end of input`，
-对外服务中断约 **86 秒**（05:25:22 → 05:26:48），当场 `ops/rollback.sh` 回 0.9.77、线上恢复。
+692 条测试全绿（没有任何测试 import `server/index.mjs`），**但 CI 的 oxlint 当场就报了错**：
+`server/index.mjs:1040:51 Expected } but found EOF`（CI run 43510322959 failure）。
+真正的问题是**我没等 CI 绿就部署**——`systemctl restart visionqa` 时 journal 才炸出 `SyntaxError: Unexpected end of input`，
+对外服务中断约 **86 秒**（05:25:22 → 05:26:48），`ops/rollback.sh` 回 0.9.77 才恢复。
+这条失败记录留在 CI 历史里，没有删；修完重发的 run 是 43511541609 success。
 
 修好文件后补了一条语法护栏（`test/syntax.test.mjs`）：用一个子进程（`--experimental-vm-modules` 的
 `vm.SourceTextModule`）把 `server/` 与 `scripts/` 下每个模块解析一遍，0.8 秒。
