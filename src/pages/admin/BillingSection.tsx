@@ -9,6 +9,7 @@ import {
   type PlanInput,
 } from '../../api/plans'
 import QuotaCard from './QuotaCard'
+import UnitEconomicsCard from './UnitEconomicsCard'
 import { formatDateTime } from './data'
 import { AdminHead, Badge, EmptyState, ErrorBanner, LoadingLine, RefreshButton } from './ui'
 
@@ -215,6 +216,8 @@ export default function BillingSection() {
           </div>
         ) : null}
       </section>
+
+      <UnitEconomicsCard />
 
       <section className="admin-card admin-block">
         <div className="admin-card-head">

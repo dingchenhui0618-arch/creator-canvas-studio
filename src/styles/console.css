@@ -442,6 +442,27 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+/* 按次算账（v0.9.81）：积分、折钱、上游成本、毛利排成一行。
+   三条口径：负数（倒贴）用 fail 色，一眼能看见；「未定价」用 faint 色，不拿 0.00 冒充成本为零；
+   毛利与毛利率右对齐等宽，扫一列就能比大小。 */
+.admin-table--econ th:nth-child(2),
+.admin-table--econ th:nth-child(3),
+.admin-table--econ th:nth-child(4),
+.admin-table--econ th:nth-child(5),
+.admin-table--econ th:nth-child(6) {
+  white-space: nowrap;
+}
+.admin-table--econ td > .admin-cell-note {
+  display: block;
+  margin-top: 2px;
+  font-family: inherit;
+}
+.admin-econ-neg {
+  color: var(--fail, #a33838);
+}
+.admin-econ-unknown {
+  color: var(--faint, #8a8a8a);
+}
 
 .admin-cell-sub {
   display: block;

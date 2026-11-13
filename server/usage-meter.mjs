@@ -285,7 +285,9 @@ export function usageSummary({ days = 14, now = Date.now() } = {}) {
     rows = []
   }
 
-  const totals = { calls: 0, okCalls: 0, failedCalls: 0, tokensIn: 0, tokensOut: 0, images: 0, videoSeconds: 0, estCostMilli: 0 }
+  // measuredCalls：真有用量（live 且成功）的条数。按次算账（v0.9.81）要拿它当分母：
+  // 回填条目只有次数、没有 token 与张数，把它算进分母会把「一次成本」摊薄成假的。
+  const totals = { calls: 0, okCalls: 0, measuredCalls: 0, failedCalls: 0, tokensIn: 0, tokensOut: 0, images: 0, videoSeconds: 0, estCostMilli: 0 }
   const byKind = new Map()
   const byModel = new Map()
   const byDay = new Map()
@@ -295,6 +297,7 @@ export function usageSummary({ days = 14, now = Date.now() } = {}) {
     totals.calls += 1
     if (Number(row.ok) === 1) totals.okCalls += 1
     else totals.failedCalls += 1
+    if (row.source === 'live' && Number(row.ok) === 1) totals.measuredCalls += 1
     totals.tokensIn += Number(row.tokens_in) || 0
     totals.tokensOut += Number(row.tokens_out) || 0
     if (row.kind === 'image') totals.images += Number(row.units) || 0
@@ -303,9 +306,13 @@ export function usageSummary({ days = 14, now = Date.now() } = {}) {
     const cost = row.source === 'live' ? estimateMilli(row, priceView.prices) : 0
     totals.estCostMilli += cost
 
-    const kindRow = byKind.get(row.kind) || { kind: row.kind, label: KIND_LABEL[row.kind] || row.kind, calls: 0, failedCalls: 0, tokensIn: 0, tokensOut: 0, units: 0, unit: unitForKind(row.kind), estCostMilli: 0 }
+    const kindRow = byKind.get(row.kind) || { kind: row.kind, label: KIND_LABEL[row.kind] || row.kind, calls: 0, okCalls: 0, measuredCalls: 0, failedCalls: 0, tokensIn: 0, tokensOut: 0, units: 0, unit: unitForKind(row.kind), estCostMilli: 0 }
     kindRow.calls += 1
     if (Number(row.ok) !== 1) kindRow.failedCalls += 1
+    if (row.source === 'live' && Number(row.ok) === 1) {
+      kindRow.okCalls += 1
+      kindRow.measuredCalls += 1
+    }
     kindRow.tokensIn += Number(row.tokens_in) || 0
     kindRow.tokensOut += Number(row.tokens_out) || 0
     kindRow.units += Number(row.units) || 0

@@ -34,6 +34,7 @@ import { createInvite, inviteSummary, revokeInvite } from '../invites.mjs'
 import { deletePlan, listPlans, savePlan } from '../plans.mjs'
 import { clearQuotaOverride, quotaOverview, saveQuota, setQuotaOverride } from '../quota.mjs'
 import { saveUsagePrices, usagePrices, usageSummary } from '../usage-meter.mjs'
+import { pricingEstimate } from '../pricing.mjs'
 import { clearSiteInfo, resolveSiteInfo, saveSiteInfo, SITE_FIELDS } from '../site-info.mjs'
 import { launchReadiness } from '../readiness.mjs'
 import { cleanOrphanFrames, clearStorageOverride, saveStorageLimit, setStorageOverride, storageOverview } from '../storage.mjs'
@@ -1198,6 +1199,21 @@ export function createAdminRouter() {
           detail: { prices: saved.prices },
         })
         sendJson(res, 200, { ok: true, ...usagePrices(), prices: saved.prices })
+        return true
+      }
+
+      // 按次算账（v0.9.81）：把「扣多少积分」折成钱，与上游估算成本放在一行里。
+      // 只读：读用量事件、估算单价与档位，不扣积分、不调上游、不写任何数据。
+      if (pathname === '/api/admin/pricing/estimate' && req.method === 'GET') {
+        const days = Number(url.searchParams.get('days')) || 30
+        const planId = String(url.searchParams.get('plan') || '')
+        const rateText = url.searchParams.get('rate')
+        const rate = rateText === null || rateText === '' ? 0 : Number(rateText)
+        if (!Number.isFinite(rate) || rate < 0 || rate > 1000) {
+          sendJson(res, 400, { ok: false, error: '每积分多少钱要写 0–1000 之间的数字', code: 'BAD_RATE' })
+          return true
+        }
+        sendJson(res, 200, pricingEstimate({ days, planId, rmbPerCredit: rate }))
         return true
       }
 
