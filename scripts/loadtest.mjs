@@ -13,9 +13,11 @@
 //   node scripts/loadtest.mjs --kind=review --n=10 --guard=off     # 关掉闸门，看 10 并发真实峰值
 //   node scripts/loadtest.mjs --kind=replicate --n=10 --guard=off  # 再加上 ffmpeg 子进程那条路
 //   node scripts/loadtest.mjs --kind=review --n=3                  # 上限以内的正常路径
+//   node scripts/loadtest.mjs --kind=canvas --n=10                   # 画布出图通道：只放整机上限那么多张，其余不碰上游
 //
 // 参数：
-//   --kind=review|replicate   重活类型（默认 review：整个流程都在本机，不依赖外网）
+//   --kind=review|replicate|canvas  重活类型（默认 review：整个流程都在本机，不依赖外网；
+//                             canvas = 画布调平台出图通道 /api/gateway，假上游假装出一张图）
 //   --n=10                    同时提交几条（每个账号一条：评审按账号只放 1 条并行）
 //   --upstream-ms=4000        假上游延迟（让任务重叠，而不是排队）
 //   --guard=on|off            on=按生产默认（水位 + 全站上限 3）；off=VQ_WATER_GUARD=0 + VQ_GLOBAL_HEAVY=0
@@ -104,6 +106,20 @@ async function startFakeUpstream({ delayMs = 4000 } = {}) {
       const body = JSON.stringify({ data: [{ id: 'loadtest-vision', object: 'model' }] })
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(body)
+      return
+    }
+    // 画布出图（--kind=canvas）：上游就是这条同步出图接口，回一个图片地址。
+    // 延迟由 --upstream-ms 控制，让「在生成」真的重叠在一起——不然名额还没占热就还回去了。
+    if (req.method === 'POST' && pathname.endsWith('/images/generations')) {
+      stats.calls += 1
+      stats.concurrent += 1
+      stats.peakConcurrent = Math.max(stats.peakConcurrent, stats.concurrent)
+      const index = stats.calls
+      setTimeout(() => {
+        stats.concurrent -= 1
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ data: [{ url: 'https://example.invalid/loadtest-' + index + '.png' }] }))
+      }, delayMs)
       return
     }
     // 请求体读干净：keep-alive 连接里残留的 body 会让下一次请求对不上
@@ -231,6 +247,52 @@ function seedAccounts({ dataDir, count, cookieName }) {
   })
 }
 
+// ---------- 出图渠道（--kind=canvas） ----------
+// 画布的出图节点不带账号，走的是平台令牌通道：这里造一把指向假上游的 Key。
+// 注意要在**一次性实例启动之前**造好：Key 池在进程里首次读盘后就缓存了，后造它看不见。
+const SEED_KEY_SOURCE = [
+  "const { pathToFileURL } = await import('node:url')",
+  'const vault = await import(pathToFileURL(process.env.SEED_VAULT).href)',
+  'const key = vault.createKey({',
+  "  name: '压测出图',",
+  "  provider: 'cgcm',",
+  '  baseUrl: process.env.SEED_BASE + "/seeapi",',
+  '  apiKey: "sk-loadtest-canvas-1234567890",',
+  '  models: ["image-2-pro"],',
+  '  capabilities: ["image"],',
+  '  priority: 10,',
+  '  weight: 100,',
+  '})',
+  'console.log(JSON.stringify({ id: key.id }))',
+].join('\n')
+
+function seedGatewayKey({ dataDir, base, secret }) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ['--input-type=module', '-e', SEED_KEY_SOURCE], {
+      cwd: ROOT,
+      env: {
+        ...process.env,
+        DATA_DIR: dataDir,
+        VQ_KEY_SECRET: secret,
+        SEED_VAULT: path.join(ROOT, 'server', 'keyvault.mjs'),
+        SEED_BASE: base,
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    let out = ''
+    let err = ''
+    child.stdout.on('data', (chunk) => { out += String(chunk) })
+    child.stderr.on('data', (chunk) => { err += String(chunk) })
+    child.on('exit', (code) => {
+      if (code !== 0) {
+        reject(new Error('造出图 Key 失败（退出码 ' + code + '）：' + (err || out).slice(-800)))
+        return
+      }
+      resolve()
+    })
+  })
+}
+
 // ---------- 读数 ----------
 function readMeminfo() {
   try {
@@ -341,6 +403,18 @@ function evaluate({ summary, guard, n, cap }) {
     if (unexpected.length) problems.push('被拒的原因不是「名额满 / 水位红线」：' + unexpected.join('、'))
   }
   if (summary.health.max > 5000) problems.push('压测期间健康探针最慢 ' + summary.health.max + ' ms：主线程被打到不可用')
+  if (summary.kind === 'canvas') {
+    // 这条通道最要紧的不是「快」，而是「被拒的那几张一张都没发出去」——发出去就是钱。
+    if (summary.upstream.calls !== accepted) {
+      problems.push('被拒的请求也碰到了上游：上游被调用 ' + summary.upstream.calls + ' 次，放行 ' + accepted + ' 次')
+    }
+    if (Number(summary.upstream.peakConcurrent) > accepted) {
+      problems.push('上游同时跑了 ' + summary.upstream.peakConcurrent + ' 张，比放行的 ' + accepted + ' 张还多')
+    }
+    if (guard !== 'off' && summary.rateLimitProbe && summary.rateLimitProbe.firstLimitedIndex !== 21) {
+      problems.push('入口限流没在第 21 次生效：' + JSON.stringify(summary.rateLimitProbe))
+    }
+  }
   return { ok: problems.length === 0, problems }
 }
 
@@ -353,6 +427,12 @@ async function run(options) {
   const base = 'http://127.0.0.1:' + options.port
 
   const fake = await startFakeUpstream({ delayMs: options.upstreamMs })
+  // 画布出图通道：令牌与 Key 只属于这次一次性实例（不同进程、不同数据目录，不碰生产配置）
+  const gatewayToken = 'loadtest-gateway-token'
+  const keySecret = 'loadtest-key-secret-not-real'
+  if (options.kind === 'canvas') {
+    await seedGatewayKey({ dataDir, base: fake.url, secret: keySecret })
+  }
   const guardEnv = options.guard === 'off'
     ? { VQ_WATER_GUARD: '0', VQ_GLOBAL_HEAVY: '0' }
     : { VQ_GLOBAL_HEAVY: '3' }
@@ -375,6 +455,11 @@ async function run(options) {
       VISION_MODELS: '',
       VISION_FALLBACKS: '',
       LLM_FALLBACKS: '',
+      VQ_KEY_SECRET: keySecret,
+      // 名额目录跟着这次一次性实例走：压测要量的是「这个实例会不会放超」，
+      // 不是去跟生产那两个实例抢同一批名额（那会把真实用户的任务挤成 503）。
+      VQ_HEAVY_LEASE_DIR: path.join(dataDir, 'heavy-leases'),
+      ...(options.kind === 'canvas' ? { VQ_GATEWAY_TOKEN: gatewayToken, VQ_GATEWAY_OPEN: '1' } : {}),
       NODE_OPTIONS: '--max-old-space-size=' + options.heapMb,
     },
   })
@@ -454,14 +539,19 @@ async function run(options) {
     const submitOne = async (account, index) => {
       const body = options.kind === 'review'
         ? { media: mediaRel, intent: '压测：' + index, label: '压测图' }
-        : { url: options.videoUrl, item: { id: 'loadtest-' + nonce + '-' + index, title: '压测视频 ' + index, platform: 'douyin', platformLabel: '抖音', stats: { likes: 0, comments: 0, shares: 0, collects: 0 } } }
+        : options.kind === 'canvas'
+          ? { model: 'image-2-pro', prompt: '压测第 ' + (index + 1) + ' 张图' }
+          : { url: options.videoUrl, item: { id: 'loadtest-' + nonce + '-' + index, title: '压测视频 ' + index, platform: 'douyin', platformLabel: '抖音', stats: { likes: 0, comments: 0, shares: 0, collects: 0 } } }
+      const target = options.kind === 'review' ? '/api/review' : options.kind === 'canvas' ? '/api/gateway/v1/images/generations' : '/api/replicate'
       const started = Date.now()
       try {
-        const response = await fetch(base + (options.kind === 'review' ? '/api/review' : '/api/replicate'), {
+        const response = await fetch(base + target, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Cookie: account.cookie,
+            ...(options.kind === 'canvas'
+              ? { Authorization: 'Bearer ' + gatewayToken }
+              : { Cookie: account.cookie }),
             'X-Forwarded-For': '10.9.0.' + (index + 1),
           },
           body: JSON.stringify(body),
@@ -539,8 +629,40 @@ async function run(options) {
       }
     }
 
+    // 入口限流（v0.9.79）：出图通道一分钟 20 次。用另一个来源 IP 打 21 次「未知路径」——
+    // 走未知路径是为了只量限流本身：真生成一次要等上游，会把这台机器占住好几分钟。
+    let rateProbe = null
+    if (options.kind === 'canvas') {
+      const probed = []
+      for (let i = 0; i < 21; i += 1) {
+        try {
+          const response = await fetch(base + '/api/gateway/v1/loadtest-rate-probe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + gatewayToken, 'X-Forwarded-For': '10.77.77.77' },
+            body: '{}',
+            signal: AbortSignal.timeout(5000),
+          })
+          const text = await response.text()
+          let parsed = null
+          try { parsed = JSON.parse(text) } catch { parsed = null }
+          probed.push({ status: response.status, code: (parsed && parsed.code) || '' })
+        } catch {
+          probed.push({ status: 0, code: 'NETWORK' })
+        }
+      }
+      const firstLimited = probed.findIndex((item) => item.status === 429)
+      rateProbe = {
+        attempted: probed.length,
+        byStatus: probed.reduce((acc, item) => { acc[item.status] = (acc[item.status] || 0) + 1; return acc }, {}),
+        firstLimitedIndex: firstLimited < 0 ? null : firstLimited + 1,
+        code: (probed.find((item) => item.status === 429) || {}).code || '',
+      }
+    }
+
     const statuses = summarizeStatuses(responses)
     const observedLimit = waterAfter && waterAfter.heavy ? waterAfter.heavy.configLimit : null
+    // 画布出图是两层名额：整机总名额（3）与这一类的整机上限（默认 2），实际放行取小的那个
+    const kindLimit = waterAfter && waterAfter.heavy && waterAfter.heavy.kindLimits ? waterAfter.heavy.kindLimits.canvas_gen : null
     const finite = (values) => values.filter((value) => Number.isFinite(value))
     const summary = {
       arm: options.label,
@@ -597,13 +719,17 @@ async function run(options) {
         failures: healths.filter((item) => item.status !== 200).length,
       },
       isolate: options.kind === 'review' ? { mode: options.isolate, report: isolateAfter } : null,
+      kindLimit,
+      rateLimitProbe: rateProbe,
       aliveAfter,
       drainedActive,
       observedLimit,
       afterHeapUsedMb: waterAfter && waterAfter.heap ? waterAfter.heap.heapUsedMb : null,
       afterLevel: waterAfter ? waterAfter.level : null,
     }
-    const verdict = evaluate({ summary, guard: options.guard, n: options.n, cap: Number(observedLimit) || 3 })
+    const globalCap = Number(observedLimit) || 3
+    const cap = options.kind === 'canvas' && Number(kindLimit) > 0 ? Math.min(globalCap, Number(kindLimit)) : globalCap
+    const verdict = evaluate({ summary, guard: options.guard, n: options.n, cap })
     summary.verdict = verdict
     if (options.keepSamples) summary.samples = samples
     return { summary, dataDir, logs: server.logs, child: server.child }
@@ -653,7 +779,7 @@ function runOnce(file, args) {
 
 function readOptions(argv) {
   const args = parseArgs(argv)
-  const kind = args.kind === 'replicate' ? 'replicate' : 'review'
+  const kind = args.kind === 'replicate' || args.kind === 'canvas' ? args.kind : 'review'
   const n = Math.max(1, Math.min(40, Number(args.n || 10)))
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, '')
   const guard = args.guard === 'off' ? 'off' : 'on'
@@ -693,6 +819,12 @@ function formatReport(summary) {
   if (summary.isolate) {
     const report = summary.isolate.report
     lines.push('  评审隔离：' + (summary.isolate.mode === 'on' ? '开（独立 worker）' : '关（同进程）') + (report ? ' · 进 worker ' + report.runs + ' 单（成功 ' + report.ok + ' / 失败 ' + report.failed + '）· 堆上限 ' + report.heapMb + ' MB' : ' · 没读到计数'))
+  }
+  if (summary.kind === 'canvas') {
+    lines.push('  画布出图：放行 ' + summary.requests.accepted + ' 张 / 整机上限 ' + (summary.kindLimit ?? '—') + ' 张 · 上游被调用 ' + summary.upstream.calls + ' 次（被拒的一次都没发出去）')
+    if (summary.rateLimitProbe) {
+      lines.push('  入口限流：' + summary.rateLimitProbe.attempted + ' 次里' + (summary.rateLimitProbe.firstLimitedIndex ? '第 ' + summary.rateLimitProbe.firstLimitedIndex + ' 次开始 429（' + summary.rateLimitProbe.code + '）' : '一次都没限到'))
+    }
   }
   lines.push('  收尾：实例存活 ' + (summary.aliveAfter ? '是' : '否') + ' · 名额还回 ' + (summary.drainedActive === 0 ? '是' : '否（剩 ' + summary.drainedActive + '）'))
   lines.push('  判定：' + (summary.verdict.ok ? '通过' : '不通过 · ' + summary.verdict.problems.join('；')))

@@ -34,6 +34,8 @@ export interface WaterlineReport {
     unlimited: boolean
     configLimit: number
     full: boolean
+    // 按类型的整机上限（v0.9.79）：目前只有画布出图这一类（平台令牌通道，没有账号可挂）
+    kindLimits?: Record<string, number>
   }
   capacity: Record<string, number>
   baseCapacity: Record<string, number>

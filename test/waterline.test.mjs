@@ -88,7 +88,12 @@ test('读数：来自真实系统与真实 V8 堆，不是编的', () => {
   const report = water.waterlineReport()
   assert.equal(report.ok, true)
   assert.ok(['ok', 'tight', 'critical'].includes(report.level))
-  assert.deepEqual(report.heavyKinds, ['replicate', 'review', 'flow_run'])
+  assert.deepEqual(report.heavyKinds, ['replicate', 'review', 'flow_run', 'canvas_gen'])
+  // 按类型的整机上限只给「没有账号可挂」的画布出图用（v0.9.79），其余仍靠每账号上限
+  assert.equal(water.kindLimitFor('canvas_gen', 'ok', true), 2)
+  assert.equal(water.kindLimitFor('review', 'ok', true), 0, '评审是每账号 1 条 + 整机 3 条，不该再叠一层整机 1 条')
+  // 这一屏的数字跟着当前水位走（偏紧时会从 2 收紧到 1）：断言「同一套公式算出来的」
+  assert.equal(report.heavy.kindLimits.canvas_gen, water.capacityFor('canvas_gen', config.credits.concurrency.canvas_gen, report.level))
   assert.equal(report.retryAfterSec, 60)
   assert.equal(report.thresholds.criticalAvailableMb, 128)
   assert.equal(report.thresholds.tightAvailableMb, 320)

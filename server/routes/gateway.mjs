@@ -11,6 +11,7 @@
 import { readBody, sendJson } from './_shared.mjs'
 import { authorizeGateway, createImageTask, createVideoTask, generateImage, listPoolModels, pollVideoTask } from '../gateway.mjs'
 import { config } from '../config.mjs'
+import { admit } from '../waterline.mjs'
 
 const IMAGE_CREATE = new Set(['/api/gateway/v1/images/generations'])
 const IMAGE_CREATE_ASYNC = new Set(['/api/gateway/v1/images/generations/async'])
@@ -30,6 +31,36 @@ function fail(res, error) {
     ...(error?.upstreamCode ? { upstreamCode: error.upstreamCode } : {}),
     ...(error?.detail ? { detail: error.detail } : {}),
   })
+}
+
+/**
+ * 出图 / 出视频也是重活（v0.9.79）：以前这条通道既不限流、也不过水位与名额——
+ * 画布一次点「批量出图」就能连着发 8 张，每张都在等上游、每张都在花钱。
+ * 现在先占整机名额（canvas_gen）再调上游：占不到就 503，**根本不会碰上游**，
+ * 这一单没花钱。占到的名额在 finally 里还，超时、上游报错也一样还。
+ */
+async function withHeavy(res, run) {
+  const water = admit('canvas_gen')
+  if (!water.ok) {
+    const body = water.body || {}
+    sendJson(res, water.status || 503, {
+      ok: false,
+      error: body.error || '服务器正忙，这次生成没有开始（没有产生费用）；等一分钟再试',
+      code: body.code || 'SERVER_BUSY',
+      // 画布要能分开「同类排队」和「整机忙」：前者少发几张就好，后者得等
+      ...(body.kind ? { kind: body.kind } : {}),
+      ...(body.retryAfterSec ? { retryAfterSec: body.retryAfterSec } : {}),
+      // 画布的出图节点会把这些原样显示在节点上：把「机器在跑几条」和「多久后再试」一起给它
+      ...(body.active != null ? { active: body.active, limit: body.limit } : {}),
+    })
+    return
+  }
+  const releaseAdmission = () => { try { water.lease.release() } catch { /* 还名额不该影响响应 */ } }
+  try {
+    await run()
+  } finally {
+    releaseAdmission()
+  }
 }
 
 export function createGatewayRouter() {
@@ -62,29 +93,35 @@ export function createGatewayRouter() {
       const callerIdempotency = String(req.headers['idempotency-key'] || '')
 
       if (IMAGE_CREATE.has(pathname) && req.method === 'POST') {
-        try {
-          sendJson(res, 200, await generateImage(await readBody(req), { idempotencyKey: callerIdempotency }))
-        } catch (error) {
-          fail(res, error)
-        }
+        await withHeavy(res, async () => {
+          try {
+            sendJson(res, 200, await generateImage(await readBody(req), { idempotencyKey: callerIdempotency }))
+          } catch (error) {
+            fail(res, error)
+          }
+        })
         return true
       }
 
       if (IMAGE_CREATE_ASYNC.has(pathname) && req.method === 'POST') {
-        try {
-          sendJson(res, 200, await createImageTask(await readBody(req), { idempotencyKey: callerIdempotency }))
-        } catch (error) {
-          fail(res, error)
-        }
+        await withHeavy(res, async () => {
+          try {
+            sendJson(res, 200, await createImageTask(await readBody(req), { idempotencyKey: callerIdempotency }))
+          } catch (error) {
+            fail(res, error)
+          }
+        })
         return true
       }
 
       if (VIDEO_CREATE.has(pathname) && req.method === 'POST') {
-        try {
-          sendJson(res, 200, await createVideoTask(await readBody(req)))
-        } catch (error) {
-          fail(res, error)
-        }
+        await withHeavy(res, async () => {
+          try {
+            sendJson(res, 200, await createVideoTask(await readBody(req)))
+          } catch (error) {
+            fail(res, error)
+          }
+        })
         return true
       }
 

@@ -19,7 +19,11 @@ const HEAVY_LABEL: Record<string, string> = {
   replicate: '一键复刻',
   review: '视觉评审',
   flow_run: '画布运行',
+  canvas_gen: '画布出图',
 }
+
+// 没有账号可挂的那一类（v0.9.79）：它的上限是整机口径，不是「每账号」
+const NO_USER_KINDS = new Set(['canvas_gen'])
 
 export default function WaterlineCard() {
   const [view, setView] = useState<WaterlineReport | null>(null)
@@ -56,7 +60,7 @@ export default function WaterlineCard() {
         <div>
           <p className="admin-label">运行水位</p>
           <p className="admin-sub">
-            这台机器还能接多少活。内存到红线时，复刻、评审与画布运行会在扣费前被拒绝（不扣积分），其余请求照常；
+            这台机器还能接多少活。内存到红线时，复刻、评审、画布运行与画布出图会在扣费前被拒绝（不扣积分），其余请求照常；
             水位偏紧时重活并发降到 1——宁可慢一点，也不要两条一起把进程顶穿。
           </p>
         </div>
@@ -131,9 +135,13 @@ export default function WaterlineCard() {
                 <span>{HEAVY_LABEL[kind] || kind}</span>
                 <b>{view.capacity[kind] || 0} 条</b>
                 <span className="admin-cell-note">
-                  {view.baseCapacity[kind] && view.capacity[kind] !== view.baseCapacity[kind]
-                    ? '按水位从 ' + view.baseCapacity[kind] + ' 条收紧'
-                    : '同时最多 ' + (view.baseCapacity[kind] || 0) + ' 条'}
+                  {NO_USER_KINDS.has(kind)
+                    ? (view.baseCapacity[kind] || 0) === 0
+                      ? '不单独限（仍占整机名额）'
+                      : '整机同时最多（没有账号可限）'
+                    : view.baseCapacity[kind] && view.capacity[kind] !== view.baseCapacity[kind]
+                      ? '按水位从 ' + view.baseCapacity[kind] + ' 条收紧'
+                      : '同时最多 ' + (view.baseCapacity[kind] || 0) + ' 条'}
                 </span>
               </div>
             ))}

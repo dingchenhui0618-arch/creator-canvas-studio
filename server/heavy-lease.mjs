@@ -23,7 +23,9 @@ import os from 'node:os'
 import path from 'node:path'
 
 // 与 waterline 的 HEAVY_KINDS 同一份含义。分开写是为了不让 waterline 反过来依赖这里（会成环）。
-const HEAVY = new Set(['replicate', 'review', 'flow_run'])
+// canvas_gen = 画布出图 / 出视频（平台令牌通道，没有账号可挂）：它同样要吃上游额度、
+// 占这台机器的连接与内存，所以一样算重活（v0.9.79）。
+const HEAVY = new Set(['replicate', 'review', 'flow_run', 'canvas_gen'])
 const DIRNAME = 'visionqa-heavy-leases-v1'
 const LOCK_NAME = '.lock'
 // 租约文件名就三段：pid-时间戳36-序号36。前缀对不上的一律不当作租约（目录里将来放别的东西也不怕）。
@@ -35,6 +37,8 @@ const stats = {
   created: 0,
   released: 0,
   refused: 0,
+  // 其中「总名额还有、只是这一类排满」的条数：后台能分开看是机器满了还是画布太挤
+  kindRefused: 0,
   pruned: 0,
   lockMiss: 0,
   dirFail: 0,
@@ -269,10 +273,12 @@ function makeLease(dir, cfg, kind, name) {
 export function acquireHeavyLease(kind, options = {}) {
   const cfg = leaseConfig()
   const wanted = String(kind || '')
-  const fallback = { ok: true, lease: noopLease, source: cfg.enabled ? 'memory' : 'off', active: null, limit: 0 }
+  const fallback = { ok: true, lease: noopLease, source: cfg.enabled ? 'memory' : 'off', active: null, limit: 0, kindActive: null, kindLimit: 0 }
   if (!HEAVY.has(wanted)) return fallback
   if (!cfg.enabled) return fallback
   const limit = Math.max(0, Math.round(Number(options.limit) || 0))
+  // 按类型的上限：只给「没有账号可限」的通道用（画布出图）。0 = 不看这一层。
+  const kindLimit = Math.max(0, Math.round(Number(options.kindLimit) || 0))
   const dir = path.resolve(cfg.dir)
   if (!ensureDir(dir)) return { ...fallback, source: 'memory', degraded: true }
   if (!acquireLock(dir, cfg.lockWaitMs)) {
@@ -282,14 +288,25 @@ export function acquireHeavyLease(kind, options = {}) {
   }
   try {
     const active = listLeases(dir, cfg)
-    if (limit > 0 && active.length >= limit) {
+    const byKind = countByKind(active)
+    const kindActive = byKind[wanted] || 0
+    // 两道闸：整机总名额（不分类型）+ 这一类的名额（只有令牌通道用得上）。
+    // 被拒的时候两种原因要分开报：总名额满和「同类排满」给用户的下一步不是一回事。
+    const full = limit > 0 && active.length >= limit
+    const kindFull = kindLimit > 0 && kindActive >= kindLimit
+    if (full || kindFull) {
       stats.refused += 1
+      if (kindFull && !full) stats.kindRefused = (stats.kindRefused || 0) + 1
       return {
         ok: false,
         source: 'lease',
         active: active.length,
         limit,
-        byKind: countByKind(active),
+        kindLimit,
+        kindActive,
+        kindFull,
+        full,
+        byKind,
         leases: active.map((item) => ({ pid: item.pid, kind: item.kind, ageSec: Math.round((Date.now() - item.startedAt) / 1000) })),
       }
     }
@@ -306,7 +323,7 @@ export function acquireHeavyLease(kind, options = {}) {
     fs.writeFileSync(file, body, { flag: 'wx', mode: 0o666 })
     stats.created += 1
     // active 报的是「这一单之前整机在跑几条」：调用方要知道的是它前面排了几个，不是含自己
-    return { ok: true, source: 'lease', active: active.length, limit, lease: makeLease(dir, cfg, wanted, name) }
+    return { ok: true, source: 'lease', active: active.length, limit, kindActive, kindLimit, lease: makeLease(dir, cfg, wanted, name) }
   } catch (error) {
     stats.lastError = '租约写入失败：' + String((error && (error.code || error.message)) || error)
     return { ...fallback, source: 'memory', degraded: true }

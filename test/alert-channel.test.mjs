@@ -39,8 +39,9 @@ function clearFiles() {
 }
 
 // 一个真的接收端：capture 里留下原始请求体与头，后面按它验签名
-function receiver({ status = 200, delayMs = 0 } = {}) {
-  const capture = { hits: 0, raw: '', headers: {}, body: null }
+function receiver({ status = 200, delayMs = 0, hold = false } = {}) {
+  // hold = 收到请求后压着不回，由用例决定什么时候放行：这样「有没有在等网络」不用拿秒表赌调度
+  const capture = { hits: 0, replied: 0, raw: '', headers: {}, body: null, release: () => {} }
   const server = http.createServer((req, res) => {
     capture.hits += 1
     capture.headers = req.headers
@@ -54,10 +55,12 @@ function receiver({ status = 200, delayMs = 0 } = {}) {
         capture.body = null
       }
       const reply = () => {
+        capture.replied += 1
         res.writeHead(status, { 'content-type': 'application/json' })
         res.end(JSON.stringify({ ok: status < 400 }))
       }
-      if (delayMs) setTimeout(reply, delayMs)
+      if (hold) capture.release = reply
+      else if (delayMs) setTimeout(reply, delayMs)
       else reply()
     })
   })
@@ -135,22 +138,28 @@ test('后台配过就优先用它，清掉后回到环境变量', async () => {
   assert.equal(view.source, 'env')
 })
 
-test('投递不阻塞调用方：接收端慢 1 秒，recordAlert 立刻返回', async () => {
+test('投递不阻塞调用方：接收端压着不回，recordAlert 照样返回', async () => {
   clearFiles()
   useEnvChannel('')
-  // 接收端故意慢 1 秒：要是 recordAlert 在等它，elapsed 至少 1 秒
-  const { server, capture, url } = await receiver({ status: 500, delayMs: 1000 })
+  // 接收端收到请求后压着不回（由下面放行）：要是 recordAlert 在等这个响应，
+  // 它就会一直挂到 5 秒的兜底超时——那才是「阻塞」；秒表式的 500ms 断言在并行跑测试时是脆的。
+  const { server, capture, url } = await receiver({ status: 500, hold: true })
   await channel.saveChannel({ url })
   const alerts = await freshAlerts()
   try {
-    const startedAt = Date.now()
-    const alert = await alerts.recordAlert({ kind: 'server-5xx', title: '投递不该挡住请求', dedupeKey: 'blocking' })
-    const elapsed = Date.now() - startedAt
+    const alert = await Promise.race([
+      alerts.recordAlert({ kind: 'server-5xx', title: '投递不该挡住请求', dedupeKey: 'blocking' }),
+      new Promise((resolve) => setTimeout(() => resolve('timeout'), 5000)),
+    ])
+    assert.notEqual(alert, 'timeout', 'recordAlert 5 秒都没返回：它在等接收端的响应')
     assert.ok(alert, '告警要落盘')
-    // 先让这次投递落地再断言时间：万一断言失败，后面的用例也不会被在途请求污染
-    await alerts.flushAlertDeliveries()
-    assert.ok(elapsed < 500, 'recordAlert 用了 ' + elapsed + 'ms，说明在等网络')
+    // 请求已经发出去了，而接收端还没回：这正是「没在等网络」
+    for (let i = 0; i < 40 && capture.hits < 1; i += 1) await new Promise((resolve) => setTimeout(resolve, 25))
     assert.equal(capture.hits, 1)
+    assert.equal(capture.replied, 0)
+    // 放行响应，再让这次投递落地：断言的是失败进重试队列，不是时间
+    capture.release()
+    await alerts.flushAlertDeliveries()
     const box = await alerts.outboxStats()
     assert.equal(box.pending, 1)
     assert.equal(box.lastAttempt.status, 500)

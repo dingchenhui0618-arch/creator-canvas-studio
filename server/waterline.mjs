@@ -12,7 +12,7 @@
 //   拒：真到红线、或全站重活已经满了，就在扣费之前拒绝，并说清「没扣积分、多久后再试」。
 //
 // 三条边界：
-//   1) 只拦重活（复刻 / 评审 / 画布运行）；检索只是转发一个 HTTP、对话只有几十 KB 上下文，不跟着拦；
+//   1) 只拦重活（复刻 / 评审 / 画布运行 / 画布出图）；检索只是转发一个 HTTP、对话只有几十 KB 上下文，不跟着拦；
 //   2) 阈值可用环境变量覆盖：写 0 等于关掉那一条，VQ_WATER_GUARD=0 只量不拦；
 //   3) 判定是纯函数、读数是注入的——测试不依赖跑测试这台机器的内存大小。
 import fs from 'node:fs'
@@ -24,8 +24,11 @@ import { activeFor } from './gate.mjs'
 import { acquireHeavyLease, heavyLeaseStatus } from './heavy-lease.mjs'
 
 const MB = 1048576
-export const HEAVY_KINDS = ['replicate', 'review', 'flow_run']
+export const HEAVY_KINDS = ['replicate', 'review', 'flow_run', 'canvas_gen']
 const HEAVY = new Set(HEAVY_KINDS)
+// 没有账号可挂的重活（v0.9.79）：画布出图走平台令牌，请求里没有用户 id，
+// 「每账号上限」对它用不上，所以它的按类型上限落到整机（见 kindLimitFor）。
+const NO_USER_KINDS = new Set(['canvas_gen'])
 // 同一条红线 5 分钟内只记一条告警：拒绝可能连着来，告警队列不该被刷屏
 const ALERT_GAP_MS = 5 * 60 * 1000
 let lastAlertAt = 0
@@ -158,6 +161,12 @@ export function waterlineReport() {
   const lease = heavyLeaseStatus()
   const active = lease.source === 'lease' ? { total: lease.total, byKind: lease.byKind } : activeFor(HEAVY_KINDS)
   const globalLimit = limits.guard ? globalHeavyCap(verdict.level) : 0
+  // 按类型的整机上限（v0.9.79）：守卫关掉时如实显示「会按几条放行」，和 capacity 一个口径
+  const kindLimits = {}
+  for (const kind of NO_USER_KINDS) {
+    const base = Math.max(0, Math.round(Number(config.credits.concurrency[kind]) || 0))
+    kindLimits[kind] = limits.guard ? capacityFor(kind, base, verdict.level) : base
+  }
   return {
     ok: true,
     checkedAt: new Date().toISOString(),
@@ -172,6 +181,8 @@ export function waterlineReport() {
       unlimited: globalLimit === 0,
       configLimit: Math.max(0, Math.round(Number(config.credits.globalHeavy) || 0)),
       full: globalLimit > 0 && active.total >= globalLimit,
+      // 按类型的整机上限：目前只有画布出图（没有账号可挂的那一类）
+      kindLimits,
       // scope=lease 表示这个数整机共用（两个实例同一个数）；process 表示退回进程内计数
       scope: lease.source,
       lease,
@@ -199,6 +210,35 @@ function alertOnce(kind, verdict, reason) {
     detail: '被拒：' + kind + '；' + reason,
     dedupeKey: 'memory-pressure',
   }).catch(() => {})
+}
+
+/**
+ * 这一类在整机上最多放几条（v0.9.79）。
+ * 只有「没有账号可挂」的通道需要它：画布出图走平台令牌，每账号上限对它无从下手，
+ * 所以 VQ_CONCURRENCY_CANVAS_GEN 是整机口径——一张画布点批量出图时，机器只放这么多张。
+ * 守卫关掉时回 0：那一档是「只量不拦」。
+ */
+export function kindLimitFor(kind, level = 'ok', guard = true) {
+  if (!guard) return 0
+  if (!NO_USER_KINDS.has(kind)) return 0
+  return capacityFor(kind, config.credits.concurrency[kind], level)
+}
+
+/** 按类型的名额排满时回的那一条：和「整机排满」分开说，下一步动作不一样（等一分钟 vs 少发几张）。 */
+function kindBusyBody(kind, got, cap, level) {
+  const internal = config.ui.mode === 'internal'
+  return {
+    error: internal
+      ? '这一类的任务已经在同时跑 ' + got.kindActive + ' 条（上限 ' + got.kindLimit + ' 条，整机合计 ' + got.active + ' 条），这条没有开始（没有产生费用）。等一分钟再试，或者少发几张。'
+      : '这条任务没有开始（没有产生费用）：服务器正忙着处理同类请求，等一分钟再试，或者少发几张。',
+    code: 'SERVER_BUSY',
+    kind,
+    level,
+    active: got.active,
+    limit: cap,
+    retryAfterSec: RETRY_AFTER_SEC,
+    ...(internal ? { busyKinds: got.byKind, kindActive: got.kindActive, kindLimit: got.kindLimit } : {}),
+  }
 }
 
 /** 名额满时回给前端的那一条：生产口径不带内部读数，内部环境才给按类型的明细。 */
@@ -258,26 +298,41 @@ export function admit(kind) {
   }
   // 守卫关掉时也占租约：后台那一屏要能看见「整机在跑几条」，只是不拦
   const cap = limits.guard ? globalHeavyCap(level) : 0
-  const got = acquireHeavyLease(kind, { limit: cap })
+  // 按类型的整机上限：目前只有画布出图用（见 kindLimitFor），其它重活靠每账号上限压
+  const kindLimit = kindLimitFor(kind, level, limits.guard)
+  const got = acquireHeavyLease(kind, { limit: cap, kindLimit })
   if (!got.ok) {
+    // 两种「满」分开说：整机总名额满 = 等一会儿；同类排满 = 少发几张也是快的
+    const byKindFull = got.kindFull && !got.full
     return {
       ok: false,
       level,
       status: 503,
       lease: null,
       scope: got.source,
-      body: busyBody({ total: got.active, byKind: got.byKind || {} }, cap, level, got.leases ? { busyLeases: got.leases.length } : {}),
+      kindFull: byKindFull,
+      kindActive: got.kindActive ?? null,
+      kindLimit,
+      body: byKindFull
+        ? kindBusyBody(kind, got, cap, level)
+        : busyBody({ total: got.active, byKind: got.byKind || {} }, cap, level, got.leases ? { busyLeases: got.leases.length } : {}),
     }
   }
-  if (got.source !== 'lease' && cap > 0) {
-    // 共享目录用不了：退回进程内的计数，也就是 v0.9.77 的判定
+  if (got.source !== 'lease' && (cap > 0 || kindLimit > 0)) {
+    // 共享目录用不了：退回进程内的计数，也就是 v0.9.77 的判定（按类型的这一层也照样算）
     const active = activeFor(HEAVY_KINDS)
-    if (active.total >= cap) {
+    const kindActive = activeFor([kind]).total
+    const totalFull = cap > 0 && active.total >= cap
+    const singleFull = kindLimit > 0 && kindActive >= kindLimit
+    if (totalFull || singleFull) {
       got.lease.release()
-      return { ok: false, level, status: 503, lease: null, scope: got.source, body: busyBody(active, cap, level) }
+      const body = singleFull && !totalFull
+        ? kindBusyBody(kind, { kindActive, kindLimit, active: active.total, byKind: active.byKind }, cap, level)
+        : busyBody(active, cap, level)
+      return { ok: false, level, status: 503, lease: null, scope: got.source, kindFull: singleFull && !totalFull, kindActive, kindLimit, body }
     }
   }
-  return { ok: true, level, reasons, lease: got.lease, active: got.active, scope: got.source }
+  return { ok: true, level, reasons, lease: got.lease, active: got.active, kindActive: got.kindActive, kindLimit, scope: got.source }
 }
 
 /**
@@ -298,6 +353,10 @@ export function admissionCheck(kind) {
     limit: water.ok ? null : water.body.limit,
     scope: water.scope || (water.body && water.body.scope) || null,
     byKind: water.ok ? null : water.body.busyKinds || null,
+    // 按类型的名额（v0.9.79）：画布出图排满时，整机总名额可能还没满——预检要说清是哪一层
+    kindFull: Boolean(water.kindFull),
+    kindActive: water.kindActive ?? null,
+    kindLimit: water.kindLimit || null,
     ms: Date.now() - started,
     checkedAt: new Date().toISOString(),
   }

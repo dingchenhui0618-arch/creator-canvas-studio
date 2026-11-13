@@ -151,6 +151,10 @@ export const config = {
       chat: Number(process.env.VQ_CONCURRENCY_CHAT ?? 2),
       // 同账号同时只允许一条画布流程在跑，避免连点把上游配额打光
       flow_run: Number(process.env.VQ_CONCURRENCY_FLOW_RUN ?? 1),
+      // 画布出图 / 出视频走的是平台令牌（/api/gateway，没有账号可挂），
+      // 所以这一条不是「每账号」而是「整机」：同一时刻最多几张在生成。
+      // 画布点「批量出图」会连发，8 张一起冲进来时整机只放 2 张，其余立刻拒（不碰上游、不花钱）。
+      canvas_gen: Number(process.env.VQ_CONCURRENCY_CANVAS_GEN ?? 2),
     },
     // 全站（不分账号）同时在跑的重活条数上限（v0.9.70）。
     // 按账号的上限管不住「两个账号各来两条」：这台机器只有 2 核 / 1.86 GB，
