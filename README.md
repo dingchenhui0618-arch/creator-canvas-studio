@@ -641,7 +641,7 @@ DOMAIN=visionqa.wavisionai.cn bash deploy/production/enable-https.sh            
 
 ![生产：设置页「登录设备」——当前设备排第一，其余每行可单独退出；命令行登录单独标出（v0.9.62）](docs/screenshot-sessions-2026-11-13.png)
 
-提交 `待补`，CI 待补。
+提交 `6ec4c2d`（代码 + 6 条测试 + 文档 + 1 张生产截图），CI 43452458743 success。
 
 细节见 [登录设备](docs/sessions-2026-11-13.md)。
 
