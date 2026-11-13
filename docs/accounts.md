@@ -24,6 +24,7 @@ token + HttpOnly cookie，浏览器里拿不到 token，也拿不到密码。没
 | GET | `/api/admin/invites` | 200 `{ items, total, active, used, revoked, expired, limits }` | 401 / 403 |
 | POST | `/api/admin/invites` | 201 `{ invite }`（含明文码，只此一次） | 401 / 403 |
 | POST | `/api/admin/invites/:id/revoke` | 200 `{ ok, changed, invite }` | 401 / 403 / 404 |
+| GET | `/api/admin/gateway` | 200 `{ configured, userOpen, readiness:{ ready, missing }, tokenMasked, keys, models, coverage, recentTasks }` | 401 / 403 |
 | POST | `/api/auth/login` | 200 `{ user }` + Set-Cookie | 400 `field` / 401 `field:'form'` / 429 |
 | POST | `/api/auth/logout` | 204 + 清 cookie | — |
 | GET | `/api/auth/me` | 200 `{ user }` | 401 `{ error }` |

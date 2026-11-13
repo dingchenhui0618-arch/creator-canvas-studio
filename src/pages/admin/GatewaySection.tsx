@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useApi } from './data'
 import { Badge, EmptyState, ErrorBanner, LoadingLine, RefreshButton, SourceTag } from './ui'
-import type { GatewayStatus } from '../../api/gateway'
+import type { GatewayBlocker, GatewayStatus } from '../../api/gateway'
 
 const ENDPOINTS: { key: keyof GatewayStatus['endpoints']; label: string; note: string }[] = [
   { key: 'images', label: '出图', note: '同步返回 data[].url，画布直接取图' },
@@ -16,6 +16,25 @@ const GROUPS: { capability: 'image' | 'video'; label: string }[] = [
   { capability: 'video', label: '出视频' },
 ]
 
+const BLOCKER_LABEL: Record<GatewayBlocker, string> = {
+  open: '平台额度开关',
+  token: '服务令牌',
+  keys: '出图 / 出视频 Key',
+}
+
+const BLOCKER_FIX: Record<GatewayBlocker, string> = {
+  open: '平台额度开关没打开：在服务器 /opt/visionqa/.env 写 VQ_GATEWAY_OPEN=1 再重启 visionqa，生成才会放行。这个开关跟着上游额度走，后台不给「一键开启」按钮，免得点了以为能生成。',
+  token: '服务令牌还没配置：通道会直接回 503，不会匿名放行。',
+  keys: '还没有声明出图 / 出视频能力的 Key：在「模型 Key」里贴一把，并勾上对应能力。',
+}
+
+// 模型都有人接、但通道整体不通时，别把「点哪个都能生成」写在页面上。
+function modelHintSuffix(data: GatewayStatus) {
+  if (!data.userOpen) return '；但平台额度开关未打开（VQ_GATEWAY_OPEN=1），现在点生成会直接回 503。'
+  if (!data.configured) return '；但服务令牌未配置，通道现在回 503。'
+  return '，画布点哪个都能生成。'
+}
+
 // 任务状态说人话：running 用「生成中」，其余按有没有拿到成品分两类。
 function taskStatusLabel(task: { kind: 'image' | 'video'; status: string }) {
   const done = task.kind === 'image' ? '已出图' : '已出片'
@@ -29,6 +48,8 @@ function taskStatusLabel(task: { kind: 'image' | 'video'; status: string }) {
 /**
  * 生成通道：画布的出图 / 出视频请求经这里，按「能力 → 模型 → 优先级 → 权重」选平台 Key。
  * 这里只展示「开没开、有几把 Key、什么模型、跑着几个任务」——令牌与上游 Key 不出浏览器。
+ * 「开没开」分两层：平台额度开关（VQ_GATEWAY_OPEN）与服务令牌（VQ_GATEWAY_TOKEN），
+ * 两样都在位、且至少一把 Key 才叫能生成；令牌配了不等于通道开了。
  */
 export default function GatewaySection() {
   const state = useApi<GatewayStatus>('/api/admin/gateway')
@@ -44,6 +65,10 @@ export default function GatewaySection() {
   }
 
   const data = state.data
+  const readiness = data?.readiness
+  // 通道通了不等于每个模型都有人接：画布点名要的模型缺 Key 时，生成照样会失败，
+  // 所以「能」的说明里必须带出这一句，不能让人以为点哪个都行。
+  const missingModels = data?.coverage.filter((row) => !row.ready) || []
 
   return (
     <section className="admin-card admin-block">
@@ -68,10 +93,47 @@ export default function GatewaySection() {
 
       {data ? (
         <>
-          <p className="admin-hint">
-            <Badge tone={data.configured ? 'ok' : 'warn'}>{data.configured ? '通道已开启' : '通道未开启'}</Badge>{' '}
-            出图 Key {data.keys.image} 把 · 出视频 Key {data.keys.video} 把 · 正在跑 {data.activeTasks} 个生成任务
-          </p>
+          <dl className="admin-kv">
+            <div>
+              <dt>画布现在能生成</dt>
+              <dd>
+                <Badge tone={readiness?.ready ? 'ok' : 'warn'}>{readiness?.ready ? '能' : '不能'}</Badge>
+                <span>
+                  {readiness?.ready
+                    ? missingModels.length
+                      ? '通道已通，但还有 ' + missingModels.length + ' 个模型没 Key（见下方清单），画布正好选到它们时会失败'
+                      : '额度开关、服务令牌、Key 都在位，画布点生成会转发上游'
+                    : readiness?.missing.length
+                      ? '还差' + readiness.missing.map((item) => BLOCKER_LABEL[item]).join('、')
+                      : '—'}
+                </span>
+              </dd>
+            </div>
+            <div>
+              <dt>平台额度开关</dt>
+              <dd>
+                <Badge tone={data.userOpen ? 'ok' : 'fail'}>{data.userOpen ? '已开放' : '未开放'}</Badge>
+                <code className="admin-mono">VQ_GATEWAY_OPEN={data.userOpen ? '1' : '0'}</code>
+              </dd>
+            </div>
+            <div>
+              <dt>服务令牌</dt>
+              <dd>
+                <Badge tone={data.configured ? 'ok' : 'fail'}>{data.configured ? '已配置' : '未配置'}</Badge>
+                <code className="admin-mono">{data.tokenMasked || '—'}</code>
+              </dd>
+            </div>
+            <div>
+              <dt>Key 与任务</dt>
+              <dd>
+                出图 Key {data.keys.image} 把 · 出视频 Key {data.keys.video} 把 · 正在跑 {data.activeTasks} 个生成任务
+              </dd>
+            </div>
+          </dl>
+
+          {readiness?.missing.length ? (
+            <p className="admin-hint">{readiness.missing.map((item) => BLOCKER_FIX[item]).join(' ')}</p>
+          ) : null}
 
           {GROUPS.map((group) => {
             const rows = data.coverage.filter((row) => row.capability === group.capability)
@@ -114,10 +176,10 @@ export default function GatewaySection() {
                 </div>
                 <p className="admin-hint">
                   {missing.length
-                    ? '还不通：' +
+                    ? '还缺 Key：' +
                       missing.map((row) => row.label).join('、') +
-                      '。补一把声明了这些模型的 Key 就通——模型清单留空表示通用，或照上面一列的名字填。'
-                    : rows.length + ' 个' + group.label + '模型都有人接，画布点哪个都能生成。'}
+                      '。补一把声明了这些模型的 Key 就能生成——模型清单留空表示通用，或照上面一列的名字填。'
+                    : rows.length + ' 个' + group.label + '模型都有人接' + modelHintSuffix(data)}
                 </p>
               </div>
             )
@@ -154,12 +216,9 @@ export default function GatewaySection() {
           </div>
           {copied ? <p className="admin-hint">{copied}</p> : null}
           <p className="admin-hint">
-            {data.configured
-              ? `服务令牌已配置（${data.tokenMasked}），画布侧用 Authorization: Bearer 调用。`
-              : '服务令牌还没配置：通道会直接回 503，不会匿名放行。'}
-            {data.keys.image === 0 && data.keys.video === 0
-              ? ' 现在还没有声明出图 / 出视频能力的 Key：贴一把 Key 并勾上对应能力，通道就能生成。'
-              : ''}
+            {readiness?.ready
+              ? `画布侧用 Authorization: Bearer 调用（服务令牌 ${data.tokenMasked}），三样都在位，生成会正常转发上游。额度开关是全局的：画布服务里的所有账号、出图与出视频一起生效。`
+              : '通道没通时请求一律被挡在这里：不会匿名放行，也不会替你花上游额度。'}
           </p>
 
           {data.recentTasks.length ? (

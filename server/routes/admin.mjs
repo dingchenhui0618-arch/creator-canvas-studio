@@ -16,7 +16,7 @@ import { removePreference } from '../preferences.mjs'
 import { AGENT_TOOLS } from '../agents.mjs'
 import { lastWebRead, readWebPage } from '../webread.mjs'
 import { listKeys, createKey, updateKey, deleteKey, testKey, listRoutes, previewRoute, vaultModels, PROVIDER_PRESETS, CAPABILITIES } from '../keyvault.mjs'
-import { gatewayStatus, modelCoverage } from '../gateway.mjs'
+import { gatewayReadiness, gatewayStatus, modelCoverage } from '../gateway.mjs'
 import { canvasAdminConfigured, listCanvasUsers, setCanvasUserAccess } from '../canvas-admin.mjs'
 import { alertCounts, ackAlert, checkDisk, listAlerts, recordAlert } from '../alerts.mjs'
 import { clearClientErrors, listClientErrors } from '../client-errors.mjs'
@@ -286,13 +286,16 @@ export function createAdminRouter() {
       // 不回令牌明文与上游 Key —— 这两样东西任何人都不能从浏览器拿到。
       if (pathname === '/api/admin/gateway' && req.method === 'GET') {
         const status = gatewayStatus()
-        const counts = listKeys().summary.counts
+        const counts = listKeys().summary.counts || {}
+        const keys = { image: counts.image || 0, video: counts.video || 0 }
         const maskToken = (token) => (token ? String(token).slice(0, 4) + '••••' + String(token).slice(-4) : '')
         sendJson(res, 200, {
           ...status,
           userOpen: config.gateway.open,
+          // 「令牌配了」不等于「能生成」：额度开关关着时生成一律 503，后台要照实说。
+          readiness: gatewayReadiness({ open: config.gateway.open, configured: status.configured, ...keys }),
           tokenMasked: maskToken(config.gateway.token),
-          keys: { image: counts.image || 0, video: counts.video || 0 },
+          keys,
           models: { image: vaultModels('image'), video: vaultModels('video') },
           coverage: modelCoverage(),
         })

@@ -126,6 +126,20 @@ export function gatewayConfigured() {
   return Boolean(config.gateway.token)
 }
 
+/**
+ * 画布现在能不能生成：三样同时在位才算通——平台额度开关（VQ_GATEWAY_OPEN）、
+ * 服务令牌（VQ_GATEWAY_TOKEN）、至少一把声明了出图 / 出视频能力的 Key。
+ * 后台与画布共用这一个判断，别再各自猜「配置了就是开了」：2026-11-13 后台就因此
+ * 把「令牌已配、额度没开」显示成「通道已开启」，画布点生成却回 503。
+ */
+export function gatewayReadiness({ open, configured, image, video } = {}) {
+  const missing = []
+  if (!open) missing.push('open')
+  if (!configured) missing.push('token')
+  if (!Number(image) && !Number(video)) missing.push('keys')
+  return { ready: missing.length === 0, missing }
+}
+
 /** 常量时间比对，避免令牌长度 / 前缀差异被计时探测。 */
 export function gatewayTokenMatches(value) {
   const expected = config.gateway.token

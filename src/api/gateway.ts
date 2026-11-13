@@ -21,8 +21,14 @@ export type GatewayCoverage = {
   keys: { id: string; name: string; priority: number }[]
 }
 
+/** 通道没通时缺的那一样：额度开关 / 服务令牌 / Key。顺序就是修的先后。 */
+export type GatewayBlocker = 'open' | 'token' | 'keys'
+
 export type GatewayStatus = {
   configured: boolean
+  /** 平台额度开关（服务器 .env 的 VQ_GATEWAY_OPEN）：关着时生成一律 503，令牌对也没用 */
+  userOpen: boolean
+  readiness: { ready: boolean; missing: GatewayBlocker[] }
   tokenMasked: string
   baseUrl: string
   activeTasks: number
