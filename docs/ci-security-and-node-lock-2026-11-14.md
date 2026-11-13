@@ -164,4 +164,6 @@ npm audit --omit=dev --audit-level=high
 npm test
 ```
 
+本轮提交 `9f4cf5b`（代码 + 测试 + 文档 + 2 张生产截图）、`15061cb`（`--experimental-strip-types`，为让单测在 22.12.0 上跑）；CI **43491423413 success**，第一次矩阵跑 `43490781275` 红在 22.12.0 的 5 个文件上（见「第一次在 22.12.0 上跑」一节）。
+
 生产上确认版本：`curl -s https://visionqa.wavisionai.cn/api/version`（匿名只有版本号）；登录后看 `runtime`，或后台「系统与版本」那一行。

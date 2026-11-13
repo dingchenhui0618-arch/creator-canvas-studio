@@ -860,7 +860,7 @@ DOMAIN=visionqa.wavisionai.cn bash deploy/production/enable-https.sh            
 
 ![生产：390 宽同一张卡，「运行环境」一行换行不溢出（scrollWidth 390）](docs/screenshot-node-runtime-mobile-2026-11-14.png)
 
-提交 `TBD`（代码 + 16 条测试 + 文档 + 运维说明）+ 本条提交（提交号与 CI 号），CI 待跑。
+提交 `9f4cf5b`（代码 + 16 条测试 + 文档 + 2 张生产截图）+ `15061cb`（单测在 22.12.0 上跑）+ 本条提交（提交号与 CI 号），CI **43491423413** success（`验证（Node 22.12.0）` / `验证（Node 24）` / `安全扫描` 三个 job 全绿；第一次跑 `43490781275` 红在 22.12.0 的 5 个文件上，即上面那条）。
 
 细节见 [CI 安全扫描与 Node 版本锁](docs/ci-security-and-node-lock-2026-11-14.md)。
 
