@@ -2446,4 +2446,4 @@ v0.9.10 让「甲方看没看」第一次有了答案，这一轮让这个答案
 
 ![生产 390：评审页头三颗胶囊整行换行，内容区 322 不横向溢出](docs/screenshot-pills-prod-390-2026-11-13.png)
 
-验收：版本 0.9.46、入口 `index-DX_GJ8WV.js`（513,017 字节）、样式 `index-BAKeXmWI.css`（250,089 字节）、release `20261113-023724-v0.9.46-pills.tar.gz`、`/api/version` 0.9.46、health ok（templates 26）、两服务 active；1440 与 390 实测无横向滚动，只读不扣积分。提交待补。细节与判断见 [胶囊归队](docs/pill-system-2026-11-13.md)。
+验收：版本 0.9.46、入口 `index-DX_GJ8WV.js`（513,017 字节）、样式 `index-BAKeXmWI.css`（250,089 字节）、release `20261113-023724-v0.9.46-pills.tar.gz`、`/api/version` 0.9.46、health ok（templates 26）、两服务 active；1440 与 390 实测无横向滚动，只读不扣积分。提交 `0deb41b`（代码 + 测试）+ `60928be`（文档 + 7 张截图 + README），CI 43354848681 success。细节与判断见 [胶囊归队](docs/pill-system-2026-11-13.md)。
