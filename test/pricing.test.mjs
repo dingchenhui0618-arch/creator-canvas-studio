@@ -134,6 +134,10 @@ test('只有回填记录时不算一次成本：分母为 0 就说「只有历�
   assert.equal(replicate.unitCostMilli, null)
   const run = result.rows.find((row) => row.action === 'flow_run')
   assert.match(run.costReason, /没有这类调用/)
+  // 有汇率、但一次带用量的调用都没有：窗口收入不是 0（那会读成「真的收了 0 元」），是 null
+  assert.equal(result.totals.revenueMilli, null)
+  assert.equal(result.totals.marginMilli, null)
+  assert.ok(result.warnings.some((line) => /没有带用量的调用/.test(line)))
 })
 
 test('端到端：真实用量事件 + 估算单价 + 档位，算出这一次的账', () => {

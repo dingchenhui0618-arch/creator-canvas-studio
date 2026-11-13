@@ -176,10 +176,11 @@ export default function UnitEconomicsCard() {
       {!waitingForRate && view && totals ? (
         <>
           <p className="admin-hint">
-            最近 {view.days} 天：真有用量的上游调用 {totals.measured.toLocaleString('zh-CN')} 次 ·
-            理论收入 {money(totals.revenueMilli)} · 上游估算成本 {money(totals.costMilli)} ·
-            毛利 {signedMoney(totals.marginMilli)}
-            {totals.unbilledCostMilli ? '（其中 ' + money(totals.unbilledCostMilli) + ' 来自不扣积分的画布出图 / 出视频）' : ''}
+            {totals.measured === 0
+              ? '最近 ' + view.days + ' 天没有带用量的调用：窗口收入与成本都算不出来。下面每一行的「折算收入」是按汇率折的每次收入，可以先据此定价。'
+              : '最近 ' + view.days + ' 天：真有用量的上游调用 ' + totals.measured.toLocaleString('zh-CN') + ' 次 · 理论收入 ' +
+                money(totals.revenueMilli) + ' · 上游估算成本 ' + money(totals.costMilli) + ' · 毛利 ' + signedMoney(totals.marginMilli) +
+                (totals.unbilledCostMilli ? '（其中 ' + money(totals.unbilledCostMilli) + ' 来自不扣积分的画布出图 / 出视频）' : '')}
           </p>
           <div className="admin-table-wrap">
             <table className="admin-table admin-table--econ">

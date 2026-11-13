@@ -212,6 +212,9 @@ export function unitEconomics({ summary, plans = [], planId = '', rmbPerCredit =
       warnings.push('「' + row.label + '」不扣积分：本窗口约 ' + money(row.costMilli) + ' 的上游成本没有对应收入。')
     }
   }
+  if (billable && measured === 0) {
+    warnings.push('本窗口没有带用量的调用：窗口收入与成本都算不出来（表里的「折算收入」是按汇率折的每次收入）。')
+  }
   warnings.push('金额是按管理员填的上游估算单价折算的，不是账单；收入是按档位汇率折算的理论值，不是真实收款。')
 
   return {
@@ -221,8 +224,9 @@ export function unitEconomics({ summary, plans = [], planId = '', rmbPerCredit =
     totals: {
       measured,
       costMilli,
-      revenueMilli: billable ? revenueMilli : null,
-      marginMilli: billable ? revenueMilli - costMilli : null,
+      // 一次带用量的调用都没有时，窗口收入不是一个数（0 会读成「真的收了 0 元」）：回 null
+      revenueMilli: billable && measured > 0 ? revenueMilli : null,
+      marginMilli: billable && measured > 0 ? revenueMilli - costMilli : null,
       unbilledCostMilli,
     },
     warnings,
