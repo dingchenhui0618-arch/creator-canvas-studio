@@ -167,6 +167,8 @@ export const config = {
     // 条款版本：注册时必须把「勾选同意的版本」记到账号上，改条款就改这个版本号
     termsVersion: (process.env.VQ_TERMS_VERSION || '2026-11-12').trim(),
     termsUpdatedAt: (process.env.VQ_TERMS_UPDATED_AT || '2026-11-12').trim(),
+    // 站点的对外地址：找回密码邮件里的链接要靠它拼；分享链接也用它。
+    publicBaseUrl: (process.env.VQ_PUBLIC_BASE_URL || 'https://visionqa.wavisionai.cn').trim().replace(/\/+$/, ''),
   },
   // 告警：本站队列（后台「系统」页）永远可用。
   // 外推通道可以在后台直接配（存在数据目录的 alert-channel.json），环境变量只是兜底：
@@ -175,6 +177,18 @@ export const config = {
     webhook: (process.env.VQ_ALERT_WEBHOOK || '').trim(),
     secret: (process.env.VQ_ALERT_SECRET || '').trim(),
     diskFreeMb: Number(process.env.VQ_ALERT_DISK_FREE_MB || 1024),
+  },
+  // 邮件通道（找回密码用）：后台「系统 → 邮件通道」保存后优先于环境变量；
+  // 环境变量只是兜底，老部署不改也能用。口令只落在数据目录的 mail.json（0600）。
+  mail: {
+    host: (process.env.VQ_SMTP_HOST || '').trim(),
+    port: Number(process.env.VQ_SMTP_PORT || 0),
+    secure: process.env.VQ_SMTP_SECURE === '1',
+    starttls: process.env.VQ_SMTP_STARTTLS !== '0',
+    user: (process.env.VQ_SMTP_USER || '').trim(),
+    pass: process.env.VQ_SMTP_PASS || '',
+    fromName: (process.env.VQ_SMTP_FROM_NAME || '').trim(),
+    fromAddress: (process.env.VQ_SMTP_FROM || '').trim(),
   },
   auth: {
     dbFile: path.join(dataDir, 'auth.db'),

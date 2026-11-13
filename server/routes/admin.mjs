@@ -20,6 +20,9 @@ import { gatewayReadiness, gatewayStatus, modelCoverage } from '../gateway.mjs'
 import { canvasAdminConfigured, listCanvasUsers, setCanvasUserAccess } from '../canvas-admin.mjs'
 import { alertCounts, ackAlert, checkDisk, flushAlertDeliveries, listAlerts, listOutbox, outboxStats, recordAlert, retryOutboxItem } from '../alerts.mjs'
 import { channelView, clearChannel, maskUrl, saveChannel } from '../alert-channel.mjs'
+import { clearMail, mailView, saveMail, smtpForSending } from '../mail-config.mjs'
+import { sendMail } from '../mailer.mjs'
+import { resetTtlMinutes } from '../password-reset.mjs'
 import { clearClientErrors, listClientErrors } from '../client-errors.mjs'
 import { listLogs, pruneLogs } from '../log-files.mjs'
 import { listReports, reportCounts, resolveReport } from '../reports.mjs'
@@ -844,6 +847,95 @@ export function createAdminRouter() {
         if (!item) return (sendJson(res, 404, { ok: false, error: '没有这条待重试通知' }), true)
         recordAudit({ req, actor: user, action: 'alert.retry', targetType: 'alert', targetId: outboxRetry[1], targetLabel: item.title })
         sendJson(res, 200, { ok: true, item, outbox: await outboxStats() })
+        return true
+      }
+
+      // 邮件通道：找回密码靠它发信。口令只回「有没有」，账号给掩码。
+      if (pathname === '/api/admin/mail' && req.method === 'GET') {
+        const mail = await mailView()
+        sendJson(res, 200, {
+          ok: true,
+          mail,
+          // 登录页的「忘记密码」是否可用，取决于这条通道 + 发件地址
+          passwordReset: mail.configured,
+          ttlMinutes: resetTtlMinutes(),
+        })
+        return true
+      }
+
+      // 保存邮件通道：口令留空表示沿用旧口令（只改端口 / 发件人时不用重输）
+      if (pathname === '/api/admin/mail/channel' && req.method === 'PUT') {
+        const body = await readBody(req)
+        const saved = await saveMail(
+          {
+            host: body.host,
+            port: body.port,
+            secure: body.secure === true,
+            starttls: body.starttls !== false,
+            user: body.user,
+            pass: body.pass,
+            fromName: body.fromName,
+            fromAddress: body.fromAddress,
+            enabled: body.enabled !== false,
+            insecure: body.insecure === true,
+          },
+          { by: user.email },
+        )
+        if (!saved.ok) return (sendJson(res, 400, { ok: false, error: saved.error }), true)
+        recordAudit({
+          req,
+          actor: user,
+          action: 'mail.channel.save',
+          targetType: 'mail',
+          targetId: 'channel',
+          targetLabel: '邮件通道',
+          detail: { host: saved.mail.host, port: saved.mail.port, secure: saved.mail.secure, fromAddress: saved.mail.fromAddress, passKept: saved.passKept },
+        })
+        sendJson(res, 200, { ok: true, mail: await mailView(), passKept: saved.passKept })
+        return true
+      }
+
+      if (pathname === '/api/admin/mail/channel' && req.method === 'DELETE') {
+        await clearMail()
+        recordAudit({ req, actor: user, action: 'mail.channel.clear', targetType: 'mail', targetId: 'channel', targetLabel: '邮件通道' })
+        sendJson(res, 200, { ok: true, mail: await mailView() })
+        return true
+      }
+
+      // 发一封真的测试邮件：只回「已保存」等于没验，这里等 SMTP 的结果再回话
+      if (pathname === '/api/admin/mail/test' && req.method === 'POST') {
+        const body = await readBody(req)
+        const to = String(body.to || '').trim() || user.email
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(to)) {
+          return (sendJson(res, 400, { ok: false, error: '收件地址不是合法邮箱' }), true)
+        }
+        const channel = await smtpForSending()
+        if (!channel) return (sendJson(res, 400, { ok: false, error: '还没有配置邮件通道，先填好保存再发测试' }), true)
+        const started = Date.now()
+        try {
+          const result = await sendMail(
+            {
+              to,
+              subject: 'VisionQA 邮件通道测试',
+              text: '这是一封测试邮件：收到它说明找回密码可以发信了。\n\n发信地址：' + channel.from.address + '\n服务器：' + (channel.smtp.host || '') + ':' + (channel.smtp.port || ''),
+              html:
+                '<div style="margin:0;padding:24px;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,PingFang SC,sans-serif;color:#18181b;">' +
+                '<div style="max-width:480px;margin:0 auto;background:#ffffff;border:1px solid #e4e4e7;border-radius:12px;padding:24px;">' +
+                '<p style="margin:0 0 8px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#71717a;">VisionQA</p>' +
+                '<h1 style="margin:0 0 12px;font-size:18px;">邮件通道测试</h1>' +
+                '<p style="margin:0;font-size:14px;line-height:1.7;color:#3f3f46;">收到这封信说明后台配置的发信通道能用，登录页的「忘记密码」可以发重置链接了。</p>' +
+                '</div></div>',
+              from: channel.from,
+            },
+            channel.smtp,
+            { timeoutMs: 20000 },
+          )
+          recordAudit({ req, actor: user, action: 'mail.test', targetType: 'mail', targetId: 'channel', targetLabel: '邮件通道', detail: { to, ms: result.ms } })
+          sendJson(res, 200, { ok: true, ms: result.ms, to })
+        } catch (error) {
+          recordAudit({ req, actor: user, action: 'mail.test', targetType: 'mail', targetId: 'channel', targetLabel: '邮件通道', detail: { to, error: String(error?.message || '') } })
+          sendJson(res, 502, { ok: false, error: String(error?.message || '发信失败'), ms: Date.now() - started })
+        }
         return true
       }
 

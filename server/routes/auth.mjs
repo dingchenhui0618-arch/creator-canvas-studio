@@ -18,6 +18,7 @@ import {
   clientIp,
   verifyPassword,
   changePassword,
+  setPassword,
   destroyOtherSessions,
   signTotpChallenge,
   readTotpChallenge,
@@ -34,6 +35,16 @@ import {
 import { generateBackupCodes, generateSecret, matchBackupCode, otpauthUrl, verifyTotp } from '../totp.mjs'
 import { logEvent } from '../log.mjs'
 import { grant } from '../credits.mjs'
+import { mailConfigured, smtpForSending } from '../mail-config.mjs'
+import { sendMail } from '../mailer.mjs'
+import {
+  buildResetMail,
+  consumeResetToken,
+  createResetToken,
+  peekResetToken,
+  recordResetRequest,
+  resetRequestBlocked,
+} from '../password-reset.mjs'
 import {
   claimInvite,
   clearInviteAttempts,
@@ -79,6 +90,34 @@ function checkPassword(password) {
   return ''
 }
 
+// 重置链接失效原因直接翻成用户能懂的话；不区分「从没存在」和「被清掉」，
+// 都指向「重新申请一封」，不让链接状态变成账号探针。
+const RESET_REASON = {
+  missing: '链接不完整，请从邮件里重新点一次',
+  unknown: '这枚链接不认识，可能已经用过：请重新申请一封',
+  used: '这枚链接已经改过口令了，请用新口令登录',
+  expired: '链接已过期，请重新申请一封',
+}
+
+// 找回密码的邮件在后台发：SMTP 慢或挂掉时，用户不该盯着转圈等一个 20 秒超时。
+// 结果只进日志；接口对所有情况回同一句话，否则响应差异会变成「这个邮箱有没有账号」的探针。
+async function deliverResetMail({ to, link, ttlMinutes, email }) {
+  const channel = await smtpForSending()
+  if (!channel) {
+    logEvent('mail-skipped', { to, kind: 'password-reset', reason: '邮件通道未配置' })
+    return { sent: false, reason: 'no-channel' }
+  }
+  const mail = buildResetMail({ link, ttlMinutes, email, supportEmail: config.site.supportEmail })
+  try {
+    const result = await sendMail({ ...mail, to, from: channel.from }, channel.smtp, { timeoutMs: 20000 })
+    logEvent('mail-sent', { to, kind: 'password-reset', ms: result.ms })
+    return { sent: true, ms: result.ms }
+  } catch (error) {
+    logEvent('mail-failed', { to, kind: 'password-reset', error: error.message })
+    return { sent: false, reason: error.message }
+  }
+}
+
 // 同源校验：带 Origin 且与 Host 不一致的写请求直接拒绝（cookie 会话的最低成本 CSRF 防护）
 function sameOrigin(req) {
   const origin = req.headers.origin
@@ -106,6 +145,8 @@ export function createAuthRouter() {
           minPasswordLength: MIN_PASSWORD,
           // 注册页照着这句显示规则，改策略只改服务端一处
           passwordPolicy: '至少 ' + MIN_PASSWORD + ' 位，且同时包含字母和数字',
+          // 配了邮件通道才能自助找回口令；没配时登录页如实说「找管理员」，不摆一个点了没用的入口。
+          passwordReset: await mailConfigured(),
         })
         return true
       }
@@ -417,6 +458,67 @@ export function createAuthRouter() {
         const token = parseCookies(req)[config.auth.cookieName]
         const signedOut = destroyOtherSessions(row.id, token)
         logEvent('password-change', { by: row.email, signedOut })
+        sendJson(res, 200, { ok: true, signedOut })
+        return true
+      }
+
+      // 找回密码第一步：发一封带一次性链接的邮件。
+      // 无账号、没配通道、发信失败都回同一句话——响应差异不能变成「这个邮箱存不存在」的探针。
+      if (pathname === '/api/auth/password/forgot' && req.method === 'POST') {
+        const body = await readBody(req)
+        const email = normalizeEmail(body.email)
+        const emailError = checkEmail(email)
+        if (emailError) return (fail(res, 400, emailError, 'email'), true)
+        const ip = clientIp(req)
+        const gate = resetRequestBlocked(email, ip)
+        if (gate.blocked) {
+          res.setHeader('Retry-After', String(gate.retryAfterSec))
+          return (fail(res, 429, '申请太频繁了，请 ' + Math.ceil(gate.retryAfterSec / 60) + ' 分钟后再试', 'form'), true)
+        }
+        recordResetRequest(email, ip)
+        const row = findUserByEmail(email)
+        if (row && row.is_active) {
+          const { token, ttlMinutes } = createResetToken(row.id, { ip })
+          const link = config.site.publicBaseUrl + '/#/reset?token=' + encodeURIComponent(token)
+          // 不 await：发信是后台的事，接口立刻回话
+          void deliverResetMail({ to: row.email, link, ttlMinutes, email: row.email })
+          logEvent('password-forgot', { email: row.email })
+        }
+        sendJson(res, 200, {
+          ok: true,
+          message: '如果这个邮箱有账号，重置邮件已经发出；没收到就看一眼垃圾邮件，或者让管理员重置。',
+        })
+        return true
+      }
+
+      // 找回密码第二步（探测）：重置页打开时先问「这枚链接还能用吗」，不消费。
+      if (pathname === '/api/auth/password/reset' && req.method === 'GET') {
+        const token = String(url.searchParams.get('token') || '')
+        const state = peekResetToken(token)
+        sendJson(res, 200, {
+          valid: state.valid,
+          expiresAt: state.expiresAt || null,
+          reason: state.valid ? '' : state.reason || 'unknown',
+          message: state.valid ? '' : RESET_REASON[state.reason] || RESET_REASON.unknown,
+        })
+        return true
+      }
+
+      // 找回密码第三步：用 token 换新口令。改完注销这个账号的全部会话（包括可能被劫持的那条）。
+      if (pathname === '/api/auth/password/reset' && req.method === 'POST') {
+        const body = await readBody(req)
+        const token = String(body.token || '').trim()
+        if (!token) return (fail(res, 400, '链接里没有重置凭据，请从邮件里重新点一次', 'form'), true)
+        const next = String(body.password || '')
+        const passwordError = checkPassword(next)
+        if (passwordError) return (fail(res, 400, passwordError, 'password'), true)
+        const consumed = consumeResetToken(token)
+        if (!consumed.ok) return (fail(res, 400, RESET_REASON[consumed.reason] || RESET_REASON.unknown, 'form'), true)
+        const row = findUserById(consumed.userId)
+        if (!row || !row.is_active) return (fail(res, 400, '账号已停用，请联系管理员', 'form'), true)
+        setPassword(row.id, next)
+        const signedOut = destroyOtherSessions(row.id)
+        logEvent('password-reset', { email: row.email, by: 'email-link', signedOut })
         sendJson(res, 200, { ok: true, signedOut })
         return true
       }

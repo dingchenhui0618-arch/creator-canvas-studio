@@ -56,6 +56,8 @@ export type AuthConfig = {
   minPasswordLength: number
   /** 完整口令规则的一句话说明，直接显示在注册表单下面。 */
   passwordPolicy?: string
+  /** 服务端配了邮件通道才为 true：登录页据此决定「忘记密码」是开工还是如实说找管理员。 */
+  passwordReset?: boolean
 }
 
 type AuthErrorBody = { error?: string; field?: unknown }
@@ -150,6 +152,34 @@ export async function register(payload: RegisterPayload): Promise<AuthUser> {
     body: JSON.stringify(payload),
   })
   return body.user
+}
+
+/** 找回密码：服务端对所有情况回同一句话，页面照它显示，不据此判断邮箱是否存在。 */
+export async function forgotPassword(email: string): Promise<{ ok: boolean; message: string }> {
+  return request<{ ok: boolean; message: string }>('/api/auth/password/forgot', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  })
+}
+
+export type ResetState = {
+  valid: boolean
+  expiresAt: string | null
+  reason: string
+  message: string
+}
+
+/** 重置页打开时先探测：链接还能用吗（不消费 token）。 */
+export function checkResetToken(token: string): Promise<ResetState> {
+  return request<ResetState>('/api/auth/password/reset?token=' + encodeURIComponent(token))
+}
+
+/** 用邮件里的 token 换新口令；成功后这个账号的全部会话被注销。 */
+export function resetPassword(token: string, password: string): Promise<{ ok: boolean; signedOut: number }> {
+  return request<{ ok: boolean; signedOut: number }>('/api/auth/password/reset', {
+    method: 'POST',
+    body: JSON.stringify({ token, password }),
+  })
 }
 
 /** 修改当前账号口令；成功后服务端会注销其它设备上的会话。 */

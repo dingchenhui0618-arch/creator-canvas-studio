@@ -61,6 +61,8 @@ const TemplateLibraryPage = lazy(() =>
 )
 const AdminConsolePage = lazy(() => import('./pages/admin/AdminConsolePage'))
 const LegalPage = lazy(() => import('./pages/LegalPage').then((module) => ({ default: module.LegalPage })))
+// 找回密码页也是「不登录就能打开」的一屏：邮件链接直接落到这里
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage').then((module) => ({ default: module.ResetPasswordPage })))
 // 只读分享页单独拆包：外部访客只下载这一屏，不需要工作台那一整套
 const SharePage = lazy(() => import('./pages/SharePage'))
 // 作品分享页也单独拆包：它读的是脚本与分镜，不依赖工作台组件
@@ -465,7 +467,7 @@ function Workbench({
 
   const renderPage = () => {
     // 合规页与只读分享页在 App 根部整屏渲染，不进侧栏外壳；引导是工作台里的弹窗，不占路由
-    if (route.kind === 'legal' || route.kind === 'share' || route.kind === 'shared-project') return null
+    if (route.kind === 'legal' || route.kind === 'share' || route.kind === 'shared-project' || route.kind === 'reset') return null
     if (route.kind === 'admin') return <AdminConsolePage section={route.section} />
     if (route.kind === 'agent-editor') {
       return (
@@ -992,6 +994,15 @@ function App() {
     return (
       <Suspense fallback={<PageSkeleton label="正在打开条款" />}>
         <LegalPage doc={route.doc} />
+      </Suspense>
+    )
+  }
+
+  // 找回密码：邮件链接里带 token，不登录也要能打开（和条款页一样整屏渲染）
+  if (route.kind === 'reset') {
+    return (
+      <Suspense fallback={<PageSkeleton label="正在打开重置页" />}>
+        <ResetPasswordPage key={route.token} token={route.token} />
       </Suspense>
     )
   }

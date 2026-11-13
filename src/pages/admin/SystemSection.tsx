@@ -118,6 +118,30 @@ type AlertsInfo = {
   outboxItems: OutboxItem[]
 }
 
+type MailChannel = {
+  configured: boolean
+  source: 'admin' | 'env' | 'none'
+  host: string
+  port: number
+  secure: boolean
+  starttls: boolean
+  accountMasked: string
+  hasPassword: boolean
+  fromName: string
+  fromAddress: string
+  enabled: boolean
+  updatedAt: string
+  updatedBy: string
+  canEdit: boolean
+}
+
+type MailInfo = {
+  ok: boolean
+  mail: MailChannel
+  passwordReset: boolean
+  ttlMinutes: number
+}
+
 // 复刻任务：以前任务只存内存，发版重启就 404、扣掉的积分也不退。
 // 现在真源是 SQLite，后台能看到「这条停在哪一步、退没退」。
 type JobItem = {
@@ -303,6 +327,7 @@ export default function SystemSection() {
   const alerts = useApi<AlertsInfo>('/api/admin/alerts')
   const jobs = useApi<JobsInfo>('/api/admin/jobs')
   const backups = useApi<BackupsInfo>('/api/admin/backups')
+  const mail = useApi<MailInfo>('/api/admin/mail')
   const [alertNote, setAlertNote] = useState('')
   const [busy, setBusy] = useState('')
   // 外推通道：地址本身是凭证，输入框不预填；保存后接口只回掩码
@@ -310,6 +335,19 @@ export default function SystemSection() {
   const [channelNote, setChannelNote] = useState('')
   const [channelSecret, setChannelSecret] = useState('')
   const [channelBusy, setChannelBusy] = useState('')
+  // 邮件通道：口令只写不读，输入框永远是空的；保存时留空 = 沿用旧口令
+  const [mailBusy, setMailBusy] = useState('')
+  const [mailNote, setMailNote] = useState('')
+  const [testTo, setTestTo] = useState('')
+  const [mailForm, setMailForm] = useState({
+    host: '',
+    port: '587',
+    secure: false,
+    user: '',
+    pass: '',
+    fromName: 'VisionQA',
+    fromAddress: '',
+  })
 
   const errors = [
     version.error ? `GET /api/version：${version.error}` : '',
@@ -317,6 +355,7 @@ export default function SystemSection() {
     storage.error ? `GET /api/admin/storage：${storage.error}` : '',
     alerts.error ? `GET /api/admin/alerts：${alerts.error}` : '',
     jobs.error ? `GET /api/admin/jobs：${jobs.error}` : '',
+    mail.error ? `GET /api/admin/mail：${mail.error}` : '',
   ].filter(Boolean)
 
   const reload = () => {
@@ -325,6 +364,7 @@ export default function SystemSection() {
     storage.reload()
     alerts.reload()
     jobs.reload()
+    mail.reload()
   }
 
   // 测试告警会真的记一条，并等这一次外推的结果回来——只写「已发送」等于没验
@@ -398,6 +438,66 @@ export default function SystemSection() {
       setChannelNote(cause instanceof Error ? cause.message : '重试失败')
     } finally {
       setChannelBusy('')
+    }
+  }
+
+  const saveMailChannel = async () => {
+    setMailBusy('save')
+    setMailNote('')
+    try {
+      const result = await request<{ mail: MailChannel; passKept: boolean }>('/api/admin/mail/channel', {
+        method: 'PUT',
+        body: JSON.stringify({
+          host: mailForm.host.trim(),
+          port: Number(mailForm.port) || 0,
+          secure: mailForm.secure,
+          user: mailForm.user.trim(),
+          pass: mailForm.pass,
+          fromName: mailForm.fromName.trim(),
+          fromAddress: mailForm.fromAddress.trim(),
+        }),
+      })
+      setMailForm((previous) => ({ ...previous, pass: '' }))
+      setMailNote(
+        result.passKept
+          ? '邮件通道已保存，口令沿用之前那条。'
+          : '邮件通道已保存。现在可以发一封测试邮件，确认收件端能收到。',
+      )
+      mail.reload()
+    } catch (cause) {
+      setMailNote(cause instanceof Error ? cause.message : '保存失败')
+    } finally {
+      setMailBusy('')
+    }
+  }
+
+  const clearMailChannel = async () => {
+    setMailBusy('clear')
+    setMailNote('')
+    try {
+      await request('/api/admin/mail/channel', { method: 'DELETE' })
+      setMailNote('已清掉后台配置的邮件通道。登录页的「忘记密码」会退回「找管理员」的提示。')
+      mail.reload()
+    } catch (cause) {
+      setMailNote(cause instanceof Error ? cause.message : '清除失败')
+    } finally {
+      setMailBusy('')
+    }
+  }
+
+  const sendTestMail = async () => {
+    setMailBusy('test')
+    setMailNote('')
+    try {
+      const result = await request<{ ok: boolean; ms: number; to: string }>('/api/admin/mail/test', {
+        method: 'POST',
+        body: JSON.stringify({ to: testTo.trim() }),
+      })
+      setMailNote('测试邮件已交给发信服务器（' + result.ms + ' ms，收件 ' + result.to + '）。去收件箱确认一下。')
+    } catch (cause) {
+      setMailNote(cause instanceof Error ? cause.message : '发测试邮件失败')
+    } finally {
+      setMailBusy('')
     }
   }
 
@@ -631,6 +731,213 @@ export default function SystemSection() {
         ) : null}
 
         {alertNote ? <p className="admin-hint">{alertNote}</p> : null}
+      </section>
+
+      <section className="admin-card admin-block">
+        <div className="admin-block-head">
+          <div>
+            <p className="admin-label">邮件通道</p>
+            <p className="admin-sub">
+              找回密码靠它发信：登录页点「忘记密码」→ 服务端发一封 30 分钟有效的一次性链接 → 改完注销这个账号的全部会话。
+              口令只写不读；没配通道时登录页不提供自助找回，只提示找管理员。
+            </p>
+          </div>
+          <div className="admin-alert-actions">
+            <SourceTag kind="api" source="GET /api/admin/mail" />
+            <button
+              type="button"
+              className="vq-button vq-button--ghost"
+              onClick={() => void sendTestMail()}
+              disabled={mailBusy === 'test' || !mail.data?.mail.configured}
+            >
+              {mailBusy === 'test' ? '发送中…' : '发一封测试邮件'}
+            </button>
+          </div>
+        </div>
+
+        {mail.loading && !mail.data ? <LoadingLine label="/api/admin/mail" /> : null}
+
+        {mail.data ? (
+          <>
+            <div className="admin-alert-facts">
+              <span>
+                通道 <b>{mail.data.mail.configured ? '已配置' : '未配置'}</b>
+              </span>
+              <span>
+                登录页「忘记密码」<b>{mail.data.passwordReset ? '可用' : '不可用'}</b>
+              </span>
+              <span>
+                链接有效期 <b>{mail.data.ttlMinutes}</b> 分钟
+              </span>
+              <span>
+                发信服务器 <b className="admin-mono">{mail.data.mail.host ? mail.data.mail.host + ':' + mail.data.mail.port : '—'}</b>
+              </span>
+            </div>
+
+            <div className="admin-channel">
+              <div className="admin-channel-head">
+                <div>
+                  <p className="admin-label">发信服务</p>
+                  <p className="admin-sub">
+                    465 走直连 TLS，587 走 STARTTLS；账号与口令是 SMTP 登录用的，不是站点账号。发件地址会出现在收件人的邮箱里。
+                  </p>
+                </div>
+                <Badge tone={mail.data.mail.configured ? 'ok' : 'warn'}>{mail.data.mail.configured ? '能发信' : '未配置'}</Badge>
+              </div>
+
+              <dl className="admin-kv">
+                <div>
+                  <dt>服务器</dt>
+                  <dd>
+                    <code className="admin-mono">{mail.data.mail.host ? mail.data.mail.host + ':' + mail.data.mail.port : '—'}</code>
+                    {mail.data.mail.source === 'env' ? <span className="admin-cell-sub">来自环境变量 VQ_SMTP_*</span> : null}
+                    {mail.data.mail.source === 'admin' ? (
+                      <span className="admin-cell-sub">后台配置{mail.data.mail.updatedBy ? ' · ' + mail.data.mail.updatedBy : ''}</span>
+                    ) : null}
+                  </dd>
+                </div>
+                <div>
+                  <dt>加密</dt>
+                  <dd>{mail.data.mail.secure ? '直连 TLS' : mail.data.mail.starttls ? 'STARTTLS' : '明文（只建议本机测试）'}</dd>
+                </div>
+                <div>
+                  <dt>账号</dt>
+                  <dd>
+                    <code className="admin-mono">{mail.data.mail.accountMasked || '不需要认证'}</code>
+                    <Badge tone={mail.data.mail.hasPassword ? 'ok' : 'neutral'}>{mail.data.mail.hasPassword ? '口令已保存' : '无口令'}</Badge>
+                  </dd>
+                </div>
+                <div>
+                  <dt>发件人</dt>
+                  <dd>
+                    <code className="admin-mono">{mail.data.mail.fromAddress || '—'}</code>
+                    {mail.data.mail.fromName ? <span className="admin-cell-sub">{mail.data.mail.fromName}</span> : null}
+                  </dd>
+                </div>
+                <div>
+                  <dt>测试收件</dt>
+                  <dd>
+                    <input
+                      className="vq-input"
+                      value={testTo}
+                      onChange={(event) => setTestTo(event.target.value)}
+                      placeholder="留空发到自己的管理员邮箱"
+                      autoComplete="off"
+                      spellCheck={false}
+                      disabled={mailBusy === 'test'}
+                    />
+                  </dd>
+                </div>
+              </dl>
+
+              {mail.data.mail.canEdit ? (
+                <div className="admin-mail-form">
+                  <label className="vq-field admin-mail-field">
+                    <span>服务器</span>
+                    <input
+                      className="vq-input"
+                      value={mailForm.host}
+                      onChange={(event) => setMailForm((previous) => ({ ...previous, host: event.target.value }))}
+                      placeholder="smtp.example.com"
+                      autoComplete="off"
+                      spellCheck={false}
+                      disabled={mailBusy === 'save'}
+                    />
+                  </label>
+                  <label className="vq-field admin-mail-field--port">
+                    <span>端口</span>
+                    <input
+                      className="vq-input"
+                      value={mailForm.port}
+                      onChange={(event) => setMailForm((previous) => ({ ...previous, port: event.target.value }))}
+                      inputMode="numeric"
+                      disabled={mailBusy === 'save'}
+                    />
+                  </label>
+                  <label className="vq-check admin-mail-field--check">
+                    <input
+                      type="checkbox"
+                      checked={mailForm.secure}
+                      onChange={(event) => setMailForm((previous) => ({ ...previous, secure: event.target.checked }))}
+                      disabled={mailBusy === 'save'}
+                    />
+                    <span>直连 TLS</span>
+                  </label>
+                  <label className="vq-field admin-mail-field">
+                    <span>账号</span>
+                    <input
+                      className="vq-input"
+                      value={mailForm.user}
+                      onChange={(event) => setMailForm((previous) => ({ ...previous, user: event.target.value }))}
+                      placeholder="不需要认证就留空"
+                      autoComplete="off"
+                      spellCheck={false}
+                      disabled={mailBusy === 'save'}
+                    />
+                  </label>
+                  <label className="vq-field admin-mail-field">
+                    <span>口令</span>
+                    <input
+                      className="vq-input"
+                      type="password"
+                      value={mailForm.pass}
+                      onChange={(event) => setMailForm((previous) => ({ ...previous, pass: event.target.value }))}
+                      placeholder={mail.data.mail.hasPassword ? '留空沿用已保存的口令' : 'SMTP 口令'}
+                      autoComplete="new-password"
+                      disabled={mailBusy === 'save'}
+                    />
+                  </label>
+                  <label className="vq-field admin-mail-field">
+                    <span>发件地址</span>
+                    <input
+                      className="vq-input"
+                      value={mailForm.fromAddress}
+                      onChange={(event) => setMailForm((previous) => ({ ...previous, fromAddress: event.target.value }))}
+                      placeholder="发件邮箱（收件人看到的那个）"
+                      autoComplete="off"
+                      spellCheck={false}
+                      disabled={mailBusy === 'save'}
+                    />
+                  </label>
+                  <label className="vq-field admin-mail-field">
+                    <span>发件人名</span>
+                    <input
+                      className="vq-input"
+                      value={mailForm.fromName}
+                      onChange={(event) => setMailForm((previous) => ({ ...previous, fromName: event.target.value }))}
+                      disabled={mailBusy === 'save'}
+                    />
+                  </label>
+                  <div className="admin-doc-actions">
+                    <button
+                      type="button"
+                      className="vq-button"
+                      onClick={() => void saveMailChannel()}
+                      disabled={mailBusy === 'save' || !mailForm.host.trim() || !mailForm.fromAddress.trim()}
+                    >
+                      {mailBusy === 'save' ? '保存中…' : '保存通道'}
+                    </button>
+                    {mail.data.mail.source === 'admin' ? (
+                      <button
+                        type="button"
+                        className="vq-button vq-button--ghost"
+                        onClick={() => void clearMailChannel()}
+                        disabled={mailBusy === 'clear'}
+                      >
+                        {mailBusy === 'clear' ? '清除中…' : '清掉通道'}
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+
+              {mail.data.mail.source === 'env' ? (
+                <p className="admin-hint">现在用的是服务器环境变量 VQ_SMTP_*。在上面保存一条会覆盖它；清掉后台配置后又会回到环境变量。</p>
+              ) : null}
+              {mailNote ? <p className="admin-hint">{mailNote}</p> : null}
+            </div>
+          </>
+        ) : null}
       </section>
 
       <section className="admin-card admin-block">

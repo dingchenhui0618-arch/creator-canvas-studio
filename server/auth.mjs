@@ -1,5 +1,6 @@
 // 真实账号体系：SQLite 用户库 + scrypt 口令 + 服务端会话（HttpOnly cookie）
-// 说明：这是本地/单机部署用的最小实现，够上线起步用；不做邮件验证与找回密码。
+// 说明：这是本地/单机部署用的最小实现，够上线起步用；不做邮件验证。
+// 找回密码走 server/password-reset.mjs（一次性 token + 邮件通道），口令本身仍只存 scrypt 哈希。
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'

@@ -36,6 +36,8 @@ export type Route =
   // 作品级分享：#/share/project/<token>，读的是脚本 + 分镜的公开视图
   | { kind: 'shared-project'; token: string }
   | { kind: 'admin'; section: AdminSection }
+  // 找回密码：从邮件里点进来的 #/reset?token=…，不登录也要能打开
+  | { kind: 'reset'; token: string }
 
 export const DEFAULT_ROUTE: Route = { kind: 'page', page: 'overview' }
 
@@ -65,7 +67,7 @@ export function routeToPage(route: Route): Page {
 
 /** 不进工作台外壳的路由：条款页与只读分享页整屏渲染，工作台骨架不参与。 */
 export function isBareRoute(route: Route): boolean {
-  return route.kind === 'legal' || route.kind === 'share' || route.kind === 'shared-project'
+  return route.kind === 'legal' || route.kind === 'share' || route.kind === 'shared-project' || route.kind === 'reset'
 }
 
 /** Page 转向量：列表页跳转、事件兼容都走这里，避免各页面自己拼 hash。 */
@@ -93,6 +95,11 @@ function parseAdminSection(value: string | undefined): AdminSection {
 export function parseRoute(hash: string): Route {
   const cleaned = hash.replace(/^#/, '').trim()
   if (!cleaned || cleaned === '/') return DEFAULT_ROUTE
+  // 找回密码的 token 在查询串里（#/reset?token=...），先摘出来，别让它混进路径分段
+  if (/^\/reset(?:[?]|$)/.test(cleaned)) {
+    const query = cleaned.includes('?') ? cleaned.slice(cleaned.indexOf('?') + 1) : ''
+    return { kind: 'reset', token: new URLSearchParams(query).get('token') || '' }
+  }
   const segments = cleaned
     .replace(/^\/+/, '')
     .replace(/\/+$/, '')
@@ -156,6 +163,7 @@ export function toHash(route: Route): string {
     return '#/' + route.page
   }
   if (route.kind === 'admin') return '#/admin/' + route.section
+  if (route.kind === 'reset') return '#/reset' + (route.token ? '?token=' + encodeURIComponent(route.token) : '')
   if (route.kind === 'legal') return '#/legal/' + route.doc
   if (route.kind === 'share') return '#/share/' + encodeURIComponent(route.token)
   if (route.kind === 'shared-project') return '#/share/project/' + encodeURIComponent(route.token)
@@ -176,6 +184,7 @@ export function routeKey(route: Route): string {
     return 'page:' + route.page
   }
   if (route.kind === 'admin') return 'admin:' + route.section
+  if (route.kind === 'reset') return 'reset:' + route.token
   if (route.kind === 'legal') return 'legal:' + route.doc
   if (route.kind === 'share') return 'share:' + route.token
   if (route.kind === 'shared-project') return 'shared-project:' + route.token

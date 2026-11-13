@@ -452,6 +452,10 @@ const server = http.createServer(async (req, res) => {
           { key: 'VQ_CREDIT_CHAT', purpose: '每次智能体对话消耗的积分', current: String(config.credits.prices.chat) },
           { key: 'VQ_CREDIT_WELCOME', purpose: '新账号初始积分', current: String(config.credits.welcome) },
           { key: 'VQ_ADMIN_EMAILS', purpose: '管理员邮箱（逗号分隔，可发放积分）', current: config.auth.adminEmails.join(',') },
+          // 邮件通道默认在后台「系统 → 邮件通道」配；这两条只是老部署的兜底
+          { key: 'VQ_SMTP_HOST', purpose: '发信服务器（后台没配时用它兜底）', current: config.mail.host },
+          { key: 'VQ_SMTP_USER', purpose: '发信账号', current: config.mail.user ? '已配置' : '' },
+          { key: 'VQ_SMTP_FROM', purpose: '发件地址（收件人看到的）', current: config.mail.fromAddress },
         ],
       })
     }

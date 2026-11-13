@@ -10,7 +10,7 @@ import {
   register as registerAccount,
 } from '../auth/session'
 import type { RegisterInput, Session, SignInInput } from '../auth/session'
-import { checkInvite, getAuthConfig } from '../api/auth'
+import { checkInvite, forgotPassword, getAuthConfig } from '../api/auth'
 import type { InviteState } from '../api/auth'
 import { useSiteInfo, useUiMode } from '../api/app'
 import '../styles/shell.css'
@@ -86,6 +86,9 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
   const [inviteCode, setInviteCode] = useState(() => inviteFromHash().code)
   const [invite, setInvite] = useState<InviteState | null>(null)
   const [checkingInvite, setCheckingInvite] = useState(false)
+  // 服务端配了邮件通道才提供自助找回；没配就如实说「找管理员」，不摆一个点了没用的入口。
+  const [passwordReset, setPasswordReset] = useState(false)
+  const [forgotOpen, setForgotOpen] = useState(false)
   // 密码长度以后端配置为准，这里只放一个兜底值；登录不校验长度。
   const [minPasswordLength, setMinPasswordLength] = useState(DEFAULT_MIN_PASSWORD_LENGTH)
   const [passwordPolicy, setPasswordPolicy] = useState('')
@@ -107,6 +110,7 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
         setInviteRegistration(Boolean(config.inviteRegistration))
         if (config.minPasswordLength > 0) setMinPasswordLength(config.minPasswordLength)
         if (config.passwordPolicy) setPasswordPolicy(config.passwordPolicy)
+        setPasswordReset(Boolean(config.passwordReset))
       })
       .catch(() => {
         // 后端没起来：注册入口按最保守处理（不显示），登录照常可填。
@@ -338,6 +342,16 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
                 setInfo('')
               }}
             />
+          ) : forgotOpen ? (
+            <ForgotStep
+              email={email}
+              supportEmail={site.supportEmail}
+              onBack={() => {
+                setForgotOpen(false)
+                setErrors({})
+                setInfo('')
+              }}
+            />
           ) : (
             <>
           <div className="vq-login-form-head">
@@ -553,15 +567,21 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
                 <button
                   type="button"
                   className="vq-link"
-                  onClick={() =>
+                  onClick={() => {
+                    if (passwordReset) {
+                      setForgotOpen(true)
+                      setErrors({})
+                      setInfo('')
+                      return
+                    }
                     setInfo(
                       internal
                         ? '内部环境：管理员在「后台 → 账号」里可直接重置口令，新口令只显示一次；该账号所有旧会话会被注销。'
                         : site.supportEmail
-                          ? '忘记口令请找管理员重置（' + site.supportEmail + '）。平台不通过邮件找回，也不会以任何方式向你索要当前口令。'
-                          : '忘记口令请找工作区管理员重置。平台不通过邮件找回，也不会以任何方式向你索要当前口令。',
+                          ? '这个部署还没配置邮件通道，不能自助找回。请找管理员重置（' + site.supportEmail + '）：管理员在「后台 → 账号」里直接改，新口令只显示一次。平台不会以任何方式向你索要当前口令。'
+                          : '这个部署还没配置邮件通道，不能自助找回。请找工作区管理员重置：管理员在「后台 → 账号」里直接改，新口令只显示一次。平台不会以任何方式向你索要当前口令。',
                     )
-                  }
+                  }}
                 >
                   忘记密码？
                 </button>
@@ -707,3 +727,113 @@ function TwoFactorStep({
     </>
   )
 }
+
+/** 找回密码第一步：填邮箱发链接。服务端对「有没有这个账号」回同一句话，这里照它显示。 */
+function ForgotStep({
+  email: initial,
+  supportEmail,
+  onBack,
+}: {
+  email: string
+  supportEmail: string
+  onBack: () => void
+}) {
+  const [email, setEmail] = useState(initial)
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState('')
+  const [error, setError] = useState('')
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (busy) return
+    const trimmed = email.trim()
+    if (!trimmed) {
+      setError('请输入邮箱')
+      return
+    }
+    if (!EMAIL_PATTERN.test(trimmed)) {
+      setError('邮箱格式看起来不太对')
+      return
+    }
+    setError('')
+    setBusy(true)
+    try {
+      const result = await forgotPassword(trimmed)
+      setNote(result.message || '如果这个邮箱有账号，重置邮件已经发出。')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '没有发出去，请稍后重试')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <div className="vq-login-form-head">
+        <span className="vq-mono">Reset password</span>
+        <h2>找回口令</h2>
+        <p>填登录用的邮箱，我们会发一封带一次性链接的邮件，链接 30 分钟内有效。</p>
+      </div>
+
+      {note ? (
+        <div className="vq-banner vq-banner--info" role="status">
+          <ShieldCheck size={14} />
+          <span>{note}</span>
+        </div>
+      ) : null}
+      {error ? (
+        <div className="vq-banner vq-banner--error" role="alert">
+          <Lock size={14} />
+          <span>{error}</span>
+        </div>
+      ) : null}
+
+      <form className="vq-login-form" onSubmit={submit} noValidate>
+        <div className="vq-field">
+          <label className="vq-field-label" htmlFor="vq-forgot-email">
+            邮箱 <em className="vq-mono">email</em>
+          </label>
+          <span className={'vq-input' + (error ? ' is-invalid' : '')}>
+            <Mail size={15} />
+            <input
+              id="vq-forgot-email"
+              type="email"
+              inputMode="email"
+              autoComplete="username"
+              autoFocus
+              placeholder={EXAMPLE_EMAIL}
+              value={email}
+              onChange={(event) => {
+                setEmail(event.target.value)
+                if (error) setError('')
+              }}
+              disabled={busy}
+            />
+          </span>
+          <span className="vq-field-hint">
+            {supportEmail ? '收不到就找管理员重置（' + supportEmail + '）。' : '收不到就找工作区管理员重置。'}
+            平台不会向你索要当前口令。
+          </span>
+        </div>
+
+        <button className="vq-button vq-button--primary vq-button--lg" type="submit" disabled={busy}>
+          {busy ? (
+            <>
+              <Loader2 size={15} className="vq-spin" />
+              正在发送…
+            </>
+          ) : (
+            <>
+              发送重置邮件
+              <ArrowRight size={15} />
+            </>
+          )}
+        </button>
+        <button type="button" className="vq-link vq-login-back" onClick={onBack} disabled={busy}>
+          返回登录
+        </button>
+      </form>
+    </>
+  )
+}
+
