@@ -29,9 +29,21 @@ import {
   totpMaterial,
   saveTotpCounter,
   saveTotpBackup,
+  deleteUser,
 } from '../auth.mjs'
 import { generateBackupCodes, generateSecret, matchBackupCode, otpauthUrl, verifyTotp } from '../totp.mjs'
 import { logEvent } from '../log.mjs'
+import { grant } from '../credits.mjs'
+import {
+  claimInvite,
+  clearInviteAttempts,
+  findInviteByCode,
+  inviteState,
+  normalizeInviteCode,
+  recordInviteAttempt,
+  signupCountForIp,
+  tooManyInviteAttempts,
+} from '../invites.mjs'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 const MIN_PASSWORD = 8
@@ -88,6 +100,9 @@ export function createAuthRouter() {
         // 之前的演示账号把邮箱和口令直接发给每个访客，等于公开后门。
         sendJson(res, 200, {
           registrationEnabled: config.auth.registrationEnabled,
+          // 邀请制始终可用：注册全局关闭时，持有效邀请码的人仍能自助开号。
+          // 登录页据此在「注册」入口上显示「有邀请码」这一条路径。
+          inviteRegistration: true,
           minPasswordLength: MIN_PASSWORD,
           // 注册页照着这句显示规则，改策略只改服务端一处
           passwordPolicy: '至少 ' + MIN_PASSWORD + ' 位，且同时包含字母和数字',
@@ -102,17 +117,71 @@ export function createAuthRouter() {
         return true
       }
 
+      // 注册页先验码：只回「能不能用、还剩几次、送多少积分」，不回创建人、备注与使用者。
+      // 限流按来源做，避免有人拿这个接口扫邀请码。
+      if (pathname === '/api/auth/invite' && req.method === 'GET') {
+        const ip = clientIp(req)
+        if (tooManyInviteAttempts('invite-lookup|' + ip)) {
+          fail(res, 429, '查询次数过多，请 10 分钟后再试')
+          return true
+        }
+        const state = inviteState(url.searchParams.get('code'))
+        if (!state.valid) recordInviteAttempt('invite-lookup|' + ip)
+        else clearInviteAttempts('invite-lookup|' + ip)
+        sendJson(res, state.valid ? 200 : 410, state)
+        return true
+      }
+
       if (req.method === 'POST' && !sameOrigin(req)) {
         fail(res, 403, '来源不被信任')
         return true
       }
 
       if (pathname === '/api/auth/register' && req.method === 'POST') {
-        if (!config.auth.registrationEnabled) {
-          fail(res, 403, '当前未开放注册，请联系管理员开通账号')
+        const body = await readBody(req)
+        const ip = clientIp(req)
+        const rawInvite = String(body.inviteCode || '').trim()
+        const inviteCode = normalizeInviteCode(rawInvite)
+        const attemptKey = 'register-invite|' + ip
+
+        // 两道门：全局注册开着，或者手里有一枚有效邀请码。注册关闭时不再把门焊死。
+        if (!config.auth.registrationEnabled && !rawInvite) {
+          fail(res, 403, '当前未开放自助注册；有邀请码请在「邀请码」一栏填入，或联系管理员开通账号')
           return true
         }
-        const body = await readBody(req)
+        if (rawInvite && !inviteCode) {
+          fail(res, 400, '邀请码格式不正确，请核对后填入完整邀请码', 'code')
+          return true
+        }
+
+        let invite = null
+        if (inviteCode) {
+          if (tooManyInviteAttempts(attemptKey)) {
+            fail(res, 429, '邀请码尝试次数过多，请 10 分钟后再试')
+            return true
+          }
+          invite = findInviteByCode(inviteCode)
+          if (!invite || invite.status !== 'active') {
+            recordInviteAttempt(attemptKey)
+            const message =
+              !invite
+                ? '邀请码无效，请核对完整邀请码'
+                : invite.status === 'revoked'
+                  ? '这枚邀请码已被撤销，请联系管理员换一枚'
+                  : invite.status === 'used'
+                    ? '这枚邀请码已经用完了，请联系管理员再要一枚'
+                    : '这枚邀请码已过期，请联系管理员换一枚'
+            fail(res, 410, message, 'code')
+            return true
+          }
+          clearInviteAttempts(attemptKey)
+          // 反滥用：同一来源 24 小时内最多开 N 个号（默认 3），不靠肉眼盯注册量。
+          if (signupCountForIp(ip) >= config.invites.maxPerIp) {
+            fail(res, 429, '同一网络今天通过邀请码开通的账号已达上限，请明天再试或联系管理员')
+            return true
+          }
+        }
+
         const email = normalizeEmail(body.email)
         const password = String(body.password || '')
         const name = String(body.name || '').trim().slice(0, MAX_NAME)
@@ -132,9 +201,28 @@ export function createAuthRouter() {
         }
 
         const user = createUser({ email, password, name, terms: { version: termsVersion, at: new Date().toISOString() } })
+        if (invite) {
+          // 占用放在建号之后才能带上 userId；占用失败（并发抢最后一格）就把刚建的号收回，
+          // 免得出现「码没用上、号已经建好」的中间态。
+          const claimed = claimInvite(invite.id, { userId: user.id, email, ip })
+          if (!claimed.ok) {
+            deleteUser(user.id)
+            fail(res, 410, '这枚邀请码刚刚被用掉了，请换一枚或联系管理员', 'code')
+            return true
+          }
+          if (invite.credits > 0) {
+            grant(user.id, invite.credits, {
+              kind: 'invite',
+              note: '邀请码赠送（' + invite.code.slice(0, 7) + '••••）',
+              operator: 'invite',
+            })
+          }
+          logEvent('register-invite', { email, invite: invite.code.slice(0, 7) + '••••', credits: invite.credits })
+        }
+
         const { token } = createSession(user, {
           userAgent: req.headers['user-agent'] || '',
-          ip: clientIp(req),
+          ip,
           remember: false,
         })
         setCookie(res, sessionCookie(token, config.auth.sessionDays * 24 * 3600))

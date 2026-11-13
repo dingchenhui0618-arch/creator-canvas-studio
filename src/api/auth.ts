@@ -44,10 +44,14 @@ export type RegisterPayload = {
   /** 注册必须带：真的勾选了，且同意的是当前这一版条款 */
   acceptedTerms: boolean
   termsVersion: string
+  /** 邀请制：注册全局关闭时，凭这枚码开号（服务端只在这里收明文码） */
+  inviteCode?: string
 }
 
 export type AuthConfig = {
   registrationEnabled: boolean
+  /** 邀请制始终可用：即使全局注册关闭，持有效邀请码也能自助开号 */
+  inviteRegistration?: boolean
   /** 注册密码最小长度由后端下发（login 不校验长度，老密码不受影响）。 */
   minPasswordLength: number
   /** 完整口令规则的一句话说明，直接显示在注册表单下面。 */
@@ -72,6 +76,28 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   } catch (caught) {
     const error = caught as AuthRequestError
     error.field = toField(error.body?.field)
+    throw error
+  }
+}
+
+export type InviteState = {
+  valid: boolean
+  /** active / used / revoked / expired / missing / invalid */
+  status?: string
+  reason?: string
+  credits?: number
+  remaining?: number
+  expiresAt?: string | null
+}
+
+/** 注册页验码：只回「能不能用、还剩几次、送多少积分」。410 是无效码的正常状态，不当异常抛。 */
+export async function checkInvite(code: string): Promise<InviteState> {
+  try {
+    return await request<InviteState>('/api/auth/invite?code=' + encodeURIComponent(code))
+  } catch (caught) {
+    const error = caught as AuthRequestError
+    const body = (error.body || {}) as unknown as { reason?: string; status?: string; credits?: number }
+    if (error.status === 410) return { valid: false, status: body.status, reason: body.reason }
     throw error
   }
 }

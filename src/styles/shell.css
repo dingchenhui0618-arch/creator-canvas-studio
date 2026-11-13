@@ -1806,6 +1806,15 @@ select:focus-visible {
   line-height: 1.6;
 }
 
+/* 邀请码核验结果：可用/已失效要一眼分清，不只是一行灰字 */
+.vq-field-hint.is-ok {
+  color: var(--pass);
+}
+
+.vq-field-hint.is-bad {
+  color: var(--fail);
+}
+
 .vq-login-row {
   display: flex;
   align-items: center;

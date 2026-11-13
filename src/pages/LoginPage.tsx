@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { ArrowRight, Eye, EyeOff, Loader2, Lock, Mail, ScanSearch, ShieldCheck, User } from 'lucide-react'
+import { ArrowRight, Eye, EyeOff, Loader2, Lock, Mail, ScanSearch, ShieldCheck, Ticket, User } from 'lucide-react'
 import {
   AuthError,
   DEFAULT_MIN_PASSWORD_LENGTH,
@@ -10,7 +10,8 @@ import {
   register as registerAccount,
 } from '../auth/session'
 import type { RegisterInput, Session, SignInInput } from '../auth/session'
-import { getAuthConfig } from '../api/auth'
+import { checkInvite, getAuthConfig } from '../api/auth'
+import type { InviteState } from '../api/auth'
 import { useSiteInfo, useUiMode } from '../api/app'
 import '../styles/shell.css'
 
@@ -19,6 +20,35 @@ type Mode = 'signin' | 'signup'
 type FormErrors = { email?: string; password?: string; name?: string; terms?: string; code?: string; form?: string }
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+// 邀请链接形如 #/register?code=VQ-XXXX-XXXX：直接进注册态并预填，对方不用再翻消息找码。
+function inviteFromHash(): { code: string; signup: boolean } {
+  if (typeof window === 'undefined') return { code: '', signup: false }
+  const raw = window.location.hash.replace(/^#/, '')
+  const [pathPart, queryPart = ''] = raw.split('?')
+  const params = new URLSearchParams(queryPart)
+  return { code: params.get('code') || '', signup: /^\/register\b/.test(pathPart) || params.has('code') }
+}
+
+// 注册成功后把 #/register?code=... 收拾干净：工作台已经进来了，地址栏不该还挂着邀请码。
+function leaveAuthLink(): void {
+  if (/^#\/(?:register|login)(?:[?]|$)/.test(window.location.hash)) {
+    window.history.replaceState(null, '', '#/overview')
+  }
+}
+
+function inviteHintOf(state: InviteState | null, checking: boolean): string {
+  if (checking) return '正在核对邀请码…'
+  if (!state) return ''
+  if (state.valid) {
+    const credits = Number(state.credits || 0)
+    return '邀请码可用' + (credits > 0 ? '，注册后额外赠送 ' + credits + ' 积分' : '，注册后直接开号')
+  }
+  if (state.reason === 'used') return '这枚邀请码已经用完了，请联系管理员再要一枚'
+  if (state.reason === 'revoked') return '这枚邀请码已被撤销，请联系管理员换一枚'
+  if (state.reason === 'expired') return '这枚邀请码已过期，请联系管理员换一枚'
+  return '邀请码无效，请核对完整邀请码'
+}
 
 type Props = {
   notice?: string
@@ -35,7 +65,7 @@ type Props = {
 export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: Props) {
   const { internal } = useUiMode()
   const site = useSiteInfo()
-  const [mode, setMode] = useState<Mode>('signin')
+  const [mode, setMode] = useState<Mode>(() => (inviteFromHash().signup ? 'signup' : 'signin'))
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
@@ -51,11 +81,21 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
   // 注册开关与密码长度由后端下发；登录页不再展示任何演示账号或口令。
   // 首屏默认不显示注册入口（跟服务端 fail-closed 一致），拿到配置再放开。
   const [registrationEnabled, setRegistrationEnabled] = useState(false)
+  // 邀请制始终可用：注册全局关闭时，凭有效邀请码仍能自助开号
+  const [inviteRegistration, setInviteRegistration] = useState(false)
+  const [inviteCode, setInviteCode] = useState(() => inviteFromHash().code)
+  const [invite, setInvite] = useState<InviteState | null>(null)
+  const [checkingInvite, setCheckingInvite] = useState(false)
   // 密码长度以后端配置为准，这里只放一个兜底值；登录不校验长度。
   const [minPasswordLength, setMinPasswordLength] = useState(DEFAULT_MIN_PASSWORD_LENGTH)
   const [passwordPolicy, setPasswordPolicy] = useState('')
   const passwordRef = useRef<HTMLInputElement>(null)
   const isSignup = mode === 'signup'
+  // 注册全局关着也可以走邀请码；两扇门任一打开就显示注册入口
+  const canSignup = registrationEnabled || inviteRegistration
+  const inviteText = inviteCode.trim()
+  const inviteMessage = isSignup ? inviteHintOf(invite, checkingInvite) : ''
+  const inviteBad = Boolean(invite && !invite.valid)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -64,6 +104,7 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
       .then((config) => {
         if (!active) return
         setRegistrationEnabled(config.registrationEnabled)
+        setInviteRegistration(Boolean(config.inviteRegistration))
         if (config.minPasswordLength > 0) setMinPasswordLength(config.minPasswordLength)
         if (config.passwordPolicy) setPasswordPolicy(config.passwordPolicy)
       })
@@ -76,6 +117,30 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
       controller.abort()
     }
   }, [])
+
+  // 码一填就核一次（防抖 450ms）：有效的直接说送多少积分，无效的当场说原因，
+  // 别等提交完再把人退回来重填。
+  useEffect(() => {
+    if (!isSignup || !inviteText) return
+    let active = true
+    const timer = window.setTimeout(() => {
+      setCheckingInvite(true)
+      checkInvite(inviteText)
+        .then((state) => {
+          if (active) setInvite(state)
+        })
+        .catch(() => {
+          if (active) setInvite(null)
+        })
+        .finally(() => {
+          if (active) setCheckingInvite(false)
+        })
+    }, 450)
+    return () => {
+      active = false
+      window.clearTimeout(timer)
+    }
+  }, [isSignup, inviteText])
 
   const switchMode = (next: Mode) => {
     if (busy || next === mode) return
@@ -99,13 +164,16 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
       else if (password.length < minPasswordLength) nextErrors.password = `密码至少 ${minPasswordLength} 位`
       else if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) nextErrors.password = '密码要同时包含字母和数字'
       if (trimmedName.length > NAME_MAX_LENGTH) nextErrors.name = `昵称最多 ${NAME_MAX_LENGTH} 字`
+      // 注册关闭时邀请码就是唯一入口；填了但已失效也不要继续，避免提交完才被退回来
+      if (!registrationEnabled && !inviteText) nextErrors.code = '当前未开放自助注册，请填写邀请码'
+      else if (inviteText && inviteBad) nextErrors.code = '这枚邀请码当前不可用，请核对或联系管理员'
       if (!acceptedTerms) nextErrors.terms = '请先阅读并勾选同意服务条款与隐私说明'
     } else if (!password) {
       nextErrors.password = '请输入密码'
     }
 
     setInfo('')
-    if (nextErrors.email || nextErrors.password || nextErrors.name || nextErrors.terms) {
+    if (nextErrors.email || nextErrors.password || nextErrors.name || nextErrors.terms || nextErrors.code) {
       setErrors(nextErrors)
       return
     }
@@ -122,7 +190,9 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
             name: trimmedName || undefined,
             acceptedTerms,
             termsVersion: site.termsVersion,
+            inviteCode: inviteText || undefined,
           })
+          leaveAuthLink()
         } else {
           await registerAccount({
             email: trimmedEmail,
@@ -130,13 +200,16 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
             name: trimmedName || undefined,
             acceptedTerms,
             termsVersion: site.termsVersion,
+            inviteCode: inviteText || undefined,
           })
           created = true
           setInfo('账号已创建，正在建立会话…')
           await onSignIn({ email: trimmedEmail, password, remember })
+          leaveAuthLink()
         }
       } else {
         await onSignIn({ email: trimmedEmail, password, remember })
+        leaveAuthLink()
       }
     } catch (error) {
       setBusy(false)
@@ -158,6 +231,7 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
         else if (error.field === 'password') setErrors({ password: error.message })
         else if (error.field === 'name') setErrors({ name: error.message })
         else if (error.field === 'terms') setErrors({ terms: error.message })
+        else if (error.field === 'code') setErrors({ code: error.message })
         else setErrors({ form: error.message })
       } else {
         setErrors({ form: isSignup ? '注册没有完成，请稍后重试。' : '登录没有完成，请稍后重试。' })
@@ -271,14 +345,16 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
             <h2>{isSignup ? '创建账号' : '登录 VisionQA'}</h2>
             <p>
               {isSignup
-                ? '注册完直接进入工作台。昵称只是显示名，可以稍后再补。'
+                ? registrationEnabled
+                  ? '注册完直接进入工作台。昵称只是显示名，可以稍后再补。'
+                  : '凭邀请码创建账号，开通后直接进入工作台；没有邀请码可以联系管理员。'
                 : internal
                   ? '使用工作邮箱继续。会话由服务端校验，凭据不进浏览器存储。'
                   : '使用工作邮箱继续。登录状态会安全保存，凭据不留在浏览器里。'}
             </p>
           </div>
 
-          {registrationEnabled && (
+          {canSignup && (
             <div className="vq-login-modes" role="group" aria-label="登录或注册">
               <button
                 type="button"
@@ -321,6 +397,51 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
           )}
 
           <form className="vq-login-form" onSubmit={submit} noValidate>
+            {isSignup && (
+              <div className="vq-field">
+                <label className="vq-field-label" htmlFor="vq-invite">
+                  邀请码 <em className="vq-mono">{registrationEnabled ? 'invite · 可选' : 'invite · 内测必填'}</em>
+                </label>
+                <span className={`vq-input${errors.code ? ' is-invalid' : ''}`}>
+                  <Ticket size={15} />
+                  <input
+                    id="vq-invite"
+                    name="inviteCode"
+                    autoComplete="off"
+                    spellCheck={false}
+                    placeholder="VQ-XXXX-XXXX"
+                    value={inviteCode}
+                    onChange={(event) => {
+                      const next = event.target.value
+                      setInviteCode(next)
+                      if (!next.trim()) {
+                        setInvite(null)
+                        setCheckingInvite(false)
+                      }
+                      if (errors.code) setErrors((previous) => ({ ...previous, code: undefined }))
+                    }}
+                    aria-invalid={Boolean(errors.code)}
+                    aria-describedby="vq-invite-hint"
+                    disabled={busy}
+                  />
+                </span>
+                {errors.code ? (
+                  <span className="vq-field-error" id="vq-invite-hint">
+                    {errors.code}
+                  </span>
+                ) : inviteMessage ? (
+                  <span className={`vq-field-hint${inviteBad ? ' is-bad' : invite ? ' is-ok' : ''}`} id="vq-invite-hint">
+                    {inviteMessage}
+                  </span>
+                ) : (
+                  <span className="vq-field-hint" id="vq-invite-hint">
+                    {registrationEnabled
+                      ? '有邀请码就填上，注册后额外赠送积分；没有也可以直接注册。'
+                      : '注册通道未公开开放；凭邀请码可以自助开号。'}
+                  </span>
+                )}
+              </div>
+            )}
             <div className="vq-field">
               <label className="vq-field-label" htmlFor="vq-email">
                 邮箱 <em className="vq-mono">email</em>

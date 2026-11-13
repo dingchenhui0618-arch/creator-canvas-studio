@@ -111,3 +111,34 @@ journalctl -u visionqa-backup.service -n 30 --no-pager   # 一行 JSON：encrypt
 → `chown -R visionqa:visionqa` → 起服务 → 验账号、模板、Key。
 
 注意：prod 的 `/usr/bin/node` 不带 `node:sqlite`，必须用 `/usr/local/bin/node`（unit 里已经写好）。
+
+## 邀请码（v0.9.50）
+
+注册全局关闭（`VQ_REGISTRATION=0`）时，内测放号走邀请码，不用管理员在线建号。
+
+1. 后台「账号 → 邀请码」：填可用次数 / 有效天数 / 赠送积分 / 备注 → 签发。
+2. 签完当场复制注册链接，形如：
+
+```
+https://<域名>/#/register?code=VQ-XXXX-XXXX
+```
+
+3. 对方打开即进注册页、邀请码已预填；提交后直接登录，赠送积分在账本里单独记 `invite`。
+4. 没用完的码可以随时在后台撤销，撤销后立即失效（HTTP 410）。
+
+环境变量（都有默认值，一般不用写）：
+
+| 变量 | 默认 | 含义 |
+| --- | --- | --- |
+| `VQ_INVITE_CREDITS` | 100 | 每枚码默认赠送积分 |
+| `VQ_INVITE_DAYS` | 7 | 默认有效期（天） |
+| `VQ_INVITE_USES` | 1 | 默认可用次数 |
+| `VQ_INVITE_IP_LIMIT` | 3 | 同一来源 24h 内最多开几个邀请号 |
+
+注意：
+
+- 码就是凭证，一人一码更安全；不要把手里的可用码发到公开频道。
+- 目前**没有邮件通道**，链接需要手动发给受邀人（等 A5 SMTP 接入后可自动发送）。
+- 反滥用只到来源计数：同一 NAT 出口的同事共享 3 个名额。
+- 赠送积分在注册时到账；「首次成功任务后解锁」与新账号 24h 复刻并发限制还没做。
+- 核查接口：`GET /api/admin/invites`（管理员 cookie），返回状态、已用/上限与最近使用者。

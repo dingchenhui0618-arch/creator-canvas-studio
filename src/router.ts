@@ -193,11 +193,19 @@ function publish(route: Route) {
   for (const listener of listeners) listener()
 }
 
+// 邀请链接 #/register?code=... 是登录页的入口，不是工作台路由：
+// 地址要原样留给登录页读邀请码，规范化成 #/overview 之后码就丢了。
+function isAuthEntryLink(hash: string): boolean {
+  return /^#\/(?:register|login)(?:[?]|$)/.test(hash)
+}
+
 function handleHashChange() {
   const route = parseRoute(window.location.hash)
   const canonical = toHash(route)
   // 非法或旧格式的 hash 用 replaceState 修正，不额外压一条历史。
-  if (window.location.hash !== canonical) window.history.replaceState(null, '', canonical)
+  if (window.location.hash !== canonical && !isAuthEntryLink(window.location.hash)) {
+    window.history.replaceState(null, '', canonical)
+  }
   publish(route)
 }
 
@@ -220,7 +228,7 @@ export function initializeRoute(preferredEdition?: EditionId): Route {
   }
   snapshot = route
   const canonical = toHash(route)
-  if (raw !== canonical) window.history.replaceState(null, '', canonical)
+  if (raw !== canonical && !isAuthEntryLink(raw)) window.history.replaceState(null, '', canonical)
   ensureListening()
   return route
 }

@@ -198,6 +198,16 @@ export const config = {
     seedPassword: (process.env.VQ_SEED_PASSWORD || process.env.VQ_DEMO_PASSWORD || '').trim(),
     seedName: process.env.VQ_SEED_NAME || 'VisionQA 管理员',
   },
+  // 邀请制：注册全局关闭时，持有有效邀请码的人仍可自助开号（内测不用管理员在线）。
+  // 码是 bearer 凭证，只在签发那一次返回明文；库里存规范化后的码本身（不是高频敏感口令，不需要哈希）。
+  invites: {
+    defaultCredits: Number(process.env.VQ_INVITE_CREDITS ?? 100),
+    defaultDays: Number(process.env.VQ_INVITE_DAYS ?? 7),
+    defaultUses: Number(process.env.VQ_INVITE_USES ?? 1),
+    // 反滥用：同一来源 24 小时内通过邀请码最多开几个号
+    maxPerIp: Number(process.env.VQ_INVITE_IP_LIMIT ?? 3),
+    ipWindowHours: 24,
+  },
 }
 
 export const redfoxEnabled = () => Boolean(config.redfox.key)

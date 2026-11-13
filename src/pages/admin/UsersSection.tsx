@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { listAdminUsers, createAdminUser, grantCredits, updateAdminUser, resetAdminPassword, deleteAdminUser, listCreditRequests, resolveCreditRequest, type AdminUser, type CreditRequest } from '../../api/credits'
+import { listAdminUsers, createAdminUser, grantCredits, updateAdminUser, resetAdminPassword, deleteAdminUser, listCreditRequests, resolveCreditRequest, listAdminInvites, createAdminInvite, revokeAdminInvite, type AdminUser, type AdminInvite, type CreditRequest } from '../../api/credits'
 import { readSession } from '../../auth/session'
 import type { SessionKind } from '../../auth/session'
 import { useUiMode } from '../../api/app'
@@ -12,6 +12,14 @@ function roleLabel(kind: SessionKind): string {
   if (kind === 'admin') return '管理员'
   if (kind === 'guest') return '访客'
   return '普通账号'
+}
+
+// 邀请码状态：同一枚码只可能处于这四种之一，界面直接说人话
+function inviteBadge(invite: AdminInvite): { tone: 'ok' | 'neutral' | 'warn' | 'fail'; label: string } {
+  if (invite.status === 'active') return { tone: 'ok', label: '可用' }
+  if (invite.status === 'used') return { tone: 'neutral', label: '已用完' }
+  if (invite.status === 'revoked') return { tone: 'fail', label: '已撤销' }
+  return { tone: 'warn', label: '已过期' }
 }
 
 /**
@@ -57,6 +65,21 @@ export default function UsersSection() {
   const [requestBusy, setRequestBusy] = useState('')
   const [requestMessage, setRequestMessage] = useState('')
   const [requestError, setRequestError] = useState('')
+  // 邀请码：内测开号的主路径，注册全局关着也能用
+  const [invites, setInvites] = useState<AdminInvite[]>([])
+  const [invitesLoading, setInvitesLoading] = useState(true)
+  const [invitesError, setInvitesError] = useState('')
+  const [inviteLimits, setInviteLimits] = useState({ maxPerIp: 3, windowHours: 24 })
+  const [inviteUses, setInviteUses] = useState('1')
+  const [inviteDays, setInviteDays] = useState('7')
+  const [inviteCredits, setInviteCredits] = useState('100')
+  const [inviteNote, setInviteNote] = useState('')
+  const [creatingInvite, setCreatingInvite] = useState(false)
+  const [createInviteError, setCreateInviteError] = useState('')
+  const [newInvite, setNewInvite] = useState<AdminInvite | null>(null)
+  const [inviteCopied, setInviteCopied] = useState('')
+  const [inviteBusy, setInviteBusy] = useState('')
+  const [inviteMessage, setInviteMessage] = useState('')
 
   const load = useCallback(() => {
     setLoading(true)
@@ -85,6 +108,71 @@ export default function UsersSection() {
     const timer = window.setTimeout(loadRequests, 0)
     return () => window.clearTimeout(timer)
   }, [loadRequests])
+
+  const loadInvites = useCallback(() => {
+    setInvitesLoading(true)
+    setInvitesError('')
+    listAdminInvites()
+      .then((data) => {
+        setInvites(data.items)
+        setInviteLimits(data.limits)
+      })
+      .catch((caught) => setInvitesError(caught instanceof Error ? caught.message : '邀请码读取失败'))
+      .finally(() => setInvitesLoading(false))
+  }, [])
+
+  useEffect(() => {
+    const timer = window.setTimeout(loadInvites, 0)
+    return () => window.clearTimeout(timer)
+  }, [loadInvites])
+
+  const submitInvite = async () => {
+    if (creatingInvite) return
+    setCreatingInvite(true)
+    setCreateInviteError('')
+    setInviteMessage('')
+    try {
+      const result = await createAdminInvite({
+        maxUses: Math.max(1, Number(inviteUses) || 1),
+        days: Math.max(1, Number(inviteDays) || 7),
+        credits: Math.max(0, Number(inviteCredits) || 0),
+        note: inviteNote.trim(),
+      })
+      setNewInvite(result.invite)
+      setInviteNote('')
+      loadInvites()
+    } catch (caught) {
+      setCreateInviteError(caught instanceof Error ? caught.message : '签发失败')
+    } finally {
+      setCreatingInvite(false)
+    }
+  }
+
+  const copyInvite = async (invite: AdminInvite, kind: 'code' | 'link') => {
+    const link = window.location.origin + window.location.pathname + '#/register?code=' + encodeURIComponent(invite.code)
+    try {
+      await navigator.clipboard.writeText(kind === 'link' ? link : invite.code)
+      setInviteCopied(invite.id + ':' + kind)
+      window.setTimeout(() => setInviteCopied(''), 2000)
+    } catch {
+      setInviteCopied('')
+    }
+  }
+
+  const revokeInviteCode = async (invite: AdminInvite) => {
+    if (inviteBusy) return
+    setInviteBusy(invite.id)
+    setInviteMessage('')
+    try {
+      await revokeAdminInvite(invite.id)
+      setInviteMessage('已撤销 ' + invite.code + '，现在用它注册会直接被拒。')
+      loadInvites()
+    } catch (caught) {
+      setInvitesError(caught instanceof Error ? caught.message : '撤销失败')
+    } finally {
+      setInviteBusy('')
+    }
+  }
 
   const decideRequest = async (item: CreditRequest, action: 'grant' | 'ignore') => {
     if (requestBusy) return
@@ -494,6 +582,140 @@ export default function UsersSection() {
             </div>
           </div>
         ) : null}
+      </section>
+      <section className="admin-card admin-block">
+        <div className="admin-block-head">
+          <div>
+            <p className="admin-label">邀请码</p>
+            <p className="admin-sub">
+              注册通道默认关闭；签发一枚码，对方打开链接就能自己开号，不用管理员在线。码只在签发时显示一次，可随时撤销；
+              同一来源 {inviteLimits.windowHours} 小时内最多开 {inviteLimits.maxPerIp} 个号，防止批量领额度。
+            </p>
+          </div>
+          <SourceTag kind="api" source="/api/admin/invites" />
+        </div>
+        <div className="admin-edit-grid">
+          <label className="admin-edit-field">
+            <span>可用次数</span>
+            <input
+              value={inviteUses}
+              onChange={(event) => setInviteUses(event.target.value.replace(/[^0-9]/g, ''))}
+              inputMode="numeric"
+              placeholder="1"
+            />
+          </label>
+          <label className="admin-edit-field">
+            <span>有效天数</span>
+            <input
+              value={inviteDays}
+              onChange={(event) => setInviteDays(event.target.value.replace(/[^0-9]/g, ''))}
+              inputMode="numeric"
+              placeholder="7"
+            />
+          </label>
+          <label className="admin-edit-field">
+            <span>赠送积分</span>
+            <input
+              value={inviteCredits}
+              onChange={(event) => setInviteCredits(event.target.value.replace(/[^0-9]/g, ''))}
+              inputMode="numeric"
+              placeholder="100"
+            />
+          </label>
+          <label className="admin-edit-field admin-edit-field--wide">
+            <span>备注（给谁、哪一批）</span>
+            <input
+              value={inviteNote}
+              onChange={(event) => setInviteNote(event.target.value)}
+              maxLength={200}
+              placeholder="例如：首批内测 · 林可"
+            />
+          </label>
+        </div>
+        <div className="admin-edit-actions">
+          <button type="button" className="vq-button vq-button--primary" disabled={creatingInvite} onClick={() => void submitInvite()}>
+            {creatingInvite ? '签发中…' : '签发邀请码'}
+          </button>
+          <button type="button" className="vq-button vq-button--ghost" disabled={invitesLoading} onClick={loadInvites}>
+            刷新
+          </button>
+        </div>
+        {createInviteError ? <p className="admin-hint" role="alert">{createInviteError}</p> : null}
+        {newInvite ? (
+          <div className="admin-reset" role="status">
+            <div className="admin-reset-copy">
+              <span className="admin-label">邀请码已签发（只显示这一次）</span>
+              <p className="admin-sub">
+                {newInvite.maxUses} 次可用，有效期至 {formatDateTime(newInvite.expiresAt)}，注册后额外赠送 {newInvite.credits} 积分。
+                打开链接会直接进注册页并预填邀请码。
+              </p>
+              <a className="admin-invite-link" href={'#/register?code=' + encodeURIComponent(newInvite.code)} target="_blank" rel="noreferrer">
+                #/register?code={newInvite.code}
+              </a>
+            </div>
+            <code className="admin-reset-code">{newInvite.code}</code>
+            <div className="admin-doc-actions">
+              <button type="button" className="vq-button vq-button--ghost" onClick={() => void copyInvite(newInvite, 'code')}>
+                {inviteCopied === newInvite.id + ':code' ? '已复制' : '复制邀请码'}
+              </button>
+              <button type="button" className="vq-button vq-button--ghost" onClick={() => void copyInvite(newInvite, 'link')}>
+                {inviteCopied === newInvite.id + ':link' ? '已复制' : '复制注册链接'}
+              </button>
+              <button type="button" className="vq-button vq-button--ghost" onClick={() => setNewInvite(null)}>
+                关闭
+              </button>
+            </div>
+          </div>
+        ) : null}
+        {invitesError ? <p className="admin-hint" role="alert">{invitesError}</p> : null}
+        {inviteMessage ? <p className="admin-hint">{inviteMessage}</p> : null}
+        {invitesLoading && !invites.length ? (
+          <LoadingLine label="/api/admin/invites" />
+        ) : invites.length ? (
+          <div className="admin-invite-list">
+            {invites.map((invite) => {
+              const badge = inviteBadge(invite)
+              const lastUse = invite.uses?.[0]
+              return (
+                <div className="admin-invite-row" key={invite.id}>
+                  <div className="admin-invite-code">
+                    <code>{invite.code}</code>
+                    <Badge tone={badge.tone}>{badge.label}</Badge>
+                  </div>
+                  <div className="admin-invite-meta">
+                    <span>已用 {invite.used}/{invite.maxUses}</span>
+                    <span>{invite.expiresAt ? '有效期至 ' + formatDateTime(invite.expiresAt) : '不限有效期'}</span>
+                    <span>赠送 {invite.credits} 积分</span>
+                    {invite.note ? <span>备注：{invite.note}</span> : null}
+                    <span>签发：{invite.createdBy || '—'}</span>
+                    {lastUse ? (
+                      <span>
+                        最近使用：{lastUse.email || '—'} · {formatDateTime(lastUse.createdAt)}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="admin-invite-actions">
+                    <button type="button" className="vq-button vq-button--ghost" onClick={() => void copyInvite(invite, 'link')}>
+                      {inviteCopied === invite.id + ':link' ? '已复制' : '复制链接'}
+                    </button>
+                    {invite.status === 'active' ? (
+                      <button
+                        type="button"
+                        className="vq-button vq-button--danger"
+                        disabled={Boolean(inviteBusy)}
+                        onClick={() => void revokeInviteCode(invite)}
+                      >
+                        {inviteBusy === invite.id ? '撤销中…' : '撤销'}
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          <EmptyState title="还没有签发邀请码" description="默认 1 次、7 天、赠送 100 积分；按批次签发，用完即止。" />
+        )}
       </section>
       <section className="admin-card admin-block">
         <div className="admin-block-head">

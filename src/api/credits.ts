@@ -148,8 +148,51 @@ export const resetAdminPassword = (userId: string, password?: string) =>
     body: JSON.stringify(password ? { password } : {}),
   })
 
+export type AdminInvite = {
+  id: string
+  code: string
+  createdBy: string
+  maxUses: number
+  used: number
+  remaining: number
+  credits: number
+  note: string
+  expiresAt: string | null
+  revokedAt: string | null
+  createdAt: string
+  status: 'active' | 'used' | 'revoked' | 'expired'
+  /** 最近 5 次使用：谁用的、来源哈希前 8 位、时间（排查一码多传） */
+  uses?: { email: string; ip: string; createdAt: string }[]
+}
+
+export type AdminInvitesResponse = {
+  items: AdminInvite[]
+  total: number
+  active: number
+  used: number
+  revoked: number
+  expired: number
+  limits: { maxPerIp: number; windowHours: number }
+}
+
+export const listAdminInvites = () => request<AdminInvitesResponse>('/api/admin/invites')
+
+// 签发：码只在这次响应里回明文，后台要当场复制给受邀人
+export const createAdminInvite = (input: { maxUses?: number; days?: number; credits?: number; note?: string }) =>
+  request<{ ok: boolean; invite: AdminInvite }>('/api/admin/invites', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+
+export const revokeAdminInvite = (inviteId: string) =>
+  request<{ ok: boolean; changed: boolean; invite: AdminInvite }>('/api/admin/invites/' + inviteId + '/revoke', {
+    method: 'POST',
+    body: '{}',
+  })
+
 // 流水类型的中文名：服务端只存 kind，展示层在这里翻译
 export const CREDIT_KIND_LABEL: Record<string, string> = {
+  invite: '邀请码赠送',
   search: '检索',
   'search-refund': '检索退款',
   replicate: '一键复刻',

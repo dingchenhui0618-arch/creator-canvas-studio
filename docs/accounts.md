@@ -18,14 +18,18 @@ token + HttpOnly cookie，浏览器里拿不到 token，也拿不到密码。没
 
 | 方法 | 路径 | 成功 | 失败 |
 | --- | --- | --- | --- |
-| GET | `/api/auth/config` | `{ registrationEnabled, minPasswordLength, demoAccount: {email,password} \| null }` | — |
-| POST | `/api/auth/register` | 201 `{ user }` + Set-Cookie | 400 `{error, field}` / 409 `field:'email'` |
+| GET | `/api/auth/config` | `{ registrationEnabled, inviteRegistration, minPasswordLength, passwordPolicy }` | — |
+| POST | `/api/auth/register` | 201 `{ user }` + Set-Cookie（注册关闭时带有效 `inviteCode` 仍可开号） | 400 `{error, field}` / 409 `field:'email'` / 410 邀请码失效 |
+| GET | `/api/auth/invite?code=` | 200 `{ valid:true, status, credits, remaining, expiresAt }` | 410 `{ valid:false, reason }` / 429 |
+| GET | `/api/admin/invites` | 200 `{ items, total, active, used, revoked, expired, limits }` | 401 / 403 |
+| POST | `/api/admin/invites` | 201 `{ invite }`（含明文码，只此一次） | 401 / 403 |
+| POST | `/api/admin/invites/:id/revoke` | 200 `{ ok, changed, invite }` | 401 / 403 / 404 |
 | POST | `/api/auth/login` | 200 `{ user }` + Set-Cookie | 400 `field` / 401 `field:'form'` / 429 |
 | POST | `/api/auth/logout` | 204 + 清 cookie | — |
 | GET | `/api/auth/me` | 200 `{ user }` | 401 `{ error }` |
 
 `user = { id, email, name, workspace, kind }`，`kind` 取 `account | demo | guest`。
-错误里的 `field` 只有 `email / password / name / form` 四种，登录失败一律 `form` 且文案统一为
+错误里的 `field` 有 `email / password / name / terms / code / form` 六种，登录失败一律 `form` 且文案统一为
 「邮箱或密码不正确」——不区分「邮箱不存在」和「密码错」。
 
 ## 3. 安全上具体做了什么
@@ -46,7 +50,9 @@ token + HttpOnly cookie，浏览器里拿不到 token，也拿不到密码。没
 | --- | --- | --- | --- |
 | `VQ_REQUIRE_AUTH` | 关 | **1** | 受保护接口要求登录，未登录返回 `{error:'未登录', loginRequired:true}` |
 | `VQ_SECURE_COOKIES` | 关 | **1** | 会话 cookie 加 Secure（必须走 HTTPS） |
-| `VQ_REGISTRATION` | 开 | 按需 | 内部系统建议 0，由管理员建号（`npm run adduser`） |
+| `VQ_REGISTRATION` | 开 | 按需 | 内部系统建议 0；关掉后仍可用邀请码开号（见下行） |
+| `VQ_INVITE_CREDITS` / `VQ_INVITE_DAYS` / `VQ_INVITE_USES` | 100 / 7 / 1 | 同默认 | 每枚邀请码默认赠送积分 / 有效期 / 可用次数 |
+| `VQ_INVITE_IP_LIMIT` | 3 | 3 | 同一来源 24h 内最多开几个邀请号（IP 只存哈希） |
 | `VQ_SESSION_DAYS` / `VQ_REMEMBER_DAYS` | 7 / 30 | 7 / 30 | 会话时长 / 勾「记住我」后的时长 |
 | `VQ_SEED_EMAIL` / `VQ_SEED_PASSWORD` | 空（不 seed） | 填一次 | 库里没有这个邮箱时建一条**普通账号**，只为「部署完能登录」；口令不会下发给任何访客 |
 | `VQ_SEED_ACCOUNT` | 有口令即开 | 1 | 设为 0 可完全关闭 seed |

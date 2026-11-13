@@ -457,6 +457,84 @@
   border-radius: var(--radius-sm);
 }
 
+/* 邀请码：第一行「码 + 状态 + 操作」，第二行是事实（次数/有效期/赠送/备注/谁用的）。
+   窄屏整体压成一列，不做横向滚动。 */
+.admin-invite-list {
+  display: grid;
+  margin-top: 8px;
+}
+
+.admin-invite-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 16px;
+  align-items: start;
+  padding: 12px 0;
+  border-top: 1px solid var(--line, #e6e3dd);
+}
+
+.admin-invite-code {
+  grid-row: 1;
+  grid-column: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.admin-invite-code code {
+  color: var(--ink, #17130d);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+}
+
+.admin-invite-meta {
+  grid-row: 2;
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  color: var(--faint, #8a8a8a);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.admin-invite-actions {
+  grid-row: 1;
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.admin-invite-link {
+  display: inline-block;
+  margin-top: 4px;
+  color: var(--ink-soft, #4a453d);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  .admin-invite-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-invite-actions {
+    grid-row: 2;
+    grid-column: 1;
+    justify-content: flex-start;
+  }
+
+  .admin-invite-meta {
+    grid-row: 3;
+  }
+}
+
 /* 备份失败的原因要能一眼看到，不能混在灰色说明里。 */
 .admin-hint--fail {
   margin-bottom: 12px;

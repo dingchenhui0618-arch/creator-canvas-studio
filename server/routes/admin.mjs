@@ -25,6 +25,7 @@ import { listReports, reportCounts, resolveReport } from '../reports.mjs'
 import { disableTemplateShare, getTemplate, updateTemplate } from '../templates.mjs'
 import { listJobs } from '../jobs.mjs'
 import { backupSummary } from '../backup-status.mjs'
+import { createInvite, inviteSummary, revokeInvite } from '../invites.mjs'
 
 const MODEL_KEY = /^\/api\/admin\/model-keys\/([\w-]+)$/
 const MODEL_KEY_TEST = /^\/api\/admin\/model-keys\/([\w-]+)\/test$/
@@ -162,6 +163,60 @@ export function createAdminRouter() {
         logEvent('user-create', { by: user.email, email, kind, balance })
         recordAudit({ req, actor: user, action: 'user.create', targetType: 'user', targetId: created.id, targetLabel: created.email, detail: { kind, balance } })
         sendJson(res, 201, payload)
+        return true
+      }
+      // ── 邀请码 ──────────────────────────────────────────────────
+      // 内测开号的主路径：管理员签发一枚码，对方自己在登录页注册，不用管理员在线。
+      // 码是 bearer 凭证，所以只在签发响应里回明文；列表也回（管理员本来就能开号）。
+      if (pathname === '/api/admin/invites' && req.method === 'GET') {
+        sendJson(res, 200, inviteSummary())
+        return true
+      }
+
+      if (pathname === '/api/admin/invites' && req.method === 'POST') {
+        const body = await readBody(req)
+        const created = createInvite({
+          createdBy: user.email,
+          maxUses: body.maxUses,
+          days: body.days,
+          credits: body.credits,
+          note: body.note,
+        })
+        logEvent('invite-create', { by: user.email, invite: created.code.slice(0, 7) + '••••', maxUses: created.maxUses, credits: created.credits, days: body.days })
+        recordAudit({
+          req,
+          actor: user,
+          action: 'invite.create',
+          targetType: 'invite',
+          targetId: created.id,
+          targetLabel: created.code.slice(0, 7) + '••••',
+          detail: { maxUses: created.maxUses, credits: created.credits, expiresAt: created.expiresAt },
+        })
+        sendJson(res, 201, { ok: true, invite: created })
+        return true
+      }
+
+      const INVITE_REVOKE = /^\/api\/admin\/invites\/([\w-]+)\/revoke$/
+      const inviteMatch = pathname.match(INVITE_REVOKE)
+      if (inviteMatch && req.method === 'POST') {
+        const result = revokeInvite(inviteMatch[1])
+        if (!result.invite) {
+          sendJson(res, 404, { error: '邀请码不存在' })
+          return true
+        }
+        if (result.ok) {
+          logEvent('invite-revoke', { by: user.email, invite: result.invite.code.slice(0, 7) + '••••' })
+          recordAudit({
+            req,
+            actor: user,
+            action: 'invite.revoke',
+            targetType: 'invite',
+            targetId: result.invite.id,
+            targetLabel: result.invite.code.slice(0, 7) + '••••',
+            detail: { used: result.invite.used, maxUses: result.invite.maxUses },
+          })
+        }
+        sendJson(res, 200, { ok: true, changed: result.ok, invite: result.invite })
         return true
       }
       // ── 额度申请 ────────────────────────────────────────────────

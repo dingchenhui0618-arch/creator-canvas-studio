@@ -115,8 +115,9 @@ export function refund(userId, kind, { ref = '', amount = null, meta = null } = 
   }
 }
 
-// 管理员发放 / 扣减（负数），余额不会被扣成负数
-export function grant(userId, amount, { note = '', operator = '' } = {}) {
+// 管理员发放 / 扣减（负数），余额不会被扣成负数。
+// kind 可选：邀请码赠送记成 invite，账本里和「管理员发放」分得清。
+export function grant(userId, amount, { note = '', operator = '', kind = '' } = {}) {
   const delta = Math.trunc(Number(amount) || 0)
   if (!delta) throw new Error('发放数量不能为 0')
   const db = getDb()
@@ -138,7 +139,7 @@ export function grant(userId, amount, { note = '', operator = '' } = {}) {
       userId: String(userId),
       delta,
       balanceAfter: after,
-      kind: delta > 0 ? 'grant' : 'deduct',
+      kind: kind || (delta > 0 ? 'grant' : 'deduct'),
       ref: [note, operator ? '操作人 ' + operator : ''].filter(Boolean).join(' · '),
     })
     db.exec('COMMIT')

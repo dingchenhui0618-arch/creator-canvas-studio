@@ -38,6 +38,8 @@ export type RegisterInput = {
   name?: string
   acceptedTerms: boolean
   termsVersion: string
+  /** 邀请制：注册关闭时凭这枚码开号 */
+  inviteCode?: string
 }
 
 export type AuthField = 'email' | 'password' | 'name' | 'terms' | 'code' | 'form'
@@ -258,6 +260,7 @@ export async function register(input: RegisterInput): Promise<Session> {
       name: name || undefined,
       acceptedTerms: input.acceptedTerms,
       termsVersion: input.termsVersion,
+      inviteCode: input.inviteCode?.trim() || undefined,
     })
     const session = createSession(user, true)
     persistSession(session)
