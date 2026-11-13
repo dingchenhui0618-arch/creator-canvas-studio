@@ -31,6 +31,17 @@ DOMAIN=VisionQA.wavisionai.cn bash deploy/production/install.sh
 `git clone` + `npm ci` + `npm run build` → 写 `.env`（Key 留空）→ systemd（`--max-old-space-size=384`）→
 写 nginx vhost 并 reload。
 
+## Node 版本（锁在 22.12.0）
+
+- 生产钉 **22.12.0**（`install.sh` 的 `NODE_VERSION`），CI 在 **22.12.0 与 24** 上各跑一遍，本机开发允许到 24。
+  三处对不上时以「CI 绿的那个」为准，别只在本机试。
+- `install.sh` 装完 Node 会先比一次版本（下限 22.12.0），不达标直接停，不会装到一半才发现。
+- 服务启动时 `server/node-guard.mjs`（`server/index.mjs` 的第一个 import）会检查：低于下限、
+  或 `node:sqlite` 加载失败（漏了 `--experimental-sqlite`）→ 打印人话并以 **78**（EX_CONFIG）退出。
+  `systemctl status visionqa` 看到 78 不是代码崩了，是运行时不对。
+- 升级 Node 的步骤：改 `install.sh` 的 `NODE_VERSION`、改 `visionqa.service` 的 `ExecStart`
+  （Node 22 必须带 `--experimental-sqlite`，24 起可以去掉）、改 `.nvmrc`、把新版本加进 CI 矩阵，先让 workflow 绿再上生产。
+
 ## HTTPS
 
 服务器上已有 nginx 与 `wavisionai.cn` 的证书。二选一：

@@ -1,4 +1,4 @@
-# 每次推到 master 或开 PR 都跑一遍：类型检查、代码检查、单元测试、构建。
+# 每次推到 master 或开 PR 都跑：两个 Node 版本各验证一遍，再做安全扫描（依赖漏洞 + 密钥）。
 # 不跑任何要联网或要花积分的东西：单测全在临时 DATA_DIR 里跑，不碰生产数据。
 name: CI
 
@@ -13,21 +13,31 @@ concurrency:
 
 jobs:
   verify:
-    name: 类型检查 / 代码检查 / 单元测试 / 构建
+    name: 验证（Node ${{ matrix.node }}）
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # 22.12.0 是生产钉的版本（deploy/production/install.sh 的 NODE_VERSION），
+        # 24 是本机开发用的版本。两个都绿才算过——只在开发机上过、生产上炸是最贵的红。
+        node: ['22.12.0', '24']
     steps:
       - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version: ${{ matrix.node }}
           cache: npm
 
       # ffmpeg-static / ffprobe-static 的 postinstall 会去 GitHub 下载二进制，
       # CI 只做静态检查与单测，用不到它们，跳过安装脚本能少一个失败面。
       - name: 安装依赖
         run: npm ci --ignore-scripts
+
+      # 版本自检：不在支持范围内就别往下跑，红得早一点、原因明确一点
+      - name: Node 版本自检
+        run: node scripts/check-node.mjs
 
       - name: 类型检查
         run: npx tsc -b
@@ -40,3 +50,24 @@ jobs:
 
       - name: 构建
         run: npm run build
+
+  security:
+    name: 安全扫描（依赖漏洞 / 密钥）
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22.12.0'
+
+      # 只看生产依赖：devDependencies 是 electron / vite / oxlint，不进服务器。
+      # 命中 high 或 critical 直接红——修不了就先写进 docs 并说明为什么，不许静默放行。
+      - name: 生产依赖漏洞
+        run: npm audit --omit=dev --audit-level=high
+
+      # 规则、夹具豁免、假 Key 标记都在 scripts/scan-secrets.mjs 里，改规则先加单测。
+      # 扫的是 git 跟踪的文件，所以 .env / 私钥 / 构建产物只要没进仓库就不会被扫到。
+      - name: 密钥扫描
+        run: node scripts/scan-secrets.mjs

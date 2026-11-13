@@ -62,6 +62,13 @@ if ! /usr/local/node/bin/node -v 2>/dev/null | grep -q "^v${NODE_VERSION%%\..*}"
   ln -sf /usr/local/node/bin/npm /usr/local/bin/npm
 fi
 node -v; npm -v
+# B9：Node 下限 22.12.0（低于它没有可用的 node:sqlite）。装到一半才发现最费时间，
+# 所以这里先比一次版本，不合格直接停（版本比较用 sort -V，不要手写字符串比较）。
+NODE_MIN=22.12.0
+if [ "$(printf '%s\n%s\n' "$NODE_MIN" "$(node -v | sed 's/^v//')" | sort -V | head -n1)" != "$NODE_MIN" ]; then
+  echo "Node $(node -v) 低于下限 $NODE_MIN：node:sqlite 不可用，先升级 Node（见 package.json engines）" >&2
+  exit 1
+fi
 
 log "3/7 账号与目录"
 id -u "$APP_USER" >/dev/null 2>&1 || useradd -r -m -d /home/$APP_USER -s /bin/bash "$APP_USER"

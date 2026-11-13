@@ -1115,6 +1115,18 @@ export default function SystemSection() {
                   <span className="admin-value admin-value--inline">v{version.data.version}</span>
                 </dd>
               </div>
+              {version.data.runtime ? (
+                <div>
+                  <dt>运行环境</dt>
+                  <dd>
+                    <code className="admin-mono">Node {version.data.runtime.node}</code>
+                    <Badge tone={version.data.runtime.level === 'supported' ? 'ok' : version.data.runtime.level === 'untested' ? 'warn' : 'fail'}>
+                      {version.data.runtime.level === 'supported' ? '已验证' : version.data.runtime.level === 'untested' ? '未验证' : '不支持'}
+                    </Badge>
+                    <span className="admin-cell-sub">支持 {version.data.runtime.min} 起；生产与 CI 都按这个范围跑</span>
+                  </dd>
+                </div>
+              ) : null}
               <div>
                 <dt>服务名</dt>
                 <dd className={internal ? 'admin-mono' : ''}>{internal ? version.data.name : 'VisionQA 工作台'}</dd>

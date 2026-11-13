@@ -94,6 +94,8 @@ export type VersionInfo = {
   version: string
   name: string
   startedAt: string
+  // B9：登录后才有；运行时 Node 版本与支持范围，版本不匹配时后台能直接看出来
+  runtime?: { node: string; min: string; level: 'supported' | 'untested' | 'too-old' | 'invalid'; supported: boolean }
 }
 
 export type BdcPort = {

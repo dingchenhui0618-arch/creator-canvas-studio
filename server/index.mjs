@@ -1,3 +1,7 @@
+// B9：第一个 import 是守门模块——Node 版本不对、或启动时漏了 --experimental-sqlite，
+// 都在加载 config / storage / SQLite 之前带着明确提示退出（退出码 78），
+// 不会变成一句看不懂的 ERR_UNKNOWN_BUILTIN_MODULE。
+import './node-guard.mjs'
 import http from 'node:http'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
@@ -79,6 +83,7 @@ import { sitePublicView } from './site-info.mjs'
 import { storageRoom } from './storage.mjs'
 import { admit, capacityFor } from './waterline.mjs'
 import { inheritedListenFd, listenMode } from './listen.mjs'
+import { checkNodeVersion, MIN_NODE } from './node-version.mjs'
 import { clearModelBlock, modelServiceState } from './service-state.mjs'
 import { fetchPublic } from './media.mjs'
 import { bdcStatus, canvasErrorMessage, listCanvases, createCanvas, appendCanvasNote } from './bdc.mjs'
@@ -360,11 +365,19 @@ const server = http.createServer(async (req, res) => {
       // 真实的版本号：读本仓库 package.json；客户端拿它和自己的构建版本比对，用来发现「页面是旧的」。
       // 生产匿名探针只回产品名与版本；包名与启动时刻属于部署细节，登录后（后台系统页）才返回。
       const internal = config.ui.mode === 'internal'
+      // B9：运行时的 Node 版本跟启动时间一样属于部署细节，登录后的后台才看得到。
+      // 版本掉出支持范围时后台直接显示「未验证 / 不支持」，不用登服务器查。
+      const runtime = checkNodeVersion()
       sendJson(res, 200, {
         ok: true,
         version: PKG.version,
         name: internal ? PKG.name : 'VisionQA',
-        ...(user ? { startedAt: STARTED_AT } : {}),
+        ...(user
+          ? {
+              startedAt: STARTED_AT,
+              runtime: { node: runtime.node, min: MIN_NODE, level: runtime.level, supported: runtime.ok },
+            }
+          : {}),
       })
       return
     }
@@ -1091,6 +1104,8 @@ const onListening = () => {
     redfox: redfoxEnabled() ? 'on' : 'mock',
     vision: visionEnabled() ? config.vision.model : 'off',
     auth: config.auth.requireAuth ? 'on' : 'off',
+    // 运行时版本一起落到启动事件里：换 Node 之后翻日志就能看到当时跑的是哪个版本
+    node: process.versions.node,
   })
 }
 if (listenFd === null) server.listen(config.port, '127.0.0.1', onListening)
