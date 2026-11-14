@@ -10,7 +10,7 @@ import { projectsById, withReviewProject } from '../review-ownership.mjs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { config } from '../config.mjs'
-import { currentUser } from '../auth.mjs'
+import { currentUser, isAdmin } from '../auth.mjs'
 import { charge, refund } from '../credits.mjs'
 import { quotaRefusal } from '../quota.mjs'
 import { enter, leave } from '../gate.mjs'
@@ -220,6 +220,14 @@ export function createReviewRouter() {
       }
       if (pathname === '/api/review' && req.method === 'POST') {
         const body = await readBody(req)
+        // 自己传的图按账号分目录（v0.9.87）：评审入口再核一次归属——
+        // 本地素材那道闸只保证「这张图在数据目录里、是图」，管不到「是不是你的」。
+        const mediaPath = body.media ? String(body.media) : ''
+        const uploadOwner = mediaPath.match(/^uploads\/([A-Za-z0-9_-]{3,64})\//)
+        if (uploadOwner && user?.id && uploadOwner[1] !== user.id && !isAdmin(user)) {
+          sendJson(res, 404, { error: '这张图不在你的账号下：评审没有开始，也未扣积分', code: 'MEDIA_FORBIDDEN' })
+          return true
+        }
         // 素材先过一道：类型 / 大小不对就在扣费、占名额之前拒掉（被拒的这单不扣积分）
         const mediaProbe = body.media ? await probeLocalMedia(String(body.media)) : null
         // 从作品页发起的评审：先确认作品还在，再扣积分——不能收完钱才发现记不进任何作品
@@ -303,8 +311,10 @@ export function createReviewRouter() {
             : await reviewVisual({ ...job, log: writeLog })
           // 插件服务出结论时没有用到平台模型，不清除模型侧状态
           if (result.mode === 'local-model') noteModelSuccess()
+          // kind 说清画面从哪来：模板首帧 / 自己传的图 / 外链。以前凡是 media 都记成 template，
+          // 上传的截图也会被记成「模板帧」（v0.9.87 起分开）。
           const source = body.media
-            ? { kind: 'template', label: body.label || body.intent || '', media: body.media }
+            ? { kind: mediaPath.startsWith('uploads/') ? 'upload' : 'template', label: body.label || body.intent || '', media: body.media }
             : { kind: body.imageUrl ? 'url' : 'unknown', label: body.label || body.intent || '', imageUrl: body.imageUrl || '' }
           const saved = await saveReview({
             user,

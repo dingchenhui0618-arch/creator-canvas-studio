@@ -13,6 +13,9 @@ const RULES = [
   { method: 'POST', match: (p) => p === '/api/agents', bucket: 'agents', limit: 30 },
   { method: 'POST', match: (p) => /^\/api\/flows\/[\w-]+\/run$/.test(p), bucket: 'flow_run', limit: 6 },
   { method: 'POST', match: (p) => p === '/api/credits/request', bucket: 'credit_request', limit: 3 },
+  // 传图（v0.9.87）：一次评审只需要一张，一分钟 12 次对拖拽重试够用；
+  // 这条不扣积分，限的是「一块 8 MB 的请求体一分钟能读几次」，挡的是脚本把磁盘灌满。
+  { method: 'POST', match: (p) => p === '/api/media/upload', bucket: 'media_upload', limit: 12 },
   // 平台出图通道（v0.9.79）：调用方是画布服务端，一次批量出图会连发。
   // 名额闸门管的是「同时几张」，这一条管的是「一分钟最多几次」——令牌泄露或画布死循环时，
   // 决定烧多少钱的是后一条。20 次/分钟对正常批量够用，脚本刷会被 429 挡住。

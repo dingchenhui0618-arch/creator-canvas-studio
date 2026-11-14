@@ -72,6 +72,7 @@ import { createGatewayRouter } from './routes/gateway.mjs'
 import { createAccountRouter } from './routes/account.mjs'
 import { createLocalAgentRouter } from './routes/local-agent.mjs'
 import { createStorageRouter } from './routes/storage.mjs'
+import { createMediaRouter } from './routes/media.mjs'
 import { currentUser, listUsers, clientIp, isAdmin } from './auth.mjs'
 import { recordClientError } from './client-errors.mjs'
 import { createReport } from './reports.mjs'
@@ -102,6 +103,8 @@ const featureRoutes = [
   createAgentsRouter(),
   createFlowsRouter(),
   createReviewRouter(),
+  // 自己传一张图来评（v0.9.87）：/api/media/upload 收原始字节，/media/uploads/* 按归属读回来
+  createMediaRouter(),
   createBillingRouter(),
   createCreditsRouter(),
   // 素材占用：设置页要看「自己的帧图占了多少盘」（v0.9.68）

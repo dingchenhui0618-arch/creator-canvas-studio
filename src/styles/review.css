@@ -24,6 +24,23 @@
 .review-manual-row { display:flex; gap:8px; }
 .review-manual-row input { flex:1; min-width:0; padding:8px 8px; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface-raised); font-size:12px; color:var(--ink); }
 
+/* 传一张自己的图（v0.9.87）：评审栏里的第一入口。
+   虚线框 = 「这里可以放一张图」，拖进来或点右边选；拖拽悬停时换成实线，不再加阴影（整页只有一个主按钮才有阴影）。 */
+.review-upload { display:flex; align-items:center; gap:12px; padding:12px; border:1px dashed var(--line-strong); border-radius:var(--radius-sm); background:var(--surface-raised); transition:border-color .15s ease, background-color .15s ease; }
+.review-upload.is-dragging { border-style:solid; border-color:var(--ink); background:var(--canvas); }
+.review-upload.is-busy { opacity:.72; }
+.review-upload-input { display:none; }
+.review-upload-text { display:flex; flex-direction:column; gap:4px; min-width:0; flex:1; }
+.review-upload-text strong { font-size:13px; font-weight:500; color:var(--ink); }
+.review-upload-text span { font-size:12px; line-height:1.55; color:var(--faint); overflow-wrap:anywhere; }
+.review-upload-error { display:flex; align-items:flex-start; gap:8px; margin:0; padding:8px 12px; border:1px solid var(--fail); border-radius:var(--radius-sm); background:var(--fail-soft); font-size:12px; line-height:1.55; color:var(--fail); }
+.review-upload-error svg { flex:none; margin-top:2px; }
+@media (max-width: 900px) {
+  /* 窄屏上评审栏是整宽：文字与按钮并排会挤成三行，改成上下两块 */
+  .review-upload { flex-wrap:wrap; }
+  .review-upload-text { flex-basis:100%; }
+}
+
 .review-canvas-actions { display:flex; align-items:center; gap:12px; }
 .review-credit { font-family:var(--font-mono); font-size:11px; letter-spacing:.02em; color:var(--faint); white-space:nowrap; }
 .review-history { display:flex; flex-direction:column; gap:8px; padding-top:12px; border-top:1px solid var(--line); }

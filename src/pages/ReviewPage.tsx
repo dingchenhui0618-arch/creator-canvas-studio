@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { ArrowRight, ChevronDown, Clapperboard, Crosshair, Loader2, Play, RefreshCw, ScanEye, TriangleAlert } from 'lucide-react'
+import { ArrowRight, ChevronDown, Clapperboard, Crosshair, ImagePlus, Loader2, Play, RefreshCw, ScanEye, TriangleAlert } from 'lucide-react'
 import { getReview, getReviewCandidates, getReviewStatus, listReviews, runReview, type JudgeResult, type ReviewCandidates, type ReviewResult, type ReviewStatus, type ReviewSummary } from '../api/review'
 import { getCredits, getModelService, recheckModelService, type CreditsResponse, type ModelServiceState } from '../api/credits'
 import { listTemplates, coverSrc } from '../api/radar'
+import { uploadRejection, uploadReviewImage } from '../api/media'
 import { getProject } from '../api/projects'
 import {
   ISSUE_LABEL,
@@ -157,6 +158,12 @@ export default function ReviewPage({
   // 证据原图被删过（模板帧清理 / 远程图片失效）：说清楚，不留一张破图
   const [previewBroken, setPreviewBroken] = useState(false)
   const [manualUrl, setManualUrl] = useState('')
+  // 自己传一张图（v0.9.87）：传完就当成「已挑好画面」——评审那条链路认的是 media 路径，与模板帧同一套
+  const [uploadBusy, setUploadBusy] = useState(false)
+  const [uploadError, setUploadError] = useState('')
+  const [uploadNote, setUploadNote] = useState('')
+  const [uploadDrag, setUploadDrag] = useState(false)
+  const uploadInputRef = useRef<HTMLInputElement | null>(null)
   // 首屏先问「评哪条作品的哪一版」：没有作品、或从作品页进来要挑画面时，才回到挑一张图
   const [candidates, setCandidates] = useState<ReviewCandidates | null>(null)
   const [candidatesError, setCandidatesError] = useState('')
@@ -182,6 +189,8 @@ export default function ReviewPage({
 
   const pick = useCallback((target: Picked) => {
     setPicked(target)
+    // 换成模板帧 / 图片地址时，上传栏那句「已选 …」不再成立（上传成功后它自己会再写上）
+    setUploadNote('')
     setResult(null)
     setError('')
     setActive(null)
@@ -191,6 +200,57 @@ export default function ReviewPage({
     setOpenError('')
     setPreviewBroken(false)
   }, [])
+
+
+  /**
+   * 传一张自己的图当这次评审的画面（v0.9.87）：传完直接选中，评审走原来那条链路。
+   * 本机先拦一次大小与类型，省得 8 MB 的请求体发出去再被拒；服务端还会按文件头再判一次。
+   */
+  const uploadImage = useCallback(
+    async (file: File) => {
+      const rejection = uploadRejection(file)
+      if (rejection) {
+        setUploadError(rejection)
+        setUploadNote('')
+        return
+      }
+      setUploadBusy(true)
+      setUploadError('')
+      setUploadNote('')
+      try {
+        const saved = await uploadReviewImage(file)
+        if (reviewId) onClearReview?.()
+        pick({ media: saved.media, label: '我传的图 · ' + file.name, preview: saved.imageUrl })
+        setUploadNote(
+          '已选 ' + file.name + ' · 第 ' + saved.usage.files + ' / ' + saved.usage.maxFiles + ' 张' +
+            (saved.replaced ? '（顶掉了 ' + saved.replaced + ' 张旧图）' : ''),
+        )
+      } catch (reason) {
+        setUploadError(reason instanceof Error ? reason.message : '上传失败，稍后再试')
+      } finally {
+        setUploadBusy(false)
+      }
+    },
+    [onClearReview, pick, reviewId],
+  )
+
+  // Ctrl+V 直接贴截图：对「把这一版的画面贴进来最准」这句话来说，这是最短的一步。
+  // 焦点在输入框里时不抢——那多半是在粘一个图片地址，不是在贴图。
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const onPaste = (event: ClipboardEvent) => {
+      const items = event.clipboardData?.items
+      if (!items?.length) return
+      const active = document.activeElement as HTMLElement | null
+      if (active && /^(INPUT|TEXTAREA)$/.test(active.tagName)) return
+      const file = Array.from(items).find((item) => item.kind === 'file' && item.type.startsWith('image/'))?.getAsFile()
+      if (!file) return
+      event.preventDefault()
+      void uploadImage(file)
+    }
+    document.addEventListener('paste', onPaste)
+    return () => document.removeEventListener('paste', onPaste)
+  }, [uploadImage])
 
   useEffect(() => {
     let alive = true
@@ -434,7 +494,7 @@ export default function ReviewPage({
               <Clapperboard size={14} strokeWidth={1.75} />
               <div>
                 <strong>记入作品：{projectTitle || '正在读取作品…'}</strong>
-                <span>这次结论会挂在这条作品下。把这一版要发的画面贴进来最准；没有截图时拿模板首帧也能评，但那是原片那一帧。</span>
+                <span>这次结论会挂在这条作品下。把这一版要发的画面传上来最准（下面可以直接传图或 Ctrl+V 贴截图）；没有截图时拿模板首帧也能评，但那是原片那一帧。</span>
               </div>
             </div>
           ) : null}
@@ -452,6 +512,53 @@ export default function ReviewPage({
             </button>
           </div>
 
+          {/* 传一张自己的图（v0.9.87）：以前只能从模板帧或图片地址里选，
+              而作品页那句「把这一版要发的画面贴进来最准」一直没有入口能把图放进来。 */}
+          <div
+            className={'review-upload' + (uploadDrag ? ' is-dragging' : '') + (uploadBusy ? ' is-busy' : '')}
+            onDragEnter={(event) => { event.preventDefault(); if (!uploadBusy) setUploadDrag(true) }}
+            onDragOver={(event) => { event.preventDefault(); if (!uploadBusy) setUploadDrag(true) }}
+            onDragLeave={() => setUploadDrag(false)}
+            onDrop={(event) => {
+              event.preventDefault()
+              setUploadDrag(false)
+              if (uploadBusy) return
+              const file = event.dataTransfer?.files?.[0]
+              if (file) void uploadImage(file)
+            }}
+          >
+            <input
+              ref={uploadInputRef}
+              className="review-upload-input"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={(event) => {
+                const file = event.target.files?.[0]
+                // 清空 value：同一个文件改完再选一次，change 也要能触发
+                event.target.value = ''
+                if (file) void uploadImage(file)
+              }}
+            />
+            <div className="review-upload-text">
+              <strong>{uploadBusy ? '正在传这张图…' : '传一张自己的图'}</strong>
+              <span>{uploadNote || '拖进来、按 Ctrl+V 贴截图，或点右边选文件 · jpg / png / webp，≤ 8 MB'}</span>
+            </div>
+            <button
+              type="button"
+              className="vq-button vq-button--ghost vq-button--sm"
+              onClick={() => uploadInputRef.current?.click()}
+              disabled={uploadBusy}
+              title="从电脑里选一张图：只评这一张，不动作品里的画布"
+            >
+              {uploadBusy ? <Loader2 size={13} className="vq-spin" /> : <ImagePlus size={13} />}
+              {uploadBusy ? '上传中' : '选图'}
+            </button>
+          </div>
+          {uploadError ? (
+            <p className="review-upload-error" role="alert">
+              <TriangleAlert size={13} /> {uploadError}
+            </p>
+          ) : null}
           {pickerExpanded ? (
             <>
               <div className="review-grid">
