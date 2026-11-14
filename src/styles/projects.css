@@ -2296,6 +2296,24 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
   color: var(--faint);
 }
 
+/* 交时评审照写交付那一刻的结论（v0.9.120）：它是历史快照，不跟这一版后来的重评跑。 */
+.vq-vcompare-review-snapshot,
+.vq-vcompare-review-drift {
+  margin: 0;
+  color: var(--faint);
+  font-size: 11.5px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.vq-vcompare-review-drift.is-worse {
+  color: var(--fail);
+}
+
+.vq-vcompare-review-drift.is-better {
+  color: var(--pass);
+}
+
 .vq-vcompare-review-change {
   margin: 0;
   color: var(--muted);

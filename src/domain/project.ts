@@ -176,8 +176,12 @@ export type ProjectVersionCompareSide = {
   scriptAvailable: boolean
   /** 这一版最近一评的概况；没评过 count 为 0（v0.9.119） */
   review: ProjectVersionCompareReview
-  /** 这一版交出去过没有；有就是交付时间（老记录可能是空串）（v0.9.119） */
-  delivery: { at: string } | null
+  /**
+   * 这一版交出去过没有；有就是交付时间（老记录可能是空串）（v0.9.119）。
+   * review 是交付那一刻的评审快照（v0.9.120）：对象 = 交时评过；null = 当时还没评；
+   * 没有这个字段 = 升级前的交付记录，当时没记。不能拿这一版后来的评审冒充交时结论。
+   */
+  delivery: { at: string; review?: ProjectDeliveryReview | null } | null
 }
 
 /** 两版之间的评审变化（v0.9.119）：只写变了什么，不替人判断要不要改 */

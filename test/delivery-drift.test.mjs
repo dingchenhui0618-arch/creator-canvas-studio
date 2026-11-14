@@ -157,6 +157,13 @@ test('页面文案：两种漂移各一句话，没漂移回空串', () => {
   assert.equal(client.deliveryDriftText(null), '')
 })
 
+test('页面文案：交时评审三种状态分得清，不拿后来重评冒充当初', () => {
+  assert.equal(client.deliveryReviewText(null), '还没评过')
+  assert.equal(client.deliveryReviewText(undefined), '没记（升级前的交付记录）')
+  assert.equal(client.deliveryReviewText(snap('pass')), '通过')
+  assert.equal(client.deliveryReviewText(snap('needs_review', { issues: issues({ blocker: 1, counted: 1 }) })), '需人工确认 · 1 阻塞')
+})
+
 test('交付记录本身不被重评改写：交时仍是当初那句', async () => {
   const project = await getProject('prj_worse', me)
   assert.equal(project.deliveries[0].review.verdict, 'pass', '交时快照照旧')

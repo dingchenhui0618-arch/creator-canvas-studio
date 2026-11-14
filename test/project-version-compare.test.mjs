@@ -196,6 +196,17 @@ test('任意两版对照：明细逐项列出，当前版读现在的、归档�
   assert.equal(oneToTwo.body.target.review.verdict, 'pass')
   assert.ok(oneToTwo.body.target.delivery)
   assert.ok(oneToTwo.body.target.delivery.at.length > 0, 'v2 交付记录应有时间')
+  // 交时评审快照（v0.9.120）：交付那一刻 v2 是通过、1 个主要，不随后来的重评改写
+  assert.equal(oneToTwo.body.target.delivery.review.verdict, 'pass')
+  assert.deepEqual(oneToTwo.body.target.delivery.review.issues, {
+    blocker: 0,
+    major: 1,
+    minor: 0,
+    info: 0,
+    counted: 1,
+    observations: 1,
+  })
+  assert.equal(oneToTwo.body.target.delivery.review.at, oneToTwo.body.target.review.at, '交时评审时间应是交付当时的最近一评')
   assert.deepEqual(oneToTwo.body.reviewChange, { text: '主要少 1 个', tone: 'better' })
   const twoToThree = await call('GET', '/api/projects/' + built.project.id + '/versions/compare?base=2&target=3')
   assert.equal(twoToThree.status, 200)
@@ -204,6 +215,7 @@ test('任意两版对照：明细逐项列出，当前版读现在的、归档�
   assert.deepEqual(twoToThree.body.script.changed, [])
   assert.equal(twoToThree.body.script.hookChanged, false)
   assert.deepEqual(twoToThree.body.canvas.removed.map((item) => item.title), ['出图'])
+  assert.equal(twoToThree.body.base.delivery.review.verdict, 'pass', 'v2 那一侧仍带交时快照')
 
   // 只读：对照前后作品一个字都不变
   const after = await call('GET', '/api/projects/' + built.project.id)

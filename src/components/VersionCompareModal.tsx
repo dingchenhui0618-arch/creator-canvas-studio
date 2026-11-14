@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ArrowLeftRight, X } from 'lucide-react'
 import { compareProjectVersions } from '../api/projects'
-import { REVIEW_VERDICT_LABEL, issueGap, issueLine } from '../domain/review'
+import { REVIEW_VERDICT_LABEL, deliveryDrift, deliveryDriftText, deliveryReviewText, issueGap, issueLine } from '../domain/review'
 import type {
   ProjectVersionCompare,
   ProjectVersionCompareField,
@@ -60,6 +60,10 @@ function ReviewOutcome({
         {[base, target].map((side) => {
           const review = side.review
           const issues = reviewIssueText(review)
+          const delivery = side.delivery
+          // 交时快照和这一版最近一评比：只在两边都记着认得出的结论时开口，
+          // 老记录或交时没评过就只说快照本身，不编一句「后来变了」（v0.9.120）。
+          const drift = delivery ? deliveryDrift(delivery.review, review) : null
           return (
             <article className="vq-vcompare-review-card" key={side.n}>
               <div className="vq-vcompare-review-head">
@@ -77,8 +81,18 @@ function ReviewOutcome({
                 {issues ? ' · ' + issues : ''}
               </p>
               <p className="vq-vcompare-review-delivery">
-                {side.delivery ? '交付过 · ' + reviewAtLabel(side.delivery.at) : '没交付'}
+                {delivery ? '交付过 · ' + reviewAtLabel(delivery.at) : '没交付'}
               </p>
+              {delivery ? (
+                <p className="vq-vcompare-review-snapshot">
+                  交时评审：{deliveryReviewText(delivery.review)}
+                </p>
+              ) : null}
+              {drift ? (
+                <p className={'vq-vcompare-review-drift is-' + drift.tone}>
+                  交付{deliveryDriftText(drift)}
+                </p>
+              ) : null}
             </article>
           )
         })}
@@ -384,7 +398,7 @@ export function VersionCompareModal({
         </div>
 
         <p className="vq-vcompare-note">
-          只读：不改画布、不改脚本、不扣积分。节点只比类型与配置，移动位置或改标题不算；脚本按段名比口播，开版时存下的快照才算；评审读这一版最近一次，交付只认这一版的记录。没有快照或没评过的一侧不猜「没变」。
+          只读：不改画布、不改脚本、不扣积分。节点只比类型与配置，移动位置或改标题不算；脚本按段名比口播，开版时存下的快照才算；评审读这一版最近一次，交付只认这一版的记录，交时评审照写当初、不被后来重评改写。没有快照或没评过的一侧不猜「没变」。
         </p>
       </div>
     </div>

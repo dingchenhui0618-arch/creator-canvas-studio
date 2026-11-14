@@ -880,7 +880,12 @@ export function createProjectsRouter() {
         const deliveryOfVersion = (n) => {
           const list = Array.isArray(project.deliveries) ? project.deliveries : []
           const entry = list.filter((item) => item.version === n).pop()
-          if (entry) return { at: String(entry.at || '') }
+          if (entry) {
+            // review 三种状态原样带出去：对象 = 交时评过；null = 当时还没评；字段不存在 = 升级前没记。
+            // 不在这里补一次「拿现在评审当交时」——那会把历史改写成交付后的结论（v0.9.120）。
+            const at = String(entry.at || '')
+            return entry.review === undefined ? { at } : { at, review: entry.review }
+          }
           // 交付记录是后来才有的：老数据没有条目，但状态是已交付且指的是当前这一版，
           // 与作品页 deliveredCurrent 同一口径——写「交付过 · 时间没记录」，不写成没交。
           if (project.status === 'done' && project.version > 0 && n === project.version) return { at: '' }
