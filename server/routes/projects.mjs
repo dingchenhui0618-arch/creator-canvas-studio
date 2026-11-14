@@ -42,7 +42,7 @@ import { canStartProject } from '../origin-entry.mjs'
 import { adoptCanvasForProject, createProjectFromCanvas } from '../project-canvas.mjs'
 import { buildZip, safeEntryName } from '../zip-store.mjs'
 import { storyboardFrames } from '../project-frames.mjs'
-import { newDeliveryPackageId, readDeliveryPackage, saveDeliveryPackage } from '../delivery-packages.mjs'
+import { deliveriesWithDisk, hashDeliveryPackage, newDeliveryPackageId, packageIntegrity, readDeliveryPackage, saveDeliveryPackage } from '../delivery-packages.mjs'
 import {
   listProjects,
   getProject,
@@ -77,6 +77,8 @@ const DELIVERABLE = /^\/api\/projects\/([\w-]+)\/deliverable$/
 const DELIVERABLE_ZIP = /^\/api\/projects\/([\w-]+)\/deliverable\.zip$/
 // 交付时封存的那一份（v0.9.125）：按作品 + 交付记录编号取，不按「今天重打一份」
 const DELIVERY_PACKAGE = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})$/
+// 盘上这一份还对不对（v0.9.128）：只读，流式重算 SHA-256 与档案比；不缓存、不写盘、不修文件
+const DELIVERY_PACKAGE_CHECK = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})\/check$/
 // 打印版不进 /api：它是在新标签里打开的 HTML，地址栏里那串会印在纸的页脚上
 const DELIVERABLE_PRINT = /^\/print\/projects\/([\w-]+)\/deliverable$/
 // 评审对照纸：评审把问题框在哪一块画面上，同一张 A4 里印出来（交付包里也有同一份）
@@ -245,8 +247,12 @@ async function projectDetailView(project, user, { snapshots = false } = {}) {
     .filter((entry) => entry.projectId === project.id)
     .map((entry) => ({ id: entry.id, title: entry.title, createdAt: entry.createdAt, beats: (entry.structure || []).length, shots: (entry.storyboard || []).length }))
     .slice(0, 5)
+  // 盘上还在不在（v0.9.128）：每条封存包只 stat 一次，作品页不用点开就能知道包还在不在。
+  // 只加一个 disk 字段，档案里的字节数与哈希原样不动。
+  const projectView = projectBrief(project)
+  const projectDeliveries = await deliveriesWithDisk(project.id, projectView.deliveries || [])
   return {
-    project: projectBrief(project),
+    project: { ...projectView, deliveries: projectDeliveries },
     // 作品页的分享面板读这里：列表接口不返回 token
     share,
     // 沉淀出去的模板：作品页写「已存成模板 N 条」，刷新还在
@@ -1148,6 +1154,36 @@ export function createProjectsRouter() {
           'X-Robots-Tag': 'noindex',
         })
         res.end(archive)
+        return true
+      }
+
+      // 盘上这一份还对不对（v0.9.128）：只读，流式重算 SHA-256 与档案比。
+      // 不缓存结果：要的就是「现在」这一份；不清文件、不改档案、不写盘。
+      const packageCheck = pathname.match(DELIVERY_PACKAGE_CHECK)
+      if (packageCheck) {
+        if (req.method !== 'GET') {
+          sendJson(res, 405, { error: '封存包只能核对，不能修改' })
+          return true
+        }
+        const project = await getProject(packageCheck[1], user)
+        if (!project) {
+          sendJson(res, 404, { error: '作品不存在或已被删除' })
+          return true
+        }
+        const delivery = (project.deliveries || []).find((entry) => entry.id === packageCheck[2] && entry.package)
+        if (!delivery) {
+          sendJson(res, 404, { error: '这一条交付没有封存包，或者包已经不在了' })
+          return true
+        }
+        const actual = await hashDeliveryPackage(project.id, delivery.id)
+        const integrity = packageIntegrity(delivery.package, actual)
+        sendJson(res, 200, {
+          ok: integrity.ok,
+          state: integrity.state,
+          checkedAt: new Date().toISOString(),
+          expected: { sha256: delivery.package.sha256 || '', bytes: Number(delivery.package.bytes) || 0 },
+          actual: actual ? { sha256: actual.sha256, bytes: actual.bytes } : null,
+        })
         return true
       }
 

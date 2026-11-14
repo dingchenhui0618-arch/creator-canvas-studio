@@ -138,6 +138,8 @@ export type ProjectDeliveryPackage = {
   sha256: string
   fileName: string
   savedAt: string
+  /** 服务器盘上这一份还在不在（v0.9.128）：只 stat，不算哈希；老接口没有这一项 */
+  disk?: { present: boolean; bytes: number }
   /** 包内文件总数；老包（v0.9.125）没有这一项 */
   fileCount?: number
   /** 包内清单，最多 60 条；老包没有 */
@@ -395,6 +397,53 @@ export function checkPackageFile(
   else if (!shaOk) text = 'SHA-256 对不上：这个文件不是这一版封存的包'
   else if (!sizeOk) text = '大小和档案差 ' + Math.abs(sizeDelta) + ' B，包可能没下载完整'
   return { ok, shaOk, sizeOk, sizeDelta, text }
+}
+
+/**
+ * 服务器上那一份的核对结果（v0.9.128）：作品页按需让服务端重算盘上的 SHA-256。
+ * 和 checkPackageFile 分开：那边核「你手里这个文件」，这边核「服务器上封存的那一份」；
+ * 两头都对得上，才说明这份交付从封存到现在没被动过。
+ */
+export type PackageServerCheck = {
+  ok: boolean
+  /** missing 文件没了、resized 大小变了、mismatch 大小没变但内容被换过 */
+  state: 'ok' | 'mismatch' | 'resized' | 'missing' | 'unverifiable'
+  checkedAt: string
+  expected: { sha256: string; bytes: number }
+  actual: { sha256: string; bytes: number } | null
+}
+
+/** 服务器那一份的状态说成人话：丢了 / 大小变了 / 内容被换过 / 只能比大小 / 对得上。 */
+export function serverPackageText(result: PackageServerCheck | null | undefined): string {
+  if (!result) return ''
+  const want = Math.max(0, Math.round(Number(result.expected?.bytes) || 0))
+  const got = Math.max(0, Math.round(Number(result.actual?.bytes) || 0))
+  const delta = Math.abs(got - want)
+  switch (result.state) {
+    case 'missing':
+      return '服务器上这一份没了：档案还在，盘上的文件已经不在了'
+    case 'resized':
+      return '服务器上这一份大小和档案差 ' + delta + ' B，可能被截断了'
+    case 'mismatch':
+      return '服务器上这一份和档案对不上：盘上这份不是当初封存的那一份'
+    case 'unverifiable':
+      return '这一版没记 SHA-256，只能比大小：大小对得上'
+    default:
+      return '服务器上这一份也对得上：还是当初封存的那一份'
+  }
+}
+
+/**
+ * 盘上这一份的提示（v0.9.128）：只在不对劲的时候说话，正常时不占地方。
+ * 详情里带了 disk 才判断；老接口没有这一项就不猜。
+ */
+export function packageDiskAlert(pkg: ProjectDeliveryPackage | null | undefined): string {
+  const disk = pkg?.disk
+  if (!disk) return ''
+  if (!disk.present) return '服务器上包没了'
+  const want = Math.max(0, Math.round(Number(pkg?.bytes) || 0))
+  if (want && Math.round(Number(disk.bytes) || 0) !== want) return '服务器上大小变了'
+  return ''
 }
 
 /**

@@ -5,6 +5,7 @@ import ProjectStatusPill from '../components/ProjectStatus'
 import { VersionScriptModal } from '../components/VersionScriptModal'
 import { VersionCompareModal } from '../components/VersionCompareModal'
 import {
+  checkDeliveryPackage,
   deleteProject,
   deliverablePrintUrl,
   deliveryPackageUrl,
@@ -34,10 +35,13 @@ import {
   deliveryArchive,
   deliveryOf,
   packageBytesLabel,
+  packageDiskAlert,
   packageShortSha,
   projectStep,
+  serverPackageText,
   sha256HexOfBytes,
   type PackageCheck,
+  type PackageServerCheck,
   reviewsForVersion,
   runsForVersion,
   type ProjectDelivery,
@@ -176,6 +180,13 @@ export default function ProjectPage({
     check: PackageCheck | null
     error: string
   }>({ version: 0, status: 'idle', fileName: '', actualSha: '', actualBytes: 0, check: null, error: '' })
+  // 服务器上那一份（v0.9.128）：点「查一遍」才让服务端重算盘上的 SHA-256；只读、不缓存
+  const [serverCheck, setServerCheck] = useState<{
+    version: number
+    busy: boolean
+    result: PackageServerCheck | null
+    error: string
+  }>({ version: 0, busy: false, result: null, error: '' })
   // 人工复核：一句话备注，加上正在提交的那一档（拍通过 / 拍不通过 / 撤销）
   // null 表示「跟着这条拍板的备注走」：改判或撤销后不用手动清空，渲染时现算
   const [decisionNote, setDecisionNote] = useState<string | null>(null)
@@ -600,6 +611,25 @@ export default function ProjectPage({
         actualBytes: file.size,
         check: null,
         error: caught instanceof Error ? caught.message : '这个包没读出来',
+      })
+    }
+  }
+
+  // 服务器上那一份（v0.9.128）：盘上的文件和档案里的哈希比。
+  // 只读接口：不修文件、不改档案、不缓存结果；查的就是「现在」这一份。
+  const checkServerPackage = async (version: number, deliveryId: string) => {
+    if (!data) return
+    setServerCheck({ version, busy: true, result: null, error: '' })
+    try {
+      if (!deliveryId) throw new Error('这一条交付没有编号，查不了')
+      const result = await checkDeliveryPackage(data.project.id, deliveryId)
+      setServerCheck({ version, busy: false, result, error: '' })
+    } catch (caught) {
+      setServerCheck({
+        version,
+        busy: false,
+        result: null,
+        error: caught instanceof Error ? caught.message : '服务器上那一份没查成',
       })
     }
   }
@@ -1428,7 +1458,7 @@ export default function ProjectPage({
               </span>
             </h2>
             <p className="vq-project-archive-note">
-              标记交付时封存的那一份，之后改模板、改脚本、开新版都不会变。下载后把它拖进「核对」，本机算 SHA-256 与档案对比，不上传；包只认登录态，不走公开分享。
+              标记交付时封存的那一份，之后改模板、改脚本、开新版都不会变。手里那份拖进「核对」在本机算，服务器上那份点「查一遍哈希」在服务端算，两头都对上才算数；包只认登录态，不走公开分享。
             </p>
           </div>
           <ul className="vq-archive-list">
@@ -1467,6 +1497,11 @@ export default function ProjectPage({
                     ) : (
                       <span className="vq-archive-legacy-note">v0.9.125 之前的交付只记了哪一版，没有存包</span>
                     )}
+                    {sealed && pkg && packageDiskAlert(pkg) ? (
+                      <span className="vq-archive-disk-alert" role="status">
+                        {packageDiskAlert(pkg)}
+                      </span>
+                    ) : null}
                   </div>
                   {sealed && pkg ? (
                     <div className="vq-archive-actions">
@@ -1494,15 +1529,24 @@ export default function ProjectPage({
                         <FileCheck2 size={12} />
                         核对
                       </button>
-                      <a
-                        className="vq-button vq-button--quiet vq-button--sm"
-                        href={deliveryPackageUrl(project.id, row.id || '')}
-                        download
-                        title={'下载封存的那一份（' + pkg.bytes.toLocaleString('zh-CN') + ' B，之后改模板也不会变）'}
-                      >
-                        下载包
-                        <Download size={12} />
-                      </a>
+                      {pkg.disk && !pkg.disk.present ? (
+                        <span
+                          className="vq-button vq-button--quiet vq-button--sm is-disabled"
+                          title="服务器上这份封存包已经不在了，下载不了；档案里的哈希与大小仍然在"
+                        >
+                          包没了
+                        </span>
+                      ) : (
+                        <a
+                          className="vq-button vq-button--quiet vq-button--sm"
+                          href={deliveryPackageUrl(project.id, row.id || '')}
+                          download
+                          title={'下载封存的那一份（' + pkg.bytes.toLocaleString('zh-CN') + ' B，之后改模板也不会变）'}
+                        >
+                          下载包
+                          <Download size={12} />
+                        </a>
+                      )}
                     </div>
                   ) : null}
                   {sealed && pkg && verifyOpen === row.version ? (
@@ -1572,6 +1616,74 @@ export default function ProjectPage({
                           ) : null}
                         </div>
                       ) : null}
+                      {/* 服务器上那一份（v0.9.128）：上一段核「你手里这个文件」，这一段核「盘上封存的那一份」 */}
+                      <div className="vq-archive-verify-server">
+                        <div className="vq-archive-verify-server-head">
+                          <span className="vq-archive-verify-server-title">服务器上封存的那份</span>
+                          {pkg.disk ? (
+                            <span
+                              className={'vq-archive-server-badge' + (pkg.disk.present ? '' : ' is-bad')}
+                              title={
+                                pkg.disk.present
+                                  ? '盘上还有这个文件（这里只看大小，点「查一遍哈希」才重算内容）'
+                                  : '档案还在，盘上的文件已经没了'
+                              }
+                            >
+                              {pkg.disk.present ? '盘上 ' + packageBytesLabel(pkg.disk.bytes) : '盘上没了'}
+                            </span>
+                          ) : null}
+                          <button
+                            type="button"
+                            className="vq-button vq-button--quiet vq-button--sm"
+                            onClick={() => void checkServerPackage(row.version, row.id || '')}
+                            disabled={serverCheck.busy && serverCheck.version === row.version}
+                            title="让服务端读一遍盘上这一份、算 SHA-256 与档案比；只读，不改文件"
+                          >
+                            <RefreshCw size={12} />
+                            {serverCheck.busy && serverCheck.version === row.version ? '正在算…' : '查一遍哈希'}
+                          </button>
+                        </div>
+                        <p className="vq-archive-verify-hint">
+                          档案记的是封存那一刻的哈希；盘上的文件被截断或换掉，只有重算一遍才发现。
+                        </p>
+                        {serverCheck.version === row.version && serverCheck.error ? (
+                          <p className="vq-archive-verify-note is-bad" role="status">
+                            {serverCheck.error}
+                          </p>
+                        ) : null}
+                        {serverCheck.version === row.version && serverCheck.result ? (
+                          <div
+                            className={'vq-archive-verify-result is-' + (serverCheck.result.ok ? 'ok' : 'bad')}
+                            role="status"
+                          >
+                            <strong>
+                              {serverCheck.result.ok ? <Check size={13} /> : <X size={13} />}
+                              {serverPackageText(serverCheck.result)}
+                            </strong>
+                            <span className="vq-mono">
+                              {serverCheck.result.actual
+                                ? packageBytesLabel(serverCheck.result.actual.bytes) +
+                                  ' · SHA-256 ' +
+                                  packageShortSha(serverCheck.result.actual.sha256)
+                                : '盘上没有文件'}
+                            </span>
+                            {!serverCheck.result.ok && serverCheck.result.actual ? (
+                              <div className="vq-archive-verify-diff">
+                                <span className="vq-mono">档案记的是 {packageShortSha(pkg.sha256)}</span>
+                                <button
+                                  type="button"
+                                  className="vq-archive-sha vq-mono"
+                                  onClick={() => void copyPackageSha(serverCheck.result?.actual?.sha256 || '')}
+                                  title="复制服务器上这一份的完整 SHA-256"
+                                >
+                                  复制服务器上这一份的 SHA-256
+                                  <Copy size={11} />
+                                </button>
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
                   ) : null}
                   {open && pkg ? (

@@ -8,6 +8,7 @@
 //  - 文件只在服务器数据目录里，路径由作品编号 + 交付记录编号拼成，不接受外部给的路径；
 //  - 下载仍走作品详情的登录态，包本身不是公开链接；
 //  - 封存失败不挡「标记交付」：记录照落，只是这一条没有包（界面如实说）。
+import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
@@ -80,6 +81,73 @@ export async function readDeliveryPackage(projectId, deliveryId) {
   } catch {
     return null
   }
+}
+
+/**
+ * 服务器上那一份还在不在（v0.9.128）：只 stat，不读内容、不改文件。
+ * 包没了不等于档案错了：档案记的是「当初封存了什么」，这两件事要分开说。
+ */
+export async function statDeliveryPackage(projectId, deliveryId) {
+  const target = packagePath(projectId, deliveryId)
+  if (!target) return { present: false, bytes: 0 }
+  try {
+    const info = await fsp.stat(target)
+    if (!info.isFile()) return { present: false, bytes: 0 }
+    return { present: true, bytes: info.size }
+  } catch {
+    return { present: false, bytes: 0 }
+  }
+}
+
+/**
+ * 流式算盘上这一份的 SHA-256：只读文件、不缓存、不写盘。
+ * 为什么要重算：档案里的哈希是封存那一刻记下的；盘上的文件可能被截断、覆盖或悄悄换掉，
+ * 不重算就永远发现不了「下载回来的其实已经不是当初那一份」。
+ */
+export async function hashDeliveryPackage(projectId, deliveryId) {
+  const target = packagePath(projectId, deliveryId)
+  if (!target) return null
+  try {
+    const hash = createHash('sha256')
+    let bytes = 0
+    for await (const chunk of fs.createReadStream(target)) {
+      hash.update(chunk)
+      bytes += chunk.length
+    }
+    return { sha256: hash.digest('hex'), bytes }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 盘上这一份与档案那一笔对得上吗（v0.9.128）：纯函数，不碰磁盘。
+ * state 分开写：missing 是文件没了，resized 是大小变了，mismatch 是大小没变但内容被换过；
+ * 没记哈希的老包只能比大小，如实回 unverifiable，不把「比不了」说成「对得上」。
+ */
+export function packageIntegrity(record, actual) {
+  const wantSha = String(record?.sha256 || '').trim().toLowerCase()
+  const wantBytes = Math.max(0, Math.round(Number(record?.bytes) || 0))
+  if (!actual) return { ok: false, state: 'missing' }
+  const gotSha = String(actual.sha256 || '').trim().toLowerCase()
+  const gotBytes = Math.max(0, Math.round(Number(actual.bytes) || 0))
+  if (wantBytes && gotBytes !== wantBytes) return { ok: false, state: 'resized' }
+  if (!wantSha) return { ok: true, state: 'unverifiable' }
+  if (wantSha !== gotSha) return { ok: false, state: 'mismatch' }
+  return { ok: true, state: 'ok' }
+}
+
+/**
+ * 作品详情里顺手带上「盘上还在不在」：只 stat，不读内容。
+ * 每条交付记录都换成新对象，package 也是新的：档案本身是事实，不能就地改写。
+ */
+export async function deliveriesWithDisk(projectId, deliveries = []) {
+  const list = Array.isArray(deliveries) ? deliveries : []
+  return Promise.all(list.map(async (entry) => {
+    if (!entry?.id || !entry.package) return entry
+    const disk = await statDeliveryPackage(projectId, entry.id)
+    return { ...entry, package: { ...entry.package, disk } }
+  }))
 }
 
 /** 删一份：重新打开这一版、或同一版重新交付时，旧包不该继续留在盘上。 */

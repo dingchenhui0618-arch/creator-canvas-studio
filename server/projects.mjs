@@ -286,6 +286,24 @@ export async function getProject(id, user = null) {
   return found ? normalize(found) : null
 }
 
+/**
+ * 全量交付封存包（v0.9.128）：健康检查要按整库看「档案里记的包，盘上还在不在」，
+ * 不受登录态过滤——这里只回编号与包元数据，不给作品标题、脚本或任何内容。
+ * 上限 200 条：健康检查每 10 秒跑一次，不能跟着作品数量无限长。
+ */
+export async function allDeliveryPackages() {
+  const list = await loadAll()
+  const rows = []
+  for (const item of list) {
+    for (const entry of normalizeDeliveries(item.deliveries)) {
+      if (!entry?.id || !entry.package) continue
+      rows.push({ projectId: item.id, deliveryId: entry.id, package: entry.package })
+      if (rows.length >= 200) return rows
+    }
+  }
+  return rows
+}
+
 export async function createProject({ title = '', templateId = '', flowId = '' } = {}, user = null) {
   const list = await loadAll()
   const now = new Date().toISOString()

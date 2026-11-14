@@ -7,6 +7,7 @@ import type {
   ProjectFlowBrief,
   ProjectListFacets,
   ProjectScript,
+  PackageServerCheck,
   ProjectShare,
   ProjectSpendDetail,
   ProjectVersionCompare,
@@ -254,6 +255,13 @@ export const downloadProjectDeliverableZip = (id: string) =>
  */
 export const deliveryPackageUrl = (projectId: string, deliveryId: string) =>
   '/api/projects/' + encodeURIComponent(projectId) + '/delivery-packages/' + encodeURIComponent(deliveryId)
+
+/**
+ * 让服务端重算盘上那一份的 SHA-256（v0.9.128）：只读接口，流式读一遍文件，
+ * 不缓存、不写盘、不修文件。作品页点「查一遍」才调，不跟着首屏走。
+ */
+export const checkDeliveryPackage = (projectId: string, deliveryId: string) =>
+  request<PackageServerCheck>(deliveryPackageUrl(projectId, deliveryId) + '/check')
 
 /**
  * 交付稿的 A4 打印版地址：新标签里打开一张排好版的纸，打印（存 PDF）交给浏览器。

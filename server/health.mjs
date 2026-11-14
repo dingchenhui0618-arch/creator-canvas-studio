@@ -11,6 +11,8 @@ import { config, internalMode, redfoxEnabled, visionEnabled } from './config.mjs
 import { openDb as getDb } from './auth.mjs'
 import { templateStats } from './templates.mjs'
 import { modelServiceState } from './service-state.mjs'
+import { allDeliveryPackages } from './projects.mjs'
+import { statDeliveryPackage } from './delivery-packages.mjs'
 
 const CACHE_MS = 10000
 let cached = null
@@ -36,6 +38,52 @@ async function timed(fn, { timeoutMs = 0, failure = '暂时不可用' } = {}) {
 
 function seconds(value) {
   return Math.round(value / 1000)
+}
+
+/**
+ * 交付封存包（v0.9.128）：档案里记着的那几份，盘上还在不在。
+ * 只 stat、不算哈希：哈希要读整份文件，留给作品页按需「查一遍」；
+ * 这里只回答最容易出事的那件事——文件是不是已经没了 / 大小变了。
+ */
+async function packageCheck() {
+  const started = Date.now()
+  try {
+    const rows = await allDeliveryPackages()
+    let present = 0
+    let missing = 0
+    let resized = 0
+    for (const row of rows) {
+      const disk = await statDeliveryPackage(row.projectId, row.deliveryId)
+      if (!disk.present) {
+        missing += 1
+        continue
+      }
+      present += 1
+      const want = Math.max(0, Math.round(Number(row.package?.bytes) || 0))
+      if (want && disk.bytes !== want) resized += 1
+    }
+    const bad = missing + resized
+    return {
+      id: 'packages',
+      label: pick('交付封存包', '交付封存'),
+      status: bad ? 'warn' : 'ok',
+      detail: !rows.length
+        ? pick('还没有交付封存包', '还没有封存包')
+        : pick(
+            rows.length + ' 个包 · 盘上 ' + present + (missing ? ' · 丢 ' + missing : '') + (resized ? ' · 大小变 ' + resized : ''),
+            bad ? bad + ' 个封存包和档案对不上' : rows.length + ' 个封存包都在',
+          ),
+      ms: Date.now() - started,
+    }
+  } catch (error) {
+    return {
+      id: 'packages',
+      label: pick('交付封存包', '交付封存'),
+      status: 'warn',
+      detail: isInternal() ? String(error?.message || error) : '暂时查不了',
+      ms: Date.now() - started,
+    }
+  }
 }
 
 export async function deepHealth({ force = false } = {}) {
@@ -102,6 +150,9 @@ export async function deepHealth({ force = false } = {}) {
       { failure: '模板库暂时不可用' },
     )),
   })
+
+  // 交付封存包：档案里的包，盘上还在不在（只 stat，不算哈希）
+  checks.push(await packageCheck())
 
   // 模型服务：/models 能连通只说明接口通，账号余额为 0 时真实调用仍然 402。
   // 先看最近一次真实调用的结果，再决定要不要探活——避免「显示可用、一用就失败」。

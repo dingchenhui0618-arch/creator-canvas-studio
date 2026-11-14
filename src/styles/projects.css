@@ -1177,6 +1177,60 @@
   text-transform: none;
 }
 
+/* 服务器上那份（v0.9.128）：和「你手里这份」用一条细线隔开，不另起一个虚线框 */
+.vq-archive-verify-server {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+}
+
+.vq-archive-verify-server-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+}
+
+.vq-archive-verify-server-title {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: var(--weight-medium);
+}
+
+/* 盘上那一份的大小：胶囊和全站状态胶囊同一套尺寸，只在没了的时候转红 */
+.vq-archive-server-badge {
+  padding: 1px var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.7;
+  /* 大小单位不跟着 .vq-mono 变大写 */
+  text-transform: none;
+}
+
+.vq-archive-server-badge.is-bad {
+  border-color: var(--fail);
+  color: var(--fail);
+}
+
+/* 档案行的红字提示：只在盘上不对劲时出现，正常时一个字都不占 */
+.vq-archive-disk-alert {
+  justify-self: start;
+  width: fit-content;
+  color: var(--fail);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+/* 包没了：下载入口换成说明，不给人一个点了就 404 的按钮 */
+.vq-button.is-disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
 .vq-archive-actions .vq-button.is-armed {
   background: var(--surface-soft);
   color: var(--ink);
