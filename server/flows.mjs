@@ -676,15 +676,20 @@ export function newRunId() {
   return 'run_' + randomUUID().slice(0, 8)
 }
 
-/** 运行刚建出来、还没执行任何节点时的模样（落盘用的初始态）。 */
-function blankRun(flow, id, cost = 0) {
+/** 运行刚建出来、还没执行任何节点时的模样（落盘用的初始态）。
+ *  queued = 这一单还在整机队里等名额：还没开始跑、也还没扣积分，运行记录该如实写「排队中」，
+ *  不能先写成 running 让运行记录页把它当失败（v0.9.98）。 */
+function blankRun(flow, id, cost = 0, { queued = false } = {}) {
   const amount = Math.max(0, Math.round(Number(cost) || 0))
+  const now = new Date().toISOString()
   return {
     id,
     flowId: flow.id,
     flowName: flow.name,
-    status: 'running',
-    startedAt: new Date().toISOString(),
+    status: queued ? 'queued' : 'running',
+    // 排队单从哪一刻开始等：页面按它算「排队 12s」，翻成 running 之后不再变
+    queuedAt: queued ? now : null,
+    startedAt: now,
     finishedAt: null,
     durationMs: 0,
     total: 0,
@@ -696,10 +701,39 @@ function blankRun(flow, id, cost = 0) {
 }
 
 /** 扣积分之前先把运行记录落一笔：扣完马上断电也留得下这条单，恢复时按账本退。 */
-export async function startFlowRun(flow, runId, { cost = 0 } = {}) {
-  const run = blankRun(flow, String(runId || '') || newRunId(), cost)
+export async function startFlowRun(flow, runId, { cost = 0, queued = false } = {}) {
+  const run = blankRun(flow, String(runId || '') || newRunId(), cost, { queued })
   await saveRun(run)
   return run
+}
+
+/**
+ * 排到名额、钱也扣成功了：记录从「排队中」翻成「运行中」。
+ * 为什么不等 runFlow 自己落盘再说：扣费已经发生，万一进程在这两步之间被杀，
+ * 启动恢复只能按记录状态判断——记录还写着 queued 就会被当成「没花过钱」清掉，账就对不上了。
+ * 反复调用无副作用：已经是 running 的记录原样返回，不会把开始时间往后推。
+ */
+export async function markRunStarted(runId) {
+  const id = String(runId || '')
+  if (!id) return null
+  return enqueueWrite(async () => {
+    const list = await loadRuns()
+    const index = list.findIndex((item) => item.id === id)
+    if (index < 0) return null
+    if (list[index].status !== 'queued') return list[index]
+    const startedAt = new Date().toISOString()
+    const queuedAt = Date.parse(String(list[index].queuedAt || ''))
+    const next = {
+      ...list[index],
+      status: 'running',
+      startedAt,
+      queuedMs: Number.isFinite(queuedAt) ? Math.max(0, Date.parse(startedAt) - queuedAt) : 0,
+    }
+    const copy = [...list]
+    copy[index] = next
+    await persistRuns(copy)
+    return next
+  })
 }
 
 /** 只给「记录建了、钱还没扣成功」这一刻用：撤掉占位记录，不留一条永远 running 的空单。 */
@@ -720,7 +754,7 @@ export async function abandonRun(runId, reason = '运行失败') {
   const list = await loadRuns()
   const run = list.find((item) => item.id === id)
   if (!run) return 0
-  if (run.status === 'running') {
+  if (run.status === 'running' || run.status === 'queued') {
     run.status = 'error'
     run.finishedAt = new Date().toISOString()
     run.error = String(reason || '运行失败').slice(0, 500)
@@ -893,14 +927,28 @@ export async function runFlow(flow, { onEvent, credits = null, runId = '' } = {}
 // 发一次版就是一次重启：以前运行记录只在跑完才写、退款靠内存里的回调，重启后
 // 已扣的积分没人退、这次运行也查不到。现在运行一开始就落盘，重启 / 停机按账本净额退。
 
-/** 启动恢复：上次进程没跑完的运行标成中断并按账本退款；重复启动不会多退。 */
+/** 启动恢复：上次进程没跑完的运行标成中断并按账本退款；重复启动不会多退。
+ *  排队中的单还没有开始跑、也没有扣钱（扣费在排到之后），恢复时直接撤掉——留着会是一条
+ *  永远「排队中」的记录，页面会以为还有一条运行在等名额。 */
 export async function recoverInterruptedRuns() {
   let recovered = 0
   let refunded = 0
+  let dropped = 0
   const list = await loadRuns()
+  const kept = []
   let changed = false
   for (const run of list) {
-    if (run.status !== 'running') continue
+    if (run.status === 'queued') {
+      // 钱不可能已经扣过，但按账本净额再核一遍：真扣了（极端时序）就退回，再撤记录
+      if (refundRunCredits(run) > 0) refunded += 1
+      dropped += 1
+      changed = true
+      continue
+    }
+    if (run.status !== 'running') {
+      kept.push(run)
+      continue
+    }
     run.status = 'interrupted'
     run.finishedAt = new Date().toISOString()
     const started = Date.parse(String(run.startedAt || ''))
@@ -909,9 +957,10 @@ export async function recoverInterruptedRuns() {
     if (refundRunCredits(run) > 0) refunded += 1
     recovered += 1
     changed = true
+    kept.push(run)
   }
-  if (changed) await persistRuns(list)
-  return { recovered, refunded }
+  if (changed) await persistRuns(kept)
+  return { recovered, refunded, dropped }
 }
 
 /** 停机收尾：给正在跑的运行标中断 + 退款，再让调用方关服务。重复调用无副作用。 */

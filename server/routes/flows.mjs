@@ -10,6 +10,7 @@ import {
   getRun,
   newRunId,
   startFlowRun,
+  markRunStarted,
   dropRunRecord,
   abandonRun,
   NODE_KINDS,
@@ -207,7 +208,11 @@ export function createFlowsRouter() {
         const body = await readBody(req)
         // 运行 id 先定、记录先落盘、再扣费：扣完立刻断电也留得下这条单，重启时按账本退。
         const runId = newRunId()
-        await startFlowRun(flow, runId, { cost: user?.id ? Number(config.credits.prices.flow_run) || 0 : 0 })
+        // 有账号才会真的去排整机那条队：先落成「排队中」，排到、扣完费再翻「运行中」
+        await startFlowRun(flow, runId, {
+          cost: user?.id ? Number(config.credits.prices.flow_run) || 0 : 0,
+          queued: Boolean(user?.id),
+        })
         const paid = await beginRunCharge(res, user, runId, flow.name, {
           ticket: String(req.headers['x-vq-queue-ticket'] || ''),
         })
@@ -217,6 +222,8 @@ export function createFlowsRouter() {
           return true
         }
         const creditNote = paid.cost > 0 ? { cost: paid.cost } : null
+        // 钱已经扣了：记录必须马上从「排队中」翻过来，否则进程此刻被杀，启动恢复会把它当没花钱的单撤掉
+        await markRunStarted(runId)
         try {
           if (body.stream) {
             sendStreamHead(res)

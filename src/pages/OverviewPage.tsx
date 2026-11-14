@@ -34,7 +34,7 @@ import {
   reviewTimeLabel,
   type DeliveryDrift,
 } from '../domain/review'
-import { runWorkLine } from '../domain/run'
+import { runLiveText, runStatusMeta, runWorkLine } from '../domain/run'
 import { stampTime, visitLine } from '../domain/share'
 import { useSiteInfo, useUiMode } from '../api/app'
 import '../styles/overview.css'
@@ -50,6 +50,7 @@ type RunRow = {
   flowName: string
   status: string
   startedAt: string
+  queuedAt?: string | null
   durationMs: number
   // 这条运行挂在哪条作品的哪一版；空白画布直接跑的是 null
   project?: RunProjectRef | null
@@ -1125,7 +1126,9 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                 <span role="columnheader">耗时</span>
                 <span role="columnheader">开始</span>
               </div>
-              {recentRuns.map((run) => (
+              {recentRuns.map((run) => {
+                const meta = runStatusMeta(run.status)
+                return (
                 <div className="vq-table-row" role="row" key={run.id}>
                   <div className="vq-table-name" role="cell">
                     <strong>{run.flowName}</strong>
@@ -1133,16 +1136,17 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                     <span className="vq-mono">{runWorkLine(run)}</span>
                   </div>
                   <span role="cell">
-                    <Tag tone={run.status === 'success' ? 'plain' : 'fail'}>{run.status === 'success' ? '成功' : '失败'}</Tag>
+                    <Tag tone={meta.tone === 'pass' ? 'plain' : meta.tone === 'fail' ? 'fail' : 'warn'}>{meta.label}</Tag>
                   </span>
                   <span className="vq-mono" role="cell">
-                    {secondsOf(run.durationMs)}
+                    {run.status === 'running' || run.status === 'queued' ? runLiveText(run) : secondsOf(run.durationMs)}
                   </span>
                   <span className="vq-mono" role="cell">
                     {clockOf(run.startedAt)}
                   </span>
                 </div>
-              ))}
+                )
+              })}
             </div>
           ) : (
             <div className="vq-empty vq-empty--inline">

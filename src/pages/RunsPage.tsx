@@ -5,7 +5,7 @@ import { Select } from '../components/Select'
 import { adoptProjectCanvas, createProject, listProjects } from '../api/projects'
 import type { ProjectSummary } from '../domain/project'
 import { listFlows, listRuns, type ApiFlow, type RunRecord } from '../api/flows'
-import { runVersionLabel, runWorkLine } from '../domain/run'
+import { runLiveText, runStatusMeta, runVersionLabel, runWorkLine } from '../domain/run'
 import { readRunsView, resolveFlowFilter, writeRunsView, type RunsView } from '../domain/list-view'
 import '../styles/runs.css'
 
@@ -146,6 +146,27 @@ export function RunsPage({
     return () => window.clearTimeout(timer)
   }, [load])
 
+  // 有单在排队或正在跑时，这一页自己跟上（v0.9.98）：不整页重载、不把选中项跳回第一条，
+  // 也不闪「读取运行记录…」——只是安静地把列表换掉。没有活着的行就停，不白轮询。
+  const refresh = useCallback(async () => {
+    try {
+      const result = await listRuns({ flowId: activeFlowId, status, q: query, limit: PAGE_SIZE, offset })
+      const list = result.items || []
+      setItems(list)
+      setTotal(result.total || 0)
+      setOpen((id) => (id && list.some((item) => item.id === id) ? id : list[0]?.id || null))
+    } catch {
+      // 轮询失败不打断页面：下一轮再来，真正读不到时还有手动刷新
+    }
+  }, [activeFlowId, offset, query, status])
+
+  const live = items.some((item) => item.status === 'running' || item.status === 'queued')
+  useEffect(() => {
+    if (!live) return undefined
+    const timer = window.setInterval(() => { void refresh() }, 3000)
+    return () => window.clearInterval(timer)
+  }, [live, refresh])
+
   useEffect(() => {
     let alive = true
     void listFlows()
@@ -245,7 +266,7 @@ export function RunsPage({
         title="运行记录"
         desc="每次画布执行都以真实模型调用为单位记录：哪个节点、多久、返回了什么、在哪一步失败；每条都写着属于哪条作品的第几版。"
         actions={
-          <button type="button" className="vq-button vq-button--ghost vq-button--sm" onClick={() => void load()}>
+          <button type="button" className="vq-button vq-button--ghost vq-button--sm" onClick={() => void refresh()}>
             <RefreshCw size={13} />刷新
           </button>
         }
@@ -328,15 +349,17 @@ export function RunsPage({
                     resetAdopt()
                   }}
                 >
-                  <span className={`runs-dot ${item.status === 'success' ? 'is-pass' : item.status === 'interrupted' ? 'is-warn' : 'is-fail'}`} />
+                  <span className={`runs-dot is-${runStatusMeta(item.status).tone}`} />
                   <span className="runs-row-main">
                     <strong>{item.flowName}</strong>
                     <small className={'runs-row-where' + (item.project ? '' : ' is-orphan')}>{runWorkLine(item)}</small>
                     <small className="vq-mono">{item.id} · {item.total} 个节点</small>
                   </span>
                   <span className="runs-row-meta">
-                    <span className="vq-mono">{item.status === 'success' ? '成功' : item.status === 'interrupted' ? '已中断' : '失败'}</span>
-                    <span className="vq-mono">{(item.durationMs / 1000).toFixed(1)}s</span>
+                    <span className="vq-mono">{runStatusMeta(item.status).label}</span>
+                    <span className="vq-mono">
+                      {item.status === 'running' || item.status === 'queued' ? runLiveText(item) : (item.durationMs / 1000).toFixed(1) + 's'}
+                    </span>
                     <span className="vq-mono">{fmtTime(item.startedAt)}</span>
                   </span>
                 </button>
@@ -349,9 +372,17 @@ export function RunsPage({
               <div className="runs-detail-head">
                 <Activity size={14} strokeWidth={1.5} />
                 <strong>{current.flowName}</strong>
-                <span className="vq-mono">{(current.durationMs / 1000).toFixed(1)}s</span>
+                <span className="vq-mono">
+                  {current.status === 'running' || current.status === 'queued' ? runLiveText(current) : (current.durationMs / 1000).toFixed(1) + 's'}
+                </span>
                 {current.credits && current.credits.cost > 0 ? (
-                  <span className="vq-mono">{current.credits.refunded ? '已退回 ' + current.credits.cost + ' 积分' : '消耗 ' + current.credits.cost + ' 积分'}</span>
+                  <span className="vq-mono">
+                    {current.credits.refunded
+                      ? '已退回 ' + current.credits.cost + ' 积分'
+                      : current.status === 'queued'
+                        ? '排到后扣 ' + current.credits.cost + ' 积分'
+                        : '消耗 ' + current.credits.cost + ' 积分'}
+                  </span>
                 ) : null}
                 <span className="runs-detail-actions">
                   {!current.project ? (
@@ -448,12 +479,12 @@ export function RunsPage({
               {adoptDone ? <p className="runs-adopt-done">{adoptDone}</p> : null}
               {current.status !== 'success' ? (
                 <p className="runs-note">
-                  {current.status === 'interrupted'
-                    ? '这次运行被中断，积分按账本退回。'
-                    : '这次运行失败了，积分原路退回。'}
-                  <a className="vq-link" href="#/help/replicate-failed">
-                    看常见原因
-                  </a>
+                  {runStatusMeta(current.status).note}
+                  {current.status === 'error' || current.status === 'interrupted' ? (
+                    <a className="vq-link" href="#/help/replicate-failed">
+                      看常见原因
+                    </a>
+                  ) : null}
                 </p>
               ) : null}
               <ol className="runs-nodes">

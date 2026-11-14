@@ -72,9 +72,11 @@ export type RunRecord = {
   id: string
   flowId: string
   flowName: string
-  // interrupted = 进程重启 / 停机打断，已按账本退回积分
-  status: 'success' | 'error' | 'running' | 'interrupted'
+  // queued = 还在整机队里等名额（没开始跑、没扣积分）；interrupted = 进程重启 / 停机打断，已按账本退回积分
+  status: 'success' | 'error' | 'running' | 'queued' | 'interrupted'
   startedAt: string
+  /** 排队单从哪一刻开始等（v0.9.98）；没排过队的是 null / 缺省 */
+  queuedAt?: string | null
   finishedAt: string | null
   durationMs: number
   total: number

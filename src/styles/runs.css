@@ -21,6 +21,15 @@
 .runs-dot.is-pass { background:var(--pass); }
 .runs-dot.is-fail { background:var(--fail); }
 .runs-dot.is-warn { background:var(--warn); }
+/* 排队中 / 运行中（v0.9.98）：以前这两种状态也顶着失败的红点，读起来像「已经失败并退钱」。
+   排队用语义色里的待确认黄；运行中不占语义色，用墨色 + 一圈缓慢呼吸的点，表示「还在动」。 */
+.runs-dot.is-queued { background:var(--warn); }
+.runs-dot.is-live { background:var(--ink); animation:runs-live 1.8s var(--ease-out) infinite; }
+@keyframes runs-live {
+  0%, 100% { box-shadow:0 0 0 0 rgba(17,17,17,.3); }
+  50% { box-shadow:0 0 0 3px rgba(17,17,17,0); }
+}
+@media (prefers-reduced-motion: reduce) { .runs-dot.is-live { animation:none; } }
 .runs-row-main { display:flex; flex-direction:column; gap:4px; min-width:0; }
 .runs-row-main strong { font-size:12px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .runs-row-main small { color:var(--faint); font-size:12px; }
