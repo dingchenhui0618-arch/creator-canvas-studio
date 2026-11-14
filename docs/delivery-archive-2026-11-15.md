@@ -118,3 +118,5 @@ saveDeliveryPackage() 增加可选的 files：每条只记文件名与字节数�
     bash /opt/visionqa/ops/rollback.sh --to 2   # v0.9.124
 
 这一版只加了一个可选字段（package.fileCount / package.files）、一段作品页区块与一个客户端派生函数；不改交付记录结构的主字段、不改路由、不改分享、不改评审与画布。回退后旧版忽略新字段，数据和磁盘上的包都还在。细节与「发现但没做」见本文；生产与本地证据见上表。
+
+提交 ca22f12；CI 43633269768 三个 job 全 success（安全扫描 15s、Node 22.12.0 2m40s、Node 24 2m41s）。
