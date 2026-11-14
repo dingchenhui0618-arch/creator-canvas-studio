@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowRight, ArrowUpRight, Eye, History, LayoutTemplate, Plus, RefreshCw, RotateCcw, Search, Send, Share2, Workflow, X } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, Download, Eye, History, LayoutTemplate, Plus, RefreshCw, RotateCcw, Search, Send, Share2, Workflow, X } from 'lucide-react'
 import type { Page } from '../domain/types'
 import PageHead from '../components/PageHead'
 import { Pill, Tag } from '../components/ui'
 import { request } from '../api/client'
 import { listBdcCanvases, type BdcCanvas } from '../api/bdc'
 import type { RunProjectRef } from '../api/flows'
-import { deliverablePrintUrl, listDeliveries, listProjects, listShares } from '../api/projects'
+import { deliverablePrintUrl, deliveryPackageUrl, listDeliveries, listProjects, listShares } from '../api/projects'
 import {
   ackReview,
   listReviewQueue,
@@ -1012,15 +1012,30 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                     </span>
                     <ArrowRight size={13} />
                   </button>
-                  {row.current ? (
-                    <button
-                      type="button"
-                      className="vq-button vq-button--quiet vq-button--sm vq-delivery-paper"
-                      onClick={() => openDeliverable(row.projectId)}
-                      title="在新标签里打开这一版的交付稿（A4，可存 PDF）"
-                    >
-                      交付稿
-                    </button>
+                  {row.current || (row.deliveryId && row.package) ? (
+                    <div className="vq-delivery-actions">
+                      {row.current ? (
+                        <button
+                          type="button"
+                          className="vq-button vq-button--quiet vq-button--sm vq-delivery-paper"
+                          onClick={() => openDeliverable(row.projectId)}
+                          title="在新标签里打开这一版的交付稿（A4，可存 PDF）"
+                        >
+                          交付稿
+                        </button>
+                      ) : null}
+                      {row.deliveryId && row.package ? (
+                        <a
+                          className="vq-button vq-button--quiet vq-button--sm vq-delivery-package"
+                          href={deliveryPackageUrl(row.projectId, row.deliveryId)}
+                          download
+                          title={'下载交付时封存的整套（' + row.package.bytes.toLocaleString('zh-CN') + ' B，之后改模板也不会变）'}
+                        >
+                          交付包
+                          <Download size={12} />
+                        </a>
+                      ) : null}
+                    </div>
                   ) : null}
                 </div>
               ))}
@@ -1061,7 +1076,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
 
             {hasPastDelivery ? (
               <p className="vq-delivery-note">
-                交付稿只按当前这一版生成：旧版要回看，点进去看作品里的「版本对照」。
+                交付包在标记交付时封存：旧版封过也能原样下载；升级前交的那几版没有包，要回看就点进作品看「版本对照」。
               </p>
             ) : null}
           </>

@@ -42,6 +42,7 @@ import { canStartProject } from '../origin-entry.mjs'
 import { adoptCanvasForProject, createProjectFromCanvas } from '../project-canvas.mjs'
 import { buildZip } from '../zip-store.mjs'
 import { storyboardFrames } from '../project-frames.mjs'
+import { newDeliveryPackageId, readDeliveryPackage, saveDeliveryPackage } from '../delivery-packages.mjs'
 import {
   listProjects,
   getProject,
@@ -74,6 +75,8 @@ const TEMPLATE_FROM = /^\/api\/projects\/([\w-]+)\/template$/
 const DELIVERABLE = /^\/api\/projects\/([\w-]+)\/deliverable$/
 // 交付包：交付稿 + 现场页 + 评审对照 + 两版对照 + 帧图打成一个 zip，收件人解压就能看，不用登录
 const DELIVERABLE_ZIP = /^\/api\/projects\/([\w-]+)\/deliverable\.zip$/
+// 交付时封存的那一份（v0.9.125）：按作品 + 交付记录编号取，不按「今天重打一份」
+const DELIVERY_PACKAGE = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})$/
 // 打印版不进 /api：它是在新标签里打开的 HTML，地址栏里那串会印在纸的页脚上
 const DELIVERABLE_PRINT = /^\/print\/projects\/([\w-]+)\/deliverable$/
 // 评审对照纸：评审把问题框在哪一块画面上，同一张 A4 里印出来（交付包里也有同一份）
@@ -286,6 +289,111 @@ async function deliverablePayload(project, user, tzOffsetMinutes) {
   const review = latest ? await getReview(latest.id, user) : null
   // detail 一起带出去：交付包的现场页要同一份脚本与分镜，不必再读一遍作品
   return { ...projectDeliverable(detail, { review, tzOffsetMinutes }), detail }
+}
+
+/**
+ * 打一份交付包（v0.9.125 抽成函数）：下载时现打与「标记交付」时封存读同一份实现，
+ * 不会出现「刚交的包」和「点下载拿到的包」内容不一样。
+ */
+async function buildProjectDeliveryArchive(project, user, tzOffsetMinutes) {
+  const { fileName, markdown, detail } = await deliverablePayload(project, user, tzOffsetMinutes)
+  const frames = await storyboardFrames(detail.template)
+  const now = new Date()
+  const sheet = setSheetHtml({
+    project,
+    script: detail.script,
+    template: detail.template,
+    frameBase: 'frames/',
+    availableFrames: new Set(frames.map((frame) => frame.name)),
+    offline: true,
+    generatedAt: now.toISOString(),
+    tzOffsetMinutes,
+  })
+  // 评审对照页：评审评过的那张画面如果就是分镜里的帧，直接复用包里那一份；
+  // 不是（另一条模板的帧）才复制进来。读不到就照实写「不在这份产物里」，不拿别的图顶。
+  const reviewRecords = await reviewSheetRecords(detail, user)
+  const packagedFrames = new Map(frames.map((frame) => [frame.templateId + '/' + frame.file, frame.name]))
+  const reviewImages = new Map()
+  const reviewExtras = []
+  for (const record of reviewRecords) {
+    const image = reviewImageRef(record.source)
+    if (!image) continue
+    const packagedName = packagedFrames.get(image.templateId + '/' + image.file)
+    if (packagedName) {
+      reviewImages.set(record.id, 'frames/' + packagedName)
+      continue
+    }
+    try {
+      const data = await fsp.readFile(path.join(config.framesDir, image.templateId, image.file))
+      const name = '评审/对照-' + String(reviewExtras.length + 1).padStart(2, '0') + '.jpg'
+      reviewExtras.push({ name, data })
+      reviewImages.set(record.id, name)
+    } catch {
+      // 帧图被清理过（模板回收站 / 过期清理）：这张纸只印问题与编号
+    }
+  }
+  const reviewSheet = reviewRecords.length
+    ? reviewSheetHtml({
+        project,
+        records: reviewRecords,
+        decisions: detail.decisions,
+        now,
+        tzOffsetMinutes,
+        offline: true,
+        imageSrc: (block) => reviewImages.get(block.id) || '',
+        imageNote: (block) => {
+          const source = reviewImages.get(block.id)
+          if (!source) return ''
+          return source.startsWith('frames/')
+            ? '画面：交付包里是 ' + source
+            : '画面：这张不在分镜帧里，跟着这张纸放在 ' + source
+        },
+      })
+    : ''
+  // 两版对照页（v0.9.122）：交付包是给「没有账号的人」的一整套，
+  // 这一版改了什么也该在里面，而不是只活在作品页弹窗。只打当前版与上一版：
+  // 包里对应的是「这次交出去的东西」，不是一条作品的完整版本史。
+  let compareSheet = ''
+  let compareSheetPair = null
+  if (project.version >= 2) {
+    const baseNo = project.version - 1
+    const built = await versionCompareView(project, user, baseNo, project.version)
+    if (built.ok) {
+      compareSheet = compareSheetHtml({
+        project,
+        compare: built.view,
+        now,
+        tzOffsetMinutes,
+        // 包里没有作品页可回：不印「返回作品」这类会点到 file:// 死链接的入口；
+        // 品牌图也换成文字，离线打开不欠一张破图
+        projectId: '',
+        offline: true,
+      })
+      compareSheetPair = { base: baseNo, target: project.version }
+    }
+  }
+  const note = packageNote({
+    model: setSheetModel({ project, script: detail.script, template: detail.template }),
+    generatedAt: now.toISOString(),
+    tzOffsetMinutes,
+    frameCount: frames.length,
+    reviewSheetCount: reviewRecords.length,
+    compareSheet: compareSheetPair,
+  })
+  const archive = buildZip(
+    [
+      { name: fileName, data: Buffer.from(markdown, 'utf8') },
+      { name: '现场页.html', data: Buffer.from(sheet, 'utf8') },
+      ...(reviewSheet ? [{ name: '评审对照页.html', data: Buffer.from(reviewSheet, 'utf8') }] : []),
+      ...(compareSheet ? [{ name: '两版对照页.html', data: Buffer.from(compareSheet, 'utf8') }] : []),
+      { name: '说明.txt', data: Buffer.from(note, 'utf8') },
+      ...frames.map((frame) => ({ name: 'frames/' + frame.name, data: frame.data })),
+      ...reviewExtras,
+    ],
+    { mtime: now },
+  )
+  const zipName = fileName.replace(/\.md$/i, '') + '-交付包.zip'
+  return { archive, fileName, zipName, now }
 }
 
 // 打印版出错时也给一张纸：这个地址是在新标签里打开的，吐一段 JSON 会让人以为页面坏了。
@@ -989,109 +1097,51 @@ export function createProjectsRouter() {
         }
         const rawZipTz = Number(url.searchParams.get('tz'))
         const zipTz = Number.isFinite(rawZipTz) ? Math.max(-720, Math.min(840, Math.round(rawZipTz))) : 480
-        const { fileName, markdown, detail } = await deliverablePayload(project, user, zipTz)
-        const frames = await storyboardFrames(detail.template)
-        const now = new Date()
-        const sheet = setSheetHtml({
-          project,
-          script: detail.script,
-          template: detail.template,
-          frameBase: 'frames/',
-          availableFrames: new Set(frames.map((frame) => frame.name)),
-          offline: true,
-          generatedAt: now.toISOString(),
-          tzOffsetMinutes: zipTz,
-        })
-        // 评审对照页：评审评过的那张画面如果就是分镜里的帧，直接复用包里那一份；
-        // 不是（另一条模板的帧）才复制进来。读不到就照实写「不在这份产物里」，不拿别的图顶。
-        const reviewRecords = await reviewSheetRecords(detail, user)
-        const packagedFrames = new Map(frames.map((frame) => [frame.templateId + '/' + frame.file, frame.name]))
-        const reviewImages = new Map()
-        const reviewExtras = []
-        for (const record of reviewRecords) {
-          const image = reviewImageRef(record.source)
-          if (!image) continue
-          const packagedName = packagedFrames.get(image.templateId + '/' + image.file)
-          if (packagedName) {
-            reviewImages.set(record.id, 'frames/' + packagedName)
-            continue
-          }
-          try {
-            const data = await fsp.readFile(path.join(config.framesDir, image.templateId, image.file))
-            const name = '评审/对照-' + String(reviewExtras.length + 1).padStart(2, '0') + '.jpg'
-            reviewExtras.push({ name, data })
-            reviewImages.set(record.id, name)
-          } catch {
-            // 帧图被清理过（模板回收站 / 过期清理）：这张纸只印问题与编号
-          }
-        }
-        const reviewSheet = reviewRecords.length
-          ? reviewSheetHtml({
-              project,
-              records: reviewRecords,
-              decisions: detail.decisions,
-              now,
-              tzOffsetMinutes: zipTz,
-              offline: true,
-              imageSrc: (block) => reviewImages.get(block.id) || '',
-              imageNote: (block) => {
-                const source = reviewImages.get(block.id)
-                if (!source) return ''
-                return source.startsWith('frames/')
-                  ? '画面：交付包里是 ' + source
-                  : '画面：这张不在分镜帧里，跟着这张纸放在 ' + source
-              },
-            })
-          : ''
-        // 两版对照页（v0.9.122）：交付包是给「没有账号的人」的一整套，
-        // 这一版改了什么也该在里面，而不是只活在作品页弹窗。只打当前版与上一版：
-        // 包里对应的是「这次交出去的东西」，不是一条作品的完整版本史。
-        let compareSheet = ''
-        let compareSheetPair = null
-        if (project.version >= 2) {
-          const baseNo = project.version - 1
-          const built = await versionCompareView(project, user, baseNo, project.version)
-          if (built.ok) {
-            compareSheet = compareSheetHtml({
-              project,
-              compare: built.view,
-              now,
-              tzOffsetMinutes: zipTz,
-              // 包里没有作品页可回：不印「返回作品」这类会点到 file:// 死链接的入口；
-              // 品牌图也换成文字，离线打开不欠一张破图
-              projectId: '',
-              offline: true,
-            })
-            compareSheetPair = { base: baseNo, target: project.version }
-          }
-        }
-        const note = packageNote({
-          model: setSheetModel({ project, script: detail.script, template: detail.template }),
-          generatedAt: now.toISOString(),
-          tzOffsetMinutes: zipTz,
-          frameCount: frames.length,
-          reviewSheetCount: reviewRecords.length,
-          compareSheet: compareSheetPair,
-        })
-        const archive = buildZip(
-          [
-            { name: fileName, data: Buffer.from(markdown, 'utf8') },
-            { name: '现场页.html', data: Buffer.from(sheet, 'utf8') },
-            ...(reviewSheet ? [{ name: '评审对照页.html', data: Buffer.from(reviewSheet, 'utf8') }] : []),
-            ...(compareSheet ? [{ name: '两版对照页.html', data: Buffer.from(compareSheet, 'utf8') }] : []),
-            { name: '说明.txt', data: Buffer.from(note, 'utf8') },
-            ...frames.map((frame) => ({ name: 'frames/' + frame.name, data: frame.data })),
-            ...reviewExtras,
-          ],
-          { mtime: now },
-        )
-        const zipName = fileName.replace(/\.md$/i, '') + '-交付包.zip'
+        const { archive, zipName } = await buildProjectDeliveryArchive(project, user, zipTz)
         res.writeHead(200, {
           'Content-Type': 'application/zip',
           'Content-Disposition':
             'attachment; filename="visionqa-deliverable-' + project.id + '.zip"; filename*=UTF-8\'\'' + encodeURIComponent(zipName),
           'Content-Length': String(archive.length),
           'Cache-Control': 'no-store',
+        })
+        res.end(archive)
+        return true
+      }
+
+      // 交付时封存的那一份（v0.9.125）：只读、按作品登录态取；没有包的老记录明确说 404，
+      // 不拿今天现打的包冒充「当初交出去的那一份」。
+      const packagePath = pathname.match(DELIVERY_PACKAGE)
+      if (packagePath) {
+        if (req.method !== 'GET') {
+          sendJson(res, 405, { error: '交付包只能下载，不能修改' })
+          return true
+        }
+        const project = await getProject(packagePath[1], user)
+        if (!project) {
+          sendJson(res, 404, { error: '作品不存在或已被删除' })
+          return true
+        }
+        const delivery = (project.deliveries || []).find((entry) => entry.id === packagePath[2] && entry.package)
+        if (!delivery) {
+          sendJson(res, 404, { error: '这一条交付没有封存包，或者包已经不在了' })
+          return true
+        }
+        const archive = await readDeliveryPackage(project.id, delivery.id)
+        if (!archive) {
+          sendJson(res, 404, { error: '封存的交付包不在了；作品页还能按今天的样子重新打一份' })
+          return true
+        }
+        const fileName = delivery.package.fileName || 'VisionQA-交付包.zip'
+        res.writeHead(200, {
+          'Content-Type': 'application/zip',
+          'Content-Disposition':
+            'attachment; filename="visionqa-delivery-' + project.id + '-v' + delivery.version + '.zip"; filename*=UTF-8\'\'' + encodeURIComponent(fileName),
+          'Content-Length': String(archive.length),
+          // 封存时的 SHA-256：解压前可以先核对「还是不是当初那一份」
+          'X-VQ-Package-SHA256': delivery.package.sha256,
+          'Cache-Control': 'no-store',
+          'X-Robots-Tag': 'noindex',
         })
         res.end(archive)
         return true
@@ -1140,7 +1190,25 @@ export function createProjectsRouter() {
         }
         if ('status' in body) patch.status = String(body.status || '')
         if ('flowId' in body) patch.flowId = String(body.flowId || '')
-        const project = await updateProject(item[1], patch, user)
+        // 标记交付 = 同时封存这一版的整套交付包（v0.9.125）：以后改模板、清帧图、开新版，
+        // 「当初交出去的是什么」都还能原样取回。封存失败不挡交付，记录照落。
+        let deliveryId = ''
+        let deliveryPackage = null
+        if (patch.status === 'done') {
+          const current = await getProject(item[1], user)
+          if (current) {
+            const rawTz = Number(body.tz)
+            const tz = Number.isFinite(rawTz) ? Math.max(-720, Math.min(840, Math.round(rawTz))) : 480
+            try {
+              const { archive, zipName } = await buildProjectDeliveryArchive(current, user, tz)
+              deliveryId = newDeliveryPackageId()
+              deliveryPackage = await saveDeliveryPackage(current.id, deliveryId, archive, { fileName: zipName })
+            } catch (caught) {
+              console.warn('[projects] 交付包封存失败：' + (caught instanceof Error ? caught.message : String(caught)))
+            }
+          }
+        }
+        const project = await updateProject(item[1], patch, user, { deliveryId, deliveryPackage })
         if (!project) {
           sendJson(res, 404, { error: '作品不存在或已被删除' })
           return true

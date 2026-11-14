@@ -77,8 +77,11 @@ export const adoptProjectCanvas = (id: string, flowId: string) =>
     runs: { count: number }
   }>('/api/projects/' + id + '/canvas', { method: 'PUT', body: JSON.stringify({ flowId }) })
 
-export const updateProject = (id: string, payload: { title?: string; flowId?: string; status?: 'active' | 'done' }) =>
-  request<{ ok: boolean; project: Project }>('/api/projects/' + id, { method: 'PATCH', body: JSON.stringify(payload) })
+export const updateProject = (id: string, payload: { title?: string; flowId?: string; status?: 'active' | 'done' }) => {
+  // 标记交付时服务端会顺手封存交付包，包里的时间按导出人所在的时区写；标题 / 画布不需要这一项
+  const body = payload.status ? { ...payload, tz: -new Date().getTimezoneOffset() } : payload
+  return request<{ ok: boolean; project: Project }>('/api/projects/' + id, { method: 'PATCH', body: JSON.stringify(body) })
+}
 
 // 某一版的脚本快照（v0.9.114）：只读。当前版读现在的脚本，归档版读开新版时存下的原文。
 export type ProjectVersionScript = {
@@ -244,6 +247,13 @@ export const downloadProjectDeliverableZip = (id: string) =>
     '/api/projects/' + encodeURIComponent(id) + '/deliverable.zip?tz=' + encodeURIComponent(tzOffset()),
     'visionqa-deliverable.zip',
   )
+
+/**
+ * 交付时封存的那一份（v0.9.125）：按「作品 + 交付记录编号」取，不是按今天的样子重打。
+ * 只读接口；作品删掉、这一版重新打开之后地址会 404。
+ */
+export const deliveryPackageUrl = (projectId: string, deliveryId: string) =>
+  '/api/projects/' + encodeURIComponent(projectId) + '/delivery-packages/' + encodeURIComponent(deliveryId)
 
 /**
  * 交付稿的 A4 打印版地址：新标签里打开一张排好版的纸，打印（存 PDF）交给浏览器。

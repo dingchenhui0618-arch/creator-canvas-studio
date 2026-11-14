@@ -1070,18 +1070,31 @@
   color: var(--ink);
 }
 
-/* 「交付稿」：小档按钮（--sm），与行尾的「已看过」同一档，不跟作品名抢注意力 */
-.vq-delivery-row .vq-delivery-paper {
-  flex: none;
+/* 行尾动作：当前版是「交付稿」，封过包的还有「交付包」；两个都走小档按钮，
+   与行尾的「已看过」同一档，不跟作品名抢注意力。 */
+.vq-delivery-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   margin-right: 16px;
-  /* 它是这一行真正能做的事（取回那一版交付稿），比旁边的状态字要显眼一档 */
+}
+
+.vq-delivery-row .vq-delivery-paper,
+.vq-delivery-row .vq-delivery-package {
+  flex: none;
+  /* 它们是这一行真正能做的事（取回那一版产物），比旁边的状态字要显眼一档 */
   color: var(--muted);
   font-weight: 400;
   transition: color var(--dur-1) var(--ease-out), background-color var(--dur-1) var(--ease-out);
 }
 
-.vq-delivery-row .vq-delivery-paper:hover:not(:disabled) {
+.vq-delivery-row .vq-delivery-paper:hover:not(:disabled),
+.vq-delivery-row .vq-delivery-package:hover {
   color: var(--ink);
+}
+
+.vq-delivery-row .vq-delivery-package svg {
+  flex-shrink: 0;
 }
 
 .vq-delivery-more {
@@ -1164,7 +1177,7 @@
     display: none;
   }
 
-  .vq-delivery-row .vq-delivery-paper {
+  .vq-delivery-actions {
     margin-right: 8px;
   }
 }

@@ -125,13 +125,27 @@ export type ProjectDeliveryReview = {
 }
 
 /**
+ * 交付时封存的整套产物（v0.9.125）：字节数、哈希与下载名。
+ * 没有这个字段 = 升级前交的 / 封存失败，界面不能给出会 404 的下载入口。
+ */
+export type ProjectDeliveryPackage = {
+  bytes: number
+  sha256: string
+  fileName: string
+  savedAt: string
+}
+
+/**
  * 一条交付记录：哪一版、什么时候、交的时候评审怎么说。
  * review 三种状态都要分得清：对象 = 记下了；null = 当时还没评过；没有这个字段 = 升级前的老记录（没记）。
+ * id/package 同理：升级前的老记录没有封存包。
  */
 export type ProjectDelivery = {
+  id?: string
   version: number
   at: string
   review?: ProjectDeliveryReview | null
+  package?: ProjectDeliveryPackage
 }
 
 /** 归档的旧版本：只存画布指针与名字，画布本身仍在流程服务里 */
@@ -333,6 +347,10 @@ export type ProjectDeliveryRow = {
   review?: ProjectDeliveryReview | null
   /** 这一版最近一评的问题数：界面拿它和交时快照比，判断「之后又评成了别的结论」（v0.9.86） */
   issues?: ReviewIssues | null
+  /** 封存包编号：有编号才下载得到；老记录没有 */
+  deliveryId?: string
+  /** 交付时封存的整套；没有这个字段说明这一条交付没封存 */
+  package?: ProjectDeliveryPackage
 }
 
 /** 交付流水的整份数字按全部记录算，不因为只取了一页而变小 */

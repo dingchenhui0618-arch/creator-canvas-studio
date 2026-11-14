@@ -49,6 +49,9 @@ export function ledgerRows({ projects = [], counts = {} } = {}) {
         review: entry?.review,
         // 这一版最近一评的问题数：界面拿它和交时快照比，才说得出「之后又评成了别的结论」
         issues: bucket?.issues || null,
+        // 封存包（v0.9.125）：有编号与元数据才给下载入口；老记录这两项都是空
+        deliveryId: String(entry?.id || ''),
+        package: entry?.package || null,
       })
     }
   }

@@ -13,6 +13,12 @@ import { visitKey } from './share-visits.mjs'
 // 交付那一刻的评审结论要从评审库现读；只读、不写评审（v0.9.85）
 import { reviewSummaryByVersion } from './reviews.mjs'
 import { reviewsForVersion } from './project-status.mjs'
+// 交付包封存（v0.9.125）：标记交付时落一份 zip，之后改模板 / 开新版都不动它
+import {
+  dropDeliveryPackage,
+  dropProjectDeliveryPackages,
+  pruneDeliveryPackages,
+} from './delivery-packages.mjs'
 
 const projectsFile = path.join(config.dataDir, 'projects.json')
 const MAX_PROJECTS = 200
@@ -146,15 +152,37 @@ function normalizeDeliveryReview(raw) {
   }
 }
 
-// 交付记录：{ version, at, review }。老记录没有时间就写空串——照样是「这一版交过」，只是不知道什么时候。
+// 交付包元数据（v0.9.125）：不存磁盘路径，只存编号、字节数、哈希与下载时用的中文名。
+// 老记录没有这个字段，读出来还是没有——不拿今天现打的包冒充当初封存的那一份。
+function normalizeDeliveryPackage(raw) {
+  if (!raw || typeof raw !== 'object') return null
+  const bytes = Math.max(0, Math.round(Number(raw.bytes) || 0))
+  const sha256 = String(raw.sha256 || '').toLowerCase()
+  const fileName = String(raw.fileName || '').trim().slice(0, 180)
+  if (!bytes || !/^[0-9a-f]{64}$/.test(sha256) || !fileName) return null
+  return {
+    bytes,
+    sha256,
+    fileName,
+    savedAt: String(raw.savedAt || ''),
+  }
+}
+
+// 交付记录：{ id, version, at, review, package }。老记录没有时间就写空串——照样是「这一版交过」，只是不知道什么时候。
 // review 同理：没有这个字段就是「当时没记评审」，不能拿这一版后来的评审冒充（v0.9.85）。
+// id/package 同理：升级前的老交付记录没有封存包，界面不能给出一个点开 404 的按钮。
 function normalizeDeliveries(raw) {
   return (Array.isArray(raw) ? raw : [])
     .filter((entry) => entry && typeof entry === 'object')
     .map((entry) => {
       const base = { version: Math.max(0, Math.round(Number(entry.version) || 0)), at: String(entry.at || '') }
-      if (entry.review === undefined) return base
-      return { ...base, review: normalizeDeliveryReview(entry.review) }
+      const id = /^[0-9a-f]{16}$/.test(String(entry.id || '')) ? String(entry.id) : ''
+      if (id) base.id = id
+      if (entry.review !== undefined) base.review = normalizeDeliveryReview(entry.review)
+      // 没有 id 就没有可下载的包：包按 id 寻址，缺 id 时即使盘上有文件也打不开
+      const pkg = id ? normalizeDeliveryPackage(entry.package) : null
+      if (pkg) base.package = pkg
+      return base
     })
     .filter((entry) => entry.version > 0)
     .slice(-MAX_DELIVERIES)
@@ -270,8 +298,12 @@ export async function createProject({ title = '', templateId = '', flowId = '' }
 
 const PATCHABLE = ['title', 'flowId', 'status']
 
-/** 只允许改标题、绑定的画布、状态；模板绑定建好就不改（换模板等于换一条内容）。 */
-export async function updateProject(id, patch = {}, user = null) {
+/**
+ * 只允许改标题、绑定的画布、状态；模板绑定建好就不改（换模板等于换一条内容）。
+ * deliveryPackage 是路由封存好的包元数据（v0.9.125）：只有「标记交付」这一条路会带，
+ * 存储层不负责打包，只负责把「这一版交出去时是什么样」与包编号一起落盘。
+ */
+export async function updateProject(id, patch = {}, user = null, { deliveryId = '', deliveryPackage = null } = {}) {
   const list = await loadAll()
   const found = list.find((item) => item.id === id && canAccess(item, user))
   if (!found) return null
@@ -293,20 +325,38 @@ export async function updateProject(id, patch = {}, user = null) {
   if (patch.status === 'done') {
     const at = new Date().toISOString()
     const version = Math.max(1, Number(found.version) || 1)
-    const rest = normalizeDeliveries(found.deliveries).filter((entry) => entry.version !== version)
+    const deliveries = normalizeDeliveries(found.deliveries)
+    const previous = deliveries.find((entry) => entry.version === version) || null
+    const rest = deliveries.filter((entry) => entry.version !== version)
     // 交的时候评审怎么说，跟着这一版一起记下来：事后重评不改这条记录
     const review = await deliveryReviewSnapshot({ id: found.id, version }, user)
-    found.deliveries = [...rest, { version, at, review }].slice(-MAX_DELIVERIES)
+    const record = { version, at, review }
+    // 新封存的包优先；打包失败时保留同一版上一次封存的那份，不把它降级成「没有包」
+    if (deliveryPackage && deliveryId) {
+      record.id = deliveryId
+      record.package = deliveryPackage
+    } else if (previous?.id && previous.package) {
+      record.id = previous.id
+      record.package = previous.package
+    }
+    found.deliveries = [...rest, record].slice(-MAX_DELIVERIES)
     changed = true
+    // 同一版重新交付会换一个包编号；被挤掉的旧记录也可能留下文件。只保留还挂着的那些。
+    await pruneDeliveryPackages(found.id, found.deliveries.map((entry) => entry.id).filter(Boolean))
   }
   // 重新打开 = 收回「这一版已交付」：撤掉当前这一版的交付记录，别的版本留着。
   // 交付是对某一版的宣布，撤销之后稿子与胶囊都回到「这一版还没交」，不留一条假记录。
   if (patch.status === 'active' && beforeStatus === 'done') {
     const version = Math.max(1, Number(found.version) || 1)
-    const rest = normalizeDeliveries(found.deliveries).filter((entry) => entry.version !== version)
-    if (rest.length !== normalizeDeliveries(found.deliveries).length) {
+    const before = normalizeDeliveries(found.deliveries)
+    const rest = before.filter((entry) => entry.version !== version)
+    if (rest.length !== before.length) {
       found.deliveries = rest
       changed = true
+      // 记录收回了，那一次封存的包也一起收回：不能留一个点开还能下载的地址
+      for (const entry of before) {
+        if (entry.version === version && entry.id) await dropDeliveryPackage(found.id, entry.id)
+      }
     }
   }
   // 第一次绑上画布就是 v1：版本计数从这里开始，之后只有「开一版新的」才会加
@@ -405,6 +455,8 @@ export async function archiveProjectVersion(id, { flowId = '', prevName = '', sc
   }
   found.updatedAt = now
   await persist(list)
+  // 开新版只保留还挂着的交付包；被版本上限挤掉的旧记录不留下载入口，也不留文件
+  await pruneDeliveryPackages(id, normalizeDeliveries(found.deliveries).map((entry) => entry.id).filter(Boolean))
   return normalize(found)
 }
 
@@ -414,6 +466,8 @@ export async function deleteProject(id, user = null) {
   if (index < 0) return null
   const [removed] = list.splice(index, 1)
   await persist(list)
+  // 作品没了，它封存的交付包也不该留在盘上
+  await dropProjectDeliveryPackages(id)
   return normalize(removed)
 }
 

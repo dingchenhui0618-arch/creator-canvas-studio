@@ -509,7 +509,7 @@ export default function ProjectPage({
     }
   }
 
-  // 标记交付会记下「哪一版、什么时候」（服务端落一条交付记录）；重新打开只改状态，记录留着
+  // 标记交付会记下「哪一版、什么时候」并封存整套交付包（v0.9.125）；重新打开收回这一版的记录与包，别的版本留着
   const toggleDone = async () => {
     if (!data) return
     const next = deliveredCurrent(data.project) ? 'active' : 'done'
@@ -523,7 +523,8 @@ export default function ProjectPage({
           ? '已标记交付：v' + (delivery?.version ?? result.project.version) +
             (delivery?.at ? ' · ' + stamp(delivery.at) : '') +
             // 交的时候评审怎么说一起说出来：这条记录之后不会被重评改写
-            (delivery ? ' · 交时评审 ' + deliveryReviewText(delivery.review) : '')
+            (delivery ? ' · 交时评审 ' + deliveryReviewText(delivery.review) : '') +
+            (delivery?.package ? ' · 交付包已封存' : '')
           : '已重新打开：这一版的交付记录也撤掉了',
       )
     } catch (caught) {
@@ -1066,7 +1067,7 @@ export default function ProjectPage({
                     <Package size={15} />
                     <span className="vq-menu-copy">
                       <strong>交付包</strong>
-                      <small>.zip：交付稿 + 现场页 + 评审对照 + 两版对照 + 帧图，解压就能看</small>
+                      <small>.zip：交付稿 + 现场页 + 评审对照 + 两版对照 + 帧图，解压就能看；标记交付时另存一份，工作台「交出去的」可原样下载</small>
                     </span>
                   </button>
                 </div>
