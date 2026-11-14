@@ -65,10 +65,10 @@ fs.writeFileSync(
   'utf8',
 )
 
-function mockReq({ method = 'GET', cookie = '' } = {}) {
+function mockReq({ method = 'GET', cookie = '', headers = {} } = {}) {
   const req = new Readable({ read() {} })
   req.method = method
-  req.headers = cookie ? { cookie } : {}
+  req.headers = { ...(cookie ? { cookie } : {}), ...headers }
   req.socket = { remoteAddress: '127.0.0.1' }
   req.push(null)
   return req
@@ -104,11 +104,11 @@ function mockRes() {
   }
 }
 
-async function get(target, { cookie = '', method = 'GET' } = {}) {
+async function get(target, { cookie = '', method = 'GET', headers = {} } = {}) {
   const router = createFramesRouter()
   const res = mockRes()
   const url = new URL('http://127.0.0.1' + target)
-  const handled = await router.handle(mockReq({ method, cookie }), res, url, url.pathname)
+  const handled = await router.handle(mockReq({ method, cookie, headers }), res, url, url.pathname)
   return { handled, status: res.statusCode, res }
 }
 
@@ -187,6 +187,58 @@ test('本地演示（VQ_REQUIRE_AUTH=0）匿名照常能看：离线开发不该
     assert.deepEqual(result.res.bytes, JPG)
   } finally {
     config.auth.requireAuth = original
+  }
+})
+
+// ---------- 缓存不再替退出登录打掩护（v0.9.89） ----------
+test('帧图的缓存头是 private + no-cache：不给 max-age，浏览器每次用之前都得回源', async () => {
+  const mine = await get('/media/frames/tpl_owner01/frame-01.jpg', { cookie: cookieOf(owner) })
+  assert.equal(mine.status, 200)
+  assert.equal(mine.res.headers['Cache-Control'], 'private, no-cache')
+  assert.match(mine.res.headers.ETag, /^"[0-9a-f]+-[0-9a-f]+"$/)
+})
+
+test('没变化回 304：不带 body、也不带 Content-Length', async () => {
+  const first = await get('/media/frames/tpl_owner01/frame-01.jpg', { cookie: cookieOf(owner) })
+  const etag = first.res.headers.ETag
+  const again = await get('/media/frames/tpl_owner01/frame-01.jpg', { cookie: cookieOf(owner), headers: { 'if-none-match': etag } })
+  assert.equal(again.status, 304)
+  assert.equal(again.res.bytes.length, 0)
+  assert.equal(again.res.headers['Content-Length'], undefined)
+  assert.equal(again.res.headers['Cache-Control'], 'private, no-cache')
+  assert.equal(again.res.headers.ETag, etag)
+})
+
+test('缓存不能当登录的旁路：带着 ETag 匿名来是 401，别人来是 404，都不给 304', async () => {
+  const first = await get('/media/frames/tpl_owner01/frame-01.jpg', { cookie: cookieOf(owner) })
+  const etag = first.res.headers.ETag
+  const anonymous = await get('/media/frames/tpl_owner01/frame-01.jpg', { headers: { 'if-none-match': etag } })
+  assert.equal(anonymous.status, 401, '退出登录后重验必须拿不到 304，否则旧画面又画出来了')
+  const stranger = await get('/media/frames/tpl_owner01/frame-01.jpg', { cookie: cookieOf(other), headers: { 'if-none-match': etag } })
+  assert.equal(stranger.status, 404)
+  assert.equal(stranger.res.text, 'frame not found')
+})
+
+test('弱 ETag 前缀也认（中间层会改写），命中时还是 304', async () => {
+  const first = await get('/media/frames/tpl_owner01/frame-01.jpg', { cookie: cookieOf(owner) })
+  const weak = await get('/media/frames/tpl_owner01/frame-01.jpg', { cookie: cookieOf(owner), headers: { 'if-none-match': 'W/' + first.res.headers.ETag } })
+  assert.equal(weak.status, 304)
+  const star = await get('/media/frames/tpl_owner01/frame-01.jpg', { cookie: cookieOf(owner), headers: { 'if-none-match': '*' } })
+  assert.equal(star.status, 304)
+})
+
+test('帧文件换了内容：旧 ETag 不再命中，回 200 + 新字节', async () => {
+  const first = await get('/media/frames/tpl_owner01/frame-01.jpg', { cookie: cookieOf(owner) })
+  const etag = first.res.headers.ETag
+  const replacement = Buffer.concat([JPG, Buffer.alloc(32, 0x33)])
+  fs.writeFileSync(path.join(config.framesDir, 'tpl_owner01', 'frame-01.jpg'), replacement)
+  try {
+    const changed = await get('/media/frames/tpl_owner01/frame-01.jpg', { cookie: cookieOf(owner), headers: { 'if-none-match': etag } })
+    assert.equal(changed.status, 200)
+    assert.deepEqual(changed.res.bytes, replacement)
+    assert.notEqual(changed.res.headers.ETag, etag)
+  } finally {
+    fs.writeFileSync(path.join(config.framesDir, 'tpl_owner01', 'frame-01.jpg'), JPG)
   }
 })
 

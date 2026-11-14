@@ -228,3 +228,28 @@ test('自己的上传图不会被归属闸拦下', async () => {
   const result = await postReview({ media: saved.media, intent: '自己的图' }, cookieOf(owner))
   assert.notEqual(result.payload?.code, 'MEDIA_FORBIDDEN')
 })
+
+// ---------- 缓存不再替退出登录打掩护（v0.9.89） ----------
+test('上传图的缓存也要重验：private + no-cache + ETag，没变 304；清掉登录就 401、别人 404', async () => {
+  const saved = await uploads.saveUpload({ userId: owner.id, buffer: imageBuffer(PNG_SIGNATURE, 1024) })
+  const url = '/media/' + saved.media
+
+  const first = await call({ method: 'GET', target: url, cookie: cookieOf(owner) })
+  assert.equal(first.status, 200)
+  assert.equal(first.res.headers['Cache-Control'], 'private, no-cache')
+  const etag = first.res.headers.ETag
+  assert.match(etag, /^"[0-9a-f]+-[0-9a-f]+"$/)
+
+  const again = await call({ method: 'GET', target: url, cookie: cookieOf(owner), headers: { 'if-none-match': etag } })
+  assert.equal(again.status, 304)
+  assert.equal(again.res.chunks.length, 0, '304 不能带 body')
+
+  // 关键：退出登录（没有 cookie 了）之后，浏览器拿着自己的 ETag 回来重验——
+  // 以前这里是 max-age=300，浏览器根本不会回源，画面就还挂在屏幕上；现在必须是 401
+  const anonymous = await call({ method: 'GET', target: url, headers: { 'if-none-match': etag } })
+  assert.equal(anonymous.status, 401)
+  assert.equal(anonymous.payload?.loginRequired, true)
+
+  const stranger = await call({ method: 'GET', target: url, cookie: cookieOf(other), headers: { 'if-none-match': etag } })
+  assert.equal(stranger.status, 404)
+})

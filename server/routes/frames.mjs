@@ -9,16 +9,17 @@
 //   - 生产（VQ_REQUIRE_AUTH=1）必须登录，匿名一律 401；本地演示（=0）不认人，照常可用
 //   - 登录后只能看自己看得见的模板：别人的私有模板回 404，连存在性都不告诉；管理员可看全部
 //   - 只发图片（jpg / png / webp）；模板已不在库里的孤儿帧也回 404
-//   - private 缓存：浏览器可以存一小时，中间层不许存（帧图现在跟登录态绑定）
+//   - 缓存（v0.9.89）：private + no-cache + ETag，中间层不许存，浏览器每次用之前
+//     都要回源问一句。只给 max-age 的话，退出登录后同一台电脑还能把画面画出来一小时
 //
 // 分享页与交付包不受影响：它们拿的是带 token 的地址（/api/share/<token>/frame/<序号>、
 // /api/share/project/<token>/frame/<序号>），token 本身就是凭证，不经过这条路由。
-import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { sendJson } from './_shared.mjs'
 import { config } from '../config.mjs'
 import { currentUser } from '../auth.mjs'
 import { getTemplate } from '../templates.mjs'
+import { sendAuthImage } from '../image-response.mjs'
 
 const FRAME_PATH = /^\/media\/frames\/([\w-]+)\/([\w.-]+)$/
 const IMAGE_FILE = /\.(?:jpe?g|png|webp)$/i
@@ -58,20 +59,10 @@ export function createFramesRouter() {
         return true
       }
       const file = path.join(config.framesDir, templateId, fileName)
-      try {
-        const bytes = await fsp.readFile(file)
-        res.writeHead(200, {
-          'Content-Type': MIME[path.extname(fileName).toLowerCase()] || 'application/octet-stream',
-          'Content-Length': bytes.length,
-          'Cache-Control': 'private, max-age=3600',
-          'X-Content-Type-Options': 'nosniff',
-        })
-        res.end(bytes)
-        return true
-      } catch {
-        notFound(res)
-        return true
-      }
+      const mime = MIME[path.extname(fileName).toLowerCase()] || 'application/octet-stream'
+      // 登录与归属都已经判过，这里才轮得到缓存比对（304 不会绕过上面两道）
+      if (!(await sendAuthImage(req, res, file, mime))) notFound(res)
+      return true
     },
   }
 }

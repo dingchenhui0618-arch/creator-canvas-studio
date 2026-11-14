@@ -281,6 +281,13 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
             </div>
             <div className="vq-row">
               <div className="vq-row-copy">
+                <strong>退出登录会清掉什么</strong>
+                <span>这台电脑上的对话历史、画布与检索词；看过的画面也不再从缓存里显示，下一次请求就回源</span>
+              </div>
+              <span className="vq-row-value vq-mono">{internal ? 'localStorage · 图片重验' : '本机记录'}</span>
+            </div>
+            <div className="vq-row">
+              <div className="vq-row-copy">
                 <strong>本次登录时间</strong>
                 <span>{internal ? '服务端会话的创建时间，用于会话过期判断' : '这台设备本次登录的时间'}</span>
               </div>

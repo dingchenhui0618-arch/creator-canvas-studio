@@ -7,6 +7,7 @@ import {
   logout as requestLogout,
   register as requestRegister,
 } from '../api/auth'
+import { clearLocalResidue } from './local-residue'
 
 // admin 是服务端 users.kind='admin'：能看全部数据、发放积分。界面只用来显示角色与放开管理台入口。
 export type SessionKind = 'demo' | 'account' | 'guest' | 'admin'
@@ -131,11 +132,28 @@ export function clearStoredSession(): void {
 }
 
 /**
+ * 清掉这台电脑上「属于上一个账号」的痕迹（v0.9.89）：对话历史、画布 id、检索词、
+ * 筛选词。会话本身由 clearStoredSession 负责；这里失败也不该拦住退出。
+ */
+export function clearResidue(): string[] {
+  const [local, tab] = storageCandidates()
+  try {
+    return clearLocalResidue(local ?? null, tab ?? null)
+  } catch {
+    return []
+  }
+}
+
+/**
  * 写入本地用户缓存：勾了「记住我」放 localStorage，否则只放当前标签页的 sessionStorage。
  * 这里存的是 user 档案，不是凭据；cookie 由服务端管理，前端读不到。
  */
 export function persistSession(session: Session): void {
+  // 先看上一份是谁：换账号（不是同一账号刷新）时，上一个账号留在这台电脑上的痕迹要清掉，
+  // 否则新账号一进智能体面板就能看到上一个人的对话历史。
+  const previous = readSession()
   clearStoredSession()
+  if (previous && previous.user.id !== session.user.id) clearResidue()
   const [persistent, tabOnly] = storageCandidates()
   const target = session.remember ? persistent : tabOnly
   if (!target) return
@@ -278,6 +296,9 @@ export async function signOut(): Promise<void> {
     // 退出失败不能把用户留在本地的「已登录」假象里。
   } finally {
     clearStoredSession()
+    // 服务端那边 cookie 与图片权限已经没了（帧图/上传图每次用之前都重验）；
+    // 本机这份痕迹也一起收掉
+    clearResidue()
   }
 }
 

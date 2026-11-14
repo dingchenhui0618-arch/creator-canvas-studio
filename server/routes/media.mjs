@@ -6,8 +6,8 @@
 // 读回来：GET /media/uploads/<账号 id>/<文件名>，必须登录且只能读自己的（管理员可读所有人的）。
 // 这条与 /media/frames 的差别写在 docs/review-upload-*.md 里：模板帧是「作品的素材」，
 // 上传图是「你传给我的东西」，默认只给传的人看，不进分享页、不进交付包。
-import fsp from 'node:fs/promises'
 import { sendJson } from './_shared.mjs'
+import { sendAuthImage } from '../image-response.mjs'
 import { readBinaryBody } from '../body-reader.mjs'
 import { currentUser, isAdmin } from '../auth.mjs'
 import { refusalResponse } from '../public-error.mjs'
@@ -15,7 +15,6 @@ import { logEvent } from '../log.mjs'
 import { UPLOAD_LIMITS, listUploads, resolveUpload, saveUpload, uploadUsage } from '../uploads.mjs'
 
 const UPLOAD_PATH = /^\/media\/uploads\/([A-Za-z0-9_-]{3,64})\/([^/]+)$/
-const NO_SNIFF = { 'X-Content-Type-Options': 'nosniff' }
 
 function sendRefusal(res, error) {
   const mapped = refusalResponse(error)
@@ -93,22 +92,13 @@ export function createMediaRouter() {
           res.end('not found')
           return true
         }
-        try {
-          const bytes = await fsp.readFile(target.file)
-          res.writeHead(200, {
-            'Content-Type': target.mime,
-            'Content-Length': bytes.length,
-            // 私有：可以进浏览器缓存一小会儿，但不许中间层存；别人拿着 URL 也读不到（先过登录与归属）
-            'Cache-Control': 'private, max-age=300',
-            ...NO_SNIFF,
-          })
-          res.end(bytes)
-          return true
-        } catch {
-          res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' })
+        // 私有 + 必须重验（v0.9.89）：以前给 max-age=300，退出登录后这五分钟里
+        // 浏览器不会回源，画面就还留在屏幕上；现在每次用之前都回源，没变回 304
+        if (!(await sendAuthImage(req, res, target.file, target.mime))) {
+          res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' })
           res.end('not found')
-          return true
         }
+        return true
       }
 
       return false
