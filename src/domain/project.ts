@@ -159,6 +159,8 @@ export type ProjectDelivery = {
   package?: ProjectDeliveryPackage
   /** 收包人贴回来的收据比过之后的结论（v0.9.136）；没有 = 还没人贴过 */
   receipt?: DeliveryReceipt
+  /** 回执链接的 token（v0.9.137）：一条免登录地址，收包人自己就能把收据贴回来；没有 = 只存发件人贴 */
+  receiptToken?: string
 }
 
 /** 收据对账比的那五项：版次、包名、字节、整包哈希、对方结论 */
@@ -199,6 +201,8 @@ export type DeliveryReceipt = {
   problems?: string[]
   checks?: DeliveryReceiptCheck[]
   claimed?: DeliveryReceiptClaimed
+  /** 这张收据是谁贴的（v0.9.137）：'link' = 收包人自己贴的，'you' = 发件人替他贴的；老记录没有 */
+  via?: 'link' | 'you'
 }
 
 /** 收据对账接口回的那一份：结论 + 存下来的记录 */
@@ -209,6 +213,39 @@ export type DeliveryReceiptResult = {
   problems: string[]
   checks: DeliveryReceiptCheck[]
   receipt: DeliveryReceipt
+}
+
+/**
+ * 收包人那一侧看到的这一份（v0.9.137）：只有「这是哪一份、之前贴过没有」。
+ * 不给哈希也不给档案——有包的人在自己那张校验页上看得到，链接本身不该多给东西。
+ */
+export type ReceiptLinkDelivery = {
+  version: number
+  fileName: string
+  bytes: number
+  at: string
+}
+
+export type ReceiptLinkView = {
+  ok: boolean
+  project: { title: string }
+  delivery: ReceiptLinkDelivery
+  receipt: { state: DeliveryReceipt['state']; at: string; summary: string } | null
+}
+
+/** 收包人贴完收据回的那一句：只给哪几项对上，不回期望值（v0.9.137） */
+export type ReceiptLinkResult = {
+  ok: boolean
+  state: DeliveryReceipt['state']
+  summary: string
+  problems: string[]
+  checks: { k: DeliveryReceiptCheckKey; ok: boolean }[]
+  at: string
+}
+
+/** 谁贴的这张收据：页面上说人话，老记录一律按「发件人贴的」讲 */
+export function receiptViaText(via: DeliveryReceipt['via']): string {
+  return via === 'link' ? '收包人自己从回执链接贴回来的' : '你替收包人贴进来的'
 }
 
 const RECEIPT_CHECK_LABEL: Record<string, string> = {

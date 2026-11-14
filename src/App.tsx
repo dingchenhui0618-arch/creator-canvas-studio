@@ -69,6 +69,7 @@ const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage').then((m
 const SharePage = lazy(() => import('./pages/SharePage'))
 // 作品分享页也单独拆包：它读的是脚本与分镜，不依赖工作台组件
 const ProjectSharePage = lazy(() => import('./pages/ProjectSharePage'))
+const ReceiptPage = lazy(() => import('./pages/ReceiptPage'))
 // 帮助中心也是公开可读的一屏：不登录的人先来这里找答案，而不是卡在登录页
 const HelpPage = lazy(() => import('./pages/HelpPage').then((module) => ({ default: module.HelpPage })))
 // 素材来源与下架通道（v0.9.82）：公开可读的一屏，和帮助中心一样不进工作台外壳
@@ -511,6 +512,7 @@ function Workbench({
       route.kind === 'sources' ||
       route.kind === 'share' ||
       route.kind === 'shared-project' ||
+      route.kind === 'receipt' ||
       route.kind === 'reset'
     ) {
       return null
@@ -1092,6 +1094,15 @@ function App() {
     return (
       <Suspense fallback={<PageSkeleton label="正在打开作品分享" />}>
         <ProjectSharePage key={route.token} token={route.token} />
+      </Suspense>
+    )
+  }
+
+  // 回执链接是发给收包人的：他不一定有账号，打开就直接是「贴收据」这一件事
+  if (route.kind === 'receipt') {
+    return (
+      <Suspense fallback={<PageSkeleton label="正在打开回执" />}>
+        <ReceiptPage key={route.token} token={route.token} />
       </Suspense>
     )
   }

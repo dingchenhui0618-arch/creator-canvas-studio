@@ -17,6 +17,8 @@ import type {
   ProjectVersionScriptSnapshot,
   ProjectSummary,
   PackageContents,
+  ReceiptLinkResult,
+  ReceiptLinkView,
   ShareSummaryRow,
   SharedProject,
 } from '../domain/project'
@@ -291,6 +293,27 @@ export const deliveryPackageAudit = (projectId: string, deliveryId: string) =>
  */
 export const checkDeliveryReceipt = (projectId: string, deliveryId: string, text: string) =>
   request<DeliveryReceiptResult>(deliveryPackageUrl(projectId, deliveryId) + '/receipt', {
+    method: 'POST',
+    body: JSON.stringify({ text }),
+  })
+
+/**
+ * 回执链接（v0.9.137）：档案里复制一条地址发给收包人，他不用注册就能把收据贴回来。
+ * rotate=true 换一枚 token，旧地址立刻失效；不换时只把已经在用的那一枚还回来。
+ */
+export const issueReceiptLink = (projectId: string, deliveryId: string, rotate = false) =>
+  request<{ ok: boolean; token: string; rotated: boolean }>(
+    deliveryPackageUrl(projectId, deliveryId) + '/receipt-link',
+    { method: 'POST', body: JSON.stringify({ rotate }) },
+  )
+
+/** 收包人那一侧的只读视图：token 就是凭证，不带登录态 */
+export const getReceiptLink = (token: string) =>
+  request<ReceiptLinkView>('/api/receipts/' + encodeURIComponent(token))
+
+/** 收包人把收据贴上来：服务端比对完写进那一条交付记录，只回哪几项对上 */
+export const submitReceiptByLink = (token: string, text: string) =>
+  request<ReceiptLinkResult>('/api/receipts/' + encodeURIComponent(token), {
     method: 'POST',
     body: JSON.stringify({ text }),
   })

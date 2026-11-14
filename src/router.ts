@@ -48,6 +48,8 @@ export type Route =
   | { kind: 'share'; token: string }
   // 作品级分享：#/share/project/<token>，读的是脚本 + 分镜的公开视图
   | { kind: 'shared-project'; token: string }
+  // 收包人的回执：#/receipt/<token>，不登录也能贴一段收据回来（v0.9.137）
+  | { kind: 'receipt'; token: string }
   | { kind: 'admin'; section: AdminSection }
   // 找回密码：从邮件里点进来的 #/reset?token=…，不登录也要能打开
   | { kind: 'reset'; token: string }
@@ -86,6 +88,7 @@ export function isBareRoute(route: Route): boolean {
     route.kind === 'sources' ||
     route.kind === 'share' ||
     route.kind === 'shared-project' ||
+    route.kind === 'receipt' ||
     route.kind === 'reset'
   )
 }
@@ -141,6 +144,8 @@ export function parseRoute(hash: string): Route {
     if (tail === 'project' && segments[2]) return { kind: 'shared-project', token: segments[2] }
     return tail ? { kind: 'share', token: tail } : DEFAULT_ROUTE
   }
+  // 回执链接：token 在路径里，缺了就落回工作台（没有 token 的页面没有可看的东西）
+  if (head === 'receipt') return tail ? { kind: 'receipt', token: tail } : DEFAULT_ROUTE
   // 旧的 #/welcome 链接不再单独成页：引导已改成工作台内的弹窗，落回工作台即可。
   // 作品有两个地址：#/projects 列表与 #/projects/<作品 id>
   if (head === 'projects') {
@@ -193,6 +198,7 @@ export function toHash(route: Route): string {
   }
   if (route.kind === 'admin') return '#/admin/' + route.section
   if (route.kind === 'reset') return '#/reset' + (route.token ? '?token=' + encodeURIComponent(route.token) : '')
+  if (route.kind === 'receipt') return '#/receipt/' + encodeURIComponent(route.token)
   if (route.kind === 'legal') return '#/legal/' + route.doc
   if (route.kind === 'help') return route.slug ? '#/help/' + route.slug : '#/help'
   if (route.kind === 'sources') return '#/sources'
@@ -223,6 +229,7 @@ export function routeKey(route: Route): string {
   if (route.kind === 'sources') return 'sources'
   if (route.kind === 'share') return 'share:' + route.token
   if (route.kind === 'shared-project') return 'shared-project:' + route.token
+  if (route.kind === 'receipt') return 'receipt:' + route.token
   return 'agent-editor:' + (route.agentRef ?? 'new')
 }
 

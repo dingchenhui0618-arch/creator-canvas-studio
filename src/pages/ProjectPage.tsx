@@ -19,6 +19,7 @@ import {
   enableProjectShare,
   getProject,
   getProjectVersionScript,
+  issueReceiptLink,
   openProjectCanvas,
   projectPackageAudits,
   projectSpend,
@@ -49,6 +50,7 @@ import {
   packageShortSha,
   projectStep,
   receiptCheckLabel,
+  receiptViaText,
   serverPackageText,
   sha256HexOfBytes,
   type PackageAudit,
@@ -122,6 +124,15 @@ function duration(ms: number): string {
 
 /** 收据结论与问题列表常常是同一句：句末标点不算不同，列表里不再重复一遍。 */
 const stripStop = (value: string | undefined) => String(value || '').replace(/[。.]$/, '')
+
+/**
+ * 回执链接（v0.9.137）：发给收包人的地址要用当前站点的 origin，不能写成相对路径，
+ * 否则他复制走的是一条打不开的 /#/...。token 只由服务端发，这里只拼地址。
+ */
+function receiptLinkUrl(token: string): string {
+  if (!token) return ''
+  return window.location.origin + '/#/receipt/' + encodeURIComponent(token)
+}
 
 /**
  * 作品页：一条内容的完整现场。
@@ -237,6 +248,8 @@ export default function ProjectPage({
   const [receiptDraft, setReceiptDraft] = useState('')
   const [receiptBusy, setReceiptBusy] = useState(false)
   const [receiptError, setReceiptError] = useState('')
+  // 回执链接（v0.9.137）：'issue' 正在生成、'rotate' 正在换一条，空串就是没在跑
+  const [receiptLinkBusy, setReceiptLinkBusy] = useState<'' | 'issue' | 'rotate'>('')
   // 上次巡检（v0.9.132）：定时任务每天把封存包验一遍，这里只读它写下的结论。
   // 没巡检过就 at 为空，界面上不出现这一行——不拿「今天没验」冒充「验过了」。
   const [audits, setAudits] = useState<{
@@ -788,6 +801,44 @@ export default function ProjectPage({
       setReceiptError(caught instanceof Error ? caught.message : '这段收据没对成')
     } finally {
       setReceiptBusy(false)
+    }
+  }
+
+  // 回执链接（v0.9.137）：复制发给收包人，他自己就能把收据贴回来，不用再转发文字。
+  // 换一条 = 服务端换一枚 token，旧地址立刻失效；本地只把这一行的 token 换掉。
+  const ensureReceiptLink = async (deliveryId: string, rotate: boolean) => {
+    if (!data) return
+    setReceiptLinkBusy(rotate ? 'rotate' : 'issue')
+    setReceiptError('')
+    try {
+      const result = await issueReceiptLink(data.project.id, deliveryId, rotate)
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              project: {
+                ...prev.project,
+                deliveries: (prev.project.deliveries || []).map((entry) =>
+                  entry.id === deliveryId ? { ...entry, receiptToken: result.token } : entry,
+                ),
+              },
+            }
+          : prev,
+      )
+      onToast(rotate ? '换了一条新链接：旧的那条已经失效' : '回执链接好了：复制发给收包人')
+    } catch (caught) {
+      setReceiptError(caught instanceof Error ? caught.message : '回执链接没生成出来')
+    } finally {
+      setReceiptLinkBusy('')
+    }
+  }
+
+  const copyReceiptLink = async (token: string) => {
+    try {
+      await navigator.clipboard.writeText(receiptLinkUrl(token))
+      onToast('已复制回执链接：发给收包人，他打开就能把收据贴回来')
+    } catch {
+      onToast('复制失败：浏览器没给剪贴板权限')
     }
   }
 
@@ -1968,6 +2019,60 @@ export default function ProjectPage({
                         让他把那段发回来，整段贴在这里。只读里面的版次、包名、字节与整包 SHA-256，跟这一条封存包对一遍；
                         只比对文字，不重新打包、也不碰盘上那份。
                       </p>
+                      <div className="vq-archive-receipt-link">
+                        <div className="vq-archive-receipt-linkhead">
+                          <span className="vq-archive-receipt-label">回执链接</span>
+                          <span className="vq-archive-receipt-linkhint">
+                            发给他，他自己贴；贴完这一条自己就变成结论，不用再把文字转回来
+                          </span>
+                        </div>
+                        {row.receiptToken ? (
+                          <>
+                            <div className="vq-archive-receipt-linkrow">
+                              <code className="vq-archive-receipt-url vq-mono">{receiptLinkUrl(row.receiptToken)}</code>
+                              <div className="vq-archive-receipt-linkacts">
+                                <button
+                                  type="button"
+                                  className="vq-button vq-button--quiet vq-button--sm"
+                                  onClick={() => void copyReceiptLink(row.receiptToken || '')}
+                                  title="复制这条地址，发给收包人；他不用注册"
+                                >
+                                  <Copy size={11} />
+                                  复制
+                                </button>
+                                <button
+                                  type="button"
+                                  className="vq-button vq-button--quiet vq-button--sm"
+                                  disabled={receiptLinkBusy !== ''}
+                                  onClick={() => void ensureReceiptLink(row.id || '', true)}
+                                  title="换一枚 token：已经发出去的旧地址立刻失效"
+                                >
+                                  {receiptLinkBusy === 'rotate' ? '正在换…' : '换一条'}
+                                </button>
+                              </div>
+                            </div>
+                            <p className="vq-archive-receipt-linknote">
+                              这一条地址只认这一份包：打开它看不到作品的其他内容，也改不到包里的任何东西。
+                            </p>
+                          </>
+                        ) : (
+                          <div className="vq-archive-receipt-linkrow is-empty">
+                            <span className="vq-archive-receipt-url is-empty">
+                              这一条是升级前封存的，还没有回执链接
+                            </span>
+                            <div className="vq-archive-receipt-linkacts">
+                              <button
+                                type="button"
+                                className="vq-button vq-button--sm"
+                                disabled={receiptLinkBusy !== ''}
+                                onClick={() => void ensureReceiptLink(row.id || '', false)}
+                              >
+                                {receiptLinkBusy === 'issue' ? '正在生成…' : '生成回执链接'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                       <label className="vq-archive-receipt-field">
                         <span className="vq-archive-receipt-label">收据</span>
                         <textarea
@@ -2026,6 +2131,7 @@ export default function ProjectPage({
                             {row.receipt.claimed?.kind ? ' · ' + row.receipt.claimed.kind + '核对' : ''}
                             {' · 核对于 ' + stamp(row.receipt.at)}
                           </span>
+                          <span className="vq-archive-receipt-via">{receiptViaText(row.receipt.via)}</span>
                           {row.receipt.checks?.length ? (
                             <ul className="vq-archive-receipt-checks">
                               {row.receipt.checks.map((check) => (

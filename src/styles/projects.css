@@ -1733,6 +1733,76 @@
   color: var(--warn);
 }
 
+/* 回执链接（v0.9.137）：把「收据再发回来」换成「他自己贴」。
+   虚线框里再嵌一块实线：上面是地址与两个动作，下面一句说清这条地址的边界。 */
+.vq-archive-receipt-link {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+}
+
+.vq-archive-receipt-linkhead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+}
+
+.vq-archive-receipt-linkhint {
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.vq-archive-receipt-linkrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.vq-archive-receipt-url {
+  flex: 1 1 240px;
+  min-width: 0;
+  padding: 2px var(--space-2);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-xs);
+  background: var(--surface-soft);
+  color: var(--ink);
+  font-size: 11px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+  text-transform: none;
+}
+
+.vq-archive-receipt-url.is-empty {
+  border-style: dashed;
+  color: var(--faint);
+}
+
+.vq-archive-receipt-linkacts {
+  display: flex;
+  flex: none;
+  gap: var(--space-1);
+}
+
+.vq-archive-receipt-linknote {
+  margin: 0;
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+/* 这张收据是谁贴的：发件人替他贴的 / 收包人自己贴的，一行小字 */
+.vq-archive-receipt-via {
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
 /* 包没了：下载入口换成说明，不给人一个点了就 404 的按钮 */
 .vq-button.is-disabled {
   opacity: .55;

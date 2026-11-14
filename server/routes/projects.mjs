@@ -75,6 +75,10 @@ import {
   bindProjectFlow,
   saveProjectScript,
   saveDeliveryReceipt,
+  issueDeliveryReceiptToken,
+  findReceiptLink,
+  saveReceiptByToken,
+  newReceiptToken,
   clearProjectScript,
   enableProjectShare,
   setProjectShareCompare,
@@ -113,6 +117,11 @@ const DELIVERY_PACKAGE_ENTRY = /^\/api\/projects\/([\w-]+)\/delivery-packages\/(
 const DELIVERY_PACKAGE_VERIFY = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})\/verify$/
 // 收据对账（v0.9.136）：把收包人发回的那段收据贴进来，跟这一条封存包的哈希比一遍；写的是核对结论，不动包
 const DELIVERY_RECEIPT = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})\/receipt$/
+// 回执链接（v0.9.137）：发一条免登录的地址给收包人，让他自己把收据贴回来。
+// 这一支只是「发行 / 换一枚 token」，收据本身仍写进同一条交付记录。
+const DELIVERY_RECEIPT_LINK = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})\/receipt-link$/
+// 收包人那一侧（v0.9.137）：token 就是凭证，不带登录态；GET 看这是哪一份、POST 把收据贴上去
+const PUBLIC_RECEIPT = /^\/api\/receipts\/([0-9a-f]{16})$/
 // 打印版不进 /api：它是在新标签里打开的 HTML，地址栏里那串会印在纸的页脚上
 const DELIVERABLE_PRINT = /^\/print\/projects\/([\w-]+)\/deliverable$/
 // 评审对照纸：评审把问题框在哪一块画面上，同一张 A4 里印出来（交付包里也有同一份）
@@ -483,9 +492,15 @@ export function createProjectsRouter() {
   return {
     prefix: '/api/projects',
     // 打印版走 /print/projects/*：地址栏里那串会被浏览器印在纸的页脚上，不能带 /api
-    extraPrefixes: ['/print/projects'],
+    extraPrefixes: ['/print/projects', '/api/receipts'],
     async handle(req, res, url, pathname) {
-      if (!pathname.startsWith('/api/projects') && !pathname.startsWith('/print/projects')) return false
+      if (
+        !pathname.startsWith('/api/projects') &&
+        !pathname.startsWith('/print/projects') &&
+        !pathname.startsWith('/api/receipts')
+      ) {
+        return false
+      }
       const user = currentUser(req)
 
       // 交付稿的 A4 打印版：同一份 Markdown 排成一张纸，打印（存 PDF）交给浏览器。
@@ -642,7 +657,9 @@ export function createProjectsRouter() {
       }
 
       // 生产必须登录；本地演示（VQ_REQUIRE_AUTH=0）沿用模板/评审的做法：不认人但照常可用。
-      if (!user && config.auth.requireAuth) {
+      // /api/receipts（v0.9.137）是收包人的回执链接：那一侧本来就没有账号，
+      // 它由自己那条带 token 的分支处理，不能在这道门就 401。
+      if (!pathname.startsWith('/api/receipts') && !user && config.auth.requireAuth) {
         sendJson(res, 401, { error: '未登录', loginRequired: true })
         return true
       }
@@ -1382,6 +1399,8 @@ export function createProjectsRouter() {
             problems: check.problems,
             checks: check.checks,
             claimed: check.claimed,
+            // 这张是发件人替他贴的：收包人自己贴回来的走下面那条 token 接口，记 'link'
+            via: 'you',
           },
           user,
         )
@@ -1396,6 +1415,104 @@ export function createProjectsRouter() {
           problems: check.problems,
           checks: check.checks,
           receipt: saved.delivery.receipt,
+        })
+        return true
+      }
+
+      // 回执链接（v0.9.137）：档案里复制一条地址发出去，收包人打开就能自己贴收据。
+      // 换一枚 token 就是让旧地址立刻失效；不换的时候只是把已有的那枚还回去。
+      const receiptLinkPath = pathname.match(DELIVERY_RECEIPT_LINK)
+      if (receiptLinkPath) {
+        if (req.method !== 'POST') {
+          sendJson(res, 405, { error: '回执链接只能用 POST 生成或换一条' })
+          return true
+        }
+        if (!user && config.auth.requireAuth) {
+          sendJson(res, 401, { error: '登录已过期：回到作品页再复制链接' })
+          return true
+        }
+        const body = await readBody(req)
+        const issued = await issueDeliveryReceiptToken(receiptLinkPath[1], receiptLinkPath[2], user, {
+          rotate: body?.rotate === true,
+        })
+        if (!issued) {
+          sendJson(res, 404, { error: '这一条交付没有封存包，发不了回执链接' })
+          return true
+        }
+        sendJson(res, 200, { ok: true, token: issued.token, rotated: issued.rotated })
+        return true
+      }
+
+      // 收包人那一侧（v0.9.137）：链接里的 token 就是凭证，不登录也能打开、也能贴。
+      // GET 只说「这是哪一份、之前贴过没有」，不给哈希也不给档案——有包的人在自己那张校验页上看得到；
+      // POST 收下收据、比对完写进那一条交付记录，回给收包人的只有哪几项对上，不回「这一条是多少」。
+      const publicReceipt = pathname.match(PUBLIC_RECEIPT)
+      if (publicReceipt) {
+        const found = await findReceiptLink(publicReceipt[1])
+        if (!found) {
+          sendJson(res, 404, { error: '这条回执链接不在了：找发件人要一条新的' })
+          return true
+        }
+        const receipt = found.delivery.receipt || null
+        if (req.method === 'GET') {
+          sendJson(res, 200, {
+            ok: true,
+            project: { title: found.project.title },
+            delivery: {
+              version: found.delivery.version,
+              fileName: found.delivery.package?.fileName || '',
+              bytes: found.delivery.package?.bytes || 0,
+              at: found.delivery.at,
+            },
+            receipt: receipt
+              ? { state: receipt.state, at: receipt.at, summary: receipt.summary || '' }
+              : null,
+          })
+          return true
+        }
+        if (req.method !== 'POST') {
+          sendJson(res, 405, { error: '收据只能用 POST 贴上来' })
+          return true
+        }
+        const body = await readBody(req)
+        const text = String(body?.text ?? '')
+        if (!text.trim()) {
+          sendJson(res, 400, { error: '先把收据整段贴进来', code: 'RECEIPT_REQUIRED' })
+          return true
+        }
+        if (text.length > RECEIPT_MAX_CHARS) {
+          sendJson(res, 413, {
+            error: '这段太长了（超过 ' + RECEIPT_MAX_CHARS + ' 字）：只贴收据那几行',
+            code: 'RECEIPT_TOO_LONG',
+          })
+          return true
+        }
+        const check = checkReceipt({ text, delivery: found.delivery })
+        if (!check.parsed) {
+          sendJson(res, 422, { error: check.error, code: 'RECEIPT_UNREADABLE' })
+          return true
+        }
+        const saved = await saveReceiptByToken(publicReceipt[1], {
+          at: new Date().toISOString(),
+          state: check.state,
+          summary: check.summary,
+          problems: check.problems,
+          checks: check.checks,
+          claimed: check.claimed,
+          via: 'link',
+        })
+        if (!saved) {
+          sendJson(res, 404, { error: '这条回执链接刚刚失效了：找发件人要一条新的' })
+          return true
+        }
+        sendJson(res, 200, {
+          ok: check.state === 'match',
+          state: check.state,
+          summary: check.summary,
+          problems: check.problems,
+          // 只回哪几项对上：期望值不给，免得不拿包也能照抄出一段「对得上」
+          checks: check.checks.map((entry) => ({ k: entry.k, ok: entry.ok === true })),
+          at: saved.delivery.receipt?.at || '',
         })
         return true
       }
@@ -1600,6 +1717,8 @@ export function createProjectsRouter() {
         // 「当初交出去的是什么」都还能原样取回。封存失败不挡交付，记录照落。
         let deliveryId = ''
         let deliveryPackage = null
+        // 回执链接（v0.9.137）：新封存的包一出生就带一枚 token，档案里直接能复制链接发出去
+        let receiptToken = ''
         if (patch.status === 'done') {
           const current = await getProject(item[1], user)
           if (current) {
@@ -1608,13 +1727,14 @@ export function createProjectsRouter() {
             try {
               const { archive, zipName, files } = await buildProjectDeliveryArchive(current, user, tz)
               deliveryId = newDeliveryPackageId()
+              receiptToken = newReceiptToken()
               deliveryPackage = await saveDeliveryPackage(current.id, deliveryId, archive, { fileName: zipName, files })
             } catch (caught) {
               console.warn('[projects] 交付包封存失败：' + (caught instanceof Error ? caught.message : String(caught)))
             }
           }
         }
-        const project = await updateProject(item[1], patch, user, { deliveryId, deliveryPackage })
+        const project = await updateProject(item[1], patch, user, { deliveryId, deliveryPackage, receiptToken })
         if (!project) {
           sendJson(res, 404, { error: '作品不存在或已被删除' })
           return true

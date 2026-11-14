@@ -143,6 +143,9 @@ const PUBLIC_API = [
   '/api/app',
   '/api/gateway',
   '/api/share',
+  // 收包人的回执链接（v0.9.137）：链接里的 token 就是凭证，收包的人没有账号。
+  // 只认这一条交付、只能贴一段收据；按 IP 限流 + 体积上限挡住滥用。
+  '/api/receipts',
   '/api/client-errors',
   // 举报侵权不要求登录：被侵权的人不一定有账号；靠 IP 限流 + 内容校验挡住滥用
   '/api/reports',

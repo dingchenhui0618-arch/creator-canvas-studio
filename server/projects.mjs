@@ -34,6 +34,14 @@ const MAX_DELIVERIES = 20
 /** 一条交付记录最多带多少条包内清单：和 delivery-packages.mjs 的上限保持一致。 */
 const MAX_PACKAGE_FILES = 60
 
+/**
+ * 回执链接的 token（v0.9.137）：16 位十六进制，和交付包编号同一套形状，放地址里不用转义。
+ * 它只决定「谁能把这张收据贴回来」，不参与包的计算；换一条就是重新生成一枚，旧的立刻不认。
+ */
+export function newReceiptToken() {
+  return randomUUID().replace(/-/g, '').slice(0, 16)
+}
+
 let cache = null
 let writeChain = Promise.resolve()
 
@@ -195,6 +203,10 @@ function normalizeDeliveryReceipt(raw) {
   const at = typeof raw.at === 'string' ? raw.at : ''
   if (!state || !at) return null
   const base = { at, state }
+  // 这张收据是谁贴的：'link' = 收包人自己从回执链接贴回来的，'you' = 发件人替他贴的。
+  // 老记录没有这一项，读出来也没有——界面按「你贴的」讲，不编一个「对方自己贴的」。
+  const via = raw.via === 'link' ? 'link' : raw.via === 'you' ? 'you' : ''
+  if (via) base.via = via
   const summary = clip(raw.summary, 300)
   if (summary) base.summary = summary
   const problems = (Array.isArray(raw.problems) ? raw.problems : [])
@@ -245,6 +257,10 @@ function normalizeDeliveries(raw) {
       // 收据对账只挂在有封存包的记录上：没有包就没有可比的哈希
       const receipt = pkg ? normalizeDeliveryReceipt(entry.receipt) : null
       if (receipt) base.receipt = receipt
+      // 回执链接（v0.9.137）：给收包人一条不用登录的入口，把收据自己贴回来。
+      // 只挂在有封存包的记录上——没有包就没有可比的东西；坏了就当没有这条链接。
+      const token = /^[0-9a-f]{16}$/.test(String(entry.receiptToken || '')) ? String(entry.receiptToken) : ''
+      if (pkg && token) base.receiptToken = token
       return base
     })
     .filter((entry) => entry.version > 0)
@@ -384,7 +400,12 @@ const PATCHABLE = ['title', 'flowId', 'status']
  * deliveryPackage 是路由封存好的包元数据（v0.9.125）：只有「标记交付」这一条路会带，
  * 存储层不负责打包，只负责把「这一版交出去时是什么样」与包编号一起落盘。
  */
-export async function updateProject(id, patch = {}, user = null, { deliveryId = '', deliveryPackage = null } = {}) {
+export async function updateProject(
+  id,
+  patch = {},
+  user = null,
+  { deliveryId = '', deliveryPackage = null, receiptToken = '' } = {},
+) {
   const list = await loadAll()
   const found = list.find((item) => item.id === id && canAccess(item, user))
   if (!found) return null
@@ -416,9 +437,13 @@ export async function updateProject(id, patch = {}, user = null, { deliveryId = 
     if (deliveryPackage && deliveryId) {
       record.id = deliveryId
       record.package = deliveryPackage
+      // 换了一份新包，回执链接也跟着换：旧链接指的是上一份，不能继续往新记录里写
+      if (/^[0-9a-f]{16}$/.test(String(receiptToken || ''))) record.receiptToken = receiptToken
     } else if (previous?.id && previous.package) {
       record.id = previous.id
       record.package = previous.package
+      // 打包失败、沿用上一份包时，链接也沿用：它指的还是同一份盘上的文件
+      if (previous.receiptToken) record.receiptToken = previous.receiptToken
     }
     found.deliveries = [...rest, record].slice(-MAX_DELIVERIES)
     changed = true
@@ -472,6 +497,68 @@ export async function saveDeliveryReceipt(id, deliveryId, receipt, user = null) 
   found.updatedAt = new Date().toISOString()
   await persist(list)
   return { project: normalize(found), delivery: deliveries[index] }
+}
+
+/**
+ * 回执链接（v0.9.137）：把这一条交付记录的 token 换成新的一枚，旧链接立刻不认。
+ * rotate=false 时只补一枚缺的，不换掉已经在用的那一条——发给对方的链接不能凭空失效。
+ * 返回 null = 作品/交付记录不存在，或者这一条没有封存包。
+ */
+export async function issueDeliveryReceiptToken(id, deliveryId, user = null, { rotate = false } = {}) {
+  const list = await loadAll()
+  const found = list.find((item) => item.id === id && canAccess(item, user))
+  if (!found) return null
+  const deliveries = normalizeDeliveries(found.deliveries)
+  const index = deliveries.findIndex((entry) => entry.id === deliveryId && entry.package)
+  if (index < 0) return null
+  const current = deliveries[index].receiptToken || ''
+  if (current && !rotate) return { token: current, rotated: false, delivery: deliveries[index] }
+  const token = newReceiptToken()
+  deliveries[index] = { ...deliveries[index], receiptToken: token }
+  found.deliveries = deliveries
+  found.updatedAt = new Date().toISOString()
+  await persist(list)
+  return { token, rotated: Boolean(current), delivery: deliveries[index] }
+}
+
+/**
+ * 按回执链接的 token 找那一条交付（v0.9.137）：收包人打开的页面只认这一枚 token，
+ * 不认人也不认作品——所以只回这一条交付和它所属作品的标题，别的一概不给。
+ */
+export async function findReceiptLink(token) {
+  const value = String(token || '')
+  if (!/^[0-9a-f]{16}$/.test(value)) return null
+  const list = await loadAll()
+  for (const project of list) {
+    const deliveries = normalizeDeliveries(project.deliveries)
+    const delivery = deliveries.find((entry) => entry.receiptToken === value && entry.package)
+    if (delivery) return { project: normalize(project), delivery }
+  }
+  return null
+}
+
+/**
+ * 收包人自己在回执链接上贴回来的收据（v0.9.137）。
+ * 与 saveDeliveryReceipt 同一件事，只是「哪一条」由 token 决定，不由登录态决定；
+ * 同样只改这一条交付记录的 receipt，包的字节与哈希、交付时间、评审快照都不动。
+ */
+export async function saveReceiptByToken(token, receipt) {
+  const value = String(token || '')
+  if (!/^[0-9a-f]{16}$/.test(value)) return null
+  const normalized = normalizeDeliveryReceipt(receipt)
+  if (!normalized) return null
+  const list = await loadAll()
+  for (const project of list) {
+    const deliveries = normalizeDeliveries(project.deliveries)
+    const index = deliveries.findIndex((entry) => entry.receiptToken === value && entry.package)
+    if (index < 0) continue
+    deliveries[index] = { ...deliveries[index], receipt: normalized }
+    project.deliveries = deliveries
+    project.updatedAt = new Date().toISOString()
+    await persist(list)
+    return { project: normalize(project), delivery: deliveries[index] }
+  }
+  return null
 }
 
 /**

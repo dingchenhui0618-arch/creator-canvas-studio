@@ -26,6 +26,9 @@ const RULES = [
   { method: 'POST', match: (p) => p === '/api/reports', bucket: 'report', limit: 5 },
   // 反馈也是公开入口：写一条反馈是低频动作，一分钟 3 条足够，连续刷会被 429
   { method: 'POST', match: (p) => p === '/api/feedback', bucket: 'feedback', limit: 3 },
+  // 收包人的回执链接（v0.9.137）：公开、可写，一个链接正常也就贴一两次；
+  // 每分钟 12 次已经够「贴错了改一下」，脚本刷会被 429，不会把作品库写穿
+  { method: 'POST', match: (p) => /^\/api\/receipts\/[0-9a-f]{16}$/.test(p), bucket: 'receipt_link', limit: 12 },
 ]
 
 // 每 5 分钟清一次过期桶，避免长期运行时 Map 无限长
