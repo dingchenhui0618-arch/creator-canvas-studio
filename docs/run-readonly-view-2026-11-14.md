@@ -81,6 +81,21 @@ v0.9.104 让「继续运行」可以写进地址 `#/canvas/<flowId>/resume/<runI
 
 ![390 宽：只读条、换行后的画布工具栏、画布与检查器都在画面内，无横向溢出](run-view-390-2026-11-14.png)
 
+## 生产实况（2026-11-14）
+
+发布标签 `20261114-163500-r116-vie`（发布脚本截断 31 字符，完整意图 `20261114-163500-r116-view`）；快照 `20261114-083553-20261114-163500-r116-vie.tar.gz` 1,018,437 B。
+
+| 检查 | 读数 |
+| --- | --- |
+| unit | `visionqa` / `visionqa-internal` / `visionqa.socket` / `bdc-web` 全 active |
+| 版本 / 健康 | 8799 / 8800 / 公网都是 **0.9.106**；`/api/health` ok（模板 26，uptime 46s） |
+| 入口 | `index-BLZHxoce.js` 200 · **577,823 B**；公网同一文件 200 · 577,823 B |
+| 画布 / 后台 / 样式 | 240,467 B / 201,072 B / 276,220 B；画布样式 27,191 B |
+| 文件一致 | `flows 6b8d3ed9` / `routes f6236d72` / 入口 `e4f32c43` / 画布 `4b2e737c` / 后台 `b3876415` / 样式 `c3755b30` / 画布样式 `053f2024`，全部与本地一致 |
+| 心跳 / 盘 / 临时文件 | 1482139 / 1482135；盘 72%；`/tmp` 清回 351M；近 15 分钟只有 SQLite experimental 提示 |
+
+生产没有真实运行授权，线上没有真实「停止 → 查看 → 退出」记录；生产验证的是版本、入口、文件一致与四个 unit 健康。
+
 ## 踩到的坑
 
 1. **不能复用 `resume` 地址做查看**：地址是用户能复制、能刷新、能后退的对象；同一地址如果既能查看又能续跑，页面状态一抖就可能把「看」变成「执行」。
@@ -121,4 +136,5 @@ bash /opt/visionqa/ops/rollback.sh --to 2   # v0.9.104
 - oxlint **0 error / 15 warning**（与上一轮同一批基线，无新增）。
 - `tsc -b` 与 `npm run build` 干净。
 - 本地构建：`index-BLZHxoce.js` 577,823 B；`CanvasPage-Dt0nFjJ-.js` 240,467 B；`AdminConsolePage-Dbp0Sf07.js` 201,072 B；`index-txSBUiKZ.css` 276,220 B；`CanvasPage-DWwXKjc4.css` 27,191 B。
-- 密钥扫描在提交前单独跑，结果见 README 对应小节。
+- 密钥扫描 **652 文件 / 0 命中**。
+- 提交 `c1bf16c`，CI **43576215738** 三 job 全 success。
