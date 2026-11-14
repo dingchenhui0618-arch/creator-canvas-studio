@@ -2157,7 +2157,7 @@ v0.9.110 起，对照接口写死「两条运行必须在同一张画布上」�
 
 | 本地实测（8951，VQ_REQUIRE_AUTH=1，零上游、零积分） | 读数 |
 | --- | --- |
-| 作品 / 画布 | prj_c644c073；v1 flow_758e1241 → v2 flow_9f3648ed → v3 flow_dd4f174a |
+| 作品 / 画布 | prj_3ec90ce9；v1 flow_8aba190a → v2 flow_24e402cd → v3 flow_10645334 |
 | 三次脚本 | v1 2 段 → v2 3 段 → v3 4 段 |
 | v2 / v3 变更句 | v2「画布改 1 个（输入主题）；脚本多 1 段（收尾）、1 段口播改过、钩子换过」；v3「画布改 1 个（输入主题）；脚本多 1 段（结尾）、钩子换过」 |
 | 脚本快照 | v1 2 段、v2 3 段、当前 v3 4 段；v9 → 404；未登录 → 401 |
@@ -2171,8 +2171,10 @@ v0.9.110 起，对照接口写死「两条运行必须在同一张画布上」�
 
 ![390：脚本快照弹窗在窄屏内，正文不横向溢出](docs/project-version-script-390-2026-11-14.png)
 
-全仓 **934/934**（新增 7 条差异纯函数用例 + 2 条作品版本接口用例），oxlint **0 error / 15 warning**（同一批基线），tsc -b 与 build 干净；入口 index-D2v_xE2S.js（602,726 B）、画布 CanvasPage-Hmt87Xvw.js（242,014 B）、后台 AdminConsolePage-CgD-T2FM.js（201,077 B）、主样式 index-SZZGPYcC.css（290,176 B）、画布样式 CanvasPage-BX48Ugxj.css（28,926 B）。入口比 v0.9.113 多 4,092 B，样式多 3,893 B，没有新增第三方依赖。
+全仓 **934/934**（新增 7 条差异纯函数用例 + 2 条作品版本接口用例），oxlint **0 error / 15 warning**（同一批基线），tsc -b 与 build 干净；入口 index-SdyQq5Ff.js（602,726 B）、画布 CanvasPage-KSpKARei.js（242,014 B）、后台 AdminConsolePage-D0x9A31O.js（201,077 B）、主样式 index-SZZGPYcC.css（290,176 B）、画布样式 CanvasPage-BX48Ugxj.css（28,926 B）。入口比 v0.9.113 多 4,092 B，样式多 3,893 B，没有新增第三方依赖。
 
-生产部署（部署后补）。
+生产部署 `20261114-134445-r124verdiff`（快照 `20261114-134445-r124verdiff.tar.gz` **1,037,224 B**）：四个 unit 全 active，8799 / 8800 / 公网都 **0.9.114**，`/api/health` ok（模板 26，部署后 uptime 73s）；入口 200 · 602,726 B、画布 242,014 B、后台 201,077 B、主样式 290,176 B、画布样式 28,926 B；服务端与前端哈希全部与本地一致（`version-diff 01059b59` / `routes 5541ef0e` / `project-deliverable b38ebecd` / 入口 `16a721b1` / 画布 `e40c54d3` / 后台 `7d0e4986` / 主样式 `f74895b5` / 画布样式 `b49e8586`）；部署文件里 `versionChangesOf` 在 version-diff、`versionChanges` 在 routes（3 处）、`VERSION_SCRIPT` 在 routes（2 处）、`vq-verscript` 在样式里；未登录请求 `/api/projects/<id>/versions/1/script` 返回 **401**；心跳 pid 1488983 / 1488980，盘 72%，`/tmp` 352M，日志没有业务 error。生产 9 条运行、0 条带 graph，`run-graphs` 还没有目录；生产没有真实运行授权，也没有登录生产账号读版本脚本，这一版的证据来自本地真浏览器 + 直连本地服务。
+
+提交 `b2e51ef`；CI **43600305396** 三个 job 全 success（安全扫描、Node 22.12、Node 24）。
 
 回退：bash /opt/visionqa/ops/rollback.sh --to 1 → **v0.9.113**（--to 2 是 v0.9.112）。这一版不改已有 JSON schema：versionChanges 与脚本快照都是现算的只读响应；新增接口 /versions/:n/script 旧前端不会请求，回退安全。细节、八条坑与「发现但没做」见 [每一版比上一版改了什么，旧版脚本还能翻开看](docs/project-version-change-2026-11-14.md)。

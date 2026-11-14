@@ -66,7 +66,7 @@ GET /api/projects/:id/versions/:n/script：
 
 | 检查 | 读数 |
 | --- | --- |
-| 作品 / 画布 | prj_c644c073；v1 flow_758e1241 → v2 flow_9f3648ed → v3 flow_dd4f174a |
+| 作品 / 画布 | prj_3ec90ce9；v1 flow_8aba190a → v2 flow_24e402cd → v3 flow_10645334 |
 | 三次脚本 | v1 2 段（脚本 A）→ v2 3 段（脚本 B）→ v3 4 段（脚本 C） |
 | v2 变更句 | 画布改 1 个（输入主题）；脚本多 1 段（收尾）、1 段口播改过、钩子换过 |
 | v3 变更句 | 画布改 1 个（输入主题）；脚本多 1 段（结尾）、钩子换过 |
@@ -105,7 +105,21 @@ GET /api/projects/:id/versions/:n/script：
 
 ## 生产部署
 
-本轮部署后补：版本号、快照文件、四个 unit、入口与样式大小、文件哈希、未登录 401、心跳与磁盘。
+部署 `20261114-134445-r124verdiff`，快照 `20261114-134445-r124verdiff.tar.gz` **1,037,224 B**。
+
+| 检查 | 读数 |
+| --- | --- |
+| 版本 / 健康 | 8799 / 8800 / 公网都 **0.9.114**；`/api/health` ok（模板 26，部署后 uptime 73s） |
+| 四个 unit | 全 active |
+| 入口 / 画布 / 后台 | `index-SdyQq5Ff.js` 602,726 B；`CanvasPage-KSpKARei.js` 242,014 B；`AdminConsolePage-D0x9A31O.js` 201,077 B |
+| 样式 | `index-SZZGPYcC.css` 290,176 B；`CanvasPage-BX48Ugxj.css` 28,926 B |
+| 文件一致 | `version-diff 01059b59` / `routes 5541ef0e` / `project-deliverable b38ebecd` / 入口 `16a721b1` / 画布 `e40c54d3` / 后台 `7d0e4986` / 主样式 `f74895b5` / 画布样式 `b49e8586` |
+| 路由已上线 | `versionChangesOf` 在 version-diff；`versionChanges` 在 routes（3 处）；`VERSION_SCRIPT` 在 routes（2 处）；`vq-verscript` 在样式里 |
+| 未登录 | `/api/projects/<id>/versions/1/script` → **401** |
+| 心跳 / 盘 | pid 1488983 / 1488980；盘 72%；`/tmp` 352M；日志没有业务 error |
+| 旧记录 | 9 条运行、0 条带 graph；`run-graphs` 还没有目录 |
+
+生产没有登录账号去读一条作品的版本脚本，只验证了未登录 401 与文件哈希；需求证据来自本地真浏览器 + 本地服务，零真实上游。
 
 ## 回退
 
