@@ -223,8 +223,19 @@ function nodeResultView(result) {
 export function compareSideOf(run) {
   const nodes = Array.isArray(run?.nodes) ? run.nodes : []
   const done = nodes.filter((node) => node.status === 'success' || node.status === 'unsupported').length
+  const project = run?.project && typeof run.project === 'object' ? run.project : null
   return {
     id: String(run?.id || ''),
+    // 跨版本对照（v0.9.113）：这一侧是哪张画布、属于作品的第几版。
+    // 没挂作品的运行 project 为 null，页面就不写「v几」。
+    flowName: String(run?.flowName || ''),
+    project: project
+      ? {
+          id: String(project.id || ''),
+          title: String(project.title || ''),
+          version: Math.max(0, Math.round(Number(project.version) || 0)),
+        }
+      : null,
     status: String(run?.status || ''),
     canceled: Boolean(run?.canceled),
     startedAt: run?.startedAt || '',
@@ -300,11 +311,22 @@ export function buildRunCompare(current, previous) {
     current?.flowRevision && previous?.flowRevision && current.flowRevision !== previous.flowRevision,
   )
   const graphUnknown = Boolean(!current?.flowRevision || !previous?.flowRevision)
+  // 同一件作品开过新版后，两条运行可以来自不同的 flowId：节点按 id 对齐，
+  // 版本号由作品索引给（route 在调用前挂好），页面写「v1 与 v2」。
+  const crossFlow = String(current?.flowId || '') !== String(previous?.flowId || '')
+  const sameProject = Boolean(
+    crossFlow &&
+    current?.project?.id &&
+    previous?.project?.id &&
+    String(current.project.id) === String(previous.project.id),
+  )
 
   return {
     comparable: true,
     flowId: String(current?.flowId || ''),
     flowName: String(current?.flowName || ''),
+    crossVersion: sameProject,
+    project: sameProject ? { id: String(current.project.id), title: String(current.project.title || '') } : null,
     current: compareSideOf(current),
     previous: compareSideOf(previous),
     graph: {

@@ -49,6 +49,19 @@ export function projectsByFlow(projects = []) {
   return byFlow
 }
 
+/**
+ * 一条作品名下的所有画布：当前版 + 归档版。运行对照跨版本时用它圈定范围——
+ * 只认这条作品自己的画布，别把别处的运行也当成可对照对象。
+ */
+export function projectFlowIds(project) {
+  const ids = []
+  if (project?.flowId) ids.push(String(project.flowId))
+  for (const version of Array.isArray(project?.versions) ? project.versions : []) {
+    if (version?.flowId) ids.push(String(version.flowId))
+  }
+  return Array.from(new Set(ids))
+}
+
 /** 一条运行挂在哪条作品上：没挂作品（空白画布直接跑的）返回 null，页面据此写「没挂在作品上」。 */
 export function runProjectRef(byFlow, flowId) {
   if (!flowId || !(byFlow instanceof Map)) return null

@@ -419,11 +419,14 @@ export async function getRun(id, user = null) {
  * 不分「更早」和「更晚」——默认仍取更早的一条，但用户可以在弹窗里点名任意一条，
  * 最早那条运行也能回头挑之后的一次来看。列表按开始时间倒序，最近的在前。
  */
-export async function compareOptionsOf(run, user = null) {
+export async function compareOptionsOf(run, user = null, flowIds = null) {
   if (!run) return { items: [], total: 0 }
+  // flowIds 由调用方给（v0.9.113）：同一件作品开过新版后，其它版本的运行也能挑来对照；
+  // 不给就还是只看同一条画布，老的调用方行为不变。
+  const allowed = new Set((Array.isArray(flowIds) && flowIds.length ? flowIds : [run.flowId]).map(String))
   const peers = (await loadRuns())
     .filter((item) => canAccess(item, user))
-    .filter((item) => item.flowId === run.flowId && item.id !== run.id)
+    .filter((item) => allowed.has(String(item.flowId)) && item.id !== run.id)
     .filter((item) => item.status !== 'running' && item.status !== 'queued')
   peers.sort((a, b) => String(b.startedAt || '').localeCompare(String(a.startedAt || '')))
   return { items: peers, total: peers.length }

@@ -171,6 +171,10 @@ export type RunCompareSide = {
   /** 实际花掉的积分（退回来的不算） */
   cost: number
   refunded: boolean
+  /** 这条运行在哪张画布上；跨版本对照时用它写「v1 / v2」 */
+  flowName?: string
+  /** 挂在哪件作品、第几版；空白画布跑的不挂作品，是 null */
+  project?: { id: string; title: string; version: number } | null
 }
 
 export type RunCompareNodeSide = {
@@ -208,6 +212,8 @@ type RunCompareBase = {
   optionsTotal: number
   /** 候选超过 20 条时只返回最近 20 条 */
   optionsTruncated: boolean
+  /** 候选范围：flow = 只有同一条画布；project = 同一件作品的其它版本也在里面（v0.9.113） */
+  optionsScoped?: 'flow' | 'project'
 }
 
 export type RunCompare = RunCompareBase &
@@ -219,6 +225,9 @@ export type RunCompare = RunCompareBase &
     | {
         comparable: true
         previous: RunCompareSide
+        /** 两条运行在同一件作品的不同版本画布上（v0.9.113） */
+        crossVersion?: boolean
+        project?: { id: string; title: string } | null
         graph: { changed: boolean; unknown: boolean; currentRevision: string; previousRevision: string }
         nodes: RunCompareNode[]
         totals: {

@@ -25,7 +25,7 @@ import {
 import { currentUser } from '../auth.mjs'
 import { config } from '../config.mjs'
 import { listProjects } from '../projects.mjs'
-import { projectsByFlow, projectFlowsMatching, withRunProject, withFlowProject } from '../run-ownership.mjs'
+import { projectsByFlow, projectFlowsMatching, projectFlowIds, runProjectRef, withRunProject, withFlowProject } from '../run-ownership.mjs'
 import { charge, balanceOf } from '../credits.mjs'
 import { quotaRefusal } from '../quota.mjs'
 import { enter, leave } from '../gate.mjs'
@@ -50,6 +50,22 @@ function isOwnPath(pathname) {
     pathname === '/api/runs' ||
     pathname.startsWith('/api/runs/')
   )
+}
+
+/**
+ * 对照的圈子（v0.9.113）：同一条画布，或同一件作品开过新版的其它画布。
+ * 作品名下的画布由当前版 + 归档版本表决定；没挂作品的画布只有自己一张。
+ */
+async function compareScopeOf(run, user) {
+  const projects = await listProjects(user)
+  const byFlow = projectsByFlow(projects)
+  const project = runProjectRef(byFlow, run.flowId)
+  const doc = project ? projects.find((item) => item.id === project.id) : null
+  return {
+    project,
+    byFlow,
+    flowIds: doc ? projectFlowIds(doc) : [String(run.flowId || '')],
+  }
 }
 
 function sendStreamHead(res) {
@@ -244,12 +260,16 @@ export function createFlowsRouter() {
         const withId = String(url.searchParams.get('with') || '').trim()
         // 可对照的候选一起带回去（v0.9.111）：页面上的「对照对象」直接从这里出，
         // 不用再发一次列表请求，也不会列出正在跑 / 排队的运行。
-        const peers = await compareOptionsOf(run, user)
-        const options = peers.items.slice(0, 20).map(compareSideOf)
+        // v0.9.113 起范围放宽到同一件作品的其它版本画布：开过新版之后，上一版的运行也能挑来对照。
+        const scope = await compareScopeOf(run, user)
+        const peers = await compareOptionsOf(run, user, scope.flowIds)
+        const options = withRunProject(peers.items, scope.byFlow).slice(0, 20).map(compareSideOf)
         const optionsMeta = {
           options,
           optionsTotal: peers.total,
           optionsTruncated: peers.total > options.length,
+          // 页面据此写「同一件作品的其它版本也可以挑」；只在真有多张画布时才说
+          optionsScoped: scope.flowIds.length > 1 ? 'project' : 'flow',
         }
         let previous = null
         if (withId) {
@@ -262,8 +282,11 @@ export function createFlowsRouter() {
             notFound(res, '要对照的那条运行不存在')
             return true
           }
-          if (previous.flowId !== run.flowId) {
-            sendJson(res, 400, { error: '这两条运行不在同一张画布上（可能已经分版），不能逐节点对照' })
+          // 同一张画布，或同一件作品开过新版的另一张画布；别处的运行不硬凑
+          const previousProject = runProjectRef(scope.byFlow, previous.flowId)
+          const sameProject = Boolean(scope.project && previousProject && scope.project.id === previousProject.id)
+          if (previous.flowId !== run.flowId && !sameProject) {
+            sendJson(res, 400, { error: '这两条运行不属于同一件作品：只能对照同一张画布，或同一件作品开过新版的画布' })
             return true
           }
           if (previous.status === 'running' || previous.status === 'queued') {
@@ -271,16 +294,17 @@ export function createFlowsRouter() {
             return true
           }
         } else {
-          // 默认取更早的最近一条；最早那条没有更早的，但候选里可能还有之后的运行，
-          // 页面会把它列出来让人自己挑，而不是硬说「没得对照」。
+          // 默认仍只取同一条画布上更早的最近一条：跨版本要人自己点名，不替人改对照口径。
+          // 最早那条没有更早的，但候选里可能还有之后的运行，页面会列出来让人挑，而不是硬说「没得对照」。
           const startedAt = String(run.startedAt || '')
-          previous = peers.items.find((item) => String(item.startedAt || '') < startedAt) || null
+          previous = peers.items.find((item) => item.flowId === run.flowId && String(item.startedAt || '') < startedAt) || null
         }
+        const currentRun = withRunProject([run], scope.byFlow)[0]
         const base = {
           ok: true,
           flowId: run.flowId,
           flowName: run.flowName,
-          current: compareSideOf(run),
+          current: compareSideOf(currentRun),
           ...optionsMeta,
         }
         if (!previous) {
@@ -288,12 +312,12 @@ export function createFlowsRouter() {
             ...base,
             comparable: false,
             reason: options.length
-              ? '这是这张画布上最早的一条运行；默认没有更早的可对照，可以从下面挑一条之后的运行。'
+              ? '这是这张画布上最早的一条运行；默认没有更早的可对照，可以从下面挑一条' + (scope.flowIds.length > 1 ? '运行——同一件作品的其它版本也可以。' : '之后的运行。')
               : '这是这张画布上最早的一条运行；再跑一次之后，这里会逐节点对照两次的结果。',
           })
           return true
         }
-        sendJson(res, 200, { ...base, ...buildRunCompare(run, previous) })
+        sendJson(res, 200, { ...base, ...buildRunCompare(currentRun, withRunProject([previous], scope.byFlow)[0]) })
         return true
       }
 
@@ -330,9 +354,15 @@ export function createFlowsRouter() {
           notFound(res, '要对照的那条运行不存在')
           return true
         }
+        // 与对照表同一套范围：同一张画布，或同一件作品的其它版本画布（v0.9.113）。
+        // 节点按 id 对齐：旧版有的节点在新版被删掉时，buildRunOutputDiff 会按「一边为空」处理。
         if (previous.flowId !== run.flowId) {
-          sendJson(res, 400, { error: '这两条运行不在同一张画布上（可能已经分版），不能逐节点对照' })
-          return true
+          const scope = await compareScopeOf(run, user)
+          const previousProject = runProjectRef(scope.byFlow, previous.flowId)
+          if (!scope.project || !previousProject || scope.project.id !== previousProject.id) {
+            sendJson(res, 400, { error: '这两条运行不属于同一件作品：只能对照同一张画布，或同一件作品开过新版的画布' })
+            return true
+          }
         }
         if (previous.status === 'running' || previous.status === 'queued') {
           sendJson(res, 409, { error: '要对照的那条运行还没跑完，等它结束再看' })

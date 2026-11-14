@@ -20,6 +20,7 @@ isolateLeaseDir('vq-lease-run-compare-')
 
 const { buildRunCompare, buildRunOutputDiff } = await import('../server/run-compare.mjs')
 const flows = await import('../server/flows.mjs')
+const projects = await import('../server/projects.mjs')
 const { createFlowsRouter } = await import('../server/routes/flows.mjs')
 
 function mockReq({ method = 'GET' } = {}) {
@@ -244,6 +245,35 @@ test('输出键顺序不同不算改动；两条老运行没有指纹时 graph �
   assert.equal(compare.graph.unknown, true)
 })
 
+test('跨版本对照：同一件作品的两张画布按节点 id 对齐，并说清 v1 → v2', () => {
+  const node = (id, output) => ({ id, kind: id === 'in' ? 'input' : 'output', title: id, status: 'success', ms: 100, output })
+  const current = {
+    id: 'run_v2', flowId: 'flow_v2', flowName: '跨版作品 v2',
+    project: { id: 'prj_1', title: '跨版作品', version: 2 },
+    nodes: [node('in', '新版的输入'), node('out', '新版的输入')],
+    nodeRevisions: { in: 'r2', out: 'r2' }, flowRevision: 'rev-2',
+  }
+  const previous = {
+    id: 'run_v1', flowId: 'flow_v1', flowName: '跨版作品 v1',
+    project: { id: 'prj_1', title: '跨版作品', version: 1 },
+    nodes: [node('in', '旧版的输入'), node('out', '旧版的输入'), node('gone', '上一版有')],
+    nodeRevisions: { in: 'r1', out: 'r1' }, flowRevision: 'rev-1',
+  }
+  const compare = buildRunCompare(current, previous)
+  assert.equal(compare.crossVersion, true)
+  assert.equal(compare.project.id, 'prj_1')
+  assert.equal(compare.current.project.version, 2)
+  assert.equal(compare.previous.project.version, 1)
+  assert.equal(compare.nodes.find((item) => item.id === 'in').added, false, '不同 flowId 上同 id 的节点要能对上')
+  assert.equal(compare.nodes.find((item) => item.id === 'in').outputChanged, true)
+  assert.equal(compare.nodes.find((item) => item.id === 'gone').removed, true)
+
+  // 不同作品的两张画布不能被说成「同一件作品的版本」
+  const foreign = buildRunCompare(current, { ...previous, project: { id: 'prj_2', title: '别家', version: 1 } })
+  assert.equal(foreign.crossVersion, false)
+  assert.equal(foreign.project, null)
+})
+
 test('对照接口：默认找上一条；第一条说清楚没得比；跨画布与自对照拒绝；不返回完整输出', async () => {
   const flow = await flows.createFlow({
     name: '对照用例画布',
@@ -309,7 +339,7 @@ test('对照接口：默认找上一条；第一条说清楚没得比；跨画�
   const otherRun = await flows.runFlow(otherFlow, { runId: flows.newRunId() })
   const cross = await get(router, '/api/runs/' + second.id + '/compare?with=' + otherRun.id)
   assert.equal(cross.status, 400)
-  assert.match(cross.body.error, /同一张画布/)
+  assert.match(cross.body.error, /不属于同一件作品/)
 
   const missing = await get(router, '/api/runs/' + second.id + '/compare?with=run_not_there')
   assert.equal(missing.status, 404)
@@ -358,5 +388,59 @@ test('对照接口：默认找上一条；第一条说清楚没得比；跨画�
   assert.equal((await get(router, '/api/runs/' + third.id + '/compare/diff?with=' + first.id + '&node=nope')).status, 404)
   const crossDiff = await get(router, '/api/runs/' + third.id + '/compare/diff?with=' + otherRun.id + '&node=in')
   assert.equal(crossDiff.status, 400)
-  assert.match(crossDiff.body.error, /同一张画布/)
+  assert.match(crossDiff.body.error, /不属于同一件作品/)
+
+  // 跨版本对照（v0.9.113）：同一件作品开过新版后，两张画布上的运行可以挑来对照。
+  // 节点 id 由开新版时的复制保留，所以「同一节点」仍能按 id 对齐。
+  const v1 = await flows.createFlow({
+    name: '跨版作品 v1',
+    nodes: [
+      { id: 'in', type: 'input', position: { x: 0, y: 0 }, data: { title: '输入', description: '', config: { text: '旧版的输入' } } },
+      { id: 'out', type: 'output', position: { x: 300, y: 0 }, data: { title: '输出', description: '', config: { format: 'markdown' } } },
+    ],
+    edges: [{ id: 'e1', source: 'in', target: 'out' }],
+  })
+  const project = await projects.createProject({ title: '跨版作品', flowId: v1.id })
+  const v1Run = await flows.runFlow(v1, { runId: flows.newRunId() })
+  const v2 = await flows.createFlow({
+    name: '跨版作品 v2',
+    nodes: [
+      { id: 'in', type: 'input', position: { x: 0, y: 0 }, data: { title: '输入', description: '', config: { text: '新版的输入' } } },
+      { id: 'out', type: 'output', position: { x: 300, y: 0 }, data: { title: '输出', description: '', config: { format: 'markdown' } } },
+    ],
+    edges: [{ id: 'e1', source: 'in', target: 'out' }],
+  })
+  await projects.archiveProjectVersion(project.id, { flowId: v2.id, prevName: v1.name })
+  const v2Run = await flows.runFlow(await flows.getFlow(v2.id), { runId: flows.newRunId() })
+
+  const crossVersion = await get(router, '/api/runs/' + v2Run.id + '/compare?with=' + v1Run.id)
+  assert.equal(crossVersion.status, 200)
+  assert.equal(crossVersion.body.comparable, true)
+  assert.equal(crossVersion.body.crossVersion, true)
+  assert.equal(crossVersion.body.project.title, '跨版作品')
+  assert.equal(crossVersion.body.current.project.version, 2)
+  assert.equal(crossVersion.body.previous.project.version, 1)
+  assert.equal(crossVersion.body.optionsScoped, 'project')
+  assert.equal(crossVersion.body.options.some((item) => item.id === v1Run.id && item.project.version === 1), true)
+  const crossInput = crossVersion.body.nodes.find((item) => item.id === 'in')
+  assert.equal(crossInput.added, false, '两张画布上的同 id 节点应能对上')
+  assert.equal(crossInput.outputChanged, true)
+  assert.equal(crossInput.revisionChanged, true)
+
+  // 默认仍只取同一条画布更早的一条：跨版本要人自己点名，不替人改对照口径
+  const defaultOnV2 = await get(router, '/api/runs/' + v2Run.id + '/compare')
+  assert.equal(defaultOnV2.status, 200)
+  assert.equal(defaultOnV2.body.comparable, false)
+  assert.equal(defaultOnV2.body.options.some((item) => item.id === v1Run.id), true)
+  assert.match(defaultOnV2.body.reason, /其它版本/)
+
+  const crossVersionDiff = await get(router, '/api/runs/' + v2Run.id + '/compare/diff?with=' + v1Run.id + '&node=in')
+  assert.equal(crossVersionDiff.status, 200)
+  assert.equal(crossVersionDiff.body.lines.some((line) => line.op === 'add' && line.text.includes('新版的输入')), true)
+  assert.equal(crossVersionDiff.body.lines.some((line) => line.op === 'del' && line.text.includes('旧版的输入')), true)
+
+  // 别的作品的画布仍然不能硬凑
+  const unrelated = await get(router, '/api/runs/' + v2Run.id + '/compare?with=' + otherRun.id)
+  assert.equal(unrelated.status, 400)
+  assert.match(unrelated.body.error, /不属于同一件作品/)
 })

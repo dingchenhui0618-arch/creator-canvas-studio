@@ -468,7 +468,7 @@ export function RunsPage({
                       type="button"
                       className="vq-button vq-button--ghost vq-button--sm"
                       onClick={() => setCompareRun(current)}
-                      title="把这次运行和同一条画布上的另一条运行摆在一起：逐节点看变化、耗时与扣费，只读、不重跑"
+                      title="把这次运行和另一条运行摆在一起：同一张画布，或同一件作品的另一版画布；逐节点看变化、耗时与扣费，只读、不重跑"
                     >
                       <GitCompareArrows size={13} />对照
                     </button>

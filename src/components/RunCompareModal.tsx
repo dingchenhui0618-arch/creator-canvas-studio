@@ -16,9 +16,10 @@ import { Pill } from './ui'
 import { Select } from './Select'
 import '../styles/run-compare.css'
 
-// 运行对照（v0.9.110）：只读弹窗。同一条画布的两条运行摆在一起，
+// 运行对照（v0.9.110）：只读弹窗。两条运行摆在一起，
 // 回答「这两次比，哪个节点变了、慢了多久、多花了多少」。
 // v0.9.111 起可以自己挑对照对象，不再只认更早的那一条；最早那条也能回头挑之后的一次。
+// v0.9.113 起候选里还有同一件作品其它版本的运行：开过新版之后也能对着看。
 // 只比结果与指纹；完整输出仍在单条运行详情里，不在这里再铺一遍。
 
 const NODE_STATUS_LABEL: Record<string, string> = {
@@ -46,6 +47,29 @@ function formatWhen(iso: string): string {
   return date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
+function versionText(side: RunCompareSide): string {
+  const version = Number(side.project?.version) || 0
+  return version > 0 ? 'v' + version : ''
+}
+
+/** 跨版本对照的「v1 与 v2」：不写箭头，谁是对照、谁是当前由两张卡片各自标。 */
+function crossVersionText(data: RunCompare | null): string {
+  if (!data || !data.comparable || !data.crossVersion) return ''
+  const from = Number(data.previous.project?.version) || 0
+  const to = Number(data.current.project?.version) || 0
+  if (!from || !to) return ''
+  return from === to ? 'v' + from : 'v' + Math.min(from, to) + ' 与 v' + Math.max(from, to)
+}
+
+function compareSub(data: RunCompare | null): string {
+  const tail = '只读对照，不重跑、不扣积分'
+  if (data?.comparable && data.crossVersion) {
+    const title = data.project?.title || data.flowName
+    return [title, crossVersionText(data), tail].filter(Boolean).join(' · ')
+  }
+  return data?.flowName ? data.flowName + ' · ' + tail : tail
+}
+
 function costText(side: RunCompareSide): string {
   if (side.cost > 0) return '扣 ' + side.cost + ' 积分'
   if (side.refunded) return '已退回'
@@ -62,12 +86,14 @@ function NodeStatusIcon({ status }: { status: string }) {
 
 function SideCard({ label, side }: { label: string; side: RunCompareSide }) {
   const meta = runStatusMeta(side.status, side.canceled)
+  const version = versionText(side)
   return (
     <div className="rc-side-card">
       <div className="rc-side-card-head">
         <span className="vq-mono">{label}</span>
         <Pill tone={meta.tone}>{meta.label}</Pill>
       </div>
+      {version ? <span className="rc-side-card-version">{version}</span> : null}
       <strong className="rc-side-card-when">{formatWhen(side.startedAt)}</strong>
       <div className="rc-side-card-meta">
         <span>{runSpentText(side)}</span>
@@ -115,7 +141,8 @@ function compareChips(node: RunCompareNode) {
 function optionLabel(side: RunCompareSide): string {
   const meta = runStatusMeta(side.status, side.canceled)
   const cost = side.cost > 0 ? '扣 ' + side.cost : side.refunded ? '已退' : '没扣'
-  return formatWhen(side.startedAt) + ' · ' + meta.label + ' · ' + formatMs(side.durationMs) + ' · ' + cost + ' · ' + side.id.slice(-8)
+  const version = versionText(side)
+  return (version ? version + ' · ' : '') + formatWhen(side.startedAt) + ' · ' + meta.label + ' · ' + formatMs(side.durationMs) + ' · ' + cost + ' · ' + side.id.slice(-8)
 }
 
 // 输出差异（v0.9.112）：只在点开某个「输出变了」的节点时读取。
@@ -245,9 +272,7 @@ export function RunCompareModal({ runId, onClose }: { runId: string; onClose: ()
           <div>
             <span className="vq-mono">Run compare / 运行对照</span>
             <h2 id="rc-title">两条运行摆一起</h2>
-            <p className="rc-sub">
-              {data?.flowName ? data.flowName + ' · ' : ''}只读对照，不重跑、不扣积分
-            </p>
+            <p className="rc-sub">{compareSub(data)}</p>
           </div>
           <button type="button" className="vq-button vq-button--icon" aria-label="关闭运行对照" onClick={onClose}>
             <X size={16} />
@@ -262,7 +287,7 @@ export function RunCompareModal({ runId, onClose }: { runId: string; onClose: ()
               label="选择要对照的运行"
               value={withId}
               options={[
-                { value: '', label: '自动：上一条已结束运行' },
+                { value: '', label: '自动：这条画布上一条已结束运行' },
                 ...data.options.map((side) => ({ value: side.id, label: optionLabel(side) })),
               ]}
               onChange={(value) => {
@@ -276,9 +301,13 @@ export function RunCompareModal({ runId, onClose }: { runId: string; onClose: ()
               }}
             />
             <span className="rc-pick-hint">
-              {data.optionsTruncated
-                ? '同一条画布共 ' + data.optionsTotal + ' 条已结束运行，这里列最近 ' + data.options.length + ' 条；差值 = 当前 − 对照'
-                : '同一条画布上另有 ' + data.optionsTotal + ' 条已结束运行；差值 = 当前 − 对照'}
+              {data.optionsScoped === 'project'
+                ? (data.optionsTruncated
+                    ? '同一件作品共 ' + data.optionsTotal + ' 条已结束运行（含其它版本），这里列最近 ' + data.options.length + ' 条；差值 = 当前 − 对照'
+                    : '同一件作品另有 ' + data.optionsTotal + ' 条已结束运行（含其它版本）；差值 = 当前 − 对照')
+                : (data.optionsTruncated
+                    ? '同一条画布共 ' + data.optionsTotal + ' 条已结束运行，这里列最近 ' + data.options.length + ' 条；差值 = 当前 − 对照'
+                    : '同一条画布上另有 ' + data.optionsTotal + ' 条已结束运行；差值 = 当前 − 对照')}
             </span>
           </div>
         ) : null}
@@ -304,8 +333,10 @@ export function RunCompareModal({ runId, onClose }: { runId: string; onClose: ()
             <p className="rc-alone-note">{data.reason}</p>
             <p className="rc-alone-hint">
               {data.options.length
-                ? '从上面「对照对象」挑一条之后的运行，就能逐节点对照；运行结果本身不会因此改变。'
-                : '对照需要同一条画布上的两条运行；运行结果本身不会因此改变。'}
+                ? (data.optionsScoped === 'project'
+                    ? '从上面「对照对象」挑一条运行（同一件作品的其它版本也可以）；运行结果本身不会因此改变。'
+                    : '从上面「对照对象」挑一条之后的运行，就能逐节点对照；运行结果本身不会因此改变。')
+                : '对照需要同一张画布、或同一件作品另一版画布上的两条运行；运行结果本身不会因此改变。'}
             </p>
           </div>
         ) : (
@@ -334,12 +365,21 @@ export function RunCompareModal({ runId, onClose }: { runId: string; onClose: ()
               </div>
             </div>
 
-            <p className={'rc-graph' + (data.graph.changed ? ' is-changed' : '')}>
-              {data.graph.changed
-                ? '这两次之间画布改过：参数或连线不同，对照按节点 id 对齐，只比同 id 节点的结果。'
-                : data.graph.unknown
-                  ? '有一条运行没有留下画布指纹，无法判断是否同一版画布；下面按节点 id 对齐。'
-                  : '两条运行用的是同一版画布。'}
+            <p className={'rc-graph' + (data.graph.changed ? ' is-changed' : '') + (data.crossVersion ? ' is-cross' : '')}>
+              {data.crossVersion
+                ? '这两条运行在同一件作品的不同版本画布上' +
+                  (crossVersionText(data) ? '（' + crossVersionText(data) + '）' : '') +
+                  '：逐节点按 id 对齐' +
+                  (data.graph.changed
+                    ? '，画布参数或连线也改过。'
+                    : data.graph.unknown
+                      ? '；有一条没留下画布指纹，画布是否同一版无从判断。'
+                      : '，画布内容没改，只是开了新版。')
+                : data.graph.changed
+                  ? '这两次之间画布改过：参数或连线不同，对照按节点 id 对齐，只比同 id 节点的结果。'
+                  : data.graph.unknown
+                    ? '有一条运行没有留下画布指纹，无法判断是否同一版画布；下面按节点 id 对齐。'
+                    : '两条运行用的是同一版画布。'}
             </p>
 
             <div className="rc-table" role="table" aria-label="逐节点对照">
