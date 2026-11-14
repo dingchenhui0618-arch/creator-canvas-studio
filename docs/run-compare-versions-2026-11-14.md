@@ -103,6 +103,24 @@ scope = 同一张画布
 - 候选不显示「这一版什么时候开的 / 交付没有」，只有版本号、时间、状态、耗时、扣费。
 - 没有在真实运行上验证：生产没有真实运行授权，本轮的候选与对照全部来自本地真浏览器 + 假上游。
 
+## 生产实况
+
+部署 `20261114-123902-r123cross`，快照 `20261114-123902-r123cross.tar.gz` **1,035,933 B**。
+
+| 检查 | 读数 |
+| --- | --- |
+| 版本 / 健康 | 8799 / 8800 / 公网都 **0.9.113**；`/api/health` ok（模板 26，uptime 13s） |
+| 四个 unit | 全 active |
+| 入口 / 画布 / 后台 | `index-DhTG6s9L.js` 598,634 B；`CanvasPage-CixdzTS1.js` 242,014 B；`AdminConsolePage-CzmJ6SWQ.js` 201,077 B |
+| 样式 | 主样式 286,283 B；画布样式 28,926 B |
+| 哈希一致 | `flows 6d68aea2` / `run-compare 8dd4d965` / `routes 54a59792` / `run-ownership 9a3cf44c` / 入口 `8ec07f38` / 画布 `b542012d` / 后台 `f86f34b2` / 主样式 `4a8b3c31` / 画布样式 `b49e8586` |
+| 路由已上线 | `crossVersion` 在 run-compare；`compareScopeOf` 在 routes（3 处）；`projectFlowIds` 在 run-ownership |
+| 未登录 | `/compare` 与 `/compare/diff` 都 **401** |
+| 心跳 / 盘 | pid 1487644 / 1487641；盘 72%；`/tmp` 清理后 351M；日志无业务 error |
+| 旧记录 | 9 条运行、0 条带 graph；`run-graphs` 还没有目录 |
+
+生产没有真实运行授权，这一版没有在真实运行上跨版本对照过；本地证据来自真浏览器 + 假上游。
+
 ## 回退
 
 - `bash /opt/visionqa/ops/rollback.sh --to 1` → v0.9.112；`--to 2` → v0.9.111。

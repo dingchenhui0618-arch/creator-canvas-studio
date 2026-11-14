@@ -2139,4 +2139,8 @@ v0.9.110 起，对照接口写死「两条运行必须在同一张画布上」�
 
 全仓 **925/925**（新增 1 条纯函数用例、扩 1 条接口用例），oxlint **0 error / 15 warning**（与上一轮同一批基线），`tsc -b` 与 build 干净；入口 `index-DhTG6s9L.js`（598,634 B）、画布 `CanvasPage-CixdzTS1.js`（242,014 B）、后台 `AdminConsolePage-CzmJ6SWQ.js`（201,077 B）、主样式 `index-ChZiwXJo.css`（286,283 B）、画布样式 `CanvasPage-BX48Ugxj.css`（28,926 B）。入口比 v0.9.112 多 1,472 B，样式多 226 B，没有新增第三方依赖。
 
+生产部署 `20261114-123902-r123cross`（快照 `20261114-123902-r123cross.tar.gz` **1,035,933 B**）：四个 unit 全 active，8799 / 8800 / 公网都 **0.9.113**，`/api/health` ok（模板 26，部署后 uptime 13s）；入口 200 · 598,634 B、画布 242,014 B、后台 201,077 B、主样式 286,283 B、画布样式 28,926 B；服务端与前端哈希全部与本地一致（`flows 6d68aea2` / `run-compare 8dd4d965` / `routes 54a59792` / `run-ownership 9a3cf44c` / 入口 `8ec07f38` / 画布 `b542012d` / 后台 `f86f34b2` / 主样式 `4a8b3c31` / 画布样式 `b49e8586`）；部署文件里 `crossVersion` 在 run-compare、`compareScopeOf` 在 routes（3 处）、`projectFlowIds` 在 run-ownership；未登录请求 `/compare` 与 `/compare/diff` 都返回 **401**；心跳 pid 1487644 / 1487641，盘 72%，`/tmp` 清理本次部署临时文件后 351M，日志没有业务 error。生产 9 条运行、0 条带 graph，`run-graphs` 还没有目录；生产没有真实运行授权，这一版没有在真实运行上跨版本对照过，候选与对照证据来自本地真浏览器 + 假上游。
+
+提交 `ec076d5`；CI **43595506455** 三个 job 全 success。
+
 回退：`bash /opt/visionqa/ops/rollback.sh --to 1` → **v0.9.112**（`--to 2` 是 v0.9.111）。这一版不改已有 JSON schema：版本号来自作品索引，`crossVersion` / `project` 是现算的只读响应；旧前端不读新字段，同一画布内的对照行为与 v0.9.112 完全一致。细节、八条坑与「发现但没做」见 [开了新版，上一版的运行也能拿来对照](docs/run-compare-versions-2026-11-14.md)。
