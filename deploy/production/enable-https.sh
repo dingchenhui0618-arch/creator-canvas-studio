@@ -1,7 +1,13 @@
 #!/bin/bash
 # 给已经用 HTTP 跑起来的站点补 HTTPS：
-#   certbot(webroot) 签证书 → 重写 vhost(80 只留 ACME + 跳转 / 443 跑应用) → 打开 Secure Cookie
-# 用法（root）：DOMAIN=visionqa.wavisionai.cn bash deploy/production/enable-https.sh
+#   certbot(webroot) 签证书 → 换 vhost(80 只留 ACME + 跳转 / 443 跑应用) → 打开 Secure Cookie
+# 用法（root）：
+#   DOMAIN=visionqa.wavisionai.cn bash /opt/visionqa/deploy/production/enable-https.sh
+#
+# vhost 不再内联在这里：应用段（所有 location、私有图覆盖、缓存头、安全头）只写在
+# deploy/production/nginx-app.conf 一份，这个脚本只换外壳（nginx-tls.conf）。
+# 以前这里内联了一整套，线上手加过的私有图 ^~ 覆盖、/print/、安全头从来没回来过，
+# 谁重跑一次这个脚本，私有图就又会掉回 7 天 public 缓存（2026-11-14 复查发现）。
 set -euo pipefail
 
 DOMAIN=${DOMAIN:-visionqa.wavisionai.cn}
@@ -12,9 +18,14 @@ ACME_DIR=${ACME_DIR:-/www/wwwroot/wavisionai.cn/acme}
 EMAIL=${EMAIL:-}
 NGINX_BIN=${NGINX_BIN:-/usr/sbin/nginx}
 CONF=${CONF:-/etc/nginx/conf.d/${DOMAIN}.conf}
-CERT_DIR=/etc/letsencrypt/live/${DOMAIN}
+CERT_DIR=${CERT_DIR:-/etc/letsencrypt/live/${DOMAIN}}
+NGINX_DIR=$(dirname "$CONF")
+APP_CONF="$NGINX_DIR/${DOMAIN}.app.conf"
+RENDER="$APP_DIR/deploy/production/render-vhost.sh"
 
 log() { printf '\n== %s\n' "$*"; }
+
+[ -f "$RENDER" ] || { echo "找不到 $RENDER：先把 deploy/ 目录同步到 $APP_DIR 再跑" >&2; exit 1; }
 
 log "1/4 申请证书（webroot: ${ACME_DIR}）"
 mkdir -p "$ACME_DIR"
@@ -26,66 +37,23 @@ else
   certbot "${CERT_ARGS[@]}"
 fi
 
-log "2/4 重写 vhost：80 只做 ACME + 跳转，443 跑应用"
-TMP=$(mktemp)
-cat > "$TMP" <<'NGINX'
-server {
-    listen 80;
-    server_name __DOMAIN__;
-
-    # 续期走这里，别被跳转吃掉
-    location /.well-known/acme-challenge/ {
-        root __ACME_DIR__;
-    }
-
-    location / {
-        return 301 https://$host$request_uri;
-    }
-}
-
-server {
-    listen 443 ssl;
-    server_name __DOMAIN__;
-
-    root __APP_DIR__/dist;
-    client_max_body_size 64m;
-    index index.html;
-
-    ssl_certificate     /etc/letsencrypt/live/__DOMAIN__/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/__DOMAIN__/privkey.pem;
-    include /etc/letsencrypt/options-ssl-nginx.conf;
-    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
-
-    location /api/ {
-        proxy_pass http://127.0.0.1:__API_PORT__;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_read_timeout 300s;
-        proxy_buffering off;
-    }
-
-    location /media/ {
-        proxy_pass http://127.0.0.1:__API_PORT__;
-        proxy_set_header Host $host;
-        add_header Cache-Control "public, max-age=604800";
-    }
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
-    gzip on;
-    gzip_types text/css application/javascript application/json image/svg+xml;
-    gzip_min_length 1024;
-}
-NGINX
-
-sed -e "s|__DOMAIN__|${DOMAIN}|g" -e "s|__APP_DIR__|${APP_DIR}|g" \
-    -e "s|__API_PORT__|${API_PORT}|g" -e "s|__ACME_DIR__|${ACME_DIR}|g" "$TMP" > "$CONF"
-rm -f "$TMP"
+log "2/4 换 vhost：80 只做 ACME + 跳转，443 跑应用"
+# 访问日志：有 visits 格式就照写，没有就 off（写不存在的格式名 nginx -t 直接失败）
+if grep -rqs 'log_format visits' /etc/nginx/ 2>/dev/null || grep -qs 'log_format visits' "$NGINX_DIR"/*.conf 2>/dev/null; then
+  ACCESS_LOG_LINE="/var/log/nginx/visits/visits.log visits"
+  mkdir -p "$(dirname "$ACCESS_LOG_LINE")"
+else
+  ACCESS_LOG_LINE="off"
+fi
+TS=$(date +%Y%m%d-%H%M%S)
+if [ -f "$CONF" ]; then
+  cp "$CONF" "${CONF}.bak-${TS}"
+  echo "原配置已备份：${CONF}.bak-${TS}"
+fi
+export DOMAIN APP_DIR API_PORT ACME_DIR APP_CONF CERT_DIR ACCESS_LOG_LINE HTTP_PORT=${HTTP_PORT:-80}
+# 应用段顺手刷新一遍：模板改了（加一个私有目录之类）重跑这个脚本就能同步，不用等下次发版
+bash "$RENDER" "$APP_DIR/deploy/production/nginx-app.conf" "$APP_CONF"
+bash "$RENDER" "$APP_DIR/deploy/production/nginx-tls.conf" "$CONF"
 
 log "3/4 nginx 校验并重载"
 "$NGINX_BIN" -t

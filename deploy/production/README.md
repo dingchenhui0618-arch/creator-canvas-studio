@@ -29,7 +29,7 @@ DOMAIN=VisionQA.wavisionai.cn bash deploy/production/install.sh
 
 脚本是幂等的，做七件事：装依赖 → 装 Node 22（npmmirror 优先）→ 建 `visionqa` 用户 →
 `git clone` + `npm ci` + `npm run build` → 写 `.env`（Key 留空）→ systemd（`--max-old-space-size=384`）→
-写 nginx vhost 并 reload。
+渲染 nginx vhost（`nginx-app.conf` + 一份外壳）并 reload。
 
 ## Node 版本（锁在 22.12.0）
 
@@ -42,12 +42,29 @@ DOMAIN=VisionQA.wavisionai.cn bash deploy/production/install.sh
 - 升级 Node 的步骤：改 `install.sh` 的 `NODE_VERSION`、改 `visionqa.service` 的 `ExecStart`
   （Node 22 必须带 `--experimental-sqlite`，24 起可以去掉）、改 `.nvmrc`、把新版本加进 CI 矩阵，先让 workflow 绿再上生产。
 
+## nginx 站点配置（只有一份真源）
+
+站点配置拆成三块，`scripts/check-nginx.mjs`（在 `npm test` 里跑）盯着它们不许再漂：
+
+| 文件 | 作用 |
+| --- | --- |
+| `deploy/production/nginx-app.conf` | **唯一写着 `location` 的文件**：静态产物、`/api/` 反代、`/media/uploads/` 与 `/media/frames/` 的私有覆盖、`/print/`、安全头、缓存头 |
+| `deploy/production/nginx-http.conf` | HTTP 阶段的外壳（证书还没签下来）：应用段 + ACME 续期目录 |
+| `deploy/production/nginx-tls.conf` | HTTPS 阶段的外壳：80 只留 ACME + 301，443 跑应用 |
+| `deploy/production/render-vhost.sh` | 把占位符换成真值；渲染完还留着占位符就报错退出 |
+
+- `install.sh` 第 7 步会自己判断：`/etc/letsencrypt/live/<域名>` 已存在就装 HTTPS 版外壳，否则装 HTTP 版；
+  覆盖线上配置前先备份成 `<conf>.bak-<时间>`。**重跑安装不会把已经在跑 HTTPS 的站点换回 HTTP。**
+- 访问日志：机器上有 `log_format visits` 就照写，没有就 `off`（写一个不存在的格式名会让 `nginx -t` 直接失败）。
+- 以前两份脚本各自内联一整段 vhost，线上手改过的东西（私有图 `^~` 覆盖、`/print/`、安全头）从来没回到脚本里；
+  照文档重跑一次部署，自己上传的图和模板帧图就会掉回 7 天 `public` 缓存（2026-11-14 复查发现）。
+  所以现在只留一份。**要改线上配置就改模板再重跑脚本，别直接改 `/etc/nginx/conf.d/`。**
+
 ## HTTPS
 
-服务器上已有 nginx 与 `wavisionai.cn` 的证书。二选一：
+服务器上已有 nginx 与 `wavisionai.cn` 的证书。两条路：
 
-- **宝塔面板**（服务器上已装）：网站 → 添加站点 `VisionQA.wavisionai.cn` → 申请 Let's Encrypt → 把
-  `deploy/production/nginx-visionqa.conf` 的内容并进去。
+- **一键**（推荐）：`DOMAIN=visionqa.wavisionai.cn bash deploy/production/enable-https.sh`，签发/复用证书 → 换 HTTPS 外壳 → 打开 Secure Cookie。
 - **acme.sh**：
   ```bash
   curl https://get.acme.sh | sh -s email=ops@example.com
@@ -57,7 +74,7 @@ DOMAIN=VisionQA.wavisionai.cn bash deploy/production/install.sh
     --fullchain-file /etc/nginx/ssl/visionqa.crt \
     --reloadcmd "nginx -s reload"
   ```
-  然后在 vhost 里加 `listen 443 ssl;` 与证书路径，并把 80 的 server 改成 301 跳转。
+  然后照 `nginx-tls.conf` 换外壳（别手写一套 vhost，那份一定会和模板漂移）。
 
 拿到证书后把 `.env` 里的 `VQ_SECURE_COOKIES` 保持为 `1`（只有 HTTPS 能登录）。
 

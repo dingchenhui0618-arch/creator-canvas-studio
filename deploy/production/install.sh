@@ -173,19 +173,44 @@ systemctl --no-pager --lines=5 status visionqa || true
 curl -fsS "http://127.0.0.1:${API_PORT}/api/health" && echo " <- 本地健康检查通过"
 
 log "7/7 nginx 站点"
-NET_CONF="deploy/production/nginx-visionqa.conf"
-# 按「真正在跑的 nginx」选配置目录：宝塔 / 系统 nginx 两套路径
+# 站点配置只有一份真源：deploy/production/nginx-app.conf（反代与静态的每条规则都在那里），
+# nginx-http.conf / nginx-tls.conf 只是两个薄外壳，用 include 把应用段拉进来。
+# 这里不再内联 vhost——以前内联的那份和线上手改过的差着私有图 ^~ 覆盖、/print/、安全头，
+# 照着文档重跑一次安装，自己上传的图就又会变回「7 天 public 缓存」（2026-11-14 复查发现）。
 if [ -x /www/server/nginx/sbin/nginx ]; then
-  CONF=/www/server/panel/vhost/nginx/${DOMAIN}.conf
   NGINX_BIN=/www/server/nginx/sbin/nginx
+  NGINX_DIR=/www/server/panel/vhost/nginx
 else
-  CONF=/etc/nginx/conf.d/${DOMAIN}.conf
   NGINX_BIN=/usr/sbin/nginx
   [ -x "$NGINX_BIN" ] || NGINX_BIN=$(command -v nginx)
+  NGINX_DIR=/etc/nginx/conf.d
 fi
-cp "$NET_CONF" "$CONF"
+CONF="$NGINX_DIR/${DOMAIN}.conf"
+APP_CONF="$NGINX_DIR/${DOMAIN}.app.conf"
+CERT_DIR="/etc/letsencrypt/live/${DOMAIN}"
+# 证书已经在这台机器上（重跑安装）就装 HTTPS 版外壳，否则装 HTTP 版等 enable-https.sh 来签。
+# 不判断这一下的话，重跑一次 install.sh 会把已经在跑 HTTPS 的站点换回 HTTP。
+if [ -d "$CERT_DIR" ]; then
+  WRAPPER="$APP_DIR/deploy/production/nginx-tls.conf"
+else
+  WRAPPER="$APP_DIR/deploy/production/nginx-http.conf"
+fi
+# 访问日志：这台机器上有 visits 格式就照写，没有就写 off——写一个不存在的格式名会让 nginx -t 直接失败
+if grep -rqs 'log_format visits' /etc/nginx/ 2>/dev/null; then
+  ACCESS_LOG_LINE="/var/log/nginx/visits/visits.log visits"
+  mkdir -p "$(dirname "$ACCESS_LOG_LINE")"
+else
+  ACCESS_LOG_LINE="off"
+fi
 mkdir -p "$ACME_DIR"
-sed -i "s|__DOMAIN__|${DOMAIN}|g; s|__APP_DIR__|${APP_DIR}|g; s|__API_PORT__|${API_PORT}|g; s|__ACME_DIR__|${ACME_DIR}|g" "$CONF"
-echo "已写入 $CONF"
+TS=$(date +%Y%m%d-%H%M%S)
+if [ -f "$CONF" ]; then
+  cp "$CONF" "${CONF}.bak-${TS}"
+  echo "原配置已备份：${CONF}.bak-${TS}"
+fi
+export DOMAIN APP_DIR API_PORT ACME_DIR APP_CONF CERT_DIR ACCESS_LOG_LINE HTTP_PORT=${HTTP_PORT:-80}
+bash "$APP_DIR/deploy/production/render-vhost.sh" "$APP_DIR/deploy/production/nginx-app.conf" "$APP_CONF"
+bash "$APP_DIR/deploy/production/render-vhost.sh" "$WRAPPER" "$CONF"
+echo "已写入 $CONF（应用段 $APP_CONF）"
 "$NGINX_BIN" -t && "$NGINX_BIN" -s reload
 echo "完成。HTTP 已可访问 http://${DOMAIN}/ ，HTTPS 证书见 deploy/production/README.md"
