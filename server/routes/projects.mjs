@@ -14,7 +14,8 @@ import { projectTemplateReply, projectTemplateSpec } from '../project-template.m
 import { templateOrigin } from '../project-source.mjs'
 import { createFlow, getFlow, hasRunGraph, listRunsByFlows } from '../flows.mjs'
 import { normalizeProjectScript, scriptPace, scriptView } from '../project-script.mjs'
-import { reviewChangeOf, reviewSideOf, versionBaseChangesOf, versionChangesOf, versionCompareOf } from '../version-diff.mjs'
+import { versionBaseChangesOf, versionChangesOf } from '../version-diff.mjs'
+import { versionCompareView } from '../project-compare.mjs'
 import { buildReplicateDraft } from '../script-draft.mjs'
 import { syncCanvasScript } from '../project-canvas-sync.mjs'
 import {
@@ -30,6 +31,7 @@ import { projectSpendDetail } from '../project-spend.mjs'
 import { deliverablePrintHtml, printNoticeHtml } from '../project-deliverable-html.mjs'
 import { packageNote, parseShotRange, setSheetHtml, setSheetModel } from '../project-set-sheet.mjs'
 import { reviewImageRef, reviewSheetHtml, reviewSheetSelection } from '../project-review-sheet.mjs'
+import { compareSheetHtml } from '../project-compare-sheet.mjs'
 import { getShareVisits, getShareVisitsByKey } from '../share-visits.mjs'
 import { shareBriefsByProject } from '../share-summary.mjs'
 import { ackFor, dropAcksForProject, listAcks } from '../review-acks.mjs'
@@ -74,6 +76,8 @@ const DELIVERABLE_ZIP = /^\/api\/projects\/([\w-]+)\/deliverable\.zip$/
 const DELIVERABLE_PRINT = /^\/print\/projects\/([\w-]+)\/deliverable$/
 // 评审对照纸：评审把问题框在哪一块画面上，同一张 A4 里印出来（交付包里也有同一份）
 const REVIEW_PRINT = /^\/print\/projects\/([\w-]+)\/review$/
+// 两版对照纸（v0.9.121）：把弹窗里的 v2 → v3 排成 A4，打印 / 存 PDF 带走
+const COMPARE_PRINT = /^\/print\/projects\/([\w-]+)\/versions\/compare$/
 
 // 详情 / 列表里的 project 只有一份形状（server/project-briefs.mjs）：
 // 不带原始脚本、不带分享 token。画布归作品那条路（v0.9.29）回执也用同一份。
@@ -433,6 +437,65 @@ export function createProjectsRouter() {
             decisions: detail.decisions,
             now: new Date(),
             tzOffsetMinutes: reviewTz,
+            projectId: printable.id,
+          }),
+        )
+        return true
+      }
+
+      // 两版对照纸（v0.9.121）：与弹窗同一份取数，排成 A4 带走。
+      const comparePrintPath = pathname.match(COMPARE_PRINT)
+      if (comparePrintPath && req.method === 'GET') {
+        if (!user && config.auth.requireAuth) {
+          sendPrintNotice(res, 401, {
+            title: '登录已过期',
+            message: '这个打印页要用你的登录态取数据：回到作品页打开「两版对照」，再点「打印对照」，或者先登录。',
+            href: '/#/login',
+            label: '去登录',
+          })
+          return true
+        }
+        const printable = await getProject(comparePrintPath[1], user)
+        if (!printable) {
+          sendPrintNotice(res, 404, {
+            title: '作品不在了',
+            message: '这条作品可能已经被删除。回作品列表看看还在不在。',
+            href: '/#/projects',
+            label: '回作品列表',
+          })
+          return true
+        }
+        const baseNo = Number(url.searchParams.get('base'))
+        const targetNo = Number(url.searchParams.get('target'))
+        const valid = (n) => Number.isInteger(n) && n >= 1 && n <= printable.version
+        if (!valid(baseNo) || !valid(targetNo) || baseNo === targetNo) {
+          sendPrintNotice(res, 400, {
+            title: '这两版对不上',
+            message: '对照纸要选两个不同的版本，且都在 1 到 v' + printable.version + ' 之间。回作品页重新选一次。',
+            href: '/#/projects/' + encodeURIComponent(printable.id),
+            label: '回作品页',
+          })
+          return true
+        }
+        const built = await versionCompareView(printable, user, baseNo, targetNo)
+        if (!built.ok) {
+          sendPrintNotice(res, 404, {
+            title: '有一版没有归档记录',
+            message: '这条作品没有 v' + built.missing + ' 的归档记录，没法印这张对照纸。回作品页看看还在不在。',
+            href: '/#/projects/' + encodeURIComponent(printable.id),
+            label: '回作品页',
+          })
+          return true
+        }
+        const rawCompareTz = Number(url.searchParams.get('tz'))
+        const compareTz = Number.isFinite(rawCompareTz) ? Math.max(-720, Math.min(840, Math.round(rawCompareTz))) : 480
+        res.writeHead(200, PRINT_HEAD)
+        res.end(
+          compareSheetHtml({
+            project: printable,
+            compare: built.view,
+            now: new Date(),
+            tzOffsetMinutes: compareTz,
             projectId: printable.id,
           }),
         )
@@ -822,99 +885,12 @@ export function createProjectsRouter() {
           sendJson(res, 400, { error: '两版对照要选两个不同的版本', code: 'VERSION_COMPARE_SAME' })
           return true
         }
-        const resolveSide = async (n) => {
-          if (n === project.version) {
-            const [flow, template] = await Promise.all([
-              project.flowId ? getFlow(project.flowId, user) : null,
-              project.templateId ? getTemplate(project.templateId, user) : null,
-            ])
-            const script = scriptView(project, template)
-            return {
-              n,
-              name: project.title,
-              current: true,
-              nodes: flow && Array.isArray(flow.nodes) ? flow.nodes : null,
-              canvasAvailable: Boolean(flow && Array.isArray(flow.nodes)),
-              script,
-              scriptAvailable: Boolean(script && Array.isArray(script.structure)),
-              beats: Array.isArray(script?.structure) ? script.structure.length : 0,
-            }
-          }
-          const entry = project.versions.find((item) => item.n === n)
-          if (!entry) return null
-          const flow = entry.flowId ? await getFlow(entry.flowId, user) : null
-          return {
-            n,
-            name: entry.name,
-            current: false,
-            nodes: flow && Array.isArray(flow.nodes) ? flow.nodes : null,
-            canvasAvailable: Boolean(flow && Array.isArray(flow.nodes)),
-            script: entry.script || null,
-            scriptAvailable: Boolean(entry.script && Array.isArray(entry.script.structure)),
-            beats: Array.isArray(entry.script?.structure) ? entry.script.structure.length : 0,
-          }
-        }
-        const [baseSide, targetSide] = await Promise.all([resolveSide(baseNo), resolveSide(targetNo)])
-        if (!baseSide) {
-          sendJson(res, 404, { error: '这条作品没有 v' + baseNo + ' 的归档记录', code: 'VERSION_COMPARE_MISSING' })
+        const built = await versionCompareView(project, user, baseNo, targetNo)
+        if (!built.ok) {
+          sendJson(res, 404, { error: '这条作品没有 v' + built.missing + ' 的归档记录', code: 'VERSION_COMPARE_MISSING' })
           return true
         }
-        if (!targetSide) {
-          sendJson(res, 404, { error: '这条作品没有 v' + targetNo + ' 的归档记录', code: 'VERSION_COMPARE_MISSING' })
-          return true
-        }
-        const diff = versionCompareOf({
-          baseNodes: baseSide.nodes,
-          targetNodes: targetSide.nodes,
-          baseScript: baseSide.script,
-          targetScript: targetSide.script,
-        })
-        const notes = []
-        if (!baseSide.canvasAvailable || !targetSide.canvasAvailable) notes.push('有一版的画布已被删除：画布这一侧不比，脚本仍按快照比。')
-        if (!baseSide.scriptAvailable || !targetSide.scriptAvailable) notes.push('有一版没存脚本快照：脚本这一侧不比，画布仍按节点比。')
-        if (!diff.script && baseSide.scriptAvailable && targetSide.scriptAvailable) notes.push('有一版的脚本没有分段：脚本这一侧没有可比的口播。')
-        if (!diff.summary) notes.push('这两版没有可比的数据：画布与脚本都读不到。')
-        // 评审与交付（v0.9.119）：两版各自读这一版最近一评，交付只认这一版的记录。
-        // 评审按版次统计，版本划分前的老评审折进 v1（与作品页同一套 reviewsForVersion）。
-        const versionCounts = await reviewSummaryByVersion(project.id, user)
-        const deliveryOfVersion = (n) => {
-          const list = Array.isArray(project.deliveries) ? project.deliveries : []
-          const entry = list.filter((item) => item.version === n).pop()
-          if (entry) {
-            // review 三种状态原样带出去：对象 = 交时评过；null = 当时还没评；字段不存在 = 升级前没记。
-            // 不在这里补一次「拿现在评审当交时」——那会把历史改写成交付后的结论（v0.9.120）。
-            const at = String(entry.at || '')
-            return entry.review === undefined ? { at } : { at, review: entry.review }
-          }
-          // 交付记录是后来才有的：老数据没有条目，但状态是已交付且指的是当前这一版，
-          // 与作品页 deliveredCurrent 同一口径——写「交付过 · 时间没记录」，不写成没交。
-          if (project.status === 'done' && project.version > 0 && n === project.version) return { at: '' }
-          return null
-        }
-        const sideView = (side) => ({
-          n: side.n,
-          name: side.name,
-          current: side.current,
-          nodes: Array.isArray(side.nodes) ? side.nodes.length : 0,
-          beats: side.beats,
-          canvasAvailable: side.canvasAvailable,
-          scriptAvailable: side.scriptAvailable,
-          review: reviewSideOf(reviewsForVersion(versionCounts, side.n)),
-          delivery: deliveryOfVersion(side.n),
-        })
-        sendJson(res, 200, {
-          ok: true,
-          base: sideView(baseSide),
-          target: sideView(targetSide),
-          summary: diff.summary,
-          canvas: diff.canvas,
-          script: diff.script,
-          reviewChange: reviewChangeOf(
-            reviewsForVersion(versionCounts, baseNo),
-            reviewsForVersion(versionCounts, targetNo),
-          ),
-          notes,
-        })
+        sendJson(res, 200, { ok: true, ...built.view })
         return true
       }
 

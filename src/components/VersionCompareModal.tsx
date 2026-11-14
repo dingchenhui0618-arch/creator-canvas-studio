@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeftRight, X } from 'lucide-react'
-import { compareProjectVersions } from '../api/projects'
+import { ArrowLeftRight, Printer, X } from 'lucide-react'
+import { compareProjectVersions, compareSheetUrl } from '../api/projects'
 import { REVIEW_VERDICT_LABEL, deliveryDrift, deliveryDriftText, deliveryReviewText, issueGap, issueLine } from '../domain/review'
 import type {
   ProjectVersionCompare,
@@ -192,12 +192,15 @@ export function VersionCompareModal({
   initialBase,
   initialTarget,
   onClose,
+  onPrint,
 }: {
   projectId: string
   versions: VersionCompareOption[]
   initialBase: number
   initialTarget: number
   onClose: () => void
+  /** 打印纸在新标签打开；由作品页接管弹窗拦截提示，不在弹窗里各写一套 */
+  onPrint?: (url: string, blocked: string) => void
 }) {
   const has = (n: number) => versions.some((item) => item.n === n)
   const fallback = versions.find((item) => item.n < initialTarget)?.n || versions[0]?.n || 1
@@ -238,6 +241,16 @@ export function VersionCompareModal({
     setTarget(base)
   }
 
+  // 打印纸走服务端渲染：与弹窗同一份对照数据，只把版本带进地址（v0.9.121）。
+  const openSheet = () => {
+    const url = compareSheetUrl(projectId, base, target)
+    if (onPrint) {
+      onPrint(url, '新标签被浏览器拦下了：允许本站弹窗，再点一次「打印对照」')
+      return
+    }
+    window.open(url, '_blank')
+  }
+
   const canvasTouched = Boolean(result?.canvas && (
     result.canvas.added.length || result.canvas.removed.length || result.canvas.changed.length
   ))
@@ -262,9 +275,21 @@ export function VersionCompareModal({
             <span className="vq-mono">两版对照 / VERSION DIFF</span>
             <h2 id="vq-vcompare-title">v{base} 到 v{target}</h2>
           </div>
-          <button type="button" className="vq-button vq-button--icon" aria-label="关闭两版对照" onClick={onClose}>
-            <X size={16} />
-          </button>
+          <div className="vq-vcompare-head-actions">
+            <button
+              type="button"
+              className="vq-button vq-button--ghost vq-vcompare-print"
+              onClick={openSheet}
+              disabled={!result || busy || Boolean(error)}
+              title="把这两版排成 A4：打印或存 PDF，只读、不重跑、不扣积分"
+            >
+              <Printer size={14} />
+              打印对照
+            </button>
+            <button type="button" className="vq-button vq-button--icon" aria-label="关闭两版对照" onClick={onClose}>
+              <X size={16} />
+            </button>
+          </div>
         </div>
 
         <div className="vq-vcompare-pickers">
@@ -397,9 +422,11 @@ export function VersionCompareModal({
           ) : null}
         </div>
 
-        <p className="vq-vcompare-note">
-          只读：不改画布、不改脚本、不扣积分。节点只比类型与配置，移动位置或改标题不算；脚本按段名比口播，开版时存下的快照才算；评审读这一版最近一次，交付只认这一版的记录，交时评审照写当初、不被后来重评改写。没有快照或没评过的一侧不猜「没变」。
-        </p>
+        <div className="vq-vcompare-foot">
+          <p className="vq-vcompare-note">
+            只读：不改画布、不改脚本、不扣积分。节点只比类型与配置，移动位置或改标题不算；脚本按段名比口播，开版时存下的快照才算；评审读这一版最近一次，交付只认这一版的记录，交时评审照写当初、不被后来重评改写。没有快照或没评过的一侧不猜「没变」。
+          </p>
+        </div>
       </div>
     </div>
   )

@@ -2189,6 +2189,13 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
   letter-spacing: -0.01em;
 }
 
+.vq-vcompare-head-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+}
+
 .vq-vcompare-pickers {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
@@ -2616,13 +2623,37 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
   list-style: none;
 }
 
-.vq-vcompare-note {
-  margin: 0;
+.vq-vcompare-foot {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
   padding-top: var(--space-3);
   border-top: 1px solid var(--line);
+}
+
+.vq-vcompare-note {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
   color: var(--faint);
   font-size: 11.5px;
   line-height: 1.7;
+}
+
+.vq-vcompare-print {
+  flex: none;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .vq-vcompare-head-actions {
+    gap: var(--space-1);
+  }
+
+  .vq-vcompare-print {
+    padding-inline: var(--space-2);
+  }
 }
 
 @media (max-width: 720px) {
@@ -2644,6 +2675,15 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
 
   .vq-vcompare-swap {
     justify-self: start;
+  }
+
+  .vq-vcompare-foot {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .vq-vcompare-print {
+    justify-content: center;
   }
 
   .vq-vcompare-summary {

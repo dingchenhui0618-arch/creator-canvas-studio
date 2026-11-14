@@ -2369,6 +2369,7 @@ export default function ProjectPage({
           initialBase={project.basedOn || (project.version > 1 ? project.version - 1 : 1)}
           initialTarget={project.version}
           onClose={() => setCompareOpen(false)}
+          onPrint={openPaper}
         />
       ) : null}
 

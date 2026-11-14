@@ -53,6 +53,14 @@ async function call(method, pathname, body = null) {
   return { status: res.statusCode, body: JSON.parse(res.body || '{}') }
 }
 
+// 打印页回的是 HTML，不是 JSON：单独一个调用器，别让 JSON.parse 把纸吞了。
+async function callHtml(pathname) {
+  const res = mockRes()
+  const url = new URL('http://vq.local' + pathname)
+  await createProjectsRouter().handle(mockReq({ method: 'GET' }), res, url, url.pathname)
+  return { status: res.statusCode, headers: res.headers, body: res.body }
+}
+
 const node = (id, type, title, config) => ({ id, type, data: { title, config } })
 const script = (hook, beats) => ({
   hook,
@@ -216,6 +224,20 @@ test('任意两版对照：明细逐项列出，当前版读现在的、归档�
   assert.equal(twoToThree.body.script.hookChanged, false)
   assert.deepEqual(twoToThree.body.canvas.removed.map((item) => item.title), ['出图'])
   assert.equal(twoToThree.body.base.delivery.review.verdict, 'pass', 'v2 那一侧仍带交时快照')
+
+  // 对照纸（v0.9.121）：与弹窗同一份取数，排成 A4；不是 JSON、不改任何东西
+  const sheet = await callHtml('/print/projects/' + built.project.id + '/versions/compare?base=2&target=3&tz=480')
+  assert.equal(sheet.status, 200)
+  assert.match(sheet.headers['Content-Type'] || sheet.headers['content-type'], /text\/html/)
+  assert.match(sheet.body, /两版对照 · 两版对照验收/)
+  assert.match(sheet.body, /v2 → v3/)
+  assert.match(sheet.body, /交时评审：通过 · 1 主要/)
+  assert.match(sheet.body, /交付过 · /)
+  assert.match(sheet.body, /data-print/)
+  assert.doesNotMatch(sheet.body, /undefined/, '纸上不能漏出 undefined')
+  const badSheet = await callHtml('/print/projects/' + built.project.id + '/versions/compare?base=2&target=2&tz=480')
+  assert.equal(badSheet.status, 400)
+  assert.match(badSheet.body, /这两版对不上/)
 
   // 只读：对照前后作品一个字都不变
   const after = await call('GET', '/api/projects/' + built.project.id)

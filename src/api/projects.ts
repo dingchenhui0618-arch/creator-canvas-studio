@@ -263,6 +263,17 @@ export function reviewSheetUrl(id: string): string {
 }
 
 /**
+ * 两版对照纸地址（v0.9.121）：把弹窗里选中的两版排成 A4，打印 / 存 PDF。
+ * 与弹窗读同一个对照接口的数据；版本落在地址里，刷新或转发地址仍然对得上。
+ */
+export function compareSheetUrl(id: string, base: number, target: number): string {
+  return (
+    '/print/projects/' + encodeURIComponent(id) + '/versions/compare?base=' + encodeURIComponent(String(base)) +
+    '&target=' + encodeURIComponent(String(target)) + '&tz=' + encodeURIComponent(tzOffset())
+  )
+}
+
+/**
  * 分享页里的评审对照纸：不用登录，凭证就是分享链接里的 token。
  * 画面走带 token 的帧图接口（分享页拿不到要登录的 /media/frames），纸的其余部分与作品页那份同一份渲染。
  */
