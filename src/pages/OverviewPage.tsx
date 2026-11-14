@@ -19,8 +19,11 @@ import {
 } from '../api/review'
 import {
   deliveredCurrent,
+  ledgerReceiptText,
+  ledgerReceiptTotalsText,
   projectStatus,
   reviewsForVersion,
+  type DeliveryLedgerReceipts,
   type ProjectDeliveryRow,
   type ProjectSummary,
   type ShareSummaryRow,
@@ -174,6 +177,8 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
   const [deliveries, setDeliveries] = useState<ProjectDeliveryRow[]>([])
   const [deliveryTotal, setDeliveryTotal] = useState(0)
   const [deliverySummary, setDeliverySummary] = useState({ projects: 0, current: 0, drifted: 0, lastAt: '' })
+  // 回执的四个数（v0.9.139）：封过包的几次、对上几次、对不上几次、还没回来几次
+  const [deliveryReceipts, setDeliveryReceipts] = useState<DeliveryLedgerReceipts>({ sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0 })
   const [deliveryHasMore, setDeliveryHasMore] = useState(false)
   const [deliveryOpen, setDeliveryOpen] = useState(false)
   const [deliveryBusy, setDeliveryBusy] = useState(false)
@@ -236,10 +241,12 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
         lastAt: deliveryResult.value.lastAt || '',
       })
       setDeliveryHasMore(Boolean(deliveryResult.value.hasMore))
+      setDeliveryReceipts(deliveryResult.value.receipts ?? { sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0 })
     } else {
       setDeliveries([])
       setDeliveryTotal(0)
       setDeliverySummary({ projects: 0, current: 0, drifted: 0, lastAt: '' })
+      setDeliveryReceipts({ sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0 })
       setDeliveryHasMore(false)
       problems.push('交付记录：' + String((deliveryResult.reason as Error)?.message || deliveryResult.reason))
     }
@@ -322,6 +329,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
       setDeliveryHasMore(Boolean(next.hasMore))
       setDeliveryTotal(next.total ?? merged.length)
       setDeliverySummary({ projects: next.projects ?? 0, current: next.currentTotal ?? 0, drifted: next.drifted ?? 0, lastAt: next.lastAt || '' })
+      setDeliveryReceipts((prev) => next.receipts ?? prev)
       setDeliveryError('')
     } catch (error) {
       setDeliveryError('再往下没取到：' + String((error as Error)?.message || error))
@@ -960,6 +968,16 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                     : '')
                 : '作品评审通过后在作品页「交付这一版」；交出去的每一版都排在这里，开过新版也留得住。'}
             </p>
+            {/* 回执（v0.9.139）：封过包的几份里，他验过的有几份、对不上的有几份。
+                对不上是这里唯一值得当场动手的一件，所以单独一句、带颜色。 */}
+            {deliveryReceipts.sealed ? (
+              <p className="vq-delivery-receipt-total">{ledgerReceiptTotalsText(deliveryReceipts)}</p>
+            ) : null}
+            {deliveryReceipts.mismatched ? (
+              <p className="vq-delivery-receipt-total is-bad" role="status">
+                {'有 ' + deliveryReceipts.mismatched + ' 次回执对不上：点那几行进去，看差在哪一项。'}
+              </p>
+            ) : null}
           </div>
           <button type="button" className="vq-link" onClick={() => onNavigate('projects')}>
             全部作品
@@ -1006,6 +1024,22 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                           <span>{'交时评审没记' + (row.reviews ? ' · 这一版评过 ' + row.reviews + ' 次' : '')}</span>
                         )}
                       </span>
+                      {/* 回执（v0.9.139）：这一份他验没验、验的是不是这一份。
+                          没封过包的老交付没有这一行——那时候还没有可比的包，不能写成「没回来」。 */}
+                      {row.package ? (
+                        row.receipt ? (
+                          <span
+                            className={'vq-delivery-receipt is-' + row.receipt.state}
+                            title={'回执是' + (row.receipt.via === 'link' ? '收包人自己从回执链接贴回来的' : '你替收包人贴进来的')}
+                          >
+                            {ledgerReceiptText(row.receipt)}
+                          </span>
+                        ) : (
+                          <span className="vq-delivery-receipt is-pending" title="封存包已经能贴回收据了，这一份还没收到">
+                            还没收到回执
+                          </span>
+                        )
+                      ) : null}
                     </span>
                     <span className={'vq-delivery-state' + (row.current ? ' is-current' : '')}>
                       {row.current ? '当前版' : '已到 v' + row.currentVersion}

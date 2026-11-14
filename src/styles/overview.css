@@ -1049,6 +1049,62 @@
   white-space: nowrap;
 }
 
+/* 回执（v0.9.139）：这一份他验没验、验的是不是这一份。
+   与作品页交付档案里的那枚胶囊同一套形状（发丝线、11px、圆头），
+   差别只在这里是清单里的一行字，不带图标；还没收到时用虚线，不抢已回来的那几行的注意力。 */
+.vq-delivery-receipt {
+  align-self: start;
+  justify-self: start;
+  width: fit-content;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  line-height: 1.7;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.vq-delivery-receipt.is-match {
+  border-color: var(--pass);
+  color: var(--pass);
+}
+
+.vq-delivery-receipt.is-mismatch,
+.vq-delivery-receipt.is-broken {
+  border-color: var(--fail);
+  color: var(--fail);
+}
+
+.vq-delivery-receipt.is-conflict {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.vq-delivery-receipt.is-pending {
+  border-style: dashed;
+  border-color: var(--line);
+  color: var(--faint);
+}
+
+/* 清单顶上那句回执汇总（v0.9.139）：先说封过包的几份，再说回来了几份。
+   对不上那一句单独成行、用失败色——整段染红会把「对得上」也一起说成坏消息。 */
+.vq-delivery-receipt-total {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.vq-delivery-receipt-total.is-bad {
+  margin-top: 4px;
+  color: var(--fail);
+  font-weight: 500;
+}
+
 /* 这一行交的是不是当前版：只写版次事实，不写「已交付」——
    作品可能已经开到下一版，那一次交付就不再是现状。 */
 .vq-delivery-state {
@@ -1177,8 +1233,16 @@
     display: none;
   }
 
+  /* 窄屏这一行不再并排：右边那两个动作会吃掉正文的一半，
+     时间与结论被挤成两行、末尾的「·」还吊在行尾。
+     改成行尾单独一条，两个动作靠右——正文才有整行宽度。 */
+  .vq-delivery-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .vq-delivery-actions {
-    margin-right: 8px;
+    justify-content: flex-end;
+    margin: 0 12px 12px;
   }
 }
 

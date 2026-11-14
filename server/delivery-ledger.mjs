@@ -6,6 +6,10 @@
 // 「现在还作不作数」由 current（这一版还是不是当前版）与 deliveredNow 各自说，不混成一句假话。
 //
 // 工作台只回答「我交出去过什么」：一屏先排 3 条，点开一页 8 条，再往下按 offset 接着取。
+//
+// 回执（v0.9.139）：交出去之后收包人会把回执贴回来，结论留在作品页的交付档案里。
+// 但工作台才是每天看的地方——一份「他验的不是我封的那份」如果只写在那个面板里，
+// 没人打开就永远不知道。所以每一行带上回执的结论，清单顶上再按整份记录数一遍。
 import { deliveredCurrent, deliveryDrift } from './project-status.mjs'
 
 /** 一页取几条：工作台点开一次排 8 条，再往下是「再看 N 条」。 */
@@ -14,6 +18,27 @@ export const LEDGER_PAGE = 8
 export const LEDGER_MAX_PAGE = 20
 
 const versionOf = (value) => Math.max(1, Math.round(Number(value) || 0))
+
+// 与 projects.mjs 同一套四种状态：多一种就按「没核对过」处理，不猜
+const RECEIPT_STATES = ['match', 'mismatch', 'broken', 'conflict']
+
+/**
+ * 工作台那一行上的回执（v0.9.139）：只要结论、时间、谁贴的、贴过几次。
+ * 逐项比对与摘要留在作品页的交付档案里——一页几十条，不把每条的 checks 都搬过来。
+ * 老记录只有 receipt 没有 receipts，按一次算，不把一次说成零次。
+ */
+function receiptBrief(entry) {
+  const receipt = entry?.receipt
+  if (!receipt || !RECEIPT_STATES.includes(receipt.state)) return null
+  const history = Array.isArray(entry?.receipts) ? entry.receipts.length : 0
+  return {
+    state: receipt.state,
+    at: String(receipt.at || ''),
+    // 没有 via 的老记录按「你替他贴的」讲，与作品页同一口径
+    via: receipt.via === 'link' ? 'link' : 'you',
+    count: Math.max(1, history),
+  }
+}
 
 /**
  * 摊平成行：一条作品可能交过好几版，每一版一行。
@@ -52,6 +77,8 @@ export function ledgerRows({ projects = [], counts = {} } = {}) {
         // 封存包（v0.9.125）：有编号与元数据才给下载入口；老记录这两项都是空
         deliveryId: String(entry?.id || ''),
         package: entry?.package || null,
+        // 回执（v0.9.139）：有封存包才谈得上回执；没贴过就是 null（界面写「还没回执」）
+        receipt: receiptBrief(entry),
       })
     }
   }
@@ -74,6 +101,17 @@ export function ledgerRows({ projects = [], counts = {} } = {}) {
  */
 export function deliveryLedger({ projects = [], counts = {} } = {}, { offset = 0, limit = LEDGER_PAGE } = {}) {
   const rows = ledgerRows({ projects, counts })
+  // 回执的四个数按整份记录算（不是这一页）：封过包的几条、对上的几条、对不上的几条、还没回来的几条。
+  // 只有封了包的交付才谈得上回执——升级前那几条没有包，不把它们算成「还没回来」，那样会凭空多出待办。
+  const receipts = { sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0 }
+  for (const row of rows) {
+    if (!row.package) continue
+    receipts.sealed += 1
+    if (!row.receipt) receipts.pending += 1
+    else if (row.receipt.state === 'match') receipts.matched += 1
+    else if (row.receipt.state === 'mismatch') receipts.mismatched += 1
+    else receipts.unclear += 1
+  }
   const max = Math.min(LEDGER_MAX_PAGE, Math.max(1, Math.round(Number(limit) || LEDGER_PAGE)))
   // 从第几条开始取：负数不往回排，越过总数就是空的一页，界面据此收起「再看」
   const from = Math.min(rows.length, Math.max(0, Math.round(Number(offset) || 0)))
@@ -89,6 +127,8 @@ export function deliveryLedger({ projects = [], counts = {} } = {}, { offset = 0
     drifted: rows.filter((row) => deliveryDrift(row.review, { verdict: row.verdict, issues: row.issues })).length,
     // 最近一次交付的时间；一条带时间的都没有就是空串
     lastAt: rows.find((row) => row.atKnown)?.at || '',
+    // 回执的四个数（v0.9.139）：sealed = matched + mismatched + unclear + pending
+    receipts,
     offset: from,
     hasMore: from + items.length < rows.length,
   }

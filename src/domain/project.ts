@@ -777,6 +777,18 @@ export type ProjectRun = {
 }
 
 /**
+ * 工作台那一行上的回执（v0.9.139）：只要结论、时间、谁贴的与贴过几次。
+ * 逐项比对与摘要在作品页的交付档案里，工作台一页几十条，不把它们搬过来。
+ */
+export type ProjectDeliveryReceiptBrief = {
+  state: DeliveryReceipt['state']
+  at: string
+  via: 'link' | 'you'
+  /** 这条交付上贴过几次：老记录只有 receipt 没有流水时按一次算 */
+  count: number
+}
+
+/**
  * 交付流水的一行（工作台「交出去的」）：某一版的某一次交付。
  * current 只回答「这一版还是不是当前版」，deliveredNow 只回答「这条作品现在还在交付状态」——
  * 两个都是事实，不能合成一句「已交付」，否则开过新版之后旧交付会被说成现状。
@@ -806,6 +818,8 @@ export type ProjectDeliveryRow = {
   deliveryId?: string
   /** 交付时封存的整套；没有这个字段说明这一条交付没封存 */
   package?: ProjectDeliveryPackage
+  /** 回执的结论；没贴过就是 null（有包才谈得上回执），老记录没有包也就没有这一项（v0.9.139） */
+  receipt?: ProjectDeliveryReceiptBrief | null
 }
 
 /** 交付流水的整份数字按全部记录算，不因为只取了一页而变小 */
@@ -820,8 +834,66 @@ export type DeliveryLedger = {
   drifted: number
   /** 最近一次交付的时间；一条带时间的都没有就是空串 */
   lastAt: string
+  /** 回执的四个数（v0.9.139）：按整份记录算，sealed = matched + mismatched + unclear + pending */
+  receipts: DeliveryLedgerReceipts
   offset: number
   hasMore: boolean
+}
+
+/**
+ * 交出去的这几份里，回执回来了几份（v0.9.139）。
+ * 只有封过包的交付才谈得上回执：升级前那几条没有包，不算「还没回来」，不然会凭空多出待办。
+ */
+export type DeliveryLedgerReceipts = {
+  /** 封过包的交付条数 */
+  sealed: number
+  matched: number
+  mismatched: number
+  /** 贴回来了，但对方读不出来，或者哈希对上而结论打架 */
+  unclear: number
+  /** 封了包、还没收到回执 */
+  pending: number
+}
+
+/**
+ * 工作台那一行上的回执怎么读（v0.9.139）。
+ * 只说结论、时间与贴过几次；「谁贴的」放在 title 里，一行里不塞三句。
+ */
+export function ledgerReceiptText(receipt: ProjectDeliveryReceiptBrief | null | undefined): string {
+  if (!receipt) return ''
+  const count = Math.max(1, Math.round(Number(receipt.count) || 1))
+  const at = receiptAtText(receipt.at)
+  const line = '回执 · ' + receiptStateText(receipt.state) + (at ? ' · ' + at : '')
+  return count > 1 ? line + ' · 贴过 ' + count + ' 次' : line
+}
+
+/** 回执时间只写到分钟：与作品页那行结论同一口径，不在这行里给秒。 */
+function receiptAtText(at: string): string {
+  const ms = Date.parse(String(at || ''))
+  if (!Number.isFinite(ms)) return ''
+  const date = new Date(ms)
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return pad(date.getMonth() + 1) + '-' + pad(date.getDate()) + ' ' + pad(date.getHours()) + ':' + pad(date.getMinutes())
+}
+
+/**
+ * 清单顶上那句回执汇总（v0.9.139）：数字要能对上，话要说得出口。
+ * 「都还没回执」是一种真实情况，不能写成「0 次回执对得上，3 次还没回执」那种数数的口气。
+ */
+export function ledgerReceiptTotalsText(totals: DeliveryLedgerReceipts | null | undefined): string {
+  const sealed = Math.max(0, Math.round(Number(totals?.sealed) || 0))
+  if (!sealed) return ''
+  const matched = Math.max(0, Math.round(Number(totals?.matched) || 0))
+  const mismatched = Math.max(0, Math.round(Number(totals?.mismatched) || 0))
+  const unclear = Math.max(0, Math.round(Number(totals?.unclear) || 0))
+  const pending = Math.max(0, Math.round(Number(totals?.pending) || 0))
+  if (pending === sealed) return '封过包的 ' + sealed + ' 次都还没收到回执。'
+  const parts: string[] = []
+  if (matched) parts.push(matched + ' 次回执对得上')
+  if (mismatched) parts.push(mismatched + ' 次对不上')
+  if (unclear) parts.push(unclear + ' 次贴回来了，但读不出或说法打架')
+  if (pending) parts.push(pending + ' 次还没收到回执')
+  return '封过包的 ' + sealed + ' 次：' + parts.join('，') + '。'
 }
 
 /**
