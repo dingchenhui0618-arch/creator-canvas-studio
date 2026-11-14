@@ -438,6 +438,48 @@ function topoSort(nodes, edges) {
  * 续跑要复用上次的节点输出；如果用户在这中间改了提示词、换了模型或改了连线，
  * 旧输出就不再属于这张画布，宁可拒绝复用，也不能把过期结果接着往下跑。
  */
+function stableJson(value) {
+  if (Array.isArray(value)) return '[' + value.map((item) => stableJson(item)).join(',') + ']'
+  if (value && typeof value === 'object') {
+    return '{' + Object.keys(value).sort().map((key) => JSON.stringify(key) + ':' + stableJson(value[key])).join(',') + '}'
+  }
+  return JSON.stringify(value) ?? 'null'
+}
+
+/**
+ * 逐节点的内容指纹（v0.9.103）：节点自己的配置 + 所有上游节点的指纹 + 入线。
+ * 只改下游节点时，上游节点仍然能复用；改提示词、换模型、改连线会沿着依赖链
+ * 让这个节点和它的下游一起失效。位置、标题、描述不算内容——挪一下画布不该白跑。
+ * 算法和 flowRevisionOf 分开：整图指纹继续用于诊断，局部复用看这张逐节点表。
+ */
+export function nodeRevisionsOf(flow) {
+  const nodes = Array.isArray(flow?.nodes) ? flow.nodes : []
+  const edges = Array.isArray(flow?.edges) ? flow.edges : []
+  const order = topoSort(nodes, edges)
+  const incoming = new Map(nodes.map((node) => [node.id, []]))
+  for (const edge of edges) incoming.get(edge.target)?.push(edge)
+  const revisions = new Map()
+  for (const id of order) {
+    const node = nodes.find((item) => item.id === id)
+    if (!node) continue
+    const parents = (incoming.get(id) || [])
+      .map((edge) => ({
+        source: String(edge.source || ''),
+        sourceHandle: String(edge.sourceHandle || ''),
+        targetHandle: String(edge.targetHandle || ''),
+        revision: revisions.get(edge.source) || '',
+      }))
+      .sort((a, b) => (a.source + '\u0000' + a.sourceHandle + '\u0000' + a.targetHandle).localeCompare(b.source + '\u0000' + b.sourceHandle + '\u0000' + b.targetHandle))
+    revisions.set(id, createHash('sha256').update(stableJson({
+      id: String(node.id || ''),
+      type: String(node.type || node.data?.kind || ''),
+      config: node.data?.config && typeof node.data.config === 'object' ? node.data.config : {},
+      incoming: parents,
+    })).digest('hex').slice(0, 16))
+  }
+  return Object.fromEntries(revisions)
+}
+
 export function flowRevisionOf(flow) {
   const nodes = (Array.isArray(flow?.nodes) ? flow.nodes : [])
     .map((node) => ({
@@ -493,18 +535,36 @@ export function canResumeRun(run) {
 }
 
 /**
- * 从上次运行里挑出可以原样复用的节点结果：
+ * 从上次运行里挑出可以原样复用的节点结果（v0.9.103 起按节点逐个判断）：
  *   - 只复用 success / unsupported，失败节点和它下游要重跑；
+ *   - 节点自己的配置或任何上游变了，这个节点就不能复用；没改的上游仍然复用；
  *   - 条件节点的分支结果也一起带回来，否则续跑会把已经走过的分支再走错；
  *   - 只认当前画布里还存在的节点，画布删了节点就自然不复用。
  * 返回的 results / edgeActive 直接喂给 runFlow，省掉已经花过钱的那几步。
  */
 export function resumeSeedFor(run, flow) {
   const nodesById = new Map((Array.isArray(flow?.nodes) ? flow.nodes : []).map((node) => [node.id, node]))
+  const currentRevisions = nodeRevisionsOf(flow)
+  const priorRevisions = run?.nodeRevisions && typeof run.nodeRevisions === 'object' ? run.nodeRevisions : null
+  const hasPriorRevisions = Boolean(priorRevisions && Object.keys(priorRevisions).length)
+  // 老运行只有整图指纹：画布没改就照旧整批复用，改了就没有可证明没变的节点。
+  const wholeMatches = !run?.flowRevision || run.flowRevision === flowRevisionOf(flow)
   const results = new Map()
+  let staleCount = 0
   for (const item of Array.isArray(run?.nodes) ? run.nodes : []) {
-    if (!item || !nodesById.has(item.id)) continue
+    if (!item) continue
     if (item.status !== 'success' && item.status !== 'unsupported') continue
+    if (!nodesById.has(item.id)) {
+      staleCount += 1
+      continue
+    }
+    const same = hasPriorRevisions
+      ? priorRevisions[item.id] === currentRevisions[item.id]
+      : wholeMatches
+    if (!same || !currentRevisions[item.id]) {
+      staleCount += 1
+      continue
+    }
     const node = nodesById.get(item.id)
     results.set(item.id, {
       id: item.id,
@@ -514,7 +574,7 @@ export function resumeSeedFor(run, flow) {
       ms: 0,
       output: item.output ?? null,
       error: null,
-      message: '上次已经跑完，这次直接复用',
+      message: '上次已经跑完，内容没变，这次直接复用',
       reused: true,
     })
   }
@@ -530,7 +590,34 @@ export function resumeSeedFor(run, flow) {
     }
     edgeActive.set(edge.id, active)
   }
-  return { results, edgeActive, reusedCount: results.size }
+  return { results, edgeActive, reusedCount: results.size, staleCount }
+}
+
+/**
+ * 续跑预检（v0.9.103）：页面在点「继续运行」之前先问一次，别拿整条旧记录的总数
+ * 当成还能复用几个。返回的 seed 只在服务端使用，路由不会把它序列化给页面。
+ */
+export function resumePlanFor(run, flow, price = 0) {
+  const seed = resumeSeedFor(run, flow)
+  const total = Array.isArray(flow?.nodes) ? flow.nodes.length : 0
+  const rerun = Math.max(0, total - seed.reusedCount)
+  let reason = ''
+  if (!canResumeRun(run)) reason = '这条运行没有可复用的已跑节点：重新运行会用最新画布从头跑'
+  else if (!seed.reusedCount) reason = '画布改动后没有能原样复用的节点：重新运行会用最新画布从头跑'
+  else if (!rerun) reason = '画布里的节点都已经跑过了，没有还要补的'
+  const resumable = Boolean(canResumeRun(run) && seed.reusedCount > 0 && rerun > 0)
+  return {
+    runId: run?.id || '',
+    flowId: flow?.id || '',
+    total,
+    reused: seed.reusedCount,
+    rerun,
+    stale: seed.staleCount,
+    cost: resumable ? resumeCostOf(run, price) : 0,
+    resumable,
+    reason,
+    seed,
+  }
 }
 
 function resolveValue(token, ctx) {
@@ -1019,6 +1106,8 @@ export async function runFlow(flow, { onEvent, credits = null, runId = '', resum
     billTotal,
     billFinished: 0,
     flowRevision: flowRevisionOf(flow),
+    // 逐节点内容指纹：续跑时用来判断哪些旧结果还能原样复用（v0.9.103）
+    nodeRevisions: nodeRevisionsOf(flow),
     nodes: reusedNodes,
     output: '',
     ownerId: flow.ownerId || '',

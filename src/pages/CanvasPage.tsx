@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Check, ChevronDown, CircleAlert, Copy, Expand, Hourglass, LayoutGrid, Maximize2, Minimize2, Play, Plus, RotateCcw, RotateCw, Save, Square, Trash } from 'lucide-react'
+import { Check, ChevronDown, CircleAlert, Copy, Expand, History, Hourglass, LayoutGrid, Maximize2, Minimize2, Play, Plus, RotateCcw, RotateCw, Save, Square, Trash } from 'lucide-react'
 import {
   Background,
   Controls,
@@ -20,6 +20,7 @@ import {
   deleteFlow,
   getFlow,
   getRunQueue,
+  getRunResumePlan,
   listFlows,
   runFlowStream,
   saveFlowAsTemplate,
@@ -29,6 +30,7 @@ import {
   type RunNodeResult,
   type RunProjectRef,
   type RunRecord,
+  type RunResumePlan,
 } from '../api/flows'
 import { getCredits } from '../api/credits'
 import { runResumeInfo } from '../domain/run'
@@ -122,6 +124,9 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
   const [runRecord, setRunRecord] = useState<RunRecord | null>(null)
   // 停止 / 失败后还能接着跑的那条运行：抽屉里的「继续」按它发起，复用它已跑完的节点
   const [resumeSource, setResumeSource] = useState<RunRecord | null>(null)
+  // 续跑预检（v0.9.103）：画布改过之后，旧记录里的「跑完 3 个」不等于「还能复用 3 个」。
+  // 由服务端按节点内容指纹现算，页面只负责把「复用几个 / 重跑几个 / 补多少」说清楚。
+  const [resumePlan, setResumePlan] = useState<RunResumePlan | null>(null)
   const [runMeta, setRunMeta] = useState<{ id: string; total: number }>({ id: '', total: 0 })
   const [runError, setRunError] = useState('')
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -353,6 +358,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
     setFutureCount(0)
     setRunRecord(null)
     setResumeSource(null)
+    setResumePlan(null)
     setRunNodes([])
     setRunMeta({ id: '', total: 0 })
     setRunError('')
@@ -383,6 +389,8 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
       const message = error instanceof Error ? error.message : String(error)
       setSaveState('error')
       setSaveError(message)
+      // 保存失败时 handleRun 会在发请求前停住；这里保留上一次成功保存的预检，
+      // 至少不会拿一份没落盘的画布去报价，也不把抽屉整块清空。
       return false
     }
   }, [])
@@ -452,6 +460,26 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
     }, 900)
     return () => window.clearTimeout(timer)
   }, [graphSignature, loadState, saveNow])
+
+  // 续跑预检：等画布存完再问，免得服务端拿旧内容算出一份会过期的复用数。
+  // 只读请求，不扣费、不写记录；失败就退回旧记录的估算，不让抽屉整块消失。
+  useEffect(() => {
+    let alive = true
+    if (!resumeSource) return
+    if (running || loadState !== 'ready') return
+    if (saveState !== 'saved') return
+    const id = flowIdRef.current
+    if (!id) return
+    const timer = window.setTimeout(() => {
+      getRunResumePlan(id, resumeSource.id)
+        .then((plan) => { if (alive) setResumePlan(plan) })
+        .catch(() => { if (alive) setResumePlan(null) })
+    }, 120)
+    return () => {
+      alive = false
+      window.clearTimeout(timer)
+    }
+  }, [resumeSource, graphSignature, saveState, running, loadState])
 
   const selectedNode = useMemo(() => nodes.find((node) => node.id === selectedId) ?? null, [nodes, selectedId])
 
@@ -721,6 +749,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
     setRunNodes([])
     setRunRecord(null)
     setResumeSource(null)
+    setResumePlan(null)
     setRunMeta({ id: '', total: 0 })
     setRunError('')
     // 票号是这次运行的凭据：排队期间页面按它问名次，服务端按它认出「是同一条」而不是新来一条
@@ -881,6 +910,12 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
     if (!resumeSource || running) return
     void handleRun(resumeSource)
   }, [handleRun, resumeSource, running])
+
+  // 画布改到没有可复用节点时，抽屉里给的出口不是「继续」而是「从头运行」。
+  const restartRunning = useCallback(() => {
+    if (running) return
+    void handleRun(null)
+  }, [handleRun, running])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1260,6 +1295,17 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
               </button>
             </span>
           ) : null}
+          {/* 关掉抽屉去改画布之后，还能从这里回到上次那条运行；否则「改完再续跑」没有入口 */}
+          {resumeSource && !running ? (
+            <button
+              className="vq-button vq-button--ghost"
+              type="button"
+              onClick={() => setDrawerOpen(true)}
+              title="查看上次停止 / 失败的运行；内容没改的节点可以继续复用"
+            >
+              <History size={14} />上次运行
+            </button>
+          ) : null}
           {running && !runQueue && runMeta.id ? (
             <button
               className="vq-button vq-button--danger"
@@ -1474,7 +1520,9 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
         nodes={runNodes}
         record={runRecord}
         resume={resumeSource}
+        resumePlan={resumePlan}
         onResume={resumeRunning}
+        onRestart={restartRunning}
         queuedMs={runQueuedMs}
         queue={runQueue}
         queueElapsed={runElapsed}

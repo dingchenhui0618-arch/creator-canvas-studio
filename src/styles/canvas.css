@@ -534,6 +534,9 @@
 .cv-drawer-resume strong { font-size: 12px; }
 .cv-drawer-resume p { margin: 4px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
 .cv-drawer-resume .vq-button { flex: none; }
+/* 画布改到没有可复用节点：不是错误，只是这次接不上；用虚线把「不能继续」和「运行失败」分开 */
+.cv-drawer-resume.is-blocked { border-style: dashed; background: var(--surface-raised); }
+.cv-drawer-resume.is-blocked strong { color: var(--muted); }
 /* 窄屏运行抽屉：一行塞不下时整项换行，别把「1/2 节点」拆成两段 */
 @media (max-width: 760px) {
   .cv-drawer-meta { flex-wrap: wrap; justify-content: flex-start; gap: 4px 12px; }

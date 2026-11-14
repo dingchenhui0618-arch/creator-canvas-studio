@@ -106,6 +106,10 @@ export type RunRecord = {
   billFinished?: number
   /** 有已跑完的节点、也还有没跑的，才给「继续跑」入口 */
   resumable?: boolean
+  /** 上次运行时这张画布的整图内容指纹（诊断用；局部复用看 nodeRevisions） */
+  flowRevision?: string
+  /** 上次运行时每个节点的内容指纹：续跑时只复用指纹没变的节点（v0.9.103） */
+  nodeRevisions?: Record<string, string>
   /** true = 用户停止 / 页面断开导致的中断，不是服务重启 */
   canceled?: boolean
   nodes: RunNodeResult[]
@@ -115,6 +119,25 @@ export type RunRecord = {
   credits?: RunCredits | null
   /** 属于哪条作品的哪一版；没挂在作品上为 null / 缺省 */
   project?: RunProjectRef | null
+}
+
+/** 续跑预检（v0.9.103）：只读，不扣费。页面按它显示还能复用几个、改过几个、补多少。 */
+export type RunResumePlan = {
+  ok: boolean
+  runId: string
+  flowId: string
+  /** 当前画布一共几个节点 */
+  total: number
+  /** 内容没变、可以直接复用的旧结果 */
+  reused: number
+  /** 这次还要执行的节点（改过的、新增的、没跑完的） */
+  rerun: number
+  /** 上次跑完了、但因为自己或上游改过而失效的节点 */
+  stale: number
+  /** 这次续跑要补多少积分 */
+  cost: number
+  resumable: boolean
+  reason: string
 }
 
 export type RunList = { items: RunRecord[]; total: number; offset: number; limit: number }
@@ -151,6 +174,10 @@ export type RunQueueState = {
 
 export const getRunQueue = (ticket: string) =>
   request<RunQueueState>('/api/runs/queue?ticket=' + encodeURIComponent(ticket))
+
+/** 续跑预检：只问不跑。画布改过之后，页面据此说清「哪几个还能复用」。 */
+export const getRunResumePlan = (flowId: string, runId: string) =>
+  request<RunResumePlan>('/api/flows/' + flowId + '/resume-plan?runId=' + encodeURIComponent(runId))
 
 export type RunEventMessage =
   // 排过队才有这一条（v0.9.96）：从第几位开始等、等了多久，运行结论据此写「排队 N 秒后开始」

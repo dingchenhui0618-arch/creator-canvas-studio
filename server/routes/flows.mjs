@@ -14,9 +14,7 @@ import {
   dropRunRecord,
   abandonRun,
   requestRunStop,
-  canResumeRun,
-  resumeSeedFor,
-  resumeCostOf,
+  resumePlanFor,
   flowRevisionOf,
   NODE_KINDS,
   TOOLS,
@@ -36,6 +34,7 @@ import { publicError } from '../public-error.mjs'
 // index.mjs 会按 prefix + extraPrefixes 分发，因此两个前缀都进到这里。
 const FLOW_ITEM = /^\/api\/flows\/([\w-]+)$/
 const FLOW_RUN = /^\/api\/flows\/([\w-]+)\/run$/
+const FLOW_RESUME_PLAN = /^\/api\/flows\/([\w-]+)\/resume-plan$/
 const RUN_ITEM = /^\/api\/runs\/([\w-]+)$/
 const RUN_STOP = /^\/api\/runs\/([\w-]+)\/stop$/
 
@@ -236,6 +235,48 @@ export function createFlowsRouter() {
         return true
       }
 
+      // 续跑预检（v0.9.103）：只读，不扣费、不写记录。页面在抽屉里先问「改过画布后
+      // 还有几个旧节点能复用、这次要补几个、补多少积分」，别拿旧记录的总数糊弄用户。
+      const resumePlanMatch = pathname.match(FLOW_RESUME_PLAN)
+      if (resumePlanMatch) {
+        if (req.method !== 'GET') {
+          res.setHeader('Allow', 'GET')
+          sendJson(res, 405, { error: '只支持 GET' })
+          return true
+        }
+        const flow = await getFlow(resumePlanMatch[1], user)
+        if (!flow) {
+          notFound(res, '流程不存在')
+          return true
+        }
+        const runId = String(url.searchParams.get('runId') || '')
+        if (!runId) {
+          sendJson(res, 400, { error: '缺少 runId：要问的是哪条运行' })
+          return true
+        }
+        const source = await getRun(runId, user)
+        if (!source) {
+          notFound(res, '要接着跑的那条运行不存在')
+          return true
+        }
+        if (source.flowId !== flow.id) {
+          sendJson(res, 400, { error: '这条运行不是当前画布的，不能接着跑' })
+          return true
+        }
+        try {
+          const plan = resumePlanFor(source, flow, Number(config.credits.prices.flow_run) || 0)
+          const { seed, ...body } = plan
+          void seed
+          sendJson(res, 200, { ok: true, ...body })
+        } catch (error) {
+          sendJson(res, error?.code === 'FLOW_CYCLE' ? 400 : 500, {
+            error: publicError(error, '暂时算不出这次能复用几个节点'),
+            code: error?.code || 'RESUME_PLAN_FAILED',
+          })
+        }
+        return true
+      }
+
       const runMatch = pathname.match(FLOW_RUN)
       if (runMatch) {
         if (req.method !== 'POST') {
@@ -254,8 +295,9 @@ export function createFlowsRouter() {
         }
         const body = await readBody(req)
         const price = Number(config.credits.prices.flow_run) || 0
-        // 续跑（v0.9.102）：只复用上次已经跑完的节点，按「还没付的那部分」补差价。
-        // 画布在上次运行后改过就拒绝——旧提示词跑出来的结果不能悄悄接在新画布上。
+        // 续跑（v0.9.103）：按节点内容指纹逐个核对，只复用内容没变的旧结果；
+        // 改过的节点和它的下游会重跑，没改的上游不再重复调上游、也不再重复收费。
+        // 画布整体改过不再一刀切拒绝——拒绝的理由必须具体到「一个能复用的都没有」。
         let resume = null
         let resumeCost = null
         const resumeOf = String(body?.resumeOf || '')
@@ -269,21 +311,27 @@ export function createFlowsRouter() {
             sendJson(res, 400, { error: '这条运行不是当前画布的，不能接着跑' })
             return true
           }
-          if (!canResumeRun(source)) {
-            sendJson(res, 409, { error: '这条运行没有可复用的已跑节点：重新运行会用最新画布从头跑' })
+          let plan = null
+          try {
+            plan = resumePlanFor(source, flow, price)
+          } catch (error) {
+            sendJson(res, error?.code === 'FLOW_CYCLE' ? 400 : 500, {
+              error: publicError(error, '暂时算不出这次能复用几个节点'),
+              code: error?.code || 'RESUME_PLAN_FAILED',
+            })
             return true
           }
-          if (source.flowRevision && source.flowRevision !== flowRevisionOf(flow)) {
-            sendJson(res, 409, { error: '画布在上次运行后改过了；接着跑会复用旧提示词的结果，已拒绝。重新运行会用最新画布。' })
+          if (!plan.resumable) {
+            sendJson(res, 409, {
+              error: plan.reason,
+              code: 'NOT_RESUMABLE',
+              reused: plan.reused,
+              rerun: plan.rerun,
+            })
             return true
           }
-          const seed = resumeSeedFor(source, flow)
-          if (!seed.reusedCount || seed.reusedCount >= flow.nodes.length) {
-            sendJson(res, 409, { error: '上次没有跑完可复用的节点：重新运行会用最新画布从头跑' })
-            return true
-          }
-          resume = { ...seed, of: source.id }
-          resumeCost = resumeCostOf(source, price)
+          resume = { ...plan.seed, of: source.id }
+          resumeCost = plan.cost
         }
         // 运行 id 先定、记录先落盘、再扣费：扣完立刻断电也留得下这条单，重启时按账本退。
         const runId = newRunId()

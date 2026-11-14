@@ -1,6 +1,6 @@
 import { Check, CircleAlert, CircleDashed, CircleSlash, Loader, X } from 'lucide-react'
 import { NODE_META } from './catalog'
-import type { RunNodeResult, RunRecord } from '../api/flows'
+import type { RunNodeResult, RunRecord, RunResumePlan } from '../api/flows'
 import { useUiMode } from '../api/app'
 import { runResumeInfo } from '../domain/run'
 import { Pill } from '../components/ui'
@@ -15,7 +15,11 @@ type RunDrawerProps = {
   record: RunRecord | null
   /** 停止 / 失败后还能接着跑的那条运行（v0.9.102）：有它才显示「继续」 */
   resume?: RunRecord | null
+  /** 续跑预检（v0.9.103）：画布改过之后，旧记录里的跑完数不等于还能复用数 */
+  resumePlan?: RunResumePlan | null
   onResume?: () => void
+  /** 画布改到没有可复用节点时，抽屉里直接给「从头运行」 */
+  onRestart?: () => void
   /** 这次运行之前排了多久（v0.9.96）；0 = 没排队，不写这一项 */
   queuedMs?: number
   /** 正在排队时的名次（v0.9.96）：顶栏被运行抽屉盖住时，这里也要说清「在第几位等」 */
@@ -59,11 +63,19 @@ function nodeOutputText(output: RunNodeResult['output']): string {
   return typeof text === 'string' ? text : ''
 }
 
-export function RunDrawer({ open, running, flowName, runId, total, nodes, record, resume = null, onResume, queuedMs = 0, queue = null, queueElapsed = 0, cancelled = false, onCancelQueue, error, onClose, onSelectNode }: RunDrawerProps) {
+export function RunDrawer({ open, running, flowName, runId, total, nodes, record, resume = null, resumePlan = null, onResume, onRestart, queuedMs = 0, queue = null, queueElapsed = 0, cancelled = false, onCancelQueue, error, onClose, onSelectNode }: RunDrawerProps) {
   const { internal } = useUiMode()
   const progress = total > 0 ? Math.round((nodes.length / total) * 100) : 0
-  const resumeInfo = runResumeInfo(resume || record)
-  const resumeReady = Boolean(onResume) && !running && resumeInfo.resumable && resumeInfo.left > 0
+  const recordedResume = runResumeInfo(resume || record)
+  // 预检结果比旧记录更准：改过画布后，旧记录说「跑完 3 个」，实际只有 2 个还能复用。
+  const resumeLeft = resumePlan ? resumePlan.rerun : recordedResume.left
+  const resumeReused = resumePlan ? resumePlan.reused : recordedResume.reused
+  const resumeCost = resumePlan ? resumePlan.cost : recordedResume.cost
+  const resumePossible = resumePlan ? resumePlan.resumable : recordedResume.resumable
+  const resumeStale = resumePlan?.stale ?? 0
+  const resumeReady = Boolean(onResume) && !running && resumePossible && resumeLeft > 0
+  // 预检说不能续、但旧记录看起来还能续：这是「画布改过了」，要给一个明确的出口，不能只把按钮藏掉。
+  const resumeBlocked = Boolean(resume) && resumePlan !== null && !resumePlan.resumable && recordedResume.resumable && !running
   const duration = record ? record.durationMs : nodes.reduce((sum, node) => sum + (node.ms || 0), 0)
   // 排队也是一段时间：抽屉开着的时候顶栏会被它盖住，所以状态胶囊直接写 QUEUED，别让用户以为节点在跑
   const statusText = queue
@@ -138,12 +150,30 @@ export function RunDrawer({ open, running, flowName, runId, total, nodes, record
         {resumeReady ? (
           <div className="cv-drawer-resume">
             <div>
-              <strong>还差 {resumeInfo.left} 个节点</strong>
-              <p>上次跑完的 {resumeInfo.reused} 个节点直接复用，不重复调用、也不重复扣费。</p>
+              <strong>还差 {resumeLeft} 个节点</strong>
+              <p>
+                {resumeStale > 0
+                  ? '上次跑完的 ' + resumeReused + ' 个节点内容没变，继续复用；改过的 ' + resumeStale + ' 个和它的下游会重跑，只补没付过的部分。'
+                  : '上次跑完的 ' + resumeReused + ' 个节点直接复用，不重复调用、也不重复扣费。'}
+              </p>
             </div>
             <button className="vq-button vq-button--primary vq-button--sm" type="button" onClick={onResume}>
-              {resumeInfo.cost > 0 ? '继续运行 · ' + resumeInfo.cost + ' 积分' : '继续运行'}
+              {resumeCost > 0 ? '继续运行 · ' + resumeCost + ' 积分' : '继续运行'}
             </button>
+          </div>
+        ) : null}
+
+        {resumeBlocked ? (
+          <div className="cv-drawer-resume is-blocked">
+            <div>
+              <strong>这次没有能原样复用的节点</strong>
+              <p>{resumePlan?.reason || '画布改过了；从头运行会用最新画布。'}</p>
+            </div>
+            {onRestart ? (
+              <button className="vq-button vq-button--ghost vq-button--sm" type="button" onClick={onRestart}>
+                从头运行
+              </button>
+            ) : null}
           </div>
         ) : null}
 

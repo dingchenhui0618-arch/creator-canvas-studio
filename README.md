@@ -1733,3 +1733,35 @@ v0.9.101 能停，但停完只有「重新运行」——已经跑完、已经�
 ![续跑完成：DONE、2/2 节点；输入节点标「复用 · 已跑过」，只补了模型节点，本次消耗 1 积分](docs/resume-done-2026-11-14.png)
 
 回退：`bash /opt/visionqa/ops/rollback.sh --to 1` → v0.9.101（`--to 2` 是 v0.9.100）。`resumeOf` 与几个新字段都是可选；老前端不传时走原来的整图运行。细节、十一条坑与「发现但没做」见 [停下来之后接着跑](docs/run-resume-2026-11-14.md)。
+
+## 一百七十、画布改过之后，只重跑改过的节点（v0.9.103，2026-11-14）
+
+v0.9.102 能「停下来接着跑」，但判断标准是整张画布：改一个字的提示词，整条续跑就被拒绝，前面已经跑完、已经付过钱的输入和模型节点跟着作废。这一轮把判断下放到每个节点：**只重跑自己改过的节点和它的下游，没改的上游继续复用**。
+
+- **逐节点指纹**：`nodeRevisionsOf()` 按拓扑序，对每个节点哈希「自己的 id / 类型 / 配置 + 入线 source / sourceHandle / targetHandle + 所有上游节点的指纹」。改第二段 → 第二段和下游失效，输入与第一段仍可复用；只挪位置、改标题、改说明不算内容。
+- **旧运行有回退**：v0.9.102 的记录没有 `nodeRevisions`，退回整图 `flowRevision`：画布没改整批复用，改了就没有可证明没变的节点。条件分支继续按上次 `branch` 恢复分支边。
+- **预检只说真数**：新增只读 `GET /api/flows/:id/resume-plan?runId=run_x`，返回 `total / reused / rerun / stale / cost / resumable`；和真正续跑共用 `resumePlanFor()`，不扣费、不写记录。
+- **页面**：停止后关抽屉去改画布，顶栏留「上次运行」入口；抽屉写「还差 3 个节点」「复用 2 个、改过 1 个和它的下游重跑」；没有可复用节点时给「从头运行」。预检等画布保存完成才发，保存失败时不会拿没落盘的画布去续跑。
+- **钱与分母**：续跑价仍是「上次原价 − kept」；新运行 `billTotal = 当前画布节点数 − 本次复用数`，`billFinished` 只加这次真正执行的节点；停止结算继续用这两个数，`settled` 防二次全额退。
+
+| 本地实测（8931 + 假上游 8963，每次 3 秒，零真实上游） | 读数 |
+| --- | --- |
+| 第一次运行 | 跑到第三段时停止；`run_7c68530f` · interrupted · canceled · 6.4s |
+| 节点 / 结算 | 5 个节点 3/5 跑完；`cost=5 / kept=3 / refundedAmount=2 / settled=true`；余额 140 → 137 |
+| 改画布 | 只改第二段提示词，其余不动；保存成功 |
+| 预检 | `reused=2 / rerun=3 / stale=1 / cost=2 / resumable=true` |
+| 续跑 | `run_6a8ee8d9` · success · 6.0s · `resumeOf=run_7c68530f` · `reusedNodes=2` |
+| 计费 / 上游 | 本次 `cost=2 / billTotal=3 / billFinished=3`；余额 137 → 135；假上游总共 **5** 次，输入与第一段没有重复调用 |
+| 390 宽 | `scrollWidth 380 = clientWidth 380`，预检卡片与按钮都在画面内 |
+
+![停止后只改第二段：预检写「还差 3 个节点、复用 2 个、改过 1 个」，继续运行只要 2 积分](docs/resume-partial-plan-2026-11-14.png)
+
+![续跑完成：5/5 节点；输入与第一段标「复用 · 已跑过」，第二段与第三段重跑，本次只付 2 积分](docs/resume-partial-done-2026-11-14.png)
+
+![390 宽：抽屉铺满，预检卡片、说明与续跑按钮都在画面内，无横向溢出](docs/resume-partial-plan-390-2026-11-14.png)
+
+全仓 **905/905**（+1 条新用例，路由续跑用例增加预检断言），oxlint **0 error / 15 warning**，`tsc -b` 与 build 干净；入口 `index-DnGsbMLY.js`（573,349 B）、画布 `CanvasPage-Bmrdz7tp.js`（235,387 B）、后台 `AdminConsolePage-DvxwfNs4.js`（201,080 B）、样式 `index-C09qhU_5.css`（275,246 B）；密钥扫描 **645 文件 / 0 命中**。
+
+回退：`bash /opt/visionqa/ops/rollback.sh --to 1` → v0.9.102（`--to 2` 是 v0.9.101）。新增的 `nodeRevisions`、`resume-plan`、`stale`、`resumePlanFor` 都是增量；旧前端不请求预检、不带 `resumeOf` 时仍走原来的整图运行。细节、十一条坑与「发现但没做」见 [画布改过之后，还能接着跑没改的节点](docs/run-resume-partial-2026-11-14.md)。
+
+生产核对：部署后补。
