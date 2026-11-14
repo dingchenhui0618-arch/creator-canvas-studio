@@ -50,6 +50,7 @@ test('仓库里的配置通过：应用段一份 + 两个外壳 + 两个脚本',
   const { issues, files } = checkRepo()
   assert.deepEqual(issues, [])
   assert.ok(files.app.includes('location ^~ /media/uploads/'))
+  assert.ok(files.app.includes('location ^~ /download/'), '离线包必须到 Node，不能被 SPA fallback 接走')
   assert.ok(!files.app.includes('visionqa.wavisionai.cn'), '模板不许写死这台机器的域名')
   assert.ok(!files.app.includes('/opt/visionqa'), '模板不许写死这台机器的目录')
 })

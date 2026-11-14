@@ -296,3 +296,11 @@ export function sharedReviewSheetUrl(token: string): string {
 export function sharedCompareSheetUrl(token: string): string {
   return '/print/share/project/' + encodeURIComponent(token) + '/versions/compare?tz=' + encodeURIComponent(tzOffset())
 }
+
+/**
+ * 分享页的离线包：现场页 + 评审对照 + 帧图（分享者打开时再带两版对照）。
+ * 下载本身就是一次带 token 的 GET；地址停用后同一个包也打不开。
+ */
+export function sharedBundleUrl(token: string): string {
+  return '/download/share/project/' + encodeURIComponent(token) + '/bundle.zip?tz=' + encodeURIComponent(tzOffset())
+}

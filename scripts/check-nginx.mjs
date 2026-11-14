@@ -43,6 +43,7 @@ const REQUIRED_LOCATIONS = [
   ['^~ /media/frames/', '模板帧图会掉回 /media/ 的 7 天 public 缓存（私有画面被公开缓存）'],
   ['/media/', '帧图缩略图没有长缓存'],
   ['^~ /print/', '打印页会被 try_files 兜成 SPA 的 index.html'],
+  ['^~ /download/', '分享离线包会被 try_files 兜成 SPA 的 index.html（下载拿到 200 的 HTML）'],
   ['/', '没有静态产物 fallback'],
 ]
 

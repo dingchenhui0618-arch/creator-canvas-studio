@@ -41,6 +41,7 @@ import { projectListQuery } from '../project-list.mjs'
 import { canStartProject } from '../origin-entry.mjs'
 import { adoptCanvasForProject, createProjectFromCanvas } from '../project-canvas.mjs'
 import { buildZip } from '../zip-store.mjs'
+import { storyboardFrames } from '../project-frames.mjs'
 import {
   listProjects,
   getProject,
@@ -297,33 +298,6 @@ const PRINT_HEAD = {
 function sendPrintNotice(res, status, notice) {
   res.writeHead(status, PRINT_HEAD)
   res.end(printNoticeHtml(notice))
-}
-
-/**
- * 交付包里的帧图：只认分镜里记下的那一份 /media/frames/<模板 id>/<文件名>，
- * 落地成 shot-03.jpg 这种按镜头编号命名的文件，收件人对着现场页就找得到。
- * 读不到的不补、不猜：集合里没有它，现场页那一镜就写「没存帧图」。
- */
-async function storyboardFrames(template) {
-  const shots = Array.isArray(template?.storyboard) ? template.storyboard : []
-  if (!template?.id || !shots.length) return []
-  const out = []
-  const seen = new Set()
-  for (const [index, shot] of shots.entries()) {
-    const matched = String(shot?.frameUrl || '').match(/^\/media\/frames\/([\w-]+)\/([\w.-]+)$/)
-    if (!matched || matched[1] !== template.id) continue
-    const name = 'shot-' + String(Number(shot.shotNo) || index + 1).padStart(2, '0') + '.jpg'
-    if (seen.has(name)) continue
-    try {
-      const data = await fsp.readFile(path.join(config.framesDir, template.id, matched[2]))
-      seen.add(name)
-      // templateId/file 只为「评审评的是不是这一张」服务：是同一张就复用这个文件，不再复制一份
-      out.push({ name, data, templateId: matched[1], file: matched[2] })
-    } catch {
-      // 抽帧目录被清过（模板回收站 / 过期清理）：这一镜没有图，别拿别的帧顶
-    }
-  }
-  return out
 }
 
 /**

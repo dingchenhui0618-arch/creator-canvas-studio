@@ -368,7 +368,9 @@ export function setSheetHtml({
         '<div class="set-shots" data-shot-total="' + model.shotTotal + '">' + shotCards(model, { frameBase, availableFrames }) + '</div>\n'
       : '<p class="set-empty">模板没有分镜表：按上面的脚本直接拍，或者换一条已解析的模板。</p>\n') +
     '<p class="set-foot">VisionQA · 现场页 · v' + (model.version || 0) + ' · ' +
-    escapeHtml(stampText(generatedAt, tzOffsetMinutes)) + ' · ' + escapeHtml(model.id || projectId) + ' · ' +
+    escapeHtml(stampText(generatedAt, tzOffsetMinutes)) +
+    // 离线分享包里不印作品编号：空的时候连分隔点一起省掉，不留下「·  ·」
+    (model.id || projectId ? ' · ' + escapeHtml(model.id || projectId) : '') + ' · ' +
     escapeHtml(aiLabelFootText()) + '</p>\n' +
     '</div>\n</main>'
   return paperShell(model.title + ' · 现场页 · VisionQA', body, EXTRA_CSS, RANGE_SCRIPT, { aiLabel: true })

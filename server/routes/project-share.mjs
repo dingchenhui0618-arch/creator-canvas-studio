@@ -14,6 +14,7 @@ import { printNoticeHtml } from '../project-deliverable-html.mjs'
 import { reviewSheetHtml, reviewSheetSelection } from '../project-review-sheet.mjs'
 import { compareSheetHtml } from '../project-compare-sheet.mjs'
 import { versionCompareView } from '../project-compare.mjs'
+import { buildShareBundle } from '../project-share-bundle.mjs'
 import { getProjectByShareToken } from '../projects.mjs'
 import { getTemplate } from '../templates.mjs'
 import { scriptView } from '../project-script.mjs'
@@ -29,6 +30,8 @@ const FRAME = /^\/api\/share\/project\/([\w-]+)\/frame\/(\d+)$/
 const PRINT_REVIEW = /^\/print\/share\/project\/([\w-]+)\/review$/
 // 两版对照纸：分享者主动打开时才存在；固定「当前版 vs 上一版」，不接受任意版次
 const PRINT_COMPARE = /^\/print\/share\/project\/([\w-]+)\/versions\/compare$/
+// 离线包：把分享页已经展示的现场页、评审对照与帧图打成一个 zip；不是新权限，token 仍是唯一凭证
+const DOWNLOAD_BUNDLE = /^\/download\/share\/project\/([\w-]+)\/bundle\.zip$/
 const FRAME_MIME = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' }
 const PRINT_HEAD = { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' }
 // 评审全局最多 200 条；单条作品扫最近 50 条摘要足够覆盖「每一版最近一次」
@@ -62,6 +65,12 @@ function sendPrintNotice(res, status, notice) {
   res.end(printNoticeHtml(notice))
 }
 
+// 下载地址直接在新标签里打开：出错时也给一张说清楚的纸，不吐一段 JSON
+function sendDownloadNotice(res, status, notice) {
+  res.writeHead(status, { ...PRINT_HEAD, 'Content-Disposition': 'inline' })
+  res.end(printNoticeHtml(notice))
+}
+
 function clampTz(raw) {
   const value = Number(raw)
   return Number.isFinite(value) ? Math.max(-720, Math.min(840, Math.round(value))) : 480
@@ -84,10 +93,72 @@ async function sharedReviewRecords(project) {
 export function createProjectShareRouter() {
   return {
     prefix: '/api/share/project',
-    // 打印版不在 /api 下：地址栏里那串会被浏览器印在纸脚上，也免得把令牌当接口调用
-    extraPrefixes: ['/print/share/project'],
+    // 打印版不在 /api 下：地址栏里那串会被浏览器印在纸脚上，也免得把令牌当接口调用；
+    // 离线包走 /download：浏览器把响应当附件，不把 zip 当页面渲染。
+    extraPrefixes: ['/print/share/project', '/download/share/project'],
     async handle(req, res, url, pathname) {
-      if (!pathname.startsWith('/api/share/project') && !pathname.startsWith('/print/share/project')) return false
+      if (
+        !pathname.startsWith('/api/share/project') &&
+        !pathname.startsWith('/print/share/project') &&
+        !pathname.startsWith('/download/share/project')
+      ) return false
+      // 离线包：拿到链接就能下载，不用登录。包里只放分享页已经展示的东西：
+      // 前 12 镜的现场页、每版最近一次评审、分享者打开时的两版对照、帧图与说明。
+      // 两版对照仍然只看 share.compare；没开就少一个文件，不在包里另开一扇门。
+      const bundleMatch = pathname.match(DOWNLOAD_BUNDLE)
+      if (bundleMatch) {
+        if (req.method !== 'GET') {
+          sendDownloadNotice(res, 405, {
+            title: '这个地址只能下载',
+            message: '只读分享不接收上传或修改；要拿离线包请直接点分享页上的下载。',
+            href: '/',
+            label: '打开 VisionQA',
+          })
+          return true
+        }
+        const token = bundleMatch[1]
+        const shared = await getProjectByShareToken(token)
+        if (!shared) {
+          sendDownloadNotice(res, 404, {
+            title: '这个离线包已经打不开',
+            message: '分享者可能已经停止分享，或者换过一条新链接。已经下载到本地的包不受影响。',
+            href: '/',
+            label: '打开 VisionQA',
+          })
+          return true
+        }
+        const found = shared.templateId ? await getTemplate(shared.templateId, null) : null
+        const template = found && !found.deletedAt ? found : null
+        const script = scriptView(shared, template)
+        const [records, allDecisions] = await Promise.all([
+          sharedReviewRecords(shared),
+          listDecisions(null),
+        ])
+        const decisions = allDecisions.filter((entry) => entry.projectId === shared.id)
+        const tz = clampTz(url.searchParams.get('tz'))
+        const bundle = await buildShareBundle({
+          project: shared,
+          template,
+          script,
+          reviewRecords: records,
+          decisions,
+          now: new Date(),
+          tzOffsetMinutes: tz,
+        })
+        const fallback = 'visionqa-share-v' + (Math.round(Number(shared.version) || 0) || 0) + '.zip'
+        res.writeHead(200, {
+          'Content-Type': 'application/zip',
+          'Content-Disposition':
+            'attachment; filename="' + fallback + '"; filename*=UTF-8\'\'' + encodeURIComponent(bundle.fileName),
+          'Content-Length': String(bundle.archive.length),
+          'Cache-Control': 'no-store',
+          'X-Robots-Tag': 'noindex',
+          'Referrer-Policy': 'no-referrer',
+        })
+        res.end(bundle.archive)
+        return true
+      }
+
       // 两版对照纸：分享者没打开、或这条作品还没有上一版，都给一张说清楚的纸
       const comparePrintMatch = pathname.match(PRINT_COMPARE)
       if (comparePrintMatch) {

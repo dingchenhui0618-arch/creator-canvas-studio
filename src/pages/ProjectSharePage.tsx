@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { ArrowUpRight, GitCompare, Link2Off, Loader2, Printer, ScanEye } from 'lucide-react'
-import { getSharedProject, sharedCompareSheetUrl, sharedReviewSheetUrl } from '../api/projects'
+import { ArrowUpRight, Download, GitCompare, Link2Off, Loader2, Package, Printer, ScanEye } from 'lucide-react'
+import { getSharedProject, sharedBundleUrl, sharedCompareSheetUrl, sharedReviewSheetUrl } from '../api/projects'
 import type { SharedProject } from '../domain/project'
 import { REVIEW_VERDICT_LABEL as VERDICT_LABEL } from '../domain/review'
 import { describeTiming } from '../domain/radar'
@@ -93,6 +93,8 @@ export default function ProjectSharePage({ token }: { token: string }) {
   const paperUrl = view.stats.reviews ? sharedReviewSheetUrl(token) : ''
   // 两版对照不是默认权限：服务端只在分享者打开、且上一版已归档时给出这个入口
   const compareUrl = view.versionCompare ? sharedCompareSheetUrl(token) : ''
+  // 离线包不是另一份权限：它只打包这个页面上已经公开的内容；两版对照仍然跟随上面的开关
+  const bundleUrl = sharedBundleUrl(token)
 
   return (
     <div className="pshare-page">
@@ -187,6 +189,21 @@ export default function ProjectSharePage({ token }: { token: string }) {
             </a>
           </section>
         ) : null}
+
+        <section className="pshare-block">
+          <div className="pshare-block-head">
+            <h2>带走整套</h2>
+            <span>ZIP · 不用登录</span>
+          </div>
+          <a className="pshare-paper" href={bundleUrl} download>
+            <Package size={16} className="pshare-paper-icon" />
+            <span className="pshare-paper-main">
+              <strong>离线包 · 现场页、评审对照与帧图</strong>
+              <span>把这一页已经公开的脚本、分镜和评审框打成一个 zip；解压后双击就能打印，不用联网。两版对照只在分享者打开时放进包里。</span>
+            </span>
+            <Download size={14} />
+          </a>
+        </section>
 
         {script?.hook ? (
           <section className="pshare-block">
@@ -311,7 +328,8 @@ export default function ProjectSharePage({ token }: { token: string }) {
             <strong>关于这个链接</strong>
             <p>
               只读分享：只展示这条作品的脚本、分镜，以及评审次数与评审对照纸；分享者可以另外打开两版对照纸。
-              这里不展示账号、积分与完整画布。分享者停止分享后，这个地址与两张对照纸都会立即失效。分享者能看到这条链接被打开的次数、最近一次的时间，
+              上面的离线包只是把这些内容打包带走，不包含更多东西。这里不展示账号、积分与完整画布。
+              分享者停止分享后，这个地址、两张对照纸与离线包都会立即失效。分享者能看到这条链接被打开的次数、最近一次的时间，
               以及是从微信、手机还是电脑打开的；不记录 IP，也不记录具体是谁。
             </p>
           </div>
