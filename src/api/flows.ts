@@ -97,7 +97,34 @@ export type RunQuery = {
   offset?: number
 }
 
+/**
+ * 运行的排队位（v0.9.96）：名额满时服务端先收下这一单、排在整机的一条队里（与画布出图 / 评审同一条队）。
+ * 票号是这次运行的凭据（页面自己生成），服务端只按它查名次——聚合数里看不到票号。
+ */
+export type RunQueueState = {
+  ok: boolean
+  kind: string
+  /** 这一类每条最多等多久、最多几条同时排（0 = 这一档关掉了） */
+  waitMs: number
+  maxWaiting: number
+  /** 整机现在几条在等、最久的那条等了多久（口径见 scope / countsScope） */
+  waiting: number
+  oldestWaitMs: number
+  scope: 'lease' | 'process'
+  countsScope: 'process'
+  full: boolean
+  /** 我这张票现在排第几；不在队里（还没登记 / 已排到 / 票不对）是 null */
+  position: number | null
+  ahead: number | null
+  waitedMs: number
+}
+
+export const getRunQueue = (ticket: string) =>
+  request<RunQueueState>('/api/runs/queue?ticket=' + encodeURIComponent(ticket))
+
 export type RunEventMessage =
+  // 排过队才有这一条（v0.9.96）：从第几位开始等、等了多久，运行结论据此写「排队 N 秒后开始」
+  | { type: 'run-queue'; position: number; waitedMs: number }
   | { type: 'run-start'; run: { id: string; flowId: string; flowName: string; total: number } }
   | { type: 'node-start'; nodeId: string; index: number; total: number }
   | { type: 'node-end'; node: RunNodeResult; index: number; total: number }
@@ -158,10 +185,15 @@ export async function deleteFlow(id: string): Promise<{ ok: boolean }> {
 export async function runFlowStream(
   id: string,
   onEvent: (event: RunEventMessage) => void,
+  /** 排队票号（v0.9.96）：页面自己生成，服务端按它认出「同一条」，不回写进响应 */
+  ticket = '',
 ): Promise<RunRecord> {
   const response = await fetch('/api/flows/' + id + '/run', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(ticket ? { 'X-VQ-Queue-Ticket': ticket } : {}),
+    },
     body: JSON.stringify({ stream: true }),
   })
   if (!response.ok) {

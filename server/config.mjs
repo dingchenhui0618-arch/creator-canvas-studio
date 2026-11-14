@@ -188,6 +188,13 @@ export const config = {
       waitMs: numEnv(process.env.VQ_REVIEW_QUEUE_MS, 60000),
       maxWaiting: numEnv(process.env.VQ_REVIEW_QUEUE_MAX, 4),
     },
+    // 画布运行的排队位（v0.9.96）：运行一条流程会下载并分析多张图，是最重的一条重活（3 积分/次），
+    // 撞上整机上限时以前也立刻 503。它一跑就要几十秒，用户本来就等着看节点逐个点亮，等得起这一档。
+    // 与画布出图 / 评审共用同一套排队位（按类型各一条队），写 0 = 退回立刻拒。
+    runQueue: {
+      waitMs: numEnv(process.env.VQ_RUN_QUEUE_MS, 60000),
+      maxWaiting: numEnv(process.env.VQ_RUN_QUEUE_MAX, 4),
+    },
     // 全站（不分账号）同时在跑的重活条数上限（v0.9.70）。
     // 按账号的上限管不住「两个账号各来两条」：这台机器只有 2 核 / 1.86 GB，
     // 重活撞在一起就是 OOM，进程一死所有人的会话一起断。

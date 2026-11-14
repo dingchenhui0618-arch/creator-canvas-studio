@@ -14,7 +14,7 @@ import { currentUser, isAdmin } from '../auth.mjs'
 import { charge, refund } from '../credits.mjs'
 import { quotaRefusal } from '../quota.mjs'
 import { enter, leave } from '../gate.mjs'
-import { admitWaiting, capacityFor, queueView } from '../waterline.mjs'
+import { admitWaiting, capacityFor, queueView, watchClientGone } from '../waterline.mjs'
 import { publicError, refusal } from '../public-error.mjs'
 import { modelServiceState, noteModelFailure, noteModelSuccess } from '../service-state.mjs'
 import { IsolateError, reviewIsolateConfig, runReviewIsolated } from '../isolate.mjs'
@@ -65,22 +65,8 @@ async function readLocalMedia(probe) {
   return { bytes, mime: probe.mime }
 }
 
-/**
- * 「客户端还在不在」的判据（v0.9.95）：只看响应这一侧。
- *
- * 踩过的坑：请求体读完之后 req.destroyed 必为 true（IncomingMessage 读满就 autoDestroy），
- * 拿它当「人走了」，每一单评审都会在排队第一步就退出——客户端那边挂在 POST 上永远等不到响应。
- * 人真的走了的信号是响应被关掉：res 的 'close' 在 writableEnded 还是 false 时触发，或 res 已 destroy。
- */
-export function watchClientGone(res) {
-  let gone = false
-  try {
-    if (typeof res.on === 'function') res.on('close', () => { if (!res.writableEnded) gone = true })
-  } catch {
-    // 测试里的假 res 没有 on：那两处判据照样能兜住
-  }
-  return () => gone || res.destroyed === true || res.writableEnded === true
-}
+// v0.9.96：这个判据搬到 waterline.mjs 给「评审 / 运行」共用，这里再转出去给既有用例 import。
+export { watchClientGone }
 
 const REVIEW_ITEM = /^\/api\/reviews\/([\w-]+)$/
 const ACK_ITEM = /^\/api\/reviews\/ack\/([\w-]+)$/

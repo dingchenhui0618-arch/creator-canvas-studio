@@ -57,8 +57,9 @@ test('默认参数：评审 60 秒 / 4 条，画布出图仍是 90 秒 / 8 条�
   assert.deepEqual(queue(), { waitMs: 4000, maxWaiting: 2 })
   // 画布出图那一段没动（同一份配置里两段分开，改评审不许把画布一起改了）
   assert.deepEqual(water.queueLimitsFor('canvas_gen'), { waitMs: 90000, maxWaiting: 8 })
+  // v0.9.96 起运行也排队（默认 60 秒 / 4 条）：这里只验「读的是它自己那一段配置」
+  assert.deepEqual(water.queueLimitsFor('flow_run'), { waitMs: 60000, maxWaiting: 4 })
   // 没配排队位的类型仍然是立刻拒
-  assert.deepEqual(water.queueLimitsFor('flow_run'), { waitMs: 0, maxWaiting: 0 })
   assert.deepEqual(water.queueLimitsFor('review_nope'), { waitMs: 0, maxWaiting: 0 })
 
   // 生产默认值用干净的子进程量一次：本进程的 env 已经被测试改过

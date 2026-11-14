@@ -23,7 +23,7 @@ import { projectsByFlow, projectFlowsMatching, withRunProject, withFlowProject }
 import { charge, balanceOf } from '../credits.mjs'
 import { quotaRefusal } from '../quota.mjs'
 import { enter, leave } from '../gate.mjs'
-import { admit, capacityFor } from '../waterline.mjs'
+import { admitWaiting, capacityFor, queueView, watchClientGone } from '../waterline.mjs'
 import { publicError } from '../public-error.mjs'
 
 // /api/flows 与 /api/runs 共用一个 router：
@@ -52,15 +52,31 @@ function sendStreamHead(res) {
 // 画布整条流程按次扣积分：先扣后跑，跑挂了 / 被重启打断全额退回，和检索/复刻/评审同一套账。
 // 扣费单据 ref = 运行 id（不是画布名）：账本、运行记录、恢复退款三处说同一件事。
 // 未登录（本地演示）时 charge 返回匿名结果，不扣费也不限流。
-function beginRunCharge(res, user, ref, label = '') {
-  if (!user?.id) return { cost: 0, balance: null, release: () => {} }
+// v0.9.96：名额满时先进整机的排队位（默认 60 秒 / 4 条），排到才占名额、才扣费；排队期间不花钱、不跑流程。
+async function beginRunCharge(res, user, ref, label = '', options = {}) {
+  if (!user?.id) return { cost: 0, balance: null, queue: null, release: () => {} }
   // 画布运行要下载并分析多张图，是这里最重的一条：内存到红线就不接（不扣积分、不调上游）。
-  const water = admit('flow_run')
+  const water = await admitWaiting('flow_run', {
+    ticket: options.ticket,
+    // 只认响应侧：请求体已经读完，req.destroyed 现在是 true（见 waterline.watchClientGone）
+    isAborted: watchClientGone(res),
+  })
   if (!water.ok) {
+    // 客户端已经断开：不写响应、不占名额、不扣积分（票在 admitWaiting 的 finally 里退掉了）
+    if (water.aborted) {
+      try { res.destroy?.() } catch { /* 已经断了 */ }
+      return null
+    }
     sendJson(res, water.status, water.body)
     return null
   }
-  // 名额是 admit 占的（v0.9.78：跨进程租约），扣费失败这条路径要先还回去
+  // 排到了：名次与等了多久一起带出去——脚本看响应头，运行抽屉看流里的第一条事件
+  const queued = water.position ? { position: water.position, waitedMs: water.waitedMs } : null
+  if (queued) {
+    res.setHeader('X-VQ-Queue-Position', String(queued.position))
+    res.setHeader('X-VQ-Queue-Waited-Ms', String(queued.waitedMs))
+  }
+  // 名额是 admitWaiting 占的（v0.9.78：跨进程租约），扣费失败这条路径要先还回去
   const releaseAdmission = () => { try { water.lease.release() } catch { /* 还名额不该影响响应 */ } }
   const max = capacityFor('flow_run', Number(config.credits.concurrency.flow_run || 0), water.level)
   if (max && !enter(user.id, 'flow_run', max)) {
@@ -93,6 +109,8 @@ function beginRunCharge(res, user, ref, label = '') {
   return {
     cost: paid.cost,
     balance: paid.balance,
+    // 排过队才有这一项：运行抽屉据此在结论里写「排队 N 秒后开始」
+    queue: queued,
     release: () => { leave(user.id, 'flow_run'); releaseAdmission() },
   }
 }
@@ -150,6 +168,13 @@ export function createFlowsRouter() {
         return true
       }
 
+      // 排队位这一刻的样子（v0.9.96）：页面在等的时候拿票号问「我第几、等了多久」。
+      // 只读；票号是凭据、只进不出，聚合数仍是整机口径（与画布出图 / 评审同一条队、同一份实现）。
+      if (pathname === '/api/runs/queue' && req.method === 'GET') {
+        sendJson(res, 200, { ok: true, ...queueView('flow_run', url.searchParams.get('ticket') || '') })
+        return true
+      }
+
       const runItemMatch = pathname.match(RUN_ITEM)
       if (runItemMatch && req.method === 'GET') {
         const run = await getRun(runItemMatch[1], user)
@@ -183,7 +208,9 @@ export function createFlowsRouter() {
         // 运行 id 先定、记录先落盘、再扣费：扣完立刻断电也留得下这条单，重启时按账本退。
         const runId = newRunId()
         await startFlowRun(flow, runId, { cost: user?.id ? Number(config.credits.prices.flow_run) || 0 : 0 })
-        const paid = beginRunCharge(res, user, runId, flow.name)
+        const paid = await beginRunCharge(res, user, runId, flow.name, {
+          ticket: String(req.headers['x-vq-queue-ticket'] || ''),
+        })
         if (!paid) {
           // 并发闸门 / 积分不足：钱没扣、运行也不会发生，占位记录撤掉
           await dropRunRecord(runId)
@@ -193,6 +220,10 @@ export function createFlowsRouter() {
         try {
           if (body.stream) {
             sendStreamHead(res)
+            // 排过队就先推一条「我从第几位等到开跑」：页面不用再自己算，运行结论也说得清
+            if (paid.queue) {
+              res.write(JSON.stringify({ type: 'run-queue', position: paid.queue.position, waitedMs: paid.queue.waitedMs }) + '\n')
+            }
             const write = (event) => {
               if (res.writableEnded) return
               // 结束时把余额和退款结论一起推给前端，运行抽屉不用再额外请求
@@ -219,6 +250,7 @@ export function createFlowsRouter() {
           sendJson(res, 200, {
             ...run,
             credits: run.credits ? { ...run.credits, balance: balanceOf(user?.id) } : null,
+            ...(paid.queue ? { queue: paid.queue } : {}),
           })
         } catch (error) {
           // 抛到这里说明运行没跑起来（例如有环）：记录标失败、按账本退钱

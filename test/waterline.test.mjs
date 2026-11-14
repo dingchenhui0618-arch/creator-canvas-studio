@@ -114,12 +114,13 @@ test('读数：来自真实系统与真实 V8 堆，不是编的', () => {
   assert.equal(report.heavy.queue.maxWaiting, config.credits.canvasQueue.maxWaiting)
   assert.equal(report.heavy.queue.waiting, 0)
   // v0.9.95 之前这里断言「评审不排队，客户端自己重试更合适」；评审是主付费动作，改成它也排：
-  // 每条最多等 60 秒、最多 4 条同时排（整机口径），别的重活（复刻 / 运行）仍然立刻拒
+  // 每条最多等 60 秒、最多 4 条同时排（整机口径）。v0.9.96 起运行（flow_run）也进来，同一档参数。
   assert.equal(water.queueLimitsFor('review').waitMs, config.credits.reviewQueue.waitMs)
   assert.equal(water.queueLimitsFor('review').maxWaiting, config.credits.reviewQueue.maxWaiting)
   assert.equal(water.admissionQueueReport('review').waiting, 0)
   assert.equal(water.queueLimitsFor('replicate').waitMs, 0, '复刻仍然不排队：有账号的调用方自己重试')
-  assert.equal(water.queueLimitsFor('flow_run').waitMs, 0, '运行仍然不排队（下一个候选）')
+  assert.equal(water.queueLimitsFor('flow_run').waitMs, config.credits.runQueue.waitMs, 'v0.9.96 起运行也排队')
+  assert.equal(water.admissionQueueReport('flow_run').waiting, 0)
 })
 
 test('到红线：重活被拒且说清没扣积分，轻活照常，生产口径不带内部读数', async () => {

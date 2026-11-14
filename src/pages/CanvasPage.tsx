@@ -19,6 +19,7 @@ import {
   createFlow,
   deleteFlow,
   getFlow,
+  getRunQueue,
   listFlows,
   runFlowStream,
   saveFlowAsTemplate,
@@ -150,6 +151,12 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
   const [queueIdleAt, setQueueIdleAt] = useState(0)
   const queueWasBusy = useRef(false)
   const queueIdleTimer = useRef<number | undefined>(undefined)
+  // 运行的排队位（v0.9.96）：名额满时这一单先进整机的队，等的时候顶栏显示「第几位 · 已等几秒」。
+  // 票号是这次运行的凭据：页面自己生成，服务端按它查名次；排到之后 waitedMs 记下来给运行结论用。
+  const [runQueue, setRunQueue] = useState<{ position: number; waitedMs: number; waiting: number; waitMs: number } | null>(null)
+  const [runQueuedMs, setRunQueuedMs] = useState(0)
+  const runQueueTicketRef = useRef('')
+  const [runElapsed, setRunElapsed] = useState(0)
   // 画布 iframe：画布加载完会要一张信任票据，拿到后它自己换会话，用户不用在画布里再登一次
   const bdcFrameRef = useRef<HTMLIFrameElement | null>(null)
   // 进页面时地址里点名的那块内置流程（只影响「默认进哪个视图」，之后切流程不动它）
@@ -644,6 +651,36 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
     }
   }, [applyFlow, running, toast])
 
+  // 运行排队这段时间的秒表与名次（v0.9.96）：只在「点了运行、还没回来」时跑。
+  // 第一次立刻问，别等一个轮询周期；排到了（position 变 null）就把条子收起来——
+  // 后面是节点在跑，按钮改成「运行中 Ns」，和评审页同一套说法。
+  useEffect(() => {
+    if (!running) return
+    let alive = true
+    const startedAt = Date.now()
+    const tick = () => {
+      if (alive) setRunElapsed(Math.round((Date.now() - startedAt) / 1000))
+      const ticket = runQueueTicketRef.current
+      if (!ticket) return
+      getRunQueue(ticket)
+        .then((next) => {
+          if (!alive) return
+          if (!next.position) {
+            setRunQueue(null)
+            return
+          }
+          setRunQueue({ position: next.position, waitedMs: next.waitedMs, waiting: next.waiting, waitMs: next.waitMs })
+        })
+        .catch(() => undefined)
+    }
+    tick()
+    const poll = window.setInterval(tick, 1200)
+    return () => {
+      alive = false
+      window.clearInterval(poll)
+    }
+  }, [running])
+
   const handleRun = useCallback(async () => {
     if (running) return
     if (!nodesRef.current.length) {
@@ -661,6 +698,14 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
     setRunRecord(null)
     setRunMeta({ id: '', total: 0 })
     setRunError('')
+    // 票号是这次运行的凭据：排队期间页面按它问名次，服务端按它认出「是同一条」而不是新来一条
+    runQueueTicketRef.current =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : 'vq-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10)
+    setRunQueue(null)
+    setRunQueuedMs(0)
+    setRunElapsed(0)
     setNodes((current) => current.map((node) => ({
       ...node,
       data: { ...node.data, status: 'pending', ms: undefined, output: undefined, error: undefined },
@@ -668,6 +713,12 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
 
     try {
       const record = await runFlowStream(flowIdRef.current, (event) => {
+        if (event.type === 'run-queue') {
+          // 排到了：名次收起，把「等了多久」留给运行结论（排队 N 秒后开始）
+          setRunQueue(null)
+          setRunQueuedMs(event.waitedMs)
+          return
+        }
         if (event.type === 'run-start') {
           setRunMeta({ id: event.run.id, total: event.run.total })
           return
@@ -697,7 +748,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
               : item
           )))
         }
-      })
+      }, runQueueTicketRef.current)
       setRunRecord(record)
       toast(record.status === 'success'
         ? '运行完成 · ' + (record.durationMs / 1000).toFixed(1) + 's'
@@ -713,6 +764,8 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
       toast('运行失败：' + message)
     } finally {
       setRunning(false)
+      setRunQueue(null)
+      runQueueTicketRef.current = ''
       // 运行结束（含失败退款）后余额会变，重新读一次，别让按钮旁的余额停在旧值
       refreshRunCredit()
     }
@@ -1080,6 +1133,19 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
               运行 {runCredit.price} 积分 · 余额 {runCredit.balance ?? '—'}
             </span>
           ) : null}
+          {runQueue ? (
+            <span
+              className="cv-run-queue"
+              role="status"
+              title={
+                '整机此刻 ' + runQueue.waiting + ' 条在等，每条最多等 ' + Math.round(runQueue.waitMs / 1000) +
+                ' 秒；排到才扣积分、才跑流程，现在关掉页面不会扣费'
+              }
+            >
+              <Hourglass size={12} strokeWidth={1.75} />
+              排队中 · 第 {runQueue.position} 位 · 已等 {runElapsed}s
+            </span>
+          ) : null}
           <button
             className="vq-button vq-button--primary"
             type="button"
@@ -1087,7 +1153,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
             disabled={running || loadState !== 'ready' || (runCredit != null && runCredit.balance != null && runCredit.balance < runCredit.price)}
             title={runCredit && runCredit.balance != null && runCredit.balance < runCredit.price ? '积分不足，先让管理员发放' : '按拓扑序执行整张画布'}
           >
-            <Play size={14} fill="currentColor" />{running ? '运行中…' : '运行流程'}
+            <Play size={14} fill="currentColor" />{running ? (runQueue ? '排队中' : '运行中 ' + runElapsed + 's') : '运行流程'}
           </button>
           <button className="vq-button vq-button--icon" type="button" onClick={() => { void removeFlow() }} disabled={running || loadState !== 'ready'} aria-label="删除流程" title="删除流程">
             <Trash size={14} />
@@ -1281,6 +1347,9 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
         total={runMeta.total}
         nodes={runNodes}
         record={runRecord}
+        queuedMs={runQueuedMs}
+        queue={runQueue}
+        queueElapsed={runElapsed}
         error={runError}
         onClose={() => setDrawerOpen(false)}
         onSelectNode={focusNode}

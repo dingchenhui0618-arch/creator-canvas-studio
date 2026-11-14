@@ -749,12 +749,35 @@
   border-color: rgba(163, 56, 56, .22);
 }
 .cv-bdc-queue.is-done { color: var(--muted); }
+/* 运行排队位（v0.9.96）：与画布出图的排队位同一套样子（发丝线 + 等宽微字 + 全站胶囊圆角），
+   只在等名额时出现；排到就收起，按钮改报「运行中 Ns」。 */
+.cv-run-queue {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 24px;
+  max-width: 320px;
+  padding: 0 8px;
+  overflow: hidden;
+  color: var(--warn);
+  background: var(--warn-soft);
+  border: 1px solid rgba(138, 91, 8, .22);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .02em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.cv-run-queue svg { flex: none; }
 @media (max-width: 720px) {
   /* 小屏状态条先留住排队位：第三方署名在面包屑里已经说了，地址在「新窗口」里也看得到，
      所以这两项让位，好让「在跑 2 · 排队 4（最久 6.3s）」整句都放得下。 */
   .cv-bdc-label,
   .cv-bdc-url { display: none; }
   .cv-bdc-queue { max-width: 200px; }
+  .cv-run-queue { max-width: 200px; }
 }
 .cv-bdc-spacer { flex: 1 1 auto; }
 .cv-bdc-url {

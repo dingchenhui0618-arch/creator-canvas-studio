@@ -12,6 +12,12 @@ type RunDrawerProps = {
   total: number
   nodes: RunNodeResult[]
   record: RunRecord | null
+  /** 这次运行之前排了多久（v0.9.96）；0 = 没排队，不写这一项 */
+  queuedMs?: number
+  /** 正在排队时的名次（v0.9.96）：顶栏被运行抽屉盖住时，这里也要说清「在第几位等」 */
+  queue?: { position: number; waitedMs: number; waiting: number } | null
+  /** 排队已等了几秒（页面自己的秒表，和顶栏胶囊同一个数） */
+  queueElapsed?: number
   error: string
   onClose: () => void
   onSelectNode: (nodeId: string) => void
@@ -45,11 +51,12 @@ function nodeOutputText(output: RunNodeResult['output']): string {
   return typeof text === 'string' ? text : ''
 }
 
-export function RunDrawer({ open, running, flowName, runId, total, nodes, record, error, onClose, onSelectNode }: RunDrawerProps) {
+export function RunDrawer({ open, running, flowName, runId, total, nodes, record, queuedMs = 0, queue = null, queueElapsed = 0, error, onClose, onSelectNode }: RunDrawerProps) {
   const { internal } = useUiMode()
   const progress = total > 0 ? Math.round((nodes.length / total) * 100) : 0
   const duration = record ? record.durationMs : nodes.reduce((sum, node) => sum + (node.ms || 0), 0)
-  const statusText = running ? 'RUNNING' : record ? (record.status === 'success' ? 'DONE' : record.status === 'interrupted' ? 'INTERRUPTED' : 'ERROR') : error ? 'ERROR' : 'IDLE'
+  // 排队也是一段时间：抽屉开着的时候顶栏会被它盖住，所以状态胶囊直接写 QUEUED，别让用户以为节点在跑
+  const statusText = queue ? 'QUEUED' : running ? 'RUNNING' : record ? (record.status === 'success' ? 'DONE' : record.status === 'interrupted' ? 'INTERRUPTED' : 'ERROR') : error ? 'ERROR' : 'IDLE'
   const statusTone = running ? 'live' : record?.status === 'error' || record?.status === 'interrupted' || error ? 'fail' : record ? 'pass' : 'idle'
 
   return (
@@ -69,6 +76,7 @@ export function RunDrawer({ open, running, flowName, runId, total, nodes, record
         <span className="cv-mono">{runId || '尚未运行'}</span>
         <span>{formatMs(duration)}</span>
         <span>{nodes.length} / {total || nodes.length} 节点</span>
+        {queuedMs > 0 ? <span>排队 {Math.round(queuedMs / 1000)} 秒后开始</span> : null}
         {record?.credits && record.credits.cost > 0 ? (
           <span>{record.credits.refunded ? '已退回 ' + record.credits.cost + ' 积分' : '消耗 ' + record.credits.cost + ' 积分'}</span>
         ) : null}
@@ -88,7 +96,11 @@ export function RunDrawer({ open, running, flowName, runId, total, nodes, record
 
         {!nodes.length && !error && (
           <div className="cv-drawer-empty">
-            {running ? <p>已提交运行，等待第一个节点返回…</p> : <p>点「运行流程」后，这里会按节点顺序显示状态、耗时和输出。</p>}
+            {running ? (
+              queue
+                ? <p>正在排队 · 第 {queue.position} 位 · 已等 {queueElapsed} 秒（排到才开始跑，现在关掉页面不会扣费）</p>
+                : <p>已提交运行，等待第一个节点返回…</p>
+            ) : <p>点「运行流程」后，这里会按节点顺序显示状态、耗时和输出。</p>}
           </div>
         )}
 

@@ -294,11 +294,13 @@ function waitText(ms) {
 const QUEUE_CONFIG = {
   canvas_gen: () => (config.credits && config.credits.canvasQueue) || {},
   review: () => (config.credits && config.credits.reviewQueue) || {},
+  flow_run: () => (config.credits && config.credits.runQueue) || {},
 }
 // 排队相关的话按类型说：评审没有「少发几张」，运行/生成才有。
 const QUEUE_WORD = {
   canvas_gen: { noun: '生成', cost: '没有产生费用', advice: '少发几张，或者等一分钟再试' },
   review: { noun: '评审', cost: '没有扣积分', advice: '先把这一版改一改，或者等一分钟再试' },
+  flow_run: { noun: '运行', cost: '没有扣积分', advice: '等这条流程跑完再试' },
 }
 function queueWord(kind) {
   return QUEUE_WORD[kind] || QUEUE_WORD.canvas_gen
@@ -447,6 +449,23 @@ function currentLevel() {
 }
 
 /**
+ * 「客户端还在不在」的判据（v0.9.95，v0.9.96 从评审路由搬到这里给运行复用）：只看响应这一侧。
+ *
+ * 踩过的坑：请求体读完之后 req.destroyed 必为 true（IncomingMessage 读满就 autoDestroy），
+ * 拿它当「人走了」，每一单都会在排队第一步就退出——客户端那边挂在 POST 上永远等不到响应。
+ * 人真的走了的信号是响应被关掉：res 的 'close' 在 writableEnded 还是 false 时触发，或 res 已 destroy。
+ */
+export function watchClientGone(res) {
+  let gone = false
+  try {
+    if (typeof res.on === 'function') res.on('close', () => { if (!res.writableEnded) gone = true })
+  } catch {
+    // 测试里的假 res 没有 on：那两处判据照样能兜住
+  }
+  return () => gone || res.destroyed === true || res.writableEnded === true
+}
+
+/**
  * 带排队的名额申请（v0.9.80，v0.9.93 变成整机一条队）。
  * 顺序刻意是「先登记、再试名额」：登记了才知道自己在这条队里排第几；而前面还有人在等的时候，
  * 即使这一刻有空位也不许插队——那个空位是排在前面那一条的。以前是「先试名额、抢到就是你的」，
@@ -546,6 +565,10 @@ export async function admitWaiting(kind, options = {}) {
     return {
       ...(last || { ok: false, level }),
       ok: false,
+      // 等超时也要有 status：上一轮可能停在「让出去」那一支（它只记 ahead，没有 status），
+      // 漏了这一行，调用方拿到的就是一条没有状态码的拒绝（v0.9.96 新用例抓到）。
+      status: 503,
+      lease: null,
       queued: true,
       timedOut: true,
       waitedMs,
