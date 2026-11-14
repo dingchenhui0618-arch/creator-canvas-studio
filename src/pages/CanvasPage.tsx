@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Check, ChevronDown, CircleAlert, Copy, Expand, History, Hourglass, LayoutGrid, Maximize2, Minimize2, Play, Plus, RotateCcw, RotateCw, Save, Square, Trash } from 'lucide-react'
+import { ArrowLeft, Check, ChevronDown, CircleAlert, Copy, Expand, History, Hourglass, LayoutGrid, Maximize2, Minimize2, Play, Plus, RotateCcw, RotateCw, Save, Square, Trash } from 'lucide-react'
 import {
   Background,
   Controls,
@@ -34,7 +34,7 @@ import {
   type RunResumePlan,
 } from '../api/flows'
 import { getCredits } from '../api/credits'
-import { runResumeInfo } from '../domain/run'
+import { runResumeInfo, runSpentText, runStatusMeta } from '../domain/run'
 import { getCanvasSessionTicket } from '../api/canvasSession'
 import { getCanvasQueue, type CanvasQueueView } from '../api/canvasQueue'
 import { useUiMode } from '../api/app'
@@ -56,6 +56,7 @@ import { autoLayout } from '../canvas/layout'
 import { fromFlowEdges, fromFlowNodes, toFlowEdges, toFlowNodes, validateConnection } from '../canvas/serialize'
 import type { FlowNodeData, FlowNodeKind, RunNodeStatus } from '../canvas/types'
 import PageHead from '../components/PageHead'
+import { Pill } from '../components/ui'
 import { Select } from '../components/Select'
 import '../styles/canvas.css'
 
@@ -68,14 +69,16 @@ const nodeTypes = {
   output: FlowNodeCard,
 }
 
-// 画布页有三个入口，都来自地址栏：
+// 画布页有四个入口，都来自地址栏：
 //   flowId       #/canvas/<flowId>                    内置编排的流程（模板库、运行记录跳转）
+//   viewRunId    #/canvas/<flowId>/run/<runId>        只读查看一次运行：回放节点结果，不许改画布（v0.9.106）
 //   resumeRunId  #/canvas/<flowId>/resume/<runId>     特定一次运行：打开时把记录放回抽屉（v0.9.104）
 //   canvasId     #/canvas/project/<画布ID>            画布服务里的画布项目（工作台「继续上次的画布」）
 type CanvasPageProps = {
   onToast?: (message: string) => void
   flowId?: string
   resumeRunId?: string
+  viewRunId?: string
   canvasId?: string
   // 专注模式：进画布收起侧栏与顶栏，只留画布自己的工具条；再点一次退出
   focus?: boolean
@@ -86,10 +89,16 @@ type Snapshot = { nodes: Node<FlowNodeData>[]; edges: Edge[] }
 
 type SaveState = 'saved' | 'saving' | 'dirty' | 'error'
 
-export default function CanvasPage({ onToast, flowId, resumeRunId, canvasId, focus, onToggleFocus }: CanvasPageProps) {
+function formatRunTime(iso: string): string {
+  const date = new Date(iso)
+  if (!Number.isFinite(date.getTime())) return '—'
+  return date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
+export default function CanvasPage({ onToast, flowId, resumeRunId, viewRunId, canvasId, focus, onToggleFocus }: CanvasPageProps) {
   return (
     <ReactFlowProvider>
-      <CanvasWorkspace onToast={onToast} flowId={flowId} resumeRunId={resumeRunId} canvasId={canvasId} focus={focus} onToggleFocus={onToggleFocus} />
+      <CanvasWorkspace onToast={onToast} flowId={flowId} resumeRunId={resumeRunId} viewRunId={viewRunId} canvasId={canvasId} focus={focus} onToggleFocus={onToggleFocus} />
     </ReactFlowProvider>
   )
 }
@@ -106,8 +115,11 @@ function hostOf(value: string): string {
   }
 }
 
-function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialResumeId, canvasId: initialCanvasId, focus, onToggleFocus }: CanvasPageProps) {
+function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialResumeId, viewRunId: initialViewId, canvasId: initialCanvasId, focus, onToggleFocus }: CanvasPageProps) {
   const { internal } = useUiMode()
+  // 只读查看（v0.9.106）：地址里带的是 run 时，画布回放这次运行的结果，但不写回、不扣费、不提供运行入口。
+  const readOnly = Boolean(initialViewId)
+  const openRunId = initialViewId || initialResumeId || ''
   const rf = useReactFlow()
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<FlowNodeData>>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
@@ -205,6 +217,16 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
   const stageRef = useRef<HTMLDivElement>(null)
 
   const toast = useCallback((message: string) => onToast?.(message), [onToast])
+
+  // 退出只读查看：地址回到普通画布，App 按模式重挂一次画布，原来的运行态不会挂到编辑态上。
+  const exitRunView = useCallback(() => {
+    const id = flowIdRef.current
+    if (!id) {
+      navigate({ kind: 'page', page: 'runs' })
+      return
+    }
+    navigate({ kind: 'page', page: 'canvas', flowId: id })
+  }, [])
 
   const refreshRunCredit = useCallback(() => {
     void getCredits(1)
@@ -342,9 +364,9 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
   // 已经装进页面的流程：applyFlow 会把 id 写回地址栏，路由再回灌进来时用它挡住第二次加载
   const loadedFlowRef = useRef('')
   // 地址里点名的那条运行已经放回抽屉没有：路由重渲染、保存后重跑 effect 都不该再拉一次
-  const appliedResumeRef = useRef('')
+  const appliedRunRef = useRef('')
 
-  const applyFlow = useCallback((flow: ApiFlow, resumeRunId?: string) => {
+  const applyFlow = useCallback((flow: ApiFlow, resumeRunId?: string, viewRunId?: string) => {
     skipSave.current = true
     loadedFlowRef.current = flow.id
     setFlowId(flow.id)
@@ -370,13 +392,22 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
     setSaveState('saved')
     setSaveError('')
     // 地址栏跟着当前流程走：刷新、复制链接、从其它页面跳回来都能落到同一张画布。
-    // 从运行记录点「继续运行」进来时保留 runId：刷新后还能回到那条运行。
-    if (flow.id) replaceRoute({ kind: 'page', page: 'canvas', flowId: flow.id, ...(resumeRunId ? { resumeRunId } : {}) })
+    // 从运行记录点进来时保留 runId，并且查看 / 续跑两种入口不能互相覆盖：
+    // 查看是只读回放（v0.9.106），续跑才会重新执行没跑完的节点（v0.9.104）。
+    if (flow.id) {
+      replaceRoute({
+        kind: 'page',
+        page: 'canvas',
+        flowId: flow.id,
+        ...(viewRunId ? { viewRunId } : resumeRunId ? { resumeRunId } : {}),
+      })
+    }
   }, [setNodes, setEdges])
 
   const saveNow = useCallback(async (): Promise<boolean> => {
     const id = flowIdRef.current
-    if (!id) return false
+    // 只读查看不是编辑会话：任何保存入口（按钮、Ctrl+S、切流程）都不能落盘。
+    if (!id || readOnly) return false
     const sentSignature = signatureRef.current
     setSaveState('saving')
     try {
@@ -399,7 +430,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
       // 至少不会拿一份没落盘的画布去报价，也不把抽屉整块清空。
       return false
     }
-  }, [])
+  }, [readOnly])
 
   // 初次加载：列出流程；没有流程时创建一个空流程，保证画布可用
   useEffect(() => {
@@ -435,7 +466,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
           list = [created]
         }
         setFlows(list)
-        applyFlow(target || list[0], initialResumeId)
+        applyFlow(target || list[0], initialResumeId, initialViewId)
         setLoadState('ready')
         window.setTimeout(() => rf.fitView({ padding: 0.12 }), 80)
       } catch (error) {
@@ -448,18 +479,19 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
     return () => {
       alive = false
     }
-  }, [applyFlow, initialFlowId, initialResumeId, rf, bdcTarget])
+  }, [applyFlow, initialFlowId, initialResumeId, initialViewId, rf, bdcTarget])
 
-  // 从运行记录点「继续运行」进来（v0.9.104）：地址里带着 runId，画布就绪后把那条记录
-  // 放回抽屉——关过页面、换过设备、隔天再回来，都不必先记得上次停在哪一屏。
-  // 只读单条运行；能不能续、复用几个仍由 resume-plan 现算，这里不替服务端下结论。
+  // 从运行记录点「查看」或「继续运行」进来（v0.9.104 / v0.9.106）：地址里带着 runId，
+  // 画布就绪后把那条记录放回抽屉——关过页面、换过设备、隔天再回来，都不必先记得上次停在哪一屏。
+  // 查看模式只回放节点结果，不写画布、不扣费；能不能续仍由 resume-plan 在记录页现算，这里不替服务端下结论。
   useEffect(() => {
     const id = flowIdRef.current
-    const runId = initialResumeId
+    const runId = openRunId
     if (!runId || !id || loadState !== 'ready') return undefined
-    const key = id + ':' + runId
-    if (appliedResumeRef.current === key) return undefined
-    appliedResumeRef.current = key
+    const mode = readOnly ? 'view' : 'resume'
+    const key = mode + ':' + id + ':' + runId
+    if (appliedRunRef.current === key) return undefined
+    appliedRunRef.current = key
     let alive = true
     const timer = window.setTimeout(() => {
       getRun(runId)
@@ -467,7 +499,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
           if (!alive) return
           if (run.flowId !== flowIdRef.current) {
             toast('这条运行不属于当前画布')
-            replaceRoute({ kind: 'page', page: 'canvas', flowId: flowIdRef.current })
+            navigate({ kind: 'page', page: 'canvas', flowId: flowIdRef.current }, { replace: true })
             return
           }
           const byId = new Map(run.nodes.map((node) => [node.id, node]))
@@ -492,25 +524,27 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
           setRunMeta({ id: run.id, total: run.total })
           setRunError('')
           setRunCancelled(Boolean(run.canceled))
-          setResumeSource(runResumeInfo(run).resumable ? run : null)
+          // 查看模式不提供续跑入口；续跑入口只在 resume 地址里出现，避免只读页偷偷变成执行页。
+          setResumeSource(!readOnly && runResumeInfo(run).resumable ? run : null)
           setResumePlan(null)
           setDrawerOpen(true)
         })
         .catch((error) => {
           if (!alive) return
           toast('这条运行打不开：' + (error instanceof Error ? error.message : String(error)))
-          replaceRoute({ kind: 'page', page: 'canvas', flowId: flowIdRef.current })
+          navigate({ kind: 'page', page: 'canvas', flowId: flowIdRef.current }, { replace: true })
         })
     }, 120)
     return () => {
       alive = false
       window.clearTimeout(timer)
     }
-  }, [initialResumeId, flowId, loadState, setNodes, toast])
+  }, [openRunId, readOnly, flowId, loadState, setNodes, toast])
 
   // 自动保存：只比较节点/连线/流程名的投影，选中态变化不会触发保存
   useEffect(() => {
-    if (loadState !== 'ready') return
+    // 只读查看不回写任何内容：即使 React Flow 只改了选中态，也不让保存链路有机会落盘。
+    if (loadState !== 'ready' || readOnly) return
     if (skipSave.current) {
       skipSave.current = false
       savedSignature.current = graphSignature
@@ -523,7 +557,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
       void saveNow()
     }, 900)
     return () => window.clearTimeout(timer)
-  }, [graphSignature, loadState, saveNow])
+  }, [graphSignature, loadState, readOnly, saveNow])
 
   // 续跑预检：等画布存完再问，免得服务端拿旧内容算出一份会过期的复用数。
   // 只读请求，不扣费、不写记录；失败就退回旧记录的估算，不让抽屉整块消失。
@@ -546,6 +580,12 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
   }, [resumeSource, graphSignature, saveState, running, loadState])
 
   const selectedNode = useMemo(() => nodes.find((node) => node.id === selectedId) ?? null, [nodes, selectedId])
+  // 这次运行里有、当前画布上已经没有的节点：查看页只能说清「回放缺了几块」，不能假装画布还是当时的版本。
+  const runViewMissing = readOnly && runRecord
+    ? runRecord.nodes.filter((result) => !nodes.some((node) => node.id === result.id)).length
+    : 0
+  const runViewStatus = runRecord ? runStatusMeta(runRecord.status, Boolean(runRecord.canceled)) : null
+  const runViewSpent = runRecord ? runSpentText(runRecord) : '读取中'
 
   // 选中状态同时写进 node.selected，React Flow 的选中样式才会跟着走
   const selectNode = useCallback((id: string) => {
@@ -598,11 +638,12 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
 
   const onDrop = useCallback((event: React.DragEvent) => {
     event.preventDefault()
+    if (readOnly) return
     const kind = event.dataTransfer.getData('application/x-flow-node') as FlowNodeKind
     if (!kind || !NODE_META[kind]) return
     const point = rf.screenToFlowPosition({ x: event.clientX, y: event.clientY })
     addNodeAt(kind, { x: Math.round(point.x - 116), y: Math.round(point.y - 52) })
-  }, [addNodeAt, rf])
+  }, [addNodeAt, readOnly, rf])
 
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault()
@@ -610,6 +651,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
   }, [])
 
   const onConnect = useCallback((connection: Connection) => {
+    if (readOnly) return
     const error = validateConnection(edgesRef.current, connection)
     if (error) {
       toast(error)
@@ -627,9 +669,10 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
       className: branch ? 'cv-edge cv-edge--branch' : 'cv-edge',
     }, current))
     toast(branch ? '已连接（' + branch + ' 分支）' : '已连接两个节点')
-  }, [pushHistory, setEdges, toast])
+  }, [pushHistory, readOnly, setEdges, toast])
 
   const deleteSelected = useCallback(() => {
+    if (readOnly) return
     const id = selectedIdRef.current
     if (!id) {
       toast('先选中一个节点')
@@ -640,9 +683,10 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
     setEdges((current) => current.filter((edge) => edge.source !== id && edge.target !== id))
     selectNode('')
     toast('已删除节点及其连线')
-  }, [pushHistory, selectNode, setNodes, setEdges, toast])
+  }, [pushHistory, readOnly, selectNode, setNodes, setEdges, toast])
 
   const duplicateSelected = useCallback(() => {
+    if (readOnly) return
     const node = nodesRef.current.find((item) => item.id === selectedIdRef.current)
     if (!node) return
     pushHistory()
@@ -657,30 +701,33 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
     }])
     selectNode(id)
     toast('已复制节点')
-  }, [pushHistory, selectNode, setNodes, toast])
+  }, [pushHistory, readOnly, selectNode, setNodes, toast])
 
   const patchSelected = useCallback((patch: Partial<FlowNodeData>, key: string) => {
+    if (readOnly) return
     const id = selectedIdRef.current
     if (!id) return
     pushHistory('node:' + id + ':' + key)
     setNodes((current) => current.map((node) => (node.id === id ? { ...node, data: { ...node.data, ...patch } } : node)))
-  }, [pushHistory, setNodes])
+  }, [pushHistory, readOnly, setNodes])
 
   const patchConfig = useCallback((patch: FlowNodeData['config'], key: string) => {
+    if (readOnly) return
     const id = selectedIdRef.current
     if (!id) return
     pushHistory('cfg:' + id + ':' + key)
     setNodes((current) => current.map((node) => (
       node.id === id ? { ...node, data: { ...node.data, config: { ...node.data.config, ...patch } } } : node
     )))
-  }, [pushHistory, setNodes])
+  }, [pushHistory, readOnly, setNodes])
 
   const relayout = useCallback(() => {
+    if (readOnly) return
     pushHistory()
     setNodes((current) => autoLayout(current, edgesRef.current))
     window.setTimeout(() => rf.fitView({ padding: 0.12, duration: 200 }), 60)
     toast('已按依赖层级重新布局')
-  }, [pushHistory, setNodes, rf, toast])
+  }, [pushHistory, readOnly, setNodes, rf, toast])
 
   const focusNode = useCallback((id: string) => {
     selectNode(id)
@@ -790,6 +837,10 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
   }, [running])
 
   const handleRun = useCallback(async (resumeFrom: RunRecord | null = null) => {
+    if (readOnly) {
+      toast('只读查看中，不能运行；退出查看后再运行')
+      return
+    }
     if (running) return
     if (!nodesRef.current.length) {
       toast('画布还没有节点，先从左侧拖入一个')
@@ -948,7 +999,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
       // 运行结束（含失败退款）后余额会变，重新读一次，别让按钮旁的余额停在旧值
       refreshRunCredit()
     }
-  }, [refreshRunCredit, running, saveError, saveNow, setNodes, toast])
+  }, [readOnly, refreshRunCredit, running, saveError, saveNow, setNodes, toast])
 
   // 只退排队：入口只在有名次条时出现（已经开跑就没有这个按钮），所以不会把一条在跑的运行当成「退队」。
   const cancelRunQueue = useCallback(() => {
@@ -992,17 +1043,23 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
       const key = event.key.toLowerCase()
       if (modifier && key === 'z' && !typing) {
         event.preventDefault()
+        if (readOnly) return
         if (event.shiftKey) redo()
         else undo()
         return
       }
       if (modifier && key === 'y' && !typing) {
         event.preventDefault()
+        if (readOnly) return
         redo()
         return
       }
       if (modifier && key === 's') {
         event.preventDefault()
+        if (readOnly) {
+          toast('只读查看中，画布没有改动')
+          return
+        }
         void saveNow().then((ok) => toast(ok ? '已保存' : '保存失败：' + saveError))
         return
       }
@@ -1013,12 +1070,12 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
       }
       if (!typing && selectedIdRef.current && (event.key === 'Delete' || event.key === 'Backspace')) {
         event.preventDefault()
-        deleteSelected()
+        if (!readOnly) deleteSelected()
       }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [deleteSelected, redo, saveError, saveNow, toast, undo])
+  }, [deleteSelected, readOnly, redo, saveError, saveNow, toast, undo])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -1302,7 +1359,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
         </div>
       ) : (
       <PageHead
-        kicker="画布 / 流程编排"
+        kicker={readOnly ? '画布 / 历史运行' : '画布 / 流程编排'}
         title={
           <span className="cv-title-row">
             <input
@@ -1311,16 +1368,35 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
               onChange={(event) => setName(event.target.value)}
               aria-label="流程名称"
               spellCheck={false}
-              disabled={loadState !== 'ready'}
+              disabled={loadState !== 'ready' || readOnly}
             />
-            <span className={`cv-save is-${saveState}`} title={saveError || saveLabel}>
-              <span className="cv-save-dot" />{saveLabel}
+            <span className={`cv-save is-${readOnly ? 'saved' : saveState}`} title={readOnly ? '只读查看：不改动当前画布' : saveError || saveLabel}>
+              <span className="cv-save-dot" />{readOnly ? '只读查看' : saveLabel}
             </span>
           </span>
         }
-        desc="按依赖顺序逐个节点执行 · 每次运行记录耗时、输出与失败原因，失败自动退回积分"
+        desc={readOnly
+          ? '回放一次运行：节点状态、耗时、输出都来自这条记录；画布参数取当前版本，只读查看不会写回，也不会扣积分。'
+          : '按依赖顺序逐个节点执行 · 每次运行记录耗时、输出与失败原因，失败自动退回积分'}
         actions={
           <div className="cv-head-actions">
+          {readOnly ? (
+            <>
+              <button
+                className="vq-button vq-button--ghost"
+                type="button"
+                onClick={() => setDrawerOpen(true)}
+                disabled={!runRecord}
+                title="重新打开这次运行的逐节点结果"
+              >
+                <History size={14} />运行结果
+              </button>
+              <button className="vq-button vq-button--primary" type="button" onClick={exitRunView} title="回到可编辑画布；这次查看没有改动任何内容">
+                <ArrowLeft size={14} />退出查看
+              </button>
+            </>
+          ) : (
+          <>
           <label className="cv-flow-select">
             <span className="cv-sr-only">切换流程</span>
             <select
@@ -1397,12 +1473,44 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
           <button className="vq-button vq-button--icon" type="button" onClick={() => { void removeFlow() }} disabled={running || loadState !== 'ready'} aria-label="删除流程" title="删除流程">
             <Trash size={14} />
           </button>
+          </>
+          )}
           </div>
         }
       />
       )}
 
-      {bdc?.deployed && !bdcView ? (
+      {readOnly ? (
+        <div className="cv-runview" role="status" aria-live="polite">
+          <div className="cv-runview-line">
+            <span className="cv-runview-kicker"><History size={13} strokeWidth={1.75} />历史运行 · 只读</span>
+            <Pill tone={runViewStatus?.tone || 'idle'} dot>{runViewStatus?.label || '正在读取'}</Pill>
+            <span className="vq-mono">{openRunId}</span>
+            <span className="vq-mono">{runRecord ? formatRunTime(runRecord.startedAt) : '—'}</span>
+            <span className="vq-mono">{runViewSpent}</span>
+            <span className="vq-mono">{runNodes.length} / {runRecord?.total || '—'} 节点</span>
+            {runRecord?.credits && runRecord.credits.cost > 0 ? (
+              <span className="vq-mono">
+                {runRecord.credits.refunded
+                  ? runRecord.credits.kept != null
+                    ? '已退 ' + (runRecord.credits.refundedAmount ?? 0) + ' · 已跑部分 ' + runRecord.credits.kept + ' 积分'
+                    : '已退回 ' + runRecord.credits.cost + ' 积分'
+                  : '消耗 ' + runRecord.credits.cost + ' 积分'}
+              </span>
+            ) : null}
+          </div>
+          <p className="cv-runview-copy">
+            节点位置与参数取当前画布；状态、耗时、输出来自这条运行。查看不会写回画布，也不扣积分。
+          </p>
+          {runViewMissing > 0 ? (
+            <p className="cv-runview-warn">
+              这次运行里有 {runViewMissing} 个节点已不在当前画布：它们的结果仍可在右侧运行结果里查看，但不会画在画布上。
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {bdc?.deployed && !bdcView && !readOnly ? (
         <div className="cv-bdc-bar">
           <span className="vq-mono">BD CANVAS · {bdcLocalOnly ? '本机已部署' : '已部署'}</span>
           <p>画布由 VisionQA Canvas 接管（{bdc.web.url}）；这里的流程编排保留作备选，数据各存各的。</p>
@@ -1439,7 +1547,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
         </div>
       ) : (
         <div className="cv-workspace">
-          {paletteOpen ? (
+          {!readOnly && paletteOpen ? (
             <Palette onAdd={addFromPalette} onClose={() => setPaletteOpen(false)} disabled={loadState !== 'ready'} />
           ) : null}
 
@@ -1479,31 +1587,43 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
             ) : null}
             <div className="cv-toolbar">
               <div className="cv-toolbar-group">
-                <button className="cv-tool" type="button" onClick={relayout} disabled={!nodes.length}>
-                  <LayoutGrid size={14} />自动布局
-                </button>
-                <span className="cv-divider" />
-                <button className="cv-tool" type="button" onClick={undo} disabled={!historyCount} title="Ctrl+Z">
-                  <RotateCcw size={14} />撤销
-                </button>
-                <button className="cv-tool" type="button" onClick={redo} disabled={!futureCount} title="Ctrl+Shift+Z / Ctrl+Y">
-                  <RotateCw size={14} />重做
-                </button>
-                <span className="cv-divider" />
+                {readOnly ? (
+                  <span className="cv-toolbar-count cv-toolbar-count--readonly" title="历史运行只读查看：不提供布局、撤销与节点编辑">
+                    <History size={13} strokeWidth={1.75} />历史运行 · 只读
+                  </span>
+                ) : (
+                  <>
+                    <button className="cv-tool" type="button" onClick={relayout} disabled={!nodes.length}>
+                      <LayoutGrid size={14} />自动布局
+                    </button>
+                    <span className="cv-divider" />
+                    <button className="cv-tool" type="button" onClick={undo} disabled={!historyCount} title="Ctrl+Z">
+                      <RotateCcw size={14} />撤销
+                    </button>
+                    <button className="cv-tool" type="button" onClick={redo} disabled={!futureCount} title="Ctrl+Shift+Z / Ctrl+Y">
+                      <RotateCw size={14} />重做
+                    </button>
+                    <span className="cv-divider" />
+                  </>
+                )}
                 <span className="cv-toolbar-count" title={historyCount ? '已记录 ' + historyCount + ' 步可撤销操作' : ''}>
                   {nodes.length} 节点 · {edges.length} 连线
                 </span>
               </div>
               <div className="cv-toolbar-group">
-                <button
-                  className={`cv-tool ${paletteOpen ? 'is-active' : ''}`}
-                  type="button"
-                  onClick={() => setPaletteOpen((value) => !value)}
-                  title="双击画布也可唤出节点面板"
-                >
-                  <Plus size={14} />节点
-                </button>
-                <span className="cv-divider" />
+                {readOnly ? null : (
+                  <>
+                    <button
+                      className={`cv-tool ${paletteOpen ? 'is-active' : ''}`}
+                      type="button"
+                      onClick={() => setPaletteOpen((value) => !value)}
+                      title="双击画布也可唤出节点面板"
+                    >
+                      <Plus size={14} />节点
+                    </button>
+                    <span className="cv-divider" />
+                  </>
+                )}
                 <button className="cv-tool" type="button" onClick={() => rf.fitView({ padding: 0.12, duration: 200 })}>
                   <Maximize2 size={14} />适应画布
                 </button>
@@ -1511,16 +1631,32 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
               </div>
             </div>
 
-            <div className="cv-canvas" ref={stageRef} onDrop={onDrop} onDragOver={onDragOver}>
+            <div
+              className={'cv-canvas' + (readOnly ? ' is-readonly' : '')}
+              ref={stageRef}
+              onDrop={readOnly ? undefined : onDrop}
+              onDragOver={readOnly ? undefined : onDragOver}
+            >
               <ReactFlow
                 nodes={nodes}
                 edges={edges}
                 nodeTypes={nodeTypes}
-                onNodesChange={onNodesChange}
+                onNodesChange={(changes) => {
+                  if (!readOnly) {
+                    onNodesChange(changes)
+                    return
+                  }
+                  // 只读只接受选中态；拖动、删除、连线等变更一律丢掉。
+                  const selection = changes.filter((change) => change.type === 'select')
+                  if (selection.length) onNodesChange(selection)
+                }}
                 onEdgesChange={onEdgesChange}
                 onConnect={onConnect}
+                nodesDraggable={!readOnly}
+                nodesConnectable={!readOnly}
+                edgesFocusable={!readOnly}
                 onNodeClick={(_, node) => selectNode(node.id)}
-                onNodeDragStart={() => pushHistory()}
+                onNodeDragStart={() => { if (!readOnly) pushHistory() }}
                 onPaneClick={() => selectNode('')}
                 onMoveEnd={(_, viewport) => setZoom(viewport.zoom)}
                 deleteKeyCode={null}
@@ -1528,6 +1664,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
                 fitViewOptions={{ padding: 0.12 }}
                 zoomOnDoubleClick={false}
                 onDoubleClick={(event) => {
+                  if (readOnly) return
                   if ((event.target as HTMLElement).closest('.react-flow__node')) return
                   setPaletteOpen(true)
                 }}
@@ -1562,8 +1699,10 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
                 </div>
               )}
               <div className="cv-hint">
-                <span className="cv-hint-dot" data-running={running} />
-                {running ? '运行中：节点会按拓扑序逐个点亮' : '拖动节点右侧圆点连线；每个输入端口只接一根线'}
+                <span className="cv-hint-dot" data-running={running} data-readonly={readOnly} />
+                {readOnly
+                  ? '只读查看：节点状态来自这次运行，画布不会被改动'
+                  : running ? '运行中：节点会按拓扑序逐个点亮' : '拖动节点右侧圆点连线；每个输入端口只接一根线'}
               </div>
             </div>
           </section>
@@ -1574,6 +1713,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
             onConfig={patchConfig}
             onDuplicate={duplicateSelected}
             onDelete={deleteSelected}
+            readOnly={readOnly}
           />
         </div>
       )}
@@ -1586,15 +1726,15 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
         total={runMeta.total}
         nodes={runNodes}
         record={runRecord}
-        resume={resumeSource}
-        resumePlan={resumePlan}
-        onResume={resumeRunning}
-        onRestart={restartRunning}
+        resume={readOnly ? null : resumeSource}
+        resumePlan={readOnly ? null : resumePlan}
+        onResume={readOnly ? undefined : resumeRunning}
+        onRestart={readOnly ? undefined : restartRunning}
         queuedMs={runQueuedMs}
         queue={runQueue}
         queueElapsed={runElapsed}
         cancelled={runCancelled}
-        onCancelQueue={cancelRunQueue}
+        onCancelQueue={readOnly ? undefined : cancelRunQueue}
         error={runError}
         onClose={() => setDrawerOpen(false)}
         onSelectNode={focusNode}

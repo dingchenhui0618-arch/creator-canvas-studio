@@ -533,9 +533,11 @@ function Workbench({
         // 表现出来就是进画布闪一下、/api/flows 连打两遍。
         return (
           <CanvasPage
-            key={'canvas:' + (route.canvasId || 'flow')}
+            // 运行地址和普通画布是两种模式：进出只读查看时重挂一次，避免旧运行状态挂在新模式上。
+            key={'canvas:' + (route.canvasId || 'flow') + ':' + (route.viewRunId ? 'view' : route.resumeRunId ? 'resume' : 'edit')}
             flowId={route.flowId}
             resumeRunId={route.resumeRunId}
+            viewRunId={route.viewRunId}
             canvasId={route.canvasId}
             onToast={notify}
             focus={focusOn}
@@ -619,6 +621,7 @@ function Workbench({
           <RunsPage
             onOpenFlow={(flowId) => navigate({ kind: 'page', page: 'canvas', flowId })}
             onResumeRun={(flowId, runId) => navigate({ kind: 'page', page: 'canvas', flowId, resumeRunId: runId })}
+            onViewRun={(flowId, runId) => navigate({ kind: 'page', page: 'canvas', flowId, viewRunId: runId })}
             onOpenProject={(projectId) => navigate({ kind: 'page', page: 'projects', projectId })}
           />
         )

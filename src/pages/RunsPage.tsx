@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Activity, ArrowRight, ChevronLeft, ChevronRight, Link2, Loader2, Play, RefreshCw, Search, Workflow } from 'lucide-react'
+import { Activity, ArrowRight, ChevronLeft, ChevronRight, Eye, Link2, Loader2, Play, RefreshCw, Search, Workflow } from 'lucide-react'
 import PageHead from '../components/PageHead'
 import { Select } from '../components/Select'
 import { adoptProjectCanvas, createProject, listProjects } from '../api/projects'
@@ -83,11 +83,14 @@ function NodeOutput({ output }: { output: unknown }) {
 export function RunsPage({
   onOpenFlow,
   onResumeRun,
+  onViewRun,
   onOpenProject,
 }: {
   onOpenFlow?: (flowId: string) => void
   /** 续跑入口（v0.9.104）：回到画布时把这条运行放回抽屉，已跑完的节点不再重复扣费 */
   onResumeRun?: (flowId: string, runId: string) => void
+  /** 只读回放（v0.9.106）：在画布上查看这次运行的节点状态，不改画布、不扣费 */
+  onViewRun?: (flowId: string, runId: string) => void
   onOpenProject?: (projectId: string) => void
 }) {
   const [items, setItems] = useState<RunRecord[]>([])
@@ -455,6 +458,16 @@ export function RunsPage({
                     >
                       回作品
                       <ArrowRight size={13} />
+                    </button>
+                  ) : null}
+                  {onViewRun && current.status !== 'running' && current.status !== 'queued' ? (
+                    <button
+                      type="button"
+                      className="vq-button vq-button--ghost vq-button--sm"
+                      onClick={() => onViewRun(current.flowId, current.id)}
+                      title="在画布上只读查看这次运行：节点状态与输出来自这条记录，不会改动画布，也不扣积分"
+                    >
+                      <Eye size={13} />查看这次运行
                     </button>
                   ) : null}
                   {onResumeRun && current.status !== 'running' && current.status !== 'queued' && canResume ? (

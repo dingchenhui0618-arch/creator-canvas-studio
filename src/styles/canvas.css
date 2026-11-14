@@ -643,6 +643,10 @@
 
 @media (max-width: 760px) {
   .cv-workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(420px, 1fr) auto; min-height: 0; }
+  /* 窄屏这一条装不下「只读标识 + 节点数 + 适应画布 + 缩放」：让它换行，
+     以前 justify-content: space-between 会把两组压在一起，文字互相盖住。 */
+  .cv-toolbar { height: auto; flex: 0 0 auto; min-height: 42px; flex-wrap: wrap; padding: 4px 8px; }
+  .cv-toolbar-group { flex-wrap: wrap; }
   .cv-inspector { max-height: 420px; }
   .cv-flow-name { width: 100%; }
   .cv-head-actions .vq-button { flex: 1; justify-content: center; }
@@ -934,4 +938,72 @@
   flex: 1 1 auto;
   color: var(--faint);
   font-size: 11px;
+}
+
+/* ---------- 历史运行只读查看（v0.9.106） ----------
+   这条不是错误提示，也不是成功提示：先把「看的是哪条运行、结局是什么」说清，
+   再补一句口径——节点位置/参数取当前画布，状态/耗时/输出来自运行记录。
+   只用发丝线、等宽元数据与一个状态胶囊；不做渐变、不加装饰色。 */
+.cv-runview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+.cv-runview-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+.cv-runview-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.cv-runview-line .vq-mono { color: var(--faint); font-size: 11px; }
+.cv-runview-copy,
+.cv-runview-warn {
+  margin: 0;
+  max-width: 920px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.65;
+}
+.cv-runview-warn { color: var(--warn); }
+.cv-toolbar-count--readonly { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); }
+.cv-canvas.is-readonly .react-flow__node { cursor: default; }
+.cv-canvas.is-readonly .react-flow__handle { display: none; }
+.cv-hint-dot[data-readonly="true"] { background: var(--muted); }
+.cv-inspector-body { min-width: 0; margin: 0; padding: 0; border: 0; }
+.cv-inspector-body:disabled .cv-input,
+.cv-inspector-body:disabled .cv-textarea,
+.cv-inspector-body:disabled .cv-select {
+  color: var(--muted);
+  background: var(--surface);
+  opacity: 1;
+  cursor: default;
+}
+.cv-inspector-body:disabled .cv-range { accent-color: var(--faint); cursor: default; }
+.cv-inspector-foot--readonly {
+  justify-content: space-between;
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .04em;
+}
+@media (max-width: 760px) {
+  .cv-runview { gap: 8px; padding: 12px; }
+  .cv-runview-line { gap: 8px 12px; }
 }

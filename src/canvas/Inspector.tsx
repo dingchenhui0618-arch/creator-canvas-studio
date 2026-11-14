@@ -17,6 +17,8 @@ type InspectorProps = {
   onConfig: (patch: NodeConfig, key: string) => void
   onDuplicate: () => void
   onDelete: () => void
+  /** 历史运行只读查看：字段仍可读，但不接受编辑，也不给复制 / 删除入口（v0.9.106） */
+  readOnly?: boolean
 }
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
@@ -29,7 +31,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   )
 }
 
-export function Inspector({ node, onPatch, onConfig, onDuplicate, onDelete }: InspectorProps) {
+export function Inspector({ node, onPatch, onConfig, onDuplicate, onDelete, readOnly = false }: InspectorProps) {
   // 模型候选来自服务端 /api/models；hook 必须在提前 return 之前调用
   const modelOptions = useModelOptions()
   const { internal } = useUiMode()
@@ -40,8 +42,8 @@ export function Inspector({ node, onPatch, onConfig, onDuplicate, onDelete }: In
         <span className="cv-kicker">节点检查器</span>
         <div className="cv-inspector-empty">
           <span className="cv-empty-mark" aria-hidden>+</span>
-          <p>选中画布上的节点，在这里编辑它的参数。</p>
-          <p className="cv-muted">连线规则：每个输入端口只接一根线，不能连成环。</p>
+          <p>{readOnly ? '选中画布上的节点，在这里查看它当时的参数与结果。' : '选中画布上的节点，在这里编辑它的参数。'}</p>
+          <p className="cv-muted">{readOnly ? '只读查看：参数取当前画布，状态与输出来自这条运行。' : '连线规则：每个输入端口只接一根线，不能连成环。'}</p>
         </div>
       </aside>
     )
@@ -65,7 +67,7 @@ export function Inspector({ node, onPatch, onConfig, onDuplicate, onDelete }: In
         </div>
       </header>
 
-      <div className="cv-inspector-body">
+      <fieldset className="cv-inspector-body" disabled={readOnly}>
         <section className="cv-section">
           <Field label="节点标题">
             <input
@@ -214,12 +216,19 @@ export function Inspector({ node, onPatch, onConfig, onDuplicate, onDelete }: In
           <div className="cv-meta-row"><span>节点 ID</span><strong className="cv-mono">{node.id}</strong></div>
           {node.data.error && <p className="cv-node-error">{node.data.error}</p>}
         </section>
-      </div>
+      </fieldset>
 
-      <footer className="cv-inspector-foot">
-        <button className="vq-button vq-button--ghost" type="button" onClick={onDuplicate}><Copy size={13} />复制</button>
-        <button className="vq-button vq-button--danger" type="button" onClick={onDelete}><Trash size={13} />删除</button>
-      </footer>
+      {readOnly ? (
+        <footer className="cv-inspector-foot cv-inspector-foot--readonly">
+          <span>历史运行 · 只读</span>
+          <span className="cv-mono">不会写回画布</span>
+        </footer>
+      ) : (
+        <footer className="cv-inspector-foot">
+          <button className="vq-button vq-button--ghost" type="button" onClick={onDuplicate}><Copy size={13} />复制</button>
+          <button className="vq-button vq-button--danger" type="button" onClick={onDelete}><Trash size={13} />删除</button>
+        </footer>
+      )}
     </aside>
   )
 }
