@@ -52,6 +52,8 @@ export type RunNodeResult = {
   output: Record<string, unknown> | null
   error: string | null
   message: string | null
+  /** 续跑时这个节点没有重新执行：结果来自上一次运行（v0.9.102） */
+  reused?: boolean
 }
 
 export type RunCredits = {
@@ -61,6 +63,8 @@ export type RunCredits = {
   /** 主动停止时按已开始节点留下的部分（v0.9.101）；全额退 / 没结算时缺省 */
   kept?: number
   refundedAmount?: number
+  /** true = 按已跑节点结过账，收尾时不会再全额退（v0.9.101） */
+  settled?: boolean
 }
 
 /**
@@ -91,6 +95,17 @@ export type RunRecord = {
   total: number
   /** 已经开始的节点数：主动停止时按它结算（v0.9.101） */
   startedNodes?: number
+  /** 已经跑完的节点数；续跑时包含上次复用过来的节点（v0.9.102） */
+  finishedNodes?: number
+  /** 续跑：这条运行接着哪条跑 */
+  resumeOf?: string | null
+  /** 续跑：这次直接复用了几个上次已经跑完的节点 */
+  reusedNodes?: number
+  /** 续跑：本次按几个节点计费（不含复用节点） */
+  billTotal?: number
+  billFinished?: number
+  /** 有已跑完的节点、也还有没跑的，才给「继续跑」入口 */
+  resumable?: boolean
   /** true = 用户停止 / 页面断开导致的中断，不是服务重启 */
   canceled?: boolean
   nodes: RunNodeResult[]
@@ -140,7 +155,7 @@ export const getRunQueue = (ticket: string) =>
 export type RunEventMessage =
   // 排过队才有这一条（v0.9.96）：从第几位开始等、等了多久，运行结论据此写「排队 N 秒后开始」
   | { type: 'run-queue'; position: number; waitedMs: number }
-  | { type: 'run-start'; run: { id: string; flowId: string; flowName: string; total: number } }
+  | { type: 'run-start'; run: { id: string; flowId: string; flowName: string; total: number; resumeOf?: string | null; reusedNodes?: number } }
   | { type: 'node-start'; nodeId: string; index: number; total: number }
   | { type: 'node-end'; node: RunNodeResult; index: number; total: number }
   | { type: 'run-end'; run: RunRecord }
@@ -208,6 +223,8 @@ export async function runFlowStream(
   ticket = '',
   /** 取消（v0.9.97）：abort 会把这条连接关掉，服务端据此退出排队——不占名额、不扣积分、不跑流程 */
   signal?: AbortSignal,
+  /** 续跑（v0.9.102）：接着这条运行跑，只补没跑完的节点，只付没付过的那部分 */
+  resumeOf = '',
 ): Promise<RunRecord> {
   const response = await fetch('/api/flows/' + id + '/run', {
     method: 'POST',
@@ -215,7 +232,7 @@ export async function runFlowStream(
       'Content-Type': 'application/json',
       ...(ticket ? { 'X-VQ-Queue-Ticket': ticket } : {}),
     },
-    body: JSON.stringify({ stream: true }),
+    body: JSON.stringify({ stream: true, ...(resumeOf ? { resumeOf } : {}) }),
     signal,
   })
   if (!response.ok) {

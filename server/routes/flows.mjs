@@ -14,6 +14,10 @@ import {
   dropRunRecord,
   abandonRun,
   requestRunStop,
+  canResumeRun,
+  resumeSeedFor,
+  resumeCostOf,
+  flowRevisionOf,
   NODE_KINDS,
   TOOLS,
   REVIEW_PROFILES,
@@ -91,7 +95,12 @@ async function beginRunCharge(res, user, ref, label = '', options = {}) {
     })
     return null
   }
-  const paid = charge(user.id, 'flow_run', { ref, meta: label ? { label } : null })
+  // 续跑只补「上次没付的那部分」：amount 由调用方按上次结算算好，普通运行仍走单价。
+  const paid = charge(user.id, 'flow_run', {
+    ref,
+    ...(options.amount === undefined ? {} : { amount: options.amount }),
+    meta: label ? { label } : null,
+  })
   if (!paid.ok) {
     releaseAdmission()
     leave(user.id, 'flow_run')
@@ -244,15 +253,52 @@ export function createFlowsRouter() {
           return true
         }
         const body = await readBody(req)
+        const price = Number(config.credits.prices.flow_run) || 0
+        // 续跑（v0.9.102）：只复用上次已经跑完的节点，按「还没付的那部分」补差价。
+        // 画布在上次运行后改过就拒绝——旧提示词跑出来的结果不能悄悄接在新画布上。
+        let resume = null
+        let resumeCost = null
+        const resumeOf = String(body?.resumeOf || '')
+        if (resumeOf) {
+          const source = await getRun(resumeOf, user)
+          if (!source) {
+            notFound(res, '要接着跑的那条运行不存在')
+            return true
+          }
+          if (source.flowId !== flow.id) {
+            sendJson(res, 400, { error: '这条运行不是当前画布的，不能接着跑' })
+            return true
+          }
+          if (!canResumeRun(source)) {
+            sendJson(res, 409, { error: '这条运行没有可复用的已跑节点：重新运行会用最新画布从头跑' })
+            return true
+          }
+          if (source.flowRevision && source.flowRevision !== flowRevisionOf(flow)) {
+            sendJson(res, 409, { error: '画布在上次运行后改过了；接着跑会复用旧提示词的结果，已拒绝。重新运行会用最新画布。' })
+            return true
+          }
+          const seed = resumeSeedFor(source, flow)
+          if (!seed.reusedCount || seed.reusedCount >= flow.nodes.length) {
+            sendJson(res, 409, { error: '上次没有跑完可复用的节点：重新运行会用最新画布从头跑' })
+            return true
+          }
+          resume = { ...seed, of: source.id }
+          resumeCost = resumeCostOf(source, price)
+        }
         // 运行 id 先定、记录先落盘、再扣费：扣完立刻断电也留得下这条单，重启时按账本退。
         const runId = newRunId()
         // 有账号才会真的去排整机那条队：先落成「排队中」，排到、扣完费再翻「运行中」
         await startFlowRun(flow, runId, {
-          cost: user?.id ? Number(config.credits.prices.flow_run) || 0 : 0,
+          cost: resume ? resumeCost : (user?.id ? price : 0),
           queued: Boolean(user?.id),
+          resumeOf: resume?.of || '',
+          reusedNodes: resume?.reusedCount || 0,
+          billTotal: resume ? flow.nodes.length - resume.reusedCount : flow.nodes.length,
+          flowRevision: flowRevisionOf(flow),
         })
         const paid = await beginRunCharge(res, user, runId, flow.name, {
           ticket: String(req.headers['x-vq-queue-ticket'] || ''),
+          amount: resume ? resumeCost : undefined,
         })
         if (!paid) {
           // 并发闸门 / 积分不足：钱没扣、运行也不会发生，占位记录撤掉
@@ -290,7 +336,7 @@ export function createFlowsRouter() {
             }
             try {
               // 失败 / 中断的退款在 runFlow 收尾时按账本退一次，这里不再重复退
-              await runFlow(flow, { onEvent: write, credits: creditNote, runId })
+              await runFlow(flow, { onEvent: write, credits: creditNote, runId, resume })
             } catch (error) {
               await abandonRun(runId, publicError(error, '运行失败，请稍后重试'))
               write({ type: 'run-error', error: publicError(error, '运行失败，请稍后重试'), code: error?.code || 'FLOW_RUN_FAILED' })
@@ -298,7 +344,7 @@ export function createFlowsRouter() {
             res.end()
             return true
           }
-          const run = await runFlow(flow, { credits: creditNote, runId })
+          const run = await runFlow(flow, { credits: creditNote, runId, resume })
           sendJson(res, 200, {
             ...run,
             credits: run.credits ? { ...run.credits, balance: balanceOf(user?.id) } : null,

@@ -517,7 +517,8 @@
 .cv-drawer-head strong { display: block; margin-top: 8px; font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
 .cv-drawer-head-right { display: flex; align-items: center; gap: 8px; }
 /* 运行状态徽标（v0.9.46）：改用全站 .vq-pill。 */
-.cv-drawer-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 16px 8px; color: var(--faint); font-size: 12px; }
+.cv-drawer-meta { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 4px 12px; padding: 8px 16px 8px; color: var(--faint); font-size: 12px; }
+.cv-drawer-meta > span { white-space: nowrap; }
 .cv-drawer-progress { height: 2px; margin: 0 16px; background: var(--line); }
 .cv-drawer-progress span { display: block; height: 100%; background: var(--ink); transition: width .2s ease; }
 .cv-drawer-body { flex: 1; min-height: 0; overflow: auto; padding: 12px 16px 16px; }
@@ -529,10 +530,16 @@
 .cv-drawer-stopped { display: flex; gap: 8px; margin-bottom: 12px; padding: 8px 12px; color: var(--ink-soft); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); }
 .cv-drawer-stopped strong { font-size: 12px; }
 .cv-drawer-stopped p { margin: 4px 0 0; font-size: 12px; line-height: 1.5; word-break: break-word; }
+.cv-drawer-resume { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; padding: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.cv-drawer-resume strong { font-size: 12px; }
+.cv-drawer-resume p { margin: 4px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
+.cv-drawer-resume .vq-button { flex: none; }
 /* 窄屏运行抽屉：一行塞不下时整项换行，别把「1/2 节点」拆成两段 */
 @media (max-width: 760px) {
   .cv-drawer-meta { flex-wrap: wrap; justify-content: flex-start; gap: 4px 12px; }
   .cv-drawer-meta > span { white-space: nowrap; }
+  .cv-drawer-resume { flex-direction: column; align-items: stretch; }
+  .cv-drawer-resume .vq-button { width: 100%; }
 }
 .cv-run-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .cv-run-item { overflow: hidden; background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-sm); }

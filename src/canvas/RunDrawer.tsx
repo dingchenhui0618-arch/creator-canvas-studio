@@ -2,6 +2,7 @@ import { Check, CircleAlert, CircleDashed, CircleSlash, Loader, X } from 'lucide
 import { NODE_META } from './catalog'
 import type { RunNodeResult, RunRecord } from '../api/flows'
 import { useUiMode } from '../api/app'
+import { runResumeInfo } from '../domain/run'
 import { Pill } from '../components/ui'
 
 type RunDrawerProps = {
@@ -12,6 +13,9 @@ type RunDrawerProps = {
   total: number
   nodes: RunNodeResult[]
   record: RunRecord | null
+  /** 停止 / 失败后还能接着跑的那条运行（v0.9.102）：有它才显示「继续」 */
+  resume?: RunRecord | null
+  onResume?: () => void
   /** 这次运行之前排了多久（v0.9.96）；0 = 没排队，不写这一项 */
   queuedMs?: number
   /** 正在排队时的名次（v0.9.96）：顶栏被运行抽屉盖住时，这里也要说清「在第几位等」 */
@@ -55,9 +59,11 @@ function nodeOutputText(output: RunNodeResult['output']): string {
   return typeof text === 'string' ? text : ''
 }
 
-export function RunDrawer({ open, running, flowName, runId, total, nodes, record, queuedMs = 0, queue = null, queueElapsed = 0, cancelled = false, onCancelQueue, error, onClose, onSelectNode }: RunDrawerProps) {
+export function RunDrawer({ open, running, flowName, runId, total, nodes, record, resume = null, onResume, queuedMs = 0, queue = null, queueElapsed = 0, cancelled = false, onCancelQueue, error, onClose, onSelectNode }: RunDrawerProps) {
   const { internal } = useUiMode()
   const progress = total > 0 ? Math.round((nodes.length / total) * 100) : 0
+  const resumeInfo = runResumeInfo(resume || record)
+  const resumeReady = Boolean(onResume) && !running && resumeInfo.resumable && resumeInfo.left > 0
   const duration = record ? record.durationMs : nodes.reduce((sum, node) => sum + (node.ms || 0), 0)
   // 排队也是一段时间：抽屉开着的时候顶栏会被它盖住，所以状态胶囊直接写 QUEUED，别让用户以为节点在跑
   const statusText = queue
@@ -90,6 +96,11 @@ export function RunDrawer({ open, running, flowName, runId, total, nodes, record
         <span className="cv-mono">{runId || '尚未运行'}</span>
         <span>{formatMs(duration)}</span>
         <span>{nodes.length} / {total || nodes.length} 节点</span>
+        {record?.resumeOf ? (
+          <span title={'上次运行 ' + record.resumeOf + ' 已跑完的节点直接复用'}>
+            续跑 · 复用 {record.reusedNodes ?? 0} 个已跑节点
+          </span>
+        ) : null}
         {queuedMs > 0 ? <span>排队 {Math.round(queuedMs / 1000)} 秒后开始</span> : null}
         {record?.credits && record.credits.cost > 0 ? (
           <span>
@@ -124,6 +135,18 @@ export function RunDrawer({ open, running, flowName, runId, total, nodes, record
           </div>
         ) : null}
 
+        {resumeReady ? (
+          <div className="cv-drawer-resume">
+            <div>
+              <strong>还差 {resumeInfo.left} 个节点</strong>
+              <p>上次跑完的 {resumeInfo.reused} 个节点直接复用，不重复调用、也不重复扣费。</p>
+            </div>
+            <button className="vq-button vq-button--primary vq-button--sm" type="button" onClick={onResume}>
+              {resumeInfo.cost > 0 ? '继续运行 · ' + resumeInfo.cost + ' 积分' : '继续运行'}
+            </button>
+          </div>
+        ) : null}
+
         {!nodes.length && !error && (
           <div className="cv-drawer-empty">
             {running ? (
@@ -153,8 +176,8 @@ export function RunDrawer({ open, running, flowName, runId, total, nodes, record
                   <strong>{node.title}</strong>
                   <span className="cv-mono">{NODE_META[node.kind]?.mono ?? node.kind}</span>
                 </span>
-                <span className="cv-run-ms">{formatMs(node.ms)}</span>
-                <span className="cv-run-state">{STATUS_LABEL[node.status] ?? node.status}</span>
+                <span className="cv-run-ms">{node.reused ? '复用' : formatMs(node.ms)}</span>
+                <span className="cv-run-state">{node.reused ? '已跑过' : (STATUS_LABEL[node.status] ?? node.status)}</span>
               </button>
               {node.error && <p className="cv-run-error">{node.error}</p>}
               {!node.error && nodeOutputText(node.output) && <pre className="cv-run-output">{nodeOutputText(node.output)}</pre>}

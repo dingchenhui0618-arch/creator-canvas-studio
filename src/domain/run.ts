@@ -1,4 +1,4 @@
-import type { RunProjectRef } from '../api/flows'
+import type { RunProjectRef, RunRecord } from '../api/flows'
 
 /** 一条运行在页面上怎么称呼：颜色档与文案全站一处，别一处写「排队中」一处写「PENDING」。 */
 export type RunStatusTone = 'pass' | 'fail' | 'warn' | 'live' | 'queued'
@@ -15,12 +15,12 @@ export function runStatusMeta(status: unknown, canceled = false): RunStatusMeta 
   if (key === 'success') return { label: '成功', tone: 'pass', note: '' }
   if (key === 'interrupted') {
     return canceled
-      ? { label: '已停止', tone: 'warn', note: '你停止了这次运行：跑完的节点按比例计费，没跑完的部分已退回。' }
-      : { label: '已中断', tone: 'warn', note: '这次运行被中断，积分按账本退回。' }
+      ? { label: '已停止', tone: 'warn', note: '你停止了这次运行：跑完的节点按比例计费，没跑完的部分已退回；可以接着跑没跑完的节点。' }
+      : { label: '已中断', tone: 'warn', note: '这次运行被中断，积分按账本退回；有已跑完的节点时可以接着跑。' }
   }
   if (key === 'running') return { label: '运行中', tone: 'live', note: '这次运行还在跑：节点会一个个补上，跑完自动结算。' }
   if (key === 'queued') return { label: '排队中', tone: 'queued', note: '正在排队：还没轮到这个名额，排到才开始跑、才扣积分。' }
-  if (key === 'error' || key === 'failed' || !key) return { label: '失败', tone: 'fail', note: '这次运行失败了，积分原路退回。' }
+  if (key === 'error' || key === 'failed' || !key) return { label: '失败', tone: 'fail', note: '这次运行失败了，积分原路退回；有已跑完的节点时可以接着跑。' }
   return { label: key, tone: 'warn', note: '' }
 }
 
@@ -52,6 +52,30 @@ export function runSpentText(run: {
   if (waited < 1000) return runText
   const waitText = waited < 10000 ? (waited / 1000).toFixed(1) + 's' : Math.round(waited / 1000) + 's'
   return '排队 ' + waitText + ' · 运行 ' + runText
+}
+
+/** 续跑入口要用到的三个数：还差几个节点、这次还要补多少积分、上次复用了几个。 */
+export type RunResumeInfo = { left: number; cost: number; reused: number; resumable: boolean }
+
+export function runResumeInfo(run: RunRecord | null): RunResumeInfo {
+  if (!run) return { left: 0, cost: 0, reused: 0, resumable: false }
+  const nodes = Array.isArray(run.nodes) ? run.nodes : []
+  const done = nodes.filter((node) => node.status === 'success' || node.status === 'unsupported').length
+  const total = Math.max(0, Number(run.total) || 0)
+  const left = Math.max(0, total - done)
+  const cost = Math.max(0, Number(run.credits?.cost) || 0)
+  // 主动停止已经按跑完节点结过账：补账本里还没付的那部分。
+  // 失败 / 重启是全额退：按剩下节点占全图的比例收，不按整张画布再收一遍。
+  const kept = run.credits?.settled ? Math.max(0, Number(run.credits.kept) || 0) : 0
+  const nextCost = run.credits?.settled
+    ? Math.max(0, cost - kept)
+    : (total > 0 ? Math.min(cost, Math.ceil((cost * left) / total)) : 0)
+  return {
+    left,
+    cost: nextCost,
+    reused: done,
+    resumable: Boolean(run.resumable ?? (run.status !== 'success' && done > 0 && left > 0)),
+  }
 }
 
 /**

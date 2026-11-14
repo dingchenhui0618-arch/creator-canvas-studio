@@ -31,6 +31,7 @@ import {
   type RunRecord,
 } from '../api/flows'
 import { getCredits } from '../api/credits'
+import { runResumeInfo } from '../domain/run'
 import { getCanvasSessionTicket } from '../api/canvasSession'
 import { getCanvasQueue, type CanvasQueueView } from '../api/canvasQueue'
 import { useUiMode } from '../api/app'
@@ -119,6 +120,8 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
   const [running, setRunning] = useState(false)
   const [runNodes, setRunNodes] = useState<RunNodeResult[]>([])
   const [runRecord, setRunRecord] = useState<RunRecord | null>(null)
+  // 停止 / 失败后还能接着跑的那条运行：抽屉里的「继续」按它发起，复用它已跑完的节点
+  const [resumeSource, setResumeSource] = useState<RunRecord | null>(null)
   const [runMeta, setRunMeta] = useState<{ id: string; total: number }>({ id: '', total: 0 })
   const [runError, setRunError] = useState('')
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -349,6 +352,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
     setHistoryCount(0)
     setFutureCount(0)
     setRunRecord(null)
+    setResumeSource(null)
     setRunNodes([])
     setRunMeta({ id: '', total: 0 })
     setRunError('')
@@ -693,10 +697,15 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
     }
   }, [running])
 
-  const handleRun = useCallback(async () => {
+  const handleRun = useCallback(async (resumeFrom: RunRecord | null = null) => {
     if (running) return
     if (!nodesRef.current.length) {
       toast('画布还没有节点，先从左侧拖入一个')
+      return
+    }
+    const resume = runResumeInfo(resumeFrom)
+    if (resumeFrom && (!resume.resumable || resume.left <= 0)) {
+      toast('这条运行没有可复用的已跑节点，直接重新运行即可')
       return
     }
     const saved = await saveNow()
@@ -704,10 +713,14 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
       toast('保存失败，未发起运行：' + saveError)
       return
     }
+    // 续跑失败在 run-start 之前时，把上一次的结论原样放回抽屉，别让页面空掉
+    let started = false
+    const previous = resumeFrom
     setRunning(true)
     setDrawerOpen(true)
     setRunNodes([])
     setRunRecord(null)
+    setResumeSource(null)
     setRunMeta({ id: '', total: 0 })
     setRunError('')
     // 票号是这次运行的凭据：排队期间页面按它问名次，服务端按它认出「是同一条」而不是新来一条
@@ -731,6 +744,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
     runAbortRef.current = controller
     try {
       const record = await runFlowStream(flowIdRef.current, (event) => {
+        if (event.type === 'run-start') started = true
         if (event.type === 'run-queue') {
           // 排到了：名次收起，把「等了多久」留给运行结论（排队 N 秒后开始）
           runQueuedRef.current = false
@@ -768,8 +782,9 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
               : item
           )))
         }
-      }, runQueueTicketRef.current, controller.signal)
+      }, runQueueTicketRef.current, controller.signal, resumeFrom?.id || '')
       setRunRecord(record)
+      setResumeSource(runResumeInfo(record).resumable ? record : null)
       // 停止/中断时正在跑的那个节点不会再有 node-end：不能让它一直挂着「运行中」
       if (record.status === 'interrupted') {
         setNodes((current) => current.map((node) => (
@@ -807,9 +822,18 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
           setRunCancelled(false)
           toast('已停止等待这次运行 · 已开跑的按运行记录结算')
         }
+        if (previous && !started) {
+          setRunRecord(previous)
+          setResumeSource(previous)
+        }
         return
       }
       const message = error instanceof Error ? error.message : String(error)
+      // 续跑被服务端拒绝（画布改过、没有可复用节点）：上一次的结论还在，放回抽屉并保留续跑入口
+      if (previous && !started) {
+        setRunRecord(previous)
+        setResumeSource(previous)
+      }
       setRunError(message)
       setNodes((current) => current.map((node) => (
         node.data.status === 'running' || node.data.status === 'pending'
@@ -838,7 +862,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
   }, [])
 
   // 停止已经开跑的运行（v0.9.101）：不再直接 abort 连接——那样服务端只能猜「人走了」。
-  // 走一条明确的接口，服务端中止当前上游、按已开始节点结算；页面继续读流，直到 run-end。
+  // 走一条明确的接口，服务端中止当前上游、按跑完的节点结算；页面继续读流，直到 run-end。
   const stopRunning = useCallback(async () => {
     const id = runIdRef.current
     if (!id || stopping) return
@@ -851,6 +875,12 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
       setStopping(false)
     }
   }, [stopping, toast])
+
+  // 接着上次停下的地方跑（v0.9.102）：服务端复用已跑完的节点，只补没跑完的，只收没付过的部分。
+  const resumeRunning = useCallback(() => {
+    if (!resumeSource || running) return
+    void handleRun(resumeSource)
+  }, [handleRun, resumeSource, running])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1443,6 +1473,8 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
         total={runMeta.total}
         nodes={runNodes}
         record={runRecord}
+        resume={resumeSource}
+        onResume={resumeRunning}
         queuedMs={runQueuedMs}
         queue={runQueue}
         queueElapsed={runElapsed}

@@ -382,6 +382,11 @@ export function RunsPage({
                         : '消耗 ' + current.credits.cost + ' 积分'}
                   </span>
                 ) : null}
+                {current.resumeOf ? (
+                  <span className="vq-mono" title="上次已跑完的节点直接复用，这次只补没跑完的部分">
+                    续跑自 {current.resumeOf} · 复用 {current.reusedNodes ?? 0} 个节点
+                  </span>
+                ) : null}
                 <span className="runs-detail-actions">
                   {!current.project ? (
                     <button

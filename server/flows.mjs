@@ -1,6 +1,6 @@
 import fsp from 'node:fs/promises'
 import path from 'node:path'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { config } from './config.mjs'
 import { canAccess } from './owner.mjs'
 import { callTextModel } from './llm.mjs'
@@ -354,6 +354,13 @@ export function runSummary(run) {
     total: Number(run.total) || 0,
     startedNodes: Number(run.startedNodes) || 0,
     finishedNodes: Number(run.finishedNodes) || 0,
+    // 续跑（v0.9.102）：这条是接着哪条跑、复用了几个已经跑完的节点、本次按几个节点计费
+    resumeOf: run.resumeOf || null,
+    reusedNodes: Number(run.reusedNodes) || 0,
+    billTotal: Number(run.billTotal) || 0,
+    billFinished: Number(run.billFinished) || 0,
+    // 有已跑完的节点、也还有没跑的，才给「继续跑」入口；0 节点中断（重启）不能续
+    resumable: canResumeRun(run),
     canceled: Boolean(run.canceled),
     failed: (Array.isArray(run.nodes) ? run.nodes : []).filter((node) => node.status === 'error').length,
     error: run.error || '',
@@ -424,6 +431,106 @@ function topoSort(nodes, edges) {
     throw error
   }
   return order
+}
+
+/**
+ * 画布内容的执行指纹：只算节点 id / 类型 / 配置和连线，不算位置。
+ * 续跑要复用上次的节点输出；如果用户在这中间改了提示词、换了模型或改了连线，
+ * 旧输出就不再属于这张画布，宁可拒绝复用，也不能把过期结果接着往下跑。
+ */
+export function flowRevisionOf(flow) {
+  const nodes = (Array.isArray(flow?.nodes) ? flow.nodes : [])
+    .map((node) => ({
+      id: String(node.id || ''),
+      type: String(node.type || node.data?.kind || ''),
+      config: node.data?.config && typeof node.data.config === 'object' ? node.data.config : {},
+    }))
+    .sort((a, b) => a.id.localeCompare(b.id))
+  const edges = (Array.isArray(flow?.edges) ? flow.edges : [])
+    .map((edge) => ({
+      source: String(edge.source || ''),
+      target: String(edge.target || ''),
+      sourceHandle: edge.sourceHandle || '',
+      targetHandle: edge.targetHandle || '',
+    }))
+    .sort((a, b) => (a.source + '\u0000' + a.target + '\u0000' + a.sourceHandle + '\u0000' + a.targetHandle).localeCompare(b.source + '\u0000' + b.target + '\u0000' + b.sourceHandle + '\u0000' + b.targetHandle))
+  return createHash('sha256').update(JSON.stringify({ nodes, edges })).digest('hex').slice(0, 16)
+}
+
+/** 这次运行已经真正付掉的积分：主动停止按结算数，失败 / 重启全额退是 0。 */
+export function spentOfRun(run) {
+  if (!run || !run.ownerId) return 0
+  if (run.credits?.settled === true) {
+    // 老记录可能只有 refundedAmount：按「原价减已退」还原，不能把已经退掉的又当成已付
+    if (run.credits.kept !== undefined) return Math.max(0, Number(run.credits.kept) || 0)
+    return Math.max(0, (Number(run.credits.cost) || 0) - (Number(run.credits.refundedAmount) || 0))
+  }
+  if (run.credits?.refunded) return 0
+  return Math.max(0, Number(run.credits?.cost) || 0)
+}
+
+/** 续跑还要补多少积分：上次原价减去已经留下的部分，绝不按二次全价收。 */
+export function resumeCostOf(run, price = 0) {
+  if (!run || !run.ownerId) return 0
+  const cost = Math.max(0, Number(run.credits?.cost) || Number(price) || 0)
+  if (!cost) return 0
+  // 主动停止已经按「跑完节点」结过账：补的正好是账本里还没付的那部分。
+  // 失败 / 重启是全额退：按剩下节点占全图的比例收，不按整张画布再收一遍。
+  if (run.credits?.settled === true) return Math.max(0, cost - spentOfRun(run))
+  const total = Math.max(1, Number(run.total) || 1)
+  const done = (Array.isArray(run.nodes) ? run.nodes : [])
+    .filter((node) => node.status === 'success' || node.status === 'unsupported').length
+  const left = Math.max(0, Math.min(total, total - done))
+  return left > 0 ? Math.min(cost, Math.ceil((cost * left) / total)) : 0
+}
+
+/** 这条运行值不值得给「继续跑」：必须已经结束、至少跑完一个节点、还有没跑完的节点。 */
+export function canResumeRun(run) {
+  if (!run || (run.status !== 'error' && run.status !== 'interrupted')) return false
+  const nodes = Array.isArray(run.nodes) ? run.nodes : []
+  const done = nodes.filter((node) => node.status === 'success' || node.status === 'unsupported').length
+  return done > 0 && done < (Number(run.total) || 0)
+}
+
+/**
+ * 从上次运行里挑出可以原样复用的节点结果：
+ *   - 只复用 success / unsupported，失败节点和它下游要重跑；
+ *   - 条件节点的分支结果也一起带回来，否则续跑会把已经走过的分支再走错；
+ *   - 只认当前画布里还存在的节点，画布删了节点就自然不复用。
+ * 返回的 results / edgeActive 直接喂给 runFlow，省掉已经花过钱的那几步。
+ */
+export function resumeSeedFor(run, flow) {
+  const nodesById = new Map((Array.isArray(flow?.nodes) ? flow.nodes : []).map((node) => [node.id, node]))
+  const results = new Map()
+  for (const item of Array.isArray(run?.nodes) ? run.nodes : []) {
+    if (!item || !nodesById.has(item.id)) continue
+    if (item.status !== 'success' && item.status !== 'unsupported') continue
+    const node = nodesById.get(item.id)
+    results.set(item.id, {
+      id: item.id,
+      kind: node.type,
+      title: node.data?.title || item.title || item.id,
+      status: item.status,
+      ms: 0,
+      output: item.output ?? null,
+      error: null,
+      message: '上次已经跑完，这次直接复用',
+      reused: true,
+    })
+  }
+  const edgeActive = new Map()
+  for (const edge of Array.isArray(flow?.edges) ? flow.edges : []) {
+    const source = results.get(edge.source)
+    if (!source) continue
+    const sourceNode = nodesById.get(edge.source)
+    let active = source.status === 'success' || source.status === 'unsupported'
+    const branch = source.output && typeof source.output.branch === 'string' ? source.output.branch : null
+    if (active && sourceNode?.type === 'condition') {
+      active = (branch || 'false') === (edge.sourceHandle || 'true')
+    }
+    edgeActive.set(edge.id, active)
+  }
+  return { results, edgeActive, reusedCount: results.size }
 }
 
 function resolveValue(token, ctx) {
@@ -699,7 +806,7 @@ export function newRunId() {
 /** 运行刚建出来、还没执行任何节点时的模样（落盘用的初始态）。
  *  queued = 这一单还在整机队里等名额：还没开始跑、也还没扣积分，运行记录该如实写「排队中」，
  *  不能先写成 running 让运行记录页把它当失败（v0.9.98）。 */
-function blankRun(flow, id, cost = 0, { queued = false } = {}) {
+function blankRun(flow, id, cost = 0, { queued = false, resumeOf = '', reusedNodes = 0, billTotal = 0, flowRevision = '' } = {}) {
   const amount = Math.max(0, Math.round(Number(cost) || 0))
   const now = new Date().toISOString()
   return {
@@ -718,13 +825,19 @@ function blankRun(flow, id, cost = 0, { queued = false } = {}) {
     nodes: [],
     output: '',
     ownerId: flow.ownerId || '',
+    // 续跑：这条记录接着哪条跑、复用几个节点、本次按几个节点计费、跑的是哪一版画布
+    resumeOf: resumeOf || null,
+    reusedNodes: Math.max(0, Math.round(Number(reusedNodes) || 0)),
+    billTotal: Math.max(0, Math.round(Number(billTotal) || 0)),
+    billFinished: 0,
+    flowRevision: flowRevision || '',
     credits: amount > 0 ? { cost: amount, refunded: false } : null,
   }
 }
 
 /** 扣积分之前先把运行记录落一笔：扣完马上断电也留得下这条单，恢复时按账本退。 */
-export async function startFlowRun(flow, runId, { cost = 0, queued = false } = {}) {
-  const run = blankRun(flow, String(runId || '') || newRunId(), cost, { queued })
+export async function startFlowRun(flow, runId, { cost = 0, queued = false, resumeOf = '', reusedNodes = 0, billTotal = 0, flowRevision = '' } = {}) {
+  const run = blankRun(flow, String(runId || '') || newRunId(), cost, { queued, resumeOf, reusedNodes, billTotal, flowRevision })
   await saveRun(run)
   return run
 }
@@ -795,9 +908,11 @@ export async function abandonRun(runId, reason = '运行失败') {
 export function settleCanceledRun(run) {
   if (!run || !run.ownerId || !run.id) return 0
   const cost = Math.max(0, Math.round(Number(run.credits?.cost) || 0))
-  const total = Math.max(1, Number(run.total) || 1)
-  const completed = Math.max(0, Math.min(total, Number(run.finishedNodes) || 0))
-  // 向上取整：只要动过一个节点，就至少留下 1 积分；一个节点都没开始则一分不留
+  // 续跑只按「这次要跑的节点」结算：复用的节点上次已经付过钱，不能再算进分母。
+  // 老记录没有 billTotal / billFinished，回落到 total / finishedNodes，口径不变。
+  const total = Math.max(1, Number(run.billTotal) || Number(run.total) || 1)
+  const completed = Math.max(0, Math.min(total, Number(run.billFinished ?? run.finishedNodes) || 0))
+  // 向上取整：只要动过一个节点，就至少留下 1 积分；一个节点都没跑完则一分不留
   const kept = completed > 0 ? Math.min(cost, Math.ceil((cost * completed) / total)) : 0
   let owed = 0
   try {
@@ -851,9 +966,15 @@ export function refundRunCredits(run) {
  * 按拓扑序执行整张画布。
  * onEvent 用于流式输出：run-start / node-start / node-end / run-end / run-error。
  */
-export async function runFlow(flow, { onEvent, credits = null, runId = '' } = {}) {
+export async function runFlow(flow, { onEvent, credits = null, runId = '', resume = null } = {}) {
   const emit = typeof onEvent === 'function' ? onEvent : () => {}
   const order = topoSort(flow.nodes, flow.edges)
+  // 续跑：resume.results / edgeActive 是上次运行留下的真结果（见 resumeSeedFor）。
+  // 这里不重新调用上游，直接把结果放回上下文；计费分母只算这次还要跑的节点。
+  const resumeResults = resume?.results instanceof Map ? resume.results : new Map()
+  const resumeEdges = resume?.edgeActive instanceof Map ? resume.edgeActive : new Map()
+  const resumedCount = resumeResults.size
+  const billTotal = Math.max(0, order.length - resumedCount)
   const nodesById = new Map(flow.nodes.map((node) => [node.id, node]))
   const incoming = new Map(flow.nodes.map((node) => [node.id, []]))
   const outgoing = new Map(flow.nodes.map((node) => [node.id, []]))
@@ -871,6 +992,9 @@ export async function runFlow(flow, { onEvent, credits = null, runId = '' } = {}
   // 排队时长是 markRunStarted 算好的真数（v0.9.100）；这里漏接的话，排队单跑完就再也
   // 说不清「一共等了多久」——页面只剩节点耗时，用户会以为一次 50 秒的等待只花了 7 秒。
   const placeholder = runId ? (await loadRuns()).find((item) => item.id === id) : null
+  const reusedNodes = order
+    .filter((nodeId) => resumeResults.has(nodeId))
+    .map((nodeId) => resumeResults.get(nodeId))
   const run = {
     id,
     flowId: flow.id,
@@ -888,8 +1012,14 @@ export async function runFlow(flow, { onEvent, credits = null, runId = '' } = {}
     // 已经开始 / 已经跑完的节点数：停止时按「跑完的节点」结算。
     // 正在跑的那个节点不算钱：它的结果用户没拿到，停下来的这次运行不该为它收费。
     startedNodes: 0,
-    finishedNodes: 0,
-    nodes: [],
+    finishedNodes: resumedCount,
+    // 续跑：复用了几个上次已跑完的节点；本次计费只看 billTotal / billFinished
+    resumeOf: resume?.of || placeholder?.resumeOf || null,
+    reusedNodes: resumedCount,
+    billTotal,
+    billFinished: 0,
+    flowRevision: flowRevisionOf(flow),
+    nodes: reusedNodes,
     output: '',
     ownerId: flow.ownerId || '',
     // 本次运行实际扣了多少积分；失败会由路由层退回，refunded 在结束时标真
@@ -900,18 +1030,37 @@ export async function runFlow(flow, { onEvent, credits = null, runId = '' } = {}
   // 已扣的积分在账本里也永远对不上是哪次运行。
   activeRuns.set(run.id, run)
   await saveRun(run)
-  emit({ type: 'run-start', run: { id: run.id, flowId: run.flowId, flowName: run.flowName, total: order.length } })
+  emit({
+    type: 'run-start',
+    run: {
+      id: run.id,
+      flowId: run.flowId,
+      flowName: run.flowName,
+      total: order.length,
+      resumeOf: run.resumeOf,
+      reusedNodes: resumedCount,
+    },
+  })
 
-  const results = new Map()
-  const edgeActive = new Map()
+  const results = new Map(resumeResults)
+  const edgeActive = new Map(resumeEdges)
   let errorCount = 0
   let startedNodes = 0
+
+  // 复用的节点也要让页面看见：它们不重新跑，但结果、耗时归属和「上次已跑过」都要写清楚。
+  // 先推 run-start 再补 node-end，页面的运行抽屉按顺序就能排出来。
+  for (let index = 0; index < order.length; index += 1) {
+    const reused = resumeResults.get(order[index])
+    if (reused) emit({ type: 'node-end', node: reused, index, total: order.length })
+  }
 
   for (let index = 0; index < order.length; index += 1) {
     // 停机收尾已经把这次运行标成中断并退了钱：后面的节点不再执行，别再产生上游费用
     if (run.aborted) break
     const node = nodesById.get(order[index])
     if (!node) continue
+    // 上次已经跑完的节点直接跳过：结果已在 results / edgeActive 里，不再调上游也不重复计费
+    if (resumeResults.has(node.id)) continue
     const inEdges = incoming.get(node.id) || []
     const activeIn = inEdges.filter((edge) => edgeActive.get(edge.id) === true)
     const entry = inEdges.length === 0
@@ -976,6 +1125,8 @@ export async function runFlow(flow, { onEvent, credits = null, runId = '' } = {}
     results.set(node.id, result)
     run.nodes.push(result)
     run.finishedNodes = (Number(run.finishedNodes) || 0) + 1
+    // 只把这次真正跑完的节点算进「本次该付的钱」；复用的节点上次已经付过
+    run.billFinished = (Number(run.billFinished) || 0) + 1
 
     const executedOk = result.status === 'success' || result.status === 'unsupported'
     const branch = result.output && typeof result.output.branch === 'string' ? result.output.branch : null
@@ -989,7 +1140,10 @@ export async function runFlow(flow, { onEvent, credits = null, runId = '' } = {}
     emit({ type: 'node-end', node: result, index, total: order.length })
   }
 
-  if (run.aborted) {
+  // 停止请求可能刚好落在最后一个节点跑完之后：所有节点都有结果了就不该再记「中断」，
+  // 否则用户会看到一条已经跑完却写着 STOPPED、还留了全部钱的记录（v0.9.102）。
+  const allNodesHandled = run.nodes.length >= order.length
+  if (run.aborted && !allNodesHandled) {
     run.status = 'interrupted'
     if (run.stopReason === 'user' || run.stopReason === 'disconnect') {
       run.canceled = true
@@ -997,7 +1151,7 @@ export async function runFlow(flow, { onEvent, credits = null, runId = '' } = {}
       const bill = run.credits
         ? '跑完的节点按比例计费，没跑完的部分已经退回。'
         : '这次运行不计费。'
-      run.error = who + '；' + bill + '需要的话可以重新运行。'
+      run.error = who + '；' + bill + '可以接着跑没跑完的节点，也可以重新运行。'
     } else {
       // 服务重启 / 停机：没有用户主动停止，仍按全额退（已有路径）
       run.error = run.error || '服务重启，运行中断；' + (run.ownerId ? '已扣积分已退回，重新运行即可。' : '重新运行即可。')
@@ -1025,6 +1179,8 @@ export async function runFlow(flow, { onEvent, credits = null, runId = '' } = {}
       refundRunCredits(run)
     }
   }
+  // 页面据此决定要不要给「继续跑」：已跑完一部分、还有没跑的，才值得复用。
+  run.resumable = canResumeRun(run)
   await saveRun(run)
   await touchFlowRun(flow.id, run)
   activeRuns.delete(run.id)
