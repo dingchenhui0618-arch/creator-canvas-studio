@@ -105,7 +105,7 @@ GET /api/runs/run_62d87725/compare/diff?with=run_9bf5e702&node=n_llm
 | 样式 | 主样式 `index-yX8RGvWa.css` 286,057 B · 200；画布样式 `CanvasPage-BX48Ugxj.css` 28,926 B |
 | 文件一致 | `flows fd83b1ab` / `run-compare e26536e1` / `routes 3102fca8` / 入口 `ae7b310b` / 画布 `c32160bf` / 后台 `576c88f5` / 主样式 `be1c301c` / 画布样式 `b49e8586` |
 | 路由已上线 | `RUN_COMPARE_DIFF` 在 routes 第 44 行、`buildRunOutputDiff` 在第 341 行；未登录 `/compare` 与 `/compare/diff` 都返回 **401** |
-| 心跳 / 盘 | pid 1486920 / 1486916，beatAt 12:12:24Z；盘 72%；`/tmp` 352M；日志没有业务 error |
+| 心跳 / 盘 | pid 1486920 / 1486916，beatAt 12:12:24Z；盘 72%；`/tmp` 352M（清理本次部署临时文件后 351M）；日志没有业务 error |
 | 旧记录 | 9 条运行、0 条带 graph；`run-graphs` 还没有目录 |
 
 生产没有真实运行授权，这一版没有在真实运行上展开过差异；差异证据来自本地真浏览器 + 假上游。
