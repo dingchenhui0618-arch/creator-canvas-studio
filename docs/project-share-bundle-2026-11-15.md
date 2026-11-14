@@ -84,3 +84,5 @@ v0.9.123 让分享页可以带一张两版对照纸，但拿到链接的人仍�
 - `bash /opt/visionqa/ops/rollback.sh --to 1` → **v0.9.123**
 - `--to 2` → **v0.9.122**
 - Nginx 回退：`cp /etc/nginx/conf.d/visionqa.wavisionai.cn.app.inc.bak-r134-* /etc/nginx/conf.d/visionqa.wavisionai.cn.app.inc && nginx -t && nginx -s reload`（那份是加 `/download/` 之前的线上原文）
+
+提交 `0a706f6`（功能、测试、Nginx、文档与截图）；CI **43627514020** 三个 job 全 success（安全扫描、Node 24、Node 22.12.0）。

@@ -2537,6 +2537,6 @@ v0.9.123 让分享页能带一张两版对照纸，但拿到链接的人仍然�
 
 发现但没做：离线包只放前 12 镜，不能选「只打某几镜」再下载；包里没有 Markdown 交付稿与运行记录（要完整交付稿仍走登录后的交付包）；没有单独的离线包下载次数 / 访问记录；没有跨作品、任意两版或「保存为模板」的离线包；生产没有真实账号开着分享做下载验证，也没有真实甲方下载记录。
 
-<!-- r134-commit -->
+提交 `0a706f6`（功能、测试、Nginx、文档与截图）；CI **43627514020** 三个 job 全 success（安全扫描、Node 24、Node 22.12.0）。
 
 回退：`bash /opt/visionqa/ops/rollback.sh --to 1` → **v0.9.123**；`--to 2` → **v0.9.122**。Nginx 回退：`cp /etc/nginx/conf.d/visionqa.wavisionai.cn.app.inc.bak-r134-* /etc/nginx/conf.d/visionqa.wavisionai.cn.app.inc && nginx -t && nginx -s reload`（那份是加 `/download/` 之前的线上原文）。这一版只多一个只读下载路由、一个公共帧图读取模块、一个分享页卡片与一条 Nginx location；不改作品 / 评审 / 交付 / 运行落盘结构。细节、公网坑与「发现但没做」见 [只读分享能带走一个离线包](docs/project-share-bundle-2026-11-15.md)。
