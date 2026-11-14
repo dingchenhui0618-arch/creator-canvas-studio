@@ -126,3 +126,18 @@ bash /opt/visionqa/ops/rollback.sh --to 2   # v0.9.102
 - oxlint **0 error / 15 warning**（与上一轮同一批基线警告），`tsc -b` 干净，build 干净。
 - 构建：入口 `index-qDgCDllX.js` **574,416 B**；画布 `CanvasPage-BUmESs0z.js` 236,466 B；后台 `AdminConsolePage-C6FfLg_I.js` 201,066 B；样式 `index-C09qhU_5.css` 275,246 B；画布样式 25,578 B。
 - 密钥扫描在提交前重跑；本轮没有新增真实凭据。
+
+## 生产部署
+
+发布标签 `20261114-152800-r114-run`（发布脚本截断为 31 字符，完整意图 `20261114-152800-r114-runlink`；快照 `20261114-073101-20261114-152800-r114-run.tar.gz` **1,017,340 B**）：
+
+| 检查 | 读数 |
+| --- | --- |
+| 四个 unit | `visionqa` / `visionqa-internal` / `visionqa.socket` / `bdc-web` 全 active |
+| 版本 / 健康 | 8799 / 8800 / 公网都是 **0.9.104**；`/api/health` ok（模板 26，uptime 28s） |
+| 入口 | `index-qDgCDllX.js` 200 · **574,416 B**；公网同一文件也是 200 · 574,416 B |
+| 画布 / 后台 / 样式 | 236,466 B / 201,066 B / 275,246 B；画布样式 25,578 B |
+| 文件一致 | `flows 6b8d3ed9` / `routes f6236d72` / 入口 `741295b5` / 画布 `c800691e` / 后台 `28ee5b92` / 样式 `574a59b5` / 画布样式 `d6430808`，全部与本地一致 |
+| 心跳 / 盘 / 临时文件 | pid 1480699 / 1480698；盘 72%；`/tmp` 清回 351M；近 15 分钟没有业务 warning（只有 SQLite experimental 提示） |
+
+生产没有真实运行授权，线上没有真实「停止 → 重开 → 续跑」记录；这一轮生产验证的是版本、入口、文件一致与四个 unit 健康。功能证据全部来自本地真浏览器 + 假上游、907 条测试与地址语法用例。
