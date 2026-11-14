@@ -199,7 +199,7 @@ export default function ProjectSharePage({ token }: { token: string }) {
             <Package size={16} className="pshare-paper-icon" />
             <span className="pshare-paper-main">
               <strong>离线包 · 现场页、评审对照与帧图</strong>
-              <span>把这一页已经公开的脚本、分镜和评审框打成一个 zip；解压后双击就能打印，不用联网。两版对照只在分享者打开时放进包里。</span>
+              <span>把这一页已经公开的脚本、分镜和评审框打成一个 zip；解压后双击就能打印，不用联网。包里还带一页 校验.html：把 zip 拖进去就能自己核对，坏了一条会点名。两版对照只在分享者打开时放进包里。</span>
             </span>
             <Download size={14} />
           </a>

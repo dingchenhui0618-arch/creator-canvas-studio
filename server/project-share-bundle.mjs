@@ -5,10 +5,13 @@
 //     不另开一扇门：作品编号、归属账号、画布、模板 id、原始素材路径与 token 都不进包。
 //  2. 没有评审 / 没有帧图 / 没有上一版时照实少放文件，不拿别的东西顶，说明里也不写不存在的文件。
 //  3. 两版对照只在分享者已经打开开关时进包；离线包的凭据仍是同一条分享链接，停用后地址打不开。
+//  4. 包里带一页「校验.html」：收包人（通常没有账号）解压后双击，把 zip 拖进去，就在自己机器上
+//     逐条重算 CRC32、再算整包 SHA-256。清单只列包内文件名与字节，不含作品编号、token 与内部路径。
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { config } from './config.mjs'
 import { aiLabelFootText } from './ai-label.mjs'
+import { packageVerifyHtml, VERIFY_PAGE_NAME } from './package-verify-page.mjs'
 import { compareSheetHtml } from './project-compare-sheet.mjs'
 import { versionCompareView } from './project-compare.mjs'
 import { storyboardFrames } from './project-frames.mjs'
@@ -67,6 +70,7 @@ export function shareBundleNote({
     ...(comparePair
       ? ['两版对照页.html  v' + comparePair.base + ' → v' + comparePair.target + ' 的画布参数、脚本口播、评审与交付并排']
       : []),
+    '校验.html        收包人自己验包：把收到的 zip 拖进去，逐条比 CRC32，对不上的点名；不上传、不联网、不要账号',
     frameCount
       ? 'frames/          原片帧图 ' + frameCount + ' 张，按镜头编号命名（shot-01.jpg …），与现场页一一对应'
       : 'frames/          这条作品没有可打包的帧图：模板待解析，或者抽帧没有落盘',
@@ -192,17 +196,29 @@ export async function buildShareBundle({
     comparePair,
     shotTotal: Array.isArray(template?.storyboard) ? template.storyboard.length : 0,
   })
-  const archive = buildZip(
-    [
-      { name: '现场页.html', data: Buffer.from(sheet, 'utf8') },
-      ...(reviewSheet ? [{ name: '评审对照页.html', data: Buffer.from(reviewSheet, 'utf8') }] : []),
-      ...(compareSheet ? [{ name: '两版对照页.html', data: Buffer.from(compareSheet, 'utf8') }] : []),
-      { name: '说明.txt', data: Buffer.from(note, 'utf8') },
-      ...frames.map((frame) => ({ name: 'frames/' + frame.name, data: frame.data })),
-      ...reviewExtras,
-    ],
-    { mtime: now },
-  )
+  // 校验页的清单要覆盖包内其它所有条目：先把它们排好，再生成页面、插回说明.txt 后面。
+  // 页面本身不进清单（它没法记自己的哈希），与交付包里的那一页同一套判据。
+  const entries = [
+    { name: '现场页.html', data: Buffer.from(sheet, 'utf8') },
+    ...(reviewSheet ? [{ name: '评审对照页.html', data: Buffer.from(reviewSheet, 'utf8') }] : []),
+    ...(compareSheet ? [{ name: '两版对照页.html', data: Buffer.from(compareSheet, 'utf8') }] : []),
+    { name: '说明.txt', data: Buffer.from(note, 'utf8') },
+    ...frames.map((frame) => ({ name: 'frames/' + frame.name, data: frame.data })),
+    ...reviewExtras,
+  ]
+  const verify = packageVerifyHtml({
+    project: publicProject,
+    zipName: shareBundleFileName(project),
+    entries,
+    generatedAt: now.toISOString(),
+    tzOffsetMinutes: tz,
+    packageKind: '离线包',
+  })
+  entries.splice(entries.findIndex((entry) => entry.name === '说明.txt') + 1, 0, {
+    name: VERIFY_PAGE_NAME,
+    data: Buffer.from(verify, 'utf8'),
+  })
+  const archive = buildZip(entries, { mtime: now })
   return {
     fileName: shareBundleFileName(project),
     archive,

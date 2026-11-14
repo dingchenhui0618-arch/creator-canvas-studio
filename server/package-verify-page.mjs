@@ -295,8 +295,9 @@ const VERIFY_SCRIPT = [
 ].join('\n')
 
 /**
- * 交付包里的校验页：清单写进页面，脚本在收包人自己的浏览器里跑。
+ * 包里的校验页：清单写进页面，脚本在收包人自己的浏览器里跑。
  * entries 传包内条目（不含这一页自己），顺序与 zip 里一致。
+ * packageKind 只改纸上那句话（交付包 / 离线包），判据与脚本完全一样。
  */
 export function packageVerifyHtml({
   project = {},
@@ -304,6 +305,7 @@ export function packageVerifyHtml({
   entries = [],
   generatedAt = '',
   tzOffsetMinutes = 480,
+  packageKind = '交付包',
 } = {}) {
   // 清单与 zip 条目同一套字节：这里重算一遍 CRC32，和打包时写进中央目录的那个值同源
   const files = (Array.isArray(entries) ? entries : [])
@@ -313,6 +315,7 @@ export function packageVerifyHtml({
     })
     .filter((file) => file.name)
   const manifest = packageVerifyManifest({ zipName, files })
+  const kind = String(packageKind || '交付包')
   const title = String(project.title || '未命名作品')
   const version = Math.max(1, Math.round(Number(project.version) || 0))
   const count = manifest.files.length
@@ -349,5 +352,5 @@ export function packageVerifyHtml({
     '<script type="application/json" id="vq-manifest">' + blob + '</script>\n' +
     '</div>\n' +
     '</main>'
-  return paperShell(title + ' · 交付包校验 · VisionQA', body, VERIFY_CSS.join('\n'), VERIFY_SCRIPT)
+  return paperShell(title + ' · ' + kind + '校验 · VisionQA', body, VERIFY_CSS.join('\n'), VERIFY_SCRIPT)
 }
