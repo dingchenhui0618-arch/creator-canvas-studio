@@ -16,7 +16,7 @@ import {
   abandonRun,
   requestRunStop,
   resumePlanFor,
-  previousRunOf,
+  compareOptionsOf,
   flowRevisionOf,
   NODE_KINDS,
   TOOLS,
@@ -241,6 +241,15 @@ export function createFlowsRouter() {
           return true
         }
         const withId = String(url.searchParams.get('with') || '').trim()
+        // 可对照的候选一起带回去（v0.9.111）：页面上的「对照对象」直接从这里出，
+        // 不用再发一次列表请求，也不会列出正在跑 / 排队的运行。
+        const peers = await compareOptionsOf(run, user)
+        const options = peers.items.slice(0, 20).map(compareSideOf)
+        const optionsMeta = {
+          options,
+          optionsTotal: peers.total,
+          optionsTruncated: peers.total > options.length,
+        }
         let previous = null
         if (withId) {
           if (withId === run.id) {
@@ -261,18 +270,29 @@ export function createFlowsRouter() {
             return true
           }
         } else {
-          previous = await previousRunOf(run, user)
+          // 默认取更早的最近一条；最早那条没有更早的，但候选里可能还有之后的运行，
+          // 页面会把它列出来让人自己挑，而不是硬说「没得对照」。
+          const startedAt = String(run.startedAt || '')
+          previous = peers.items.find((item) => String(item.startedAt || '') < startedAt) || null
+        }
+        const base = {
+          ok: true,
+          flowId: run.flowId,
+          flowName: run.flowName,
+          current: compareSideOf(run),
+          ...optionsMeta,
         }
         if (!previous) {
           sendJson(res, 200, {
-            ok: true,
+            ...base,
             comparable: false,
-            reason: '这是这张画布上最早的一条运行；再跑一次之后，这里会逐节点对照两次的结果。',
-            current: compareSideOf(run),
+            reason: options.length
+              ? '这是这张画布上最早的一条运行；默认没有更早的可对照，可以从下面挑一条之后的运行。'
+              : '这是这张画布上最早的一条运行；再跑一次之后，这里会逐节点对照两次的结果。',
           })
           return true
         }
-        sendJson(res, 200, { ok: true, ...buildRunCompare(run, previous) })
+        sendJson(res, 200, { ...base, ...buildRunCompare(run, previous) })
         return true
       }
 

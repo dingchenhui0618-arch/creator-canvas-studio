@@ -414,20 +414,19 @@ export async function getRun(id, user = null) {
 }
 
 /**
- * 同一条画布上「更早的那一条」运行（v0.9.110 对照用）。
- * 不走 /api/runs 的 50 条分页：对照的是正在看的那条，它可能已经排到历史窗口末端，
- * 分页会漏掉它的上一条。排队中 / 运行中的记录没有完整结果，不能拿来对照。
+ * 同一条画布上还能拿来对照的运行（v0.9.111）：排除自己，也排除还在跑 / 排队的。
+ * 不走 /api/runs 的 50 条分页：对照的是正在看的那条，它可能已经排到历史窗口末端。
+ * 不分「更早」和「更晚」——默认仍取更早的一条，但用户可以在弹窗里点名任意一条，
+ * 最早那条运行也能回头挑之后的一次来看。列表按开始时间倒序，最近的在前。
  */
-export async function previousRunOf(run, user = null) {
-  if (!run) return null
-  const startedAt = String(run.startedAt || '')
-  const earlier = (await loadRuns())
+export async function compareOptionsOf(run, user = null) {
+  if (!run) return { items: [], total: 0 }
+  const peers = (await loadRuns())
     .filter((item) => canAccess(item, user))
     .filter((item) => item.flowId === run.flowId && item.id !== run.id)
     .filter((item) => item.status !== 'running' && item.status !== 'queued')
-    .filter((item) => String(item.startedAt || '') < startedAt)
-  earlier.sort((a, b) => String(b.startedAt || '').localeCompare(String(a.startedAt || '')))
-  return earlier[0] || null
+  peers.sort((a, b) => String(b.startedAt || '').localeCompare(String(a.startedAt || '')))
+  return { items: peers, total: peers.length }
 }
 
 /**

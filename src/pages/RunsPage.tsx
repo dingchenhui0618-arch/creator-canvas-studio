@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Activity, ArrowRight, ChevronLeft, ChevronRight, Eye, Link2, Loader2, Play, RefreshCw, Search, Workflow } from 'lucide-react'
+import { Activity, ArrowRight, ChevronLeft, ChevronRight, Eye, GitCompareArrows, Link2, Loader2, Play, RefreshCw, Search, Workflow } from 'lucide-react'
 import PageHead from '../components/PageHead'
 import { Select } from '../components/Select'
+import { RunCompareModal } from '../components/RunCompareModal'
 import { adoptProjectCanvas, createProject, listProjects } from '../api/projects'
 import type { ProjectSummary } from '../domain/project'
 import { getRunResumePlan, listFlows, listRuns, type ApiFlow, type RunRecord, type RunResumePlan } from '../api/flows'
@@ -106,6 +107,8 @@ export function RunsPage({
   const [query, setQuery] = useState('')
   const [offset, setOffset] = useState(0)
   const [open, setOpen] = useState<string | null>(null)
+  // 运行记录页直接对照（v0.9.111）：不用先进只读回看，挑中的这条作为「当前运行」。
+  const [compareRun, setCompareRun] = useState<RunRecord | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [resumePlan, setResumePlan] = useState<ResumePlanState | null>(null)
@@ -460,6 +463,16 @@ export function RunsPage({
                       <ArrowRight size={13} />
                     </button>
                   ) : null}
+                  {current.status !== 'running' && current.status !== 'queued' ? (
+                    <button
+                      type="button"
+                      className="vq-button vq-button--ghost vq-button--sm"
+                      onClick={() => setCompareRun(current)}
+                      title="把这次运行和同一条画布上的另一条运行摆在一起：逐节点看变化、耗时与扣费，只读、不重跑"
+                    >
+                      <GitCompareArrows size={13} />对照
+                    </button>
+                  ) : null}
                   {onViewRun && current.status !== 'running' && current.status !== 'queued' ? (
                     <button
                       type="button"
@@ -615,6 +628,8 @@ export function RunsPage({
           ) : null}
         </div>
       ) : null}
+
+      {compareRun ? <RunCompareModal runId={compareRun.id} onClose={() => setCompareRun(null)} /> : null}
 
       {total > 0 ? (
         <div className="runs-pager">

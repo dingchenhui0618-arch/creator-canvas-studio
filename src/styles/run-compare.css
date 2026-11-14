@@ -1,0 +1,192 @@
+/* ---------- 运行对照（v0.9.110；v0.9.111 起可挑对照对象） ---------- */
+.rc-backdrop { padding: var(--space-6); }
+.rc-modal {
+  width: min(960px, 100%);
+  max-height: calc(100vh - 48px);
+  transition: width var(--dur-3) var(--ease-out);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-pop);
+  animation: rc-in var(--dur-2) var(--ease-out);
+}
+@keyframes rc-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rc-modal { animation: none; }
+}
+.rc-modal.is-alone { width: min(620px, 100%); }
+.rc-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-6) var(--space-3);
+  border-bottom: 1px solid var(--line-faint);
+}
+.rc-head h2 { margin: var(--space-1) 0 0; font-size: var(--text-xl); font-weight: var(--weight-medium); }
+.rc-sub { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-xs); }
+/* 对照对象（v0.9.111）：默认上一条，也可以点名同画布任意一条已结束运行。
+   候选标签带时间、状态、耗时与扣费，长标签在面板里换行，不把弹窗撑宽。 */
+.rc-pick {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-6);
+  border-bottom: 1px solid var(--line-faint);
+}
+.rc-pick-label {
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: var(--text-mono);
+  letter-spacing: .04em;
+  white-space: nowrap;
+}
+.rc-pick .vq-select { width: min(420px, 100%); }
+.rc-pick .vq-select__trigger { width: 100%; }
+.rc-pick .vq-select__panel { width: min(440px, calc(100vw - 64px)); }
+.rc-pick .vq-select__option {
+  height: auto;
+  min-height: 32px;
+  padding: var(--space-1) var(--space-2);
+  white-space: normal;
+  line-height: 1.45;
+}
+.rc-pick-hint { color: var(--faint); font-size: var(--text-xs); line-height: 1.55; }
+.rc-body { padding: var(--space-4) var(--space-6) var(--space-6); overflow: auto; }
+.rc-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.rc-side-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.rc-side-card-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.rc-side-card-head .vq-mono { color: var(--faint); }
+.rc-side-card-when { font-size: var(--text-sm); font-weight: var(--weight-medium); font-variant-numeric: tabular-nums; }
+.rc-side-card-meta { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); color: var(--muted); font-size: var(--text-xs); }
+.rc-side-card-failed { margin: 0; color: var(--fail); font-size: var(--text-xs); }
+.rc-totals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); margin-top: var(--space-3); }
+.rc-total {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-sm);
+}
+.rc-total .vq-mono { color: var(--faint); }
+.rc-total strong { font-size: var(--text-lg); font-weight: var(--weight-medium); font-variant-numeric: tabular-nums; }
+.rc-total strong.is-slow { color: var(--warn); }
+.rc-total strong.is-fast { color: var(--pass); }
+.rc-graph { margin: var(--space-3) 0 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.65; }
+.rc-graph.is-changed { color: var(--warn); }
+.rc-table { margin-top: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-md); overflow: hidden; }
+.rc-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.05fr) minmax(0, 1fr) minmax(0, 1fr) minmax(132px, .85fr);
+  align-items: start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-top: 1px solid var(--line-faint);
+}
+.rc-row:first-child { border-top: 0; }
+.rc-row--head {
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface);
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: var(--text-mono);
+  letter-spacing: .04em;
+}
+.rc-row.is-added { box-shadow: inset 2px 0 0 var(--pass); }
+.rc-row.is-removed { box-shadow: inset 2px 0 0 var(--line-strong); }
+.rc-node { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rc-node strong { font-size: var(--text-sm); font-weight: var(--weight-medium); overflow-wrap: anywhere; }
+.rc-node .vq-mono { color: var(--faint); }
+.rc-side { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.rc-side-name { display: none; color: var(--faint); font-family: var(--font-mono); font-size: var(--text-mono); letter-spacing: .04em; }
+.rc-side-line { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
+.rc-node-status { display: inline-flex; align-items: center; gap: var(--space-1); color: var(--muted); font-size: var(--text-xs); white-space: nowrap; }
+.rc-side.is-success .rc-node-status { color: var(--pass); }
+.rc-side.is-error .rc-node-status { color: var(--fail); }
+.rc-side.is-skipped .rc-node-status,
+.rc-side.is-unsupported .rc-node-status { color: var(--faint); }
+.rc-node-ms { color: var(--muted); font-family: var(--font-mono); font-size: var(--text-mono); font-variant-numeric: tabular-nums; }
+.rc-delta { font-family: var(--font-mono); font-size: var(--text-mono); font-variant-numeric: tabular-nums; }
+.rc-delta.is-slow { color: var(--warn); }
+.rc-delta.is-fast { color: var(--pass); }
+.rc-node-error { color: var(--fail); font-size: var(--text-xs); line-height: 1.55; overflow-wrap: anywhere; }
+.rc-node-preview {
+  display: -webkit-box;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.rc-side-empty { color: var(--faint); font-size: var(--text-xs); }
+.rc-changes { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.rc-chip {
+  display: inline-flex;
+  align-items: center;
+  height: var(--chip-tag-h);
+  padding: 0 var(--chip-pad-tight);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  color: var(--muted);
+  font-size: var(--text-mono);
+  white-space: nowrap;
+}
+.rc-chip.is-same,
+.rc-chip.is-removed { color: var(--faint); }
+.rc-chip.is-output,
+.rc-chip.is-status,
+.rc-chip.is-revision { color: var(--warn); border-color: rgba(138, 91, 8, .26); background: var(--warn-soft); }
+.rc-chip.is-added { color: var(--pass); border-color: rgba(23, 107, 67, .24); background: var(--pass-soft); }
+.rc-state { display: grid; place-items: center; gap: var(--space-3); padding: var(--space-12) var(--space-6); color: var(--muted); font-size: var(--text-sm); text-align: center; }
+.rc-state.is-error p { margin: 0; color: var(--fail); }
+.rc-alone { padding: var(--space-4) var(--space-6) var(--space-2); }
+.rc-alone .rc-side-card { max-width: 420px; }
+.rc-alone-note { margin: var(--space-4) 0 0; font-size: var(--text-sm); }
+.rc-alone-hint { margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.65; }
+.rc-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-6);
+  border-top: 1px solid var(--line-faint);
+  color: var(--faint);
+  font-size: var(--text-xs);
+}
+@media (max-width: 760px) {
+  .rc-backdrop { padding: var(--space-2); }
+  .rc-modal { max-height: calc(100vh - 16px); }
+  .rc-head { padding: var(--space-4) var(--space-4) var(--space-3); }
+  .rc-pick { padding: var(--space-3) var(--space-4); }
+  .rc-pick .vq-select { width: 100%; }
+  .rc-pick .vq-select__panel { width: calc(100vw - 48px); }
+  .rc-pick-hint { flex: 1 1 100%; }
+  .rc-body { padding: var(--space-3) var(--space-4) var(--space-4); }
+  .rc-cards,
+  .rc-totals { grid-template-columns: 1fr; }
+  .rc-row { grid-template-columns: 1fr; gap: var(--space-2); padding: var(--space-3); }
+  .rc-row--head { display: none; }
+  .rc-node { padding-bottom: var(--space-1); border-bottom: 1px dashed var(--line-faint); }
+  .rc-side-name { display: block; }
+  .rc-alone { padding: var(--space-3) var(--space-4) var(--space-1); }
+  .rc-foot { flex-wrap: wrap; padding: var(--space-3) var(--space-4); }
+  .rc-foot > span { flex: 1 1 100%; }
+}
+

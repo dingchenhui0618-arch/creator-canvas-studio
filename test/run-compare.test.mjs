@@ -184,6 +184,8 @@ test('对照接口：默认找上一条；第一条说清楚没得比；跨画�
   assert.equal(alone.body.comparable, false)
   assert.match(alone.body.reason, /最早的一条运行/)
   assert.equal(alone.body.current.id, first.id)
+  assert.equal(alone.body.options.length, 0, '第一条运行时还没有可对照的候选')
+  assert.equal(alone.body.optionsTotal, 0)
 
   await flows.updateFlow(flow.id, {
     nodes: [
@@ -203,6 +205,10 @@ test('对照接口：默认找上一条；第一条说清楚没得比；跨画�
   assert.equal(compare.body.previous.id, first.id)
   assert.equal(compare.body.current.id, second.id)
   assert.equal(compare.body.graph.changed, true)
+  assert.equal(compare.body.optionsTotal, 1, '同一条画布上另有 1 条已结束运行')
+  assert.equal(compare.body.options.length, 1)
+  assert.equal(compare.body.options[0].id, first.id, '候选里应有上一条运行')
+  assert.equal(compare.body.options.some((item) => item.id === second.id), false, '候选不能包含当前这条')
   const input = compare.body.nodes.find((item) => item.id === 'in')
   assert.equal(input.outputChanged, true)
   assert.equal(input.revisionChanged, true)
@@ -229,4 +235,31 @@ test('对照接口：默认找上一条；第一条说清楚没得比；跨画�
 
   const missing = await get(router, '/api/runs/' + second.id + '/compare?with=run_not_there')
   assert.equal(missing.status, 404)
+
+  // 再跑第三次：最早那条运行默认仍没有更早的，但候选里应出现之后两条；
+  // 点名之后的一条也必须能对照——「最早」不再是死路。
+  await flows.updateFlow(flow.id, {
+    nodes: [
+      { id: 'in', type: 'input', position: { x: 0, y: 0 }, data: { title: '输入', description: '', config: { text: '第三次的输入' } } },
+      { id: 'out', type: 'output', position: { x: 300, y: 0 }, data: { title: '输出', description: '', config: { format: 'markdown' } } },
+    ],
+    edges: [{ id: 'e1', source: 'in', target: 'out' }],
+  })
+  const thirdFlow = await flows.getFlow(flow.id)
+  const third = await flows.runFlow(thirdFlow, { runId: flows.newRunId() })
+  assert.equal(third.status, 'success')
+
+  const firstAgain = await get(router, '/api/runs/' + first.id + '/compare')
+  assert.equal(firstAgain.status, 200)
+  assert.equal(firstAgain.body.comparable, false, '最早一条默认仍不硬凑对照')
+  assert.equal(firstAgain.body.optionsTotal, 2)
+  assert.equal(firstAgain.body.options.length, 2)
+  assert.equal(firstAgain.body.options[0].id, third.id, '候选按开始时间倒序，最近的在前')
+
+  const picked = await get(router, '/api/runs/' + first.id + '/compare?with=' + third.id)
+  assert.equal(picked.status, 200)
+  assert.equal(picked.body.comparable, true, '最早一条可以点名对照之后的一条')
+  assert.equal(picked.body.current.id, first.id)
+  assert.equal(picked.body.previous.id, third.id)
+  assert.equal(picked.body.graph.changed, true)
 })

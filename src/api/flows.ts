@@ -198,35 +198,43 @@ export type RunCompareNode = {
   msDelta: number | null
 }
 
-export type RunCompare =
-  | {
-      ok: true
-      comparable: false
-      reason: string
-      current: RunCompareSide
-    }
-  | {
-      ok: true
-      comparable: true
-      flowId: string
-      flowName: string
-      current: RunCompareSide
-      previous: RunCompareSide
-      graph: { changed: boolean; unknown: boolean; currentRevision: string; previousRevision: string }
-      nodes: RunCompareNode[]
-      totals: {
-        added: number
-        removed: number
-        statusChanged: number
-        outputChanged: number
-        revisionChanged: number
-        unchanged: number
-        changed: number
-        durationDelta: number
-        costDelta: number
-        failedDelta: number
+type RunCompareBase = {
+  ok: true
+  flowId: string
+  flowName: string
+  current: RunCompareSide
+  /** 同一条画布上还能拿来对照的运行（不含自己，不含还在跑 / 排队的） */
+  options: RunCompareSide[]
+  optionsTotal: number
+  /** 候选超过 20 条时只返回最近 20 条 */
+  optionsTruncated: boolean
+}
+
+export type RunCompare = RunCompareBase &
+  (
+    | {
+        comparable: false
+        reason: string
       }
-    }
+    | {
+        comparable: true
+        previous: RunCompareSide
+        graph: { changed: boolean; unknown: boolean; currentRevision: string; previousRevision: string }
+        nodes: RunCompareNode[]
+        totals: {
+          added: number
+          removed: number
+          statusChanged: number
+          outputChanged: number
+          revisionChanged: number
+          unchanged: number
+          changed: number
+          durationDelta: number
+          costDelta: number
+          failedDelta: number
+        }
+      }
+  )
 
 /** 默认和同一条画布更早的那条比；传 withId 才点名另一条。 */
 export const getRunCompare = (id: string, withId = '') =>

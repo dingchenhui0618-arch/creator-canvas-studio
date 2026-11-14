@@ -207,7 +207,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
   const [runMeta, setRunMeta] = useState<{ id: string; total: number }>({ id: '', total: 0 })
   const [runError, setRunError] = useState('')
   const [drawerOpen, setDrawerOpen] = useState(false)
-  // 运行对照（v0.9.110）：只读弹窗，打开时才去读上一条；不在画布页加载时预取
+  // 运行对照（v0.9.110）：只读弹窗，打开时才去读对照对象；不在画布页加载时预取
   const [compareOpen, setCompareOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [bdc, setBdc] = useState<BdcStatus | null>(null)
@@ -1561,7 +1561,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
                 type="button"
                 onClick={() => setCompareOpen(true)}
                 disabled={!runRecord}
-                title="和同一条画布的上一条运行逐节点对照：哪里变了、慢在哪、多花多少"
+                title="和同一条画布上的另一条运行逐节点对照：哪里变了、慢在哪、多花多少"
               >
                 <GitCompareArrows size={14} />对照上次
               </button>
