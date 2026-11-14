@@ -192,6 +192,11 @@ export type RunEventMessage =
 export const stopRun = (id: string) =>
   request<{ ok: boolean; id: string; status: string }>('/api/runs/' + id + '/stop', { method: 'POST' })
 
+/** 单条运行：从运行记录页点「继续运行」时，画布按地址里的 runId 把这条记录放回抽屉。 */
+export async function getRun(id: string): Promise<RunRecord> {
+  return request<RunRecord>('/api/runs/' + encodeURIComponent(id))
+}
+
 export async function listRuns(query: RunQuery = {}): Promise<RunList> {
   const params = new URLSearchParams()
   if (query.flowId) params.set('flowId', query.flowId)

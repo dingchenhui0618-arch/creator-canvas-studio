@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Activity, ArrowRight, ChevronLeft, ChevronRight, Link2, RefreshCw, Search, Workflow } from 'lucide-react'
+import { Activity, ArrowRight, ChevronLeft, ChevronRight, Link2, Play, RefreshCw, Search, Workflow } from 'lucide-react'
 import PageHead from '../components/PageHead'
 import { Select } from '../components/Select'
 import { adoptProjectCanvas, createProject, listProjects } from '../api/projects'
 import type { ProjectSummary } from '../domain/project'
 import { listFlows, listRuns, type ApiFlow, type RunRecord } from '../api/flows'
-import { runSpentText, runStatusMeta, runVersionLabel, runWorkLine } from '../domain/run'
+import { runResumeInfo, runSpentText, runStatusMeta, runVersionLabel, runWorkLine } from '../domain/run'
 import { readRunsView, resolveFlowFilter, writeRunsView, type RunsView } from '../domain/list-view'
 import '../styles/runs.css'
 
@@ -73,9 +73,12 @@ function NodeOutput({ output }: { output: unknown }) {
 // onOpenProject：一条运行挂在作品上时，「回作品」直接进那条作品（脚本、分镜、评审都在那儿）。
 export function RunsPage({
   onOpenFlow,
+  onResumeRun,
   onOpenProject,
 }: {
   onOpenFlow?: (flowId: string) => void
+  /** 续跑入口（v0.9.104）：回到画布时把这条运行放回抽屉，已跑完的节点不再重复扣费 */
+  onResumeRun?: (flowId: string, runId: string) => void
   onOpenProject?: (projectId: string) => void
 }) {
   const [items, setItems] = useState<RunRecord[]>([])
@@ -411,6 +414,17 @@ export function RunsPage({
                     >
                       回作品
                       <ArrowRight size={13} />
+                    </button>
+                  ) : null}
+                  {onResumeRun && current.status !== 'running' && current.status !== 'queued' && runResumeInfo(current).resumable ? (
+                    <button
+                      type="button"
+                      className="vq-button vq-button--primary vq-button--sm"
+                      onClick={() => onResumeRun(current.flowId, current.id)}
+                      title="回到画布，只补没跑完的节点；已跑完的节点直接复用，不重复扣费"
+                    >
+                      <Play size={13} fill="currentColor" />
+                      继续运行
                     </button>
                   ) : null}
                   {onOpenFlow ? (

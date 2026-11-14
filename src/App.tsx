@@ -535,6 +535,7 @@ function Workbench({
           <CanvasPage
             key={'canvas:' + (route.canvasId || 'flow')}
             flowId={route.flowId}
+            resumeRunId={route.resumeRunId}
             canvasId={route.canvasId}
             onToast={notify}
             focus={focusOn}
@@ -617,6 +618,7 @@ function Workbench({
         return (
           <RunsPage
             onOpenFlow={(flowId) => navigate({ kind: 'page', page: 'canvas', flowId })}
+            onResumeRun={(flowId, runId) => navigate({ kind: 'page', page: 'canvas', flowId, resumeRunId: runId })}
             onOpenProject={(projectId) => navigate({ kind: 'page', page: 'projects', projectId })}
           />
         )

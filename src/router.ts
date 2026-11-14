@@ -13,14 +13,16 @@ import { useSyncExternalStore } from 'react'
 import type { Page } from './domain/types'
 import { EDITION_BY_ID, type AdminSection, type EditionId } from './editions'
 import { isHelpSlug, type HelpSlug } from './domain/help'
+import { canvasRunLinkFromSegments, canvasRunLinkHash } from './domain/canvas-run-link'
 
 /** 外壳里真正占一屏的用户页面；登录与编辑器各自有独立入口。 */
 export type ShellPage = Exclude<Page, 'login' | 'agent-editor'>
 
 export type Route =
-  // 画布有两个可寻址对象：
-  //   #/canvas/<flowId>            内置编排的流程（模板库、运行记录跳转都走它）
-  //   #/canvas/project/<画布ID>    画布服务里的画布项目（工作台「继续上次的画布」走它）
+  // 画布有三个可寻址对象：
+  //   #/canvas/<flowId>                     内置编排的流程（模板库、运行记录跳转都走它）
+  //   #/canvas/<flowId>/resume/<runId>      特定一次运行：打开画布时把那条记录放回抽屉（v0.9.104）
+  //   #/canvas/project/<画布ID>             画布服务里的画布项目（工作台「继续上次的画布」走它）
   | {
       kind: 'page'
       page: ShellPage
@@ -28,6 +30,8 @@ export type Route =
       canvasId?: string
       projectId?: string
       reviewId?: string
+      /** 画布地址里点名的那条运行：刷新、前进后退后仍能回到「继续运行」 */
+      resumeRunId?: string
       /** 模板库里的单条模板：#/templates/<模板 id>（v0.9.35 起作品页的「模板 · X」点得开） */
       templateId?: string
     }
@@ -159,6 +163,9 @@ export function parseRoute(hash: string): Route {
   if ((USER_PAGES as readonly string[]).includes(head)) {
     if (head === 'canvas') {
       if (tail === 'project' && segments[2]) return { kind: 'page', page: 'canvas', canvasId: segments[2] }
+      // #/canvas/<flowId>/resume/<runId>：缺 runId 的坏链接退回这块画布，不挡住画布本身
+      const runLink = canvasRunLinkFromSegments(segments)
+      if (runLink) return { kind: 'page', page: 'canvas', ...runLink }
       return { kind: 'page', page: 'canvas', flowId: tail || undefined }
     }
     return { kind: 'page', page: head as ShellPage }
@@ -171,6 +178,7 @@ export function toHash(route: Route): string {
   if (route.kind === 'page') {
     if (route.page === 'canvas') {
       if (route.canvasId) return '#/canvas/project/' + encodeURIComponent(route.canvasId)
+      if (route.flowId && route.resumeRunId) return canvasRunLinkHash(route.flowId, route.resumeRunId)
       if (route.flowId) return '#/canvas/' + encodeURIComponent(route.flowId)
     }
     if (route.page === 'projects' && route.projectId) return '#/projects/' + encodeURIComponent(route.projectId)
@@ -194,6 +202,7 @@ export function routeKey(route: Route): string {
   if (route.kind === 'page') {
     if (route.page === 'canvas') {
       if (route.canvasId) return 'page:canvas:project:' + route.canvasId
+      if (route.flowId && route.resumeRunId) return 'page:canvas:flow:' + route.flowId + ':resume:' + route.resumeRunId
       if (route.flowId) return 'page:canvas:flow:' + route.flowId
     }
     if (route.page === 'projects' && route.projectId) return 'page:projects:' + route.projectId

@@ -19,6 +19,7 @@ import {
   createFlow,
   deleteFlow,
   getFlow,
+  getRun,
   getRunQueue,
   getRunResumePlan,
   listFlows,
@@ -67,12 +68,14 @@ const nodeTypes = {
   output: FlowNodeCard,
 }
 
-// 画布页有两个入口，都来自地址栏：
-//   flowId   #/canvas/<flowId>          内置编排的流程（模板库、运行记录跳转）
-//   canvasId #/canvas/project/<画布ID>  画布服务里的画布项目（工作台「继续上次的画布」）
+// 画布页有三个入口，都来自地址栏：
+//   flowId       #/canvas/<flowId>                    内置编排的流程（模板库、运行记录跳转）
+//   resumeRunId  #/canvas/<flowId>/resume/<runId>     特定一次运行：打开时把记录放回抽屉（v0.9.104）
+//   canvasId     #/canvas/project/<画布ID>            画布服务里的画布项目（工作台「继续上次的画布」）
 type CanvasPageProps = {
   onToast?: (message: string) => void
   flowId?: string
+  resumeRunId?: string
   canvasId?: string
   // 专注模式：进画布收起侧栏与顶栏，只留画布自己的工具条；再点一次退出
   focus?: boolean
@@ -83,10 +86,10 @@ type Snapshot = { nodes: Node<FlowNodeData>[]; edges: Edge[] }
 
 type SaveState = 'saved' | 'saving' | 'dirty' | 'error'
 
-export default function CanvasPage({ onToast, flowId, canvasId, focus, onToggleFocus }: CanvasPageProps) {
+export default function CanvasPage({ onToast, flowId, resumeRunId, canvasId, focus, onToggleFocus }: CanvasPageProps) {
   return (
     <ReactFlowProvider>
-      <CanvasWorkspace onToast={onToast} flowId={flowId} canvasId={canvasId} focus={focus} onToggleFocus={onToggleFocus} />
+      <CanvasWorkspace onToast={onToast} flowId={flowId} resumeRunId={resumeRunId} canvasId={canvasId} focus={focus} onToggleFocus={onToggleFocus} />
     </ReactFlowProvider>
   )
 }
@@ -103,7 +106,7 @@ function hostOf(value: string): string {
   }
 }
 
-function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanvasId, focus, onToggleFocus }: CanvasPageProps) {
+function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialResumeId, canvasId: initialCanvasId, focus, onToggleFocus }: CanvasPageProps) {
   const { internal } = useUiMode()
   const rf = useReactFlow()
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<FlowNodeData>>([])
@@ -338,8 +341,10 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
 
   // 已经装进页面的流程：applyFlow 会把 id 写回地址栏，路由再回灌进来时用它挡住第二次加载
   const loadedFlowRef = useRef('')
+  // 地址里点名的那条运行已经放回抽屉没有：路由重渲染、保存后重跑 effect 都不该再拉一次
+  const appliedResumeRef = useRef('')
 
-  const applyFlow = useCallback((flow: ApiFlow) => {
+  const applyFlow = useCallback((flow: ApiFlow, resumeRunId?: string) => {
     skipSave.current = true
     loadedFlowRef.current = flow.id
     setFlowId(flow.id)
@@ -364,8 +369,9 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
     setRunError('')
     setSaveState('saved')
     setSaveError('')
-    // 地址栏跟着当前流程走：刷新、复制链接、从其它页面跳回来都能落到同一张画布
-    if (flow.id) replaceRoute({ kind: 'page', page: 'canvas', flowId: flow.id })
+    // 地址栏跟着当前流程走：刷新、复制链接、从其它页面跳回来都能落到同一张画布。
+    // 从运行记录点「继续运行」进来时保留 runId：刷新后还能回到那条运行。
+    if (flow.id) replaceRoute({ kind: 'page', page: 'canvas', flowId: flow.id, ...(resumeRunId ? { resumeRunId } : {}) })
   }, [setNodes, setEdges])
 
   const saveNow = useCallback(async (): Promise<boolean> => {
@@ -429,7 +435,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
           list = [created]
         }
         setFlows(list)
-        applyFlow(target || list[0])
+        applyFlow(target || list[0], initialResumeId)
         setLoadState('ready')
         window.setTimeout(() => rf.fitView({ padding: 0.12 }), 80)
       } catch (error) {
@@ -442,7 +448,65 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
     return () => {
       alive = false
     }
-  }, [applyFlow, initialFlowId, rf, bdcTarget])
+  }, [applyFlow, initialFlowId, initialResumeId, rf, bdcTarget])
+
+  // 从运行记录点「继续运行」进来（v0.9.104）：地址里带着 runId，画布就绪后把那条记录
+  // 放回抽屉——关过页面、换过设备、隔天再回来，都不必先记得上次停在哪一屏。
+  // 只读单条运行；能不能续、复用几个仍由 resume-plan 现算，这里不替服务端下结论。
+  useEffect(() => {
+    const id = flowIdRef.current
+    const runId = initialResumeId
+    if (!runId || !id || loadState !== 'ready') return undefined
+    const key = id + ':' + runId
+    if (appliedResumeRef.current === key) return undefined
+    appliedResumeRef.current = key
+    let alive = true
+    const timer = window.setTimeout(() => {
+      getRun(runId)
+        .then((run) => {
+          if (!alive) return
+          if (run.flowId !== flowIdRef.current) {
+            toast('这条运行不属于当前画布')
+            replaceRoute({ kind: 'page', page: 'canvas', flowId: flowIdRef.current })
+            return
+          }
+          const byId = new Map(run.nodes.map((node) => [node.id, node]))
+          setNodes((current) => current.map((node) => {
+            const result = byId.get(node.id)
+            if (!result) {
+              return { ...node, data: { ...node.data, status: undefined, ms: undefined, output: undefined, error: undefined } }
+            }
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                status: (result.status === 'success' ? 'done' : result.status) as RunNodeStatus,
+                ms: result.ms,
+                output: typeof result.output?.text === 'string' ? result.output.text : '',
+                error: result.error ?? undefined,
+              },
+            }
+          }))
+          setRunRecord(run)
+          setRunNodes(run.nodes)
+          setRunMeta({ id: run.id, total: run.total })
+          setRunError('')
+          setRunCancelled(Boolean(run.canceled))
+          setResumeSource(runResumeInfo(run).resumable ? run : null)
+          setResumePlan(null)
+          setDrawerOpen(true)
+        })
+        .catch((error) => {
+          if (!alive) return
+          toast('这条运行打不开：' + (error instanceof Error ? error.message : String(error)))
+          replaceRoute({ kind: 'page', page: 'canvas', flowId: flowIdRef.current })
+        })
+    }, 120)
+    return () => {
+      alive = false
+      window.clearTimeout(timer)
+    }
+  }, [initialResumeId, flowId, loadState, setNodes, toast])
 
   // 自动保存：只比较节点/连线/流程名的投影，选中态变化不会触发保存
   useEffect(() => {
@@ -784,6 +848,9 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
         if (event.type === 'run-start') {
           runIdRef.current = event.run.id
           setRunMeta({ id: event.run.id, total: event.run.total })
+          // 这次运行已经真的开始了：地址里那条「旧运行」不再是用户正在看的对象；
+          // 再刷新时别把旧记录放回抽屉，最新那条在运行记录页。
+          replaceRoute({ kind: 'page', page: 'canvas', flowId: flowIdRef.current })
           return
         }
         if (event.type === 'node-start') {
