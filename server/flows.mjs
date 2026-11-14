@@ -32,6 +32,9 @@ export const REVIEW_PROFILES = [
 
 const flowsFile = path.join(config.dataDir, 'flows.json')
 const runsFile = path.join(config.dataDir, 'runs.json')
+// 画布快照单独放：运行记录列表只要结果，不要把几十张画的配置一起发给页面。
+// 一次运行一个文件，读详情时才带上；清运行记录时一起清。
+const runGraphsDir = path.join(config.dataDir, 'run-graphs')
 const MAX_RUNS = 60
 const MAX_TEXT = 4000
 
@@ -218,6 +221,65 @@ async function persistRuns(list) {
   const tmp = runsFile + '.tmp'
   await fsp.writeFile(tmp, JSON.stringify(list, null, 2), 'utf8')
   await fsp.rename(tmp, runsFile)
+}
+
+// ---------- 运行画布快照 ----------
+
+/** 快照文件名只认运行 id 里的安全字符，绝不把 URL 里的内容直接拼成路径。 */
+function runGraphFile(runId) {
+  const safe = String(runId || '').replace(/[^\w-]/g, '_')
+  return path.join(runGraphsDir, safe + '.json')
+}
+
+/**
+ * 一次运行开始时的画布快照：位置、标题、参数、连线都留在里面。
+ * 运行记录本身只记节点结果（v0.9.106 之前连位置都没有），所以「回看」只能看现在的画布；
+ * 从这一版起，新运行把当时那张画布也留下，旧运行仍按「取当前画布」如实回退。
+ */
+export function runGraphSnapshot(flow) {
+  const nodes = (Array.isArray(flow?.nodes) ? flow.nodes : []).slice(0, 60).map(normalizeNode)
+  return {
+    capturedAt: new Date().toISOString(),
+    flowRevision: flowRevisionOf(flow),
+    nodes,
+    edges: normalizeEdges(flow?.edges, nodes),
+  }
+}
+
+/** 先写快照再写运行记录：写失败只退化为「没有快照」，不能因为留档失败把运行本身弄挂。 */
+export async function saveRunGraph(runId, flow) {
+  const id = String(runId || '')
+  if (!id) return null
+  const snapshot = runGraphSnapshot(flow)
+  await fsp.mkdir(runGraphsDir, { recursive: true })
+  const file = runGraphFile(id)
+  const tmp = file + '.tmp'
+  await fsp.writeFile(tmp, JSON.stringify(snapshot), 'utf8')
+  await fsp.rename(tmp, file)
+  return snapshot
+}
+
+/** 读一次运行的画布快照；没有 / 损坏 / 旧格式都返回 null，页面据此回退到当前画布。 */
+export async function loadRunGraph(runId) {
+  const id = String(runId || '')
+  if (!id) return null
+  try {
+    const parsed = JSON.parse(await fsp.readFile(runGraphFile(id), 'utf8'))
+    if (!parsed || !Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) return null
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+async function deleteRunGraphs(runIds = []) {
+  for (const id of runIds) {
+    try {
+      await fsp.unlink(runGraphFile(id))
+    } catch {
+      // 没有快照或已经删过：清理不能影响运行记录本身
+    }
+  }
 }
 
 // ---------- 流程 CRUD ----------
@@ -862,10 +924,15 @@ export async function adoptUnownedFlows(ownerId) {
 // 同一条运行会写两次（开始时落一笔、结束时落终态），所以按 id 覆盖而不是直接往前插：
 // 否则一次运行在列表里会出现两条，一条永远挂在 running 上。
 async function saveRun(run) {
+  let dropped = []
   await enqueueWrite(async () => {
     const list = await loadRuns()
-    await persistRuns([run, ...list.filter((item) => item.id !== run.id)].slice(0, MAX_RUNS))
+    const merged = [run, ...list.filter((item) => item.id !== run.id)]
+    dropped = merged.slice(MAX_RUNS).map((item) => item.id)
+    await persistRuns(merged.slice(0, MAX_RUNS))
   })
+  // 记录被挤出历史窗口，它的画布快照也不该继续占盘
+  if (dropped.length) await deleteRunGraphs(dropped)
 }
 
 async function touchFlowRun(flowId, run) {
@@ -966,6 +1033,7 @@ export async function dropRunRecord(runId) {
   const next = list.filter((item) => item.id !== id)
   if (next.length === list.length) return false
   await persistRuns(next)
+  await deleteRunGraphs([id])
   return true
 }
 
@@ -1115,6 +1183,13 @@ export async function runFlow(flow, { onEvent, credits = null, runId = '', resum
     credits: credits ? { cost: Math.round(Number(credits.cost) || 0), refunded: false } : null,
   }
   Object.defineProperty(run, '__stopController', { value: stopController, enumerable: false, configurable: true })
+  // 先留画布快照、再落运行记录，最后才执行：快照对应的是这次真正要跑的那张图。
+  // 留档失败只退化为「没有快照」，不能因为回看资料写不进去就不跑流程。
+  try {
+    await saveRunGraph(run.id, flow)
+  } catch (error) {
+    console.error('[flows] 运行画布快照写入失败（回看将退回当前画布）：' + String(error && error.message ? error.message : error))
+  }
   // 先落盘再执行：以前只在结束时写运行记录，进程被杀就什么也不剩，
   // 已扣的积分在账本里也永远对不上是哪次运行。
   activeRuns.set(run.id, run)

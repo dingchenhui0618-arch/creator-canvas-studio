@@ -79,6 +79,17 @@ export type RunProjectRef = {
   archived: boolean
 }
 
+/**
+ * 一次运行开始时的画布快照（v0.9.107）：位置、标题、参数、连线都在里面。
+ * 只有单条运行详情会带；旧运行没有这一项，页面必须如实退回「取当前画布」。
+ */
+export type RunGraphSnapshot = {
+  capturedAt: string
+  flowRevision: string
+  nodes: ApiFlowNode[]
+  edges: ApiFlowEdge[]
+}
+
 export type RunRecord = {
   id: string
   flowId: string
@@ -119,6 +130,8 @@ export type RunRecord = {
   credits?: RunCredits | null
   /** 属于哪条作品的哪一版；没挂在作品上为 null / 缺省 */
   project?: RunProjectRef | null
+  /** 这次运行开始时的画布快照；只有详情接口带，旧运行时缺省 */
+  graph?: RunGraphSnapshot | null
 }
 
 /** 续跑预检（v0.9.103）：只读，不扣费。页面按它显示还能复用几个、改过几个、补多少。 */

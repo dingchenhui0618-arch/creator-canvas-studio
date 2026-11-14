@@ -19,6 +19,8 @@ type InspectorProps = {
   onDelete: () => void
   /** 历史运行只读查看：字段仍可读，但不接受编辑，也不给复制 / 删除入口（v0.9.106） */
   readOnly?: boolean
+  /** 这次运行留下了画布快照：参数取当时那一版，不是当前画布（v0.9.107） */
+  runSnapshot?: boolean
 }
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
@@ -31,7 +33,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   )
 }
 
-export function Inspector({ node, onPatch, onConfig, onDuplicate, onDelete, readOnly = false }: InspectorProps) {
+export function Inspector({ node, onPatch, onConfig, onDuplicate, onDelete, readOnly = false, runSnapshot = false }: InspectorProps) {
   // 模型候选来自服务端 /api/models；hook 必须在提前 return 之前调用
   const modelOptions = useModelOptions()
   const { internal } = useUiMode()
@@ -43,7 +45,7 @@ export function Inspector({ node, onPatch, onConfig, onDuplicate, onDelete, read
         <div className="cv-inspector-empty">
           <span className="cv-empty-mark" aria-hidden>+</span>
           <p>{readOnly ? '选中画布上的节点，在这里查看它当时的参数与结果。' : '选中画布上的节点，在这里编辑它的参数。'}</p>
-          <p className="cv-muted">{readOnly ? '只读查看：参数取当前画布，状态与输出来自这条运行。' : '连线规则：每个输入端口只接一根线，不能连成环。'}</p>
+          <p className="cv-muted">{readOnly ? (runSnapshot ? '只读查看：参数取这次运行开始时的画布快照，状态与输出也来自这条运行。' : '只读查看：参数取当前画布，状态与输出来自这条运行。') : '连线规则：每个输入端口只接一根线，不能连成环。'}</p>
         </div>
       </aside>
     )
@@ -220,7 +222,7 @@ export function Inspector({ node, onPatch, onConfig, onDuplicate, onDelete, read
 
       {readOnly ? (
         <footer className="cv-inspector-foot cv-inspector-foot--readonly">
-          <span>历史运行 · 只读</span>
+          <span>{runSnapshot ? '历史运行 · 画布快照' : '历史运行 · 只读'}</span>
           <span className="cv-mono">不会写回画布</span>
         </footer>
       ) : (

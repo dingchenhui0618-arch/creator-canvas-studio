@@ -984,7 +984,9 @@
 .cv-runview-warn { color: var(--warn); }
 .cv-toolbar-count--readonly { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); }
 .cv-canvas.is-readonly .react-flow__node { cursor: default; }
-.cv-canvas.is-readonly .react-flow__handle { display: none; }
+/* 只读时把手柄藏掉，但不能 display:none：React Flow 要靠手柄的尺寸算连线端点，
+   一 display:none 连线就会缩成一个小点（2026-11-14 截图发现）。保留布局、只是看不见。 */
+.cv-canvas.is-readonly .react-flow__handle { opacity: 0; pointer-events: none; }
 .cv-hint-dot[data-readonly="true"] { background: var(--muted); }
 .cv-inspector-body { min-width: 0; margin: 0; padding: 0; border: 0; }
 .cv-inspector-body:disabled .cv-input,
@@ -1006,4 +1008,6 @@
 @media (max-width: 760px) {
   .cv-runview { gap: 8px; padding: 12px; }
   .cv-runview-line { gap: 8px 12px; }
+  /* 窄屏画布本来就小，小地图会压住节点和底部提示；手机上用双指 / 工具条缩放即可。 */
+  .cv-canvas .react-flow__minimap { display: none; }
 }

@@ -28,6 +28,7 @@ import {
   stopRun as stopRunRequest,
   updateFlow,
   type ApiFlow,
+  type RunGraphSnapshot,
   type RunNodeResult,
   type RunProjectRef,
   type RunRecord,
@@ -137,6 +138,8 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
   const [running, setRunning] = useState(false)
   const [runNodes, setRunNodes] = useState<RunNodeResult[]>([])
   const [runRecord, setRunRecord] = useState<RunRecord | null>(null)
+  // 这次运行开始时的画布快照（v0.9.107）：有它，回看的是当时的位置与参数；没有才退回当前画布。
+  const [runGraph, setRunGraph] = useState<RunGraphSnapshot | null>(null)
   // 停止 / 失败后还能接着跑的那条运行：抽屉里的「继续」按它发起，复用它已跑完的节点
   const [resumeSource, setResumeSource] = useState<RunRecord | null>(null)
   // 续跑预检（v0.9.103）：画布改过之后，旧记录里的「跑完 3 个」不等于「还能复用 3 个」。
@@ -384,6 +387,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
     setHistoryCount(0)
     setFutureCount(0)
     setRunRecord(null)
+    setRunGraph(null)
     setResumeSource(null)
     setResumePlan(null)
     setRunNodes([])
@@ -503,7 +507,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
             return
           }
           const byId = new Map(run.nodes.map((node) => [node.id, node]))
-          setNodes((current) => current.map((node) => {
+          const withResult = (node: Node<FlowNodeData>): Node<FlowNodeData> => {
             const result = byId.get(node.id)
             if (!result) {
               return { ...node, data: { ...node.data, status: undefined, ms: undefined, output: undefined, error: undefined } }
@@ -518,7 +522,22 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
                 error: result.error ?? undefined,
               },
             }
-          }))
+          }
+          // 有快照就以快照为准：即使画布后来挪过、删过节点，回看的还是当时那张图。
+          // 旧运行没有快照，仍按原来的方式把结果贴到当前画布上，并在页面上写明这一点。
+          const graph = readOnly && run.graph && run.graph.nodes.length ? run.graph : null
+          if (graph) {
+            const pinned = fromFlowNodes(graph.nodes).map(withResult)
+            const keepIds = new Set(pinned.map((node) => node.id))
+            setNodes(pinned)
+            setEdges(fromFlowEdges(graph.edges, keepIds))
+            setSelectedId(pinned[0]?.id ?? '')
+            setRunGraph(graph)
+            window.setTimeout(() => rf.fitView({ padding: 0.12, duration: 200 }), 80)
+          } else {
+            setRunGraph(null)
+            setNodes((current) => current.map(withResult))
+          }
           setRunRecord(run)
           setRunNodes(run.nodes)
           setRunMeta({ id: run.id, total: run.total })
@@ -539,7 +558,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
       alive = false
       window.clearTimeout(timer)
     }
-  }, [openRunId, readOnly, flowId, loadState, setNodes, toast])
+  }, [openRunId, readOnly, flowId, loadState, rf, setEdges, setNodes, toast])
 
   // 自动保存：只比较节点/连线/流程名的投影，选中态变化不会触发保存
   useEffect(() => {
@@ -584,6 +603,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
   const runViewMissing = readOnly && runRecord
     ? runRecord.nodes.filter((result) => !nodes.some((node) => node.id === result.id)).length
     : 0
+  const hasRunSnapshot = Boolean(readOnly && runGraph)
   const runViewStatus = runRecord ? runStatusMeta(runRecord.status, Boolean(runRecord.canceled)) : null
   const runViewSpent = runRecord ? runSpentText(runRecord) : '读取中'
 
@@ -1364,7 +1384,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
           <span className="cv-title-row">
             <input
               className="cv-flow-name"
-              value={name}
+              value={readOnly ? (runRecord?.flowName || name) : name}
               onChange={(event) => setName(event.target.value)}
               aria-label="流程名称"
               spellCheck={false}
@@ -1376,7 +1396,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
           </span>
         }
         desc={readOnly
-          ? '回放一次运行：节点状态、耗时、输出都来自这条记录；画布参数取当前版本，只读查看不会写回，也不会扣积分。'
+          ? '回放一次运行：有画布快照时，位置与参数也是当时那一版；状态、耗时、输出都来自这条记录。只读查看不会写回，也不会扣积分。'
           : '按依赖顺序逐个节点执行 · 每次运行记录耗时、输出与失败原因，失败自动退回积分'}
         actions={
           <div className="cv-head-actions">
@@ -1483,7 +1503,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
       {readOnly ? (
         <div className="cv-runview" role="status" aria-live="polite">
           <div className="cv-runview-line">
-            <span className="cv-runview-kicker"><History size={13} strokeWidth={1.75} />历史运行 · 只读</span>
+            <span className="cv-runview-kicker"><History size={13} strokeWidth={1.75} />历史运行 · {hasRunSnapshot ? '画布快照' : '只读'}</span>
             <Pill tone={runViewStatus?.tone || 'idle'} dot>{runViewStatus?.label || '正在读取'}</Pill>
             <span className="vq-mono">{openRunId}</span>
             <span className="vq-mono">{runRecord ? formatRunTime(runRecord.startedAt) : '—'}</span>
@@ -1500,11 +1520,15 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
             ) : null}
           </div>
           <p className="cv-runview-copy">
-            节点位置与参数取当前画布；状态、耗时、输出来自这条运行。查看不会写回画布，也不扣积分。
+            {hasRunSnapshot
+              ? '节点位置、标题与参数取这次运行开始时的画布快照；状态、耗时、输出取这条运行。查看不会写回画布，也不扣积分。'
+              : '这条运行没有留下画布快照：位置与参数只能取当前画布；状态、耗时、输出来自这条运行。查看不会写回画布，也不扣积分。'}
           </p>
           {runViewMissing > 0 ? (
             <p className="cv-runview-warn">
-              这次运行里有 {runViewMissing} 个节点已不在当前画布：它们的结果仍可在右侧运行结果里查看，但不会画在画布上。
+              {hasRunSnapshot
+                ? '这次运行的画布快照里缺少 ' + runViewMissing + ' 个节点：它们的结果仍可在右侧运行结果里查看，但不会画在画布上。'
+                : '这次运行里有 ' + runViewMissing + ' 个节点不在当前画布上：它们的结果仍可在右侧运行结果里查看，但不会画在画布上。'}
             </p>
           ) : null}
         </div>
@@ -1554,7 +1578,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
           <section className="cv-stage" aria-label="流程画布">
             {/* 画布是从作品某一步被带进来的能力：先写清在帮哪条作品、哪一版，再给两个出口。
                 空白画布不写——没有作品就别编一条出来。 */}
-            {flowProject ? (
+            {flowProject && !readOnly ? (
               <div className="cv-project">
                 <span className="cv-project-kicker">{flowProject.archived ? '归档画布' : '在帮'}</span>
                 <strong className="cv-project-title">
@@ -1646,9 +1670,11 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
                     onNodesChange(changes)
                     return
                   }
-                  // 只读只接受选中态；拖动、删除、连线等变更一律丢掉。
-                  const selection = changes.filter((change) => change.type === 'select')
-                  if (selection.length) onNodesChange(selection)
+                  // 只读只接受选中态与尺寸测量；拖动、删除、新增等变更一律丢掉。
+                  // dimensions 必须放行：React Flow 靠它算连线的起点 / 终点，
+                  // 连尺寸一起丢掉的话，快照里的线会从画布左上角乱飞（2026-11-14 截图发现）。
+                  const safe = changes.filter((change) => change.type === 'select' || change.type === 'dimensions')
+                  if (safe.length) onNodesChange(safe)
                 }}
                 onEdgesChange={onEdgesChange}
                 onConnect={onConnect}
@@ -1701,7 +1727,9 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
               <div className="cv-hint">
                 <span className="cv-hint-dot" data-running={running} data-readonly={readOnly} />
                 {readOnly
-                  ? '只读查看：节点状态来自这次运行，画布不会被改动'
+                  ? hasRunSnapshot
+                    ? '只读查看：画布是这次运行开始时的快照，不会被改动'
+                    : '只读查看：节点状态来自这次运行，画布不会被改动'
                   : running ? '运行中：节点会按拓扑序逐个点亮' : '拖动节点右侧圆点连线；每个输入端口只接一根线'}
               </div>
             </div>
@@ -1714,6 +1742,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
             onDuplicate={duplicateSelected}
             onDelete={deleteSelected}
             readOnly={readOnly}
+            runSnapshot={hasRunSnapshot}
           />
         </div>
       )}
@@ -1721,7 +1750,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
       <RunDrawer
         open={drawerOpen}
         running={running}
-        flowName={name}
+        flowName={readOnly ? (runRecord?.flowName || name) : name}
         runId={runMeta.id}
         total={runMeta.total}
         nodes={runNodes}

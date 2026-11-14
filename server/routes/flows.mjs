@@ -8,6 +8,7 @@ import {
   runFlow,
   listRuns,
   getRun,
+  loadRunGraph,
   newRunId,
   startFlowRun,
   markRunStarted,
@@ -229,9 +230,14 @@ export function createFlowsRouter() {
           notFound(res, '运行记录不存在')
           return true
         }
-        // 单条运行与列表同一口径：都带 project，页面不用两处判断
+        // 单条运行与列表同一口径：都带 project，页面不用两处判断。
+        // 画布快照只在详情里带：列表一次 20 条，不把几十张节点的配置一起传下去。
         const projects = await listProjects(user)
-        sendJson(res, 200, withRunProject([run], projectsByFlow(projects))[0])
+        const graph = await loadRunGraph(run.id)
+        sendJson(res, 200, {
+          ...withRunProject([run], projectsByFlow(projects))[0],
+          ...(graph ? { graph } : {}),
+        })
         return true
       }
 
