@@ -269,7 +269,9 @@ export function kindLimitFor(kind, level = 'ok', guard = true) {
 // 画布上看到的就是「6 张失败」；可画布其实等得起（同步出图超时 1800 秒）。
 // 所以名额满时先排一会儿：排到了照常出图，排不到才拒——拒绝仍然发生在调上游之前，
 // 这一单不花钱。四件事刻意做成这样：
-//   1) 只给没有账号可挂的那一类排队（现在只有画布出图）；其余重活有账号，客户端自己重试更合适；
+//   1) 给「连发」与「主付费动作」这两类排队（画布出图 v0.9.80、评审 v0.9.95）；
+//      以前只给没有账号可挂的画布排，理由是其余重活客户端重试更合适——但评审是产品主路径，
+//      让用户自己再点一次是把活推回给他，所以它也有份；其余重活仍然是立刻拒；
 //   2) 排队位与名额同一个口径（v0.9.93）：都放在共享目录里，两个实例排的是同一条队，
 //      「最多 8 条同时排」是整机 8 条，不是每进程 8 条；
 //   3) 先来先得跨进程成立：只有队伍最前面那一条才去试名额，排在后面的不许插队——
@@ -288,10 +290,25 @@ function waitText(ms) {
   return seconds >= 10 ? String(Math.round(seconds)) : String(Math.round(seconds * 10) / 10)
 }
 
+// 哪几类排得起队、读哪一段配置。票号与名次仍是按类型各一条队（joinWaitQueue 用 kind 分目录）。
+const QUEUE_CONFIG = {
+  canvas_gen: () => (config.credits && config.credits.canvasQueue) || {},
+  review: () => (config.credits && config.credits.reviewQueue) || {},
+}
+// 排队相关的话按类型说：评审没有「少发几张」，运行/生成才有。
+const QUEUE_WORD = {
+  canvas_gen: { noun: '生成', cost: '没有产生费用', advice: '少发几张，或者等一分钟再试' },
+  review: { noun: '评审', cost: '没有扣积分', advice: '先把这一版改一改，或者等一分钟再试' },
+}
+function queueWord(kind) {
+  return QUEUE_WORD[kind] || QUEUE_WORD.canvas_gen
+}
+
 /** 这一类的排队位参数；0 表示不排队（立刻拒，v0.9.79 的行为）。 */
 export function queueLimitsFor(kind) {
-  const raw = (config.credits && config.credits.canvasQueue) || {}
-  if (!HEAVY_KINDS.includes(kind) || !NO_USER_KINDS.has(kind)) return { waitMs: 0, maxWaiting: 0 }
+  const pick = QUEUE_CONFIG[kind]
+  if (!HEAVY_KINDS.includes(kind) || !pick) return { waitMs: 0, maxWaiting: 0 }
+  const raw = pick() || {}
   return {
     waitMs: Math.max(0, Math.round(Number(raw.waitMs) || 0)),
     maxWaiting: Math.max(0, Math.round(Number(raw.maxWaiting) || 0)),
@@ -342,6 +359,33 @@ export function admissionQueueReport(kind = 'canvas_gen') {
 /** 我问的那张票现在排第几；不在队里（已经排到、还没进来、票不存在）就回 null。 */
 export function queuePositionFor(kind, ticket) {
   return waitQueuePosition(kind, ticket)
+}
+
+/**
+ * 某一类排队位这一刻的样子（v0.9.95）：页面在等的时候拿票号问「我排第几、等了多久」。
+ * 聚合数与名次都来自共享目录（整机口径）；票号是凭据，只在请求里出现，不回写进响应。
+ * 条数没有排队位（waitMs/maxWaiting 写 0）时同样能问，只是永远空着——页面据此知道这一档关掉了。
+ */
+export function queueView(kind, ticket = '') {
+  const report = admissionQueueReport(kind)
+  const mine = ticket ? waitQueuePosition(kind, String(ticket).trim().slice(0, 120)) : null
+  return {
+    kind,
+    waitMs: report.waitMs,
+    maxWaiting: report.maxWaiting,
+    waiting: report.waiting,
+    oldestWaitMs: report.oldestWaitMs,
+    scope: report.scope,
+    countsScope: report.countsScope,
+    full: report.full,
+    position: mine ? mine.position : null,
+    ahead: mine ? mine.ahead : null,
+    // 已经排了多久：页面拿它和自己的秒表对一下，别只写「已等 X 秒」却越等越回去
+    waitedMs: mine ? Math.max(0, Number(mine.waitedMs) || 0) : 0,
+    entered: report.entered,
+    served: report.served,
+    timedOut: report.timedOut,
+  }
 }
 
 /**
@@ -435,6 +479,7 @@ export async function admitWaiting(kind, options = {}) {
     // 排队位也满了：这一单直接拒，别把连接堆在这里
     stat.full += 1
     const internal = config.ui.mode === 'internal'
+    const word = queueWord(kind)
     return {
       ok: false,
       level,
@@ -447,8 +492,8 @@ export async function admitWaiting(kind, options = {}) {
       body: {
         code: 'SERVER_BUSY',
         error: internal
-          ? '排队位已经满了（' + joined.waiting + ' / ' + limits.maxWaiting + ' 条在等），这次生成没有开始（没有产生费用）。少发几张，或者等一分钟再试。'
-          : '这次生成没有开始（没有产生费用）：前面排的几张还没排到，这次排不进来了。少发几张，或者等一分钟再试。',
+          ? '排队位已经满了（' + joined.waiting + ' / ' + limits.maxWaiting + ' 条在等），这次' + word.noun + '没有开始（' + word.cost + '）。' + word.advice + '。'
+          : '这次' + word.noun + '没有开始（' + word.cost + '）：前面排的几张还没排到，这次排不进来了。' + word.advice + '。',
         retryAfterSec: RETRY_AFTER_SEC,
         ...(internal ? { queueWaiting: joined.waiting, queueMax: limits.maxWaiting } : {}),
       },
@@ -497,6 +542,7 @@ export async function admitWaiting(kind, options = {}) {
     stat.maxWaitMs = Math.max(stat.maxWaitMs, waitedMs)
     const body = (last && last.body) || {}
     const internal = config.ui.mode === 'internal'
+    const word = queueWord(kind)
     return {
       ...(last || { ok: false, level }),
       ok: false,
@@ -508,8 +554,8 @@ export async function admitWaiting(kind, options = {}) {
         ...body,
         code: 'SERVER_BUSY',
         error: internal
-          ? '排队等了 ' + waitText(waitedMs) + ' 秒还没轮到（同时最多 ' + ((last && last.kindLimit) || kindCap || 0) + ' 条），这次生成没有开始（没有产生费用）。少发几张，或者等一分钟再试。'
-          : '这次生成没有开始（没有产生费用）：排队等了 ' + waitText(waitedMs) + ' 秒还没轮到。少发几张，或者等一分钟再试。',
+          ? '排队等了 ' + waitText(waitedMs) + ' 秒还没轮到（同时最多 ' + ((last && last.kindLimit) || kindCap || 0) + ' 条），这次' + word.noun + '没有开始（' + word.cost + '）。' + word.advice + '。'
+          : '这次' + word.noun + '没有开始（' + word.cost + '）：排队等了 ' + waitText(waitedMs) + ' 秒还没轮到。' + word.advice + '。',
         retryAfterSec: RETRY_AFTER_SEC,
         ...(internal ? { waitedMs, queueWaiting: waitQueueSnapshot(kind).waiting, kindActive: (last && last.kindActive) ?? null, kindLimit: (last && last.kindLimit) || kindCap || null } : {}),
       },

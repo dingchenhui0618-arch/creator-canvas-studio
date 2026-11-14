@@ -66,6 +66,11 @@ export type ReviewResult = {
   note: string
   /** 判断层结果：未启用 / 成功 / 失败三种状态都有，界面按状态显示 */
   judge?: JudgeResult
+  /**
+   * 这次排了多久才轮到（v0.9.95）：只有真排过队才有这一项。
+   * 排队期间没扣积分、没调模型；页面拿它写「排队 12 秒后开始」。
+   */
+  queue?: { position: number; waitedMs: number }
 }
 
 export type ReviewStatus = {
@@ -112,8 +117,41 @@ export type ReviewCandidates = {
 export const getReviewCandidates = (limit = 4) =>
   request<ReviewCandidates>('/api/reviews/candidates?limit=' + limit)
 
-export async function runReview(payload: { media?: string; imageUrl?: string; intent?: string; label?: string; projectId?: string }) {
-  const result = await request<ReviewResult>('/api/review', { method: 'POST', body: JSON.stringify(payload) })
+/**
+ * 排队位（v0.9.95）：名额满时服务端先收下这一单、排在整机的一条队里。
+ * 票号是这次评审的凭据（页面自己生成），服务端只按它查名次——聚合数里看不到票号。
+ */
+export type ReviewQueueState = {
+  ok: boolean
+  kind: string
+  /** 这一类每条最多等多久、最多几条同时排（0 = 这一档关掉了） */
+  waitMs: number
+  maxWaiting: number
+  /** 整机现在几条在等、最久的那条等了多久（口径见 scope / countsScope） */
+  waiting: number
+  oldestWaitMs: number
+  scope: 'lease' | 'process'
+  countsScope: 'process'
+  full: boolean
+  /** 我这张票现在排第几；不在队里（还没登记 / 已排到 / 票不对）是 null */
+  position: number | null
+  ahead: number | null
+  waitedMs: number
+}
+
+export const getReviewQueue = (ticket: string) =>
+  request<ReviewQueueState>('/api/review/queue?ticket=' + encodeURIComponent(ticket))
+
+export async function runReview(
+  payload: { media?: string; imageUrl?: string; intent?: string; label?: string; projectId?: string },
+  ticket = '',
+) {
+  const result = await request<ReviewResult>('/api/review', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    // 票号走请求头：排队期间页面用同一个票号去问「我排第几」
+    headers: ticket ? { 'X-VQ-Queue-Ticket': ticket } : undefined,
+  })
   // 评出新结论就可能新增或清掉一条待办（通过的那一版不再等你看）
   if (payload.projectId) noteReviewQueueChanged()
   return result

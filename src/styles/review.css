@@ -144,6 +144,10 @@
 .review-canvas-shot.is-pinned .review-anchor:not(.is-active) .review-anchor-no { opacity: .6; }
 .review-canvas-hint { margin: 0; color: var(--faint); font-size: 12px; line-height: 1.6; }
 .review-canvas-meta { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+/* 排队位（v0.9.95）：名额满时这里显示真实名次与已等时长，而不是一句「服务器正忙」 */
+.review-queue-strip { display:inline-flex; align-items:center; gap:var(--space-2); padding:var(--space-1) var(--space-2); color:var(--ink); background:var(--violet-soft); border:1px solid var(--line-strong); border-radius:var(--radius-pill); font-size:12px; font-weight:600; white-space:nowrap; }
+.review-queue-strip svg { flex:0 0 auto; color:var(--ink-soft); }
+@media (max-width: 700px) { .review-queue-strip { order:-1; } }
 
 .review-empty-state { display:flex; flex-direction:column; gap:24px; padding:24px; border:1px solid var(--line); border-radius:var(--radius-md); background:var(--surface); }
 .review-empty-head { display:flex; align-items:flex-start; gap:12px; color:var(--muted); }

@@ -240,9 +240,11 @@ test('客户端断开：票马上划掉，别的请求不会被它堵住', async
   held.lease.release()
 })
 
-test('只有画布出图有名次：别的重活既不排队也没有「我第几」', () => {
-  assert.equal(water.queueLimitsFor('review').waitMs, 0)
-  assert.equal(water.queuePositionFor('review', 'whatever'), null)
+test('画布出图的视图只讲画布这一条：评审排队不会混进「画布在排几条」', () => {
+  // v0.9.95 起评审也排队（60 秒 / 4 条），但它的队与画布是两条：画布的视图只回 canvas_gen
+  assert.ok(water.queueLimitsFor('review').waitMs > 0)
+  assert.equal(water.queueLimitsFor('replicate').waitMs, 0, '复刻仍然不排队')
+  assert.equal(water.queuePositionFor('canvas_gen', 'whatever'), null)
   const view = water.canvasQueueView()
   assert.equal(view.kind, 'canvas_gen')
   // v0.9.93：排队位搬进共享目录，两个实例排的是同一条队；目录用不了才退回 process

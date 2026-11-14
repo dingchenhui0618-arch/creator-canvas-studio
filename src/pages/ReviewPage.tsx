@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { ArrowRight, ChevronDown, Clapperboard, Crosshair, ImagePlus, Loader2, Play, RefreshCw, ScanEye, TriangleAlert } from 'lucide-react'
-import { getReview, getReviewCandidates, getReviewStatus, listReviews, runReview, type JudgeResult, type ReviewCandidates, type ReviewResult, type ReviewStatus, type ReviewSummary } from '../api/review'
+import { ArrowRight, ChevronDown, Clapperboard, Crosshair, Hourglass, ImagePlus, Loader2, Play, RefreshCw, ScanEye, TriangleAlert } from 'lucide-react'
+import { getReview, getReviewCandidates, getReviewQueue, getReviewStatus, listReviews, runReview, type JudgeResult, type ReviewCandidates, type ReviewResult, type ReviewStatus, type ReviewSummary } from '../api/review'
 import { getCredits, getModelService, recheckModelService, type CreditsResponse, type ModelServiceState } from '../api/credits'
 import { listTemplates, coverSrc } from '../api/radar'
 import { uploadRejection, uploadReviewImage } from '../api/media'
@@ -137,6 +137,10 @@ export default function ReviewPage({
   const [result, setResult] = useState<ReviewResult | null>(null)
   const [running, setRunning] = useState(false)
   const [elapsed, setElapsed] = useState(0)
+  // 排队位（v0.9.95）：名额满时服务端先让我们排着，这里按票号问「第几、等了多久」。
+  // 排到之前不扣积分、不调模型，所以这段等待必须如实显示，不能让人对着「评审中」干等。
+  const [queue, setQueue] = useState<{ position: number; waitedMs: number; waiting: number; waitMs: number } | null>(null)
+  const queueTicketRef = useRef('')
   const [error, setError] = useState('')
   const [active, setActive] = useState<string | null>(null)
   // 钉住：悬停只是预览，钉住才是「现在就看这一条」；再点一次或按 Esc 取消
@@ -306,6 +310,33 @@ export default function ReviewPage({
     }
   }, [running])
 
+  // 排队位：只在「点了评审、还没回来」这段时间问服务端。第一次立刻问，别等一个轮询周期。
+  // 排到了（position 变 null）就把条子收起来——后面是模型在跑，按钮上的「评审中」接着报时。
+  useEffect(() => {
+    if (!running) return
+    let alive = true
+    const tick = () => {
+      const ticket = queueTicketRef.current
+      if (!ticket) return
+      getReviewQueue(ticket)
+        .then((next) => {
+          if (!alive) return
+          if (!next.position) {
+            setQueue(null)
+            return
+          }
+          setQueue({ position: next.position, waitedMs: next.waitedMs, waiting: next.waiting, waitMs: next.waitMs })
+        })
+        .catch(() => undefined)
+    }
+    tick()
+    const poll = window.setInterval(tick, 1200)
+    return () => {
+      alive = false
+      window.clearInterval(poll)
+    }
+  }, [running])
+
   const recheckModel = async () => {
     setRechecking(true)
     try {
@@ -329,14 +360,23 @@ export default function ReviewPage({
     setError('')
     setResult(null)
     setOpenedScope(null)
+    // 票号是这次评审的凭据：排队期间页面按它问名次，服务端按它认出「是同一条」而不是新来一条
+    queueTicketRef.current =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : 'vq-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10)
+    setQueue(null)
     try {
-      const next = await runReview({
-        media: picked.media,
-        imageUrl: picked.imageUrl,
-        intent: picked.label,
-        label: picked.label,
-        projectId: projectId || undefined,
-      })
+      const next = await runReview(
+        {
+          media: picked.media,
+          imageUrl: picked.imageUrl,
+          intent: picked.label,
+          label: picked.label,
+          projectId: projectId || undefined,
+        },
+        queueTicketRef.current,
+      )
       setResult(next)
       setActive(next.observations[0]?.id ?? null)
       setPinned(null)
@@ -353,6 +393,8 @@ export default function ReviewPage({
       getModelService().then((next) => setModelState(next.model)).catch(() => undefined)
     } finally {
       setRunning(false)
+      setQueue(null)
+      queueTicketRef.current = ''
       getCredits(1).then(setCredits).catch(() => undefined)
     }
   }
@@ -717,10 +759,25 @@ export default function ReviewPage({
                       </button>
                     )
                   ) : (
-                    <button type="button" className="vq-button vq-button--primary vq-button--sm" disabled={running || !status?.model || modelBlocked} onClick={run}>
-                      {running ? <Loader2 size={13} className="spin" /> : <Play size={13} />}
-                      {running ? '评审中 ' + elapsed + 's' : result ? '重新评审' : '开始评审'}
-                    </button>
+                    <>
+                      {queue ? (
+                        <span
+                          className="review-queue-strip"
+                          role="status"
+                          title={
+                            '整机此刻 ' + queue.waiting + ' 条在等，每条最多等 ' + Math.round(queue.waitMs / 1000) +
+                            ' 秒；排到才扣积分、才调模型，现在退出不会扣费'
+                          }
+                        >
+                          <Hourglass size={12} strokeWidth={1.75} />
+                          排队中 · 第 {queue.position} 位 · 已等 {elapsed}s
+                        </span>
+                      ) : null}
+                      <button type="button" className="vq-button vq-button--primary vq-button--sm" disabled={running || !status?.model || modelBlocked} onClick={run}>
+                        {running ? <Loader2 size={13} className="spin" /> : <Play size={13} />}
+                        {running ? (queue ? '排队中' : '评审中 ' + elapsed + 's') : result ? '重新评审' : '开始评审'}
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -869,7 +926,10 @@ export default function ReviewPage({
               <div className="review-verdict">
                 <Pill lg tone={result.verdict}>{VERDICT_LABEL[result.verdict]}</Pill>
                 <p>{result.summary}</p>
-                <span className="vq-mono">{result.provider} · {(result.ms / 1000).toFixed(1)}s</span>
+                <span className="vq-mono">
+                  {result.provider} · {(result.ms / 1000).toFixed(1)}s
+                  {result.queue ? ' · 排队 ' + Math.round(result.queue.waitedMs / 1000) + ' 秒后开始' : ''}
+                </span>
               </div>
 
               <ReviewIssueSummary observations={result.observations} />

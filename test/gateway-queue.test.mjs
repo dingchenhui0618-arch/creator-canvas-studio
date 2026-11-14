@@ -226,8 +226,12 @@ test('waitMs 写 0 = 退回立刻拒（排队这一层可以被关掉）', async
   held.lease.release()
 })
 
-test('只有画布出图这一类排队：其它重活的参数是 0', () => {
-  assert.equal(water.queueLimitsFor('review').waitMs, 0)
+test('只有画布出图与评审两类排队：别的重活参数是 0', () => {
+  // v0.9.95 起评审也排（默认 60 秒 / 4 条），复刻与运行仍然立刻拒
+  assert.equal(water.queueLimitsFor('replicate').waitMs, 0)
+  assert.equal(water.queueLimitsFor('flow_run').waitMs, 0)
+  assert.equal(water.queueLimitsFor('review').waitMs, config.credits.reviewQueue.waitMs)
+  assert.equal(water.queueLimitsFor('review').maxWaiting, config.credits.reviewQueue.maxWaiting)
   assert.equal(water.queueLimitsFor('canvas_gen').waitMs, 0)
   // 上面几条用例改过参数；恢复成默认再验一次
   config.credits.canvasQueue.waitMs = 90000

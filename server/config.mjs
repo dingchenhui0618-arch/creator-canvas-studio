@@ -181,6 +181,13 @@ export const config = {
       waitMs: numEnv(process.env.VQ_CANVAS_QUEUE_MS, 90000),
       maxWaiting: numEnv(process.env.VQ_CANVAS_QUEUE_MAX, 8),
     },
+    // 评审的排队位（v0.9.95）：评审是产品的主付费动作（默认 5 积分一次），撞上整机的重活上限时
+    // 以前立刻 503，用户只能自己再点一次。评审本身是同步等待（超时 300 秒），等得起这一档。
+    // 与画布出图共用同一套排队位（按类型各一条队），waitMs 写 0 或 maxWaiting 写 0 = 退回立刻拒。
+    reviewQueue: {
+      waitMs: numEnv(process.env.VQ_REVIEW_QUEUE_MS, 60000),
+      maxWaiting: numEnv(process.env.VQ_REVIEW_QUEUE_MAX, 4),
+    },
     // 全站（不分账号）同时在跑的重活条数上限（v0.9.70）。
     // 按账号的上限管不住「两个账号各来两条」：这台机器只有 2 核 / 1.86 GB，
     // 重活撞在一起就是 OOM，进程一死所有人的会话一起断。

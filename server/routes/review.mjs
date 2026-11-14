@@ -14,7 +14,7 @@ import { currentUser, isAdmin } from '../auth.mjs'
 import { charge, refund } from '../credits.mjs'
 import { quotaRefusal } from '../quota.mjs'
 import { enter, leave } from '../gate.mjs'
-import { admit, capacityFor } from '../waterline.mjs'
+import { admitWaiting, capacityFor, queueView } from '../waterline.mjs'
 import { publicError, refusal } from '../public-error.mjs'
 import { modelServiceState, noteModelFailure, noteModelSuccess } from '../service-state.mjs'
 import { IsolateError, reviewIsolateConfig, runReviewIsolated } from '../isolate.mjs'
@@ -63,6 +63,23 @@ async function readLocalMedia(probe) {
     throw mediaError('MEDIA_TOO_LARGE', 413, '这张图超过了 ' + MAX_MEDIA_BYTES / 1024 / 1024 + ' MB 上限：先压一下再评审，这次没扣积分')
   }
   return { bytes, mime: probe.mime }
+}
+
+/**
+ * 「客户端还在不在」的判据（v0.9.95）：只看响应这一侧。
+ *
+ * 踩过的坑：请求体读完之后 req.destroyed 必为 true（IncomingMessage 读满就 autoDestroy），
+ * 拿它当「人走了」，每一单评审都会在排队第一步就退出——客户端那边挂在 POST 上永远等不到响应。
+ * 人真的走了的信号是响应被关掉：res 的 'close' 在 writableEnded 还是 false 时触发，或 res 已 destroy。
+ */
+export function watchClientGone(res) {
+  let gone = false
+  try {
+    if (typeof res.on === 'function') res.on('close', () => { if (!res.writableEnded) gone = true })
+  } catch {
+    // 测试里的假 res 没有 on：那两处判据照样能兜住
+  }
+  return () => gone || res.destroyed === true || res.writableEnded === true
 }
 
 const REVIEW_ITEM = /^\/api\/reviews\/([\w-]+)$/
@@ -218,6 +235,12 @@ export function createReviewRouter() {
         sendJson(res, 200, await reviewStatus())
         return true
       }
+      // 排队位（v0.9.95）：页面在等的时候按票号问「我排第几、等了多久」。
+      // 只读、不占名额、不扣积分；票号是凭据，不回写进聚合数，没有票号就只能看整机的队。
+      if (pathname === '/api/review/queue' && req.method === 'GET') {
+        sendJson(res, 200, { ok: true, ...queueView('review', url.searchParams.get('ticket') || '') })
+        return true
+      }
       if (pathname === '/api/review' && req.method === 'POST') {
         const body = await readBody(req)
         // 自己传的图按账号分目录（v0.9.87）：评审入口再核一次归属——
@@ -253,11 +276,32 @@ export function createReviewRouter() {
           })
           return true
         }
-        // 内存到红线时不接这一单（不扣积分、不调模型）；水位偏紧时评审只放一条并行。
-        const water = admit('review')
+        // 名额满时先排队（v0.9.95）：评审是产品的主付费动作，撞上整机上限时让用户自己再点一次
+        // 是把活推回去。内存到红线仍然直接拒（等一分钟不会变好，admit 已经把告警记下了）。
+        // 票号由页面生成放在请求头里：排队期间页面拿它问 /api/review/queue 排第几。
+        const queueTicket = String(req.headers['x-vq-queue-ticket'] || '').trim().slice(0, 120)
+        const water = await admitWaiting('review', {
+          ticket: queueTicket,
+          // 只认响应侧：请求体已经读完，req.destroyed 现在是 true（见 watchClientGone 的说明）
+          isAborted: watchClientGone(res),
+        })
+        // 客户端已经断开：不写响应、不占名额、不扣积分（票在 admitWaiting 的 finally 里退掉了）
+        if (water.aborted) {
+          // 把连接收掉：真走了的人不需要响应，误判时也不会让客户端一直挂在 POST 上
+          try { res.destroy?.() } catch { /* 已经断了 */ }
+          return true
+        }
         if (!water.ok) {
           sendJson(res, water.status, water.body)
           return true
+        }
+        // 排到之后把「当时第几、排了多久」一并回给页面（响应头也带一份，脚本与 curl 看得到）
+        const queuedAt = water.position
+          ? { position: water.position, waitedMs: Math.max(0, Number(water.waitedMs) || 0) }
+          : null
+        if (queuedAt) {
+          res.setHeader('X-VQ-Queue-Position', String(queuedAt.position))
+          res.setHeader('X-VQ-Queue-Waited-Ms', String(queuedAt.waitedMs))
         }
         // 名额是 admit 占的（v0.9.78：跨进程租约），每条提前返回的路径都要还回去
         const releaseAdmission = () => { try { water.lease.release() } catch { /* 还名额不该影响响应 */ } }
@@ -325,7 +369,12 @@ export function createReviewRouter() {
             projectId,
             version: projectVersion,
           })
-          sendJson(res, 200, { ...result, reviewId: saved.id, credits: { cost: paid.cost, balance: paid.balance } })
+          sendJson(res, 200, {
+            ...result,
+            reviewId: saved.id,
+            credits: { cost: paid.cost, balance: paid.balance },
+            ...(queuedAt ? { queue: queuedAt } : {}),
+          })
         } catch (error) {
           // 隔离层的失败与「模型调不通」不是一回事：模型状态不能被它带黑，状态码也要说清是
           // 超时（504）还是进程没了（503），让前端知道「再试一次」有没有意义。
