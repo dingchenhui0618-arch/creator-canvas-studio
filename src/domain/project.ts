@@ -159,6 +159,11 @@ export type ProjectDelivery = {
   package?: ProjectDeliveryPackage
   /** 收包人贴回来的收据比过之后的结论（v0.9.136）；没有 = 还没人贴过 */
   receipt?: DeliveryReceipt
+  /**
+   * 这一条交付上贴过的每一次（v0.9.138），最后一条就是 receipt。
+   * 链接发出去之后可能先贴一张对不上的、后来又贴对了；只留最近一次等于把前一次的证据擦掉。
+   */
+  receipts?: DeliveryReceipt[]
   /** 回执链接的 token（v0.9.137）：一条免登录地址，收包人自己就能把收据贴回来；没有 = 只存发件人贴 */
   receiptToken?: string
 }
@@ -256,17 +261,21 @@ const RECEIPT_CHECK_LABEL: Record<string, string> = {
   verdict: '对方结论',
 }
 
+/** 一次对账的结论怎么说（v0.9.136）：四个状态各有一句人话，不说术语。 */
+export function receiptStateText(state: DeliveryReceipt['state']): string {
+  return state === 'match'
+    ? '对得上'
+    : state === 'mismatch'
+      ? '对不上'
+      : state === 'broken'
+        ? '对方读不出来'
+        : '说法打架'
+}
+
 /** 对账结果里那一行（v0.9.136）：给人看的一句话，不说术语。 */
 export function deliveryReceiptLine(receipt: DeliveryReceipt | null | undefined): string {
   if (!receipt) return ''
-  const label =
-    receipt.state === 'match'
-      ? '对得上'
-      : receipt.state === 'mismatch'
-        ? '对不上'
-        : receipt.state === 'broken'
-          ? '对方读不出来'
-          : '说法打架'
+  const label = receiptStateText(receipt.state)
   const ms = Date.parse(String(receipt.at || ''))
   if (!Number.isFinite(ms)) return '收包人核对过 · ' + label
   const date = new Date(ms)

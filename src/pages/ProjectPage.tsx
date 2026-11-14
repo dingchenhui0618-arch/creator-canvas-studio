@@ -50,6 +50,7 @@ import {
   packageShortSha,
   projectStep,
   receiptCheckLabel,
+  receiptStateText,
   receiptViaText,
   serverPackageText,
   sha256HexOfBytes,
@@ -2163,6 +2164,36 @@ export default function ProjectPage({
                                   <li key={line}>{line}</li>
                                 ))}
                             </ul>
+                          ) : null}
+                          {row.receipts && row.receipts.length > 1 ? (
+                            <div className="vq-archive-receipt-log">
+                              <span className="vq-archive-receipt-loghead">
+                                这一条前前后后贴过 {row.receipts.length} 次，更早的记在这里
+                              </span>
+                              <ol className="vq-archive-receipt-loglist">
+                                {row.receipts
+                                  .slice(0, -1)
+                                  .reverse()
+                                  .map((earlier) => (
+                                    <li key={earlier.at} className={'is-' + earlier.state}>
+                                      <span className="vq-archive-receipt-logstate">
+                                        {receiptStateText(earlier.state)}
+                                      </span>
+                                      <span className="vq-archive-receipt-logmeta vq-mono">
+                                        {stamp(earlier.at)}
+                                        {' · '}
+                                        {earlier.via === 'link' ? '他自己贴的' : '你贴的'}
+                                      </span>
+                                      <span className="vq-archive-receipt-logsum">
+                                        {earlier.summary || deliveryReceiptLine(earlier)}
+                                      </span>
+                                    </li>
+                                  ))}
+                              </ol>
+                              <p className="vq-archive-receipt-linknote">
+                                上面那次是最后一次；流水只留最近 5 次，包里的字节与哈希一次都没被它改过。
+                              </p>
+                            </div>
                           ) : null}
                         </div>
                       ) : null}

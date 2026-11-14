@@ -149,7 +149,8 @@ export default function ReceiptPage({ token }: { token: string }) {
         {view.receipt && !result ? (
           <p className={'rpage-already is-' + view.receipt.state}>
             这一份之前核对过：{STATE_LABEL[view.receipt.state] || view.receipt.state}
-            {stamp(view.receipt.at) ? ' · ' + stamp(view.receipt.at) : ''}。再贴一次会覆盖上一次的结论。
+            {stamp(view.receipt.at) ? ' · ' + stamp(view.receipt.at) : ''}。
+            再贴一次会记在它后面，发件人那边两次都看得到。
           </p>
         ) : null}
 

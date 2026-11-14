@@ -196,6 +196,9 @@ function normalizeDeliveryPackage(raw) {
 // 只存比对结果与对方那几项值，不存收据原文；四种状态之外一律当没核对过。
 const RECEIPT_STATES = ['match', 'mismatch', 'broken', 'conflict']
 const RECEIPT_CHECK_KEYS = ['version', 'package', 'bytes', 'sha256', 'verdict']
+// 一条交付记录保留最后几次对账（v0.9.138）：链接发出去之后，对方可能先贴一张对不上的、
+// 换了包再贴一张对得上的。只存最近一次等于把前一次的证据擦掉——所以留流水，但只留 5 条。
+const MAX_RECEIPTS = 5
 
 function normalizeDeliveryReceipt(raw) {
   if (!raw || typeof raw !== 'object') return null
@@ -240,6 +243,24 @@ function normalizeDeliveryReceipt(raw) {
   return base
 }
 
+/**
+ * 一条交付记录上贴过的每一次（v0.9.138）：最新的一次永远同时写在 receipt 上，
+ * 流水只是把更早的那几次留着，好让「先贴了一张对不上的、后来又贴对了」这件事看得见。
+ * 老记录（只有 receipt、没有 receipts）读出来补成一条，界面不会把一次说成零次。
+ */
+function normalizeDeliveryReceipts(raw, latest) {
+  const list = (Array.isArray(raw) ? raw : []).map((entry) => normalizeDeliveryReceipt(entry)).filter(Boolean)
+  const last = list[list.length - 1]
+  if (latest && (!last || last.at !== latest.at || last.state !== latest.state)) list.push(latest)
+  return list.slice(-MAX_RECEIPTS)
+}
+
+/** 把新的一次对账接到流水后面，并把 receipt 指向它。只动这一条交付记录的两个字段。 */
+function withReceipt(record, receipt) {
+  const history = normalizeDeliveryReceipts(record.receipts, record.receipt)
+  return { ...record, receipt, receipts: [...history, receipt].slice(-MAX_RECEIPTS) }
+}
+
 // 交付记录：{ id, version, at, review, package, receipt }。老记录没有时间就写空串——照样是「这一版交过」，只是不知道什么时候。
 // review 同理：没有这个字段就是「当时没记评审」，不能拿这一版后来的评审冒充（v0.9.85）。
 // id/package 同理：升级前的老交付记录没有封存包，界面不能给出一个点开 404 的按钮。
@@ -255,8 +276,11 @@ function normalizeDeliveries(raw) {
       const pkg = id ? normalizeDeliveryPackage(entry.package) : null
       if (pkg) base.package = pkg
       // 收据对账只挂在有封存包的记录上：没有包就没有可比的哈希
-      const receipt = pkg ? normalizeDeliveryReceipt(entry.receipt) : null
-      if (receipt) base.receipt = receipt
+      const receipts = pkg ? normalizeDeliveryReceipts(entry.receipts, normalizeDeliveryReceipt(entry.receipt)) : []
+      if (receipts.length) {
+        base.receipt = receipts[receipts.length - 1]
+        base.receipts = receipts
+      }
       // 回执链接（v0.9.137）：给收包人一条不用登录的入口，把收据自己贴回来。
       // 只挂在有封存包的记录上——没有包就没有可比的东西；坏了就当没有这条链接。
       const token = /^[0-9a-f]{16}$/.test(String(entry.receiptToken || '')) ? String(entry.receiptToken) : ''
@@ -492,7 +516,7 @@ export async function saveDeliveryReceipt(id, deliveryId, receipt, user = null) 
   const deliveries = normalizeDeliveries(found.deliveries)
   const index = deliveries.findIndex((entry) => entry.id === deliveryId && entry.package)
   if (index < 0) return null
-  deliveries[index] = { ...deliveries[index], receipt: normalized }
+  deliveries[index] = withReceipt(deliveries[index], normalized)
   found.deliveries = deliveries
   found.updatedAt = new Date().toISOString()
   await persist(list)
@@ -552,7 +576,7 @@ export async function saveReceiptByToken(token, receipt) {
     const deliveries = normalizeDeliveries(project.deliveries)
     const index = deliveries.findIndex((entry) => entry.receiptToken === value && entry.package)
     if (index < 0) continue
-    deliveries[index] = { ...deliveries[index], receipt: normalized }
+    deliveries[index] = withReceipt(deliveries[index], normalized)
     project.deliveries = deliveries
     project.updatedAt = new Date().toISOString()
     await persist(list)

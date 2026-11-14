@@ -1803,6 +1803,72 @@
   line-height: 1.7;
 }
 
+/* 贴过的每一次（v0.9.138）：结论块底部接一段流水，把更早的那几次按时间倒序摆开。
+   只有贴过两次以上才出现——只贴过一次时，上面那一块已经是全部。
+   一行一条，第一条写「结论」，下面一行写时间与谁贴的，摘要单独一行，窄屏不会挤成竖条。 */
+.vq-archive-receipt-log {
+  display: grid;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--line-faint);
+}
+
+.vq-archive-receipt-loghead {
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.vq-archive-receipt-loglist {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vq-archive-receipt-loglist li {
+  display: grid;
+  gap: 1px;
+  padding: var(--space-1) 0;
+  border-top: 1px solid var(--line-faint);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.vq-archive-receipt-loglist li:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.vq-archive-receipt-logstate {
+  font-weight: var(--weight-medium);
+}
+
+.vq-archive-receipt-loglist li.is-match .vq-archive-receipt-logstate {
+  color: var(--pass);
+}
+
+.vq-archive-receipt-loglist li.is-mismatch .vq-archive-receipt-logstate,
+.vq-archive-receipt-loglist li.is-broken .vq-archive-receipt-logstate {
+  color: var(--fail);
+}
+
+.vq-archive-receipt-loglist li.is-conflict .vq-archive-receipt-logstate {
+  color: var(--warn);
+}
+
+.vq-archive-receipt-logmeta {
+  color: var(--faint);
+  white-space: normal;
+}
+
+.vq-archive-receipt-logsum {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
 /* 包没了：下载入口换成说明，不给人一个点了就 404 的按钮 */
 .vq-button.is-disabled {
   opacity: .55;
