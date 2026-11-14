@@ -552,6 +552,7 @@ function Workbench({
             projectId={route.projectId}
             onBack={() => navigate({ kind: 'page', page: 'projects' })}
             onOpenFlow={(flowId) => navigate({ kind: 'page', page: 'canvas', flowId })}
+            onViewRun={(flowId, runId) => navigate({ kind: 'page', page: 'canvas', flowId, viewRunId: runId })}
             onOpenReview={(projectId) => navigate({ kind: 'page', page: 'review', projectId })}
             onOpenReviewRecord={(reviewId) => navigate({ kind: 'page', page: 'review', reviewId })}
             onOpenAgents={(projectId) => {

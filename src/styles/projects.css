@@ -882,6 +882,10 @@
   background: var(--fail);
 }
 
+.vq-run-dot.is-stop {
+  background: var(--faint);
+}
+
 .vq-run-main {
   display: grid;
   gap: var(--space-1);
@@ -961,6 +965,15 @@
 }
 
 .vq-run-error.is-stopped { color: var(--muted); }
+
+.vq-run-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  flex: none;
+}
 
 .vq-run-open {
   flex: none;
@@ -2039,11 +2052,17 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
 
   .vq-run-row {
     grid-template-columns: 8px minmax(0, 1fr);
+    align-items: start;
   }
 
-  .vq-run-open {
+  .vq-run-dot {
+    margin-top: var(--space-2);
+  }
+
+  .vq-run-actions {
     grid-column: 1 / -1;
     justify-self: start;
+    justify-content: flex-start;
   }
 }
 

@@ -98,6 +98,7 @@ export default function ProjectPage({
   projectId,
   onBack,
   onOpenFlow,
+  onViewRun,
   onOpenReview,
   onOpenReviewRecord,
   onOpenAgents,
@@ -108,6 +109,8 @@ export default function ProjectPage({
   projectId: string
   onBack: () => void
   onOpenFlow: (flowId: string) => void
+  /** 只读回看一次运行（v0.9.108）：带着当时的节点状态进画布，不改画布、不扣费 */
+  onViewRun: (flowId: string, runId: string) => void
   onOpenReview: (projectId: string) => void
   /** 打开某一条评审的记录页：那里有当时的证据原图与问题锚点 */
   onOpenReviewRecord: (reviewId: string) => void
@@ -1150,15 +1153,19 @@ export default function ProjectPage({
             <ol className="vq-run-list">
               {data.runs.map((run) => {
                 const ok = run.status === 'success'
+                // 中断不是失败：服务重启打断和用户主动停止都走中性色，别用报错红。
+                const stopped = run.canceled || run.status === 'interrupted'
+                const live = run.status === 'running' || run.status === 'queued'
+                const tone = ok ? 'pass' : stopped ? 'stop' : 'fail'
                 return (
                   <li className="vq-run-row" key={run.id}>
-                    <span className={'vq-run-dot is-' + (ok ? 'pass' : 'fail')} aria-hidden="true" />
+                    <span className={'vq-run-dot is-' + tone} aria-hidden="true" />
                     <div className="vq-run-main">
                       <span className="vq-run-title">
                         <strong className="vq-mono">{run.id}</strong>
                         <span className="vq-version-n vq-mono vq-run-version">v{run.version}</span>
-                        <span className={'vq-run-status is-' + (ok ? 'pass' : run.canceled ? 'stop' : 'fail')}>
-                          {ok ? '成功' : run.canceled ? '已停止' : '失败'}
+                        <span className={'vq-run-status is-' + tone}>
+                          {ok ? '成功' : run.canceled ? '已停止' : run.status === 'interrupted' ? '已中断' : live ? '运行中' : '失败'}
                         </span>
                       </span>
                       <span className="vq-run-meta">
@@ -1176,16 +1183,29 @@ export default function ProjectPage({
                       </span>
                       {run.error ? <p className={'vq-run-error' + (run.canceled ? ' is-stopped' : '')}>{run.error}</p> : null}
                     </div>
-                    <button
-                      type="button"
-                      className="vq-button vq-button--ghost vq-run-open"
-                      onClick={() => onOpenFlow(run.flowId)}
-                      disabled={!run.available}
-                      title={run.available ? '打开 v' + run.version + ' 的画布' : '这次运行的画布已被删除，记录仍留着'}
-                    >
-                      {run.available ? '打开画布' : '画布已删除'}
-                      {run.available ? <ArrowRight size={13} /> : null}
-                    </button>
+                    <div className="vq-run-actions">
+                      {run.available && !live ? (
+                        <button
+                          type="button"
+                          className="vq-button vq-button--ghost vq-button--sm vq-run-view"
+                          onClick={() => onViewRun(run.flowId, run.id)}
+                          title="在画布上只读回看这次运行：有画布快照时连当时的位置与参数一起回放；不改画布、不扣积分"
+                        >
+                          <ScanEye size={13} />
+                          查看运行
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="vq-button vq-button--ghost vq-button--sm vq-run-open"
+                        onClick={() => onOpenFlow(run.flowId)}
+                        disabled={!run.available}
+                        title={run.available ? '打开 v' + run.version + ' 的画布' : '这次运行的画布已被删除，记录仍留着'}
+                      >
+                        {run.available ? '打开画布' : '画布已删除'}
+                        {run.available ? <ArrowRight size={13} /> : null}
+                      </button>
+                    </div>
                   </li>
                 )
               })}

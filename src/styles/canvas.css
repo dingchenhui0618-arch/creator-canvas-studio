@@ -982,6 +982,86 @@
   line-height: 1.65;
 }
 .cv-runview-warn { color: var(--warn); }
+
+/* 回看快照与当前画布的对照（v0.9.108）：一行摘要，点开才看名字。
+   参数 / 位置 / 标题分开列，不把「挪了一下」写成「改了提示词」。 */
+.cv-runview-diff {
+  border-top: 1px solid var(--line-faint);
+  padding-top: var(--space-2);
+}
+.cv-runview-diff > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  cursor: pointer;
+  list-style: none;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+.cv-runview-diff > summary::-webkit-details-marker { display: none; }
+.cv-runview-diff > summary:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: var(--space-1);
+  border-radius: var(--radius-sm);
+}
+.cv-runview-diff-label {
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: var(--text-mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.cv-runview-diff-summary {
+  color: var(--ink);
+  font-weight: var(--weight-medium);
+}
+.cv-runview-diff-summary.is-same {
+  color: var(--muted);
+  font-weight: var(--weight-normal);
+}
+.cv-runview-diff-counts {
+  color: var(--faint);
+  font-size: var(--text-mono);
+  white-space: nowrap;
+}
+.cv-runview-diff-chev {
+  color: var(--faint);
+  transition: transform .16s ease;
+}
+.cv-runview-diff[open] .cv-runview-diff-chev { transform: rotate(180deg); }
+.cv-runview-diff-note {
+  margin: var(--space-2) 0 0;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 1.65;
+}
+.cv-runview-diff-body {
+  display: grid;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+.cv-runview-diff-row {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+}
+.cv-runview-diff-kind {
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: var(--text-mono);
+  letter-spacing: .04em;
+  padding-top: 1px;
+}
+.cv-runview-diff-names {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
 .cv-toolbar-count--readonly { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); }
 .cv-canvas.is-readonly .react-flow__node { cursor: default; }
 /* 只读时把手柄藏掉，但不能 display:none：React Flow 要靠手柄的尺寸算连线端点，

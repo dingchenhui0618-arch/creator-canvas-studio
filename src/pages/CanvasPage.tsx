@@ -36,6 +36,7 @@ import {
 } from '../api/flows'
 import { getCredits } from '../api/credits'
 import { runResumeInfo, runSpentText, runStatusMeta } from '../domain/run'
+import { diffRunGraph, type RunGraphDiff } from '../domain/run-diff'
 import { getCanvasSessionTicket } from '../api/canvasSession'
 import { getCanvasQueue, type CanvasQueueView } from '../api/canvasQueue'
 import { useUiMode } from '../api/app'
@@ -96,6 +97,56 @@ function formatRunTime(iso: string): string {
   return date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
+// 回看的是运行开始时的快照，不是现在这张画布。把「这之后改了什么」摊开：
+// 参数 / 位置 / 标题分开数，避免把「挪了一下」说成「改了提示词」。
+function RunGraphDiffBlock({ diff }: { diff: RunGraphDiff }) {
+  const names = (items: RunGraphDiff['changed']) => {
+    const shown = items.slice(0, 6).map((item) => item.title).join(' · ')
+    return items.length > 6 ? shown + ' 等 ' + items.length + ' 个' : shown
+  }
+  const groups = [
+    ['参数', diff.changed],
+    ['位置', diff.moved],
+    ['标题', diff.retitled],
+    ['新增', diff.added],
+    ['删除', diff.removed],
+  ] as const
+  const edges = [
+    diff.edgesAdded ? '多 ' + diff.edgesAdded + ' 条' : '',
+    diff.edgesRemoved ? '少 ' + diff.edgesRemoved + ' 条' : '',
+  ].filter(Boolean).join(' · ')
+  return (
+    <details className={'cv-runview-diff' + (diff.same ? ' is-same' : '')}>
+      <summary>
+        <span className="cv-runview-diff-label">与当前画布比</span>
+        <span className={'cv-runview-diff-summary' + (diff.same ? ' is-same' : '')}>
+          {diff.same ? '一致' : diff.summary}
+        </span>
+        <span className="cv-runview-diff-counts vq-mono">快照 {diff.snapshotNodes} · 当前 {diff.currentNodes} 个节点</span>
+        <ChevronDown size={13} className="cv-runview-diff-chev" aria-hidden="true" />
+      </summary>
+      {diff.same ? (
+        <p className="cv-runview-diff-note">位置、标题、参数与连线都没有变。</p>
+      ) : (
+        <div className="cv-runview-diff-body">
+          {groups.filter(([, items]) => items.length > 0).map(([label, items]) => (
+            <div className="cv-runview-diff-row" key={label}>
+              <span className="cv-runview-diff-kind">{label}</span>
+              <span className="cv-runview-diff-names">{names(items)}</span>
+            </div>
+          ))}
+          {edges ? (
+            <div className="cv-runview-diff-row">
+              <span className="cv-runview-diff-kind">连线</span>
+              <span className="cv-runview-diff-names">{edges}</span>
+            </div>
+          ) : null}
+        </div>
+      )}
+    </details>
+  )
+}
+
 export default function CanvasPage({ onToast, flowId, resumeRunId, viewRunId, canvasId, focus, onToggleFocus }: CanvasPageProps) {
   return (
     <ReactFlowProvider>
@@ -140,6 +191,9 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
   const [runRecord, setRunRecord] = useState<RunRecord | null>(null)
   // 这次运行开始时的画布快照（v0.9.107）：有它，回看的是当时的位置与参数；没有才退回当前画布。
   const [runGraph, setRunGraph] = useState<RunGraphSnapshot | null>(null)
+  // 进只读回看时服务端给的当前画布（v0.9.108）：用来和快照对照，回答「这之后改了什么」。
+  // 快照会替换 nodes / edges，所以必须在替换前把它留在这一份里。
+  const [previewBase, setPreviewBase] = useState<ApiFlow | null>(null)
   // 停止 / 失败后还能接着跑的那条运行：抽屉里的「继续」按它发起，复用它已跑完的节点
   const [resumeSource, setResumeSource] = useState<RunRecord | null>(null)
   // 续跑预检（v0.9.103）：画布改过之后，旧记录里的「跑完 3 个」不等于「还能复用 3 个」。
@@ -388,6 +442,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
     setFutureCount(0)
     setRunRecord(null)
     setRunGraph(null)
+    setPreviewBase(viewRunId ? flow : null)
     setResumeSource(null)
     setResumePlan(null)
     setRunNodes([])
@@ -604,6 +659,11 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
     ? runRecord.nodes.filter((result) => !nodes.some((node) => node.id === result.id)).length
     : 0
   const hasRunSnapshot = Boolean(readOnly && runGraph)
+  // 只读页上的快照与「进页面时的当前画布」对照：没有快照就没有这份差异，不编。
+  const runGraphDiff = useMemo(
+    () => (readOnly ? diffRunGraph(runGraph, previewBase) : null),
+    [readOnly, runGraph, previewBase],
+  )
   const runViewStatus = runRecord ? runStatusMeta(runRecord.status, Boolean(runRecord.canceled)) : null
   const runViewSpent = runRecord ? runSpentText(runRecord) : '读取中'
 
@@ -1524,6 +1584,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
               ? '节点位置、标题与参数取这次运行开始时的画布快照；状态、耗时、输出取这条运行。查看不会写回画布，也不扣积分。'
               : '这条运行没有留下画布快照：位置与参数只能取当前画布；状态、耗时、输出来自这条运行。查看不会写回画布，也不扣积分。'}
           </p>
+          {runGraphDiff ? <RunGraphDiffBlock diff={runGraphDiff} /> : null}
           {runViewMissing > 0 ? (
             <p className="cv-runview-warn">
               {hasRunSnapshot
