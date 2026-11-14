@@ -72,3 +72,9 @@
 ## 回退
 
 `bash /opt/visionqa/ops/rollback.sh --to 1` → **v0.9.128**；`--to 2` → **v0.9.127**。这一版只加一个只读模块、两个只读路由、一块预览与一组测试；不改数据结构、不需要迁移；回退后旧前端不会请求 `/content`。
+
+## 提交与 CI
+
+- 功能、测试、文档与截图：`5367186`（16 个文件，+664 / −23；含 5 张截图与 `server/zip-read.mjs`、`test/zip-read.test.mjs`）
+- CI **43639515225** 三个 job 全 success：安全扫描 16s、Node 22.12.0 2m43s、Node 24 2m40s
+- 全仓测试 **1009/1009**；oxlint 0 error / 15 warning；`tsc -b` 与 build 干净；密钥扫描 700 文件 / 0
