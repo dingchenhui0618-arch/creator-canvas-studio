@@ -718,7 +718,51 @@ export function createProjectsRouter() {
           return true
         }
         const nextNo = project.version + 1
-        const copy = await createFlow({
+        // 以旧版为底（v0.9.115）：from 指向一条更早的归档版本，复制它的画布与脚本。
+        // 不传 from 就是原来的「从当前版往上一版」——两条路都先把当前版归档，历史不动。
+        const body = await readBody(req)
+        const rawFrom = body?.from
+        const from = rawFrom === undefined || rawFrom === null || rawFrom === '' ? 0 : Number(rawFrom)
+        if (from) {
+          if (!Number.isInteger(from) || from < 1 || from >= project.version) {
+            sendJson(res, 400, {
+              error: '只能以更早的版本为底：from 必须是 1 到 ' + (project.version - 1) + ' 之间的整数',
+              code: 'VERSION_FROM_INVALID',
+            })
+            return true
+          }
+        }
+        let sourceFlow = null
+        let nextScript = null
+        if (from) {
+          const source = project.versions.find((entry) => entry.n === from)
+          if (!source) {
+            sendJson(res, 404, { error: '这条作品没有 v' + from + ' 的归档记录', code: 'VERSION_FROM_MISSING' })
+            return true
+          }
+          if (!source.script) {
+            sendJson(res, 409, {
+              error: 'v' + from + ' 开版时没有存脚本快照：没法整版回到当时，只能打开那一版画布手动改',
+              code: 'VERSION_SCRIPT_MISSING',
+            })
+            return true
+          }
+          sourceFlow = await getFlow(source.flowId, user)
+          if (!sourceFlow) {
+            sendJson(res, 409, {
+              error: 'v' + from + ' 的画布已经被删除：没法以它为底再开一版',
+              code: 'VERSION_FLOW_MISSING',
+            })
+            return true
+          }
+          nextScript = source.script
+        }
+        const copy = await createFlow(sourceFlow ? {
+          name: ((project.title || sourceFlow.name).slice(0, 40) + ' v' + nextNo + ' · 以 v' + from + ' 为底').slice(0, 60),
+          description: '以 v' + from + ' 的画布和脚本为底重新开的一版',
+          nodes: sourceFlow.nodes,
+          edges: sourceFlow.edges,
+        } : {
           name: (project.title || current.name).slice(0, 48) + ' v' + nextNo,
           description: current.description || '',
           nodes: current.nodes,
@@ -730,12 +774,13 @@ export function createProjectsRouter() {
           flowId: copy.id,
           prevName: current.name,
           script: scriptView(project, template),
+          ...(nextScript ? { nextScript } : {}),
         }, user)
         if (!updated) {
           sendJson(res, 409, { error: '开新版本没有成功：这一版没有归档，作品仍然指向原来的画布', code: 'VERSION_FAILED' })
           return true
         }
-        sendJson(res, 201, { ok: true, project: updated, flow: flowBrief(copy) })
+        sendJson(res, 201, { ok: true, project: updated, flow: flowBrief(copy), ...(from ? { basedOn: from } : {}) })
         return true
       }
 

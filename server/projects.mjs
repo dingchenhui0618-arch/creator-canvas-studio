@@ -339,7 +339,7 @@ export async function bindProjectFlow(id, flowId, user = null) {
  * 开新版本：当前画布存成归档（只存 flowId 与名字，不复制节点），作品改指向新画布。
  * 复制画布本身由路由做——存储层只认指针，不碰流程服务。
  */
-export async function archiveProjectVersion(id, { flowId = '', prevName = '', script = null } = {}, user = null) {
+export async function archiveProjectVersion(id, { flowId = '', prevName = '', script = null, nextScript = undefined } = {}, user = null) {
   const list = await loadAll()
   const found = list.find((item) => item.id === id && canAccess(item, user))
   if (!found) return null
@@ -371,6 +371,12 @@ export async function archiveProjectVersion(id, { flowId = '', prevName = '', sc
   }
   found.flowId = String(flowId || '')
   found.version = current.version + 1
+  // 以旧版为底（v0.9.115）：新一版的脚本不再是「现在的脚本」，而是旧版归档时存下的那一份。
+  // 这里只认已经归一化过的快照；传 null 表示不换脚本，避免空值把作品自己的脚本清掉。
+  if (nextScript !== undefined) {
+    const restored = normalizeStoredScript(nextScript)
+    if (restored) found.script = restored
+  }
   found.updatedAt = now
   await persist(list)
   return normalize(found)

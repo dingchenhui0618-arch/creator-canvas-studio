@@ -147,6 +147,38 @@ test('开新版时把这一版的脚本存进归档：历史版本当时说了�
   assert.equal(later.versions[1].script, null)
 })
 
+
+test('以旧版为底开新版：新一版的脚本换回旧版快照，当前版归档保留自己的话', async () => {
+  const project = await p.createProject({ title: '回退', templateId: 'tpl_a' }, userA)
+  await p.updateProject(project.id, { flowId: 'flow_r1' }, userA)
+  const A = {
+    hook: '第一版的钩子',
+    structure: [{ beat: '开场', voiceover: '第一版的一句', startSec: 0, endSec: 3 }],
+    source: 'project',
+    updatedAt: '2026-11-14T10:00:00.000Z',
+  }
+  const B = {
+    hook: '第二版的钩子',
+    structure: [{ beat: '开场', voiceover: '第二版改过的一句', startSec: 0, endSec: 3 }],
+    source: 'project',
+    updatedAt: '2026-11-14T11:00:00.000Z',
+  }
+  await p.saveProjectScript(project.id, A)
+  await p.archiveProjectVersion(project.id, { flowId: 'flow_r2', prevName: '第一版', script: A }, userA)
+  await p.saveProjectScript(project.id, B)
+  const rebased = await p.archiveProjectVersion(project.id, {
+    flowId: 'flow_r3',
+    prevName: '第二版',
+    script: B,
+    nextScript: A,
+  }, userA)
+  assert.equal(rebased.version, 3)
+  assert.equal(rebased.flowId, 'flow_r3')
+  assert.equal(rebased.script.hook, '第一版的钩子', '新一版脚本要回到旧版快照')
+  assert.equal(rebased.versions[0].script.hook, '第一版的钩子', 'v1 的快照不能动')
+  assert.equal(rebased.versions[1].script.hook, '第二版的钩子', 'v2 归档的是它自己的脚本')
+})
+
 test('评审按版本记账，版本对照的计数互不串', async () => {
   const project = await p.createProject({ title: '对照', templateId: 'tpl_a' }, userA)
   await p.updateProject(project.id, { flowId: 'flow_x' }, userA)

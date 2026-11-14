@@ -744,6 +744,23 @@
   flex: none;
 }
 
+/* 归档版本右侧两个动作：打开画布 / 以这一版为底。窄屏时整组落到下一行，不挤标题 */
+.vq-version-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.vq-version-rebase {
+  color: var(--muted);
+}
+
+.vq-version-rebase.is-armed {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
 /* 旧版脚本的入口（v0.9.114）：段数本身是按钮，点开只读快照；不做成第二枚胶囊，和元信息同一行 */
 .vq-version-script {
   display: inline-flex;
@@ -2093,9 +2110,10 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
     grid-template-columns: auto minmax(0, 1fr);
   }
 
-  .vq-version-open {
+  .vq-version-actions {
     grid-column: 1 / -1;
     justify-self: start;
+    justify-content: flex-start;
   }
 
   .vq-run-row {

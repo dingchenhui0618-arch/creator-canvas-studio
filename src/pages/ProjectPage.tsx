@@ -127,7 +127,7 @@ export default function ProjectPage({
   const [data, setData] = useState<ProjectDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [busy, setBusy] = useState<'' | 'canvas' | 'done' | 'delete' | 'title' | 'version' | 'script' | 'export' | 'zip'>('')
+  const [busy, setBusy] = useState<'' | 'canvas' | 'done' | 'delete' | 'title' | 'version' | 'rebase' | 'script' | 'export' | 'zip'>('')
   const [renaming, setRenaming] = useState(false)
   const [draftTitle, setDraftTitle] = useState('')
   // 脚本就地编辑：草稿只在内存里，保存后才写进作品（copy-on-write）
@@ -158,6 +158,8 @@ export default function ProjectPage({
   const [decideBusy, setDecideBusy] = useState<'' | 'pass' | 'reject' | 'undo' | 'clear'>('')
   // 「清空拍板记录」要点两下：第一下只是把按钮换成「再点一次」，5 秒没有第二下就缩回去
   const [clearLogArmed, setClearLogArmed] = useState(false)
+  // 「以这一版为底」也点两下：第一下把按钮换成「再点一次 · 开 v4」，5 秒没有第二下就缩回去
+  const [rebaseArmed, setRebaseArmed] = useState<number | null>(null)
   // 「存成模板」：把这一版做完的脚本 + 沿用模板的分镜沉淀回模板库。
   // 面板先把「存什么、从哪来、会不会跟原模板一样」说清，再让人点下去。
   const [tplSheet, setTplSheet] = useState<{
@@ -258,6 +260,13 @@ export default function ProjectPage({
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [shareOpen])
+
+  // 「以这一版为底」的第一下只保持 5 秒：等太久还挂着「再点一次」，容易误触
+  useEffect(() => {
+    if (rebaseArmed === null) return
+    const timer = window.setTimeout(() => setRebaseArmed(null), 5000)
+    return () => window.clearTimeout(timer)
+  }, [rebaseArmed])
 
   // 版本脚本弹窗：Esc 关闭；打开时背景不滚动（和分享弹窗同一套）
   useEffect(() => {
@@ -595,7 +604,7 @@ export default function ProjectPage({
 
   // 开新版＝复制当前画布；旧画布归档成 vN，作品立刻指向新画布。
   const startVersion = async () => {
-    if (!data) return
+    if (!data || busy) return
     setBusy('version')
     try {
       const result = await startProjectVersion(data.project.id)
@@ -603,6 +612,34 @@ export default function ProjectPage({
       onToast('已开 v' + result.project.version + '：画布从上一版复制过来，接着改这一版')
     } catch (caught) {
       onToast(caught instanceof Error ? caught.message : '开新版本失败')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  // 以旧版为底开新版（v0.9.115）：点两下才执行。新一版复制旧版画布与脚本，当前版归档；
+  // 不覆盖任何历史，所以不需要原生 confirm。第一下只把按钮换成「再点一次」。
+  const rebaseVersion = async (row: { n: number; scriptBeats: number }) => {
+    if (!data || busy) return
+    if (!row.scriptBeats) {
+      onToast('这一版开版时没存脚本快照，没法整版回到当时；只能打开那一版画布手动改')
+      return
+    }
+    if (rebaseArmed !== row.n) {
+      setRebaseArmed(row.n)
+      return
+    }
+    setRebaseArmed(null)
+    setBusy('rebase')
+    try {
+      const result = await startProjectVersion(data.project.id, row.n)
+      await load()
+      onToast(
+        '已以 v' + row.n + ' 为底开 v' + result.project.version +
+        '：画布和脚本回到那一版，v' + (result.project.version - 1) + ' 已归档，记录都还在',
+      )
+    } catch (caught) {
+      onToast(caught instanceof Error ? caught.message : '以旧版为底开新版失败')
     } finally {
       setBusy('')
     }
@@ -1074,13 +1111,13 @@ export default function ProjectPage({
               <span className="vq-mono">{project.version} 版</span>
             </h2>
             <p className="vq-project-versions-note">
-              开新版时会把这一版的脚本存一份快照，再改只影响新版；每一行写清「比上一版改了什么」，点脚本段数能翻开那一版的原文。旧版本的画布还能打开看，但改它不会写回那一版。
+              开新版时会把这一版的脚本存一份快照，再改只影响新版；每一行写清「比上一版改了什么」，点脚本段数能翻开那一版的原文。归档版还能「以这一版为底」再开一版：画布和脚本回到那一版，当前版归档，记录都保留。
             </p>
             <button
               type="button"
               className="vq-button vq-button--ghost"
               onClick={() => void startVersion()}
-              disabled={busy === 'version'}
+              disabled={busy === 'version' || busy === 'rebase'}
             >
               <CopyPlus size={14} />
               {busy === 'version' ? '正在复制画布…' : '开一版新的'}
@@ -1202,16 +1239,35 @@ export default function ProjectPage({
                       </ul>
                     ) : null}
                   </div>
-                  <button
-                    type="button"
-                    className="vq-button vq-button--ghost vq-version-open"
-                    onClick={() => onOpenFlow(row.flowId)}
-                    disabled={!row.available}
-                    title={row.available ? '在画布里打开 v' + row.n : '这一版的画布已被删除'}
-                  >
-                    {row.available ? '打开画布' : '画布已删除'}
-                    {row.available ? <ArrowRight size={13} /> : null}
-                  </button>
+                  <div className="vq-version-actions">
+                    <button
+                      type="button"
+                      className="vq-button vq-button--ghost vq-version-open"
+                      onClick={() => onOpenFlow(row.flowId)}
+                      disabled={!row.available || busy === 'version' || busy === 'rebase'}
+                      title={row.available ? '在画布里打开 v' + row.n : '这一版的画布已被删除'}
+                    >
+                      {row.available ? '打开画布' : '画布已删除'}
+                      {row.available ? <ArrowRight size={13} /> : null}
+                    </button>
+                    {!row.current ? (
+                      <button
+                        type="button"
+                        className={'vq-button vq-button--ghost vq-version-rebase' + (rebaseArmed === row.n ? ' is-armed' : '')}
+                        onClick={() => void rebaseVersion(row)}
+                        disabled={busy === 'version' || busy === 'rebase' || !row.scriptBeats}
+                        title={
+                          row.scriptBeats
+                            ? '以 v' + row.n + ' 的画布和脚本为底开 v' + (project.version + 1) +
+                              '；v' + project.version + ' 会归档，所有记录都保留'
+                            : '这一版开版时没存脚本快照，没法整版回到当时'
+                        }
+                      >
+                        <RotateCcw size={13} />
+                        {rebaseArmed === row.n ? '再点一次 · 开 v' + (project.version + 1) : '以这一版为底'}
+                      </button>
+                    ) : null}
+                  </div>
                 </li>
               )
             })}

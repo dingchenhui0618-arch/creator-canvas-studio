@@ -93,12 +93,13 @@ export type ProjectVersionScript = {
 export const getProjectVersionScript = (id: string, n: number) =>
   request<ProjectVersionScript>('/api/projects/' + id + '/versions/' + n + '/script')
 
-// 开一版新的：服务端复制当前画布，旧画布归档成 vN
-export const startProjectVersion = (id: string) =>
-  request<{ ok: boolean; project: Project; flow: { id: string; name: string } }>('/api/projects/' + id + '/versions', {
-    method: 'POST',
-    body: JSON.stringify({}),
-  })
+// 开一版新的：服务端复制当前画布，旧画布归档成 vN。
+// from 给更早的版次时，复制的是那一版的画布与脚本（v0.9.115）；不给就是从当前版开。
+export const startProjectVersion = (id: string, from?: number) =>
+  request<{ ok: boolean; project: Project; flow: { id: string; name: string }; basedOn?: number }>(
+    '/api/projects/' + id + '/versions',
+    { method: 'POST', body: JSON.stringify(from ? { from } : {}) },
+  )
 
 export const deleteProject = (id: string) =>
   request<{ ok: boolean; removed: { id: string; detachedReviews: number } }>('/api/projects/' + id, { method: 'DELETE' })
