@@ -94,7 +94,21 @@ archiveProjectVersion 新增可选参数 nextScript：
 
 ## 生产部署
 
-本轮部署后补：版本号、快照文件、四个 unit、入口与样式大小、文件哈希、未登录 401、心跳与磁盘。
+部署 `20261114-142507-r125rebase`，快照 `20261114-142507-r125rebase.tar.gz` **1,039,386 B**。
+
+| 检查 | 读数 |
+| --- | --- |
+| 版本 / 健康 | 8799 / 8800 / 公网都 **0.9.115**；`/api/health` ok（模板 26，部署后 uptime 46s） |
+| 四个 unit | 全 active |
+| 入口 / 画布 / 后台 | `index-LHfN3kzj.js` 604,036 B；`CanvasPage-D6JLpGYA.js` 242,014 B；`AdminConsolePage-DrlLq9nz.js` 201,077 B |
+| 样式 | `index-Aeb2kh8X.css` 290,405 B；`CanvasPage-BX48Ugxj.css` 28,926 B |
+| 文件一致 | `projects b70a459b` / `routes 9756fc2c` / 入口 `59a178af` / 画布 `11d37c67` / 后台 `9ca67fdc` / 主样式 `8ce3509f` / 画布样式 `b49e8586` |
+| 路由已上线 | `nextScript` 在 projects（3 处）；`VERSION_FROM_INVALID` 与 `basedOn` 在 routes；`vq-version-rebase` 在样式里 |
+| 未登录 | `POST /api/projects/<id>/versions` → **401** |
+| 心跳 / 盘 | pid 1489831 / 1489826；盘 72%；`/tmp` 清理后 352M；日志没有业务 error |
+| 旧记录 | 9 条运行、0 条带 graph；`run-graphs` 还没有目录 |
+
+生产没有登录账号做真实回退，只验证了未登录 401 与文件哈希；功能证据来自本地真浏览器 + 本地服务，零真实上游。
 
 ## 回退
 

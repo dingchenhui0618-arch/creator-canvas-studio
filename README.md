@@ -2209,6 +2209,8 @@ v0.9.110 起，对照接口写死「两条运行必须在同一张画布上」�
 
 全仓 **937/937**（新增 1 条存储层用例 + 2 条接口用例），oxlint **0 error / 15 warning**（同一批基线），tsc -b 与 build 干净，官方密钥扫描 **671 文件 / 0**；入口 index-LHfN3kzj.js（604,036 B）、画布 CanvasPage-D6JLpGYA.js（242,014 B）、后台 AdminConsolePage-DrlLq9nz.js（201,077 B）、主样式 index-Aeb2kh8X.css（290,405 B）、画布样式 CanvasPage-BX48Ugxj.css（28,926 B）。入口比 v0.9.114 多 1,310 B，样式多 229 B，没有新增第三方依赖。
 
-生产部署（部署后补）。
+生产部署 `20261114-142507-r125rebase`（快照 `20261114-142507-r125rebase.tar.gz` **1,039,386 B**）：四个 unit 全 active，8799 / 8800 / 公网都 **0.9.115**，`/api/health` ok（模板 26，部署后 uptime 46s）；入口 200 · 604,036 B、画布 242,014 B、后台 201,077 B、主样式 290,405 B、画布样式 28,926 B；服务端与前端哈希全部与本地一致（`projects b70a459b` / `routes 9756fc2c` / 入口 `59a178af` / 画布 `11d37c67` / 后台 `9ca67fdc` / 主样式 `8ce3509f` / 画布样式 `b49e8586`）；部署文件里 `nextScript` 在 projects（3 处）、`VERSION_FROM_INVALID` 与 `basedOn` 在 routes、`vq-version-rebase` 在样式里；未登录 POST `/api/projects/<id>/versions` 返回 **401**；心跳 pid 1489831 / 1489826，盘 72%，`/tmp` 清理后 352M，日志没有业务 error。生产 9 条运行、0 条带 graph，`run-graphs` 还没有目录；生产没有登录账号做真实回退，证据来自本地真浏览器 + 本地服务，零真实上游。
+
+提交 `6208971`；CI **43604312665** 三个 job 全 success（安全扫描、Node 24、Node 22.12）。
 
 回退：bash /opt/visionqa/ops/rollback.sh --to 1 → **v0.9.114**（--to 2 是 v0.9.113）。这一版不改已有 JSON schema：from 是请求参数，basedOn 是响应字段，nextScript 只在服务端使用；旧前端不传 from，行为与 v0.9.114 完全一致。细节、八条坑与「发现但没做」见 [以旧版为底再开一版](docs/project-version-rebase-2026-11-14.md)。
