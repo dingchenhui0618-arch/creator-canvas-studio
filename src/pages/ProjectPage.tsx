@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowLeft, ArrowRight, BookmarkPlus, Bot, Check, ChevronDown, Clapperboard, Copy, CopyPlus, Download, FileText, GitCompare, Link2, Package, Pencil, Plus, Printer, RefreshCw, RotateCcw, ScanEye, Share2, Trash2, Workflow, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, BookmarkPlus, Bot, Check, ChevronDown, Clapperboard, Copy, CopyPlus, Download, FileCheck2, FileText, GitCompare, Link2, Package, Pencil, Plus, Printer, RefreshCw, RotateCcw, ScanEye, Share2, Trash2, Upload, Workflow, X } from 'lucide-react'
 import PageHead from '../components/PageHead'
 import ProjectStatusPill from '../components/ProjectStatus'
 import { VersionScriptModal } from '../components/VersionScriptModal'
@@ -29,12 +29,15 @@ import {
 import { describeTiming, type ScriptBeat } from '../domain/radar'
 import { formatCount } from '../api/radar'
 import {
+  checkPackageFile,
   deliveredCurrent,
   deliveryArchive,
   deliveryOf,
   packageBytesLabel,
   packageShortSha,
   projectStep,
+  sha256HexOfBytes,
+  type PackageCheck,
   reviewsForVersion,
   runsForVersion,
   type ProjectDelivery,
@@ -162,6 +165,17 @@ export default function ProjectPage({
   const deliverRef = useRef<HTMLDivElement | null>(null)
   // 交付档案（v0.9.126）：展开哪一版的包内清单（0 = 都收起）；同一时间只开一个
   const [archiveOpen, setArchiveOpen] = useState(0)
+  // 核对下载到的包（v0.9.127）：只在本机算 SHA-256，0 表示哪一行都没开
+  const [verifyOpen, setVerifyOpen] = useState(0)
+  const [verify, setVerify] = useState<{
+    version: number
+    status: 'idle' | 'reading' | 'done' | 'error'
+    fileName: string
+    actualSha: string
+    actualBytes: number
+    check: PackageCheck | null
+    error: string
+  }>({ version: 0, status: 'idle', fileName: '', actualSha: '', actualBytes: 0, check: null, error: '' })
   // 人工复核：一句话备注，加上正在提交的那一档（拍通过 / 拍不通过 / 撤销）
   // null 表示「跟着这条拍板的备注走」：改判或撤销后不用手动清空，渲染时现算
   const [decisionNote, setDecisionNote] = useState<string | null>(null)
@@ -548,6 +562,45 @@ export default function ProjectPage({
       onToast('已复制 SHA-256，可发给收件人核对包有没有被改过')
     } catch {
       onToast('复制失败：浏览器没给剪贴板权限')
+    }
+  }
+
+  // 核对封存包（v0.9.127）：文件在本机读、在本机算，不上传、不写出。
+  // 哈希对上档案里那一条，才说明手里这份还是封存时的那一份；库里没有任何接口能收文件。
+  const verifyPackage = async (version: number, pkg: { sha256: string; bytes: number }, file: File) => {
+    setVerifyOpen(version)
+    setVerify({
+      version,
+      status: 'reading',
+      fileName: file.name,
+      actualSha: '',
+      actualBytes: file.size,
+      check: null,
+      error: '',
+    })
+    try {
+      if (!file.size) throw new Error('这个文件是空的，不是交付包')
+      if (file.size > 64 * 1024 * 1024) throw new Error('文件超过 64 MB，交付包不该这么大')
+      const actualSha = await sha256HexOfBytes(await file.arrayBuffer())
+      setVerify({
+        version,
+        status: 'done',
+        fileName: file.name,
+        actualSha,
+        actualBytes: file.size,
+        check: checkPackageFile(pkg, { sha256: actualSha, bytes: file.size }),
+        error: '',
+      })
+    } catch (caught) {
+      setVerify({
+        version,
+        status: 'error',
+        fileName: file.name,
+        actualSha: '',
+        actualBytes: file.size,
+        check: null,
+        error: caught instanceof Error ? caught.message : '这个包没读出来',
+      })
     }
   }
 
@@ -1375,7 +1428,7 @@ export default function ProjectPage({
               </span>
             </h2>
             <p className="vq-project-archive-note">
-              标记交付时封存的那一份，之后改模板、改脚本、开新版都不会变。下载前可以复制 SHA-256 发给收件人核对；包只认登录态，不走公开分享。
+              标记交付时封存的那一份，之后改模板、改脚本、开新版都不会变。下载后把它拖进「核对」，本机算 SHA-256 与档案对比，不上传；包只认登录态，不走公开分享。
             </p>
           </div>
           <ul className="vq-archive-list">
@@ -1428,6 +1481,19 @@ export default function ProjectPage({
                           {open ? '收起' : '清单 ' + pkg.fileCount}
                         </button>
                       ) : null}
+                      <button
+                        type="button"
+                        className={
+                          'vq-button vq-button--quiet vq-button--sm' +
+                          (verifyOpen === row.version ? ' is-armed' : '')
+                        }
+                        aria-expanded={verifyOpen === row.version}
+                        onClick={() => setVerifyOpen(verifyOpen === row.version ? 0 : row.version)}
+                        title="把下载到的包拖进来，本机算 SHA-256，看还是不是这一份"
+                      >
+                        <FileCheck2 size={12} />
+                        核对
+                      </button>
                       <a
                         className="vq-button vq-button--quiet vq-button--sm"
                         href={deliveryPackageUrl(project.id, row.id || '')}
@@ -1437,6 +1503,75 @@ export default function ProjectPage({
                         下载包
                         <Download size={12} />
                       </a>
+                    </div>
+                  ) : null}
+                  {sealed && pkg && verifyOpen === row.version ? (
+                    <div className="vq-archive-verify">
+                      <label
+                        className="vq-archive-verify-drop"
+                        onDragOver={(event) => event.preventDefault()}
+                        onDrop={(event) => {
+                          event.preventDefault()
+                          const file = event.dataTransfer.files?.[0]
+                          if (file) void verifyPackage(row.version, pkg, file)
+                        }}
+                      >
+                        <input
+                          type="file"
+                          accept=".zip,application/zip,application/x-zip-compressed"
+                          aria-label={'选择下载到的 v' + row.version + ' 封存包'}
+                          onChange={(event) => {
+                            const input = event.currentTarget
+                            const file = input.files?.[0]
+                            input.value = ''
+                            if (file) void verifyPackage(row.version, pkg, file)
+                          }}
+                        />
+                        <Upload size={13} />
+                        <span>把下载到的包拖进来，或点这里选文件</span>
+                      </label>
+                      <p className="vq-archive-verify-hint">
+                        只在本机读这个文件、算 SHA-256，不上传也不写出；对上档案里的 {packageShortSha(pkg.sha256)} 与 {packageBytesLabel(pkg.bytes)} 才算这一份。
+                      </p>
+                      {verify.version === row.version && verify.status === 'reading' ? (
+                        <p className="vq-archive-verify-note" role="status">
+                          正在算 {verify.fileName} 的 SHA-256…
+                        </p>
+                      ) : null}
+                      {verify.version === row.version && verify.status === 'error' ? (
+                        <p className="vq-archive-verify-note is-bad" role="status">
+                          {verify.error}
+                        </p>
+                      ) : null}
+                      {verify.version === row.version && verify.status === 'done' && verify.check ? (
+                        <div
+                          className={'vq-archive-verify-result is-' + (verify.check.ok ? 'ok' : 'bad')}
+                          role="status"
+                        >
+                          <strong>
+                            {verify.check.ok ? <Check size={13} /> : <X size={13} />}
+                            {verify.check.text}
+                          </strong>
+                          <span className="vq-mono">
+                            {verify.fileName} · {packageBytesLabel(verify.actualBytes)} · SHA-256{' '}
+                            {packageShortSha(verify.actualSha)}
+                          </span>
+                          {!verify.check.ok ? (
+                            <div className="vq-archive-verify-diff">
+                              <span className="vq-mono">档案记的是 {packageShortSha(pkg.sha256)}</span>
+                              <button
+                                type="button"
+                                className="vq-archive-sha vq-mono"
+                                onClick={() => void copyPackageSha(verify.actualSha)}
+                                title="复制这个文件的完整 SHA-256，发给对方排查"
+                              >
+                                复制这个文件的 SHA-256
+                                <Copy size={11} />
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
                   {open && pkg ? (

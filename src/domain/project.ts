@@ -348,9 +348,66 @@ export function packageBytesLabel(bytes: number): string {
 
 /** 界面上只露 SHA-256 的前 12 位：够核对，又不把一行撑爆；完整值在复制与提示里。 */
 export function packageShortSha(sha: string): string {
-  const value = String(sha || '').trim().toLowerCase()
-  if (!/^[0-9a-f]{64}$/.test(value)) return ''
+  const value = normalizeSha256(sha)
+  if (!value) return ''
   return value.slice(0, 12) + '…'
+}
+
+/** 收成 64 位小写十六进制；不是 SHA-256 就返回空串（粘贴时的大小写、空格都不算错） */
+export function normalizeSha256(sha: string): string {
+  const value = String(sha || '').trim().toLowerCase()
+  return /^[0-9a-f]{64}$/.test(value) ? value : ''
+}
+
+/**
+ * 核对一个下载到的封存包（v0.9.127）：只比 SHA-256 与字节数。
+ * 为什么不在服务端对：包在用户手里，读它、算它都不该再上传一遍；
+ * 哈希对上就说明还是当初封存的那一份，模型、脚本、模板后来怎么改都影响不到它。
+ */
+export type PackageCheck = {
+  /** 哈希与大小都对上 */
+  ok: boolean
+  /** 哈希对上；档案没有哈希时也是 false（核对不了） */
+  shaOk: boolean
+  /** 字节数对上；档案没记大小时按对上算（不拦着核对） */
+  sizeOk: boolean
+  /** 实际比档案多（正）或少（负）多少字节 */
+  sizeDelta: number
+  /** 给人看的一句结论 */
+  text: string
+}
+
+export function checkPackageFile(
+  expected: { sha256?: string; bytes?: number } | null | undefined,
+  actual: { sha256: string; bytes: number } | null | undefined,
+): PackageCheck {
+  const want = normalizeSha256(expected?.sha256 || '')
+  const got = normalizeSha256(actual?.sha256 || '')
+  const wantBytes = Math.max(0, Math.round(Number(expected?.bytes) || 0))
+  const gotBytes = Math.max(0, Math.round(Number(actual?.bytes) || 0))
+  const sizeOk = !wantBytes || gotBytes === wantBytes
+  const shaOk = Boolean(want && got && want === got)
+  const sizeDelta = wantBytes ? gotBytes - wantBytes : 0
+  const ok = shaOk && sizeOk
+  let text = '和封存的那一刻一致：还是同一个包'
+  if (!want) text = '这一版没记 SHA-256，核对不了大小之外的改动'
+  else if (!got) text = '这个文件没算出 SHA-256，核对不了'
+  else if (!shaOk) text = 'SHA-256 对不上：这个文件不是这一版封存的包'
+  else if (!sizeOk) text = '大小和档案差 ' + Math.abs(sizeDelta) + ' B，包可能没下载完整'
+  return { ok, shaOk, sizeOk, sizeDelta, text }
+}
+
+/**
+ * 浏览器里算一段字节的 SHA-256。Web Crypto 只在 https / localhost 下提供，
+ * 拿不到就抛人话，让界面说清「换个地址打开」，而不是静默失败。
+ */
+export async function sha256HexOfBytes(bytes: ArrayBuffer): Promise<string> {
+  const subtle = globalThis.crypto?.subtle
+  if (!subtle) throw new Error('这个地址不是 HTTPS，浏览器不给算 SHA-256')
+  const digest = await subtle.digest('SHA-256', bytes)
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('')
 }
 
 /** 一次画布运行的摘要：运行记在画布服务里，作品页把名下所有版本的运行按时间归集成一条线 */
