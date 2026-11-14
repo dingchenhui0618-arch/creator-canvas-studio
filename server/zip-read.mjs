@@ -1,13 +1,18 @@
-// 读封存包里的目录与单个条目（v0.9.129）：只读，不解压到磁盘，也不写任何文件。
+// 读封存包里的目录、单条内容，以及整包逐条体检（v0.9.129 / v0.9.130）：只读，不解压到磁盘，也不写任何文件。
 //
 // 为什么自己读而不是装 jszip：封存包是我们自己用 zip-store.mjs 打的（store，不压缩），
 // 目录就写在文件尾部的中央目录里，按偏移取一段就够。几十行读得完的代码，
 // 比再引一个依赖更容易审：读进来的名字、大小、CRC 都来自包本身，不是另记一份。
 //
+// 两种读法（v0.9.130）：路由里已经把包读进内存时用内存那一路；整包体检、列目录用盘上的
+// 只读句柄按偏移读，内存里最多只有一条，不把整包和它的解压结果一起摊在内存里。
+//
 // 边界：
 //  - 只认我们写得出、也解得开的那两种压缩方式（0 = store、8 = deflate）；别的回 null，不猜；
 //  - 条目大小、条目数、整包大小都有上限，超了如实说，不把整台机器的内存交给一个坏包；
+//  - 体检另外记一个「解开过多少字节」的预算：条目小但条数多，乘起来照样能撑爆内存；
 //  - 目录读不出来就回 null（被截断 / 尾部被改），不拿中央目录之前的东西硬拼一份清单。
+import { readSync } from 'node:fs'
 import { inflateRawSync } from 'node:zlib'
 import { crc32 } from './zip-store.mjs'
 
@@ -20,47 +25,81 @@ const EOCD_SCAN = EOCD_MIN + 0xffff
 export const MAX_ENTRIES = 2000
 export const MAX_ENTRY_BYTES = 32 * 1024 * 1024
 export const MAX_PACKAGE_BYTES = 64 * 1024 * 1024
+/** 一次体检最多解开这么多字节：条目大小上限管的是单条，条数乘起来还得有个总预算。 */
+export const MAX_VERIFY_BYTES = 128 * 1024 * 1024
 
-/**
- * 读包里的目录（中央目录）：只认条目名、字节数、CRC32、压缩方式与本地头偏移。
- * 不是 zip、被截断、写了 ZIP64 都回 null —— 读不出来比读出一份错的清单安全。
- */
-export function readZipDirectory(buffer) {
-  const data = Buffer.isBuffer(buffer) ? buffer : null
-  if (!data || data.length < EOCD_MIN) return null
+/** 内存里的整份：只在包已经读进内存时用（比如单条内容预览）。 */
+function memorySource(buffer) {
+  if (!Buffer.isBuffer(buffer)) return null
+  return {
+    size: buffer.length,
+    read(offset, length) {
+      if (offset < 0 || length < 0 || offset + length > buffer.length) return null
+      return buffer.subarray(offset, offset + length)
+    },
+  }
+}
+
+/** 盘上的只读句柄：按偏移读多少算多少；只读、不缓存、不写回。 */
+function fdSource(fd, size, onRead) {
+  const total = Math.max(0, Math.round(Number(size) || 0))
+  return {
+    size: total,
+    read(offset, length) {
+      if (offset < 0 || length < 0 || offset + length > total) return null
+      const buffer = Buffer.allocUnsafe(length)
+      let got = 0
+      while (got < length) {
+        const n = readSync(fd, buffer, got, length - got, offset + got)
+        if (n <= 0) return null
+        got += n
+      }
+      if (onRead && length > 0) onRead(length)
+      return buffer
+    },
+  }
+}
+
+/** 解析中央目录：只读尾部与中央目录那两段，不碰条目内容。 */
+function parseDirectory(source) {
+  if (!source || source.size < EOCD_MIN) return null
   try {
-    let eocd = -1
-    const start = Math.max(0, data.length - EOCD_SCAN)
-    for (let at = data.length - EOCD_MIN; at >= start; at -= 1) {
-      if (data.readUInt32LE(at) === EOCD_SIG) {
-        eocd = at
+    const scanStart = Math.max(0, source.size - EOCD_SCAN)
+    const tail = source.read(scanStart, source.size - scanStart)
+    if (!tail || tail.length < EOCD_MIN) return null
+    let at = -1
+    for (let pos = tail.length - EOCD_MIN; pos >= 0; pos -= 1) {
+      if (tail.readUInt32LE(pos) === EOCD_SIG) {
+        at = pos
         break
       }
     }
-    if (eocd < 0) return null
-    const total = data.readUInt16LE(eocd + 10)
-    const centralBytes = data.readUInt32LE(eocd + 12)
-    const centralOffset = data.readUInt32LE(eocd + 16)
+    if (at < 0) return null
+    const total = tail.readUInt16LE(at + 10)
+    const centralBytes = tail.readUInt32LE(at + 12)
+    const centralOffset = tail.readUInt32LE(at + 16)
     // ZIP64：条目数或偏移写成 0xffff / 0xffffffff，这里不解释那套扩展
     if (total === 0xffff || centralBytes === 0xffffffff || centralOffset === 0xffffffff) return null
     if (total > MAX_ENTRIES) return null
-    if (centralOffset + centralBytes > data.length) return null
+    if (centralOffset + centralBytes > source.size) return null
 
+    const central = source.read(centralOffset, centralBytes)
+    if (!central) return null
     const entries = []
-    let at = centralOffset
+    let cursor = 0
     for (let index = 0; index < total; index += 1) {
-      if (at + 46 > data.length || data.readUInt32LE(at) !== CEN_SIG) return null
-      const flags = data.readUInt16LE(at + 8)
-      const method = data.readUInt16LE(at + 10)
-      const crc = data.readUInt32LE(at + 16)
-      const packed = data.readUInt32LE(at + 20)
-      const bytes = data.readUInt32LE(at + 24)
-      const nameBytes = data.readUInt16LE(at + 28)
-      const extraBytes = data.readUInt16LE(at + 30)
-      const commentBytes = data.readUInt16LE(at + 32)
-      const offset = data.readUInt32LE(at + 42)
-      if (at + 46 + nameBytes > data.length) return null
-      const name = data.subarray(at + 46, at + 46 + nameBytes).toString('utf8')
+      if (cursor + 46 > central.length || central.readUInt32LE(cursor) !== CEN_SIG) return null
+      const flags = central.readUInt16LE(cursor + 8)
+      const method = central.readUInt16LE(cursor + 10)
+      const crc = central.readUInt32LE(cursor + 16)
+      const packed = central.readUInt32LE(cursor + 20)
+      const bytes = central.readUInt32LE(cursor + 24)
+      const nameBytes = central.readUInt16LE(cursor + 28)
+      const extraBytes = central.readUInt16LE(cursor + 30)
+      const commentBytes = central.readUInt16LE(cursor + 32)
+      const offset = central.readUInt32LE(cursor + 42)
+      if (cursor + 46 + nameBytes > central.length) return null
+      const name = central.subarray(cursor + 46, cursor + 46 + nameBytes).toString('utf8')
       if (!name || name.includes('\\')) return null
       entries.push({
         index,
@@ -72,7 +111,7 @@ export function readZipDirectory(buffer) {
         offset,
         encrypted: Boolean(flags & 1),
       })
-      at += 46 + nameBytes + extraBytes + commentBytes
+      cursor += 46 + nameBytes + extraBytes + commentBytes
     }
     return { entries, total }
   } catch {
@@ -81,26 +120,97 @@ export function readZipDirectory(buffer) {
 }
 
 /**
+ * 读包里的目录（中央目录）：只认条目名、字节数、CRC32、压缩方式与本地头偏移。
+ * 不是 zip、被截断、写了 ZIP64 都回 null —— 读不出来比读出一份错的清单安全。
+ */
+export function readZipDirectory(buffer) {
+  return parseDirectory(memorySource(buffer))
+}
+
+/** 同上，但走盘上的只读句柄：只读尾部与中央目录，不把整包读进内存。 */
+export function readZipDirectoryAt(fd, size) {
+  return parseDirectory(fdSource(fd, size))
+}
+
+/**
  * 按目录里的一条取内容：只读这一段，解开后立刻验 CRC32。
+ * 出错时回 { error } —— 界面照实说是哪一种（截断 / 加密 / 认不出 / 太大），不拿字节硬拼。
+ */
+function readEntryFrom(source, entry) {
+  if (!source || !entry) return { error: 'unreadable' }
+  if (entry.encrypted) return { error: 'encrypted' }
+  if (entry.method !== 0 && entry.method !== 8) return { error: 'method' }
+  if (entry.packed > MAX_ENTRY_BYTES || entry.bytes > MAX_ENTRY_BYTES) return { error: 'too-large' }
+  try {
+    if (entry.offset + 30 > source.size) return { error: 'truncated' }
+    const head = source.read(entry.offset, 30)
+    if (!head || head.length < 30 || head.readUInt32LE(0) !== LOC_SIG) return { error: 'truncated' }
+    const nameBytes = head.readUInt16LE(26)
+    const extraBytes = head.readUInt16LE(28)
+    const start = entry.offset + 30 + nameBytes + extraBytes
+    if (start + entry.packed > source.size) return { error: 'truncated' }
+    const raw = source.read(start, entry.packed)
+    if (!raw || raw.length !== entry.packed) return { error: 'truncated' }
+    const content = entry.method === 0 ? Buffer.from(raw) : inflateRawSync(raw)
+    if (!content || content.length !== entry.bytes) return { error: 'unreadable' }
+    return { data: content, bytes: content.length, crcOk: crc32(content) === entry.crc }
+  } catch {
+    return { error: 'unreadable' }
+  }
+}
+
+/**
+ * 按目录里的一条取内容（内存里的整份）：只读这一段，解开后立刻验 CRC32。
  * crcOk 为 false 表示「这一条在包里就是坏的」——界面照实说，不把这堆字节当内容展示。
  */
 export function readZipEntry(buffer, entry) {
-  const data = Buffer.isBuffer(buffer) ? buffer : null
-  if (!data || !entry || entry.encrypted) return null
-  try {
-    if (entry.offset + 30 > data.length || data.readUInt32LE(entry.offset) !== LOC_SIG) return null
-    const nameBytes = data.readUInt16LE(entry.offset + 26)
-    const extraBytes = data.readUInt16LE(entry.offset + 28)
-    const start = entry.offset + 30 + nameBytes + extraBytes
-    if (start + entry.packed > data.length) return null
-    if (entry.packed > MAX_ENTRY_BYTES || entry.bytes > MAX_ENTRY_BYTES) return null
-    const raw = data.subarray(start, start + entry.packed)
-    const content = entry.method === 0 ? Buffer.from(raw) : entry.method === 8 ? inflateRawSync(raw) : null
-    if (!content || content.length !== entry.bytes) return null
-    return { data: content, bytes: content.length, crcOk: crc32(content) === entry.crc }
-  } catch {
-    return null
+  const source = memorySource(buffer)
+  if (!source || !entry || entry.encrypted) return null
+  const read = readEntryFrom(source, entry)
+  return read.data ? read : null
+}
+
+/** 同上，但走盘上的只读句柄：只把这一条读进内存。 */
+export function readZipEntryAt(fd, size, entry) {
+  if (!entry || entry.encrypted) return null
+  const read = readEntryFrom(fdSource(fd, size), entry)
+  return read.data ? read : null
+}
+
+/**
+ * 整包体检（v0.9.130）：把目录里每一条都解开、重算 CRC32 与目录里记的比。
+ * 逐条按范围读，内存里最多一条，解开的总字节数受 MAX_VERIFY_BYTES 约束：
+ * 超了就把剩下的记为 skipped（没走完），不装作「都对得上」。
+ */
+export function verifyZipEntries(source, entries, { budgetBytes = MAX_VERIFY_BYTES } = {}) {
+  const list = Array.isArray(entries) ? entries : []
+  const failed = []
+  let passed = 0
+  let skipped = 0
+  let decompressed = 0
+  for (const entry of list) {
+    if (decompressed + entry.bytes > budgetBytes) {
+      skipped += 1
+      continue
+    }
+    decompressed += entry.bytes
+    const read = readEntryFrom(source, entry)
+    if (read.data && read.crcOk) {
+      passed += 1
+      continue
+    }
+    failed.push({ name: entry.name, bytes: entry.bytes, reason: read.error || 'crc' })
   }
+  return { total: list.length, passed, skipped, failed }
+}
+
+/** 体检盘上那一份，并记下这次真读了多少字节（用来跟包大小对照，不是估算）。 */
+export function verifyZipAt(fd, size, entries, options = {}) {
+  let readBytes = 0
+  const source = fdSource(fd, size, (n) => {
+    readBytes += n
+  })
+  return { ...verifyZipEntries(source, entries, options), readBytes }
 }
 
 /**

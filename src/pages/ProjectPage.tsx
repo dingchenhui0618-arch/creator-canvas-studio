@@ -8,6 +8,7 @@ import {
   checkDeliveryPackage,
   deleteProject,
   deliverablePrintUrl,
+  deliveryPackageAudit,
   deliveryPackageContents,
   deliveryPackageEntryUrl,
   deliveryPackageUrl,
@@ -36,6 +37,8 @@ import {
   deliveredCurrent,
   deliveryArchive,
   deliveryOf,
+  packageAuditFaultLabel,
+  packageAuditText,
   packageBytesLabel,
   packageDiskAlert,
   packageManifestNote,
@@ -43,6 +46,7 @@ import {
   projectStep,
   serverPackageText,
   sha256HexOfBytes,
+  type PackageAudit,
   type PackageCheck,
   type PackageContents,
   type PackageEntry,
@@ -211,6 +215,13 @@ export default function ProjectPage({
     note: string
     error: string
   }>({ version: 0, deliveryId: '', name: '', kind: 'other', status: 'idle', text: '', note: '', error: '' })
+  // 整包体检（v0.9.130）：把盘上那份逐条解开、重算 CRC32；只在点过之后出现，不跟首屏走
+  const [audit, setAudit] = useState<{
+    version: number
+    state: 'idle' | 'busy' | 'done' | 'unreadable' | 'error'
+    result: PackageAudit | null
+    error: string
+  }>({ version: 0, state: 'idle', result: null, error: '' })
   // 人工复核：一句话备注，加上正在提交的那一档（拍通过 / 拍不通过 / 撤销）
   // null 表示「跟着这条拍板的备注走」：改判或撤销后不用手动清空，渲染时现算
   const [decisionNote, setDecisionNote] = useState<string | null>(null)
@@ -677,11 +688,29 @@ export default function ProjectPage({
     }
   }
 
+  // 整包体检：逐条解开、重算 CRC32，跟目录里记的比。只读接口，不修文件、不写档案；
+  // 结论只到「字节对不对」这一层，所以界面不拿它替内容背书。
+  const auditPackage = async (version: number, deliveryId: string) => {
+    if (!data) return
+    if (!deliveryId) {
+      onToast('这一版没有封存包，体检不了')
+      return
+    }
+    setAudit({ version, state: 'busy', result: null, error: '' })
+    try {
+      const result = await deliveryPackageAudit(data.project.id, deliveryId)
+      setAudit({ version, state: result.state === 'ok' ? 'done' : 'unreadable', result, error: '' })
+    } catch (caught) {
+      setAudit({ version, state: 'error', result: null, error: caught instanceof Error ? caught.message : '体检没跑完' })
+    }
+  }
+
   // 「清单」按钮：同一时间只开一行；换一行、收起时都把上一行的预览一起收掉
   const toggleArchive = (version: number, deliveryId: string) => {
     const next = archiveOpen === version ? 0 : version
     setArchiveOpen(next)
     setPreview({ version: 0, deliveryId: '', name: '', kind: 'other', status: 'idle', text: '', note: '', error: '' })
+    setAudit({ version: 0, state: 'idle', result: null, error: '' })
     if (!next) return
     if (contents.version === version && (contents.busy || contents.result || contents.error)) return
     void loadPackageContents(version, deliveryId)
@@ -1573,6 +1602,9 @@ export default function ProjectPage({
               const open = sealed && archiveOpen === row.version
               // 包里那份（v0.9.129）：档案记的清单和包内目录对不上时的那句话；对得上时是空串
               const manifestNote = open && contents.version === row.version ? packageManifestNote(contents.result?.manifest) : ''
+              // 体检说坏的那几条，在清单里也标出来：不用回头对名字
+              const auditResult = open && audit.version === row.version ? audit.result : null
+              const badEntries = new Set(auditResult && auditResult.state === 'ok' ? auditResult.failed.map((item) => item.name) : [])
               return (
                 <li className="vq-archive-row" key={sealed ? row.id : 'v' + row.version}>
                   <span className="vq-version-n vq-mono">v{row.version}</span>
@@ -1837,12 +1869,73 @@ export default function ProjectPage({
                       ) : null}
                       {contents.version === row.version && contents.result?.ok && contents.result.entries ? (
                         <>
-                          <p className="vq-archive-contents-note">
-                            目录是从盘上那份读出来的：{contents.result.entries.length} 个文件
-                            {contents.result.manifest ? '，档案记了 ' + contents.result.manifest.recorded + ' 个' : ''}
-                            {contents.result.entries.length ? '；点一条就在这儿看，不用解压。' : '。'}
-                          </p>
+                          <div className="vq-archive-contents-head">
+                            <p className="vq-archive-contents-note">
+                              目录是从盘上那份读出来的：{contents.result.entries.length} 个文件
+                              {contents.result.manifest ? '，档案记了 ' + contents.result.manifest.recorded + ' 个' : ''}
+                              {contents.result.entries.length ? '；点一条就在这儿看，不用整包解压。' : '。'}
+                            </p>
+                            {contents.result.entries.length ? (
+                              <button
+                                type="button"
+                                className="vq-button vq-button--quiet vq-button--sm"
+                                disabled={audit.version === row.version && audit.state === 'busy'}
+                                onClick={() => void auditPackage(row.version, row.id || '')}
+                                title="把包里每一条都解开、重算一遍 CRC32；只读，不改文件"
+                              >
+                                {audit.version === row.version && audit.state === 'busy'
+                                  ? '正在体检…'
+                                  : auditResult
+                                    ? '再体检一遍'
+                                    : '体检整包'}
+                              </button>
+                            ) : null}
+                          </div>
                           {manifestNote ? <p className="vq-archive-contents-note is-bad">{manifestNote}</p> : null}
+                          {audit.version === row.version && audit.state === 'error' ? (
+                            <p className="vq-archive-audit-note is-bad">{audit.error}</p>
+                          ) : null}
+                          {auditResult ? (
+                            <div
+                              className={
+                                'vq-archive-audit' +
+                                (auditResult.state === 'unreadable' ? ' is-bad' : auditResult.ok ? ' is-ok' : ' is-warn')
+                              }
+                              role="status"
+                            >
+                              <div className="vq-archive-audit-head">
+                                <strong>
+                                  {auditResult.state === 'unreadable'
+                                    ? '整包体检做不了'
+                                    : auditResult.ok
+                                      ? '整包体检通过'
+                                      : '整包体检发现问题'}
+                                </strong>
+                                {auditResult.state === 'ok' ? (
+                                  <span className="vq-archive-audit-meta">
+                                    <span className="vq-mono">
+                                      读了 {packageBytesLabel(auditResult.readBytes)} / 包 {packageBytesLabel(auditResult.bytes)}
+                                    </span>
+                                    <span> · 用了 {auditResult.ms} ms</span>
+                                  </span>
+                                ) : null}
+                              </div>
+                              <p className="vq-archive-audit-text">{packageAuditText(auditResult)}</p>
+                              {auditResult.failed.length ? (
+                                <ul className="vq-archive-audit-failed">
+                                  {auditResult.failed.map((item) => (
+                                    <li key={item.name}>
+                                      <span title={item.name}>{item.name}</span>
+                                      <span>{packageAuditFaultLabel(item.reason)}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : null}
+                              <p className="vq-archive-audit-hint">
+                                体检只说明包在盘上没坏；内容对不对，得看评审和现场页。
+                              </p>
+                            </div>
+                          ) : null}
                           {contents.result.entries.length ? (
                             <ul className="vq-archive-entries">
                               {contents.result.entries.map((entry) => (
@@ -1851,11 +1944,18 @@ export default function ProjectPage({
                                     type="button"
                                     className={
                                       'vq-archive-entry' +
-                                      (preview.version === row.version && preview.name === entry.name ? ' is-open' : '')
+                                      (preview.version === row.version && preview.name === entry.name ? ' is-open' : '') +
+                                      (badEntries.has(entry.name) ? ' is-bad' : '')
                                     }
                                     aria-expanded={preview.version === row.version && preview.name === entry.name}
                                     onClick={() => void openPackageEntry(row.version, row.id || '', entry)}
-                                    title={entry.kind === 'other' ? '这种文件不能在这里看，下载包来解压' : '点开看包里这一份'}
+                                    title={
+                                      badEntries.has(entry.name)
+                                        ? '体检说这一条坏了，打开也不该拿来当内容'
+                                        : entry.kind === 'other'
+                                          ? '这种文件不能在这里看，下载包来解压'
+                                          : '点开看包里这一份'
+                                    }
                                   >
                                     <span>{entry.name}</span>
                                     <span className="vq-mono">{packageBytesLabel(entry.bytes)}</span>

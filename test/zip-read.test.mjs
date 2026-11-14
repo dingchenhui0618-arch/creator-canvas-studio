@@ -1,5 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { closeSync, mkdtempSync, openSync, rmSync, truncateSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { deflateRawSync } from 'node:zlib'
 
 // 包里那份（v0.9.129）：封存包里的目录与单条内容要能读回来，而且读的就是包里那一份。
@@ -12,7 +15,18 @@ import { deflateRawSync } from 'node:zlib'
 const zipStore = await import('../server/zip-store.mjs')
 const reader = await import('../server/zip-read.mjs')
 const { buildZip, crc32 } = zipStore
-const { readZipDirectory, readZipEntry, findZipEntry, entryKind, entryMime, compareManifest } = reader
+const {
+  readZipDirectory,
+  readZipDirectoryAt,
+  readZipEntry,
+  readZipEntryAt,
+  findZipEntry,
+  entryKind,
+  entryMime,
+  compareManifest,
+  verifyZipEntries,
+  verifyZipAt,
+} = reader
 
 const entries = [
   { name: '交付稿.md', data: Buffer.from('# 交付稿\n这一版改了开场。\n', 'utf8') },
@@ -131,6 +145,122 @@ test('档案清单 vs 包内目录：少一个、多一个都说得出；老包�
   assert.deepEqual(legacy.missing, [])
   assert.deepEqual(legacy.extra, [])
 })
+
+test('盘上的那份按句柄读：目录与内存里那份逐条一致，取一条也对得上', () => {
+  const zip = buildZip(entries)
+  const temp = tempZip(zip)
+  try {
+    const at = readZipDirectoryAt(temp.fd, temp.size)
+    assert.ok(at)
+    const memory = readZipDirectory(zip)
+    assert.deepEqual(
+      at.entries.map((entry) => ({ ...entry })),
+      memory.entries.map((entry) => ({ ...entry })),
+    )
+    const target = findZipEntry(at.entries, '交付稿.md')
+    const read = readZipEntryAt(temp.fd, temp.size, target)
+    assert.ok(read)
+    assert.equal(read.crcOk, true)
+    assert.deepEqual(Buffer.from(read.data), entries[0].data)
+    // 名字不在目录里：找不到，不瞎猜
+    assert.equal(findZipEntry(at.entries, '没这条.txt'), null)
+    assert.equal(readZipEntryAt(temp.fd, temp.size, findZipEntry(at.entries, '没这条.txt')), null)
+  } finally {
+    temp.close()
+  }
+})
+
+test('整包体检：每一条都解开重算 CRC，全部对得上；读的字节数不超过包大小', () => {
+  const zip = buildZip(entries)
+  const temp = tempZip(zip)
+  try {
+    const { entries: list } = readZipDirectoryAt(temp.fd, temp.size)
+    const audit = verifyZipAt(temp.fd, temp.size, list)
+    assert.equal(audit.total, 3)
+    assert.equal(audit.passed, 3)
+    assert.equal(audit.skipped, 0)
+    assert.deepEqual(audit.failed, [])
+    assert.ok(audit.readBytes > 0)
+    assert.ok(audit.readBytes <= zip.length)
+  } finally {
+    temp.close()
+  }
+})
+
+test('整包体检：盘上某一条坏了一个字节，就点名那一条，其余照样通过', () => {
+  const zip = buildZip(entries)
+  const { entries: list } = readZipDirectory(zip)
+  const target = findZipEntry(list, '现场页.html')
+  const nameBytes = Buffer.byteLength('现场页.html', 'utf8')
+  zip[target.offset + 30 + nameBytes + 2] ^= 0xff
+  const temp = tempZip(zip)
+  try {
+    const at = readZipDirectoryAt(temp.fd, temp.size)
+    assert.ok(at)
+    const audit = verifyZipAt(temp.fd, temp.size, at.entries)
+    assert.equal(audit.total, 3)
+    assert.equal(audit.passed, 2)
+    assert.equal(audit.failed.length, 1)
+    assert.equal(audit.failed[0].name, '现场页.html')
+    assert.equal(audit.failed[0].reason, 'crc')
+  } finally {
+    temp.close()
+  }
+})
+
+test('整包体检：包被截断就是目录都读不出来，不给一份猜的清单', () => {
+  const zip = buildZip(entries)
+  const temp = tempZip(zip)
+  try {
+    truncateSync(temp.file, zip.length - 40)
+    assert.equal(readZipDirectoryAt(temp.fd, zip.length - 40), null)
+  } finally {
+    temp.close()
+  }
+})
+
+test('整包体检：解开的总字节有预算，超了就记 skipped，不装作都对得上', () => {
+  const zip = buildZip(entries)
+  const temp = tempZip(zip)
+  try {
+    const { entries: list } = readZipDirectoryAt(temp.fd, temp.size)
+    const audit = verifyZipAt(temp.fd, temp.size, list, { budgetBytes: 1 })
+    assert.equal(audit.total, 3)
+    assert.equal(audit.passed, 0)
+    assert.equal(audit.skipped, 3)
+    assert.deepEqual(audit.failed, [])
+  } finally {
+    temp.close()
+  }
+})
+
+test('体检会说清坏在哪一种：加密的、认不出的压缩方式，不混成一句「坏了」', () => {
+  const zip = buildZip(entries)
+  const source = { size: zip.length, read: (offset, length) => zip.subarray(offset, offset + length) }
+  const { entries: list } = readZipDirectory(zip)
+  const encrypted = verifyZipEntries(source, [{ ...list[0], encrypted: true }])
+  assert.equal(encrypted.failed.length, 1)
+  assert.equal(encrypted.failed[0].reason, 'encrypted')
+  const oddMethod = verifyZipEntries(source, [{ ...list[0], method: 99 }])
+  assert.equal(oddMethod.failed[0].reason, 'method')
+})
+
+/** 把一份包落到临时文件，返回只读句柄；用完 close，临时目录顺手删掉。 */
+function tempZip(buffer) {
+  const dir = mkdtempSync(join(tmpdir(), 'vq-zip-'))
+  const file = join(dir, 'pkg.zip')
+  writeFileSync(file, buffer)
+  const fd = openSync(file, 'r')
+  return {
+    fd,
+    file,
+    size: buffer.length,
+    close: () => {
+      closeSync(fd)
+      rmSync(dir, { recursive: true, force: true })
+    },
+  }
+}
 
 /** 手工拼一个 method 8（deflate）的单条目 zip：我们的包是 store，但别人重打过的也要读得出来。 */
 function deflatedZip(name, data) {

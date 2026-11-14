@@ -492,6 +492,76 @@ export function packageManifestNote(diff: PackageManifestDiff | null | undefined
 }
 
 /**
+ * 整包体检的结果（v0.9.130）：把包里每一条都解开、重算 CRC32 之后，包在盘上还坏没坏的结论。
+ * 它只说明「盘上这份包没坏」，不说明「内容对不对」——内容对不对是评审和现场页的事。
+ * 每次体检都不缓存：要的就是「现在」这一份。
+ */
+export type PackageAuditFault = 'crc' | 'truncated' | 'encrypted' | 'method' | 'too-large' | 'unreadable'
+
+export type PackageAuditFailure = {
+  name: string
+  bytes: number
+  reason: PackageAuditFault
+}
+
+export type PackageAudit = {
+  /** 每一条都对得上，而且没有因为预算没走完的条目 */
+  ok: boolean
+  /** ok 目录读得出来；unreadable 包被截断或尾部被改过，体检做不了 */
+  state: 'ok' | 'unreadable'
+  verifiedAt?: string
+  error?: string
+  total: number
+  passed: number
+  /** 超过解开预算、没走完的条数：如实说没走完，不装作都对得上 */
+  skipped: number
+  budgetBytes?: number
+  failed: PackageAuditFailure[]
+  bytes: number
+  readBytes: number
+  ms: number
+  /** 老包没记清单时是 null：那时不比较，也不把整包说成「多出来的」 */
+  manifest?: PackageManifestDiff | null
+}
+
+/** 体检里那一条是哪种坏法：短标签，列表里也用这一句 */
+export function packageAuditFaultLabel(reason: string): string {
+  switch (reason) {
+    case 'crc':
+      return 'CRC32 对不上'
+    case 'truncated':
+      return '在包里被截断了'
+    case 'encrypted':
+      return '是加密的，这里解不开'
+    case 'method':
+      return '压缩方式认不出来'
+    case 'too-large':
+      return '太大，超出单条上限'
+    default:
+      return '解不开'
+  }
+}
+
+/**
+ * 体检结论说成人话：通过了说通过，没通过点名第一条，没走完就说没走完。
+ * 「对得上」只到字节这一层，所以这句话里不出现「内容没问题」。
+ */
+export function packageAuditText(audit: PackageAudit | null | undefined): string {
+  if (!audit) return ''
+  if (audit.state === 'unreadable') return audit.error || '包里的目录读不出来：可能被截断，或者尾部被改过'
+  if (audit.failed.length) {
+    const first = audit.failed[0]
+    const head =
+      audit.failed.length === 1
+        ? '「' + first.name + '」' + packageAuditFaultLabel(first.reason)
+        : '有 ' + audit.failed.length + ' 条对不上，第一条「' + first.name + '」' + packageAuditFaultLabel(first.reason)
+    return audit.passed + ' 条对得上，' + head
+  }
+  if (audit.skipped) return '走了 ' + audit.passed + ' 条，剩下 ' + audit.skipped + ' 条超过体检上限没走完'
+  return '全部 ' + audit.total + ' 条都对得上 CRC32'
+}
+
+/**
  * 浏览器里算一段字节的 SHA-256。Web Crypto 只在 https / localhost 下提供，
  * 拿不到就抛人话，让界面说清「换个地址打开」，而不是静默失败。
  */

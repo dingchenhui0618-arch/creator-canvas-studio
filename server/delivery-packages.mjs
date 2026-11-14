@@ -84,6 +84,30 @@ export async function readDeliveryPackage(projectId, deliveryId) {
 }
 
 /**
+ * 打开盘上那份只读句柄（v0.9.130）：列目录、整包体检都按偏移读，不把整包读进内存。
+ * 文件不在、或者不是普通文件，回 null；调用方负责 close。
+ */
+export async function openDeliveryPackage(projectId, deliveryId) {
+  const target = packagePath(projectId, deliveryId)
+  if (!target) return null
+  try {
+    const handle = await fsp.open(target, 'r')
+    const info = await handle.stat()
+    if (!info.isFile()) {
+      await handle.close().catch(() => {})
+      return null
+    }
+    return {
+      fd: handle.fd,
+      size: info.size,
+      close: () => handle.close().catch(() => {}),
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
  * 服务器上那一份还在不在（v0.9.128）：只 stat，不读内容、不改文件。
  * 包没了不等于档案错了：档案记的是「当初封存了什么」，这两件事要分开说。
  */

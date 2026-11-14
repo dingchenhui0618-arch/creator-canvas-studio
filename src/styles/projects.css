@@ -1223,6 +1223,117 @@
   color: var(--fail);
 }
 
+/* 体检整包（v0.9.130）：结论一行说清，坏的那几条点名列出来；「对得上」只到字节这一层 */
+.vq-archive-contents-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.vq-archive-contents-head .vq-archive-contents-note {
+  flex: 1 1 240px;
+}
+
+.vq-archive-audit {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line-strong);
+  border-radius: var(--radius-xs);
+  background: var(--surface-soft);
+}
+
+.vq-archive-audit.is-ok {
+  border-left-color: var(--pass);
+}
+
+.vq-archive-audit.is-warn {
+  border-left-color: var(--warn);
+}
+
+.vq-archive-audit.is-bad {
+  border-left-color: var(--fail);
+}
+
+.vq-archive-audit-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.vq-archive-audit-head strong {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: var(--weight-medium);
+}
+
+.vq-archive-audit-meta {
+  color: var(--faint);
+  font-size: 11px;
+}
+
+/* 数字和单位不拆行：「用了 1 ms」被拆成两行会让读数像两个数 */
+.vq-archive-audit-meta > span {
+  white-space: nowrap;
+}
+
+.vq-archive-audit-text {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.vq-archive-audit-failed {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vq-archive-audit-failed li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  color: var(--fail);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.vq-archive-audit-failed li span:first-child {
+  overflow-wrap: anywhere;
+}
+
+.vq-archive-audit-hint {
+  margin: 0;
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.vq-archive-audit-note {
+  margin: 0;
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.vq-archive-audit-note.is-bad {
+  color: var(--fail);
+}
+
+.vq-archive-entry.is-bad {
+  color: var(--fail);
+}
+
 /* 核对包（v0.9.127）：虚线框住「只在本机算」这件事；拖进来与点选是同一个入口 */
 .vq-archive-verify {
   grid-column: 2 / -1;

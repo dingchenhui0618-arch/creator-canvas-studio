@@ -42,16 +42,27 @@ import { canStartProject } from '../origin-entry.mjs'
 import { adoptCanvasForProject, createProjectFromCanvas } from '../project-canvas.mjs'
 import { buildZip, safeEntryName } from '../zip-store.mjs'
 import { storyboardFrames } from '../project-frames.mjs'
-import { deliveriesWithDisk, hashDeliveryPackage, newDeliveryPackageId, packageIntegrity, readDeliveryPackage, saveDeliveryPackage } from '../delivery-packages.mjs'
+import {
+  deliveriesWithDisk,
+  hashDeliveryPackage,
+  newDeliveryPackageId,
+  openDeliveryPackage,
+  packageIntegrity,
+  readDeliveryPackage,
+  saveDeliveryPackage,
+} from '../delivery-packages.mjs'
 import {
   MAX_ENTRY_BYTES,
   MAX_PACKAGE_BYTES,
+  MAX_VERIFY_BYTES,
   compareManifest,
   entryKind,
   entryMime,
   findZipEntry,
+  readZipDirectoryAt,
   readZipDirectory,
   readZipEntry,
+  verifyZipAt,
 } from '../zip-read.mjs'
 import {
   listProjects,
@@ -92,6 +103,8 @@ const DELIVERY_PACKAGE_CHECK = /^\/api\/projects\/([\w-]+)\/delivery-packages\/(
 // 包里那份（v0.9.129）：读封存包自己的目录、按条目名取一条内容；只读，不解压到磁盘、不写文件
 const DELIVERY_PACKAGE_CONTENT = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})\/content$/
 const DELIVERY_PACKAGE_ENTRY = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})\/content\/(.+)$/
+// 整包体检（v0.9.130）：逐条解开、重算 CRC32，按偏移读，内存里最多一条；只读、不缓存、不写盘
+const DELIVERY_PACKAGE_VERIFY = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})\/verify$/
 // 打印版不进 /api：它是在新标签里打开的 HTML，地址栏里那串会印在纸的页脚上
 const DELIVERABLE_PRINT = /^\/print\/projects\/([\w-]+)\/deliverable$/
 // 评审对照纸：评审把问题框在哪一块画面上，同一张 A4 里印出来（交付包里也有同一份）
@@ -1251,6 +1264,67 @@ export function createProjectsRouter() {
           })),
           manifest,
         })
+        return true
+      }
+
+      // 整包体检（v0.9.130）：把包里每一条都解开、重算 CRC32，跟目录里记的比。
+      // 只读：按偏移从盘上读，内存里最多一条；不缓存结果、不改文件、不写档案。
+      const packageVerify = pathname.match(DELIVERY_PACKAGE_VERIFY)
+      if (packageVerify) {
+        if (req.method !== 'GET') {
+          sendJson(res, 405, { error: '封存包只能体检，不能修改' })
+          return true
+        }
+        const project = await getProject(packageVerify[1], user)
+        if (!project) {
+          sendJson(res, 404, { error: '作品不存在或已被删除' })
+          return true
+        }
+        const delivery = (project.deliveries || []).find((entry) => entry.id === packageVerify[2] && entry.package)
+        if (!delivery) {
+          sendJson(res, 404, { error: '这一条交付没有封存包，或者包已经不在了' })
+          return true
+        }
+        const handle = await openDeliveryPackage(project.id, delivery.id)
+        if (!handle) {
+          sendJson(res, 404, { error: '盘上那份封存包不在了；下载回来的拷贝还能自己核对 SHA-256' })
+          return true
+        }
+        try {
+          if (handle.size > MAX_PACKAGE_BYTES) {
+            sendJson(res, 413, {
+              error: '这个包超过 ' + Math.round(MAX_PACKAGE_BYTES / (1024 * 1024)) + ' MB，太大了不能在这里体检；下载下来自己核对',
+            })
+            return true
+          }
+          const directory = readZipDirectoryAt(handle.fd, handle.size)
+          if (!directory) {
+            sendJson(res, 200, {
+              ok: false,
+              state: 'unreadable',
+              error: '包里的目录读不出来：可能被截断，或者尾部被改过',
+            })
+            return true
+          }
+          const started = Date.now()
+          const audit = verifyZipAt(handle.fd, handle.size, directory.entries)
+          sendJson(res, 200, {
+            ok: audit.failed.length === 0 && audit.skipped === 0,
+            state: 'ok',
+            verifiedAt: new Date().toISOString(),
+            total: audit.total,
+            passed: audit.passed,
+            skipped: audit.skipped,
+            budgetBytes: MAX_VERIFY_BYTES,
+            failed: audit.failed,
+            bytes: handle.size,
+            readBytes: audit.readBytes,
+            ms: Date.now() - started,
+            manifest: delivery.package.files?.length ? compareManifest(directory.entries, delivery.package.files) : null,
+          })
+        } finally {
+          await handle.close()
+        }
         return true
       }
 

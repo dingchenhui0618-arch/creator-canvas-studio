@@ -8,6 +8,7 @@ import type {
   ProjectListFacets,
   ProjectScript,
   PackageServerCheck,
+  PackageAudit,
   ProjectShare,
   ProjectSpendDetail,
   ProjectVersionCompare,
@@ -270,6 +271,13 @@ export const checkDeliveryPackage = (projectId: string, deliveryId: string) =>
  */
 export const deliveryPackageContents = (projectId: string, deliveryId: string) =>
   request<PackageContents>(deliveryPackageUrl(projectId, deliveryId) + '/content')
+
+/**
+ * 整包体检（v0.9.130）：让服务端把包里每一条都解开、重算 CRC32。
+ * 只读接口，按偏移从盘上读，内存里最多一条；不缓存结果，也不写盘。
+ */
+export const deliveryPackageAudit = (projectId: string, deliveryId: string) =>
+  request<PackageAudit>(deliveryPackageUrl(projectId, deliveryId) + '/verify')
 
 /**
  * 包里一条内容的地址：按条目名取（名字里的 / 保留为分隔，其余逐段编码）。
