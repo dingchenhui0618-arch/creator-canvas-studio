@@ -427,6 +427,7 @@ export function packageNote({ model, generatedAt = '', tzOffsetMinutes = 480, fr
     '',
     '交付稿.md      全文：来源、脚本、分镜、评审、运行记录、逐版对照',
     '现场页.html    只带脚本与分镜的一张纸（含原片帧图），双击打开就能打印 / 存 PDF',
+    '校验.html      收包人自己验包：把收到的 zip 拖进去，逐条比 CRC32，坏的那条会点名；不上传、不联网',
     frameCount
       ? 'frames/        原片帧图 ' + frameCount + ' 张，按镜头编号命名（shot-01.jpg …），和现场页里的画面一一对应'
       : 'frames/        这条作品没有帧图可打：模板是待解析的，或者原片抽帧没有落盘',

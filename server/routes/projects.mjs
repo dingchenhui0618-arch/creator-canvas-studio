@@ -32,6 +32,7 @@ import { deliverablePrintHtml, printNoticeHtml } from '../project-deliverable-ht
 import { packageNote, parseShotRange, setSheetHtml, setSheetModel } from '../project-set-sheet.mjs'
 import { reviewImageRef, reviewSheetHtml, reviewSheetSelection } from '../project-review-sheet.mjs'
 import { compareSheetHtml } from '../project-compare-sheet.mjs'
+import { packageVerifyHtml, VERIFY_PAGE_NAME } from '../package-verify-page.mjs'
 import { getShareVisits, getShareVisitsByKey } from '../share-visits.mjs'
 import { shareBriefsByProject } from '../share-summary.mjs'
 import { ackFor, dropAcksForProject, listAcks } from '../review-acks.mjs'
@@ -406,6 +407,7 @@ async function buildProjectDeliveryArchive(project, user, tzOffsetMinutes) {
       compareSheetPair = { base: baseNo, target: project.version }
     }
   }
+  const zipName = fileName.replace(/\.md$/i, '') + '-交付包.zip'
   const note = packageNote({
     model: setSheetModel({ project, script: detail.script, template: detail.template }),
     generatedAt: now.toISOString(),
@@ -423,6 +425,18 @@ async function buildProjectDeliveryArchive(project, user, tzOffsetMinutes) {
     ...frames.map((frame) => ({ name: 'frames/' + frame.name, data: frame.data })),
     ...reviewExtras,
   ]
+  // 校验页（v0.9.133）：收包人拿到的不是一句「请相信我们」，而是一张能自己算一遍的纸。
+  // 清单只记上面这些条目：这一页没法记自己的哈希，所以它生成之后再插进包里（说明.txt 后面）。
+  const verifyPage = packageVerifyHtml({
+    project: { id: project.id, title: project.title, version: project.version },
+    zipName,
+    entries,
+    generatedAt: now.toISOString(),
+    tzOffsetMinutes,
+  })
+  const noteIndex = entries.findIndex((entry) => entry.name === '说明.txt')
+  entries.splice(noteIndex + 1, 0, { name: VERIFY_PAGE_NAME, data: Buffer.from(verifyPage, 'utf8') })
+
   const archive = buildZip(entries, { mtime: now })
   // 包内清单跟包一起落进交付记录（v0.9.126）：名字走 safeEntryName，和 zip 里的条目一致；
   // 大小按实际写进去的字节算，界面不用再猜。
@@ -430,7 +444,6 @@ async function buildProjectDeliveryArchive(project, user, tzOffsetMinutes) {
     name: safeEntryName(entry.name),
     bytes: Buffer.isBuffer(entry.data) ? entry.data.length : Buffer.byteLength(String(entry.data ?? ''), 'utf8'),
   }))
-  const zipName = fileName.replace(/\.md$/i, '') + '-交付包.zip'
   return { archive, fileName, zipName, now, files }
 }
 
