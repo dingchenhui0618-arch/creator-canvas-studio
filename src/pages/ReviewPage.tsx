@@ -4,7 +4,16 @@ import { getReview, getReviewCandidates, getReviewStatus, listReviews, runReview
 import { getCredits, getModelService, recheckModelService, type CreditsResponse, type ModelServiceState } from '../api/credits'
 import { listTemplates, coverSrc } from '../api/radar'
 import { getProject } from '../api/projects'
-import { REVIEW_VERDICT_LABEL as VERDICT_LABEL, reviewTimeLabel, reviewVersionLabel } from '../domain/review'
+import {
+  ISSUE_LABEL,
+  ISSUE_TONE,
+  issueCountsOf,
+  issueGap,
+  issueLine,
+  REVIEW_VERDICT_LABEL as VERDICT_LABEL,
+  reviewTimeLabel,
+  reviewVersionLabel,
+} from '../domain/review'
 import { anchorNumber, evidenceAreaLabel, reviewAnchorBadges, reviewAnchorMarks } from '../domain/review-anchors'
 import type { ReplicaTemplate } from '../domain/radar'
 import { consumeReviewTarget, onReviewRequest, type ReviewTarget } from '../state/review'
@@ -15,9 +24,8 @@ import { ReviewHistoryRow } from '../components/ReviewHistoryRow'
 import { Pill, Tag } from '../components/ui'
 import '../styles/review.css'
 
-const SEVERITY_LABEL: Record<string, string> = { blocker: '阻塞', major: '主要', minor: '次要', info: '信息' }
-// 严重度是元数据，不是结论：只借标签的语气色，尺寸仍走 20px 那一档
-const SEVERITY_TONE: Record<string, 'fail' | 'warn' | 'plain'> = { blocker: 'fail', major: 'warn', minor: 'plain', info: 'plain' }
+// 严重度四级（ISSUE_LABEL / ISSUE_TONE）与版本对照、交付纸共用 domain/review.ts 那一份，
+// 这里不再各写一套，免得一处写「阻塞」一处写「阻断」
 const SUPPORT_LABEL: Record<string, string> = {
   supported: '一致',
   too_strict: '偏严',
@@ -28,6 +36,23 @@ const RISK_LABEL = ['可以直接发布', '小修后可以发布', '必须先解
 function percent(value: number | null | undefined) {
   if (value === null || value === undefined) return '—'
   return Math.round(value * 100) + '%'
+}
+
+/**
+ * 这一次评审的问题数（v0.9.84）：结论下面先给一行数字，再往下看逐条。
+ * 严重度没记全时把「另有 N 条」写出来——0 个阻塞和「没记」不是一回事。
+ */
+function ReviewIssueSummary({ observations }: { observations: ReviewResult['observations'] }) {
+  const issues = issueCountsOf(observations)
+  const line = issueLine(issues)
+  if (!line) return null
+  const gap = issueGap(issues)
+  return (
+    <p className="review-issue-summary vq-mono">
+      {issues.observations} 条问题 · {line}
+      {gap ? <span className="review-issue-gap">另有 {gap} 条没记严重度</span> : null}
+    </p>
+  )
 }
 
 /**
@@ -686,7 +711,13 @@ export default function ReviewPage({
                 </li>
                 <li>
                   <span className="vq-mono">02</span>
-                  <div><strong>出结论</strong><p>{internal ? '按 visual-baseline 七项维度评审' : '按七项视觉维度评审'}，结论只有通过 / 需人工确认 / 不通过三种。</p></div>
+                  <div>
+                    <strong>出结论</strong>
+                    <p>
+                      {internal ? '按 visual-baseline 七项维度评审' : '按七项视觉维度评审'}，结论只有通过 / 需人工确认 / 不通过三种。
+                      每条问题带维度、严重度（阻塞 / 主要 / 次要 / 信息）和置信度——置信是模型对这条判断有多确定，不是问题有多严重。
+                    </p>
+                  </div>
                 </li>
                 <li>
                   <span className="vq-mono">03</span>
@@ -734,6 +765,8 @@ export default function ReviewPage({
                 <span className="vq-mono">{result.provider} · {(result.ms / 1000).toFixed(1)}s</span>
               </div>
 
+              <ReviewIssueSummary observations={result.observations} />
+
               {result.judge ? <JudgePanel judge={result.judge} /> : null}
 
               <ol className="review-observations">
@@ -758,7 +791,7 @@ export default function ReviewPage({
                     <div className="review-obs-head">
                       <span className={`review-obs-no${markedIds.has(item.id) ? ' has-anchor' : ''}`}>{anchorNumber(position + 1)}</span>
                       <span className="vq-mono">{item.dimension}</span>
-                      <Tag tone={SEVERITY_TONE[item.severity] || 'plain'}>{SEVERITY_LABEL[item.severity]}</Tag>
+                      <Tag tone={ISSUE_TONE[item.severity] || 'plain'}>{ISSUE_LABEL[item.severity]}</Tag>
                       {item.evidence ? (
                         <>
                           <span className="vq-mono" title="模型对这条判断的置信度">置信 {Math.round(item.confidence * 100)}%</span>

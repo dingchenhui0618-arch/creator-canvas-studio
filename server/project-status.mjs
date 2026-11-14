@@ -18,14 +18,16 @@ export const DECISION_TEXT = { pass: '人工通过', reject: '人工不通过' }
 export function reviewsForVersion(counts, version) {
   const own = counts?.[String(version)]
   const legacy = Number(version) === 1 ? counts?.['0'] : undefined
-  if (!own && !legacy) return { count: 0, lastVerdict: '', lastAt: '' }
-  if (!own) return { count: Number(legacy.count) || 0, lastVerdict: legacy.lastVerdict || '', lastAt: legacy.lastAt || '' }
-  if (!legacy) return { count: Number(own.count) || 0, lastVerdict: own.lastVerdict || '', lastAt: own.lastAt || '' }
+  // issues 是「这一版最近一次评审的问题数」（v0.9.84）：跟着 lastAt 一起挑，不把两次评审相加
+  if (!own && !legacy) return { count: 0, lastVerdict: '', lastAt: '', issues: null }
+  if (!own) return { count: Number(legacy.count) || 0, lastVerdict: legacy.lastVerdict || '', lastAt: legacy.lastAt || '', issues: legacy.issues || null }
+  if (!legacy) return { count: Number(own.count) || 0, lastVerdict: own.lastVerdict || '', lastAt: own.lastAt || '', issues: own.issues || null }
   const latest = String(own.lastAt) >= String(legacy.lastAt) ? own : legacy
   return {
     count: (Number(own.count) || 0) + (Number(legacy.count) || 0),
     lastVerdict: latest.lastVerdict || '',
     lastAt: latest.lastAt || '',
+    issues: latest.issues || null,
   }
 }
 

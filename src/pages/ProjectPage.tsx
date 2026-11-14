@@ -25,7 +25,7 @@ import { describeTiming, type ScriptBeat } from '../domain/radar'
 import { formatCount } from '../api/radar'
 import { deliveredCurrent, deliveryOf, projectStep, reviewsForVersion, runsForVersion, type ProjectDetail, type ProjectSpendDetail } from '../domain/project'
 import { ackReview, decideReview, clearReviewDecision, unackReview } from '../api/review'
-import { REVIEW_VERDICT_LABEL as VERDICT_LABEL, reviewTimeLabel, reviewsOfVersion } from '../domain/review'
+import { ISSUE_LABEL, issueCompare, issueGap, issueLine, REVIEW_VERDICT_LABEL as VERDICT_LABEL, reviewTimeLabel, reviewsOfVersion } from '../domain/review'
 import { stampTime as stamp, visitLine } from '../domain/share'
 import '../styles/projects.css'
 
@@ -660,6 +660,11 @@ export default function ProjectPage({
   const script = data.script
   // 状态与「下一步」只看当前这一版评过没有：新版刚开出来时不能因为上一版评过就跳过评审
   const currentReviews = reviewsForVersion(data.versionCounts, project.version)
+  // 「这一版比上一版好在哪」：只在前后两版都评过、且都记了严重度时才算得出来（v0.9.84）
+  const previousVersion = project.version > 1 ? project.version - 1 : 0
+  const previousReviews = previousVersion ? reviewsForVersion(data.versionCounts, previousVersion) : null
+  const issueDelta = issueCompare(previousReviews?.issues, currentReviews.issues)
+  const currentIssueLine = issueLine(currentReviews.issues)
   // 人工复核：服务端已经按「当前这一版最近一次评审」挑好了，对不上就是 null（拍板自动失效）
   const decision = data.decision ?? null
   // 拍板记录（v0.9.26）：这条作品名下每一次拍板都留着，按拍板时间倒序；还算不算数由服务端算好（state）。
@@ -925,6 +930,15 @@ export default function ProjectPage({
           <span className="vq-next-label">{step.label}</span>
           <h2 id="vq-project-next">{step.title}</h2>
           <p className="vq-project-hint">{step.hint}</p>
+          {issueDelta && currentIssueLine ? (
+            <p className={'vq-project-issue-line is-' + issueDelta.tone}>
+              这一版 {currentIssueLine}
+              <span className="vq-project-issue-delta">
+                比第 {previousVersion} 版{issueDelta.delta < 0 ? '少' : '多'} {Math.abs(issueDelta.delta)} 个
+                {ISSUE_LABEL[issueDelta.level]}
+              </span>
+            </p>
+          ) : null}
           <button
             type="button"
             className="vq-next-cta"
@@ -985,6 +999,10 @@ export default function ProjectPage({
             {versionRows.map((row) => {
               const counter = reviewsForVersion(data.versionCounts, row.n)
               const runCount = runsForVersion(data.runCounts || {}, row.n)
+              // 问题数与「比上一版多了还是少了」都从同一份统计现算，不另存（v0.9.84）
+              const issueText = issueLine(counter.issues)
+              const issueMissing = issueGap(counter.issues)
+              const rowDelta = row.n > 1 ? issueCompare(reviewsForVersion(data.versionCounts, row.n - 1).issues, counter.issues) : null
               // 这一版的评审逐条列出来：点一条直接看当时的证据原图，别只留一个「2 次评审」
               const rowReviews = reviewsOfVersion(reviews, row.n)
               return (
@@ -998,6 +1016,23 @@ export default function ProjectPage({
                       {/* 没存快照的旧版本写清楚：不能让人以为「那一版就是现在的脚本」 */}
                       <span>{row.scriptBeats ? row.scriptBeats + ' 段脚本' : row.current ? '没写脚本' : '脚本没存快照'}</span>
                       <span>{counter.count ? counter.count + ' 次评审' : '未评审'}</span>
+                      {issueText ? (
+                        <span
+                          className="vq-version-issues"
+                          title={
+                            '这一版最近一次评审的问题数（按严重度）' +
+                            (issueMissing ? '；另有 ' + issueMissing + ' 条没记严重度' : '')
+                          }
+                        >
+                          最近一评 {issueText}
+                        </span>
+                      ) : null}
+                      {rowDelta ? (
+                        <span className={'vq-version-delta is-' + rowDelta.tone}>
+                          比 v{row.n - 1} {rowDelta.delta < 0 ? '少' : '多'} {Math.abs(rowDelta.delta)} 个
+                          {ISSUE_LABEL[rowDelta.level]}
+                        </span>
+                      ) : null}
                       <span>{runCount ? runCount + ' 次运行' : '没跑过'}</span>
                       {deliveredVersions.has(row.n) ? (
                         <span

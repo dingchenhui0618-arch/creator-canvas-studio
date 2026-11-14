@@ -147,6 +147,22 @@
 .review-verdict .vq-mono { grid-column:1 / -1; }
 
 
+/* 评审结论下面那一行问题数（v0.9.84）：数字先行，逐条在下面 */
+.review-issue-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.review-issue-gap {
+  color: var(--faint);
+  font-family: var(--font-ui);
+}
+
 .review-observations { display:flex; flex-direction:column; gap:1px; margin:0; padding:0; list-style:none; border-top:1px solid var(--line); }
 .review-obs { display:flex; flex-direction:column; gap:4px; padding:12px 12px; border-bottom:1px solid var(--line); border-left:2px solid transparent; cursor:pointer; transition:background .15s ease, border-color .15s ease; }
 .review-obs:hover { background:var(--surface-raised); }

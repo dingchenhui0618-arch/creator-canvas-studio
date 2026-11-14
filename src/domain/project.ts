@@ -1,5 +1,5 @@
 import type { ScriptBeat, StoryboardShot, TemplateTiming } from './radar'
-import type { ReviewSummary } from '../api/review'
+import type { ReviewIssues, ReviewSummary } from '../api/review'
 
 // 作品（Project）：一条内容的主线对象。
 // 它不自带脚本与分镜——那两样在它绑定的模板上，改了模板作品跟着变；
@@ -16,7 +16,13 @@ export type ProjectTemplateBrief = {
   shots: number
 }
 
-export type ProjectReviews = { count: number; lastVerdict: string; lastAt: string }
+export type ProjectReviews = {
+  count: number
+  lastVerdict: string
+  lastAt: string
+  /** 这一版最近一次评审的问题数（按严重度）；老记录没有 */
+  issues?: ReviewIssues | null
+}
 
 /**
  * 这条作品上花掉的积分（v0.9.65）：评审与画布运行分开记。
@@ -454,11 +460,17 @@ export function projectStatus(
 export function reviewsForVersion(counts: Record<string, ProjectReviews>, version: number): ProjectReviews {
   const own = counts[String(version)]
   const legacy = version === 1 ? counts['0'] : undefined
-  if (!own && !legacy) return { count: 0, lastVerdict: '', lastAt: '' }
-  if (!own) return legacy as ProjectReviews
-  if (!legacy) return own
+  // 问题数与 lastVerdict 同一个来源：这一版最近那一次评审，不把两次评审的问题相加
+  if (!own && !legacy) return { count: 0, lastVerdict: '', lastAt: '', issues: null }
+  if (!own) return { ...legacy!, issues: legacy!.issues ?? null }
+  if (!legacy) return { ...own, issues: own.issues ?? null }
   const latest = String(own.lastAt) >= String(legacy.lastAt) ? own : legacy
-  return { count: own.count + legacy.count, lastVerdict: latest.lastVerdict, lastAt: latest.lastAt }
+  return {
+    count: own.count + legacy.count,
+    lastVerdict: latest.lastVerdict,
+    lastAt: latest.lastAt,
+    issues: latest.issues ?? null,
+  }
 }
 
 /**

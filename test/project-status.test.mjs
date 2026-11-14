@@ -6,7 +6,8 @@ import assert from 'node:assert/strict'
 
 const { projectStatus, reviewsForVersion } = await import('../server/project-status.mjs')
 
-const reviews = (count, verdict = '', lastAt = '2026-11-12T10:00:00.000Z') => ({ count, lastVerdict: verdict, lastAt })
+// v0.9.84 起版本统计多带一份按严重度的问题数：没有评审结果时是 null，不是 0
+const reviews = (count, verdict = '', lastAt = '2026-11-12T10:00:00.000Z', issues = null) => ({ count, lastVerdict: verdict, lastAt, issues })
 const project = (extra = {}) => ({ id: 'prj_a', status: 'active', flowId: 'flow_a', version: 1, ...extra })
 
 test('没画布说待开画布，有画布没评审说在做', () => {
@@ -40,5 +41,11 @@ test('某一版的评审：版本划分之前记在 0 上的折进 v1，各版�
   const v1 = reviewsForVersion(counts, 1)
   assert.equal(v1.count, 3, 'v1 把记在 0 上的两次也算进来')
   assert.equal(v1.lastVerdict, 'fail', '最后一次结论取时间更晚的那条')
-  assert.deepEqual(reviewsForVersion({}, 1), { count: 0, lastVerdict: '', lastAt: '' }, '一版都没评过时给出空计数，不是 undefined')
+  // 问题数跟着「最近一次」走：折进 v1 时不能把两版（0 与 1）的问题相加
+  const withIssues = {
+    ...counts,
+    2: reviews(1, 'needs_review', '2026-11-12T00:00:00.000Z', { blocker: 2, major: 1, minor: 0, info: 0, counted: 3, observations: 3 }),
+  }
+  assert.equal(reviewsForVersion(withIssues, 2).issues.blocker, 2)
+  assert.deepEqual(reviewsForVersion({}, 1), { count: 0, lastVerdict: '', lastAt: '', issues: null }, '一版都没评过时给出空计数，不是 undefined')
 })

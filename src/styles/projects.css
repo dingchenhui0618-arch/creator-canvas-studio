@@ -376,6 +376,40 @@
   line-height: 1.7;
 }
 
+/* 「这一版比上一版少了几个问题」（v0.9.84）：在主卡的提示下面一行，不抢标题的层级 */
+.vq-project-issue-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+  color: rgba(255, 255, 255, 0.72);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+.vq-project-issue-delta {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.vq-project-issue-line.is-better .vq-project-issue-delta {
+  background: var(--pass-soft);
+  color: var(--pass);
+}
+
+.vq-project-issue-line.is-worse .vq-project-issue-delta {
+  background: var(--fail-soft);
+  color: var(--fail);
+}
+
 .vq-project-body {
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
@@ -653,6 +687,36 @@
   background: var(--pass-soft);
   color: var(--pass);
   font-variant-numeric: tabular-nums;
+}
+
+/* 这一版最近一次评审的问题数：与「2 次评审」同一行，数字用等宽，语气色只给「多了/少了」 */
+.vq-version-issues,
+.vq-version-delta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.vq-version-issues {
+  color: var(--muted);
+}
+
+.vq-version-delta {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+}
+
+.vq-version-delta.is-better {
+  background: var(--pass-soft);
+  color: var(--pass);
+}
+
+.vq-version-delta.is-worse {
+  background: var(--fail-soft);
+  color: var(--fail);
 }
 
 .vq-version-open {

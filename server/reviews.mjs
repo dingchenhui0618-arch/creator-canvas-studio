@@ -41,6 +41,28 @@ function clip(value, max) {
   return String(value ?? '').slice(0, max)
 }
 
+// 问题的严重度只有四级（见 server/review.mjs 的提示词）：阻塞 / 主要 / 次要 / 信息。
+// 「这一版比上一版有没有变好」不能靠印象——按严重度数一遍，数字就是结论。
+export const SEVERITIES = ['blocker', 'major', 'minor', 'info']
+
+/**
+ * 一次评审里的问题数（按严重度）。
+ * 两个数分开记：counted 是「认得严重度的条数」，observations 是「一共几条」。
+ * 老记录没有 severity 字段，那时 counted 会小于 observations——界面据此写「另有 N 条没记严重度」，
+ * 不能把「没记」写成「0 个阻塞」。
+ */
+export function severityCounts(result) {
+  const list = Array.isArray(result?.observations) ? result.observations : []
+  const counts = { blocker: 0, major: 0, minor: 0, info: 0, counted: 0, observations: list.length }
+  for (const item of list) {
+    const key = String(item?.severity || '').toLowerCase()
+    if (!SEVERITIES.includes(key)) continue
+    counts[key] += 1
+    counts.counted += 1
+  }
+  return counts
+}
+
 // 列表只回摘要，观测点与修复建议留在详情里
 function toSummary(item) {
   return {
@@ -49,6 +71,8 @@ function toSummary(item) {
     verdict: item.result?.verdict || '',
     summary: item.result?.summary || '',
     observations: Array.isArray(item.result?.observations) ? item.result.observations.length : 0,
+    // 按严重度的问题数：列表与版本对照都读这一份，不为了一个数字再拉一次详情
+    issues: severityCounts(item.result),
     source: item.source || {},
     projectId: item.projectId || '',
     // 评审发生在作品的第几版：多版本对照靠这一个数分组，老记录没有就是 0
@@ -201,18 +225,22 @@ export async function reviewSpendItems(projectId, user = null) {
   }))
 }
 
-/** 一条作品内按版本分组：作品页的「版本对照」要显示每一版评过几次、最后结论。 */
+/**
+ * 一条作品内按版本分组：作品页的「版本对照」要显示每一版评过几次、最后结论、问题数。
+ * 问题数只取这一版**最近一次**评审的：同一版重评两次，两次的问题不能相加（同一批问题会被数两遍）。
+ */
 export async function reviewSummaryByVersion(projectId, user = null) {
   if (!projectId) return {}
   const list = (await loadAll()).filter((item) => canAccess(item, user) && item.projectId === projectId)
   const counts = {}
   for (const item of list) {
     const key = String(Math.max(0, Math.round(Number(item.version) || 0)))
-    const entry = counts[key] || (counts[key] = { count: 0, lastVerdict: '', lastAt: '' })
+    const entry = counts[key] || (counts[key] = { count: 0, lastVerdict: '', lastAt: '', issues: null })
     entry.count += 1
     if (String(item.createdAt) > entry.lastAt) {
       entry.lastAt = String(item.createdAt)
       entry.lastVerdict = item.result?.verdict || ''
+      entry.issues = severityCounts(item.result)
     }
   }
   return counts

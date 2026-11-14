@@ -122,6 +122,16 @@ export async function runReview(payload: { media?: string; imageUrl?: string; in
 /** 评审记在哪条作品上：只带 id 与标题，版次在评审记录自己的 version 里。 */
 export type ReviewProjectRef = { id: string; title: string }
 
+/** 一次评审的问题数（按严重度）：counted 是认得严重度的条数，observations 是一共几条。 */
+export type ReviewIssues = {
+  blocker: number
+  major: number
+  minor: number
+  info: number
+  counted: number
+  observations: number
+}
+
 export type ReviewSummary = {
   id: string
   intent: string
@@ -134,6 +144,8 @@ export type ReviewSummary = {
   verdict: 'pass' | 'needs_review' | 'fail' | ''
   summary: string
   observations: number
+  /** 按严重度的问题数；老接口没有这个字段时按「没记严重度」处理，不当作 0 */
+  issues?: ReviewIssues
   source: { kind?: string; label?: string; media?: string; imageUrl?: string }
   ms: number
   credits: { cost: number; balance: number | null } | null
