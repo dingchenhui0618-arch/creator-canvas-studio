@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Check, ChevronDown, CircleAlert, Copy, Expand, History, Hourglass, LayoutGrid, Maximize2, Minimize2, Play, Plus, RotateCcw, RotateCw, Save, Square, Trash } from 'lucide-react'
+import { ArrowLeft, Check, ChevronDown, CircleAlert, Copy, Expand, GitCompareArrows, History, Hourglass, LayoutGrid, Maximize2, Minimize2, Play, Plus, RotateCcw, RotateCw, Save, Square, Trash } from 'lucide-react'
 import {
   Background,
   Controls,
@@ -53,6 +53,7 @@ import { NODE_META } from '../canvas/catalog'
 import { FlowNodeCard } from '../canvas/FlowNode'
 import { Inspector } from '../canvas/Inspector'
 import { Palette } from '../canvas/Palette'
+import { RunCompareModal } from '../components/RunCompareModal'
 import { RunDrawer } from '../canvas/RunDrawer'
 import { autoLayout } from '../canvas/layout'
 import { fromFlowEdges, fromFlowNodes, toFlowEdges, toFlowNodes, validateConnection } from '../canvas/serialize'
@@ -206,6 +207,8 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
   const [runMeta, setRunMeta] = useState<{ id: string; total: number }>({ id: '', total: 0 })
   const [runError, setRunError] = useState('')
   const [drawerOpen, setDrawerOpen] = useState(false)
+  // 运行对照（v0.9.110）：只读弹窗，打开时才去读上一条；不在画布页加载时预取
+  const [compareOpen, setCompareOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [bdc, setBdc] = useState<BdcStatus | null>(null)
   const [bdcView, setBdcView] = useState(false)
@@ -1553,6 +1556,15 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
               >
                 <History size={14} />运行结果
               </button>
+              <button
+                className="vq-button vq-button--ghost"
+                type="button"
+                onClick={() => setCompareOpen(true)}
+                disabled={!runRecord}
+                title="和同一条画布的上一条运行逐节点对照：哪里变了、慢在哪、多花多少"
+              >
+                <GitCompareArrows size={14} />对照上次
+              </button>
               <button className="vq-button vq-button--primary" type="button" onClick={exitRunView} title="回到可编辑画布；这次查看没有改动任何内容">
                 <ArrowLeft size={14} />退出查看
               </button>
@@ -1925,6 +1937,10 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
         onClose={() => setDrawerOpen(false)}
         onSelectNode={focusNode}
       />
+
+      {readOnly && compareOpen ? (
+        <RunCompareModal runId={runRecord?.id || openRunId} onClose={() => setCompareOpen(false)} />
+      ) : null}
     </div>
   )
 }

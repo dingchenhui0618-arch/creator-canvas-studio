@@ -16,6 +16,7 @@ import {
   abandonRun,
   requestRunStop,
   resumePlanFor,
+  previousRunOf,
   flowRevisionOf,
   NODE_KINDS,
   TOOLS,
@@ -30,6 +31,7 @@ import { quotaRefusal } from '../quota.mjs'
 import { enter, leave } from '../gate.mjs'
 import { admitWaiting, capacityFor, queueView, watchClientGone } from '../waterline.mjs'
 import { publicError } from '../public-error.mjs'
+import { buildRunCompare, compareSideOf } from '../run-compare.mjs'
 
 // /api/flows 与 /api/runs 共用一个 router：
 // index.mjs 会按 prefix + extraPrefixes 分发，因此两个前缀都进到这里。
@@ -38,6 +40,7 @@ const FLOW_RUN = /^\/api\/flows\/([\w-]+)\/run$/
 const FLOW_RESUME_PLAN = /^\/api\/flows\/([\w-]+)\/resume-plan$/
 const RUN_ITEM = /^\/api\/runs\/([\w-]+)$/
 const RUN_STOP = /^\/api\/runs\/([\w-]+)\/stop$/
+const RUN_COMPARE = /^\/api\/runs\/([\w-]+)\/compare$/
 
 function isOwnPath(pathname) {
   return (
@@ -220,6 +223,56 @@ export function createFlowsRouter() {
           return true
         }
         sendJson(res, 200, { ok: true, id: run.id, status: 'stopping' })
+        return true
+      }
+
+      // 运行对照（v0.9.110）：只读，不重跑、不扣费。默认找同一条画布更早的那一条；
+      // 页面也可以点名 with=<runId>。两条必须同属一张画布，跨版画布不逐节点对照。
+      const runCompareMatch = pathname.match(RUN_COMPARE)
+      if (runCompareMatch) {
+        if (req.method !== 'GET') {
+          res.setHeader('Allow', 'GET')
+          sendJson(res, 405, { error: '只支持 GET' })
+          return true
+        }
+        const run = await getRun(runCompareMatch[1], user)
+        if (!run) {
+          notFound(res, '运行记录不存在')
+          return true
+        }
+        const withId = String(url.searchParams.get('with') || '').trim()
+        let previous = null
+        if (withId) {
+          if (withId === run.id) {
+            sendJson(res, 400, { error: '不能拿这条运行和它自己对照' })
+            return true
+          }
+          previous = await getRun(withId, user)
+          if (!previous) {
+            notFound(res, '要对照的那条运行不存在')
+            return true
+          }
+          if (previous.flowId !== run.flowId) {
+            sendJson(res, 400, { error: '这两条运行不在同一张画布上（可能已经分版），不能逐节点对照' })
+            return true
+          }
+          if (previous.status === 'running' || previous.status === 'queued') {
+            sendJson(res, 409, { error: '要对照的那条运行还没跑完，等它结束再看' })
+            return true
+          }
+        } else {
+          previous = await previousRunOf(run, user)
+        }
+        if (!previous) {
+          sendJson(res, 200, {
+            ok: true,
+            comparable: false,
+            reason: '这是这张画布上最早的一条运行；再跑一次之后，这里会逐节点对照两次的结果。',
+            current: compareSideOf(run),
+          })
+          return true
+        }
+        sendJson(res, 200, { ok: true, ...buildRunCompare(run, previous) })
         return true
       }
 

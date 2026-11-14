@@ -153,6 +153,87 @@ export type RunResumePlan = {
   reason: string
 }
 
+/**
+ * 运行对照（v0.9.110）：同一条画布的两条运行摆在一起。
+ * 服务端只返回逐节点指纹与短预览；完整输出仍在单条运行详情里。
+ */
+export type RunCompareSide = {
+  id: string
+  status: RunRecord['status']
+  canceled: boolean
+  startedAt: string
+  finishedAt: string
+  durationMs: number
+  queuedMs: number
+  total: number
+  finished: number
+  failed: number
+  /** 实际花掉的积分（退回来的不算） */
+  cost: number
+  refunded: boolean
+}
+
+export type RunCompareNodeSide = {
+  status: RunNodeResult['status']
+  ms: number
+  error: string
+  /** 首段预览，最多 180 字；完整内容去单条运行详情看 */
+  preview: string
+}
+
+export type RunCompareNode = {
+  id: string
+  kind: FlowNodeKind
+  title: string
+  current: RunCompareNodeSide | null
+  previous: RunCompareNodeSide | null
+  /** 这条运行才有的节点 */
+  added: boolean
+  /** 上一条有、这条已经没有的节点 */
+  removed: boolean
+  statusChanged: boolean
+  outputChanged: boolean
+  /** 节点自己的参数、上游参数或入线变了（指纹变了） */
+  revisionChanged: boolean
+  msDelta: number | null
+}
+
+export type RunCompare =
+  | {
+      ok: true
+      comparable: false
+      reason: string
+      current: RunCompareSide
+    }
+  | {
+      ok: true
+      comparable: true
+      flowId: string
+      flowName: string
+      current: RunCompareSide
+      previous: RunCompareSide
+      graph: { changed: boolean; unknown: boolean; currentRevision: string; previousRevision: string }
+      nodes: RunCompareNode[]
+      totals: {
+        added: number
+        removed: number
+        statusChanged: number
+        outputChanged: number
+        revisionChanged: number
+        unchanged: number
+        changed: number
+        durationDelta: number
+        costDelta: number
+        failedDelta: number
+      }
+    }
+
+/** 默认和同一条画布更早的那条比；传 withId 才点名另一条。 */
+export const getRunCompare = (id: string, withId = '') =>
+  request<RunCompare>(
+    '/api/runs/' + encodeURIComponent(id) + '/compare' + (withId ? '?with=' + encodeURIComponent(withId) : ''),
+  )
+
 export type RunList = { items: RunRecord[]; total: number; offset: number; limit: number }
 
 export type RunQuery = {

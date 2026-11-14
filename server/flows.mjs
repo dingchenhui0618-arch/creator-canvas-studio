@@ -414,6 +414,23 @@ export async function getRun(id, user = null) {
 }
 
 /**
+ * 同一条画布上「更早的那一条」运行（v0.9.110 对照用）。
+ * 不走 /api/runs 的 50 条分页：对照的是正在看的那条，它可能已经排到历史窗口末端，
+ * 分页会漏掉它的上一条。排队中 / 运行中的记录没有完整结果，不能拿来对照。
+ */
+export async function previousRunOf(run, user = null) {
+  if (!run) return null
+  const startedAt = String(run.startedAt || '')
+  const earlier = (await loadRuns())
+    .filter((item) => canAccess(item, user))
+    .filter((item) => item.flowId === run.flowId && item.id !== run.id)
+    .filter((item) => item.status !== 'running' && item.status !== 'queued')
+    .filter((item) => String(item.startedAt || '') < startedAt)
+  earlier.sort((a, b) => String(b.startedAt || '').localeCompare(String(a.startedAt || '')))
+  return earlier[0] || null
+}
+
+/**
  * 一行运行记录的摘要：作品页运行归集用它，不带 nodes 的逐节点输出（一次运行的 output 可能很大）。
  * 失败原因、耗时、节点数、扣了多少积分都留着——归集要回答的是「这条作品跑过几次、成没成」。
  */
