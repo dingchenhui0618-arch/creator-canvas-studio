@@ -189,3 +189,15 @@ test('交付包的说明：文件对应关系与帧图张数，没帧图就说�
   const empty = packageNote({ model, frameCount: 0 })
   assert.match(empty, /没有帧图可打/)
 })
+
+test('交付包的说明：带了两版对照页才写这一行，写清是哪两版', () => {
+  const model = setSheetModel({ project, script, template })
+  const withCompare = packageNote({ model, frameCount: 0, compareSheet: { base: 2, target: 3 } })
+  assert.match(withCompare, /两版对照页\.html/)
+  assert.match(withCompare, /v2 → v3/)
+  assert.match(withCompare, /双击打开就能打印/)
+  const without = packageNote({ model, frameCount: 0 })
+  assert.doesNotMatch(without, /两版对照页\.html/, '包里没有这张纸时不能写一个找不到的文件')
+  const legacy = packageNote({ model, frameCount: 0, compareSheet: { base: 0, target: 0 } })
+  assert.doesNotMatch(legacy, /两版对照页\.html/, 'v0 不是可对照的版次')
+})

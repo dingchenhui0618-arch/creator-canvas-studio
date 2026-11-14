@@ -946,7 +946,7 @@ export default function ProjectPage({
                 aria-expanded={deliverOpen}
                 onClick={() => setDeliverOpen((value) => !value)}
                 disabled={busy === 'export' || busy === 'zip'}
-                title="交付这一版：Markdown 全文、A4 打印稿、现场页、评审对照、交付包"
+                title="交付这一版：Markdown 全文、A4 打印稿、现场页、评审对照、交付包（含两版对照）"
               >
                 <Download size={14} />
                 {busy === 'export' ? '正在整理…' : busy === 'zip' ? '正在打包…' : '交付'}
@@ -1049,7 +1049,7 @@ export default function ProjectPage({
                     <Package size={15} />
                     <span className="vq-menu-copy">
                       <strong>交付包</strong>
-                      <small>.zip：交付稿 + 现场页 + 评审对照 + 帧图，解压就能看</small>
+                      <small>.zip：交付稿 + 现场页 + 评审对照 + 两版对照 + 帧图，解压就能看</small>
                     </span>
                   </button>
                 </div>

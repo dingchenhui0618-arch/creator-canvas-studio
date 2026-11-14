@@ -408,8 +408,15 @@ function stampText(value, tzOffsetMinutes) {
   )
 }
 
-/** 交付包里那张「这张纸是什么」的说明：不解释太多，只写文件对应关系与口径。 */
-export function packageNote({ model, generatedAt = '', tzOffsetMinutes = 480, frameCount = 0, reviewSheetCount = 0 } = {}) {
+/**
+ * 交付包里那张「这张纸是什么」的说明：不解释太多，只写文件对应关系与口径。
+ * compareSheet 传 { base, target } 表示包里带了「两版对照页.html」；
+ * 没传就不写这一行——读者不会在包里找一个不存在的文件。
+ */
+export function packageNote({ model, generatedAt = '', tzOffsetMinutes = 480, frameCount = 0, reviewSheetCount = 0, compareSheet = null } = {}) {
+  const compareLine = compareSheet && compareSheet.base && compareSheet.target
+    ? '两版对照页.html  v' + compareSheet.base + ' → v' + compareSheet.target + ' 的画布参数、脚本口播、评审与交付并排；只读，双击打开就能打印'
+    : ''
   const lines = [
     'VisionQA 交付包',
     '',
@@ -425,9 +432,10 @@ export function packageNote({ model, generatedAt = '', tzOffsetMinutes = 480, fr
     ...(reviewSheetCount
       ? ['评审对照页.html  评审说过的问题框在当时的画面上：左边框上的编号，就是右边问题列表的编号（' + reviewSheetCount + ' 版）']
       : []),
+    ...(compareLine ? [compareLine] : []),
     '',
     '口径：口播与时长以脚本为准（按台词估算），镜头时间来自模板；改过脚本不会自动重排镜头时间。',
-    '现场页在离线状态下也用同一套数字：它和交付稿是同一次导出的同一份数据。',
+    '现场页与两版对照页在离线状态下也用同一套数字：它们和交付稿是同一次导出的同一份数据。',
     '',
   ]
   return lines.join('\n')

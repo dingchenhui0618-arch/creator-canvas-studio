@@ -248,6 +248,7 @@ export function compareSheetHtml({
   now = new Date(),
   tzOffsetMinutes = 480,
   projectId = '',
+  offline = false,
 } = {}) {
   const tz = Number.isFinite(Number(tzOffsetMinutes)) ? Math.max(-720, Math.min(840, Math.round(Number(tzOffsetMinutes)))) : 480
   const base = compare.base || {}
@@ -263,12 +264,13 @@ export function compareSheetHtml({
       projectId,
       tag: '两版对照 / A4',
       meta: '210 x 297 mm',
-      hint: '纸张选 A4；只读对照，不重跑、不扣积分',
-      back: Boolean(projectId),
+      hint: offline ? '解压后直接打印 / 存为 PDF；只读对照，不重跑、不扣积分' : '纸张选 A4；只读对照，不重跑、不扣积分',
+      back: !offline && Boolean(projectId),
+      brand: offline ? 'text' : 'img',
     }),
   )
   body.push('<main class="sheet">')
-  body.push(brandRow({ kind: 'VERSION DIFF / A4', aiLabel: true }))
+  body.push(brandRow({ mark: offline ? 'text' : 'img', kind: 'VERSION DIFF / A4', aiLabel: true }))
   body.push('<div class="sheet-body">')
   body.push('<h1 class="sheet-title">两版对照 · ' + escapeHtml(project.title || '未命名作品') + '</h1>')
   body.push(

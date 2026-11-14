@@ -38,11 +38,19 @@ function mockRes() {
     statusCode: 0,
     headers: {},
     body: '',
+    chunks: [],
     writableEnded: false,
     writeHead(code, headers) { this.statusCode = code; Object.assign(this.headers, headers || {}) },
     setHeader(name, value) { this.headers[String(name).toLowerCase()] = value },
     write(chunk) { this.body += String(chunk); return true },
-    end(chunk) { if (chunk) this.body += String(chunk); this.writableEnded = true },
+    end(chunk) {
+      if (chunk) {
+        const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk))
+        this.chunks.push(buf)
+        this.body += buf.toString('utf8')
+      }
+      this.writableEnded = true
+    },
   }
 }
 
@@ -59,6 +67,30 @@ async function callHtml(pathname) {
   const url = new URL('http://vq.local' + pathname)
   await createProjectsRouter().handle(mockReq({ method: 'GET' }), res, url, url.pathname)
   return { status: res.statusCode, headers: res.headers, body: res.body }
+}
+
+// 交付包回的是 ZIP：不能 String() 完再 JSON.parse，留原始 Buffer。
+async function callBinary(pathname) {
+  const res = mockRes()
+  const url = new URL('http://vq.local' + pathname)
+  await createProjectsRouter().handle(mockReq({ method: 'GET' }), res, url, url.pathname)
+  return { status: res.statusCode, headers: res.headers, body: Buffer.concat(res.chunks) }
+}
+
+// 验包里的文件：buildZip 用的是 store（不压缩），按本地头一路读即可。
+function zipEntries(buf) {
+  const entries = []
+  let offset = 0
+  while (offset + 30 <= buf.length && buf.readUInt32LE(offset) === 0x04034b50) {
+    const size = buf.readUInt32LE(offset + 18)
+    const nameLen = buf.readUInt16LE(offset + 26)
+    const extraLen = buf.readUInt16LE(offset + 28)
+    const name = buf.subarray(offset + 30, offset + 30 + nameLen).toString('utf8')
+    const start = offset + 30 + nameLen + extraLen
+    entries.push({ name, data: buf.subarray(start, start + size) })
+    offset = start + size
+  }
+  return entries
 }
 
 const node = (id, type, title, config) => ({ id, type, data: { title, config } })
@@ -267,6 +299,45 @@ test('版次不对、选同一版：明确拒绝，不偷偷读别的版本', as
   const same = await call('GET', '/api/projects/' + project.id + '/versions/compare?base=2&target=2')
   assert.equal(same.status, 400)
   assert.equal(same.body.code, 'VERSION_COMPARE_SAME')
+})
+
+test('交付包里带两版对照页：当前版 vs 上一版，离线打开没有死链', async () => {
+  const built = await buildProject('交付包对照验收')
+  const res = await callBinary('/api/projects/' + built.project.id + '/deliverable.zip')
+  assert.equal(res.status, 200)
+  assert.match(String(res.headers['Content-Type'] || res.headers['content-type']), /application\/zip/)
+  assert.ok(res.body.length > 0)
+  assert.equal(res.body.readUInt32LE(0), 0x04034b50, '回的不是 ZIP')
+
+  const entries = zipEntries(res.body)
+  const names = entries.map((entry) => entry.name)
+  assert.ok(names.includes('两版对照页.html'), '交付包缺两版对照页：' + names.join(', '))
+  assert.ok(names.includes('说明.txt'))
+  const compare = entries.find((entry) => entry.name === '两版对照页.html')
+  const html = compare.data.toString('utf8')
+  assert.match(html, /VERSION DIFF \/ A4/)
+  assert.match(html, /两版对照 · 交付包对照验收/)
+  assert.match(html, /v2 → v3/)
+  assert.match(html, /交时评审/)
+  assert.doesNotMatch(html, /返回作品/, '交付包里没有作品页可回，不能印一个 file:// 下会死的入口')
+  assert.doesNotMatch(html, /\/brand\/visionqa-lockup\.svg/, '离线包没有服务器，品牌图会变成破图')
+
+  const note = entries.find((entry) => entry.name === '说明.txt').data.toString('utf8')
+  assert.match(note, /两版对照页\.html/)
+  assert.match(note, /v2 → v3/)
+})
+
+test('v1 交付包没有上一版：不塞一张空对照页，说明里也不写', async () => {
+  const flow = await flows.createFlow({ name: '只有一版', nodes: nodesV1, edges: [] })
+  const project = await projects.createProject({ title: '只有一版', flowId: flow.id })
+  const res = await callBinary('/api/projects/' + project.id + '/deliverable.zip')
+  assert.equal(res.status, 200)
+  const entries = zipEntries(res.body)
+  const names = entries.map((entry) => entry.name)
+  assert.ok(names.includes('现场页.html'))
+  assert.ok(!names.includes('两版对照页.html'), '没有上一版可比时不该多一张空纸')
+  const note = entries.find((entry) => entry.name === '说明.txt').data.toString('utf8')
+  assert.doesNotMatch(note, /两版对照页\.html/)
 })
 
 test('缺画布 / 缺脚本快照：明细为 null，notes 说清哪一侧不比', async () => {

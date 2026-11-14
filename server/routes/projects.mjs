@@ -70,7 +70,7 @@ const SHARE = /^\/api\/projects\/([\w-]+)\/share$/
 // 作品「存成模板」：做完的这一版沉淀回模板库（脚本是这一版的，分镜沿用绑定模板的取景）
 const TEMPLATE_FROM = /^\/api\/projects\/([\w-]+)\/template$/
 const DELIVERABLE = /^\/api\/projects\/([\w-]+)\/deliverable$/
-// 交付包：交付稿 + 现场页 + 帧图打成一个 zip，收件人解压就能看，不用登录
+// 交付包：交付稿 + 现场页 + 评审对照 + 两版对照 + 帧图打成一个 zip，收件人解压就能看，不用登录
 const DELIVERABLE_ZIP = /^\/api\/projects\/([\w-]+)\/deliverable\.zip$/
 // 打印版不进 /api：它是在新标签里打开的 HTML，地址栏里那串会印在纸的页脚上
 const DELIVERABLE_PRINT = /^\/print\/projects\/([\w-]+)\/deliverable$/
@@ -962,7 +962,7 @@ export function createProjectsRouter() {
         return true
       }
 
-      // 交付包：一份 .zip（交付稿 + 现场页 + 原片帧图），解压就能看，不用登录也不用联网。
+      // 交付包：一份 .zip（交付稿 + 现场页 + 评审对照 + 两版对照 + 原片帧图），解压就能看，不用登录也不用联网。
       // 适合发给不在系统里的人（剪辑、拍摄、甲方）：他们拿到的是一整套，不是几份对不上号的附件。
       const zipPath = pathname.match(DELIVERABLE_ZIP)
       if (zipPath && req.method === 'GET') {
@@ -1027,18 +1027,42 @@ export function createProjectsRouter() {
               },
             })
           : ''
+        // 两版对照页（v0.9.122）：交付包是给「没有账号的人」的一整套，
+        // 这一版改了什么也该在里面，而不是只活在作品页弹窗。只打当前版与上一版：
+        // 包里对应的是「这次交出去的东西」，不是一条作品的完整版本史。
+        let compareSheet = ''
+        let compareSheetPair = null
+        if (project.version >= 2) {
+          const baseNo = project.version - 1
+          const built = await versionCompareView(project, user, baseNo, project.version)
+          if (built.ok) {
+            compareSheet = compareSheetHtml({
+              project,
+              compare: built.view,
+              now,
+              tzOffsetMinutes: zipTz,
+              // 包里没有作品页可回：不印「返回作品」这类会点到 file:// 死链接的入口；
+              // 品牌图也换成文字，离线打开不欠一张破图
+              projectId: '',
+              offline: true,
+            })
+            compareSheetPair = { base: baseNo, target: project.version }
+          }
+        }
         const note = packageNote({
           model: setSheetModel({ project, script: detail.script, template: detail.template }),
           generatedAt: now.toISOString(),
           tzOffsetMinutes: zipTz,
           frameCount: frames.length,
           reviewSheetCount: reviewRecords.length,
+          compareSheet: compareSheetPair,
         })
         const archive = buildZip(
           [
             { name: fileName, data: Buffer.from(markdown, 'utf8') },
             { name: '现场页.html', data: Buffer.from(sheet, 'utf8') },
             ...(reviewSheet ? [{ name: '评审对照页.html', data: Buffer.from(reviewSheet, 'utf8') }] : []),
+            ...(compareSheet ? [{ name: '两版对照页.html', data: Buffer.from(compareSheet, 'utf8') }] : []),
             { name: '说明.txt', data: Buffer.from(note, 'utf8') },
             ...frames.map((frame) => ({ name: 'frames/' + frame.name, data: frame.data })),
             ...reviewExtras,
