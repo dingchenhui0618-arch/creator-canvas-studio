@@ -89,7 +89,26 @@ flowRevisionOf(flow) 只对节点 id / 类型 / 配置和连线做 SHA-256 前 1
 
 ## 生产实测
 
-（发布后补：版本、入口、文件哈希、心跳、旧资源与诚实边界。）
+发布标签 `20261114-143300-r112-resume`；快照 `/opt/visionqa/releases/20261114-063319-20261114-143300-r112-res.tar.gz`（1,012,835 B）。
+
+| 检查 | 读数 |
+| --- | --- |
+| 四个 unit | `visionqa` / `visionqa-internal` / `visionqa.socket` / `bdc-web` 全 active |
+| 版本 | 8799 / 8800 / 公网 `/api/version` 都 **0.9.102** |
+| 健康 | `/api/health` ok（模板 26，uptime 21s） |
+| 入口 | `index-Dyt6TrgG.js` 200 · **573,264 B** |
+| 画布 / 后台 / 样式 | `CanvasPage-B-J7bEYt.js` 234,055 B；`AdminConsolePage-Imb_ZQK4.js` 201,075 B；`index-C09qhU_5.css` 275,246 B；`CanvasPage-Bl8EQwWL.css` 25,441 B |
+| 文件一致 | `flows 7dc1eca4` · `routes/flows 1cf6b56d` · 入口 `c37b8129` · 画布 `0d35b917` · 后台 `3cdf0ddf` · 样式 `574a59b5` · 画布样式 `46f87b93`，与本地一致 |
+| 心跳 | `public:8799` pid 1479312 · `internal:8800` pid 1479310 |
+| 盘 / 临时 / 日志 | 72%；`/tmp` 发布包与临时目录已清；近 10 分钟无 warning |
+
+**旧资源要说真话**：发布目录现在只有新的 `index-Dyt6TrgG.js`，上一版 `index-CVwkH9QU.js` /
+`index-B01dXERS.js` 已不在 `dist/assets`。请求旧入口 URL 会得到 **200 + text/html**（729 B 的
+nginx SPA 兜底 index.html），这不是旧 JS 还在，也不能当缓存兼容的证据。已经在旧标签页里打开、
+不刷新的页面会去请求已经不存在的旧哈希；刷新一次就拿到新入口。前几轮把这 200 读成「合并部署
+保留旧哈希」是误判，这轮改正。**诚实边界**：生产没有真实运行授权，线上没有一条真实续跑记录；
+生产验证的是版本、入口、文件哈希、实例健康与日志。续跑效果来自本地真浏览器 + 假上游，以及
+路由级用例。
 
 ## 坑
 
