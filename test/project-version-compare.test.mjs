@@ -17,6 +17,7 @@ process.env.VQ_KEY_SECRET = 'test-secret-version-compare'
 
 const projects = await import('../server/projects.mjs')
 const flows = await import('../server/flows.mjs')
+const { saveReview } = await import('../server/reviews.mjs')
 const { createProjectsRouter } = await import('../server/routes/projects.mjs')
 
 function mockReq({ method = 'GET', body = null } = {}) {
@@ -75,18 +76,48 @@ const nodesV1 = [node('n_input', 'input', '输入', { text: '第一版' }), node
 const nodesV2 = [node('n_input', 'input', '输入', { text: '第一版' }), node('n_llm', 'llm', '写一句', { systemPrompt: '第二版提示词' }), node('n_out', 'output', '输出', { format: 'markdown' }), node('n_image', 'output', '出图', { format: 'markdown' })]
 const nodesV3 = [node('n_input', 'input', '输入', { text: '第三版' }), node('n_llm', 'llm', '写一句', { systemPrompt: '第二版提示词' }), node('n_out', 'output', '输出', { format: 'markdown' })]
 
+const reviewResult = (verdict, observations) => ({
+  verdict,
+  summary: verdict === 'pass' ? '画面可以交' : '还有一处要改',
+  observations: observations.map((severity) => ({ severity, note: '问题' })),
+})
+
 async function buildProject(title) {
   const v1 = await flows.createFlow({ name: title + ' v1', nodes: nodesV1, edges: [] })
   const project = await projects.createProject({ title, flowId: v1.id })
   await projects.saveProjectScript(project.id, scriptA)
+  await saveReview({
+    projectId: project.id,
+    version: 1,
+    intent: 'v1 验收',
+    result: reviewResult('pass', ['major', 'major']),
+    credits: { cost: 5, balance: 95 },
+  })
   const v2 = await call('POST', '/api/projects/' + project.id + '/versions', {})
   assert.equal(v2.status, 201)
   await flows.updateFlow(v2.body.flow.id, { nodes: nodesV2 })
   await projects.saveProjectScript(project.id, scriptB)
+  await saveReview({
+    projectId: project.id,
+    version: 2,
+    intent: 'v2 验收',
+    result: reviewResult('pass', ['major']),
+    credits: { cost: 5, balance: 90 },
+  })
+  // v2 交出去：交付记录里带着当时的评审快照，之后开 v3 不覆盖它
+  const delivered = await call('PATCH', '/api/projects/' + project.id, { status: 'done' })
+  assert.equal(delivered.status, 200)
   const v3 = await call('POST', '/api/projects/' + project.id + '/versions', {})
   assert.equal(v3.status, 201)
   await flows.updateFlow(v3.body.flow.id, { nodes: nodesV3 })
   await projects.saveProjectScript(project.id, scriptC)
+  await saveReview({
+    projectId: project.id,
+    version: 3,
+    intent: 'v3 验收',
+    result: reviewResult('needs_review', ['blocker', 'major']),
+    credits: { cost: 5, balance: 85 },
+  })
   return { project, v1: v1.id, v2: v2.body.flow.id, v3: v3.body.flow.id }
 }
 
@@ -128,6 +159,20 @@ test('任意两版对照：明细逐项列出，当前版读现在的、归档�
   assert.equal(res.body.script.hookAfter, '第二版钩子')
   assert.deepEqual(res.body.notes, [])
 
+  // 评审与交付（v0.9.119）：两侧各读这一版最近一评，交付只认这一版的记录
+  assert.equal(res.body.base.review.count, 1)
+  assert.equal(res.body.base.review.verdict, 'pass')
+  assert.deepEqual(res.body.base.review.issues, { blocker: 0, major: 2, minor: 0, info: 0, counted: 2, observations: 2 })
+  assert.equal(res.body.target.review.count, 1)
+  assert.equal(res.body.target.review.verdict, 'needs_review')
+  assert.deepEqual(res.body.target.review.issues, { blocker: 1, major: 1, minor: 0, info: 0, counted: 2, observations: 2 })
+  assert.equal(res.body.base.delivery, null)
+  assert.equal(res.body.target.delivery, null)
+  assert.deepEqual(res.body.reviewChange, {
+    text: '结论从「通过」变成「需人工确认」',
+    tone: 'worse',
+  })
+
   // 方向反过来：多 / 少跟着换边，钩子的前后也换边
   const reverse = await call('GET', '/api/projects/' + built.project.id + '/versions/compare?base=3&target=1')
   assert.equal(reverse.status, 200)
@@ -135,12 +180,23 @@ test('任意两版对照：明细逐项列出，当前版读现在的、归档�
   assert.deepEqual(reverse.body.script.removed, ['收尾'])
   assert.equal(reverse.body.script.hookBefore, '第二版钩子')
   assert.equal(reverse.body.script.hookAfter, '第一版钩子')
+  assert.deepEqual(reverse.body.reviewChange, {
+    text: '结论从「需人工确认」变成「通过」',
+    tone: 'better',
+  })
   assert.deepEqual(reverse.body.canvas.fields.n_input.map((item) => [item.before, item.after]), [['第三版', '第一版']])
 
   // 1 → 2 能看到 v2 新增的「出图」节点；2 → 3 只剩画布变化
   const oneToTwo = await call('GET', '/api/projects/' + built.project.id + '/versions/compare?base=1&target=2')
   assert.equal(oneToTwo.status, 200)
   assert.deepEqual(oneToTwo.body.canvas.added.map((item) => item.title), ['出图'])
+  // v2 交过：交付时间落在 v2 这一侧；v1 没交
+  assert.equal(oneToTwo.body.base.review.verdict, 'pass')
+  assert.equal(oneToTwo.body.base.delivery, null)
+  assert.equal(oneToTwo.body.target.review.verdict, 'pass')
+  assert.ok(oneToTwo.body.target.delivery)
+  assert.ok(oneToTwo.body.target.delivery.at.length > 0, 'v2 交付记录应有时间')
+  assert.deepEqual(oneToTwo.body.reviewChange, { text: '主要少 1 个', tone: 'better' })
   const twoToThree = await call('GET', '/api/projects/' + built.project.id + '/versions/compare?base=2&target=3')
   assert.equal(twoToThree.status, 200)
   assert.deepEqual(twoToThree.body.script.added, [])
@@ -190,6 +246,9 @@ test('缺画布 / 缺脚本快照：明细为 null，notes 说清哪一侧不比
   assert.equal(noScript.body.script, null)
   assert.ok(noScript.body.canvas)
   assert.ok(noScript.body.notes.some((note) => note.includes('脚本快照')))
+  assert.equal(noScript.body.base.review.count, 0)
+  assert.equal(noScript.body.target.review.count, 0)
+  assert.equal(noScript.body.reviewChange.tone, 'unknown')
   assert.doesNotMatch(noScript.body.summary, /脚本跟.*一样/)
 
   // 画布被删：v1 的画布删掉，脚本快照仍然可比

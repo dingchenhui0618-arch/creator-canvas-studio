@@ -157,6 +157,14 @@ export type ProjectVersionView = ProjectVersion & {
   scriptSource: '' | 'project' | 'template'
 }
 
+/** 两版对照里一侧的评审概况（v0.9.119）：这一版评过几次、最近结论、最近一评的问题数 */
+export type ProjectVersionCompareReview = {
+  count: number
+  verdict: string
+  at: string
+  issues: ReviewIssues | null
+}
+
 /** 两版对照里的一侧（v0.9.117）：版次、名字、节点数、段数，以及那一侧有没有可比的数据 */
 export type ProjectVersionCompareSide = {
   n: number
@@ -166,6 +174,16 @@ export type ProjectVersionCompareSide = {
   beats: number
   canvasAvailable: boolean
   scriptAvailable: boolean
+  /** 这一版最近一评的概况；没评过 count 为 0（v0.9.119） */
+  review: ProjectVersionCompareReview
+  /** 这一版交出去过没有；有就是交付时间（老记录可能是空串）（v0.9.119） */
+  delivery: { at: string } | null
+}
+
+/** 两版之间的评审变化（v0.9.119）：只写变了什么，不替人判断要不要改 */
+export type ProjectVersionCompareReviewChange = {
+  text: string
+  tone: 'better' | 'worse' | 'same' | 'unknown'
 }
 
 export type ProjectVersionCompareNode = {
@@ -213,6 +231,8 @@ export type ProjectVersionCompare = {
     hookBefore: string
     hookAfter: string
   } | null
+  /** 两版评审结论 / 问题数变了什么；有一版没评过时为 unknown（v0.9.119） */
+  reviewChange?: ProjectVersionCompareReviewChange
   notes: string[]
 }
 

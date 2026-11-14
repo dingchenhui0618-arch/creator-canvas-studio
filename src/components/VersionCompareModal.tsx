@@ -1,10 +1,14 @@
 import { useEffect, useState } from 'react'
 import { ArrowLeftRight, X } from 'lucide-react'
 import { compareProjectVersions } from '../api/projects'
+import { REVIEW_VERDICT_LABEL, issueGap, issueLine } from '../domain/review'
 import type {
   ProjectVersionCompare,
   ProjectVersionCompareField,
   ProjectVersionCompareNode,
+  ProjectVersionCompareReview,
+  ProjectVersionCompareReviewChange,
+  ProjectVersionCompareSide,
 } from '../domain/project'
 
 export type VersionCompareOption = {
@@ -14,6 +18,75 @@ export type VersionCompareOption = {
 }
 
 type CompareGroupTone = 'added' | 'removed' | 'changed'
+
+function reviewAtLabel(at: string) {
+  if (!at) return '时间没记录'
+  const date = new Date(at)
+  if (Number.isNaN(date.getTime())) return '时间没记录'
+  return date.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function reviewIssueText(review: ProjectVersionCompareReview) {
+  if (!review.count) return ''
+  const line = issueLine(review.issues)
+  const gap = issueGap(review.issues)
+  if (line && gap) return line + ' · 另有 ' + gap + ' 条没记严重度'
+  if (line) return line
+  if (gap) return '另有 ' + gap + ' 条没记严重度'
+  return '没记问题数'
+}
+
+function ReviewOutcome({
+  base,
+  target,
+  change,
+}: {
+  base: ProjectVersionCompareSide
+  target: ProjectVersionCompareSide
+  change?: ProjectVersionCompareReviewChange
+}) {
+  return (
+    <section className="vq-vcompare-section">
+      <div className="vq-vcompare-section-head">
+        <h3>评审与交付</h3>
+        <span className="vq-mono">改完有没有变好</span>
+      </div>
+      <div className="vq-vcompare-review-pair">
+        {[base, target].map((side) => {
+          const review = side.review
+          const issues = reviewIssueText(review)
+          return (
+            <article className="vq-vcompare-review-card" key={side.n}>
+              <div className="vq-vcompare-review-head">
+                <span className="vq-mono">v{side.n}</span>
+                {review.count ? (
+                  <span className={'vq-project-verdict is-' + (review.verdict || 'none')}>
+                    {REVIEW_VERDICT_LABEL[review.verdict] || '未记结论'}
+                  </span>
+                ) : (
+                  <span className="vq-project-verdict">未评审</span>
+                )}
+              </div>
+              <p className="vq-vcompare-review-meta">
+                {review.count ? review.count + ' 次评审' : '还没评过'}
+                {issues ? ' · ' + issues : ''}
+              </p>
+              <p className="vq-vcompare-review-delivery">
+                {side.delivery ? '交付过 · ' + reviewAtLabel(side.delivery.at) : '没交付'}
+              </p>
+            </article>
+          )
+        })}
+      </div>
+      {change ? <p className={'vq-vcompare-review-change is-' + change.tone}>{change.text}</p> : null}
+    </section>
+  )
+}
 
 function nodeTone(tone: CompareGroupTone) {
   return tone === 'added' ? '+' : tone === 'removed' ? '−' : '~'
@@ -226,6 +299,8 @@ export function VersionCompareModal({
                 <span>{result.summary || '这两版没有可比的数据'}</span>
               </p>
 
+              <ReviewOutcome base={result.base} target={result.target} change={result.reviewChange} />
+
               <section className="vq-vcompare-section">
                 <div className="vq-vcompare-section-head">
                   <h3>画布</h3>
@@ -309,7 +384,7 @@ export function VersionCompareModal({
         </div>
 
         <p className="vq-vcompare-note">
-          只读：不改画布、不改脚本、不扣积分。节点只比类型与配置，移动位置或改标题不算；脚本按段名比口播，开版时存下的快照才算。没有快照的一侧不猜「没改」。
+          只读：不改画布、不改脚本、不扣积分。节点只比类型与配置，移动位置或改标题不算；脚本按段名比口播，开版时存下的快照才算；评审读这一版最近一次，交付只认这一版的记录。没有快照或没评过的一侧不猜「没变」。
         </p>
       </div>
     </div>

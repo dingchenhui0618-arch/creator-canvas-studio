@@ -2252,6 +2252,73 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
   letter-spacing: 0.02em;
 }
 
+/* 评审与交付（v0.9.119）：两版并排各说各的结论、问题数与交付状态，
+   下面一句只写「变了什么」。卡片用同一套软底，结论胶囊沿用全站口径。 */
+.vq-vcompare-review-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.vq-vcompare-review-card {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+}
+
+.vq-vcompare-review-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.vq-vcompare-review-head .vq-mono {
+  flex: none;
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.vq-vcompare-review-meta,
+.vq-vcompare-review-delivery {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.vq-vcompare-review-delivery {
+  color: var(--faint);
+}
+
+.vq-vcompare-review-change {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-meta);
+  line-height: var(--leading-meta);
+}
+
+.vq-vcompare-review-change.is-better {
+  color: var(--pass);
+}
+
+.vq-vcompare-review-change.is-worse {
+  color: var(--fail);
+}
+
+.vq-vcompare-review-change.is-same {
+  color: var(--muted);
+}
+
+.vq-vcompare-review-change.is-unknown {
+  color: var(--faint);
+}
+
 .vq-vcompare-section {
   display: grid;
   gap: var(--space-2);
@@ -2563,6 +2630,10 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
 
   .vq-vcompare-summary {
     padding: var(--space-3);
+  }
+
+  .vq-vcompare-review-pair {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .vq-vcompare-node {

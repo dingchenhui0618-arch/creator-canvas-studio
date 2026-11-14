@@ -322,6 +322,86 @@ export function canvasFieldDetail(prev, next) {
   return fields
 }
 
+const REVIEW_VERDICT_LABELS = {
+  pass: '通过',
+  needs_review: '需人工确认',
+  fail: '不通过',
+}
+
+const REVIEW_ISSUE_LABELS = {
+  blocker: '阻塞',
+  major: '主要',
+  minor: '次要',
+}
+
+const REVIEW_VERDICT_RANK = { pass: 0, needs_review: 1, fail: 2 }
+
+const reviewCount = (value) => Math.max(0, Math.round(Number(value) || 0))
+
+/**
+ * 一版的评审概况变成对照里的一侧：次数、最近结论、时间与最近一评的问题数。
+ * 没评过就是 0 / 空结论，不拿「0 个阻塞」冒充「没问题」。
+ */
+export function reviewSideOf(summary) {
+  const count = reviewCount(summary?.count)
+  const raw = summary?.issues
+  const issues = raw && typeof raw === 'object'
+    ? {
+        blocker: reviewCount(raw.blocker),
+        major: reviewCount(raw.major),
+        minor: reviewCount(raw.minor),
+        info: reviewCount(raw.info),
+        counted: reviewCount(raw.counted),
+        observations: reviewCount(raw.observations),
+      }
+    : null
+  return {
+    count,
+    verdict: count ? String(summary?.lastVerdict || '') : '',
+    at: count ? String(summary?.lastAt || '') : '',
+    issues,
+  }
+}
+
+/**
+ * 改完有没有变好（v0.9.119）：两版的评审结论先比，结论相同再比前三档问题数。
+ * 只回答「变了什么」，不替人下判断；信息级不参与（看到但不确定算不算问题）。
+ * 任何一侧没评过、没记结论、没记严重度，都如实说不比，不编一句「没变」。
+ */
+export function reviewChangeOf(base, target) {
+  const before = reviewSideOf(base)
+  const after = reviewSideOf(target)
+  if (!before.count || !after.count) {
+    return { text: '有一版还没评审，结论与问题数不比', tone: 'unknown' }
+  }
+  if (!before.verdict || !after.verdict) {
+    return { text: '有一版没记评审结论，结论不比', tone: 'unknown' }
+  }
+  if (!Object.hasOwn(REVIEW_VERDICT_RANK, before.verdict) || !Object.hasOwn(REVIEW_VERDICT_RANK, after.verdict)) {
+    return { text: '有一版的评审结论认不出来，结论不比', tone: 'unknown' }
+  }
+  if (before.verdict !== after.verdict) {
+    const worse = REVIEW_VERDICT_RANK[after.verdict] > REVIEW_VERDICT_RANK[before.verdict]
+    return {
+      text: '结论从「' + (REVIEW_VERDICT_LABELS[before.verdict] || '未记录') + '」变成「'
+        + (REVIEW_VERDICT_LABELS[after.verdict] || '未记录') + '」',
+      tone: worse ? 'worse' : 'better',
+    }
+  }
+  if (!before.issues?.counted || !after.issues?.counted) {
+    return { text: '结论没变；有一版没记严重度，问题数不比', tone: 'unknown' }
+  }
+  for (const level of ['blocker', 'major', 'minor']) {
+    const delta = after.issues[level] - before.issues[level]
+    if (!delta) continue
+    return {
+      text: REVIEW_ISSUE_LABELS[level] + (delta < 0 ? '少 ' : '多 ') + Math.abs(delta) + ' 个',
+      tone: delta < 0 ? 'better' : 'worse',
+    }
+  }
+  return { text: '结论与前三档问题数都没变', tone: 'same' }
+}
+
 /**
  * 任意两版对照（v0.9.117）：给版本行的一句话，加上可逐项列出的画布与脚本明细。
  * 只读、不写任何东西；方向按 base → target，反过来选就是看「改回去了什么」。

@@ -14,7 +14,7 @@ import { projectTemplateReply, projectTemplateSpec } from '../project-template.m
 import { templateOrigin } from '../project-source.mjs'
 import { createFlow, getFlow, hasRunGraph, listRunsByFlows } from '../flows.mjs'
 import { normalizeProjectScript, scriptPace, scriptView } from '../project-script.mjs'
-import { versionBaseChangesOf, versionChangesOf, versionCompareOf } from '../version-diff.mjs'
+import { reviewChangeOf, reviewSideOf, versionBaseChangesOf, versionChangesOf, versionCompareOf } from '../version-diff.mjs'
 import { buildReplicateDraft } from '../script-draft.mjs'
 import { syncCanvasScript } from '../project-canvas-sync.mjs'
 import {
@@ -874,6 +874,18 @@ export function createProjectsRouter() {
         if (!baseSide.scriptAvailable || !targetSide.scriptAvailable) notes.push('有一版没存脚本快照：脚本这一侧不比，画布仍按节点比。')
         if (!diff.script && baseSide.scriptAvailable && targetSide.scriptAvailable) notes.push('有一版的脚本没有分段：脚本这一侧没有可比的口播。')
         if (!diff.summary) notes.push('这两版没有可比的数据：画布与脚本都读不到。')
+        // 评审与交付（v0.9.119）：两版各自读这一版最近一评，交付只认这一版的记录。
+        // 评审按版次统计，版本划分前的老评审折进 v1（与作品页同一套 reviewsForVersion）。
+        const versionCounts = await reviewSummaryByVersion(project.id, user)
+        const deliveryOfVersion = (n) => {
+          const list = Array.isArray(project.deliveries) ? project.deliveries : []
+          const entry = list.filter((item) => item.version === n).pop()
+          if (entry) return { at: String(entry.at || '') }
+          // 交付记录是后来才有的：老数据没有条目，但状态是已交付且指的是当前这一版，
+          // 与作品页 deliveredCurrent 同一口径——写「交付过 · 时间没记录」，不写成没交。
+          if (project.status === 'done' && project.version > 0 && n === project.version) return { at: '' }
+          return null
+        }
         const sideView = (side) => ({
           n: side.n,
           name: side.name,
@@ -882,6 +894,8 @@ export function createProjectsRouter() {
           beats: side.beats,
           canvasAvailable: side.canvasAvailable,
           scriptAvailable: side.scriptAvailable,
+          review: reviewSideOf(reviewsForVersion(versionCounts, side.n)),
+          delivery: deliveryOfVersion(side.n),
         })
         sendJson(res, 200, {
           ok: true,
@@ -890,6 +904,10 @@ export function createProjectsRouter() {
           summary: diff.summary,
           canvas: diff.canvas,
           script: diff.script,
+          reviewChange: reviewChangeOf(
+            reviewsForVersion(versionCounts, baseNo),
+            reviewsForVersion(versionCounts, targetNo),
+          ),
           notes,
         })
         return true

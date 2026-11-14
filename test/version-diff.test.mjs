@@ -6,6 +6,8 @@ import {
   canvasFieldDetail,
   canvasText,
   fingerprint,
+  reviewChangeOf,
+  reviewSideOf,
   scriptDetail,
   scriptText,
   versionChangeText,
@@ -243,4 +245,77 @@ test('任意两版对照把参数明细挂在改过的节点上；没有改动�
   assert.deepEqual(changed.canvas.fields.n1.map((item) => item.label).sort(), ['提示词', '温度'].sort())
   const same = versionCompareOf({ baseNodes: before, targetNodes: before, baseScript: null, targetScript: null })
   assert.equal(same.canvas.fields, undefined)
+})
+
+const issuesOf = (patch = {}) => ({
+  blocker: 0,
+  major: 0,
+  minor: 0,
+  info: 0,
+  counted: 0,
+  observations: 0,
+  ...patch,
+})
+
+const reviewOf = (verdict, issues = null) => ({
+  count: 1,
+  lastVerdict: verdict,
+  lastAt: '2026-11-15T12:00:00.000Z',
+  issues,
+})
+
+test('两版评审结论变了：通过到需人工确认算变差，反过来算变好', () => {
+  const pass = reviewOf('pass', issuesOf({ major: 1, counted: 1, observations: 1 }))
+  const needs = reviewOf('needs_review', issuesOf({ blocker: 1, major: 1, counted: 2, observations: 2 }))
+  assert.deepEqual(reviewChangeOf(pass, needs), {
+    text: '结论从「通过」变成「需人工确认」',
+    tone: 'worse',
+  })
+  assert.deepEqual(reviewChangeOf(needs, pass), {
+    text: '结论从「需人工确认」变成「通过」',
+    tone: 'better',
+  })
+})
+
+test('结论没变就比前三档问题数：从重到轻只说第一处变化，信息级不算', () => {
+  const before = reviewOf('pass', issuesOf({ blocker: 1, major: 2, counted: 3, observations: 4 }))
+  const fewerBlocker = reviewOf('pass', issuesOf({ blocker: 0, major: 2, counted: 2, observations: 2 }))
+  assert.deepEqual(reviewChangeOf(before, fewerBlocker), { text: '阻塞少 1 个', tone: 'better' })
+
+  const moreMajor = reviewOf('pass', issuesOf({ blocker: 1, major: 3, counted: 4, observations: 4 }))
+  assert.deepEqual(reviewChangeOf(before, moreMajor), { text: '主要多 1 个', tone: 'worse' })
+
+  const infoOnly = reviewOf('pass', issuesOf({ blocker: 1, major: 2, info: 5, counted: 3, observations: 8 }))
+  assert.deepEqual(reviewChangeOf(before, infoOnly), {
+    text: '结论与前三档问题数都没变',
+    tone: 'same',
+  })
+})
+
+test('没评过、没记结论、没记严重度：如实说不比，不编「没变」', () => {
+  const pass = reviewOf('pass', issuesOf({ major: 1, counted: 1, observations: 1 }))
+  assert.equal(reviewChangeOf({ count: 0 }, pass).tone, 'unknown')
+  assert.match(reviewChangeOf({ count: 0 }, pass).text, /还没评审/)
+  assert.equal(reviewChangeOf({ ...pass, lastVerdict: '' }, pass).tone, 'unknown')
+  assert.match(reviewChangeOf({ ...pass, lastVerdict: '' }, pass).text, /没记评审结论/)
+
+  const noSeverity = reviewOf('pass', issuesOf({ observations: 2, counted: 0 }))
+  assert.equal(reviewChangeOf(pass, noSeverity).tone, 'unknown')
+  assert.match(reviewChangeOf(pass, noSeverity).text, /没记严重度/)
+})
+
+test('一侧评审概况按同一套数清洗：没评过不冒充 0 个阻塞', () => {
+  assert.deepEqual(reviewSideOf({ count: 2, lastVerdict: 'pass', lastAt: 't', issues: { blocker: '1', major: 2, counted: '3' } }), {
+    count: 2,
+    verdict: 'pass',
+    at: 't',
+    issues: { blocker: 1, major: 2, minor: 0, info: 0, counted: 3, observations: 0 },
+  })
+  assert.deepEqual(reviewSideOf({ count: 0, lastVerdict: 'pass', issues: { blocker: 1 } }), {
+    count: 0,
+    verdict: '',
+    at: '',
+    issues: { blocker: 1, major: 0, minor: 0, info: 0, counted: 0, observations: 0 },
+  })
+  assert.deepEqual(reviewSideOf(null), { count: 0, verdict: '', at: '', issues: null })
 })
