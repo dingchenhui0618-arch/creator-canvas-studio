@@ -112,3 +112,5 @@ node --experimental-sqlite --experimental-strip-types .tmp-qa/r118-e2e.mjs
 
 生产验证的是版本、入口、文件一致、四个 unit 健康，以及旧运行确实没有快照、仍走「取当前画布」的回退。带差异的只读回看证据来自本地真浏览器 + 假上游；生产没有真实运行授权，这一版没有在任何真实运行上开过快照。
 
+
+提交 `90e98f9`（代码、测试、截图与文档）；CI **43581259487** 三个 job 全 success；HEAD == origin/master，工作树干净。文档补充提交随后另记。
