@@ -149,6 +149,24 @@ test('标记交付时封存 zip：记录带编号 / 字节数 / 哈希 / 下载�
   const file = path.join(dir, 'delivery-packages', 'prj_pkg', delivery.id + '.zip')
   assert.equal(fs.statSync(file).size, delivery.package.bytes)
   assert.equal(fs.readFileSync(file).length, delivery.package.bytes)
+
+  // 包内清单（v0.9.126）：封存时顺手记下名字与字节数，界面不用解 zip 就能说清包里有什么
+  assert.ok(delivery.package.fileCount >= 6)
+  assert.equal(delivery.package.files.length, delivery.package.fileCount)
+  const names = delivery.package.files.map((item) => item.name)
+  assert.ok(names.some((name) => name.endsWith('.md')), '有交付稿')
+  assert.ok(names.includes('说明.txt'))
+  assert.ok(names.includes('现场页.html'))
+  assert.ok(names.includes('评审对照页.html'))
+  assert.ok(names.includes('两版对照页.html'))
+  assert.ok(names.some((name) => name.startsWith('frames/')), '帧图在清单里')
+  for (const item of delivery.package.files) {
+    assert.ok(item.bytes >= 0)
+    assert.ok(item.name.length <= 160)
+  }
+  const reloaded = await projects.getProject('prj_pkg', me)
+  assert.deepEqual(reloaded.deliveries[0].package.files, delivery.package.files, '读回来清单还在')
+  assert.equal(reloaded.deliveries[0].package.fileCount, delivery.package.fileCount)
 })
 
 test('下载封存包：登录态可取，带 zip 头与中文名；非 GET 405', async () => {
@@ -231,4 +249,25 @@ test('存储层：路径不认外部目录、空包不写、只保留还挂着�
   assert.equal(await packages.pruneDeliveryPackages('prj_store', ['0123456789abcdef']), 1)
   assert.equal(await packages.readDeliveryPackage('prj_store', 'fedcba9876543210'), null)
   assert.deepEqual(await packages.readDeliveryPackage('prj_store', '0123456789abcdef'), Buffer.from('aaa'))
+})
+
+test('清单上限：总数照记，名单只留前 60 条，坏名字不进清单', async () => {
+  const many = Array.from({ length: 80 }, (_, index) => ({ name: '第' + index + '个.txt', bytes: index }))
+  const saved = await packages.saveDeliveryPackage('prj_store', '2222222222222222', Buffer.from('ccc'), {
+    fileName: 'C.zip',
+    files: [...many, { name: '   ', bytes: 9 }, { name: '坏' + String.fromCharCode(10) + '名字.txt', bytes: -3 }],
+  })
+  assert.equal(saved.fileCount, 81)
+  assert.equal(saved.files.length, 60)
+  assert.equal(saved.files[0].name, '第0个.txt')
+  assert.equal(saved.files[59].name, '第59个.txt')
+  assert.equal(saved.files[60], undefined)
+  assert.equal(saved.files.at(-1).bytes, 59)
+
+  const dirty = await packages.saveDeliveryPackage('prj_store', '3333333333333333', Buffer.from('ddd'), {
+    fileName: 'D.zip',
+    files: [{ name: '合' + String.fromCharCode(0) + '法.txt', bytes: 4 }],
+  })
+  assert.equal(dirty.files[0].name, '合法.txt')
+  assert.equal(dirty.files[0].bytes, 4)
 })

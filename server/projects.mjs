@@ -31,6 +31,8 @@ const MAX_SHARE_HISTORY = 8
 export const SHARE_HISTORY_LIMIT = MAX_SHARE_HISTORY
 // 交付记录：一次「标记交付」= 哪一版、什么时候交出去。留 20 条，与版本上限对齐
 const MAX_DELIVERIES = 20
+/** 一条交付记录最多带多少条包内清单：和 delivery-packages.mjs 的上限保持一致。 */
+const MAX_PACKAGE_FILES = 60
 
 let cache = null
 let writeChain = Promise.resolve()
@@ -160,12 +162,26 @@ function normalizeDeliveryPackage(raw) {
   const sha256 = String(raw.sha256 || '').toLowerCase()
   const fileName = String(raw.fileName || '').trim().slice(0, 180)
   if (!bytes || !/^[0-9a-f]{64}$/.test(sha256) || !fileName) return null
-  return {
+  const base = {
     bytes,
     sha256,
     fileName,
     savedAt: String(raw.savedAt || ''),
   }
+  // 包内清单（v0.9.126）：老包（v0.9.125）没有这两项，界面只说大小、不假装列得出来。
+  const fileCount = Math.min(9999, Math.max(0, Math.round(Number(raw.fileCount) || 0)))
+  const files = (Array.isArray(raw.files) ? raw.files : [])
+    .map((file) => ({
+      name: String(file?.name || '').replace(/\p{Cc}/gu, '').trim().slice(0, 160),
+      bytes: Math.max(0, Math.round(Number(file?.bytes) || 0)),
+    }))
+    .filter((file) => file.name)
+    .slice(0, MAX_PACKAGE_FILES)
+  if (fileCount && files.length) {
+    base.fileCount = fileCount
+    base.files = files
+  }
+  return base
 }
 
 // 交付记录：{ id, version, at, review, package }。老记录没有时间就写空串——照样是「这一版交过」，只是不知道什么时候。

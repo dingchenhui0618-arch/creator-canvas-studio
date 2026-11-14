@@ -40,7 +40,7 @@ import { decisionFor, decisionHistory, reviewsForVersion } from '../project-stat
 import { projectListQuery } from '../project-list.mjs'
 import { canStartProject } from '../origin-entry.mjs'
 import { adoptCanvasForProject, createProjectFromCanvas } from '../project-canvas.mjs'
-import { buildZip } from '../zip-store.mjs'
+import { buildZip, safeEntryName } from '../zip-store.mjs'
 import { storyboardFrames } from '../project-frames.mjs'
 import { newDeliveryPackageId, readDeliveryPackage, saveDeliveryPackage } from '../delivery-packages.mjs'
 import {
@@ -380,20 +380,24 @@ async function buildProjectDeliveryArchive(project, user, tzOffsetMinutes) {
     reviewSheetCount: reviewRecords.length,
     compareSheet: compareSheetPair,
   })
-  const archive = buildZip(
-    [
-      { name: fileName, data: Buffer.from(markdown, 'utf8') },
-      { name: '现场页.html', data: Buffer.from(sheet, 'utf8') },
-      ...(reviewSheet ? [{ name: '评审对照页.html', data: Buffer.from(reviewSheet, 'utf8') }] : []),
-      ...(compareSheet ? [{ name: '两版对照页.html', data: Buffer.from(compareSheet, 'utf8') }] : []),
-      { name: '说明.txt', data: Buffer.from(note, 'utf8') },
-      ...frames.map((frame) => ({ name: 'frames/' + frame.name, data: frame.data })),
-      ...reviewExtras,
-    ],
-    { mtime: now },
-  )
+  const entries = [
+    { name: fileName, data: Buffer.from(markdown, 'utf8') },
+    { name: '现场页.html', data: Buffer.from(sheet, 'utf8') },
+    ...(reviewSheet ? [{ name: '评审对照页.html', data: Buffer.from(reviewSheet, 'utf8') }] : []),
+    ...(compareSheet ? [{ name: '两版对照页.html', data: Buffer.from(compareSheet, 'utf8') }] : []),
+    { name: '说明.txt', data: Buffer.from(note, 'utf8') },
+    ...frames.map((frame) => ({ name: 'frames/' + frame.name, data: frame.data })),
+    ...reviewExtras,
+  ]
+  const archive = buildZip(entries, { mtime: now })
+  // 包内清单跟包一起落进交付记录（v0.9.126）：名字走 safeEntryName，和 zip 里的条目一致；
+  // 大小按实际写进去的字节算，界面不用再猜。
+  const files = entries.map((entry) => ({
+    name: safeEntryName(entry.name),
+    bytes: Buffer.isBuffer(entry.data) ? entry.data.length : Buffer.byteLength(String(entry.data ?? ''), 'utf8'),
+  }))
   const zipName = fileName.replace(/\.md$/i, '') + '-交付包.zip'
-  return { archive, fileName, zipName, now }
+  return { archive, fileName, zipName, now, files }
 }
 
 // 打印版出错时也给一张纸：这个地址是在新标签里打开的，吐一段 JSON 会让人以为页面坏了。
@@ -1200,9 +1204,9 @@ export function createProjectsRouter() {
             const rawTz = Number(body.tz)
             const tz = Number.isFinite(rawTz) ? Math.max(-720, Math.min(840, Math.round(rawTz))) : 480
             try {
-              const { archive, zipName } = await buildProjectDeliveryArchive(current, user, tz)
+              const { archive, zipName, files } = await buildProjectDeliveryArchive(current, user, tz)
               deliveryId = newDeliveryPackageId()
-              deliveryPackage = await saveDeliveryPackage(current.id, deliveryId, archive, { fileName: zipName })
+              deliveryPackage = await saveDeliveryPackage(current.id, deliveryId, archive, { fileName: zipName, files })
             } catch (caught) {
               console.warn('[projects] 交付包封存失败：' + (caught instanceof Error ? caught.message : String(caught)))
             }

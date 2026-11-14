@@ -128,11 +128,20 @@ export type ProjectDeliveryReview = {
  * 交付时封存的整套产物（v0.9.125）：字节数、哈希与下载名。
  * 没有这个字段 = 升级前交的 / 封存失败，界面不能给出会 404 的下载入口。
  */
+export type ProjectDeliveryFile = {
+  name: string
+  bytes: number
+}
+
 export type ProjectDeliveryPackage = {
   bytes: number
   sha256: string
   fileName: string
   savedAt: string
+  /** 包内文件总数；老包（v0.9.125）没有这一项 */
+  fileCount?: number
+  /** 包内清单，最多 60 条；老包没有 */
+  files?: ProjectDeliveryFile[]
 }
 
 /**
@@ -276,10 +285,14 @@ export function deliveryOf(project: Project | null | undefined): ProjectDelivery
   const list = Array.isArray(project?.deliveries) ? project.deliveries : []
   const last = list[list.length - 1]
   if (!last) return null
+  // id / package 要一起带出来：标记交付后的提示靠它说「包已封存」，
+  // 只返回 version/at/review 会让界面永远看不见包（v0.9.126 修）。
   return {
+    ...(last.id ? { id: last.id } : {}),
     version: Math.max(0, Math.round(Number(last.version) || 0)),
     at: String(last.at || ''),
     review: last.review,
+    ...(last.package ? { package: last.package } : {}),
   }
 }
 
@@ -292,6 +305,52 @@ export function deliveredCurrent(project: Project | null | undefined): boolean {
   const delivery = deliveryOf(project)
   if (!delivery) return true
   return delivery.version === Math.max(1, Math.round(Number(project?.version) || 0))
+}
+
+/** 交付档案的一行：交过的每一版都在，能不能下载看有没有封存包 */
+export type ProjectDeliveryArchive = {
+  /** 交付过的那几版，最近的排前面 */
+  rows: ProjectDelivery[]
+  /** 有包、能下载的条数 */
+  sealed: number
+  /** 交得早 / 封存失败，只留了记录没有包 */
+  legacy: number
+  /** 能下载的包合计多少字节 */
+  bytes: number
+}
+
+/**
+ * 作品页的交付档案（v0.9.126）：从交付记录派生，不另存一份。
+ * 为什么连没有包的老记录也列出来：作品页要能回答「这条作品交过几版、哪几版没包」，
+ * 只列包会让升级前交的那几版凭空消失。
+ */
+export function deliveryArchive(project: Project | null | undefined): ProjectDeliveryArchive {
+  const list = (Array.isArray(project?.deliveries) ? project.deliveries : []).filter(
+    (entry) => entry && Math.round(Number(entry.version) || 0) > 0,
+  )
+  const rows = list.slice().reverse()
+  const sealed = rows.filter((entry) => Boolean(entry.id && entry.package))
+  return {
+    rows,
+    sealed: sealed.length,
+    legacy: rows.length - sealed.length,
+    bytes: sealed.reduce((sum, entry) => sum + Math.max(0, Math.round(Number(entry.package?.bytes) || 0)), 0),
+  }
+}
+
+/** 包大小给人看：小于 1 KB 写字节，小于 1 MB 写整数 KB，再大留一位小数。 */
+export function packageBytesLabel(bytes: number): string {
+  const n = Math.max(0, Math.round(Number(bytes) || 0))
+  if (n < 1024) return n + ' B'
+  if (n < 1024 * 1024) return Math.round(n / 1024) + ' KB'
+  return (n / 1024 / 1024).toFixed(1) + ' MB'
+}
+
+/** 界面上只露 SHA-256 的前 12 位：够核对，又不把一行撑爆；完整值在复制与提示里。 */
+export function packageShortSha(sha: string): string {
+  const value = String(sha || '').trim().toLowerCase()
+  if (!/^[0-9a-f]{64}$/.test(value)) return ''
+  return value.slice(0, 12) + '…'
 }
 
 /** 一次画布运行的摘要：运行记在画布服务里，作品页把名下所有版本的运行按时间归集成一条线 */

@@ -15,6 +15,8 @@ import { config } from './config.mjs'
 
 const SAFE_ID = /^[0-9a-z_-]{1,80}$/i
 const PACKAGE_ID = /^[0-9a-f]{16}$/
+/** 交付记录里最多记这么多条包内文件；交付包本身不受影响，只是清单不再往下记。 */
+const MAX_MANIFEST_FILES = 60
 
 /** 新交付记录的编号：16 位十六进制，够短、可放地址，也不和别的记录撞。 */
 export function newDeliveryPackageId() {
@@ -41,20 +43,31 @@ function packagePath(projectId, deliveryId) {
 /**
  * 存一份交付包：返回写进交付记录的元数据，不返回磁盘路径。
  * fileName 是给下载响应头用的中文名；sha256 让人能核对「还是不是当初那一份」。
+ *
+ * files 是包内清单（v0.9.126）：只记名字与字节数，不记内容；封存时顺手存下，
+ * 之后不用解开 zip 才能说清「这个包里有什么」。清单上限 60 条，超出的只记总数。
  */
-export async function saveDeliveryPackage(projectId, deliveryId, data, { fileName = '' } = {}) {
+export async function saveDeliveryPackage(projectId, deliveryId, data, { fileName = '', files = [] } = {}) {
   const target = packagePath(projectId, deliveryId)
   if (!target) throw new Error('交付包编号不合法')
   const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data)
   if (!buffer.length) throw new Error('交付包是空的')
   await fsp.mkdir(path.dirname(target), { recursive: true })
   await fsp.writeFile(target, buffer)
+  const manifest = (Array.isArray(files) ? files : [])
+    .map((file) => ({
+      name: String(file?.name || '').replace(/\p{Cc}/gu, '').trim().slice(0, 160),
+      bytes: Math.max(0, Math.round(Number(file?.bytes) || 0)),
+    }))
+    .filter((file) => file.name)
   return {
     id: deliveryId,
     bytes: buffer.length,
     sha256: createHash('sha256').update(buffer).digest('hex'),
     fileName: String(fileName || '').slice(0, 180),
     savedAt: new Date().toISOString(),
+    fileCount: manifest.length,
+    files: manifest.slice(0, MAX_MANIFEST_FILES),
   }
 }
 

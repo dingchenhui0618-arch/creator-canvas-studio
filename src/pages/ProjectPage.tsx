@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowLeft, ArrowRight, BookmarkPlus, Bot, Check, ChevronDown, Clapperboard, CopyPlus, Download, FileText, GitCompare, Link2, Package, Pencil, Plus, Printer, RefreshCw, RotateCcw, ScanEye, Share2, Trash2, Workflow, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, BookmarkPlus, Bot, Check, ChevronDown, Clapperboard, Copy, CopyPlus, Download, FileText, GitCompare, Link2, Package, Pencil, Plus, Printer, RefreshCw, RotateCcw, ScanEye, Share2, Trash2, Workflow, X } from 'lucide-react'
 import PageHead from '../components/PageHead'
 import ProjectStatusPill from '../components/ProjectStatus'
 import { VersionScriptModal } from '../components/VersionScriptModal'
@@ -7,6 +7,7 @@ import { VersionCompareModal } from '../components/VersionCompareModal'
 import {
   deleteProject,
   deliverablePrintUrl,
+  deliveryPackageUrl,
   disableProjectShare,
   downloadProjectDeliverable,
   downloadProjectDeliverableZip,
@@ -29,7 +30,10 @@ import { describeTiming, type ScriptBeat } from '../domain/radar'
 import { formatCount } from '../api/radar'
 import {
   deliveredCurrent,
+  deliveryArchive,
   deliveryOf,
+  packageBytesLabel,
+  packageShortSha,
   projectStep,
   reviewsForVersion,
   runsForVersion,
@@ -156,6 +160,8 @@ export default function ProjectPage({
   // 页头就不会排到七个按钮；点空白处或 Esc 收起（和账号菜单同一套习惯）
   const [deliverOpen, setDeliverOpen] = useState(false)
   const deliverRef = useRef<HTMLDivElement | null>(null)
+  // 交付档案（v0.9.126）：展开哪一版的包内清单（0 = 都收起）；同一时间只开一个
+  const [archiveOpen, setArchiveOpen] = useState(0)
   // 人工复核：一句话备注，加上正在提交的那一档（拍通过 / 拍不通过 / 撤销）
   // null 表示「跟着这条拍板的备注走」：改判或撤销后不用手动清空，渲染时现算
   const [decisionNote, setDecisionNote] = useState<string | null>(null)
@@ -534,6 +540,17 @@ export default function ProjectPage({
     }
   }
 
+  // 交付档案（v0.9.126）：复制的是完整 SHA-256，不是界面上截断的那 12 位。
+  // 收件人拿到 zip 后可以自己算一遍哈希，对上才说明还是当初封存的那一份。
+  const copyPackageSha = async (sha: string) => {
+    try {
+      await navigator.clipboard.writeText(sha)
+      onToast('已复制 SHA-256，可发给收件人核对包有没有被改过')
+    } catch {
+      onToast('复制失败：浏览器没给剪贴板权限')
+    }
+  }
+
   // 交付稿：脚本、分镜、评审结论、版本与运行压成一份 Markdown，直接落盘。
   // 只读接口，不扣积分；导出的是「当前这一版」，不是整条作品的历史合集。
   const exportDeliverable = async () => {
@@ -841,6 +858,8 @@ export default function ProjectPage({
   )
   // 老记录没有交付条目：状态是已交付就当当前这一版交过，只是时间没记录
   if (delivered && !delivery && project.version) deliveredVersions.set(project.version, { version: project.version, at: '' })
+  // 交付档案（v0.9.126）：交过的每一版，最近的排前面；有没有包、包多大都从这里现算
+  const archive = deliveryArchive(project)
   const versionRows = [
     {
       n: project.version,
@@ -1341,6 +1360,106 @@ export default function ProjectPage({
               )
             })}
           </ol>
+        </section>
+      ) : null}
+
+      {archive.rows.length ? (
+        <section className="vq-project-archive" aria-labelledby="vq-project-archive-head">
+          <div className="vq-project-archive-head">
+            <h2 id="vq-project-archive-head">
+              交付档案
+              <span className="vq-mono">
+                {archive.sealed} 个包
+                {archive.sealed ? ' · ' + packageBytesLabel(archive.bytes) : ''}
+                {archive.legacy ? ' · ' + archive.legacy + ' 版没包' : ''}
+              </span>
+            </h2>
+            <p className="vq-project-archive-note">
+              标记交付时封存的那一份，之后改模板、改脚本、开新版都不会变。下载前可以复制 SHA-256 发给收件人核对；包只认登录态，不走公开分享。
+            </p>
+          </div>
+          <ul className="vq-archive-list">
+            {archive.rows.map((row) => {
+              const pkg = row.package
+              const sealed = Boolean(row.id && pkg)
+              const files = sealed && pkg?.files ? pkg.files : []
+              const open = sealed && archiveOpen === row.version
+              return (
+                <li className="vq-archive-row" key={sealed ? row.id : 'v' + row.version}>
+                  <span className="vq-version-n vq-mono">v{row.version}</span>
+                  <div className="vq-archive-main">
+                    <strong title={sealed ? pkg?.fileName : '这一版交出去时还没封存包'}>
+                      {sealed ? pkg?.fileName : '这一版没封存包'}
+                    </strong>
+                    <span className="vq-mono vq-archive-meta">
+                      <span>{row.at ? '交付于 ' + stamp(row.at) : '交付时间没记录'}</span>
+                      <span>交时评审 {deliveryReviewText(row.review)}</span>
+                      {sealed && pkg ? (
+                        <span>
+                          {pkg.fileCount ? pkg.fileCount + ' 个文件 · ' : ''}
+                          {packageBytesLabel(pkg.bytes)}
+                        </span>
+                      ) : null}
+                    </span>
+                    {sealed && pkg ? (
+                      <button
+                        type="button"
+                        className="vq-archive-sha vq-mono"
+                        onClick={() => void copyPackageSha(pkg.sha256)}
+                        title={'复制完整 SHA-256，发给收件人核对：' + pkg.sha256}
+                      >
+                        SHA-256 {packageShortSha(pkg.sha256)}
+                        <Copy size={11} />
+                      </button>
+                    ) : (
+                      <span className="vq-archive-legacy-note">v0.9.125 之前的交付只记了哪一版，没有存包</span>
+                    )}
+                  </div>
+                  {sealed && pkg ? (
+                    <div className="vq-archive-actions">
+                      {pkg.fileCount && files.length ? (
+                        <button
+                          type="button"
+                          className="vq-button vq-button--quiet vq-button--sm"
+                          aria-expanded={open}
+                          onClick={() => setArchiveOpen(open ? 0 : row.version)}
+                          title={open ? '收起包内清单' : '看看这个包里有什么'}
+                        >
+                          {open ? '收起' : '清单 ' + pkg.fileCount}
+                        </button>
+                      ) : null}
+                      <a
+                        className="vq-button vq-button--quiet vq-button--sm"
+                        href={deliveryPackageUrl(project.id, row.id || '')}
+                        download
+                        title={'下载封存的那一份（' + pkg.bytes.toLocaleString('zh-CN') + ' B，之后改模板也不会变）'}
+                      >
+                        下载包
+                        <Download size={12} />
+                      </a>
+                    </div>
+                  ) : null}
+                  {open && pkg ? (
+                    <>
+                      <ul className="vq-archive-files">
+                        {files.map((file) => (
+                          <li key={file.name}>
+                            <span title={file.name}>{file.name}</span>
+                            <span className="vq-mono">{packageBytesLabel(file.bytes)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                      {pkg.fileCount && pkg.fileCount > files.length ? (
+                        <p className="vq-archive-more vq-mono">
+                          还有 {pkg.fileCount - files.length} 个文件没列，包里都在
+                        </p>
+                      ) : null}
+                    </>
+                  ) : null}
+                </li>
+              )
+            })}
+          </ul>
         </section>
       ) : null}
 
