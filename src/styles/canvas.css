@@ -757,9 +757,8 @@
   align-items: center;
   gap: 8px;
   height: 24px;
-  max-width: 320px;
-  padding: 0 8px;
-  overflow: hidden;
+  max-width: 360px;
+  padding: 0 0 0 8px;
   color: var(--warn);
   background: var(--warn-soft);
   border: 1px solid rgba(138, 91, 8, .22);
@@ -768,16 +767,36 @@
   font-size: 11px;
   letter-spacing: .02em;
   white-space: nowrap;
-  text-overflow: ellipsis;
 }
 .cv-run-queue svg { flex: none; }
+/* 位置不够时省略的是名次那句，取消按钮整块留着：排错队的人得随时退得出来（v0.9.97） */
+.cv-run-queue-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.cv-run-queue-cancel {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  align-self: stretch;
+  /* 整个胶囊高度都能点：24px 高、约 40px 宽，是这一条上唯一的退队入口 */
+  padding: 0 8px 0 4px;
+  color: inherit;
+  background: none;
+  border: 0;
+  border-left: 1px solid rgba(138, 91, 8, .28);
+  border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
+  font: inherit;
+  letter-spacing: .04em;
+  cursor: pointer;
+}
+.cv-run-queue-cancel:hover { text-decoration: underline; }
+.cv-run-queue-cancel:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 @media (max-width: 720px) {
   /* 小屏状态条先留住排队位：第三方署名在面包屑里已经说了，地址在「新窗口」里也看得到，
      所以这两项让位，好让「在跑 2 · 排队 4（最久 6.3s）」整句都放得下。 */
   .cv-bdc-label,
   .cv-bdc-url { display: none; }
   .cv-bdc-queue { max-width: 200px; }
-  .cv-run-queue { max-width: 200px; }
+  /* 小屏上名次与取消按钮一起放：省略号吃掉时长那句就够了 */
+  .cv-run-queue { max-width: 240px; }
 }
 .cv-bdc-spacer { flex: 1 1 auto; }
 .cv-bdc-url {

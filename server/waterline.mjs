@@ -460,9 +460,11 @@ export function watchClientGone(res) {
   try {
     if (typeof res.on === 'function') res.on('close', () => { if (!res.writableEnded) gone = true })
   } catch {
-    // 测试里的假 res 没有 on：那两处判据照样能兜住
+    // 测试里的假 res 没有 on：下面那处判据照样能兜住
   }
-  return () => gone || res.destroyed === true || res.writableEnded === true
+  // 只认「连接被提前关掉」与 res 被 destroy。writableEnded 不能当成「人走了」：
+  // 响应正常写完它不是取消，把它算进来会让「退队」与「跑完了」混成同一件事（v0.9.97 的用例抓到）。
+  return () => gone || res.destroyed === true
 }
 
 /**

@@ -157,6 +157,12 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
   const [runQueuedMs, setRunQueuedMs] = useState(0)
   const runQueueTicketRef = useRef('')
   const [runElapsed, setRunElapsed] = useState(0)
+  // 取消排队（v0.9.97）：点「取消」把这条连接 abort 掉。服务端认的是响应被关掉，
+  // 于是退出排队（票退掉、不占名额、不扣积分），页面立刻回到空闲。
+  const runAbortRef = useRef<AbortController | null>(null)
+  // 上一次问名次时还排着队：取消之后靠它分清「退出排队」与「中断一条已经开跑的运行」
+  const runQueuedRef = useRef(false)
+  const [runCancelled, setRunCancelled] = useState(false)
   // 画布 iframe：画布加载完会要一张信任票据，拿到后它自己换会话，用户不用在画布里再登一次
   const bdcFrameRef = useRef<HTMLIFrameElement | null>(null)
   // 进页面时地址里点名的那块内置流程（只影响「默认进哪个视图」，之后切流程不动它）
@@ -666,9 +672,11 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
         .then((next) => {
           if (!alive) return
           if (!next.position) {
+            runQueuedRef.current = false
             setRunQueue(null)
             return
           }
+          runQueuedRef.current = true
           setRunQueue({ position: next.position, waitedMs: next.waitedMs, waiting: next.waiting, waitMs: next.waitMs })
         })
         .catch(() => undefined)
@@ -706,15 +714,20 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
     setRunQueue(null)
     setRunQueuedMs(0)
     setRunElapsed(0)
+    setRunCancelled(false)
+    runQueuedRef.current = false
     setNodes((current) => current.map((node) => ({
       ...node,
       data: { ...node.data, status: 'pending', ms: undefined, output: undefined, error: undefined },
     })))
 
+    const controller = new AbortController()
+    runAbortRef.current = controller
     try {
       const record = await runFlowStream(flowIdRef.current, (event) => {
         if (event.type === 'run-queue') {
           // 排到了：名次收起，把「等了多久」留给运行结论（排队 N 秒后开始）
+          runQueuedRef.current = false
           setRunQueue(null)
           setRunQueuedMs(event.waitedMs)
           return
@@ -748,12 +761,32 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
               : item
           )))
         }
-      }, runQueueTicketRef.current)
+      }, runQueueTicketRef.current, controller.signal)
       setRunRecord(record)
       toast(record.status === 'success'
         ? '运行完成 · ' + (record.durationMs / 1000).toFixed(1) + 's'
         : '运行结束，有节点失败 · ' + (record.durationMs / 1000).toFixed(1) + 's')
     } catch (error) {
+      // 自己点的「取消」：abort 不是失败。节点退回「还没跑」，不当成一条错误留在画布上。
+      if ((error as { name?: string })?.name === 'AbortError') {
+        const stillQueued = runQueuedRef.current
+        setRunQueue(null)
+        setRunError('')
+        setNodes((current) => current.map((node) => (
+          node.data.status === 'running' || node.data.status === 'pending'
+            ? { ...node, data: { ...node.data, status: undefined, ms: undefined, output: undefined, error: undefined } }
+            : node
+        )))
+        if (stillQueued) {
+          // 名次条还在 = 这一单还没排到：钱一分没动，流程也没跑
+          setRunCancelled(true)
+          toast('已退出排队 · 没有扣积分')
+        } else {
+          setRunCancelled(false)
+          toast('已停止等待这次运行 · 已开跑的按运行记录结算')
+        }
+        return
+      }
       const message = error instanceof Error ? error.message : String(error)
       setRunError(message)
       setNodes((current) => current.map((node) => (
@@ -765,11 +798,20 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
     } finally {
       setRunning(false)
       setRunQueue(null)
+      runQueuedRef.current = false
+      runAbortRef.current = null
       runQueueTicketRef.current = ''
       // 运行结束（含失败退款）后余额会变，重新读一次，别让按钮旁的余额停在旧值
       refreshRunCredit()
     }
   }, [refreshRunCredit, running, saveError, saveNow, setNodes, toast])
+
+  // 只退排队：入口只在有名次条时出现（已经开跑就没有这个按钮），所以不会把一条在跑的运行当成「退队」。
+  const cancelRunQueue = useCallback(() => {
+    const controller = runAbortRef.current
+    if (!controller) return
+    controller.abort()
+  }, [])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1143,7 +1185,10 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
               }
             >
               <Hourglass size={12} strokeWidth={1.75} />
-              排队中 · 第 {runQueue.position} 位 · 已等 {runElapsed}s
+              <span className="cv-run-queue-text">排队中 · 第 {runQueue.position} 位 · 已等 {runElapsed}s</span>
+              <button type="button" className="cv-run-queue-cancel" onClick={cancelRunQueue} title="退出排队：这条流程不跑、也不扣积分">
+                取消
+              </button>
             </span>
           ) : null}
           <button
@@ -1350,6 +1395,8 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
         queuedMs={runQueuedMs}
         queue={runQueue}
         queueElapsed={runElapsed}
+        cancelled={runCancelled}
+        onCancelQueue={cancelRunQueue}
         error={runError}
         onClose={() => setDrawerOpen(false)}
         onSelectNode={focusNode}

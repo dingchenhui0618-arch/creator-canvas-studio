@@ -187,6 +187,8 @@ export async function runFlowStream(
   onEvent: (event: RunEventMessage) => void,
   /** 排队票号（v0.9.96）：页面自己生成，服务端按它认出「同一条」，不回写进响应 */
   ticket = '',
+  /** 取消（v0.9.97）：abort 会把这条连接关掉，服务端据此退出排队——不占名额、不扣积分、不跑流程 */
+  signal?: AbortSignal,
 ): Promise<RunRecord> {
   const response = await fetch('/api/flows/' + id + '/run', {
     method: 'POST',
@@ -195,6 +197,7 @@ export async function runFlowStream(
       ...(ticket ? { 'X-VQ-Queue-Ticket': ticket } : {}),
     },
     body: JSON.stringify({ stream: true }),
+    signal,
   })
   if (!response.ok) {
     const text = await response.text()

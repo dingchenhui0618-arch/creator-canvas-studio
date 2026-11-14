@@ -18,6 +18,10 @@ type RunDrawerProps = {
   queue?: { position: number; waitedMs: number; waiting: number } | null
   /** 排队已等了几秒（页面自己的秒表，和顶栏胶囊同一个数） */
   queueElapsed?: number
+  /** 刚取消过排队：空状态写清「没跑、没扣积分」，别让抽屉看起来像一次失败 */
+  cancelled?: boolean
+  /** 排队时可以在这里退出（v0.9.97）：顶栏被抽屉盖住时，这个入口仍然够得着 */
+  onCancelQueue?: () => void
   error: string
   onClose: () => void
   onSelectNode: (nodeId: string) => void
@@ -51,7 +55,7 @@ function nodeOutputText(output: RunNodeResult['output']): string {
   return typeof text === 'string' ? text : ''
 }
 
-export function RunDrawer({ open, running, flowName, runId, total, nodes, record, queuedMs = 0, queue = null, queueElapsed = 0, error, onClose, onSelectNode }: RunDrawerProps) {
+export function RunDrawer({ open, running, flowName, runId, total, nodes, record, queuedMs = 0, queue = null, queueElapsed = 0, cancelled = false, onCancelQueue, error, onClose, onSelectNode }: RunDrawerProps) {
   const { internal } = useUiMode()
   const progress = total > 0 ? Math.round((nodes.length / total) * 100) : 0
   const duration = record ? record.durationMs : nodes.reduce((sum, node) => sum + (node.ms || 0), 0)
@@ -97,9 +101,18 @@ export function RunDrawer({ open, running, flowName, runId, total, nodes, record
         {!nodes.length && !error && (
           <div className="cv-drawer-empty">
             {running ? (
-              queue
-                ? <p>正在排队 · 第 {queue.position} 位 · 已等 {queueElapsed} 秒（排到才开始跑，现在关掉页面不会扣费）</p>
-                : <p>已提交运行，等待第一个节点返回…</p>
+              queue ? (
+                <>
+                  <p>正在排队 · 第 {queue.position} 位 · 已等 {queueElapsed} 秒（排到才开始跑，现在退出不会扣费）</p>
+                  {onCancelQueue ? (
+                    <button type="button" className="vq-button vq-button--ghost vq-button--sm" onClick={onCancelQueue}>
+                      取消排队
+                    </button>
+                  ) : null}
+                </>
+              ) : <p>已提交运行，等待第一个节点返回…</p>
+            ) : cancelled ? (
+              <p>已退出排队：这条流程没有跑，也没有扣积分。</p>
             ) : <p>点「运行流程」后，这里会按节点顺序显示状态、耗时和输出。</p>}
           </div>
         )}

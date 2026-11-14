@@ -141,6 +141,11 @@ export default function ReviewPage({
   // 排到之前不扣积分、不调模型，所以这段等待必须如实显示，不能让人对着「评审中」干等。
   const [queue, setQueue] = useState<{ position: number; waitedMs: number; waiting: number; waitMs: number } | null>(null)
   const queueTicketRef = useRef('')
+  // 取消排队（v0.9.97）：点「取消」把这条连接 abort 掉，服务端据此退出排队（不占名额、不扣积分、不调模型）。
+  // 评审不是流式的：abort 之后页面立刻回到空闲，静默提示说清这一单算没算。
+  const queueAbortRef = useRef<AbortController | null>(null)
+  const queuedRef = useRef(false)
+  const [queueNote, setQueueNote] = useState('')
   const [error, setError] = useState('')
   const [active, setActive] = useState<string | null>(null)
   // 钉住：悬停只是预览，钉住才是「现在就看这一条」；再点一次或按 Esc 取消
@@ -322,9 +327,11 @@ export default function ReviewPage({
         .then((next) => {
           if (!alive) return
           if (!next.position) {
+            queuedRef.current = false
             setQueue(null)
             return
           }
+          queuedRef.current = true
           setQueue({ position: next.position, waitedMs: next.waitedMs, waiting: next.waiting, waitMs: next.waitMs })
         })
         .catch(() => undefined)
@@ -352,6 +359,11 @@ export default function ReviewPage({
 
   const modelBlocked = modelState?.available === false
 
+  // 只退排队：入口只在名次条在时出现（排到之后条子就收起），不会把一条正在跑的评审当成「退队」
+  const cancelQueue = () => {
+    queueAbortRef.current?.abort()
+  }
+
   const run = async () => {
     if (!picked) return
     startedRef.current = Date.now()
@@ -366,6 +378,10 @@ export default function ReviewPage({
         ? crypto.randomUUID()
         : 'vq-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10)
     setQueue(null)
+    setQueueNote('')
+    queuedRef.current = false
+    const controller = new AbortController()
+    queueAbortRef.current = controller
     try {
       const next = await runReview(
         {
@@ -376,6 +392,7 @@ export default function ReviewPage({
           projectId: projectId || undefined,
         },
         queueTicketRef.current,
+        controller.signal,
       )
       setResult(next)
       setActive(next.observations[0]?.id ?? null)
@@ -388,12 +405,23 @@ export default function ReviewPage({
         })
         .catch(() => undefined)
     } catch (reason) {
+      // 自己点的「取消」：abort 不是失败。还在排队时这一单没调模型、没扣积分；已经开跑的按记录结算。
+      if ((reason as { name?: string })?.name === 'AbortError') {
+        const wasQueued = queuedRef.current
+        setError('')
+        setQueueNote(wasQueued
+          ? '已退出排队：这次没有调模型、没有扣积分。想评的时候再点「开始评审」。'
+          : '已停止在页面上等待：这一单可能已经开跑，结论以评审记录为准。')
+        return
+      }
       setError(String((reason as Error)?.message || reason))
       // 失败后同步一次服务状态：额度 / 凭证问题会在页头与提示条上显示
       getModelService().then((next) => setModelState(next.model)).catch(() => undefined)
     } finally {
       setRunning(false)
       setQueue(null)
+      queuedRef.current = false
+      queueAbortRef.current = null
       queueTicketRef.current = ''
       getCredits(1).then(setCredits).catch(() => undefined)
     }
@@ -770,7 +798,10 @@ export default function ReviewPage({
                           }
                         >
                           <Hourglass size={12} strokeWidth={1.75} />
-                          排队中 · 第 {queue.position} 位 · 已等 {elapsed}s
+                          <span className="review-queue-strip-text">排队中 · 第 {queue.position} 位 · 已等 {elapsed}s</span>
+                          <button type="button" className="review-queue-cancel" onClick={cancelQueue} title="退出排队：这次不评、也不扣积分">
+                            取消
+                          </button>
                         </span>
                       ) : null}
                       <button type="button" className="vq-button vq-button--primary vq-button--sm" disabled={running || !status?.model || modelBlocked} onClick={run}>
@@ -907,6 +938,14 @@ export default function ReviewPage({
               <button type="button" className="vq-button vq-button--ghost vq-button--sm" onClick={run}>
                 <RefreshCw size={12} /> 重试
               </button>
+            </div>
+          ) : null}
+
+          {/* 取消排队不算失败：这里安静地说清这一单算没算，不给「重试」按钮催人再来一次 */}
+          {queueNote ? (
+            <div className="review-queue-note" role="status">
+              <Hourglass size={13} strokeWidth={1.75} />
+              <span>{queueNote}</span>
             </div>
           ) : null}
 

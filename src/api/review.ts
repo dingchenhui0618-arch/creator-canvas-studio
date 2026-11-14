@@ -145,12 +145,15 @@ export const getReviewQueue = (ticket: string) =>
 export async function runReview(
   payload: { media?: string; imageUrl?: string; intent?: string; label?: string; projectId?: string },
   ticket = '',
+  /** 取消（v0.9.97）：排队期间 abort 会关掉连接，服务端退出排队——不占名额、不扣积分、不调模型 */
+  signal?: AbortSignal,
 ) {
   const result = await request<ReviewResult>('/api/review', {
     method: 'POST',
     body: JSON.stringify(payload),
     // 票号走请求头：排队期间页面用同一个票号去问「我排第几」
     headers: ticket ? { 'X-VQ-Queue-Ticket': ticket } : undefined,
+    signal,
   })
   // 评出新结论就可能新增或清掉一条待办（通过的那一版不再等你看）
   if (payload.projectId) noteReviewQueueChanged()
