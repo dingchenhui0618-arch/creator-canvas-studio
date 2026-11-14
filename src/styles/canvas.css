@@ -643,6 +643,10 @@
 
 @media (max-width: 760px) {
   .cv-workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(420px, 1fr) auto; min-height: 0; }
+  /* 窄屏标题独占一行：只读/已删除两个小标识换到下一行，不能把输入框挤成一条缝 */
+  .cv-title-row { flex-wrap: wrap; row-gap: 8px; }
+  .cv-title-row .cv-flow-name { flex: 1 1 100%; }
+  .cv-title-row .vq-pill { flex: none; }
   /* 窄屏这一条装不下「只读标识 + 节点数 + 适应画布 + 缩放」：让它换行，
      以前 justify-content: space-between 会把两组压在一起，文字互相盖住。 */
   .cv-toolbar { height: auto; flex: 0 0 auto; min-height: 42px; flex-wrap: wrap; padding: 4px 8px; }

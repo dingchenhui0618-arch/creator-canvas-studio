@@ -12,7 +12,7 @@ import { config } from '../config.mjs'
 import { createTemplateFromProject, getTemplate, listTemplates, reuseTemplate } from '../templates.mjs'
 import { projectTemplateReply, projectTemplateSpec } from '../project-template.mjs'
 import { templateOrigin } from '../project-source.mjs'
-import { createFlow, getFlow, listRunsByFlows } from '../flows.mjs'
+import { createFlow, getFlow, hasRunGraph, listRunsByFlows } from '../flows.mjs'
 import { normalizeProjectScript, scriptPace, scriptView } from '../project-script.mjs'
 import { buildReplicateDraft } from '../script-draft.mjs'
 import { syncCanvasScript } from '../project-canvas-sync.mjs'
@@ -146,10 +146,16 @@ async function projectDetailView(project, user, { snapshots = false } = {}) {
   // 注意这里必须放在 versions 算好之后再建：顺序反了就是一个 ReferenceError（0.2.3 生产实测踩到）。
   const liveFlows = new Set(versions.filter((entry) => entry.available).map((entry) => entry.flowId))
   if (flow) liveFlows.add(flow.id)
-  const runs = runData.items.map((run) => ({
-    ...run,
-    version: versionOfFlow.get(run.flowId) || 0,
-    available: liveFlows.has(run.flowId),
+  // 画布被删掉的运行：只要当时留下过快照，就还能只读回看。
+  // 这里只 stat 文件、不把快照塞进列表；available 仍表示「现在能不能打开画布」。
+  const runs = await Promise.all(runData.items.map(async (run) => {
+    const available = liveFlows.has(run.flowId)
+    return {
+      ...run,
+      version: versionOfFlow.get(run.flowId) || 0,
+      available,
+      hasSnapshot: available ? false : await hasRunGraph(run.id),
+    }
   }))
   const runCounts = {}
   for (const [flowId, amount] of Object.entries(runData.byFlow)) {

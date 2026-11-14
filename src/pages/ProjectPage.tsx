@@ -1184,12 +1184,16 @@ export default function ProjectPage({
                       {run.error ? <p className={'vq-run-error' + (run.canceled ? ' is-stopped' : '')}>{run.error}</p> : null}
                     </div>
                     <div className="vq-run-actions">
-                      {run.available && !live ? (
+                      {!live && (run.available || run.hasSnapshot) ? (
                         <button
                           type="button"
                           className="vq-button vq-button--ghost vq-button--sm vq-run-view"
                           onClick={() => onViewRun(run.flowId, run.id)}
-                          title="在画布上只读回看这次运行：有画布快照时连当时的位置与参数一起回放；不改画布、不扣积分"
+                          title={
+                            run.available
+                              ? '在画布上只读回看这次运行：有画布快照时连当时的位置与参数一起回放；不改画布、不扣积分'
+                              : '这块画布已经删除，但这次运行留下了画布快照：仍可只读回看当时的位置与参数；不改任何内容、不扣积分'
+                          }
                         >
                           <ScanEye size={13} />
                           查看运行

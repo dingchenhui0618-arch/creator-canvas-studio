@@ -68,6 +68,8 @@ test('运行开始时留下画布快照；改画布后仍回看当时的位置�
 
   const graph = await flows.loadRunGraph(runId)
   assert.ok(graph, '运行开始后应该留下快照')
+  assert.equal(await flows.hasRunGraph(runId), true, '运行页要能只凭 id 判断有没有快照')
+  assert.equal(await flows.hasRunGraph('run_not_there'), false)
   assert.match(graph.capturedAt, /^\d{4}-\d{2}-\d{2}T/)
   assert.equal(graph.nodes.find((node) => node.id === 'in')?.position.x, 12)
   assert.equal(graph.nodes.find((node) => node.id === 'in')?.data.config.text, '一开始写的那句话')
@@ -112,7 +114,9 @@ test('运行开始时留下画布快照；改画布后仍回看当时的位置�
     newer.push(id)
   }
   assert.equal(await flows.loadRunGraph(newer[0]), null)
+  assert.equal(await flows.hasRunGraph(newer[0]), false, '快照清理后不能还报「有」')
   assert.ok(await flows.loadRunGraph(newer[61 - 1]))
+  assert.equal(await flows.hasRunGraph(newer[61 - 1]), true)
   const files = fs.readdirSync(path.join(process.env.DATA_DIR, 'run-graphs')).filter((name) => name.endsWith('.json'))
   assert.equal(files.length, 60)
 })

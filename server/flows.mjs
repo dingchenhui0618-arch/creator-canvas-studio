@@ -272,6 +272,21 @@ export async function loadRunGraph(runId) {
   }
 }
 
+/**
+ * 这次运行有没有留下画布快照：作品页对「画布已删除」的运行要据此决定
+ * 还开不开「查看运行」。只 stat 文件，不读整张画布，列表里查 20 条也不重。
+ */
+export async function hasRunGraph(runId) {
+  const id = String(runId || '')
+  if (!id) return false
+  try {
+    await fsp.access(runGraphFile(id))
+    return true
+  } catch {
+    return false
+  }
+}
+
 async function deleteRunGraphs(runIds = []) {
   for (const id of runIds) {
     try {

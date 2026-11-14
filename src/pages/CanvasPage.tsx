@@ -181,6 +181,10 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
   const [description, setDescription] = useState('')
   // 这块画布挂在哪条作品的第几版：服务端按画布指针现算，空白画布为 null
   const [flowProject, setFlowProject] = useState<RunProjectRef | null>(null)
+  // 只读回看的画布已经被删除（v0.9.109）：快照还在时按当时那张图回放，退出不能再回到一张不存在的画布。
+  const [flowDeleted, setFlowDeleted] = useState(false)
+  // 画布删了、这次运行也没有快照：没有可回放的画布，只能把话说清并送回运行记录。
+  const [missingSnapshot, setMissingSnapshot] = useState(false)
   const [selectedId, setSelectedId] = useState('')
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading')
   const [loadError, setLoadError] = useState('')
@@ -276,14 +280,24 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
   const toast = useCallback((message: string) => onToast?.(message), [onToast])
 
   // 退出只读查看：地址回到普通画布，App 按模式重挂一次画布，原来的运行态不会挂到编辑态上。
+  // 画布已经删除时不能回到一张不存在的画布：优先回作品页，没有作品就回运行记录。
   const exitRunView = useCallback(() => {
+    if (flowDeleted || missingSnapshot) {
+      const projectId = runRecord?.project?.id
+      if (projectId) {
+        navigate({ kind: 'page', page: 'projects', projectId })
+        return
+      }
+      navigate({ kind: 'page', page: 'runs' })
+      return
+    }
     const id = flowIdRef.current
     if (!id) {
       navigate({ kind: 'page', page: 'runs' })
       return
     }
     navigate({ kind: 'page', page: 'canvas', flowId: id })
-  }, [])
+  }, [flowDeleted, missingSnapshot, runRecord])
 
   const refreshRunCredit = useCallback(() => {
     void getCredits(1)
@@ -422,6 +436,9 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
   const loadedFlowRef = useRef('')
   // 地址里点名的那条运行已经放回抽屉没有：路由重渲染、保存后重跑 effect 都不该再拉一次
   const appliedRunRef = useRef('')
+  // 只读回看只加载一次：画布删了 / 没有快照时没有 applyFlow 可以把 loadedFlowRef 填上，
+  // 少了这道闸，渲染一次就再拉一次 flows + run，会变成一串 404。
+  const viewLoadRef = useRef('')
 
   const applyFlow = useCallback((flow: ApiFlow, resumeRunId?: string, viewRunId?: string) => {
     skipSave.current = true
@@ -505,6 +522,8 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
         setLoadState('ready')
         return
       }
+      // 同一条只读回看已经失败过：保持失败页，不再反复请求。成功那条由 applyFlow 接管。
+      if (initialViewId && viewLoadRef.current === initialViewId) return
       setLoadState('loading')
       try {
         let list = await listFlows()
@@ -519,13 +538,71 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
             target = null
           }
         }
+        // 画布被删除后，运行记录与快照还在：地址带 runId 时用快照重建一块只读画布。
+        // 这时绝不创建「未命名流程」——用户要看的是历史，不是一张新画布。
+        let deletedFlow = false
+        if (!target && initialFlowId && initialViewId) {
+          try {
+            const run = await getRun(initialViewId)
+            const graph = run.graph && run.graph.nodes.length ? run.graph : null
+            if (run.flowId !== initialFlowId) {
+              viewLoadRef.current = initialViewId
+              setLoadError('这次运行不属于地址里的画布。')
+              setLoadState('error')
+              return
+            }
+            if (!graph) {
+              viewLoadRef.current = initialViewId
+              setFlowDeleted(true)
+              setMissingSnapshot(true)
+              setName(run.flowName || '已删除的画布')
+              setLoadError('这块画布已经被删除，这次运行也没有留下画布快照。')
+              setLoadState('error')
+              return
+            }
+            target = {
+              id: run.flowId,
+              name: run.flowName || '已删除的画布',
+              description: '',
+              nodes: graph.nodes,
+              edges: graph.edges,
+              runCount: 0,
+              lastRunId: run.id,
+              lastRunAt: run.finishedAt || run.startedAt,
+              createdAt: graph.capturedAt,
+              updatedAt: graph.capturedAt,
+              project: run.project ?? null,
+            }
+            deletedFlow = true
+          } catch (error) {
+            viewLoadRef.current = initialViewId
+            const status = (error as { status?: number }).status
+            setMissingSnapshot(status === 404)
+            setLoadError(
+              status === 404
+                ? '这次运行不存在或已被清理。'
+                : '这次运行打不开：' + (error instanceof Error ? error.message : String(error)),
+            )
+            setLoadState('error')
+            return
+          }
+        }
         if (!alive) return
-        if (!list.length) {
+        if (!list.length && !target) {
           const created = await createFlow({ name: '未命名流程', description: '', nodes: [], edges: [] })
           list = [created]
         }
+        if (target) {
+          const current = target
+          list = [current, ...list.filter((flow) => flow.id !== current.id)]
+        }
+        const chosen = target || list[0]
+        if (!chosen) throw new Error('没有可打开的画布')
+        if (deletedFlow) setFlowDeleted(true)
         setFlows(list)
-        applyFlow(target || list[0], initialResumeId, initialViewId)
+        applyFlow(chosen, initialResumeId, initialViewId)
+        // 画布已经删除：没有「当前画布」可对照，不显示差异行，也不写「一致」。
+        if (deletedFlow) setPreviewBase(null)
         setLoadState('ready')
         window.setTimeout(() => rf.fitView({ padding: 0.12 }), 80)
       } catch (error) {
@@ -1453,10 +1530,15 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
             <span className={`cv-save is-${readOnly ? 'saved' : saveState}`} title={readOnly ? '只读查看：不改动当前画布' : saveError || saveLabel}>
               <span className="cv-save-dot" />{readOnly ? '只读查看' : saveLabel}
             </span>
+            {flowDeleted ? <Pill tone="warn">画布已删除</Pill> : null}
           </span>
         }
         desc={readOnly
-          ? '回放一次运行：有画布快照时，位置与参数也是当时那一版；状态、耗时、输出都来自这条记录。只读查看不会写回，也不会扣积分。'
+          ? missingSnapshot
+            ? '这块画布已经被删除，这次运行也没有留下可回放的画布快照；逐节点结果与扣费仍留在运行记录里。'
+            : flowDeleted
+              ? '这块画布已经被删除；下面回放的是这次运行开始时留下的画布快照。只读查看不会写回，也不会扣积分。'
+              : '回放一次运行：有画布快照时，位置与参数也是当时那一版；状态、耗时、输出都来自这条记录。只读查看不会写回，也不会扣积分。'
           : '按依赖顺序逐个节点执行 · 每次运行记录耗时、输出与失败原因，失败自动退回积分'}
         actions={
           <div className="cv-head-actions">
@@ -1560,7 +1642,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
       />
       )}
 
-      {readOnly ? (
+      {readOnly && loadState === 'ready' ? (
         <div className="cv-runview" role="status" aria-live="polite">
           <div className="cv-runview-line">
             <span className="cv-runview-kicker"><History size={13} strokeWidth={1.75} />历史运行 · {hasRunSnapshot ? '画布快照' : '只读'}</span>
@@ -1580,9 +1662,11 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
             ) : null}
           </div>
           <p className="cv-runview-copy">
-            {hasRunSnapshot
-              ? '节点位置、标题与参数取这次运行开始时的画布快照；状态、耗时、输出取这条运行。查看不会写回画布，也不扣积分。'
-              : '这条运行没有留下画布快照：位置与参数只能取当前画布；状态、耗时、输出来自这条运行。查看不会写回画布，也不扣积分。'}
+            {flowDeleted
+              ? '这块画布已经被删除：位置、标题与参数取这次运行开始时的快照，画布上就是当时的版本。查看不会写回，也不扣积分。'
+              : hasRunSnapshot
+                ? '节点位置、标题与参数取这次运行开始时的画布快照；状态、耗时、输出取这条运行。查看不会写回画布，也不扣积分。'
+                : '这条运行没有留下画布快照：位置与参数只能取当前画布；状态、耗时、输出来自这条运行。查看不会写回画布，也不扣积分。'}
           </p>
           {runGraphDiff ? <RunGraphDiffBlock diff={runGraphDiff} /> : null}
           {runViewMissing > 0 ? (
@@ -1624,11 +1708,23 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
         <div className="cv-state">
           <CircleAlert size={18} strokeWidth={1.5} />
           <div>
-            <strong>画布加载失败</strong>
+            <strong>{missingSnapshot ? '这次运行没有画布可回看' : '画布加载失败'}</strong>
             <p>{loadError}</p>
-            <p className="cv-muted">{internal ? '确认 API 服务（127.0.0.1:8787）已启动，然后重新加载页面。' : '稍后重新加载页面；如果仍未恢复，请联系平台维护人员。'}</p>
+            <p className="cv-muted">
+              {missingSnapshot
+                ? '运行记录本身还在：逐节点结果、耗时与扣费都能在运行记录里看。'
+                : internal
+                  ? '确认 API 服务（127.0.0.1:8787）已启动，然后重新加载页面。'
+                  : '稍后重新加载页面；如果仍未恢复，请联系平台维护人员。'}
+            </p>
           </div>
-          <button className="vq-button vq-button--ghost" type="button" onClick={() => window.location.reload()}>重新加载</button>
+          <button
+            className="vq-button vq-button--ghost"
+            type="button"
+            onClick={() => (missingSnapshot ? navigate({ kind: 'page', page: 'runs' }) : window.location.reload())}
+          >
+            {missingSnapshot ? '去运行记录' : '重新加载'}
+          </button>
         </div>
       ) : (
         <div className="cv-workspace">

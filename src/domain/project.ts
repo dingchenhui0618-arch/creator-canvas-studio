@@ -209,6 +209,8 @@ export type ProjectRun = {
   version: number
   /** 那一版画布还在不在：被删掉后运行记录仍留着，但画布打不开 */
   available: boolean
+  /** 画布已删除时，这次运行是否留下了画布快照；留下就还能只读回看 */
+  hasSnapshot?: boolean
 }
 
 /**
