@@ -565,6 +565,49 @@ export function packageAuditText(audit: PackageAudit | null | undefined): string
 }
 
 /**
+ * 巡检记下的一个封存包（v0.9.132）：定时任务验完之后，这一包当时是什么样。
+ * state 说清是「验过」还是「没验成」——没验成不写成通过。
+ */
+export type PackageAuditRecord = {
+  deliveryId: string
+  version: number
+  state: 'ok' | 'missing' | 'unreadable' | 'too-large'
+  ok: boolean
+  total: number
+  passed: number
+  skipped: number
+  failed: PackageAuditFailure[]
+  bytes: number
+  readBytes: number
+  ms: number
+}
+
+/** 上一次巡检整体：什么时候跑的、看了几个包、几个有问题 */
+export type PackageAuditReport = {
+  /** 空串表示还没巡检过（定时任务没跑过、或还没部署） */
+  at: string
+  checked: number
+  problems: number
+  packages: PackageAuditRecord[]
+}
+
+/**
+ * 巡检那一行说人话：跟体检同一口径，只到「字节对不对」这一层。
+ * 没验成的（包不在了 / 目录读不出来 / 太大）直说没验成，不写「通过」。
+ */
+export function packageAuditLine(record: PackageAuditRecord | null | undefined): string {
+  if (!record) return ''
+  if (record.state === 'missing') return '盘上那份不在了'
+  if (record.state === 'unreadable') return '目录读不出来'
+  if (record.state === 'too-large') return '太大，没验'
+  if (record.ok) return record.total + ' 条都对得上'
+  const first = record.failed[0]
+  if (first) return record.passed + ' 条对得上，「' + first.name + '」' + packageAuditFaultLabel(first.reason)
+  if (record.skipped) return '走了 ' + record.passed + ' 条，剩下 ' + record.skipped + ' 条没走完'
+  return '有问题'
+}
+
+/**
  * 浏览器里算一段字节的 SHA-256。Web Crypto 只在 https / localhost 下提供，
  * 拿不到就抛人话，让界面说清「换个地址打开」，而不是静默失败。
  */

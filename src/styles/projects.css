@@ -1489,6 +1489,30 @@
   line-height: 1.6;
 }
 
+/* 上次巡检（v0.9.132）：档案区顶部一句、每一行一句；有问题是红的，跟「包不在了」同一套语言 */
+.vq-project-archive-audit {
+  margin: 8px 0 0;
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.vq-project-archive-audit.is-bad {
+  color: var(--fail);
+}
+
+.vq-archive-auditline {
+  justify-self: start;
+  width: fit-content;
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.vq-archive-auditline.is-bad {
+  color: var(--fail);
+}
+
 /* 包没了：下载入口换成说明，不给人一个点了就 404 的按钮 */
 .vq-button.is-disabled {
   opacity: .55;

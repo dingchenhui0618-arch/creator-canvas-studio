@@ -51,6 +51,7 @@ import {
   readDeliveryPackage,
   saveDeliveryPackage,
 } from '../delivery-packages.mjs'
+import { readAuditReport } from '../package-audits.mjs'
 import {
   MAX_ENTRY_BYTES,
   MAX_PACKAGE_BYTES,
@@ -101,6 +102,8 @@ const DELIVERY_PACKAGE = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-
 const DELIVERY_PACKAGE_CHECK = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})\/check$/
 // 包里那份（v0.9.129）：读封存包自己的目录、按条目名取一条内容；只读，不解压到磁盘、不写文件
 const DELIVERY_PACKAGE_CONTENT = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})\/content$/
+// 封存包巡检报告（v0.9.132）：定时任务每天验一遍，这里只读它写下的那份结论
+const PACKAGE_AUDITS = /^\/api\/projects\/([\w-]+)\/package-audits$/
 const DELIVERY_PACKAGE_ENTRY = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})\/content\/(.+)$/
 // 整包体检（v0.9.130）：逐条解开、重算 CRC32，按偏移读，内存里最多一条；只读、不缓存、不写盘
 const DELIVERY_PACKAGE_VERIFY = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})\/verify$/
@@ -1141,6 +1144,45 @@ export function createProjectsRouter() {
           'Cache-Control': 'no-store',
         })
         res.end(archive)
+        return true
+      }
+
+      // 巡检报告（v0.9.132）：定时任务把盘上每个封存包验一遍后写下的结论。
+      // 只读这一份报告；没巡检过就如实说「还没巡检」，不拿今天的临时体检冒充满意。
+      const packageAudits = pathname.match(PACKAGE_AUDITS)
+      if (packageAudits) {
+        if (req.method !== 'GET') {
+          sendJson(res, 405, { error: '巡检报告只能读，不能修改' })
+          return true
+        }
+        const project = await getProject(packageAudits[1], user)
+        if (!project) {
+          sendJson(res, 404, { error: '作品不存在或已被删除' })
+          return true
+        }
+        const report = await readAuditReport()
+        const packages = (report?.packages || [])
+          .filter((item) => item && item.projectId === project.id)
+          .map((item) => ({
+            deliveryId: String(item.deliveryId || ''),
+            version: Number(item.version) || 0,
+            state: String(item.state || ''),
+            ok: Boolean(item.ok),
+            total: Number(item.total) || 0,
+            passed: Number(item.passed) || 0,
+            skipped: Number(item.skipped) || 0,
+            failed: Array.isArray(item.failed) ? item.failed : [],
+            bytes: Number(item.bytes) || 0,
+            readBytes: Number(item.readBytes) || 0,
+            ms: Number(item.ms) || 0,
+          }))
+        sendJson(res, 200, {
+          ok: true,
+          at: report?.at || '',
+          checked: packages.length,
+          problems: packages.filter((item) => !item.ok).length,
+          packages,
+        })
         return true
       }
 

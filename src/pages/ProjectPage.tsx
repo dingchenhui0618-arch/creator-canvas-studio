@@ -19,6 +19,7 @@ import {
   getProject,
   getProjectVersionScript,
   openProjectCanvas,
+  projectPackageAudits,
   projectSpend,
   resetProjectScript,
   reviewSheetUrl,
@@ -38,6 +39,7 @@ import {
   deliveryArchive,
   deliveryOf,
   packageAuditFaultLabel,
+  packageAuditLine,
   packageAuditText,
   packageBytesLabel,
   packageDiskAlert,
@@ -47,6 +49,7 @@ import {
   serverPackageText,
   sha256HexOfBytes,
   type PackageAudit,
+  type PackageAuditRecord,
   type PackageCheck,
   type PackageContents,
   type PackageEntry,
@@ -222,6 +225,14 @@ export default function ProjectPage({
     result: PackageAudit | null
     error: string
   }>({ version: 0, state: 'idle', result: null, error: '' })
+  // 上次巡检（v0.9.132）：定时任务每天把封存包验一遍，这里只读它写下的结论。
+  // 没巡检过就 at 为空，界面上不出现这一行——不拿「今天没验」冒充「验过了」。
+  const [audits, setAudits] = useState<{
+    at: string
+    problems: number
+    checked: number
+    byId: Record<string, PackageAuditRecord>
+  }>({ at: '', problems: 0, checked: 0, byId: {} })
   // 人工复核：一句话备注，加上正在提交的那一档（拍通过 / 拍不通过 / 撤销）
   // null 表示「跟着这条拍板的备注走」：改判或撤销后不用手动清空，渲染时现算
   const [decisionNote, setDecisionNote] = useState<string | null>(null)
@@ -267,6 +278,24 @@ export default function ProjectPage({
     }, 0)
     return () => window.clearTimeout(timer)
   }, [load])
+
+  // 巡检结论跟首屏一起取：只读一份报告，读不到就不显示这一行（不挡作品页）
+  useEffect(() => {
+    let alive = true
+    void projectPackageAudits(projectId)
+      .then((report) => {
+        if (!alive) return
+        const byId: Record<string, PackageAuditRecord> = {}
+        for (const item of report.packages || []) byId[item.deliveryId] = item
+        setAudits({ at: report.at || '', problems: report.problems || 0, checked: report.checked || 0, byId })
+      })
+      .catch(() => {
+        /* 巡检只是附加信息：读不到就当没巡检过，不在这里报错 */
+      })
+    return () => {
+      alive = false
+    }
+  }, [projectId])
 
   // 花费明细：读一次就留着，切月份才重新取；点「收起」不清缓存，再点开还是同一份
   const loadSpend = useCallback(async (scope: string) => {
@@ -1076,6 +1105,16 @@ export default function ProjectPage({
   if (delivered && !delivery && project.version) deliveredVersions.set(project.version, { version: project.version, at: '' })
   // 交付档案（v0.9.126）：交过的每一版，最近的排前面；有没有包、包多大都从这里现算
   const archive = deliveryArchive(project)
+  // 巡检那句放在档案区顶部：什么时候验的、几个包、有没有问题
+  const auditSummary = audits.at
+    ? '上次巡检 ' + stamp(audits.at) + ' · ' +
+      (audits.problems
+        ? audits.problems + ' 个包有问题'
+        : audits.checked
+          ? audits.checked + ' 个包都对得上 CRC32'
+          : '还没有封存包') +
+      '（定时任务每天验一遍）'
+    : ''
   const versionRows = [
     {
       n: project.version,
@@ -1594,6 +1633,9 @@ export default function ProjectPage({
               标记交付时封存的那一份，之后改模板、改脚本、开新版都不会变。手里那份拖进「核对」在本机算，服务器上那份点「查一遍哈希」在服务端算，两头都对上才算数；包里那份不用解压，点清单里的文件名就能看。包只认登录态，不走公开分享。
             </p>
           </div>
+          {auditSummary ? (
+            <p className={'vq-project-archive-audit' + (audits.problems ? ' is-bad' : '')}>{auditSummary}</p>
+          ) : null}
           <ul className="vq-archive-list">
             {archive.rows.map((row) => {
               const pkg = row.package
@@ -1605,6 +1647,8 @@ export default function ProjectPage({
               // 体检说坏的那几条，在清单里也标出来：不用回头对名字
               const auditResult = open && audit.version === row.version ? audit.result : null
               const badEntries = new Set(auditResult && auditResult.state === 'ok' ? auditResult.failed.map((item) => item.name) : [])
+              // 上次巡检对这一版的结论：有就写一行，没有就不出现
+              const rowAudit = sealed && row.id ? audits.byId[row.id] || null : null
               return (
                 <li className="vq-archive-row" key={sealed ? row.id : 'v' + row.version}>
                   <span className="vq-version-n vq-mono">v{row.version}</span>
@@ -1638,6 +1682,14 @@ export default function ProjectPage({
                     {sealed && pkg && packageDiskAlert(pkg) ? (
                       <span className="vq-archive-disk-alert" role="status">
                         {packageDiskAlert(pkg)}
+                      </span>
+                    ) : null}
+                    {rowAudit ? (
+                      <span
+                        className={'vq-archive-auditline' + (rowAudit.ok ? '' : ' is-bad')}
+                        title="定时任务每天验一遍；要现在验，展开清单点「体检整包」"
+                      >
+                        巡检 {stamp(audits.at)} · {packageAuditLine(rowAudit)}
                       </span>
                     ) : null}
                   </div>

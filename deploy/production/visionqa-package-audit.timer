@@ -1,0 +1,11 @@
+[Unit]
+Description=VisionQA sealed package audit (daily)
+
+[Timer]
+# 备份在 03:30 跑完再巡检：备份刚写完盘，正好验一遍封存包还在不在
+OnCalendar=*-*-* 04:30:00
+Persistent=true
+RandomizedDelaySec=600
+
+[Install]
+WantedBy=timers.target

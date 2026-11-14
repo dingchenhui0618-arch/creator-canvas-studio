@@ -1,0 +1,15 @@
+[Unit]
+Description=VisionQA sealed package audit (read-only CRC32 walk)
+After=visionqa.service local-fs.target
+
+[Service]
+Type=oneshot
+User=visionqa
+WorkingDirectory=/opt/visionqa
+Environment=DATA_DIR=/var/lib/visionqa
+# 和备份同一个 node：这台机器 /usr/bin/node 是旧版本，/usr/local/bin/node 才是服务的运行时
+ExecStart=/usr/local/bin/node /opt/visionqa/scripts/audit-packages.mjs
+# 巡检要读盘，别跟备份抢 IO；它不写业务数据，只写一份报告
+Nice=15
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

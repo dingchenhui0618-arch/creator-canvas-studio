@@ -51,6 +51,12 @@ fi
 # 重启只换进程、端口不断开，新连接排队等新进程接手，不再是 3–10 秒 502。
 # 幂等：已经开启时这里什么都不做；第一次会多停一次服务（让出端口给 socket 单元）。
 # 装不上不影响这次发布，只是这一版仍按普通端口监听（后台日志里能看到失败原因）。
+# 封存包巡检：每天验一遍盘上的包，坏了在作品页标出来（报告是只读结论，不修包）
+if [ -f "$APP_DIR/deploy/production/install-audit.sh" ]; then
+  chmod +x "$APP_DIR/deploy/production/install-audit.sh" 2>/dev/null || true
+  bash "$APP_DIR/deploy/production/install-audit.sh" > /tmp/vq-audit-install.log 2>&1 || echo "封存包巡检定时任务安装失败，详见 /tmp/vq-audit-install.log" >&2
+fi
+
 if [ -f "$APP_DIR/deploy/production/install-socket.sh" ]; then
   chmod +x "$APP_DIR/deploy/production/install-socket.sh" 2>/dev/null || true
   bash "$APP_DIR/deploy/production/install-socket.sh" > /tmp/vq-socket-install.log 2>&1 || echo "socket 激活安装失败，本版仍按端口监听，详见 /tmp/vq-socket-install.log" >&2

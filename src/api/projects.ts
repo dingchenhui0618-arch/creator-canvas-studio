@@ -9,6 +9,7 @@ import type {
   ProjectScript,
   PackageServerCheck,
   PackageAudit,
+  PackageAuditReport,
   ProjectShare,
   ProjectSpendDetail,
   ProjectVersionCompare,
@@ -55,6 +56,10 @@ export const listDeliveries = (offset = 0) =>
   request<DeliveryLedger>('/api/deliveries' + (offset > 0 ? '?offset=' + encodeURIComponent(offset) : ''))
 
 export const getProject = (id: string) => request<ProjectDetail>('/api/projects/' + id)
+
+// 上次巡检（v0.9.132）：定时任务每天验一遍封存包，这里只读它写下的那份结论
+export const projectPackageAudits = (id: string) =>
+  request<PackageAuditReport>('/api/projects/' + id + '/package-audits')
 
 // 花费明细（v0.9.66）：合计在作品详情里，点开「明细」才读这一份。
 // month 给 YYYY-MM 只看那个月；不给就是累计。
