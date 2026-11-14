@@ -327,6 +327,17 @@ export type ProjectScript = {
 }
 
 /**
+ * 某一版开新版时存下的脚本快照（v0.9.114）。
+ * 没有 timing：快照是当时的原文，不拿现在的模板重新对账。
+ */
+export type ProjectVersionScriptSnapshot = {
+  hook: string
+  structure: ScriptBeat[]
+  source: 'project' | 'template'
+  updatedAt: string
+}
+
+/**
  * 作品列表卡片上的分享状态：只够写一枚胶囊与一个次数。
  * 不带 token、不带记录键、不带每一轮明细——那些只在作品页的分享面板里。
  */
@@ -440,6 +451,11 @@ export type ProjectDetail = {
   versions: ProjectVersionView[]
   /** 按版本分组的评审计数：键是版本号，用于版本对照 */
   versionCounts: Record<string, ProjectReviews>
+  /**
+   * 每个版本相对上一版改了什么（v0.9.114）：键是版本号，值是一句人话。
+   * 缺这一项表示那一侧没有可比对的数据（画布被删 / 没存脚本快照），页面不硬写「没改」。
+   */
+  versionChanges?: Record<string, string>
   /** 这条作品的拍板记录（按时间倒序）；管当前这一版的那条在 decision 里 */
   decisions?: ProjectDecision[]
   decision?: ProjectDecision | null

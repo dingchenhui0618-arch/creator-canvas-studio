@@ -11,6 +11,8 @@
 import { describeTiming } from './speech.mjs'
 import { aiLabelFootText, aiLabelMarkdown } from './ai-label.mjs'
 import { DIMENSION_LABEL, boxText, normalizeBox } from './project-review-sheet.mjs'
+// 版本改了什么由 version-diff 一份实现：交付稿与作品页必须同一句话
+import { canvasDelta, canvasText, fingerprint, flat, scriptText } from './version-diff.mjs'
 // 状态与「某一版评过几次」读作品状态那一处：纸上写的状态与页面上那枚胶囊必须是同一句话
 import {
   VERDICT_TEXT as VERDICT_LABEL,
@@ -50,8 +52,6 @@ const cell = (value) =>
     .trim()
 
 // 列表行里的值：换行与外层缩进压成单空格，否则一句话就把下面几行顶出列表
-const flat = (value) => String(value ?? '').replace(/\s+/g, ' ').trim()
-
 const sec = (value) => {
   const amount = Number(value)
   return Number.isFinite(amount) && amount > 0 ? Math.round(amount * 10) / 10 + ' 秒' : '—'
@@ -297,87 +297,10 @@ function reviewSection(detail, review, tz) {
 // 脚本只有一份（作品级，copy-on-write），更早开的版本没有快照——这一点必须写进稿子，
 // 否则读者会以为「v1 的脚本就是现在这个样子」。
 
-// 节点指纹：复制版本时节点 id 沿用，靠 id 认「同一个节点改没改」，内容比的是配置文本
-function fingerprint(nodes) {
-  if (!Array.isArray(nodes)) return null
-  return nodes.map((node) => {
-    const text = String(node?.type || '') + ':' + JSON.stringify(node?.data?.config ?? {})
-    let hash = 2166136261
-    for (let i = 0; i < text.length; i += 1) {
-      hash ^= text.charCodeAt(i)
-      hash = Math.imul(hash, 16777619)
-    }
-    return { id: String(node?.id || ''), title: flat(node?.data?.title) || '未命名节点', hash: (hash >>> 0).toString(36) }
-  })
-}
-
-const names = (list, max = 3) => {
-  const shown = list.slice(0, max).join('、')
-  return list.length > max ? shown + ' 等 ' + list.length + ' 个' : shown
-}
-
 // 句子里的摘要与原因要短：纸上一行排不下三段，读者也只需要知道「大概说了什么」
 const shorten = (value, max = 90) => {
   const text = flat(value)
   return text.length > max ? text.slice(0, max - 1) + '…' : text
-}
-
-/** 两份节点指纹比出「多了 / 少了 / 改了」；缺一侧（画布被删）就返回 null。 */
-function canvasDelta(prev, next) {
-  if (!prev || !next) return null
-  const before = new Map(prev.map((node) => [node.id, node]))
-  const after = new Map(next.map((node) => [node.id, node]))
-  const added = []
-  const removed = []
-  const changed = []
-  for (const [id, node] of after) {
-    const old = before.get(id)
-    if (!old) added.push(node.title)
-    else if (old.hash !== node.hash) changed.push(node.title)
-  }
-  for (const [id, node] of before) if (!after.has(id)) removed.push(node.title)
-  return { added, removed, changed }
-}
-
-function canvasText(delta) {
-  if (!delta) return ''
-  const bits = []
-  if (delta.added.length) bits.push('多 ' + delta.added.length + ' 个（' + names(delta.added) + '）')
-  if (delta.removed.length) bits.push('少 ' + delta.removed.length + ' 个（' + names(delta.removed) + '）')
-  if (delta.changed.length) bits.push('改 ' + delta.changed.length + ' 个（' + names(delta.changed) + '）')
-  return bits.length ? bits.join('、') : '节点没动'
-}
-
-// 脚本按段名对：改名不算改口播，重名段落按出现顺序比词
-function scriptText(prev, next) {
-  if (!prev?.structure?.length || !next?.structure?.length) return ''
-  const group = (script) => {
-    const map = new Map()
-    for (const beat of script.structure) {
-      const name = flat(beat?.beat) || '未命名段落'
-      if (!map.has(name)) map.set(name, [])
-      map.get(name).push(flat(beat?.voiceover))
-    }
-    return map
-  }
-  const before = group(prev)
-  const after = group(next)
-  const added = [...after.keys()].filter((name) => !before.has(name))
-  const removed = [...before.keys()].filter((name) => !after.has(name))
-  let changed = 0
-  for (const [name, lines] of after) {
-    const old = before.get(name)
-    if (!old) continue
-    if (old.length !== lines.length || old.some((line, index) => line !== lines[index])) changed += 1
-  }
-  const hookChanged = flat(prev.hook) !== flat(next.hook)
-  const bits = []
-  if (added.length) bits.push('多 ' + added.length + ' 段（' + names(added) + '）')
-  if (removed.length) bits.push('少 ' + removed.length + ' 段（' + names(removed) + '）')
-  if (changed) bits.push(changed + ' 段口播改过')
-  if (!bits.length && !hookChanged) return '跟上一版一样'
-  bits.push(hookChanged ? '钩子换过' : '钩子没变')
-  return bits.join('、')
 }
 
 /** 评审与运行按版本分组：版本 0 是版本划分之前记的，折进 v1（与页面同一套规则）。 */
@@ -442,7 +365,7 @@ function versionSection(detail, tz) {
   if (previous) {
     const canvas = canvasText(canvasDelta(fingerprint(previous.nodeList), fingerprint(current.nodeList)))
     const script = scriptText(previous.script, current.script)
-    const bits = [canvas ? '画布' + canvas : '', script ? '脚本' + script : ''].filter(Boolean)
+    const bits = [canvas ? '画布' + canvas : '', script ? '脚本' + (/^\d/.test(script) ? '：' : '') + script : ''].filter(Boolean)
     if (bits.length) out.push('', 'v' + current.n + ' 比 v' + previous.n + '：' + bits.join('；') + '。')
   }
 

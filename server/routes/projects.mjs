@@ -14,6 +14,7 @@ import { projectTemplateReply, projectTemplateSpec } from '../project-template.m
 import { templateOrigin } from '../project-source.mjs'
 import { createFlow, getFlow, hasRunGraph, listRunsByFlows } from '../flows.mjs'
 import { normalizeProjectScript, scriptPace, scriptView } from '../project-script.mjs'
+import { versionChangesOf } from '../version-diff.mjs'
 import { buildReplicateDraft } from '../script-draft.mjs'
 import { syncCanvasScript } from '../project-canvas-sync.mjs'
 import {
@@ -57,6 +58,8 @@ const ITEM = /^\/api\/projects\/([\w-]+)$/
 // 作品的花费明细（v0.9.66）：合计在详情里，明细单独取，点开才读
 const SPEND = /^\/api\/projects\/([\w-]+)\/spend$/
 const VERSIONS = /^\/api\/projects\/([\w-]+)\/versions$/
+// 某一版的脚本快照（v0.9.114）：开新版时存下的原文，只读、只给这一版
+const VERSION_SCRIPT = /^\/api\/projects\/([\w-]+)\/versions\/(\d+)\/script$/
 const SCRIPT = /^\/api\/projects\/([\w-]+)\/script$/
 const CANVAS = /^\/api\/projects\/([\w-]+)\/canvas$/
 const SHARE = /^\/api\/projects\/([\w-]+)\/share$/
@@ -123,22 +126,38 @@ async function projectDetailView(project, user, { snapshots = false } = {}) {
   ])
   // 归档的旧版本只存了 flowId：这里顺手确认画布还在，已删掉的版本按钮要禁用而不是点开报错。
   // 页面只要「这一版几段脚本」；交付稿要跟上一版对比，才把快照与节点一起带上（snapshots）。
-  const versions = await Promise.all(project.versions.map(async (entry) => {
+  // 「省了几版」那一层始终留在服务端：节点数组只用来算版本行的一句话，不塞进响应。
+  const versionRecords = await Promise.all(project.versions.map(async (entry) => {
     const archived = entry.flowId ? await getFlow(entry.flowId, user) : null
     const snapshot = entry.script || null
     return {
       n: entry.n,
-      flowId: entry.flowId,
-      name: entry.name,
-      archivedAt: entry.archivedAt,
-      available: Boolean(archived),
-      nodes: Array.isArray(archived?.nodes) ? archived.nodes.length : 0,
-      // 开新版时存下的脚本快照：这里只给段数，正文只在导出时带
-      scriptBeats: Array.isArray(snapshot?.structure) ? snapshot.structure.length : 0,
-      scriptSource: snapshot?.source || '',
-      ...(snapshots ? { scriptSnapshot: snapshot, nodeList: archived?.nodes || null } : {}),
+      nodes: archived?.nodes || null,
+      script: snapshot,
+      view: {
+        n: entry.n,
+        flowId: entry.flowId,
+        name: entry.name,
+        archivedAt: entry.archivedAt,
+        available: Boolean(archived),
+        nodes: Array.isArray(archived?.nodes) ? archived.nodes.length : 0,
+        // 开新版时存下的脚本快照：这里只给段数，正文只在导出时带
+        scriptBeats: Array.isArray(snapshot?.structure) ? snapshot.structure.length : 0,
+        scriptSource: snapshot?.source || '',
+        ...(snapshots ? { scriptSnapshot: snapshot, nodeList: archived?.nodes || null } : {}),
+      },
     }
   }))
+  const versions = versionRecords.map((item) => item.view)
+  // 版本行上的「比上一版改了什么」：画布按节点配置、脚本按快照，口径与交付稿同一份实现。
+  // 当前版也要算（v3 相对 v2 改了什么），所以把当前画布与脚本一起放进来。
+  const currentScript = scriptView(project, template)
+  const versionChanges = versionChangesOf([
+    ...versionRecords.map((item) => ({ n: item.n, nodes: item.nodes, script: item.script })),
+    ...(project.flowId && project.version > 0
+      ? [{ n: project.version, nodes: flow?.nodes || null, script: currentScript }]
+      : []),
+  ])
   const versionOfFlow = new Map()
   for (const entry of project.versions) versionOfFlow.set(entry.flowId, entry.n)
   if (project.flowId) versionOfFlow.set(project.flowId, project.version)
@@ -218,7 +237,7 @@ async function projectDetailView(project, user, { snapshots = false } = {}) {
     // 节点本身只在导出时带上：页面上十几版节点一起传过去没有用，还拖慢首屏
     flow: snapshots && flowView ? { ...flowView, nodeList: flow.nodes } : flowView,
     // 作品页的脚本：自己的版本优先（source: project），否则跟随模板
-    script: scriptView(project, template),
+    script: currentScript,
     reviews: reviews.items,
     // 拍板记录按时间倒序（纸要按版次各印各的，胶囊只用其中管当前这一版的那条）
     decisions: decisionLog,
@@ -227,6 +246,8 @@ async function projectDetailView(project, user, { snapshots = false } = {}) {
     ack,
     versions,
     versionCounts,
+    // 版本行的一句话（v0.9.114）：键是版次，值写「比上一版改了什么」；比不了就没有这一项
+    versionChanges,
     runs,
     runTotal: runData.total,
     runCounts,
@@ -703,7 +724,7 @@ export function createProjectsRouter() {
           nodes: current.nodes,
           edges: current.edges,
         }, user)
-        // 归档这一版的脚本：脚本只有一份（作品级），不留快照，历史版本当时说了什么就再也查不到了
+        // 归档这一版的脚本：脚本只有一份（作品级），开版时存一份快照，历史版本当时说了什么还能查
         const template = project.templateId ? await getTemplate(project.templateId, user) : null
         const updated = await archiveProjectVersion(project.id, {
           flowId: copy.id,
@@ -715,6 +736,51 @@ export function createProjectsRouter() {
           return true
         }
         sendJson(res, 201, { ok: true, project: updated, flow: flowBrief(copy) })
+        return true
+      }
+
+      // 某一版的脚本快照（v0.9.114）：只读，不扣费、不改任何东西。
+      // 当前版直接读作品现在的脚本；归档版只读开新版时存下的那一份，不拿现在的脚本冒充。
+      const versionScriptPath = pathname.match(VERSION_SCRIPT)
+      if (versionScriptPath && req.method === 'GET') {
+        const project = await getProject(versionScriptPath[1], user)
+        if (!project) {
+          sendJson(res, 404, { error: '作品不存在或已被删除' })
+          return true
+        }
+        const n = Number(versionScriptPath[2])
+        if (!Number.isInteger(n) || n <= 0) {
+          sendJson(res, 400, { error: '版本号不对：必须是 1 起的整数' })
+          return true
+        }
+        if (n === project.version) {
+          const template = project.templateId ? await getTemplate(project.templateId, user) : null
+          const script = scriptView(project, template)
+          sendJson(res, 200, {
+            ok: true,
+            n,
+            current: true,
+            name: '',
+            archivedAt: '',
+            script,
+            reason: script ? '' : '这一版还没写脚本',
+          })
+          return true
+        }
+        const archived = project.versions.find((entry) => entry.n === n)
+        if (!archived) {
+          sendJson(res, 404, { error: '这条作品没有 v' + n })
+          return true
+        }
+        sendJson(res, 200, {
+          ok: true,
+          n,
+          current: false,
+          name: archived.name,
+          archivedAt: archived.archivedAt,
+          script: archived.script || null,
+          reason: archived.script ? '' : '这一版开版时还没有脚本快照：当时的口播找不回来了',
+        })
         return true
       }
 

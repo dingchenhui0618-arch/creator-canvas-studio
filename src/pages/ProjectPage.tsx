@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight, BookmarkPlus, Bot, Check, ChevronDown, Clapperboard, CopyPlus, Download, FileText, Link2, Package, Pencil, Plus, Printer, RefreshCw, RotateCcw, ScanEye, Share2, Trash2, Workflow, X } from 'lucide-react'
 import PageHead from '../components/PageHead'
 import ProjectStatusPill from '../components/ProjectStatus'
+import { VersionScriptModal } from '../components/VersionScriptModal'
 import {
   deleteProject,
   deliverablePrintUrl,
@@ -10,6 +11,7 @@ import {
   downloadProjectDeliverableZip,
   enableProjectShare,
   getProject,
+  getProjectVersionScript,
   openProjectCanvas,
   projectSpend,
   resetProjectScript,
@@ -32,6 +34,7 @@ import {
   type ProjectDelivery,
   type ProjectDetail,
   type ProjectSpendDetail,
+  type ProjectVersionScriptSnapshot,
 } from '../domain/project'
 import { ackReview, decideReview, clearReviewDecision, unackReview } from '../api/review'
 import {
@@ -134,6 +137,17 @@ export default function ProjectPage({
   const [shareOpen, setShareOpen] = useState(false)
   const [shareBusy, setShareBusy] = useState<'' | 'enable' | 'disable' | 'copy'>('')
   const [shareCopied, setShareCopied] = useState(false)
+  // 版本脚本快照（v0.9.114）：点旧版的「N 段脚本」才读，打开页面时不预取
+  const [versionScript, setVersionScript] = useState<{
+    open: boolean
+    n: number
+    name: string
+    change: string
+    busy: boolean
+    error: string
+    script: ProjectVersionScriptSnapshot | null
+    reason: string
+  }>({ open: false, n: 0, name: '', change: '', busy: false, error: '', script: null, reason: '' })
   // 交付菜单：五种产物（交付稿 / 打印稿 / 现场页 / 评审对照 / 交付包）收在一个入口里，
   // 页头就不会排到七个按钮；点空白处或 Esc 收起（和账号菜单同一套习惯）
   const [deliverOpen, setDeliverOpen] = useState(false)
@@ -245,6 +259,21 @@ export default function ProjectPage({
     return () => document.removeEventListener('keydown', onKey)
   }, [shareOpen])
 
+  // 版本脚本弹窗：Esc 关闭；打开时背景不滚动（和分享弹窗同一套）
+  useEffect(() => {
+    if (!versionScript.open) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setVersionScript((prev) => ({ ...prev, open: false }))
+    }
+    document.addEventListener('keydown', onKey)
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = previous
+    }
+  }, [versionScript.open])
+
   // 作品第一次开画布就是这里：服务端用这条作品**现在的脚本**生成输入 + 复刻两个节点，
   // 建完立刻绑上作品（v1），再打开画布。脚本改过也不怕：画布拿到的就是新词。
   const openCanvas = useCallback(async () => {
@@ -267,6 +296,31 @@ export default function ProjectPage({
 
   // 只读分享：开 / 停 / 复制。链接是这条作品的地址，不是账号的，所以停止只影响这一条。
   const shareLink = data?.share ? window.location.origin + '/#/share/project/' + data.share.token : ''
+
+  // 旧版脚本：点版本行上的段数才读。不动画布、不扣积分；读失败也把弹窗留着，写清原因。
+  const openVersionScript = async (row: { n: number; name: string }) => {
+    if (!data) return
+    setVersionScript({
+      open: true,
+      n: row.n,
+      name: row.name,
+      change: data.versionChanges?.[row.n] || '',
+      busy: true,
+      error: '',
+      script: null,
+      reason: '',
+    })
+    try {
+      const result = await getProjectVersionScript(data.project.id, row.n)
+      setVersionScript((prev) => prev.n === row.n
+        ? { ...prev, busy: false, script: result.script, reason: result.reason || '' }
+        : prev)
+    } catch (caught) {
+      setVersionScript((prev) => prev.n === row.n
+        ? { ...prev, busy: false, error: caught instanceof Error ? caught.message : '这一版的脚本没读出来' }
+        : prev)
+    }
+  }
 
   const openShare = () => {
     setShareCopied(false)
@@ -728,6 +782,8 @@ export default function ProjectPage({
     },
     ...data.versions.map((item) => ({ ...item, current: false })),
   ].sort((a, b) => b.n - a.n)
+  // 每个版本相对上一版改了什么：服务端按同一份 diff 实现算好，页面只负责排成一句
+  const versionChanges = data.versionChanges || {}
 
   return (
     <div className="page vq-page vq-project-page">
@@ -1018,7 +1074,7 @@ export default function ProjectPage({
               <span className="vq-mono">{project.version} 版</span>
             </h2>
             <p className="vq-project-versions-note">
-              开新版时会把这一版的脚本存一份快照，再改只影响新版；旧版本的画布还能打开看，但改它不会写回那一版。
+              开新版时会把这一版的脚本存一份快照，再改只影响新版；每一行写清「比上一版改了什么」，点脚本段数能翻开那一版的原文。旧版本的画布还能打开看，但改它不会写回那一版。
             </p>
             <button
               type="button"
@@ -1051,7 +1107,23 @@ export default function ProjectPage({
                       <span className="vq-mono">{row.current ? '最新' : '归档 ' + stamp(row.archivedAt)}</span>
                       <span>{row.nodes} 节点</span>
                       {/* 没存快照的旧版本写清楚：不能让人以为「那一版就是现在的脚本」 */}
-                      <span>{row.scriptBeats ? row.scriptBeats + ' 段脚本' : row.current ? '没写脚本' : '脚本没存快照'}</span>
+                      {row.scriptBeats ? (
+                        row.current ? (
+                          <span>{row.scriptBeats} 段脚本</span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="vq-version-script"
+                            onClick={() => void openVersionScript(row)}
+                            title={'读 v' + row.n + ' 开新版时存下的脚本原文'}
+                          >
+                            {row.scriptBeats} 段脚本
+                            <ArrowRight size={11} />
+                          </button>
+                        )
+                      ) : (
+                        <span>{row.current ? '没写脚本' : '脚本没存快照'}</span>
+                      )}
                       <span>{counter.count ? counter.count + ' 次评审' : '未评审'}</span>
                       {issueText ? (
                         <span
@@ -1099,6 +1171,15 @@ export default function ProjectPage({
                         </>
                       ) : null}
                     </span>
+                    {versionChanges[row.n] ? (
+                      <p
+                        className="vq-version-change"
+                        title="节点只比类型与配置，移动位置或改标题不算；脚本按段名比口播，开新版时存的快照才算"
+                      >
+                        <span className="vq-mono">比 v{row.n - 1}</span>
+                        {versionChanges[row.n]}
+                      </p>
+                    ) : null}
                     {rowReviews.length ? (
                       <ul className="vq-version-reviews">
                         {rowReviews.slice(0, 3).map((review) => (
@@ -2173,6 +2254,8 @@ export default function ProjectPage({
           </div>
         </div>
       ) : null}
+
+      <VersionScriptModal state={versionScript} onClose={() => setVersionScript((prev) => ({ ...prev, open: false }))} />
     </div>
   )
 }

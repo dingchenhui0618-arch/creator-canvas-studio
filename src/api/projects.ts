@@ -9,6 +9,7 @@ import type {
   ProjectScript,
   ProjectShare,
   ProjectSpendDetail,
+  ProjectVersionScriptSnapshot,
   ProjectSummary,
   ShareSummaryRow,
   SharedProject,
@@ -77,6 +78,20 @@ export const adoptProjectCanvas = (id: string, flowId: string) =>
 
 export const updateProject = (id: string, payload: { title?: string; flowId?: string; status?: 'active' | 'done' }) =>
   request<{ ok: boolean; project: Project }>('/api/projects/' + id, { method: 'PATCH', body: JSON.stringify(payload) })
+
+// 某一版的脚本快照（v0.9.114）：只读。当前版读现在的脚本，归档版读开新版时存下的原文。
+export type ProjectVersionScript = {
+  ok: boolean
+  n: number
+  current: boolean
+  name: string
+  archivedAt: string
+  script: ProjectVersionScriptSnapshot | null
+  reason: string
+}
+
+export const getProjectVersionScript = (id: string, n: number) =>
+  request<ProjectVersionScript>('/api/projects/' + id + '/versions/' + n + '/script')
 
 // 开一版新的：服务端复制当前画布，旧画布归档成 vN
 export const startProjectVersion = (id: string) =>
