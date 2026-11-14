@@ -216,3 +216,12 @@ test('后台那一屏把两层口径分开写：整机的排队位 + 本进程�
   waitq.leaveWaitQueue('canvas_gen', 'r-1')
   assert.equal(water.waterlineReport().heavy.queue.waiting, 0)
 })
+test('同一毫秒里连着登记的 6 张票：名次仍按登记顺序，不退化成按哈希排', () => {
+  const dir = freshDir('vq-wq-burst-')
+  const rows = []
+  for (let i = 0; i < 6; i += 1) rows.push(waitq.joinWaitQueue('canvas_gen', 'burst-' + i, { maxWaiting: 8 }))
+  assert.deepEqual(rows.map((row) => row.position), [1, 2, 3, 4, 5, 6])
+  assert.equal(waitersOf(dir).length, 6)
+  const snapshot = waitq.waitQueueSnapshot('canvas_gen')
+  assert.deepEqual(snapshot.queue.map((row) => row.position), [1, 2, 3, 4, 5, 6])
+})

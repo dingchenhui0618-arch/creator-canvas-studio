@@ -34,6 +34,11 @@ const DEFAULT_STALE_MS = 4000
 // 共享目录用不了时的那份（v0.9.83 的行为）：只在本进程内排队
 const localWaiters = new Map()
 let localSeq = 0
+// 共享目录里的入场时间是毫秒，同一毫秒里连着登记两张票时「谁先来」就丢了，
+// 名次会退化成按哈希排：先登记的反而可能排第二（v0.9.93 的 CI 上偶发过一次）。
+// 本进程内用严格递增的时间戳，同毫秒的第二张记成 +1ms；跨进程恰好撞同一毫秒时
+// 谁先谁后本来就不确定（两个进程同时到），按 pid/哈希并列处理。
+let lastSharedEnteredAt = 0
 
 const stats = {
   joined: 0,
@@ -223,7 +228,8 @@ export function joinWaitQueue(kind, ticket, options = {}) {
     if (maxWaiting > 0 && list.length >= maxWaiting) return { ok: false, full: true, waiting: list.length, dir: base }
     const target = ensureWaitersDir(base)
     if (!target) return LEASE_LOCK_MISS
-    const enteredAt = Date.now()
+    const enteredAt = Math.max(Date.now(), lastSharedEnteredAt + 1)
+    lastSharedEnteredAt = enteredAt
     const name = hash + '-' + process.pid + '-' + enteredAt.toString(36) + '.wait'
     const file = path.join(target, name)
     const body = JSON.stringify({ kind, pid: process.pid, enteredAt, host: os.hostname(), v: 1 })
@@ -378,6 +384,7 @@ export function waitQueueStatus() {
 export function resetWaitQueueState() {
   localWaiters.clear()
   localSeq = 0
+  lastSharedEnteredAt = 0
   for (const key of Object.keys(stats)) {
     if (key === 'lastError') stats[key] = ''
     else stats[key] = 0
