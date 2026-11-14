@@ -98,4 +98,4 @@ v0.9.96 运行开始排队时，页面会写「排队 6s」；v0.9.98 起占位�
 
 ## 回退
 
-`bash /opt/visionqa/ops/rollback.sh --to 2` → v0.9.99。无 schema、无接口破坏：`queuedMs` 是新增可选字段，旧前端忽略；`runFlow` 读占位记录只多一次内存缓存读取，旧版本不认识这个字段也不会受影响。
+`bash /opt/visionqa/ops/rollback.sh --to 1` → v0.9.99（`--to 2` 再往前一版是 v0.9.98）。无 schema、无接口破坏：`queuedMs` 是新增可选字段，旧前端忽略；`runFlow` 读占位记录只多一次内存缓存读取，旧版本不认识这个字段也不会受影响。
