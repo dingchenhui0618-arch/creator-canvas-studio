@@ -447,6 +447,51 @@ export function packageDiskAlert(pkg: ProjectDeliveryPackage | null | undefined)
 }
 
 /**
+ * 封存包里的一个条目（v0.9.129）：名字、字节数与类别都来自包本身（读的是盘上那份的中央目录），
+ * 不是把档案里记的清单再抄一遍。
+ */
+export type PackageEntryKind = 'image' | 'text' | 'html' | 'other'
+
+export type PackageEntry = {
+  name: string
+  bytes: number
+  kind: PackageEntryKind
+}
+
+/** 档案记的清单 vs 包里真有的条目：只比名字，差在哪就说哪 */
+export type PackageManifestDiff = {
+  recorded: number
+  archived: number
+  missing: string[]
+  extra: string[]
+}
+
+export type PackageContents = {
+  ok: boolean
+  /** ok 目录读得出来；unreadable 包被截断或尾部被改过 */
+  state: 'ok' | 'unreadable'
+  readAt?: string
+  error?: string
+  entries?: PackageEntry[]
+  /** 老包没记清单时是 null：那时不比较，也不把整包说成「多出来的」 */
+  manifest?: PackageManifestDiff | null
+}
+
+/**
+ * 包内目录和档案对不上时的那句话（v0.9.129）：只在真差的时候说，两边一致时是空串。
+ * 名字最多列三个，剩下的只报个数——界面上这一行不是给人逐个核对的。
+ */
+export function packageManifestNote(diff: PackageManifestDiff | null | undefined): string {
+  if (!diff || !diff.recorded) return ''
+  const list = (names: string[]) =>
+    names.length > 3 ? names.slice(0, 3).join('、') + ' 等 ' + names.length + ' 个' : names.join('、')
+  const parts: string[] = []
+  if (diff.missing.length) parts.push('包里少了 ' + list(diff.missing))
+  if (diff.extra.length) parts.push('包里多了 ' + list(diff.extra))
+  return parts.join('；')
+}
+
+/**
  * 浏览器里算一段字节的 SHA-256。Web Crypto 只在 https / localhost 下提供，
  * 拿不到就抛人话，让界面说清「换个地址打开」，而不是静默失败。
  */

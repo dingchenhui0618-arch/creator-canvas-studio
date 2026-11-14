@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowLeft, ArrowRight, BookmarkPlus, Bot, Check, ChevronDown, Clapperboard, Copy, CopyPlus, Download, FileCheck2, FileText, GitCompare, Link2, Package, Pencil, Plus, Printer, RefreshCw, RotateCcw, ScanEye, Share2, Trash2, Upload, Workflow, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, BookmarkPlus, Bot, Check, ChevronDown, Clapperboard, Copy, CopyPlus, Download, ExternalLink, FileCheck2, FileText, GitCompare, Link2, Package, Pencil, Plus, Printer, RefreshCw, RotateCcw, ScanEye, Share2, Trash2, Upload, Workflow, X } from 'lucide-react'
 import PageHead from '../components/PageHead'
 import ProjectStatusPill from '../components/ProjectStatus'
 import { VersionScriptModal } from '../components/VersionScriptModal'
@@ -8,6 +8,8 @@ import {
   checkDeliveryPackage,
   deleteProject,
   deliverablePrintUrl,
+  deliveryPackageContents,
+  deliveryPackageEntryUrl,
   deliveryPackageUrl,
   disableProjectShare,
   downloadProjectDeliverable,
@@ -36,11 +38,15 @@ import {
   deliveryOf,
   packageBytesLabel,
   packageDiskAlert,
+  packageManifestNote,
   packageShortSha,
   projectStep,
   serverPackageText,
   sha256HexOfBytes,
   type PackageCheck,
+  type PackageContents,
+  type PackageEntry,
+  type PackageEntryKind,
   type PackageServerCheck,
   reviewsForVersion,
   runsForVersion,
@@ -187,6 +193,24 @@ export default function ProjectPage({
     result: PackageServerCheck | null
     error: string
   }>({ version: 0, busy: false, result: null, error: '' })
+  // 包里那份（v0.9.129）：目录从盘上那份封存包读，档案里记的清单只用来对照
+  const [contents, setContents] = useState<{
+    version: number
+    busy: boolean
+    result: PackageContents | null
+    error: string
+  }>({ version: 0, busy: false, result: null, error: '' })
+  // 包里一条内容的预览：图片与页面交给浏览器按地址取（页面进沙箱），文字自己读回来看
+  const [preview, setPreview] = useState<{
+    version: number
+    deliveryId: string
+    name: string
+    kind: PackageEntryKind
+    status: 'idle' | 'loading' | 'ready' | 'error'
+    text: string
+    note: string
+    error: string
+  }>({ version: 0, deliveryId: '', name: '', kind: 'other', status: 'idle', text: '', note: '', error: '' })
   // 人工复核：一句话备注，加上正在提交的那一档（拍通过 / 拍不通过 / 撤销）
   // null 表示「跟着这条拍板的备注走」：改判或撤销后不用手动清空，渲染时现算
   const [decisionNote, setDecisionNote] = useState<string | null>(null)
@@ -630,6 +654,86 @@ export default function ProjectPage({
         busy: false,
         result: null,
         error: caught instanceof Error ? caught.message : '服务器上那一份没查成',
+      })
+    }
+  }
+
+  // 包里那份（v0.9.129）：清单改成从盘上那份的中央目录读，档案里记的那份只做对照。
+  // 只读接口：不缓存、不解压到磁盘；盘上没了就退回档案里记的清单，不拿今天的样子补。
+  const loadPackageContents = async (version: number, deliveryId: string) => {
+    if (!data) return
+    setContents({ version, busy: true, result: null, error: '' })
+    try {
+      if (!deliveryId) throw new Error('这一条交付没有编号，读不了包里的目录')
+      const result = await deliveryPackageContents(data.project.id, deliveryId)
+      setContents({ version, busy: false, result, error: '' })
+    } catch (caught) {
+      setContents({
+        version,
+        busy: false,
+        result: null,
+        error: caught instanceof Error ? caught.message : '包里的目录没读出来',
+      })
+    }
+  }
+
+  // 「清单」按钮：同一时间只开一行；换一行、收起时都把上一行的预览一起收掉
+  const toggleArchive = (version: number, deliveryId: string) => {
+    const next = archiveOpen === version ? 0 : version
+    setArchiveOpen(next)
+    setPreview({ version: 0, deliveryId: '', name: '', kind: 'other', status: 'idle', text: '', note: '', error: '' })
+    if (!next) return
+    if (contents.version === version && (contents.busy || contents.result || contents.error)) return
+    void loadPackageContents(version, deliveryId)
+  }
+
+  const closePreview = () => {
+    setPreview({ version: 0, deliveryId: '', name: '', kind: 'other', status: 'idle', text: '', note: '', error: '' })
+  }
+
+  // 单条内容：图片与页面按地址取（页面进沙箱 iframe，脚本跑不起来），文字读回来给 <pre>。
+  // 服务端解开每一条都会先验 CRC32；对不上回 409，这里照实说，不把那堆字节当内容。
+  const openPackageEntry = async (version: number, deliveryId: string, entry: PackageEntry) => {
+    if (!data) return
+    if (preview.version === version && preview.name === entry.name) {
+      closePreview()
+      return
+    }
+    if (entry.kind !== 'text') {
+      setPreview({ version, deliveryId, name: entry.name, kind: entry.kind, status: 'ready', text: '', note: '', error: '' })
+      return
+    }
+    setPreview({ version, deliveryId, name: entry.name, kind: 'text', status: 'loading', text: '', note: '', error: '' })
+    try {
+      const response = await fetch(deliveryPackageEntryUrl(data.project.id, deliveryId, entry.name), {
+        credentials: 'same-origin',
+      })
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { error?: string } | null
+        throw new Error(body?.error || '这一条读不出来')
+      }
+      const raw = await response.text()
+      const limit = 20000
+      setPreview({
+        version,
+        deliveryId,
+        name: entry.name,
+        kind: 'text',
+        status: 'ready',
+        text: raw.slice(0, limit),
+        note: raw.length > limit ? '只显示前 2 万字符，全文下载包来解压' : '',
+        error: '',
+      })
+    } catch (caught) {
+      setPreview({
+        version,
+        deliveryId,
+        name: entry.name,
+        kind: 'text',
+        status: 'error',
+        text: '',
+        note: '',
+        error: caught instanceof Error ? caught.message : '这一条没读出来',
       })
     }
   }
@@ -1458,7 +1562,7 @@ export default function ProjectPage({
               </span>
             </h2>
             <p className="vq-project-archive-note">
-              标记交付时封存的那一份，之后改模板、改脚本、开新版都不会变。手里那份拖进「核对」在本机算，服务器上那份点「查一遍哈希」在服务端算，两头都对上才算数；包只认登录态，不走公开分享。
+              标记交付时封存的那一份，之后改模板、改脚本、开新版都不会变。手里那份拖进「核对」在本机算，服务器上那份点「查一遍哈希」在服务端算，两头都对上才算数；包里那份不用解压，点清单里的文件名就能看。包只认登录态，不走公开分享。
             </p>
           </div>
           <ul className="vq-archive-list">
@@ -1467,6 +1571,8 @@ export default function ProjectPage({
               const sealed = Boolean(row.id && pkg)
               const files = sealed && pkg?.files ? pkg.files : []
               const open = sealed && archiveOpen === row.version
+              // 包里那份（v0.9.129）：档案记的清单和包内目录对不上时的那句话；对得上时是空串
+              const manifestNote = open && contents.version === row.version ? packageManifestNote(contents.result?.manifest) : ''
               return (
                 <li className="vq-archive-row" key={sealed ? row.id : 'v' + row.version}>
                   <span className="vq-version-n vq-mono">v{row.version}</span>
@@ -1510,10 +1616,10 @@ export default function ProjectPage({
                           type="button"
                           className="vq-button vq-button--quiet vq-button--sm"
                           aria-expanded={open}
-                          onClick={() => setArchiveOpen(open ? 0 : row.version)}
-                          title={open ? '收起包内清单' : '看看这个包里有什么'}
+                          onClick={() => toggleArchive(row.version, row.id || '')}
+                          title={open ? '收起包内清单' : '读盘上那份的目录：里面有什么、点开就能看'}
                         >
-                          {open ? '收起' : '清单 ' + pkg.fileCount}
+                          {open ? '收起' : '清单 ' + (pkg.fileCount || files.length)}
                         </button>
                       ) : null}
                       <button
@@ -1687,21 +1793,140 @@ export default function ProjectPage({
                     </div>
                   ) : null}
                   {open && pkg ? (
-                    <>
-                      <ul className="vq-archive-files">
-                        {files.map((file) => (
-                          <li key={file.name}>
-                            <span title={file.name}>{file.name}</span>
-                            <span className="vq-mono">{packageBytesLabel(file.bytes)}</span>
-                          </li>
-                        ))}
-                      </ul>
-                      {pkg.fileCount && pkg.fileCount > files.length ? (
-                        <p className="vq-archive-more vq-mono">
-                          还有 {pkg.fileCount - files.length} 个文件没列，包里都在
-                        </p>
+                    <div className="vq-archive-contents">
+                      {contents.version === row.version && contents.busy ? (
+                        <p className="vq-archive-contents-note">正在读盘上那份的目录…</p>
                       ) : null}
-                    </>
+                      {contents.version === row.version && contents.error ? (
+                        <>
+                          <p className="vq-archive-contents-note is-bad">{contents.error}</p>
+                          <p className="vq-archive-contents-note">盘上那份读不到，下面是档案里记的清单；点不开预览，下载下来看。</p>
+                          <ul className="vq-archive-files">
+                            {files.map((file) => (
+                              <li key={file.name}>
+                                <span title={file.name}>{file.name}</span>
+                                <span className="vq-mono">{packageBytesLabel(file.bytes)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                          {pkg.fileCount && pkg.fileCount > files.length ? (
+                            <p className="vq-archive-more vq-mono">
+                              还有 {pkg.fileCount - files.length} 个文件没列，包里都在
+                            </p>
+                          ) : null}
+                        </>
+                      ) : null}
+                      {contents.version === row.version && contents.result && !contents.result.ok ? (
+                        <>
+                          <p className="vq-archive-contents-note is-bad">{contents.result.error || '包里的目录读不出来'}</p>
+                          <p className="vq-archive-contents-note">下面是档案里记的清单；点不开预览，下载下来看。</p>
+                          <ul className="vq-archive-files">
+                            {files.map((file) => (
+                              <li key={file.name}>
+                                <span title={file.name}>{file.name}</span>
+                                <span className="vq-mono">{packageBytesLabel(file.bytes)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                          {pkg.fileCount && pkg.fileCount > files.length ? (
+                            <p className="vq-archive-more vq-mono">
+                              还有 {pkg.fileCount - files.length} 个文件没列，包里都在
+                            </p>
+                          ) : null}
+                        </>
+                      ) : null}
+                      {contents.version === row.version && contents.result?.ok && contents.result.entries ? (
+                        <>
+                          <p className="vq-archive-contents-note">
+                            目录是从盘上那份读出来的：{contents.result.entries.length} 个文件
+                            {contents.result.manifest ? '，档案记了 ' + contents.result.manifest.recorded + ' 个' : ''}
+                            {contents.result.entries.length ? '；点一条就在这儿看，不用解压。' : '。'}
+                          </p>
+                          {manifestNote ? <p className="vq-archive-contents-note is-bad">{manifestNote}</p> : null}
+                          {contents.result.entries.length ? (
+                            <ul className="vq-archive-entries">
+                              {contents.result.entries.map((entry) => (
+                                <li key={entry.name}>
+                                  <button
+                                    type="button"
+                                    className={
+                                      'vq-archive-entry' +
+                                      (preview.version === row.version && preview.name === entry.name ? ' is-open' : '')
+                                    }
+                                    aria-expanded={preview.version === row.version && preview.name === entry.name}
+                                    onClick={() => void openPackageEntry(row.version, row.id || '', entry)}
+                                    title={entry.kind === 'other' ? '这种文件不能在这里看，下载包来解压' : '点开看包里这一份'}
+                                  >
+                                    <span>{entry.name}</span>
+                                    <span className="vq-mono">{packageBytesLabel(entry.bytes)}</span>
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : null}
+                          {preview.version === row.version && preview.status !== 'idle' ? (
+                            <div className="vq-archive-preview">
+                              <div className="vq-archive-preview-head">
+                                <strong>{preview.name}</strong>
+                                <div className="vq-archive-preview-actions">
+                                  {preview.kind === 'html' ? (
+                                    <a
+                                      className="vq-button vq-button--quiet vq-button--sm"
+                                      href={deliveryPackageEntryUrl(project.id, preview.deliveryId, preview.name)}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      title="在新标签里按原样打开这份页面（还是包里那一份）"
+                                    >
+                                      原样打开
+                                      <ExternalLink size={12} />
+                                    </a>
+                                  ) : null}
+                                  <button type="button" className="vq-button vq-button--quiet vq-button--sm" onClick={closePreview}>
+                                    收起预览
+                                  </button>
+                                </div>
+                              </div>
+                              {preview.status === 'loading' ? <p className="vq-archive-preview-note">正在读…</p> : null}
+                              {preview.status === 'error' ? (
+                                <p className="vq-archive-preview-note is-bad">{preview.error}</p>
+                              ) : null}
+                              {preview.status === 'ready' && preview.kind === 'image' ? (
+                                <img
+                                  src={deliveryPackageEntryUrl(project.id, preview.deliveryId, preview.name)}
+                                  alt={preview.name}
+                                  onError={() =>
+                                    setPreview((current) => ({
+                                      ...current,
+                                      status: 'error',
+                                      error: '这一张读不出来：包里这一块可能是坏的',
+                                    }))
+                                  }
+                                />
+                              ) : null}
+                              {preview.status === 'ready' && preview.kind === 'html' ? (
+                                // allow-same-origin 只为了让页面里的相对帧图按同源取、CSP 的 'self' 生效；
+                                // 没有 allow-scripts，页面里的脚本仍然跑不起来
+                                <iframe
+                                  title={preview.name}
+                                  sandbox="allow-same-origin"
+                                  loading="lazy"
+                                  src={deliveryPackageEntryUrl(project.id, preview.deliveryId, preview.name)}
+                                />
+                              ) : null}
+                              {preview.status === 'ready' && preview.kind === 'text' ? (
+                                <>
+                                  <pre>{preview.text}</pre>
+                                  {preview.note ? <p className="vq-archive-preview-note">{preview.note}</p> : null}
+                                </>
+                              ) : null}
+                              {preview.status === 'ready' && preview.kind === 'other' ? (
+                                <p className="vq-archive-preview-note">这种文件不能在这里看，下载包来解压。</p>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </>
+                      ) : null}
+                    </div>
                   ) : null}
                 </li>
               )

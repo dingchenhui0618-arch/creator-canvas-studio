@@ -44,6 +44,16 @@ import { buildZip, safeEntryName } from '../zip-store.mjs'
 import { storyboardFrames } from '../project-frames.mjs'
 import { deliveriesWithDisk, hashDeliveryPackage, newDeliveryPackageId, packageIntegrity, readDeliveryPackage, saveDeliveryPackage } from '../delivery-packages.mjs'
 import {
+  MAX_ENTRY_BYTES,
+  MAX_PACKAGE_BYTES,
+  compareManifest,
+  entryKind,
+  entryMime,
+  findZipEntry,
+  readZipDirectory,
+  readZipEntry,
+} from '../zip-read.mjs'
+import {
   listProjects,
   getProject,
   createProject,
@@ -79,6 +89,9 @@ const DELIVERABLE_ZIP = /^\/api\/projects\/([\w-]+)\/deliverable\.zip$/
 const DELIVERY_PACKAGE = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})$/
 // 盘上这一份还对不对（v0.9.128）：只读，流式重算 SHA-256 与档案比；不缓存、不写盘、不修文件
 const DELIVERY_PACKAGE_CHECK = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})\/check$/
+// 包里那份（v0.9.129）：读封存包自己的目录、按条目名取一条内容；只读，不解压到磁盘、不写文件
+const DELIVERY_PACKAGE_CONTENT = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})\/content$/
+const DELIVERY_PACKAGE_ENTRY = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})\/content\/(.+)$/
 // 打印版不进 /api：它是在新标签里打开的 HTML，地址栏里那串会印在纸的页脚上
 const DELIVERABLE_PRINT = /^\/print\/projects\/([\w-]+)\/deliverable$/
 // 评审对照纸：评审把问题框在哪一块画面上，同一张 A4 里印出来（交付包里也有同一份）
@@ -1184,6 +1197,141 @@ export function createProjectsRouter() {
           expected: { sha256: delivery.package.sha256 || '', bytes: Number(delivery.package.bytes) || 0 },
           actual: actual ? { sha256: actual.sha256, bytes: actual.bytes } : null,
         })
+        return true
+      }
+
+      // 包里那份（v0.9.129）：直接读封存包自己的目录，不只看档案里记的那份清单。
+      // 只读：不缓存、不解压到磁盘、不写任何文件；包仍只认登录态，也没有公开地址。
+      const packageContent = pathname.match(DELIVERY_PACKAGE_CONTENT)
+      if (packageContent) {
+        if (req.method !== 'GET') {
+          sendJson(res, 405, { error: '封存包的内容只能读，不能修改' })
+          return true
+        }
+        const project = await getProject(packageContent[1], user)
+        if (!project) {
+          sendJson(res, 404, { error: '作品不存在或已被删除' })
+          return true
+        }
+        const delivery = (project.deliveries || []).find((entry) => entry.id === packageContent[2] && entry.package)
+        if (!delivery) {
+          sendJson(res, 404, { error: '这一条交付没有封存包，或者包已经不在了' })
+          return true
+        }
+        const archive = await readDeliveryPackage(project.id, delivery.id)
+        if (!archive) {
+          sendJson(res, 404, { error: '盘上那份封存包不在了；包内清单还能看档案里记的那一份' })
+          return true
+        }
+        if (archive.length > MAX_PACKAGE_BYTES) {
+          sendJson(res, 413, {
+            error: '这个包超过 ' + Math.round(MAX_PACKAGE_BYTES / (1024 * 1024)) + ' MB，太大了不能在这里读目录；下载下来再看',
+          })
+          return true
+        }
+        const directory = readZipDirectory(archive)
+        if (!directory) {
+          sendJson(res, 200, {
+            ok: false,
+            state: 'unreadable',
+            error: '包里的目录读不出来：可能被截断，或者尾部被改过',
+          })
+          return true
+        }
+        // 档案里记过清单才比较：老包没记过，不把整包说成「多出来的」
+        const manifest = delivery.package.files?.length ? compareManifest(directory.entries, delivery.package.files) : null
+        sendJson(res, 200, {
+          ok: true,
+          state: 'ok',
+          readAt: new Date().toISOString(),
+          entries: directory.entries.map((entry) => ({
+            name: entry.name,
+            bytes: entry.bytes,
+            kind: entryKind(entry.name),
+          })),
+          manifest,
+        })
+        return true
+      }
+
+      // 包里的一条内容（v0.9.129）：按条目名取，只认目录里真有的那一条。
+      // 解开之后先验 CRC32 再发：包里这一块坏了就回 409，不把坏字节当内容展示。
+      const packageEntry = pathname.match(DELIVERY_PACKAGE_ENTRY)
+      if (packageEntry) {
+        if (req.method !== 'GET') {
+          sendJson(res, 405, { error: '封存包的内容只能读，不能修改' })
+          return true
+        }
+        const project = await getProject(packageEntry[1], user)
+        if (!project) {
+          sendJson(res, 404, { error: '作品不存在或已被删除' })
+          return true
+        }
+        const delivery = (project.deliveries || []).find((entry) => entry.id === packageEntry[2] && entry.package)
+        if (!delivery) {
+          sendJson(res, 404, { error: '这一条交付没有封存包，或者包已经不在了' })
+          return true
+        }
+        let entryName = ''
+        try {
+          entryName = decodeURIComponent(packageEntry[3])
+        } catch {
+          sendJson(res, 400, { error: '条目名的编码不对' })
+          return true
+        }
+        const archive = await readDeliveryPackage(project.id, delivery.id)
+        if (!archive) {
+          sendJson(res, 404, { error: '盘上那份封存包不在了；包内清单还能看档案里记的那一份' })
+          return true
+        }
+        if (archive.length > MAX_PACKAGE_BYTES) {
+          sendJson(res, 413, {
+            error: '这个包超过 ' + Math.round(MAX_PACKAGE_BYTES / (1024 * 1024)) + ' MB，不能在这里读单条内容；下载下来再看',
+          })
+          return true
+        }
+        const directory = readZipDirectory(archive)
+        if (!directory) {
+          sendJson(res, 409, { error: '包里的目录读不出来：可能被截断，先下载包来看' })
+          return true
+        }
+        const entry = findZipEntry(directory.entries, entryName)
+        if (!entry) {
+          sendJson(res, 404, { error: '包里没有这个文件' })
+          return true
+        }
+        if (entry.bytes > MAX_ENTRY_BYTES) {
+          sendJson(res, 413, {
+            error: '这一条超过 ' + Math.round(MAX_ENTRY_BYTES / (1024 * 1024)) + ' MB，不能在这里预览；下载包来解压',
+          })
+          return true
+        }
+        const read = readZipEntry(archive, entry)
+        if (!read) {
+          sendJson(res, 409, { error: '这一条读不出来：包在这一块可能坏了' })
+          return true
+        }
+        if (!read.crcOk) {
+          sendJson(res, 409, { error: '这一条的内容跟包里的 CRC32 对不上：包在这一块坏了，别拿它当内容' })
+          return true
+        }
+        const mime = entryMime(entry.name)
+        const headers = {
+          'Content-Type': mime,
+          'Content-Length': String(read.bytes),
+          'Content-Disposition': 'inline',
+          'Cache-Control': 'no-store',
+          'X-Content-Type-Options': 'nosniff',
+          'X-Robots-Tag': 'noindex',
+          'X-VQ-Entry-Crc32': String(entry.crc),
+        }
+        // 页面进沙箱 iframe（前端 sandbox 属性）之外再加一道：即使哪天漏了 sandbox，也不许取外部资源
+        if (mime.startsWith('text/html')) {
+          headers['Content-Security-Policy'] =
+            "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; font-src data:; base-uri 'none'; form-action 'none'"
+        }
+        res.writeHead(200, headers)
+        res.end(read.data)
         return true
       }
 

@@ -13,6 +13,7 @@ import type {
   ProjectVersionCompare,
   ProjectVersionScriptSnapshot,
   ProjectSummary,
+  PackageContents,
   ShareSummaryRow,
   SharedProject,
 } from '../domain/project'
@@ -262,6 +263,25 @@ export const deliveryPackageUrl = (projectId: string, deliveryId: string) =>
  */
 export const checkDeliveryPackage = (projectId: string, deliveryId: string) =>
   request<PackageServerCheck>(deliveryPackageUrl(projectId, deliveryId) + '/check')
+
+/**
+ * 包里那份的目录（v0.9.129）：读的是盘上那份封存包的中央目录，不是再抄一遍档案。
+ * 只读接口，不解压到磁盘、不写文件；盘上那份没了就 404。
+ */
+export const deliveryPackageContents = (projectId: string, deliveryId: string) =>
+  request<PackageContents>(deliveryPackageUrl(projectId, deliveryId) + '/content')
+
+/**
+ * 包里一条内容的地址：按条目名取（名字里的 / 保留为分隔，其余逐段编码）。
+ * 页面里的相对图（frames/xx.jpg）会按这个地址往下解析，所以预览时不用改写页面里的路径。
+ */
+export const deliveryPackageEntryUrl = (projectId: string, deliveryId: string, name: string) =>
+  deliveryPackageUrl(projectId, deliveryId) +
+  '/content/' +
+  name
+    .split('/')
+    .map((part) => encodeURIComponent(part))
+    .join('/')
 
 /**
  * 交付稿的 A4 打印版地址：新标签里打开一张排好版的纸，打印（存 PDF）交给浏览器。
