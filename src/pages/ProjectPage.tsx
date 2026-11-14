@@ -815,6 +815,8 @@ export default function ProjectPage({
       available: Boolean(flow),
       nodes: flow ? flow.nodes : 0,
       scriptBeats,
+      // 当前这一版的来源：回退开出来的版本刷新后也要看得见（v0.9.116）
+      basedOn: project.basedOn || 0,
       current: true,
     },
     ...data.versions.map((item) => ({ ...item, current: false })),
@@ -1111,7 +1113,7 @@ export default function ProjectPage({
               <span className="vq-mono">{project.version} 版</span>
             </h2>
             <p className="vq-project-versions-note">
-              开新版时会把这一版的脚本存一份快照，再改只影响新版；每一行写清「比上一版改了什么」，点脚本段数能翻开那一版的原文。归档版还能「以这一版为底」再开一版：画布和脚本回到那一版，当前版归档，记录都保留。
+              开新版时会把这一版的脚本存一份快照，再改只影响新版；每一行写清「比上一版改了什么」，点脚本段数能翻开那一版的原文。归档版还能「以这一版为底」再开一版：画布和脚本回到那一版，当前版归档，记录都保留；那一行会标出底座，改动也按底座算。
             </p>
             <button
               type="button"
@@ -1127,6 +1129,11 @@ export default function ProjectPage({
             {versionRows.map((row) => {
               const counter = reviewsForVersion(data.versionCounts, row.n)
               const runCount = runsForVersion(data.runCounts || {}, row.n)
+              // 以旧版为底的那一版：优先用服务端算好的「跟底座比」，标签也换成底座；
+              // 没有这一项就还是原来的「比上一版」，老版本数据不受影响（v0.9.116）
+              const baseChange = data.versionBaseChanges?.[row.n]
+              const changeText = baseChange?.text || versionChanges[row.n]
+              const changeBase = baseChange?.base || row.n - 1
               // 问题数与「比上一版多了还是少了」都从同一份统计现算，不另存（v0.9.84）
               const issueText = issueLine(counter.issues)
               const issueMissing = issueGap(counter.issues)
@@ -1142,6 +1149,16 @@ export default function ProjectPage({
                     <strong>{row.name}</strong>
                     <span className="vq-version-meta">
                       <span className="vq-mono">{row.current ? '最新' : '归档 ' + stamp(row.archivedAt)}</span>
+                      {row.basedOn ? (
+                        <span
+                          className="vq-version-lineage"
+                          title={
+                            '这一版开版时复制的是 v' + row.basedOn + ' 的画布和脚本；下方的改动也按 v' + row.basedOn + ' 算'
+                          }
+                        >
+                          以 v{row.basedOn} 为底
+                        </span>
+                      ) : null}
                       <span>{row.nodes} 节点</span>
                       {/* 没存快照的旧版本写清楚：不能让人以为「那一版就是现在的脚本」 */}
                       {row.scriptBeats ? (
@@ -1208,13 +1225,17 @@ export default function ProjectPage({
                         </>
                       ) : null}
                     </span>
-                    {versionChanges[row.n] ? (
+                    {changeText ? (
                       <p
-                        className="vq-version-change"
-                        title="节点只比类型与配置，移动位置或改标题不算；脚本按段名比口播，开新版时存的快照才算"
+                        className={'vq-version-change' + (baseChange ? ' is-based' : '')}
+                        title={
+                          baseChange
+                            ? '这一版以 v' + baseChange.base + ' 为底：这句是相对底座算的，不是相对上一版；节点只比类型与配置，脚本按段名比口播'
+                            : '节点只比类型与配置，移动位置或改标题不算；脚本按段名比口播，开新版时存的快照才算'
+                        }
                       >
-                        <span className="vq-mono">比 v{row.n - 1}</span>
-                        {versionChanges[row.n]}
+                        <span className="vq-mono">比 v{changeBase}</span>
+                        {changeText}
                       </p>
                     ) : null}
                     {rowReviews.length ? (

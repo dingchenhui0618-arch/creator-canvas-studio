@@ -128,3 +128,29 @@ export function versionChangesOf(rows) {
   }
   return out
 }
+
+/**
+ * 以旧版为底开的那一版：改动按底座算，不按上一版算（v0.9.116）。
+ * 只返回底座不是上一版的版本——底座就是上一版时，原来的「比上一版」已经说对了。
+ * 返回 { '5': { base: 2, text: '画布与脚本都没动' } }；底座那一版被删或已不在表里就不返回。
+ */
+export function versionBaseChangesOf(rows) {
+  const list = (Array.isArray(rows) ? rows : []).filter((row) => row && Number.isFinite(Number(row.n)))
+  const byNumber = new Map(list.map((row) => [Number(row.n), row]))
+  const out = {}
+  for (const row of list) {
+    const n = Number(row.n)
+    const base = Number(row.base)
+    if (!Number.isInteger(base) || base < 1 || base >= n || base === n - 1) continue
+    const prev = byNumber.get(base)
+    if (!prev) continue
+    const text = versionChangeText({
+      prevNodes: prev.nodes,
+      nextNodes: row.nodes,
+      prevScript: prev.script,
+      nextScript: row.script,
+    })
+    if (text) out[String(n)] = { base, text }
+  }
+  return out
+}

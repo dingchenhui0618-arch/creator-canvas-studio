@@ -101,6 +101,8 @@ test('第一张画布把作品推进 v1，开一版新的归档旧画布、版�
 
   const next = await p.archiveProjectVersion(project.id, { flowId: 'flow_b', name: '折叠收纳 v2', prevName: '第一版画布' }, userA)
   assert.equal(next.version, 2)
+  assert.equal(next.basedOn, 0, '普通开版接着上一版，没有底座')
+  assert.equal(next.versions[0].basedOn, 0)
   assert.equal(next.flowId, 'flow_b')
   assert.equal(next.versions.length, 1)
   assert.deepEqual(
@@ -171,12 +173,21 @@ test('以旧版为底开新版：新一版的脚本换回旧版快照，当前�
     prevName: '第二版',
     script: B,
     nextScript: A,
+    basedOn: 1,
   }, userA)
   assert.equal(rebased.version, 3)
+  assert.equal(rebased.basedOn, 1, '新一版要记住是从 v1 回来的')
   assert.equal(rebased.flowId, 'flow_r3')
   assert.equal(rebased.script.hook, '第一版的钩子', '新一版脚本要回到旧版快照')
   assert.equal(rebased.versions[0].script.hook, '第一版的钩子', 'v1 的快照不能动')
   assert.equal(rebased.versions[1].script.hook, '第二版的钩子', 'v2 归档的是它自己的脚本')
+  assert.equal(rebased.versions[1].basedOn, 0, 'v2 不是回退来的，没有底座')
+
+  // v3 归档时，来源要跟着它一起归档；新开的 v4 不再继承 v3 的底座
+  const later = await p.archiveProjectVersion(project.id, { flowId: 'flow_r4', prevName: '第三版' }, userA)
+  assert.equal(later.version, 4)
+  assert.equal(later.basedOn, 0, '普通开版不继承底座')
+  assert.equal(later.versions[2].basedOn, 1, 'v3 归档后仍然是从 v1 回来的')
 })
 
 test('评审按版本记账，版本对照的计数互不串', async () => {

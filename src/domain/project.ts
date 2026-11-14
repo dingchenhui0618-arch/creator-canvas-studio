@@ -135,11 +135,20 @@ export type ProjectDelivery = {
 }
 
 /** 归档的旧版本：只存画布指针与名字，画布本身仍在流程服务里 */
-export type ProjectVersion = { n: number; flowId: string; name: string; archivedAt: string }
+export type ProjectVersion = {
+  n: number
+  flowId: string
+  name: string
+  archivedAt: string
+  /** 这一版是从哪一版复制来的；0 表示接着上一版改（v0.9.116） */
+  basedOn?: number
+}
 
 /** 作品详情会顺手确认归档画布还在，并带上节点数 */
 // 归档版本额外带上开版时存下的脚本快照段数：交付稿与版本对照都靠它说「这一版几段」
 export type ProjectVersionView = ProjectVersion & {
+  /** 开这一版时复制的是哪一版；0 表示接着上一版改 */
+  basedOn?: number
   available: boolean
   nodes: number
   /** 开新版那一刻的脚本段数；0 表示那一版没存快照（升级前开的版本） */
@@ -155,6 +164,8 @@ export type Project = {
   flowId: string
   /** 第几版：0 还没开画布，开出来就是 v1 */
   version: number
+  /** 这一版是从哪一版复制来的；0 表示接着上一版改（v0.9.116） */
+  basedOn?: number
   versions: ProjectVersion[]
   status: ProjectStatus
   /** 交付记录，按发生顺序；最后一条是最近一次 */
@@ -456,7 +467,12 @@ export type ProjectDetail = {
    * 缺这一项表示那一侧没有可比对的数据（画布被删 / 没存脚本快照），页面不硬写「没改」。
    */
   versionChanges?: Record<string, string>
-  /** 这条作品的拍板记录（按时间倒序）；管当前这一版的那条在 decision 里 */
+  /**
+   * 以旧版为底的那一版跟底座对账（v0.9.116）：键是版次，值是底座与一句人话。
+   * 只给底座不是上一版的版本；页面优先读它，把「比 v3」换成「比 v1」。
+   */
+  versionBaseChanges?: Record<string, { base: number; text: string }>
+  /** 这条作品的拍板记录（按时间倒序）；管当前那一版的那条在 decision 里 */
   decisions?: ProjectDecision[]
   decision?: ProjectDecision | null
   /**

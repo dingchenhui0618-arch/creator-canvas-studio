@@ -14,7 +14,7 @@ import { projectTemplateReply, projectTemplateSpec } from '../project-template.m
 import { templateOrigin } from '../project-source.mjs'
 import { createFlow, getFlow, hasRunGraph, listRunsByFlows } from '../flows.mjs'
 import { normalizeProjectScript, scriptPace, scriptView } from '../project-script.mjs'
-import { versionChangesOf } from '../version-diff.mjs'
+import { versionBaseChangesOf, versionChangesOf } from '../version-diff.mjs'
 import { buildReplicateDraft } from '../script-draft.mjs'
 import { syncCanvasScript } from '../project-canvas-sync.mjs'
 import {
@@ -132,6 +132,8 @@ async function projectDetailView(project, user, { snapshots = false } = {}) {
     const snapshot = entry.script || null
     return {
       n: entry.n,
+      // 这一版是从哪一版复制来的：0 表示接着上一版改
+      basedOn: entry.basedOn || 0,
       nodes: archived?.nodes || null,
       script: snapshot,
       view: {
@@ -139,6 +141,8 @@ async function projectDetailView(project, user, { snapshots = false } = {}) {
         flowId: entry.flowId,
         name: entry.name,
         archivedAt: entry.archivedAt,
+        // 来源跟着版本走：归档之后仍然知道 v4 是从 v1 回来的（v0.9.116）
+        basedOn: entry.basedOn || 0,
         available: Boolean(archived),
         nodes: Array.isArray(archived?.nodes) ? archived.nodes.length : 0,
         // 开新版时存下的脚本快照：这里只给段数，正文只在导出时带
@@ -150,14 +154,18 @@ async function projectDetailView(project, user, { snapshots = false } = {}) {
   }))
   const versions = versionRecords.map((item) => item.view)
   // 版本行上的「比上一版改了什么」：画布按节点配置、脚本按快照，口径与交付稿同一份实现。
-  // 当前版也要算（v3 相对 v2 改了什么），所以把当前画布与脚本一起放进来。
-  const currentScript = scriptView(project, template)
-  const versionChanges = versionChangesOf([
-    ...versionRecords.map((item) => ({ n: item.n, nodes: item.nodes, script: item.script })),
+  // 当前版也要算（v3 相对 v2 改了什么），所以把当前画布与脚本一起放进来；
+  // base 是「以旧版为底」的那一版用来对账的底座，普通版本为 0，仍按上一版算。
+  const versionRowsForDiff = [
+    ...versionRecords.map((item) => ({ n: item.n, nodes: item.nodes, script: item.script, base: item.basedOn })),
     ...(project.flowId && project.version > 0
-      ? [{ n: project.version, nodes: flow?.nodes || null, script: currentScript }]
+      ? [{ n: project.version, nodes: flow?.nodes || null, script: currentScript, base: project.basedOn || 0 }]
       : []),
-  ])
+  ]
+  const versionChanges = versionChangesOf(versionRowsForDiff)
+  // 回退版跟底座对账（v0.9.116）：老前端继续只读 versionChanges，标签仍写「比上一版」；
+  // 新前端优先读这一份，把标签换成真正的底座，不会把「回到 v1 后没动」误读成「比 v3 少两段」。
+  const versionBaseChanges = versionBaseChangesOf(versionRowsForDiff)
   const versionOfFlow = new Map()
   for (const entry of project.versions) versionOfFlow.set(entry.flowId, entry.n)
   if (project.flowId) versionOfFlow.set(project.flowId, project.version)
@@ -248,6 +256,8 @@ async function projectDetailView(project, user, { snapshots = false } = {}) {
     versionCounts,
     // 版本行的一句话（v0.9.114）：键是版次，值写「比上一版改了什么」；比不了就没有这一项
     versionChanges,
+    // 以旧版为底的那一版跟底座对账（v0.9.116）：{ '4': { base: 1, text: '画布与脚本都没动' } }
+    versionBaseChanges,
     runs,
     runTotal: runData.total,
     runCounts,
@@ -775,6 +785,8 @@ export function createProjectsRouter() {
           prevName: current.name,
           script: scriptView(project, template),
           ...(nextScript ? { nextScript } : {}),
+          // 来源写进这一版：刷新、归档之后都还知道它是从哪一版回来的
+          basedOn: from,
         }, user)
         if (!updated) {
           sendJson(res, 409, { error: '开新版本没有成功：这一版没有归档，作品仍然指向原来的画布', code: 'VERSION_FAILED' })

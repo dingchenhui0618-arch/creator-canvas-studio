@@ -6,6 +6,7 @@ import {
   fingerprint,
   scriptText,
   versionChangeText,
+  versionBaseChangesOf,
   versionChangesOf,
 } from '../server/version-diff.mjs'
 
@@ -122,4 +123,19 @@ test('版本表按相邻版次算：v2、v3 各一句，最早一版没有', () 
   assert.match(changes['2'], /画布改 1 个（输入）/)
   assert.match(changes['2'], /1 段口播改过/)
   assert.match(changes['3'], /画布与脚本都没动/)
+})
+
+test('以旧版为底：改动按底座算，不再拿上一版当基准', () => {
+  const rows = [
+    { n: 1, nodes: [node('n1', '输入', { text: 'v1' })], script: script('钩子 v1', [['开场', '第一版']]) },
+    { n: 2, nodes: [node('n1', '输入', { text: 'v2' })], script: script('钩子 v2', [['开场', '第二版']]) },
+    { n: 3, nodes: [node('n1', '输入', { text: 'v2' })], script: script('钩子 v2', [['开场', '第二版']]) },
+    { n: 4, nodes: [node('n1', '输入', { text: 'v1' })], script: script('钩子 v1', [['开场', '第一版']]), base: 1 },
+  ]
+  const bases = versionBaseChangesOf(rows)
+  assert.deepEqual(bases['4'], { base: 1, text: '画布与脚本都没动' })
+  assert.equal(bases['2'], undefined, '普通版本仍按上一版算')
+  assert.equal(bases['3'], undefined, '底座就是上一版时不重复给')
+  // 底座那一版不在表里（被删 / 被裁掉）就不写，页面回退到「比上一版」
+  assert.equal(versionBaseChangesOf([{ ...rows[3], base: 2 }])['4'], undefined)
 })

@@ -86,14 +86,23 @@ function normalizeVersionScript(raw) {
   }
 }
 
+// 以旧版为底（v0.9.116）：只认「更早的整数版次」，越界或指向自己一律当线性版本。
+function normalizeBasedOn(raw, version) {
+  const value = Math.round(Number(raw))
+  const top = Math.max(1, Math.round(Number(version) || 0))
+  return Number.isFinite(value) && value >= 1 && value < top ? value : 0
+}
+
 function normalizeVersion(raw, fallbackN) {
   const n = Math.round(Number(raw?.n))
+  const normalizedN = Number.isFinite(n) && n > 0 ? n : fallbackN
   return {
-    n: Number.isFinite(n) && n > 0 ? n : fallbackN,
+    n: normalizedN,
     flowId: String(raw?.flowId || ''),
     name: clip(raw?.name || '未命名画布', 60),
     archivedAt: String(raw?.archivedAt || ''),
     script: normalizeVersionScript(raw?.script),
+    basedOn: normalizeBasedOn(raw?.basedOn, normalizedN),
   }
 }
 
@@ -193,6 +202,8 @@ function normalize(item) {
     flowId: String(item.flowId || ''),
     // 第几版：0 表示还没开过画布，开出来就是 v1
     version,
+    // 这一版是从哪一版复制来的（v0.9.116）：0 表示接着上一版改，不是回退来的
+    basedOn: normalizeBasedOn(item.basedOn, version),
     // 归档的旧版本只存指针：画布还在流程服务里，这里不复制节点
     versions,
     // 作品自己的脚本：只有用户动过才存在；没有就跟随模板（项目页读 scriptView）
@@ -239,6 +250,8 @@ export async function createProject({ title = '', templateId = '', flowId = '' }
     // 从模板建的作品还没有画布，等「开画布」才变成 v1；
     // 从画布建的（v0.9.29）画布已经在了，一出生就是 v1——否则版本对照里会显示成 v0。
     version: flowId ? 1 : 0,
+    // 出生就是 v1，没有「以哪一版为底」；之后回退开版才写这个数
+    basedOn: 0,
     versions: [],
     // 先不复制模板脚本：复制发生在第一次保存脚本时（copy-on-write）
     script: null,
@@ -339,7 +352,7 @@ export async function bindProjectFlow(id, flowId, user = null) {
  * 开新版本：当前画布存成归档（只存 flowId 与名字，不复制节点），作品改指向新画布。
  * 复制画布本身由路由做——存储层只认指针，不碰流程服务。
  */
-export async function archiveProjectVersion(id, { flowId = '', prevName = '', script = null, nextScript = undefined } = {}, user = null) {
+export async function archiveProjectVersion(id, { flowId = '', prevName = '', script = null, nextScript = undefined, basedOn = 0 } = {}, user = null) {
   const list = await loadAll()
   const found = list.find((item) => item.id === id && canAccess(item, user))
   if (!found) return null
@@ -355,6 +368,8 @@ export async function archiveProjectVersion(id, { flowId = '', prevName = '', sc
       archivedAt: now,
       // 归档时把这一版的脚本一起存下来：之后改脚本也只影响新版本
       script: normalizeVersionScript(script) || undefined,
+      // 来源跟着这一版一起归档：v4 是从 v1 回来的，归档之后仍然查得到
+      basedOn: current.basedOn,
     },
   ].slice(-MAX_VERSIONS)
   // 开新版等于上一版收尾：标着交付的那一版先补一条交付记录（老记录没有时间就写空串），
@@ -371,6 +386,12 @@ export async function archiveProjectVersion(id, { flowId = '', prevName = '', sc
   }
   found.flowId = String(flowId || '')
   found.version = current.version + 1
+  // 新一版的来源：不传 basedOn 就是接上一版改（0）；以旧版为底时写那一版的版次。
+  // 只认更早且存在的版次——越界不写，避免页面显示一个查不到的底座。
+  found.basedOn = normalizeBasedOn(basedOn, found.version)
+  if (found.basedOn && !current.versions.some((entry) => entry.n === found.basedOn)) {
+    found.basedOn = 0
+  }
   // 以旧版为底（v0.9.115）：新一版的脚本不再是「现在的脚本」，而是旧版归档时存下的那一份。
   // 这里只认已经归一化过的快照；传 null 表示不换脚本，避免空值把作品自己的脚本清掉。
   if (nextScript !== undefined) {

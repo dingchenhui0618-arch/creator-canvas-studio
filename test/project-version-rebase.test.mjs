@@ -1,9 +1,10 @@
-// 以旧版为底开新版（v0.9.115）。
-// 这一组盯住四件事：
+// 以旧版为底开新版（v0.9.115），以及回退版的底座对账（v0.9.116）。
+// 这一组盯住五件事：
 //   1) from 指向归档版时，新画布复制那一版，新脚本也换成那一版的快照；
 //   2) 当前版照常归档，v1 / v2 / v3 各自的话都还在；
-//   3) 没存脚本快照的版本不允许整版回退，409 说清原因；
-//   4) from 越界 / 不存在的版次不偷偷退回「从当前版开」。
+//   3) 新一版记住 basedOn，详情里的改动按底座算，不再拿上一版当基准；
+//   4) 没存脚本快照的版本不允许整版回退，409 说清原因；
+//   5) from 越界 / 不存在的版次不偷偷退回「从当前版开」。
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
@@ -102,6 +103,14 @@ test('from 指向旧版：新画布和新脚本都回到那一版，当前版照
   assert.equal(detail.body.project.version, 4)
   assert.equal(detail.body.script.hook, '第一版的钩子')
   assert.equal(detail.body.versions.length, 3)
+  assert.equal(detail.body.project.basedOn, 1, 'v4 的来源要写进作品')
+  assert.deepEqual(
+    detail.body.versionBaseChanges['4'],
+    { base: 1, text: '画布与脚本都没动' },
+    'v4 是照 v1 复制的，跟底座对账应说没动',
+  )
+  assert.equal(detail.body.versions[2].basedOn, 0, 'v3 不是回退来的')
+  // 老前端口径不变：versionChanges 仍然按上一版算，避免「比 v3」被静默改掉
   assert.match(detail.body.versionChanges['4'], /脚本/, 'v4 相对 v3 要有改动句')
   assert.match(detail.body.versionChanges['4'], /钩子换过/, 'v4 的脚本与 v3 不同')
 
@@ -133,4 +142,31 @@ test('from 越界或版本没有脚本快照：明确拒绝，不偷偷从当前
   assert.equal(noSnapshot.status, 409)
   assert.equal(noSnapshot.body.code, 'VERSION_SCRIPT_MISSING')
   assert.match(noSnapshot.body.error, /脚本快照/)
+})
+
+test('以旧版为底的一版归档后，来源跟着它走；新版不再继承底座', async () => {
+  const base = await flows.createFlow({ name: '来源归档 v1', nodes: [node('第一版提示词')], edges: [] })
+  const project = await projects.createProject({ title: '来源归档', flowId: base.id })
+  await projects.saveProjectScript(project.id, script('来源的钩子', '来源的一句'))
+
+  const v2 = await call('POST', '/api/projects/' + project.id + '/versions', {})
+  assert.equal(v2.status, 201)
+  const v3 = await call('POST', '/api/projects/' + project.id + '/versions', { from: 1 })
+  assert.equal(v3.status, 201)
+  assert.equal(v3.body.basedOn, 1)
+  const v4 = await call('POST', '/api/projects/' + project.id + '/versions', {})
+  assert.equal(v4.status, 201)
+  assert.equal(v4.body.project.version, 4)
+  assert.equal(v4.body.project.basedOn, 0, '普通开版不继承上一版的底座')
+
+  const detail = await call('GET', '/api/projects/' + project.id)
+  const archivedV3 = detail.body.versions.find((row) => row.n === 3)
+  assert.ok(archivedV3, 'v3 应已归档')
+  assert.equal(archivedV3.basedOn, 1, '归档后仍记得它是从 v1 回来的')
+  assert.deepEqual(
+    detail.body.versionBaseChanges['3'],
+    { base: 1, text: '画布与脚本都没动' },
+    'v3 归档后，对账仍然对 v1',
+  )
+  assert.equal(detail.body.versionBaseChanges['4'], undefined, 'v4 接着 v3 改，不写底座对账')
 })
