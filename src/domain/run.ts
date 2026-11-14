@@ -1,4 +1,4 @@
-import type { RunProjectRef, RunRecord } from '../api/flows'
+import type { RunProjectRef, RunRecord, RunResumePlan } from '../api/flows'
 
 /** 一条运行在页面上怎么称呼：颜色档与文案全站一处，别一处写「排队中」一处写「PENDING」。 */
 export type RunStatusTone = 'pass' | 'fail' | 'warn' | 'live' | 'queued'
@@ -75,6 +75,39 @@ export function runResumeInfo(run: RunRecord | null): RunResumeInfo {
     cost: nextCost,
     reused: done,
     resumable: Boolean(run.resumable ?? (run.status !== 'success' && done > 0 && left > 0)),
+  }
+}
+
+/**
+ * 运行记录页的续跑预检文案（v0.9.105）：点「继续运行」之前先把当前画布算清楚。
+ * 运行记录里存的是上次收尾时的 resumable / 节点数；画布改过之后它就会过期。
+ * 这里只负责把服务端刚算出的 plan 翻成人话，不替服务端判断能不能续。
+ */
+export type RunResumePlanView = { resumable: boolean; summary: string; note: string; button: string }
+
+export function runResumePlanView(plan: RunResumePlan | null): RunResumePlanView {
+  if (!plan) return { resumable: false, summary: '', note: '', button: '' }
+  const reused = Math.max(0, Number(plan.reused) || 0)
+  const rerun = Math.max(0, Number(plan.rerun) || 0)
+  const stale = Math.max(0, Number(plan.stale) || 0)
+  if (!plan.resumable) {
+    return {
+      resumable: false,
+      summary: String(plan.reason || '当前画布没有能原样复用的已跑节点'),
+      note: '不会复用旧结果：从头运行会按最新画布跑全图。',
+      button: '',
+    }
+  }
+  const cost = Math.max(0, Number(plan.cost) || 0)
+  const costText = cost > 0 ? '补 ' + cost + ' 积分' : '不再扣费'
+  const staleText = stale > 0 ? '（其中 ' + stale + ' 个改过）' : ''
+  return {
+    resumable: true,
+    summary: '复用 ' + reused + ' 个 · 还差 ' + rerun + ' 个' + staleText + ' · ' + costText,
+    note: stale > 0
+      ? '上次跑过、但改过或已不在画布上的 ' + stale + ' 个节点会重跑；其余没跑完的节点这次补上。'
+      : '上次跑完且内容没变的节点直接复用，不重复调上游。',
+    button: '继续运行 · ' + costText,
   }
 }
 

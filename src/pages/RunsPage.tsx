@@ -1,15 +1,24 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Activity, ArrowRight, ChevronLeft, ChevronRight, Link2, Play, RefreshCw, Search, Workflow } from 'lucide-react'
+import { Activity, ArrowRight, ChevronLeft, ChevronRight, Link2, Loader2, Play, RefreshCw, Search, Workflow } from 'lucide-react'
 import PageHead from '../components/PageHead'
 import { Select } from '../components/Select'
 import { adoptProjectCanvas, createProject, listProjects } from '../api/projects'
 import type { ProjectSummary } from '../domain/project'
-import { listFlows, listRuns, type ApiFlow, type RunRecord } from '../api/flows'
-import { runResumeInfo, runSpentText, runStatusMeta, runVersionLabel, runWorkLine } from '../domain/run'
+import { getRunResumePlan, listFlows, listRuns, type ApiFlow, type RunRecord, type RunResumePlan } from '../api/flows'
+import { runResumeInfo, runResumePlanView, runSpentText, runStatusMeta, runVersionLabel, runWorkLine } from '../domain/run'
 import { readRunsView, resolveFlowFilter, writeRunsView, type RunsView } from '../domain/list-view'
 import '../styles/runs.css'
 
 const PAGE_SIZE = 12
+
+// 续跑预检（v0.9.105）：记录里存的 resumable 是上次收尾时的判断；
+// 画布改过之后要按当前内容重算，页面才知道「还能复用几个、补多少」。
+type ResumePlanState = {
+  runId: string
+  state: 'loading' | 'ready' | 'error'
+  plan?: RunResumePlan
+  message?: string
+}
 
 const fmtTime = (iso: string) => {
   const date = new Date(iso)
@@ -96,6 +105,8 @@ export function RunsPage({
   const [open, setOpen] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [resumePlan, setResumePlan] = useState<ResumePlanState | null>(null)
+  const [planNonce, setPlanNonce] = useState(0)
   // 归到作品（v0.9.29）：没挂在作品上的运行以前只有一句「作品页不会出现它」，
   // 现在就地能把它收进一条作品——挂到已有作品，或者照这块画布新建一条。
   const [projects, setProjects] = useState<ProjectSummary[]>([])
@@ -201,6 +212,36 @@ export function RunsPage({
   const pageFailed = items.filter((item) => item.status === 'error').length
   const pageInterrupted = items.filter((item) => item.status === 'interrupted').length
   const current = items.find((item) => item.id === open) || null
+  // 只有记录本身说「有跑完、也有没跑」的终态运行才值得预检。
+  // 排队的和在跑的不问：它们没有可复用的旧结果。
+  const planRun = current && current.status !== 'running' && current.status !== 'queued' && runResumeInfo(current).resumable ? current : null
+  const planRunId = planRun?.id || ''
+  const planFlowId = planRun?.flowId || ''
+  // effect 落地前先用「核对中」占位，避免上一条运行的旧 plan 挂到新选中的行上。
+  const planNow: ResumePlanState | null = planRunId
+    ? (resumePlan?.runId === planRunId ? resumePlan : { runId: planRunId, state: 'loading' })
+    : null
+  const planView = planNow?.state === 'ready' ? runResumePlanView(planNow.plan ?? null) : null
+  const storedResume = runResumeInfo(current)
+  // 预检说不能续时，按钮也必须消失——不能让用户点进去才发现没有可复用的节点。
+  // 预检失败（网络 / 服务端临时错误）仍按记录估算，服务端运行时还会再判一次。
+  const canResume = planNow?.state === 'ready' ? Boolean(planNow.plan?.resumable) : storedResume.resumable
+  const resumeBusy = planNow?.state === 'loading'
+
+  useEffect(() => {
+    // 不在 effect 里同步写「核对中」：那会多一轮渲染，也会让 lint 的
+    // set-state-in-effect 亮起来。planNow 在渲染时按 runId 判断有没有拿到
+    // 当前这条运行的 plan，没拿到就是 loading。
+    if (!planRunId || !planFlowId) return undefined
+    let alive = true
+    getRunResumePlan(planFlowId, planRunId)
+      .then((plan) => { if (alive) setResumePlan({ runId: planRunId, state: 'ready', plan }) })
+      .catch((reason) => {
+        if (alive) setResumePlan({ runId: planRunId, state: 'error', message: String((reason as Error)?.message || reason) })
+      })
+    return () => { alive = false }
+  }, [planRunId, planFlowId, planNonce])
+
   const filtered = Boolean(activeFlowId || status || query)
   const hasPrev = offset > 0
   const hasNext = offset + items.length < total
@@ -416,15 +457,20 @@ export function RunsPage({
                       <ArrowRight size={13} />
                     </button>
                   ) : null}
-                  {onResumeRun && current.status !== 'running' && current.status !== 'queued' && runResumeInfo(current).resumable ? (
+                  {onResumeRun && current.status !== 'running' && current.status !== 'queued' && canResume ? (
                     <button
                       type="button"
                       className="vq-button vq-button--primary vq-button--sm"
                       onClick={() => onResumeRun(current.flowId, current.id)}
-                      title="回到画布，只补没跑完的节点；已跑完的节点直接复用，不重复扣费"
+                      disabled={resumeBusy}
+                      title={resumeBusy
+                        ? '正在按当前画布核对还能复用几个节点'
+                        : planView?.resumable
+                          ? planView.note
+                          : '回到画布，只补没跑完的节点；已跑完的节点直接复用，不重复扣费'}
                     >
-                      <Play size={13} fill="currentColor" />
-                      继续运行
+                      {resumeBusy ? <Loader2 size={13} className="vq-spin" /> : <Play size={13} fill="currentColor" />}
+                      {resumeBusy ? '继续运行 · 核对中' : planView?.resumable ? planView.button : '继续运行'}
                     </button>
                   ) : null}
                   {onOpenFlow ? (
@@ -438,6 +484,39 @@ export function RunsPage({
                   ) : null}
                 </span>
               </div>
+              {planNow ? (
+                <div
+                  className={'runs-plan' + (planView ? (planView.resumable ? ' is-ready' : ' is-blocked') : '')}
+                  aria-live="polite"
+                >
+                  <span className="runs-plan-label">续跑预检</span>
+                  {planNow.state === 'loading' ? (
+                    <span className="runs-plan-main">
+                      <Loader2 size={13} className="vq-spin" />
+                      正在按当前画布核对能复用几个、还要补多少积分…
+                    </span>
+                  ) : planNow.state === 'error' ? (
+                    <>
+                      <span className="runs-plan-main">这次没能核对</span>
+                      <p className="runs-plan-copy">
+                        服务端返回：{planNow.message || '未知错误'}。仍按上次记录估算，点继续运行时服务端还会再判一次。
+                      </p>
+                      <button
+                        type="button"
+                        className="vq-button vq-button--ghost vq-button--sm runs-plan-retry"
+                        onClick={() => setPlanNonce((value) => value + 1)}
+                      >
+                        重新核对
+                      </button>
+                    </>
+                  ) : planView ? (
+                    <>
+                      <strong className="runs-plan-main">{planView.summary}</strong>
+                      <p className="runs-plan-copy">{planView.note}</p>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
               {current.project ? (
                 <p className="runs-detail-where">
                   作品 · {current.project.title} · {runVersionLabel(current.project)}
