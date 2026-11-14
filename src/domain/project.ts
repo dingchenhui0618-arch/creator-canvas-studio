@@ -157,6 +157,89 @@ export type ProjectDelivery = {
   at: string
   review?: ProjectDeliveryReview | null
   package?: ProjectDeliveryPackage
+  /** 收包人贴回来的收据比过之后的结论（v0.9.136）；没有 = 还没人贴过 */
+  receipt?: DeliveryReceipt
+}
+
+/** 收据对账比的那五项：版次、包名、字节、整包哈希、对方结论 */
+export type DeliveryReceiptCheckKey = 'version' | 'package' | 'bytes' | 'sha256' | 'verdict'
+
+export type DeliveryReceiptCheck = {
+  k: DeliveryReceiptCheckKey
+  /** 这一条封存包里记的值 */
+  want: string
+  /** 收据上写的值 */
+  got: string
+  ok: boolean
+}
+
+/** 收据上对方写的那几项：只留比对用得上的，不存收据原文 */
+export type DeliveryReceiptClaimed = {
+  at: string
+  kind: string
+  title: string
+  version: number
+  bytes: number
+  sha256: string
+  packageName: string
+  chip: string
+  summary: string
+}
+
+/**
+ * 一次收据对账的结论（v0.9.136）。
+ * 四种状态分得清「对得上 / 对不上 / 对方读不出来 / 哈希对上但结论打架」——
+ * 不把「比不了」说成「对得上」。
+ */
+export type DeliveryReceipt = {
+  /** 发件人贴进来对一遍的时间 */
+  at: string
+  state: 'match' | 'mismatch' | 'broken' | 'conflict'
+  summary: string
+  problems?: string[]
+  checks?: DeliveryReceiptCheck[]
+  claimed?: DeliveryReceiptClaimed
+}
+
+/** 收据对账接口回的那一份：结论 + 存下来的记录 */
+export type DeliveryReceiptResult = {
+  ok: boolean
+  state: DeliveryReceipt['state']
+  summary: string
+  problems: string[]
+  checks: DeliveryReceiptCheck[]
+  receipt: DeliveryReceipt
+}
+
+const RECEIPT_CHECK_LABEL: Record<string, string> = {
+  version: '版次',
+  package: '包名',
+  bytes: '字节',
+  sha256: '整包 SHA-256',
+  verdict: '对方结论',
+}
+
+/** 对账结果里那一行（v0.9.136）：给人看的一句话，不说术语。 */
+export function deliveryReceiptLine(receipt: DeliveryReceipt | null | undefined): string {
+  if (!receipt) return ''
+  const label =
+    receipt.state === 'match'
+      ? '对得上'
+      : receipt.state === 'mismatch'
+        ? '对不上'
+        : receipt.state === 'broken'
+          ? '对方读不出来'
+          : '说法打架'
+  const ms = Date.parse(String(receipt.at || ''))
+  if (!Number.isFinite(ms)) return '收包人核对过 · ' + label
+  const date = new Date(ms)
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return '收包人核对过 · ' + label + ' · ' + pad(date.getMonth() + 1) + '-' + pad(date.getDate()) + ' ' + pad(date.getHours()) + ':' + pad(date.getMinutes())
+}
+
+/** 对账那张小表里每项叫什么：页面上给的是这一行字，不是字段名。 */
+export function receiptCheckLabel(key: string): string {
+  return RECEIPT_CHECK_LABEL[key] || key
 }
 
 /** 归档的旧版本：只存画布指针与名字，画布本身仍在流程服务里 */

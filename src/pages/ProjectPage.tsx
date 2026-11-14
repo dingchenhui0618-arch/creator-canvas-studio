@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowLeft, ArrowRight, BookmarkPlus, Bot, Check, ChevronDown, Clapperboard, Copy, CopyPlus, Download, ExternalLink, FileCheck2, FileText, GitCompare, Link2, Package, Pencil, Plus, Printer, RefreshCw, RotateCcw, ScanEye, Share2, Trash2, Upload, Workflow, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, BookmarkPlus, Bot, Check, ChevronDown, Clapperboard, ClipboardCheck, Copy, CopyPlus, Download, ExternalLink, FileCheck2, FileText, GitCompare, Link2, Package, Pencil, Plus, Printer, RefreshCw, RotateCcw, ScanEye, Share2, Trash2, Upload, Workflow, X } from 'lucide-react'
 import PageHead from '../components/PageHead'
 import ProjectStatusPill from '../components/ProjectStatus'
 import { VersionScriptModal } from '../components/VersionScriptModal'
 import { VersionCompareModal } from '../components/VersionCompareModal'
 import {
   checkDeliveryPackage,
+  checkDeliveryReceipt,
   deleteProject,
   deliverablePrintUrl,
   deliveryPackageAudit,
@@ -38,6 +39,7 @@ import {
   deliveredCurrent,
   deliveryArchive,
   deliveryOf,
+  deliveryReceiptLine,
   packageAuditFaultLabel,
   packageAuditLine,
   packageAuditText,
@@ -46,6 +48,7 @@ import {
   packageManifestNote,
   packageShortSha,
   projectStep,
+  receiptCheckLabel,
   serverPackageText,
   sha256HexOfBytes,
   type PackageAudit,
@@ -116,6 +119,9 @@ function duration(ms: number): string {
   if (total < 60) return (ms / 1000).toFixed(1) + ' 秒'
   return Math.floor(total / 60) + ' 分 ' + (total % 60) + ' 秒'
 }
+
+/** 收据结论与问题列表常常是同一句：句末标点不算不同，列表里不再重复一遍。 */
+const stripStop = (value: string | undefined) => String(value || '').replace(/[。.]$/, '')
 
 /**
  * 作品页：一条内容的完整现场。
@@ -225,6 +231,12 @@ export default function ProjectPage({
     result: PackageAudit | null
     error: string
   }>({ version: 0, state: 'idle', result: null, error: '' })
+  // 收据对账（v0.9.136）：收包人把校验页给出的收据发回来，贴进作品页跟封存包对一遍。
+  // 打开哪一行、贴了什么文字、正在对/对完的结论都收在这里；结论同时写回这一条交付记录。
+  const [receiptOpen, setReceiptOpen] = useState(0)
+  const [receiptDraft, setReceiptDraft] = useState('')
+  const [receiptBusy, setReceiptBusy] = useState(false)
+  const [receiptError, setReceiptError] = useState('')
   // 上次巡检（v0.9.132）：定时任务每天把封存包验一遍，这里只读它写下的结论。
   // 没巡检过就 at 为空，界面上不出现这一行——不拿「今天没验」冒充「验过了」。
   const [audits, setAudits] = useState<{
@@ -732,6 +744,58 @@ export default function ProjectPage({
     } catch (caught) {
       setAudit({ version, state: 'error', result: null, error: caught instanceof Error ? caught.message : '体检没跑完' })
     }
+  }
+
+  // 收据对账（v0.9.136）：贴进来的是一段文字，服务端拿里面的整包 SHA-256 跟这一条封存包比。
+  // 对完写回这一条交付记录（刷新还在），同时把本地的这一行一起换掉——不用再等一次整页读。
+  const submitReceipt = async (version: number, deliveryId: string) => {
+    if (!data) return
+    if (!receiptDraft.trim()) {
+      setReceiptError('先把收包人发回的收据整段贴进来')
+      return
+    }
+    if (!deliveryId) {
+      setReceiptError('这一条交付没有封存包，没有可比的哈希')
+      return
+    }
+    setReceiptBusy(true)
+    setReceiptError('')
+    try {
+      const result = await checkDeliveryReceipt(data.project.id, deliveryId, receiptDraft)
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              project: {
+                ...prev.project,
+                deliveries: (prev.project.deliveries || []).map((entry) =>
+                  entry.id === deliveryId ? { ...entry, receipt: result.receipt } : entry,
+                ),
+              },
+            }
+          : prev,
+      )
+      onToast(
+        result.state === 'match'
+          ? '对得上：收包人核过的就是这一份 v' + version
+          : result.state === 'broken'
+            ? '收包人那边读不出来：这一份重发更稳'
+            : result.state === 'conflict'
+              ? '哈希对得上，但收据的结论写着有问题：先问清对方验的是哪个文件'
+              : '对不上：看下面哪一项不是这一份',
+      )
+    } catch (caught) {
+      setReceiptError(caught instanceof Error ? caught.message : '这段收据没对成')
+    } finally {
+      setReceiptBusy(false)
+    }
+  }
+
+  // 换一行、收起时把草稿与上一次的报错清掉；已经记下的结论跟着交付记录走，不清。
+  const toggleReceipt = (version: number) => {
+    setReceiptOpen(receiptOpen === version ? 0 : version)
+    setReceiptDraft('')
+    setReceiptError('')
   }
 
   // 「清单」按钮：同一时间只开一行；换一行、收起时都把上一行的预览一起收掉
@@ -1630,7 +1694,7 @@ export default function ProjectPage({
               </span>
             </h2>
             <p className="vq-project-archive-note">
-              标记交付时封存的那一份，之后改模板、改脚本、开新版都不会变。手里那份拖进「核对」在本机算，服务器上那份点「查一遍哈希」在服务端算，两头都对上才算数；包里那份不用解压，点清单里的文件名就能看。包只认登录态，不走公开分享。
+              标记交付时封存的那一份，之后改模板、改脚本、开新版都不会变。手里那份拖进「核对」在本机算，服务器上那份点「查一遍哈希」在服务端算，两头都对上才算数；包里那份不用解压，点清单里的文件名就能看。收包人验完会发回一段收据，贴进「收据」就能对一遍，结论记在这一行上。包只认登录态，不走公开分享。
             </p>
           </div>
           {auditSummary ? (
@@ -1679,6 +1743,14 @@ export default function ProjectPage({
                     ) : (
                       <span className="vq-archive-legacy-note">v0.9.125 之前的交付只记了哪一版，没有存包</span>
                     )}
+                    {row.receipt ? (
+                      <span
+                        className={'vq-archive-receiptline is-' + row.receipt.state}
+                        title={row.receipt.summary || '收包人贴回来的收据比过之后记在这里'}
+                      >
+                        {deliveryReceiptLine(row.receipt)}
+                      </span>
+                    ) : null}
                     {sealed && pkg && packageDiskAlert(pkg) ? (
                       <span className="vq-archive-disk-alert" role="status">
                         {packageDiskAlert(pkg)}
@@ -1718,6 +1790,19 @@ export default function ProjectPage({
                       >
                         <FileCheck2 size={12} />
                         核对
+                      </button>
+                      <button
+                        type="button"
+                        className={
+                          'vq-button vq-button--quiet vq-button--sm' +
+                          (receiptOpen === row.version ? ' is-armed' : '')
+                        }
+                        aria-expanded={receiptOpen === row.version}
+                        onClick={() => toggleReceipt(row.version)}
+                        title="把收包人发回的收据贴进来，跟这一条封存包对一遍"
+                      >
+                        <ClipboardCheck size={12} />
+                        收据
                       </button>
                       {pkg.disk && !pkg.disk.present ? (
                         <span
@@ -1874,6 +1959,107 @@ export default function ProjectPage({
                           </div>
                         ) : null}
                       </div>
+                    </div>
+                  ) : null}
+                  {sealed && pkg && receiptOpen === row.version ? (
+                    <div className="vq-archive-receipt">
+                      <p className="vq-archive-receipt-hint">
+                        收包人把包解开、双击「校验.html」拖进 zip 核对完，会得到一段「带走这份结论」；
+                        让他把那段发回来，整段贴在这里。只读里面的版次、包名、字节与整包 SHA-256，跟这一条封存包对一遍；
+                        只比对文字，不重新打包、也不碰盘上那份。
+                      </p>
+                      <label className="vq-archive-receipt-field">
+                        <span className="vq-archive-receipt-label">收据</span>
+                        <textarea
+                          className="vq-archive-receipt-input"
+                          rows={5}
+                          spellCheck={false}
+                          aria-label={'收包人发回的 v' + row.version + ' 收据'}
+                          value={receiptOpen === row.version ? receiptDraft : ''}
+                          onChange={(event) => setReceiptDraft(event.currentTarget.value)}
+                          placeholder={
+                            'VisionQA 交付包核对 · ' + project.title + ' v' + row.version + '\n' +
+                            '包：' + pkg.fileName + '\n' +
+                            '结论：都对得上 · …\n' +
+                            '整包：' + pkg.bytes.toLocaleString('zh-CN') + ' B · SHA-256 …\n' +
+                            '时间：…'
+                          }
+                        />
+                      </label>
+                      <div className="vq-archive-receipt-actions">
+                        <button
+                          type="button"
+                          className="vq-button vq-button--sm"
+                          disabled={receiptBusy || !receiptDraft.trim()}
+                          onClick={() => void submitReceipt(row.version, row.id || '')}
+                        >
+                          {receiptBusy ? '正在对…' : '对一遍'}
+                        </button>
+                        <button
+                          type="button"
+                          className="vq-button vq-button--quiet vq-button--sm"
+                          disabled={receiptBusy || !receiptDraft}
+                          onClick={() => {
+                            setReceiptDraft('')
+                            setReceiptError('')
+                          }}
+                        >
+                          清空
+                        </button>
+                        <span className="vq-archive-receipt-hint is-inline">
+                          收据对得上才算「他验的就是我封存的那一份」；对不上时下面会写清哪一项不一样。
+                        </span>
+                      </div>
+                      {receiptError ? (
+                        <p className="vq-archive-receipt-note is-bad" role="status">
+                          {receiptError}
+                        </p>
+                      ) : null}
+                      {row.receipt ? (
+                        <div className={'vq-archive-receipt-result is-' + row.receipt.state} role="status">
+                          <strong>
+                            {row.receipt.state === 'match' ? <Check size={13} /> : <X size={13} />}
+                            {row.receipt.summary || deliveryReceiptLine(row.receipt)}
+                          </strong>
+                          <span className="vq-mono">
+                            {row.receipt.claimed?.at ? '收据上的时间 ' + row.receipt.claimed.at : '收据上没写时间'}
+                            {row.receipt.claimed?.kind ? ' · ' + row.receipt.claimed.kind + '核对' : ''}
+                            {' · 核对于 ' + stamp(row.receipt.at)}
+                          </span>
+                          {row.receipt.checks?.length ? (
+                            <ul className="vq-archive-receipt-checks">
+                              {row.receipt.checks.map((check) => (
+                                <li key={check.k} className={check.ok ? 'is-ok' : 'is-bad'}>
+                                  <span className="vq-archive-receipt-k">{receiptCheckLabel(check.k)}</span>
+                                  {check.ok ? (
+                                    <span className="vq-archive-receipt-got vq-mono">{check.want}</span>
+                                  ) : (
+                                    <span className="vq-archive-receipt-pair">
+                                      <span className="vq-archive-receipt-got vq-mono">
+                                        <span className="vq-archive-receipt-tag">收据</span>
+                                        {check.got || '没写'}
+                                      </span>
+                                      <span className="vq-archive-receipt-want vq-mono">
+                                        <span className="vq-archive-receipt-tag">这一条</span>
+                                        {check.want || '没记'}
+                                      </span>
+                                    </span>
+                                  )}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : null}
+                          {row.receipt.problems?.filter((line) => stripStop(line) !== stripStop(row.receipt?.summary)).length ? (
+                            <ul className="vq-archive-receipt-problems">
+                              {row.receipt.problems
+                                .filter((line) => stripStop(line) !== stripStop(row.receipt?.summary))
+                                .map((line) => (
+                                  <li key={line}>{line}</li>
+                                ))}
+                            </ul>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
                   {open && pkg ? (

@@ -1513,6 +1513,226 @@
   color: var(--fail);
 }
 
+/* 收据对账（v0.9.136）：把收包人发回的那段文字贴进来，跟这一条封存包对一遍。
+   虚线框与「核对」那一块同一套语言：都只说一件事——这里的字不进包、也不上传。 */
+.vq-archive-receipt {
+  grid-column: 2 / -1;
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  padding: var(--space-3);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+}
+
+.vq-archive-receipt-hint {
+  margin: 0;
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.vq-archive-receipt-hint.is-inline {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.vq-archive-receipt-field {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.vq-archive-receipt-label {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+.vq-archive-receipt-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 88px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.7;
+  text-transform: none;
+  resize: vertical;
+}
+
+.vq-archive-receipt-input::placeholder {
+  color: var(--faint);
+}
+
+.vq-archive-receipt-input:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.vq-archive-receipt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.vq-archive-receipt-note {
+  margin: 0;
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.vq-archive-receipt-note.is-bad {
+  color: var(--fail);
+}
+
+/* 结论块：对得上绿、对不上与读不出来红、说法打架用警示色——四种状态一眼分得开 */
+.vq-archive-receipt-result {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: 11.5px;
+  line-height: 1.6;
+  text-transform: none;
+}
+
+.vq-archive-receipt-result.is-match {
+  background: var(--pass-soft);
+  color: var(--pass);
+}
+
+.vq-archive-receipt-result.is-mismatch,
+.vq-archive-receipt-result.is-broken {
+  background: var(--fail-soft);
+  color: var(--fail);
+}
+
+.vq-archive-receipt-result.is-conflict {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.vq-archive-receipt-result strong {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  font-size: 12px;
+  font-weight: var(--weight-medium);
+}
+
+.vq-archive-receipt-result strong svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.vq-archive-receipt-result > span {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+/* 五项逐项摆开：左边这一条封存包的，右边收据上的；对不上的那一项自己转红 */
+.vq-archive-receipt-checks {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vq-archive-receipt-checks li {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: var(--space-2);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.vq-archive-receipt-checks li .vq-mono {
+  overflow-wrap: anywhere;
+  text-transform: none;
+}
+
+.vq-archive-receipt-k {
+  color: var(--faint);
+}
+
+/* 对得上的项只写一遍；对不上的那项把两边的值上下摆开，长包名也不会挤成竖条 */
+.vq-archive-receipt-pair {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-3);
+  min-width: 0;
+}
+
+.vq-archive-receipt-got,
+.vq-archive-receipt-want {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.vq-archive-receipt-got {
+  color: var(--ink);
+}
+
+.vq-archive-receipt-want {
+  color: var(--faint);
+}
+
+.vq-archive-receipt-tag {
+  margin-right: 4px;
+  color: var(--faint);
+}
+
+.vq-archive-receipt-checks li.is-bad .vq-archive-receipt-got {
+  color: var(--fail);
+}
+
+.vq-archive-receipt-problems {
+  margin: 0;
+  padding: 0 0 0 var(--space-3);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+/* 档案行上的那句结论：胶囊形状跟「盘上那份」同一套，只在有收据时出现 */
+.vq-archive-receiptline {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  width: fit-content;
+  padding: 1px var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.7;
+  text-transform: none;
+}
+
+.vq-archive-receiptline.is-match {
+  border-color: var(--pass);
+  color: var(--pass);
+}
+
+.vq-archive-receiptline.is-mismatch,
+.vq-archive-receiptline.is-broken {
+  border-color: var(--fail);
+  color: var(--fail);
+}
+
+.vq-archive-receiptline.is-conflict {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
 /* 包没了：下载入口换成说明，不给人一个点了就 404 的按钮 */
 .vq-button.is-disabled {
   opacity: .55;
@@ -1577,6 +1797,16 @@
   /* 窄屏上拖放不好用，说明缩短到一句；结论与差异值照旧换行显示 */
   .vq-archive-verify {
     padding: var(--space-2);
+  }
+
+  /* 收据块在窄屏铺满整行：贴进来的文字不缩在右半边 */
+  .vq-archive-receipt {
+    grid-column: 1 / -1;
+    padding: var(--space-2);
+  }
+
+  .vq-archive-receipt-checks li {
+    grid-template-columns: 80px minmax(0, 1fr);
   }
 }
 

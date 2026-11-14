@@ -184,7 +184,51 @@ function normalizeDeliveryPackage(raw) {
   return base
 }
 
-// 交付记录：{ id, version, at, review, package }。老记录没有时间就写空串——照样是「这一版交过」，只是不知道什么时候。
+// 收据对账（v0.9.136）：收包人贴回来的那段收据比对完的结论，挂在交付记录上。
+// 只存比对结果与对方那几项值，不存收据原文；四种状态之外一律当没核对过。
+const RECEIPT_STATES = ['match', 'mismatch', 'broken', 'conflict']
+const RECEIPT_CHECK_KEYS = ['version', 'package', 'bytes', 'sha256', 'verdict']
+
+function normalizeDeliveryReceipt(raw) {
+  if (!raw || typeof raw !== 'object') return null
+  const state = RECEIPT_STATES.includes(raw.state) ? raw.state : ''
+  const at = typeof raw.at === 'string' ? raw.at : ''
+  if (!state || !at) return null
+  const base = { at, state }
+  const summary = clip(raw.summary, 300)
+  if (summary) base.summary = summary
+  const problems = (Array.isArray(raw.problems) ? raw.problems : [])
+    .map((line) => clip(line, 180))
+    .filter(Boolean)
+    .slice(0, 4)
+  if (problems.length) base.problems = problems
+  const checks = (Array.isArray(raw.checks) ? raw.checks : [])
+    .map((check) => ({
+      k: RECEIPT_CHECK_KEYS.includes(check?.k) ? check.k : '',
+      want: clip(check?.want, 200),
+      got: clip(check?.got, 200),
+      ok: check?.ok === true,
+    }))
+    .filter((check) => check.k && (check.want || check.got))
+    .slice(0, RECEIPT_CHECK_KEYS.length)
+  if (checks.length) base.checks = checks
+  const source = raw.claimed && typeof raw.claimed === 'object' ? raw.claimed : {}
+  const claimed = {
+    at: clip(source.at, 40),
+    kind: clip(source.kind, 20),
+    title: clip(source.title, 120),
+    version: Math.max(0, Math.round(Number(source.version) || 0)),
+    bytes: Math.max(0, Math.round(Number(source.bytes) || 0)),
+    sha256: /^[0-9a-f]{64}$/.test(String(source.sha256 || '').toLowerCase()) ? String(source.sha256).toLowerCase() : '',
+    packageName: clip(source.packageName, 180),
+    chip: clip(source.chip, 20),
+    summary: clip(source.summary, 300),
+  }
+  if (Object.values(claimed).some(Boolean)) base.claimed = claimed
+  return base
+}
+
+// 交付记录：{ id, version, at, review, package, receipt }。老记录没有时间就写空串——照样是「这一版交过」，只是不知道什么时候。
 // review 同理：没有这个字段就是「当时没记评审」，不能拿这一版后来的评审冒充（v0.9.85）。
 // id/package 同理：升级前的老交付记录没有封存包，界面不能给出一个点开 404 的按钮。
 function normalizeDeliveries(raw) {
@@ -198,6 +242,9 @@ function normalizeDeliveries(raw) {
       // 没有 id 就没有可下载的包：包按 id 寻址，缺 id 时即使盘上有文件也打不开
       const pkg = id ? normalizeDeliveryPackage(entry.package) : null
       if (pkg) base.package = pkg
+      // 收据对账只挂在有封存包的记录上：没有包就没有可比的哈希
+      const receipt = pkg ? normalizeDeliveryReceipt(entry.receipt) : null
+      if (receipt) base.receipt = receipt
       return base
     })
     .filter((entry) => entry.version > 0)
@@ -403,6 +450,28 @@ export async function updateProject(id, patch = {}, user = null, { deliveryId = 
     await persist(list)
   }
   return normalize(found)
+}
+
+/**
+ * 记下收包人贴回来的收据对账结果（v0.9.136）。
+ * 只改这一条交付记录的 receipt：包的字节与哈希、交付时间、那一版的评审快照都不动——
+ * 核对是「事后发生的一件事」，不能反过来改写当初封存时记下的事实。
+ * 返回 null = 作品/交付记录不存在，或者这一条没有封存包（没有可比的哈希）。
+ */
+export async function saveDeliveryReceipt(id, deliveryId, receipt, user = null) {
+  const list = await loadAll()
+  const found = list.find((item) => item.id === id && canAccess(item, user))
+  if (!found) return null
+  const normalized = normalizeDeliveryReceipt(receipt)
+  if (!normalized) return null
+  const deliveries = normalizeDeliveries(found.deliveries)
+  const index = deliveries.findIndex((entry) => entry.id === deliveryId && entry.package)
+  if (index < 0) return null
+  deliveries[index] = { ...deliveries[index], receipt: normalized }
+  found.deliveries = deliveries
+  found.updatedAt = new Date().toISOString()
+  await persist(list)
+  return { project: normalize(found), delivery: deliveries[index] }
 }
 
 /**

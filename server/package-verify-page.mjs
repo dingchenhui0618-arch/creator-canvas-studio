@@ -248,7 +248,7 @@ const VERIFY_SCRIPT = [
   '  // 收据：一段人能直接发回给发件人的文字（谁、哪一份、结论、整包哈希、时间、坏在哪）',
   '  function receiptText(file, buf, info) {',
   '    var project = M.project || {};',
-  '    var head = "VisionQA 离线包核对";',
+  '    var head = "VisionQA " + (M.kind || "离线包") + "核对";',
   '    if (project.title) {',
   '      head += " · " + project.title + (project.version ? " v" + project.version : "");',
   '    }',
@@ -434,7 +434,9 @@ export function packageVerifyHtml({
   const title = String(project.title || '未命名作品')
   const version = Math.max(1, Math.round(Number(project.version) || 0))
   // 收据要写清「哪一份」：作品名与版次本来就是纸面上公开的信息，放进清单给页面脚本用。
+  // kind 只用来让收据抬头写「交付包核对」还是「离线包核对」，判据与清单一个字不变。
   manifest.project = { title, version }
+  manifest.kind = kind
   const count = manifest.files.length
   const blob = JSON.stringify(manifest).replace(/</g, '\\u003c')
   const body =

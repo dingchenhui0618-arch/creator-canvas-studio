@@ -191,8 +191,10 @@ test('收据：结论能复制或存成 txt，清单带上作品名与版次', a
   assert.ok(html.includes('存成 核对结果.txt'), '要有存成 txt 的按钮')
   assert.ok(html.includes('这段文字只在你自己的电脑上生成'), '要说清不上传')
   assert.ok(html.includes('@media print { .vf-receipt-row { display: none; } }'), '打印时按钮收起来')
+  assert.ok(html.includes('var head = "VisionQA " + (M.kind || "离线包") + "核对"'), '收据抬头按交付包 / 离线包写')
   const manifest = JSON.parse(html.match(/id="vq-manifest">([\s\S]*?)<\/script>/)[1])
   assert.deepEqual(manifest.project, { title: '验包验收 <script>alert(1)</script>', version: 1 }, '清单里带上作品名与版次')
+  assert.equal(manifest.kind, '交付包', '清单里记着这是交付包还是离线包')
   const blob = html.match(/id="vq-manifest">([\s\S]*?)<\/script>/)[1]
   assert.equal(blob.includes('<'), false, '清单里不留尖括号（标题带标签也拆不坏页面）')
   assert.ok(blob.includes('\\u003cscript'), '标签以 \\u003c 转义后再进清单')

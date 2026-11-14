@@ -53,6 +53,8 @@ import {
   saveDeliveryPackage,
 } from '../delivery-packages.mjs'
 import { readAuditReport } from '../package-audits.mjs'
+// 收据对账（v0.9.136）：只解析、只比对，不重打包、不联网
+import { checkReceipt, RECEIPT_MAX_CHARS } from '../receipt-check.mjs'
 import {
   MAX_ENTRY_BYTES,
   MAX_PACKAGE_BYTES,
@@ -72,6 +74,7 @@ import {
   updateProject,
   bindProjectFlow,
   saveProjectScript,
+  saveDeliveryReceipt,
   clearProjectScript,
   enableProjectShare,
   setProjectShareCompare,
@@ -108,6 +111,8 @@ const PACKAGE_AUDITS = /^\/api\/projects\/([\w-]+)\/package-audits$/
 const DELIVERY_PACKAGE_ENTRY = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})\/content\/(.+)$/
 // 整包体检（v0.9.130）：逐条解开、重算 CRC32，按偏移读，内存里最多一条；只读、不缓存、不写盘
 const DELIVERY_PACKAGE_VERIFY = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})\/verify$/
+// 收据对账（v0.9.136）：把收包人发回的那段收据贴进来，跟这一条封存包的哈希比一遍；写的是核对结论，不动包
+const DELIVERY_RECEIPT = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})\/receipt$/
 // 打印版不进 /api：它是在新标签里打开的 HTML，地址栏里那串会印在纸的页脚上
 const DELIVERABLE_PRINT = /^\/print\/projects\/([\w-]+)\/deliverable$/
 // 评审对照纸：评审把问题框在哪一块画面上，同一张 A4 里印出来（交付包里也有同一份）
@@ -1325,6 +1330,72 @@ export function createProjectsRouter() {
             kind: entryKind(entry.name),
           })),
           manifest,
+        })
+        return true
+      }
+
+      // 收据对账（v0.9.136）：收包人把校验页给出的收据发回来，发件人贴进作品页对一遍。
+      // 只读收据文字与档案里的包元数据，写一条核对结论；不重打包、不解压、不联网。
+      const receiptPath = pathname.match(DELIVERY_RECEIPT)
+      if (receiptPath) {
+        if (req.method !== 'POST') {
+          sendJson(res, 405, { error: '收据只能用 POST 贴进来，不能读也不能改' })
+          return true
+        }
+        // 核对结果挂在别人的交付记录上：必须要他自己的作品；本地演示（VQ_REQUIRE_AUTH=0）不认人
+        if (!user && config.auth.requireAuth) {
+          sendJson(res, 401, { error: '登录已过期：回到作品页再贴一次' })
+          return true
+        }
+        const project = await getProject(receiptPath[1], user)
+        if (!project) {
+          sendJson(res, 404, { error: '作品不存在或已被删除' })
+          return true
+        }
+        const delivery = (project.deliveries || []).find((entry) => entry.id === receiptPath[2] && entry.package)
+        if (!delivery) {
+          sendJson(res, 404, { error: '这一条交付没有封存包，没有可比的哈希' })
+          return true
+        }
+        const body = await readBody(req)
+        const text = String(body?.text ?? '')
+        if (!text.trim()) {
+          sendJson(res, 400, { error: '要贴一段收据：{"text": "VisionQA …核对 …"}', code: 'RECEIPT_REQUIRED' })
+          return true
+        }
+        if (text.length > RECEIPT_MAX_CHARS) {
+          sendJson(res, 413, { error: '这段太长了（超过 ' + RECEIPT_MAX_CHARS + ' 字）：只贴收据那几行', code: 'RECEIPT_TOO_LONG' })
+          return true
+        }
+        const check = checkReceipt({ text, delivery })
+        if (!check.parsed) {
+          sendJson(res, 422, { error: check.error, code: 'RECEIPT_UNREADABLE' })
+          return true
+        }
+        const saved = await saveDeliveryReceipt(
+          project.id,
+          delivery.id,
+          {
+            at: new Date().toISOString(),
+            state: check.state,
+            summary: check.summary,
+            problems: check.problems,
+            checks: check.checks,
+            claimed: check.claimed,
+          },
+          user,
+        )
+        if (!saved) {
+          sendJson(res, 404, { error: '这一条交付记录不在了，刷新一下再试' })
+          return true
+        }
+        sendJson(res, 200, {
+          ok: check.state === 'match',
+          state: check.state,
+          summary: check.summary,
+          problems: check.problems,
+          checks: check.checks,
+          receipt: saved.delivery.receipt,
         })
         return true
       }

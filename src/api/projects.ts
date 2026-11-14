@@ -1,6 +1,7 @@
 import { request } from './client'
 import type {
   DeliveryLedger,
+  DeliveryReceiptResult,
   Project,
   ProjectBucket,
   ProjectDetail,
@@ -283,6 +284,16 @@ export const deliveryPackageContents = (projectId: string, deliveryId: string) =
  */
 export const deliveryPackageAudit = (projectId: string, deliveryId: string) =>
   request<PackageAudit>(deliveryPackageUrl(projectId, deliveryId) + '/verify')
+
+/**
+ * 收据对账（v0.9.136）：把收包人发回的收据整段贴进来，服务端拿里面的整包 SHA-256
+ * 跟这一条封存包比一遍，把结论记在这条交付记录上。只比对文字与档案，不重打包、不联网。
+ */
+export const checkDeliveryReceipt = (projectId: string, deliveryId: string, text: string) =>
+  request<DeliveryReceiptResult>(deliveryPackageUrl(projectId, deliveryId) + '/receipt', {
+    method: 'POST',
+    body: JSON.stringify({ text }),
+  })
 
 /**
  * 包里一条内容的地址：按条目名取（名字里的 / 保留为分隔，其余逐段编码）。
