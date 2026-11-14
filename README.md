@@ -2107,5 +2107,7 @@ v0.9.110 / v0.9.111 的对照能指出「哪个节点输出变了」，但后面
 
 全仓 **924/924**（新增 1 条纯函数用例、扩 1 条接口用例），oxlint **0 error / 15 warning**（与上一轮同一批基线），`tsc -b` 与 build 干净；入口 `index-p7pTDTVG.js`（597,162 B）、画布 `CanvasPage-Bq-cXI16.js`（242,014 B）、后台 `AdminConsolePage-DB2or-RG.js`（201,077 B）、主样式 `index-yX8RGvWa.css`（286,057 B）、画布样式 `CanvasPage-BX48Ugxj.css`（28,926 B）。入口比 v0.9.111 多 3,109 B，样式多 2,483 B，没有新增第三方依赖。
 
+生产部署 `20261114-2012-r122diff`（快照 `20261114-121211-20261114-2012-r122diff.tar.gz` **1,032,864 B**）：四个 unit 全 active，8799 / 8800 / 公网都 **0.9.112**，`/api/health` ok（模板 26，部署后 uptime 19s）；入口 200 · 597,162 B、画布 242,014 B、后台 201,077 B、主样式 286,057 B、画布样式 28,926 B；服务端与前端哈希全部与本地一致（`flows fd83b1ab` / `run-compare e26536e1` / `routes 3102fca8` / 入口 `ae7b310b` / 画布 `c32160bf` / 后台 `576c88f5` / 主样式 `be1c301c` / 画布样式 `b49e8586`）；部署文件里 `RUN_COMPARE_DIFF` 与 `buildRunOutputDiff` 都在（routes 第 44 / 341 行）；未登录请求 `/api/runs/<id>/compare` 与 `/compare/diff` 都返回 **401**；心跳 pid 1486920 / 1486916，盘 72%，`/tmp` 352M，日志没有业务 error。生产 9 条运行、0 条带 graph，`run-graphs` 还没有目录；没有真实运行授权，这一版没有在真实运行上展开过差异，差异证据来自本地真浏览器 + 假上游。
+
 回退：`bash /opt/visionqa/ops/rollback.sh --to 1` → **v0.9.111**（`--to 2` 是 v0.9.110）。这一版不改已有 JSON schema：差异是现算的只读响应，不新增落盘字段；旧前端不请求 `/compare/diff`，对照弹窗照旧。细节、八条坑与「发现但没做」见 [知道输出变了，还得看见改了哪几行](docs/run-output-diff-2026-11-14.md)。
 
