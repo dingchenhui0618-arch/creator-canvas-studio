@@ -89,3 +89,24 @@
 - 回退：`bash /opt/visionqa/ops/rollback.sh --to 1` → **v0.9.108**；`--to 2` → **v0.9.107**。这一版不改 JSON schema，只新增作品运行的 `hasSnapshot` 字段与只读回看分支。
 - 本地验证：`npm test`、`npm run lint`、`npm run build`、`node .tmp-qa/r119-e2e.mjs`；E2E 只在本地 8945 + 假上游 8975 跑。
 - 工程数字见本轮提交说明与生产实况文档。
+
+## 生产实况（v0.9.109）
+
+发布 `20261114-180500-r119gone`，快照 `20261114-101009-20261114-180500-r119gone.tar.gz` **1,024,543 B**。
+
+| 检查 | 读数 |
+| --- | --- |
+| 四个 unit | `visionqa` / `visionqa-internal` / `visionqa.socket` / `bdc-web` 全 active |
+| 版本 / 健康 | 8799 / 8800 / 公网都是 **0.9.109**；`/api/health` ok（模板 26，uptime 50s） |
+| 入口 | `index-D5C4jWoV.js` 200 · **578,588 B**；公网同一文件 200 · 578,588 B |
+| 画布 / 后台 / 样式 | 246,686 B / 201,072 B / 276,467 B；画布样式 28,926 B |
+| 文件一致 | `flows d9aeba53` / `routes 321505a1` / 入口 `dc801b32` / 画布 `a7de183b` / 后台 `e066f5c9` / 样式 `d86dc712` / 画布样式 `b49e8586` |
+| 心跳 / 盘 | public pid 1484333 / internal pid 1484331；盘 72%；`/tmp` 357M，清回 351M |
+| 旧记录 | 生产 9 条运行、`runs.json` 里 **0 条带 graph**；`run-graphs` 还没有目录 |
+| 日志 | 只有 SQLite experimental 提示，没有业务 error / unhandled |
+
+生产验证的是版本、入口、文件一致、四个 unit 健康，以及旧运行确实没有快照、仍走「取当前画布」的回退。带「已删画布仍能回看」的证据来自本地真浏览器 + 假上游；生产没有真实运行授权，这一版没有在任何真实运行上开过快照，也没有在线上删过任何画布。
+
+- 提交 `44c355f`；CI **43583729494** 三个 job 全 success；HEAD == origin/master，工作树干净。
+- 本地 `npm test` **920/920**、oxlint **0 error / 15 warning**、`tsc -b` 与 build 干净、密钥扫描 **657 文件 / 0 命中**。
+- 回退：`bash /opt/visionqa/ops/rollback.sh --to 1` → **v0.9.108**；`--to 2` → **v0.9.107**。
