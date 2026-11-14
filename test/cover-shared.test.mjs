@@ -7,7 +7,8 @@ import path from 'node:path'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createCoverProxy } from '../server/cover-proxy.mjs'
-import { coverReport, registerCoverStats, waterlineReport } from '../server/waterline.mjs'
+import { coverKeyReport, coverReport, registerCoverStats, waterlineReport } from '../server/waterline.mjs'
+import { coverKeyHash } from '../server/cover-store.mjs'
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'vq-cover-shared-'))
 const mkRes = () => ({
@@ -107,4 +108,25 @@ test('后台那一屏：waterlineReport().cover 来自封面代理，没挂上�
   assert.equal(coverReport().bytes, 1024)
   registerCoverStats(null)
   assert.equal(waterlineReport().cover, null)
+})
+
+test('排障键：peek 与 coverKeyReport 回答同一张封面在不在，地址不外发', async (t) => {
+  const dir = tmp()
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }))
+  const proxy = createCoverProxy({ dir, fetchImage: async (url) => fakeImage(url), perMinute: 100 })
+  const url = 'https://img.example.com/probe.png?sign=SECRET'
+  assert.deepEqual(await proxy.peek(url), { present: false })
+  await call(proxy, url)
+  const peeked = await proxy.peek(url)
+  assert.equal(peeked.present, true)
+  assert.equal(peeked.type, 'image/png')
+  registerCoverStats(() => proxy.stats(), (key) => proxy.peek(key))
+  const viaWaterline = await coverKeyReport(url)
+  assert.equal(viaWaterline.present, true)
+  assert.equal(typeof coverKeyHash(url), 'string')
+  assert.equal(coverKeyHash(url).length, 32)
+  const bad = await proxy.peek('file:///etc/passwd')
+  assert.deepEqual(bad, { present: false, error: 'bad_url' })
+  registerCoverStats(null)
+  assert.equal(await coverKeyReport(url), null)
 })

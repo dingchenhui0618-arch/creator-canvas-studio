@@ -156,15 +156,22 @@ export function globalHeavyCap(level = 'ok') {
 // 封面代理的计数在 index.mjs 里组装（它才知道 config 与目录）。这里只存一个取值函数：
 // 反过来 import cover-proxy 会让 waterline 依赖一个只在服务启动时才存在的对象。
 let coverStatsProvider = null
+let coverPeekProvider = null
 
-/** 启动时挂上（index.mjs）；传 null 摘掉。 */
-export function registerCoverStats(fn) {
+/** 启动时挂上（index.mjs）；只传 report 也行，传 null 摘掉。 */
+export function registerCoverStats(fn, peekFn) {
   coverStatsProvider = typeof fn === 'function' ? fn : null
+  coverPeekProvider = typeof peekFn === 'function' ? peekFn : null
 }
 
 /** 只读诊断用：没有挂上时回 null，不编一个空对象骗人。 */
 export function coverReport() {
   return coverStatsProvider ? coverStatsProvider() : null
+}
+
+/** 「这张封面在不在缓存里」：只读、不计命中；没挂上时回 null。 */
+export async function coverKeyReport(key) {
+  return coverPeekProvider ? coverPeekProvider(String(key || '')) : null
 }
 
 /** 给后台看的一屏：读数、判定、阈值、折算后的并发上限、全站正在跑几条。 */

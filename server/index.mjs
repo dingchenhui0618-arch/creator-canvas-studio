@@ -224,7 +224,7 @@ const coverProxy = createCoverProxy({
 })
 const proxyImage = coverProxy.serve
 // 后台那一屏（/api/admin/waterline）与网关的只读诊断（/api/gateway/v1/covers）都从这里取
-registerCoverStats(() => coverProxy.stats())
+registerCoverStats(() => coverProxy.stats(), (key) => coverProxy.peek(key))
 
 // ---- 积分与并发：一次「要花钱」的请求进来，先过并发闸门，再扣积分 ----
 // 返回 { cost, release }；余额不足/并发超限时直接写响应并返回 null。

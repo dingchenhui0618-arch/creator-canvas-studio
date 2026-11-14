@@ -92,6 +92,19 @@ export function createCoverCache({
       trim()
       return images.has(key)
     },
+    /**
+     * 只看一眼在不在，不计命中也不挪 LRU（v0.9.94 的排障接口用）：
+     * 网关的 /api/gateway/v1/covers?key= 要回答「这张封面在这个实例里有没有」，
+     * 但它不是一次真实访问，不该把 hits/misses 的账记花。
+     */
+    peek(key) {
+      const at = now()
+      const image = images.get(key)
+      if (image && image.expiresAt > at) return { present: true, type: image.type, bytes: image.bytes, expiresAt: image.expiresAt }
+      const expiredAt = negatives.get(key)
+      if (expiredAt !== undefined && expiredAt > at) return { present: true, type: '', bytes: 0, expiresAt: expiredAt, negative: true }
+      return { present: false }
+    },
     /** 抓不到也记一笔：60 秒内同一个地址不再去打上游（否则一屏 40 张坏封面会反复重试）。 */
     putMiss(key) {
       negatives.delete(key)

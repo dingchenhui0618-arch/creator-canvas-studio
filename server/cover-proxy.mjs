@@ -160,8 +160,24 @@ export function createCoverProxy({
     }
   }
 
+  /**
+   * 排障：这张封面在这个实例的缓存里有没有（不计命中、不挪 LRU、不打上游）。
+   * 网关的 /api/gateway/v1/covers?key= 用它回答「两个实例看到的是不是同一张」。
+   */
+  async function peek(target) {
+    let url
+    try {
+      url = new URL(target)
+      if (!/^https?:$/.test(url.protocol)) throw new Error('bad protocol')
+    } catch {
+      return { present: false, error: 'bad_url' }
+    }
+    return store.peek(url.href)
+  }
+
   return {
     serve,
+    peek,
     // scope=lease 表示条目数 / 字节 / 在途数是整机口径；hits/misses/waiting 是本进程计数
     stats: () => store.report(),
     store,

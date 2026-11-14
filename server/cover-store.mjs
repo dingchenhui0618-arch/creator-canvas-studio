@@ -40,6 +40,11 @@ function hashKey(key) {
   return crypto.createHash('sha256').update(String(key)).digest('hex').slice(0, 32)
 }
 
+/** 排障接口用：把封面地址换成缓存里的那个名字，地址本身不往外发。 */
+export function coverKeyHash(key) {
+  return hashKey(key)
+}
+
 function removeQuiet(file) {
   try {
     fs.unlinkSync(file)
@@ -60,6 +65,33 @@ function listNames(dir, suffix) {
     return fs.readdirSync(dir).filter((name) => name.endsWith(suffix))
   } catch {
     return []
+  }
+}
+
+// 只看头：排障问「这张在不在缓存里」时，不该为了一张 8MB 的图把整段读进内存
+function readHeader(file) {
+  let fd
+  try {
+    fd = fs.openSync(file, 'r')
+    const buf = Buffer.alloc(256)
+    const read = fs.readSync(fd, buf, 0, buf.length, 0)
+    const nl = buf.subarray(0, read).indexOf(0x0a)
+    if (nl < 0) return null
+    const head = buf.subarray(0, nl).toString('utf8')
+    if (!head.startsWith(MAGIC)) return null
+    const meta = JSON.parse(head.slice(MAGIC.length))
+    if (!meta || typeof meta.type !== 'string' || !Number.isFinite(meta.expiresAt)) return null
+    return meta
+  } catch {
+    return null
+  } finally {
+    if (fd !== undefined) {
+      try {
+        fs.closeSync(fd)
+      } catch {
+        // 关不掉也不影响结论
+      }
+    }
   }
 }
 
@@ -188,6 +220,35 @@ export function createSharedCoverCache({
     return { status: 200, type: meta.type, buffer: body }
   }
 
+  /**
+   * 只回答「在不在」，不计命中、不挪 LRU、不删过期文件（v0.9.94 的排障用）。
+   * 过期条目照样报 present=true + expired=true：那正是排障想知道的状态。
+   */
+  function peek(key) {
+    const file = fileFor(key, IMG_EXT)
+    const meta = readHeader(file)
+    if (meta) {
+      let bytes = 0
+      try {
+        bytes = fs.statSync(file).size
+      } catch {
+        return { present: false }
+      }
+      return { present: true, type: meta.type, bytes, expiresAt: meta.expiresAt, expired: meta.expiresAt <= now() }
+    }
+    const negFile = fileFor(key, NEG_EXT)
+    let neg = null
+    try {
+      neg = JSON.parse(fs.readFileSync(negFile, 'utf8'))
+    } catch {
+      // 没有负缓存
+    }
+    if (neg && Number.isFinite(neg.expiresAt)) {
+      return { present: true, type: '', bytes: 0, expiresAt: neg.expiresAt, expired: neg.expiresAt <= now(), negative: true }
+    }
+    return { present: false }
+  }
+
   function put(key, { type, buffer } = {}) {
     if (!buffer || !buffer.length) return false
     const meta = { type: String(type || 'application/octet-stream'), expiresAt: now() + ttlMs }
@@ -275,7 +336,7 @@ export function createSharedCoverCache({
     for (const item of listSized(base, NEG_EXT)) removeQuiet(item.file)
   }
 
-  return { get, put, putMiss, stats, clear, dir: base }
+  return { get, put, putMiss, peek, stats, clear, dir: base }
 }
 
 /**
@@ -506,6 +567,9 @@ export function createCoverStore(options = {}) {
       async takeQuota(key) {
         return rate.take(key)
       },
+      async peek(key) {
+        return cache.peek(key)
+      },
       async acquireSlot(timeoutMs = waitMs) {
         return slots.acquire(timeoutMs)
       },
@@ -561,6 +625,9 @@ export function createCoverStore(options = {}) {
     },
     async takeQuota(key) {
       return rate.take(key)
+    },
+    async peek(key) {
+      return cache.peek(key)
     },
     async acquireSlot(timeoutMs = waitMs) {
       return (await slots.acquire(timeoutMs)) ? { release: () => slots.release() } : null

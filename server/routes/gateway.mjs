@@ -11,7 +11,8 @@
 import { readBody, sendJson } from './_shared.mjs'
 import { authorizeGateway, createImageTask, createVideoTask, generateImage, listPoolModels, pollVideoTask } from '../gateway.mjs'
 import { config } from '../config.mjs'
-import { admitWaiting, canvasQueueView, coverReport } from '../waterline.mjs'
+import { admitWaiting, canvasQueueView, coverKeyReport, coverReport } from '../waterline.mjs'
+import { coverKeyHash } from '../cover-store.mjs'
 
 const IMAGE_CREATE = new Set(['/api/gateway/v1/images/generations'])
 const IMAGE_CREATE_ASYNC = new Set(['/api/gateway/v1/images/generations/async'])
@@ -136,7 +137,15 @@ export function createGatewayRouter() {
       // 和 /api/gateway/v1/queue 一样是给排障用的：两个实例各问一次，条目 / 字节 / 在途数
       // 应该是同一个数（共享目录），pid 不相同——对不上就是目录没共用。
       if (pathname === '/api/gateway/v1/covers' && req.method === 'GET') {
-        sendJson(res, 200, { ok: true, cover: coverReport() })
+        // ?key=<封面地址> 额外回答「这一张在不在缓存里」：只读、不计命中、不打上游。
+        // 回的是哈希与字节数，不回地址本身（分享链接、签名参数不该被记进日志）。
+        const probe = String(url.searchParams.get('key') || '').slice(0, 2048)
+        const body = { ok: true, cover: coverReport() }
+        if (probe) {
+          const peek = await coverKeyReport(probe)
+          body.key = peek ? { hash: coverKeyHash(probe), ...peek } : null
+        }
+        sendJson(res, 200, body)
         return true
       }
 

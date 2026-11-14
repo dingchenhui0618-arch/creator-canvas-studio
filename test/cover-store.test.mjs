@@ -242,3 +242,22 @@ test('共享报告：条目与字节是整机口径，hits/misses 是本进程�
   assert.equal(report.dir, dir)
   assert.equal(report.pid, process.pid)
 })
+test('排障只看一眼：peek 回答在不在、多大、什么时候过期，且不计命中', async (t) => {
+  const dir = tmp()
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }))
+  let clock = 1000
+  const cache = createSharedCoverCache({ dir, ttlMs: 500, now: () => clock })
+  assert.deepEqual(cache.peek('https://img.example.com/p.png'), { present: false })
+  cache.put('https://img.example.com/p.png', { type: 'image/png', buffer: Buffer.from('payload') })
+  const peeked = cache.peek('https://img.example.com/p.png')
+  assert.equal(peeked.present, true)
+  assert.equal(peeked.type, 'image/png')
+  assert.ok(peeked.bytes > 7)
+  assert.equal(peeked.expiresAt, 1500)
+  assert.equal(peeked.expired, false)
+  assert.equal(cache.stats().hits, 0, 'peek 不是一次命中')
+  clock += 500
+  assert.equal(cache.peek('https://img.example.com/p.png').expired, true)
+  cache.putMiss('https://img.example.com/bad.png')
+  assert.equal(cache.peek('https://img.example.com/bad.png').negative, true)
+})
