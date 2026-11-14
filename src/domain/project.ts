@@ -195,6 +195,8 @@ export type ProjectRun = {
   startedAt: string
   finishedAt: string
   durationMs: number
+  /** 排队等了多久（v0.9.100）：0 = 没排过队 */
+  queuedMs?: number
   total: number
   failed: number
   error: string

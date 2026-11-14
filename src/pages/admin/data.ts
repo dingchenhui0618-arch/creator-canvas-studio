@@ -56,6 +56,8 @@ export type RunItem = {
   startedAt: string
   finishedAt?: string | null
   durationMs: number
+  /** 排队等了多久（v0.9.100）：0 / 缺省 = 没排过队 */
+  queuedMs?: number
   total: number
   nodes?: RunNode[]
   error?: string | null

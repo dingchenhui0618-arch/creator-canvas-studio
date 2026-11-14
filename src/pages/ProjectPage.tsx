@@ -1161,6 +1161,7 @@ export default function ProjectPage({
                       </span>
                       <span className="vq-run-meta">
                         <span>{run.total} 节点{run.failed ? ' · ' + run.failed + ' 个失败' : ''}</span>
+                        {(run.queuedMs ?? 0) >= 1000 ? <span>排队 {duration(run.queuedMs ?? 0)}</span> : null}
                         <span>{duration(run.durationMs)}</span>
                         <span>
                           {run.credits && run.credits.cost

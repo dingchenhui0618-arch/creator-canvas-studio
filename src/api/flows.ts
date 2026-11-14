@@ -77,6 +77,8 @@ export type RunRecord = {
   startedAt: string
   /** 排队单从哪一刻开始等（v0.9.98）；没排过队的是 null / 缺省 */
   queuedAt?: string | null
+  /** 排队一共等了多久（v0.9.100）：0 / 缺省 = 没排过队；终态记录也保留 */
+  queuedMs?: number
   finishedAt: string | null
   durationMs: number
   total: number

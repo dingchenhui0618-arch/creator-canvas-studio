@@ -29,6 +29,28 @@ export function runLiveText(run: { status: string; queuedAt?: string | null; sta
 }
 
 /**
+ * 一条跑完的运行该写多久：只写节点耗时会把排队那段时间藏掉——用户等了一分钟，
+ * 记录上写 7.0s，看起来像产品在撒谎。排队过就写「排队 52.0s · 运行 7.0s」（v0.9.100）。
+ */
+export function runSpentText(run: {
+  status: string
+  durationMs?: number
+  queuedMs?: number
+  queuedAt?: string | null
+  startedAt?: string | null
+}): string {
+  if (run.status === 'running' || run.status === 'queued') return runLiveText(run)
+  const runMs = Math.max(0, Number(run.durationMs) || 0)
+  const waited = Math.max(0, Number(run.queuedMs) || 0)
+  const runText = (runMs / 1000).toFixed(1) + 's'
+  // 几十毫秒的「排队」只是占位记录到扣费之间的时间，不是用户在门口等：
+  // 写「排队 0.0s」既难看又像在表功，1 秒以内就不提（原始数仍在记录里）。
+  if (waited < 1000) return runText
+  const waitText = waited < 10000 ? (waited / 1000).toFixed(1) + 's' : Math.round(waited / 1000) + 's'
+  return '排队 ' + waitText + ' · 运行 ' + runText
+}
+
+/**
  * 运行记录里「这条运行属于哪条作品的哪一版」的写法，全站一处。
  * 运行记录页的第二行、详情页头、工作台的最近运行都读它——分开写迟早一处写「v2」、
  * 一处写「第2版」，归档版还会有一处忘了标「已归档」。

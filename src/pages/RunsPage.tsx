@@ -5,7 +5,7 @@ import { Select } from '../components/Select'
 import { adoptProjectCanvas, createProject, listProjects } from '../api/projects'
 import type { ProjectSummary } from '../domain/project'
 import { listFlows, listRuns, type ApiFlow, type RunRecord } from '../api/flows'
-import { runLiveText, runStatusMeta, runVersionLabel, runWorkLine } from '../domain/run'
+import { runSpentText, runStatusMeta, runVersionLabel, runWorkLine } from '../domain/run'
 import { readRunsView, resolveFlowFilter, writeRunsView, type RunsView } from '../domain/list-view'
 import '../styles/runs.css'
 
@@ -357,9 +357,7 @@ export function RunsPage({
                   </span>
                   <span className="runs-row-meta">
                     <span className="vq-mono">{runStatusMeta(item.status).label}</span>
-                    <span className="vq-mono">
-                      {item.status === 'running' || item.status === 'queued' ? runLiveText(item) : (item.durationMs / 1000).toFixed(1) + 's'}
-                    </span>
+                    <span className="vq-mono">{runSpentText(item)}</span>
                     <span className="vq-mono">{fmtTime(item.startedAt)}</span>
                   </span>
                 </button>
@@ -372,9 +370,7 @@ export function RunsPage({
               <div className="runs-detail-head">
                 <Activity size={14} strokeWidth={1.5} />
                 <strong>{current.flowName}</strong>
-                <span className="vq-mono">
-                  {current.status === 'running' || current.status === 'queued' ? runLiveText(current) : (current.durationMs / 1000).toFixed(1) + 's'}
-                </span>
+                <span className="vq-mono">{runSpentText(current)}</span>
                 {current.credits && current.credits.cost > 0 ? (
                   <span className="vq-mono">
                     {current.credits.refunded

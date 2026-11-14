@@ -41,13 +41,14 @@ function outputOf(value: unknown): string {
 // 导出当前筛选结果：只导已加载的记录，字段与表格一致，带 BOM 让 Excel 正确识别中文
 function exportCsv(runs: RunItem[], accountOf: (run: RunItem) => string) {
   const rows: (string | number | null | undefined)[][] = [
-    ['运行 ID', '流程 ID', '流程', '账号', '状态', '耗时 ms', '节点数', '开始时间', '结束时间', '错误'],
+    ['运行 ID', '流程 ID', '流程', '账号', '状态', '排队 ms', '耗时 ms', '节点数', '开始时间', '结束时间', '错误'],
     ...runs.map((run) => [
       run.id,
       run.flowId,
       run.flowName,
       accountOf(run),
       run.status,
+      run.queuedMs || 0,
       run.durationMs,
       run.total,
       run.startedAt,
@@ -241,6 +242,13 @@ function RunsPanel({ refreshKey }: { refreshKey: number }) {
     return hit ? hit.email : run.ownerId
   }
   const filtering = Boolean(status || ownerId || flowId)
+  // 排队不是「耗时」：耗时只说节点执行，等待是用户在门口站着。本页有多少条真排过队、
+  // 平均与最长等多久，用记录里已经算好的 queuedMs 直接读，不在页面上另估（v0.9.100）。
+  const queuedRuns = runs.filter((run) => Number(run.queuedMs) >= 1000)
+  const queuedAverage = queuedRuns.length
+    ? Math.round(queuedRuns.reduce((sum, run) => sum + Number(run.queuedMs), 0) / queuedRuns.length)
+    : 0
+  const queuedLongest = queuedRuns.reduce((max, run) => Math.max(max, Number(run.queuedMs) || 0), 0)
 
   return (
     <>
@@ -254,7 +262,13 @@ function RunsPanel({ refreshKey }: { refreshKey: number }) {
           <div>
             <p className="admin-label">运行记录</p>
             <p className="admin-sub">
-              {data ? `共 ${data.total} 条${filtering ? '（已筛选）' : ''}；节点输出来自列表返回的 nodes 字段。` : '等待接口返回。'}
+              {data
+                ? `共 ${data.total} 条${filtering ? '（已筛选）' : ''}；` +
+                  (queuedRuns.length
+                    ? `本页 ${runs.length} 条里 ${queuedRuns.length} 条排过队，平均等 ${formatDuration(queuedAverage)}，最长 ${formatDuration(queuedLongest)}。`
+                    : `本页 ${runs.length} 条都没有排过队。`) +
+                  '节点输出来自列表返回的 nodes 字段。'
+                : '等待接口返回。'}
             </p>
           </div>
           <SourceTag kind="api" source="GET /api/runs" />
@@ -320,6 +334,7 @@ function RunsPanel({ refreshKey }: { refreshKey: number }) {
                   <th>流程</th>
                   <th>账号</th>
                   <th>状态</th>
+                  <th>排队</th>
                   <th>耗时</th>
                   <th>节点</th>
                   <th>开始时间</th>
@@ -349,13 +364,14 @@ function RunsPanel({ refreshKey }: { refreshKey: number }) {
                         <td>
                           <Badge tone={tone.tone}>{tone.label}</Badge>
                         </td>
+                        <td className="admin-mono">{(run.queuedMs ?? 0) >= 1000 ? formatDuration(run.queuedMs) : '—'}</td>
                         <td className="admin-mono">{formatDuration(run.durationMs)}</td>
                         <td className="admin-mono">{run.total}</td>
                         <td className="admin-mono">{formatDateTime(run.startedAt)}</td>
                       </tr>
                       {open ? (
                         <tr className="admin-run-detail">
-                          <td colSpan={7}>
+                          <td colSpan={8}>
                             <RunDetail run={run} account={accountOf(run)} />
                           </td>
                         </tr>
@@ -522,6 +538,7 @@ function RunDetail({ run, account }: { run: RunItem; account: string }) {
         <span>flow {run.flowId}</span>
         <span>账号 {account}</span>
         <span>实例 {run.ownerInstance || '升级前的记录'}</span>
+        {(run.queuedMs ?? 0) >= 1000 ? <span>排队 {formatDuration(run.queuedMs)}</span> : null}
         <span>结束 {formatDateTime(run.finishedAt)}</span>
       </div>
       {nodes.length ? (

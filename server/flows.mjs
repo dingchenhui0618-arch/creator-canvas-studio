@@ -349,6 +349,8 @@ export function runSummary(run) {
     startedAt: run.startedAt,
     finishedAt: run.finishedAt || '',
     durationMs: Number(run.durationMs) || 0,
+    // 排队等了多少毫秒（0 = 没排过队）：作品页与运行详情用同一个数说「等 + 跑」
+    queuedMs: Number(run.queuedMs) || 0,
     total: Number(run.total) || 0,
     failed: (Array.isArray(run.nodes) ? run.nodes : []).filter((node) => node.status === 'error').length,
     error: run.error || '',
@@ -804,13 +806,21 @@ export async function runFlow(flow, { onEvent, credits = null, runId = '' } = {}
   }
 
   const startedAt = Date.now()
+  const id = String(runId || '') || newRunId()
+  // runFlow 会用这个对象覆盖同 id 的占位记录：占位记录上的字段必须跟着写回去。
+  // 排队时长是 markRunStarted 算好的真数（v0.9.100）；这里漏接的话，排队单跑完就再也
+  // 说不清「一共等了多久」——页面只剩节点耗时，用户会以为一次 50 秒的等待只花了 7 秒。
+  const placeholder = runId ? (await loadRuns()).find((item) => item.id === id) : null
   const run = {
-    id: String(runId || '') || newRunId(),
+    id,
     flowId: flow.id,
     flowName: flow.name,
     status: 'running',
     // runFlow 会用这个对象覆盖同 id 的占位记录：实例归属必须跟着写回去
     ownerInstance: currentInstanceId(),
+    // 排队从哪一刻开始、等了多久：只有占位记录上有，终态也要留着
+    queuedAt: placeholder?.queuedAt || null,
+    queuedMs: Math.max(0, Math.round(Number(placeholder?.queuedMs) || 0)),
     startedAt: new Date(startedAt).toISOString(),
     finishedAt: null,
     durationMs: 0,

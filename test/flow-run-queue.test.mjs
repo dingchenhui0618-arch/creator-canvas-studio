@@ -350,6 +350,14 @@ test('路由：运行排队期间不扣积分，排到后响应头带名次、�
     assert.ok(end, '流里要有 run-end')
     // 排到之后才扣费：账本里正好一张扣费单（这条流程的节点失败，随后全额退回）
     const runId = end.run.id
+    // 排队时长要跟着终态记录走：runFlow 会用自己造的对象覆盖占位记录，
+    // 这里漏接的话页面就只剩节点耗时，用户等的那段时间凭空消失（v0.9.100）
+    assert.ok(Number(end.run.queuedMs) >= 150, '终态记录要带真实排队时长，拿到的是 ' + end.run.queuedMs)
+    assert.ok(end.run.queuedAt, '排队开始的时刻也要留着')
+    const saved = await flows.getRun(runId, user)
+    assert.equal(saved.queuedMs, end.run.queuedMs, '落盘的终态记录与流里返回的是同一个数')
+    assert.equal(saved.queuedAt, end.run.queuedAt)
+    assert.ok(saved.startedAt >= saved.queuedAt)
     const charges = ledgerRows('flow_run').filter((row) => row.ref === runId)
     assert.equal(charges.length, 1, '排到后只扣一次')
     assert.equal(balance(), before, '节点失败要全额退回，余额回到原值')
@@ -357,4 +365,22 @@ test('路由：运行排队期间不扣积分，排到后响应头带名次、�
   } finally {
     release()
   }
+})
+
+test('运行摘要也带排队时长：作品页与运行记录用同一个数', () => {
+  const summary = flows.runSummary({
+    id: 'run_demo',
+    flowId: 'flow_demo',
+    flowName: '演示画布',
+    status: 'success',
+    startedAt: '2026-11-14T05:00:00.000Z',
+    finishedAt: '2026-11-14T05:00:07.000Z',
+    durationMs: 7000,
+    queuedMs: 8200,
+    total: 3,
+  })
+  assert.equal(summary.durationMs, 7000)
+  assert.equal(summary.queuedMs, 8200)
+  // 升级前的记录没有这个字段：摘要写 0，页面据此只说「运行」，不编一个等待时长
+  assert.equal(flows.runSummary({ status: 'success', durationMs: 1200 }).queuedMs, 0)
 })
