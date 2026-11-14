@@ -60,8 +60,7 @@ import {
   entryMime,
   findZipEntry,
   readZipDirectoryAt,
-  readZipDirectory,
-  readZipEntry,
+  readZipEntryAt,
   verifyZipAt,
 } from '../zip-read.mjs'
 import {
@@ -1231,18 +1230,24 @@ export function createProjectsRouter() {
           sendJson(res, 404, { error: '这一条交付没有封存包，或者包已经不在了' })
           return true
         }
-        const archive = await readDeliveryPackage(project.id, delivery.id)
-        if (!archive) {
+        const handle = await openDeliveryPackage(project.id, delivery.id)
+        if (!handle) {
           sendJson(res, 404, { error: '盘上那份封存包不在了；包内清单还能看档案里记的那一份' })
           return true
         }
-        if (archive.length > MAX_PACKAGE_BYTES) {
-          sendJson(res, 413, {
-            error: '这个包超过 ' + Math.round(MAX_PACKAGE_BYTES / (1024 * 1024)) + ' MB，太大了不能在这里读目录；下载下来再看',
-          })
-          return true
+        // 按偏移读：只读尾部与中央目录这一小段，不把整包读进内存（v0.9.131）
+        let directory
+        try {
+          if (handle.size > MAX_PACKAGE_BYTES) {
+            sendJson(res, 413, {
+              error: '这个包超过 ' + Math.round(MAX_PACKAGE_BYTES / (1024 * 1024)) + ' MB，太大了不能在这里读目录；下载下来再看',
+            })
+            return true
+          }
+          directory = readZipDirectoryAt(handle.fd, handle.size)
+        } finally {
+          await handle.close()
         }
-        const directory = readZipDirectory(archive)
         if (!directory) {
           sendJson(res, 200, {
             ok: false,
@@ -1257,6 +1262,8 @@ export function createProjectsRouter() {
           ok: true,
           state: 'ok',
           readAt: new Date().toISOString(),
+          bytes: handle.size,
+          readBytes: directory.readBytes,
           entries: directory.entries.map((entry) => ({
             name: entry.name,
             bytes: entry.bytes,
@@ -1353,34 +1360,42 @@ export function createProjectsRouter() {
           sendJson(res, 400, { error: '条目名的编码不对' })
           return true
         }
-        const archive = await readDeliveryPackage(project.id, delivery.id)
-        if (!archive) {
+        const handle = await openDeliveryPackage(project.id, delivery.id)
+        if (!handle) {
           sendJson(res, 404, { error: '盘上那份封存包不在了；包内清单还能看档案里记的那一份' })
           return true
         }
-        if (archive.length > MAX_PACKAGE_BYTES) {
-          sendJson(res, 413, {
-            error: '这个包超过 ' + Math.round(MAX_PACKAGE_BYTES / (1024 * 1024)) + ' MB，不能在这里读单条内容；下载下来再看',
-          })
-          return true
+        // 按偏移读：目录只读尾部那一小段，内容只读这一条（v0.9.131），不再把整包摊进内存
+        let directory
+        let entry
+        let read
+        try {
+          if (handle.size > MAX_PACKAGE_BYTES) {
+            sendJson(res, 413, {
+              error: '这个包超过 ' + Math.round(MAX_PACKAGE_BYTES / (1024 * 1024)) + ' MB，不能在这里读单条内容；下载下来再看',
+            })
+            return true
+          }
+          directory = readZipDirectoryAt(handle.fd, handle.size)
+          if (!directory) {
+            sendJson(res, 409, { error: '包里的目录读不出来：可能被截断，先下载包来看' })
+            return true
+          }
+          entry = findZipEntry(directory.entries, entryName)
+          if (!entry) {
+            sendJson(res, 404, { error: '包里没有这个文件' })
+            return true
+          }
+          if (entry.bytes > MAX_ENTRY_BYTES) {
+            sendJson(res, 413, {
+              error: '这一条超过 ' + Math.round(MAX_ENTRY_BYTES / (1024 * 1024)) + ' MB，不能在这里预览；下载包来解压',
+            })
+            return true
+          }
+          read = readZipEntryAt(handle.fd, handle.size, entry)
+        } finally {
+          await handle.close()
         }
-        const directory = readZipDirectory(archive)
-        if (!directory) {
-          sendJson(res, 409, { error: '包里的目录读不出来：可能被截断，先下载包来看' })
-          return true
-        }
-        const entry = findZipEntry(directory.entries, entryName)
-        if (!entry) {
-          sendJson(res, 404, { error: '包里没有这个文件' })
-          return true
-        }
-        if (entry.bytes > MAX_ENTRY_BYTES) {
-          sendJson(res, 413, {
-            error: '这一条超过 ' + Math.round(MAX_ENTRY_BYTES / (1024 * 1024)) + ' MB，不能在这里预览；下载包来解压',
-          })
-          return true
-        }
-        const read = readZipEntry(archive, entry)
         if (!read) {
           sendJson(res, 409, { error: '这一条读不出来：包在这一块可能坏了' })
           return true
@@ -1398,6 +1413,9 @@ export function createProjectsRouter() {
           'X-Content-Type-Options': 'nosniff',
           'X-Robots-Tag': 'noindex',
           'X-VQ-Entry-Crc32': String(entry.crc),
+          // 这一回真从盘上读了多少字节（目录 + 这一条），跟包大小对照着看就知道没翻整包
+          'X-VQ-Read-Bytes': String((directory?.readBytes || 0) + (read.readBytes || 0)),
+          'X-VQ-Package-Bytes': String(handle.size),
         }
         // 页面进沙箱 iframe（前端 sandbox 属性）之外再加一道：即使哪天漏了 sandbox，也不许取外部资源
         if (mime.startsWith('text/html')) {

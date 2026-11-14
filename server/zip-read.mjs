@@ -4,8 +4,9 @@
 // 目录就写在文件尾部的中央目录里，按偏移取一段就够。几十行读得完的代码，
 // 比再引一个依赖更容易审：读进来的名字、大小、CRC 都来自包本身，不是另记一份。
 //
-// 两种读法（v0.9.130）：路由里已经把包读进内存时用内存那一路；整包体检、列目录用盘上的
-// 只读句柄按偏移读，内存里最多只有一条，不把整包和它的解压结果一起摊在内存里。
+// 两种读法（v0.9.130 / v0.9.131）：路由里已经把包读进内存时用内存那一路；列目录、单条内容、
+// 整包体检都走盘上的只读句柄按偏移读，内存里最多只有一条，不把整包和它的解压结果一起摊在内存里。
+// 每回读了多少字节都记在源上（readBytes），路由把它发出来：说「只读了一条」拿的是真读过的数，不是估算。
 //
 // 边界：
 //  - 只认我们写得出、也解得开的那两种压缩方式（0 = store、8 = deflate）；别的回 null，不猜；
@@ -28,23 +29,27 @@ export const MAX_PACKAGE_BYTES = 64 * 1024 * 1024
 /** 一次体检最多解开这么多字节：条目大小上限管的是单条，条数乘起来还得有个总预算。 */
 export const MAX_VERIFY_BYTES = 128 * 1024 * 1024
 
-/** 内存里的整份：只在包已经读进内存时用（比如单条内容预览）。 */
+/** 内存里的整份：只在调用方本来就握着 Buffer 时用（库函数、测试）。 */
 function memorySource(buffer) {
   if (!Buffer.isBuffer(buffer)) return null
-  return {
+  const source = {
     size: buffer.length,
+    readBytes: 0,
     read(offset, length) {
       if (offset < 0 || length < 0 || offset + length > buffer.length) return null
+      source.readBytes += length
       return buffer.subarray(offset, offset + length)
     },
   }
+  return source
 }
 
-/** 盘上的只读句柄：按偏移读多少算多少；只读、不缓存、不写回。 */
-function fdSource(fd, size, onRead) {
+/** 盘上的只读句柄：按偏移读多少算多少；只读、不缓存、不写回，读过的字节记在 readBytes。 */
+function fdSource(fd, size) {
   const total = Math.max(0, Math.round(Number(size) || 0))
-  return {
+  const source = {
     size: total,
+    readBytes: 0,
     read(offset, length) {
       if (offset < 0 || length < 0 || offset + length > total) return null
       const buffer = Buffer.allocUnsafe(length)
@@ -54,27 +59,41 @@ function fdSource(fd, size, onRead) {
         if (n <= 0) return null
         got += n
       }
-      if (onRead && length > 0) onRead(length)
+      source.readBytes += length
       return buffer
     },
   }
+  return source
+}
+
+/**
+ * 找 EOCD：先只读最后 22 字节（没有注释的包，收尾记录就在这儿），找不到再放到 1 KB、最后到 64 KB。
+ * 窗口都贴着文件尾，所以「找到了」还要求 pos + 22 + 注释长度 === 窗口长度，不把中间某段碰巧像签名的字节当收尾。
+ */
+function findEocd(source) {
+  let previous = 0
+  for (const limit of [EOCD_MIN, 1024, EOCD_SCAN]) {
+    const window = Math.min(Math.max(source.size, 0), limit)
+    if (window <= previous) continue
+    previous = window
+    const tail = source.read(source.size - window, window)
+    if (!tail || tail.length < EOCD_MIN) continue
+    for (let pos = tail.length - EOCD_MIN; pos >= 0; pos -= 1) {
+      if (tail.readUInt32LE(pos) !== EOCD_SIG) continue
+      if (pos + EOCD_MIN + tail.readUInt16LE(pos + 20) !== tail.length) continue
+      return { tail, at: pos }
+    }
+  }
+  return null
 }
 
 /** 解析中央目录：只读尾部与中央目录那两段，不碰条目内容。 */
 function parseDirectory(source) {
   if (!source || source.size < EOCD_MIN) return null
   try {
-    const scanStart = Math.max(0, source.size - EOCD_SCAN)
-    const tail = source.read(scanStart, source.size - scanStart)
-    if (!tail || tail.length < EOCD_MIN) return null
-    let at = -1
-    for (let pos = tail.length - EOCD_MIN; pos >= 0; pos -= 1) {
-      if (tail.readUInt32LE(pos) === EOCD_SIG) {
-        at = pos
-        break
-      }
-    }
-    if (at < 0) return null
+    const found = findEocd(source)
+    if (!found) return null
+    const { tail, at } = found
     const total = tail.readUInt16LE(at + 10)
     const centralBytes = tail.readUInt32LE(at + 12)
     const centralOffset = tail.readUInt32LE(at + 16)
@@ -113,7 +132,7 @@ function parseDirectory(source) {
       })
       cursor += 46 + nameBytes + extraBytes + commentBytes
     }
-    return { entries, total }
+    return { entries, total, readBytes: source.readBytes }
   } catch {
     return null
   }
@@ -153,7 +172,7 @@ function readEntryFrom(source, entry) {
     if (!raw || raw.length !== entry.packed) return { error: 'truncated' }
     const content = entry.method === 0 ? Buffer.from(raw) : inflateRawSync(raw)
     if (!content || content.length !== entry.bytes) return { error: 'unreadable' }
-    return { data: content, bytes: content.length, crcOk: crc32(content) === entry.crc }
+    return { data: content, bytes: content.length, crcOk: crc32(content) === entry.crc, readBytes: source.readBytes }
   } catch {
     return { error: 'unreadable' }
   }
@@ -206,11 +225,8 @@ export function verifyZipEntries(source, entries, { budgetBytes = MAX_VERIFY_BYT
 
 /** 体检盘上那一份，并记下这次真读了多少字节（用来跟包大小对照，不是估算）。 */
 export function verifyZipAt(fd, size, entries, options = {}) {
-  let readBytes = 0
-  const source = fdSource(fd, size, (n) => {
-    readBytes += n
-  })
-  return { ...verifyZipEntries(source, entries, options), readBytes }
+  const source = fdSource(fd, size)
+  return { ...verifyZipEntries(source, entries, options), readBytes: source.readBytes }
 }
 
 /**

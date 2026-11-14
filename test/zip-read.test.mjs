@@ -170,6 +170,46 @@ test('盘上的那份按句柄读：目录与内存里那份逐条一致，取�
   }
 })
 
+test('按偏移读目录只读尾部那一小段：包再大也不翻整包（v0.9.131）', () => {
+  const big = []
+  for (let index = 0; index < 48; index += 1) {
+    big.push({ name: 'frames/shot-' + String(index).padStart(2, '0') + '.jpg', data: Buffer.alloc(64 * 1024, index) })
+  }
+  const zip = buildZip(big)
+  const temp = tempZip(zip)
+  try {
+    const at = readZipDirectoryAt(temp.fd, temp.size)
+    assert.ok(at)
+    assert.equal(at.total, 48)
+    // 48 条、3 MB 的包，目录这一趟只该读几 KB：不是「读进来再切」
+    assert.ok(at.readBytes > 0)
+    assert.ok(at.readBytes < 4096, '读目录读了 ' + at.readBytes + ' 字节')
+    assert.ok(at.readBytes < zip.length / 100)
+    // 取一条也只读这一条：本地头 + 这一条的数据，跟包多大无关
+    const target = findZipEntry(at.entries, 'frames/shot-25.jpg')
+    assert.ok(target)
+    const read = readZipEntryAt(temp.fd, temp.size, target)
+    assert.ok(read)
+    assert.equal(read.crcOk, true)
+    assert.ok(read.readBytes >= target.bytes)
+    assert.ok(read.readBytes < target.bytes + 512, '读一条读了 ' + read.readBytes + ' 字节')
+    assert.ok(read.readBytes < zip.length / 10)
+  } finally {
+    temp.close()
+  }
+})
+
+test('内存那一路也记读了多少：列目录和取一条都会累加', () => {
+  const zip = buildZip(entries)
+  const dir = readZipDirectory(zip)
+  assert.ok(dir.readBytes > 0)
+  const target = findZipEntry(dir.entries, '现场页.html')
+  const read = readZipEntry(zip, target)
+  assert.ok(read)
+  assert.ok(read.readBytes >= target.bytes)
+  assert.equal(read.crcOk, true)
+})
+
 test('整包体检：每一条都解开重算 CRC，全部对得上；读的字节数不超过包大小', () => {
   const zip = buildZip(entries)
   const temp = tempZip(zip)

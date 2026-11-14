@@ -204,6 +204,36 @@ test('封存之后改模板、改脚本：取回的字节仍是当初那一份',
   assert.deepEqual(fs.readFileSync(file), before)
 })
 
+test('包内目录与单条内容：按偏移读，读的字节远小于整包（v0.9.131）', async () => {
+  const project = await projects.getProject('prj_pkg', me)
+  const delivery = project.deliveries[0]
+  const head = '/api/projects/prj_pkg/delivery-packages/' + delivery.id
+
+  const listed = await call('GET', head + '/content')
+  assert.equal(listed.status, 200)
+  const body = JSON.parse(listed.body)
+  assert.equal(body.ok, true)
+  assert.equal(body.bytes, delivery.package.bytes)
+  assert.ok(body.readBytes > 0)
+  assert.ok(body.readBytes < 4096, '读目录读了 ' + body.readBytes + ' 字节')
+  assert.equal(body.entries.length, delivery.package.files.length)
+  assert.equal(body.manifest.recorded, delivery.package.files.length)
+  assert.deepEqual(body.manifest.missing, [])
+
+  const entry = await call('GET', head + '/content/' + encodeURIComponent('说明.txt'))
+  assert.equal(entry.status, 200)
+  assert.ok(String(entry.headers['Content-Type']).startsWith('text/plain'))
+  const readBytes = Number(entry.headers['X-VQ-Read-Bytes'])
+  assert.ok(readBytes > 0)
+  assert.ok(readBytes < delivery.package.bytes, '读一条读了 ' + readBytes + ' 字节')
+  assert.equal(Number(entry.headers['X-VQ-Package-Bytes']), delivery.package.bytes)
+  assert.match(String(entry.headers['X-VQ-Entry-Crc32']), /^[0-9]+$/)
+  assert.ok(entry.body.length > 0)
+
+  assert.equal((await call('POST', head + '/content')).status, 405)
+  assert.equal((await call('GET', head + '/content/' + encodeURIComponent('没这条.txt'))).status, 404)
+})
+
 test('交付流水带包编号：当前版一行能下载，老记录没有包不出入口', async () => {
   const list = await projects.listProjects(me)
   const rows = ledgerRows({ projects: list, counts: {} })

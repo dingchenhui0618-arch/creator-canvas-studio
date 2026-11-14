@@ -472,6 +472,9 @@ export type PackageContents = {
   state: 'ok' | 'unreadable'
   readAt?: string
   error?: string
+  /** 包多大，以及这一回为了读目录真从盘上读了多少字节（v0.9.131：按偏移读，不翻整包） */
+  bytes?: number
+  readBytes?: number
   entries?: PackageEntry[]
   /** 老包没记清单时是 null：那时不比较，也不把整包说成「多出来的」 */
   manifest?: PackageManifestDiff | null

@@ -1871,7 +1871,9 @@ export default function ProjectPage({
                         <>
                           <div className="vq-archive-contents-head">
                             <p className="vq-archive-contents-note">
-                              目录是从盘上那份读出来的：{contents.result.entries.length} 个文件
+                              目录是从盘上那份按偏移读的：{contents.result.entries.length} 个文件
+                              {contents.result.readBytes ? '，只读了 ' + packageBytesLabel(contents.result.readBytes) : ''}
+                              {contents.result.bytes ? '（包 ' + packageBytesLabel(contents.result.bytes) + '）' : ''}
                               {contents.result.manifest ? '，档案记了 ' + contents.result.manifest.recorded + ' 个' : ''}
                               {contents.result.entries.length ? '；点一条就在这儿看，不用整包解压。' : '。'}
                             </p>
