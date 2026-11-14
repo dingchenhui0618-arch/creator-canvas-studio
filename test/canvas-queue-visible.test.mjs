@@ -245,7 +245,8 @@ test('只有画布出图有名次：别的重活既不排队也没有「我第�
   assert.equal(water.queuePositionFor('review', 'whatever'), null)
   const view = water.canvasQueueView()
   assert.equal(view.kind, 'canvas_gen')
-  assert.equal(view.queueScope, 'process', '排队位现在是本进程的（两个实例各排各的），这一点要写在响应里')
+  // v0.9.93：排队位搬进共享目录，两个实例排的是同一条队；目录用不了才退回 process
+  assert.equal(view.queueScope, 'lease', '排队位与名额同一个口径（整机一份），这一点要写在响应里')
   assert.equal(typeof view.scope, 'string')
 })
 

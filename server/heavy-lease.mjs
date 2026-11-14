@@ -87,7 +87,7 @@ function sleepSync(ms) {
   }
 }
 
-function pidAlive(pid) {
+export function pidAlive(pid) {
   if (!Number.isInteger(pid) || pid <= 0) return false
   try {
     process.kill(pid, 0)
@@ -241,6 +241,37 @@ function releaseLock(dir) {
     fs.rmdirSync(path.join(dir, LOCK_NAME))
   } catch {
     // 已经被当陈旧锁清掉：无害
+  }
+}
+
+/** 现在生效的共享目录（解析后）：租约与排队位用的是同一个目录，别各算一份。 */
+export function leaseDirPath() {
+  return path.resolve(leaseConfig().dir)
+}
+
+/** 目录或锁没拿到：调用方退回进程内（和 acquireHeavyLease 的降级同一个口径）。 */
+export const LEASE_LOCK_MISS = Symbol('lease-lock-miss')
+
+/**
+ * 在共享目录的跨进程锁里跑一段**同步**逻辑（v0.9.93）。
+ * 排队位的「数一下在等几条 + 登记自己」要和租约的「数一下在跑几条 + 占名额」用同一把锁：
+ * 两个实例同时读、各自以为还有一个空位，就会一起放行——锁是唯一挡住这件事的东西。
+ * 目录不可用 / 拿不到锁时返回 LEASE_LOCK_MISS，由调用方决定怎么降级。
+ */
+export function withLeaseDirLock(fn) {
+  const cfg = leaseConfig()
+  if (!cfg.enabled) return LEASE_LOCK_MISS
+  const dir = path.resolve(cfg.dir)
+  if (!ensureDir(dir)) return LEASE_LOCK_MISS
+  if (!acquireLock(dir, cfg.lockWaitMs)) {
+    stats.lockMiss += 1
+    stats.lastError = '共享目录锁等待超时'
+    return LEASE_LOCK_MISS
+  }
+  try {
+    return fn({ dir, cfg })
+  } finally {
+    releaseLock(dir)
   }
 }
 
