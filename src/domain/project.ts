@@ -229,6 +229,8 @@ export type ProjectDeliveryRow = {
   verdict: string
   /** 交的时候评审怎么说（交付时存下的快照）；null 当时还没评过；没有这个字段是升级前的老记录 */
   review?: ProjectDeliveryReview | null
+  /** 这一版最近一评的问题数：界面拿它和交时快照比，判断「之后又评成了别的结论」（v0.9.86） */
+  issues?: ReviewIssues | null
 }
 
 /** 交付流水的整份数字按全部记录算，不因为只取了一页而变小 */
@@ -239,6 +241,8 @@ export type DeliveryLedger = {
   projects: number
   /** 其中几条交的还是当前这一版 */
   currentTotal: number
+  /** 其中几条交出去之后这一版又被评成了别的结论（v0.9.86）：按交付记录数，不按作品数 */
+  drifted: number
   /** 最近一次交付的时间；一条带时间的都没有就是空串 */
   lastAt: string
   offset: number

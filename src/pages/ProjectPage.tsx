@@ -36,6 +36,8 @@ import {
 import { ackReview, decideReview, clearReviewDecision, unackReview } from '../api/review'
 import {
   ISSUE_LABEL,
+  deliveryDrift,
+  deliveryDriftText,
   deliveryReviewText,
   issueCompare,
   issueGap,
@@ -1033,6 +1035,8 @@ export default function ProjectPage({
               const issueText = issueLine(counter.issues)
               const issueMissing = issueGap(counter.issues)
               const rowDelta = row.n > 1 ? issueCompare(reviewsForVersion(data.versionCounts, row.n - 1).issues, counter.issues) : null
+              // 交出去之后这一版又被评成了别的结论没有：拿交时快照和这一版最近一评比（v0.9.86）
+              const rowDrift = deliveryDrift(deliveredVersions.get(row.n)?.review, { verdict: counter.lastVerdict, issues: counter.issues })
               // 这一版的评审逐条列出来：点一条直接看当时的证据原图，别只留一个「2 次评审」
               const rowReviews = reviewsOfVersion(reviews, row.n)
               return (
@@ -1080,6 +1084,15 @@ export default function ProjectPage({
                           >
                             交时评审：{deliveryReviewText(deliveredVersions.get(row.n)?.review)}
                           </span>
+                          {/* 交出去之后这一版又被评成了别的结论：记录不改，后来变了什么要说（v0.9.86） */}
+                          {rowDrift ? (
+                            <span
+                              className={'vq-version-drift is-' + rowDrift.tone}
+                              title="交出去之后这一版又被评过：这句写的是最近一评；交付记录本身不改，同一版重新标记交付才会写新快照"
+                            >
+                              · {deliveryDriftText(rowDrift)}
+                            </span>
+                          ) : null}
                         </>
                       ) : null}
                     </span>

@@ -180,11 +180,13 @@ export async function reviewCountsByProject(user = null) {
     }
     // 列表上的状态胶囊只看当前这一版：新版刚开出来时不能因为上一版评过就显示「已评审」
     const key = String(Math.max(0, Math.round(Number(item.version) || 0)))
-    const bucket = entry.versions[key] || (entry.versions[key] = { count: 0, lastVerdict: '', lastAt: '' })
+    const bucket = entry.versions[key] || (entry.versions[key] = { count: 0, lastVerdict: '', lastAt: '', issues: null })
     bucket.count += 1
     if (String(item.createdAt) > bucket.lastAt) {
       bucket.lastAt = String(item.createdAt)
       bucket.lastVerdict = item.result?.verdict || ''
+      // 这一版最近一评的问题数（v0.9.86）：交付流水拿它和交时快照比，才说得出「后来变了什么」
+      bucket.issues = severityCounts(item.result)
     }
   }
   return counts

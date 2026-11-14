@@ -6,7 +6,7 @@
 // 「现在还作不作数」由 current（这一版还是不是当前版）与 deliveredNow 各自说，不混成一句假话。
 //
 // 工作台只回答「我交出去过什么」：一屏先排 3 条，点开一页 8 条，再往下按 offset 接着取。
-import { deliveredCurrent } from './project-status.mjs'
+import { deliveredCurrent, deliveryDrift } from './project-status.mjs'
 
 /** 一页取几条：工作台点开一次排 8 条，再往下是「再看 N 条」。 */
 export const LEDGER_PAGE = 8
@@ -47,6 +47,8 @@ export function ledgerRows({ projects = [], counts = {} } = {}) {
         reviews: Number(bucket?.count) || 0,
         verdict: String(bucket?.lastVerdict || ''),
         review: entry?.review,
+        // 这一版最近一评的问题数：界面拿它和交时快照比，才说得出「之后又评成了别的结论」
+        issues: bucket?.issues || null,
       })
     }
   }
@@ -80,6 +82,8 @@ export function deliveryLedger({ projects = [], counts = {} } = {}, { offset = 0
     projects: new Set(rows.map((row) => row.projectId)).size,
     // 其中几条交的还是当前这一版：开过新版的那些作品，旧的交付记录仍然在
     currentTotal: rows.filter((row) => row.current).length,
+    // 其中几条交出去之后这一版又被评成了别的结论（v0.9.86）：按交付记录数，不按作品数
+    drifted: rows.filter((row) => deliveryDrift(row.review, { verdict: row.verdict, issues: row.issues })).length,
     // 最近一次交付的时间；一条带时间的都没有就是空串
     lastAt: rows.find((row) => row.atKnown)?.at || '',
     offset: from,

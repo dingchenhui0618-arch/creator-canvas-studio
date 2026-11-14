@@ -93,6 +93,46 @@ export function deliveredCurrent(project) {
   return delivery.version === Math.max(1, Math.round(Number(project?.version) || 0))
 }
 
+/** 结论的轻重：只用来判断「后来评的比交时更差还是更好」，不参与界面文案。 */
+const VERDICT_RANK = { pass: 0, needs_review: 1, fail: 2 }
+/** 参与比较的严重度：信息级不算问题（看到但不确定算不算），与版本对照同一套比法。 */
+const DRIFT_LEVELS = ['blocker', 'major', 'minor']
+
+const driftCount = (issues, level) => Math.max(0, Math.round(Number(issues?.[level]) || 0))
+
+/**
+ * 交出去之后这一版又被评过（v0.9.86）：和交时快照比，结论变了没有、问题数变了没有。
+ * 交付记录写的仍然是「交的时候」（v0.9.85 的快照），这里只回答「后来有没有不一样」，
+ * 不改写那条记录，也不拿最近一评把交时结论换掉。
+ *
+ * 返回 null 或 { kind, from, verdict, issues, tone }：
+ *   kind='verdict' 结论变了；kind='issues' 结论没变、前三档问题数变了
+ *   tone 只是「更差 / 更好」，要不要补一版由人决定
+ * 两边都得记着认得出的结论才算：老数据、坏数据宁可不说，也不编一句「变了」。
+ * 同一版重新标记交付会写一份新快照，下次比对上，漂移自己就没了。
+ */
+export function deliveryDrift(snapshot, latest) {
+  if (!snapshot || typeof snapshot !== 'object') return null
+  const from = String(snapshot.verdict || '')
+  const to = String(latest?.verdict || '')
+  if (!Object.hasOwn(VERDICT_RANK, from) || !Object.hasOwn(VERDICT_RANK, to)) return null
+  if (to !== from) {
+    return {
+      kind: 'verdict',
+      from,
+      verdict: to,
+      issues: latest?.issues || null,
+      tone: VERDICT_RANK[to] > VERDICT_RANK[from] ? 'worse' : 'better',
+    }
+  }
+  for (const level of DRIFT_LEVELS) {
+    const delta = driftCount(latest?.issues, level) - driftCount(snapshot.issues, level)
+    if (!delta) continue
+    return { kind: 'issues', from, verdict: to, issues: latest?.issues || null, tone: delta > 0 ? 'worse' : 'better' }
+  }
+  return null
+}
+
 /**
  * 状态胶囊：文案 + 语气 + 那条结论。
  * 语气只决定颜色，语义全在文案里，换皮不会改意思。

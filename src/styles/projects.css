@@ -697,6 +697,19 @@
   color: var(--muted);
 }
 
+/* 交出去之后这一版又被评成别的结论（v0.9.86）：交时评审照写当初，这句只说「后来变了」。
+   变差用警示色、变好回正文色——它是一条提醒，不是新的评审结论。 */
+.vq-version-drift,
+.vq-delivery-drift {
+  color: var(--warn);
+  font-variant-numeric: tabular-nums;
+}
+
+.vq-version-drift.is-better,
+.vq-delivery-drift.is-better {
+  color: var(--muted);
+}
+
 /* 这一版最近一次评审的问题数：与「2 次评审」同一行，数字用等宽，语气色只给「多了/少了」 */
 .vq-version-issues,
 .vq-version-delta {

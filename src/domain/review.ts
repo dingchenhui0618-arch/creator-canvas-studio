@@ -84,6 +84,66 @@ export function deliveryReviewText(review: ProjectDeliveryReview | null | undefi
   return '没记（升级前的交付记录）'
 }
 
+/** 交出去之后这一版又被评过：比的是交时快照与这一版最近一评（v0.9.86）。 */
+export type DeliveryDrift = {
+  /** verdict 结论变了；issues 结论没变、前三档问题数变了 */
+  kind: 'verdict' | 'issues'
+  /** 交时快照里的结论 */
+  from: string
+  /** 这一版最近一评的结论 */
+  verdict: string
+  /** 这一版最近一评的问题数（文案用） */
+  issues: ReviewIssues | null
+  tone: 'worse' | 'better'
+}
+
+const DRIFT_RANK: Record<string, number> = { pass: 0, needs_review: 1, fail: 2 }
+const DRIFT_LEVELS = ['blocker', 'major', 'minor'] as const
+
+const driftCount = (issues: ReviewIssues | null | undefined, level: (typeof DRIFT_LEVELS)[number]): number =>
+  Math.max(0, Math.round(Number(issues?.[level]) || 0))
+
+/**
+ * 交出去之后这一版又被评过（v0.9.86）：交时快照和这一版最近一评比，结论变了没有、问题数变了没有。
+ * 规则与服务端 project-status.mjs 的 deliveryDrift 是同一份：两边各用各的字，但判断必须一致
+ * （test/delivery-drift.test.mjs 里把两边放进同一组用例对照）。
+ * 两边都得记着认得出的结论才算；信息级不参与（看到但不确定算不算问题），与版本对照同一套比法。
+ */
+export function deliveryDrift(
+  snapshot: ProjectDeliveryReview | null | undefined,
+  latest: { verdict?: string; issues?: ReviewIssues | null } | null | undefined,
+): DeliveryDrift | null {
+  if (!snapshot || typeof snapshot !== 'object') return null
+  const from = String(snapshot.verdict || '')
+  const to = String(latest?.verdict || '')
+  if (!Object.hasOwn(DRIFT_RANK, from) || !Object.hasOwn(DRIFT_RANK, to)) return null
+  const issues = latest?.issues || null
+  if (to !== from) {
+    return { kind: 'verdict', from, verdict: to, issues, tone: DRIFT_RANK[to] > DRIFT_RANK[from] ? 'worse' : 'better' }
+  }
+  for (const level of DRIFT_LEVELS) {
+    const delta = driftCount(issues, level) - driftCount(snapshot.issues, level)
+    if (delta) return { kind: 'issues', from, verdict: to, issues, tone: delta > 0 ? 'worse' : 'better' }
+  }
+  return null
+}
+
+/** 前三档的问题一行：阻塞 / 主要 / 次要；信息级不算问题。 */
+function driftIssueLine(issues?: ReviewIssues | null): string {
+  return DRIFT_LEVELS
+    .filter((level) => driftCount(issues, level) > 0)
+    .map((level) => driftCount(issues, level) + ' ' + ISSUE_LABEL[level])
+    .join(' · ')
+}
+
+/** 交时评审后面那句：结论变了 / 结论没变但问题数变了；没有漂移回空串。 */
+export function deliveryDriftText(drift: DeliveryDrift | null | undefined): string {
+  if (!drift) return ''
+  if (drift.kind === 'verdict') return '之后又评成「' + (REVIEW_VERDICT_LABEL[drift.verdict] || '未记结论') + '」'
+  const line = driftIssueLine(drift.issues)
+  return '之后又评过一次' + (line ? '（' + line + '）' : '')
+}
+
 /** 有几条问题没记严重度：老记录才会出现，写出来比藏起来诚实。 */
 export function issueGap(issues?: ReviewIssues | null): number {
   if (!issues) return 0

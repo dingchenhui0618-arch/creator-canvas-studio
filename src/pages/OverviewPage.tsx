@@ -26,11 +26,24 @@ import {
   type ShareSummaryRow,
 } from '../domain/project'
 import { isFirstRun } from '../domain/first-run'
-import { REVIEW_VERDICT_LABEL, issueLine, reviewTimeLabel } from '../domain/review'
+import {
+  REVIEW_VERDICT_LABEL,
+  deliveryDrift,
+  deliveryDriftText,
+  issueLine,
+  reviewTimeLabel,
+  type DeliveryDrift,
+} from '../domain/review'
 import { runWorkLine } from '../domain/run'
 import { stampTime, visitLine } from '../domain/share'
 import { useSiteInfo, useUiMode } from '../api/app'
 import '../styles/overview.css'
+
+/** 交出去之后这一版又被评过：与作品页、交付稿是同一份规则，只多一句跟在交时评审后面（v0.9.86）。 */
+function DeliveryDriftNote({ drift }: { drift: DeliveryDrift | null }) {
+  if (!drift) return null
+  return <span className={'vq-delivery-drift is-' + drift.tone}>{' · ' + deliveryDriftText(drift)}</span>
+}
 
 type RunRow = {
   id: string
@@ -159,7 +172,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
   // 「我交出去过什么」不该只给最近一条，也不该只在作品页里一条一条翻。
   const [deliveries, setDeliveries] = useState<ProjectDeliveryRow[]>([])
   const [deliveryTotal, setDeliveryTotal] = useState(0)
-  const [deliverySummary, setDeliverySummary] = useState({ projects: 0, current: 0, lastAt: '' })
+  const [deliverySummary, setDeliverySummary] = useState({ projects: 0, current: 0, drifted: 0, lastAt: '' })
   const [deliveryHasMore, setDeliveryHasMore] = useState(false)
   const [deliveryOpen, setDeliveryOpen] = useState(false)
   const [deliveryBusy, setDeliveryBusy] = useState(false)
@@ -218,13 +231,14 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
       setDeliverySummary({
         projects: deliveryResult.value.projects ?? 0,
         current: deliveryResult.value.currentTotal ?? 0,
+        drifted: deliveryResult.value.drifted ?? 0,
         lastAt: deliveryResult.value.lastAt || '',
       })
       setDeliveryHasMore(Boolean(deliveryResult.value.hasMore))
     } else {
       setDeliveries([])
       setDeliveryTotal(0)
-      setDeliverySummary({ projects: 0, current: 0, lastAt: '' })
+      setDeliverySummary({ projects: 0, current: 0, drifted: 0, lastAt: '' })
       setDeliveryHasMore(false)
       problems.push('交付记录：' + String((deliveryResult.reason as Error)?.message || deliveryResult.reason))
     }
@@ -306,7 +320,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
       setDeliveries(merged)
       setDeliveryHasMore(Boolean(next.hasMore))
       setDeliveryTotal(next.total ?? merged.length)
-      setDeliverySummary({ projects: next.projects ?? 0, current: next.currentTotal ?? 0, lastAt: next.lastAt || '' })
+      setDeliverySummary({ projects: next.projects ?? 0, current: next.currentTotal ?? 0, drifted: next.drifted ?? 0, lastAt: next.lastAt || '' })
       setDeliveryError('')
     } catch (error) {
       setDeliveryError('再往下没取到：' + String((error as Error)?.message || error))
@@ -939,7 +953,10 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                   ' 条作品上' +
                   (deliverySummary.current
                     ? '，其中 ' + deliverySummary.current + ' 次交的还是当前这一版。'
-                    : '，都不是当前这一版了：开过新版，旧交付的记录仍然留着。')
+                    : '，都不是当前这一版了：开过新版，旧交付的记录仍然留着。') +
+                  (deliverySummary.drifted
+                    ? '另有 ' + deliverySummary.drifted + ' 次交出去之后这一版又被评成了别的结论。'
+                    : '')
                 : '作品评审通过后在作品页「交付这一版」；交出去的每一版都排在这里，开过新版也留得住。'}
             </p>
           </div>
@@ -978,6 +995,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                           <span>
                             {'交时评审「' + (REVIEW_VERDICT_LABEL[row.review.verdict] || '未记结论') + '」'}
                             {issueLine(row.review.issues) ? ' · ' + issueLine(row.review.issues) : ''}
+                            <DeliveryDriftNote drift={deliveryDrift(row.review, { verdict: row.verdict, issues: row.issues })} />
                           </span>
                         ) : row.review === null ? (
                           // 当时确实查过：一版都没评过，不是「没记」

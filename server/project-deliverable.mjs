@@ -19,6 +19,7 @@ import {
   decisionFor,
   deliveryOf,
   deliveredCurrent,
+  deliveryDrift,
 } from './project-status.mjs'
 
 /** 交付记录的一句话：这一版交没交、交了哪一版、什么时候。抬头、交付小节与版本表共用。 */
@@ -471,9 +472,12 @@ function versionSection(detail, tz) {
       if (deliveredVersions.has(row.n)) {
         const entry = deliveredVersions.get(row.n)
         const at = String(entry?.at || '')
+        // 交付之后这一版又被评过：交时评审照写当初，后面补一句「后来变了什么」
+        const drift = deliveryDrift(entry?.review, latestReviewOf(detail.versionCounts, row.n))
         out.push(
           '- 交付：' + (at ? stamp(at, tz) + ' 交出去过' : '交出去过（时间没记录）') +
-            ' · 交时评审 ' + deliveryReviewText(entry?.review),
+            ' · 交时评审 ' + deliveryReviewText(entry?.review) +
+            (drift ? ' · ' + deliveryDriftText(drift) : ''),
         )
       }
       const canvas = canvasText(canvasDelta(fingerprint(before?.nodeList), fingerprint(row.nodeList)))
@@ -590,15 +594,44 @@ function deliveryReviewText(review) {
   return '没记（升级前的交付记录）'
 }
 
+/**
+ * 交出去之后这一版又被评成了别的结论（v0.9.86）：跟在「交时评审」后面的一小句。
+ * 判断规则与页面同一份（project-status 的 deliveryDrift），纸上用的严重度是这份稿自己的写法。
+ */
+function deliveryDriftText(drift) {
+  if (!drift) return ''
+  if (drift.kind === 'verdict') return '之后又评成「' + (VERDICT_LABEL[drift.verdict] || '未记结论') + '」'
+  const bits = []
+  for (const level of ['blocker', 'major', 'minor']) {
+    const n = Math.max(0, Math.round(Number(drift.issues?.[level]) || 0))
+    if (n) bits.push(n + ' 个' + SEVERITY_LABEL[level])
+  }
+  return '之后又评过一次' + (bits.length ? '（' + bits.join(' · ') + '）' : '')
+}
+
+/** 某一版最近一评的结论与问题数：交付快照只和这一份比。 */
+function latestReviewOf(counts, version) {
+  const counter = reviewsOf(counts, version)
+  return { verdict: counter.lastVerdict || '', issues: counter.issues || null }
+}
+
 function deliverySection(detail, tz) {
   const { project } = detail
   const out = ['', '## 交付', '']
   out.push('- 交付：' + deliveryText(project, tz))
-  // 交付那一刻评审怎么说：交付之后再重评也不改这一行（记录的是当初，不是现在）
+  // 交付那一刻评审怎么说：交付之后再重评也不改这一行（记录的是当初，不是现在）；
+  // 后来又被评成了别的结论时，另起一句补在后面——两句都在，历史与现状都不藏（v0.9.86）
   const latest = deliveryOf(project)
-  if (latest) out.push('- 交时评审：' + deliveryReviewText(latest.review))
+  if (latest) {
+    const drift = deliveryDrift(latest.review, latestReviewOf(detail.versionCounts, latest.version))
+    out.push('- 交时评审：' + deliveryReviewText(latest.review) + (drift ? ' · ' + deliveryDriftText(drift) : ''))
+  }
   const history = (Array.isArray(project.deliveries) ? project.deliveries : [])
-    .map((entry) => 'v' + entry.version + (entry.at ? ' · ' + stamp(entry.at, tz) : ' · 时间没记录') + ' · 交时评审 ' + deliveryReviewText(entry.review))
+    .map((entry) => {
+      const drift = deliveryDrift(entry.review, latestReviewOf(detail.versionCounts, entry.version))
+      return 'v' + entry.version + (entry.at ? ' · ' + stamp(entry.at, tz) : ' · 时间没记录') +
+        ' · 交时评审 ' + deliveryReviewText(entry.review) + (drift ? ' · ' + deliveryDriftText(drift) : '')
+    })
     .reverse()
   if (history.length) out.push('- 交付记录：' + history.join('；'))
   out.push(
