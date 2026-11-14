@@ -10,6 +10,7 @@ import { grant, ledgerOf, balanceOf } from '../credits.mjs'
 import { listRequests, resolveRequest } from '../credit-requests.mjs'
 import { config, redfoxEnabled, visionEnabled } from '../config.mjs'
 import { deepHealth } from '../health.mjs'
+import { listInstances } from '../instances.mjs'
 import { diagnosticsLogs, logEvent } from '../log.mjs'
 import { listAudit, recordAudit } from '../audit.mjs'
 import { removePreference } from '../preferences.mjs'
@@ -828,6 +829,13 @@ export function createAdminRouter() {
 
       if (pathname === '/api/admin/health' && req.method === 'GET') {
         sendJson(res, 200, await deepHealth({ force: url.searchParams.get('force') === '1' }))
+        return true
+      }
+
+      // 执行实例：两个实例共用一个 DATA_DIR，后台要能看见「谁还活着、心跳多久没来」。
+      // 启动恢复靠同一份判据决定哪些运行记录可以收，所以这张表也是「重启会不会误伤」的答案。
+      if (pathname === '/api/admin/instances' && req.method === 'GET') {
+        sendJson(res, 200, { ok: true, ...(await listInstances()) })
         return true
       }
 

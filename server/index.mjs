@@ -51,6 +51,7 @@ import { originFootprint, libraryMarks } from './source-footprint.mjs'
 import { listProjects } from './projects.mjs'
 import { adoptUnowned as adoptUnownedAgents } from './agents.mjs'
 import { adoptUnownedFlows, createFlow, getFlow, recoverInterruptedRuns, interruptRunningRuns } from './flows.mjs'
+import { instanceHeartbeatError, startInstanceHeartbeat, stopInstanceHeartbeat } from './instances.mjs'
 import { adoptUnowned as adoptUnownedReviews } from './reviews.mjs'
 import { readJsonBody as readBody } from './body-reader.mjs'
 import { refusalResponse } from './public-error.mjs'
@@ -1084,6 +1085,8 @@ const server = http.createServer(async (req, res) => {
 })
 
 installProcessGuards()
+// 先让自己的心跳落在共享目录里，再跑启动恢复：另一个实例若正好这时重启，才看得见我们还活着。
+const instance = await startInstanceHeartbeat()
 await migrateOwnership()
 // 上次进程没跑完的复刻任务：标成中断并按积分账本退款（重复启动不会重复退），
 // 顺手清掉崩溃时留下的任务临时目录。发版 = 重启 = 以前每次都可能白扣 10 积分。
@@ -1091,7 +1094,7 @@ const recoveredJobs = recoverInterruptedJobs()
 if (recoveredJobs.recovered) logEvent('jobs.recovered', recoveredJobs)
 // 画布运行同一套：上次没跑完的运行标中断，并按账本把已扣积分退回（重复启动不会多退）
 const recoveredRuns = await recoverInterruptedRuns()
-if (recoveredRuns.recovered) logEvent('runs.recovered', recoveredRuns)
+if (recoveredRuns.recovered || recoveredRuns.dropped || recoveredRuns.skipped) logEvent('runs.recovered', recoveredRuns)
 // 启动先清一次过期日志（停机久了不会把过期文件一直留着），之后每小时最多再清一次
 const prunedLogs = await startLogRetention()
 if (prunedLogs.removed.length) logEvent('logs.prune', { removed: prunedLogs.removed.length, bytesFreed: prunedLogs.bytesFreed })
@@ -1107,6 +1110,9 @@ const onListening = () => {
     redfox: redfoxEnabled() ? 'on' : 'mock',
     vision: visionEnabled() ? config.vision.model : 'off',
     auth: config.auth.requireAuth ? 'on' : 'off',
+    // 哪个实例：两个实例共用一个 DATA_DIR，日志里要能分清是谁
+    instance: instance.id,
+    heartbeat: instanceHeartbeatError() ? 'error' : 'ok',
     // 运行时版本一起落到启动事件里：换 Node 之后翻日志就能看到当时跑的是哪个版本
     node: process.versions.node,
   })
@@ -1134,7 +1140,9 @@ async function shutdown(signal) {
   } catch (error) {
     logRequestError('shutdown', error, { signal, kind: 'runs' })
   }
-  logEvent('shutdown', { signal, interrupted, runsInterrupted })
+  // 主动摘掉自己的心跳：另一个实例重启时不必等 60 秒才发现我们已经退出
+  await stopInstanceHeartbeat()
+  logEvent('shutdown', { signal, interrupted, runsInterrupted, instance: instance.id })
   server.close(() => {})
   setTimeout(() => process.exit(0), 1500).unref()
 }

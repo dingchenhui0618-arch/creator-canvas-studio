@@ -1,7 +1,17 @@
 import { Fragment, useState } from 'react'
 import type { AdminUser } from '../../api/credits'
 import { useUiMode } from '../../api/app'
-import { formatDateTime, formatDuration, useApi, type AuditItem, type AuditResponse, type RunItem, type RunsResponse } from './data'
+import {
+  formatDateTime,
+  formatDuration,
+  useApi,
+  type AuditItem,
+  type AuditResponse,
+  type InstanceItem,
+  type InstancesResponse,
+  type RunItem,
+  type RunsResponse,
+} from './data'
 import { AdminHead, Badge, EmptyState, ErrorBanner, LoadingLine, RefreshButton, SourceTag } from './ui'
 
 type FlowsResponse = { items: { id: string; name: string }[]; total: number }
@@ -127,6 +137,84 @@ export default function AuditSection() {
   )
 }
 
+const INSTANCE_STATE: Record<InstanceItem['state'], { tone: 'neutral' | 'ok' | 'warn' | 'fail'; label: string }> = {
+  alive: { tone: 'ok', label: '在线' },
+  stale: { tone: 'warn', label: '心跳过期' },
+  dead: { tone: 'fail', label: '进程已退出' },
+  restarted: { tone: 'warn', label: '机器重启过' },
+  bad: { tone: 'neutral', label: '记录损坏' },
+}
+
+function lastSeen(ageMs: number | null): string {
+  if (ageMs === null) return '—'
+  if (ageMs < 1500) return '刚刚'
+  if (ageMs < 60000) return Math.round(ageMs / 1000) + ' 秒前'
+  if (ageMs < 3600000) return Math.round(ageMs / 60000) + ' 分钟前'
+  return Math.round(ageMs / 3600000) + ' 小时前'
+}
+
+// 执行实例：两个实例共用一份数据目录，启动恢复只收「主人已经死了」的运行记录。
+// 这张表是那个判据的可见版本，也是「重启一个会不会误伤另一个」的直接答案。
+function InstanceCard({ refreshKey }: { refreshKey: number }) {
+  const { data, error, loading, reload } = useApi<InstancesResponse>('/api/admin/instances?_r=' + refreshKey)
+  const items = data?.items ?? []
+  return (
+    <section className="admin-card admin-block">
+      <div className="admin-block-head">
+        <div>
+          <p className="admin-label">执行实例</p>
+          <p className="admin-sub">
+            {data
+              ? `共 ${items.length} 个实例；心跳每 ${Math.round(data.beatMs / 1000)} 秒一次，${Math.round(data.ttlMs / 1000)} 秒没有心跳视为离线。重启一个实例不会收掉另一个实例正在跑的单。`
+              : '两个实例共用一个数据目录；这里显示谁还活着。'}
+          </p>
+        </div>
+        <SourceTag kind="api" source="GET /api/admin/instances" />
+      </div>
+      {error ? <ErrorBanner message={`GET /api/admin/instances：${error}`} onRetry={reload} /> : null}
+      {loading && !data ? <LoadingLine label="/api/admin/instances" /> : null}
+      {data?.heartbeatError ? <p className="admin-hint">本实例心跳写入失败：{data.heartbeatError}（重启恢复会失去存活判据）</p> : null}
+      {items.length ? (
+        <div className="admin-table-wrap">
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>实例</th>
+                <th>状态</th>
+                <th>进程</th>
+                <th>最后心跳</th>
+                <th>启动</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => {
+                const tone = INSTANCE_STATE[item.state]
+                return (
+                  <tr key={item.id}>
+                    <td className="admin-mono">
+                      {item.id}
+                      {item.self ? <span className="admin-hint">（本实例）</span> : null}
+                    </td>
+                    <td>
+                      <Badge tone={tone.tone}>{tone.label}</Badge>
+                    </td>
+                    <td className="admin-mono">
+                      {item.pid} · {item.host}
+                    </td>
+                    <td className="admin-mono">{lastSeen(item.ageMs)}</td>
+                    <td className="admin-mono">{formatDateTime(item.startedAt)}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+      {!loading && !items.length && !error ? <p className="admin-hint">没有读到任何实例心跳文件。</p> : null}
+    </section>
+  )
+}
+
 function RunsPanel({ refreshKey }: { refreshKey: number }) {
   const [status, setStatus] = useState('')
   const [ownerId, setOwnerId] = useState('')
@@ -158,6 +246,8 @@ function RunsPanel({ refreshKey }: { refreshKey: number }) {
     <>
       {error ? <ErrorBanner message={`GET /api/runs：${error}`} onRetry={reload} /> : null}
       {loading && !data ? <LoadingLine label="/api/runs" /> : null}
+
+      <InstanceCard refreshKey={refreshKey} />
 
       <section className="admin-card admin-block">
         <div className="admin-block-head">
@@ -431,6 +521,7 @@ function RunDetail({ run, account }: { run: RunItem; account: string }) {
         <span className="admin-mono">{run.id}</span>
         <span>flow {run.flowId}</span>
         <span>账号 {account}</span>
+        <span>实例 {run.ownerInstance || '升级前的记录'}</span>
         <span>结束 {formatDateTime(run.finishedAt)}</span>
       </div>
       {nodes.length ? (

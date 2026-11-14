@@ -50,6 +50,8 @@ export type RunItem = {
   flowId: string
   flowName: string
   ownerId?: string
+  // 哪个实例执行的：两份实例共用 DATA_DIR，排查「重启误伤」时先看这一列
+  ownerInstance?: string
   status: string
   startedAt: string
   finishedAt?: string | null
@@ -65,6 +67,26 @@ export type RunsResponse = {
   total: number
   offset?: number
   limit?: number
+}
+
+export type InstanceItem = {
+  id: string
+  pid: number
+  host: string
+  startedAt: string
+  beatAt: string
+  ageMs: number | null
+  state: 'alive' | 'stale' | 'dead' | 'restarted' | 'bad'
+  alive: boolean
+  self: boolean
+}
+
+export type InstancesResponse = {
+  self: string
+  beatMs: number
+  ttlMs: number
+  heartbeatError: string
+  items: InstanceItem[]
 }
 
 export type AuditItem = {

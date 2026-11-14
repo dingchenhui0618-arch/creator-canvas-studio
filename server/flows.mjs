@@ -10,6 +10,7 @@ import { listTemplates, templateStats } from './templates.mjs'
 import { publicError } from './public-error.mjs'
 import { preferenceModel } from './preferences.mjs'
 import { outstandingCharge, refund } from './credits.mjs'
+import { currentInstanceId, liveInstanceIds } from './instances.mjs'
 
 // 画布流程：存储（data/flows.json）+ 运行记录（data/runs.json）+ 拓扑执行引擎。
 // 原子写范式与 server/templates.mjs 一致：先写 .tmp，再 rename 覆盖。
@@ -687,6 +688,8 @@ function blankRun(flow, id, cost = 0, { queued = false } = {}) {
     flowId: flow.id,
     flowName: flow.name,
     status: queued ? 'queued' : 'running',
+    // 这条记录归哪个实例执行：两份实例共用 DATA_DIR，启动恢复只收自己人的单
+    ownerInstance: currentInstanceId(),
     // 排队单从哪一刻开始等：页面按它算「排队 12s」，翻成 running 之后不再变
     queuedAt: queued ? now : null,
     startedAt: now,
@@ -806,6 +809,8 @@ export async function runFlow(flow, { onEvent, credits = null, runId = '' } = {}
     flowId: flow.id,
     flowName: flow.name,
     status: 'running',
+    // runFlow 会用这个对象覆盖同 id 的占位记录：实例归属必须跟着写回去
+    ownerInstance: currentInstanceId(),
     startedAt: new Date(startedAt).toISOString(),
     finishedAt: null,
     durationMs: 0,
@@ -929,15 +934,28 @@ export async function runFlow(flow, { onEvent, credits = null, runId = '' } = {}
 
 /** 启动恢复：上次进程没跑完的运行标成中断并按账本退款；重复启动不会多退。
  *  排队中的单还没有开始跑、也没有扣钱（扣费在排到之后），恢复时直接撤掉——留着会是一条
- *  永远「排队中」的记录，页面会以为还有一条运行在等名额。 */
+ *  永远「排队中」的记录，页面会以为还有一条运行在等名额。
+ *
+ *  但「上次进程」不一定是自己的进程：两个生产实例共用 DATA_DIR，重启 8799 时
+ *  8800 可能正在跑一条。所以只收「没有实例归属（升级前的旧记录）」或「主人已经死了」的单；
+ *  主人还活着（心跳新 + 进程在 + 同一次开机）的记录原样留着，记在 skipped 里。 */
 export async function recoverInterruptedRuns() {
   let recovered = 0
   let refunded = 0
   let dropped = 0
+  let skipped = 0
+  const self = currentInstanceId()
+  const liveElsewhere = await liveInstanceIds()
   const list = await loadRuns()
   const kept = []
   let changed = false
   for (const run of list) {
+    const owner = String(run.ownerInstance || '')
+    if ((run.status === 'running' || run.status === 'queued') && owner && owner !== self && liveElsewhere.has(owner)) {
+      skipped += 1
+      kept.push(run)
+      continue
+    }
     if (run.status === 'queued') {
       // 钱不可能已经扣过，但按账本净额再核一遍：真扣了（极端时序）就退回，再撤记录
       if (refundRunCredits(run) > 0) refunded += 1
@@ -960,7 +978,7 @@ export async function recoverInterruptedRuns() {
     kept.push(run)
   }
   if (changed) await persistRuns(kept)
-  return { recovered, refunded, dropped }
+  return { recovered, refunded, dropped, skipped }
 }
 
 /** 停机收尾：给正在跑的运行标中断 + 退款，再让调用方关服务。重复调用无副作用。 */
