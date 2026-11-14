@@ -181,3 +181,19 @@ test('说明.txt 交代了这一页；坏名字被拦在清单外', () => {
   const manifest = packageVerifyManifest({ files: [{ name: '', bytes: 1, crc32: 1 }, { name: 'ok.txt', bytes: 2, crc32: 2 }] })
   assert.deepEqual(manifest.files.map((item) => item.n), ['ok.txt'])
 })
+test('收据：结论能复制或存成 txt，清单带上作品名与版次', async () => {
+  const { buffer, directory } = sealed
+  const html = readZipEntry(buffer, findZipEntry(directory.entries, VERIFY_PAGE_NAME)).data.toString('utf8')
+  // 静态纸面上没有收据块：它只在核对出结果后才出现
+  assert.equal(html.includes('<div class="vf-receipt">'), false, '收据是核对后才生成的')
+  assert.ok(html.includes('带走这份结论'), '脚本里要有收据标题')
+  assert.ok(html.includes('复制这段'), '要有复制按钮')
+  assert.ok(html.includes('存成 核对结果.txt'), '要有存成 txt 的按钮')
+  assert.ok(html.includes('这段文字只在你自己的电脑上生成'), '要说清不上传')
+  assert.ok(html.includes('@media print { .vf-receipt-row { display: none; } }'), '打印时按钮收起来')
+  const manifest = JSON.parse(html.match(/id="vq-manifest">([\s\S]*?)<\/script>/)[1])
+  assert.deepEqual(manifest.project, { title: '验包验收 <script>alert(1)</script>', version: 1 }, '清单里带上作品名与版次')
+  const blob = html.match(/id="vq-manifest">([\s\S]*?)<\/script>/)[1]
+  assert.equal(blob.includes('<'), false, '清单里不留尖括号（标题带标签也拆不坏页面）')
+  assert.ok(blob.includes('\\u003cscript'), '标签以 \\u003c 转义后再进清单')
+})
