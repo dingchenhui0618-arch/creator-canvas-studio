@@ -105,7 +105,7 @@ packageNote 新增可选参数 compareSheet: { base, target }。传了才写：
 
 ## 提交与 CI
 
-提交与 CI 见仓库记录。
+提交 `53d843c`（功能、测试、文档与截图）；CI **43621818860** 三个 job 全 success（安全扫描、Node 24、Node 22.12.0）。
 
 ## 回退
 
