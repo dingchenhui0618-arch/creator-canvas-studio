@@ -67,7 +67,11 @@ export function normalizeInviteCode(value) {
     .toUpperCase()
     .replace(/[^0-9A-Z]/g, '')
   if (!raw) return ''
-  const body = raw.startsWith(CODE_PREFIX) ? raw.slice(CODE_PREFIX.length) : raw
+  // 前缀只在「长度正好是 VQ + 8 位」时才剥：码本身也可能以 VQ 开头（1/1024），
+  // 以前无条件剥会把 'VQXRTTSU' 这种「缺前缀的输入」剥成 6 位，然后判成非法码。
+  const body = raw.length === CODE_BODY + CODE_PREFIX.length && raw.startsWith(CODE_PREFIX)
+    ? raw.slice(CODE_PREFIX.length)
+    : raw
   if (body.length !== CODE_BODY) return ''
   for (const char of body) if (!ALPHABET.includes(char)) return ''
   return CODE_PREFIX + '-' + body.slice(0, 4) + '-' + body.slice(4)

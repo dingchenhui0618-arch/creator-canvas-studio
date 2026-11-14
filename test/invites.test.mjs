@@ -90,6 +90,9 @@ test('邀请码规范化：大小写、空格、缺前缀都指向同一枚码',
   assert.equal(invites.normalizeInviteCode(invite.code.toLowerCase()), invite.code)
   assert.equal(invites.normalizeInviteCode(' ' + invite.code + ' '), invite.code)
   assert.equal(invites.normalizeInviteCode(invite.code.slice(3)), invite.code, '缺 VQ- 前缀也要能认')
+  // 码本身以 VQ 开头时（1/1024），无前缀输入以前会被再剥一层变成 6 位、判成非法码
+  assert.equal(invites.normalizeInviteCode('VQXRTTSU'), 'VQ-VQXR-TTSU', '码体以 VQ 开头时不要再剥一层前缀')
+  assert.equal(invites.normalizeInviteCode('VQ-VQXR-TTSU'), 'VQ-VQXR-TTSU')
   assert.equal(invites.normalizeInviteCode('VQ-0000-0000'), '', '含 0 的码不是合法码')
   assert.equal(invites.normalizeInviteCode('VQ-ABC'), '')
   assert.equal(invites.normalizeInviteCode(''), '')
