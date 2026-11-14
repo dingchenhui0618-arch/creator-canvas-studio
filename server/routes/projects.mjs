@@ -156,6 +156,7 @@ async function projectDetailView(project, user, { snapshots = false } = {}) {
   // 版本行上的「比上一版改了什么」：画布按节点配置、脚本按快照，口径与交付稿同一份实现。
   // 当前版也要算（v3 相对 v2 改了什么），所以把当前画布与脚本一起放进来；
   // base 是「以旧版为底」的那一版用来对账的底座，普通版本为 0，仍按上一版算。
+  const currentScript = scriptView(project, template)
   const versionRowsForDiff = [
     ...versionRecords.map((item) => ({ n: item.n, nodes: item.nodes, script: item.script, base: item.basedOn })),
     ...(project.flowId && project.version > 0
