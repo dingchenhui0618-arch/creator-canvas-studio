@@ -1157,7 +1157,9 @@ export default function ProjectPage({
                       <span className="vq-run-title">
                         <strong className="vq-mono">{run.id}</strong>
                         <span className="vq-version-n vq-mono vq-run-version">v{run.version}</span>
-                        <span className={'vq-run-status is-' + (ok ? 'pass' : 'fail')}>{ok ? '成功' : '失败'}</span>
+                        <span className={'vq-run-status is-' + (ok ? 'pass' : run.canceled ? 'stop' : 'fail')}>
+                          {ok ? '成功' : run.canceled ? '已停止' : '失败'}
+                        </span>
                       </span>
                       <span className="vq-run-meta">
                         <span>{run.total} 节点{run.failed ? ' · ' + run.failed + ' 个失败' : ''}</span>
@@ -1165,12 +1167,14 @@ export default function ProjectPage({
                         <span>{duration(run.durationMs)}</span>
                         <span>
                           {run.credits && run.credits.cost
-                            ? run.credits.cost + ' 积分' + (run.credits.refunded ? '（已退）' : '')
+                            ? run.credits.kept != null
+                              ? '已跑 ' + run.credits.kept + ' 积分 · 已退 ' + (run.credits.refundedAmount ?? 0)
+                              : run.credits.cost + ' 积分' + (run.credits.refunded ? '（已退）' : '')
                             : '不计费'}
                         </span>
                         <span className="vq-mono">{stamp(run.startedAt)}</span>
                       </span>
-                      {run.error ? <p className="vq-run-error">{run.error}</p> : null}
+                      {run.error ? <p className={'vq-run-error' + (run.canceled ? ' is-stopped' : '')}>{run.error}</p> : null}
                     </div>
                     <button
                       type="button"

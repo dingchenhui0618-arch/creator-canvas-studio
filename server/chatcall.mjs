@@ -83,8 +83,12 @@ export async function chatCompletion({
         error.code = 'NO_MODEL'
         throw error
       }
-      const controller = signal ? null : new AbortController()
-      const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null
+      // 超时与「用户停止」是两个独立的中止源（v0.9.101）：以前传了外部 signal 就不再设超时，
+      // 上游卡住时这条运行会一直挂着；现在两个信号合并，谁先到谁生效。
+      // 反过来，外部 signal 中止时不能再当成「上游失败」去换 Key / 换模型——那是用户在停。
+      if (signal?.aborted) throw new Error('运行已停止')
+      const timeoutSignal = AbortSignal.timeout(Math.max(1000, Number(timeoutMs) || 300000))
+      const requestSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal
       const body = { model, messages, temperature, max_tokens: maxTokens }
       if (useJson) body.response_format = { type: 'json_object' }
       try {
@@ -92,7 +96,7 @@ export async function chatCompletion({
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey },
           body: JSON.stringify(body),
-          signal: signal || controller.signal,
+          signal: requestSignal,
         })
         const text = await response.text()
         if (!response.ok) {
@@ -145,6 +149,8 @@ export async function chatCompletion({
         })
         return { message: choice.message || {}, finishReason, usage: parsed?.usage, jsonMode: useJson }
       } catch (error) {
+        // 用户停止不是这把 Key 的错：不记故障、不冷却，也不再换下一把继续烧钱
+        if (signal?.aborted) throw error
         if (error?.code === 'NO_MODEL' || error?.status || error?.truncated) {
           lastError = error
           break
@@ -153,8 +159,6 @@ export async function chatCompletion({
         route({ ok: false, error: String(error?.message || error).slice(0, 120) })
         lastError = error
         break
-      } finally {
-        if (timer) clearTimeout(timer)
       }
     }
     // 还有候选就换下一把（故障回退）；没有候选时这一段结束、下面抛出最后一次错误。

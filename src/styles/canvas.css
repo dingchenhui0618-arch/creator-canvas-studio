@@ -525,6 +525,15 @@
 .cv-drawer-error { display: flex; gap: 8px; margin-bottom: 12px; padding: 8px 12px; color: var(--fail); background: var(--fail-soft); border: 1px solid rgba(163, 56, 56, .22); border-radius: var(--radius-sm); }
 .cv-drawer-error strong { font-size: 12px; }
 .cv-drawer-error p { margin: 4px 0 0; font-size: 12px; line-height: 1.5; word-break: break-word; }
+/* 主动停止不是失败：用中性边框与文字，别把用户自己按的按钮画成报错 */
+.cv-drawer-stopped { display: flex; gap: 8px; margin-bottom: 12px; padding: 8px 12px; color: var(--ink-soft); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.cv-drawer-stopped strong { font-size: 12px; }
+.cv-drawer-stopped p { margin: 4px 0 0; font-size: 12px; line-height: 1.5; word-break: break-word; }
+/* 窄屏运行抽屉：一行塞不下时整项换行，别把「1/2 节点」拆成两段 */
+@media (max-width: 760px) {
+  .cv-drawer-meta { flex-wrap: wrap; justify-content: flex-start; gap: 4px 12px; }
+  .cv-drawer-meta > span { white-space: nowrap; }
+}
 .cv-run-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .cv-run-item { overflow: hidden; background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-sm); }
 .cv-run-item.is-error { border-color: rgba(163, 56, 56, .3); }

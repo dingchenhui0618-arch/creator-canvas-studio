@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Check, ChevronDown, CircleAlert, Copy, Expand, Hourglass, LayoutGrid, Maximize2, Minimize2, Play, Plus, RotateCcw, RotateCw, Save, Trash } from 'lucide-react'
+import { Check, ChevronDown, CircleAlert, Copy, Expand, Hourglass, LayoutGrid, Maximize2, Minimize2, Play, Plus, RotateCcw, RotateCw, Save, Square, Trash } from 'lucide-react'
 import {
   Background,
   Controls,
@@ -23,6 +23,7 @@ import {
   listFlows,
   runFlowStream,
   saveFlowAsTemplate,
+  stopRun as stopRunRequest,
   updateFlow,
   type ApiFlow,
   type RunNodeResult,
@@ -160,6 +161,9 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
   // 取消排队（v0.9.97）：点「取消」把这条连接 abort 掉。服务端认的是响应被关掉，
   // 于是退出排队（票退掉、不占名额、不扣积分），页面立刻回到空闲。
   const runAbortRef = useRef<AbortController | null>(null)
+  // 这一次运行的 id：排队阶段还没有，run-start 之后才有；「停止运行」按它找服务端那一条
+  const runIdRef = useRef('')
+  const [stopping, setStopping] = useState(false)
   // 上一次问名次时还排着队：取消之后靠它分清「退出排队」与「中断一条已经开跑的运行」
   const runQueuedRef = useRef(false)
   const [runCancelled, setRunCancelled] = useState(false)
@@ -715,6 +719,8 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
     setRunQueuedMs(0)
     setRunElapsed(0)
     setRunCancelled(false)
+    setStopping(false)
+    runIdRef.current = ''
     runQueuedRef.current = false
     setNodes((current) => current.map((node) => ({
       ...node,
@@ -733,6 +739,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
           return
         }
         if (event.type === 'run-start') {
+          runIdRef.current = event.run.id
           setRunMeta({ id: event.run.id, total: event.run.total })
           return
         }
@@ -763,9 +770,24 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
         }
       }, runQueueTicketRef.current, controller.signal)
       setRunRecord(record)
-      toast(record.status === 'success'
-        ? '运行完成 · ' + (record.durationMs / 1000).toFixed(1) + 's'
-        : '运行结束，有节点失败 · ' + (record.durationMs / 1000).toFixed(1) + 's')
+      // 停止/中断时正在跑的那个节点不会再有 node-end：不能让它一直挂着「运行中」
+      if (record.status === 'interrupted') {
+        setNodes((current) => current.map((node) => (
+          node.data.status === 'running' || node.data.status === 'pending'
+            ? { ...node, data: { ...node.data, status: undefined, ms: undefined } }
+            : node
+        )))
+      }
+      if (record.status === 'success') {
+        toast('运行完成 · ' + (record.durationMs / 1000).toFixed(1) + 's')
+      } else if (record.status === 'interrupted') {
+        const back = Number(record.credits?.refundedAmount ?? 0) || 0
+        toast(record.canceled
+          ? '已停止' + (back > 0 ? ' · 退回 ' + back + ' 积分' : ' · 已跑部分不退')
+          : '运行被中断 · 已退回积分')
+      } else {
+        toast('运行结束，有节点失败 · ' + (record.durationMs / 1000).toFixed(1) + 's')
+      }
     } catch (error) {
       // 自己点的「取消」：abort 不是失败。节点退回「还没跑」，不当成一条错误留在画布上。
       if ((error as { name?: string })?.name === 'AbortError') {
@@ -797,10 +819,12 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
       toast('运行失败：' + message)
     } finally {
       setRunning(false)
+      setStopping(false)
       setRunQueue(null)
       runQueuedRef.current = false
       runAbortRef.current = null
       runQueueTicketRef.current = ''
+      runIdRef.current = ''
       // 运行结束（含失败退款）后余额会变，重新读一次，别让按钮旁的余额停在旧值
       refreshRunCredit()
     }
@@ -812,6 +836,21 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
     if (!controller) return
     controller.abort()
   }, [])
+
+  // 停止已经开跑的运行（v0.9.101）：不再直接 abort 连接——那样服务端只能猜「人走了」。
+  // 走一条明确的接口，服务端中止当前上游、按已开始节点结算；页面继续读流，直到 run-end。
+  const stopRunning = useCallback(async () => {
+    const id = runIdRef.current
+    if (!id || stopping) return
+    setStopping(true)
+    try {
+      await stopRunRequest(id)
+      toast('正在停止 · 跑完的节点按比例计费')
+    } catch (error) {
+      toast('停止失败：' + (error instanceof Error ? error.message : String(error)))
+      setStopping(false)
+    }
+  }, [stopping, toast])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1191,15 +1230,27 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, canvasId: initialCanv
               </button>
             </span>
           ) : null}
-          <button
-            className="vq-button vq-button--primary"
-            type="button"
-            onClick={() => { void handleRun() }}
-            disabled={running || loadState !== 'ready' || (runCredit != null && runCredit.balance != null && runCredit.balance < runCredit.price)}
-            title={runCredit && runCredit.balance != null && runCredit.balance < runCredit.price ? '积分不足，先让管理员发放' : '按拓扑序执行整张画布'}
-          >
-            <Play size={14} fill="currentColor" />{running ? (runQueue ? '排队中' : '运行中 ' + runElapsed + 's') : '运行流程'}
-          </button>
+          {running && !runQueue && runMeta.id ? (
+            <button
+              className="vq-button vq-button--danger"
+              type="button"
+              onClick={() => { void stopRunning() }}
+              disabled={stopping}
+              title="停止这次运行：当前上游会立刻中止；跑完的节点按比例计费，没跑完的部分退回"
+            >
+              <Square size={12} fill="currentColor" />{stopping ? '停止中…' : '停止运行 ' + runElapsed + 's'}
+            </button>
+          ) : (
+            <button
+              className="vq-button vq-button--primary"
+              type="button"
+              onClick={() => { void handleRun() }}
+              disabled={running || loadState !== 'ready' || (runCredit != null && runCredit.balance != null && runCredit.balance < runCredit.price)}
+              title={runCredit && runCredit.balance != null && runCredit.balance < runCredit.price ? '积分不足，先让管理员发放' : '按拓扑序执行整张画布'}
+            >
+              <Play size={14} fill="currentColor" />{running ? '排队中' : '运行流程'}
+            </button>
+          )}
           <button className="vq-button vq-button--icon" type="button" onClick={() => { void removeFlow() }} disabled={running || loadState !== 'ready'} aria-label="删除流程" title="删除流程">
             <Trash size={14} />
           </button>

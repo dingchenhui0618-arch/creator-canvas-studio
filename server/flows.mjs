@@ -352,9 +352,20 @@ export function runSummary(run) {
     // 排队等了多少毫秒（0 = 没排过队）：作品页与运行详情用同一个数说「等 + 跑」
     queuedMs: Number(run.queuedMs) || 0,
     total: Number(run.total) || 0,
+    startedNodes: Number(run.startedNodes) || 0,
+    finishedNodes: Number(run.finishedNodes) || 0,
+    canceled: Boolean(run.canceled),
     failed: (Array.isArray(run.nodes) ? run.nodes : []).filter((node) => node.status === 'error').length,
     error: run.error || '',
-    credits: run.credits ? { cost: Number(run.credits.cost) || 0, refunded: Boolean(run.credits.refunded) } : null,
+    credits: run.credits ? {
+      cost: Number(run.credits.cost) || 0,
+      refunded: Boolean(run.credits.refunded),
+      // 主动停止是按已开始节点结算的：页面要能说清「扣了多少、退了多少」，不能只写一个已退
+      ...(run.credits.settled ? {
+        kept: Number(run.credits.kept) || 0,
+        refundedAmount: Number(run.credits.refundedAmount) || 0,
+      } : {}),
+    } : null,
   }
 }
 
@@ -375,8 +386,12 @@ export async function listRunsByFlows(flowIds = [], { limit = 20, all = false } 
   const creditsByFlow = {}
   for (const run of list) {
     byFlow[run.flowId] = (byFlow[run.flowId] || 0) + 1
-    if (run.credits && !run.credits.refunded) {
-      creditsByFlow[run.flowId] = (creditsByFlow[run.flowId] || 0) + Math.max(0, Number(run.credits.cost) || 0)
+    if (run.credits) {
+      // 失败全额退 = 没花；主动停止按已开始节点结算 = 只算留下的那一部分（v0.9.101）
+      const spent = run.credits.settled
+        ? Math.max(0, Number(run.credits.kept) || 0)
+        : (run.credits.refunded ? 0 : Math.max(0, Number(run.credits.cost) || 0))
+      if (spent > 0) creditsByFlow[run.flowId] = (creditsByFlow[run.flowId] || 0) + spent
     }
   }
   // all：花费明细要每一笔（作品页的运行归集只取前 20 条摘要），页面摘要仍按 limit 封顶
@@ -506,6 +521,8 @@ async function runLlm(node, ctx) {
     log: (message) => console.log('[flows] ' + message),
     // 计量挂在「这次运行」上：同一张画布跑十遍，后台能看出十遍各花了多少 token
     meter: { ref: ctx.runId || '', projectId: ctx.projectId || '' },
+    // 用户点「停止」时，正在等的这次上游调用要立刻中止，而不是等它自己超时（v0.9.101）
+    signal: ctx.signal || undefined,
   })
   return { text: clip(result.text), model: result.model, temperature: cfg.temperature }
 }
@@ -533,8 +550,8 @@ async function runReview(node, ctx = {}) {
   const job = { ...media, intent: profile.intent, ref: ctx.runId || '' }
   const writeLog = (message) => console.log('[flows] ' + message)
   const result = reviewIsolateConfig().enabled
-    ? await runReviewIsolated(job, { log: writeLog })
-    : await reviewVisual({ ...job, log: writeLog })
+    ? await runReviewIsolated(job, { log: writeLog, signal: ctx.signal })
+    : await reviewVisual({ ...job, log: writeLog, signal: ctx.signal })
   const observations = Array.isArray(result.observations) ? result.observations : []
   const blockers = observations.filter((item) => item.severity === 'blocker').length
   const verdictLabel = { pass: '通过', needs_review: '待确认', fail: '有问题' }[result.verdict] || result.verdict
@@ -769,9 +786,49 @@ export async function abandonRun(runId, reason = '运行失败') {
   return 1
 }
 
+/**
+ * 用户主动停止（v0.9.101）：按「已经跑完的节点」结算，没跑完的部分退回。
+ * 为什么不是全额退：模型调用已经发生、上游可能已经计费；为什么不是不退：
+ * 停下来的用户没有拿到结果，剩下的节点一分钱都不该收。
+ * 只有结算成功才写 settled=true；写失败就留给收尾那条路径全额退，宁可多退用户，不少退。
+ */
+export function settleCanceledRun(run) {
+  if (!run || !run.ownerId || !run.id) return 0
+  const cost = Math.max(0, Math.round(Number(run.credits?.cost) || 0))
+  const total = Math.max(1, Number(run.total) || 1)
+  const completed = Math.max(0, Math.min(total, Number(run.finishedNodes) || 0))
+  // 向上取整：只要动过一个节点，就至少留下 1 积分；一个节点都没开始则一分不留
+  const kept = completed > 0 ? Math.min(cost, Math.ceil((cost * completed) / total)) : 0
+  let owed = 0
+  try {
+    owed = outstandingCharge(run.ownerId, 'flow_run', run.id)
+  } catch (error) {
+    console.error('[flows] 核对停止运行的账本失败：' + String(error && error.message ? error.message : error))
+    return 0
+  }
+  const back = Math.max(0, owed - kept)
+  try {
+    if (back > 0) refund(run.ownerId, 'flow_run', { ref: run.id, amount: back })
+    run.credits = {
+      ...(run.credits || {}),
+      cost,
+      kept,
+      refunded: back > 0,
+      refundedAmount: back,
+      settled: true,
+    }
+    return back
+  } catch (error) {
+    console.error('[flows] 停止运行的退款失败（应退 ' + back + ' 积分）：' + String(error && error.message ? error.message : error))
+    return 0
+  }
+}
+
 /** 按账本净额退这次运行还欠的积分：重复调用算出 0，不会多退。 */
 export function refundRunCredits(run) {
   if (!run || !run.ownerId || !run.id) return 0
+  // 停止运行已经按「已跑节点」结过账：收尾时不能再把剩下的钱退一遍
+  if (run.credits?.settled === true) return 0
   let owed = 0
   try {
     owed = outstandingCharge(run.ownerId, 'flow_run', run.id)
@@ -807,6 +864,9 @@ export async function runFlow(flow, { onEvent, credits = null, runId = '' } = {}
 
   const startedAt = Date.now()
   const id = String(runId || '') || newRunId()
+  // 用户停止的通道：控制器挂在 run 上，但做成不可枚举——运行记录要原样落盘，
+  // 不能把一个 AbortController 写进 JSON。停止请求按 runId 找到它并 abort。
+  const stopController = new AbortController()
   // runFlow 会用这个对象覆盖同 id 的占位记录：占位记录上的字段必须跟着写回去。
   // 排队时长是 markRunStarted 算好的真数（v0.9.100）；这里漏接的话，排队单跑完就再也
   // 说不清「一共等了多久」——页面只剩节点耗时，用户会以为一次 50 秒的等待只花了 7 秒。
@@ -825,12 +885,17 @@ export async function runFlow(flow, { onEvent, credits = null, runId = '' } = {}
     finishedAt: null,
     durationMs: 0,
     total: order.length,
+    // 已经开始 / 已经跑完的节点数：停止时按「跑完的节点」结算。
+    // 正在跑的那个节点不算钱：它的结果用户没拿到，停下来的这次运行不该为它收费。
+    startedNodes: 0,
+    finishedNodes: 0,
     nodes: [],
     output: '',
     ownerId: flow.ownerId || '',
     // 本次运行实际扣了多少积分；失败会由路由层退回，refunded 在结束时标真
     credits: credits ? { cost: Math.round(Number(credits.cost) || 0), refunded: false } : null,
   }
+  Object.defineProperty(run, '__stopController', { value: stopController, enumerable: false, configurable: true })
   // 先落盘再执行：以前只在结束时写运行记录，进程被杀就什么也不剩，
   // 已扣的积分在账本里也永远对不上是哪次运行。
   activeRuns.set(run.id, run)
@@ -840,6 +905,7 @@ export async function runFlow(flow, { onEvent, credits = null, runId = '' } = {}
   const results = new Map()
   const edgeActive = new Map()
   let errorCount = 0
+  let startedNodes = 0
 
   for (let index = 0; index < order.length; index += 1) {
     // 停机收尾已经把这次运行标成中断并退了钱：后面的节点不再执行，别再产生上游费用
@@ -869,10 +935,17 @@ export async function runFlow(flow, { onEvent, credits = null, runId = '' } = {}
     }
 
     emit({ type: 'node-start', nodeId: node.id, index, total: order.length })
+    startedNodes += 1
+    run.startedNodes = startedNodes
     const nodeStartedAt = Date.now()
     let result
     try {
-      const ctx = { ...collectContext(activeIn, results, nodesById), ownerId: flow.ownerId || '', runId: run.id }
+      const ctx = {
+        ...collectContext(activeIn, results, nodesById),
+        ownerId: flow.ownerId || '',
+        runId: run.id,
+        signal: stopController.signal,
+      }
       const executed = await executeNode(node, ctx)
       result = {
         id: node.id,
@@ -885,6 +958,8 @@ export async function runFlow(flow, { onEvent, credits = null, runId = '' } = {}
         message: null,
       }
     } catch (error) {
+      // 用户停止导致的中止不是「这个节点失败」：不留一条假错误，直接进入中断收尾
+      if (run.aborted) break
       result = {
         id: node.id,
         kind: node.type,
@@ -900,6 +975,7 @@ export async function runFlow(flow, { onEvent, credits = null, runId = '' } = {}
     }
     results.set(node.id, result)
     run.nodes.push(result)
+    run.finishedNodes = (Number(run.finishedNodes) || 0) + 1
 
     const executedOk = result.status === 'success' || result.status === 'unsupported'
     const branch = result.output && typeof result.output.branch === 'string' ? result.output.branch : null
@@ -915,7 +991,17 @@ export async function runFlow(flow, { onEvent, credits = null, runId = '' } = {}
 
   if (run.aborted) {
     run.status = 'interrupted'
-    run.error = run.error || '服务重启，运行中断；' + (run.ownerId ? '已扣积分已退回，重新运行即可。' : '重新运行即可。')
+    if (run.stopReason === 'user' || run.stopReason === 'disconnect') {
+      run.canceled = true
+      const who = run.stopReason === 'disconnect' ? '页面已经断开，这次运行停了' : '你停止了这次运行'
+      const bill = run.credits
+        ? '跑完的节点按比例计费，没跑完的部分已经退回。'
+        : '这次运行不计费。'
+      run.error = who + '；' + bill + '需要的话可以重新运行。'
+    } else {
+      // 服务重启 / 停机：没有用户主动停止，仍按全额退（已有路径）
+      run.error = run.error || '服务重启，运行中断；' + (run.ownerId ? '已扣积分已退回，重新运行即可。' : '重新运行即可。')
+    }
   } else {
     run.status = errorCount > 0 ? 'error' : 'success'
   }
@@ -929,8 +1015,16 @@ export async function runFlow(flow, { onEvent, credits = null, runId = '' } = {}
   if (run.status === 'error') {
     run.error = errorCount > 0 ? run.nodes.filter((item) => item.status === 'error').map((item) => item.title + '：' + item.error).join('；') : null
   }
-  // 失败与中断都按账本净额退回：路由、重启恢复、停机收尾三条路径谁先跑都只退一次
-  if (run.status !== 'success') refundRunCredits(run)
+  // 失败与中断都按账本净额退回：路由、重启恢复、停机收尾三条路径谁先跑都只退一次。
+  // 用户主动停止走「按已开始节点结算」；结算失败才回落到全额退，宁可多退用户。
+  if (run.status !== 'success') {
+    if (run.canceled) {
+      settleCanceledRun(run)
+      if (run.credits?.settled !== true) refundRunCredits(run)
+    } else {
+      refundRunCredits(run)
+    }
+  }
   await saveRun(run)
   await touchFlowRun(flow.id, run)
   activeRuns.delete(run.id)
@@ -941,6 +1035,20 @@ export async function runFlow(flow, { onEvent, credits = null, runId = '' } = {}
 // ---------- 中断与恢复 ----------
 // 发一次版就是一次重启：以前运行记录只在跑完才写、退款靠内存里的回调，重启后
 // 已扣的积分没人退、这次运行也查不到。现在运行一开始就落盘，重启 / 停机按账本净额退。
+
+/** 用户点「停止运行」：只认这个进程里正在跑的那条；中止信号会让当前上游调用立刻返回。
+ *  返回 ok 后运行还会走完收尾（写终态、按已开始节点结算），页面从流里拿到 run-end。 */
+export function requestRunStop(runId, { reason = 'user' } = {}) {
+  const id = String(runId || '')
+  const run = activeRuns.get(id)
+  if (!run) return { ok: false, code: 'RUN_NOT_ACTIVE', message: '这条运行已经结束，或者不在这个实例上' }
+  if (run.status !== 'running') return { ok: false, code: 'RUN_NOT_ACTIVE', message: '这条运行已经不在运行中' }
+  if (run.aborted) return { ok: true, id, status: run.status, already: true }
+  run.stopReason = reason === 'disconnect' ? 'disconnect' : 'user'
+  run.aborted = true
+  try { run.__stopController?.abort() } catch { /* 已经中止 */ }
+  return { ok: true, id, status: run.status }
+}
 
 /** 启动恢复：上次进程没跑完的运行标成中断并按账本退款；重复启动不会多退。
  *  排队中的单还没有开始跑、也没有扣钱（扣费在排到之后），恢复时直接撤掉——留着会是一条
@@ -997,6 +1105,7 @@ export async function interruptRunningRuns(reason = '服务停止') {
   if (!running.length) return 0
   for (const run of running) {
     run.aborted = true
+    try { run.__stopController?.abort() } catch { /* 已经中止 */ }
     run.status = 'interrupted'
     run.finishedAt = new Date().toISOString()
     const started = Date.parse(String(run.startedAt || ''))

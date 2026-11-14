@@ -54,7 +54,14 @@ export type RunNodeResult = {
   message: string | null
 }
 
-export type RunCredits = { cost: number; balance: number | null; refunded: boolean }
+export type RunCredits = {
+  cost: number
+  balance: number | null
+  refunded: boolean
+  /** 主动停止时按已开始节点留下的部分（v0.9.101）；全额退 / 没结算时缺省 */
+  kept?: number
+  refundedAmount?: number
+}
 
 /**
  * 这条运行属于哪条作品的哪一版：服务端按画布指针现算，不带脚本与分享凭证。
@@ -82,6 +89,10 @@ export type RunRecord = {
   finishedAt: string | null
   durationMs: number
   total: number
+  /** 已经开始的节点数：主动停止时按它结算（v0.9.101） */
+  startedNodes?: number
+  /** true = 用户停止 / 页面断开导致的中断，不是服务重启 */
+  canceled?: boolean
   nodes: RunNodeResult[]
   output: string
   error?: string | null
@@ -134,6 +145,10 @@ export type RunEventMessage =
   | { type: 'node-end'; node: RunNodeResult; index: number; total: number }
   | { type: 'run-end'; run: RunRecord }
   | { type: 'run-error'; error: string; code?: string }
+
+/** 停止一条已经开跑的运行（v0.9.101）：服务端中止当前上游，再按已开始节点结算。 */
+export const stopRun = (id: string) =>
+  request<{ ok: boolean; id: string; status: string }>('/api/runs/' + id + '/stop', { method: 'POST' })
 
 export async function listRuns(query: RunQuery = {}): Promise<RunList> {
   const params = new URLSearchParams()

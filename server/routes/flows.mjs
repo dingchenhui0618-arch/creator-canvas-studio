@@ -13,6 +13,7 @@ import {
   markRunStarted,
   dropRunRecord,
   abandonRun,
+  requestRunStop,
   NODE_KINDS,
   TOOLS,
   REVIEW_PROFILES,
@@ -32,6 +33,7 @@ import { publicError } from '../public-error.mjs'
 const FLOW_ITEM = /^\/api\/flows\/([\w-]+)$/
 const FLOW_RUN = /^\/api\/flows\/([\w-]+)\/run$/
 const RUN_ITEM = /^\/api\/runs\/([\w-]+)$/
+const RUN_STOP = /^\/api\/runs\/([\w-]+)\/stop$/
 
 function isOwnPath(pathname) {
   return (
@@ -176,6 +178,42 @@ export function createFlowsRouter() {
         return true
       }
 
+      // 停止一条已经开跑的运行（v0.9.101）：排队阶段仍走「关连接退队」，这里只认 running。
+      // 停止不是「立刻把记录改成失败」——先中止当前上游，让 runFlow 自己写完终态与结算，
+      // 否则记录会先被写死、正在跑的节点返回后又把它覆盖掉。
+      const runStopMatch = pathname.match(RUN_STOP)
+      if (runStopMatch) {
+        if (req.method !== 'POST') {
+          res.setHeader('Allow', 'POST')
+          sendJson(res, 405, { error: '只支持 POST' })
+          return true
+        }
+        const run = await getRun(runStopMatch[1], user)
+        if (!run) {
+          notFound(res, '运行记录不存在')
+          return true
+        }
+        if (run.ownerId && user?.id && run.ownerId !== user.id) {
+          sendJson(res, 403, { error: '这条运行不属于当前账号' })
+          return true
+        }
+        if (run.status !== 'running') {
+          sendJson(res, 409, {
+            ok: false,
+            code: 'RUN_NOT_ACTIVE',
+            error: run.status === 'queued' ? '这条运行还在排队：关掉这次请求就会退出排队，不会扣积分' : '这条运行已经结束',
+          })
+          return true
+        }
+        const stopped = requestRunStop(run.id, { reason: 'user' })
+        if (!stopped.ok) {
+          sendJson(res, 409, { ok: false, code: stopped.code, error: stopped.message })
+          return true
+        }
+        sendJson(res, 200, { ok: true, id: run.id, status: 'stopping' })
+        return true
+      }
+
       const runItemMatch = pathname.match(RUN_ITEM)
       if (runItemMatch && req.method === 'GET') {
         const run = await getRun(runItemMatch[1], user)
@@ -226,6 +264,13 @@ export function createFlowsRouter() {
         await markRunStarted(runId)
         try {
           if (body.stream) {
+            // 页面被关掉 / 连接被 abort：停止这条运行，不要让它继续烧上游。
+            // 只认「响应没写完就 close」——正常 runFlow 结束后 res.end() 也会触发 close。
+            try {
+              res.on('close', () => {
+                if (!res.writableEnded) requestRunStop(runId, { reason: 'disconnect' })
+              })
+            } catch { /* 测试里的假响应没有 on */ }
             sendStreamHead(res)
             // 排过队就先推一条「我从第几位等到开跑」：页面不用再自己算，运行结论也说得清
             if (paid.queue) {

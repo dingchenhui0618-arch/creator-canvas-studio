@@ -26,9 +26,10 @@ export function visionChain() {
   return list.length ? list : modelChain()
 }
 
-async function callOnce(messages, model, { temperature = 0.3, maxTokens = 2000, json = false, meter = null } = {}) {
+async function callOnce(messages, model, { temperature = 0.3, maxTokens = 2000, json = false, meter = null, signal } = {}) {
   // max_tokens 包含推理 token：推理型模型给太小会把正文截断，chatCompletion 会按可重试错误抛出
-  const { message } = await chatCompletion({ model, messages, temperature, maxTokens, json, meter })
+  // signal 是「用户停止运行」的通道（v0.9.101）：传下去之后 fetch 会被立刻中止，不再换模型重试
+  const { message } = await chatCompletion({ model, messages, temperature, maxTokens, json, meter, signal })
   const content = String(message.content || '').trim()
   // 推理型模型偶发把整段输出塞进 reasoning_content、content 为空：
   // 换下一个候选模型，绝不把思考过程当答案返回。
@@ -57,6 +58,8 @@ export async function callTextModel(messages, options = {}) {
         log?.(attempt === 0 ? '模型：' + model : '模型：' + model + ' · 截断后把 max_tokens 放宽到 ' + maxTokens + ' 再试一次')
         return await callOnce(messages, model, { ...options, maxTokens })
       } catch (error) {
+        // 用户停止：不换候选模型、不重试，直接把中止交给运行层收尾
+        if (options.signal?.aborted) throw error
         lastError = error
         const truncated = Boolean(error?.truncated)
         const retryable = truncated || error?.retryable || error?.name === 'AbortError' || /fetch failed/i.test(String(error?.message))

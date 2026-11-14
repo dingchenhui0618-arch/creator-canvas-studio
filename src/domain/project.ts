@@ -198,9 +198,13 @@ export type ProjectRun = {
   /** 排队等了多久（v0.9.100）：0 = 没排过队 */
   queuedMs?: number
   total: number
+  /** 已经开始的节点数：主动停止时按它结算（v0.9.101） */
+  startedNodes?: number
+  /** 用户停止 / 页面断开导致的中断，不是服务重启 */
+  canceled?: boolean
   failed: number
   error: string
-  credits: { cost: number; refunded: boolean } | null
+  credits: { cost: number; refunded: boolean; kept?: number; refundedAmount?: number } | null
   /** 这次运行跑的是第几版画布 */
   version: number
   /** 那一版画布还在不在：被删掉后运行记录仍留着，但画布打不开 */

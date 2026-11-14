@@ -58,9 +58,10 @@ function tooBigImage() {
 // 把远程图片取下来：先看声明大小、再边读边卡 8 MB。
 // 以前两条路（插件服务 / 本地模型）各写一遍，其中插件服务那条是整段 arrayBuffer 下来之后才判大小——
 // 一个 100 MB 的图床地址就是一次 OOM。现在两条路共用这一个口。
-async function fetchImageCapped(imageUrl) {
+async function fetchImageCapped(imageUrl, signal = null) {
   await assertPublicHttpUrl(imageUrl)
-  const response = await fetch(imageUrl, { signal: AbortSignal.timeout(15_000) })
+  const timeout = AbortSignal.timeout(15_000)
+  const response = await fetch(imageUrl, { signal: signal ? AbortSignal.any([signal, timeout]) : timeout })
   if (!response.ok) throw new Error('取不到这张图（HTTP ' + response.status + '）')
   const declared = Number(response.headers.get('content-length') || 0)
   if (declared > MAX_IMAGE_BYTES) throw tooBigImage()
@@ -116,7 +117,7 @@ function normalize(raw, provider, requestId) {
   }
 }
 
-export async function reviewVisual({ imageUrl, imageBytes, mime = 'image/jpeg', intent = '', log, projectId = '', ref = '' }) {
+export async function reviewVisual({ imageUrl, imageBytes, mime = 'image/jpeg', intent = '', log, projectId = '', ref = '', signal = null }) {
   const requestId = 'vr_' + Math.random().toString(36).slice(2, 10)
   const started = Date.now()
   // 计量口径：kind 由各调用点自己定（视觉=vision、判断=judge），这里只负责把
@@ -152,18 +153,21 @@ export async function reviewVisual({ imageUrl, imageBytes, mime = 'image/jpeg', 
       } else if (imageUrl) {
         // 评审接口接受外部图片地址：同样要拦内网地址，否则它就是一个匿名 SSRF 入口；
         // 取图与缩图走和本地模型同一条路（8 MB 硬上限 + 长边 1600）
-        const remote = await fetchImageCapped(imageUrl)
+        const remote = await fetchImageCapped(imageUrl, signal)
         const shot = await compressForReview(remote.bytes, remote.mime, { log })
         compression = shot.report
         form.append('candidate', new Blob([shot.bytes], { type: shot.mime }), 'candidate.' + (shot.mime.includes('png') ? 'png' : 'jpg'))
       }
-      const response = await fetch(SERVICE_URL + '/api/visual-review', { method: 'POST', body: form, signal: AbortSignal.timeout(60000) })
+      const serviceTimeout = AbortSignal.timeout(60000)
+      const response = await fetch(SERVICE_URL + '/api/visual-review', { method: 'POST', body: form, signal: signal ? AbortSignal.any([signal, serviceTimeout]) : serviceTimeout })
       const json = await response.json()
       if (response.ok) {
         const mapped = await attachJudge(normalize(json, 'visionqa-plugin@' + SERVICE_URL.replace(/^https?:\/\//, ''), requestId), intent, meter)
         return { ...mapped, ms: Date.now() - started, mode: 'service', note: '由 VisionQA 插件服务返回（fixture provider 时只证明链路可用，不代表模型准确率）', compression }
       }
     } catch (error) {
+      // 用户停止导致的中止不是「服务评审失败」，不再退回本地模型继续烧一次
+      if (signal?.aborted) throw error
       log?.('VisionQA 服务评审失败，退回本地模型：' + String(error?.message || error).slice(0, 120))
     }
   }
@@ -192,7 +196,7 @@ export async function reviewVisual({ imageUrl, imageBytes, mime = 'image/jpeg', 
     // 自己把图取下来再当 data URL 发出去，不要把远程地址原样交给上游模型：
     // 模型服务未必够得着我们的图床（生产实测 DeepSeek 取 GitHub raw 直接 400），
     // 而且这样一来图片地址只在我们的出口出现，不给上游当代理跳板。
-    const remote = await fetchImageCapped(imageUrl)
+    const remote = await fetchImageCapped(imageUrl, signal)
     const shot = await compressForReview(remote.bytes, remote.mime, { log })
     compression = shot.report
     dataUrl = toDataUrl(shot.bytes, shot.mime)
@@ -208,7 +212,7 @@ export async function reviewVisual({ imageUrl, imageBytes, mime = 'image/jpeg', 
         { type: 'image_url', image_url: { url: dataUrl, detail: 'low' } },
       ],
     },
-  ], { temperature: 0.2, maxTokens: 3000, json: true, log, models: visionChain(), meter })
+  ], { temperature: 0.2, maxTokens: 3000, json: true, log, models: visionChain(), meter, signal })
 
   const parsed = extractJson(result.text)
   const mapped = await attachJudge(normalize(parsed, 'local-model:' + result.model, requestId), intent, meter)

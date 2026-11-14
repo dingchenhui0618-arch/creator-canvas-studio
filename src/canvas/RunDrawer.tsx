@@ -60,8 +60,18 @@ export function RunDrawer({ open, running, flowName, runId, total, nodes, record
   const progress = total > 0 ? Math.round((nodes.length / total) * 100) : 0
   const duration = record ? record.durationMs : nodes.reduce((sum, node) => sum + (node.ms || 0), 0)
   // 排队也是一段时间：抽屉开着的时候顶栏会被它盖住，所以状态胶囊直接写 QUEUED，别让用户以为节点在跑
-  const statusText = queue ? 'QUEUED' : running ? 'RUNNING' : record ? (record.status === 'success' ? 'DONE' : record.status === 'interrupted' ? 'INTERRUPTED' : 'ERROR') : error ? 'ERROR' : 'IDLE'
-  const statusTone = running ? 'live' : record?.status === 'error' || record?.status === 'interrupted' || error ? 'fail' : record ? 'pass' : 'idle'
+  const statusText = queue
+    ? 'QUEUED'
+    : running
+      ? 'RUNNING'
+      : record
+        ? (record.status === 'success' ? 'DONE' : record.status === 'interrupted' ? (record.canceled ? 'STOPPED' : 'INTERRUPTED') : 'ERROR')
+        : error ? 'ERROR' : 'IDLE'
+  const statusTone = running
+    ? 'live'
+    : record?.canceled
+      ? 'warn'
+      : record?.status === 'error' || record?.status === 'interrupted' || error ? 'fail' : record ? 'pass' : 'idle'
 
   return (
     <aside className={`cv-drawer ${open ? 'is-open' : ''}`} aria-label="运行结果" aria-hidden={!open}>
@@ -82,7 +92,13 @@ export function RunDrawer({ open, running, flowName, runId, total, nodes, record
         <span>{nodes.length} / {total || nodes.length} 节点</span>
         {queuedMs > 0 ? <span>排队 {Math.round(queuedMs / 1000)} 秒后开始</span> : null}
         {record?.credits && record.credits.cost > 0 ? (
-          <span>{record.credits.refunded ? '已退回 ' + record.credits.cost + ' 积分' : '消耗 ' + record.credits.cost + ' 积分'}</span>
+          <span>
+            {record.credits.refunded
+              ? record.credits.kept != null
+                ? '已退 ' + (record.credits.refundedAmount ?? 0) + ' 积分 · 已跑部分 ' + record.credits.kept + ' 积分'
+                : '已退回 ' + record.credits.cost + ' 积分'
+              : '消耗 ' + record.credits.cost + ' 积分'}
+          </span>
         ) : null}
       </div>
       <div className="cv-drawer-progress"><span style={{ width: progress + '%' }} /></div>
@@ -97,6 +113,16 @@ export function RunDrawer({ open, running, flowName, runId, total, nodes, record
             </div>
           </div>
         )}
+
+        {!error && record?.canceled && record.error ? (
+          <div className="cv-drawer-stopped">
+            <CircleSlash size={14} strokeWidth={1.75} />
+            <div>
+              <strong>运行已停止</strong>
+              <p>{record.error}</p>
+            </div>
+          </div>
+        ) : null}
 
         {!nodes.length && !error && (
           <div className="cv-drawer-empty">

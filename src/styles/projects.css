@@ -935,6 +935,13 @@
   color: var(--fail);
 }
 
+/* 主动停止是用户自己的动作，不是失败：中性底色，别用报错红 */
+.vq-run-status.is-stop {
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--muted);
+}
+
 .vq-run-meta {
   display: inline-flex;
   flex-wrap: wrap;
@@ -952,6 +959,8 @@
   font-size: var(--text-meta);
   line-height: 1.6;
 }
+
+.vq-run-error.is-stopped { color: var(--muted); }
 
 .vq-run-open {
   flex: none;

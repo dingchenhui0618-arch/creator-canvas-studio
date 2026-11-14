@@ -349,14 +349,14 @@ export function RunsPage({
                     resetAdopt()
                   }}
                 >
-                  <span className={`runs-dot is-${runStatusMeta(item.status).tone}`} />
+                  <span className={`runs-dot is-${runStatusMeta(item.status, item.canceled).tone}`} />
                   <span className="runs-row-main">
                     <strong>{item.flowName}</strong>
                     <small className={'runs-row-where' + (item.project ? '' : ' is-orphan')}>{runWorkLine(item)}</small>
                     <small className="vq-mono">{item.id} · {item.total} 个节点</small>
                   </span>
                   <span className="runs-row-meta">
-                    <span className="vq-mono">{runStatusMeta(item.status).label}</span>
+                    <span className="vq-mono">{runStatusMeta(item.status, item.canceled).label}</span>
                     <span className="vq-mono">{runSpentText(item)}</span>
                     <span className="vq-mono">{fmtTime(item.startedAt)}</span>
                   </span>
@@ -374,7 +374,9 @@ export function RunsPage({
                 {current.credits && current.credits.cost > 0 ? (
                   <span className="vq-mono">
                     {current.credits.refunded
-                      ? '已退回 ' + current.credits.cost + ' 积分'
+                      ? current.credits.kept != null
+                        ? '已退 ' + (current.credits.refundedAmount ?? 0) + ' · 已跑部分 ' + current.credits.kept + ' 积分'
+                        : '已退回 ' + current.credits.cost + ' 积分'
                       : current.status === 'queued'
                         ? '排到后扣 ' + current.credits.cost + ' 积分'
                         : '消耗 ' + current.credits.cost + ' 积分'}
@@ -475,7 +477,7 @@ export function RunsPage({
               {adoptDone ? <p className="runs-adopt-done">{adoptDone}</p> : null}
               {current.status !== 'success' ? (
                 <p className="runs-note">
-                  {runStatusMeta(current.status).note}
+                  {runStatusMeta(current.status, current.canceled).note}
                   {current.status === 'error' || current.status === 'interrupted' ? (
                     <a className="vq-link" href="#/help/replicate-failed">
                       看常见原因

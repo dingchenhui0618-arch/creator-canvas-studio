@@ -92,13 +92,18 @@ export class WorkerPool {
     return { size: this.#size, alive: this.#slots.size, idle: this.#idle.length, queued: this.#queue.length }
   }
 
-  run(payload, { onLog = null } = {}) {
+  run(payload, { onLog = null, signal = null } = {}) {
     return new Promise((resolve, reject) => {
       if (this.#closed) {
         reject(new IsolateError('REVIEW_WORKER_DOWN', '评审进程池已关闭，这次评审没有开始'))
         return
       }
-      this.#queue.push({ payload, onLog, resolve, reject })
+      // 已经在停的运行不必再排进池子：直接回「已中止」，调用方据此收尾
+      if (signal?.aborted) {
+        reject(new IsolateError('REVIEW_CANCELED', '运行已停止，这次评审没有开始'))
+        return
+      }
+      this.#queue.push({ payload, onLog, resolve, reject, signal })
       this.#pump()
     })
   }
@@ -144,6 +149,16 @@ export class WorkerPool {
     slot.job = task
     slot.onLog = task.onLog
     slot.worker.ref()
+    // 用户停止：终止这个 worker（它可能正卡在一次上游调用里），任务立刻以 REVIEW_CANCELED 收尾，
+    // 池会补一个新的。只杀接了这一单的 worker，别的评审不受影响。
+    if (task.signal) {
+      slot.abort = () => this.#failSlot(slot, new IsolateError('REVIEW_CANCELED', '运行已停止，这次评审已中止'))
+      if (task.signal.aborted) {
+        slot.abort()
+        return
+      }
+      task.signal.addEventListener('abort', slot.abort, { once: true })
+    }
     const id = ++this.#jobSeq
     slot.timer = setTimeout(() => {
       this.#failSlot(slot, new IsolateError('REVIEW_TIMEOUT', '评审超过 ' + Math.round(this.#timeoutMs / 1000) + ' 秒还没回结果，已经中止；服务本身没受影响', { status: 504 }))
@@ -213,6 +228,10 @@ export class WorkerPool {
   #takeJob(slot) {
     if (slot.timer) { clearTimeout(slot.timer); slot.timer = null }
     const task = slot.job
+    if (slot.abort) {
+      try { task?.signal?.removeEventListener('abort', slot.abort) } catch { /* 已移除 */ }
+      slot.abort = null
+    }
     slot.job = null
     slot.onLog = null
     return task
@@ -251,11 +270,11 @@ export function resetReviewPool() {
 }
 
 /** 评审走隔离池；调用方只关心「有没有开」，怎么跑在这里 */
-export async function runReviewIsolated(payload, { log = null, env = process.env } = {}) {
+export async function runReviewIsolated(payload, { log = null, env = process.env, signal = null } = {}) {
   const config = reviewIsolateConfig(env)
   stats.runs += 1
   try {
-    const result = await reviewPool.get(config).run(payload, { onLog: log })
+    const result = await reviewPool.get(config).run(payload, { onLog: log, signal })
     stats.ok += 1
     return result
   } catch (error) {

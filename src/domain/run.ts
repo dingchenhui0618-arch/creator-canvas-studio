@@ -10,10 +10,14 @@ export type RunStatusMeta = { label: string; tone: RunStatusTone; note: string }
  *   running = 正在跑，节点会一个个补上。
  * 以前页面把所有非成功都写成「失败」——排队中和在跑都顶着红点，读起来像已经失败并退了钱。
  */
-export function runStatusMeta(status: unknown): RunStatusMeta {
+export function runStatusMeta(status: unknown, canceled = false): RunStatusMeta {
   const key = String(status || '')
   if (key === 'success') return { label: '成功', tone: 'pass', note: '' }
-  if (key === 'interrupted') return { label: '已中断', tone: 'warn', note: '这次运行被中断，积分按账本退回。' }
+  if (key === 'interrupted') {
+    return canceled
+      ? { label: '已停止', tone: 'warn', note: '你停止了这次运行：跑完的节点按比例计费，没跑完的部分已退回。' }
+      : { label: '已中断', tone: 'warn', note: '这次运行被中断，积分按账本退回。' }
+  }
   if (key === 'running') return { label: '运行中', tone: 'live', note: '这次运行还在跑：节点会一个个补上，跑完自动结算。' }
   if (key === 'queued') return { label: '排队中', tone: 'queued', note: '正在排队：还没轮到这个名额，排到才开始跑、才扣积分。' }
   if (key === 'error' || key === 'failed' || !key) return { label: '失败', tone: 'fail', note: '这次运行失败了，积分原路退回。' }

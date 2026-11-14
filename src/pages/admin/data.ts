@@ -59,9 +59,11 @@ export type RunItem = {
   /** 排队等了多久（v0.9.100）：0 / 缺省 = 没排过队 */
   queuedMs?: number
   total: number
+  startedNodes?: number
+  canceled?: boolean
   nodes?: RunNode[]
   error?: string | null
-  credits?: { cost: number; balance: number | null; refunded: boolean } | null
+  credits?: { cost: number; balance: number | null; refunded: boolean; kept?: number; refundedAmount?: number } | null
 }
 
 export type RunsResponse = {
