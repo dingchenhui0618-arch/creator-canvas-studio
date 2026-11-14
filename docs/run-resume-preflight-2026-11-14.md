@@ -56,7 +56,7 @@ current.status !== 'running' && current.status !== 'queued' && runResumeInfo(cur
 | 页面（不能续） | 写「画布改动后没有能原样复用的节点…」；「继续运行」按钮消失，「在画布打开」仍在 |
 | 只读 / 扣费 | 预检前后余额都是 97；没有写运行记录、没有调上游 |
 | 浏览器预检请求 | 页面加载 / 两次刷新共 **4** 次 `resume-plan`；没有逐行预检 |
-| 390 宽 | `scrollWidth 390 = clientWidth 390`，预检条与按钮都在画面内 |
+| 390 宽 | `scrollWidth 390 = clientWidth 390`，预检条与说明都在画面内 |
 
 ![运行记录页：选中 3/5 停止的运行，预检条写「复用 3 个 · 还差 2 个 · 补 2 积分」，按钮直接带补多少](run-resume-preflight-ready-2026-11-14.png)
 
