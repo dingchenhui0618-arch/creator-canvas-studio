@@ -3,6 +3,7 @@ import { ArrowLeftRight, X } from 'lucide-react'
 import { compareProjectVersions } from '../api/projects'
 import type {
   ProjectVersionCompare,
+  ProjectVersionCompareField,
   ProjectVersionCompareNode,
 } from '../domain/project'
 
@@ -49,6 +50,45 @@ function BeatGroup({ tone, label, items }: { tone: CompareGroupTone; label: stri
         <p className="vq-vcompare-group-label">{label} {items.length}</p>
         <ul className="vq-vcompare-items">
           {items.map((name) => <li key={name}>{name}</li>)}
+        </ul>
+      </div>
+    </div>
+  )
+}
+
+function ChangedNodes({ items, fields }: { items: ProjectVersionCompareNode[]; fields?: Record<string, ProjectVersionCompareField[]> }) {
+  if (!items.length) return null
+  return (
+    <div className="vq-vcompare-group is-changed">
+      <span className="vq-vcompare-tag" aria-hidden="true">~</span>
+      <div className="vq-vcompare-group-body">
+        <p className="vq-vcompare-group-label">改 {items.length}</p>
+        <ul className="vq-vcompare-node-list">
+          {items.map((item) => {
+            const changes = fields?.[item.id] || []
+            return (
+              <li className="vq-vcompare-node" key={item.id}>
+                <div className="vq-vcompare-node-head">
+                  <strong>{item.title}</strong>
+                  <span className="vq-mono">{changes.length ? changes.length + ' 项参数' : '配置改过'}</span>
+                </div>
+                {changes.length ? (
+                  <ul className="vq-vcompare-fields">
+                    {changes.map((field) => (
+                      <li className="vq-vcompare-field" key={field.key}>
+                        <span className="vq-vcompare-field-label">{field.label}</span>
+                        <span className="vq-vcompare-field-values">
+                          <span className="vq-vcompare-value is-before" title={field.before}>{field.before}</span>
+                          <span className="vq-vcompare-field-arrow" aria-hidden="true">→</span>
+                          <span className="vq-vcompare-value is-after" title={field.after}>{field.after}</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </li>
+            )
+          })}
         </ul>
       </div>
     </div>
@@ -117,6 +157,9 @@ export function VersionCompareModal({
   const scriptTouched = Boolean(result?.script && (
     result.script.added.length || result.script.removed.length || result.script.changed.length || result.script.hookChanged
   ))
+  const changedFieldCount = result?.canvas?.fields
+    ? Object.values(result.canvas.fields).reduce((sum, list) => sum + list.length, 0)
+    : 0
 
   return (
     <div className="vq-modal-backdrop" onMouseDown={onClose}>
@@ -188,6 +231,7 @@ export function VersionCompareModal({
                   <h3>画布</h3>
                   <span className="vq-mono">
                     {result.base.canvasAvailable ? result.base.nodes : '—'} → {result.target.canvasAvailable ? result.target.nodes : '—'} 节点
+                    {changedFieldCount ? ' · ' + changedFieldCount + ' 项参数' : ''}
                   </span>
                 </div>
                 {result.canvas ? (
@@ -195,7 +239,7 @@ export function VersionCompareModal({
                     <div className="vq-vcompare-groups">
                       <NodeGroup tone="added" label="多" items={result.canvas.added} />
                       <NodeGroup tone="removed" label="少" items={result.canvas.removed} />
-                      <NodeGroup tone="changed" label="改" items={result.canvas.changed} />
+                      <ChangedNodes items={result.canvas.changed} fields={result.canvas.fields} />
                     </div>
                   ) : (
                     <p className="vq-vcompare-state">节点没动。</p>

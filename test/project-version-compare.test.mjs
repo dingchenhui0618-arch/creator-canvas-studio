@@ -112,6 +112,10 @@ test('任意两版对照：明细逐项列出，当前版读现在的、归档�
   assert.deepEqual(res.body.canvas.added, [])
   assert.deepEqual(res.body.canvas.removed, [])
   assert.deepEqual(res.body.canvas.changed.map((item) => item.title).sort(), ['写一句', '输入'])
+  const inputFields = res.body.canvas.fields.n_input
+  assert.deepEqual(inputFields.map((item) => [item.label, item.before, item.after]), [['输入文本', '第一版', '第三版']])
+  const llmFields = res.body.canvas.fields.n_llm
+  assert.deepEqual(llmFields.map((item) => [item.label, item.before, item.after]), [['提示词', '第一版提示词', '第二版提示词']])
   assert.deepEqual(res.body.script.added, ['收尾'])
   assert.deepEqual(res.body.script.removed, [])
   assert.deepEqual(res.body.script.changed, [{
@@ -131,6 +135,7 @@ test('任意两版对照：明细逐项列出，当前版读现在的、归档�
   assert.deepEqual(reverse.body.script.removed, ['收尾'])
   assert.equal(reverse.body.script.hookBefore, '第二版钩子')
   assert.equal(reverse.body.script.hookAfter, '第一版钩子')
+  assert.deepEqual(reverse.body.canvas.fields.n_input.map((item) => [item.before, item.after]), [['第三版', '第一版']])
 
   // 1 → 2 能看到 v2 新增的「出图」节点；2 → 3 只剩画布变化
   const oneToTwo = await call('GET', '/api/projects/' + built.project.id + '/versions/compare?base=1&target=2')

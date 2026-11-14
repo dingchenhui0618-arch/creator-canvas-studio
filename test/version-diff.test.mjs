@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   canvasDelta,
   canvasDetail,
+  canvasFieldDetail,
   canvasText,
   fingerprint,
   scriptDetail,
@@ -187,4 +188,59 @@ test('任意两版：一句话与明细同源；缺一侧时明细为 null，不
   assert.equal(missing.canvas, null)
   assert.equal(missing.script, null)
   assert.equal(missing.summary, '')
+})
+
+test('改过的节点差到参数：类型、文本、温度、提示词各列一项', () => {
+  const before = [
+    node('n1', '输入', { text: '第一版' }, { type: 'input' }),
+    node('n2', '写一句', { model: 'deepseek-flash', temperature: 0.4, systemPrompt: '第一版提示词' }),
+  ]
+  const after = [
+    node('n1', '输入', { text: '第三版' }, { type: 'input' }),
+    node('n2', '写一句', { model: 'deepseek-flash', temperature: 0.7, systemPrompt: '第二版提示词' }),
+  ]
+  const fields = canvasFieldDetail(before, after)
+  assert.deepEqual(fields.n1, [{
+    key: 'text',
+    label: '输入文本',
+    before: '第一版',
+    after: '第三版',
+    truncated: false,
+  }])
+  assert.deepEqual(fields.n2.map((item) => [item.label, item.before, item.after]), [
+    ['温度', '0.4', '0.7'],
+    ['提示词', '第一版提示词', '第二版提示词'],
+  ])
+  // 多 / 少节点没有前后参数可比，不硬凑
+  assert.deepEqual(canvasFieldDetail([...before, node('n3', '多', { text: 'x' }, { type: 'input' })], after).n3, undefined)
+  // 配置一模一样时不给空明细
+  assert.deepEqual(canvasFieldDetail(before, before), {})
+})
+
+test('节点类型换了也算一项；很长的提示词只截改动附近，两端各留省略号', () => {
+  const longOld = '甲'.repeat(400) + '旧句' + '乙'.repeat(400)
+  const longNew = '甲'.repeat(400) + '新句' + '乙'.repeat(400)
+  const fields = canvasFieldDetail(
+    [node('n1', '旧节点', { text: longOld }, { type: 'input' })],
+    [node('n1', '新节点', { text: longNew }, { type: 'llm' })],
+  )
+  assert.equal(fields.n1[0].key, 'type')
+  assert.equal(fields.n1[0].before, '输入')
+  assert.equal(fields.n1[0].after, '大模型')
+  const prompt = fields.n1.find((item) => item.key === 'text')
+  assert.equal(prompt.truncated, true)
+  assert.ok(prompt.before.includes('旧句'), '截断后仍要看得到改动的那一段')
+  assert.ok(prompt.after.includes('新句'))
+  assert.ok(prompt.before.startsWith('…') && prompt.before.endsWith('…'), '两端省略号说明截过')
+  assert.ok(prompt.before.length < 500, '不能把 800 字整段塞回弹窗')
+})
+
+test('任意两版对照把参数明细挂在改过的节点上；没有改动时不多带字段', () => {
+  const before = [node('n1', '写一句', { temperature: 0.4, systemPrompt: '旧' })]
+  const after = [node('n1', '写一句', { temperature: 0.7, systemPrompt: '新' })]
+  const changed = versionCompareOf({ baseNodes: before, targetNodes: after, baseScript: null, targetScript: null })
+  assert.equal(changed.canvas.fields.n1.length, 2)
+  assert.deepEqual(changed.canvas.fields.n1.map((item) => item.label).sort(), ['提示词', '温度'].sort())
+  const same = versionCompareOf({ baseNodes: before, targetNodes: before, baseScript: null, targetScript: null })
+  assert.equal(same.canvas.fields, undefined)
 })

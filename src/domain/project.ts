@@ -173,6 +173,15 @@ export type ProjectVersionCompareNode = {
   title: string
 }
 
+/** 改过的节点差在哪一项参数（v0.9.118）：类型或 config 的一个键，带前后可读值与截断标记 */
+export type ProjectVersionCompareField = {
+  key: string
+  label: string
+  before: string
+  after: string
+  truncated: boolean
+}
+
 /** 改过口播的段：段名 + 前后各段口播（重名段落按出现顺序排） */
 export type ProjectVersionCompareBeat = {
   name: string
@@ -193,6 +202,8 @@ export type ProjectVersionCompare = {
     added: ProjectVersionCompareNode[]
     removed: ProjectVersionCompareNode[]
     changed: ProjectVersionCompareNode[]
+    /** 改过的节点 id → 参数明细；没有参数改动时这一项不出现（v0.9.118） */
+    fields?: Record<string, ProjectVersionCompareField[]>
   } | null
   script: {
     added: string[]

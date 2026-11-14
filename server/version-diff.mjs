@@ -190,12 +190,150 @@ export function versionBaseChangesOf(rows) {
   return out
 }
 
+const CONFIG_FIELD_LABELS = {
+  type: '节点类型',
+  text: '输入文本',
+  model: '模型',
+  temperature: '温度',
+  systemPrompt: '提示词',
+  keyword: '关键词',
+  contentType: '内容类型',
+  limit: '条数',
+  toolName: '工具',
+  expression: '条件',
+  format: '输出格式',
+  profile: '评审档位',
+  image: '评审图片',
+}
+
+const NODE_TYPE_LABELS = {
+  input: '输入',
+  llm: '大模型',
+  kb: '知识库',
+  tool: '工具',
+  condition: '条件',
+  output: '输出',
+  review: '评审',
+}
+
+const EMPTY_FIELD_TEXT = { model: '跟随当前模型', contentType: '不限' }
+
+/** 一个配置项的值变成人能读的一行；空模型写「跟随当前模型」，不写成空白让人猜。 */
+function fieldText(value, key) {
+  if (value === undefined || value === null || value === '') return EMPTY_FIELD_TEXT[key] || '（空）'
+  if (typeof value === 'number') return String(value)
+  if (typeof value === 'boolean') return value ? '是' : '否'
+  if (typeof value === 'string') return flat(value) || '（空）'
+  try {
+    return flat(JSON.stringify(value)) || '（空）'
+  } catch {
+    return String(value)
+  }
+}
+
+function clipMiddle(text, max = 180) {
+  const value = String(text || '')
+  if (value.length <= max) return value
+  const head = Math.floor(max * 0.55)
+  return value.slice(0, head) + '…' + value.slice(-(max - head - 1))
+}
+
+/**
+ * 很长的提示词只截「改动的附近」，不把 4000 字整段塞进弹窗。
+ * 先找共同前后缀，再各留一段上下文；改动本身也太长时从中间省略。
+ */
+function fieldExcerpt(before, after) {
+  const a = String(before || '')
+  const b = String(after || '')
+  if (a.length <= 260 && b.length <= 260) return { before: a || '（空）', after: b || '（空）', truncated: false }
+  let prefix = 0
+  const maxPrefix = Math.min(a.length, b.length)
+  while (prefix < maxPrefix && a[prefix] === b[prefix]) prefix += 1
+  let suffix = 0
+  const maxSuffix = Math.min(a.length - prefix, b.length - prefix)
+  while (suffix < maxSuffix && a[a.length - 1 - suffix] === b[b.length - 1 - suffix]) suffix += 1
+  const context = 42
+  const start = Math.max(0, prefix - context)
+  const aTail = Math.min(a.length, a.length - suffix + context)
+  const bTail = Math.min(b.length, b.length - suffix + context)
+  const aChanged = clipMiddle(a.slice(prefix, Math.max(prefix, a.length - suffix)), 150)
+  const bChanged = clipMiddle(b.slice(prefix, Math.max(prefix, b.length - suffix)), 150)
+  const aText = (start > 0 ? '…' : '') + a.slice(start, prefix) + aChanged + a.slice(a.length - suffix, aTail) + (aTail < a.length ? '…' : '')
+  const bText = (start > 0 ? '…' : '') + b.slice(start, prefix) + bChanged + b.slice(b.length - suffix, bTail) + (bTail < b.length ? '…' : '')
+  return {
+    before: aText || '（空）',
+    after: bText || '（空）',
+    truncated: aText !== a || bText !== b,
+  }
+}
+
+/**
+ * 一个节点改在哪几项参数上：类型与 config 的每个键都比。
+ * 只返回改过的项；位置、标题不在 config 里，天然不算。
+ */
+function nodeFieldChanges(beforeNode, afterNode) {
+  const changes = []
+  const beforeType = String(beforeNode?.type || '')
+  const afterType = String(afterNode?.type || '')
+  if (beforeType !== afterType) {
+    changes.push({
+      key: 'type',
+      label: CONFIG_FIELD_LABELS.type,
+      before: NODE_TYPE_LABELS[beforeType] || beforeType || '（空）',
+      after: NODE_TYPE_LABELS[afterType] || afterType || '（空）',
+      truncated: false,
+    })
+  }
+  const beforeConfig = beforeNode?.data?.config && typeof beforeNode.data.config === 'object' ? beforeNode.data.config : {}
+  const afterConfig = afterNode?.data?.config && typeof afterNode.data.config === 'object' ? afterNode.data.config : {}
+  const keys = [...new Set([...Object.keys(afterConfig), ...Object.keys(beforeConfig)])]
+  for (const key of keys) {
+    const before = fieldText(beforeConfig[key], key)
+    const after = fieldText(afterConfig[key], key)
+    if (before === after) continue
+    changes.push({
+      key,
+      label: CONFIG_FIELD_LABELS[key] || key,
+      ...fieldExcerpt(before, after),
+    })
+  }
+  if (!changes.length && JSON.stringify(beforeConfig) !== JSON.stringify(afterConfig)) {
+    const excerpt = fieldExcerpt(fieldText(beforeConfig, 'config'), fieldText(afterConfig, 'config'))
+    changes.push({ key: 'config', label: '节点配置', ...excerpt })
+  }
+  return changes
+}
+
+/**
+ * 改过的节点差在哪几项参数（v0.9.118）：按节点 id 给一份明细。
+ * 只给改过的节点；多 / 少节点没有「前后参数」可比，不硬凑。
+ */
+export function canvasFieldDetail(prev, next) {
+  if (!Array.isArray(prev) || !Array.isArray(next)) return {}
+  const before = new Map(prev.map((node) => [String(node?.id || ''), node]))
+  const after = new Map(next.map((node) => [String(node?.id || ''), node]))
+  const fields = {}
+  for (const [id, node] of after) {
+    const old = before.get(id)
+    if (!old) continue
+    const changes = nodeFieldChanges(old, node)
+    if (changes.length) fields[id] = changes
+  }
+  return fields
+}
+
 /**
  * 任意两版对照（v0.9.117）：给版本行的一句话，加上可逐项列出的画布与脚本明细。
  * 只读、不写任何东西；方向按 base → target，反过来选就是看「改回去了什么」。
  * 返回的 canvas / script 在一侧读不到时为 null，调用方照 notes 说清哪一侧不比。
  */
 export function versionCompareOf({ baseNodes, targetNodes, baseScript, targetScript }) {
+  const canvas = canvasDetail(fingerprint(baseNodes), fingerprint(targetNodes))
+  // 改过的节点再差到具体参数：没有改动就不带 fields，老调用方读到的结构不变（v0.9.118）
+  if (canvas) {
+    const fields = canvasFieldDetail(baseNodes, targetNodes)
+    if (Object.keys(fields).length) canvas.fields = fields
+  }
   return {
     summary: versionChangeText({
       prevNodes: baseNodes,
@@ -203,7 +341,7 @@ export function versionCompareOf({ baseNodes, targetNodes, baseScript, targetScr
       prevScript: baseScript,
       nextScript: targetScript,
     }),
-    canvas: canvasDetail(fingerprint(baseNodes), fingerprint(targetNodes)),
+    canvas,
     script: scriptDetail(baseScript, targetScript),
   }
 }

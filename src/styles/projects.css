@@ -2353,6 +2353,99 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
   line-height: 22px;
 }
 
+
+
+.vq-vcompare-node-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vq-vcompare-node {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+}
+
+.vq-vcompare-node-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.vq-vcompare-node-head strong {
+  color: var(--ink);
+  font-size: var(--text-meta);
+  font-weight: var(--weight-medium);
+}
+
+.vq-vcompare-node-head .vq-mono {
+  flex: none;
+  color: var(--faint);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.vq-vcompare-fields {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: var(--space-2) 0 0;
+  border-top: 1px dashed var(--line-faint);
+  list-style: none;
+}
+
+.vq-vcompare-field {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-2);
+}
+
+.vq-vcompare-field-label {
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.vq-vcompare-field-values {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-2);
+  min-width: 0;
+}
+
+.vq-vcompare-value {
+  max-width: 100%;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.vq-vcompare-value.is-after {
+  border: 1px solid var(--line-faint);
+  background: var(--surface-raised);
+  color: var(--ink);
+}
+
+.vq-vcompare-field-arrow {
+  flex: none;
+  color: var(--faint);
+  font-size: 11px;
+}
+
 .vq-vcompare-changed {
   display: grid;
   gap: var(--space-1);
@@ -2470,6 +2563,24 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
 
   .vq-vcompare-summary {
     padding: var(--space-3);
+  }
+
+  .vq-vcompare-node {
+    padding: var(--space-2);
+  }
+
+  .vq-vcompare-field {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-1);
+  }
+
+  .vq-vcompare-field-values {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .vq-vcompare-field-arrow {
+    transform: rotate(90deg);
   }
 }
 
