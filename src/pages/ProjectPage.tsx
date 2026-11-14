@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, BookmarkPlus, Bot, Check, ChevronDown, Clapperbo
 import PageHead from '../components/PageHead'
 import ProjectStatusPill from '../components/ProjectStatus'
 import { VersionScriptModal } from '../components/VersionScriptModal'
+import { VersionCompareModal } from '../components/VersionCompareModal'
 import {
   deleteProject,
   deliverablePrintUrl,
@@ -148,6 +149,8 @@ export default function ProjectPage({
     script: ProjectVersionScriptSnapshot | null
     reason: string
   }>({ open: false, n: 0, name: '', change: '', busy: false, error: '', script: null, reason: '' })
+  // 任意两版对照（v0.9.117）：只读弹窗，打开才读；选哪两版由弹窗自己管
+  const [compareOpen, setCompareOpen] = useState(false)
   // 交付菜单：五种产物（交付稿 / 打印稿 / 现场页 / 评审对照 / 交付包）收在一个入口里，
   // 页头就不会排到七个按钮；点空白处或 Esc 收起（和账号菜单同一套习惯）
   const [deliverOpen, setDeliverOpen] = useState(false)
@@ -282,6 +285,21 @@ export default function ProjectPage({
       document.body.style.overflow = previous
     }
   }, [versionScript.open])
+
+  // 两版对照弹窗：Esc 关闭；打开时背景不滚动（和版本脚本弹窗同一套）
+  useEffect(() => {
+    if (!compareOpen) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setCompareOpen(false)
+    }
+    document.addEventListener('keydown', onKey)
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = previous
+    }
+  }, [compareOpen])
 
   // 作品第一次开画布就是这里：服务端用这条作品**现在的脚本**生成输入 + 复刻两个节点，
   // 建完立刻绑上作品（v1），再打开画布。脚本改过也不怕：画布拿到的就是新词。
@@ -1113,17 +1131,29 @@ export default function ProjectPage({
               <span className="vq-mono">{project.version} 版</span>
             </h2>
             <p className="vq-project-versions-note">
-              开新版时会把这一版的脚本存一份快照，再改只影响新版；每一行写清「比上一版改了什么」，点脚本段数能翻开那一版的原文。归档版还能「以这一版为底」再开一版：画布和脚本回到那一版，当前版归档，记录都保留；那一行会标出底座，改动也按底座算。
+              开新版时会把这一版的脚本存一份快照，再改只影响新版；每一行写清「比上一版改了什么」，点脚本段数能翻开那一版的原文。归档版还能「以这一版为底」再开一版：画布和脚本回到那一版，当前版归档，记录都保留；那一行会标出底座，改动也按底座算。右上「两版对照」可以任选两版，逐项看画布节点与脚本口播，只读、不扣积分。
             </p>
-            <button
-              type="button"
-              className="vq-button vq-button--ghost"
-              onClick={() => void startVersion()}
-              disabled={busy === 'version' || busy === 'rebase'}
-            >
-              <CopyPlus size={14} />
-              {busy === 'version' ? '正在复制画布…' : '开一版新的'}
-            </button>
+            <div className="vq-project-versions-actions">
+              <button
+                type="button"
+                className="vq-button vq-button--ghost"
+                onClick={() => setCompareOpen(true)}
+                disabled={project.version < 2 || busy === 'version' || busy === 'rebase'}
+                title={project.version < 2 ? '至少要有两版才能对照' : '只读对照任意两版：画布节点与脚本口播逐项列出来'}
+              >
+                <ScanEye size={14} />
+                两版对照
+              </button>
+              <button
+                type="button"
+                className="vq-button vq-button--ghost"
+                onClick={() => void startVersion()}
+                disabled={busy === 'version' || busy === 'rebase'}
+              >
+                <CopyPlus size={14} />
+                {busy === 'version' ? '正在复制画布…' : '开一版新的'}
+              </button>
+            </div>
           </div>
           <ol className="vq-version-list">
             {versionRows.map((row) => {
@@ -2330,6 +2360,16 @@ export default function ProjectPage({
             ) : null}
           </div>
         </div>
+      ) : null}
+
+      {compareOpen ? (
+        <VersionCompareModal
+          projectId={project.id}
+          versions={versionRows.map((row) => ({ n: row.n, name: row.name, current: row.current }))}
+          initialBase={project.basedOn || (project.version > 1 ? project.version - 1 : 1)}
+          initialTarget={project.version}
+          onClose={() => setCompareOpen(false)}
+        />
       ) : null}
 
       <VersionScriptModal state={versionScript} onClose={() => setVersionScript((prev) => ({ ...prev, open: false }))} />

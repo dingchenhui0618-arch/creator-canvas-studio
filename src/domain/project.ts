@@ -157,6 +157,54 @@ export type ProjectVersionView = ProjectVersion & {
   scriptSource: '' | 'project' | 'template'
 }
 
+/** 两版对照里的一侧（v0.9.117）：版次、名字、节点数、段数，以及那一侧有没有可比的数据 */
+export type ProjectVersionCompareSide = {
+  n: number
+  name: string
+  current: boolean
+  nodes: number
+  beats: number
+  canvasAvailable: boolean
+  scriptAvailable: boolean
+}
+
+export type ProjectVersionCompareNode = {
+  id: string
+  title: string
+}
+
+/** 改过口播的段：段名 + 前后各段口播（重名段落按出现顺序排） */
+export type ProjectVersionCompareBeat = {
+  name: string
+  before: string[]
+  after: string[]
+}
+
+/**
+ * 任意两版对照（v0.9.117）：只读。
+ * canvas / script 在一侧读不到时为 null；同时看 notes 写清哪一侧不比。
+ */
+export type ProjectVersionCompare = {
+  ok: boolean
+  base: ProjectVersionCompareSide
+  target: ProjectVersionCompareSide
+  summary: string
+  canvas: {
+    added: ProjectVersionCompareNode[]
+    removed: ProjectVersionCompareNode[]
+    changed: ProjectVersionCompareNode[]
+  } | null
+  script: {
+    added: string[]
+    removed: string[]
+    changed: ProjectVersionCompareBeat[]
+    hookChanged: boolean
+    hookBefore: string
+    hookAfter: string
+  } | null
+  notes: string[]
+}
+
 export type Project = {
   id: string
   title: string

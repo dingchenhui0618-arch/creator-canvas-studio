@@ -1,0 +1,273 @@
+import { useEffect, useState } from 'react'
+import { ArrowLeftRight, X } from 'lucide-react'
+import { compareProjectVersions } from '../api/projects'
+import type {
+  ProjectVersionCompare,
+  ProjectVersionCompareNode,
+} from '../domain/project'
+
+export type VersionCompareOption = {
+  n: number
+  name: string
+  current?: boolean
+}
+
+type CompareGroupTone = 'added' | 'removed' | 'changed'
+
+function nodeTone(tone: CompareGroupTone) {
+  return tone === 'added' ? '+' : tone === 'removed' ? '−' : '~'
+}
+
+function NodeGroup({ tone, label, items }: { tone: CompareGroupTone; label: string; items: ProjectVersionCompareNode[] }) {
+  if (!items.length) return null
+  return (
+    <div className={'vq-vcompare-group is-' + tone}>
+      <span className="vq-vcompare-tag" aria-hidden="true">{nodeTone(tone)}</span>
+      <div className="vq-vcompare-group-body">
+        <p className="vq-vcompare-group-label">{label} {items.length}</p>
+        <ul className="vq-vcompare-items">
+          {items.map((item) => (
+            <li
+              key={item.id}
+              title={tone === 'changed' ? '这个节点的配置改过；移动位置或改标题不算' : tone === 'added' ? '这一版新增的节点' : '这一版去掉的节点'}
+            >
+              {item.title}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  )
+}
+
+function BeatGroup({ tone, label, items }: { tone: CompareGroupTone; label: string; items: string[] }) {
+  if (!items.length) return null
+  return (
+    <div className={'vq-vcompare-group is-' + tone}>
+      <span className="vq-vcompare-tag" aria-hidden="true">{nodeTone(tone)}</span>
+      <div className="vq-vcompare-group-body">
+        <p className="vq-vcompare-group-label">{label} {items.length}</p>
+        <ul className="vq-vcompare-items">
+          {items.map((name) => <li key={name}>{name}</li>)}
+        </ul>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * 任意两版对照（v0.9.117）：只读弹窗。
+ * 默认拿当前版的上一版 / 底座当基准；两边都能换，换完立刻重读，不发写请求。
+ */
+export function VersionCompareModal({
+  projectId,
+  versions,
+  initialBase,
+  initialTarget,
+  onClose,
+}: {
+  projectId: string
+  versions: VersionCompareOption[]
+  initialBase: number
+  initialTarget: number
+  onClose: () => void
+}) {
+  const has = (n: number) => versions.some((item) => item.n === n)
+  const fallback = versions.find((item) => item.n < initialTarget)?.n || versions[0]?.n || 1
+  const [base, setBase] = useState(has(initialBase) && initialBase !== initialTarget ? initialBase : fallback)
+  const [target, setTarget] = useState(has(initialTarget) ? initialTarget : versions[0]?.n || 1)
+  // 请求结果按「哪两版」存：换选择器时不必在 effect 里同步清状态，直接看当前 key 有没有结果。
+  // 这样也躲开 react(set-state-in-effect)：effect 里只在异步回来后 setState（v0.9.117）。
+  const key = base + ':' + target
+  const same = base === target
+  const [read, setRead] = useState<{
+    key: string
+    busy: boolean
+    error: string
+    result: ProjectVersionCompare | null
+  }>({ key: '', busy: true, error: '', result: null })
+
+  useEffect(() => {
+    if (same) return
+    let cancelled = false
+    compareProjectVersions(projectId, base, target)
+      .then((next) => {
+        if (cancelled) return
+        setRead({ key, busy: false, error: '', result: next })
+      })
+      .catch((caught) => {
+        if (cancelled) return
+        setRead({ key, busy: false, error: caught instanceof Error ? caught.message : '两版没读出来', result: null })
+      })
+    return () => { cancelled = true }
+  }, [projectId, base, target, key, same])
+
+  const busy = !same && (read.key !== key || read.busy)
+  const error = read.key === key ? read.error : ''
+  const result = read.key === key ? read.result : null
+
+  const swap = () => {
+    setBase(target)
+    setTarget(base)
+  }
+
+  const canvasTouched = Boolean(result?.canvas && (
+    result.canvas.added.length || result.canvas.removed.length || result.canvas.changed.length
+  ))
+  const scriptTouched = Boolean(result?.script && (
+    result.script.added.length || result.script.removed.length || result.script.changed.length || result.script.hookChanged
+  ))
+
+  return (
+    <div className="vq-modal-backdrop" onMouseDown={onClose}>
+      <div
+        className="vq-vcompare-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="vq-vcompare-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="vq-vcompare-head">
+          <div>
+            <span className="vq-mono">两版对照 / VERSION DIFF</span>
+            <h2 id="vq-vcompare-title">v{base} 到 v{target}</h2>
+          </div>
+          <button type="button" className="vq-button vq-button--icon" aria-label="关闭两版对照" onClick={onClose}>
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="vq-vcompare-pickers">
+          <label className="vq-vcompare-picker">
+            <span>基准</span>
+            <select value={base} onChange={(event) => setBase(Number(event.target.value))}>
+              {versions.map((item) => (
+                <option key={item.n} value={item.n}>
+                  v{item.n} · {item.name}{item.current ? '（最新）' : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            className="vq-button vq-button--icon vq-vcompare-swap"
+            onClick={swap}
+            title="交换基准与对照"
+            aria-label="交换基准与对照"
+          >
+            <ArrowLeftRight size={15} />
+          </button>
+          <label className="vq-vcompare-picker">
+            <span>对照</span>
+            <select value={target} onChange={(event) => setTarget(Number(event.target.value))}>
+              {versions.map((item) => (
+                <option key={item.n} value={item.n}>
+                  v{item.n} · {item.name}{item.current ? '（最新）' : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div aria-live="polite">
+          {base === target ? (
+            <p className="vq-vcompare-state">两版对照要选两个不同的版本。</p>
+          ) : busy ? (
+            <p className="vq-vcompare-state">正在读这两版…</p>
+          ) : error ? (
+            <p className="vq-vcompare-state is-error">{error}</p>
+          ) : result ? (
+            <>
+              <p className="vq-vcompare-summary">
+                <span className="vq-mono">v{result.base.n} → v{result.target.n}</span>
+                <span>{result.summary || '这两版没有可比的数据'}</span>
+              </p>
+
+              <section className="vq-vcompare-section">
+                <div className="vq-vcompare-section-head">
+                  <h3>画布</h3>
+                  <span className="vq-mono">
+                    {result.base.canvasAvailable ? result.base.nodes : '—'} → {result.target.canvasAvailable ? result.target.nodes : '—'} 节点
+                  </span>
+                </div>
+                {result.canvas ? (
+                  canvasTouched ? (
+                    <div className="vq-vcompare-groups">
+                      <NodeGroup tone="added" label="多" items={result.canvas.added} />
+                      <NodeGroup tone="removed" label="少" items={result.canvas.removed} />
+                      <NodeGroup tone="changed" label="改" items={result.canvas.changed} />
+                    </div>
+                  ) : (
+                    <p className="vq-vcompare-state">节点没动。</p>
+                  )
+                ) : (
+                  <p className="vq-vcompare-state">有一侧画布读不到，画布这一侧不比。</p>
+                )}
+              </section>
+
+              <section className="vq-vcompare-section">
+                <div className="vq-vcompare-section-head">
+                  <h3>脚本</h3>
+                  <span className="vq-mono">
+                    {result.base.scriptAvailable ? result.base.beats : '—'} → {result.target.scriptAvailable ? result.target.beats : '—'} 段
+                  </span>
+                </div>
+                {result.script ? (
+                  <>
+                    {result.script.added.length || result.script.removed.length || result.script.changed.length ? (
+                      <div className="vq-vcompare-groups">
+                        <BeatGroup tone="added" label="多" items={result.script.added} />
+                        <BeatGroup tone="removed" label="少" items={result.script.removed} />
+                        {result.script.changed.length ? (
+                          <div className="vq-vcompare-group is-changed">
+                            <span className="vq-vcompare-tag" aria-hidden="true">~</span>
+                            <div className="vq-vcompare-group-body">
+                              <p className="vq-vcompare-group-label">口播改过 {result.script.changed.length}</p>
+                              <ul className="vq-vcompare-changed">
+                                {result.script.changed.map((beat) => (
+                                  <li key={beat.name}>
+                                    <strong>{beat.name}</strong>
+                                    <span className="vq-vcompare-quote">
+                                      {beat.before.join(' ') || '（空）'} → {beat.after.join(' ') || '（空）'}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {result.script.hookChanged ? (
+                      <div className="vq-vcompare-hook">
+                        <span className="vq-vcompare-group-label">开头钩子换过</span>
+                        <div className="vq-vcompare-hook-pair">
+                          <p><span className="vq-mono">v{result.base.n}</span>{result.script.hookBefore || '（空）'}</p>
+                          <p><span className="vq-mono">v{result.target.n}</span>{result.script.hookAfter || '（空）'}</p>
+                        </div>
+                      </div>
+                    ) : !scriptTouched ? (
+                      <p className="vq-vcompare-state">口播与钩子都没动。</p>
+                    ) : null}
+                  </>
+                ) : (
+                  <p className="vq-vcompare-state">有一侧脚本没存快照，脚本这一侧不比。</p>
+                )}
+              </section>
+
+              {result.notes.length ? (
+                <ul className="vq-vcompare-notes">
+                  {result.notes.map((note) => <li key={note}>{note}</li>)}
+                </ul>
+              ) : null}
+            </>
+          ) : null}
+        </div>
+
+        <p className="vq-vcompare-note">
+          只读：不改画布、不改脚本、不扣积分。节点只比类型与配置，移动位置或改标题不算；脚本按段名比口播，开版时存下的快照才算。没有快照的一侧不猜「没改」。
+        </p>
+      </div>
+    </div>
+  )
+}

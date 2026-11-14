@@ -29,8 +29,12 @@ const names = (list, max = 3) => {
   return list.length > max ? shown + ' 等 ' + list.length + ' 个' : shown
 }
 
-/** 两份节点指纹比出「多了 / 少了 / 改了」；缺一侧（画布被删）就返回 null。 */
-export function canvasDelta(prev, next) {
+/**
+ * 两份节点指纹比出「多了 / 少了 / 改了」，带节点 id 与标题。
+ * 任意两版对照要逐项列出节点，所以保留 id；版本行的一句话再从这里的标题生成（v0.9.117）。
+ * 缺一侧（画布被删）就返回 null，不猜「没改」。
+ */
+export function canvasDetail(prev, next) {
   if (!prev || !next) return null
   const before = new Map(prev.map((node) => [node.id, node]))
   const after = new Map(next.map((node) => [node.id, node]))
@@ -39,11 +43,22 @@ export function canvasDelta(prev, next) {
   const changed = []
   for (const [id, node] of after) {
     const old = before.get(id)
-    if (!old) added.push(node.title)
-    else if (old.hash !== node.hash) changed.push(node.title)
+    if (!old) added.push({ id, title: node.title })
+    else if (old.hash !== node.hash) changed.push({ id, title: node.title })
   }
-  for (const [id, node] of before) if (!after.has(id)) removed.push(node.title)
+  for (const [id, node] of before) if (!after.has(id)) removed.push({ id, title: node.title })
   return { added, removed, changed }
+}
+
+/** 老口径：只要标题，版本行与交付稿的一句话都读它。 */
+export function canvasDelta(prev, next) {
+  const detail = canvasDetail(prev, next)
+  if (!detail) return null
+  return {
+    added: detail.added.map((node) => node.title),
+    removed: detail.removed.map((node) => node.title),
+    changed: detail.changed.map((node) => node.title),
+  }
 }
 
 export function canvasText(delta) {
@@ -55,35 +70,55 @@ export function canvasText(delta) {
   return bits.length ? bits.join('、') : '节点没动'
 }
 
-// 脚本按段名对：改名不算改口播，重名段落按出现顺序比词
-export function scriptText(prev, next) {
-  if (!prev?.structure?.length || !next?.structure?.length) return ''
-  const group = (script) => {
-    const map = new Map()
-    for (const beat of script.structure) {
-      const name = flat(beat?.beat) || '未命名段落'
-      if (!map.has(name)) map.set(name, [])
-      map.get(name).push(flat(beat?.voiceover))
-    }
-    return map
+const groupBeats = (script) => {
+  const map = new Map()
+  for (const beat of script.structure) {
+    const name = flat(beat?.beat) || '未命名段落'
+    if (!map.has(name)) map.set(name, [])
+    map.get(name).push(flat(beat?.voiceover))
   }
-  const before = group(prev)
-  const after = group(next)
+  return map
+}
+
+/**
+ * 脚本明细（v0.9.117）：多 / 少 / 改的段各是哪几段，改过的段带上前后口播。
+ * 与 scriptText 同一个口径：按段名对、重名段落按出现顺序比词、钩子单独说。
+ * 一侧没有分段就不比，返回 null，不硬写「没改」。
+ */
+export function scriptDetail(prev, next) {
+  if (!prev?.structure?.length || !next?.structure?.length) return null
+  const before = groupBeats(prev)
+  const after = groupBeats(next)
   const added = [...after.keys()].filter((name) => !before.has(name))
   const removed = [...before.keys()].filter((name) => !after.has(name))
-  let changed = 0
+  const changed = []
   for (const [name, lines] of after) {
     const old = before.get(name)
     if (!old) continue
-    if (old.length !== lines.length || old.some((line, index) => line !== lines[index])) changed += 1
+    if (old.length !== lines.length || old.some((line, index) => line !== lines[index])) {
+      changed.push({ name, before: old, after: lines })
+    }
   }
-  const hookChanged = flat(prev.hook) !== flat(next.hook)
+  return {
+    added,
+    removed,
+    changed,
+    hookChanged: flat(prev.hook) !== flat(next.hook),
+    hookBefore: flat(prev.hook),
+    hookAfter: flat(next.hook),
+  }
+}
+
+// 脚本按段名对：改名不算改口播，重名段落按出现顺序比词
+export function scriptText(prev, next) {
+  const detail = scriptDetail(prev, next)
+  if (!detail) return ''
   const bits = []
-  if (added.length) bits.push('多 ' + added.length + ' 段（' + names(added) + '）')
-  if (removed.length) bits.push('少 ' + removed.length + ' 段（' + names(removed) + '）')
-  if (changed) bits.push(changed + ' 段口播改过')
-  if (!bits.length && !hookChanged) return '跟上一版一样'
-  bits.push(hookChanged ? '钩子换过' : '钩子没变')
+  if (detail.added.length) bits.push('多 ' + detail.added.length + ' 段（' + names(detail.added) + '）')
+  if (detail.removed.length) bits.push('少 ' + detail.removed.length + ' 段（' + names(detail.removed) + '）')
+  if (detail.changed.length) bits.push(detail.changed.length + ' 段口播改过')
+  if (!bits.length && !detail.hookChanged) return '跟上一版一样'
+  bits.push(detail.hookChanged ? '钩子换过' : '钩子没变')
   return bits.join('、')
 }
 
@@ -153,4 +188,22 @@ export function versionBaseChangesOf(rows) {
     if (text) out[String(n)] = { base, text }
   }
   return out
+}
+
+/**
+ * 任意两版对照（v0.9.117）：给版本行的一句话，加上可逐项列出的画布与脚本明细。
+ * 只读、不写任何东西；方向按 base → target，反过来选就是看「改回去了什么」。
+ * 返回的 canvas / script 在一侧读不到时为 null，调用方照 notes 说清哪一侧不比。
+ */
+export function versionCompareOf({ baseNodes, targetNodes, baseScript, targetScript }) {
+  return {
+    summary: versionChangeText({
+      prevNodes: baseNodes,
+      nextNodes: targetNodes,
+      prevScript: baseScript,
+      nextScript: targetScript,
+    }),
+    canvas: canvasDetail(fingerprint(baseNodes), fingerprint(targetNodes)),
+    script: scriptDetail(baseScript, targetScript),
+  }
 }

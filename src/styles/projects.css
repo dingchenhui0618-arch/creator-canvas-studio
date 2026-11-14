@@ -604,7 +604,11 @@
   line-height: 1.6;
 }
 
-.vq-project-versions-head .vq-button {
+/* 版本区两个入口并排：两版对照是只读的，开新版会归档当前版，语气要分开 */
+.vq-project-versions-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
   margin-left: auto;
 }
 
@@ -2152,6 +2156,322 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
   }
 }
 
+
+/* ---------- 两版对照（v0.9.117） ----------
+   只读弹窗：两个选择器 + 一句结论 + 画布/脚本明细；与版本脚本快照同一套纸面，
+   正文可滚，1440 与 390 都不把视口撑破。 */
+.vq-vcompare-modal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: min(680px, 100%);
+  max-height: min(760px, calc(100vh - 48px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-6);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-pop);
+}
+
+.vq-vcompare-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.vq-vcompare-head h2 {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-medium);
+  letter-spacing: -0.01em;
+}
+
+.vq-vcompare-pickers {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: end;
+  gap: var(--space-2);
+}
+
+.vq-vcompare-picker {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.vq-vcompare-picker span {
+  color: var(--faint);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.vq-vcompare-picker select {
+  width: 100%;
+  height: 32px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--text-meta);
+}
+
+.vq-vcompare-picker select:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+
+.vq-vcompare-swap {
+  flex: none;
+  color: var(--muted);
+}
+
+.vq-vcompare-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-2);
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-left: 2px solid var(--ink);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--surface-soft);
+  color: var(--ink);
+  font-size: var(--text-meta);
+  line-height: var(--leading-meta);
+}
+
+.vq-vcompare-summary .vq-mono {
+  flex: none;
+  color: var(--faint);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+.vq-vcompare-section {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line-faint);
+}
+
+.vq-vcompare-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.vq-vcompare-section-head h3 {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+.vq-vcompare-section-head .vq-mono {
+  color: var(--faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.vq-vcompare-groups {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.vq-vcompare-group {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-2);
+}
+
+.vq-vcompare-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.vq-vcompare-group.is-added .vq-vcompare-tag {
+  background: var(--pass-soft);
+  color: var(--pass);
+}
+
+.vq-vcompare-group.is-removed .vq-vcompare-tag {
+  background: var(--fail-soft);
+  color: var(--fail);
+}
+
+.vq-vcompare-group.is-changed .vq-vcompare-tag {
+  background: var(--surface-soft);
+  color: var(--ink);
+}
+
+.vq-vcompare-group-body {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.vq-vcompare-group-label {
+  margin: 0;
+  color: var(--faint);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+.vq-vcompare-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vq-vcompare-items li {
+  padding: 0 var(--space-2);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  color: var(--muted);
+  font-size: var(--text-meta);
+  line-height: 22px;
+}
+
+.vq-vcompare-changed {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vq-vcompare-changed li {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.vq-vcompare-changed strong {
+  color: var(--ink);
+  font-size: var(--text-meta);
+  font-weight: var(--weight-medium);
+}
+
+.vq-vcompare-quote {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.6;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.vq-vcompare-hook {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+}
+
+.vq-vcompare-hook-pair {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.vq-vcompare-hook-pair p {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-meta);
+  line-height: var(--leading-meta);
+}
+
+.vq-vcompare-hook-pair .vq-mono {
+  flex: none;
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.vq-vcompare-state {
+  margin: var(--space-1) 0 0;
+  color: var(--muted);
+  font-size: var(--text-meta);
+  line-height: var(--leading-meta);
+}
+
+.vq-vcompare-state.is-error {
+  color: var(--fail);
+}
+
+.vq-vcompare-notes {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.7;
+  list-style: none;
+}
+
+.vq-vcompare-note {
+  margin: 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+  color: var(--faint);
+  font-size: 11.5px;
+  line-height: 1.7;
+}
+
+@media (max-width: 720px) {
+  .vq-project-versions-actions {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .vq-vcompare-modal {
+    width: 100%;
+    max-height: calc(100vh - 32px);
+    padding: var(--space-4);
+  }
+
+  .vq-vcompare-pickers {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .vq-vcompare-swap {
+    justify-self: start;
+  }
+
+  .vq-vcompare-summary {
+    padding: var(--space-3);
+  }
+}
 
 /* ---------- 版本脚本快照（v0.9.114） ----------
    只读弹窗：与只读分享同一套纸面与关闭习惯；正文可滚，长脚本不把视口撑破。 */

@@ -14,7 +14,7 @@ import { projectTemplateReply, projectTemplateSpec } from '../project-template.m
 import { templateOrigin } from '../project-source.mjs'
 import { createFlow, getFlow, hasRunGraph, listRunsByFlows } from '../flows.mjs'
 import { normalizeProjectScript, scriptPace, scriptView } from '../project-script.mjs'
-import { versionBaseChangesOf, versionChangesOf } from '../version-diff.mjs'
+import { versionBaseChangesOf, versionChangesOf, versionCompareOf } from '../version-diff.mjs'
 import { buildReplicateDraft } from '../script-draft.mjs'
 import { syncCanvasScript } from '../project-canvas-sync.mjs'
 import {
@@ -60,6 +60,8 @@ const SPEND = /^\/api\/projects\/([\w-]+)\/spend$/
 const VERSIONS = /^\/api\/projects\/([\w-]+)\/versions$/
 // 某一版的脚本快照（v0.9.114）：开新版时存下的原文，只读、只给这一版
 const VERSION_SCRIPT = /^\/api\/projects\/([\w-]+)\/versions\/(\d+)\/script$/
+// 任意两版对照（v0.9.117）：只读，不写版本、不改画布、不扣积分
+const VERSION_COMPARE = /^\/api\/projects\/([\w-]+)\/versions\/compare$/
 const SCRIPT = /^\/api\/projects\/([\w-]+)\/script$/
 const CANVAS = /^\/api\/projects\/([\w-]+)\/canvas$/
 const SHARE = /^\/api\/projects\/([\w-]+)\/share$/
@@ -794,6 +796,102 @@ export function createProjectsRouter() {
           return true
         }
         sendJson(res, 201, { ok: true, project: updated, flow: flowBrief(copy), ...(from ? { basedOn: from } : {}) })
+        return true
+      }
+
+      // 任意两版对照（v0.9.117）：只读。方向是 base → target，两版都能从归档或当前版取。
+      // 画布与脚本各读各的：当前版读现在的，归档版读快照；哪一侧读不到就如实说，不拿别的版本顶替。
+      const comparePath = pathname.match(VERSION_COMPARE)
+      if (comparePath && req.method === 'GET') {
+        const project = await getProject(comparePath[1], user)
+        if (!project) {
+          sendJson(res, 404, { error: '作品不存在或已被删除' })
+          return true
+        }
+        const baseNo = Number(url.searchParams.get('base'))
+        const targetNo = Number(url.searchParams.get('target'))
+        const valid = (n) => Number.isInteger(n) && n >= 1 && n <= project.version
+        if (!valid(baseNo) || !valid(targetNo)) {
+          sendJson(res, 400, {
+            error: '对照的版次不对：base 与 target 都必须是 1 到 ' + project.version + ' 之间的整数',
+            code: 'VERSION_COMPARE_INVALID',
+          })
+          return true
+        }
+        if (baseNo === targetNo) {
+          sendJson(res, 400, { error: '两版对照要选两个不同的版本', code: 'VERSION_COMPARE_SAME' })
+          return true
+        }
+        const resolveSide = async (n) => {
+          if (n === project.version) {
+            const [flow, template] = await Promise.all([
+              project.flowId ? getFlow(project.flowId, user) : null,
+              project.templateId ? getTemplate(project.templateId, user) : null,
+            ])
+            const script = scriptView(project, template)
+            return {
+              n,
+              name: project.title,
+              current: true,
+              nodes: flow && Array.isArray(flow.nodes) ? flow.nodes : null,
+              canvasAvailable: Boolean(flow && Array.isArray(flow.nodes)),
+              script,
+              scriptAvailable: Boolean(script && Array.isArray(script.structure)),
+              beats: Array.isArray(script?.structure) ? script.structure.length : 0,
+            }
+          }
+          const entry = project.versions.find((item) => item.n === n)
+          if (!entry) return null
+          const flow = entry.flowId ? await getFlow(entry.flowId, user) : null
+          return {
+            n,
+            name: entry.name,
+            current: false,
+            nodes: flow && Array.isArray(flow.nodes) ? flow.nodes : null,
+            canvasAvailable: Boolean(flow && Array.isArray(flow.nodes)),
+            script: entry.script || null,
+            scriptAvailable: Boolean(entry.script && Array.isArray(entry.script.structure)),
+            beats: Array.isArray(entry.script?.structure) ? entry.script.structure.length : 0,
+          }
+        }
+        const [baseSide, targetSide] = await Promise.all([resolveSide(baseNo), resolveSide(targetNo)])
+        if (!baseSide) {
+          sendJson(res, 404, { error: '这条作品没有 v' + baseNo + ' 的归档记录', code: 'VERSION_COMPARE_MISSING' })
+          return true
+        }
+        if (!targetSide) {
+          sendJson(res, 404, { error: '这条作品没有 v' + targetNo + ' 的归档记录', code: 'VERSION_COMPARE_MISSING' })
+          return true
+        }
+        const diff = versionCompareOf({
+          baseNodes: baseSide.nodes,
+          targetNodes: targetSide.nodes,
+          baseScript: baseSide.script,
+          targetScript: targetSide.script,
+        })
+        const notes = []
+        if (!baseSide.canvasAvailable || !targetSide.canvasAvailable) notes.push('有一版的画布已被删除：画布这一侧不比，脚本仍按快照比。')
+        if (!baseSide.scriptAvailable || !targetSide.scriptAvailable) notes.push('有一版没存脚本快照：脚本这一侧不比，画布仍按节点比。')
+        if (!diff.script && baseSide.scriptAvailable && targetSide.scriptAvailable) notes.push('有一版的脚本没有分段：脚本这一侧没有可比的口播。')
+        if (!diff.summary) notes.push('这两版没有可比的数据：画布与脚本都读不到。')
+        const sideView = (side) => ({
+          n: side.n,
+          name: side.name,
+          current: side.current,
+          nodes: Array.isArray(side.nodes) ? side.nodes.length : 0,
+          beats: side.beats,
+          canvasAvailable: side.canvasAvailable,
+          scriptAvailable: side.scriptAvailable,
+        })
+        sendJson(res, 200, {
+          ok: true,
+          base: sideView(baseSide),
+          target: sideView(targetSide),
+          summary: diff.summary,
+          canvas: diff.canvas,
+          script: diff.script,
+          notes,
+        })
         return true
       }
 

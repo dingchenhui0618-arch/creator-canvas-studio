@@ -9,6 +9,7 @@ import type {
   ProjectScript,
   ProjectShare,
   ProjectSpendDetail,
+  ProjectVersionCompare,
   ProjectVersionScriptSnapshot,
   ProjectSummary,
   ShareSummaryRow,
@@ -92,6 +93,15 @@ export type ProjectVersionScript = {
 
 export const getProjectVersionScript = (id: string, n: number) =>
   request<ProjectVersionScript>('/api/projects/' + id + '/versions/' + n + '/script')
+
+/**
+ * 任意两版对照（v0.9.117）：只读。base 是基准、target 是对照，方向按这两者。
+ * 不写版本、不改画布、不扣积分；哪一侧读不到由 notes 说清。
+ */
+export const compareProjectVersions = (id: string, base: number, target: number) =>
+  request<ProjectVersionCompare>(
+    '/api/projects/' + id + '/versions/compare?base=' + encodeURIComponent(base) + '&target=' + encodeURIComponent(target),
+  )
 
 // 开一版新的：服务端复制当前画布，旧画布归档成 vN。
 // from 给更早的版次时，复制的是那一版的画布与脚本（v0.9.115）；不给就是从当前版开。

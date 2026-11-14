@@ -2,12 +2,15 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   canvasDelta,
+  canvasDetail,
   canvasText,
   fingerprint,
+  scriptDetail,
   scriptText,
   versionChangeText,
   versionBaseChangesOf,
   versionChangesOf,
+  versionCompareOf,
 } from '../server/version-diff.mjs'
 
 // 「比上一版改了什么」只有一个实现：交付稿与作品页版本行都读这里。
@@ -138,4 +141,50 @@ test('以旧版为底：改动按底座算，不再拿上一版当基准', () =>
   assert.equal(bases['3'], undefined, '底座就是上一版时不重复给')
   // 底座那一版不在表里（被删 / 被裁掉）就不写，页面回退到「比上一版」
   assert.equal(versionBaseChangesOf([{ ...rows[3], base: 2 }])['4'], undefined)
+})
+
+test('两版对照的画布明细带节点 id：多、少、改都能逐项列出来', () => {
+  const before = [node('n1', '输入', { text: '旧' }), node('n2', '配音', { voice: '旧' })]
+  const after = [node('n1', '输入', { text: '新' }), node('n3', '出图', { size: '9:16' })]
+  const detail = canvasDetail(fingerprint(before), fingerprint(after))
+  assert.deepEqual(detail.added, [{ id: 'n3', title: '出图' }])
+  assert.deepEqual(detail.removed, [{ id: 'n2', title: '配音' }])
+  assert.deepEqual(detail.changed, [{ id: 'n1', title: '输入' }])
+  assert.equal(canvasText(canvasDelta(fingerprint(before), fingerprint(after))), '多 1 个（出图）、少 1 个（配音）、改 1 个（输入）')
+})
+
+test('两版对照的脚本明细：改过的段带前后口播，钩子单独说', () => {
+  const before = script('旧钩子', [['开场', '同一句'], ['闷蒸', '先闷蒸']])
+  const after = script('新钩子', [['开场', '同一句'], ['闷蒸', '再闷蒸'], ['收尾', '出杯']])
+  const detail = scriptDetail(before, after)
+  assert.deepEqual(detail.added, ['收尾'])
+  assert.deepEqual(detail.removed, [])
+  assert.deepEqual(detail.changed, [{ name: '闷蒸', before: ['先闷蒸'], after: ['再闷蒸'] }])
+  assert.equal(detail.hookChanged, true)
+  assert.equal(detail.hookBefore, '旧钩子')
+  assert.equal(detail.hookAfter, '新钩子')
+})
+
+test('任意两版：一句话与明细同源；缺一侧时明细为 null，不冒充没改', () => {
+  const nodes = [node('n1', '写一句', { prompt: 'A' })]
+  const sameScript = script('钩子', [['开场', '同一句']])
+  const same = versionCompareOf({
+    baseNodes: nodes,
+    targetNodes: nodes,
+    baseScript: sameScript,
+    targetScript: sameScript,
+  })
+  assert.equal(same.summary, '画布与脚本都没动')
+  assert.deepEqual(same.canvas, { added: [], removed: [], changed: [] })
+  assert.deepEqual(same.script.changed, [])
+
+  const missing = versionCompareOf({
+    baseNodes: null,
+    targetNodes: nodes,
+    baseScript: null,
+    targetScript: sameScript,
+  })
+  assert.equal(missing.canvas, null)
+  assert.equal(missing.script, null)
+  assert.equal(missing.summary, '')
 })
