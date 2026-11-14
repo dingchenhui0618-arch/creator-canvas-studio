@@ -171,13 +171,14 @@ export function createSemaphore(max = 4) {
           if (waiter.timer) clearTimeout(waiter.timer)
           resolve(ok)
         }
+        // 计时器不要 unref：靠 unref 的计时器兑现的 Promise，在事件循环里没有别的活时
+        // 会永远挂着（CI 的 Node 22 上就是这句「Promise resolution is still pending」）。
+        // 服务进程本来一直有活，这 5 秒不差这一点。
         waiter.timer = setTimeout(() => {
           const index = waiting.indexOf(waiter)
           if (index >= 0) waiting.splice(index, 1)
           finish(false)
         }, timeoutMs)
-        // 排队不该拖住进程退出
-        if (typeof waiter.timer.unref === 'function') waiter.timer.unref()
         waiter.resolve = (ok) => finish(ok)
         waiting.push(waiter)
       })
