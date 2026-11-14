@@ -73,6 +73,7 @@ import { createAccountRouter } from './routes/account.mjs'
 import { createLocalAgentRouter } from './routes/local-agent.mjs'
 import { createStorageRouter } from './routes/storage.mjs'
 import { createMediaRouter } from './routes/media.mjs'
+import { createFramesRouter } from './routes/frames.mjs'
 import { currentUser, listUsers, clientIp, isAdmin } from './auth.mjs'
 import { recordClientError } from './client-errors.mjs'
 import { createReport } from './reports.mjs'
@@ -93,6 +94,7 @@ import { clearModelBlock, modelServiceState } from './service-state.mjs'
 import { fetchPublic } from './media.mjs'
 import { bdcStatus, canvasErrorMessage, listCanvases, createCanvas, appendCanvasNote } from './bdc.mjs'
 import { modelCatalog } from './models.mjs'
+import { distFileFor } from './static-path.mjs'
 
 // 功能路由：每个模块自己处理 /api/<prefix> 下的请求，index.mjs 只管分发
 // auth 放最前面：/api/auth/* 永远不需要登录就能访问
@@ -105,6 +107,8 @@ const featureRoutes = [
   createReviewRouter(),
   // 自己传一张图来评（v0.9.87）：/api/media/upload 收原始字节，/media/uploads/* 按归属读回来
   createMediaRouter(),
+  // 模板帧图（v0.9.88）：/media/frames/* 以前匿名可读，现在要登录且只认自己看得见的模板
+  createFramesRouter(),
   createBillingRouter(),
   createCreditsRouter(),
   // 素材占用：设置页要看「自己的帧图占了多少盘」（v0.9.68）
@@ -1078,18 +1082,17 @@ const server = http.createServer(async (req, res) => {
       return proxyImage(res, target)
     }
 
-    const frameMatch = pathname.match(/^\/media\/frames\/([\w-]+)\/([\w.-]+)$/)
-    if (frameMatch) {
-      const file = path.join(config.framesDir, frameMatch[1], frameMatch[2])
-      const ok = await serveFile(res, file)
-      if (!ok) { res.writeHead(404); res.end('frame not found') }
+    // 生产环境静态托管 dist。路径先过 distFileFor：拼完必须还在 dist 里，
+    // 否则 /%2e%2e%2fpackage.json 这种解码后的 ../ 会把项目根上的文件发出去（v0.9.88）。
+    const distDir = path.join(process.cwd(), 'dist')
+    const candidate = pathname === '/' ? path.join(distDir, 'index.html') : distFileFor(distDir, pathname)
+    if (candidate && (await serveFile(res, candidate))) return
+    // 越界路径不回 index.html：那是「这里没有东西」，不该被当成一次成功的页面访问
+    if (!candidate) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' })
+      res.end('not found: ' + pathname)
       return
     }
-
-    // 生产环境静态托管 dist
-    const distDir = path.join(process.cwd(), 'dist')
-    const candidate = pathname === '/' ? path.join(distDir, 'index.html') : path.join(distDir, pathname)
-    if (await serveFile(res, candidate)) return
     if (await serveFile(res, path.join(distDir, 'index.html'))) return
 
     res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' })

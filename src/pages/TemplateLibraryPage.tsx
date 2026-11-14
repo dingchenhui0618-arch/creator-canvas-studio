@@ -633,11 +633,11 @@ export function TemplateLibraryPage({
                           <li key={index}><span className="vq-mono">{String(index + 1).padStart(2, '0')}</span>{node.title}<em>{node.kind}</em></li>
                         ))}
                       </ul>
-                      {detail.analysis && detail.analysis.reusableRules.length ? (
+                      {detail.analysis && (detail.analysis.reusableRules || []).length ? (
                         <>
                           <div className="drawer-section-head drawer-section-head--tight"><h4>节点提示词</h4></div>
                           <ul className="drawer-list drawer-list--rules">
-                            {detail.analysis.reusableRules.map((rule, index) => <li key={index}>{rule}</li>)}
+                            {(detail.analysis.reusableRules || []).map((rule, index) => <li key={index}>{rule}</li>)}
                           </ul>
                         </>
                       ) : null}
@@ -663,7 +663,7 @@ export function TemplateLibraryPage({
                         <section className="drawer-section">
                           <div className="drawer-section-head"><h3>开头钩子</h3><span className="tag">{detail.hookType}</span></div>
                           <p className="drawer-quote">{detail.hook}</p>
-                          <div className="drawer-tags">{detail.tags.map((tag) => <span className="tag" key={tag}>{tag}</span>)}</div>
+                          <div className="drawer-tags">{(detail.tags || []).map((tag) => <span className="tag" key={tag}>{tag}</span>)}</div>
                         </section>
                       )}
 
@@ -797,11 +797,11 @@ export function TemplateLibraryPage({
                         <section className="drawer-section">
                           <div className="drawer-section-head"><h3>爆款分析</h3><span>节奏：{detail.analysis.pacing}</span></div>
                           <ul className="drawer-list">
-                            {detail.analysis.viralPoints.map((point, index) => <li key={index}>{point}</li>)}
+                            {(detail.analysis.viralPoints || []).map((point, index) => <li key={index}>{point}</li>)}
                           </ul>
                           <div className="drawer-section-head drawer-section-head--tight"><h4>可复用规则</h4></div>
                           <ul className="drawer-list drawer-list--rules">
-                            {detail.analysis.reusableRules.map((rule, index) => <li key={index}>{rule}</li>)}
+                            {(detail.analysis.reusableRules || []).map((rule, index) => <li key={index}>{rule}</li>)}
                           </ul>
                         </section>
                       ) : null}
