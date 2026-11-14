@@ -208,9 +208,14 @@ function normalize(item) {
     versions,
     // 作品自己的脚本：只有用户动过才存在；没有就跟随模板（项目页读 scriptView）
     script: normalizeStoredScript(item.script),
-    // 只读分享：token 本身就是凭证；没开就是 null。列表接口不返回它（projectBrief 会剥掉）
+    // 只读分享：token 本身就是凭证；没开就是 null。列表接口不返回它（projectBrief 会剥掉）。
+    // compare 是分享者自己的选择：默认关，打开后拿到链接的人才能打印「当前版 vs 上一版」。
     share: item.shareToken
-      ? { token: String(item.shareToken), createdAt: String(item.shareCreatedAt || '') }
+      ? {
+          token: String(item.shareToken),
+          createdAt: String(item.shareCreatedAt || ''),
+          compare: item.shareCompare === true,
+        }
       : null,
     // 以前开过的链接：token 已清、地址打不开，只留哈希键与起止时间（打开记录按哈希键还对得上）
     shareHistory: normalizeShareHistory(item.shareHistory),
@@ -422,7 +427,7 @@ function newShareToken() {
   return randomBytes(18).toString('base64url')
 }
 
-export async function enableProjectShare(id, user = null) {
+export async function enableProjectShare(id, user = null, { compare = false } = {}) {
   const list = await loadAll()
   const found = list.find((item) => item.id === id && canAccess(item, user))
   if (!found) return null
@@ -433,8 +438,33 @@ export async function enableProjectShare(id, user = null) {
   found.shareToken = token
   found.shareCreatedAt = createdAt
   found.shareBy = user?.id || ''
+  // 对照纸是分享者主动打开的，不是默认权限：关掉时连字段一起删，旧链接不会残留
+  if (compare === true) found.shareCompare = true
+  else delete found.shareCompare
   await persist(list)
-  return { token, createdAt }
+  return { token, createdAt, compare: compare === true }
+}
+
+/**
+ * 已开的链接上切换「带不带两版对照」：不换 token，已经发出去的地址继续有效。
+ * 只改一个布尔字段，不碰作品、评审、交付；没在分享时返回 null。
+ */
+export async function setProjectShareCompare(id, user = null, compare = false) {
+  const list = await loadAll()
+  const found = list.find((item) => item.id === id && canAccess(item, user))
+  if (!found || !found.shareToken) return null
+  const next = compare === true
+  const current = found.shareCompare === true
+  if (next !== current) {
+    if (next) found.shareCompare = true
+    else delete found.shareCompare
+    await persist(list)
+  }
+  return {
+    token: String(found.shareToken),
+    createdAt: String(found.shareCreatedAt || ''),
+    compare: next,
+  }
 }
 
 export async function disableProjectShare(id, user = null) {
@@ -446,6 +476,7 @@ export async function disableProjectShare(id, user = null) {
   delete found.shareToken
   delete found.shareCreatedAt
   delete found.shareBy
+  delete found.shareCompare
   await persist(list)
   return true
 }

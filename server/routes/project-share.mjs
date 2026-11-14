@@ -12,6 +12,8 @@ import path from 'node:path'
 import { sendJson } from './_shared.mjs'
 import { printNoticeHtml } from '../project-deliverable-html.mjs'
 import { reviewSheetHtml, reviewSheetSelection } from '../project-review-sheet.mjs'
+import { compareSheetHtml } from '../project-compare-sheet.mjs'
+import { versionCompareView } from '../project-compare.mjs'
 import { getProjectByShareToken } from '../projects.mjs'
 import { getTemplate } from '../templates.mjs'
 import { scriptView } from '../project-script.mjs'
@@ -25,6 +27,8 @@ const SHARED = /^\/api\/share\/project\/([\w-]+)$/
 const FRAME = /^\/api\/share\/project\/([\w-]+)\/frame\/(\d+)$/
 // 评审对照纸也挂在分享链接上：甲方、剪辑没有账号，纸要跟着链接一起能打开
 const PRINT_REVIEW = /^\/print\/share\/project\/([\w-]+)\/review$/
+// 两版对照纸：分享者主动打开时才存在；固定「当前版 vs 上一版」，不接受任意版次
+const PRINT_COMPARE = /^\/print\/share\/project\/([\w-]+)\/versions\/compare$/
 const FRAME_MIME = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' }
 const PRINT_HEAD = { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' }
 // 评审全局最多 200 条；单条作品扫最近 50 条摘要足够覆盖「每一版最近一次」
@@ -84,6 +88,73 @@ export function createProjectShareRouter() {
     extraPrefixes: ['/print/share/project'],
     async handle(req, res, url, pathname) {
       if (!pathname.startsWith('/api/share/project') && !pathname.startsWith('/print/share/project')) return false
+      // 两版对照纸：分享者没打开、或这条作品还没有上一版，都给一张说清楚的纸
+      const comparePrintMatch = pathname.match(PRINT_COMPARE)
+      if (comparePrintMatch) {
+        if (req.method !== 'GET') {
+          res.writeHead(405, { 'Content-Type': 'text/plain; charset=utf-8' })
+          res.end('分享链接只能看，不能改')
+          return true
+        }
+        const token = comparePrintMatch[1]
+        const shared = await getProjectByShareToken(token)
+        if (!shared) {
+          sendPrintNotice(res, 404, {
+            title: '这条分享链接已经失效',
+            message: '分享者可能已经停止分享，或者换过一条新链接。',
+            href: '/',
+            label: '打开 VisionQA',
+          })
+          return true
+        }
+        const targetNo = Math.max(0, Math.round(Number(shared.version) || 0))
+        const baseNo = targetNo - 1
+        if (shared.share?.compare !== true) {
+          sendPrintNotice(res, 404, {
+            title: '这张对照纸没有随分享打开',
+            message: '分享者只开了脚本、分镜与评审对照；两版对照要分享者在作品页单独打开。',
+            href: '/#/share/project/' + encodeURIComponent(token),
+            label: '回分享页',
+          })
+          return true
+        }
+        const hasBase = baseNo >= 1 && (Array.isArray(shared.versions) ? shared.versions : [])
+          .some((entry) => Math.round(Number(entry?.n) || 0) === baseNo)
+        if (!hasBase) {
+          sendPrintNotice(res, 404, {
+            title: '这条分享还没有上一版',
+            message: '两版对照要等这条作品开出第二版，并且分享者把对照打开；现在只有当前这一版。',
+            href: '/#/share/project/' + encodeURIComponent(token),
+            label: '回分享页',
+          })
+          return true
+        }
+        const built = await versionCompareView(shared, null, baseNo, targetNo)
+        if (!built.ok) {
+          sendPrintNotice(res, 404, {
+            title: '有一版没有归档记录',
+            message: '这条作品没有 v' + built.missing + ' 的归档记录，没法印这张对照纸。',
+            href: '/#/share/project/' + encodeURIComponent(token),
+            label: '回分享页',
+          })
+          return true
+        }
+        res.writeHead(200, PRINT_HEAD)
+        res.end(
+          compareSheetHtml({
+            // 公开链接上不印作品编号：分享页的白名单同样不给它
+            project: { title: shared.title, version: shared.version },
+            compare: built.view,
+            now: new Date(),
+            tzOffsetMinutes: clampTz(url.searchParams.get('tz')),
+            backHref: '/#/share/project/' + encodeURIComponent(token),
+            backLabel: '返回分享页',
+            hint: '只读分享：这张纸随链接一起打开；打印或存 PDF 由浏览器完成',
+            originNote: '来自只读分享链接：分享者停用链接后这个地址会打不开；已经存下来的 PDF 不受影响。',
+          }),
+        )
+        return true
+      }
       const printMatch = pathname.match(PRINT_REVIEW)
       if (printMatch) {
         if (req.method !== 'GET') {

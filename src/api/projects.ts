@@ -114,11 +114,19 @@ export const startProjectVersion = (id: string, from?: number) =>
 export const deleteProject = (id: string) =>
   request<{ ok: boolean; removed: { id: string; detachedReviews: number } }>('/api/projects/' + id, { method: 'DELETE' })
 
-// 作品级只读分享：发给没有账号的人看脚本与分镜；停止后旧链接立即失效
-export const enableProjectShare = (id: string) =>
+// 作品级只读分享：发给没有账号的人看脚本与分镜；停止后旧链接立即失效。
+// compare 是分享者自己的选择：默认不带两版对照，打开后拿到链接的人才能打印这张纸。
+export const enableProjectShare = (id: string, compare = false) =>
   request<{ ok: boolean; token: string; createdAt: string; share: ProjectShare }>('/api/projects/' + id + '/share', {
     method: 'POST',
-    body: JSON.stringify({}),
+    body: JSON.stringify({ compare }),
+  })
+
+// 已开的链接上切换「带不带两版对照」：不换 token，已经发出去的地址继续有效
+export const setProjectShareCompare = (id: string, compare: boolean) =>
+  request<{ ok: boolean; share: ProjectShare }>('/api/projects/' + id + '/share', {
+    method: 'PATCH',
+    body: JSON.stringify({ compare }),
   })
 
 export const disableProjectShare = (id: string) =>
@@ -279,4 +287,12 @@ export function compareSheetUrl(id: string, base: number, target: number): strin
  */
 export function sharedReviewSheetUrl(token: string): string {
   return '/print/share/project/' + encodeURIComponent(token) + '/review?tz=' + encodeURIComponent(tzOffset())
+}
+
+/**
+ * 分享页里的两版对照纸：不用登录，凭证就是分享 token。
+ * 固定「当前版 vs 上一版」；分享者没打开对照时，这个地址会给一张说清楚的纸而不是内容。
+ */
+export function sharedCompareSheetUrl(token: string): string {
+  return '/print/share/project/' + encodeURIComponent(token) + '/versions/compare?tz=' + encodeURIComponent(tzOffset())
 }

@@ -457,7 +457,13 @@ export type ShareVisits = {
 }
 
 /** 作品级只读分享：token 只在作品页的分享面板与地址里出现，列表接口不返回 */
-export type ProjectShare = { token: string; createdAt: string; visits?: ShareVisits }
+export type ProjectShare = {
+  token: string
+  createdAt: string
+  /** 打开后，拿到链接的人也能打印「当前版 vs 上一版」；默认关 */
+  compare: boolean
+  visits?: ShareVisits
+}
 
 /** 一轮已经停用的分享：地址打不开，但那次被打开过几次还留着（只留最近 8 轮） */
 export type ShareHistoryEntry = { createdAt: string; closedAt: string; visits: ShareVisits }
@@ -514,6 +520,8 @@ export type SharedProject = {
   script: { hook: string; structure: ScriptBeat[]; source: 'project' | 'template'; timing: TemplateTiming | null } | null
   storyboard: SharedProjectShot[]
   stats: { beats: number; shots: number; reviews: number; lastVerdict: string; lastAt: string; runs: number }
+  /** 分享者打开了两版对照、且上一版已归档时才有；固定当前版 vs 上一版 */
+  versionCompare: { base: number; target: number } | null
   sharedAt: string
   /** 这份公开视图里有 AI 生成内容：页面上要有看得见的标识 */
   aiLabel: AiLabel

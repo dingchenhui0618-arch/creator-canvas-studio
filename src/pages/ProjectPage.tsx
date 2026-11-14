@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowLeft, ArrowRight, BookmarkPlus, Bot, Check, ChevronDown, Clapperboard, CopyPlus, Download, FileText, Link2, Package, Pencil, Plus, Printer, RefreshCw, RotateCcw, ScanEye, Share2, Trash2, Workflow, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, BookmarkPlus, Bot, Check, ChevronDown, Clapperboard, CopyPlus, Download, FileText, GitCompare, Link2, Package, Pencil, Plus, Printer, RefreshCw, RotateCcw, ScanEye, Share2, Trash2, Workflow, X } from 'lucide-react'
 import PageHead from '../components/PageHead'
 import ProjectStatusPill from '../components/ProjectStatus'
 import { VersionScriptModal } from '../components/VersionScriptModal'
@@ -19,6 +19,7 @@ import {
   reviewSheetUrl,
   saveProjectAsTemplate,
   saveProjectScript,
+  setProjectShareCompare,
   setSheetUrl,
   startProjectVersion,
   updateProject,
@@ -136,7 +137,7 @@ export default function ProjectPage({
   const [scriptDraft, setScriptDraft] = useState<{ hook: string; structure: ScriptBeat[] } | null>(null)
   // 只读分享：链接在这个作品上，弹窗里开、停、复制；token 只从作品详情拿
   const [shareOpen, setShareOpen] = useState(false)
-  const [shareBusy, setShareBusy] = useState<'' | 'enable' | 'disable' | 'copy'>('')
+  const [shareBusy, setShareBusy] = useState<'' | 'enable' | 'disable' | 'copy' | 'compare'>('')
   const [shareCopied, setShareCopied] = useState(false)
   // 版本脚本快照（v0.9.114）：点旧版的「N 段脚本」才读，打开页面时不预取
   const [versionScript, setVersionScript] = useState<{
@@ -363,7 +364,7 @@ export default function ProjectPage({
     setShareBusy('enable')
     try {
       const result = await enableProjectShare(data.project.id)
-      setData({ ...data, share: { token: result.token, createdAt: result.createdAt } })
+      setData({ ...data, share: result.share })
       onToast('分享链接已生成：拿到链接的人不用登录就能看脚本、分镜和评审对照')
     } catch (caught) {
       onToast(caught instanceof Error ? caught.message : '分享链接没生成成功')
@@ -400,6 +401,22 @@ export default function ProjectPage({
       onToast('分享链接已复制')
     } catch {
       onToast('浏览器没给剪贴板权限：手动选中链接复制')
+    } finally {
+      setShareBusy('')
+    }
+  }
+
+  // 对照纸不是默认权限：分享者在这里主动打开，链接不变；关掉后同一地址立即打不开那张纸
+  const toggleShareCompare = async () => {
+    if (!data?.share) return
+    const next = !data.share.compare
+    setShareBusy('compare')
+    try {
+      const result = await setProjectShareCompare(data.project.id, next)
+      setData((prev) => (prev ? { ...prev, share: result.share } : prev))
+      onToast(next ? '分享页已带上两版对照：拿到链接的人也能打印这张纸' : '已关闭分享页的两版对照，链接本身不变')
+    } catch (caught) {
+      onToast(caught instanceof Error ? caught.message : '分享对照没切换成功，刷新再试')
     } finally {
       setShareBusy('')
     }
@@ -2247,7 +2264,8 @@ export default function ProjectPage({
             <p className="vq-share-copy">
               拿到链接的人不用登录就能看：开头钩子、脚本分段与口播时长、分镜、评审与运行的次数，
               还有一张评审对照纸（评审说的问题框在当时的画面上，可打印或存 PDF）。
-              看不到账号、积分与画布内容。
+              两版对照默认不带；需要给甲方看「这一版改了什么」时，在链接下面单独打开。
+              看不到账号、积分与完整画布。
             </p>
 
             {data.share ? (
@@ -2296,6 +2314,33 @@ export default function ProjectPage({
                     {shareBusy === 'disable' ? '正在停止…' : '停止分享'}
                   </button>
                 </div>
+                {data.project.version > 1 ? (
+                  <div className="vq-share-compare">
+                    <div className="vq-share-compare-main">
+                      <span className="vq-share-compare-title">
+                        <GitCompare size={14} />
+                        分享页带上两版对照
+                      </span>
+                      <p className="vq-share-compare-copy">
+                        v{data.project.version - 1} → v{data.project.version} 的画布参数、脚本口播、评审与交付并排；
+                        默认关，打开后拿到链接的人也能打印这张 A4。
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={data.share.compare}
+                      aria-label="分享页带上两版对照"
+                      className={'vq-share-switch' + (data.share.compare ? ' is-on' : '')}
+                      onClick={() => void toggleShareCompare()}
+                      disabled={shareBusy === 'compare'}
+                    >
+                      <span aria-hidden="true" />
+                    </button>
+                  </div>
+                ) : (
+                  <p className="vq-share-note">这条作品还没有上一版：开出第二版后，分享页可以带上两版对照。</p>
+                )}
                 <div className="vq-share-visits">
                   <div className="vq-share-visits-head">
                     <span className="vq-share-visits-label">链接打开情况</span>

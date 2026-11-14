@@ -249,6 +249,11 @@ export function compareSheetHtml({
   tzOffsetMinutes = 480,
   projectId = '',
   offline = false,
+  // 分享出去的纸要回分享页（没有登录态）；两处都只影响顶栏与一句来源说明
+  backHref = '',
+  backLabel = '返回作品',
+  hint = '',
+  originNote = '',
 } = {}) {
   const tz = Number.isFinite(Number(tzOffsetMinutes)) ? Math.max(-720, Math.min(840, Math.round(Number(tzOffsetMinutes)))) : 480
   const base = compare.base || {}
@@ -264,8 +269,10 @@ export function compareSheetHtml({
       projectId,
       tag: '两版对照 / A4',
       meta: '210 x 297 mm',
-      hint: offline ? '解压后直接打印 / 存为 PDF；只读对照，不重跑、不扣积分' : '纸张选 A4；只读对照，不重跑、不扣积分',
-      back: !offline && Boolean(projectId),
+      hint: hint || (offline ? '解压后直接打印 / 存为 PDF；只读对照，不重跑、不扣积分' : '纸张选 A4；只读对照，不重跑、不扣积分'),
+      back: !offline && Boolean(backHref || projectId),
+      backHref,
+      backLabel,
       brand: offline ? 'text' : 'img',
     }),
   )
@@ -287,6 +294,7 @@ export function compareSheetHtml({
     '</ul>',
   )
   body.push('<p class="sheet-ai-note">' + escapeHtml(AI_LABEL_NOTICE) + '</p>')
+  if (originNote) body.push('<p class="sheet-origin-note">' + escapeHtml(originNote) + '</p>')
 
   body.push('<section class="cmp-summary">')
   body.push('<p class="cmp-kicker">一句话</p>')
@@ -382,6 +390,7 @@ const COMPARE_SHEET_CSS = [
   '.cmp-quote b { display: block; margin-bottom: 1pt; font-size: 8pt; }',
   '.cmp-quote span { display: block; color: var(--muted); overflow-wrap: anywhere; }',
   '.cmp-notes { margin: 0; padding-left: 13pt; font-size: 8pt; line-height: 1.6; color: var(--muted); }',
+  '.sheet-origin-note { margin: 0 0 12pt; padding-left: 8pt; border-left: 1.5pt solid var(--line-strong); font-size: 8pt; line-height: 1.6; color: var(--faint); }',
   '.cmp-notes li { margin: 0 0 3pt; }',
   '@media screen and (max-width: 700px) { .cmp-sides { grid-template-columns: 1fr; } .cmp-deltas { grid-template-columns: repeat(3, minmax(0, 1fr)); } .cmp-table { display: block; overflow-x: auto; } }',
 ].join('\n')

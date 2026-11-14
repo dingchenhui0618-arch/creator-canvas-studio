@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { ArrowUpRight, Link2Off, Loader2, Printer, ScanEye } from 'lucide-react'
-import { getSharedProject, sharedReviewSheetUrl } from '../api/projects'
+import { ArrowUpRight, GitCompare, Link2Off, Loader2, Printer, ScanEye } from 'lucide-react'
+import { getSharedProject, sharedCompareSheetUrl, sharedReviewSheetUrl } from '../api/projects'
 import type { SharedProject } from '../domain/project'
 import { REVIEW_VERDICT_LABEL as VERDICT_LABEL } from '../domain/review'
 import { describeTiming } from '../domain/radar'
@@ -91,6 +91,8 @@ export default function ProjectSharePage({ token }: { token: string }) {
   // 评审对照纸：评审把每条问题框在当时的画面上，编号对到问题列表。
   // 走 <a> 而不是 window.open：新标签由浏览器自己开，不会被弹窗拦截器吃掉。
   const paperUrl = view.stats.reviews ? sharedReviewSheetUrl(token) : ''
+  // 两版对照不是默认权限：服务端只在分享者打开、且上一版已归档时给出这个入口
+  const compareUrl = view.versionCompare ? sharedCompareSheetUrl(token) : ''
 
   return (
     <div className="pshare-page">
@@ -168,6 +170,23 @@ export default function ProjectSharePage({ token }: { token: string }) {
             </dd>
           </div>
         </dl>
+
+        {compareUrl && view.versionCompare ? (
+          <section className="pshare-block">
+            <div className="pshare-block-head">
+              <h2>这一版改了什么</h2>
+              <span>v{view.versionCompare.base} → v{view.versionCompare.target} · A4</span>
+            </div>
+            <a className="pshare-paper" href={compareUrl} target="_blank" rel="noreferrer">
+              <GitCompare size={16} className="pshare-paper-icon" />
+              <span className="pshare-paper-main">
+                <strong>两版对照 · 画布、脚本、评审与交付并排</strong>
+                <span>左边是上一版、右边是当前版；只列改过的节点与口播，可打印或存成 PDF。分享者停用链接后，这张纸也会打不开。</span>
+              </span>
+              <ArrowUpRight size={14} />
+            </a>
+          </section>
+        ) : null}
 
         {script?.hook ? (
           <section className="pshare-block">
@@ -291,8 +310,8 @@ export default function ProjectSharePage({ token }: { token: string }) {
           <div>
             <strong>关于这个链接</strong>
             <p>
-              只读分享：只展示这条作品的脚本、分镜，以及评审次数与评审对照纸，不展示账号、积分与画布内容。
-              分享者停止分享后，这个地址与对照纸会立即失效。分享者能看到这条链接被打开的次数、最近一次的时间，
+              只读分享：只展示这条作品的脚本、分镜，以及评审次数与评审对照纸；分享者可以另外打开两版对照纸。
+              这里不展示账号、积分与完整画布。分享者停止分享后，这个地址与两张对照纸都会立即失效。分享者能看到这条链接被打开的次数、最近一次的时间，
               以及是从微信、手机还是电脑打开的；不记录 IP，也不记录具体是谁。
             </p>
           </div>

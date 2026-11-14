@@ -2979,6 +2979,85 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
   color: var(--faint);
 }
 
+/* 分享页的两版对照开关（v0.9.123）：默认关，只改一个布尔字段，不换 token。
+   开关本身 44×24，滑块 16、四周留 4；标签与说明走 4/8pt 栅格。 */
+.vq-share-compare {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.vq-share-compare-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.vq-share-compare-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-meta);
+  color: var(--ink);
+}
+
+.vq-share-compare-copy {
+  margin: 0;
+  font-size: var(--text-meta);
+  line-height: var(--leading-meta);
+  color: var(--faint);
+}
+
+.vq-share-switch {
+  position: relative;
+  flex: none;
+  width: 44px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  cursor: pointer;
+  transition: background-color .16s ease, border-color .16s ease;
+}
+
+.vq-share-switch span {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-pill);
+  background: var(--faint);
+  transition: transform .16s ease, background-color .16s ease;
+}
+
+.vq-share-switch.is-on {
+  border-color: var(--ink);
+  background: var(--ink);
+}
+
+.vq-share-switch.is-on span {
+  transform: translateX(20px);
+  background: var(--surface-raised);
+}
+
+.vq-share-switch:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.vq-share-switch:disabled {
+  opacity: .5;
+  cursor: default;
+}
+
 /* ---------- 分享链接的打开情况（v0.9.10） ----------
    不是监控，只回答「发出去的链接被点开过几次」：次数 + 最近一次 + 客户端类别。
    与弹窗其它行用同一套 4/8pt 间距，靠一条分隔线隔开，不再套第二层卡片。 */

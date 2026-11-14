@@ -50,6 +50,7 @@ import {
   saveProjectScript,
   clearProjectScript,
   enableProjectShare,
+  setProjectShareCompare,
   disableProjectShare,
   archiveProjectVersion,
   deleteProject,
@@ -742,7 +743,8 @@ export function createProjectsRouter() {
       }
 
       // 作品级只读分享：发给没有账号的人看脚本与分镜。
-      // 今天只做「开 / 停」两件事：token 存在作品上，停止即清掉，旧链接当场失效。
+      // 「开 / 停 / 是否带两版对照」三件事：token 存在作品上，停止即清掉，旧链接当场失效；
+      // 对照开关不改 token，已经发出去的链接继续有效。
       const sharePath = pathname.match(SHARE)
       if (sharePath && req.method === 'POST') {
         const project = await getProject(sharePath[1], user)
@@ -750,12 +752,52 @@ export function createProjectsRouter() {
           sendJson(res, 404, { error: '作品不存在或已被删除' })
           return true
         }
-        const result = await enableProjectShare(project.id, user)
+        // 开分享的请求体是可选的：没有 body 的调用（脚本、测试）照旧按“不带对照”处理。
+        // 真实 HTTP 请求是可读流；不是流时不要为了一个可选字段把它读挂。
+        const body = req && typeof req[Symbol.asyncIterator] === 'function' ? await readBody(req) : null
+        if (body?.compare !== undefined && typeof body.compare !== 'boolean') {
+          sendJson(res, 400, { error: 'compare 只能是 true 或 false', code: 'SHARE_COMPARE_INVALID' })
+          return true
+        }
+        const result = await enableProjectShare(project.id, user, { compare: body?.compare === true })
         if (!result) {
           sendJson(res, 409, { error: '分享链接没开成功：作品可能刚被删掉，刷新再试', code: 'SHARE_FAILED' })
           return true
         }
-        sendJson(res, 200, { ok: true, token: result.token, createdAt: result.createdAt, share: { token: result.token, createdAt: result.createdAt } })
+        sendJson(res, 200, {
+          ok: true,
+          token: result.token,
+          createdAt: result.createdAt,
+          share: { token: result.token, createdAt: result.createdAt, compare: result.compare === true },
+        })
+        return true
+      }
+
+      // 已经开着分享时切换对照纸：只改一个布尔字段，不换 token、不碰作品内容
+      if (sharePath && req.method === 'PATCH') {
+        const project = await getProject(sharePath[1], user)
+        if (!project) {
+          sendJson(res, 404, { error: '作品不存在或已被删除' })
+          return true
+        }
+        const body = await readBody(req)
+        if (typeof body?.compare !== 'boolean') {
+          sendJson(res, 400, { error: '要明确写 compare: true 或 false', code: 'SHARE_COMPARE_INVALID' })
+          return true
+        }
+        if (!project.share) {
+          sendJson(res, 409, { error: '还没开分享：先开一条链接，再决定带不带两版对照', code: 'SHARE_NOT_OPEN' })
+          return true
+        }
+        const result = await setProjectShareCompare(project.id, user, body.compare)
+        if (!result) {
+          sendJson(res, 409, { error: '分享对照没切换成功：刷新再试', code: 'SHARE_COMPARE_FAILED' })
+          return true
+        }
+        sendJson(res, 200, {
+          ok: true,
+          share: { token: result.token, createdAt: result.createdAt, compare: result.compare === true },
+        })
         return true
       }
 

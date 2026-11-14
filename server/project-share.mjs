@@ -94,6 +94,13 @@ export function publicProjectView({ project, template, script, reviews, runs, to
   const beats = Array.isArray(script?.structure) ? script.structure.map(beatView) : []
   const shots = Array.isArray(template?.storyboard) ? template.storyboard.length : 0
   const counter = reviews || { count: 0, lastVerdict: '', lastAt: '' }
+  // 两版对照是分享者主动打开的（默认关）：只给「当前版 vs 上一版」，不开放任意版次。
+  // 上一版没有归档就不放入口，免得拿到链接的人点进一张打不开的纸。
+  const compareTarget = Math.max(0, Math.round(num(project.version)))
+  const compareBase = compareTarget - 1
+  const compareEnabled = project.share?.compare === true
+  const compareReady = compareEnabled && compareBase >= 1 && (Array.isArray(project.versions) ? project.versions : [])
+    .some((entry) => Math.round(num(entry?.n)) === compareBase)
   return {
     project: {
       title: text(project.title, 80),
@@ -131,6 +138,8 @@ export function publicProjectView({ project, template, script, reviews, runs, to
       lastAt: String(counter.lastAt || ''),
       runs: Math.max(0, Math.round(num(runs))),
     },
+    // 只有分享者打开、且上一版确实归档时才有：前端据此显示入口，不猜版本
+    versionCompare: compareReady ? { base: compareBase, target: compareTarget } : null,
     sharedAt: String(project.share?.createdAt || ''),
     // AI 生成内容标识：分享页是「作品出了工作台」的入口，标识跟着数据走，前端不自己拼文案
     aiLabel: aiLabelMeta(),
