@@ -159,7 +159,13 @@ test('老数据开新版：补一条「时间没记录」的交付记录，不�
   const next = await archiveProjectVersion('prj_legacy', { flowId: 'flow_legacy2', prevName: '老记录 v1' }, me)
   assert.equal(next.version, 2)
   assert.equal(next.status, 'active')
-  assert.deepEqual(next.deliveries, [{ version: 1, at: '' }], '版次知道，时间只能如实写空')
+  assert.deepEqual(
+    next.deliveries.map((entry) => ({ version: entry.version, at: entry.at })),
+    [{ version: 1, at: '' }],
+    '版次知道，时间只能如实写空',
+  )
+  // v0.9.85：收尾这一刻这一版评成什么样，跟着补的那条记录一起记下
+  assert.equal(next.deliveries[0].review?.verdict, 'pass', '开新版给上一版收尾，也把当时的评审快照记下来')
   assert.equal(deliveredCurrent(next), false)
 })
 

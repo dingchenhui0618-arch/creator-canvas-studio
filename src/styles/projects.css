@@ -689,6 +689,14 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* 交时评审：交付那一刻这一版评成什么（v0.9.85）。
+   与「交付过」那枚胶囊并列，但压到辅助层——它是留给以后的记录，不是现在的状态。 */
+.vq-version-delivered-review {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
 /* 这一版最近一次评审的问题数：与「2 次评审」同一行，数字用等宽，语气色只给「多了/少了」 */
 .vq-version-issues,
 .vq-version-delta {

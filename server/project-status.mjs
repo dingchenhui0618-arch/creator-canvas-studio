@@ -73,7 +73,12 @@ export function deliveryOf(project) {
   const list = Array.isArray(project?.deliveries) ? project.deliveries : []
   const last = list[list.length - 1]
   if (!last) return null
-  return { version: Math.max(0, Math.round(Number(last.version) || 0)), at: String(last.at || '') }
+  return {
+    version: Math.max(0, Math.round(Number(last.version) || 0)),
+    at: String(last.at || ''),
+    // review 原样带出去：对象 = 交的时候评过；null = 当时还没评；undefined = 老记录，没记
+    review: last.review,
+  }
 }
 
 /**

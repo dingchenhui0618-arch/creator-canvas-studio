@@ -10,6 +10,9 @@ import { config } from './config.mjs'
 import { canAccess } from './owner.mjs'
 import { normalizeStoredScript } from './project-script.mjs'
 import { visitKey } from './share-visits.mjs'
+// 交付那一刻的评审结论要从评审库现读；只读、不写评审（v0.9.85）
+import { reviewSummaryByVersion } from './reviews.mjs'
+import { reviewsForVersion } from './project-status.mjs'
 
 const projectsFile = path.join(config.dataDir, 'projects.json')
 const MAX_PROJECTS = 200
@@ -109,13 +112,59 @@ function normalizeShareHistory(raw) {
     .slice(0, MAX_SHARE_HISTORY)
 }
 
-// 交付记录：{ version, at }。老记录没有时间就写空串——照样是「这一版交过」，只是不知道什么时候。
+const DELIVERY_VERDICTS = ['pass', 'needs_review', 'fail']
+const ISSUE_KEYS = ['blocker', 'major', 'minor', 'info', 'counted', 'observations']
+
+// 问题数只认六个整数字段：盘上被手改坏了也不让 NaN 流到页面上去
+function normalizeIssues(raw) {
+  if (!raw || typeof raw !== 'object') return null
+  const out = {}
+  for (const key of ISSUE_KEYS) out[key] = Math.max(0, Math.round(Number(raw[key]) || 0))
+  return out
+}
+
+// 交付时的评审快照：当时的结论、那次评审的时间、那一版的问题数。
+// 三种状态都写清楚：对象 = 记下了；null = 当时确实还没评过；字段不存在 = 升级前的老记录（不知道）。
+function normalizeDeliveryReview(raw) {
+  if (raw === null) return null
+  if (!raw || typeof raw !== 'object') return null
+  const verdict = String(raw.verdict || '')
+  return {
+    verdict: DELIVERY_VERDICTS.includes(verdict) ? verdict : '',
+    // 时间只认字符串：盘上被改成一个数字时如实写空，不让 '7' 冒充一个时刻
+    at: typeof raw.at === 'string' ? raw.at : '',
+    issues: normalizeIssues(raw.issues),
+  }
+}
+
+// 交付记录：{ version, at, review }。老记录没有时间就写空串——照样是「这一版交过」，只是不知道什么时候。
+// review 同理：没有这个字段就是「当时没记评审」，不能拿这一版后来的评审冒充（v0.9.85）。
 function normalizeDeliveries(raw) {
   return (Array.isArray(raw) ? raw : [])
     .filter((entry) => entry && typeof entry === 'object')
-    .map((entry) => ({ version: Math.max(0, Math.round(Number(entry.version) || 0)), at: String(entry.at || '') }))
+    .map((entry) => {
+      const base = { version: Math.max(0, Math.round(Number(entry.version) || 0)), at: String(entry.at || '') }
+      if (entry.review === undefined) return base
+      return { ...base, review: normalizeDeliveryReview(entry.review) }
+    })
     .filter((entry) => entry.version > 0)
     .slice(-MAX_DELIVERIES)
+}
+
+/**
+ * 交付那一刻的评审结论（v0.9.85）：交付记录写的是「交的时候评审怎么说」。
+ * 口径与作品页的版本对照同源——同一版取最近一次、版本划分前的老评审折进 v1；
+ * 这一版一次都没评过就是 null（「当时还没评过」），不是 0 个阻塞。
+ *
+ * 为什么不在读的时候现算：交付之后再评一次，这一版的结论就变了；
+ * 拿「这一版最新的评审」当「交出去的结论」，等于每重评一次就改写一次历史。
+ */
+async function deliveryReviewSnapshot(project, user) {
+  if (!project?.id) return null
+  const counts = await reviewSummaryByVersion(project.id, user)
+  const summary = reviewsForVersion(counts, Math.max(1, Number(project.version) || 0))
+  if (!summary.count) return null
+  return { verdict: summary.lastVerdict || '', at: summary.lastAt || '', issues: summary.issues || null }
 }
 
 /** 把当前这一轮分享归档进历史（停用、或换新 token 时调用），返回是否真的归档了。 */
@@ -227,7 +276,9 @@ export async function updateProject(id, patch = {}, user = null) {
     const at = new Date().toISOString()
     const version = Math.max(1, Number(found.version) || 1)
     const rest = normalizeDeliveries(found.deliveries).filter((entry) => entry.version !== version)
-    found.deliveries = [...rest, { version, at }].slice(-MAX_DELIVERIES)
+    // 交的时候评审怎么说，跟着这一版一起记下来：事后重评不改这条记录
+    const review = await deliveryReviewSnapshot({ id: found.id, version }, user)
+    found.deliveries = [...rest, { version, at, review }].slice(-MAX_DELIVERIES)
     changed = true
   }
   // 重新打开 = 收回「这一版已交付」：撤掉当前这一版的交付记录，别的版本留着。
@@ -311,7 +362,9 @@ export async function archiveProjectVersion(id, { flowId = '', prevName = '', sc
   if (found.status === 'done') {
     const deliveries = normalizeDeliveries(found.deliveries)
     if (!deliveries.some((entry) => entry.version === current.version)) {
-      deliveries.push({ version: current.version, at: '' })
+      // 开新版等于给上一版收尾：这一刻它评成什么样，也就是「交出去时」的样子
+      const review = await deliveryReviewSnapshot({ id: found.id, version: current.version }, user)
+      deliveries.push({ version: current.version, at: '', review })
     }
     found.deliveries = deliveries.slice(-MAX_DELIVERIES)
     found.status = 'active'

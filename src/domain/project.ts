@@ -117,7 +117,22 @@ export type ProjectAck = { version: number; reviewAt: string; at: string }
  * 交付记录：一次「标记交付」= 哪一版、什么时候交出去。
  * 它是事实，不是开关：交付了 v2 又开 v3，v2 那条仍然在；老记录没有时间（at 是空串）。
  */
-export type ProjectDelivery = { version: number; at: string }
+/** 交付时的评审快照：当时的结论、那次评审的时间、那一版的问题数 */
+export type ProjectDeliveryReview = {
+  verdict: string
+  at: string
+  issues: ReviewIssues | null
+}
+
+/**
+ * 一条交付记录：哪一版、什么时候、交的时候评审怎么说。
+ * review 三种状态都要分得清：对象 = 记下了；null = 当时还没评过；没有这个字段 = 升级前的老记录（没记）。
+ */
+export type ProjectDelivery = {
+  version: number
+  at: string
+  review?: ProjectDeliveryReview | null
+}
 
 /** 归档的旧版本：只存画布指针与名字，画布本身仍在流程服务里 */
 export type ProjectVersion = { n: number; flowId: string; name: string; archivedAt: string }
@@ -153,7 +168,11 @@ export function deliveryOf(project: Project | null | undefined): ProjectDelivery
   const list = Array.isArray(project?.deliveries) ? project.deliveries : []
   const last = list[list.length - 1]
   if (!last) return null
-  return { version: Math.max(0, Math.round(Number(last.version) || 0)), at: String(last.at || '') }
+  return {
+    version: Math.max(0, Math.round(Number(last.version) || 0)),
+    at: String(last.at || ''),
+    review: last.review,
+  }
 }
 
 /**
@@ -205,9 +224,11 @@ export type ProjectDeliveryRow = {
   current: boolean
   /** 这条作品现在还在交付状态（交付过之后没开新版） */
   deliveredNow: boolean
-  /** 那一版评过几次、最后一次结论：交出去的这一版当时评成什么 */
+  /** 那一版评过几次（含交付之后的重评）、最后一次结论：版本级事实，不是「交时」的结论 */
   reviews: number
   verdict: string
+  /** 交的时候评审怎么说（交付时存下的快照）；null 当时还没评过；没有这个字段是升级前的老记录 */
+  review?: ProjectDeliveryReview | null
 }
 
 /** 交付流水的整份数字按全部记录算，不因为只取了一页而变小 */

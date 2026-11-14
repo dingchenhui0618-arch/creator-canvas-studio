@@ -26,7 +26,7 @@ import {
   type ShareSummaryRow,
 } from '../domain/project'
 import { isFirstRun } from '../domain/first-run'
-import { REVIEW_VERDICT_LABEL, reviewTimeLabel } from '../domain/review'
+import { REVIEW_VERDICT_LABEL, issueLine, reviewTimeLabel } from '../domain/review'
 import { runWorkLine } from '../domain/run'
 import { stampTime, visitLine } from '../domain/share'
 import { useSiteInfo, useUiMode } from '../api/app'
@@ -973,15 +973,18 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                       <span className="vq-mono vq-delivery-meta">
                         <span>{row.atKnown ? stampTime(row.at) + ' 交出去' : '交付时间没记下'}</span>
                         {' · '}
-                        {row.reviews ? (
-                          <>
-                            <span>{'评审「' + (REVIEW_VERDICT_LABEL[row.verdict] || '未记结论') + '」'}</span>
-                            {' · '}
-                            <span>{'评过 ' + row.reviews + ' 次'}</span>
-                          </>
+                        {row.review ? (
+                          // 交付那一刻存下的快照：之后这一版重评，这一行也不改
+                          <span>
+                            {'交时评审「' + (REVIEW_VERDICT_LABEL[row.review.verdict] || '未记结论') + '」'}
+                            {issueLine(row.review.issues) ? ' · ' + issueLine(row.review.issues) : ''}
+                          </span>
+                        ) : row.review === null ? (
+                          // 当时确实查过：一版都没评过，不是「没记」
+                          <span>交的时候还没评过</span>
                         ) : (
-                          // 没进过评审就别写「未记结论」：那一行本来就没有结论可记
-                          <span>交的时候没进评审</span>
+                          // 升级前的交付记录没有快照：只能说当时没记，不能拿这一版最近一评冒充
+                          <span>{'交时评审没记' + (row.reviews ? ' · 这一版评过 ' + row.reviews + ' 次' : '')}</span>
                         )}
                       </span>
                     </span>

@@ -414,10 +414,10 @@ function versionSection(detail, tz) {
   const byNumber = new Map(rows.map((row) => [row.n, row]))
   const reviewMap = groupByVersion(detail.reviews)
   const runMap = groupByVersion(detail.runs)
-  // 哪几版交出去过：表里标在版次后面，每版现场再写一条时间
+  // 哪几版交出去过：表里标在版次后面，每版现场再写一条时间与「交时评审」
   const deliveredVersions = new Map(
     (Array.isArray(project.deliveries) ? project.deliveries : [])
-      .map((entry) => [Math.round(Number(entry.version) || 0), String(entry.at || '')]),
+      .map((entry) => [Math.round(Number(entry.version) || 0), entry]),
   )
   for (const list of reviewMap.values()) {
     list.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
@@ -469,8 +469,12 @@ function versionSection(detail, tz) {
           (row.available ? '画布 ' + row.nodes + ' 个节点' : '画布已经被删除，只剩这一行归档记录'),
       )
       if (deliveredVersions.has(row.n)) {
-        const at = deliveredVersions.get(row.n)
-        out.push('- 交付：' + (at ? stamp(at, tz) + ' 交出去过' : '交出去过（时间没记录）'))
+        const entry = deliveredVersions.get(row.n)
+        const at = String(entry?.at || '')
+        out.push(
+          '- 交付：' + (at ? stamp(at, tz) + ' 交出去过' : '交出去过（时间没记录）') +
+            ' · 交时评审 ' + deliveryReviewText(entry?.review),
+        )
       }
       const canvas = canvasText(canvasDelta(fingerprint(before?.nodeList), fingerprint(row.nodeList)))
       if (before && canvas) out.push('- 画布：比 v' + before.n + ' ' + canvas)
@@ -562,12 +566,39 @@ function runSection(detail, tz) {
   return out
 }
 
+/**
+ * 交付时评审快照的三种状态（v0.9.85）：记下了 / 当时还没评过 / 升级前没记。
+ * 三种写法必须分开——「没记」不是「没评过」，更不是「0 个阻断」。
+ */
+function deliveryReviewText(review) {
+  if (review && typeof review === 'object') {
+    const verdict = VERDICT_LABEL[review.verdict] || '未记结论'
+    const bits = []
+    const issues = review.issues
+    if (issues) {
+      for (const level of ['blocker', 'major', 'minor']) {
+        const n = Math.max(0, Number(issues[level]) || 0)
+        if (n) bits.push(n + ' 个' + SEVERITY_LABEL[level])
+      }
+      if (!Number(issues.counted) && Number(issues.observations)) {
+        bits.push('另有 ' + Math.max(0, Number(issues.observations)) + ' 条没记严重度')
+      }
+    }
+    return verdict + (bits.length ? ' · ' + bits.join(' · ') : '')
+  }
+  if (review === null) return '还没评过'
+  return '没记（升级前的交付记录）'
+}
+
 function deliverySection(detail, tz) {
   const { project } = detail
   const out = ['', '## 交付', '']
   out.push('- 交付：' + deliveryText(project, tz))
+  // 交付那一刻评审怎么说：交付之后再重评也不改这一行（记录的是当初，不是现在）
+  const latest = deliveryOf(project)
+  if (latest) out.push('- 交时评审：' + deliveryReviewText(latest.review))
   const history = (Array.isArray(project.deliveries) ? project.deliveries : [])
-    .map((entry) => 'v' + entry.version + (entry.at ? ' · ' + stamp(entry.at, tz) : ' · 时间没记录'))
+    .map((entry) => 'v' + entry.version + (entry.at ? ' · ' + stamp(entry.at, tz) : ' · 时间没记录') + ' · 交时评审 ' + deliveryReviewText(entry.review))
     .reverse()
   if (history.length) out.push('- 交付记录：' + history.join('；'))
   out.push(

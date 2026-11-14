@@ -1,4 +1,5 @@
 import type { ReviewIssues, ReviewProjectRef, ReviewSummary } from '../api/review'
+import type { ProjectDeliveryReview } from './project'
 
 /** 结论只有三种口径，全站一处：胶囊、筛选、分享纸都从这里取字。 */
 export const REVIEW_VERDICT_LABEL: Record<string, string> = { pass: '通过', needs_review: '需人工确认', fail: '不通过' }
@@ -65,6 +66,22 @@ export function issueLine(issues?: ReviewIssues | null): string {
     .filter((level) => Math.round(Number(issues[level]) || 0) > 0)
     .map((level) => Math.round(Number(issues[level]) || 0) + ' ' + ISSUE_LABEL[level])
     .join(' · ')
+}
+
+/**
+ * 「交时评审」的一句话，三种状态必须分开写（v0.9.85）：
+ *   有快照 = 交的时候评成什么；null = 当时查过，还没评过；没有字段 = 升级前的交付记录，当时没记。
+ * 老记录不能拿这一版后来的评审冒充——交付之后再重评，历史不该被改写。
+ */
+export function deliveryReviewText(review: ProjectDeliveryReview | null | undefined): string {
+  if (review && typeof review === 'object') {
+    const verdict = REVIEW_VERDICT_LABEL[review.verdict] || '未记结论'
+    const line = issueLine(review.issues)
+    const gap = issueGap(review.issues)
+    return verdict + (line ? ' · ' + line : '') + (gap ? ' · 另有 ' + gap + ' 条没记严重度' : '')
+  }
+  if (review === null) return '还没评过'
+  return '没记（升级前的交付记录）'
 }
 
 /** 有几条问题没记严重度：老记录才会出现，写出来比藏起来诚实。 */

@@ -29,7 +29,9 @@ export function ledgerRows({ projects = [], counts = {} } = {}) {
       // 交付记录里的版次有坏值时跳过这一条：宁可少一行，也不编一版出来
       const version = Math.max(0, Math.round(Number(entry?.version) || 0))
       if (!version) continue
-      // 那一版的结论跟着版本走：这一行写「交出去时评审给的结论」，不是作品现在的结论
+      // 那一版的结论跟着版本走：这一行写「交出去时评审给的结论」，不是作品现在的结论。
+      // 交时结论是交付那一刻存下来的快照（v0.9.85）；这一版后来重评，历史不能被改写。
+      // 老记录没有快照（undefined）：界面只能写「当时没记」，不能拿最近一评冒充。
       const bucket = counts?.[project.id]?.versions?.[String(version)] || null
       rows.push({
         projectId: project.id,
@@ -41,8 +43,10 @@ export function ledgerRows({ projects = [], counts = {} } = {}) {
         currentVersion,
         current: version === currentVersion,
         deliveredNow: deliveredCurrent(project),
+        // 这一版评过几次（含交付之后的重评）：是版本级的事实，不是「交时」的结论
         reviews: Number(bucket?.count) || 0,
         verdict: String(bucket?.lastVerdict || ''),
+        review: entry?.review,
       })
     }
   }

@@ -23,9 +23,27 @@ import {
 } from '../api/projects'
 import { describeTiming, type ScriptBeat } from '../domain/radar'
 import { formatCount } from '../api/radar'
-import { deliveredCurrent, deliveryOf, projectStep, reviewsForVersion, runsForVersion, type ProjectDetail, type ProjectSpendDetail } from '../domain/project'
+import {
+  deliveredCurrent,
+  deliveryOf,
+  projectStep,
+  reviewsForVersion,
+  runsForVersion,
+  type ProjectDelivery,
+  type ProjectDetail,
+  type ProjectSpendDetail,
+} from '../domain/project'
 import { ackReview, decideReview, clearReviewDecision, unackReview } from '../api/review'
-import { ISSUE_LABEL, issueCompare, issueGap, issueLine, REVIEW_VERDICT_LABEL as VERDICT_LABEL, reviewTimeLabel, reviewsOfVersion } from '../domain/review'
+import {
+  ISSUE_LABEL,
+  deliveryReviewText,
+  issueCompare,
+  issueGap,
+  issueLine,
+  REVIEW_VERDICT_LABEL as VERDICT_LABEL,
+  reviewTimeLabel,
+  reviewsOfVersion,
+} from '../domain/review'
 import { stampTime as stamp, visitLine } from '../domain/share'
 import '../styles/projects.css'
 
@@ -399,7 +417,10 @@ export default function ProjectPage({
       const delivery = deliveryOf(result.project)
       onToast(
         next === 'done'
-          ? '已标记交付：v' + (delivery?.version ?? result.project.version) + (delivery?.at ? ' · ' + stamp(delivery.at) : '')
+          ? '已标记交付：v' + (delivery?.version ?? result.project.version) +
+            (delivery?.at ? ' · ' + stamp(delivery.at) : '') +
+            // 交的时候评审怎么说一起说出来：这条记录之后不会被重评改写
+            (delivery ? ' · 交时评审 ' + deliveryReviewText(delivery.review) : '')
           : '已重新打开：这一版的交付记录也撤掉了',
       )
     } catch (caught) {
@@ -683,11 +704,11 @@ export default function ProjectPage({
   // 交付留痕：最近一次交的是哪一版；开了新版之后旧版那条仍在，但这一版不再算已交付
   const delivery = deliveryOf(project)
   const delivered = deliveredCurrent(project)
-  const deliveredVersions = new Map<number, string>(
-    (Array.isArray(project.deliveries) ? project.deliveries : []).map((entry) => [entry.version, entry.at]),
+  const deliveredVersions = new Map<number, ProjectDelivery>(
+    (Array.isArray(project.deliveries) ? project.deliveries : []).map((entry) => [entry.version, entry]),
   )
   // 老记录没有交付条目：状态是已交付就当当前这一版交过，只是时间没记录
-  if (delivered && !delivery && project.version) deliveredVersions.set(project.version, '')
+  if (delivered && !delivery && project.version) deliveredVersions.set(project.version, { version: project.version, at: '' })
   const versionRows = [
     {
       n: project.version,
@@ -825,9 +846,18 @@ export default function ProjectPage({
                   </div>
                   {/* 导出是取产物，不是宣布交付：把「标记交付」这一步说清楚，别让人以为导完就算交了 */}
                   {delivered ? null : (
-                    <p className="vq-export-note">
-                      导出不会改状态：交出去之后点页头「标记交付」，会记下这一版与交付时间；开新版也查得到。
-                    </p>
+                    <>
+                      <p className="vq-export-note">导出不会改状态；点页头「标记交付」才记交付。</p>
+                      {/* 交付前先说清楚会记下什么：这一刻的评审跟着这一版走，之后重评也不改它 */}
+                      <p className="vq-export-note">
+                        交时评审会记为
+                        {currentReviews.count
+                          ? '「' + (VERDICT_LABEL[currentReviews.lastVerdict] || '未记结论') + '」' +
+                            (currentIssueLine ? ' · ' + currentIssueLine : '')
+                          : '「还没评过」'}
+                        ，之后重评不改这条记录。
+                      </p>
+                    </>
                   )}
                   {/* 合规标识是产物的固定一部分：先说清楚，收件人才不会把稿子当成人工复核过的结论 */}
                   <p className="vq-export-note">
@@ -1035,13 +1065,22 @@ export default function ProjectPage({
                       ) : null}
                       <span>{runCount ? runCount + ' 次运行' : '没跑过'}</span>
                       {deliveredVersions.has(row.n) ? (
-                        <span
-                          className="vq-version-delivered"
-                          title="这一版交出去过；重新打开这一版会收回这条记录，开新版会把它留在上一版"
-                        >
-                          交付过
-                          {deliveredVersions.get(row.n) ? ' · ' + stamp(deliveredVersions.get(row.n) as string) : ' · 时间没记录'}
-                        </span>
+                        <>
+                          <span
+                            className="vq-version-delivered"
+                            title="这一版交出去过；重新打开这一版会收回这条记录，开新版会把它留在上一版"
+                          >
+                            交付过
+                            {deliveredVersions.get(row.n)?.at ? ' · ' + stamp(deliveredVersions.get(row.n)?.at as string) : ' · 时间没记录'}
+                          </span>
+                          {/* 交出去那一刻的评审：之后这一版再重评，这条记录也不改 */}
+                          <span
+                            className="vq-version-delivered-review"
+                            title="交付时存下的评审快照：之后这一版重评，这条记录也不会被改写"
+                          >
+                            交时评审：{deliveryReviewText(deliveredVersions.get(row.n)?.review)}
+                          </span>
+                        </>
                       ) : null}
                     </span>
                     {rowReviews.length ? (
