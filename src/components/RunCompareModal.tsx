@@ -1,6 +1,15 @@
-import { useEffect, useState } from 'react'
-import { Check, CircleAlert, CircleDashed, CircleSlash, Loader, X } from 'lucide-react'
-import { getRunCompare, type RunCompare, type RunCompareNode, type RunCompareNodeSide, type RunCompareSide } from '../api/flows'
+import { useEffect, useRef, useState } from 'react'
+import { Check, CircleAlert, CircleDashed, CircleSlash, FileDiff, Loader, X } from 'lucide-react'
+import {
+  getRunCompare,
+  getRunOutputDiff,
+  type RunCompare,
+  type RunCompareNode,
+  type RunCompareNodeSide,
+  type RunCompareSide,
+  type RunDiffLine,
+  type RunOutputDiff,
+} from '../api/flows'
 import { NODE_META } from '../canvas/catalog'
 import { runSpentText, runStatusMeta } from '../domain/run'
 import { Pill } from './ui'
@@ -109,6 +118,67 @@ function optionLabel(side: RunCompareSide): string {
   return formatWhen(side.startedAt) + ' · ' + meta.label + ' · ' + formatMs(side.durationMs) + ' · ' + cost + ' · ' + side.id.slice(-8)
 }
 
+// 输出差异（v0.9.112）：只在点开某个「输出变了」的节点时读取。
+// 不把整份输出搬进对照弹窗；面板里只出现改动附近的行，超限就说只比了一部分。
+type DiffState = {
+  nodeId: string
+  status: 'loading' | 'ready' | 'error'
+  data?: RunOutputDiff
+  message?: string
+}
+
+function DiffLineRow({ line }: { line: RunDiffLine }) {
+  if (line.op === 'skip') {
+    return <div className="rc-diff-skip">… {line.count} 行未变 …</div>
+  }
+  const sign = line.op === 'add' ? '+' : line.op === 'del' ? '-' : ' '
+  return (
+    <div className={'rc-diff-line is-' + line.op}>
+      <span className="rc-diff-no">{line.oldNo ?? ''}</span>
+      <span className="rc-diff-no">{line.newNo ?? ''}</span>
+      <span className="rc-diff-sign">{sign}</span>
+      <span className="rc-diff-text">{line.text || ' '}</span>
+    </div>
+  )
+}
+
+function OutputDiffPanel({ state, onRetry }: { state: DiffState; onRetry: () => void }) {
+  return (
+    <div className="rc-diff" role="region" aria-label="输出差异">
+      <div className="rc-diff-head">
+        <strong>输出差异</strong>
+        <span className="vq-mono">对照运行 → 当前运行</span>
+        {state.status === 'ready' && state.data ? (
+          <span className="rc-diff-stats vq-mono">
+            +{state.data.stats.added} / -{state.data.stats.removed}
+          </span>
+        ) : null}
+      </div>
+      {state.status === 'loading' ? (
+        <p className="rc-diff-state"><Loader size={13} className="vq-spin" />正在取改动附近的几行…</p>
+      ) : state.status === 'error' ? (
+        <div className="rc-diff-state is-error">
+          <span>{state.message || '输出差异没有读出来'}</span>
+          <button type="button" className="vq-button vq-button--ghost vq-button--sm" onClick={onRetry}>重新读取</button>
+        </div>
+      ) : state.data ? (
+        <>
+          {state.data.lines.length ? (
+            <div className="rc-diff-lines">
+              {state.data.lines.map((line, index) => <DiffLineRow key={line.op + '-' + index} line={line} />)}
+            </div>
+          ) : (
+            <p className="rc-diff-state">两端文字一样，差异在其它字段里。</p>
+          )}
+          {state.data.truncated ? (
+            <p className="rc-diff-cut">内容较长，只比了前 2.4 万字符或前 1200 行；差异也只列了 260 行以内。</p>
+          ) : null}
+        </>
+      ) : null}
+    </div>
+  )
+}
+
 export function RunCompareModal({ runId, onClose }: { runId: string; onClose: () => void }) {
   const [data, setData] = useState<RunCompare | null>(null)
   const [error, setError] = useState('')
@@ -116,6 +186,11 @@ export function RunCompareModal({ runId, onClose }: { runId: string; onClose: ()
   const [attempt, setAttempt] = useState(0)
   // 空串 = 默认（同一条画布上更早的最近一条）；点名后带 ?with= 取任意一条已结束运行。
   const [withId, setWithId] = useState('')
+  // 当前展开差异的节点与那一次请求的状态；同一时间只开一个，换对照对象时收起。
+  const [diffOpen, setDiffOpen] = useState('')
+  const [diffState, setDiffState] = useState<DiffState | null>(null)
+  // 换对照对象时，上一次差异请求可能还在路上；用序号把晚到的结果丢掉。
+  const diffSeq = useRef(0)
 
   // 只有点在「重新读取」或换了对照对象时才同步切回加载态：effect 里同步 setState 会多一轮渲染，
   // 首屏的 loading 已由 useState 初值给出（弹窗每次打开都是新挂载）。
@@ -133,6 +208,35 @@ export function RunCompareModal({ runId, onClose }: { runId: string; onClose: ()
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
+
+  const loadDiff = (nodeId: string) => {
+    if (!data || !data.comparable) return
+    const seq = diffSeq.current + 1
+    diffSeq.current = seq
+    setDiffState({ nodeId, status: 'loading' })
+    getRunOutputDiff(runId, data.previous.id, nodeId)
+      .then((result) => {
+        if (seq !== diffSeq.current) return
+        setDiffState({ nodeId, status: 'ready', data: result })
+      })
+      .catch((caught) => {
+        if (seq !== diffSeq.current) return
+        setDiffState({
+          nodeId,
+          status: 'error',
+          message: caught instanceof Error ? caught.message : '输出差异没有读出来',
+        })
+      })
+  }
+
+  const toggleDiff = (nodeId: string) => {
+    if (diffOpen === nodeId) {
+      setDiffOpen('')
+      return
+    }
+    setDiffOpen(nodeId)
+    loadDiff(nodeId)
+  }
 
   return (
     <div className="vq-modal-backdrop rc-backdrop" onMouseDown={onClose}>
@@ -164,6 +268,9 @@ export function RunCompareModal({ runId, onClose }: { runId: string; onClose: ()
               onChange={(value) => {
                 if (value === withId) return
                 setWithId(value)
+                diffSeq.current += 1
+                setDiffOpen('')
+                setDiffState(null)
                 setLoading(true)
                 setError('')
               }}
@@ -270,7 +377,24 @@ export function RunCompareModal({ runId, onClose }: { runId: string; onClose: ()
                     </div>
                     <div className="rc-changes" role="cell">
                       {chips.map((chip) => <span className={'rc-chip is-' + chip.key} key={chip.key}>{chip.label}</span>)}
+                      {node.outputChanged && node.current && node.previous ? (
+                        <button
+                          type="button"
+                          className={'rc-diff-toggle' + (diffOpen === node.id ? ' is-open' : '')}
+                          aria-expanded={diffOpen === node.id}
+                          onClick={() => toggleDiff(node.id)}
+                        >
+                          <FileDiff size={12} />
+                          {diffOpen === node.id ? '收起差异' : '看改了哪几行'}
+                        </button>
+                      ) : null}
                     </div>
+                    {diffOpen === node.id ? (
+                      <OutputDiffPanel
+                        state={diffState?.nodeId === node.id ? diffState : { nodeId: node.id, status: 'loading' }}
+                        onRetry={() => loadDiff(node.id)}
+                      />
+                    ) : null}
                   </div>
                 )
               })}
@@ -279,7 +403,7 @@ export function RunCompareModal({ runId, onClose }: { runId: string; onClose: ()
         )}
 
         <footer className="rc-foot">
-          <span>输出按完整内容比对，首段只用于辨认；差值 = 当前 − 对照，两次运行都没有被改动。</span>
+          <span>输出按完整内容比对，首段只用于辨认；差值 = 当前 − 对照，看差异也是只读，两次运行都没有被改动。</span>
           <button type="button" className="vq-button vq-button--primary vq-button--sm" onClick={onClose}>关闭</button>
         </footer>
       </div>

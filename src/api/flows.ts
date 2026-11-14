@@ -242,6 +242,32 @@ export const getRunCompare = (id: string, withId = '') =>
     '/api/runs/' + encodeURIComponent(id) + '/compare' + (withId ? '?with=' + encodeURIComponent(withId) : ''),
   )
 
+/** 一个节点的输出差异（v0.9.112）：只取改动附近的几行，不把整份输出搬回来。 */
+export type RunDiffLine = {
+  op: 'same' | 'add' | 'del' | 'skip'
+  text?: string
+  oldNo?: number
+  newNo?: number
+  count?: number
+}
+
+export type RunOutputDiff = {
+  ok: true
+  nodeId: string
+  title: string
+  kind: FlowNodeKind
+  outputKind: 'text' | 'json' | 'empty' | 'mixed'
+  stats: { same: number; added: number; removed: number }
+  lines: RunDiffLine[]
+  /** 内容超过 2.4 万字符 / 1200 行，或差异超过 260 行：只比了一部分 */
+  truncated: boolean
+}
+
+export const getRunOutputDiff = (id: string, withId: string, nodeId: string) =>
+  request<RunOutputDiff>(
+    '/api/runs/' + encodeURIComponent(id) + '/compare/diff?with=' + encodeURIComponent(withId) + '&node=' + encodeURIComponent(nodeId),
+  )
+
 export type RunList = { items: RunRecord[]; total: number; offset: number; limit: number }
 
 export type RunQuery = {

@@ -31,7 +31,7 @@ import { quotaRefusal } from '../quota.mjs'
 import { enter, leave } from '../gate.mjs'
 import { admitWaiting, capacityFor, queueView, watchClientGone } from '../waterline.mjs'
 import { publicError } from '../public-error.mjs'
-import { buildRunCompare, compareSideOf } from '../run-compare.mjs'
+import { buildRunCompare, buildRunOutputDiff, compareSideOf } from '../run-compare.mjs'
 
 // /api/flows 与 /api/runs 共用一个 router：
 // index.mjs 会按 prefix + extraPrefixes 分发，因此两个前缀都进到这里。
@@ -41,6 +41,7 @@ const FLOW_RESUME_PLAN = /^\/api\/flows\/([\w-]+)\/resume-plan$/
 const RUN_ITEM = /^\/api\/runs\/([\w-]+)$/
 const RUN_STOP = /^\/api\/runs\/([\w-]+)\/stop$/
 const RUN_COMPARE = /^\/api\/runs\/([\w-]+)\/compare$/
+const RUN_COMPARE_DIFF = /^\/api\/runs\/([\w-]+)\/compare\/diff$/
 
 function isOwnPath(pathname) {
   return (
@@ -293,6 +294,56 @@ export function createFlowsRouter() {
           return true
         }
         sendJson(res, 200, { ...base, ...buildRunCompare(run, previous) })
+        return true
+      }
+
+      // 单节点输出差异（v0.9.112）：只读、按需。对照表只说「输出变了」，
+      // 这里才把改动附近的几行取回来；整份输出与第一版一样不搬。
+      const runDiffMatch = pathname.match(RUN_COMPARE_DIFF)
+      if (runDiffMatch) {
+        if (req.method !== 'GET') {
+          res.setHeader('Allow', 'GET')
+          sendJson(res, 405, { error: '只支持 GET' })
+          return true
+        }
+        const run = await getRun(runDiffMatch[1], user)
+        if (!run) {
+          notFound(res, '运行记录不存在')
+          return true
+        }
+        const withId = String(url.searchParams.get('with') || '').trim()
+        const nodeId = String(url.searchParams.get('node') || '').trim()
+        if (!withId) {
+          sendJson(res, 400, { error: '要看输出差异，得先指定对照哪一条运行' })
+          return true
+        }
+        if (withId === run.id) {
+          sendJson(res, 400, { error: '不能拿这条运行和它自己对照' })
+          return true
+        }
+        if (!nodeId) {
+          sendJson(res, 400, { error: '要看输出差异，得先指定哪一个节点' })
+          return true
+        }
+        const previous = await getRun(withId, user)
+        if (!previous) {
+          notFound(res, '要对照的那条运行不存在')
+          return true
+        }
+        if (previous.flowId !== run.flowId) {
+          sendJson(res, 400, { error: '这两条运行不在同一张画布上（可能已经分版），不能逐节点对照' })
+          return true
+        }
+        if (previous.status === 'running' || previous.status === 'queued') {
+          sendJson(res, 409, { error: '要对照的那条运行还没跑完，等它结束再看' })
+          return true
+        }
+        const diff = buildRunOutputDiff(run, previous, nodeId)
+        if (!diff) {
+          notFound(res, '这两条运行里都没有这个节点')
+          return true
+        }
+        sendJson(res, 200, { ok: true, ...diff })
         return true
       }
 

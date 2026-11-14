@@ -154,6 +154,75 @@
 .rc-chip.is-status,
 .rc-chip.is-revision { color: var(--warn); border-color: rgba(138, 91, 8, .26); background: var(--warn-soft); }
 .rc-chip.is-added { color: var(--pass); border-color: rgba(23, 107, 67, .24); background: var(--pass-soft); }
+/* 输出差异（v0.9.112）：只出现改动附近的行；新增绿、删除红，行号与符号都等宽。 */
+.rc-diff-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: var(--chip-tag-h);
+  padding: 0 var(--chip-pad-tight);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: var(--text-mono);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
+}
+.rc-diff-toggle:hover { border-color: var(--line-strong); color: var(--text); }
+.rc-diff-toggle.is-open { border-color: var(--line-strong); color: var(--text); background: var(--surface-raised); }
+.rc-diff {
+  grid-column: 1 / -1;
+  margin-top: var(--space-2);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.rc-diff-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--line-faint);
+}
+.rc-diff-head strong { font-size: var(--text-xs); font-weight: var(--weight-medium); }
+.rc-diff-head .vq-mono { color: var(--faint); font-size: var(--text-mono); }
+.rc-diff-stats { margin-left: auto; color: var(--muted); }
+.rc-diff-lines {
+  max-height: 360px;
+  overflow: auto;
+  padding: var(--space-1) 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-mono);
+  line-height: 1.7;
+}
+.rc-diff-line {
+  display: grid;
+  grid-template-columns: 32px 32px 16px minmax(0, 1fr);
+  gap: var(--space-1);
+  padding: 0 var(--space-2);
+}
+.rc-diff-line.is-add { background: var(--pass-soft); }
+.rc-diff-line.is-del { background: var(--fail-soft); }
+.rc-diff-no { color: var(--faint); text-align: right; font-variant-numeric: tabular-nums; user-select: none; }
+.rc-diff-sign { color: var(--faint); text-align: center; user-select: none; }
+.rc-diff-line.is-add .rc-diff-sign { color: var(--pass); }
+.rc-diff-line.is-del .rc-diff-sign { color: var(--fail); }
+.rc-diff-text { min-width: 0; color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; }
+.rc-diff-line.is-add .rc-diff-text { color: var(--pass); }
+.rc-diff-line.is-del .rc-diff-text { color: var(--fail); }
+.rc-diff-skip {
+  padding: var(--space-1) var(--space-3);
+  color: var(--faint);
+  font-size: var(--text-mono);
+  text-align: center;
+  user-select: none;
+}
+.rc-diff-state { display: flex; align-items: center; gap: var(--space-2); margin: 0; padding: var(--space-2) var(--space-3); color: var(--muted); font-size: var(--text-xs); }
+.rc-diff-state.is-error { flex-wrap: wrap; color: var(--fail); }
+.rc-diff-cut { margin: 0; padding: var(--space-2) var(--space-3); border-top: 1px solid var(--line-faint); color: var(--faint); font-size: var(--text-mono); line-height: 1.6; }
 .rc-state { display: grid; place-items: center; gap: var(--space-3); padding: var(--space-12) var(--space-6); color: var(--muted); font-size: var(--text-sm); text-align: center; }
 .rc-state.is-error p { margin: 0; color: var(--fail); }
 .rc-alone { padding: var(--space-4) var(--space-6) var(--space-2); }

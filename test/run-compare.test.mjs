@@ -18,7 +18,7 @@ process.env.VQ_WATER_GUARD = '0'
 process.env.VQ_RUN_QUEUE_MS = '0'
 isolateLeaseDir('vq-lease-run-compare-')
 
-const { buildRunCompare } = await import('../server/run-compare.mjs')
+const { buildRunCompare, buildRunOutputDiff } = await import('../server/run-compare.mjs')
 const flows = await import('../server/flows.mjs')
 const { createFlowsRouter } = await import('../server/routes/flows.mjs')
 
@@ -143,6 +143,84 @@ test('逐节点对照：新增、移除、状态、输出、输入或配置分�
   assert.equal(added.msDelta, null)
 })
 
+test('输出差异只列改动附近的行：新增、删除各一行，长行折开，JSON 按字段排序', () => {
+  const current = runFixture({
+    id: 'run_new',
+    nodes: [
+      {
+        id: 'script',
+        kind: 'llm',
+        title: '脚本',
+        status: 'success',
+        ms: 100,
+        output: { text: '第一行\n第二行 · 新版\n第三行\n第四行' },
+      },
+      {
+        id: 'sheet',
+        kind: 'llm',
+        title: '分镜',
+        status: 'success',
+        ms: 100,
+        output: { b: 3, a: 1 },
+      },
+    ],
+  })
+  const previous = runFixture({
+    id: 'run_old',
+    nodes: [
+      {
+        id: 'script',
+        kind: 'llm',
+        title: '脚本',
+        status: 'success',
+        ms: 100,
+        output: { text: '第一行\n第二行 · 旧版\n第三行\n第四行' },
+      },
+      {
+        id: 'sheet',
+        kind: 'llm',
+        title: '分镜',
+        status: 'success',
+        ms: 100,
+        output: { b: 2, a: 1 },
+      },
+    ],
+  })
+
+  const textDiff = buildRunOutputDiff(current, previous, 'script')
+  assert.equal(textDiff.outputKind, 'text')
+  assert.equal(textDiff.stats.added, 1)
+  assert.equal(textDiff.stats.removed, 1)
+  assert.equal(textDiff.lines.some((line) => line.op === 'del' && line.text.includes('旧版')), true)
+  assert.equal(textDiff.lines.some((line) => line.op === 'add' && line.text.includes('新版')), true)
+  assert.equal(textDiff.lines.some((line) => line.op === 'same' && line.text === '第一行'), true)
+  assert.equal(textDiff.truncated, false)
+  // 差异接口只给改动附近的行，不算完整输出
+  assert.equal(JSON.stringify(textDiff).includes('"output":'), false)
+
+  const jsonDiff = buildRunOutputDiff(current, previous, 'sheet')
+  assert.equal(jsonDiff.outputKind, 'json')
+  assert.equal(jsonDiff.stats.added, 1)
+  assert.equal(jsonDiff.stats.removed, 1)
+  assert.equal(jsonDiff.lines.some((line) => line.op === 'del' && line.text.includes('"b": 2')), true)
+  assert.equal(jsonDiff.lines.some((line) => line.op === 'add' && line.text.includes('"b": 3')), true)
+
+  // 单行几千字也不返回一整行：按 160 字折开，仍能看见改动落在哪一段
+  const longBefore = '甲'.repeat(500) + '旧' + '乙'.repeat(500)
+  const longAfter = '甲'.repeat(500) + '新' + '乙'.repeat(500)
+  const longCurrent = runFixture({ id: 'run_new', nodes: [{ id: 'long', kind: 'llm', title: '长文', status: 'success', ms: 1, output: { text: longAfter } }] })
+  const longPrevious = runFixture({ id: 'run_old', nodes: [{ id: 'long', kind: 'llm', title: '长文', status: 'success', ms: 1, output: { text: longBefore } }] })
+  const longDiff = buildRunOutputDiff(longCurrent, longPrevious, 'long')
+  assert.equal(longDiff.stats.added > 0, true)
+  assert.equal(longDiff.lines.every((line) => line.op === 'skip' || Array.from(line.text || '').length <= 160), true)
+
+  // 超过 2.4 万字符：如实标 truncated，不假装比完了全文
+  const hugeCurrent = runFixture({ id: 'run_new', nodes: [{ id: 'huge', kind: 'llm', title: '超长', status: 'success', ms: 1, output: { text: '甲'.repeat(30000) + '新' } }] })
+  const hugePrevious = runFixture({ id: 'run_old', nodes: [{ id: 'huge', kind: 'llm', title: '超长', status: 'success', ms: 1, output: { text: '甲'.repeat(30000) + '旧' } }] })
+  const hugeDiff = buildRunOutputDiff(hugeCurrent, hugePrevious, 'huge')
+  assert.equal(hugeDiff.truncated, true)
+})
+
 test('输出键顺序不同不算改动；两条老运行没有指纹时 graph 如实标 unknown', () => {
   const current = runFixture({
     id: 'run_new',
@@ -262,4 +340,23 @@ test('对照接口：默认找上一条；第一条说清楚没得比；跨画�
   assert.equal(picked.body.current.id, first.id)
   assert.equal(picked.body.previous.id, third.id)
   assert.equal(picked.body.graph.changed, true)
+
+  // 单节点输出差异：只读、按需，返回改动附近的行，不返回完整输出
+  const diff = await get(router, '/api/runs/' + third.id + '/compare/diff?with=' + first.id + '&node=in')
+  assert.equal(diff.status, 200)
+  assert.equal(diff.body.nodeId, 'in')
+  assert.equal(diff.body.outputKind, 'text')
+  assert.equal(diff.body.stats.added, 1)
+  assert.equal(diff.body.stats.removed, 1)
+  assert.equal(diff.body.lines.some((line) => line.op === 'del' && line.text.includes('第一次的输入')), true)
+  assert.equal(diff.body.lines.some((line) => line.op === 'add' && line.text.includes('第三次的输入')), true)
+  assert.equal(JSON.stringify(diff.body).includes('"output":'), false)
+
+  assert.equal((await get(router, '/api/runs/' + third.id + '/compare/diff?node=in')).status, 400)
+  assert.equal((await get(router, '/api/runs/' + third.id + '/compare/diff?with=' + first.id)).status, 400)
+  assert.equal((await get(router, '/api/runs/' + third.id + '/compare/diff?with=' + third.id + '&node=in')).status, 400)
+  assert.equal((await get(router, '/api/runs/' + third.id + '/compare/diff?with=' + first.id + '&node=nope')).status, 404)
+  const crossDiff = await get(router, '/api/runs/' + third.id + '/compare/diff?with=' + otherRun.id + '&node=in')
+  assert.equal(crossDiff.status, 400)
+  assert.match(crossDiff.body.error, /同一张画布/)
 })

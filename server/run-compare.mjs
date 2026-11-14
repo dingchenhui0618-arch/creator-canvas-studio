@@ -33,6 +33,182 @@ function previewOf(output) {
   return oneLine.length > PREVIEW_MAX ? oneLine.slice(0, PREVIEW_MAX) + '…' : oneLine
 }
 
+// 输出差异（v0.9.112）：知道「输出变了」还不够，人要看是哪几行变了。
+// 对照本身仍不搬完整输出：差异只在被点名的那一个节点上现算，返回的是改动附近的短行，
+// 两端各最多 2.4 万字符、每行最多 160 字符、差异最多 260 行；超了就如实写「只比了前面」。
+const DIFF_TEXT_MAX = 24000
+const DIFF_LINE_MAX = 160
+const DIFF_LINES_MAX = 1200
+const DIFF_OUT_MAX = 260
+const DIFF_CONTEXT = 3
+
+/** 对象输出按排好序的 JSON 展开，字段改名/改值能落在具体行上，不受键顺序影响。 */
+function sortedJson(value) {
+  if (Array.isArray(value)) return value.map(sortedJson)
+  if (value && typeof value === 'object') {
+    const out = {}
+    for (const key of Object.keys(value).sort()) out[key] = sortedJson(value[key])
+    return out
+  }
+  return value
+}
+
+function outputBody(output) {
+  if (output === null || output === undefined) return { text: '', kind: 'empty' }
+  if (typeof output === 'string') return { text: output, kind: 'text' }
+  if (typeof output === 'object' && typeof output.text === 'string') return { text: output.text, kind: 'text' }
+  return { text: JSON.stringify(sortedJson(output), null, 2) ?? '', kind: 'json' }
+}
+
+function displayLines(text) {
+  let clipped = false
+  let source = String(text ?? '')
+  if (source.length > DIFF_TEXT_MAX) {
+    source = source.slice(0, DIFF_TEXT_MAX)
+    clipped = true
+  }
+  source = source.replace(/\r\n?/g, '\n')
+  const lines = []
+  for (const raw of source.split('\n')) {
+    if (!raw) {
+      lines.push('')
+      continue
+    }
+    // 长段落按 160 字折开：单行几千字时，逐行比较仍能看见改动落在哪一段。
+    const chars = Array.from(raw)
+    for (let index = 0; index < chars.length; index += DIFF_LINE_MAX) {
+      lines.push(chars.slice(index, index + DIFF_LINE_MAX).join(''))
+    }
+  }
+  if (lines.length > DIFF_LINES_MAX) {
+    lines.length = DIFF_LINES_MAX
+    clipped = true
+  }
+  return { lines, clipped }
+}
+
+/** 行级 LCS。两边都已被 displayLines 收在 1200 行内，DP 最多约 1.4M 格。 */
+function diffLines(before, after) {
+  const n = before.length
+  const m = after.length
+  const width = m + 1
+  const dp = new Uint32Array((n + 1) * width)
+  for (let i = n - 1; i >= 0; i -= 1) {
+    for (let j = m - 1; j >= 0; j -= 1) {
+      const at = i * width + j
+      dp[at] = before[i] === after[j]
+        ? dp[(i + 1) * width + j + 1] + 1
+        : Math.max(dp[(i + 1) * width + j], dp[i * width + j + 1])
+    }
+  }
+  const ops = []
+  let i = 0
+  let j = 0
+  let oldNo = 1
+  let newNo = 1
+  while (i < n && j < m) {
+    if (before[i] === after[j]) {
+      ops.push({ op: 'same', text: before[i], oldNo, newNo })
+      i += 1
+      j += 1
+      oldNo += 1
+      newNo += 1
+    } else if (dp[(i + 1) * width + j] >= dp[i * width + j + 1]) {
+      ops.push({ op: 'del', text: before[i], oldNo })
+      i += 1
+      oldNo += 1
+    } else {
+      ops.push({ op: 'add', text: after[j], newNo })
+      j += 1
+      newNo += 1
+    }
+  }
+  while (i < n) {
+    ops.push({ op: 'del', text: before[i], oldNo })
+    i += 1
+    oldNo += 1
+  }
+  while (j < m) {
+    ops.push({ op: 'add', text: after[j], newNo })
+    j += 1
+    newNo += 1
+  }
+  return ops
+}
+
+/** 只留改动前后 3 行；两段改动离得近就并成一段，离得远写「N 行未变」。 */
+function hunkLines(ops) {
+  const changes = []
+  ops.forEach((item, index) => { if (item.op !== 'same') changes.push(index) })
+  if (!changes.length) return { lines: [], truncated: false }
+  const ranges = []
+  for (const index of changes) {
+    const start = Math.max(0, index - DIFF_CONTEXT)
+    const end = Math.min(ops.length, index + DIFF_CONTEXT + 1)
+    const last = ranges[ranges.length - 1]
+    if (last && start <= last.end) last.end = Math.max(last.end, end)
+    else ranges.push({ start, end })
+  }
+  const lines = []
+  let truncated = false
+  let cursor = 0
+  for (const range of ranges) {
+    if (range.start > cursor) {
+      if (lines.length >= DIFF_OUT_MAX) { truncated = true; break }
+      lines.push({ op: 'skip', count: range.start - cursor })
+    }
+    for (let index = range.start; index < range.end; index += 1) {
+      if (lines.length >= DIFF_OUT_MAX) { truncated = true; break }
+      lines.push(ops[index])
+    }
+    if (truncated) break
+    cursor = range.end
+  }
+  if (!truncated && cursor < ops.length) {
+    if (lines.length >= DIFF_OUT_MAX) truncated = true
+    else lines.push({ op: 'skip', count: ops.length - cursor })
+  }
+  return { lines, truncated }
+}
+
+/**
+ * 一个节点的输出差异。节点在两条运行里都不存在时返回 null；
+ * 新增 / 移除的节点也能算（另一侧按空输出），页面目前只对「输出变了」的节点给入口。
+ */
+export function buildRunOutputDiff(current, previous, nodeId) {
+  const id = String(nodeId || '')
+  const currentNodes = Array.isArray(current?.nodes) ? current.nodes : []
+  const previousNodes = Array.isArray(previous?.nodes) ? previous.nodes : []
+  const now = currentNodes.find((node) => String(node?.id || '') === id) || null
+  const before = previousNodes.find((node) => String(node?.id || '') === id) || null
+  if (!now && !before) return null
+
+  const nowBody = outputBody(now?.output)
+  const beforeBody = outputBody(before?.output)
+  const nowLines = displayLines(nowBody.text)
+  const beforeLines = displayLines(beforeBody.text)
+  const ops = diffLines(beforeLines.lines, nowLines.lines)
+  const added = ops.filter((item) => item.op === 'add').length
+  const removed = ops.filter((item) => item.op === 'del').length
+  const hunk = hunkLines(ops)
+
+  return {
+    nodeId: id,
+    title: String(now?.title || before?.title || ''),
+    kind: String(now?.kind || before?.kind || ''),
+    // text / json / empty；两边类型不同就是 mixed（例如之前是字符串，现在成了对象）
+    outputKind: nowBody.kind === beforeBody.kind ? nowBody.kind : 'mixed',
+    stats: {
+      same: ops.length - added - removed,
+      added,
+      removed,
+    },
+    lines: hunk.lines,
+    // 内容被截断与「差异行数超过上限」分开不写死：只要有一项发生，页面都提示「只比了一部分」
+    truncated: hunk.truncated || nowLines.clipped || beforeLines.clipped,
+  }
+}
+
 function nodeResultView(result) {
   if (!result) return null
   return {
