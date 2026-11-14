@@ -2214,3 +2214,37 @@ v0.9.110 起，对照接口写死「两条运行必须在同一张画布上」�
 提交 `6208971`；CI **43604312665** 三个 job 全 success（安全扫描、Node 24、Node 22.12）。
 
 回退：bash /opt/visionqa/ops/rollback.sh --to 1 → **v0.9.114**（--to 2 是 v0.9.113）。这一版不改已有 JSON schema：from 是请求参数，basedOn 是响应字段，nextScript 只在服务端使用；旧前端不传 from，行为与 v0.9.114 完全一致。细节、八条坑与「发现但没做」见 [以旧版为底再开一版](docs/project-version-rebase-2026-11-14.md)。
+
+## 一百八十三、回退版记得自己从哪来，改动按底座算（v0.9.116，2026-11-14）
+
+v0.9.115 能回到旧版，但回退后的版本行仍写「比 v3 画布改 1 个、脚本少 2 段」——这是相对上一版的实话，却不是用户此刻最想确认的「相对底座有没有改坏」。刷新之后 toast 也没了，v4 到底是从 v1 回来的还是从 v3 继续改的，版本列表里看不出来。这一轮把来源写进数据，让回退版跟自己的底座对账。
+
+- **来源跟着版本走**：作品与归档条目新增可选 `basedOn`；开新版时先把当前版的来源归档，再写新一版的来源。普通开版归零，只有「以旧版为底」才写那一版的版次。老数据没有这个字段就按 0，不报错。
+- **旧口径不动，另给一份底座对账**：`versionChanges` 仍算「比上一版」，旧前端不会把标签改错；新增 `versionBaseChanges`，只给底座不是上一版的版本，值为 `{ base, text }`。底座被删或不在表里时不给，页面回退到相邻比较。
+- **页面多一枚来源胶囊**：当前行与归档行都显示「以 v1 为底」；有底座对账时，改动句标签从「比 v3」换成「比 v1」，文字也按底座算。390 下标题被省略号截断，胶囊仍整枚可见。
+- **来源可持久**：v4 从 v1 回来，再开 v5 后 v4 归档，仍然标「以 v1 为底」；v5 接着 v4 改，不继承底座。
+- **不改历史**：不删除、不重排、不覆盖版本；评审、运行、交付记录仍按各自版次保存。
+
+| 本地实测（8951，VQ_REQUIRE_AUTH=1，零上游、零积分） | 读数 |
+| --- | --- |
+| 作品 / 版本 | `prj_71d6f37f`；v1 `flow_52018c5b` → v2 `flow_363846f8` → v3 `flow_a2da760f` → v4 `flow_682cbfda`（从 v1）→ v5 `flow_76665fbd` |
+| 回退后 | `project.basedOn=1`；v4 胶囊「以 v1 为底」；改动句「比 v1 画布与脚本都没动」；toast 写清来源 |
+| 再开 v5 | 项目 `basedOn=0`；归档 v4 `basedOn=1`、2 段脚本；v4 对账仍是 v1；v5 无底座 |
+| 归档未动 | v1 A、v2 B、v3 C（4 段）都在；v4 归档的是 A 2 段 |
+| 1440 | 五行 v5 / v4 / v3 / v2 / v1；页面 `scrollWidth 1440` |
+| 390 | 页面 `scrollWidth 390`；v4 行 109–349，动作组 125–333，来源胶囊在行内 |
+| 浏览器写入 | 2 次预期 `POST /versions`（回退 + 普通）；`PATCH` 0、脚本 `PUT` 0 |
+
+![1440：v4 当前，来源胶囊「以 v1 为底」，改动句按 v1 算](docs/project-version-base-current-2026-11-14.png)
+
+![1440：再开 v5 后，归档的 v4 仍带着来源，v5 不继承](docs/project-version-base-2026-11-14.png)
+
+![390：v4 标题被截断，但「以 v1 为底」仍在行内，动作组不溢出](docs/project-version-base-390-2026-11-14.png)
+
+全仓 **939/939**（新增 1 条纯函数用例 + 1 条接口用例；存储层与既有详情用例扩了断言），oxlint **0 error / 15 warning**（同一批基线），`tsc -b` 与 build 干净，官方密钥扫描 **673 文件 / 0**；入口 `index-Bz5YCDDW.js`（604,546 B）、画布 `CanvasPage-BvLBbn-K.js`（242,014 B）、后台 `AdminConsolePage-qxAdPJd0.js`（201,077 B）、主样式 `index-DAu7LslJ.css`（290,742 B）、画布样式 `CanvasPage-BX48Ugxj.css`（28,926 B）。入口比 v0.9.115 多 510 B，样式多 337 B，没有新增第三方依赖。
+
+生产部署 `20261114-150145-r126base`（快照 `20261114-150145-r126base.tar.gz` **1,041,448 B**）：四个 unit 全 active，8799 / 8800 / 公网都 **0.9.116**，`/api/health` ok（模板 26，部署后 uptime 39s）；入口 200 · 604,546 B、画布 242,014 B、后台 201,077 B、主样式 290,742 B、画布样式 28,926 B；服务端与前端哈希全部与本地一致（`projects a000b155` / `routes c0dbd9e8` / `version-diff 2758bbce` / 入口 `8e9566d2` / 画布 `6e50aa6c` / 后台 `c38cde92` / 主样式 `3c41c719` / 画布样式 `b49e8586`）；部署文件里 `normalizeBasedOn` 在 projects（4 处）、`versionBaseChangesOf` 在 version-diff（1 处）与 routes（2 处）、`versionBaseChanges` 在 routes（3 处）、`vq-version-lineage` 在样式里；未登录 POST `/api/projects/<id>/versions` 返回 **401**；心跳 pid 1490669 / 1490665，beatAt 15:02:17Z；盘 72%，`/tmp` 353M，日志没有业务 error。生产 9 条运行、0 条带 graph，`run-graphs` 还没有目录；生产没有登录账号做真实回退与真实详情读取，证据来自本地真浏览器 + 本地服务，零真实上游。
+
+提交 `aa5b083` + `33c2bc9`；首个提交的 CI 抓到一处 `currentScript` 漏声明（14 条详情用例失败），修复后 CI **43607577016** 三个 job 全 success（安全扫描、Node 22.12、Node 24）。
+
+回退：`bash /opt/visionqa/ops/rollback.sh --to 1` → **v0.9.115**（`--to 2` 是 v0.9.114）。这一版只新增可选字段 `basedOn` 与只读响应 `versionBaseChanges`，旧前端忽略新字段；回退后如果旧代码再写作品索引，来源字段会丢，但画布与脚本快照不受影响。细节、八条坑与「发现但没做」见 [回退版记得自己从哪来，改动按底座算](docs/project-version-base-2026-11-14.md)。
