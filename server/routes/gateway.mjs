@@ -11,7 +11,7 @@
 import { readBody, sendJson } from './_shared.mjs'
 import { authorizeGateway, createImageTask, createVideoTask, generateImage, listPoolModels, pollVideoTask } from '../gateway.mjs'
 import { config } from '../config.mjs'
-import { admitWaiting, canvasQueueView } from '../waterline.mjs'
+import { admitWaiting, canvasQueueView, coverReport } from '../waterline.mjs'
 
 const IMAGE_CREATE = new Set(['/api/gateway/v1/images/generations'])
 const IMAGE_CREATE_ASYNC = new Set(['/api/gateway/v1/images/generations/async'])
@@ -129,6 +129,14 @@ export function createGatewayRouter() {
       if (pathname === '/api/gateway/v1/queue' && req.method === 'GET') {
         const ticket = url.searchParams.get('ticket') || String(req.headers['x-vq-queue-ticket'] || '') || callerIdempotency
         sendJson(res, 200, canvasQueueView({ ticket }))
+        return true
+      }
+
+      // 封面缓存与两道闸门的整机读数（v0.9.94）：只读，不抓图、不占名额、不花钱。
+      // 和 /api/gateway/v1/queue 一样是给排障用的：两个实例各问一次，条目 / 字节 / 在途数
+      // 应该是同一个数（共享目录），pid 不相同——对不上就是目录没共用。
+      if (pathname === '/api/gateway/v1/covers' && req.method === 'GET') {
+        sendJson(res, 200, { ok: true, cover: coverReport() })
         return true
       }
 

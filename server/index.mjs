@@ -87,7 +87,7 @@ import { startAlertWatch } from './alerts.mjs'
 import { deepHealth } from './health.mjs'
 import { sitePublicView } from './site-info.mjs'
 import { storageRoom } from './storage.mjs'
-import { admit, capacityFor } from './waterline.mjs'
+import { admit, capacityFor, registerCoverStats } from './waterline.mjs'
 import { inheritedListenFd, listenMode } from './listen.mjs'
 import { checkNodeVersion, MIN_NODE } from './node-version.mjs'
 import { clearModelBlock, modelServiceState } from './service-state.mjs'
@@ -206,8 +206,9 @@ async function serveFile(res, file) {
   }
 }
 
-// 封面代理（v0.9.90）：抓一次就够，抓不到也有话说。缓存与两道闸门在 cover-cache.mjs，
-// 编排在 cover-proxy.mjs——这样「同一张抓几次」「同时几张在上游」都能在没有网络的情况下钉住。
+// 封面代理（v0.9.90 / v0.9.94）：抓一次就够，抓不到也有话说。编排在 cover-proxy.mjs，
+// 三层状态在 cover-store.mjs（共享目录，两个实例一份；目录不可用时退回 cover-cache.mjs 的进程内版）。
+// 这样「同一张抓几次」「同时几张在上游」都能在没有网络、不花额度的情况下钉住。
 const coverProxy = createCoverProxy({
   perMinute: config.limits.coverPerMinute,
   concurrency: config.limits.coverConcurrency,
@@ -216,9 +217,14 @@ const coverProxy = createCoverProxy({
   cacheBytes: config.limits.coverCacheMb * 1024 * 1024,
   cacheTtlMs: config.limits.coverCacheTtlMs,
   negativeTtlMs: config.limits.coverNegativeTtlMs,
+  // v0.9.94：两个实例共用一份（缓存、在途数、账号窗口）；目录不可用时自动退回进程内
+  dir: config.limits.coverCacheDir,
+  shared: config.limits.coverShared,
   log: (event, payload) => logEvent(event, payload),
 })
 const proxyImage = coverProxy.serve
+// 后台那一屏（/api/admin/waterline）与网关的只读诊断（/api/gateway/v1/covers）都从这里取
+registerCoverStats(() => coverProxy.stats())
 
 // ---- 积分与并发：一次「要花钱」的请求进来，先过并发闸门，再扣积分 ----
 // 返回 { cost, release }；余额不足/并发超限时直接写响应并返回 null。

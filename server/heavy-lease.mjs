@@ -253,6 +253,30 @@ export function leaseDirPath() {
 export const LEASE_LOCK_MISS = Symbol('lease-lock-miss')
 
 /**
+ * 在**任意**共享目录的跨进程锁里跑一段同步逻辑（v0.9.94）。
+ * 租约 / 排队位 / 封面缓存都靠这台机器的同一招互斥：mkdir 一个 .lock 目录，
+ * 拿到的人做「数一下 + 写一行」，做完 rmdir。锁只有几毫秒，没有心跳；
+ * 拿锁的进程死在中间，2 秒后按陈旧锁清掉。
+ * 目录不可用 / 拿不到锁时返回 LEASE_LOCK_MISS，由调用方决定怎么降级。
+ */
+export function withDirLock(dir, fn, options = {}) {
+  const target = path.resolve(String(dir || ''))
+  if (!target) return LEASE_LOCK_MISS
+  const waitMs = clampInt(options.waitMs ?? process.env.VQ_HEAVY_LEASE_LOCK_MS, 400, 20, 5000)
+  if (!ensureDir(target)) return LEASE_LOCK_MISS
+  if (!acquireLock(target, waitMs)) {
+    stats.lockMiss += 1
+    stats.lastError = '共享目录锁等待超时：' + target
+    return LEASE_LOCK_MISS
+  }
+  try {
+    return fn({ dir: target })
+  } finally {
+    releaseLock(target)
+  }
+}
+
+/**
  * 在共享目录的跨进程锁里跑一段**同步**逻辑（v0.9.93）。
  * 排队位的「数一下在等几条 + 登记自己」要和租约的「数一下在跑几条 + 占名额」用同一把锁：
  * 两个实例同时读、各自以为还有一个空位，就会一起放行——锁是唯一挡住这件事的东西。
@@ -260,19 +284,10 @@ export const LEASE_LOCK_MISS = Symbol('lease-lock-miss')
  */
 export function withLeaseDirLock(fn) {
   const cfg = leaseConfig()
+  // 关掉共享租约（VQ_HEAVY_LEASE=0）时整条机制都不该生效：这里沿用同一个开关，
+  // 排队位也跟着回进程内——两层的口径必须一起退，否则「整机 2 条、排队整机 8 位」会各说各的。
   if (!cfg.enabled) return LEASE_LOCK_MISS
-  const dir = path.resolve(cfg.dir)
-  if (!ensureDir(dir)) return LEASE_LOCK_MISS
-  if (!acquireLock(dir, cfg.lockWaitMs)) {
-    stats.lockMiss += 1
-    stats.lastError = '共享目录锁等待超时'
-    return LEASE_LOCK_MISS
-  }
-  try {
-    return fn({ dir, cfg })
-  } finally {
-    releaseLock(dir)
-  }
+  return withDirLock(cfg.dir, fn, { waitMs: cfg.lockWaitMs })
 }
 
 function makeLease(dir, cfg, kind, name) {

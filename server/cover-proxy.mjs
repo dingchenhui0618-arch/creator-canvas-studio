@@ -4,14 +4,18 @@
 // 一屏模板库 40 张封面，翻两次页就是 80 次上游请求；两个人同时翻，内存里十几份整图，
 // 2 核 / 1.86GB 的机器上慢的是所有人的页面，极端时直接 OOM。
 //
-// 现在三层，各管一件事（状态都在 cover-cache.mjs 里，这里只做编排）：
+// 现在三层，各管一件事（共享目录版状态在 cover-store.mjs，这里只做编排）：
 //   缓存命中 → 直接回，不打上游、不吃限流（最便宜的那种请求）
 //   要抓    → 先过按账号限流（每分钟几次），再过整机名额（同一刻几张在上游，满了排一会儿）
 //   抓不到  → 记一笔负缓存，60 秒内同一个地址不再去上游
 // 响应带一个 X-VQ-Cover: hit|miss|limited|busy|bad，排障时不用猜这张是从哪来的。
+//
+// v0.9.94：三层都从「进程内」换成「共享目录一份」（dir 非空且 shared 为真时）。
+// 两个实例看同一个缓存、同一个在途数与同一个账号窗口——否则「整机 4 张在上游」
+// 实际是 8 张，同一张封面两个实例各抓一次、各占一份内存。
 
 import { fetchPublic } from './media.mjs'
-import { createCoverCache, createSemaphore, createWindowLimiter } from './cover-cache.mjs'
+import { createCoverStore } from './cover-store.mjs'
 
 const IMAGE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122 Safari/537.36'
 export const COVER_MAX_BYTES = 8 * 1024 * 1024
@@ -99,16 +103,22 @@ export function createCoverProxy({
   cacheBytes = 24 * 1024 * 1024,
   cacheTtlMs = 10 * 60 * 1000,
   negativeTtlMs = 60 * 1000,
+  // 共享目录：给了就用整机一份的缓存 / 窗口 / 在途数；不给就是进程内（单测的默认）。
+  dir = '',
+  shared = true,
   log = () => {},
 } = {}) {
-  const cache = createCoverCache({
+  const store = createCoverStore({
+    dir,
+    shared,
     maxEntries: cacheEntries,
     maxBytes: cacheBytes,
     ttlMs: cacheTtlMs,
     negativeTtlMs,
+    perMinute,
+    concurrency,
+    waitMs,
   })
-  const rate = createWindowLimiter({ max: perMinute, windowMs: 60 * 1000 })
-  const slots = createSemaphore(concurrency)
 
   async function serve(res, target, cacheKey = 'anonymous') {
     let url
@@ -119,20 +129,20 @@ export function createCoverProxy({
       return coverReply(res, 404, 'image unavailable', { state: 'bad' })
     }
     const key = url.href
-    const cached = cache.get(key)
+    const cached = await store.lookup(key)
     if (cached) {
       // 缓存命中：不打上游、也不吃限流。一屏 40 张封面重复出现时走的就是这条。
       if (cached.status === 200) return coverReply(res, 200, cached.buffer, { state: 'hit', type: cached.type })
       return coverReply(res, 404, 'image unavailable', { state: 'hit' })
     }
     // 只有「要真去抓」的请求吃限流：上限是「每分钟抓几次上游」，不是「看几次封面」
-    const allowed = rate.take(cacheKey)
+    const allowed = await store.takeQuota(cacheKey)
     if (!allowed.ok) {
       log('cover.refused', { state: 'limited', host: url.host, retryAfterSec: allowed.retryAfterSec })
       return coverReply(res, 429, 'image unavailable', { state: 'limited', retryAfterSec: allowed.retryAfterSec })
     }
-    const gotSlot = await slots.acquire(waitMs)
-    if (!gotSlot) {
+    const slot = await store.acquireSlot(waitMs)
+    if (!slot) {
       log('cover.refused', { state: 'busy', host: url.host })
       return coverReply(res, 503, 'image unavailable', { state: 'busy', retryAfterSec: 2 })
     }
@@ -140,18 +150,20 @@ export function createCoverProxy({
       const hit = await fetchImage(url)
       if (!hit) {
         // 抓不到也记一笔：一屏 40 张坏封面不该在每次渲染时各重试一遍
-        cache.putMiss(key)
+        await store.rememberMiss(key)
         return coverReply(res, 404, 'image unavailable', { state: 'miss' })
       }
-      cache.put(key, hit)
+      await store.remember(key, hit)
       return coverReply(res, 200, hit.buffer, { state: 'miss', type: hit.type })
     } finally {
-      slots.release()
+      store.releaseSlot(slot)
     }
   }
 
   return {
     serve,
-    stats: () => ({ ...cache.stats(), inFlight: slots.active, waiting: slots.waiting, accounts: rate.size() }),
+    // scope=lease 表示条目数 / 字节 / 在途数是整机口径；hits/misses/waiting 是本进程计数
+    stats: () => store.report(),
+    store,
   }
 }

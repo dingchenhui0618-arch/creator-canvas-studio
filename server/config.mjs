@@ -132,6 +132,11 @@ export const config = {
     coverCacheMb: numEnv(process.env.VQ_COVER_CACHE_MB, 24),
     coverCacheTtlMs: numEnv(process.env.VQ_COVER_CACHE_TTL_MS, 10 * 60 * 1000),
     coverNegativeTtlMs: numEnv(process.env.VQ_COVER_NEGATIVE_TTL_MS, 60 * 1000),
+    // 共享目录（v0.9.94）：缓存条目 / 字节 / 在途数 / 账号窗口从「每进程一份」变成整机一份。
+    // 那个「整机 4 张在上游」从 v0.9.90 起实际是每进程 4 张（叠起来 8 张），和名额同一个毛病。
+    // 默认开；VQ_COVER_SHARED=0 退回进程内，报告里 scope 会如实写 process。
+    coverShared: process.env.VQ_COVER_SHARED !== '0',
+    coverCacheDir: String(process.env.VQ_COVER_CACHE_DIR || '').trim() || path.join(os.tmpdir(), 'visionqa-cover-cache-v1'),
   },
   // 智能体「网页读取」：只抓用户贴出来的公开网页，限制超时、体积与正文长度，
   // 避免一个超长页面把上下文顶爆或把请求挂住。

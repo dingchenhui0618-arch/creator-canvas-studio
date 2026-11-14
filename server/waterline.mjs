@@ -153,6 +153,20 @@ export function globalHeavyCap(level = 'ok') {
   return raw
 }
 
+// 封面代理的计数在 index.mjs 里组装（它才知道 config 与目录）。这里只存一个取值函数：
+// 反过来 import cover-proxy 会让 waterline 依赖一个只在服务启动时才存在的对象。
+let coverStatsProvider = null
+
+/** 启动时挂上（index.mjs）；传 null 摘掉。 */
+export function registerCoverStats(fn) {
+  coverStatsProvider = typeof fn === 'function' ? fn : null
+}
+
+/** 只读诊断用：没有挂上时回 null，不编一个空对象骗人。 */
+export function coverReport() {
+  return coverStatsProvider ? coverStatsProvider() : null
+}
+
 /** 给后台看的一屏：读数、判定、阈值、折算后的并发上限、全站正在跑几条。 */
 export function waterlineReport() {
   const limits = thresholds()
@@ -202,6 +216,9 @@ export function waterlineReport() {
       scope: lease.source,
       lease,
     },
+    // 封面这一路（v0.9.94）：条目 / 字节 / 在途数也是整机口径（共享目录），
+    // hits/misses/waiting 是本进程计数。没挂上（单测或没起封面代理）时是 null。
+    cover: coverStatsProvider ? coverStatsProvider() : null,
     memory,
     heap,
     cpu: { cores: os.cpus().length || 1, load1: round2(load[0]), load5: round2(load[1]), load15: round2(load[2]) },
@@ -212,6 +229,7 @@ export function waterlineReport() {
     heavyKinds: HEAVY_KINDS,
   }
 }
+
 
 function alertOnce(kind, verdict, reason) {
   const now = Date.now()
