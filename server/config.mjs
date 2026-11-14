@@ -121,6 +121,17 @@ export const config = {
     // 下载/探活类外部请求的超时：以前完全没设，一个不响应的源就能把进程挂住
     downloadTimeoutMs: Number(process.env.DOWNLOAD_TIMEOUT_MS || 120000),
     probeTimeoutMs: Number(process.env.PROBE_TIMEOUT_MS || 3000),
+    // 封面代理（v0.9.90）：/api/cover 以前是纯透传——一屏模板库 40 张封面，翻两次页
+    // 就是 80 次上游请求，每张最多 8MB 整段读进内存。现在同一张只抓一次，
+    // 一个账号每分钟最多抓 120 次（缓存命中不算），整机同一刻最多 4 张在上游，
+    // 满了先排 5 秒再拒。写 0 = 关掉对应那一层（退回旧的纯透传行为）。
+    coverPerMinute: numEnv(process.env.VQ_COVER_PER_MINUTE, 120),
+    coverConcurrency: numEnv(process.env.VQ_COVER_CONCURRENCY, 4),
+    coverWaitMs: numEnv(process.env.VQ_COVER_WAIT_MS, 5000),
+    coverCacheEntries: numEnv(process.env.VQ_COVER_CACHE_ENTRIES, 64),
+    coverCacheMb: numEnv(process.env.VQ_COVER_CACHE_MB, 24),
+    coverCacheTtlMs: numEnv(process.env.VQ_COVER_CACHE_TTL_MS, 10 * 60 * 1000),
+    coverNegativeTtlMs: numEnv(process.env.VQ_COVER_NEGATIVE_TTL_MS, 60 * 1000),
   },
   // 智能体「网页读取」：只抓用户贴出来的公开网页，限制超时、体积与正文长度，
   // 避免一个超长页面把上下文顶爆或把请求挂住。

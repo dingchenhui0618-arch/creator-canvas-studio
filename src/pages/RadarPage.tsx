@@ -24,6 +24,7 @@ import { ago, stampTime } from '../domain/share'
 import { createProject } from '../api/projects'
 import { ReplicateModal } from '../components/ReplicateModal'
 import { Select } from '../components/Select'
+import { CoverImage } from '../components/CoverImage'
 import PageHead from '../components/PageHead'
 import { getCredits, type CreditsResponse } from '../api/credits'
 import { Pill } from '../components/ui'
@@ -691,13 +692,14 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
             return (
               <article className="radar-card" key={item.id}>
                 <div className="radar-cover">
-                  {item.cover ? (
-                    <img src={coverSrc(item.cover)} alt="" loading="lazy" />
-                  ) : (
-                    <span className="radar-cover-empty">
-                      <span className="vq-mono">示例数据 · 无封面</span>
-                    </span>
-                  )}
+                  <CoverImage
+                    src={item.cover ? coverSrc(item.cover) : ''}
+                    fallback={(failed) => (
+                      <span className="radar-cover-empty">
+                        <span className="vq-mono">{failed ? '封面没抓到' : '示例数据 · 无封面'}</span>
+                      </span>
+                    )}
+                  />
                   <span className="radar-badge">{item.platformLabel}</span>
                   <span className="radar-duration"><Film size={11} />{formatDuration(item.durationSec)}</span>
                   {mark ? (

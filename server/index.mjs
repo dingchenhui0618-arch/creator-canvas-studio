@@ -91,10 +91,10 @@ import { admit, capacityFor } from './waterline.mjs'
 import { inheritedListenFd, listenMode } from './listen.mjs'
 import { checkNodeVersion, MIN_NODE } from './node-version.mjs'
 import { clearModelBlock, modelServiceState } from './service-state.mjs'
-import { fetchPublic } from './media.mjs'
 import { bdcStatus, canvasErrorMessage, listCanvases, createCanvas, appendCanvasNote } from './bdc.mjs'
 import { modelCatalog } from './models.mjs'
 import { distFileFor } from './static-path.mjs'
+import { createCoverProxy } from './cover-proxy.mjs'
 
 // 功能路由：每个模块自己处理 /api/<prefix> 下的请求，index.mjs 只管分发
 // auth 放最前面：/api/auth/* 永远不需要登录就能访问
@@ -206,54 +206,19 @@ async function serveFile(res, file) {
   }
 }
 
-const IMAGE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122 Safari/537.36'
-
-// 小红书 / 抖音的封面常以 http 下发，而 CDN 只认 https + 对应站点的 Referer（实测 http 直连 403、https 200）。
-// 所以先按原样试，失败再把协议升到 https 重试，都失败才返回 404。
-// 走 fetchPublic：内网地址直接拒，重定向逐跳校验，带超时。
-async function fetchCoverImage(url) {
-  const referer = /xhscdn|xiaohongshu/.test(url.host)
-    ? 'https://www.xiaohongshu.com'
-    : /douyinpic|douyin/.test(url.host)
-      ? 'https://www.douyin.com'
-      : url.origin
-  const attempt = async (target) => {
-    const { response } = await fetchPublic(target, {
-      headers: { Referer: referer, 'User-Agent': IMAGE_UA },
-      timeoutMs: 15000,
-    })
-    const type = response.headers.get('content-type') || ''
-    if (!response.ok || !type.startsWith('image/')) return null
-    const buffer = Buffer.from(await response.arrayBuffer())
-    if (buffer.length > 8 * 1024 * 1024) return null
-    return { type, buffer }
-  }
-  const candidates = [url]
-  if (url.protocol === 'http:') candidates.push(new URL('https://' + url.host + url.pathname + url.search))
-  for (const candidate of candidates) {
-    try {
-      const hit = await attempt(candidate)
-      if (hit) return hit
-    } catch {
-      // 换下一个候选
-    }
-  }
-  return null
-}
-
-async function proxyImage(res, target) {
-  try {
-    const url = new URL(target)
-    if (!/^https?:$/.test(url.protocol)) throw new Error('bad protocol')
-    const hit = await fetchCoverImage(url)
-    if (!hit) throw new Error('not an image')
-    res.writeHead(200, { 'Content-Type': hit.type, 'Cache-Control': 'public, max-age=86400' })
-    res.end(hit.buffer)
-  } catch {
-    res.writeHead(404, { 'Content-Type': 'text/plain' })
-    res.end('image unavailable')
-  }
-}
+// 封面代理（v0.9.90）：抓一次就够，抓不到也有话说。缓存与两道闸门在 cover-cache.mjs，
+// 编排在 cover-proxy.mjs——这样「同一张抓几次」「同时几张在上游」都能在没有网络的情况下钉住。
+const coverProxy = createCoverProxy({
+  perMinute: config.limits.coverPerMinute,
+  concurrency: config.limits.coverConcurrency,
+  waitMs: config.limits.coverWaitMs,
+  cacheEntries: config.limits.coverCacheEntries,
+  cacheBytes: config.limits.coverCacheMb * 1024 * 1024,
+  cacheTtlMs: config.limits.coverCacheTtlMs,
+  negativeTtlMs: config.limits.coverNegativeTtlMs,
+  log: (event, payload) => logEvent(event, payload),
+})
+const proxyImage = coverProxy.serve
 
 // ---- 积分与并发：一次「要花钱」的请求进来，先过并发闸门，再扣积分 ----
 // 返回 { cost, release }；余额不足/并发超限时直接写响应并返回 null。
@@ -1019,7 +984,8 @@ const server = http.createServer(async (req, res) => {
           res.end('no cover')
           return
         }
-        return proxyImage(res, cover)
+        // 分享页的封面也走缓存；限流对象是这条分享链接本身（token 就是凭证）
+        return proxyImage(res, cover, 'share:' + token)
       }
       if (frameKind) {
         const frame = (shared.frames || []).find((entry) => String(entry.index) === String(frameIndex))
@@ -1079,7 +1045,8 @@ const server = http.createServer(async (req, res) => {
 
     if (pathname === '/api/cover') {
       const target = url.searchParams.get('url') || ''
-      return proxyImage(res, target)
+      // 限流按账号：一个人刷封面不该把整机的上游带宽与别人的页面一起拖慢
+      return proxyImage(res, target, user?.id ? 'user:' + user.id : 'anonymous')
     }
 
     // 生产环境静态托管 dist。路径先过 distFileFor：拼完必须还在 dist 里，

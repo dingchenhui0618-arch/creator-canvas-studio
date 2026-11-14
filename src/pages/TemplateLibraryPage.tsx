@@ -24,6 +24,7 @@ import { ReplicateModal } from '../components/ReplicateModal'
 import { TrashModal } from '../components/TrashModal'
 import { ReportModal } from '../components/ReportModal'
 import type { ReportTarget } from '../api/reports'
+import { CoverImage } from '../components/CoverImage'
 import PageHead from '../components/PageHead'
 import { Tag } from '../components/ui'
 import '../styles/radar.css'
@@ -451,7 +452,10 @@ export function TemplateLibraryPage({
           {items.map((item) => (
             <article className="template-card" key={item.id} onClick={() => openTemplate(item.id)}>
               <div className="template-cover">
-                {coverFor(item) ? <img src={coverFor(item)} alt="" loading="lazy" /> : <span className="template-cover-empty">{item.platformLabel || '没有封面'}</span>}
+                <CoverImage
+                  src={coverFor(item)}
+                  fallback={(failed) => <span className="template-cover-empty">{failed ? '封面没抓到' : item.platformLabel || '没有封面'}</span>}
+                />
                 <span className={'template-type' + (isParsed(item) ? '' : ' is-pending')}>{isParsed(item) ? item.contentType : '待解析'}</span>
                 <span className="radar-duration"><Film size={11} />{item.kind === 'flow' ? (item.flowNodes?.length ?? 0) + ' 节点' : formatDuration(item.durationSec)}</span>
               </div>
