@@ -20,7 +20,8 @@ NGINX_BIN=${NGINX_BIN:-/usr/sbin/nginx}
 CONF=${CONF:-/etc/nginx/conf.d/${DOMAIN}.conf}
 CERT_DIR=${CERT_DIR:-/etc/letsencrypt/live/${DOMAIN}}
 NGINX_DIR=$(dirname "$CONF")
-APP_CONF="$NGINX_DIR/${DOMAIN}.app.conf"
+# 片段叫 .inc 不叫 .conf：conf.d/*.conf 在 http 层被 include，带 location 的片段放那儿 nginx -t 会失败
+APP_CONF="$NGINX_DIR/${DOMAIN}.app.inc"
 RENDER="$APP_DIR/deploy/production/render-vhost.sh"
 
 log() { printf '\n== %s\n' "$*"; }

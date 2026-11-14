@@ -69,7 +69,7 @@ test('渲染：占位符全部替换，两份外壳都 include 同一个应用�
     __APP_DIR__: '/srv/app',
     __API_PORT__: '9001',
     __ACME_DIR__: '/var/acme',
-    __APP_CONF__: '/etc/nginx/conf.d/example.com.app.conf',
+    __APP_CONF__: '/etc/nginx/conf.d/example.com.app.inc',
     __CERT_DIR__: '/etc/letsencrypt/live/example.com',
     __ACCESS_LOG__: 'off',
     __HTTP_PORT__: '80',
@@ -77,7 +77,7 @@ test('渲染：占位符全部替换，两份外壳都 include 同一个应用�
   const http = renderTemplate(files.http, vars)
   const tls = renderTemplate(files.tls, vars)
   for (const text of [http, tls]) {
-    assert.ok(text.includes('include /etc/nginx/conf.d/example.com.app.conf;'))
+    assert.ok(text.includes('include /etc/nginx/conf.d/example.com.app.inc;'))
     assert.ok(!/__[A-Z_]+__/.test(text))
   }
   assert.ok(tls.includes('listen 443 ssl;'))
@@ -188,6 +188,14 @@ test('安装脚本重跑不许把 HTTPS 站点换回 HTTP', () => {
   assert.ok(install.includes('.bak-'), '覆盖线上配置前要留备份')
   const issues = mutated('install.sh', (text) => text.replace(/if \[ -d "\$CERT_DIR" \]; then[\s\S]*?fi\n/, ''))
   assert.ok(has(issues, '没判断证书是否已存在'))
+})
+
+test('应用段片段必须叫 .app.inc：叫 .conf 会被 http 层整段 include', () => {
+  // conf.d/*.conf 是在 http 层被 include 的：带 location 的片段放进去，nginx -t 直接失败
+  const issues = mutated('install.sh', (text) => text.replace('.app.inc', '.app.conf'))
+  assert.ok(has(issues, '不能叫 .app.conf'))
+  const clean = mutated('enable-https.sh', (text) => text.replace('.app.inc', '.app.conf'))
+  assert.ok(has(clean, '不能叫 .app.conf'))
 })
 
 test('应用段里出现 listen 或证书，检查器必须拦（那些归外壳）', () => {

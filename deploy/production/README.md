@@ -55,6 +55,9 @@ DOMAIN=VisionQA.wavisionai.cn bash deploy/production/install.sh
 
 - `install.sh` 第 7 步会自己判断：`/etc/letsencrypt/live/<域名>` 已存在就装 HTTPS 版外壳，否则装 HTTP 版；
   覆盖线上配置前先备份成 `<conf>.bak-<时间>`。**重跑安装不会把已经在跑 HTTPS 的站点换回 HTTP。**
+- 渲染出来的片段叫 `<域名>.app.inc`，**不能叫 `.conf`**：`conf.d/*.conf` 是在 http 层被 include 的，
+  一个带 `location` 的片段放在那里，`nginx -t` 会直接报 `location directive is not allowed here`。
+  （2026-11-14 第一次在生产上渲染就撞到了，`nginx -t` 挡住 reload，站点没受影响。）
 - 访问日志：机器上有 `log_format visits` 就照写，没有就 `off`（写一个不存在的格式名会让 `nginx -t` 直接失败）。
 - 以前两份脚本各自内联一整段 vhost，线上手改过的东西（私有图 `^~` 覆盖、`/print/`、安全头）从来没回到脚本里；
   照文档重跑一次部署，自己上传的图和模板帧图就会掉回 7 天 `public` 缓存（2026-11-14 复查发现）。

@@ -186,7 +186,10 @@ else
   NGINX_DIR=/etc/nginx/conf.d
 fi
 CONF="$NGINX_DIR/${DOMAIN}.conf"
-APP_CONF="$NGINX_DIR/${DOMAIN}.app.conf"
+# 片段必须叫 .inc，不能叫 .conf：/etc/nginx/conf.d/*.conf 是在 http 层被 include 的，
+# 一个带 location 的 server 片段放在那里，nginx -t 会直接报「location directive is not allowed here」
+# （2026-11-14 在生产上第一次渲染就撞到了，nginx -t 挡住了 reload，站点没受影响）。
+APP_CONF="$NGINX_DIR/${DOMAIN}.app.inc"
 CERT_DIR="/etc/letsencrypt/live/${DOMAIN}"
 # 证书已经在这台机器上（重跑安装）就装 HTTPS 版外壳，否则装 HTTP 版等 enable-https.sh 来签。
 # 不判断这一下的话，重跑一次 install.sh 会把已经在跑 HTTPS 的站点换回 HTTP。

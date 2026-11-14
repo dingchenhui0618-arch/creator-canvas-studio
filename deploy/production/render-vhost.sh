@@ -2,7 +2,7 @@
 # 把 deploy/production/nginx-{http,tls,app}.conf 里的占位符换成真值。
 #
 #   DOMAIN=visionqa.example.com APP_DIR=/opt/visionqa API_PORT=8799 \
-#   ACME_DIR=/www/wwwroot/example/acme APP_CONF=/etc/nginx/conf.d/site.app.conf \
+#   ACME_DIR=/www/wwwroot/example/acme APP_CONF=/etc/nginx/conf.d/site.app.inc \
 #   bash render-vhost.sh deploy/production/nginx-tls.conf /etc/nginx/conf.d/site.conf
 #
 # 占位符只有这几个：__DOMAIN__ __APP_DIR__ __API_PORT__ __ACME_DIR__ __APP_CONF__

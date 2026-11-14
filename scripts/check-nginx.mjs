@@ -258,7 +258,7 @@ export function checkWrapper(text, kind, { rendered = false } = {}) {
     }
   }
   if (rendered) {
-    if (!/include .+\.app\.conf;/.test(text)) issues.push(where + '：渲染后没有 include *.app.conf，应用段根本没接上来')
+    if (!/include .+\.app\.inc;/.test(text)) issues.push(where + '：渲染后没有 include *.app.inc，应用段根本没接上来')
     if (!/server_name +\S+;/.test(text)) issues.push(where + '：渲染后没有 server_name')
     const leftover = text.match(/__[A-Z_]+__/g)
     if (leftover) issues.push(where + '：渲染后仍留着占位符 ' + [...new Set(leftover)].join(' '))
@@ -294,11 +294,19 @@ const SCRIPT_RULES = [
   ['$proxy_add_x_forwarded_for', '旧写法'],
 ]
 
+// 只看会执行的命令行：注释里提到 location / add_header 是在解释为什么不能那么写，不算违规
+const codeLines = (text) =>
+  text
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('#'))
+    .join('\n')
+
 export function checkScripts(files) {
   const issues = []
   for (const [name, text] of Object.entries(files)) {
+    const code = codeLines(text)
     for (const [needle, why] of SCRIPT_RULES) {
-      if (text.includes(needle)) issues.push(name + '：出现了 ' + needle + ' —— ' + why)
+      if (code.includes(needle)) issues.push(name + '：出现了 ' + needle.trim() + ' —— ' + why)
     }
     for (const need of ['render-vhost.sh', 'nginx-app.conf', 'nginx-tls.conf']) {
       if (!text.includes(need)) issues.push(name + '：没有引用 ' + need)
@@ -309,6 +317,9 @@ export function checkScripts(files) {
     if (name === 'install.sh' && !text.includes('[ -d "$CERT_DIR" ]')) {
       issues.push(name + '：没判断证书是否已存在，重跑一次会把 HTTPS 站点换成 HTTP')
     }
+    // 片段必须是 .inc：conf.d/*.conf 在 http 层被 include，带 location 的片段放进去 nginx -t 直接失败
+    if (!text.includes('.app.inc')) issues.push(name + '：应用段片段没落在 *.app.inc 上（conf.d/*.conf 会被 http 层整段 include）')
+    if (text.includes('.app.conf')) issues.push(name + '：应用段片段不能叫 .app.conf —— conf.d/*.conf 在 http 层被 include，nginx -t 会报 location 不许在这里')
   }
   return issues
 }
@@ -387,7 +398,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
     __APP_DIR__: '/opt/visionqa',
     __API_PORT__: '8799',
     __ACME_DIR__: '/var/www/acme',
-    __APP_CONF__: '/etc/nginx/conf.d/example.com.app.conf',
+    __APP_CONF__: '/etc/nginx/conf.d/example.com.app.inc',
     __CERT_DIR__: '/etc/letsencrypt/live/example.com',
     __ACCESS_LOG__: 'off',
     __HTTP_PORT__: '80',
