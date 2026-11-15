@@ -6,7 +6,15 @@ import { Pill, Tag } from '../components/ui'
 import { request } from '../api/client'
 import { listBdcCanvases, type BdcCanvas } from '../api/bdc'
 import type { RunProjectRef } from '../api/flows'
-import { deliverablePrintUrl, deliveryPackageUrl, listDeliveries, listProjects, listShares } from '../api/projects'
+import {
+  deliverablePrintUrl,
+  deliveryPackageUrl,
+  listDeliveries,
+  listProjects,
+  listShares,
+  receiptLinkUrl,
+  remindDelivery,
+} from '../api/projects'
 import {
   ackReview,
   listReviewQueue,
@@ -29,6 +37,12 @@ import {
   type ShareSummaryRow,
 } from '../domain/project'
 import { isFirstRun } from '../domain/first-run'
+import {
+  deliveryLateText,
+  deliveryReminderText,
+  deliveryWaitLate,
+  deliveryWaitText,
+} from '../domain/delivery-wait'
 import {
   REVIEW_VERDICT_LABEL,
   deliveryDrift,
@@ -79,6 +93,8 @@ type Props = {
   onCreateCanvas: () => void
   // 引导是弹窗：页脚「上手指引」重新打开它，不再跳一个 #/welcome 页面
   onOpenGuide: () => void
+  // 复制提醒之后说一声（v0.9.144）：复制成功 / 失败都得让人知道，不然不知道剪贴板里有没有东西
+  onToast: (message: string) => void
 }
 
 // 队列的三个时间范围（v0.9.25）：按那次评审的时间算，不是作品最近被点开的时间——
@@ -125,12 +141,40 @@ function secondsOf(ms?: number): string {
 }
 
 /**
+ * 这一行「等了多久」（v0.9.144）：还没收到回执的那一份，发出几天了。
+ * 时间没记下的老记录就什么都不说——不拿作品更新日期冒充发出时间。
+ */
+function rowWaitText(row: ProjectDeliveryRow): string {
+  return row.atKnown ? deliveryWaitText(row.at) : ''
+}
+
+/** 到了该提一句的时候没有：第三天以上才说（与清单顶上那句同一个门槛）。 */
+function rowWaitLate(row: ProjectDeliveryRow): boolean {
+  return row.atKnown && deliveryWaitLate(row.at)
+}
+
+/** 催过几次：只写次数，日期放在 title 里，一行里不堆两个时间。 */
+function rowReminderText(row: ProjectDeliveryRow): string {
+  const count = Math.max(0, Math.round(Number(row.reminder?.count) || 0))
+  return count ? '催过 ' + count + ' 次' : ''
+}
+
+/** 那一行催过没有、最近一次哪天：给 title 用，不占行宽。 */
+function rowReminderTitle(row: ProjectDeliveryRow): string {
+  const at = String(row.reminder?.at || '')
+  const ms = Date.parse(at)
+  if (!Number.isFinite(ms)) return ''
+  const date = new Date(ms)
+  return '最近一次 ' + (date.getMonth() + 1) + '-' + date.getDate()
+}
+
+/**
  * 工作台只回答一个问题：下一步点哪里。
  * 首屏是一张「下一步」主卡（继续上次那块画布，没画布就从一条爆款开始）加三个场景化入口；
  * 统计压进主卡右侧，不再单开一排数字卡——数字是背景，不是任务。
  * 任何一块没有数据就写空状态并给出下一步，不用示例行填充。
  */
-export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject, onCreateCanvas, onOpenGuide }: Props) {
+export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject, onCreateCanvas, onOpenGuide, onToast }: Props) {
   const { internal } = useUiMode()
   const site = useSiteInfo()
   const [now] = useState(() => new Date())
@@ -179,11 +223,13 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
   const [deliveryTotal, setDeliveryTotal] = useState(0)
   const [deliverySummary, setDeliverySummary] = useState({ projects: 0, current: 0, drifted: 0, lastAt: '' })
   // 回执的四个数（v0.9.139）：封过包的几次、对上几次、对不上几次、还没回来几次
-  const [deliveryReceipts, setDeliveryReceipts] = useState<DeliveryLedgerReceipts>({ sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0 })
+  const [deliveryReceipts, setDeliveryReceipts] = useState<DeliveryLedgerReceipts>({ sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0 })
   const [deliveryHasMore, setDeliveryHasMore] = useState(false)
   const [deliveryOpen, setDeliveryOpen] = useState(false)
   const [deliveryBusy, setDeliveryBusy] = useState(false)
   const [deliveryError, setDeliveryError] = useState('')
+  // 正在写「催一句」的那一条（v0.9.144）：按钮转圈并禁用，防连点
+  const [remindBusy, setRemindBusy] = useState('')
   const [loading, setLoading] = useState(true)
   const [errors, setErrors] = useState<string[]>([])
 
@@ -242,12 +288,12 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
         lastAt: deliveryResult.value.lastAt || '',
       })
       setDeliveryHasMore(Boolean(deliveryResult.value.hasMore))
-      setDeliveryReceipts(deliveryResult.value.receipts ?? { sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0 })
+      setDeliveryReceipts(deliveryResult.value.receipts ?? { sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0 })
     } else {
       setDeliveries([])
       setDeliveryTotal(0)
       setDeliverySummary({ projects: 0, current: 0, drifted: 0, lastAt: '' })
-      setDeliveryReceipts({ sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0 })
+      setDeliveryReceipts({ sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0 })
       setDeliveryHasMore(false)
       problems.push('交付记录：' + String((deliveryResult.reason as Error)?.message || deliveryResult.reason))
     }
@@ -345,6 +391,51 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
     const opened = window.open(deliverablePrintUrl(projectId), '_blank', 'noopener')
     setDeliveryError(opened ? '' : '新标签被浏览器拦下了：允许本站弹窗，或者从作品页打开交付稿')
   }, [])
+
+  /**
+   * 催一句（v0.9.144）：还没收到回执的那一份，把「哪一份、哪天发的、打开包里那张校验页怎么验、
+   * 收据贴回哪条链接」拼成一段能直接发的话复制走，顺手在档案里记下这一次。
+   * 复制失败也如实说：这一段没进剪贴板，但档案里已经记了一次，去作品页还能再复制回执链接。
+   */
+  const copyDeliveryReminder = useCallback(
+    async (row: ProjectDeliveryRow) => {
+      const deliveryId = String(row.deliveryId || '')
+      if (!deliveryId) return
+      const key = row.projectId + ':' + row.version
+      setRemindBusy(key)
+      try {
+        const issued = await remindDelivery(row.projectId, deliveryId)
+        const text = deliveryReminderText({
+          title: row.title,
+          version: row.version,
+          fileName: row.package?.fileName,
+          bytes: row.package?.bytes,
+          at: row.at,
+          link: receiptLinkUrl(issued.token),
+        })
+        try {
+          await navigator.clipboard.writeText(text)
+        } catch {
+          setDeliveryError('这一段没复制进剪贴板：浏览器没给权限。档案里已经记了这一次，回执链接到作品页那一版还能再复制。')
+          return
+        }
+        setDeliveries((prev) =>
+          prev.map((entry) =>
+            entry.projectId === row.projectId && entry.version === row.version
+              ? { ...entry, reminder: { count: issued.count, at: issued.at } }
+              : entry,
+          ),
+        )
+        setDeliveryError('')
+        onToast('已复制：提醒他验包的那一段，带回收据链接')
+      } catch (error) {
+        setDeliveryError('没催成：' + String((error as Error)?.message || error))
+      } finally {
+        setRemindBusy('')
+      }
+    },
+    [onToast],
+  )
 
   const queueFiltered = queueRange !== 'all' || queueKeyword.trim() !== ''
 
@@ -972,7 +1063,11 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
             {/* 回执（v0.9.139）：封过包的几份里，他验过的有几份、对不上的有几份。
                 对不上是这里唯一值得当场动手的一件，所以单独一句、带颜色。 */}
             {deliveryReceipts.sealed ? (
-              <p className="vq-delivery-receipt-total">{ledgerReceiptTotalsText(deliveryReceipts)}</p>
+              <p className="vq-delivery-receipt-total">
+                {ledgerReceiptTotalsText(deliveryReceipts)}
+                {/* 还没回来的那几份里，超过三天的单说一句：该提一句了（v0.9.144） */}
+                {deliveryReceipts.pendingLate ? deliveryLateText(deliveryReceipts.pendingLate) : ''}
+              </p>
             ) : null}
             {deliveryReceipts.mismatched ? (
               <p className="vq-delivery-receipt-total is-bad" role="status">
@@ -1044,8 +1139,18 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                             {ledgerReceiptText(row.receipt)}
                           </span>
                         ) : (
-                          <span className="vq-delivery-receipt is-pending" title="封存包已经能贴回收据了，这一份还没收到">
-                            还没收到回执
+                          // 还没回来：等了几天、催过几次都说出来（v0.9.144）。
+                          // 到了第三天换成警示色，并在 title 里说清「可以提一句」——不在行上写第二句。
+                          <span
+                            className={'vq-delivery-receipt is-pending' + (rowWaitLate(row) ? ' is-late' : '')}
+                            title={
+                              '封存包已经能贴回收据了，这一份还没收到' +
+                              (rowWaitText(row) ? '：' + rowWaitText(row) : '') +
+                              (rowWaitLate(row) ? '，可以提一句' : '') +
+                              (rowReminderTitle(row) ? '。' + rowReminderTitle(row) : '')
+                            }
+                          >
+                            {'还没收到回执' + (rowWaitText(row) ? ' · ' + rowWaitText(row) : '') + (rowReminderText(row) ? ' · ' + rowReminderText(row) : '')}
                           </span>
                         )
                       ) : null}
@@ -1077,6 +1182,19 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                           交付包
                           <Download size={12} />
                         </a>
+                      ) : null}
+                      {/* 还没收到回执的才给「复制提醒」（v0.9.144）：一段能直接发的话，带回收据链接。
+                          已经贴过回执、或者这一版还没生成回执链接的，行上不给这个按钮。 */}
+                      {row.remindable && row.deliveryId ? (
+                        <button
+                          type="button"
+                          className="vq-button vq-button--quiet vq-button--sm vq-delivery-remind"
+                          disabled={remindBusy === row.projectId + ':' + row.version}
+                          onClick={() => void copyDeliveryReminder(row)}
+                          title="复制一段提醒他验包的话（带回收据链接），发到微信 / 邮件里就行；发出去之后这一行会记下催过几次"
+                        >
+                          {remindBusy === row.projectId + ':' + row.version ? '正在写…' : '复制提醒'}
+                        </button>
                       ) : null}
                     </div>
                   ) : null}

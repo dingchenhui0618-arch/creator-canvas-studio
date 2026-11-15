@@ -20,6 +20,7 @@ import {
   getProject,
   getProjectVersionScript,
   issueReceiptLink,
+  receiptLinkUrl,
   openProjectCanvas,
   projectPackageAudits,
   projectSpend,
@@ -131,15 +132,6 @@ function duration(ms: number): string {
 
 /** 收据结论与问题列表常常是同一句：句末标点不算不同，列表里不再重复一遍。 */
 const stripStop = (value: string | undefined) => String(value || '').replace(/[。.]$/, '')
-
-/**
- * 回执链接（v0.9.137）：发给收包人的地址要用当前站点的 origin，不能写成相对路径，
- * 否则他复制走的是一条打不开的 /#/...。token 只由服务端发，这里只拼地址。
- */
-function receiptLinkUrl(token: string): string {
-  if (!token) return ''
-  return window.location.origin + '/#/receipt/' + encodeURIComponent(token)
-}
 
 /**
  * 作品页：一条内容的完整现场。

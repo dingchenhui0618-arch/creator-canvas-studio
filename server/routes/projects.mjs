@@ -75,6 +75,7 @@ import {
   bindProjectFlow,
   saveProjectScript,
   saveDeliveryReceipt,
+  saveDeliveryReminder,
   issueDeliveryReceiptToken,
   findReceiptLink,
   saveReceiptByToken,
@@ -120,6 +121,8 @@ const DELIVERY_RECEIPT = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-
 // 回执链接（v0.9.137）：发一条免登录的地址给收包人，让他自己把收据贴回来。
 // 这一支只是「发行 / 换一枚 token」，收据本身仍写进同一条交付记录。
 const DELIVERY_RECEIPT_LINK = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})\/receipt-link$/
+// 催一句（v0.9.144）：还没收到回执的那一条，记下「催过」并把回执链接还回来
+const DELIVERY_REMINDER = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})\/reminder$/
 // 收包人那一侧（v0.9.137）：token 就是凭证，不带登录态；GET 看这是哪一份、POST 把收据贴上去
 const PUBLIC_RECEIPT = /^\/api\/receipts\/([0-9a-f]{16})$/
 // 打印版不进 /api：它是在新标签里打开的 HTML，地址栏里那串会印在纸的页脚上
@@ -1440,6 +1443,38 @@ export function createProjectsRouter() {
           return true
         }
         sendJson(res, 200, { ok: true, token: issued.token, rotated: issued.rotated })
+        return true
+      }
+
+      // 催一句（v0.9.144）：收包人一直没贴收据时，工作台那一行点一下就记下这一次，
+      // 并把回执链接还回来拼成一段能直接发的话。只给登录着的发件人；已经贴过回执的不再催。
+      const reminderPath = pathname.match(DELIVERY_REMINDER)
+      if (reminderPath) {
+        if (req.method !== 'POST') {
+          sendJson(res, 405, { error: '催一句只能用 POST：它要在档案里记下这一次' })
+          return true
+        }
+        if (!user && config.auth.requireAuth) {
+          sendJson(res, 401, { error: '登录已过期：回到工作台再点一次' })
+          return true
+        }
+        const saved = await saveDeliveryReminder(reminderPath[1], reminderPath[2], user)
+        if (!saved) {
+          sendJson(res, 404, { error: '这一条交付没有封存包，没有要等回来的回执' })
+          return true
+        }
+        if (saved.already) {
+          sendJson(res, 409, { error: '这一份已经贴过回执了，不用再催', code: 'RECEIPT_ALREADY' })
+          return true
+        }
+        if (saved.missingLink) {
+          sendJson(res, 409, {
+            error: '这一版还没有回执链接：到作品页那一版点「生成回执链接」，再来催',
+            code: 'NO_RECEIPT_LINK',
+          })
+          return true
+        }
+        sendJson(res, 200, { ok: true, token: saved.token, at: saved.at, count: saved.count })
         return true
       }
 

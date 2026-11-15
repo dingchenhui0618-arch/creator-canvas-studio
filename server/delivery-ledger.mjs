@@ -21,6 +21,11 @@ const versionOf = (value) => Math.max(1, Math.round(Number(value) || 0))
 
 // 与 projects.mjs 同一套四种状态：多一种就按「没核对过」处理，不猜
 const RECEIPT_STATES = ['match', 'mismatch', 'broken', 'conflict']
+// 五项的顺序与作品页的逐项比对一致：差在哪一项按这个顺序列，读起来不会每次换序
+const RECEIPT_CHECK_KEYS = ['version', 'package', 'bytes', 'sha256', 'verdict']
+// 发出几天算「该提一句了」（v0.9.144）：与 src/domain/delivery-wait.ts 同一个数
+const REMIND_LATE_DAYS = 3
+const DAY_MS = 86400000
 
 /**
  * 工作台那一行上的回执（v0.9.139）：只要结论、时间、谁贴的、贴过几次。
@@ -31,13 +36,32 @@ function receiptBrief(entry) {
   const receipt = entry?.receipt
   if (!receipt || !RECEIPT_STATES.includes(receipt.state)) return null
   const history = Array.isArray(entry?.receipts) ? entry.receipts.length : 0
-  return {
+  const brief = {
     state: receipt.state,
     at: String(receipt.at || ''),
     // 没有 via 的老记录按「你替他贴的」讲，与作品页同一口径
     via: receipt.via === 'link' ? 'link' : 'you',
     count: Math.max(1, history),
   }
+  // 对不上的那几项（v0.9.144）：只给项名，不给两边写过的值。
+  // 读不出来（broken）时逐项没有意义——整张收据都没解析成，列出来只会误导。
+  if (receipt.state === 'mismatch' || receipt.state === 'conflict') {
+    const checks = Array.isArray(receipt.checks) ? receipt.checks : []
+    const bad = RECEIPT_CHECK_KEYS.filter((key) => checks.some((check) => check?.k === key && check.ok === false))
+    if (bad.length) brief.bad = bad
+  }
+  return brief
+}
+
+/**
+ * 催过的记录（v0.9.144）：催过几次、最近一次哪天。没催过就是 null。
+ * 贴过回执之后也照实返回——「催过两次他才验」是发生过的事；界面上要不要提由那一行自己决定。
+ */
+function reminderBrief(entry) {
+  const list = (Array.isArray(entry?.reminders) ? entry.reminders : [])
+    .filter((item) => item && typeof item.at === 'string' && item.at)
+  if (!list.length) return null
+  return { count: list.length, at: list[list.length - 1].at }
 }
 
 /**
@@ -79,6 +103,14 @@ export function ledgerRows({ projects = [], counts = {} } = {}) {
         package: entry?.package || null,
         // 回执（v0.9.139）：有封存包才谈得上回执；没贴过就是 null（界面写「还没回执」）
         receipt: receiptBrief(entry),
+        // 催过几次、最近一次（v0.9.144）：与回执一样只挂在有封存包的记录上
+        reminder: entry?.package ? reminderBrief(entry) : null,
+        // 现在能不能催：有包、还没回执、回执链接还留着（换过一条或从来没生过就没有）
+        remindable: Boolean(
+          entry?.package &&
+            !RECEIPT_STATES.includes(entry?.receipt?.state) &&
+            /^[0-9a-f]{16}$/.test(String(entry?.receiptToken || '')),
+        ),
       })
     }
   }
@@ -99,16 +131,25 @@ export function ledgerRows({ projects = [], counts = {} } = {}) {
  * 交付流水：items 是一页的行，其余都是按整份行算的数字——
  * 「共 N 条」「M 条作品」不会因为只取了前 8 条就变小。
  */
-export function deliveryLedger({ projects = [], counts = {} } = {}, { offset = 0, limit = LEDGER_PAGE } = {}) {
+export function deliveryLedger(
+  { projects = [], counts = {} } = {},
+  // now 只为「发了几天」这一件事：测试传一个固定时刻，结果就不会随当天日期漂
+  { offset = 0, limit = LEDGER_PAGE, now = Date.now() } = {},
+) {
   const rows = ledgerRows({ projects, counts })
+  const nowMs = Number.isFinite(Number(now)) ? Number(now) : Date.now()
   // 回执的四个数按整份记录算（不是这一页）：封过包的几条、对上的几条、对不上的几条、还没回来的几条。
   // 只有封了包的交付才谈得上回执——升级前那几条没有包，不把它们算成「还没回来」，那样会凭空多出待办。
-  const receipts = { sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0 }
+  // pendingLate（v0.9.144）不是第五种：它是 pending 里发出超过三天的那些，用来提示「可以提一句」。
+  const receipts = { sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0 }
   for (const row of rows) {
     if (!row.package) continue
     receipts.sealed += 1
-    if (!row.receipt) receipts.pending += 1
-    else if (row.receipt.state === 'match') receipts.matched += 1
+    if (!row.receipt) {
+      receipts.pending += 1
+      const at = Date.parse(row.at)
+      if (Number.isFinite(at) && nowMs - at >= REMIND_LATE_DAYS * DAY_MS) receipts.pendingLate += 1
+    } else if (row.receipt.state === 'match') receipts.matched += 1
     else if (row.receipt.state === 'mismatch') receipts.mismatched += 1
     else receipts.unclear += 1
   }

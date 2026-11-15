@@ -609,6 +609,7 @@ function Workbench({
               navigate({ kind: 'page', page: 'projects', projectId, ...(deliveryId ? { deliveryId } : {}) })
             }
             onOpenGuide={() => setGuideOpen(true)}
+            onToast={notify}
           />
         )
       case 'agents':

@@ -1055,7 +1055,10 @@
 .vq-delivery-receipt {
   align-self: start;
   justify-self: start;
+  /* 长一点就换行：390 上「对不上 · 差在整包 SHA-256 · 时间 · 贴过 3 次」一行放不下，
+     以前 nowrap 会被行尾裁掉半截（2026-11-15 实测），换行比截断诚实 */
   width: fit-content;
+  max-width: 100%;
   padding: 0 var(--space-2);
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -1065,7 +1068,8 @@
   line-height: 1.7;
   letter-spacing: normal;
   text-transform: none;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 
 .vq-delivery-receipt.is-match {
@@ -1088,6 +1092,13 @@
   border-style: dashed;
   border-color: var(--line);
   color: var(--faint);
+}
+
+/* 还没回来、又过了第三天：虚线框换成警示色（v0.9.144）。
+   没到三天的那几行还是灰的——一份包两三天内验完是常态，不能一交出去就催。 */
+.vq-delivery-receipt.is-pending.is-late {
+  border-color: var(--warn);
+  color: var(--warn);
 }
 
 /* 清单顶上那句回执汇总（v0.9.139）：先说封过包的几份，再说回来了几份。
@@ -1126,8 +1137,8 @@
   color: var(--ink);
 }
 
-/* 行尾动作：当前版是「交付稿」，封过包的还有「交付包」；两个都走小档按钮，
-   与行尾的「已看过」同一档，不跟作品名抢注意力。 */
+/* 行尾动作：当前版是「交付稿」，封过包的还有「交付包」，还没回来的再加一个「复制提醒」；
+   都走小档按钮，与行尾的「已看过」同一档，不跟作品名抢注意力。 */
 .vq-delivery-actions {
   display: flex;
   align-items: center;
@@ -1136,6 +1147,7 @@
 }
 
 .vq-delivery-row .vq-delivery-paper,
+.vq-delivery-row .vq-delivery-remind,
 .vq-delivery-row .vq-delivery-package {
   flex: none;
   /* 它们是这一行真正能做的事（取回那一版产物），比旁边的状态字要显眼一档 */
@@ -1145,6 +1157,7 @@
 }
 
 .vq-delivery-row .vq-delivery-paper:hover:not(:disabled),
+.vq-delivery-row .vq-delivery-remind:hover:not(:disabled),
 .vq-delivery-row .vq-delivery-package:hover {
   color: var(--ink);
 }

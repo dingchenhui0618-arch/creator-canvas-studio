@@ -58,6 +58,24 @@ export const listShares = () => request<{ items: ShareSummaryRow[]; total: numbe
 export const listDeliveries = (offset = 0) =>
   request<DeliveryLedger>('/api/deliveries' + (offset > 0 ? '?offset=' + encodeURIComponent(offset) : ''))
 
+/**
+ * 回执链接（v0.9.137）：发给收包人的地址要用当前站点的 origin，不能写成相对路径，
+ * 否则他复制走的是一条打不开的 /#/...。token 只由服务端发，这里只拼地址。
+ */
+export const receiptLinkUrl = (token: string): string =>
+  token ? window.location.origin + '/#/receipt/' + encodeURIComponent(token) : ''
+
+/**
+ * 催一句（v0.9.144）：这一条交付封了包、还没收到回执时，让服务端记下「催过」这件事，
+ * 并把回执链接的 token 还回来（只还给登录着的发件人）。写的是这一次提醒的时间，
+ * 不重打包、不验包、不联网，也不替人把消息发出去——发还是发件人自己发。
+ */
+export const remindDelivery = (projectId: string, deliveryId: string) =>
+  request<{ ok: boolean; token: string; at: string; count: number }>(
+    deliveryPackageUrl(projectId, deliveryId) + '/reminder',
+    { method: 'POST', body: JSON.stringify({}) },
+  )
+
 export const getProject = (id: string) => request<ProjectDetail>('/api/projects/' + id)
 
 // 上次巡检（v0.9.132）：定时任务每天验一遍封存包，这里只读它写下的那份结论

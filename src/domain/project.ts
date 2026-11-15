@@ -1059,6 +1059,11 @@ export type ProjectDeliveryReceiptBrief = {
   via: 'link' | 'you'
   /** 这条交付上贴过几次：老记录只有 receipt 没有流水时按一次算 */
   count: number
+  /**
+   * 对不上的那几项（v0.9.144）：只给项名，不给两边写过的值。
+   * 一页几十条不搬 checks；但「差哪一项」是这一行唯一能当场动手的线索，值得占几个字。
+   */
+  bad?: string[]
 }
 
 /**
@@ -1093,6 +1098,13 @@ export type ProjectDeliveryRow = {
   package?: ProjectDeliveryPackage
   /** 回执的结论；没贴过就是 null（有包才谈得上回执），老记录没有包也就没有这一项（v0.9.139） */
   receipt?: ProjectDeliveryReceiptBrief | null
+  /**
+   * 催过几次、最近一次是哪天（v0.9.144）：收包人一直没贴收据时，从这一行点「复制提醒」
+   * 发出去的那几次。只记这件事发生过，不存发出去的那段话原文（它随时能按现在的事实重写）。
+   */
+  reminder?: { count: number; at: string } | null
+  /** 现在能不能催：有封存包、还没收到回执、回执链接还在（v0.9.144） */
+  remindable?: boolean
 }
 
 /** 交付流水的整份数字按全部记录算，不因为只取了一页而变小 */
@@ -1126,6 +1138,11 @@ export type DeliveryLedgerReceipts = {
   unclear: number
   /** 封了包、还没收到回执 */
   pending: number
+  /**
+   * pending 里已经发出超过 3 天的条数（v0.9.144）：不是第五种结论，是 pending 的一个子集，
+   * 所以 sealed = matched + mismatched + unclear + pending 这条仍然成立。
+   */
+  pendingLate: number
 }
 
 /**
@@ -1136,8 +1153,19 @@ export function ledgerReceiptText(receipt: ProjectDeliveryReceiptBrief | null | 
   if (!receipt) return ''
   const count = Math.max(1, Math.round(Number(receipt.count) || 1))
   const at = receiptAtText(receipt.at)
-  const line = '回执 · ' + receiptStateText(receipt.state) + (at ? ' · ' + at : '')
+  // 差在哪一项（v0.9.144）：对不上时把项名补在结论后面，这一行就不用点进去才知道差什么。
+  // 只列表里认得的项，老收据没有逐项就还是只写「对不上」。
+  const bad = ledgerReceiptBadText(receipt.bad)
+  const line = '回执 · ' + receiptStateText(receipt.state) + (bad ? ' · 差在' + bad : '') + (at ? ' · ' + at : '')
   return count > 1 ? line + ' · 贴过 ' + count + ' 次' : line
+}
+
+/** 对不上的那几项读成人话：「整包 SHA-256」「字节数、整包 SHA-256」；没有就是空串。 */
+export function ledgerReceiptBadText(bad: string[] | null | undefined): string {
+  const keys = (Array.isArray(bad) ? bad : [])
+    .filter((key): key is string => typeof key === 'string' && Boolean(key))
+    .map((key) => receiptCheckLabel(key))
+  return keys.join('、')
 }
 
 /** 回执时间只写到分钟：与作品页那行结论同一口径，不在这行里给秒。 */
