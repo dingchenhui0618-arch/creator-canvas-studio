@@ -173,6 +173,11 @@ export type ProjectDelivery = {
   receiptLinkAt?: string
   /** 这条回执链接被打开过几次（v0.9.145）；只有 receiptLinkAt 也在时接口才会给 */
   visits?: DeliveryVisits
+  /**
+   * 这条链接又被发出去过几次（v0.9.146）：只有「一次都没被打开过」才会重发，
+   * 所以这个数回答的是「我发了几遍他都没收到」，与催过几次是两件事。
+   */
+  resends?: { at: string }[]
 }
 
 /**
@@ -1122,6 +1127,13 @@ export type ProjectDeliveryRow = {
   reminder?: { count: number; at: string } | null
   /** 现在能不能催：有封存包、还没收到回执、回执链接还在（v0.9.144） */
   remindable?: boolean
+  /** 又发过几次那条链接（v0.9.146）；没重发过就是 null */
+  resend?: { count: number; at: string } | null
+  /**
+   * 现在能不能「再发一次链接」（v0.9.146）：有包、还没回执、链接还在，而且确知这条地址一次都没被打开过。
+   * 不知道有没有人点开过（升级前发的链接）就不给这个按钮——那种情况下重发是盲发，说了也判断不了结果。
+   */
+  resendable?: boolean
   /**
    * 这条回执链接被打开过几次（v0.9.145）。null = 不知道（没有链接，或者链接发出时还没开始记）——
    * 不知道就什么都不说，不写「还没被打开」。
@@ -1170,6 +1182,11 @@ export type DeliveryLedgerReceipts = {
    * 只说「没人打开过这条地址」，不说「他没收到」——链接可能被预览抓取过，也可能真没送到。
    */
   pendingUnopened: number
+  /**
+   * pendingUnopened 里「又发过 2 次以上、链接还是没被打开」的条数（v0.9.146），同样是 pending 的子集。
+   * 这几条再发同一条地址也不会有新结果：该换渠道、换个人，或者换一条新链接。
+   */
+  pendingStuck: number
 }
 
 /**

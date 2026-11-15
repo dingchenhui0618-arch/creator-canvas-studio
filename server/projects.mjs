@@ -202,18 +202,29 @@ const MAX_RECEIPTS = 5
 // 催过几次（v0.9.144）：收包人一直没贴收据时，发件人点「催一句」发出去的那几次。
 // 与回执同一个上限 5 条——自己催到第六次还没动静，一天催十遍也改变不了什么。
 const MAX_REMINDERS = 5
+// 又发过几次（v0.9.146）：链接一次都没被打开过时，把这条地址重新发出去的那几次。
+// 与「催过」分开记：一个问「验没验」，一个问「收没收到」，混在一个数里两边都说不清。
+const MAX_RESENDS = 5
 
 /**
- * 催过的记录：只有时间，不存发出去的那段话。
+ * 催过 / 又发过的记录：只有时间，不存发出去的那段话。
  * 原因：那段话是照着档案里的事实现拼的（哪一版、哪个包、多少字节、链接），
  * 存下来只会变成第二份可能过期的话；要给人看的是「催过没有、哪天催的」。
  */
-function normalizeReminders(raw) {
+function normalizeStamps(raw, max) {
   return (Array.isArray(raw) ? raw : [])
     .map((entry) => (typeof entry === 'string' ? { at: entry } : entry))
     .map((entry) => ({ at: typeof entry?.at === 'string' ? entry.at : '' }))
     .filter((entry) => entry.at)
-    .slice(-MAX_REMINDERS)
+    .slice(-max)
+}
+
+function normalizeReminders(raw) {
+  return normalizeStamps(raw, MAX_REMINDERS)
+}
+
+function normalizeResends(raw) {
+  return normalizeStamps(raw, MAX_RESENDS)
 }
 
 function normalizeDeliveryReceipt(raw) {
@@ -308,6 +319,9 @@ function normalizeDeliveries(raw) {
       // 催过几次（v0.9.144）：和回执一样只挂在有封存包的记录上——没有包就没有「验没验」这回事
       const reminders = pkg ? normalizeReminders(entry.reminders) : []
       if (reminders.length) base.reminders = reminders
+      // 又发过几次（v0.9.146）：链接没被打开过时重新发出去的那几次，与催过分开存
+      const resends = pkg ? normalizeResends(entry.resends) : []
+      if (resends.length) base.resends = resends
       return base
     })
     .filter((entry) => entry.version > 0)
@@ -580,6 +594,35 @@ export async function saveDeliveryReminder(id, deliveryId, user = null) {
   found.updatedAt = at
   await persist(list)
   return { already: false, token, at, count: reminders.length, delivery: deliveries[index] }
+}
+
+/**
+ * 再发一次链接（v0.9.146）：这条回执链接一次都没被打开过时，发件人把它重新发出去的那一次。
+ *
+ * 为什么要与「催一句」分开记：催是「我猜你收到了，只是还没验」；重发是「我担心你根本没收到」。
+ * 两件事的下一步也不同——催完还是没动静该换人盯，重发两次还是没打开就该换渠道（邮件 / 换个人 / 换一条链接）。
+ * 混成一个「联系过 3 次」的数字，两个判断都会说不清。
+ *
+ * 与催一样只记时间，不存那段话；也照实退回三种「记不了」：没这条记录 / 已经贴过回执 / 还没有链接。
+ */
+export async function saveDeliveryResend(id, deliveryId, user = null) {
+  const list = await loadAll()
+  const found = list.find((item) => item.id === id && canAccess(item, user))
+  if (!found) return null
+  const deliveries = normalizeDeliveries(found.deliveries)
+  const index = deliveries.findIndex((entry) => entry.id === deliveryId && entry.package)
+  if (index < 0) return null
+  const entry = deliveries[index]
+  if (entry.receipt) return { already: true, delivery: entry }
+  const token = /^[0-9a-f]{16}$/.test(String(entry.receiptToken || '')) ? String(entry.receiptToken) : ''
+  if (!token) return { missingLink: true, delivery: entry }
+  const at = new Date().toISOString()
+  const resends = [...normalizeResends(entry.resends), { at }].slice(-MAX_RESENDS)
+  deliveries[index] = { ...entry, resends }
+  found.deliveries = deliveries
+  found.updatedAt = at
+  await persist(list)
+  return { already: false, token, at, count: resends.length, delivery: deliveries[index] }
 }
 
 /**

@@ -14,6 +14,7 @@ import {
   listShares,
   receiptLinkUrl,
   remindDelivery,
+  resendDelivery,
 } from '../api/projects'
 import {
   ackReview,
@@ -44,6 +45,12 @@ import {
   deliveryWaitText,
 } from '../domain/delivery-wait'
 import { deliveryOpenHint, deliveryOpenShort, deliveryUnopenedText } from '../domain/delivery-open'
+import {
+  deliveryResendHint,
+  deliveryResendMessage,
+  deliveryResendText,
+  deliveryStuckText,
+} from '../domain/delivery-resend'
 import {
   REVIEW_VERDICT_LABEL,
   deliveryDrift,
@@ -170,6 +177,14 @@ function rowReminderTitle(row: ProjectDeliveryRow): string {
 }
 
 /**
+ * 又发过几次（v0.9.146）：链接一次都没被打开过时，把这条地址重新发出去的那几次。
+ * 与「催过」分成两段写：一个问验没验，一个问收没收到。
+ */
+function rowResendText(row: ProjectDeliveryRow): string {
+  return deliveryResendText(row.resend)
+}
+
+/**
  * 工作台只回答一个问题：下一步点哪里。
  * 首屏是一张「下一步」主卡（继续上次那块画布，没画布就从一条爆款开始）加三个场景化入口；
  * 统计压进主卡右侧，不再单开一排数字卡——数字是背景，不是任务。
@@ -224,13 +239,15 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
   const [deliveryTotal, setDeliveryTotal] = useState(0)
   const [deliverySummary, setDeliverySummary] = useState({ projects: 0, current: 0, drifted: 0, lastAt: '' })
   // 回执的四个数（v0.9.139）：封过包的几次、对上几次、对不上几次、还没回来几次
-  const [deliveryReceipts, setDeliveryReceipts] = useState<DeliveryLedgerReceipts>({ sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0 })
+  const [deliveryReceipts, setDeliveryReceipts] = useState<DeliveryLedgerReceipts>({ sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0, pendingStuck: 0 })
   const [deliveryHasMore, setDeliveryHasMore] = useState(false)
   const [deliveryOpen, setDeliveryOpen] = useState(false)
   const [deliveryBusy, setDeliveryBusy] = useState(false)
   const [deliveryError, setDeliveryError] = useState('')
   // 正在写「催一句」的那一条（v0.9.144）：按钮转圈并禁用，防连点
   const [remindBusy, setRemindBusy] = useState('')
+  // 正在写「再发一次」的那一条（v0.9.146）：与催一句分开，两个按钮不会同时转
+  const [resendBusy, setResendBusy] = useState('')
   const [loading, setLoading] = useState(true)
   const [errors, setErrors] = useState<string[]>([])
 
@@ -289,12 +306,12 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
         lastAt: deliveryResult.value.lastAt || '',
       })
       setDeliveryHasMore(Boolean(deliveryResult.value.hasMore))
-      setDeliveryReceipts(deliveryResult.value.receipts ?? { sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0 })
+      setDeliveryReceipts(deliveryResult.value.receipts ?? { sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0, pendingStuck: 0 })
     } else {
       setDeliveries([])
       setDeliveryTotal(0)
       setDeliverySummary({ projects: 0, current: 0, drifted: 0, lastAt: '' })
-      setDeliveryReceipts({ sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0 })
+      setDeliveryReceipts({ sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0, pendingStuck: 0 })
       setDeliveryHasMore(false)
       problems.push('交付记录：' + String((deliveryResult.reason as Error)?.message || deliveryResult.reason))
     }
@@ -433,6 +450,51 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
         setDeliveryError('没催成：' + String((error as Error)?.message || error))
       } finally {
         setRemindBusy('')
+      }
+    },
+    [onToast],
+  )
+
+  /**
+   * 再发一次链接（v0.9.146）：这条地址一次都没被打开过时，把同一条地址重新发一次。
+   * 复制的是一段「可能没收到」的话（不是催验），并且留一句「这条也打不开就说一声」——
+   * 下一次该换渠道还是换人，全靠这句回来的答案。档案里另记一个数，与催过分开。
+   */
+  const copyDeliveryResend = useCallback(
+    async (row: ProjectDeliveryRow) => {
+      const deliveryId = String(row.deliveryId || '')
+      if (!deliveryId) return
+      const key = row.projectId + ':' + row.version
+      setResendBusy(key)
+      try {
+        const issued = await resendDelivery(row.projectId, deliveryId)
+        const text = deliveryResendMessage({
+          title: row.title,
+          version: row.version,
+          fileName: row.package?.fileName,
+          bytes: row.package?.bytes,
+          at: row.at,
+          link: receiptLinkUrl(issued.token),
+        })
+        try {
+          await navigator.clipboard.writeText(text)
+        } catch {
+          setDeliveryError('这一段没复制进剪贴板：浏览器没给权限。档案里已经记了这一次，回执链接到作品页那一版还能再复制。')
+          return
+        }
+        setDeliveries((prev) =>
+          prev.map((entry) =>
+            entry.projectId === row.projectId && entry.version === row.version
+              ? { ...entry, resend: { count: issued.count, at: issued.at } }
+              : entry,
+          ),
+        )
+        setDeliveryError('')
+        onToast('已复制：再发一次回执链接的那一段，带回了同一条链接')
+      } catch (error) {
+        setDeliveryError('没发成：' + String((error as Error)?.message || error))
+      } finally {
+        setResendBusy('')
       }
     },
     [onToast],
@@ -1070,6 +1132,8 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                 {deliveryReceipts.pendingLate ? deliveryLateText(deliveryReceipts.pendingLate) : ''}
                 {/* 连链接都没人打开过的那几份：多半没送到，先再发一次（v0.9.145） */}
                 {deliveryReceipts.pendingUnopened ? deliveryUnopenedText(deliveryReceipts.pendingUnopened) : ''}
+                {/* 又发过两次还是没打开的那几次：同一条地址再发也没用了，换个方式（v0.9.146） */}
+                {deliveryReceipts.pendingStuck ? deliveryStuckText(deliveryReceipts.pendingStuck) : ''}
               </p>
             ) : null}
             {deliveryReceipts.mismatched ? (
@@ -1152,13 +1216,25 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                               (rowWaitText(row) ? '：' + rowWaitText(row) : '') +
                               (rowWaitLate(row) ? '，可以提一句' : '') +
                               (deliveryOpenHint(row.visits) ? '。' + deliveryOpenHint(row.visits) : '') +
+                              (deliveryResendHint(row.resend) ? '。' + deliveryResendHint(row.resend) : '') +
                               (rowReminderTitle(row) ? '。' + rowReminderTitle(row) : '')
                             }
                           >
-                            {'还没收到回执' +
-                              (rowWaitText(row) ? ' · ' + rowWaitText(row) : '') +
-                              (deliveryOpenShort(row.visits) ? ' · ' + deliveryOpenShort(row.visits) : '') +
-                              (rowReminderText(row) ? ' · ' + rowReminderText(row) : '')}
+                            {/* 一段一句、各自不拆：390 上「链接还没打 / 开」「又发过 1 / 次」这种
+                                从词中间断行看着像排版事故。整段 whenwrap 之后只在「·」处换行。 */}
+                            {[
+                              '还没收到回执',
+                              rowWaitText(row) ? ' · ' + rowWaitText(row) : '',
+                              deliveryOpenShort(row.visits) ? ' · ' + deliveryOpenShort(row.visits) : '',
+                              rowResendText(row) ? ' · ' + rowResendText(row) : '',
+                              rowReminderText(row) ? ' · ' + rowReminderText(row) : '',
+                            ]
+                              .filter(Boolean)
+                              .map((part) => (
+                                <span className="vq-chip-keep" key={part}>
+                                  {part}
+                                </span>
+                              ))}
                           </span>
                         )
                       ) : null}
@@ -1191,9 +1267,19 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                           <Download size={12} />
                         </a>
                       ) : null}
-                      {/* 还没收到回执的才给「复制提醒」（v0.9.144）：一段能直接发的话，带回收据链接。
-                          已经贴过回执、或者这一版还没生成回执链接的，行上不给这个按钮。 */}
-                      {row.remindable && row.deliveryId ? (
+                      {/* 链接一次都没被打开过：先给「再发一次」（v0.9.146）——多半是没送到，
+                          再发一条同样的地址比催他验更对路。点过但没有回执的那几条仍然只有「复制提醒」。 */}
+                      {row.resendable && row.deliveryId ? (
+                        <button
+                          type="button"
+                          className="vq-button vq-button--quiet vq-button--sm vq-delivery-resend"
+                          disabled={resendBusy === row.projectId + ':' + row.version}
+                          onClick={() => void copyDeliveryResend(row)}
+                          title="复制一段「再发一次回执链接」的话，发到微信 / 邮件里就行；这一行会记下又发过几次，与催过几次分开算"
+                        >
+                          {resendBusy === row.projectId + ':' + row.version ? '正在写…' : '再发一次链接'}
+                        </button>
+                      ) : row.remindable && row.deliveryId ? (
                         <button
                           type="button"
                           className="vq-button vq-button--quiet vq-button--sm vq-delivery-remind"

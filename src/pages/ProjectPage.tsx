@@ -88,7 +88,8 @@ import {
   reviewTimeLabel,
   reviewsOfVersion,
 } from '../domain/review'
-import { deliveryOpenCount, deliveryOpenDetail, deliveryOpenHint } from '../domain/delivery-open'
+import { deliveryOpenCount, deliveryOpenHint } from '../domain/delivery-open'
+import { deliveryOpenWithResend, deliveryResendBrief, deliveryResendHint } from '../domain/delivery-resend'
 import { stampTime as stamp, visitLine } from '../domain/share'
 import '../styles/projects.css'
 
@@ -1830,6 +1831,9 @@ export default function ProjectPage({
               const advice = row.receipt ? receiptAdvice(row.receipt) : null
               // 要发给收包人的那段话（v0.9.143）：对得上时为空，不再多一个按钮
               const outreach = row.receipt ? receiptOutreach(row.receipt) : ''
+              // 这条链接又发过几次（v0.9.146）：与打开情况合成一行灰字，不并成两行
+              const resend = deliveryResendBrief(row.resends)
+              const openLine = deliveryOpenWithResend(row.visits, resend)
               return (
                 <li
                   className={
@@ -1877,15 +1881,16 @@ export default function ProjectPage({
                     ) : null}
                     {/* 回执链接被打开过没有（v0.9.145）：一句灰字，不占一枚胶囊。
                         「发出后还没被打开」只对发链接时已经开始记的那几条说——老链接不猜。 */}
-                    {deliveryOpenDetail(row.visits) ? (
+                    {openLine ? (
                       <span
-                        className={
-                          'vq-archive-openline' +
-                          (deliveryOpenCount(row.visits) ? '' : ' is-unopened')
+                        className={'vq-archive-openline' + (deliveryOpenCount(row.visits) ? '' : ' is-unopened')}
+                        title={
+                          deliveryOpenHint(row.visits) +
+                          (deliveryOpenHint(row.visits) && resend ? '。' : '') +
+                          deliveryResendHint(resend)
                         }
-                        title={deliveryOpenHint(row.visits)}
                       >
-                        {deliveryOpenDetail(row.visits)}
+                        {openLine}
                       </span>
                     ) : null}
                     {sealed && pkg && packageDiskAlert(pkg) ? (

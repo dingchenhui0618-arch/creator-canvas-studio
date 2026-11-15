@@ -26,6 +26,9 @@ const RECEIPT_CHECK_KEYS = ['version', 'package', 'bytes', 'sha256', 'verdict']
 // 发出几天算「该提一句了」（v0.9.144）：与 src/domain/delivery-wait.ts 同一个数
 const REMIND_LATE_DAYS = 3
 const DAY_MS = 86400000
+// 链接重新发过几次还没被打开，就该换个方式发了（v0.9.146）：与 src/domain/delivery-resend.ts 同一个数。
+// 一次没打开可能是没看到；第二次还没打开，多半是地址 / 渠道不对，再发同一条只是重复劳动。
+const RESEND_STUCK = 2
 
 /**
  * 工作台那一行上的回执（v0.9.139）：只要结论、时间、谁贴的、贴过几次。
@@ -65,6 +68,17 @@ function reminderBrief(entry) {
 }
 
 /**
+ * 又发过几次链接（v0.9.146）：链接一次都没被打开过时，把同一条地址重新发出去的次数。
+ * 与「催过几次」分开——催是在问验没验，重发是在问收没收到。没重发过就是 null。
+ */
+function resendBrief(entry) {
+  const list = (Array.isArray(entry?.resends) ? entry.resends : [])
+    .filter((item) => item && typeof item.at === 'string' && item.at)
+  if (!list.length) return null
+  return { count: list.length, at: list[list.length - 1].at }
+}
+
+/**
  * 回执链接被打开过几次（v0.9.145）：只回答「这条地址被点开过没有、最近一次什么时候」。
  * 链接发出时还没开始记的那些（升级前发的）一律 null——不知道就说不知道，不写「还没被打开」。
  * 记录按 token 的哈希前缀存在另一个文件里（receipt-visits.json），projects.json 不带它。
@@ -98,6 +112,9 @@ export function ledgerRows({ projects = [], counts = {}, visits = {} } = {}) {
       // 交时结论是交付那一刻存下来的快照（v0.9.85）；这一版后来重评，历史不能被改写。
       // 老记录没有快照（undefined）：界面只能写「当时没记」，不能拿最近一评冒充。
       const bucket = counts?.[project.id]?.versions?.[String(version)] || null
+      // 打开情况只算一次：同一份事实既要说「打开过几次」，也要决定「能不能再发一次」
+      const seen = visitsBrief(entry, visits?.[project.id + ':' + String(entry?.id || '')])
+      const resend = entry?.package ? resendBrief(entry) : null
       rows.push({
         projectId: project.id,
         title: project.title || '',
@@ -122,7 +139,18 @@ export function ledgerRows({ projects = [], counts = {}, visits = {} } = {}) {
         // 催过几次、最近一次（v0.9.144）：与回执一样只挂在有封存包的记录上
         reminder: entry?.package ? reminderBrief(entry) : null,
         // 回执链接被打开过几次（v0.9.145）：不知道的那些是 null，界面什么都不说
-        visits: visitsBrief(entry, visits?.[project.id + ':' + String(entry?.id || '')]),
+        visits: seen,
+        // 又发过几次链接（v0.9.146）：与催过分开记，两个数回答的是两个问题
+        resend,
+        // 现在能不能「再发一次链接」：有包、还没回执、链接还在，而且确知这条地址一次都没被打开过。
+        // 不知道被打开过没有（升级前发的链接）就不给这个按钮——那种情况下「再发一次」是盲发。
+        resendable: Boolean(
+          entry?.package &&
+            !RECEIPT_STATES.includes(entry?.receipt?.state) &&
+            /^[0-9a-f]{16}$/.test(String(entry?.receiptToken || '')) &&
+            seen &&
+            seen.opens === 0,
+        ),
         // 现在能不能催：有包、还没回执、回执链接还留着（换过一条或从来没生过就没有）
         remindable: Boolean(
           entry?.package &&
@@ -159,7 +187,9 @@ export function deliveryLedger(
   // 回执的四个数按整份记录算（不是这一页）：封过包的几条、对上的几条、对不上的几条、还没回来的几条。
   // 只有封了包的交付才谈得上回执——升级前那几条没有包，不把它们算成「还没回来」，那样会凭空多出待办。
   // pendingLate（v0.9.144）不是第五种：它是 pending 里发出超过三天的那些，用来提示「可以提一句」。
-  const receipts = { sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0 }
+  // pendingStuck（v0.9.146）同样不是第六种结论：它是 pendingUnopened 里「又发过 2 次以上还是没打开」的那些，
+  // 也就是「再把同一条地址发一遍也没用了」的那几条，该换个渠道或换个人。
+  const receipts = { sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0, pendingStuck: 0 }
   for (const row of rows) {
     if (!row.package) continue
     receipts.sealed += 1
@@ -169,7 +199,10 @@ export function deliveryLedger(
       if (Number.isFinite(at) && nowMs - at >= REMIND_LATE_DAYS * DAY_MS) receipts.pendingLate += 1
       // pendingUnopened（v0.9.145）也是 pending 的子集：还没回来、而且这条链接一次都没被打开过。
       // 不知道打开过没有的那几条不算进来——猜出来的待办比没有更糟。
-      if (row.visits && row.visits.opens === 0) receipts.pendingUnopened += 1
+      if (row.visits && row.visits.opens === 0) {
+        receipts.pendingUnopened += 1
+        if (Number(row.resend?.count) >= RESEND_STUCK) receipts.pendingStuck += 1
+      }
     } else if (row.receipt.state === 'match') receipts.matched += 1
     else if (row.receipt.state === 'mismatch') receipts.mismatched += 1
     else receipts.unclear += 1

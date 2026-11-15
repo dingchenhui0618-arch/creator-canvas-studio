@@ -1072,6 +1072,12 @@
   overflow-wrap: break-word;
 }
 
+/* 「又发过 1 次」这一段在 390 上会被拆成「又发过 1」/「次」两行（2026-11-15 实测）：
+   数字与单位不能分家，所以这一小段整体换行，不按字符断。 */
+.vq-chip-keep {
+  white-space: nowrap;
+}
+
 .vq-delivery-receipt.is-match {
   border-color: var(--pass);
   color: var(--pass);

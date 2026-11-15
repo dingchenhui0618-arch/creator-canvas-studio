@@ -76,6 +76,17 @@ export const remindDelivery = (projectId: string, deliveryId: string) =>
     { method: 'POST', body: JSON.stringify({}) },
   )
 
+/**
+ * 再发一次链接（v0.9.146）：这条回执链接一次都没被打开过时，让服务端记下「又发了一次」，
+ * 并把同一条地址的 token 还回来拼成一段能直接发的话。与催一句分成两个数：
+ * 催是在问验没验，重发是在问收没收到。同样只记这一次，不替人把消息发出去。
+ */
+export const resendDelivery = (projectId: string, deliveryId: string) =>
+  request<{ ok: boolean; token: string; at: string; count: number }>(
+    deliveryPackageUrl(projectId, deliveryId) + '/resend',
+    { method: 'POST', body: JSON.stringify({}) },
+  )
+
 export const getProject = (id: string) => request<ProjectDetail>('/api/projects/' + id)
 
 // 上次巡检（v0.9.132）：定时任务每天验一遍封存包，这里只读它写下的那份结论

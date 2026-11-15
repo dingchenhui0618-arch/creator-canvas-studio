@@ -78,6 +78,7 @@ import {
   saveProjectScript,
   saveDeliveryReceipt,
   saveDeliveryReminder,
+  saveDeliveryResend,
   issueDeliveryReceiptToken,
   findReceiptLink,
   saveReceiptByToken,
@@ -125,6 +126,8 @@ const DELIVERY_RECEIPT = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-
 const DELIVERY_RECEIPT_LINK = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})\/receipt-link$/
 // 催一句（v0.9.144）：还没收到回执的那一条，记下「催过」并把回执链接还回来
 const DELIVERY_REMINDER = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})\/reminder$/
+// 再发一次链接（v0.9.146）：链接一次都没被打开过时，把同一条地址重新发出去，另记一个数
+const DELIVERY_RESEND = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})\/resend$/
 // 收包人那一侧（v0.9.137）：token 就是凭证，不带登录态；GET 看这是哪一份、POST 把收据贴上去
 const PUBLIC_RECEIPT = /^\/api\/receipts\/([0-9a-f]{16})$/
 // 打印版不进 /api：它是在新标签里打开的 HTML，地址栏里那串会印在纸的页脚上
@@ -1480,6 +1483,38 @@ export function createProjectsRouter() {
         if (saved.missingLink) {
           sendJson(res, 409, {
             error: '这一版还没有回执链接：到作品页那一版点「生成回执链接」，再来催',
+            code: 'NO_RECEIPT_LINK',
+          })
+          return true
+        }
+        sendJson(res, 200, { ok: true, token: saved.token, at: saved.at, count: saved.count })
+        return true
+      }
+
+      // 再发一次链接（v0.9.146）：这条地址一次都没被打开过时，发件人把它重新发出去。
+      // 与催一句分开记：催是在问「验没验」，重发是在问「收没收到」，回到那一行上是两个不同的数。
+      const resendPath = pathname.match(DELIVERY_RESEND)
+      if (resendPath) {
+        if (req.method !== 'POST') {
+          sendJson(res, 405, { error: '再发一次只能用 POST：它要在档案里记下这一次' })
+          return true
+        }
+        if (!user && config.auth.requireAuth) {
+          sendJson(res, 401, { error: '登录已过期：回到工作台再点一次' })
+          return true
+        }
+        const saved = await saveDeliveryResend(resendPath[1], resendPath[2], user)
+        if (!saved) {
+          sendJson(res, 404, { error: '这一条交付没有封存包，没有可再发的回执链接' })
+          return true
+        }
+        if (saved.already) {
+          sendJson(res, 409, { error: '这一份已经贴过回执了，不用再发链接', code: 'RECEIPT_ALREADY' })
+          return true
+        }
+        if (saved.missingLink) {
+          sendJson(res, 409, {
+            error: '这一版还没有回执链接：到作品页那一版点「生成回执链接」，再来发',
             code: 'NO_RECEIPT_LINK',
           })
           return true
