@@ -288,6 +288,143 @@ export function receiptCheckLabel(key: string): string {
   return RECEIPT_CHECK_LABEL[key] || key
 }
 
+/**
+ * 又贴了一次收据之后，和上一次比变了哪一项（v0.9.141）。
+ *
+ * 为什么要有它：一条交付上可能先贴一张对不上的、换了包再贴对得上；流水（v0.9.138）只按时间
+ * 把每一次摆开，看的人得自己在两条之间逐项找差别。这里只做「两次之间」的差，不猜原因、
+ * 不替人判断该不该重发：哪一项从对不上变成对得上（或反过来），收据上写的值换了什么，
+ * 结论是变好、变坏，还是根本没变。
+ *
+ * 边界：
+ *  - 只有同一条交付上的两次才比；只比两边都记了的项，缺的那一项不算「变了」；
+ *  - 上一次那张读不出来（没有逐项）时直接说比不了，不拿「没记」当「对得上」；
+ *  - 只读已经存下来的结论与摘要，不碰包、不重算哈希。
+ */
+export type ReceiptChangeItem = {
+  /** 哪一项（「整包 SHA-256」「字节」…） */
+  label: string
+  /** 上一次对不对得上 */
+  before: boolean
+  /** 这一次对不对得上 */
+  after: boolean
+}
+
+export type DeliveryReceiptChange = {
+  /** 一次说清变化的一句话（界面上原样显示） */
+  text: string
+  /** 变了的项；两次都一样的项不列 */
+  items: ReceiptChangeItem[]
+  /** better 这次对上了 / worse 这次反了 / flat 没变 / unknown 上一次读不出来，比不了 */
+  tone: 'better' | 'worse' | 'flat' | 'unknown'
+}
+
+const CHANGE_LABEL_MAX = 3
+
+/** 名字多了只报个数：这一行不是给人逐个核对的。 */
+function changeList(names: string[]): string {
+  if (names.length <= CHANGE_LABEL_MAX) return names.join('、')
+  return names.slice(0, CHANGE_LABEL_MAX).join('、') + ' 等 ' + names.length + ' 项'
+}
+
+/** 字节数带千分位，不依赖运行环境的 Intl：收据上本来就这么写。 */
+function changeBytes(value: number): string {
+  return String(Math.max(0, Math.round(Number(value) || 0))).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+}
+
+/** 64 位哈希只露头尾：两次之间差在哪一位不是这一行的重点。 */
+function changeSha(value: string): string {
+  const sha = normalizeSha256(value)
+  return sha ? sha.slice(0, 6) + '…' + sha.slice(-4) : ''
+}
+
+/** 包名太长就截断：换的是哪个文件，认得出前几个字就够了。 */
+function changeName(value: string): string {
+  const name = String(value || '').trim()
+  return name.length > 28 ? name.slice(0, 28) + '…' : name
+}
+
+/**
+ * 和上一次比。
+ * 传的是这一条交付上贴过的全部（越晚越靠后）：不到两次就没有「上一次」，返回 null。
+ */
+export function receiptChangeOf(receipts: DeliveryReceipt[] | null | undefined): DeliveryReceiptChange | null {
+  const list = (Array.isArray(receipts) ? receipts : []).filter((entry) => entry && entry.state)
+  if (list.length < 2) return null
+  const prev = list[list.length - 2]
+  const last = list[list.length - 1]
+
+  const earlier = new Map<string, DeliveryReceiptCheck>()
+  for (const check of prev.checks || []) {
+    if (check?.k) earlier.set(check.k, check)
+  }
+  const items: ReceiptChangeItem[] = []
+  let compared = 0
+  for (const check of last.checks || []) {
+    const before = check?.k ? earlier.get(check.k) : null
+    if (!before) continue
+    compared += 1
+    if (before.ok === check.ok) continue
+    items.push({ label: receiptCheckLabel(check.k), before: before.ok, after: check.ok })
+  }
+
+  const up = items.filter((item) => item.after).map((item) => item.label)
+  const down = items.filter((item) => !item.after).map((item) => item.label)
+  const parts: string[] = []
+  if (up.length && down.length) {
+    parts.push(changeList(up) + ' 对上了，' + changeList(down) + ' 反了对不上')
+  } else if (up.length) {
+    parts.push(up.length > 1 ? changeList(up) + ' 这 ' + up.length + ' 项从对不上变成对得上' : changeList(up) + ' 从对不上变成对得上')
+  } else if (down.length) {
+    parts.push(down.length > 1 ? changeList(down) + ' 这 ' + down.length + ' 项从对得上变成对不上' : changeList(down) + ' 从对得上变成对不上')
+  } else if (compared) {
+    parts.push(
+      prev.state === last.state
+        ? '每一项都没变，结论还是「' + receiptStateText(last.state) + '」'
+        : '结论从「' + receiptStateText(prev.state) + '」变成「' + receiptStateText(last.state) + '」',
+    )
+  } else {
+    parts.push('上一次那张读不出来，比不了哪一项变了')
+  }
+  // 变了的项里已经有「对上了 / 对不上」时，再补一句结论怎么变：
+  // 四项都对了但结论还写着「说法打架」，看的人要知道这两次说的不是一回事。
+  if (items.length && prev.state !== last.state) {
+    parts.push('结论从「' + receiptStateText(prev.state) + '」变成「' + receiptStateText(last.state) + '」')
+  }
+
+  // 收据上写的值换没换：版次、字节、哈希、包名。换了不等于这次对得上，所以另说一句。
+  const was = prev.claimed
+  const now = last.claimed
+  const claims: string[] = []
+  if (was && now) {
+    const wasVersion = Math.max(0, Math.round(Number(was.version) || 0))
+    const nowVersion = Math.max(0, Math.round(Number(now.version) || 0))
+    if (wasVersion !== nowVersion) {
+      claims.push('版次从 ' + (wasVersion ? 'v' + wasVersion : '没写') + ' 换成 ' + (nowVersion ? 'v' + nowVersion : '没写'))
+    }
+    const wasBytes = Math.max(0, Math.round(Number(was.bytes) || 0))
+    const nowBytes = Math.max(0, Math.round(Number(now.bytes) || 0))
+    if (wasBytes !== nowBytes) {
+      claims.push('字节从 ' + (wasBytes ? changeBytes(wasBytes) + ' B' : '没写') + ' 换成 ' + (nowBytes ? changeBytes(nowBytes) + ' B' : '没写'))
+    }
+    const wasSha = changeSha(was.sha256 || '')
+    const nowSha = changeSha(now.sha256 || '')
+    if (wasSha !== nowSha) claims.push('整包 SHA-256 从 ' + (wasSha || '没写') + ' 换成 ' + (nowSha || '没写'))
+    if (String(was.packageName || '') !== String(now.packageName || '')) {
+      claims.push(now.packageName ? '包名换成「' + changeName(now.packageName) + '」' : '包名这次没写')
+    }
+  }
+  if (claims.length) {
+    parts.push('收据上写的变了：' + claims.slice(0, 2).join('、') + (claims.length > 2 ? ' 等 ' + claims.length + ' 项' : ''))
+  }
+
+  let tone: DeliveryReceiptChange['tone'] = 'flat'
+  if (!compared) tone = 'unknown'
+  else if (down.length || (prev.state === 'match' && last.state !== 'match')) tone = 'worse'
+  else if (up.length || (last.state === 'match' && prev.state !== 'match')) tone = 'better'
+  return { text: '和上一次比：' + parts.join('。') + '。', items, tone }
+}
+
 /** 归档的旧版本：只存画布指针与名字，画布本身仍在流程服务里 */
 export type ProjectVersion = {
   n: number

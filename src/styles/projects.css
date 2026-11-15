@@ -1831,6 +1831,31 @@
   line-height: 1.7;
 }
 
+/* 又贴了一次：和上一次比变了哪一项（v0.9.141）。摆在结论与逐项之间——
+   先看「这次比上次好了没有」，再看这一次每一项；左边一条色条只表示语气，不改文字。 */
+.vq-archive-receipt-change {
+  margin: var(--space-1) 0 0;
+  padding: 0 0 0 var(--space-2);
+  border-left: 2px solid var(--line-strong);
+  color: var(--ink);
+  font-size: 11.5px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+  text-transform: none;
+}
+
+.vq-archive-receipt-change.is-better {
+  border-left-color: var(--pass);
+}
+
+.vq-archive-receipt-change.is-worse {
+  border-left-color: var(--fail);
+}
+
+.vq-archive-receipt-change.is-unknown {
+  border-left-color: var(--warn);
+}
+
 /* 贴过的每一次（v0.9.138）：结论块底部接一段流水，把更早的那几次按时间倒序摆开。
    只有贴过两次以上才出现——只贴过一次时，上面那一块已经是全部。
    一行一条，第一条写「结论」，下面一行写时间与谁贴的，摘要单独一行，窄屏不会挤成竖条。 */

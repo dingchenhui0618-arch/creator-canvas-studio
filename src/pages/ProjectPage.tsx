@@ -51,6 +51,7 @@ import {
   packageManifestNote,
   packageShortSha,
   projectStep,
+  receiptChangeOf,
   receiptCheckLabel,
   receiptStateText,
   receiptViaText,
@@ -820,9 +821,18 @@ export default function ProjectPage({
               ...prev,
               project: {
                 ...prev.project,
-                deliveries: (prev.project.deliveries || []).map((entry) =>
-                  entry.id === deliveryId ? { ...entry, receipt: result.receipt } : entry,
-                ),
+                // 回执与流水一起换（v0.9.141）：又贴一次之后「和上一次比」和流水都该当场更新，
+                // 不用刷新才看见；服务端那边同时把这一次接进流水，这里跟着写同一条。
+                deliveries: (prev.project.deliveries || []).map((entry) => {
+                  if (entry.id !== deliveryId) return entry
+                  const history = entry.receipts?.length
+                    ? entry.receipts
+                    : entry.receipt
+                      ? [entry.receipt]
+                      : []
+                  const next = history.filter((item) => item.at !== result.receipt.at)
+                  return { ...entry, receipt: result.receipt, receipts: [...next, result.receipt].slice(-5) }
+                }),
               },
             }
           : prev,
@@ -1809,6 +1819,8 @@ export default function ProjectPage({
               const badEntries = new Set(auditResult && auditResult.state === 'ok' ? auditResult.failed.map((item) => item.name) : [])
               // 上次巡检对这一版的结论：有就写一行，没有就不出现
               const rowAudit = sealed && row.id ? audits.byId[row.id] || null : null
+              // 又贴过一次时和上一次比变了哪一项（v0.9.141）：只贴过一次时为 null，不占地方
+              const receiptChange = row.receipt ? receiptChangeOf(row.receipts) : null
               return (
                 <li
                   className={
@@ -2184,6 +2196,11 @@ export default function ProjectPage({
                             {' · 核对于 ' + stamp(row.receipt.at)}
                           </span>
                           <span className="vq-archive-receipt-via">{receiptViaText(row.receipt.via)}</span>
+                          {receiptChange ? (
+                            <p className={'vq-archive-receipt-change is-' + receiptChange.tone} role="status">
+                              {receiptChange.text}
+                            </p>
+                          ) : null}
                           {row.receipt.checks?.length ? (
                             <ul className="vq-archive-receipt-checks">
                               {row.receipt.checks.map((check) => (
