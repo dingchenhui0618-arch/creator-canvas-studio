@@ -58,6 +58,7 @@ import {
   deliveryRelinkText,
   deliveryRelinkedText,
 } from '../domain/delivery-relink'
+import { deliveryRetiredHitHint, deliveryRetiredHitText } from '../domain/delivery-retired-hit'
 import {
   REVIEW_VERDICT_LABEL,
   deliveryDrift,
@@ -197,6 +198,15 @@ function rowResendText(row: ProjectDeliveryRow): string {
  */
 function rowRelinkText(row: ProjectDeliveryRow): string {
   return deliveryRelinkText(row.relink)
+}
+
+/**
+ * 换掉的那条旧地址还被点过几次（v0.9.149）：换完地址之后，新地址的「0 次打开」
+ * 分不出「没送到」和「送到了没理」；旧的这条还在被点，说的就是前一种。
+ * 单独一段、单独一个类名：这一句带着下一步动作，不该混在「又发过几次」的字堆里。
+ */
+function rowRetiredHitText(row: ProjectDeliveryRow): string {
+  return deliveryRetiredHitText(row.retiredHits)
 }
 
 /**
@@ -1289,6 +1299,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                               (deliveryOpenHint(row.visits) ? '。' + deliveryOpenHint(row.visits) : '') +
                               (deliveryResendHint(row.resend) ? '。' + deliveryResendHint(row.resend) : '') +
                               (deliveryRelinkHint(row.relink) ? '。' + deliveryRelinkHint(row.relink) : '') +
+                              (deliveryRetiredHitHint(row.retiredHits) ? '。' + deliveryRetiredHitHint(row.retiredHits) : '') +
                               (rowReminderTitle(row) ? '。' + rowReminderTitle(row) : '')
                             }
                           >
@@ -1299,15 +1310,26 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                               rowWaitText(row) ? ' · ' + rowWaitText(row) : '',
                               deliveryOpenShort(row.visits) ? ' · ' + deliveryOpenShort(row.visits) : '',
                               rowRelinkText(row) ? ' · ' + rowRelinkText(row) : '',
+                              // 换掉的那条还在被点（v0.9.149）：单独一段、单独颜色——
+                              // 这一句后面跟着一个动作（把现在这条再发一次），不该被读成一串计数。
+                              rowRetiredHitText(row) ? (
+                                <span className="vq-keep-together vq-delivery-old" key="old">
+                                  {' · ' + rowRetiredHitText(row)}
+                                </span>
+                              ) : null,
                               rowResendText(row) ? ' · ' + rowResendText(row) : '',
                               rowReminderText(row) ? ' · ' + rowReminderText(row) : '',
                             ]
                               .filter(Boolean)
-                              .map((part) => (
-                                <span className="vq-keep-together" key={part}>
-                                  {part}
-                                </span>
-                              ))}
+                              .map((part) =>
+                                typeof part === 'string' ? (
+                                  <span className="vq-keep-together" key={part}>
+                                    {part}
+                                  </span>
+                                ) : (
+                                  part
+                                ),
+                              )}
                           </span>
                         )
                       ) : null}

@@ -84,6 +84,7 @@ import {
   issueDeliveryReceiptToken,
   findReceiptLink,
   findRetiredReceiptLink,
+  noteRetiredReceiptLinkHit,
   saveReceiptByToken,
   newReceiptToken,
   clearProjectScript,
@@ -1605,6 +1606,10 @@ export function createProjectsRouter() {
           // 也不记一次打开（打开的是一句说明，不是那一份包）。用 410：它确实曾经在，现在永久不在了。
           const retired = await findRetiredReceiptLink(publicReceipt[1])
           if (retired) {
+            // 有人点回旧地址这件事本身是个信号（v0.9.149）：他手上还是旧的那条，新的一条没到他那儿。
+            // 只记次数与时间；这一屏照旧只说「换成了新的」，不把次数写给他看——
+            // 他知道自己被数着点了几次没有任何好处，要这个数的是发件人。
+            await noteRetiredReceiptLinkHit(publicReceipt[1])
             // 这里只写「换过了」，不写日期：收包人那一侧没有账号、拿不到时区，
             // 一句按 UTC 算的日期在他那儿可能是另一天。要日期的是页面，它自己按浏览器时区写。
             sendJson(res, 410, {

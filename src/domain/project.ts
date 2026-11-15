@@ -184,6 +184,11 @@ export type ProjectDelivery = {
    * 旧地址不存——它已经打不开了，留着只是多一份可以当凭证猜的字符串。
    */
   relinks?: { at: string; resends: number }[]
+  /**
+   * 换掉的那几条旧地址（v0.9.148）：只有记录键（token 的哈希前缀）、换的时间，
+   * 有人点回去时再加「被点过几次、最近一次」（v0.9.149）。旧 token 本身不存。
+   */
+  retired?: { key: string; at: string; hits?: number; lastAt?: string }[]
 }
 
 /**
@@ -1142,6 +1147,11 @@ export type ProjectDeliveryRow = {
   resendable?: boolean
   /** 换过几条新链接（v0.9.147）：换过几次、最近一次哪天、换之前那条发过几次。没换过就是 null */
   relink?: { count: number; at: string; resends: number } | null
+  /**
+   * 换掉的那条旧地址还被点过几次（v0.9.149）：点着旧的，说明新的那条多半没送到他手上。
+   * 一次都没被点过就是 null——没发生的事不写成一行字。
+   */
+  retiredHits?: { count: number; at: string } | null
   /**
    * 现在能不能「换一条新链接」（v0.9.147）：同一条地址又发过两次还是没人打开，而且确知一次都没被打开过。
    * 打开过的、不知道打开没有的都不给——前者的地址可能正被看着，后者的地址也许已经送到，换掉只会更糟。

@@ -96,6 +96,26 @@ function relinkBrief(entry) {
 }
 
 /**
+ * 换掉的那条旧地址还被点过几次（v0.9.149）：换地址之后，新地址的打开次数从零算起——
+ * 但「没人打开新地址」有两种完全不同的原因：新地址没送到（他还在点旧的），或者送到了他没理。
+ * 旧的这条还被点着，就是前一种：他手上留着的还是旧的那条。只给次数与最近一次，不给旧地址本身。
+ * 一次都没被点过就是 null——没发生的事不写成一行字。
+ */
+function retiredHitBrief(entry) {
+  const list = (Array.isArray(entry?.retired) ? entry.retired : []).filter((item) => item && typeof item.key === 'string')
+  let count = 0
+  let at = ''
+  for (const item of list) {
+    const hits = Math.max(0, Math.round(Number(item.hits) || 0))
+    if (!hits) continue
+    count += hits
+    const lastAt = String(item.lastAt || item.at || '')
+    if (lastAt > at) at = lastAt
+  }
+  return count ? { count, at } : null
+}
+
+/**
  * 回执链接被打开过几次（v0.9.145）：只回答「这条地址被点开过没有、最近一次什么时候」。
  * 链接发出时还没开始记的那些（升级前发的）一律 null——不知道就说不知道，不写「还没被打开」。
  * 记录按 token 的哈希前缀存在另一个文件里（receipt-visits.json），projects.json 不带它。
@@ -162,6 +182,8 @@ export function ledgerRows({ projects = [], counts = {}, visits = {} } = {}) {
         resend,
         // 换过几条新链接（v0.9.147）：换过之后 resends 清零，所以两个数要一起看
         relink,
+        // 换掉的那条旧地址还被点过几次（v0.9.149）：点着旧的，说明新的那条没送到他手上
+        retiredHits: entry?.package ? retiredHitBrief(entry) : null,
         // 现在能不能「再发一次链接」：有包、还没回执、链接还在，而且确知这条地址一次都没被打开过。
         // 不知道被打开过没有（升级前发的链接）就不给这个按钮——那种情况下「再发一次」是盲发。
         resendable: Boolean(

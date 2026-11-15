@@ -131,7 +131,8 @@ test('换地址时只留旧地址的记号：不是 token，猜不回一条能�
   assert.equal(raw.includes(TOKEN_OLD), false, '旧 token 不落盘')
 
   // 按旧地址找得到那一次，按新地址与随便一串都找不到
-  assert.deepEqual(await store.findRetiredReceiptLink(TOKEN_OLD), { at: issued.at })
+  // 还没人点过：次数是零，最近一次是空串（v0.9.149 起一起给这三个数）
+  assert.deepEqual(await store.findRetiredReceiptLink(TOKEN_OLD), { at: issued.at, hits: 0, lastAt: '' })
   assert.equal(await store.findRetiredReceiptLink(issued.token), null)
   assert.equal(await store.findRetiredReceiptLink('0123456789abcdef'), null)
   assert.equal(await store.findRetiredReceiptLink('not-a-token'), null)

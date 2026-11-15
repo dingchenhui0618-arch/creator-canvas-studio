@@ -1079,6 +1079,12 @@
   white-space: nowrap;
 }
 
+/* 换掉的那条旧地址还被点着（v0.9.149）：这一句不是计数，是「新地址多半没送到」的信号，
+   所以单独一段用警示色；同一枚胶囊里其余的字仍然是灰的，不让整行都变成警报。 */
+.vq-delivery-receipt .vq-delivery-old {
+  color: var(--warn);
+}
+
 .vq-delivery-receipt.is-match {
   border-color: var(--pass);
   color: var(--pass);

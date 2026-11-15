@@ -251,13 +251,26 @@ function normalizeRelinks(raw) {
 // 记录文件被看到也拿不回一条能打开的地址，只够让旧地址说一句「这一条已经换成新的了」。
 const MAX_RETIRED_LINKS = 5
 
+// 换掉的那条旧地址还被点过几次（v0.9.149）：换地址只解决「地址不对」，解决不了「新的那条没送到他手上」。
+// 有人点回旧地址，恰恰说明他手上留着的还是旧的那条——这正是发件人最需要知道的事，
+// 不然他只看见「新地址 0 次打开」，很可能再换一条，把三条地址都发进同一个黑洞。
+// 只记次数与最近一次，不记是谁、不记从哪来：这是「这条地址被点过」，不是「他点过」。
+const RETIRED_HIT_DEDUPE_MS = 5000
+const MAX_RETIRED_HITS = 999
+
 function normalizeRetiredLinks(raw) {
   return (Array.isArray(raw) ? raw : [])
     .filter((entry) => entry && /^[0-9a-f]{16}$/.test(String(entry.key || '')))
-    .map((entry) => ({
-      key: String(entry.key),
-      at: Number.isFinite(Date.parse(String(entry.at || ''))) ? String(entry.at) : '',
-    }))
+    .map((entry) => {
+      const base = {
+        key: String(entry.key),
+        at: Number.isFinite(Date.parse(String(entry.at || ''))) ? String(entry.at) : '',
+      }
+      const hits = Math.min(MAX_RETIRED_HITS, Math.max(0, Math.round(Number(entry.hits) || 0)))
+      if (!hits) return base
+      const lastAt = Number.isFinite(Date.parse(String(entry.lastAt || ''))) ? String(entry.lastAt) : ''
+      return { ...base, hits, lastAt }
+    })
     .slice(-MAX_RETIRED_LINKS)
 }
 
@@ -791,8 +804,46 @@ export async function findRetiredReceiptLink(token) {
   for (const project of list) {
     for (const delivery of normalizeDeliveries(project.deliveries)) {
       const hit = (delivery.retired || []).find((entry) => entry.key === key)
-      if (hit) return { at: hit.at }
+      if (hit) return { at: hit.at, hits: Math.max(0, Math.round(Number(hit.hits) || 0)), lastAt: String(hit.lastAt || '') }
     }
+  }
+  return null
+}
+
+/**
+ * 有人点回一条换掉的旧地址（v0.9.149）：记一次，给发件人一个「他手上还是旧的那条」的信号。
+ *
+ * 只加次数与最近一次，不加人、不加 IP、不加从哪来——这一侧没有账号，能知道的只有这条地址被点过。
+ * 五秒内连着来的算一次：页面刷新、浏览器预取都会让同一次点击变成两三个请求，
+ * 记成三次会让发件人以为对方在反复试；顺带也让一个旧地址没法把整份记录写成千百遍。
+ *
+ * 不改作品的 updatedAt：点一下旧地址不是你改了作品，不该把它顶到列表最前面。
+ * 返回 null = 这不是一条记过的旧地址（照旧 404，不凭空造一条）。
+ */
+export async function noteRetiredReceiptLinkHit(token, nowMs = Date.now()) {
+  const key = visitKey(String(token || ''))
+  if (!key) return null
+  const list = await loadAll()
+  for (const project of list) {
+    const deliveries = normalizeDeliveries(project.deliveries)
+    const index = deliveries.findIndex((entry) => (entry.retired || []).some((item) => item.key === key))
+    if (index < 0) continue
+    const entry = deliveries[index]
+    const current = entry.retired.find((item) => item.key === key)
+    const now = Number.isFinite(Number(nowMs)) ? Number(nowMs) : Date.now()
+    const seenMs = Date.parse(String(current.lastAt || ''))
+    if (Number.isFinite(seenMs) && now - seenMs < RETIRED_HIT_DEDUPE_MS) {
+      return { at: current.at, hits: Math.max(0, Math.round(Number(current.hits) || 0)), lastAt: String(current.lastAt || ''), recorded: false }
+    }
+    const at = new Date(now).toISOString()
+    const hits = Math.min(MAX_RETIRED_HITS, Math.max(0, Math.round(Number(current.hits) || 0)) + 1)
+    deliveries[index] = {
+      ...entry,
+      retired: entry.retired.map((item) => (item.key === key ? { ...item, hits, lastAt: at } : item)),
+    }
+    project.deliveries = deliveries
+    await persist(list)
+    return { at: current.at, hits, lastAt: at, recorded: true }
   }
   return null
 }
