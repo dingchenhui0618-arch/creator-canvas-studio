@@ -89,7 +89,8 @@ import {
   reviewsOfVersion,
 } from '../domain/review'
 import { deliveryOpenCount, deliveryOpenHint } from '../domain/delivery-open'
-import { deliveryOpenWithResend, deliveryResendBrief, deliveryResendHint } from '../domain/delivery-resend'
+import { deliveryResendBrief, deliveryResendHint } from '../domain/delivery-resend'
+import { deliveryArchiveLine, deliveryRelinkBrief, deliveryRelinkHint } from '../domain/delivery-relink'
 import { stampTime as stamp, visitLine } from '../domain/share'
 import '../styles/projects.css'
 
@@ -1833,7 +1834,9 @@ export default function ProjectPage({
               const outreach = row.receipt ? receiptOutreach(row.receipt) : ''
               // 这条链接又发过几次（v0.9.146）：与打开情况合成一行灰字，不并成两行
               const resend = deliveryResendBrief(row.resends)
-              const openLine = deliveryOpenWithResend(row.visits, resend)
+              // 换过几条地址（v0.9.147）：换过之后重发次数清零，两个数一起才说得清试过几条链接
+              const relink = deliveryRelinkBrief(row.relinks)
+              const openLine = deliveryArchiveLine(row.visits, resend, relink)
               return (
                 <li
                   className={
@@ -1884,11 +1887,13 @@ export default function ProjectPage({
                     {openLine ? (
                       <span
                         className={'vq-archive-openline' + (deliveryOpenCount(row.visits) ? '' : ' is-unopened')}
-                        title={
-                          deliveryOpenHint(row.visits) +
-                          (deliveryOpenHint(row.visits) && resend ? '。' : '') +
-                          deliveryResendHint(resend)
-                        }
+                        title={[
+                          deliveryOpenHint(row.visits),
+                          deliveryResendHint(resend),
+                          deliveryRelinkHint(relink),
+                        ]
+                          .filter(Boolean)
+                          .join('。')}
                       >
                         {openLine}
                       </span>

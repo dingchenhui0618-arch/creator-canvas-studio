@@ -205,6 +205,10 @@ const MAX_REMINDERS = 5
 // 又发过几次（v0.9.146）：链接一次都没被打开过时，把这条地址重新发出去的那几次。
 // 与「催过」分开记：一个问「验没验」，一个问「收没收到」，混在一个数里两边都说不清。
 const MAX_RESENDS = 5
+// 换过几次新链接（v0.9.147）：同一条地址发到两次还没被打开之后，发件人换了一枚新 token。
+// 换过之后打开次数从头算，所以「又发过几次」也跟着清零——剩下的只有「这条地址换过几次、
+// 上一条在换掉之前发过几次」，两条加起来才说得清「这一条到底试过几条地址」。
+const MAX_RELINKS = 5
 
 /**
  * 催过 / 又发过的记录：只有时间，不存发出去的那段话。
@@ -225,6 +229,20 @@ function normalizeReminders(raw) {
 
 function normalizeResends(raw) {
   return normalizeStamps(raw, MAX_RESENDS)
+}
+
+/**
+ * 换链接的记录（v0.9.147）：每次只存时间与「换掉之前那条发过几次」。
+ * 旧地址本身不存——它已经打不开了，留着只是多一份能当凭证猜的字符串。
+ */
+function normalizeRelinks(raw) {
+  return (Array.isArray(raw) ? raw : [])
+    .filter((entry) => entry && typeof entry.at === 'string' && entry.at)
+    .map((entry) => ({
+      at: entry.at,
+      resends: Math.min(MAX_RESENDS, Math.max(0, Math.round(Number(entry.resends) || 0))),
+    }))
+    .slice(-MAX_RELINKS)
 }
 
 function normalizeDeliveryReceipt(raw) {
@@ -322,6 +340,10 @@ function normalizeDeliveries(raw) {
       // 又发过几次（v0.9.146）：链接没被打开过时重新发出去的那几次，与催过分开存
       const resends = pkg ? normalizeResends(entry.resends) : []
       if (resends.length) base.resends = resends
+      // 换过几条地址（v0.9.147）：每换一条都会清掉 resends（那几次指的是旧地址），
+      // 旧地址试过几次折在 relinks 的这一项里，不丢。
+      const relinks = pkg ? normalizeRelinks(entry.relinks) : []
+      if (relinks.length) base.relinks = relinks
       return base
     })
     .filter((entry) => entry.version > 0)
@@ -623,6 +645,57 @@ export async function saveDeliveryResend(id, deliveryId, user = null) {
   found.updatedAt = at
   await persist(list)
   return { already: false, token, at, count: resends.length, delivery: deliveries[index] }
+}
+
+/**
+ * 这一条交付现在的回执链接是哪一枚（v0.9.147）：换地址之前先看一眼——
+ * 已经贴过回执的不该再换，被打开过的也不该换（对方可能正看着那条），这些判断都在路由那一层做。
+ * 返回 null = 作品 / 交付记录不存在，或者这一条没有封存包。
+ */
+export async function deliveryReceiptLink(id, deliveryId, user = null) {
+  const list = await loadAll()
+  const found = list.find((item) => item.id === id && canAccess(item, user))
+  if (!found) return null
+  const deliveries = normalizeDeliveries(found.deliveries)
+  const entry = deliveries.find((item) => item.id === deliveryId && item.package)
+  if (!entry) return null
+  return { token: /^[0-9a-f]{16}$/.test(String(entry.receiptToken || '')) ? String(entry.receiptToken) : '', receipt: Boolean(entry.receipt) }
+}
+
+/**
+ * 换一条新链接（v0.9.147）：同一条地址发到两次还没被打开之后，把这一条交付的 token 换成新的一枚，
+ * 旧地址立刻打不开；打开次数从头算（新地址的键不一样），「又发过几次」清零，
+ * 换这件事本身折进 relinks，里面记着「换掉之前那条发过几次」。
+ *
+ * 为什么清零重发次数：那两个数回答的是「这一条地址发了几次没人打开」。换了地址还是那两个数，
+ * 下一次该不该再发就永远判断不了——所以新地址从零开始，旧地址的账留在 relinks 里。
+ *
+ * 三种退回与催 / 重发一致：没这条记录（或没有封存包）→ null；已经贴过回执 → { already: true }；
+ * 根本没有链接（v0.9.137 之前封的包）→ { missingLink: true }，先去作品页生成一条。
+ */
+export async function saveDeliveryRelink(id, deliveryId, user = null) {
+  const list = await loadAll()
+  const found = list.find((item) => item.id === id && canAccess(item, user))
+  if (!found) return null
+  const deliveries = normalizeDeliveries(found.deliveries)
+  const index = deliveries.findIndex((entry) => entry.id === deliveryId && entry.package)
+  if (index < 0) return null
+  const entry = deliveries[index]
+  if (entry.receipt) return { already: true, delivery: entry }
+  const token = /^[0-9a-f]{16}$/.test(String(entry.receiptToken || '')) ? String(entry.receiptToken) : ''
+  if (!token) return { missingLink: true, delivery: entry }
+  const at = new Date().toISOString()
+  const nextToken = newReceiptToken()
+  const resendsBefore = normalizeResends(entry.resends).length
+  const relinks = [...normalizeRelinks(entry.relinks), { at, resends: resendsBefore }].slice(-MAX_RELINKS)
+  // resends 是「这一条地址又发过几次」：换了地址就清零，账折进 relinks 里
+  const next = { ...entry, receiptToken: nextToken, receiptLinkAt: at, relinks }
+  delete next.resends
+  deliveries[index] = next
+  found.deliveries = deliveries
+  found.updatedAt = at
+  await persist(list)
+  return { token: nextToken, at, count: relinks.length, resendsBefore, delivery: deliveries[index] }
 }
 
 /**

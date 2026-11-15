@@ -79,6 +79,23 @@ function resendBrief(entry) {
 }
 
 /**
+ * 换过几条新链接（v0.9.147）：同一条地址发到两次还没被打开之后换掉的那几次。
+ * 只给「换过几次、最近一次哪换的、换之前那条发过几次」——旧地址本身不存，也不往下传。
+ * 没换过就是 null。
+ */
+function relinkBrief(entry) {
+  const list = (Array.isArray(entry?.relinks) ? entry.relinks : [])
+    .filter((item) => item && typeof item.at === 'string' && item.at)
+  if (!list.length) return null
+  const last = list[list.length - 1]
+  return {
+    count: list.length,
+    at: String(last.at || ''),
+    resends: Math.max(0, Math.round(Number(last.resends) || 0)),
+  }
+}
+
+/**
  * 回执链接被打开过几次（v0.9.145）：只回答「这条地址被点开过没有、最近一次什么时候」。
  * 链接发出时还没开始记的那些（升级前发的）一律 null——不知道就说不知道，不写「还没被打开」。
  * 记录按 token 的哈希前缀存在另一个文件里（receipt-visits.json），projects.json 不带它。
@@ -115,6 +132,7 @@ export function ledgerRows({ projects = [], counts = {}, visits = {} } = {}) {
       // 打开情况只算一次：同一份事实既要说「打开过几次」，也要决定「能不能再发一次」
       const seen = visitsBrief(entry, visits?.[project.id + ':' + String(entry?.id || '')])
       const resend = entry?.package ? resendBrief(entry) : null
+      const relink = entry?.package ? relinkBrief(entry) : null
       rows.push({
         projectId: project.id,
         title: project.title || '',
@@ -142,6 +160,8 @@ export function ledgerRows({ projects = [], counts = {}, visits = {} } = {}) {
         visits: seen,
         // 又发过几次链接（v0.9.146）：与催过分开记，两个数回答的是两个问题
         resend,
+        // 换过几条新链接（v0.9.147）：换过之后 resends 清零，所以两个数要一起看
+        relink,
         // 现在能不能「再发一次链接」：有包、还没回执、链接还在，而且确知这条地址一次都没被打开过。
         // 不知道被打开过没有（升级前发的链接）就不给这个按钮——那种情况下「再发一次」是盲发。
         resendable: Boolean(
@@ -150,6 +170,17 @@ export function ledgerRows({ projects = [], counts = {}, visits = {} } = {}) {
             /^[0-9a-f]{16}$/.test(String(entry?.receiptToken || '')) &&
             seen &&
             seen.opens === 0,
+        ),
+        // 现在能不能「换一条新链接」（v0.9.147）：同一条地址又发过两次还是没人打开，
+        // 说明问题不在「他忘了」——再发第三遍也不会不一样。打开过的、不知道打开没有的都不换：
+        // 前者可能正被看着，后者换掉等于把一条也许已经送到的地址作废。
+        relinkable: Boolean(
+          entry?.package &&
+            !RECEIPT_STATES.includes(entry?.receipt?.state) &&
+            /^[0-9a-f]{16}$/.test(String(entry?.receiptToken || '')) &&
+            seen &&
+            seen.opens === 0 &&
+            Number(resend?.count) >= RESEND_STUCK,
         ),
         // 现在能不能催：有包、还没回执、回执链接还留着（换过一条或从来没生过就没有）
         remindable: Boolean(
@@ -189,7 +220,9 @@ export function deliveryLedger(
   // pendingLate（v0.9.144）不是第五种：它是 pending 里发出超过三天的那些，用来提示「可以提一句」。
   // pendingStuck（v0.9.146）同样不是第六种结论：它是 pendingUnopened 里「又发过 2 次以上还是没打开」的那些，
   // 也就是「再把同一条地址发一遍也没用了」的那几条，该换个渠道或换个人。
-  const receipts = { sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0, pendingStuck: 0 }
+  // pendingRelinked（v0.9.147）是它的下一步：这几条已经换过一条新地址，新地址还是没人打开——
+  // 到这一步别再换地址了，问题多半不在链接上（收件人写错了、人家不用这个渠道），该换个人。
+  const receipts = { sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0, pendingStuck: 0, pendingRelinked: 0 }
   for (const row of rows) {
     if (!row.package) continue
     receipts.sealed += 1
@@ -202,6 +235,7 @@ export function deliveryLedger(
       if (row.visits && row.visits.opens === 0) {
         receipts.pendingUnopened += 1
         if (Number(row.resend?.count) >= RESEND_STUCK) receipts.pendingStuck += 1
+        if (Number(row.relink?.count) >= 1) receipts.pendingRelinked += 1
       }
     } else if (row.receipt.state === 'match') receipts.matched += 1
     else if (row.receipt.state === 'mismatch') receipts.mismatched += 1

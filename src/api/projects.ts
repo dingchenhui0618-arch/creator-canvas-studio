@@ -87,6 +87,17 @@ export const resendDelivery = (projectId: string, deliveryId: string) =>
     { method: 'POST', body: JSON.stringify({}) },
   )
 
+/**
+ * 换一条新链接（v0.9.147）：同一条地址又发过两次还是没人打开时，让服务端换一枚新 token，
+ * 旧地址立刻失效，打开次数与重发次数从零算起。返回新 token 与「换掉之前那条发过几次」。
+ * 只换地址不换包；也不替人把消息发出去——发还是发件人自己发。
+ */
+export const relinkDelivery = (projectId: string, deliveryId: string) =>
+  request<{ ok: boolean; token: string; at: string; count: number; resendsBefore: number }>(
+    deliveryPackageUrl(projectId, deliveryId) + '/relink',
+    { method: 'POST', body: JSON.stringify({}) },
+  )
+
 export const getProject = (id: string) => request<ProjectDetail>('/api/projects/' + id)
 
 // 上次巡检（v0.9.132）：定时任务每天验一遍封存包，这里只读它写下的那份结论

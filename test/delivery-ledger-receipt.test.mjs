@@ -113,6 +113,7 @@ test('四个数字对得上，翻页不改变它们', () => {
   const { receipts } = ledger
   // pendingUnopened（v0.9.145）是 pending 的子集：这几条交付都没带打开记录，所以是 0
   // pendingStuck（v0.9.146）是 pendingUnopened 里又发过两次还是一个样的那些，这里也没有
+  // pendingRelinked（v0.9.147）是换过一条新地址、新地址也没人打开的那些，这里同样没有
   assert.deepEqual(receipts, {
     sealed: 3,
     matched: 1,
@@ -122,6 +123,7 @@ test('四个数字对得上，翻页不改变它们', () => {
     pendingLate: 0,
     pendingUnopened: 0,
     pendingStuck: 0,
+    pendingRelinked: 0,
   })
   assert.equal(receipts.sealed, receipts.matched + receipts.mismatched + receipts.unclear + receipts.pending)
   const second = deliveryLedger({ projects }, { offset: 2, limit: 1, now })

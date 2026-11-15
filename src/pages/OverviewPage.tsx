@@ -13,6 +13,7 @@ import {
   listProjects,
   listShares,
   receiptLinkUrl,
+  relinkDelivery,
   remindDelivery,
   resendDelivery,
 } from '../api/projects'
@@ -51,6 +52,12 @@ import {
   deliveryResendText,
   deliveryStuckText,
 } from '../domain/delivery-resend'
+import {
+  deliveryRelinkHint,
+  deliveryRelinkMessage,
+  deliveryRelinkText,
+  deliveryRelinkedText,
+} from '../domain/delivery-relink'
 import {
   REVIEW_VERDICT_LABEL,
   deliveryDrift,
@@ -185,6 +192,14 @@ function rowResendText(row: ProjectDeliveryRow): string {
 }
 
 /**
+ * 换过几次链接（v0.9.147）：换掉一条地址之后，重发次数从零算起，
+ * 所以这一行要能同时写「换过 1 次链接」和「又发过 1 次」，两个数说的是两条不同的地址。
+ */
+function rowRelinkText(row: ProjectDeliveryRow): string {
+  return deliveryRelinkText(row.relink)
+}
+
+/**
  * 工作台只回答一个问题：下一步点哪里。
  * 首屏是一张「下一步」主卡（继续上次那块画布，没画布就从一条爆款开始）加三个场景化入口；
  * 统计压进主卡右侧，不再单开一排数字卡——数字是背景，不是任务。
@@ -239,7 +254,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
   const [deliveryTotal, setDeliveryTotal] = useState(0)
   const [deliverySummary, setDeliverySummary] = useState({ projects: 0, current: 0, drifted: 0, lastAt: '' })
   // 回执的四个数（v0.9.139）：封过包的几次、对上几次、对不上几次、还没回来几次
-  const [deliveryReceipts, setDeliveryReceipts] = useState<DeliveryLedgerReceipts>({ sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0, pendingStuck: 0 })
+  const [deliveryReceipts, setDeliveryReceipts] = useState<DeliveryLedgerReceipts>({ sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0, pendingStuck: 0, pendingRelinked: 0 })
   const [deliveryHasMore, setDeliveryHasMore] = useState(false)
   const [deliveryOpen, setDeliveryOpen] = useState(false)
   const [deliveryBusy, setDeliveryBusy] = useState(false)
@@ -248,6 +263,8 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
   const [remindBusy, setRemindBusy] = useState('')
   // 正在写「再发一次」的那一条（v0.9.146）：与催一句分开，两个按钮不会同时转
   const [resendBusy, setResendBusy] = useState('')
+  // 正在换一条新链接的那一条（v0.9.147）：换的是地址，写盘之后旧地址立刻打不开
+  const [relinkBusy, setRelinkBusy] = useState('')
   const [loading, setLoading] = useState(true)
   const [errors, setErrors] = useState<string[]>([])
 
@@ -306,12 +323,12 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
         lastAt: deliveryResult.value.lastAt || '',
       })
       setDeliveryHasMore(Boolean(deliveryResult.value.hasMore))
-      setDeliveryReceipts(deliveryResult.value.receipts ?? { sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0, pendingStuck: 0 })
+      setDeliveryReceipts(deliveryResult.value.receipts ?? { sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0, pendingStuck: 0, pendingRelinked: 0 })
     } else {
       setDeliveries([])
       setDeliveryTotal(0)
       setDeliverySummary({ projects: 0, current: 0, drifted: 0, lastAt: '' })
-      setDeliveryReceipts({ sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0, pendingStuck: 0 })
+      setDeliveryReceipts({ sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0, pendingStuck: 0, pendingRelinked: 0 })
       setDeliveryHasMore(false)
       problems.push('交付记录：' + String((deliveryResult.reason as Error)?.message || deliveryResult.reason))
     }
@@ -495,6 +512,58 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
         setDeliveryError('没发成：' + String((error as Error)?.message || error))
       } finally {
         setResendBusy('')
+      }
+    },
+    [onToast],
+  )
+
+  /**
+   * 换一条新链接（v0.9.147）：同一条地址又发过两次还是没人打开，说明问题不在「他忘了」——
+   * 换一枚新 token，旧地址立刻失效，打开次数与「又发过几次」都从零算起（旧账折进「换过几次链接」）。
+   * 只换地址不换包；也不替人把消息发出去，发还是发件人自己发。
+   */
+  const copyDeliveryRelink = useCallback(
+    async (row: ProjectDeliveryRow) => {
+      const deliveryId = String(row.deliveryId || '')
+      if (!deliveryId) return
+      const key = row.projectId + ':' + row.version
+      setRelinkBusy(key)
+      try {
+        const issued = await relinkDelivery(row.projectId, deliveryId)
+        const text = deliveryRelinkMessage({
+          title: row.title,
+          version: row.version,
+          fileName: row.package?.fileName,
+          bytes: row.package?.bytes,
+          at: row.at,
+          link: receiptLinkUrl(issued.token),
+        })
+        try {
+          await navigator.clipboard.writeText(text)
+        } catch {
+          setDeliveryError('这一段没复制进剪贴板：浏览器没给权限。地址已经换了，回执链接到作品页那一版还能再复制。')
+          return
+        }
+        setDeliveries((prev) =>
+          prev.map((entry) =>
+            entry.projectId === row.projectId && entry.version === row.version
+              ? {
+                  ...entry,
+                  relink: { count: issued.count, at: issued.at, resends: issued.resendsBefore },
+                  // 新地址还没发过：两个数都回到起点，按钮也跟着变回「再发一次链接」
+                  resend: null,
+                  resendable: true,
+                  relinkable: false,
+                }
+              : entry,
+          ),
+        )
+        setDeliveryError('')
+        onToast('已复制：换过地址的那一段（旧链接已作废）')
+      } catch (error) {
+        setDeliveryError('没换成：' + String((error as Error)?.message || error))
+      } finally {
+        setRelinkBusy('')
       }
     },
     [onToast],
@@ -1134,6 +1203,8 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                 {deliveryReceipts.pendingUnopened ? deliveryUnopenedText(deliveryReceipts.pendingUnopened) : ''}
                 {/* 又发过两次还是没打开的那几次：同一条地址再发也没用了，换个方式（v0.9.146） */}
                 {deliveryReceipts.pendingStuck ? deliveryStuckText(deliveryReceipts.pendingStuck) : ''}
+                {/* 换过新地址、新地址也没人打开的那几次：别再换地址了，先问一句（v0.9.147） */}
+                {deliveryReceipts.pendingRelinked ? deliveryRelinkedText(deliveryReceipts.pendingRelinked) : ''}
               </p>
             ) : null}
             {deliveryReceipts.mismatched ? (
@@ -1217,6 +1288,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                               (rowWaitLate(row) ? '，可以提一句' : '') +
                               (deliveryOpenHint(row.visits) ? '。' + deliveryOpenHint(row.visits) : '') +
                               (deliveryResendHint(row.resend) ? '。' + deliveryResendHint(row.resend) : '') +
+                              (deliveryRelinkHint(row.relink) ? '。' + deliveryRelinkHint(row.relink) : '') +
                               (rowReminderTitle(row) ? '。' + rowReminderTitle(row) : '')
                             }
                           >
@@ -1226,6 +1298,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                               '还没收到回执',
                               rowWaitText(row) ? ' · ' + rowWaitText(row) : '',
                               deliveryOpenShort(row.visits) ? ' · ' + deliveryOpenShort(row.visits) : '',
+                              rowRelinkText(row) ? ' · ' + rowRelinkText(row) : '',
                               rowResendText(row) ? ' · ' + rowResendText(row) : '',
                               rowReminderText(row) ? ' · ' + rowReminderText(row) : '',
                             ]
@@ -1268,8 +1341,20 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                         </a>
                       ) : null}
                       {/* 链接一次都没被打开过：先给「再发一次」（v0.9.146）——多半是没送到，
-                          再发一条同样的地址比催他验更对路。点过但没有回执的那几条仍然只有「复制提醒」。 */}
-                      {row.resendable && row.deliveryId ? (
+                          再发一条同样的地址比催他验更对路。点过但没有回执的那几条仍然只有「复制提醒」。
+                          同一条地址发到两次还没打开（v0.9.147）：换一条新链接——第三遍同样的地址
+                          不会比前两遍多出什么，地址本身多半就不对。 */}
+                      {row.relinkable && row.deliveryId ? (
+                        <button
+                          type="button"
+                          className="vq-button vq-button--quiet vq-button--sm vq-delivery-relink"
+                          disabled={relinkBusy === row.projectId + ':' + row.version}
+                          onClick={() => void copyDeliveryRelink(row)}
+                          title="换一枚新的回执地址（旧的那条立刻打不开），并复制一段「新地址在这儿」的话；包、字节、哈希都不动"
+                        >
+                          {relinkBusy === row.projectId + ':' + row.version ? '正在换…' : '换一条新链接'}
+                        </button>
+                      ) : row.resendable && row.deliveryId ? (
                         <button
                           type="button"
                           className="vq-button vq-button--quiet vq-button--sm vq-delivery-resend"

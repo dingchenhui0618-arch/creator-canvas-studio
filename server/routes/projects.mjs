@@ -79,6 +79,8 @@ import {
   saveDeliveryReceipt,
   saveDeliveryReminder,
   saveDeliveryResend,
+  saveDeliveryRelink,
+  deliveryReceiptLink,
   issueDeliveryReceiptToken,
   findReceiptLink,
   saveReceiptByToken,
@@ -128,6 +130,8 @@ const DELIVERY_RECEIPT_LINK = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([
 const DELIVERY_REMINDER = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})\/reminder$/
 // 再发一次链接（v0.9.146）：链接一次都没被打开过时，把同一条地址重新发出去，另记一个数
 const DELIVERY_RESEND = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})\/resend$/
+// 换一条新链接（v0.9.147）：同一条地址发到两次还没被打开之后，换一枚新 token，旧地址立刻失效
+const DELIVERY_RELINK = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})\/relink$/
 // 收包人那一侧（v0.9.137）：token 就是凭证，不带登录态；GET 看这是哪一份、POST 把收据贴上去
 const PUBLIC_RECEIPT = /^\/api\/receipts\/([0-9a-f]{16})$/
 // 打印版不进 /api：它是在新标签里打开的 HTML，地址栏里那串会印在纸的页脚上
@@ -1520,6 +1524,71 @@ export function createProjectsRouter() {
           return true
         }
         sendJson(res, 200, { ok: true, token: saved.token, at: saved.at, count: saved.count })
+        return true
+      }
+
+      // 换一条新链接（v0.9.147）：同一条地址又发过两次还是没人打开，说明问题不在「他忘了」——
+      // 这时候换一枚新 token，旧地址立刻失效，打开次数与重发次数都从零算起。
+      // 三种情况不换：已经贴过回执（问都问到了，换地址只会把已到手的证据弄丢方向）、
+      // 这条地址被打开过（对方可能正看着它，换掉等于把送到的那条收回）、根本没有链接。
+      const relinkPath = pathname.match(DELIVERY_RELINK)
+      if (relinkPath) {
+        if (req.method !== 'POST') {
+          sendJson(res, 405, { error: '换一条链接只能用 POST：它要换掉档案里的那一枚 token' })
+          return true
+        }
+        if (!user && config.auth.requireAuth) {
+          sendJson(res, 401, { error: '登录已过期：回到工作台再点一次' })
+          return true
+        }
+        const current = await deliveryReceiptLink(relinkPath[1], relinkPath[2], user)
+        if (!current) {
+          sendJson(res, 404, { error: '这一条交付没有封存包，没有可换的回执链接' })
+          return true
+        }
+        if (current.receipt) {
+          sendJson(res, 409, { error: '这一份已经贴过回执了，不用再换链接', code: 'RECEIPT_ALREADY' })
+          return true
+        }
+        if (!current.token) {
+          sendJson(res, 409, {
+            error: '这一版还没有回执链接：到作品页那一版点「生成回执链接」，再来换',
+            code: 'NO_RECEIPT_LINK',
+          })
+          return true
+        }
+        // 换掉一条已经送到的地址，比不发更糟：对方点开的是旧的那条，而它刚失效
+        const opened = await getReceiptVisits(current.token)
+        if (opened && opened.opens > 0) {
+          sendJson(res, 409, {
+            error: '这条链接已经被打开过 ' + opened.opens + ' 次：他可能正看着它，别换地址——再发一次这条，或者换个方式发',
+            code: 'LINK_OPENED',
+          })
+          return true
+        }
+        const saved = await saveDeliveryRelink(relinkPath[1], relinkPath[2], user)
+        if (!saved) {
+          sendJson(res, 404, { error: '这一条交付记录不在了，刷新一下再试' })
+          return true
+        }
+        if (saved.already) {
+          sendJson(res, 409, { error: '这一份已经贴过回执了，不用再换链接', code: 'RECEIPT_ALREADY' })
+          return true
+        }
+        if (saved.missingLink) {
+          sendJson(res, 409, {
+            error: '这一版还没有回执链接：到作品页那一版点「生成回执链接」，再来换',
+            code: 'NO_RECEIPT_LINK',
+          })
+          return true
+        }
+        sendJson(res, 200, {
+          ok: true,
+          token: saved.token,
+          at: saved.at,
+          count: saved.count,
+          resendsBefore: saved.resendsBefore,
+        })
         return true
       }
 
