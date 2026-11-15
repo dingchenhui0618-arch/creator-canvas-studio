@@ -98,6 +98,16 @@ export const relinkDelivery = (projectId: string, deliveryId: string) =>
     { method: 'POST', body: JSON.stringify({}) },
   )
 
+/**
+ * 这一条是给谁的（v0.9.152）：写一个称呼，或者传空串清掉。
+ * 只改交付档案里这一行的这一项：包、收据、链接、次数都不动；同一个称呼再存一次服务端不写盘（changed=false）。
+ */
+export const setDeliveryRecipient = (projectId: string, deliveryId: string, recipient: string) =>
+  request<{ ok: boolean; changed: boolean; recipient: string }>(
+    deliveryPackageUrl(projectId, deliveryId) + '/recipient',
+    { method: 'POST', body: JSON.stringify({ recipient }) },
+  )
+
 export const getProject = (id: string) => request<ProjectDetail>('/api/projects/' + id)
 
 // 上次巡检（v0.9.132）：定时任务每天验一遍封存包，这里只读它写下的那份结论

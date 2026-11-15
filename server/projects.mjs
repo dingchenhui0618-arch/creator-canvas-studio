@@ -31,6 +31,10 @@ const MAX_SHARE_HISTORY = 8
 export const SHARE_HISTORY_LIMIT = MAX_SHARE_HISTORY
 // 交付记录：一次「标记交付」= 哪一版、什么时候交出去。留 20 条，与版本上限对齐
 const MAX_DELIVERIES = 20
+// 收件人称呼（v0.9.152）：一条交付是发给谁的，只写给自己人看。24 个字够写「王老师 · 内容组」，
+// 再长就不是称呼而是备注了——这里只放一个称呼，备注属于作品本身。
+const MAX_RECIPIENT = 24
+export const RECIPIENT_LIMIT = MAX_RECIPIENT
 /** 一条交付记录最多带多少条包内清单：和 delivery-packages.mjs 的上限保持一致。 */
 const MAX_PACKAGE_FILES = 60
 
@@ -69,7 +73,23 @@ async function persist(list) {
     await fsp.mkdir(config.dataDir, { recursive: true })
     const tmp = projectsFile + '.' + process.pid + '.' + Math.random().toString(36).slice(2) + '.tmp'
     await fsp.writeFile(tmp, JSON.stringify(list, null, 2), 'utf8')
-    await fsp.rename(tmp, projectsFile)
+    // Windows 上 rename 撞上别人正好在读这份文件时是 EPERM / EBUSY（2026-11-15 本地实测：
+    // 验收脚本读盘的时机压在改写那一刻，一次改名就 500 了）。这不是文件坏了，隔一会儿再来一次就过去；
+    // 产业上的 Linux 不会出这种事，但桌面端就在 Windows 上跑，所以这里按「占用」重试，不按「失败」退出。
+    // 三次都不行才抛：不能把一次瞬时占用当成写成功。
+    let lastError = null
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        await fsp.rename(tmp, projectsFile)
+        return
+      } catch (error) {
+        lastError = error
+        if (!['EPERM', 'EBUSY', 'EACCES'].includes(String(error?.code || ''))) break
+        await new Promise((resolve) => setTimeout(resolve, 40))
+      }
+    }
+    await fsp.rm(tmp, { force: true }).catch(() => {})
+    throw lastError
   })
 }
 
@@ -351,6 +371,22 @@ function withReceipt(record, receipt) {
   return { ...record, receipt, receipts: [...history, receipt].slice(-MAX_RECEIPTS) }
 }
 
+/**
+ * 收件人称呼（v0.9.152）：这一条交付是发给谁的。
+ * 只做三件事：去掉控制字符、把空白压成一个、按字截到上限（按码点算，emoji 与生僻字不会被劈成半个）。
+ * 空串 = 没写，不存一个空字段——老记录与没写过的都读成「不知道发给谁」，界面就不说这一段。
+ */
+export function normalizeDeliveryRecipient(raw) {
+  const flat = Array.from(String(raw ?? ''))
+    .map((ch) => {
+      const code = ch.codePointAt(0) || 0
+      return code < 0x20 || code === 0x7f ? ' ' : ch
+    })
+    .join('')
+  const text = flat.replace(/\s+/g, ' ').trim()
+  return Array.from(text).slice(0, MAX_RECIPIENT).join('')
+}
+
 // 交付记录：{ id, version, at, review, package, receipt }。老记录没有时间就写空串——照样是「这一版交过」，只是不知道什么时候。
 // review 同理：没有这个字段就是「当时没记评审」，不能拿这一版后来的评审冒充（v0.9.85）。
 // id/package 同理：升级前的老交付记录没有封存包，界面不能给出一个点开 404 的按钮。
@@ -398,6 +434,10 @@ function normalizeDeliveries(raw) {
       // 不记是谁点的（那一侧没有账号），也不当收据用——验没验仍以收据为准。
       const ackAt = pkg && Number.isFinite(Date.parse(String(entry.ack?.at || ''))) ? String(entry.ack.at) : ''
       if (ackAt) base.ack = { at: ackAt }
+      // 这一条是给谁的（v0.9.152）：发件人自己写的称呼。只留在自己这一侧——
+      // 不进包、不进回执页（拿着链接的人不需要知道发件人怎么称呼别人）。
+      const recipient = pkg ? normalizeDeliveryRecipient(entry.recipient) : ''
+      if (recipient) base.recipient = recipient
       return base
     })
     .filter((entry) => entry.version > 0)
@@ -924,6 +964,41 @@ export async function saveDeliveryAck(token, at = new Date().toISOString()) {
     return { repeated: false, at: when, delivery: deliveries[index] }
   }
   return null
+}
+
+/**
+ * 记下「这一条是给谁的」（v0.9.152）。
+ *
+ * 为什么现在才记：r145–r151 一路在判断「他收到没有」——打开过几次、催过几次、换过几条地址，
+ * 可这些判断都默认「我心里有数是发给谁的」。真的同时交出去两三份时，工作台那几行只剩版次与天数，
+ * 分不出哪一条给王老师、哪一条给甲方；r150 让人「换个收件人」，也没有地方写换成谁。
+ *
+ * 只记这一条上的称呼：不碰包、不碰收据、不碰链接、不动作品的其他字段。
+ * 写的人就是发件人自己，所以照常推进 updatedAt（与 ack 相反——点「收到了」的不是他）。
+ * 同一个称呼再存一次不写盘（changed=false）：列表顺序不该因为点了一下「保存」而变。
+ * 空串 = 清掉，这一条回到「没写收件人」。
+ */
+export async function saveDeliveryRecipient(id, deliveryId, recipient, user = null) {
+  const list = await loadAll()
+  const found = list.find((item) => item.id === id && canAccess(item, user))
+  if (!found) return null
+  const deliveries = normalizeDeliveries(found.deliveries)
+  const index = deliveries.findIndex((entry) => entry.id === deliveryId && entry.package)
+  if (index < 0) return null
+  const entry = deliveries[index]
+  const next = normalizeDeliveryRecipient(recipient)
+  if (String(entry.recipient || '') === next) return { changed: false, recipient: next, delivery: entry }
+  if (next) {
+    deliveries[index] = { ...entry, recipient: next }
+  } else {
+    const cleared = { ...entry }
+    delete cleared.recipient
+    deliveries[index] = cleared
+  }
+  found.deliveries = deliveries
+  found.updatedAt = new Date().toISOString()
+  await persist(list)
+  return { changed: true, recipient: next, delivery: deliveries[index] }
 }
 
 /**

@@ -20,6 +20,7 @@ import {
   getProject,
   getProjectVersionScript,
   issueReceiptLink,
+  setDeliveryRecipient,
   receiptLinkUrl,
   openProjectCanvas,
   projectPackageAudits,
@@ -92,6 +93,15 @@ import { deliveryOpenCount, deliveryOpenHint } from '../domain/delivery-open'
 import { deliveryResendBrief, deliveryResendHint } from '../domain/delivery-resend'
 import { RELINK_LIMIT, deliveryArchiveLine, deliveryRelinkBrief, deliveryRelinkHint } from '../domain/delivery-relink'
 import { deliveryAckText } from '../domain/delivery-ack'
+import {
+  RECIPIENT_LIMIT,
+  normalizeRecipient,
+  recipientClearedText,
+  recipientEmptyText,
+  recipientHint,
+  recipientPlaceholder,
+  recipientSavedText,
+} from '../domain/delivery-recipient'
 import { stampTime as stamp, visitLine } from '../domain/share'
 import '../styles/projects.css'
 
@@ -256,6 +266,10 @@ export default function ProjectPage({
   const [receiptError, setReceiptError] = useState('')
   // 回执链接（v0.9.137）：'issue' 正在生成、'rotate' 正在换一条，空串就是没在跑
   const [receiptLinkBusy, setReceiptLinkBusy] = useState<'' | 'issue' | 'rotate'>('')
+  // 这一条是给谁的（v0.9.152）：按交付记录编号存草稿，改哪一条就只动哪一条的输入框。
+  // 没打字的那几条读档案里的值——不预填任何名字，也不把上一行写的称呼带过来。
+  const [recipientDrafts, setRecipientDrafts] = useState<Record<string, string>>({})
+  const [recipientBusy, setRecipientBusy] = useState('')
   // 上次巡检（v0.9.132）：定时任务每天把封存包验一遍，这里只读它写下的结论。
   // 没巡检过就 at 为空，界面上不出现这一行——不拿「今天没验」冒充「验过了」。
   const [audits, setAudits] = useState<{
@@ -877,6 +891,42 @@ export default function ProjectPage({
       setReceiptError(caught instanceof Error ? caught.message : '回执链接没生成出来')
     } finally {
       setReceiptLinkBusy('')
+    }
+  }
+
+  // 这一条是给谁的（v0.9.152）：写一个称呼，或者清掉。
+  // 存的是发件人自己记的一行字——不改包、不改收据、不改链接；写空了就回到「没写」。
+  const saveRecipient = async (deliveryId: string, value: string) => {
+    if (!data || !deliveryId) return
+    setRecipientBusy(deliveryId)
+    setReceiptError('')
+    try {
+      const result = await setDeliveryRecipient(data.project.id, deliveryId, value)
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              project: {
+                ...prev.project,
+                deliveries: (prev.project.deliveries || []).map((entry) =>
+                  entry.id === deliveryId ? { ...entry, recipient: result.recipient || undefined } : entry,
+                ),
+              },
+            }
+          : prev,
+      )
+      // 存下之后把这一条的草稿收掉：输入框跟着档案里的值走，不会留着一份对不上的旧字
+      setRecipientDrafts((prev) => {
+        const next = { ...prev }
+        delete next[deliveryId]
+        return next
+      })
+      if (!result.changed) onToast('没变：这一条本来就写着这个称呼')
+      else onToast(result.recipient ? recipientSavedText(result.recipient) : recipientClearedText())
+    } catch (caught) {
+      setReceiptError(caught instanceof Error ? caught.message : '收件人没记上')
+    } finally {
+      setRecipientBusy('')
     }
   }
 
@@ -2124,6 +2174,56 @@ export default function ProjectPage({
                           {deliveryAckText(row.ack)}
                         </p>
                       ) : null}
+                      {/* 这一条是给谁的（v0.9.152）：同时交出去两三份时，先在这一条上写清「给谁」。
+                          写的是一个称呼，不进包、不给收包人看；工作台那一行与复制出去的话都跟着它走。 */}
+                      <div className="vq-archive-recipient">
+                        <label className="vq-archive-recipient-field">
+                          <span className="vq-archive-receipt-label">给谁</span>
+                          <input
+                            className="vq-archive-recipient-input"
+                            type="text"
+                            spellCheck={false}
+                            maxLength={RECIPIENT_LIMIT}
+                            aria-label={'v' + row.version + ' 这一条发给谁'}
+                            placeholder={recipientPlaceholder()}
+                            value={recipientDrafts[row.id || ''] ?? normalizeRecipient(row.recipient)}
+                            onChange={(event) => {
+                              // 先把值取出来再进更新函数：React 会在处理完之后把 currentTarget 置空，
+                              // 在函数式更新里读它会在下一次渲染时抛错，整页跟着白掉（2026-11-15 实测）。
+                              const value = event.currentTarget.value
+                              setRecipientDrafts((prev) => ({ ...prev, [row.id || '']: value }))
+                            }}
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          className="vq-button vq-button--quiet vq-button--sm"
+                          disabled={
+                            recipientBusy === (row.id || '') ||
+                            normalizeRecipient(recipientDrafts[row.id || ''] ?? row.recipient) ===
+                              normalizeRecipient(row.recipient)
+                          }
+                          onClick={() => void saveRecipient(row.id || '', recipientDrafts[row.id || ''] ?? row.recipient ?? '')}
+                        >
+                          {recipientBusy === (row.id || '') ? '正在记…' : '记下'}
+                        </button>
+                        {row.recipient ? (
+                          <button
+                            type="button"
+                            className="vq-button vq-button--ghost vq-button--sm"
+                            disabled={recipientBusy === (row.id || '')}
+                            onClick={() => void saveRecipient(row.id || '', '')}
+                            title="清掉之后这一条回到「没写收件人」，包、收据、链接都不动"
+                          >
+                            清掉
+                          </button>
+                        ) : null}
+                        <span className="vq-archive-recipient-hint">
+                          {/* 没写的时候先说「还没写」，再说这个称呼会出现在哪：空着不等于出错 */}
+                          {row.recipient ? '' : recipientEmptyText() + ' · '}
+                          {recipientHint()}
+                        </span>
+                      </div>
                       <div className="vq-archive-receipt-link">
                         <div className="vq-archive-receipt-linkhead">
                           <span className="vq-archive-receipt-label">回执链接</span>

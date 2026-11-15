@@ -11,6 +11,8 @@
 //  - 提醒那段话只写档案里记着的事实（哪一版、哪个包、多少字节、哪天发的、链接），
 //    不编原因、不承诺赔偿，也不替发件人答应重发。
 
+import { recipientGreeting } from './delivery-recipient.ts'
+
 /** 发出几天算「该提一句了」：一份包两三天内验完是常态，过了第三天提一句不算催命。 */
 export const REMIND_LATE_DAYS = 3
 
@@ -73,6 +75,8 @@ export type DeliveryReminderInput = {
   at?: string
   /** 回执链接：收包人贴收据的地方；拿不到时退化成「把收据发我」 */
   link: string
+  /** 这一条是给谁的（v0.9.152）：写了就用「王老师，」开头；没写就不加称呼，也不写「你好」 */
+  recipient?: string
 }
 
 /**
@@ -97,6 +101,7 @@ export function deliveryReminderText(input: DeliveryReminderInput): string {
     ? '对得上就点「带走这份结论」，把收据贴回这条链接：\n' + link
     : '对得上就点「带走这份结论」，把收据发我就行。'
   return (
+    recipientGreeting(input?.recipient) +
     head + detail + sent + '，还等你验一下：打开里面的「校验.html」，把收到的 zip 拖进去对一遍；' +
     ask +
     '\n哪一项不一样，把那一项告诉我就行。'

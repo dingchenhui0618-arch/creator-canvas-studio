@@ -62,6 +62,7 @@ import {
 } from '../domain/delivery-relink'
 import { deliveryAskMessage } from '../domain/delivery-ask'
 import { deliveryAckedText, deliveryAckHint, deliveryAckLead } from '../domain/delivery-ack'
+import { recipientText, recipientTitle } from '../domain/delivery-recipient'
 import { deliveryRetiredHitHint, deliveryRetiredHitText } from '../domain/delivery-retired-hit'
 import {
   REVIEW_VERDICT_LABEL,
@@ -505,6 +506,8 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
           bytes: row.package?.bytes,
           at: row.at,
           link: receiptLinkUrl(issued.token),
+          // 这一条是给谁的（v0.9.152）：写了就用称呼开头，没写就不加
+          recipient: row.recipient,
         })
         try {
           await navigator.clipboard.writeText(text)
@@ -550,6 +553,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
           bytes: row.package?.bytes,
           at: row.at,
           link: receiptLinkUrl(issued.token),
+          recipient: row.recipient,
         })
         try {
           await navigator.clipboard.writeText(text)
@@ -595,6 +599,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
           bytes: row.package?.bytes,
           at: row.at,
           link: receiptLinkUrl(issued.token),
+          recipient: row.recipient,
         })
         try {
           await navigator.clipboard.writeText(text)
@@ -648,6 +653,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
           bytes: row.package?.bytes,
           at: row.at,
           link: receiptLinkUrl(current.token),
+          recipient: row.recipient,
         })
         try {
           await navigator.clipboard.writeText(text)
@@ -1347,6 +1353,16 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                       <strong>{row.title}</strong>
                       {/* 时间与结论各自成段：窄屏换行只在「·」处断，不会把「通过」劈成两行 */}
                       <span className="vq-mono vq-delivery-meta">
+                        {/* 这一条是给谁的（v0.9.152）：同时交出去两三份时，行上先得说清是给谁的。
+                            没写就什么都不说——不写「未知」，也不拿作品标题冒充收件人。 */}
+                        {row.recipient ? (
+                          <>
+                            <span className="vq-delivery-recipient" title={recipientTitle(row.recipient)}>
+                              {recipientText(row.recipient)}
+                            </span>
+                            {' · '}
+                          </>
+                        ) : null}
                         <span>{row.atKnown ? stampTime(row.at) + ' 交出去' : '交付时间没记下'}</span>
                         {' · '}
                         {row.review ? (

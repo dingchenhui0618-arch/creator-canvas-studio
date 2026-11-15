@@ -13,6 +13,7 @@
 // 带 .ts 后缀：这一支要被 node --test 直接加载（Domain 层是纯函数，测试不吃构建），
 // Node 的解析器不猜后缀，Vite 与 tsc（allowImportingTsExtensions）都认这种写法。
 import { deliveryOpenDetail } from './delivery-open.ts'
+import { recipientGreeting } from './delivery-recipient.ts'
 import type { DeliveryVisits } from './project.ts'
 
 /** 链接重发过几次还没被打开，就该换个方式发了：与 server/delivery-ledger.mjs 同一个门槛。 */
@@ -76,6 +77,8 @@ export type DeliveryResendInput = {
   at?: string
   /** 回执链接：这一条就是重新发出去的东西 */
   link: string
+  /** 这一条是给谁的（v0.9.152）：写在开头，称呼没有就不写 */
+  recipient?: string
 }
 
 /** 11-15：与收据、档案里那些时间同一个写法。 */
@@ -113,5 +116,5 @@ export function deliveryResendMessage(input: DeliveryResendInput): string {
       link +
       '\n打开这一页，把收到的 zip 拖进包里的「校验.html」对一遍，验完点「带走这份结论」，把收据贴回这条链接就行。'
     : '那条回执链接你那边可能没收到。收到了打开包里的「校验.html」对一遍，验完把收据发我就行。'
-  return head + detail + sent + '，' + tail + '\n要是这条也打不开，跟我说一声，我换个方式发给你。'
+  return recipientGreeting(input?.recipient) + head + detail + sent + '，' + tail + '\n要是这条也打不开，跟我说一声，我换个方式发给你。'
 }

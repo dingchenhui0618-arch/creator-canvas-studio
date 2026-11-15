@@ -10,6 +10,7 @@
 //    我们只知道这条地址没被点开过，不知道是谁、为什么。
 
 // 带 .ts 后缀：这一支要被 node --test 直接加载，Node 的解析器不猜后缀。
+import { recipientGreeting } from './delivery-recipient.ts'
 import { deliveryOpenWithResend } from './delivery-resend.ts'
 import type { DeliveryVisits } from './project.ts'
 
@@ -109,6 +110,8 @@ export type DeliveryRelinkInput = {
   at?: string
   /** 换完之后的新地址：这一条就是重新发出去的东西 */
   link: string
+  /** 这一条是给谁的（v0.9.152）：写在开头，称呼没有就不写 */
+  recipient?: string
 }
 
 function monthDay(at: string): string {
@@ -147,5 +150,5 @@ export function deliveryRelinkMessage(input: DeliveryRelinkInput): string {
       '\n这一条和之前那条不是同一个地址，旧的那条已经打不开了（打开会提示已换成新地址），用这一条就行。' +
       '\n打开这一页，把收到的 zip 拖进包里的「校验.html」对一遍，验完点「带走这份结论」，把收据贴回这条链接就行。'
     : '那条回执链接你那边一直没打开过。收到了打开包里的「校验.html」对一遍，验完把收据发我就行。'
-  return head + detail + sent + '，' + tail + '\n要是这一条也打不开，跟我说一声，我换一种方式发给你。'
+  return recipientGreeting(input?.recipient) + head + detail + sent + '，' + tail + '\n要是这一条也打不开，跟我说一声，我换一种方式发给你。'
 }

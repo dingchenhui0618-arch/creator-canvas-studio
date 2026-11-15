@@ -1789,6 +1789,56 @@
   color: var(--muted);
 }
 
+/* 这一条是给谁的（v0.9.152）：发件人写的称呼，摆在回执链接上面——
+   先写清发给谁，再说这条地址怎么发出去。输入框矮一点，它不是正文，是这一条的名字。 */
+.vq-archive-recipient {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+}
+
+.vq-archive-recipient-field {
+  display: flex;
+  flex: 1 1 240px;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.vq-archive-recipient-input {
+  box-sizing: border-box;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 32px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  text-transform: none;
+}
+
+.vq-archive-recipient-input::placeholder {
+  color: var(--faint);
+}
+
+.vq-archive-recipient-input:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.vq-archive-recipient-hint {
+  /* 整个一行留给这句说明：挤在「记下 / 清掉」右边会被压成两行窄字，读起来像附注里的附注 */
+  flex: 1 1 100%;
+  min-width: 0;
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
 /* 回执链接（v0.9.137）：把「收据再发回来」换成「他自己贴」。
    虚线框里再嵌一块实线：上面是地址与两个动作，下面一句说清这条地址的边界。 */
 .vq-archive-receipt-link {

@@ -87,6 +87,8 @@ import {
   noteRetiredReceiptLinkHit,
   saveReceiptByToken,
   saveDeliveryAck,
+  saveDeliveryRecipient,
+  RECIPIENT_LIMIT,
   newReceiptToken,
   clearProjectScript,
   enableProjectShare,
@@ -135,6 +137,9 @@ const DELIVERY_REMINDER = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a
 const DELIVERY_RESEND = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})\/resend$/
 // 换一条新链接（v0.9.147）：同一条地址发到两次还没被打开之后，换一枚新 token，旧地址立刻失效
 const DELIVERY_RELINK = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})\/relink$/
+// 这一条是给谁的（v0.9.152）：发件人写一个称呼，工作台那一行与他要复制出去的那段话都跟着它走。
+// 称呼只留在发件人这一侧：不进包、不进公开回执页（拿着链接的人不需要知道发件人怎么称呼别人）。
+const DELIVERY_RECIPIENT = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})\/recipient$/
 // 收包人那一侧（v0.9.137）：token 就是凭证，不带登录态；GET 看这是哪一份、POST 把收据贴上去
 const PUBLIC_RECEIPT = /^\/api\/receipts\/([0-9a-f]{16})$/
 // 收包人点一下「收到了」（v0.9.151）：验完之前他手上只有这一句话可以告诉发件人
@@ -1616,6 +1621,42 @@ export function createProjectsRouter() {
           count: saved.count,
           resendsBefore: saved.resendsBefore,
         })
+        return true
+      }
+
+      // 这一条是给谁的（v0.9.152）：写一个称呼，或者清掉。
+      // 只认发件人这一侧；不进包、不进回执页——它不是这份作品的一部分，是发件人自己记的一行字。
+      const recipientPath = pathname.match(DELIVERY_RECIPIENT)
+      if (recipientPath) {
+        if (req.method !== 'POST') {
+          sendJson(res, 405, { error: '收件人只能用 POST 写：它要记进交付档案' })
+          return true
+        }
+        if (!user && config.auth.requireAuth) {
+          sendJson(res, 401, { error: '登录已过期：回到作品页再写收件人' })
+          return true
+        }
+        const body = await readBody(req)
+        const raw = body?.recipient
+        if (raw !== undefined && typeof raw !== 'string') {
+          sendJson(res, 400, { error: '收件人写成一个称呼就行：{"recipient": "王老师"}', code: 'RECIPIENT_INVALID' })
+          return true
+        }
+        const text = String(raw ?? '')
+        // 上限按字算（不是按字节、也不是按 UTF-16 长度）：一个称呼够写「王老师 · 内容组」，超了就明说写不下
+        if (Array.from(text.replace(/\s+/g, ' ').trim()).length > RECIPIENT_LIMIT) {
+          sendJson(res, 400, {
+            error: '收件人最多写 ' + RECIPIENT_LIMIT + ' 个字：一个称呼就够，备注写在作品里',
+            code: 'RECIPIENT_TOO_LONG',
+          })
+          return true
+        }
+        const saved = await saveDeliveryRecipient(recipientPath[1], recipientPath[2], text, user)
+        if (!saved) {
+          sendJson(res, 404, { error: '这一条交付没有封存包，谈不上发给谁' })
+          return true
+        }
+        sendJson(res, 200, { ok: true, changed: saved.changed, recipient: saved.recipient })
         return true
       }
 

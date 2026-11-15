@@ -8,6 +8,8 @@
 //  - 「一次都没打开过」是数出来的——每换一条都要求上一条打开次数是零，走到这一步就是几条都没打开；
 //  - 不承诺重发、不替发件人道歉，也不说「你怎么不看」；结尾把两种可能都留出来：打不开 / 不是你。
 
+import { recipientGreeting } from './delivery-recipient.ts'
+
 export type DeliveryAskInput = {
   title: string
   version: number
@@ -17,6 +19,8 @@ export type DeliveryAskInput = {
   at?: string
   /** 现在这条回执地址 */
   link?: string
+  /** 这一条是给谁的（v0.9.152）：写在开头，称呼没有就不写 */
+  recipient?: string
 }
 
 function padTwo(value: number): string {
@@ -57,5 +61,5 @@ export function deliveryAskMessage(input: DeliveryAskInput): string {
   const tail = link
     ? '收到了就打开里面的「校验.html」，把收到的 zip 拖进去对一遍，验完点「带走这份结论」，把收据贴回这条链接就行。要是打不开、或者这条消息不是你收的，跟我说一声，我换个方式发。'
     : '收到了就打开里面的「校验.html」，把收到的 zip 拖进去对一遍，验完点「带走这份结论」，把收据发我就行。要是没收到，跟我说一声，我换个方式发。'
-  return head + detail + sent + middle + '\n' + now + tail
+  return recipientGreeting(input?.recipient) + head + detail + sent + middle + '\n' + now + tail
 }
