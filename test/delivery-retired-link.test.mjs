@@ -195,7 +195,7 @@ test('作品页那个「换一条」也留记号：两条路换掉的地址说�
   assert.equal((await store.getProject('prj_quiet')).deliveries[0].retired, undefined)
 })
 
-test('最多留五条旧地址：更早的回到「不在了」，不编一句它没记过的话', async () => {
+test('换到头了：最多两条旧地址，再换也换不动（v0.9.150）', async () => {
   const seen = []
   for (let i = 0; i < 6; i += 1) {
     const before = (await store.getProject('prj_cap')).deliveries[0].receiptToken
@@ -203,12 +203,16 @@ test('最多留五条旧地址：更早的回到「不在了」，不编一句�
     await store.saveDeliveryRelink('prj_cap', 'cd12cd12cd120014')
   }
   const row = (await store.getProject('prj_cap')).deliveries[0]
-  assert.equal(row.retired.length, 5, '最多五条，再多也改变不了什么')
+  // 记录本身最多留五条（老数据可能是换过五次留下的），但 v0.9.150 起换到两次就不再给换
+  assert.equal(row.retired.length, 2, '换到两次就到头：旧地址最多两条')
 
   const router = createProjectsRouter()
-  const first = await call(router, '/api/receipts/' + seen[0])
-  assert.equal(first.status, 404, '被挤掉的旧地址只能说「不在了」')
-  const last = await call(router, '/api/receipts/' + seen[seen.length - 1])
-  assert.equal(last.status, 410)
-  assert.equal(JSON.parse(last.body).code, 'LINK_RETIRED')
+  const firstOld = await call(router, '/api/receipts/' + seen[0])
+  assert.equal(firstOld.status, 410, '第一条换掉的照旧说「已换成新的」')
+  const secondOld = await call(router, '/api/receipts/' + seen[1])
+  assert.equal(secondOld.status, 410, '第二条也一样')
+  // 被拦住之后地址没再变：后面几次记下的都是同一枚，它照旧打得开
+  assert.equal(seen[2], seen[5], '拦住之后 token 不该再变')
+  const alive = await call(router, '/api/receipts/' + seen[5])
+  assert.equal(alive.status, 200, '现在这一枚照旧能打开')
 })

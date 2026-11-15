@@ -153,7 +153,9 @@ test('换过几次怎么说：档案里带上「换掉之前那条发过几次�
   assert.equal(domain.deliveryRelinkHint(null), '')
   assert.match(domain.deliveryRelinkHint({ count: 0, resends: 0 }), /^$/)
   assert.match(domain.deliveryRelinkHint({ count: 0, resends: 2 }), /换一条新地址（旧的那条立刻打不开）$/)
-  assert.match(domain.deliveryRelinkHint({ count: 2 }), /别再换地址了，先问他一句，或者换个收件人$/)
+  assert.match(domain.deliveryRelinkHint({ count: 1 }), /别再换地址了，先问他一句，或者换个收件人$/)
+  // 换到头了（v0.9.150）：到第二次那一句要换成「换到头了」，因为按钮已经没了
+  assert.match(domain.deliveryRelinkHint({ count: 2 }), /换到头了：再换一条也一样，先问他一句，或者换个收件人$/)
 
   assert.equal(domain.deliveryRelinkDetail(null), '')
   assert.equal(domain.deliveryRelinkDetail({ count: 1, resends: 2 }), '换过 1 次链接（上一条发过 2 次没打开）')
@@ -227,10 +229,10 @@ test('换链接记在档案里：旧 token 立刻打不开，重发次数清零�
   const found = await store.findReceiptLink(issued.token)
   assert.equal(found?.project?.id, 'prj_stuck')
 
-  // 再多换几次：只留五条；每次都把上一条发过几次记下来
+  // 再多换几次：v0.9.150 起换到两次就到头，后面几次原样退回（上限见 delivery-relink-cap）
   for (let i = 0; i < 6; i += 1) await store.saveDeliveryRelink('prj_cap', 'ab12ab12ab120012')
   const capped = (await store.getProject('prj_cap')).deliveries[0]
-  assert.equal(capped.relinks.length, 5, '最多留五次，再多也改变不了什么')
+  assert.equal(capped.relinks.length, 2, '换到两次就到了上限')
 
   // 三种「换不了」照实退回
   assert.equal((await store.saveDeliveryRelink('prj_done', 'ab12ab12ab120015')).already, true, '已经贴过回执的不再换')

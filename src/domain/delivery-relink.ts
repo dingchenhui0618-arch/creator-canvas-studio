@@ -13,6 +13,12 @@
 import { deliveryOpenWithResend } from './delivery-resend.ts'
 import type { DeliveryVisits } from './project.ts'
 
+/**
+ * 一条交付最多换几次地址（v0.9.150）：与服务端 server/projects.mjs 的 RELINK_LIMIT 同一个数。
+ * 换地址换的是 token，不是渠道——第三条还是从同一条消息里点开，前两条没送到，第三条也一样。
+ */
+export const RELINK_LIMIT = 2
+
 /** 那一行上的一句话：换过几次。没换过就是空串。 */
 export function deliveryRelinkText(relink: { count?: number } | null | undefined): string {
   const count = Math.max(0, Math.round(Number(relink?.count) || 0))
@@ -51,12 +57,25 @@ export function deliveryRelinkDetail(relink: { count?: number; resends?: number 
  */
 export function deliveryRelinkHint(relink: { count?: number; resends?: number } | null | undefined): string {
   const count = Math.max(0, Math.round(Number(relink?.count) || 0))
+  // 换到头了（v0.9.150）：到这一步按钮已经没了，这句要说清为什么没有、下一步是什么
+  if (count >= RELINK_LIMIT) {
+    return '已经换过 ' + count + ' 次地址都没被打开，换到头了：再换一条也一样，先问他一句，或者换个收件人'
+  }
   if (count >= 1) {
     return '已经换过 ' + count + ' 次新地址还是没被打开：别再换地址了，先问他一句，或者换个收件人'
   }
   const before = Math.max(0, Math.round(Number(relink?.resends) || 0))
   if (!before) return ''
   return '这条地址发过 ' + before + ' 次都没被打开：换一条新地址（旧的那条立刻打不开）'
+}
+
+/**
+ * 那一行上多出来的一段（v0.9.150）：「地址换到头了」。
+ * 只写状态，不重复上限数字——上限是产品的规矩，不是他需要背的常数。
+ */
+export function deliveryRelinkCappedText(relink: { count?: number } | null | undefined): string {
+  const count = Math.max(0, Math.round(Number(relink?.count) || 0))
+  return count >= RELINK_LIMIT ? '地址换到头了' : ''
 }
 
 /** 清单顶上那句：换过新地址、新地址也没人打开的几次。一个都没有就是空串。 */

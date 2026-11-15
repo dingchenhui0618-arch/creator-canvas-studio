@@ -251,6 +251,14 @@ function normalizeRelinks(raw) {
 // 记录文件被看到也拿不回一条能打开的地址，只够让旧地址说一句「这一条已经换成新的了」。
 const MAX_RETIRED_LINKS = 5
 
+/**
+ * 一条交付最多换几次地址（v0.9.150）：换地址换的是 token，不是渠道。
+ * 第三条地址还是从微信 / 邮件里那条消息点开，前两条没送到，第三条也多半一样；
+ * r157–r159 一路在文案里劝「别再换地址了」，可按钮一直还在给换——到这一版把话变成行为。
+ * 换到两次还是一次都没被打开，就只剩两个动作：问他一句，或者换个人。
+ */
+export const RELINK_LIMIT = 2
+
 // 换掉的那条旧地址还被点过几次（v0.9.149）：换地址只解决「地址不对」，解决不了「新的那条没送到他手上」。
 // 有人点回旧地址，恰恰说明他手上留着的还是旧的那条——这正是发件人最需要知道的事，
 // 不然他只看见「新地址 0 次打开」，很可能再换一条，把三条地址都发进同一个黑洞。
@@ -725,10 +733,14 @@ export async function saveDeliveryRelink(id, deliveryId, user = null) {
   if (entry.receipt) return { already: true, delivery: entry }
   const token = /^[0-9a-f]{16}$/.test(String(entry.receiptToken || '')) ? String(entry.receiptToken) : ''
   if (!token) return { missingLink: true, delivery: entry }
+  // 换到头了（v0.9.150）：换地址换的是地址，不是渠道。第三条还是从同一条消息里点开，
+  // 前两条没送到，第三条也一样——到这一步该问人，不该再换。什么都不改，原样退回。
+  const relinksBefore = normalizeRelinks(entry.relinks)
+  if (relinksBefore.length >= RELINK_LIMIT) return { capped: true, count: relinksBefore.length, delivery: entry }
   const at = new Date().toISOString()
   const nextToken = newReceiptToken()
   const resendsBefore = normalizeResends(entry.resends).length
-  const relinks = [...normalizeRelinks(entry.relinks), { at, resends: resendsBefore }].slice(-MAX_RELINKS)
+  const relinks = [...relinksBefore, { at, resends: resendsBefore }].slice(-MAX_RELINKS)
   // resends 是「这一条地址又发过几次」：换了地址就清零，账折进 relinks 里。
   // 旧 token 只留记录键（v0.9.148）：他还会点回聊天记录里那条，那时页面要说「换成了新的」。
   const next = withRetiredLink({ ...entry, receiptToken: nextToken, receiptLinkAt: at, relinks }, token, at)
@@ -764,6 +776,12 @@ export async function issueDeliveryReceiptToken(id, deliveryId, user = null, { r
       await persist(list)
     }
     return { token: current, rotated: false, delivery: deliveries[index] }
+  }
+  // 作品页这个「换一条」也守同一个上限（v0.9.150）：两条路换的是同一条地址，
+  // 一条路拦住另一条还能换，等于没拦住。
+  const relinksBefore = normalizeRelinks(deliveries[index].relinks)
+  if (rotate && relinksBefore.length >= RELINK_LIMIT) {
+    return { capped: true, count: relinksBefore.length, token: current, delivery: deliveries[index] }
   }
   const token = newReceiptToken()
   // 换一条等于从头开始记：新 token 的记录键不一样，打开次数自然从零算起。

@@ -1085,6 +1085,12 @@
   color: var(--warn);
 }
 
+/* 换到头了（v0.9.150）：这一条已经换过两次地址，还是一次都没被打开。
+   这一段解释的是「为什么按钮没了」，与「旧地址还被点过」同一档警示色。 */
+.vq-delivery-receipt .vq-delivery-capped {
+  color: var(--warn);
+}
+
 .vq-delivery-receipt.is-match {
   border-color: var(--pass);
   color: var(--pass);

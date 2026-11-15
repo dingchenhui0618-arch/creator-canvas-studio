@@ -1461,6 +1461,16 @@ export function createProjectsRouter() {
           sendJson(res, 404, { error: '这一条交付没有封存包，发不了回执链接' })
           return true
         }
+        if (issued.capped) {
+          sendJson(res, 409, {
+            error:
+              '这一条已经换过 ' +
+              issued.count +
+              ' 次地址都没被打开：再换一条也一样，先问他一句，或者换个收件人',
+            code: 'LINK_ROTATE_LIMIT',
+          })
+          return true
+        }
         sendJson(res, 200, { ok: true, token: issued.token, rotated: issued.rotated })
         return true
       }
@@ -1581,6 +1591,18 @@ export function createProjectsRouter() {
           sendJson(res, 409, {
             error: '这一版还没有回执链接：到作品页那一版点「生成回执链接」，再来换',
             code: 'NO_RECEIPT_LINK',
+          })
+          return true
+        }
+        // 换到头了（v0.9.150）：换地址换的是地址，不是渠道。两条路都在这里拦住，
+        // 免得换个入口还能把第三条地址发进同一个收不到的地方。
+        if (saved.capped) {
+          sendJson(res, 409, {
+            error:
+              '这一条已经换过 ' +
+              saved.count +
+              ' 次地址都没被打开：再换一条也一样，先问他一句，或者换个收件人',
+            code: 'LINK_ROTATE_LIMIT',
           })
           return true
         }

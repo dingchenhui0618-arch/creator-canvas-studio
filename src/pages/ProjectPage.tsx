@@ -90,7 +90,7 @@ import {
 } from '../domain/review'
 import { deliveryOpenCount, deliveryOpenHint } from '../domain/delivery-open'
 import { deliveryResendBrief, deliveryResendHint } from '../domain/delivery-resend'
-import { deliveryArchiveLine, deliveryRelinkBrief, deliveryRelinkHint } from '../domain/delivery-relink'
+import { RELINK_LIMIT, deliveryArchiveLine, deliveryRelinkBrief, deliveryRelinkHint } from '../domain/delivery-relink'
 import { stampTime as stamp, visitLine } from '../domain/share'
 import '../styles/projects.css'
 
@@ -2136,15 +2136,23 @@ export default function ProjectPage({
                                   <Copy size={11} />
                                   复制
                                 </button>
-                                <button
-                                  type="button"
-                                  className="vq-button vq-button--quiet vq-button--sm"
-                                  disabled={receiptLinkBusy !== ''}
-                                  onClick={() => void ensureReceiptLink(row.id || '', true)}
-                                  title="换一枚 token：已经发出去的旧地址立刻失效"
-                                >
-                                  {receiptLinkBusy === 'rotate' ? '正在换…' : '换一条'}
-                                </button>
+                                {/* 换到头了（v0.9.150）：换过两次就不再给换——换的是地址，不是渠道。
+                                    工作台那一条路也拦着（409 LINK_ROTATE_LIMIT），两条路说法一致。 */}
+                                {(row.relinks || []).length >= RELINK_LIMIT ? (
+                                  <span className="vq-archive-receipt-linkhint">
+                                    已经换过 {(row.relinks || []).length} 次地址都没被打开：不再换地址了，先问他一句，或者换个收件人
+                                  </span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    className="vq-button vq-button--quiet vq-button--sm"
+                                    disabled={receiptLinkBusy !== ''}
+                                    onClick={() => void ensureReceiptLink(row.id || '', true)}
+                                    title="换一枚 token：已经发出去的旧地址立刻失效"
+                                  >
+                                    {receiptLinkBusy === 'rotate' ? '正在换…' : '换一条'}
+                                  </button>
+                                )}
                               </div>
                             </div>
                             <p className="vq-archive-receipt-linknote">

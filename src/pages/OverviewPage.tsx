@@ -12,6 +12,7 @@ import {
   listDeliveries,
   listProjects,
   listShares,
+  issueReceiptLink,
   receiptLinkUrl,
   relinkDelivery,
   remindDelivery,
@@ -53,11 +54,13 @@ import {
   deliveryStuckText,
 } from '../domain/delivery-resend'
 import {
+  deliveryRelinkCappedText,
   deliveryRelinkHint,
   deliveryRelinkMessage,
   deliveryRelinkText,
   deliveryRelinkedText,
 } from '../domain/delivery-relink'
+import { deliveryAskMessage } from '../domain/delivery-ask'
 import { deliveryRetiredHitHint, deliveryRetiredHitText } from '../domain/delivery-retired-hit'
 import {
   REVIEW_VERDICT_LABEL,
@@ -210,6 +213,34 @@ function rowRetiredHitText(row: ProjectDeliveryRow): string {
 }
 
 /**
+ * 换到头了（v0.9.150）：换过两次地址、还是一次都没被打开，这一行多写一段状态。
+ * 它解释的是「为什么按钮没了」——不然用户只会觉得工具把功能拿走了。
+ */
+function rowRelinkCappedText(row: ProjectDeliveryRow): string {
+  return row.relinkCapped ? deliveryRelinkCappedText(row.relink) : ''
+}
+
+/**
+ * 还没收到回执那一行的 title：等了几天、这条地址送到没有、催过 / 重发过 / 换过几次、
+ * 旧地址还在不在被点，合成一句。
+ * 换到头了（v0.9.150）就不再提「再发一次」「换一条新链接」：这两件事这一行已经不给做了，
+ * 留在 title 里只会让人去找一个不存在的按钮。
+ */
+function rowPendingTitle(row: ProjectDeliveryRow): string {
+  const capped = Boolean(row.relinkCapped)
+  return (
+    '封存包已经能贴回收据了，这一份还没收到' +
+    (rowWaitText(row) ? '：' + rowWaitText(row) : '') +
+    (rowWaitLate(row) ? '，可以提一句' : '') +
+    (!capped && deliveryOpenHint(row.visits) ? '。' + deliveryOpenHint(row.visits) : '') +
+    (!capped && deliveryResendHint(row.resend) ? '。' + deliveryResendHint(row.resend) : '') +
+    (deliveryRelinkHint(row.relink) ? '。' + deliveryRelinkHint(row.relink) : '') +
+    (deliveryRetiredHitHint(row.retiredHits) ? '。' + deliveryRetiredHitHint(row.retiredHits) : '') +
+    (rowReminderTitle(row) ? '。' + rowReminderTitle(row) : '')
+  )
+}
+
+/**
  * 工作台只回答一个问题：下一步点哪里。
  * 首屏是一张「下一步」主卡（继续上次那块画布，没画布就从一条爆款开始）加三个场景化入口；
  * 统计压进主卡右侧，不再单开一排数字卡——数字是背景，不是任务。
@@ -275,6 +306,8 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
   const [resendBusy, setResendBusy] = useState('')
   // 正在换一条新链接的那一条（v0.9.147）：换的是地址，写盘之后旧地址立刻打不开
   const [relinkBusy, setRelinkBusy] = useState('')
+  // 正在写「问他一句」的那一条（v0.9.150）：只复制、不写盘，所以只防连点
+  const [askBusy, setAskBusy] = useState('')
   const [loading, setLoading] = useState(true)
   const [errors, setErrors] = useState<string[]>([])
 
@@ -579,6 +612,44 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
     [onToast],
   )
 
+  /**
+   * 问他一句（v0.9.150）：换过两次地址、一条都没被打开，工具不再给换第三条——
+   * 换的是 token，不是渠道。这里只做一件事：把现在这条地址带上，问一句「是不是没收到」。
+   * 不换地址（rotate=false，旧的不作废）、不写盘、不记账：这一行已经写满了试过几次，
+   * 再加一个「问过几次」只是把一行字变成账本。
+   */
+  const copyDeliveryAsk = useCallback(
+    async (row: ProjectDeliveryRow) => {
+      const deliveryId = String(row.deliveryId || '')
+      if (!deliveryId) return
+      const key = row.projectId + ':' + row.version
+      setAskBusy(key)
+      try {
+        const current = await issueReceiptLink(row.projectId, deliveryId, false)
+        const text = deliveryAskMessage({
+          title: row.title,
+          version: row.version,
+          fileName: row.package?.fileName,
+          bytes: row.package?.bytes,
+          at: row.at,
+          link: receiptLinkUrl(current.token),
+        })
+        try {
+          await navigator.clipboard.writeText(text)
+        } catch {
+          setDeliveryError('这一段没复制进剪贴板：浏览器没给权限。回执链接到作品页那一版还能再复制。')
+          return
+        }
+        setDeliveryError('')
+        onToast('已复制：问他收到没有的那一段，带上了现在这条地址（这一行不记数）')
+      } catch (error) {
+        setDeliveryError('没写出来：' + String((error as Error)?.message || error))
+      } finally {
+        setAskBusy('')
+      }
+    },
+    [onToast],
+  )
   const queueFiltered = queueRange !== 'all' || queueKeyword.trim() !== ''
 
   const resetQueueFilter = useCallback(() => {
@@ -1292,16 +1363,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                           // 到了第三天换成警示色，并在 title 里说清「可以提一句」——不在行上写第二句。
                           <span
                             className={'vq-delivery-receipt is-pending' + (rowWaitLate(row) ? ' is-late' : '')}
-                            title={
-                              '封存包已经能贴回收据了，这一份还没收到' +
-                              (rowWaitText(row) ? '：' + rowWaitText(row) : '') +
-                              (rowWaitLate(row) ? '，可以提一句' : '') +
-                              (deliveryOpenHint(row.visits) ? '。' + deliveryOpenHint(row.visits) : '') +
-                              (deliveryResendHint(row.resend) ? '。' + deliveryResendHint(row.resend) : '') +
-                              (deliveryRelinkHint(row.relink) ? '。' + deliveryRelinkHint(row.relink) : '') +
-                              (deliveryRetiredHitHint(row.retiredHits) ? '。' + deliveryRetiredHitHint(row.retiredHits) : '') +
-                              (rowReminderTitle(row) ? '。' + rowReminderTitle(row) : '')
-                            }
+                            title={rowPendingTitle(row)}
                           >
                             {/* 一段一句、各自不拆：390 上「链接还没打 / 开」「又发过 1 / 次」这种
                                 从词中间断行看着像排版事故。整段 whenwrap 之后只在「·」处换行。 */}
@@ -1310,6 +1372,12 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                               rowWaitText(row) ? ' · ' + rowWaitText(row) : '',
                               deliveryOpenShort(row.visits) ? ' · ' + deliveryOpenShort(row.visits) : '',
                               rowRelinkText(row) ? ' · ' + rowRelinkText(row) : '',
+                              // 换到头了（v0.9.150）：这一段解释「为什么不再给换」，单独成段
+                              rowRelinkCappedText(row) ? (
+                                <span className="vq-keep-together vq-delivery-capped" key="capped">
+                                  {' · ' + rowRelinkCappedText(row)}
+                                </span>
+                              ) : null,
                               // 换掉的那条还在被点（v0.9.149）：单独一段、单独颜色——
                               // 这一句后面跟着一个动作（把现在这条再发一次），不该被读成一串计数。
                               rowRetiredHitText(row) ? (
@@ -1375,6 +1443,18 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                           title="换一枚新的回执地址（旧的那条立刻打不开），并复制一段「新地址在这儿」的话；包、字节、哈希都不动"
                         >
                           {relinkBusy === row.projectId + ':' + row.version ? '正在换…' : '换一条新链接'}
+                        </button>
+                      ) : row.relinkCapped && row.deliveryId ? (
+                        // 换到头了（v0.9.150）：不再给第三条地址，剩下的动作是问人。
+                        // 这一段话里带着现在这条地址，所以「再发一次」这件事也算在里头了。
+                        <button
+                          type="button"
+                          className="vq-button vq-button--quiet vq-button--sm vq-delivery-ask"
+                          disabled={askBusy === row.projectId + ':' + row.version}
+                          onClick={() => void copyDeliveryAsk(row)}
+                          title="复制一段「是不是没收到」的话，带现在这条地址；换地址已经换到头了（两次），这一步不换地址、也不改这一行的数"
+                        >
+                          {askBusy === row.projectId + ':' + row.version ? '正在写…' : '问问收到没'}
                         </button>
                       ) : row.resendable && row.deliveryId ? (
                         <button

@@ -11,6 +11,8 @@
 // 但工作台才是每天看的地方——一份「他验的不是我封的那份」如果只写在那个面板里，
 // 没人打开就永远不知道。所以每一行带上回执的结论，清单顶上再按整份记录数一遍。
 import { deliveredCurrent, deliveryDrift } from './project-status.mjs'
+// 一条交付最多换几次地址（v0.9.150）：与 server/projects.mjs 的 RELINK_LIMIT 同一个数
+import { RELINK_LIMIT } from './projects.mjs'
 
 /** 一页取几条：工作台点开一次排 8 条，再往下是「再看 N 条」。 */
 export const LEDGER_PAGE = 8
@@ -186,23 +188,38 @@ export function ledgerRows({ projects = [], counts = {}, visits = {} } = {}) {
         retiredHits: entry?.package ? retiredHitBrief(entry) : null,
         // 现在能不能「再发一次链接」：有包、还没回执、链接还在，而且确知这条地址一次都没被打开过。
         // 不知道被打开过没有（升级前发的链接）就不给这个按钮——那种情况下「再发一次」是盲发。
+        // v0.9.150 起到了换地址的上限就不再给「再发一次」：那条路是「同一条消息再发一遍」，
+        // 到这一步已经证明没用；行上给的是「问他一句」，那段话里带着现在这条地址。
         resendable: Boolean(
           entry?.package &&
             !RECEIPT_STATES.includes(entry?.receipt?.state) &&
             /^[0-9a-f]{16}$/.test(String(entry?.receiptToken || '')) &&
             seen &&
-            seen.opens === 0,
+            seen.opens === 0 &&
+            Number(relink?.count || 0) < RELINK_LIMIT,
         ),
         // 现在能不能「换一条新链接」（v0.9.147）：同一条地址又发过两次还是没人打开，
         // 说明问题不在「他忘了」——再发第三遍也不会不一样。打开过的、不知道打开没有的都不换：
         // 前者可能正被看着，后者换掉等于把一条也许已经送到的地址作废。
+        // v0.9.150 起还有一条上限：换过两次就不再给换——换的是地址，不是渠道。
         relinkable: Boolean(
           entry?.package &&
             !RECEIPT_STATES.includes(entry?.receipt?.state) &&
             /^[0-9a-f]{16}$/.test(String(entry?.receiptToken || '')) &&
             seen &&
             seen.opens === 0 &&
+            Number(relink?.count || 0) < RELINK_LIMIT &&
             Number(resend?.count) >= RESEND_STUCK,
+        ),
+        // 换到头了（v0.9.150）：已经换过两次地址，这一条还是一次都没被打开。
+        // 界面据此把「换一条新链接」换成「问他一句」——到这一步再换地址只是换个 token 重发同一条消息。
+        relinkCapped: Boolean(
+          entry?.package &&
+            !RECEIPT_STATES.includes(entry?.receipt?.state) &&
+            /^[0-9a-f]{16}$/.test(String(entry?.receiptToken || '')) &&
+            seen &&
+            seen.opens === 0 &&
+            Number(relink?.count || 0) >= RELINK_LIMIT,
         ),
         // 现在能不能催：有包、还没回执、回执链接还留着（换过一条或从来没生过就没有）
         remindable: Boolean(
