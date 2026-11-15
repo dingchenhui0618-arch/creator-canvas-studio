@@ -1856,6 +1856,33 @@
   border-left-color: var(--warn);
 }
 
+/* 对不上之后做什么（v0.9.142）：逐项说完「差在哪」，这里收一句「这意味着什么、下一步做什么」。
+   一行判断加一行下一步，摆在流水上面——下面再往下就只剩历史了。 */
+.vq-archive-receipt-advice {
+  display: grid;
+  gap: 2px;
+  margin-top: var(--space-1);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--line-faint);
+  color: var(--ink);
+  font-size: 11.5px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+  text-transform: none;
+}
+
+.vq-archive-receipt-advice strong {
+  font-weight: var(--weight-medium);
+}
+
+.vq-archive-receipt-advice.is-bad strong {
+  color: var(--fail);
+}
+
+.vq-archive-receipt-advice.is-warn strong {
+  color: var(--warn);
+}
+
 /* 贴过的每一次（v0.9.138）：结论块底部接一段流水，把更早的那几次按时间倒序摆开。
    只有贴过两次以上才出现——只贴过一次时，上面那一块已经是全部。
    一行一条，第一条写「结论」，下面一行写时间与谁贴的，摘要单独一行，窄屏不会挤成竖条。 */

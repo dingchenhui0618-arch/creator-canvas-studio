@@ -425,6 +425,76 @@ export function receiptChangeOf(receipts: DeliveryReceipt[] | null | undefined):
   return { text: '和上一次比：' + parts.join('。') + '。', items, tone }
 }
 
+/**
+ * 对不上之后做什么（v0.9.142）。
+ * 逐项已经把「差在哪一项、两边各写了什么」摆开了；这一句只说「这一种差别意味着什么、
+ * 接下来该做什么」。只看存下来的那五项：推不出来的就不说，绝不替对方猜原因。
+ * 对得上时不出现——好消息不需要人再动手。
+ */
+export type ReceiptAdvice = {
+  /** bad 这一份得重发或重贴 / warn 包对得上，只是两边说法不一样 */
+  tone: 'bad' | 'warn'
+  /** 一句判断（界面上加粗） */
+  title: string
+  /** 一句下一步 */
+  text: string
+}
+
+const ADVICE_REPOST = '把上面那个「交付包」重发一次，让他用包里那张「校验.html」重验。'
+
+export function receiptAdvice(receipt: DeliveryReceipt | null | undefined): ReceiptAdvice | null {
+  if (!receipt || !receipt.state) return null
+  if (receipt.state === 'match') return null
+  if (receipt.state === 'broken') {
+    return {
+      tone: 'bad',
+      title: '他没验成：包在他那边读不出来',
+      text: '让他解压后打开包里那张「校验.html」，把收到的 zip 拖进去，用导出的收据重贴一次；再重发一份包更稳。',
+    }
+  }
+  if (receipt.state === 'conflict') {
+    return {
+      tone: 'warn',
+      title: '包对得上，只是他写的结论不一样',
+      text: '五项记录都对得上，只有他写的结论不是「都对得上」：让他按逐项的说法重贴一张，或你按逐项替他贴。',
+    }
+  }
+  const checks = (receipt.checks || []).filter((check) => check && check.k)
+  const bad = new Map<string, DeliveryReceiptCheck>()
+  for (const check of checks) if (!check.ok) bad.set(check.k, check)
+  if (!checks.length) {
+    return { tone: 'bad', title: '对不上，但看不出差在哪', text: '这一张没带逐项：让他用包里那张「校验.html」重新导一张收据。' }
+  }
+  // 版次或包名就不对：他手里那份根本不是这一版的包，先别怀疑内容。
+  if (bad.has('version') || bad.has('package')) {
+    return {
+      tone: 'bad',
+      title: '他验的不是这一版的包',
+      text: '版次或包名对不上：先问他打开的是哪个文件，再把这一版的「交付包」和回执链接重发一次。',
+    }
+  }
+  if (bad.has('bytes')) {
+    return {
+      tone: 'bad',
+      title: '他手上那份不是这个文件',
+      text: '名字和版次都对得上，字节数不一样：多半没传全，或者解压后又压过。' + ADVICE_REPOST,
+    }
+  }
+  const sha = bad.get('sha256')
+  if (sha) {
+    // 哈希空着不是「换了一串」，是那边没算出来：两条路不能写成一条。
+    if (!String(sha.got || '').trim()) {
+      return { tone: 'bad', title: '他那边没算出哈希', text: '收据上哈希是空的：让他把收到的 zip 拖进包里那张「校验.html」验完再导一张。' }
+    }
+    return {
+      tone: 'bad',
+      title: '字节一样，内容不一样',
+      text: '名字、版次、字节数都对得上，哈希不同：重新压过，或者改过里面的字。' + ADVICE_REPOST,
+    }
+  }
+  return { tone: 'bad', title: '有几项对不上', text: '让他用包里那张「校验.html」重新导一张收据；差在哪一项看上面逐项。' }
+}
+
 /** 归档的旧版本：只存画布指针与名字，画布本身仍在流程服务里 */
 export type ProjectVersion = {
   n: number

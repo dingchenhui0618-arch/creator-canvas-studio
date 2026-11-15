@@ -51,6 +51,7 @@ import {
   packageManifestNote,
   packageShortSha,
   projectStep,
+  receiptAdvice,
   receiptChangeOf,
   receiptCheckLabel,
   receiptStateText,
@@ -1821,6 +1822,8 @@ export default function ProjectPage({
               const rowAudit = sealed && row.id ? audits.byId[row.id] || null : null
               // 又贴过一次时和上一次比变了哪一项（v0.9.141）：只贴过一次时为 null，不占地方
               const receiptChange = row.receipt ? receiptChangeOf(row.receipts) : null
+              // 对不上之后做什么（v0.9.142）：从逐项推出来的那句判断与下一步；对得上时为 null
+              const advice = row.receipt ? receiptAdvice(row.receipt) : null
               return (
                 <li
                   className={
@@ -2232,6 +2235,12 @@ export default function ProjectPage({
                                   <li key={line}>{line}</li>
                                 ))}
                             </ul>
+                          ) : null}
+                          {advice ? (
+                            <div className={'vq-archive-receipt-advice is-' + advice.tone} role="note">
+                              <strong>{advice.title}</strong>
+                              <span>{advice.text}</span>
+                            </div>
                           ) : null}
                           {row.receipts && row.receipts.length > 1 ? (
                             <div className="vq-archive-receipt-log">
