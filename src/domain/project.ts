@@ -495,6 +495,72 @@ export function receiptAdvice(receipt: DeliveryReceipt | null | undefined): Rece
   return { tone: 'bad', title: '有几项对不上', text: '让他用包里那张「校验.html」重新导一张收据；差在哪一项看上面逐项。' }
 }
 
+/** 字节数补千分位再带上 B：收据上本来就那么写，照抄回去两边对得起来。 */
+function outreachBytes(value: string): string {
+  const raw = String(value || '').trim()
+  const digits = Number(raw.replace(/[,\s]/g, ''))
+  return Number.isFinite(digits) && digits > 0 ? changeBytes(digits) + ' B' : raw || '没写'
+}
+
+/**
+ * 替你把要给收包人的那段话写好（v0.9.143）。
+ * 只把收据上真实记着的东西说回去：哪一项不一样、两边各是什么、请他怎么重验。
+ * 不编原因、不承诺赔补、不写「一定」；对得上时返回空串——没有要说的。
+ */
+export function receiptOutreach(receipt: DeliveryReceipt | null | undefined): string {
+  if (!receipt || !receipt.state || receipt.state === 'match') return ''
+  const checks = (receipt.checks || []).filter((check) => check && check.k)
+  const find = (key: string) => checks.find((check) => check.k === key)
+  const askVerify = '麻烦解压交付包、打开里面那张「校验.html」，把收到的 zip 拖进去重验一遍，再把导出的收据发我。'
+  if (receipt.state === 'broken') {
+    return '你发回来的收据我这边读不出来（校验页说包读不出来）。' + askVerify + '我把这一版的包也重发一份，你看看是不是没下全。'
+  }
+  if (receipt.state === 'conflict') {
+    const chip = String(receipt.claimed?.chip || '有问题').slice(0, 20)
+    return '收据上五项都对得上，只有结论写「' + chip + '」——这一份包是好的。麻烦按逐项的说法重贴一张，结论改成「都对得上」；要是你那边确实有一项对不上，把坏在哪一项告诉我。'
+  }
+  if (!checks.length) {
+    return '收据里没带逐项，我这边看不出差在哪。' + askVerify
+  }
+  const version = find('version')
+  const pkg = find('package')
+  if ((version && !version.ok) || (pkg && !pkg.ok)) {
+    const said = [version && !version.ok ? '版次 ' + (version.got || '没写') : '', pkg && !pkg.ok ? '包名「' + (pkg.got || '没写') + '」' : '']
+      .filter(Boolean)
+      .join('、')
+    const want = [version && !version.ok ? '版次 ' + (version.want || '没记') : '', pkg && !pkg.ok ? '包名「' + (pkg.want || '没记') + '」' : '']
+      .filter(Boolean)
+      .join('、')
+    return '你发回来的收据上写的是 ' + said + '，我封的这一版是 ' + want + '：两边不是同一份包。我把这一版的「交付包」和回执链接再发你一次，麻烦重下一份再验。'
+  }
+  const bytes = find('bytes')
+  if (bytes && !bytes.ok) {
+    return (
+      '这份包的收据我看了：包名和版次都对得上，字节数不一样（你那边 ' +
+      outreachBytes(bytes.got) +
+      '，我封的是 ' +
+      outreachBytes(bytes.want) +
+      '）。多半是没传全，或者解压后又压过。' +
+      askVerify
+    )
+  }
+  const sha = find('sha256')
+  if (sha && !sha.ok) {
+    if (!String(sha.got || '').trim()) {
+      return '收据里没有整包 SHA-256（你那边可能没算出来）。' + askVerify
+    }
+    return (
+      '这份包的收据我看了：包名、版次、字节数都对得上，只有整包 SHA-256 不一样（你那边 ' +
+      sha.got +
+      '，我这边 ' +
+      (sha.want || '没记') +
+      '），说明内容被改过或重新压过。' +
+      askVerify
+    )
+  }
+  return '收据上有几项对不上，具体差在哪一项我在逐项里对着了。' + askVerify
+}
+
 /** 归档的旧版本：只存画布指针与名字，画布本身仍在流程服务里 */
 export type ProjectVersion = {
   n: number

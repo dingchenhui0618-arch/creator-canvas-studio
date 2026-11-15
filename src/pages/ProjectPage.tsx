@@ -53,6 +53,7 @@ import {
   projectStep,
   receiptAdvice,
   receiptChangeOf,
+  receiptOutreach,
   receiptCheckLabel,
   receiptStateText,
   receiptViaText,
@@ -887,6 +888,16 @@ export default function ProjectPage({
     try {
       await navigator.clipboard.writeText(receiptLinkUrl(token))
       onToast('已复制回执链接：发给收包人，他打开就能把收据贴回来')
+    } catch {
+      onToast('复制失败：浏览器没给剪贴板权限')
+    }
+  }
+
+  // 给收包人的那段话（v0.9.143）：收据里已经把差别摆开了，这一步把它写成能直接发出去的两三句。
+  const copyReceiptOutreach = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      onToast('已复制：发给收包人，让他照着重验一次')
     } catch {
       onToast('复制失败：浏览器没给剪贴板权限')
     }
@@ -1824,6 +1835,8 @@ export default function ProjectPage({
               const receiptChange = row.receipt ? receiptChangeOf(row.receipts) : null
               // 对不上之后做什么（v0.9.142）：从逐项推出来的那句判断与下一步；对得上时为 null
               const advice = row.receipt ? receiptAdvice(row.receipt) : null
+              // 要发给收包人的那段话（v0.9.143）：对得上时为空，不再多一个按钮
+              const outreach = row.receipt ? receiptOutreach(row.receipt) : ''
               return (
                 <li
                   className={
@@ -2240,6 +2253,15 @@ export default function ProjectPage({
                             <div className={'vq-archive-receipt-advice is-' + advice.tone} role="note">
                               <strong>{advice.title}</strong>
                               <span>{advice.text}</span>
+                              {outreach ? (
+                                <button
+                                  type="button"
+                                  className="vq-button vq-button--quiet vq-button--sm vq-archive-receipt-advice-copy"
+                                  onClick={() => void copyReceiptOutreach(outreach)}
+                                >
+                                  复制这段话
+                                </button>
+                              ) : null}
                             </div>
                           ) : null}
                           {row.receipts && row.receipts.length > 1 ? (
