@@ -1,6 +1,7 @@
 // 地址栏路由：页面的唯一真源是 location.hash。
 // 约定：#/overview #/projects #/radar #/templates #/agents #/runs #/review #/canvas #/settings
 //      作品：#/projects/<作品 id>；评审带作品：#/review/project/<作品 id>
+//      某一条交付：#/projects/<作品 id>/delivery/<交付记录 id>（工作台点一行直接落在那一版的档案上，v0.9.140）
 //      单条历史评审：#/review/<评审 id>（作品页点一条评审就走到这里，刷新与后退都能回到那条）
 //      单条模板：#/templates/<模板 id>（作品页「来源」里点模板名走进来，刷新与后退都还在这条模板上）
 //      智能体编辑：#/agents/new 与 #/agents/<id 或唯一名称>
@@ -14,6 +15,7 @@ import type { Page } from './domain/types'
 import { EDITION_BY_ID, type AdminSection, type EditionId } from './editions'
 import { isHelpSlug, type HelpSlug } from './domain/help'
 import { canvasRunLinkFromSegments, canvasRunLinkHash, canvasRunViewLinkHash } from './domain/canvas-run-link'
+import { deliveryLinkFromSegments, deliveryLinkHash } from './domain/delivery-link'
 
 /** 外壳里真正占一屏的用户页面；登录与编辑器各自有独立入口。 */
 export type ShellPage = Exclude<Page, 'login' | 'agent-editor'>
@@ -37,6 +39,8 @@ export type Route =
       viewRunId?: string
       /** 模板库里的单条模板：#/templates/<模板 id>（v0.9.35 起作品页的「模板 · X」点得开） */
       templateId?: string
+      /** 作品页要点开的那一条交付（v0.9.140）：工作台「交出去的」点一行就带着它过来 */
+      deliveryId?: string
     }
   | { kind: 'agent-editor'; agentRef: string | null }
   | { kind: 'legal'; doc: 'terms' | 'privacy' }
@@ -149,7 +153,15 @@ export function parseRoute(hash: string): Route {
   // 旧的 #/welcome 链接不再单独成页：引导已改成工作台内的弹窗，落回工作台即可。
   // 作品有两个地址：#/projects 列表与 #/projects/<作品 id>
   if (head === 'projects') {
-    if (tail) return { kind: 'page', page: 'projects', projectId: tail }
+    // 某一条交付：#/projects/<作品 id>/delivery/<交付记录 id>。缺任何一段都退回作品页本身，
+    // 坏链接照样能打开作品，只是不落在某一版上。
+    if (tail) {
+      const deliveryLink = deliveryLinkFromSegments(segments)
+      if (deliveryLink) {
+        return { kind: 'page', page: 'projects', projectId: deliveryLink.projectId, deliveryId: deliveryLink.deliveryId }
+      }
+      return { kind: 'page', page: 'projects', projectId: tail }
+    }
     return { kind: 'page', page: 'projects' }
   }
   // 评审页的「这次记入哪条作品」也写进地址：#/review/project/<作品 id>
@@ -190,6 +202,9 @@ export function toHash(route: Route): string {
       if (route.flowId && route.resumeRunId) return canvasRunLinkHash(route.flowId, route.resumeRunId)
       if (route.flowId) return '#/canvas/' + encodeURIComponent(route.flowId)
     }
+    if (route.page === 'projects' && route.projectId && route.deliveryId) {
+      return deliveryLinkHash(route.projectId, route.deliveryId)
+    }
     if (route.page === 'projects' && route.projectId) return '#/projects/' + encodeURIComponent(route.projectId)
     if (route.page === 'review' && route.reviewId) return '#/review/' + encodeURIComponent(route.reviewId)
     if (route.page === 'review' && route.projectId) return '#/review/project/' + encodeURIComponent(route.projectId)
@@ -215,6 +230,9 @@ export function routeKey(route: Route): string {
       if (route.flowId && route.viewRunId) return 'page:canvas:flow:' + route.flowId + ':view:' + route.viewRunId
       if (route.flowId && route.resumeRunId) return 'page:canvas:flow:' + route.flowId + ':resume:' + route.resumeRunId
       if (route.flowId) return 'page:canvas:flow:' + route.flowId
+    }
+    if (route.page === 'projects' && route.projectId && route.deliveryId) {
+      return 'page:projects:' + route.projectId + ':delivery:' + route.deliveryId
     }
     if (route.page === 'projects' && route.projectId) return 'page:projects:' + route.projectId
     if (route.page === 'review' && route.reviewId) return 'page:review:record:' + route.reviewId

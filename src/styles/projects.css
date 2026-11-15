@@ -906,6 +906,12 @@
   background: var(--surface-raised);
 }
 
+/* 深链落下来的那头（v0.9.140）：滚到眼前时别被 56px 的顶栏压住 */
+.vq-project-archive,
+.vq-archive-row {
+  scroll-margin-top: var(--space-16);
+}
+
 .vq-project-archive-head {
   display: flex;
   flex-wrap: wrap;
@@ -933,6 +939,28 @@
   color: var(--faint);
   font-size: 11px;
   line-height: 1.6;
+}
+
+/* 从工作台点进来落在哪一条（v0.9.140）：一句说明，那一行淡淡垫一层底，
+   不靠颜色喊，也不用回头在几十行里对版次。找不到时把竖线收成中性色。 */
+.vq-archive-landing {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-left: 2px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.vq-archive-landing.is-miss {
+  border-left-color: var(--faint);
+  color: var(--muted);
+}
+
+.vq-archive-row.is-landed {
+  background: var(--surface-soft);
 }
 
 .vq-archive-list {

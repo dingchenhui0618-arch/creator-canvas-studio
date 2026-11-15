@@ -550,8 +550,9 @@ function Workbench({
         // 作品有两个地址：#/projects 列表与 #/projects/<id>；打开某一项不换页面职责，只换参数
         return route.projectId ? (
           <ProjectPage
-            key={route.projectId}
+            key={route.projectId + ':' + (route.deliveryId || '')}
             projectId={route.projectId}
+            focusDeliveryId={route.deliveryId}
             onBack={() => navigate({ kind: 'page', page: 'projects' })}
             onOpenFlow={(flowId) => navigate({ kind: 'page', page: 'canvas', flowId })}
             onViewRun={(flowId, runId) => navigate({ kind: 'page', page: 'canvas', flowId, viewRunId: runId })}
@@ -603,7 +604,10 @@ function Workbench({
             onCreateCanvas={() => void createCanvasProject()}
             onNavigate={go}
             onOpenCanvas={(canvasId) => navigate({ kind: 'page', page: 'canvas', canvasId })}
-            onOpenProject={(projectId) => navigate({ kind: 'page', page: 'projects', projectId })}
+            // 交出去的清单点一行（v0.9.140）：带着那条交付记录过去，作品页的档案直接落在那一版上
+            onOpenProject={(projectId, deliveryId) =>
+              navigate({ kind: 'page', page: 'projects', projectId, ...(deliveryId ? { deliveryId } : {}) })
+            }
             onOpenGuide={() => setGuideOpen(true)}
           />
         )

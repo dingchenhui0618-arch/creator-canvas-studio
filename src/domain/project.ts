@@ -897,6 +897,54 @@ export function ledgerReceiptTotalsText(totals: DeliveryLedgerReceipts | null | 
 }
 
 /**
+ * 从工作台点进来落在哪一条（v0.9.140）：地址里带着交付记录的编号，
+ * 作品页据此把档案展开到那一版、把收据摊开，不用进来再从几十行里找。
+ * 按编号找，不按版次猜：同一版重新封过包会换一条记录，旧链接找不到就说找不到。
+ */
+export type DeliveryLanding = {
+  /** 地址里点名的那条交付记录 */
+  id: string
+  /** 落在第几版；找不到是 0 */
+  version: number
+  /** 这一版有没有封存包：没有就只开档案，没有收据可摊 */
+  hasPackage: boolean
+  /** 这一版已经贴过的回执结论（没贴过就是 null） */
+  receipt: { state: DeliveryReceipt['state'] } | null
+  /** 档案里找不到这条记录（旧链接 / 后来重新封过包） */
+  missing: boolean
+}
+
+export function deliveryLandingOf(
+  project: Project | null | undefined,
+  deliveryId: string | null | undefined,
+): DeliveryLanding | null {
+  const id = String(deliveryId || '').trim()
+  if (!id) return null
+  const row = deliveryArchive(project).rows.find((entry) => String(entry.id || '') === id)
+  if (!row) return { id, version: 0, hasPackage: false, receipt: null, missing: true }
+  return {
+    id,
+    version: Math.max(1, Math.round(Number(row.version) || 0)),
+    hasPackage: Boolean(row.id && row.package),
+    receipt: row.receipt ? { state: row.receipt.state } : null,
+    missing: false,
+  }
+}
+
+/**
+ * 那一句「你是从哪来的」（v0.9.140）：只说得出口的事实——哪一版、有没有包、贴没贴过。
+ * 找不到就不装作找到了，把「可能重新封过包」说在前面。
+ */
+export function deliveryLandingText(landing: DeliveryLanding | null | undefined): string {
+  if (!landing) return ''
+  if (landing.missing) return '从工作台点进来的那一条已经不在这份档案里了：可能这一版后来重新封过包。'
+  const head = '从工作台点进来的这一条：v' + Math.max(1, Math.round(Number(landing.version) || 1))
+  if (!landing.hasPackage) return head + ' · 这一版没封存包，只有交付记录。'
+  if (landing.receipt) return head + ' · 回执' + receiptStateText(landing.receipt.state) + '，收据已经摊开。'
+  return head + ' · 还没收到回执，下面可以贴一段收据对一遍。'
+}
+
+/**
  * 作品列表的筛法：只分「当前这一版交没交出去」，评审结论继续写在胶囊里。
  * 与状态胶囊同一口径：交付了 v2 又开 v3 的那条算「在做」，不算「已交付」。
  */

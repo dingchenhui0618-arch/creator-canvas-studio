@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight, BookmarkPlus, Bot, Check, ChevronDown, Clapperboard, ClipboardCheck, Copy, CopyPlus, Download, ExternalLink, FileCheck2, FileText, GitCompare, Link2, Package, Pencil, Plus, Printer, RefreshCw, RotateCcw, ScanEye, Share2, Trash2, Upload, Workflow, X } from 'lucide-react'
 import PageHead from '../components/PageHead'
 import ProjectStatusPill from '../components/ProjectStatus'
@@ -39,6 +39,8 @@ import {
   checkPackageFile,
   deliveredCurrent,
   deliveryArchive,
+  deliveryLandingOf,
+  deliveryLandingText,
   deliveryOf,
   deliveryReceiptLine,
   packageAuditFaultLabel,
@@ -63,6 +65,7 @@ import {
   type PackageServerCheck,
   reviewsForVersion,
   runsForVersion,
+  type Project,
   type ProjectDelivery,
   type ProjectDetail,
   type ProjectSpendDetail,
@@ -143,6 +146,7 @@ function receiptLinkUrl(token: string): string {
  */
 export default function ProjectPage({
   projectId,
+  focusDeliveryId,
   onBack,
   onOpenFlow,
   onViewRun,
@@ -154,6 +158,8 @@ export default function ProjectPage({
   onToast,
 }: {
   projectId: string
+  /** 地址里点名的那一条交付（v0.9.140）：工作台点一行过来，档案直接落在那一版上 */
+  focusDeliveryId?: string
   onBack: () => void
   onOpenFlow: (flowId: string) => void
   /** 只读回看一次运行（v0.9.108）：带着当时的节点状态进画布，不改画布、不扣费 */
@@ -259,6 +265,9 @@ export default function ProjectPage({
     checked: number
     byId: Record<string, PackageAuditRecord>
   }>({ at: '', problems: 0, checked: 0, byId: {} })
+  // 从工作台点进来的那一条（v0.9.140）：地址里带着交付记录的编号。
+  // 只落一次：之后在页里翻别的地方，不该被拽回这一版。
+  const landedRef = useRef('')
   // 人工复核：一句话备注，加上正在提交的那一档（拍通过 / 拍不通过 / 撤销）
   // null 表示「跟着这条拍板的备注走」：改判或撤销后不用手动清空，渲染时现算
   const [decisionNote, setDecisionNote] = useState<string | null>(null)
@@ -285,18 +294,34 @@ export default function ProjectPage({
   const [spendBusy, setSpendBusy] = useState(false)
   const [spendError, setSpendError] = useState('')
 
+  // 地址里点名的那一条（v0.9.140）：交付记录是异步取回来的，拿到之后落到那一版上。
+  // 只落一次（同一地址数据再刷新，不把人从别处拽回来）；找不到就不落，界面上直说找不到。
+  const applyLanding = useCallback(
+    (project: Project | null | undefined) => {
+      const found = deliveryLandingOf(project, focusDeliveryId)
+      if (!found || found.missing || !found.version) return
+      if (landedRef.current === found.id) return
+      landedRef.current = found.id
+      setArchiveOpen(found.version)
+      if (found.hasPackage) setReceiptOpen(found.version)
+    },
+    [focusDeliveryId],
+  )
+
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
-      setData(await getProject(projectId))
+      const next = await getProject(projectId)
+      setData(next)
+      applyLanding(next.project)
     } catch (caught) {
       setData(null)
       setError(caught instanceof Error ? caught.message : '作品读取失败')
     } finally {
       setLoading(false)
     }
-  }, [projectId])
+  }, [projectId, applyLanding])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -322,6 +347,19 @@ export default function ProjectPage({
       alive = false
     }
   }, [projectId])
+
+  // 从工作台点进来的那一条（v0.9.140）：按交付记录编号在档案里找，
+  // 找到了就展开它那一版；找不到（旧链接 / 重新封过包）直说找不到，不猜成最近一版。
+  const landing = useMemo(() => deliveryLandingOf(data?.project, focusDeliveryId), [data, focusDeliveryId])
+
+  // 落在那一版上就把档案滚到眼前：作品页很长，不滚过去等于没落下
+  useEffect(() => {
+    if (!landing || landing.missing || !landing.version) return
+    if (archiveOpen !== landing.version) return
+    const section = document.getElementById('vq-project-archive')
+    if (!section || typeof section.scrollIntoView !== 'function') return
+    section.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  }, [landing, archiveOpen])
 
   // 花费明细：读一次就留着，切月份才重新取；点「收起」不清缓存，再点开还是同一份
   const loadSpend = useCallback(async (scope: string) => {
@@ -1735,7 +1773,7 @@ export default function ProjectPage({
       ) : null}
 
       {archive.rows.length ? (
-        <section className="vq-project-archive" aria-labelledby="vq-project-archive-head">
+        <section className="vq-project-archive" id="vq-project-archive" aria-labelledby="vq-project-archive-head">
           <div className="vq-project-archive-head">
             <h2 id="vq-project-archive-head">
               交付档案
@@ -1749,6 +1787,12 @@ export default function ProjectPage({
               标记交付时封存的那一份，之后改模板、改脚本、开新版都不会变。手里那份拖进「核对」在本机算，服务器上那份点「查一遍哈希」在服务端算，两头都对上才算数；包里那份不用解压，点清单里的文件名就能看。收包人验完会发回一段收据，贴进「收据」就能对一遍，结论记在这一行上。包只认登录态，不走公开分享。
             </p>
           </div>
+          {/* 从工作台点进来的那一条（v0.9.140）：先落在哪一版、这一版有没有包、贴没贴过回执 */}
+          {landing ? (
+            <p className={'vq-archive-landing' + (landing.missing ? ' is-miss' : '')} role="status">
+              {deliveryLandingText(landing)}
+            </p>
+          ) : null}
           {auditSummary ? (
             <p className={'vq-project-archive-audit' + (audits.problems ? ' is-bad' : '')}>{auditSummary}</p>
           ) : null}
@@ -1766,7 +1810,14 @@ export default function ProjectPage({
               // 上次巡检对这一版的结论：有就写一行，没有就不出现
               const rowAudit = sealed && row.id ? audits.byId[row.id] || null : null
               return (
-                <li className="vq-archive-row" key={sealed ? row.id : 'v' + row.version}>
+                <li
+                  className={
+                    'vq-archive-row' +
+                    (landing && !landing.missing && landing.version === row.version ? ' is-landed' : '')
+                  }
+                  id={'vq-archive-row-v' + row.version}
+                  key={sealed ? row.id : 'v' + row.version}
+                >
                   <span className="vq-version-n vq-mono">v{row.version}</span>
                   <div className="vq-archive-main">
                     <strong title={sealed ? pkg?.fileName : '这一版交出去时还没封存包'}>

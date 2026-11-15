@@ -73,7 +73,8 @@ type Props = {
   // 工作台列的是画布服务里的画布项目：点哪块就开哪块，不再只是跳到画布页
   onOpenCanvas: (canvasId: string) => void
   // 作品是主线：有作品时主卡先给「继续这个作品」，没有才退回最近改动的画布
-  onOpenProject: (projectId: string) => void
+  // 第二个参数（v0.9.140）：交出去的清单点一行，带着那条交付记录落在作品页的档案上
+  onOpenProject: (projectId: string, deliveryId?: string) => void
   // 空白画布：直接建一块并进去，不再先弹「智能体 / 资产画布」二选一（那个弹窗把主价值藏起来了）
   onCreateCanvas: () => void
   // 引导是弹窗：页脚「上手指引」重新打开它，不再跳一个 #/welcome 页面
@@ -999,8 +1000,16 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                   <button
                     type="button"
                     className="vq-delivery-open"
-                    onClick={() => onOpenProject(row.projectId)}
-                    aria-label={'打开作品：' + row.title + '，第 ' + row.version + ' 版'}
+                    // 封过包的那几条直接落在那一版的档案上：点进去就是要看「差在哪一项」
+                    onClick={() => onOpenProject(row.projectId, row.package && row.deliveryId ? row.deliveryId : undefined)}
+                    aria-label={
+                      '打开作品：' +
+                      row.title +
+                      '，第 ' +
+                      row.version +
+                      ' 版' +
+                      (row.package && row.deliveryId ? '，直接打开这一条交付档案' : '')
+                    }
                   >
                     <Tag className="vq-delivery-tag">v{row.version}</Tag>
                     <span className="vq-delivery-copy">
