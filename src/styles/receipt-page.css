@@ -14,7 +14,9 @@
   font-size: var(--text-sm);
   line-height: 1.6;
 }
-.rpage--center { justify-content: center; padding-bottom: var(--space-8); }
+/* 状态页也顶着品牌栏（v0.9.148）：靠 margin:auto 把那一块居中，栏本身留在顶上 */
+.rpage--center { justify-content: flex-start; padding-bottom: var(--space-8); }
+.rpage--center .rpage-state { margin: auto 0; }
 
 .rpage-topbar {
   width: 100%;
@@ -219,6 +221,9 @@
 .rpage-state p { margin: 0; font-size: var(--text-sm); line-height: 1.7; }
 .rpage-state-note { font-size: var(--text-xs); color: var(--faint); }
 .rpage-state.is-missing svg { color: var(--fail); }
+/* 换掉的旧地址（v0.9.148）：不是出错，是地址挪了——用警示色而不是错红色，
+   因为包没动、发件人也没收回，只是他手里的那一条不再通。 */
+.rpage-state.is-retired svg { color: var(--warn); }
 
 @media (max-width: 560px) {
   .rpage { padding: var(--space-6) var(--space-4) var(--space-12); }

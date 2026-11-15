@@ -239,7 +239,7 @@ test('换链接记在档案里：旧 token 立刻打不开，重发次数清零�
   assert.equal(await store.saveDeliveryRelink('prj_stuck', 'ab12ab12ab129999'), null, '没有封存包的不给换')
 })
 
-test('换链接端点：换一枚新 token，旧地址 404，已经贴过回执的 409', async () => {
+test('换链接端点：换一枚新 token，旧地址 410，已经贴过回执的 409', async () => {
   const router = createProjectsRouter()
   const ok = await call(router, '/api/projects/prj_endpoint/delivery-packages/ab12ab12ab120013/relink', { method: 'POST' })
   assert.equal(ok.status, 200)
@@ -250,9 +250,11 @@ test('换链接端点：换一枚新 token，旧地址 404，已经贴过回执�
   assert.match(payload.token, /^[0-9a-f]{16}$/)
   assert.notEqual(payload.token, TOKEN_ENDPOINT)
 
-  // 换完：旧地址打不开，新地址能打开
+  // 换完：旧地址打不开，新地址能打开。
+  // v0.9.148 起旧地址不是 404 而是 410：它曾经在，只是被换掉了——他点回旧的要知道该找新地址。
   const old = await call(router, '/api/receipts/' + TOKEN_ENDPOINT)
-  assert.equal(old.status, 404)
+  assert.equal(old.status, 410)
+  assert.equal(JSON.parse(old.body).code, 'LINK_RETIRED')
   const fresh = await call(router, '/api/receipts/' + payload.token)
   assert.equal(fresh.status, 200)
 

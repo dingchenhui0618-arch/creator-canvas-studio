@@ -83,6 +83,7 @@ import {
   deliveryReceiptLink,
   issueDeliveryReceiptToken,
   findReceiptLink,
+  findRetiredReceiptLink,
   saveReceiptByToken,
   newReceiptToken,
   clearProjectScript,
@@ -1599,6 +1600,20 @@ export function createProjectsRouter() {
       if (publicReceipt) {
         const found = await findReceiptLink(publicReceipt[1])
         if (!found) {
+          // 换掉的旧地址（v0.9.148）：收包人还会从聊天记录点回旧的，那时候「不在了」是句错话——
+          // 它听起来像发件人收回了一份交出去的包。这里只说「已经换成新的」，不给新地址、不给包，
+          // 也不记一次打开（打开的是一句说明，不是那一份包）。用 410：它确实曾经在，现在永久不在了。
+          const retired = await findRetiredReceiptLink(publicReceipt[1])
+          if (retired) {
+            // 这里只写「换过了」，不写日期：收包人那一侧没有账号、拿不到时区，
+            // 一句按 UTC 算的日期在他那儿可能是另一天。要日期的是页面，它自己按浏览器时区写。
+            sendJson(res, 410, {
+              error: '这条地址已经被换成了新的一条：旧地址从那会儿起就打不开了，用我最后发给你的那条就行。',
+              code: 'LINK_RETIRED',
+              retiredAt: retired.at,
+            })
+            return true
+          }
           sendJson(res, 404, { error: '这条回执链接不在了：找发件人要一条新的' })
           return true
         }

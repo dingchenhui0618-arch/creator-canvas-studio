@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Check, ClipboardCheck, Link2Off, Loader2, X } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { ArrowLeftRight, Check, ClipboardCheck, Link2Off, Loader2, X } from 'lucide-react'
 import { getReceiptLink, submitReceiptByLink } from '../api/projects'
 import { receiptCheckLabel } from '../domain/project'
 import type { DeliveryReceipt, ReceiptLinkResult, ReceiptLinkView } from '../domain/project'
@@ -37,8 +38,33 @@ function receiverSummary(state: string, summary: string): string {
   return summary || ''
 }
 
+function ReceiptTopbar() {
+  return (
+    <header className="rpage-topbar">
+      <div className="rpage-brand">
+        <span className="rpage-brand-dot" aria-hidden="true" />
+        <span className="rpage-brand-name">VisionQA</span>
+        <span className="rpage-badge">收据回执</span>
+      </div>
+      <span className="rpage-mono">收件核对</span>
+    </header>
+  )
+}
+
+// 「这一条打不开」的那几种状态也顶着同一条品牌栏（v0.9.148）：
+// 收包人是从聊天记录里点进来的，先要认出这是 VisionQA 那一页，而不是浏览器报错。
+function CenterShell({ children }: { children: ReactNode }) {
+  return (
+    <div className="rpage rpage--center">
+      <ReceiptTopbar />
+      {children}
+    </div>
+  )
+}
+
 export default function ReceiptPage({ token }: { token: string }) {
-  const [status, setStatus] = useState<'loading' | 'ready' | 'missing'>('loading')
+  const [status, setStatus] = useState<'loading' | 'ready' | 'missing' | 'retired'>('loading')
+  const [retiredAt, setRetiredAt] = useState('')
   const [view, setView] = useState<ReceiptLinkView | null>(null)
   const [message, setMessage] = useState('')
   const [draft, setDraft] = useState('')
@@ -64,6 +90,14 @@ export default function ReceiptPage({ token }: { token: string }) {
       })
       .catch((caught: unknown) => {
         if (!alive) return
+        // 换掉的旧地址（v0.9.148）与「这条链接不在了」不是同一件事：前者是地址挪了，包没动；
+        // 后者是收回或没发过。服务端用 410 + LINK_RETIRED 分开回，这里分开讲。
+        const failure = caught as { status?: number; body?: { code?: string; retiredAt?: string } } | null
+        if (failure?.status === 410 || failure?.body?.code === 'LINK_RETIRED') {
+          setRetiredAt(typeof failure?.body?.retiredAt === 'string' ? failure.body.retiredAt : '')
+          setStatus('retired')
+          return
+        }
         setMessage(caught instanceof Error ? caught.message : String(caught))
         setStatus('missing')
       })
@@ -95,25 +129,43 @@ export default function ReceiptPage({ token }: { token: string }) {
 
   if (status === 'loading') {
     return (
-      <div className="rpage rpage--center">
+      <CenterShell>
         <div className="rpage-state">
           <Loader2 size={16} className="vq-spin" />
           <span>正在打开回执</span>
         </div>
-      </div>
+      </CenterShell>
+    )
+  }
+
+  // 换掉的旧地址（v0.9.148）：他点的是聊天记录里那一条。说清哪一天换的、包没动、去哪儿拿新的，
+  // 再说一句「找不到就回我一句」——旧地址不知道新地址，也不该把新地址给出去（换掉它就是为了不让这条再能用）。
+  if (status === 'retired') {
+    return (
+      <CenterShell>
+        <div className="rpage-state is-retired">
+          <ArrowLeftRight size={20} />
+          <strong>这条地址已经换成新的了</strong>
+          <p>
+            {retiredAt ? '发件人在 ' + stamp(retiredAt) + ' 把这条回执链接换掉了：' : '发件人已经把这条回执链接换掉了：'}
+            旧地址从那时候起就打不开了，用最后发给你的那条。
+          </p>
+          <p className="rpage-state-note">手上的包不用重下；要是找不到新的那条，回他一句，让他再发一次。</p>
+        </div>
+      </CenterShell>
     )
   }
 
   if (status === 'missing' || !view) {
     return (
-      <div className="rpage rpage--center">
+      <CenterShell>
         <div className="rpage-state is-missing">
           <Link2Off size={20} />
           <strong>这条回执链接不在了</strong>
           <p>{message && !/不在了|失效/.test(message) ? message : '发件人可能换了一条新的链接，或者这一条交付已经收回。'}</p>
           <p className="rpage-state-note">找发件人要一条新的回执链接就行；手上的包不用重下。</p>
         </div>
-      </div>
+      </CenterShell>
     )
   }
 
@@ -121,14 +173,7 @@ export default function ReceiptPage({ token }: { token: string }) {
 
   return (
     <div className="rpage">
-      <header className="rpage-topbar">
-        <div className="rpage-brand">
-          <span className="rpage-brand-dot" aria-hidden="true" />
-          <span className="rpage-brand-name">VisionQA</span>
-          <span className="rpage-badge">收据回执</span>
-        </div>
-        <span className="rpage-mono">收件核对</span>
-      </header>
+      <ReceiptTopbar />
 
       <main className="rpage-doc">
         <header className="rpage-head">

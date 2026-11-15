@@ -109,6 +109,7 @@ function bytesText(bytes?: number): string {
  * 换过链接之后的那段话（v0.9.147）。
  * 要说清「这是新地址、旧的那条已经打不开」——不然对方从聊天记录里点回旧的那条，
  * 得到的是「这条回执链接不在了」，比没收到更让人糊涂。
+ * v0.9.148 起旧地址自己会说「已经换成新的了」，这段话里也照实写一句，免得他点回去以为出了别的事。
  */
 export function deliveryRelinkMessage(input: DeliveryRelinkInput): string {
   const title = String(input?.title || '').trim()
@@ -124,7 +125,7 @@ export function deliveryRelinkMessage(input: DeliveryRelinkInput): string {
   const tail = link
     ? '那条回执链接你那边一直没打开过，我换了一条新的：\n' +
       link +
-      '\n这一条和之前那条不是同一个地址，旧的那条已经打不开了，用这一条就行。' +
+      '\n这一条和之前那条不是同一个地址，旧的那条已经打不开了（打开会提示已换成新地址），用这一条就行。' +
       '\n打开这一页，把收到的 zip 拖进包里的「校验.html」对一遍，验完点「带走这份结论」，把收据贴回这条链接就行。'
     : '那条回执链接你那边一直没打开过。收到了打开包里的「校验.html」对一遍，验完把收据发我就行。'
   return head + detail + sent + '，' + tail + '\n要是这一条也打不开，跟我说一声，我换一种方式发给你。'

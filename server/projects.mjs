@@ -245,6 +245,30 @@ function normalizeRelinks(raw) {
     .slice(-MAX_RELINKS)
 }
 
+// 换掉的那条旧地址留一个记号（v0.9.148）：收包人还会从聊天记录点回旧的，
+// 那时候不能只说「链接不在了」——他会以为整条链接坏了，或者以为发件人收回了一份已经交出去的包。
+// 记号用的是打开记录同一套键（token 的 SHA-256 前 16 位），不是 token 本身：
+// 记录文件被看到也拿不回一条能打开的地址，只够让旧地址说一句「这一条已经换成新的了」。
+const MAX_RETIRED_LINKS = 5
+
+function normalizeRetiredLinks(raw) {
+  return (Array.isArray(raw) ? raw : [])
+    .filter((entry) => entry && /^[0-9a-f]{16}$/.test(String(entry.key || '')))
+    .map((entry) => ({
+      key: String(entry.key),
+      at: Number.isFinite(Date.parse(String(entry.at || ''))) ? String(entry.at) : '',
+    }))
+    .slice(-MAX_RETIRED_LINKS)
+}
+
+/** 换掉一条地址：旧 token 的记录键留下，旧地址从此说得出「被换成了新的」，不再一律「不在了」。 */
+function withRetiredLink(record, token, at) {
+  const key = visitKey(token)
+  if (!key) return record
+  const retired = [...normalizeRetiredLinks(record.retired), { key, at }].slice(-MAX_RETIRED_LINKS)
+  return { ...record, retired }
+}
+
 function normalizeDeliveryReceipt(raw) {
   if (!raw || typeof raw !== 'object') return null
   const state = RECEIPT_STATES.includes(raw.state) ? raw.state : ''
@@ -344,6 +368,10 @@ function normalizeDeliveries(raw) {
       // 旧地址试过几次折在 relinks 的这一项里，不丢。
       const relinks = pkg ? normalizeRelinks(entry.relinks) : []
       if (relinks.length) base.relinks = relinks
+      // 换掉的旧地址（v0.9.148）：只留记录键与换掉的时间。旧 token 本身不存，
+      // 它已经打不开了，留着只是多一份能当凭证猜的字符串。
+      const retired = pkg ? normalizeRetiredLinks(entry.retired) : []
+      if (retired.length) base.retired = retired
       return base
     })
     .filter((entry) => entry.version > 0)
@@ -688,8 +716,9 @@ export async function saveDeliveryRelink(id, deliveryId, user = null) {
   const nextToken = newReceiptToken()
   const resendsBefore = normalizeResends(entry.resends).length
   const relinks = [...normalizeRelinks(entry.relinks), { at, resends: resendsBefore }].slice(-MAX_RELINKS)
-  // resends 是「这一条地址又发过几次」：换了地址就清零，账折进 relinks 里
-  const next = { ...entry, receiptToken: nextToken, receiptLinkAt: at, relinks }
+  // resends 是「这一条地址又发过几次」：换了地址就清零，账折进 relinks 里。
+  // 旧 token 只留记录键（v0.9.148）：他还会点回聊天记录里那条，那时页面要说「换成了新的」。
+  const next = withRetiredLink({ ...entry, receiptToken: nextToken, receiptLinkAt: at, relinks }, token, at)
   delete next.resends
   deliveries[index] = next
   found.deliveries = deliveries
@@ -724,8 +753,10 @@ export async function issueDeliveryReceiptToken(id, deliveryId, user = null, { r
     return { token: current, rotated: false, delivery: deliveries[index] }
   }
   const token = newReceiptToken()
-  // 换一条等于从头开始记：新 token 的记录键不一样，打开次数自然从零算起
-  deliveries[index] = { ...deliveries[index], receiptToken: token, receiptLinkAt: at }
+  // 换一条等于从头开始记：新 token 的记录键不一样，打开次数自然从零算起。
+  // 作品页这个「换一条」与工作台那个换链接是同一件事，所以旧地址同样要留记号（v0.9.148）：
+  // 否则从这里换掉的地址会得到一句「这条链接不在了」，和「根本没发过」分不开。
+  deliveries[index] = withRetiredLink({ ...deliveries[index], receiptToken: token, receiptLinkAt: at }, current, at)
   found.deliveries = deliveries
   found.updatedAt = at
   await persist(list)
@@ -744,6 +775,24 @@ export async function findReceiptLink(token) {
     const deliveries = normalizeDeliveries(project.deliveries)
     const delivery = deliveries.find((entry) => entry.receiptToken === value && entry.package)
     if (delivery) return { project: normalize(project), delivery }
+  }
+  return null
+}
+
+/**
+ * 按一条旧地址找它被换掉的那一次（v0.9.148）。
+ * 收包人从聊天记录点回旧的，得到的不能是「链接不在了」：那是「发件人收回了一交出去的包」的意思。
+ * 只认换掉的记号，不认 token、也不给作品与包——旧地址能知道的只有「它被换成了新的」和换的时间。
+ */
+export async function findRetiredReceiptLink(token) {
+  const key = visitKey(String(token || ''))
+  if (!key) return null
+  const list = await loadAll()
+  for (const project of list) {
+    for (const delivery of normalizeDeliveries(project.deliveries)) {
+      const hit = (delivery.retired || []).find((entry) => entry.key === key)
+      if (hit) return { at: hit.at }
+    }
   }
   return null
 }
