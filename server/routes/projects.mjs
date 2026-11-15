@@ -86,6 +86,7 @@ import {
   findRetiredReceiptLink,
   noteRetiredReceiptLinkHit,
   saveReceiptByToken,
+  saveDeliveryAck,
   newReceiptToken,
   clearProjectScript,
   enableProjectShare,
@@ -136,6 +137,8 @@ const DELIVERY_RESEND = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f
 const DELIVERY_RELINK = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})\/relink$/
 // 收包人那一侧（v0.9.137）：token 就是凭证，不带登录态；GET 看这是哪一份、POST 把收据贴上去
 const PUBLIC_RECEIPT = /^\/api\/receipts\/([0-9a-f]{16})$/
+// 收包人点一下「收到了」（v0.9.151）：验完之前他手上只有这一句话可以告诉发件人
+const PUBLIC_RECEIPT_ACK = /^\/api\/receipts\/([0-9a-f]{16})\/ack$/
 // 打印版不进 /api：它是在新标签里打开的 HTML，地址栏里那串会印在纸的页脚上
 const DELIVERABLE_PRINT = /^\/print\/projects\/([\w-]+)\/deliverable$/
 // 评审对照纸：评审把问题框在哪一块画面上，同一张 A4 里印出来（交付包里也有同一份）
@@ -1619,6 +1622,50 @@ export function createProjectsRouter() {
       // 收包人那一侧（v0.9.137）：链接里的 token 就是凭证，不登录也能打开、也能贴。
       // GET 只说「这是哪一份、之前贴过没有」，不给哈希也不给档案——有包的人在自己那张校验页上看得到；
       // POST 收下收据、比对完写进那一条交付记录，回给收包人的只有哪几项对上，不回「这一条是多少」。
+      // 收包人那一侧的第一句话（v0.9.151）：他点「收到了」。
+      // 与贴收据同一枚 token、同一套「旧地址 / 不在了」的说法，但写的是另一件事：
+      // 收据说的是「验完了，对不对得上」，这一下只说「东西到我手上了，还没验」。
+      const publicAck = pathname.match(PUBLIC_RECEIPT_ACK)
+      if (publicAck) {
+        if (req.method !== 'POST') {
+          sendJson(res, 405, { error: '「收到了」只能用 POST 点' })
+          return true
+        }
+        const foundAck = await findReceiptLink(publicAck[1])
+        if (!foundAck) {
+          const retiredAck = await findRetiredReceiptLink(publicAck[1])
+          if (retiredAck) {
+            // 换掉的旧地址一样要记这一次点击：他手上还是旧的那条（v0.9.149），
+            // 而这一次尤其说明新的一条确实没送到他那儿。
+            await noteRetiredReceiptLinkHit(publicAck[1])
+            sendJson(res, 410, {
+              error: '这条地址已经被换成了新的一条：旧地址从那会儿起就打不开了，用我最后发给你的那条就行。',
+              code: 'LINK_RETIRED',
+              retiredAt: retiredAck.at,
+            })
+            return true
+          }
+          sendJson(res, 404, { error: '这条回执链接不在了：找发件人要一条新的' })
+          return true
+        }
+        const saved = await saveDeliveryAck(publicAck[1])
+        if (!saved) {
+          sendJson(res, 404, { error: '这条回执链接刚刚失效了：找发件人要一条新的' })
+          return true
+        }
+        if (saved.already) {
+          // 验都验完了：再说一句「收到了」不会多出任何信息，也不该把结论改回没验
+          sendJson(res, 409, {
+            error: '这一份已经贴过收据了，不用再说收到了',
+            code: 'RECEIPT_ALREADY',
+          })
+          return true
+        }
+        // 重复点不算错：页面刷新、手滑点两次都正常，回同一个时刻，不写第二遍
+        sendJson(res, 200, { ok: true, at: saved.at, repeated: saved.repeated === true })
+        return true
+      }
+
       const publicReceipt = pathname.match(PUBLIC_RECEIPT)
       if (publicReceipt) {
         const found = await findReceiptLink(publicReceipt[1])
@@ -1658,6 +1705,8 @@ export function createProjectsRouter() {
               bytes: found.delivery.package?.bytes || 0,
               at: found.delivery.at,
             },
+            // 他点过「收到了」没有（v0.9.151）：刷新页面还看得见，不用记得自己点过
+            ackAt: found.delivery.ack?.at || '',
             receipt: receipt
               ? { state: receipt.state, at: receipt.at, summary: receipt.summary || '' }
               : null,

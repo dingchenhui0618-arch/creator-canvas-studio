@@ -61,6 +61,7 @@ import {
   deliveryRelinkedText,
 } from '../domain/delivery-relink'
 import { deliveryAskMessage } from '../domain/delivery-ask'
+import { deliveryAckedText, deliveryAckHint, deliveryAckLead } from '../domain/delivery-ack'
 import { deliveryRetiredHitHint, deliveryRetiredHitText } from '../domain/delivery-retired-hit'
 import {
   REVIEW_VERDICT_LABEL,
@@ -221,6 +222,15 @@ function rowRelinkCappedText(row: ProjectDeliveryRow): string {
 }
 
 /**
+ * 他点过「收到了」没有（v0.9.151）：有这一句的时候，行首那句「还没收到回执」
+ * 换成「他点了「收到了」，收据还没贴」——不然一行里同时写着「还没收到回执」和
+ * 「他点了「收到了」」，读起来像两件事打架。
+ */
+function rowPendingLead(row: ProjectDeliveryRow): string {
+  return deliveryAckLead(row.ack) || '还没收到回执'
+}
+
+/**
  * 还没收到回执那一行的 title：等了几天、这条地址送到没有、催过 / 重发过 / 换过几次、
  * 旧地址还在不在被点，合成一句。
  * 换到头了（v0.9.150）就不再提「再发一次」「换一条新链接」：这两件事这一行已经不给做了，
@@ -228,14 +238,19 @@ function rowRelinkCappedText(row: ProjectDeliveryRow): string {
  */
 function rowPendingTitle(row: ProjectDeliveryRow): string {
   const capped = Boolean(row.relinkCapped)
+  // 他点过「收到了」（v0.9.151）：这一行从此不再谈「送没送到」——
+  // 东西到他手上了，缺的只是验。换地址、再发一遍都不是他此刻的问题，title 里提了只会让人去找按钮。
+  const acked = Boolean(row.ack?.at)
   return (
     '封存包已经能贴回收据了，这一份还没收到' +
     (rowWaitText(row) ? '：' + rowWaitText(row) : '') +
     (rowWaitLate(row) ? '，可以提一句' : '') +
-    (!capped && deliveryOpenHint(row.visits) ? '。' + deliveryOpenHint(row.visits) : '') +
-    (!capped && deliveryResendHint(row.resend) ? '。' + deliveryResendHint(row.resend) : '') +
-    (deliveryRelinkHint(row.relink) ? '。' + deliveryRelinkHint(row.relink) : '') +
-    (deliveryRetiredHitHint(row.retiredHits) ? '。' + deliveryRetiredHitHint(row.retiredHits) : '') +
+    // 先说「他点了收到了」，再谈打开过几次：「在验」比「打开过 2 次」更接近现在到哪一步
+    (deliveryAckHint(row.ack) ? '。' + deliveryAckHint(row.ack) : '') +
+    (!capped && !acked && deliveryOpenHint(row.visits) ? '。' + deliveryOpenHint(row.visits) : '') +
+    (!capped && !acked && deliveryResendHint(row.resend) ? '。' + deliveryResendHint(row.resend) : '') +
+    (!acked && deliveryRelinkHint(row.relink) ? '。' + deliveryRelinkHint(row.relink) : '') +
+    (!acked && deliveryRetiredHitHint(row.retiredHits) ? '。' + deliveryRetiredHitHint(row.retiredHits) : '') +
     (rowReminderTitle(row) ? '。' + rowReminderTitle(row) : '')
   )
 }
@@ -295,7 +310,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
   const [deliveryTotal, setDeliveryTotal] = useState(0)
   const [deliverySummary, setDeliverySummary] = useState({ projects: 0, current: 0, drifted: 0, lastAt: '' })
   // 回执的四个数（v0.9.139）：封过包的几次、对上几次、对不上几次、还没回来几次
-  const [deliveryReceipts, setDeliveryReceipts] = useState<DeliveryLedgerReceipts>({ sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0, pendingStuck: 0, pendingRelinked: 0 })
+  const [deliveryReceipts, setDeliveryReceipts] = useState<DeliveryLedgerReceipts>({ sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0, pendingStuck: 0, pendingRelinked: 0, pendingAcked: 0 })
   const [deliveryHasMore, setDeliveryHasMore] = useState(false)
   const [deliveryOpen, setDeliveryOpen] = useState(false)
   const [deliveryBusy, setDeliveryBusy] = useState(false)
@@ -366,12 +381,12 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
         lastAt: deliveryResult.value.lastAt || '',
       })
       setDeliveryHasMore(Boolean(deliveryResult.value.hasMore))
-      setDeliveryReceipts(deliveryResult.value.receipts ?? { sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0, pendingStuck: 0, pendingRelinked: 0 })
+      setDeliveryReceipts(deliveryResult.value.receipts ?? { sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0, pendingStuck: 0, pendingRelinked: 0, pendingAcked: 0 })
     } else {
       setDeliveries([])
       setDeliveryTotal(0)
       setDeliverySummary({ projects: 0, current: 0, drifted: 0, lastAt: '' })
-      setDeliveryReceipts({ sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0, pendingStuck: 0, pendingRelinked: 0 })
+      setDeliveryReceipts({ sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0, pendingStuck: 0, pendingRelinked: 0, pendingAcked: 0 })
       setDeliveryHasMore(false)
       problems.push('交付记录：' + String((deliveryResult.reason as Error)?.message || deliveryResult.reason))
     }
@@ -1286,6 +1301,8 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                 {deliveryReceipts.pendingStuck ? deliveryStuckText(deliveryReceipts.pendingStuck) : ''}
                 {/* 换过新地址、新地址也没人打开的那几次：别再换地址了，先问一句（v0.9.147） */}
                 {deliveryReceipts.pendingRelinked ? deliveryRelinkedText(deliveryReceipts.pendingRelinked) : ''}
+                {/* 他自己点了「收到了」的那几份：东西到手了，只差验——这几份不用再问（v0.9.151） */}
+                {deliveryReceipts.pendingAcked ? deliveryAckedText(deliveryReceipts.pendingAcked) : ''}
               </p>
             ) : null}
             {deliveryReceipts.mismatched ? (
@@ -1368,7 +1385,9 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                             {/* 一段一句、各自不拆：390 上「链接还没打 / 开」「又发过 1 / 次」这种
                                 从词中间断行看着像排版事故。整段 whenwrap 之后只在「·」处换行。 */}
                             {[
-                              '还没收到回执',
+                              // 他点过「收到了」（v0.9.151）：行首那句换成「收据还没贴」——
+                              // 一行里不能同时写着「还没收到回执」和「他点了收到了」
+                              rowPendingLead(row),
                               rowWaitText(row) ? ' · ' + rowWaitText(row) : '',
                               deliveryOpenShort(row.visits) ? ' · ' + deliveryOpenShort(row.visits) : '',
                               rowRelinkText(row) ? ' · ' + rowRelinkText(row) : '',

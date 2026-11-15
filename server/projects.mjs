@@ -393,6 +393,11 @@ function normalizeDeliveries(raw) {
       // 它已经打不开了，留着只是多一份能当凭证猜的字符串。
       const retired = pkg ? normalizeRetiredLinks(entry.retired) : []
       if (retired.length) base.retired = retired
+      // 收包人自己点过「收到了」（v0.9.151）：收据要等验完才贴得上来，中间这一段
+      // 发件人一直只能靠「打开过几次」猜。这是对方亲口说的那一刻，记时间、记这一件事，
+      // 不记是谁点的（那一侧没有账号），也不当收据用——验没验仍以收据为准。
+      const ackAt = pkg && Number.isFinite(Date.parse(String(entry.ack?.at || ''))) ? String(entry.ack.at) : ''
+      if (ackAt) base.ack = { at: ackAt }
       return base
     })
     .filter((entry) => entry.version > 0)
@@ -886,6 +891,37 @@ export async function saveReceiptByToken(token, receipt) {
     project.updatedAt = new Date().toISOString()
     await persist(list)
     return { project: normalize(project), delivery: deliveries[index] }
+  }
+  return null
+}
+
+/**
+ * 收包人在回执链接上点了「收到了」（v0.9.151）。
+ *
+ * 为什么这一步值得写盘：从发出链接到收回据之间，发件人手里只有「打开过几次」这一个数，
+ * 分不出「他根本没看到」和「他看到了、包也拿到了，只是还没验」。r146–r160 一路在这两件事之间猜，
+ * 最后只能让发件人去问。可答案在收包人手上——他在那一页点一下就够了。
+ *
+ * 只记这一件事发生的时间：不记是谁点的（那一侧没有账号，转发给别人也算一次点击），
+ * 不碰包、不碰收据、不碰打开次数；也不改作品的 updatedAt——点一下的不是发件人，不该把作品顶到列表最前。
+ * 重复点不写第二遍（那一刻只有一次），已经贴过收据的不再收：验都验完了，「收到了」没有新信息。
+ */
+export async function saveDeliveryAck(token, at = new Date().toISOString()) {
+  const value = String(token || '')
+  if (!/^[0-9a-f]{16}$/.test(value)) return null
+  const when = Number.isFinite(Date.parse(String(at || ''))) ? String(at) : new Date().toISOString()
+  const list = await loadAll()
+  for (const project of list) {
+    const deliveries = normalizeDeliveries(project.deliveries)
+    const index = deliveries.findIndex((entry) => entry.receiptToken === value && entry.package)
+    if (index < 0) continue
+    const entry = deliveries[index]
+    if (entry.receipt) return { already: true, delivery: entry }
+    if (entry.ack?.at) return { repeated: true, at: entry.ack.at, delivery: entry }
+    deliveries[index] = { ...entry, ack: { at: when } }
+    project.deliveries = deliveries
+    await persist(list)
+    return { repeated: false, at: when, delivery: deliveries[index] }
   }
   return null
 }

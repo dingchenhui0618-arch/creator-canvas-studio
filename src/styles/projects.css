@@ -1561,6 +1561,18 @@
   line-height: 1.6;
 }
 
+/* 他点过「收到了」（v0.9.151）：这一句是对方亲口回的，比「打开过几次」更硬。
+   用通过色而不是警示色——它是一条好消息，但不是结论（还没验完）。 */
+.vq-archive-receipt-ack {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0;
+  color: var(--pass);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
 .vq-archive-receipt-hint.is-inline {
   flex: 1 1 220px;
   min-width: 0;

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { ArrowLeftRight, Check, ClipboardCheck, Link2Off, Loader2, X } from 'lucide-react'
-import { getReceiptLink, submitReceiptByLink } from '../api/projects'
+import { ackReceiptByLink, getReceiptLink, submitReceiptByLink } from '../api/projects'
 import { receiptCheckLabel } from '../domain/project'
 import type { DeliveryReceipt, ReceiptLinkResult, ReceiptLinkView } from '../domain/project'
 import '../styles/receipt-page.css'
@@ -71,6 +71,10 @@ export default function ReceiptPage({ token }: { token: string }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState<ReceiptLinkResult | null>(null)
+  // 「收到了」那一句（v0.9.151）：发件人那边等的是收据，可验完之前他至少该知道东西到了。
+  // 读了页面就知道自己点过没有，刷新也不重复点。
+  const [ackAt, setAckAt] = useState('')
+  const [ackBusy, setAckBusy] = useState(false)
 
   useEffect(() => {
     const previous = document.title
@@ -86,6 +90,7 @@ export default function ReceiptPage({ token }: { token: string }) {
       .then((next) => {
         if (!alive) return
         setView(next)
+        setAckAt(next.ackAt || '')
         setStatus('ready')
       })
       .catch((caught: unknown) => {
@@ -124,6 +129,21 @@ export default function ReceiptPage({ token }: { token: string }) {
       setError(caught instanceof Error ? caught.message : '这段收据没贴上去')
     } finally {
       setBusy(false)
+    }
+  }
+
+  // 点一下「收到了」：只写一件事，不比对、不改包；发件人那一行会写成「他点了「收到了」，收据还没贴」。
+  const ackReceived = async () => {
+    if (ackBusy || ackAt) return
+    setAckBusy(true)
+    setError('')
+    try {
+      const next = await ackReceiptByLink(token)
+      setAckAt(next.at)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : '这一下没告诉他，过一会儿再点')
+    } finally {
+      setAckBusy(false)
     }
   }
 
@@ -197,6 +217,35 @@ export default function ReceiptPage({ token }: { token: string }) {
             {stamp(view.receipt.at) ? ' · ' + stamp(view.receipt.at) : ''}。
             再贴一次会记在它后面，发件人那边两次都看得到。
           </p>
+        ) : null}
+
+        {/* 「收到了」那一下（v0.9.151）：贴收据之前唯一能说的一句话。
+            说清两件事：这一步不是验；点完发件人就不用再问「到底收到没有」。 */}
+        {!shown ? (
+          <section className={'rpage-ack' + (ackAt ? ' is-done' : '')} aria-label="告诉发件人东西收到了">
+            <div className="rpage-ack-copy">
+              <strong>
+                {ackAt ? <Check size={13} /> : null}
+                {ackAt ? '已经告诉他了' : '东西收到了吗？'}
+              </strong>
+              <span>
+                {ackAt
+                  ? stamp(ackAt) + ' 点的。发件人那边已经知道东西到你手上了；验完照旧把下面那栏的收据贴回来，那才算验过。'
+                  : '点一下，发件人那边就知道你拿到了，不用再发消息问你。这一步不算验，验完再贴下面的收据。'}
+              </span>
+            </div>
+            {ackAt ? null : (
+              <button
+                type="button"
+                className="rpage-button"
+                disabled={ackBusy}
+                onClick={() => void ackReceived()}
+                title="只告诉发件人「东西到了」：不比对任何东西，也不改这一份包"
+              >
+                {ackBusy ? '正在告诉他…' : '东西收到了，正在验'}
+              </button>
+            )}
+          </section>
         ) : null}
 
         <label className="rpage-field">

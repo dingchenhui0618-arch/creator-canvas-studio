@@ -351,6 +351,16 @@ export const issueReceiptLink = (projectId: string, deliveryId: string, rotate =
 export const getReceiptLink = (token: string) =>
   request<ReceiptLinkView>('/api/receipts/' + encodeURIComponent(token))
 
+/**
+ * 收包人点「收到了」（v0.9.151）：一件不比对任何东西的小事——只为让发件人知道东西到了。
+ * 重复点回同一个时刻（不写第二遍）；已经贴过收据的那一条会回 409。
+ */
+export const ackReceiptByLink = (token: string) =>
+  request<{ ok: boolean; at: string; repeated: boolean }>(
+    '/api/receipts/' + encodeURIComponent(token) + '/ack',
+    { method: 'POST' },
+  )
+
 /** 收包人把收据贴上来：服务端比对完写进那一条交付记录，只回哪几项对上 */
 export const submitReceiptByLink = (token: string, text: string) =>
   request<ReceiptLinkResult>('/api/receipts/' + encodeURIComponent(token), {

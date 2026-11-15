@@ -151,6 +151,9 @@ export type ProjectDeliveryPackage = {
  * review 三种状态都要分得清：对象 = 记下了；null = 当时还没评过；没有这个字段 = 升级前的老记录（没记）。
  * id/package 同理：升级前的老记录没有封存包。
  */
+/** 他点过「收到了」的那一下（v0.9.151）：只记时间，不记是谁 */
+export type DeliveryAck = { at: string }
+
 export type ProjectDelivery = {
   id?: string
   version: number
@@ -189,6 +192,12 @@ export type ProjectDelivery = {
    * 有人点回去时再加「被点过几次、最近一次」（v0.9.149）。旧 token 本身不存。
    */
   retired?: { key: string; at: string; hits?: number; lastAt?: string }[]
+  /**
+   * 收包人在回执页点了「收到了」（v0.9.151）：从「链接发出去」到「收据贴回来」之间，
+   * 这是对方唯一能亲口说的一句话。只记时间，不记是谁点的（那一侧没有账号），
+   * 也不当收据用：验没验仍以收据为准。
+   */
+  ack?: DeliveryAck
 }
 
 /**
@@ -268,6 +277,8 @@ export type ReceiptLinkView = {
   ok: boolean
   project: { title: string }
   delivery: ReceiptLinkDelivery
+  /** 他之前点过「收到了」没有（v0.9.151）：刷新页面之后还知道点过 */
+  ackAt?: string
   receipt: { state: DeliveryReceipt['state']; at: string; summary: string } | null
 }
 
@@ -1168,6 +1179,11 @@ export type ProjectDeliveryRow = {
    * 不知道就什么都不说，不写「还没被打开」。
    */
   visits?: DeliveryVisits | null
+  /**
+   * 他点过「收到了」（v0.9.151）：回执还没回来，但「没送到」已经排除了。
+   * null = 没点过或者这一条没有回执链接。
+   */
+  ack?: DeliveryAck | null
 }
 
 /** 交付流水的整份数字按全部记录算，不因为只取了一页而变小 */
@@ -1221,6 +1237,11 @@ export type DeliveryLedgerReceipts = {
    * 到这一步别再换地址了：两条地址都没人打开，问题多半不在链接上，该换个收件人或换个渠道。
    */
   pendingRelinked: number
+  /**
+   * pending 里「他点过「收到了」」的条数（v0.9.151）：pending 的子集，但与 pendingUnopened 互斥——
+   * 点得动「收到了」说明他打开过、东西也到手了，这几条不该再算进「可能没送到」。
+   */
+  pendingAcked: number
 }
 
 /**

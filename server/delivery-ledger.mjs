@@ -186,6 +186,9 @@ export function ledgerRows({ projects = [], counts = {}, visits = {} } = {}) {
         relink,
         // 换掉的那条旧地址还被点过几次（v0.9.149）：点着旧的，说明新的那条没送到他手上
         retiredHits: entry?.package ? retiredHitBrief(entry) : null,
+        // 他点过「收到了」（v0.9.151）：收据还没回来，但「没送到」这一层已经排除了。
+        // 只有真的点过才给时间，界面据此把「还没收到回执」那句换成「东西到手了，还没验」。
+        ack: entry?.package && entry?.ack?.at ? { at: String(entry.ack.at) } : null,
         // 现在能不能「再发一次链接」：有包、还没回执、链接还在，而且确知这条地址一次都没被打开过。
         // 不知道被打开过没有（升级前发的链接）就不给这个按钮——那种情况下「再发一次」是盲发。
         // v0.9.150 起到了换地址的上限就不再给「再发一次」：那条路是「同一条消息再发一遍」，
@@ -194,6 +197,8 @@ export function ledgerRows({ projects = [], counts = {}, visits = {} } = {}) {
           entry?.package &&
             !RECEIPT_STATES.includes(entry?.receipt?.state) &&
             /^[0-9a-f]{16}$/.test(String(entry?.receiptToken || '')) &&
+            // 他点过「收到了」（v0.9.151）：东西已经到手，缺的不是「再发一遍」
+            !entry?.ack?.at &&
             seen &&
             seen.opens === 0 &&
             Number(relink?.count || 0) < RELINK_LIMIT,
@@ -206,6 +211,8 @@ export function ledgerRows({ projects = [], counts = {}, visits = {} } = {}) {
           entry?.package &&
             !RECEIPT_STATES.includes(entry?.receipt?.state) &&
             /^[0-9a-f]{16}$/.test(String(entry?.receiptToken || '')) &&
+            // 他都点过「收到了」了，换地址解决的不是他的问题（v0.9.151）
+            !entry?.ack?.at &&
             seen &&
             seen.opens === 0 &&
             Number(relink?.count || 0) < RELINK_LIMIT &&
@@ -217,6 +224,8 @@ export function ledgerRows({ projects = [], counts = {}, visits = {} } = {}) {
           entry?.package &&
             !RECEIPT_STATES.includes(entry?.receipt?.state) &&
             /^[0-9a-f]{16}$/.test(String(entry?.receiptToken || '')) &&
+            // 点过「收到了」就不再是「没送到」：不算换到头，也不劝人再换地址（v0.9.151）
+            !entry?.ack?.at &&
             seen &&
             seen.opens === 0 &&
             Number(relink?.count || 0) >= RELINK_LIMIT,
@@ -261,17 +270,21 @@ export function deliveryLedger(
   // 也就是「再把同一条地址发一遍也没用了」的那几条，该换个渠道或换个人。
   // pendingRelinked（v0.9.147）是它的下一步：这几条已经换过一条新地址，新地址还是没人打开——
   // 到这一步别再换地址了，问题多半不在链接上（收件人写错了、人家不用这个渠道），该换个人。
-  const receipts = { sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0, pendingStuck: 0, pendingRelinked: 0 }
+  // pendingAcked（v0.9.151）同样是 pending 的子集，但和 pendingUnopened 互斥：点了「收到了」，
+  // 说明他打开过、也拿到了东西；这几条不该再被算进「可能没送到」的那一堆里。
+  const receipts = { sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0, pendingStuck: 0, pendingRelinked: 0, pendingAcked: 0 }
   for (const row of rows) {
     if (!row.package) continue
     receipts.sealed += 1
     if (!row.receipt) {
       receipts.pending += 1
+      if (row.ack) receipts.pendingAcked += 1
       const at = Date.parse(row.at)
       if (Number.isFinite(at) && nowMs - at >= REMIND_LATE_DAYS * DAY_MS) receipts.pendingLate += 1
       // pendingUnopened（v0.9.145）也是 pending 的子集：还没回来、而且这条链接一次都没被打开过。
       // 不知道打开过没有的那几条不算进来——猜出来的待办比没有更糟。
-      if (row.visits && row.visits.opens === 0) {
+      // 点过「收到了」的那几条不进「可能没送到」这一堆（v0.9.151）：他自己说了东西到手。
+      if (row.visits && row.visits.opens === 0 && !row.ack) {
         receipts.pendingUnopened += 1
         if (Number(row.resend?.count) >= RESEND_STUCK) receipts.pendingStuck += 1
         if (Number(row.relink?.count) >= 1) receipts.pendingRelinked += 1

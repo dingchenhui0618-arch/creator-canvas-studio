@@ -107,6 +107,31 @@
 .rpage-already.is-broken,
 .rpage-already.is-conflict { border-color: transparent; background: var(--fail-soft); color: var(--fail); }
 
+/* 「收到了」那一下（v0.9.151）：收据之前唯一能说的一句话。
+   单独一块、和贴收据那栏隔开——它不是验，只是「东西到手了」，压在收据框边上会被当成一步手续。 */
+.rpage-ack {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.rpage-ack-copy { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.rpage-ack-copy strong {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+.rpage-ack-copy span { font-size: var(--text-xs); line-height: 1.7; color: var(--muted); }
+.rpage-ack.is-done { background: var(--pass-soft); border-color: transparent; }
+.rpage-ack.is-done .rpage-ack-copy strong { color: var(--pass); }
+.rpage-ack .rpage-button { flex: none; }
+
 .rpage-field { display: flex; flex-direction: column; gap: var(--space-2); }
 .rpage-label {
   font-family: var(--font-mono);
@@ -231,5 +256,8 @@
   .rpage-head { padding-bottom: var(--space-4); gap: var(--space-2); }
   .rpage-head h1 { font-size: var(--text-xl); }
   .rpage-actions .rpage-hint { flex-basis: 100%; }
+  /* 窄屏上按钮整行落下来：一行里塞「说明 + 按钮」会把那句说明挤成两三个字一条 */
+  .rpage-ack { flex-direction: column; align-items: flex-start; gap: var(--space-3); }
+  .rpage-ack .rpage-button { width: 100%; justify-content: center; }
   .rpage-checks li { grid-template-columns: 16px 80px 1fr; }
 }

@@ -91,6 +91,7 @@ import {
 import { deliveryOpenCount, deliveryOpenHint } from '../domain/delivery-open'
 import { deliveryResendBrief, deliveryResendHint } from '../domain/delivery-resend'
 import { RELINK_LIMIT, deliveryArchiveLine, deliveryRelinkBrief, deliveryRelinkHint } from '../domain/delivery-relink'
+import { deliveryAckText } from '../domain/delivery-ack'
 import { stampTime as stamp, visitLine } from '../domain/share'
 import '../styles/projects.css'
 
@@ -2115,6 +2116,14 @@ export default function ProjectPage({
                         让他把那段发回来，整段贴在这里。只读里面的版次、包名、字节与整包 SHA-256，跟这一条封存包对一遍；
                         只比对文字，不重新打包、也不碰盘上那份。
                       </p>
+                      {/* 他点过「收到了」（v0.9.151）：还没验，但至少不用再猜东西有没有送到——
+                          这一句放在回执链接上面：先说「人那边回话了」，再说链接怎么发。 */}
+                      {row.ack?.at ? (
+                        <p className="vq-archive-receipt-ack">
+                          <Check size={12} />
+                          {deliveryAckText(row.ack)}
+                        </p>
+                      ) : null}
                       <div className="vq-archive-receipt-link">
                         <div className="vq-archive-receipt-linkhead">
                           <span className="vq-archive-receipt-label">回执链接</span>
