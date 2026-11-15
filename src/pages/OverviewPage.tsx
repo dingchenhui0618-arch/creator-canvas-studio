@@ -1231,7 +1231,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                             ]
                               .filter(Boolean)
                               .map((part) => (
-                                <span className="vq-chip-keep" key={part}>
+                                <span className="vq-keep-together" key={part}>
                                   {part}
                                 </span>
                               ))}
