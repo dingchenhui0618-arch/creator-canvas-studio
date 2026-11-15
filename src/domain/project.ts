@@ -166,6 +166,23 @@ export type ProjectDelivery = {
   receipts?: DeliveryReceipt[]
   /** 回执链接的 token（v0.9.137）：一条免登录地址，收包人自己就能把收据贴回来；没有 = 只存发件人贴 */
   receiptToken?: string
+  /**
+   * 这条链接发出去的时间（v0.9.145）：从这一刻开始记「被打开过几次」。
+   * 升级前发的链接没有这一项——那时候还没开始记，界面不能写成「还没被打开」。
+   */
+  receiptLinkAt?: string
+  /** 这条回执链接被打开过几次（v0.9.145）；只有 receiptLinkAt 也在时接口才会给 */
+  visits?: DeliveryVisits
+}
+
+/**
+ * 回执链接被打开过几次（v0.9.145）：收包人那一侧没有账号，能记的只有「这条地址被点开过」。
+ * 只记次数与首末时间，不记是谁打开的——所以界面只说「打开过几次」，不说「他看过了」。
+ */
+export type DeliveryVisits = {
+  opens: number
+  firstAt: string
+  lastAt: string
 }
 
 /** 收据对账比的那五项：版次、包名、字节、整包哈希、对方结论 */
@@ -1105,6 +1122,11 @@ export type ProjectDeliveryRow = {
   reminder?: { count: number; at: string } | null
   /** 现在能不能催：有封存包、还没收到回执、回执链接还在（v0.9.144） */
   remindable?: boolean
+  /**
+   * 这条回执链接被打开过几次（v0.9.145）。null = 不知道（没有链接，或者链接发出时还没开始记）——
+   * 不知道就什么都不说，不写「还没被打开」。
+   */
+  visits?: DeliveryVisits | null
 }
 
 /** 交付流水的整份数字按全部记录算，不因为只取了一页而变小 */
@@ -1143,6 +1165,11 @@ export type DeliveryLedgerReceipts = {
    * 所以 sealed = matched + mismatched + unclear + pending 这条仍然成立。
    */
   pendingLate: number
+  /**
+   * pending 里回执链接一次都没被打开过的条数（v0.9.145）：同样是 pending 的子集。
+   * 只说「没人打开过这条地址」，不说「他没收到」——链接可能被预览抓取过，也可能真没送到。
+   */
+  pendingUnopened: number
 }
 
 /**

@@ -65,10 +65,26 @@ function reminderBrief(entry) {
 }
 
 /**
+ * 回执链接被打开过几次（v0.9.145）：只回答「这条地址被点开过没有、最近一次什么时候」。
+ * 链接发出时还没开始记的那些（升级前发的）一律 null——不知道就说不知道，不写「还没被打开」。
+ * 记录按 token 的哈希前缀存在另一个文件里（receipt-visits.json），projects.json 不带它。
+ */
+function visitsBrief(entry, seen) {
+  if (!entry?.package || !entry?.receiptLinkAt) return null
+  const value = seen && typeof seen === 'object' ? seen : {}
+  return {
+    opens: Math.max(0, Math.round(Number(value.opens) || 0)),
+    firstAt: String(value.firstAt || ''),
+    lastAt: String(value.lastAt || ''),
+  }
+}
+
+/**
  * 摊平成行：一条作品可能交过好几版，每一版一行。
  * 列表与计数读同一份行，界面上的数字才不会和真正排出来的行对不上。
+ * visits 是「交付记录编号 → 这条链接的打开次数」，由路由一次读好再传进来（这一层不碰文件）。
  */
-export function ledgerRows({ projects = [], counts = {} } = {}) {
+export function ledgerRows({ projects = [], counts = {}, visits = {} } = {}) {
   const rows = []
   for (const project of Array.isArray(projects) ? projects : []) {
     if (!project || !project.id) continue
@@ -105,6 +121,8 @@ export function ledgerRows({ projects = [], counts = {} } = {}) {
         receipt: receiptBrief(entry),
         // 催过几次、最近一次（v0.9.144）：与回执一样只挂在有封存包的记录上
         reminder: entry?.package ? reminderBrief(entry) : null,
+        // 回执链接被打开过几次（v0.9.145）：不知道的那些是 null，界面什么都不说
+        visits: visitsBrief(entry, visits?.[project.id + ':' + String(entry?.id || '')]),
         // 现在能不能催：有包、还没回执、回执链接还留着（换过一条或从来没生过就没有）
         remindable: Boolean(
           entry?.package &&
@@ -132,16 +150,16 @@ export function ledgerRows({ projects = [], counts = {} } = {}) {
  * 「共 N 条」「M 条作品」不会因为只取了前 8 条就变小。
  */
 export function deliveryLedger(
-  { projects = [], counts = {} } = {},
+  { projects = [], counts = {}, visits = {} } = {},
   // now 只为「发了几天」这一件事：测试传一个固定时刻，结果就不会随当天日期漂
   { offset = 0, limit = LEDGER_PAGE, now = Date.now() } = {},
 ) {
-  const rows = ledgerRows({ projects, counts })
+  const rows = ledgerRows({ projects, counts, visits })
   const nowMs = Number.isFinite(Number(now)) ? Number(now) : Date.now()
   // 回执的四个数按整份记录算（不是这一页）：封过包的几条、对上的几条、对不上的几条、还没回来的几条。
   // 只有封了包的交付才谈得上回执——升级前那几条没有包，不把它们算成「还没回来」，那样会凭空多出待办。
   // pendingLate（v0.9.144）不是第五种：它是 pending 里发出超过三天的那些，用来提示「可以提一句」。
-  const receipts = { sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0 }
+  const receipts = { sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0 }
   for (const row of rows) {
     if (!row.package) continue
     receipts.sealed += 1
@@ -149,6 +167,9 @@ export function deliveryLedger(
       receipts.pending += 1
       const at = Date.parse(row.at)
       if (Number.isFinite(at) && nowMs - at >= REMIND_LATE_DAYS * DAY_MS) receipts.pendingLate += 1
+      // pendingUnopened（v0.9.145）也是 pending 的子集：还没回来、而且这条链接一次都没被打开过。
+      // 不知道打开过没有的那几条不算进来——猜出来的待办比没有更糟。
+      if (row.visits && row.visits.opens === 0) receipts.pendingUnopened += 1
     } else if (row.receipt.state === 'match') receipts.matched += 1
     else if (row.receipt.state === 'mismatch') receipts.mismatched += 1
     else receipts.unclear += 1

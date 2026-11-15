@@ -88,6 +88,7 @@ import {
   reviewTimeLabel,
   reviewsOfVersion,
 } from '../domain/review'
+import { deliveryOpenCount, deliveryOpenDetail, deliveryOpenHint } from '../domain/delivery-open'
 import { stampTime as stamp, visitLine } from '../domain/share'
 import '../styles/projects.css'
 
@@ -1872,6 +1873,19 @@ export default function ProjectPage({
                         title={row.receipt.summary || '收包人贴回来的收据比过之后记在这里'}
                       >
                         {deliveryReceiptLine(row.receipt)}
+                      </span>
+                    ) : null}
+                    {/* 回执链接被打开过没有（v0.9.145）：一句灰字，不占一枚胶囊。
+                        「发出后还没被打开」只对发链接时已经开始记的那几条说——老链接不猜。 */}
+                    {deliveryOpenDetail(row.visits) ? (
+                      <span
+                        className={
+                          'vq-archive-openline' +
+                          (deliveryOpenCount(row.visits) ? '' : ' is-unopened')
+                        }
+                        title={deliveryOpenHint(row.visits)}
+                      >
+                        {deliveryOpenDetail(row.visits)}
                       </span>
                     ) : null}
                     {sealed && pkg && packageDiskAlert(pkg) ? (

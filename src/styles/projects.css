@@ -1761,6 +1761,22 @@
   color: var(--warn);
 }
 
+/* 回执链接被打开过没有（v0.9.145）：一句灰字，不占第二枚胶囊——
+   这里说的是「这条地址送到没有」，与上面那枚结论不是一件事，做成胶囊会读成两种结论。 */
+.vq-archive-openline {
+  justify-self: start;
+  max-width: 100%;
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.6;
+  overflow-wrap: break-word;
+}
+
+/* 一次都没被打开：这一句是这一行里唯一能当场动手的线索（先把链接再发一次） */
+.vq-archive-openline.is-unopened {
+  color: var(--muted);
+}
+
 /* 回执链接（v0.9.137）：把「收据再发回来」换成「他自己贴」。
    虚线框里再嵌一块实线：上面是地址与两个动作，下面一句说清这条地址的边界。 */
 .vq-archive-receipt-link {

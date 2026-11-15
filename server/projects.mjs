@@ -301,6 +301,10 @@ function normalizeDeliveries(raw) {
       // 只挂在有封存包的记录上——没有包就没有可比的东西；坏了就当没有这条链接。
       const token = /^[0-9a-f]{16}$/.test(String(entry.receiptToken || '')) ? String(entry.receiptToken) : ''
       if (pkg && token) base.receiptToken = token
+      // 链接发出去的时间（v0.9.145）：从这里开始记「这条地址被打开过几次」。
+      // 升级前发的链接没有这一项——那时候还没开始记，界面只能什么都不说，不能写「还没被打开」。
+      const linkAt = pkg && token && Number.isFinite(Date.parse(String(entry.receiptLinkAt || ''))) ? String(entry.receiptLinkAt) : ''
+      if (linkAt) base.receiptLinkAt = linkAt
       // 催过几次（v0.9.144）：和回执一样只挂在有封存包的记录上——没有包就没有「验没验」这回事
       const reminders = pkg ? normalizeReminders(entry.reminders) : []
       if (reminders.length) base.reminders = reminders
@@ -481,12 +485,17 @@ export async function updateProject(
       record.id = deliveryId
       record.package = deliveryPackage
       // 换了一份新包，回执链接也跟着换：旧链接指的是上一份，不能继续往新记录里写
-      if (/^[0-9a-f]{16}$/.test(String(receiptToken || ''))) record.receiptToken = receiptToken
+      if (/^[0-9a-f]{16}$/.test(String(receiptToken || ''))) {
+        record.receiptToken = receiptToken
+        // 新链接就是这一刻发出去的：从这儿开始记「被打开过几次」（v0.9.145）
+        record.receiptLinkAt = at
+      }
     } else if (previous?.id && previous.package) {
       record.id = previous.id
       record.package = previous.package
       // 打包失败、沿用上一份包时，链接也沿用：它指的还是同一份盘上的文件
       if (previous.receiptToken) record.receiptToken = previous.receiptToken
+      if (previous.receiptLinkAt) record.receiptLinkAt = previous.receiptLinkAt
     }
     found.deliveries = [...rest, record].slice(-MAX_DELIVERIES)
     changed = true
@@ -586,11 +595,23 @@ export async function issueDeliveryReceiptToken(id, deliveryId, user = null, { r
   const index = deliveries.findIndex((entry) => entry.id === deliveryId && entry.package)
   if (index < 0) return null
   const current = deliveries[index].receiptToken || ''
-  if (current && !rotate) return { token: current, rotated: false, delivery: deliveries[index] }
+  const at = new Date().toISOString()
+  if (current && !rotate) {
+    // 已经在用的那一枚还回去。升级前发的链接没有发出时间：现在补上，
+    // 从此开始记打开次数——不补的话，界面永远不知道能不能说「还没被打开」（v0.9.145）
+    if (!deliveries[index].receiptLinkAt) {
+      deliveries[index] = { ...deliveries[index], receiptLinkAt: at }
+      found.deliveries = deliveries
+      found.updatedAt = at
+      await persist(list)
+    }
+    return { token: current, rotated: false, delivery: deliveries[index] }
+  }
   const token = newReceiptToken()
-  deliveries[index] = { ...deliveries[index], receiptToken: token }
+  // 换一条等于从头开始记：新 token 的记录键不一样，打开次数自然从零算起
+  deliveries[index] = { ...deliveries[index], receiptToken: token, receiptLinkAt: at }
   found.deliveries = deliveries
-  found.updatedAt = new Date().toISOString()
+  found.updatedAt = at
   await persist(list)
   return { token, rotated: Boolean(current), delivery: deliveries[index] }
 }

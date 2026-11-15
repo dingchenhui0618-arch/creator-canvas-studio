@@ -111,7 +111,8 @@ test('四个数字对得上，翻页不改变它们', () => {
   const now = Date.parse('2026-11-15T12:00:00.000Z')
   const ledger = deliveryLedger({ projects }, { now })
   const { receipts } = ledger
-  assert.deepEqual(receipts, { sealed: 3, matched: 1, mismatched: 1, unclear: 0, pending: 1, pendingLate: 0 })
+  // pendingUnopened（v0.9.145）是 pending 的子集：这几条交付都没带打开记录，所以是 0
+  assert.deepEqual(receipts, { sealed: 3, matched: 1, mismatched: 1, unclear: 0, pending: 1, pendingLate: 0, pendingUnopened: 0 })
   assert.equal(receipts.sealed, receipts.matched + receipts.mismatched + receipts.unclear + receipts.pending)
   const second = deliveryLedger({ projects }, { offset: 2, limit: 1, now })
   assert.equal(second.items.length, 1)

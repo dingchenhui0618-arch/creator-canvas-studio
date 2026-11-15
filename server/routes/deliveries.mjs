@@ -8,6 +8,31 @@ import { currentUser } from '../auth.mjs'
 import { listProjects } from '../projects.mjs'
 import { reviewCountsByProject } from '../reviews.mjs'
 import { deliveryLedger } from '../delivery-ledger.mjs'
+import { getReceiptVisits } from '../receipt-visits.mjs'
+
+const RECEIPT_TOKEN = /^[0-9a-f]{16}$/
+
+/**
+ * 这一页要用的「回执链接被打开过几次」（v0.9.145）：按交付记录编号一次读好，再交给台账。
+ * 只读有包、有链接、而且链接发出时已经开始记的那几条；其余的不查也不猜。
+ */
+async function receiptVisitsOf(projects) {
+  const wanted = []
+  for (const project of Array.isArray(projects) ? projects : []) {
+    for (const entry of Array.isArray(project?.deliveries) ? project.deliveries : []) {
+      if (!entry?.package || !entry?.receiptLinkAt) continue
+      if (!RECEIPT_TOKEN.test(String(entry.receiptToken || ''))) continue
+      wanted.push([project.id + ':' + String(entry.id || ''), entry.receiptToken])
+    }
+  }
+  const visits = {}
+  await Promise.all(
+    wanted.map(async ([key, token]) => {
+      visits[key] = await getReceiptVisits(token)
+    }),
+  )
+  return visits
+}
 
 export function createDeliveriesRouter() {
   return {
@@ -21,7 +46,7 @@ export function createDeliveriesRouter() {
       const user = currentUser(req)
       const [projects, counts] = await Promise.all([listProjects(user), reviewCountsByProject(user)])
       const ledger = deliveryLedger(
-        { projects, counts },
+        { projects, counts, visits: await receiptVisitsOf(projects) },
         {
           // 页码由界面给：第一页 8 条，点「再看 N 条」接着往下取
           offset: url.searchParams.get('offset') || 0,

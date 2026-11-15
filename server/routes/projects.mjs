@@ -34,6 +34,8 @@ import { reviewImageRef, reviewSheetHtml, reviewSheetSelection } from '../projec
 import { compareSheetHtml } from '../project-compare-sheet.mjs'
 import { packageVerifyHtml, VERIFY_PAGE_NAME } from '../package-verify-page.mjs'
 import { getShareVisits, getShareVisitsByKey } from '../share-visits.mjs'
+// 回执链接被打开过几次（v0.9.145）：收包人那一侧不登录，只能靠这条地址本身记
+import { getReceiptVisits, recordReceiptOpen } from '../receipt-visits.mjs'
 import { shareBriefsByProject } from '../share-summary.mjs'
 import { ackFor, dropAcksForProject, listAcks } from '../review-acks.mjs'
 import { dropDecisionsForProject, listDecisions } from '../review-decisions.mjs'
@@ -296,7 +298,15 @@ async function projectDetailView(project, user, { snapshots = false } = {}) {
   // 盘上还在不在（v0.9.128）：每条封存包只 stat 一次，作品页不用点开就能知道包还在不在。
   // 只加一个 disk 字段，档案里的字节数与哈希原样不动。
   const projectView = projectBrief(project)
-  const projectDeliveries = await deliveriesWithDisk(project.id, projectView.deliveries || [])
+  // 回执链接被打开过几次（v0.9.145）：只挂在「发链接时已经开始记」的那几条上——
+  // 升级前发的链接没有发出时间，说「还没被打开」就是瞎猜。列表接口不给这一项。
+  const projectDeliveries = await Promise.all(
+    (await deliveriesWithDisk(project.id, projectView.deliveries || [])).map(async (delivery) =>
+      delivery.receiptToken && delivery.receiptLinkAt
+        ? { ...delivery, visits: await getReceiptVisits(delivery.receiptToken) }
+        : delivery,
+    ),
+  )
   return {
     project: { ...projectView, deliveries: projectDeliveries },
     // 作品页的分享面板读这里：列表接口不返回 token
@@ -1490,6 +1500,9 @@ export function createProjectsRouter() {
         }
         const receipt = found.delivery.receipt || null
         if (req.method === 'GET') {
+          // 打开页面的那一次就记一次（v0.9.145）：发件人据此分得清「他没点开」和「他看了还没贴」。
+          // 只记这条地址被打开过，不记是谁；同一分钟内刷新算一次（页面一刷新就会再取一次数据）。
+          await recordReceiptOpen(publicReceipt[1], req.headers?.['user-agent'])
           sendJson(res, 200, {
             ok: true,
             project: { title: found.project.title },

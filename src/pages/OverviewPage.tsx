@@ -43,6 +43,7 @@ import {
   deliveryWaitLate,
   deliveryWaitText,
 } from '../domain/delivery-wait'
+import { deliveryOpenHint, deliveryOpenShort, deliveryUnopenedText } from '../domain/delivery-open'
 import {
   REVIEW_VERDICT_LABEL,
   deliveryDrift,
@@ -223,7 +224,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
   const [deliveryTotal, setDeliveryTotal] = useState(0)
   const [deliverySummary, setDeliverySummary] = useState({ projects: 0, current: 0, drifted: 0, lastAt: '' })
   // 回执的四个数（v0.9.139）：封过包的几次、对上几次、对不上几次、还没回来几次
-  const [deliveryReceipts, setDeliveryReceipts] = useState<DeliveryLedgerReceipts>({ sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0 })
+  const [deliveryReceipts, setDeliveryReceipts] = useState<DeliveryLedgerReceipts>({ sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0 })
   const [deliveryHasMore, setDeliveryHasMore] = useState(false)
   const [deliveryOpen, setDeliveryOpen] = useState(false)
   const [deliveryBusy, setDeliveryBusy] = useState(false)
@@ -288,12 +289,12 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
         lastAt: deliveryResult.value.lastAt || '',
       })
       setDeliveryHasMore(Boolean(deliveryResult.value.hasMore))
-      setDeliveryReceipts(deliveryResult.value.receipts ?? { sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0 })
+      setDeliveryReceipts(deliveryResult.value.receipts ?? { sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0 })
     } else {
       setDeliveries([])
       setDeliveryTotal(0)
       setDeliverySummary({ projects: 0, current: 0, drifted: 0, lastAt: '' })
-      setDeliveryReceipts({ sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0 })
+      setDeliveryReceipts({ sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0 })
       setDeliveryHasMore(false)
       problems.push('交付记录：' + String((deliveryResult.reason as Error)?.message || deliveryResult.reason))
     }
@@ -1067,6 +1068,8 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                 {ledgerReceiptTotalsText(deliveryReceipts)}
                 {/* 还没回来的那几份里，超过三天的单说一句：该提一句了（v0.9.144） */}
                 {deliveryReceipts.pendingLate ? deliveryLateText(deliveryReceipts.pendingLate) : ''}
+                {/* 连链接都没人打开过的那几份：多半没送到，先再发一次（v0.9.145） */}
+                {deliveryReceipts.pendingUnopened ? deliveryUnopenedText(deliveryReceipts.pendingUnopened) : ''}
               </p>
             ) : null}
             {deliveryReceipts.mismatched ? (
@@ -1139,7 +1142,8 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                             {ledgerReceiptText(row.receipt)}
                           </span>
                         ) : (
-                          // 还没回来：等了几天、催过几次都说出来（v0.9.144）。
+                          // 还没回来：等了几天、这条链接有没有人点开、催过几次，都写在这一行上
+                          // （v0.9.144 天数与提醒，v0.9.145 打开情况）。
                           // 到了第三天换成警示色，并在 title 里说清「可以提一句」——不在行上写第二句。
                           <span
                             className={'vq-delivery-receipt is-pending' + (rowWaitLate(row) ? ' is-late' : '')}
@@ -1147,10 +1151,14 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                               '封存包已经能贴回收据了，这一份还没收到' +
                               (rowWaitText(row) ? '：' + rowWaitText(row) : '') +
                               (rowWaitLate(row) ? '，可以提一句' : '') +
+                              (deliveryOpenHint(row.visits) ? '。' + deliveryOpenHint(row.visits) : '') +
                               (rowReminderTitle(row) ? '。' + rowReminderTitle(row) : '')
                             }
                           >
-                            {'还没收到回执' + (rowWaitText(row) ? ' · ' + rowWaitText(row) : '') + (rowReminderText(row) ? ' · ' + rowReminderText(row) : '')}
+                            {'还没收到回执' +
+                              (rowWaitText(row) ? ' · ' + rowWaitText(row) : '') +
+                              (deliveryOpenShort(row.visits) ? ' · ' + deliveryOpenShort(row.visits) : '') +
+                              (rowReminderText(row) ? ' · ' + rowReminderText(row) : '')}
                           </span>
                         )
                       ) : null}
