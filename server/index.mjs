@@ -79,6 +79,7 @@ import { currentUser, listUsers, clientIp, isAdmin } from './auth.mjs'
 import { recordClientError } from './client-errors.mjs'
 import { createReport } from './reports.mjs'
 import { charge, refund, priceOf, ensureWelcomeCredits } from './credits.mjs'
+import { ensureDefaultPlans } from './plans.mjs'
 import { quotaRefusal } from './quota.mjs'
 import { enter, leave } from './gate.mjs'
 import { installProcessGuards, logEvent, logRequestError, startAccess } from './log.mjs'
@@ -297,6 +298,9 @@ async function migrateOwnership() {
     }
     const welcomed = ensureWelcomeCredits()
     if (welcomed) logEvent('welcome-credits', { accounts: welcomed, amount: config.credits.welcome })
+    // 充值档位（v0.9.162）：只有「从来没配过」才铺三档默认；后台改过的价格不会被冲掉
+    const seeded = ensureDefaultPlans(config.credits.pointsPerCny)
+    if (seeded) logEvent('seed-plans', { plans: seeded, pointsPerCny: config.credits.pointsPerCny })
   } catch (error) {
     logRequestError('', error, { scope: 'migrate-ownership' })
   }

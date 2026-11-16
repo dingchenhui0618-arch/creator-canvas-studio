@@ -1329,9 +1329,16 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
 
   const bdcFrameSrc = useMemo(() => {
     const base = bdc?.web.embedUrl || bdc?.web.url || ''
-    if (!base || !canvasId) return base
-    return base + (base.includes('?') ? '&' : '?') + 'loadCanvas=' + encodeURIComponent(canvasId)
-  }, [bdc?.web.embedUrl, bdc?.web.url, canvasId])
+    if (!base) return base
+    const params = new URLSearchParams()
+    if (canvasId) params.set('loadCanvas', canvasId)
+    // 积分口径由服务端配置下发（v0.9.162）：画布按它把报价换算成积分，不再自己写死倍数。
+    // 只改 VQ_POINTS_PER_CNY，这一条跟着变，画布与充值页一起对齐。
+    const rate = bdc?.credit?.pointsPerCny
+    if (rate && rate > 0) params.set('vqCredit', String(rate))
+    const query = params.toString()
+    return query ? base + (base.includes('?') ? '&' : '?') + query : base
+  }, [bdc?.web.embedUrl, bdc?.web.url, canvasId, bdc?.credit?.pointsPerCny])
 
   const handleCreateCanvas = useCallback(async () => {
     const stamp = new Date().toLocaleString('zh-CN', { hour12: false }).replace(/[^0-9]/g, '').slice(4, 12)
@@ -1495,7 +1502,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
           ) : null}
           <a
             className="vq-button vq-button--icon"
-            href={bdc.web.embedUrl || bdc.web.url}
+            href={bdcFrameSrc}
             target="_blank"
             rel="noreferrer"
             title="在新窗口打开"

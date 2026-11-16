@@ -34,6 +34,7 @@ import ProjectsPage from './pages/ProjectsPage'
 import ProjectPage from './pages/ProjectPage'
 import { RunsPage } from './pages/RunsPage'
 import { SettingsPage } from './pages/SettingsPage'
+import RechargePage from './pages/RechargePage'
 import { RadarPage } from './pages/RadarPage'
 import LocalWorkspacePage from './pages/LocalWorkspacePage'
 import { RequireSession } from './auth/RequireSession'
@@ -546,6 +547,9 @@ function Workbench({
             onToggleFocus={() => setCanvasFocus((value) => !value)}
           />
         )
+      case 'recharge':
+        // 充值单独一屏：从设置页的积分卡进来，也能直接收藏 #/recharge
+        return <RechargePage onToast={notify} />
       case 'projects':
         // 作品有两个地址：#/projects 列表与 #/projects/<id>；打开某一项不换页面职责，只换参数
         return route.projectId ? (

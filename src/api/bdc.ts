@@ -5,6 +5,8 @@ export type BdcStatus = {
   admin: { url: string; up: boolean; status: number }
   api: { url: string; up: boolean; status: number }
   deployed: boolean
+  /** 积分口径（v0.9.162）：画布嵌进来时按它标价，主体是服务端配置 VQ_POINTS_PER_CNY */
+  credit?: { unit: string; pointsPerCny: number }
 }
 
 export type BdcCanvas = {

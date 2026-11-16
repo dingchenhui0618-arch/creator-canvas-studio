@@ -1,5 +1,5 @@
 // 地址栏路由：页面的唯一真源是 location.hash。
-// 约定：#/overview #/projects #/radar #/templates #/agents #/runs #/review #/canvas #/settings
+// 约定：#/overview #/projects #/radar #/templates #/agents #/runs #/review #/canvas #/settings #/recharge
 //      作品：#/projects/<作品 id>；评审带作品：#/review/project/<作品 id>
 //      某一条交付：#/projects/<作品 id>/delivery/<交付记录 id>（工作台点一行直接落在那一版的档案上，v0.9.140）
 //      单条历史评审：#/review/<评审 id>（作品页点一条评审就走到这里，刷新与后退都能回到那条）
@@ -70,6 +70,7 @@ const USER_PAGES: readonly ShellPage[] = [
   'review',
   'canvas',
   'settings',
+  'recharge',
   'local',
 ]
 

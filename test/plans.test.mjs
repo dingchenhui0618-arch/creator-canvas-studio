@@ -120,29 +120,47 @@ test('改价与停用：改完立刻生效，停用的不出现在公开档位�
   plans.savePlan({ ...off.plan, enabled: true }, 'admin@example.test')
 })
 
-test('overview：付款没接就永远 enabled:false，档位按后台数据渲染', () => {
+test('overview：说清档位、积分口径与模式，余额仍不在这里伪造', () => {
   const view = billingOverview()
-  assert.equal(view.enabled, false)
-  assert.equal(view.provider, null)
+  // v0.9.162 起充值能到账（内测直充），所以 enabled 跟着模式与档位走，不再是写死的 false
+  assert.equal(view.enabled, true)
+  assert.equal(view.provider, 'internal')
+  assert.equal(view.mode, 'auto')
+  assert.equal(view.pointsPerCny, 10)
   assert.equal(view.balance.credits, null, '余额不从充值接口伪造，真余额在 /api/credits')
   assert.ok(view.plans.length >= 2)
   assert.equal(view.plans.every((plan) => typeof plan.price === 'number' && plan.enabled === undefined), true)
-  assert.match(view.message, /付款通道还没接入/)
+  assert.match(view.message, /支付通道还没接入/)
+
+  // 关掉模式：回到「只能提交申请」，界面据 enabled 把按钮换掉
+  const off = billingOverview('off')
+  assert.equal(off.enabled, false)
+  assert.equal(off.provider, null)
 
   // 同一个 explainer 走路由也一致
   return call(billingRouter, mockReq({ cookie: buyerCookie }), '/api/billing/overview').then((res) => {
     assert.equal(res.statusCode, 200)
-    assert.equal(JSON.parse(res.body).enabled, false)
+    assert.equal(JSON.parse(res.body).enabled, true)
   })
 })
 
-test('下单接口：通道没接就是 501，不生成假订单', async () => {
+test('下单接口：按档位落订单并到账，匿名一律 401', async () => {
   const plan = plans.listPlans({})[0]
+  const anonymous = await call(billingRouter, mockReq({ method: 'POST', body: { planId: plan.id } }), '/api/billing/orders')
+  assert.equal(anonymous.statusCode, 401)
+  assert.equal(JSON.parse(anonymous.body).loginRequired, true)
+
+  const before = plans.listPlans({})[0]
   const res = await call(billingRouter, mockReq({ method: 'POST', cookie: buyerCookie, body: { planId: plan.id } }), '/api/billing/orders')
-  assert.equal(res.statusCode, 501)
-  assert.equal(JSON.parse(res.body).code, 'BILLING_NOT_CONFIGURED')
-  const orders = await call(billingRouter, mockReq({ cookie: buyerCookie }), '/api/billing/orders')
-  assert.deepEqual(JSON.parse(orders.body), { items: [], total: 0 })
+  assert.equal(res.statusCode, 201)
+  const payload = JSON.parse(res.body)
+  assert.equal(payload.order.planId, before.id)
+  assert.equal(payload.credits, before.credits)
+  assert.ok(payload.balance >= before.credits)
+
+  const mine = JSON.parse((await call(billingRouter, mockReq({ cookie: buyerCookie }), '/api/billing/orders')).body)
+  assert.equal(mine.total, 1)
+  assert.equal(mine.items[0].id, payload.order.id)
 })
 
 test('按档位申请：积分与价格由服务端定，客户端传的 amount 不算数', async () => {

@@ -142,6 +142,32 @@ export function publicPlans() {
   }))
 }
 
+// 默认三档（v0.9.162）：定价仍然由后台维护，这里只在「从来没配过档位」时铺一次。
+// 积分按积分口径现算（1 元 = pointsPerCny 积分），所以调比例之后重建也不会还是旧价。
+// 已经有档位就一个字都不动——后台改过的价格、停用的档位都不会被这套默认值冲掉。
+const DEFAULT_PLAN_YUAN = [30, 100, 300]
+
+export function ensureDefaultPlans(pointsPerCny = 10) {
+  const data = load()
+  if (data.plans.length) return 0
+  const rate = Number(pointsPerCny) > 0 ? Number(pointsPerCny) : 10
+  const now = new Date().toISOString()
+  data.plans = DEFAULT_PLAN_YUAN.map((yuan, index) => ({
+    id: 'plan_seed_' + (index + 1),
+    name: ['体验档', '标准档', '团队档'][index] || ('第 ' + (index + 1) + ' 档'),
+    credits: Math.max(1, Math.round(yuan * rate)),
+    priceCents: yuan * 100,
+    note: index === 0 ? '先试一档' : '',
+    enabled: true,
+    sort: (index + 1) * 10,
+    createdAt: now,
+    updatedAt: now,
+    updatedBy: 'seed',
+  }))
+  persist(data)
+  return data.plans.length
+}
+
 /** 测试与运维用：把缓存扔掉，下一次读文件。 */
 export function resetPlansCache() {
   cache = null

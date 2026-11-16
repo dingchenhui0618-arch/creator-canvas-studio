@@ -826,7 +826,7 @@ export default function UsersSection() {
         <div className="admin-block-head">
           <div>
             <p className="admin-label">发放积分</p>
-            <p className="admin-sub">充值通道未开通（金额与档位还没定），所以积分只能由管理员在这里发放。</p>
+            <p className="admin-sub">档位在「计费」里维护，用户可以在充值页自助到账（内测直充）；这里用于人工补发或扣减。</p>
           </div>
         </div>
 

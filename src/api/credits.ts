@@ -244,6 +244,7 @@ export const CREDIT_KIND_LABEL: Record<string, string> = {
   'chat-refund': '对话退款',
   flow_run: '画布运行',
   'flow_run-refund': '画布运行退款',
+  recharge: '充值',
   grant: '管理员发放',
   deduct: '管理员扣减',
   welcome: '初始额度',

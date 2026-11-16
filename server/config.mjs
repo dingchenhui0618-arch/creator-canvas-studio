@@ -146,11 +146,18 @@ export const config = {
     maxChars: Number(process.env.WEB_READ_MAX_CHARS || 6000),
   },
   // 积分制：检索 / 一键复刻 / 视觉评审 / 智能体对话按次扣积分。
-  // 单价是「内部积分」不是钱，改价只改环境变量；充值通道与支付档位仍未接入（只留占位卡）。
+  // 单价是「内部积分」不是钱，改价只改环境变量；充值档位由后台维护，充值走「内测直充」直到支付通道接入。
   credits: {
     unit: process.env.VQ_CREDIT_UNIT || '积分',
     // 新账号初始额度：够试一轮检索 + 复刻，不至于一注册就卡住
     welcome: Number(process.env.VQ_CREDIT_WELCOME ?? 100),
+    // 积分换算口径（v0.9.162）：界面上一律按积分标价，1 元 = N 积分。
+    // 这是唯一真源：画布的成本预估、充值页的「1 元 = N 积分」、默认档位都读它；
+    // 调价只改 VQ_POINTS_PER_CNY 一处，不写死在界面或画布里。
+    pointsPerCny: (() => {
+      const raw = Number(process.env.VQ_POINTS_PER_CNY ?? 10)
+      return Number.isFinite(raw) && raw > 0 ? raw : 10
+    })(),
     prices: {
       search: Number(process.env.VQ_CREDIT_SEARCH ?? 2),
       replicate: Number(process.env.VQ_CREDIT_REPLICATE ?? 10),
@@ -200,6 +207,12 @@ export const config = {
     // 重活撞在一起就是 OOM，进程一死所有人的会话一起断。
     // 0 = 不限（写 0 就恢复旧行为）；偏紧时按水位再折到 2 条，到红线时重活整体拒绝。
     globalHeavy: numEnv(process.env.VQ_GLOBAL_HEAVY, 3),
+  },
+  // 充值（v0.9.162）：商户号还没下来，没有支付通道。
+  // auto = 选一档直接入账（内测直充，页面必须写明「没有支付通道」）；
+  // off  = 回到旧行为：只能提交申请、由管理员发放。
+  billing: {
+    mode: (process.env.VQ_BILLING_MODE || '').trim().toLowerCase() === 'off' ? 'off' : 'auto',
   },
   // 界面口径：生产环境只讲产品语言（不出现模型标识、上游地址、环境变量）；
   // 内部测试环境显式设 VQ_UI_MODE=internal 后，后台保留完整技术详情用于排障。

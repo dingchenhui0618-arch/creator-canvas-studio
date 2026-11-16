@@ -1,3 +1,5 @@
+import { config } from './config.mjs'
+
 // BD Canvas 探活：BD Canvas 是 Source-Available 项目，源码不随本仓库分发，
 // 只在本机部署后通过 127.0.0.1:6677（网页入口）/ 5313（后台管理）访问。
 const WEB_URL = process.env.BDC_WEB_URL || 'http://127.0.0.1:6677'
@@ -33,6 +35,9 @@ export async function bdcStatus() {
     admin: { url: ADMIN_URL + '/admin/', ...admin },
     api: { url: API_URL, ...api },
     deployed: web.up,
+    // 积分口径（v0.9.162）：画布嵌进来时按宿主的口径标价，画布不再自己写死「1 元 = 多少积分」。
+    // 值来自服务端配置（VQ_POINTS_PER_CNY），画布只负责按它换算展示。
+    credit: { unit: config.credits.unit, pointsPerCny: config.credits.pointsPerCny },
   }
 }
 

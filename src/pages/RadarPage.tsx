@@ -635,7 +635,7 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
         <div className="radar-banner radar-banner--error">
           <AlertCircle size={15} />
           <span>
-            {insufficient}。充值通道还没开通，请让管理员在「设置 → 账号与积分」里发放，或稍后余额到账再试。
+            {insufficient}。去「充值」页选一档就能到账；也可以让管理员在「设置 → 账号与积分」里发放，或稍后余额到账再试。
           </span>
         </div>
       ) : error ? (

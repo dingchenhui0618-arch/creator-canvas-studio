@@ -11,6 +11,7 @@ import { useUiMode } from '../api/app'
 import { creditKindLabel, getCredits, getMyCreditRequest, requestCredits, requestPlan, getSystemHealth, type CreditEntry, type CreditRequest, type CreditsResponse, type SystemHealth } from '../api/credits'
 import type { BillingPlan } from '../api/billing'
 import { changePassword } from '../api/auth'
+import { navigate } from '../router'
 import { listMyFeedback, type FeedbackItem } from '../api/feedback'
 import { FeedbackModal } from '../components/FeedbackModal'
 import { HELP_ARTICLES } from '../domain/help'
@@ -45,7 +46,7 @@ function formatStamp(value?: string | null) {
 
 /**
  * 设置页只放能兑现的东西：会话是服务端真的、积分是服务端账本真的、系统状态是真的探活。
- * 充值通道还没接（用户还没定价），所以那块仍然是「未开通」占位，不摆假档位。
+ * 充值档位由后台维护、能自助到账（v0.9.162 起是内测直充）；支付渠道还没接入，所以文案必须写清「不扣真实款项」。
  */
 const LEDGER_PAGE = 12
 
@@ -239,8 +240,8 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
         title="设置"
         desc={
           internal
-            ? '账号、积分、系统状态都是服务端真实数据；充值通道还没定价，保持未开通。'
-            : '账号、积分与运行状态都来自真实数据；充值通道还没开通，暂不开放购买。'
+            ? '账号、积分、系统状态都是服务端真实数据；充值走内测直充（支付通道还没接入）。'
+            : '账号、积分与运行状态都来自真实数据；积分不够时可以在「充值」页自助充。'
         }
       />
 
@@ -376,7 +377,7 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
             <div>
               <span className="vq-mono">积分 / Credits</span>
               <h2>积分余额与消耗</h2>
-              <p>检索、复刻、评审、对话都按次扣积分；失败会原路退回。充值通道未开通，积分由管理员发放。</p>
+              <p>检索、复刻、评审、对话都按次扣积分；失败会原路退回。积分不够就去「充值」页选一档，余额与流水都在这一屏。</p>
             </div>
             <Tag tone={lowBalance ? 'warn' : 'plain'}>{lowBalance ? '余额偏低' : '按次计费'}</Tag>
           </div>
@@ -495,7 +496,7 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
                 <span>
                   {reqPending
                     ? '已提交申请（' + reqPending.amount + ' 积分），管理员处理前会保留这条。'
-                    : '充值通道还没开通。写一条申请，管理员在后台直接把积分发到你的账号。'}
+                    : '不够用就去「充值」页选一档，选完直接到账；也可以写一条申请，让管理员在后台发放。'}
                 </span>
               </div>
               <div className="vq-billing-actions">
@@ -592,12 +593,14 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
               <h2>档位与开通</h2>
               <p>
                 {plans.length
-                  ? '价格由管理员在后台维护。付款通道还没接入：「申请开通」提交的是一条开通申请，管理员确认收款后把积分放到你的账号——这里不会假装支付成功。'
-                  : '计费方式与价格还没定，暂时不能下单，也不显示额度。定价之后这里会出现档位与开通入口。'}
+                  ? billing?.enabled
+                    ? '档位由后台维护，积分口径由服务端下发（1 元 = ' + (billing.pointsPerCny || 10) + ' 积分）。支付通道还没接入，现在是内测直充：选一档直接到账，不会扣任何真实款项。'
+                    : '档位由后台维护。自助充值暂时关闭：「申请开通」提交的是一条申请，管理员确认收款后把积分放到你的账号。'
+                  : '计费方式与价格还没定，暂时不能下单，也不显示额度。定价之后这里会出现档位与充值入口。'}
               </p>
             </div>
             <Tag tone={billing?.enabled ? 'ink' : plans.length ? 'warn' : 'plain'}>
-              {billing?.enabled ? '已开通' : plans.length ? '待付款' : '未开通'}
+              {billing?.enabled ? '可充值' : plans.length ? '待开通' : '未开通'}
             </Tag>
           </div>
           <div className="vq-card-body">
@@ -608,24 +611,32 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
                   return (
                     <article key={plan.id} className={'vq-plan-card' + (active ? ' is-active' : '')}>
                       <span className="vq-plan-name">{plan.name}</span>
-                      <span className="vq-plan-price">
-                        ¥{plan.price.toFixed(2)}
-                        <span> / {plan.credits.toLocaleString('zh-CN')} 积分</span>
-                      </span>
+                      <span className="vq-plan-price">{plan.credits.toLocaleString('zh-CN')} 积分</span>
                       <span className="vq-plan-meta">
                         {plan.priceCents > 0 && plan.credits > 0
-                          ? '每积分约 ¥' + (plan.price / plan.credits).toFixed(4).replace(/0+$/, '').replace(/\.$/, '')
+                          ? '¥' + plan.price.toFixed(plan.price % 1 === 0 ? 0 : 2) + ' · 每积分约 ¥' + (plan.price / plan.credits).toFixed(4).replace(/0+$/, '').replace(/\.$/, '')
                           : '赠送额度：不收费'}
                       </span>
                       {plan.note ? <span className="vq-plan-note">{plan.note}</span> : null}
-                      <button
-                        type="button"
-                        className="vq-button vq-button--ghost"
-                        onClick={() => void requestPlanNow(plan)}
-                        disabled={Boolean(planBusyId) || Boolean(reqPending)}
-                      >
-                        {active ? '已申请，等确认' : reqPending ? '已有待处理申请' : planBusyId === plan.id ? '提交中…' : '申请开通'}
-                      </button>
+                      {billing?.enabled ? (
+                        <button
+                          type="button"
+                          className="vq-button vq-button--ghost"
+                          onClick={() => navigate({ kind: 'page', page: 'recharge' })}
+                        >
+                          <CreditCard size={14} />
+                          去充值
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="vq-button vq-button--ghost"
+                          onClick={() => void requestPlanNow(plan)}
+                          disabled={Boolean(planBusyId) || Boolean(reqPending)}
+                        >
+                          {active ? '已申请，等确认' : reqPending ? '已有待处理申请' : planBusyId === plan.id ? '提交中…' : '申请开通'}
+                        </button>
+                      )}
                     </article>
                   )
                 })}
@@ -636,15 +647,24 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
                 <strong>付款通道</strong>
                 <span>{billing?.message || billingError || '读取中…'}</span>
               </div>
-              <span className="vq-row-value vq-mono">{billing?.provider || '未接入'}</span>
+              <span className="vq-row-value vq-mono">
+                {billing?.provider === 'internal' ? '内测直充' : billing?.provider || '未接入'}
+              </span>
             </div>
             <div className="vq-billing-actions">
-              <button type="button" className="vq-button vq-button--primary" disabled>
+              <button
+                type="button"
+                className="vq-button vq-button--primary"
+                disabled={!billing?.enabled}
+                onClick={() => navigate({ kind: 'page', page: 'recharge' })}
+              >
                 <CreditCard size={14} />
-                立即购买
+                打开充值页
               </button>
               <span className="vq-billing-note">
-                {billing?.enabled ? '选择一个档位后进入支付' : '通道未接入，下单会明确失败；现在只能走「申请开通」'}
+                {billing?.enabled
+                  ? '内测直充：选一档直接到账，支付通道还没接入'
+                  : '通道未接入，下单会明确失败；现在只能走「申请开通」'}
               </span>
             </div>
             {reqError ? <p className="vq-billing-note" role="alert">{reqError}</p> : null}
