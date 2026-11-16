@@ -31,12 +31,14 @@ import {
   reviewSheetUrl,
   saveProjectAsTemplate,
   saveProjectScript,
+  setProjectShotFrame,
   setProjectShareCompare,
   setSheetUrl,
   startProjectVersion,
   updateProject,
   type ProjectTemplateSaveResult,
 } from '../api/projects'
+import { uploadRejection, uploadReviewImage } from '../api/media'
 import { describeTiming, type ScriptBeat } from '../domain/radar'
 import { formatCount } from '../api/radar'
 import {
@@ -200,6 +202,8 @@ export default function ProjectPage({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState<'' | 'canvas' | 'done' | 'delete' | 'title' | 'version' | 'rebase' | 'script' | 'export' | 'zip'>('')
+  // 哪一镜正在贴画面（v0.9.161）：上传 + 记账两段，按镜头号显示「正在贴…」，不让整页转圈
+  const [shotBusy, setShotBusy] = useState(0)
   const [renaming, setRenaming] = useState(false)
   const [draftTitle, setDraftTitle] = useState('')
   // 脚本就地编辑：草稿只在内存里，保存后才写进作品（copy-on-write）
@@ -796,6 +800,41 @@ export default function ProjectPage({
 
   // 包里那份（v0.9.129）：清单改成从盘上那份的中央目录读，档案里记的那份只做对照。
   // 只读接口：不缓存、不解压到磁盘；盘上没了就退回档案里记的清单，不拿今天的样子补。
+  // 贴一张自己的画面到某一镜（v0.9.161）：先传到自己账号下，再记到这条作品上。
+  // 两步分开说：传失败不改记录；记不上时那张图仍留在自己的素材里，不删。
+  const attachShotFrame = async (shotNo: number, file: File | null) => {
+    if (!file) return
+    const rejection = uploadRejection(file)
+    if (rejection) {
+      onToast(rejection)
+      return
+    }
+    setShotBusy(shotNo)
+    try {
+      const uploaded = await uploadReviewImage(file)
+      await setProjectShotFrame(projectId, shotNo, uploaded.media)
+      await load()
+      onToast('第 ' + shotNo + ' 镜的画面换成了你贴的这张 · 模板那几镜一个字没动')
+    } catch (reason) {
+      onToast(String((reason as Error)?.message || reason))
+    } finally {
+      setShotBusy(0)
+    }
+  }
+
+  const clearShotFrame = async (shotNo: number) => {
+    setShotBusy(shotNo)
+    try {
+      await setProjectShotFrame(projectId, shotNo, '')
+      await load()
+      onToast('第 ' + shotNo + ' 镜回到原片帧')
+    } catch (reason) {
+      onToast(String((reason as Error)?.message || reason))
+    } finally {
+      setShotBusy(0)
+    }
+  }
+
   const loadPackageContents = async (version: number, deliveryId: string) => {
     if (!data) return
     setContents({ version, busy: true, result: null, error: '' })
@@ -3205,19 +3244,75 @@ export default function ProjectPage({
             ) : null}
             {template && template.storyboard.length ? (
               <ol className="vq-shot-list">
-                {template.storyboard.map((shot, index) => (
-                  <li key={index} className="vq-shot-row">
-                    <span className="vq-mono vq-shot-index">{pad2(shot.shotNo ?? index + 1)}</span>
-                    <div className="vq-shot-copy">
-                      <span className="vq-shot-head">
-                        {shot.camera || '机位待定'}
-                        <span className="vq-mono">{(shot.startSec ?? 0) + '–' + (shot.endSec ?? 0) + ' 秒'}</span>
-                      </span>
-                      <p>{shot.visual || '（画面待补）'}</p>
-                      {shot.caption ? <span className="vq-shot-caption">字幕 · {shot.caption}</span> : null}
-                    </div>
-                  </li>
-                ))}
+                {template.storyboard.map((shot, index) => {
+                  const shotNo = Math.max(1, Math.round(Number(shot.shotNo) || index + 1))
+                  const own = data.project.shots?.[String(shotNo)] || null
+                  const source = own ? '/media/' + own.media : shot.frameUrl || ''
+                  const busy = shotBusy === shotNo
+                  return (
+                    <li key={index} className="vq-shot-row">
+                      <span className="vq-mono vq-shot-index">{pad2(shotNo)}</span>
+                      <div className={'vq-shot-figure' + (own ? ' is-own' : '')}>
+                        {source ? (
+                          <img
+                            src={source}
+                            alt={'第 ' + shotNo + ' 镜的画面'}
+                            loading="lazy"
+                            onError={(event) => {
+                              // 原片帧被清过时图会裂：就地收起这张图，写「没有帧图」，不让人对着破图猜
+                              event.currentTarget.parentElement?.classList.add('is-missing')
+                            }}
+                          />
+                        ) : null}
+                        <span className="vq-shot-figure-empty">没有帧图</span>
+                        <span className="vq-shot-figure-tag">{own ? '你的画面' : '原片帧'}</span>
+                      </div>
+                      <div className="vq-shot-copy">
+                        <span className="vq-shot-head">
+                          {shot.camera || '机位待定'}
+                          <span className="vq-mono">{(shot.startSec ?? 0) + '–' + (shot.endSec ?? 0) + ' 秒'}</span>
+                        </span>
+                        <p>{shot.visual || '（画面待补）'}</p>
+                        {shot.caption ? <span className="vq-shot-caption">字幕 · {shot.caption}</span> : null}
+                      </div>
+                      <div className="vq-shot-actions">
+                        <label
+                          className={'vq-button vq-button--ghost vq-button--sm vq-shot-attach' + (busy ? ' is-busy' : '')}
+                          title={
+                            own
+                              ? '换一张你自己出的画面：只换这一条作品的第 ' + shotNo + ' 镜，模板不动'
+                              : '把你出的画面贴到第 ' + shotNo + ' 镜：jpg / png / webp，≤ 8 MB'
+                          }
+                        >
+                          <Upload size={12} />
+                          {busy ? '正在贴' : own ? '换一张' : '贴画面'}
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp"
+                            className="vq-shot-file"
+                            disabled={busy}
+                            onChange={(event) => {
+                              const file = event.target.files?.[0] || null
+                              event.target.value = ''
+                              void attachShotFrame(shotNo, file)
+                            }}
+                          />
+                        </label>
+                        {own ? (
+                          <button
+                            type="button"
+                            className="vq-shot-clear"
+                            disabled={busy}
+                            title="这一镜不用你的画面了，回到模板抽出来的原片帧"
+                            onClick={() => void clearShotFrame(shotNo)}
+                          >
+                            用回原片
+                          </button>
+                        ) : null}
+                      </div>
+                    </li>
+                  )
+                })}
               </ol>
             ) : (
               <div className="vq-project-empty">

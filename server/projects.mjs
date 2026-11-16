@@ -8,6 +8,7 @@ import path from 'node:path'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { config } from './config.mjs'
 import { canAccess } from './owner.mjs'
+import { MAX_SHOT_FRAMES, normalizeShotFrames, shotFramesView } from './project-shots.mjs'
 import { normalizeStoredScript } from './project-script.mjs'
 import { visitKey } from './share-visits.mjs'
 // 交付那一刻的评审结论要从评审库现读；只读、不写评审（v0.9.85）
@@ -562,6 +563,8 @@ function normalize(item) {
     status: STATUSES.includes(item.status) ? item.status : 'active',
     // 交付记录：标记交付时落一条；开新版不会把它清掉，旧版交过这件事仍然查得到
     deliveries: normalizeDeliveries(item.deliveries),
+    // 这一版每一镜的画面（v0.9.161）：只存自己账号下的上传图，格式不认识就丢掉
+    shots: normalizeShotFrames(item.shots),
     createdAt: item.createdAt || new Date().toISOString(),
     updatedAt: item.updatedAt || item.createdAt || new Date().toISOString(),
   }
@@ -713,6 +716,41 @@ export async function updateProject(
     await persist(list)
   }
   return normalize(found)
+}
+
+/**
+ * 把一张自己出的画面挂到某一镜（v0.9.161）。
+ *
+ * 只改这一条作品的 shots，模板一个字不动——分镜是模板的，画面是你的。
+ * 传空等于撤销这一镜：不改那张图本身（它可能还被别的镜、别的作品用着）。
+ */
+export async function setProjectShotFrame(id, shotNo, media, user = null) {
+  const list = await loadAll()
+  const found = list.find((item) => item.id === id && canAccess(item, user))
+  if (!found) return { status: 404, code: 'PROJECT_NOT_FOUND', error: '作品不存在或已被删除' }
+  const frames = normalizeShotFrames(found.shots)
+  const key = String(shotNo)
+  const before = frames[key] || null
+  const next = String(media || '')
+  let changed = false
+  if (!next) {
+    if (before) {
+      delete frames[key]
+      changed = true
+    }
+  } else if (!before || before.media !== next) {
+    if (Object.keys(frames).length >= MAX_SHOT_FRAMES) {
+      return { status: 409, code: 'SHOT_FRAMES_LIMIT', error: '这条作品记的画面已经到 ' + MAX_SHOT_FRAMES + ' 张，先撤掉几镜' }
+    }
+    frames[key] = { media: next, at: new Date().toISOString() }
+    changed = true
+  }
+  if (changed) {
+    found.shots = frames
+    found.updatedAt = new Date().toISOString()
+    await persist(list)
+  }
+  return { status: 200, changed, project: normalize(found), shots: shotFramesView(frames) }
 }
 
 /**

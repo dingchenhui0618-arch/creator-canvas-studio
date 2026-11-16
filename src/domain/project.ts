@@ -746,6 +746,11 @@ export type Project = {
   status: ProjectStatus
   /** 交付记录，按发生顺序；最后一条是最近一次 */
   deliveries?: ProjectDelivery[]
+  /**
+   * 这一版每一镜的画面（v0.9.161）：键是镜头号，值是自己出的那张图。
+   * 只属于这条作品，模板里一个字都不动：分镜跟着模板，画面是你自己的。
+   */
+  shots?: Record<string, { media: string; at: string }>
   createdAt: string
   updatedAt: string
 }

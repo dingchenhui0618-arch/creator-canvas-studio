@@ -121,6 +121,16 @@ export const setDeliveryReply = (projectId: string, deliveryId: string, reply: s
 
 export const getProject = (id: string) => request<ProjectDetail>('/api/projects/' + id)
 
+/** 这一版每一镜的画面（v0.9.161）：media 传自己上传的那张（uploads/…），传空字符串等于撤销这一镜。 */
+export type ProjectShotFrames = Record<string, { media: string; frameUrl: string; at: string }>
+
+export function setProjectShotFrame(projectId: string, shotNo: number, media: string) {
+  return request<{ ok: boolean; changed: boolean; shots: ProjectShotFrames; templateShots: number }>(
+    '/api/projects/' + encodeURIComponent(projectId) + '/shots/' + Math.max(1, Math.round(shotNo)),
+    { method: 'POST', body: JSON.stringify({ media }) },
+  )
+}
+
 // 上次巡检（v0.9.132）：定时任务每天验一遍封存包，这里只读它写下的那份结论
 export const projectPackageAudits = (id: string) =>
   request<PackageAuditReport>('/api/projects/' + id + '/package-audits')

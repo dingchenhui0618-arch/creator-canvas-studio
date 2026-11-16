@@ -19,6 +19,13 @@
 .review-thumb-name { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; min-height:52px; padding:8px 8px; overflow:hidden; font-size:12px; line-height:1.5; color:var(--muted); }
 .review-thumb.is-active { border-color:var(--ink); box-shadow:inset 0 0 0 1px var(--ink); }
 .review-empty { margin:0; color:var(--faint); font-size:12px; line-height:1.6; }
+/* 这条作品已经贴好的画面（v0.9.161）：作品页贴过就不用在这儿再传一次 */
+.review-shots { display:flex; flex-direction:column; gap:8px; }
+.review-shots-head { display:flex; align-items:baseline; justify-content:space-between; }
+.review-shots-head strong { font-size:12px; font-weight:500; }
+.review-shots-head span { color:var(--faint); font-size:11px; }
+.review-shots .review-grid { max-height:220px; }
+
 .review-manual { display:flex; flex-direction:column; gap:8px; padding-top:12px; border-top:1px solid var(--line); }
 .review-manual label { font-family:var(--font-mono); font-size: 11px; letter-spacing:.04em; text-transform:uppercase; color:var(--faint); }
 .review-manual-row { display:flex; gap:8px; }

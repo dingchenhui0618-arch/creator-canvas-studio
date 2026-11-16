@@ -7,7 +7,8 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { sendJson, readBody } from './_shared.mjs'
 import { flowBrief, projectBrief } from '../project-briefs.mjs'
-import { currentUser } from '../auth.mjs'
+import { currentUser, isAdmin } from '../auth.mjs'
+import { normalizeShotNo, shotFrameBlock } from '../project-shots.mjs'
 import { config } from '../config.mjs'
 import { createTemplateFromProject, getTemplate, listTemplates, reuseTemplate } from '../templates.mjs'
 import { projectTemplateReply, projectTemplateSpec } from '../project-template.mjs'
@@ -76,6 +77,7 @@ import {
   updateProject,
   bindProjectFlow,
   saveProjectScript,
+  setProjectShotFrame,
   saveDeliveryReceipt,
   saveDeliveryReminder,
   saveDeliveryResend,
@@ -104,6 +106,8 @@ import {
 } from '../projects.mjs'
 
 const ITEM = /^\/api\/projects\/([\w-]+)$/
+// 这一版某一镜的画面（v0.9.161）：POST 挂一张、传空撤销
+const SHOT_FRAME = /^\/api\/projects\/([\w-]+)\/shots\/(\d+)$/
 // 作品的花费明细（v0.9.66）：合计在详情里，明细单独取，点开才读
 const SPEND = /^\/api\/projects\/([\w-]+)\/spend$/
 const VERSIONS = /^\/api\/projects\/([\w-]+)\/versions$/
@@ -2036,6 +2040,33 @@ export function createProjectsRouter() {
           return true
         }
         sendJson(res, 200, await projectSpendDetail(project, user, { month: String(url.searchParams.get('month') || '') }))
+        return true
+      }
+
+      // 某一镜的画面（v0.9.161）：先核作品与镜头号，再核这张图是不是自己的
+      const shotFramePath = pathname.match(SHOT_FRAME)
+      if (shotFramePath && req.method === 'POST') {
+        const project = await getProject(shotFramePath[1], user)
+        if (!project) {
+          sendJson(res, 404, { error: '作品不存在或已被删除', code: 'PROJECT_NOT_FOUND' })
+          return true
+        }
+        const template = project.templateId ? await getTemplate(project.templateId, user) : null
+        const shotCount = Array.isArray(template?.storyboard) ? template.storyboard.length : 0
+        const body = await readBody(req)
+        const shotNo = normalizeShotNo(shotFramePath[2])
+        const media = String(body.media || '')
+        const blocked = shotFrameBlock({ media, user, shotNo, shotCount, admin: isAdmin(user) })
+        if (blocked) {
+          sendJson(res, blocked.status, { error: blocked.error, code: blocked.code })
+          return true
+        }
+        const saved = await setProjectShotFrame(project.id, shotNo, media, user)
+        if (saved.status !== 200) {
+          sendJson(res, saved.status, { error: saved.error, code: saved.code })
+          return true
+        }
+        sendJson(res, 200, { ok: true, changed: saved.changed, shots: saved.shots, templateShots: shotCount })
         return true
       }
 

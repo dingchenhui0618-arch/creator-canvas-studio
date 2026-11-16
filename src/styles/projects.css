@@ -554,6 +554,137 @@
   line-height: var(--leading-meta);
 }
 
+/* 每一镜的画面（v0.9.161）：左边一格图、中间文字、右边两个动作。
+   图槽常驻——「原片帧」与「你的画面」只有一角小标签之差，不让人猜这一镜现在挂的是哪张。 */
+.vq-shot-row {
+  grid-template-columns: 24px 96px minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.vq-shot-figure {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 96px;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-sm);
+  background: var(--canvas);
+}
+
+.vq-shot-figure img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.vq-shot-figure.is-own {
+  border-color: var(--line-strong);
+}
+
+.vq-shot-figure-empty {
+  display: none;
+  color: var(--faint);
+  font-size: 11px;
+}
+
+/* 原片那一帧可能被清过（模板回收站 / 过期清理）：图裂了就写「没有帧图」，不留破图 */
+.vq-shot-figure.is-missing .vq-shot-figure-empty {
+  display: block;
+}
+
+.vq-shot-figure.is-missing img {
+  display: none;
+}
+
+/* 图都没了，就别再挂着「原片帧」这个标签 */
+.vq-shot-figure.is-missing .vq-shot-figure-tag {
+  display: none;
+}
+
+.vq-shot-figure-tag {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, .55);
+  color: #fff;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.vq-shot-figure.is-own .vq-shot-figure-tag {
+  background: rgba(0, 0, 0, .72);
+}
+
+.vq-shot-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  padding-top: 2px;
+}
+
+.vq-shot-attach {
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.vq-shot-file {
+  display: none;
+}
+
+.vq-shot-clear {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.6;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.vq-shot-clear:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+/* 窄屏（v0.9.161）：图上、文字中、按钮下一行一行排；不把文字挤进 24px 那一列 */
+@media (max-width: 760px) {
+  .vq-shot-row {
+    grid-template-columns: 24px minmax(0, 1fr);
+    row-gap: var(--space-2);
+  }
+
+  .vq-shot-index {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .vq-shot-figure {
+    grid-column: 2;
+    grid-row: 1;
+    width: 120px;
+  }
+
+  .vq-shot-copy {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .vq-shot-actions {
+    grid-column: 2;
+    grid-row: 3;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-2);
+  }
+}
+
 .vq-project-timing {
   margin: 0;
   padding-top: var(--space-3);

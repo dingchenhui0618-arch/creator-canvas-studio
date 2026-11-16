@@ -131,6 +131,8 @@ export default function ReviewPage({
   const { internal } = useUiMode()
   // 从作品页进来时，这次评审的结论会挂在那条作品下；标题只为把话说清楚（读不到就不显示名字）
   const [projectTitle, setProjectTitle] = useState('')
+  // 作品页已经贴好的画面（v0.9.161）：从作品页点「送评审」过来时优先给这几镜，不用再传一次
+  const [projectShots, setProjectShots] = useState<Array<{ shotNo: number; media: string }>>([])
   const [status, setStatus] = useState<ReviewStatus | null>(null)
   const [templates, setTemplates] = useState<ReplicaTemplate[]>([])
   const [picked, setPicked] = useState<Picked | null>(null)
@@ -188,7 +190,15 @@ export default function ReviewPage({
     let alive = true
     getProject(projectId)
       .then((data) => {
-        if (alive) setProjectTitle(data.project.title)
+        if (!alive) return
+        setProjectTitle(data.project.title)
+        const own = data.project.shots || {}
+        setProjectShots(
+          Object.entries(own)
+            .map(([key, value]) => ({ shotNo: Number(key) || 0, media: String(value?.media || '') }))
+            .filter((row) => row.shotNo > 0 && row.media)
+            .sort((a, b) => a.shotNo - b.shotNo),
+        )
       })
       .catch(() => undefined)
     return () => {
@@ -628,6 +638,35 @@ export default function ReviewPage({
             <p className="review-upload-error" role="alert">
               <TriangleAlert size={13} /> {uploadError}
             </p>
+          ) : null}
+          {/* 作品页贴好的画面（v0.9.161）：出图不必再过一遍「传一张」——这里直接挑 */}
+          {projectShots.length ? (
+            <div className="review-shots">
+              <div className="review-shots-head">
+                <strong>这条作品的画面</strong>
+                <span className="vq-mono">{projectShots.length} 镜已贴</span>
+              </div>
+              <div className="review-grid">
+                {projectShots.map((row) => {
+                  const label = '第 ' + row.shotNo + ' 镜 · 你的画面'
+                  return (
+                    <button
+                      key={row.shotNo}
+                      type="button"
+                      className={'review-thumb' + (picked?.label === label ? ' is-active' : '')}
+                      onClick={() => {
+                        if (reviewId) onClearReview?.()
+                        pick({ media: row.media, label, preview: '/media/' + row.media })
+                      }}
+                      title={'第 ' + row.shotNo + ' 镜：你在作品页贴进去的那张画面'}
+                    >
+                      <img src={'/media/' + row.media} alt="" loading="lazy" />
+                      <span className="review-thumb-name">第 {row.shotNo} 镜</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
           ) : null}
           {pickerExpanded ? (
             <>
