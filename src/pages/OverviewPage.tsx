@@ -42,10 +42,14 @@ import {
 } from '../domain/project'
 import { isFirstRun } from '../domain/first-run'
 import {
+  deliveryChannelText,
   deliveryLateText,
+  deliveryNagLate,
   deliveryReminderText,
+  deliveryWaitDays,
   deliveryWaitLate,
   deliveryWaitText,
+  monthDayText,
 } from '../domain/delivery-wait'
 import { deliveryOpenHint, deliveryOpenShort, deliveryUnopenedText } from '../domain/delivery-open'
 import {
@@ -190,6 +194,35 @@ function rowReminderTitle(row: ProjectDeliveryRow): string {
   if (!Number.isFinite(ms)) return ''
   const date = new Date(ms)
   return '最近一次 ' + (date.getMonth() + 1) + '-' + date.getDate()
+}
+
+/**
+ * 催过、三天以上还没动静（v0.9.157）：再发一遍一模一样的话多半还是没动静。
+ * 判据与上面那句「等了几天」同一个门槛（REMIND_LATE_DAYS），只是从最近一次催收算起；
+ * 没记催收时间的旧行不算——不知道哪天催的，就别说「催了几天没动静」。
+ */
+function rowNagLate(row: ProjectDeliveryRow): boolean {
+  const at = String(row.reminder?.at || '')
+  if (!Number.isFinite(Date.parse(at))) return false
+  return deliveryNagLate(at)
+}
+
+/**
+ * 「换个渠道问」那枚按钮的 title：把这一行为什么换动作说清，也先把这一段的边界说清——
+ * 它只复制，不记进「催过几次」：换个渠道发没发，这边没法替你记。
+ */
+function rowChannelTitle(row: ProjectDeliveryRow): string {
+  const at = String(row.reminder?.at || '')
+  const count = Math.max(0, Math.round(Number(row.reminder?.count) || 0))
+  const days = deliveryWaitDays(at)
+  const when = monthDayText(at)
+  return (
+    '已经催过' + (count ? ' ' + count + ' 次' : '') +
+    (when ? '，最近 ' + when : '') +
+    (days === null ? '' : '，' + days + ' 天还没动静') +
+    '：再发一遍一模一样的话多半还是没动静，换成问一句收到没有、要不要换种发法（直接发文件 / 发邮箱）。' +
+    '这一段只复制，不记进「催过几次」——换了渠道发没发，这边没法替你记。'
+  )
 }
 
 /**
@@ -540,6 +573,35 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
       } finally {
         setRemindBusy('')
       }
+    },
+    [onToast],
+  )
+
+  /**
+   * 换个渠道问一句（v0.9.157）：催过几次、三天以上还没动静的那一行，这一枚按钮换成它。
+   *
+   * 为什么不再用「复制提醒」：同一段「打开校验.html 拖进去」发到第四遍，问题多半不在他忘了，
+   * 而在这条消息根本没送到他手上——再发一遍一样的话，只是把同一个失败重演一次。
+   *
+   * 这一段只复制、不记进「催过几次」：换了渠道发没发，这边没法替你记；
+   * 记一笔假的「又催过」，会让那一枚上的「催完几天没动静」从头再算，就把「一直没动静」这件事抹掉了。
+   */
+  const copyDeliveryChannel = useCallback(
+    async (row: ProjectDeliveryRow) => {
+      const text = deliveryChannelText({
+        title: row.title,
+        version: row.version,
+        at: row.at,
+        recipient: row.recipient,
+      })
+      try {
+        await navigator.clipboard.writeText(text)
+      } catch {
+        setDeliveryError('这一段没复制进剪贴板：浏览器没给权限。可以到作品页那一版里复制回执链接，或者换一个浏览器再试。')
+        return
+      }
+      setDeliveryError('')
+      onToast('已复制：问一句收到没有、要不要换种发法（没记成催过）')
     },
     [onToast],
   )
@@ -1553,15 +1615,29 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                           {resendBusy === row.projectId + ':' + row.version ? '正在写…' : '再发一次链接'}
                         </button>
                       ) : row.remindable && row.deliveryId ? (
-                        <button
-                          type="button"
-                          className="vq-button vq-button--quiet vq-button--sm vq-delivery-remind"
-                          disabled={remindBusy === row.projectId + ':' + row.version}
-                          onClick={() => void copyDeliveryReminder(row)}
-                          title="复制一段提醒他验包的话（带回收据链接），发到微信 / 邮件里就行；发出去之后这一行会记下催过几次"
-                        >
-                          {remindBusy === row.projectId + ':' + row.version ? '正在写…' : '复制提醒'}
-                        </button>
+                        // 催过、三天以上没动静的那一行（v0.9.157）：再发一遍一样的话没用，换成问一句
+                        // 「收到没有、要不要换种发法」。两种动作同一档，一次只出一个——按钮从「复制提醒」
+                        // 变成「换个渠道问」，是在回答「这件事到哪一步了」，不是又加了一个功能。
+                        rowNagLate(row) ? (
+                          <button
+                            type="button"
+                            className="vq-button vq-button--quiet vq-button--sm vq-delivery-channel"
+                            onClick={() => void copyDeliveryChannel(row)}
+                            title={rowChannelTitle(row)}
+                          >
+                            换个渠道问
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="vq-button vq-button--quiet vq-button--sm vq-delivery-remind"
+                            disabled={remindBusy === row.projectId + ':' + row.version}
+                            onClick={() => void copyDeliveryReminder(row)}
+                            title="复制一段提醒他验包的话（带回收据链接），发到微信 / 邮件里就行；发出去之后这一行会记下催过几次"
+                          >
+                            {remindBusy === row.projectId + ':' + row.version ? '正在写…' : '复制提醒'}
+                          </button>
+                        )
                       ) : null}
                     </div>
                   ) : null}

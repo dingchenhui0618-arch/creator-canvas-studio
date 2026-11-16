@@ -42,6 +42,16 @@ export function deliveryWaitLate(at: string, now: number | Date = Date.now()): b
   return days !== null && days >= REMIND_LATE_DAYS
 }
 
+/**
+ * 催过几天还没动静（v0.9.157）：从最近一次催收算起，与「发出超过三天」同一个阈值。
+ * 三天以内再等等，过了第三天，再发一遍一样的话多半还是没动静。
+ * 时间读不出来就不说「没动静」——不知道的事不猜成「他没理你」。
+ */
+export function deliveryNagLate(at: string, now: number | Date = Date.now()): boolean {
+  const days = deliveryWaitDays(at, now)
+  return days !== null && days >= REMIND_LATE_DAYS
+}
+
 /** 清单顶上那句：还没回来的几份里，有几份已经超过三天。没有就返回空串。 */
 export function deliveryLateText(late: number): string {
   const count = Math.max(0, Math.round(Number(late) || 0))
@@ -61,6 +71,43 @@ export function monthDayText(at: string): string {
 function bytesText(bytes?: number): string {
   const value = Math.max(0, Math.round(Number(bytes) || 0))
   return value ? value.toLocaleString('zh-CN') + ' B' : ''
+}
+
+export type DeliveryChannelInput = {
+  /** 作品名 */
+  title: string
+  /** 第几版 */
+  version?: number
+  /** 交付时间（发出去的那一天） */
+  at?: string
+  /** 这一条是给谁的（v0.9.152）：写了就用「王老师，」开头；没写就不加称呼 */
+  recipient?: string
+}
+
+/**
+ * 换个渠道问一句（v0.9.157）。
+ *
+ * 催过几次、三天以上还是没动静时，再发一遍「打开校验.html 拖进去」多半还是没动静——
+ * 问题可能不在「他忘了」，而在这条消息根本没送到他手上。所以这一段不教怎么验包，
+ * 只问一句收到没有、要不要换一种发法（直接发文件 / 发邮箱）。
+ *
+ * 边界：不写「已读请回复」，不编原因，也不替发件人答应赔偿或重发；
+ * 不把「催过 N 次」写进话里——那是发件人自己的账，说给对方听就成了责备。
+ */
+export function deliveryChannelText(input: DeliveryChannelInput): string {
+  const title = String(input?.title || '').trim()
+  const version = Math.max(0, Math.round(Number(input?.version) || 0))
+  const when = monthDayText(String(input?.at || ''))
+
+  // 作品名缺了就只说这一份，不拼出「这份包那份包」
+  const head = title ? title + (version ? ' 第 v' + version + ' 版' : '') + '那份包' : version ? '第 v' + version + ' 版那份包' : '这份包'
+  const sent = when ? '我 ' + when + ' 发你的' : '我上次发你的'
+  return (
+    recipientGreeting(input?.recipient) +
+    head + sent + '，一直没等到你的回执。' +
+    '可能只是没看到，也可能是链接在微信里打不开：链接打得开吗？要不要我直接发你文件，或者发到你的邮箱？' +
+    '\n已经验过的话，把收据或那段结论发我，我这边记上。'
+  )
 }
 
 export type DeliveryReminderInput = {

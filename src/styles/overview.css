@@ -1281,7 +1281,8 @@
 }
 
 /* 行尾动作：当前版是「交付稿」，封过包的还有「交付包」，还没回来的再加一个「复制提醒」；
-   都走小档按钮，与行尾的「已看过」同一档，不跟作品名抢注意力。 */
+   催过几天还没动静的那一行，那一个换成「换个渠道问」（v0.9.157）——同一档按钮、同一处位置，
+   换的是这一件事的下一步，不另起一排。都走小档按钮，与行尾的「已看过」同一档，不跟作品名抢注意力。 */
 .vq-delivery-actions {
   display: flex;
   align-items: center;
@@ -1291,6 +1292,7 @@
 
 .vq-delivery-row .vq-delivery-paper,
 .vq-delivery-row .vq-delivery-remind,
+.vq-delivery-row .vq-delivery-channel,
 .vq-delivery-row .vq-delivery-package {
   flex: none;
   /* 它们是这一行真正能做的事（取回那一版产物），比旁边的状态字要显眼一档 */
@@ -1301,6 +1303,7 @@
 
 .vq-delivery-row .vq-delivery-paper:hover:not(:disabled),
 .vq-delivery-row .vq-delivery-remind:hover:not(:disabled),
+.vq-delivery-row .vq-delivery-channel:hover:not(:disabled),
 .vq-delivery-row .vq-delivery-package:hover {
   color: var(--ink);
 }
