@@ -3853,7 +3853,7 @@ E2E 里点某一行必须先按行里的文字限定，清单每一行长得一�
 
 - 全仓 **1220/1220**（新增 `test/canvas-split.test.mjs` 4 个用例：工具区五项与名字、两条地址与旧地址改写、
   外壳把 `#/board` 交给 BoardPage、外部画布只剩在 BoardPage）；lint **0 error / 16 warning**；`tsc -b` 与 `npm run build` 干净
-  （BuildPage 单独一个 10.5 kB 的懒加载块）。
+  （BoardPage 单独一个 10.5 kB 的懒加载块）。
 - headless Chrome（真服务 + 真账号 + 真 flows.json）：侧栏工具区读到 **「智能体 / 工作流 / 无限画布 / 视觉评审 / 运行记录」**；
   面包屑 **「个人工作区 / 工具 / 工作流」** 与 **「个人工作区 / 工具 / 无限画布」**；
   工作流页 `工作流 / 流程编排`、3 个节点 2 条连线照常渲染；无限画布页状态条读到
@@ -3864,18 +3864,21 @@ E2E 里点某一行必须先按行里的文字限定，清单每一行长得一�
 - 顺手修掉一处早先留下的坏数据：`package.json` 的 `description` 在之前某次编码修复里被二次编码成乱码（HEAD 上就是坏的），
   这一轮改回原句「VisionQA 桌面端：网页外壳 + 本地工作区（agent loop 在本机运行）」。
 
-### 生产实测（2026-11-16 15:10，标签 `20261116-1510-r173split2`）
+### 生产实测（2026-11-16，标签 `20261116-1510-r173split2` → `20261116-1530-r173split3`）
 
-- 发布：`bash ops/deploy.sh` 一份包（`dist server scripts deploy package.json`，1.2 MB），
-  版本 **0.9.163**，公网 `https://visionqa.wavisionai.cn` 与 8799 同一份 `index-GRvcP5rT.js`；
-  `/api/health` 两个入口都 `ok:true`（redfox / vision / llm / templates 26）。
-- 一致性：本地与生产的 `dist/index.html`、`BoardPage` 的 js 与 css 三处 SHA-256 前 12 位逐一对上
-  （`110c9ebdaba7` / `06213f9faefa` / `747dc9a4f172`）——窄屏那处改动确实上去了，不是拿旧包糊过去。
+- 发布：`bash ops/deploy.sh` 一份包（`dist server scripts deploy package.json`，1.2 MB），版本 **0.9.163**。
+  第一次（`20261116-1428-r173split`）发现 390 横切，修好后发 `r173split2`；
+  收尾又清掉三处语义含糊的旧文案（智能体编辑器「画布流程」→「工作流」、来源页「画布出图」→「无限画布出图」、
+  按次算账「一次画布运行」→「一次工作流运行」），再发 `r173split3`——线上现在这一份。
+- 一致性：本地与生产的 `dist/index.html`、`BoardPage` 的 js 与 css 三处 SHA-256 前 14 位逐一对上
+  （`0c86e23c52ffd0` / `ab6519de5e2499` / `747dc9a4f172af`）——窄屏那处改动确实上去了，不是拿旧包糊过去。
+  公网 `https://visionqa.wavisionai.cn` 与 8799 同一份 `index-gNngGgOE.js`；`/api/health` 两个入口都 `ok:true`
 - 路由：未登录访问 `/api/projects`、`/api/templates`、`/api/runs`、`/api/canvas/status`、`/api/bdc/status`
   一律 401（鉴权在路由匹配之前，未知路径也是 401，不是 404——这是既有行为，这一版没动）。
 - 数据与盘：1 个作品 / 28 个模板 / 8 条工作流；盘 73%；六个 unit 全 `active`
   （`visionqa`、`visionqa-internal`、`visionqa.socket`、`bdc-web`、`bdc-enterprise`、`bdc-api`）。
-- 回滚：`bash /opt/visionqa/ops/rollback.sh --to 1` 回到部署前那份（`index-CJAG8MJP.js`）。
+- 回滚：`bash /opt/visionqa/ops/rollback.sh --to 1` 回到 `r173split2` 那份（`index-GRvcP5rT.js`）；
+  `--to 2` 是窄屏修之前的 `index-CJAG8MJP.js`。
 - 生产真账号 + headless Chrome 重新量：状态条
   **「无限画布 | 已连接 | 画布 | 默认画布 · 2 节点 | 新建 | 写笔记 | canvas.wavisionai.cn | 专注」**，
   iframe `https://canvas.wavisionai.cn/__auth?k=…&loadCanvas=20261109-nmeom5h&vqCredit=10`（积分口径照旧由服务端下发）；
