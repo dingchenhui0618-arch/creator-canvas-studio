@@ -50,7 +50,7 @@ export function deliveryLateText(late: number): string {
 }
 
 /** 11-15：只说月日，与收据、档案里那些时间同一个写法。 */
-function monthDay(at: string): string {
+export function monthDayText(at: string): string {
   const ms = Date.parse(String(at || ''))
   if (!Number.isFinite(ms)) return ''
   const date = new Date(ms)
@@ -90,7 +90,7 @@ export function deliveryReminderText(input: DeliveryReminderInput): string {
   const version = Math.max(0, Math.round(Number(input?.version) || 0))
   const fileName = String(input?.fileName || '').trim()
   const size = bytesText(input?.bytes)
-  const when = monthDay(String(input?.at || ''))
+  const when = monthDayText(String(input?.at || ''))
   const link = String(input?.link || '').trim()
 
   // 作品名缺了就只说这一份：不拼出「这份包那份包」这种叠词

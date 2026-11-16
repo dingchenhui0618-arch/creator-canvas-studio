@@ -271,7 +271,8 @@ export function ledgerRows({ projects = [], counts = {}, visits = {} } = {}) {
  *  - 只数写了收件人的记录；没写的另算一个数（unlabeled），不混进任何一个人名下，也不猜是谁；
  *  - 只有封过包、而且还没收到收据的才算「欠着」——没包的老交付谈不上回执，对上的也不再催；
  *  - 点一个人该落在哪一条：优先「他还欠着的那条里最近交付的一条」；都回来了就落在最近交付的那条；
- *  - 按「欠着几条」排前面，同样多的按总条数、再按名字排——先看最该催的那一个。
+ *  - 按「欠着几条」排前面，同样多的先看「等得最久」算日子、再按总条数、再按名字排——先看最该催的那一个（v0.9.155）；
+ *  - 「等了多久」只按最早那条欠着的记录算，时间没记下的老记录不说天数；催过几次是这个人名下所有交付上的催收之和。
  */
 export function ledgerPeople(rows) {
   const map = new Map()
@@ -289,6 +290,11 @@ export function ledgerPeople(rows) {
       pendingTarget: null,
       pendingAt: -1,
       latestAt: -1,
+      // 欠着的那几条里最早一条的时间（v0.9.155）：Infinity = 还没有一条记着时间
+      oldestPendingMs: Number.POSITIVE_INFINITY,
+      // 催过几次、最近一次（v0.9.155）
+      nagged: 0,
+      naggedAt: '',
     }
     const candidate = {
       projectId: String(row.projectId || ''),
@@ -305,6 +311,16 @@ export function ledgerPeople(rows) {
         entry.pendingAt = atMs
         entry.pendingTarget = candidate
       }
+      // 欠着的那几条里最早的一条（v0.9.155）：只认记着时间的记录。
+      // 时间读不出来就不说「等了多久」——猜一个天数比不写更糟。
+      if (row.atKnown && atMs > 0 && atMs < entry.oldestPendingMs) entry.oldestPendingMs = atMs
+    }
+    // 催过几次（v0.9.155）：一个人名下所有交付上的催收加起来，最近一次是哪天。
+    // 催过之后才验的那几条也照实算——「催了两次他才验」是发生过的事。
+    if (row.reminder) {
+      entry.nagged += Math.max(1, Math.round(Number(row.reminder.count) || 0))
+      const nagAt = String(row.reminder.at || '')
+      if (nagAt > entry.naggedAt) entry.naggedAt = nagAt
     }
     if (atMs >= entry.latestAt) {
       entry.latestAt = atMs
@@ -319,11 +335,22 @@ export function ledgerPeople(rows) {
       sealed: entry.sealed,
       pending: entry.pending,
       pendingAcked: entry.pendingAcked,
+      // 欠着的那几条里最早一条是哪天发出的（v0.9.155）：空串 = 一条都没记下时间，界面就不说等了多久
+      oldestPendingAt: Number.isFinite(entry.oldestPendingMs)
+        ? new Date(entry.oldestPendingMs).toISOString()
+        : '',
+      // 催过几次（v0.9.155）：没催过就是 null，界面写「还没催过」
+      reminded: entry.nagged ? { count: entry.nagged, at: entry.naggedAt } : null,
       // 点进去落在哪一条：先找他还欠着的那条，都回来了落在最近交付的那条
       target: entry.pendingTarget || entry.target,
     }))
     .sort((a, b) => {
       if (a.pending !== b.pending) return b.pending - a.pending
+      // 同是欠着几条：等得久的那一个排前面（v0.9.155）——要催就先催欠得最久的；
+      // 时间说不清的老记录排在知道的后头，不假装它们一样久。
+      const aMs = a.oldestPendingAt ? Date.parse(a.oldestPendingAt) : Number.POSITIVE_INFINITY
+      const bMs = b.oldestPendingAt ? Date.parse(b.oldestPendingAt) : Number.POSITIVE_INFINITY
+      if (aMs !== bMs) return aMs - bMs
       if (a.count !== b.count) return b.count - a.count
       return a.name.localeCompare(b.name)
     })

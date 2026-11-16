@@ -1226,6 +1226,13 @@ export type DeliveryPerson = {
   pending: number
   /** 上面那些里，他自己点过「收到了」的条数（v0.9.151） */
   pendingAcked: number
+  /**
+   * 欠着的那几条里最早一条是哪天发出的（v0.9.155）：等得多久只看这一条。
+   * 空串 = 那几条都没记下时间，界面就不说等了几天。
+   */
+  oldestPendingAt?: string
+  /** 这个人名下催过几次、最近一次哪天（v0.9.155）：一次都没催过就是 null */
+  reminded?: { count: number; at: string } | null
   /** 点下去要打开哪一条交付；万一哪条连 id 都没有（老记录），deliveryId 是空串 */
   target: { projectId: string; deliveryId: string; version: number }
 }

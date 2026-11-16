@@ -1181,8 +1181,11 @@
 
 .vq-person {
   display: inline-flex;
+  /* 窄屏放不下一行时折行，而不是把名字压成零宽——名字要是没了，这一枚就只剩几个数（v0.9.155 实测） */
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 8px;
+  column-gap: 8px;
+  row-gap: 4px;
   max-width: 100%;
   padding: 4px 12px;
   border: 1px solid var(--line);
@@ -1221,6 +1224,19 @@
 
 .vq-person-count {
   flex-shrink: 0;
+  color: var(--faint);
+}
+
+/* 等得最久的那一条（v0.9.155）：换个色阶，与条数分开读——条数是「欠几份」，这句是「欠多久」。
+   前面那个点是分隔符，让两段数字不至于黏成一串。 */
+.vq-person-wait {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.vq-person-wait::before {
+  content: '·';
+  margin-right: 8px;
   color: var(--faint);
 }
 
