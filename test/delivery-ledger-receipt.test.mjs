@@ -116,6 +116,7 @@ test('四个数字对得上，翻页不改变它们', () => {
   // pendingRelinked（v0.9.147）是换过一条新地址、新地址也没人打开的那些，这里同样没有
   // pendingAcked（v0.9.151）是他自己点了「收到了」的那些，这里也没人点过
   // waitClosed（v0.9.158）是发件人自己收口、不再等的那些：从 pending 里挪出去单算，这里也没有
+  // waitClosedReturned（v0.9.160）是收口之后回执才贴回来的那些：这几条按回执算，这里同样没有
   assert.deepEqual(receipts, {
     sealed: 3,
     matched: 1,
@@ -123,6 +124,7 @@ test('四个数字对得上，翻页不改变它们', () => {
     unclear: 0,
     pending: 1,
     waitClosed: 0,
+    waitClosedReturned: 0,
     pendingLate: 0,
     pendingUnopened: 0,
     pendingStuck: 0,

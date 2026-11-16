@@ -1320,6 +1320,12 @@ export type DeliveryLedgerReceipts = {
    * 所以 sealed = matched + mismatched + unclear + pending + waitClosed。
    */
   waitClosed?: number
+  /**
+   * 收口之后回执才贴回来的条数（v0.9.160）：比 waitClosed 更靠后一步，
+   * 已经按回执算在 matched / mismatched / unclear 里，只是其中这几条你曾经决定不等了。
+   * 不是第五种结论，不进 sealed 那个等式。
+   */
+  waitClosedReturned?: number
 }
 
 /**

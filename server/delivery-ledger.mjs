@@ -424,7 +424,9 @@ export function deliveryLedger(
   // 从 pending 里挪出来单算——催收的提醒（pendingLate / pendingUnopened / pendingStuck …）
   // 也不该再按这几条算。所以这一版的口径是
   // sealed = matched + mismatched + unclear + pending + waitClosed，其中 pending 只剩「真还在等」的。
-  const receipts = { sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, waitClosed: 0, pendingLate: 0, pendingUnopened: 0, pendingStuck: 0, pendingRelinked: 0, pendingAcked: 0 }
+  // waitClosedReturned（v0.9.160）比 waitClosed 更靠后一步：这几条收口之后回执才贴回来，
+  // 已经按回执算在上面那三项里了，所以只是把它们再单数一遍，不进这个等式。
+  const receipts = { sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, waitClosed: 0, waitClosedReturned: 0, pendingLate: 0, pendingUnopened: 0, pendingStuck: 0, pendingRelinked: 0, pendingAcked: 0 }
   for (const row of rows) {
     if (!row.package) continue
     receipts.sealed += 1
@@ -446,6 +448,19 @@ export function deliveryLedger(
     } else if (row.receipt.state === 'match') receipts.matched += 1
     else if (row.receipt.state === 'mismatch') receipts.mismatched += 1
     else receipts.unclear += 1
+    // 收口之后又回来了（v0.9.160）：收口那一刻之后，回执才贴回来。
+    // 你决定不等了，是那会儿的事实；他后来把收据贴回来，也是事实——两件都发生过，就两件都记着。
+    // 这一条已经按回执算在上面那几项里了，这里只把「其中几条是收口之后才回来的」数出来。
+    // 时间读不出来不算（相等也不算「之后」）：数据缺口不编成一段故事。
+    if (
+      row.waitClosed &&
+      row.receipt &&
+      Number.isFinite(Date.parse(String(row.receipt.at || ''))) &&
+      Number.isFinite(Date.parse(String(row.waitClosed.at || ''))) &&
+      Date.parse(String(row.receipt.at)) > Date.parse(String(row.waitClosed.at))
+    ) {
+      receipts.waitClosedReturned += 1
+    }
   }
   const max = Math.min(LEDGER_MAX_PAGE, Math.max(1, Math.round(Number(limit) || LEDGER_PAGE)))
   // 从第几条开始取：负数不往回排，越过总数就是空的一页，界面据此收起「再看」

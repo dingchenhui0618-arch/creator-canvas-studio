@@ -95,7 +95,7 @@ import { deliveryOpenCount, deliveryOpenHint } from '../domain/delivery-open'
 import { deliveryResendBrief, deliveryResendHint } from '../domain/delivery-resend'
 import { RELINK_LIMIT, deliveryArchiveLine, deliveryRelinkBrief, deliveryRelinkHint } from '../domain/delivery-relink'
 import { deliveryAckText } from '../domain/delivery-ack'
-import { deliveryWaitToggleHint, deliveryWaitToggleLabel } from '../domain/delivery-wait'
+import { deliveryWaitReturned, deliveryWaitToggleHint, deliveryWaitToggleLabel } from '../domain/delivery-wait'
 import {
   RECIPIENT_LIMIT,
   normalizeRecipient,
@@ -2433,8 +2433,14 @@ export default function ProjectPage({
                         <span className="vq-archive-receipt-label">等不等回执</span>
                         <p className="vq-archive-wait-text">
                           {row.waitClosedAt
-                            ? stamp(row.waitClosedAt) +
-                              ' 你收口了这一份：不再等它的回执。工作台不再把它算进「还没回来」，也不给催收动作；档案、封存包与回执链接都照留，他之后贴回来的收据照样记。'
+                            ? row.receipt && deliveryWaitReturned(String(row.receipt.at || ''), row.waitClosedAt)
+                              ? // 收口之后又回来了（v0.9.160）：两件事都发生过，档案里两件都记着
+                                stamp(row.waitClosedAt) +
+                                ' 你收口了这一份；' +
+                                (row.receipt.at ? stamp(row.receipt.at) + ' 他把收据贴了回来' : '他后来把收据贴了回来') +
+                                '：收口之后又回来了。这一条按回执说话，收口那件事仍记在档案里——不因此推断他为什么回来，也不重算催过的账。'
+                              : stamp(row.waitClosedAt) +
+                                ' 你收口了这一份：不再等它的回执。工作台不再把它算进「还没回来」，也不给催收动作；档案、封存包与回执链接都照留，他之后贴回来的收据照样记。'
                             : '客户口头说过、当面看过、或者这版本来就作废了——这些都可以收口。收口只记「你不再等了」，不说他没验；档案、封存包与回执链接都照留。'}
                         </p>
                         <button
@@ -2445,7 +2451,9 @@ export default function ProjectPage({
                           title={
                             // 与工作台行尾那一枚同一句话（v0.9.159）：两处都在问「还等不等」
                             row.receipt
-                              ? '这一份已经有回执了：等的事已经结束，不用再收口'
+                              ? row.waitClosedAt && deliveryWaitReturned(String(row.receipt.at || ''), row.waitClosedAt)
+                                ? '这一份已经有回执了，而且是在你收口之后才回来的：等的事已经结束，不用再改；档案里两件事都记着'
+                                : '这一份已经有回执了：等的事已经结束，不用再收口'
                               : deliveryWaitToggleHint(Boolean(row.waitClosedAt))
                           }
                         >

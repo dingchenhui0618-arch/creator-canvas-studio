@@ -119,6 +119,53 @@ export function deliveryWaitClosedTotalText(count: number): string {
   return n ? '另有 ' + n + ' 次你已经不再等回执了。' : ''
 }
 
+/**
+ * 收口之后又回来了（v0.9.160）：收口那一刻之后，回执才贴回来。
+ *
+ * 收口说的是「你不再等了」，不是「他不会回了」——这两件事以前在界面上混成一件：
+ * 收口之后他真把收据贴回来，那一行就只按回执显示，谁也看不出你曾经决定不等了。
+ * 这里只判断先后：两个时间都读得出来，而且回执晚于收口。
+ *
+ * 边界：相等不算「之后」；时间读不出来就什么都不说——不为一条数据缺口编一段故事。
+ */
+export function deliveryWaitReturned(receiptAt: string, closedAt: string): boolean {
+  const receipt = Date.parse(String(receiptAt || ''))
+  const closed = Date.parse(String(closedAt || ''))
+  return Number.isFinite(receipt) && Number.isFinite(closed) && receipt > closed
+}
+
+/** 那一行上的短句：收口之后隔了几天才回来；当天回来的不写成「0 天」。 */
+export function deliveryWaitReturnedText(receiptAt: string, closedAt: string): string {
+  if (!deliveryWaitReturned(receiptAt, closedAt)) return ''
+  const days = Math.max(0, Math.floor((Date.parse(receiptAt) - Date.parse(closedAt)) / DAY_MS))
+  return days <= 0 ? '收口当天又回来了' : '收口 ' + days + ' 天后又回来了'
+}
+
+/**
+ * 那一句解释：哪天收的口、哪天回来的、这一条现在按谁说话。
+ * 不推断他为什么回来（回执里只写着结论），也不拿「回来了」反过来说「收口收错了」。
+ */
+export function deliveryWaitReturnedHint(receiptAt: string, closedAt: string): string {
+  if (!deliveryWaitReturned(receiptAt, closedAt)) return ''
+  const closed = monthDayText(closedAt)
+  const receipt = monthDayText(receiptAt)
+  return (
+    '收口之后又回来了：' +
+    (closed ? '你 ' + closed + ' 收口了这一份，' : '你收口了这一份，') +
+    (receipt ? receipt + ' ' : '') +
+    '他把收据贴了回来。这一条现在按回执说话，收口那件事仍记在档案里；不因此推断他为什么回来，也不重算催过的账。'
+  )
+}
+
+/**
+ * 清单顶上那句：回执里有一条是「收口之后才回来」的。
+ * 它本来就算在回执那几项里，所以写「其中」，不写成第五种结论，也不改那份账。
+ */
+export function deliveryWaitReturnedTotalText(count: number): string {
+  const n = Math.max(0, Math.round(Number(count) || 0))
+  return n ? '其中 ' + n + ' 次是收口之后才回来的，按回执算。' : ''
+}
+
 export type DeliveryChannelInput = {
   /** 作品名 */
   title: string

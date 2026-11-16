@@ -51,6 +51,9 @@ import {
   deliveryWaitClosedLead,
   deliveryWaitClosedTotalText,
   deliveryWaitDays,
+  deliveryWaitReturnedHint,
+  deliveryWaitReturnedText,
+  deliveryWaitReturnedTotalText,
   deliveryWaitLate,
   deliveryWaitText,
   deliveryWaitToggleHint,
@@ -106,6 +109,7 @@ const EMPTY_RECEIPTS: DeliveryLedgerReceipts = {
   pendingRelinked: 0,
   pendingAcked: 0,
   waitClosed: 0,
+  waitClosedReturned: 0,
 }
 
 /** 交出去之后这一版又被评过：与作品页、交付稿是同一份规则，只多一句跟在交时评审后面（v0.9.86）。 */
@@ -293,6 +297,23 @@ function rowRelinkCappedText(row: ProjectDeliveryRow): string {
  */
 function rowWaitClosed(row: ProjectDeliveryRow): boolean {
   return Boolean(row.waitClosed?.at)
+}
+
+/**
+ * 收口之后又回来了没有（v0.9.160）：这一条先被你收了口，回执后来才贴回来。
+ *
+ * 以前这种情况下，那一行只按回执显示（回执是更有力的事实，这一点不改）——
+ * 可「你曾经决定不等了」就凭空消失了：清单上一眼看过去，跟一条普通的回执没有区别。
+ * 现在补一个小尾巴，只回答「他是什么时候回来的」，不解释原因，也不重算催过的账。
+ */
+function rowWaitReturnedText(row: ProjectDeliveryRow): string {
+  if (!row.waitClosed?.at || !row.receipt?.at) return ''
+  return deliveryWaitReturnedText(row.receipt.at, row.waitClosed.at)
+}
+
+function rowWaitReturnedHint(row: ProjectDeliveryRow): string {
+  if (!row.waitClosed?.at || !row.receipt?.at) return ''
+  return deliveryWaitReturnedHint(row.receipt.at, row.waitClosed.at)
 }
 
 function rowPendingLead(row: ProjectDeliveryRow): string {
@@ -1501,6 +1522,10 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                 {deliveryReceipts.pendingAcked ? deliveryAckedText(deliveryReceipts.pendingAcked) : ''}
                 {/* 你自己收口的那些（v0.9.158）：不算「还没回来」，所以单说一句 */}
                 {deliveryReceipts.waitClosed ? deliveryWaitClosedTotalText(deliveryReceipts.waitClosed) : ''}
+                {/* 收口之后回执才回来的那几次（v0.9.160）：它们已经算在回执里，只说「其中几次」 */}
+                {deliveryReceipts.waitClosedReturned
+                  ? deliveryWaitReturnedTotalText(deliveryReceipts.waitClosedReturned)
+                  : ''}
               </p>
             ) : null}
             {deliveryReceipts.mismatched ? (
@@ -1610,9 +1635,18 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                         row.receipt ? (
                           <span
                             className={'vq-delivery-receipt is-' + row.receipt.state}
-                            title={'回执是' + (row.receipt.via === 'link' ? '收包人自己从回执链接贴回来的' : '你替收包人贴进来的')}
+                            title={
+                              '回执是' +
+                              (row.receipt.via === 'link' ? '收包人自己从回执链接贴回来的' : '你替收包人贴进来的') +
+                              (rowWaitReturnedHint(row) ? '。' + rowWaitReturnedHint(row) : '')
+                            }
                           >
                             {ledgerReceiptText(row.receipt)}
+                            {/* 收口之后又回来了（v0.9.160）：这一条先被你收了口，回执后来才回来。
+                                补一个小尾巴，让「你曾经决定不等了」不因为回执回来而消失。 */}
+                            {rowWaitReturnedText(row) ? (
+                              <span className="vq-keep-together vq-delivery-returned">{' · ' + rowWaitReturnedText(row)}</span>
+                            ) : null}
                           </span>
                         ) : (
                           // 还没回来：等了几天、这条链接有没有人点开、催过几次，都写在这一行上
