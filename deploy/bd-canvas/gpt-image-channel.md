@@ -30,6 +30,14 @@
 3. 画布上选 GPT Image 2 出一次图：`generation_records` 应有 `provider=gpt-image`、`status=succeeded`、`actual_charge_li=440`，且媒体目录有落盘文件。
 4. 恢复 env 默认值并重启；stub 停掉。
 
+## 提交与备份
+
+- 本次改动已在 `/opt/bdcanvas` 本地提交：`8eb11c7 VisionQA r175: GPT-Image 出图通道上线，CGCM 图片模型下线`（未 push）。
+  该提交同时带上了当时工作区里既有的未提交改动（企业信任 / 积分显示等），它们本来就在生产里跑，
+  一起提交是为了把线上状态固定在 git 里；要精确撤本次改动，仍按下面按 `.bak-r175*` 回滚。
+- `pricing_rules` 里 `seeapi-seedream-5.0-pro` 的 3 条（1K/2K/4K）保留 `is_active=1`：模型已不可选、授权也停了，
+  价格记录留作历史与将来恢复用。
+
 ## 回滚
 
 代码（备份名 `*.bak-r175-<时间戳>`）：

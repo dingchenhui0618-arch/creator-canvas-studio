@@ -4026,6 +4026,8 @@ E2E 里点某一行必须先按行里的文字限定，清单每一行长得一�
 
 发布 `20261116-1745-r175gete`，版本 **0.9.165**；8799 与公网同一份 `index-RudyRlll.js`；`/api/health` 两个入口 `ok:true`（templates 26）；`rollback.sh --to 1` 回 **v0.9.164**（`index-B1C3jq5Z.js`）。
 
+画布侧（第三方应用）改了哪些文件、DB 加了哪些行、stub 怎么验、怎么回滚，见 [deploy/bd-canvas/gpt-image-channel.md](deploy/bd-canvas/gpt-image-channel.md)。
+
 ### 截图
 
 后台「模型与上游」：平台卡（GeteAPI 49 / SeeAPI 14，均已连接）+ 计价口径 + 模型表（每行一个模型、平台来源与上游单价、接入状态）：
