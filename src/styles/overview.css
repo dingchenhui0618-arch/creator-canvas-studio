@@ -1155,6 +1155,81 @@
   font-weight: 500;
 }
 
+/* 按人看（v0.9.154）：谁还欠着回执。一排按钮、一人一枚，
+   欠着的用虚线（与「还没收到回执」那枚胶囊同一套说法），都回来的用实线；
+   名字是这一枚里的正文，条数是旁注——先认出是谁，再看欠几条。 */
+.vq-delivery-people {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px 0;
+}
+
+.vq-delivery-people-lead {
+  margin: 0;
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.vq-delivery-people-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.vq-person {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  max-width: 100%;
+  padding: 4px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-raised);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease-out), background-color var(--dur-1) var(--ease-out);
+}
+
+.vq-person:hover {
+  border-color: var(--ink);
+}
+
+.vq-person:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* 他还欠着：虚线，不染警示色——欠着是常态，不是出错 */
+.vq-person.is-pending {
+  border-style: dashed;
+}
+
+.vq-person-name {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vq-person-count {
+  flex-shrink: 0;
+  color: var(--faint);
+}
+
+.vq-person-note {
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
 /* 这一行交的是不是当前版：只写版次事实，不写「已交付」——
    作品可能已经开到下一版，那一次交付就不再是现状。 */
 .vq-delivery-state {

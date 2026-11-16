@@ -1213,6 +1213,23 @@ export type ProjectDeliveryRow = {
   reply?: DeliveryReply | null
 }
 
+/**
+ * 按人看的一堆数（v0.9.154）：同一个收件人下面的交付条数、还欠着回执的条数，
+ * 以及「点这一下落在哪一条」——优先他还欠着的那条里最近交付的一条。
+ */
+export type DeliveryPerson = {
+  name: string
+  count: number
+  /** 其中封过包的条数：没有包的老交付谈不上回执，不能被说成「回执都回来了」 */
+  sealed: number
+  /** 还欠着回执的条数：有封存包、还没收到收据（他点了「收到了」的也算欠着，只差验） */
+  pending: number
+  /** 上面那些里，他自己点过「收到了」的条数（v0.9.151） */
+  pendingAcked: number
+  /** 点下去要打开哪一条交付；万一哪条连 id 都没有（老记录），deliveryId 是空串 */
+  target: { projectId: string; deliveryId: string; version: number }
+}
+
 /** 交付流水的整份数字按全部记录算，不因为只取了一页而变小 */
 export type DeliveryLedger = {
   items: ProjectDeliveryRow[]
@@ -1227,6 +1244,13 @@ export type DeliveryLedger = {
   lastAt: string
   /** 回执的四个数（v0.9.139）：按整份记录算，sealed = matched + mismatched + unclear + pending */
   receipts: DeliveryLedgerReceipts
+  /**
+   * 按人看（v0.9.154）：写了收件人的那几条按人归堆，回答「谁还欠着回执」。
+   * 这是整份记录的账，不随分页变；没写收件人的另算一个数。
+   */
+  people?: DeliveryPerson[]
+  /** 没写收件人的交付条数（v0.9.154）：老交付或者还没补写，不混进任何人名下 */
+  unlabeled?: number
   offset: number
   hasMore: boolean
 }

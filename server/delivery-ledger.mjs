@@ -262,6 +262,74 @@ export function ledgerRows({ projects = [], counts = {}, visits = {} } = {}) {
 }
 
 /**
+ * 按人看（v0.9.154）：同一批交付按收件人归堆，回答「谁还欠着回执」。
+ *
+ * 一条交付上写着「给谁」（v0.9.152），可工作台那一行一行排下来，问的是「哪一条还没回来」；
+ * 交给同一个人三四条时，真正想问的是「王老师那边还欠几份」——这一堆数就回答这一句。
+ *
+ * 边界：
+ *  - 只数写了收件人的记录；没写的另算一个数（unlabeled），不混进任何一个人名下，也不猜是谁；
+ *  - 只有封过包、而且还没收到收据的才算「欠着」——没包的老交付谈不上回执，对上的也不再催；
+ *  - 点一个人该落在哪一条：优先「他还欠着的那条里最近交付的一条」；都回来了就落在最近交付的那条；
+ *  - 按「欠着几条」排前面，同样多的按总条数、再按名字排——先看最该催的那一个。
+ */
+export function ledgerPeople(rows) {
+  const map = new Map()
+  for (const row of rows) {
+    const name = String(row?.recipient || '')
+    if (!name) continue
+    const atMs = Date.parse(String(row?.at || '')) || 0
+    const entry = map.get(name) || {
+      name,
+      count: 0,
+      sealed: 0,
+      pending: 0,
+      pendingAcked: 0,
+      target: null,
+      pendingTarget: null,
+      pendingAt: -1,
+      latestAt: -1,
+    }
+    const candidate = {
+      projectId: String(row.projectId || ''),
+      deliveryId: String(row.deliveryId || ''),
+      version: Math.max(0, Math.round(Number(row.version) || 0)),
+    }
+    entry.count += 1
+    if (row.package) entry.sealed += 1
+    // 欠着回执 = 有包、还没收据；他自己点了「收到了」的那几条也算欠着（只差验）
+    if (row.package && !row.receipt) {
+      entry.pending += 1
+      if (row.ack) entry.pendingAcked += 1
+      if (atMs >= entry.pendingAt) {
+        entry.pendingAt = atMs
+        entry.pendingTarget = candidate
+      }
+    }
+    if (atMs >= entry.latestAt) {
+      entry.latestAt = atMs
+      entry.target = candidate
+    }
+    map.set(name, entry)
+  }
+  return [...map.values()]
+    .map((entry) => ({
+      name: entry.name,
+      count: entry.count,
+      sealed: entry.sealed,
+      pending: entry.pending,
+      pendingAcked: entry.pendingAcked,
+      // 点进去落在哪一条：先找他还欠着的那条，都回来了落在最近交付的那条
+      target: entry.pendingTarget || entry.target,
+    }))
+    .sort((a, b) => {
+      if (a.pending !== b.pending) return b.pending - a.pending
+      if (a.count !== b.count) return b.count - a.count
+      return a.name.localeCompare(b.name)
+    })
+}
+
+/**
  * 交付流水：items 是一页的行，其余都是按整份行算的数字——
  * 「共 N 条」「M 条作品」不会因为只取了前 8 条就变小。
  */
@@ -319,6 +387,10 @@ export function deliveryLedger(
     lastAt: rows.find((row) => row.atKnown)?.at || '',
     // 回执的四个数（v0.9.139）：sealed = matched + mismatched + unclear + pending
     receipts,
+    // 按人看（v0.9.154）：写了收件人的那几条按人归堆，回答「谁还欠着回执」。
+    // 这是整份记录的账，不随分页变；没写收件人的另算一个数，不混进任何人名下。
+    people: ledgerPeople(rows),
+    unlabeled: rows.filter((row) => !row.recipient).length,
     offset: from,
     hasMore: from + items.length < rows.length,
   }
