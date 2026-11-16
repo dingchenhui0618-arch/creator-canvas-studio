@@ -653,6 +653,90 @@
   color: var(--ink);
 }
 
+/* 分镜提示词（v0.9.164）：出图不在这边，但拼好的提示词能直接拿走。
+   面板沿用发丝线纸面；提示词本体用等宽字，方便一眼看出哪句是要念的话。 */
+.vq-shot-head-tools {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.vq-shot-allcopy {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 4px 8px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 11.5px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.vq-shot-allcopy:hover {
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+
+.vq-shot-prompt-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.6;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.vq-shot-prompt-toggle:hover {
+  color: var(--ink);
+}
+
+.vq-shot-prompt {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--canvas);
+}
+
+.vq-shot-prompt-text {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+
+.vq-shot-prompt-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.vq-shot-prompt-hint {
+  flex: 1 1 220px;
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
 /* 窄屏（v0.9.161）：图上、文字中、按钮下一行一行排；不把文字挤进 24px 那一列 */
 @media (max-width: 760px) {
   .vq-shot-row {

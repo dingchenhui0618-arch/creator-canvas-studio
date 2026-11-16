@@ -81,6 +81,7 @@ import {
   type ProjectVersionScriptSnapshot,
 } from '../domain/project'
 import { ackReview, decideReview, clearReviewDecision, unackReview } from '../api/review'
+import { allShotPrompts, beatForShot, shotPrompt, shotPromptHint, type ShotPromptScriptSource } from '../domain/shot-prompt'
 import {
   ISSUE_LABEL,
   deliveryDrift,
@@ -204,6 +205,8 @@ export default function ProjectPage({
   const [busy, setBusy] = useState<'' | 'canvas' | 'done' | 'delete' | 'title' | 'version' | 'rebase' | 'script' | 'export' | 'zip'>('')
   // 哪一镜正在贴画面（v0.9.161）：上传 + 记账两段，按镜头号显示「正在贴…」，不让整页转圈
   const [shotBusy, setShotBusy] = useState(0)
+  // 哪一镜的提示词摊开着（v0.9.164）：提示词是现拼的，不是存下来的，所以只记镜头号
+  const [promptNo, setPromptNo] = useState(0)
   const [renaming, setRenaming] = useState(false)
   const [draftTitle, setDraftTitle] = useState('')
   // 脚本就地编辑：草稿只在内存里，保存后才写进作品（copy-on-write）
@@ -835,6 +838,31 @@ export default function ProjectPage({
     }
   }
 
+  // 分镜提示词（v0.9.164）：现拼现用，不落库——拼错了改一句文案就能修，盘上也不会多一份会过期的副本。
+  // 复制的是一个镜头或整条作品的提示词；出图本身仍发生在无限画布，额度也由那边扣。
+  const copyShotText = async (shotNo: number, all = false) => {
+    const board = data?.template
+    if (!board?.storyboard?.length) return
+    const beats = data?.script?.structure?.length ? data.script.structure : board.structure
+    const options = { platform: board.origin?.platform || '', title: data?.project.title, scriptSource: (data?.script?.source === 'project' ? 'own' : 'template') as 'own' | 'template' }
+    let text = ''
+    if (all) {
+      text = allShotPrompts(board.storyboard, beats, options)
+    } else {
+      const shot = board.storyboard.find((item, index) => Math.max(1, Math.round(Number(item.shotNo) || index + 1)) === shotNo)
+      if (shot) text = shotPrompt(shot, beatForShot(shot, beats), options)
+    }
+    if (!text) return
+    try {
+      await navigator.clipboard.writeText(text)
+      onToast(all
+        ? '已复制 ' + board.storyboard.length + ' 镜的提示词 · 出图会花你自己的额度'
+        : '已复制第 ' + shotNo + ' 镜的提示词 · 贴进无限画布的生图框就能出图')
+    } catch {
+      onToast('浏览器没给剪贴板权限：展开提示词后手动选中复制')
+    }
+  }
+
   const loadPackageContents = async (version: number, deliveryId: string) => {
     if (!data) return
     setContents({ version, busy: true, result: null, error: '' })
@@ -1424,6 +1452,11 @@ export default function ProjectPage({
   const spendTotalMonth = spendByMonth.find((row) => row.month === spendDetail?.month)?.total || 0
   // 脚本是作品页自己的视图：改过就是这条作品自己的版本，没改过则跟随模板
   const script = data.script
+  // 分镜提示词（v0.9.164）：出图不在这边，但「这一镜该让人看见什么」在。
+  // 脚本优先用这条作品自己的那份（改过脚本的复刻，画面要跟着新词走），没有才退回模板脚本。
+  const promptBeats = script?.structure?.length ? script.structure : template?.structure || []
+  const promptScriptSource: ShotPromptScriptSource = script?.source === 'project' ? 'own' : promptBeats.length ? 'template' : 'none'
+  const promptPlatform = template?.origin?.platform || ''
   // 状态与「下一步」只看当前这一版评过没有：新版刚开出来时不能因为上一版评过就跳过评审
   const currentReviews = reviewsForVersion(data.versionCounts, project.version)
   // 「这一版比上一版好在哪」：只在前后两版都评过、且都记了严重度时才算得出来（v0.9.84）
@@ -3232,7 +3265,20 @@ export default function ProjectPage({
           <section className="vq-project-panel">
             <div className="vq-project-panel-head">
               <h2>分镜</h2>
-              <span className="vq-mono">{template ? template.shots + ' 镜 · 跟模板' : '没有分镜'}</span>
+              <div className="vq-shot-head-tools">
+                <span className="vq-mono">{template ? template.shots + ' 镜 · 跟模板' : '没有分镜'}</span>
+                {template && template.storyboard.length ? (
+                  <button
+                    type="button"
+                    className="vq-shot-allcopy"
+                    title={'把这一版 ' + template.storyboard.length + ' 镜的提示词按顺序一次复制走：贴进无限画布的生图框就能出图，出图会花你自己的额度'}
+                    onClick={() => void copyShotText(0, true)}
+                  >
+                    <Copy size={12} />
+                    复制全部提示词
+                  </button>
+                ) : null}
+              </div>
             </div>
             {/* 写进作品（v0.9.30）只写脚本：这一版的脚本是自己的、分镜仍是模板那几镜时要说清楚，
                 不让人以为「换了脚本」连镜头也换了 */}
@@ -3309,7 +3355,31 @@ export default function ProjectPage({
                             用回原片
                           </button>
                         ) : null}
+                        <button
+                          type="button"
+                          className="vq-shot-prompt-toggle"
+                          aria-expanded={promptNo === shotNo}
+                          title="看这一镜的出图提示词：由分镜与脚本现拼，贴进无限画布的生图框就能出图"
+                          onClick={() => setPromptNo(promptNo === shotNo ? 0 : shotNo)}
+                        >
+                          <FileText size={12} />
+                          提示词
+                        </button>
                       </div>
+                      {promptNo === shotNo ? (
+                        <div className="vq-shot-prompt" role="region" aria-label={'第 ' + shotNo + ' 镜的出图提示词'}>
+                          <p className="vq-shot-prompt-text">
+                            {shotPrompt(shot, beatForShot(shot, promptBeats), { platform: promptPlatform, scriptSource: promptScriptSource === 'own' ? 'own' : promptScriptSource === 'template' ? 'template' : undefined })}
+                          </p>
+                          <div className="vq-shot-prompt-foot">
+                            <span className="vq-shot-prompt-hint">{shotPromptHint(promptScriptSource)}</span>
+                            <button type="button" className="vq-button vq-button--ghost vq-button--sm" onClick={() => void copyShotText(shotNo)}>
+                              <Copy size={12} />
+                              复制这一镜
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
                     </li>
                   )
                 })}
