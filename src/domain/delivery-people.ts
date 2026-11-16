@@ -11,9 +11,13 @@
 //
 // v0.9.155：欠着几条还不够急——同样欠两条，一个是昨天刚发的、一个已经拖了六天。
 // 所以每一枚再加两件事：欠着的那几条里最早一条等了几天、这个人名下催过几次。
+//
+// v0.9.156：催过之后到底有没有回音。「催过 2 次，最近 11-12」只说发过话，
+// 没说那句话有没有用；这里补上「催完第 2 天回了」/「催完 4 天没动静」，
+// 说了话还没动静的，就该换个渠道，而不是再催一遍。
 
 import type { DeliveryPerson } from './project'
-import { deliveryWaitDays, monthDayText } from './delivery-wait.ts'
+import { REMIND_LATE_DAYS, deliveryWaitDays, monthDayText } from './delivery-wait.ts'
 
 /** 一个人名下几条交付、几条还欠着：行上按钮里那一小段 */
 export function personSummary(person: DeliveryPerson | null | undefined): string {
@@ -43,14 +47,64 @@ export function personWaitText(person: DeliveryPerson | null | undefined, now: n
   return days <= 0 ? '最早一条今天发出' : '最早一条 ' + days + ' 天没回'
 }
 
-/** 催过没有：欠着的人才谈得上催，一次都没催过就写「还没催过」——不写成空白 */
+/**
+ * 催过没有：欠着的人一次都没催过就写「还没催过」——不写成空白。
+ * 回执都回来了、但确实催过的人也要说（v0.9.156）：「催完第几天回的」得先有「催过几次」。
+ */
 export function personNaggedText(person: DeliveryPerson | null | undefined): string {
-  const pending = Math.max(0, Math.round(Number(person?.pending) || 0))
-  if (!pending) return ''
   const count = Math.max(0, Math.round(Number(person?.reminded?.count) || 0))
-  if (!count) return '还没催过'
+  const pending = Math.max(0, Math.round(Number(person?.pending) || 0))
+  if (!count) return pending ? '还没催过' : ''
   const at = monthDayText(String(person?.reminded?.at || ''))
   return '催过 ' + count + ' 次' + (at ? '，最近 ' + at : '')
+}
+
+const DAY_MS = 86400000
+
+/** 两个时刻之间差几天（整天，向下取整）；有一个读不出来就是 null。 */
+function daysBetween(from: string, to: string): number | null {
+  const start = Date.parse(String(from || ''))
+  const end = Date.parse(String(to || ''))
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return null
+  return Math.max(0, Math.floor((end - start) / DAY_MS))
+}
+
+/**
+ * 催完之后回了没有（v0.9.156）：最近一次催收之后的第一条回执算「回了」。
+ * 只说先后和天数——他也许是碰巧有空才验的，这里不下「催一下管用」的结论。
+ * 回执没回来、现在也不欠着什么，就什么都不说：没有可催的事，不硬凑一句。
+ */
+export function personNagOutText(person: DeliveryPerson | null | undefined, now: number | Date = Date.now()): string {
+  const count = Math.max(0, Math.round(Number(person?.reminded?.count) || 0))
+  if (!count) return ''
+  const nagAt = String(person?.reminded?.at || '')
+  const replyAt = String(person?.reminded?.replyAt || '')
+  if (replyAt) {
+    const days = daysBetween(nagAt, replyAt)
+    if (days === null) return ''
+    return days <= 0 ? '催完当天回了' : '催完第 ' + days + ' 天回了'
+  }
+  const pending = Math.max(0, Math.round(Number(person?.pending) || 0))
+  if (!pending) return ''
+  const days = deliveryWaitDays(nagAt, now)
+  if (days === null) return ''
+  return days <= 0 ? '今天刚催过' : '催完 ' + days + ' 天没动静'
+}
+
+/**
+ * title 里那一整句：催过几次、最近哪天、催完回了没有；
+ * 催过三天以上还没动静，就提一句换个渠道——再催一遍多半还是一样。
+ */
+function nagSentence(person: DeliveryPerson | null | undefined, now: number | Date): string {
+  const nagged = personNaggedText(person)
+  if (!nagged) return ''
+  const out = personNagOutText(person, now)
+  if (!out) return nagged + '。'
+  const replyAt = String(person?.reminded?.replyAt || '')
+  if (replyAt) return nagged + '，' + out + '（' + monthDayText(replyAt) + ' 的回执）。'
+  const days = deliveryWaitDays(String(person?.reminded?.at || ''), now)
+  const advice = days !== null && days >= REMIND_LATE_DAYS ? '，换个渠道问一句' : ''
+  return nagged + '，' + out + advice + '。'
 }
 
 /** 点那一下会落在哪一条：title 里说清，不让人点完才发现 */
@@ -62,6 +116,8 @@ export function personTitle(person: DeliveryPerson | null | undefined, now: numb
   const pending = Math.max(0, Math.round(Number(person?.pending) || 0))
   const acked = Math.max(0, Math.round(Number(person?.pendingAcked) || 0))
   const where = '点一下打开他那边最近的那一条交付'
+  // 催完之后回了没有（v0.9.156）：回执都回来了的人也说一句——那句「催完第 2 天回了」是他的实绩
+  const nag = nagSentence(person, now)
   if (pending) {
     // 等得最久的是哪一条、催过几次（v0.9.155）：光说「欠 2 条」分不出「昨天刚发」和「拖了六天」
     const days = oldestPendingDays(person, now)
@@ -81,14 +137,13 @@ export function personTitle(person: DeliveryPerson | null | undefined, now: numb
       (acked ? '（其中 ' + acked + ' 条他自己点了「收到了」，只差验）' : '') +
       '。' +
       wait +
-      personNaggedText(person) +
-      '。' +
+      nag +
       where +
       '。'
     )
   }
-  if (sealed === count) return name + '：' + count + ' 条交付，回执都回来了。' + where + '。'
-  return name + '：' + count + ' 条交付，其中 ' + sealed + ' 条封过包、回执都回来了。' + where + '。'
+  const tail = sealed === count ? '回执都回来了。' : '其中 ' + sealed + ' 条封过包、回执都回来了。'
+  return name + '：' + count + ' 条交付，' + tail + nag + where + '。'
 }
 
 /** 顶上那句：几个人、几个还欠着；一个人都没有就是空串（调用方不渲染这一块） */

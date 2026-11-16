@@ -273,6 +273,7 @@ export function ledgerRows({ projects = [], counts = {}, visits = {} } = {}) {
  *  - 点一个人该落在哪一条：优先「他还欠着的那条里最近交付的一条」；都回来了就落在最近交付的那条；
  *  - 按「欠着几条」排前面，同样多的先看「等得最久」算日子、再按总条数、再按名字排——先看最该催的那一个（v0.9.155）；
  *  - 「等了多久」只按最早那条欠着的记录算，时间没记下的老记录不说天数；催过几次是这个人名下所有交付上的催收之和。
+ *  - 催完有没有回音（v0.9.156）：最近一次催收之后的第一条回执算「回了」，只给时间，不说因果。
  */
 export function ledgerPeople(rows) {
   const map = new Map()
@@ -295,6 +296,8 @@ export function ledgerPeople(rows) {
       // 催过几次、最近一次（v0.9.155）
       nagged: 0,
       naggedAt: '',
+      // 这个人名下所有回执的时间（v0.9.156）：只作中间量，用来算「催完之后回了没有」，不往外给
+      receiptMs: [],
     }
     const candidate = {
       projectId: String(row.projectId || ''),
@@ -322,6 +325,11 @@ export function ledgerPeople(rows) {
       const nagAt = String(row.reminder.at || '')
       if (nagAt > entry.naggedAt) entry.naggedAt = nagAt
     }
+    // 回执的时间（v0.9.156）：先收着，等这一圈走完再和「最近一次催收」比先后
+    if (row.package && row.receipt && row.receipt.at) {
+      const receiptMs = Date.parse(String(row.receipt.at))
+      if (Number.isFinite(receiptMs)) entry.receiptMs.push(receiptMs)
+    }
     if (atMs >= entry.latestAt) {
       entry.latestAt = atMs
       entry.target = candidate
@@ -329,21 +337,39 @@ export function ledgerPeople(rows) {
     map.set(name, entry)
   }
   return [...map.values()]
-    .map((entry) => ({
-      name: entry.name,
-      count: entry.count,
-      sealed: entry.sealed,
-      pending: entry.pending,
-      pendingAcked: entry.pendingAcked,
-      // 欠着的那几条里最早一条是哪天发出的（v0.9.155）：空串 = 一条都没记下时间，界面就不说等了多久
-      oldestPendingAt: Number.isFinite(entry.oldestPendingMs)
-        ? new Date(entry.oldestPendingMs).toISOString()
-        : '',
-      // 催过几次（v0.9.155）：没催过就是 null，界面写「还没催过」
-      reminded: entry.nagged ? { count: entry.nagged, at: entry.naggedAt } : null,
-      // 点进去落在哪一条：先找他还欠着的那条，都回来了落在最近交付的那条
-      target: entry.pendingTarget || entry.target,
-    }))
+    .map((entry) => {
+      // 催完之后他回了没有（v0.9.156）：最近一次催收之后的第一条回执。
+      // 只给「哪天回来的」这个事实——先后顺序不等于因果，界面也不写「催一下他就回了」。
+      const nagMs = Date.parse(entry.naggedAt)
+      let replyMs = 0
+      if (entry.nagged && Number.isFinite(nagMs)) {
+        for (const ms of entry.receiptMs) {
+          if (ms > nagMs && (!replyMs || ms < replyMs)) replyMs = ms
+        }
+      }
+      return {
+        name: entry.name,
+        count: entry.count,
+        sealed: entry.sealed,
+        pending: entry.pending,
+        pendingAcked: entry.pendingAcked,
+        // 欠着的那几条里最早一条是哪天发出的（v0.9.155）：空串 = 一条都没记下时间，界面就不说等了多久
+        oldestPendingAt: Number.isFinite(entry.oldestPendingMs)
+          ? new Date(entry.oldestPendingMs).toISOString()
+          : '',
+        // 催过几次（v0.9.155）：没催过就是 null，界面写「还没催过」；
+        // 催完之后有没有回音（v0.9.156）：replyAt 是最近一次催收之后的第一条回执，空串 = 还没有
+        reminded: entry.nagged
+          ? {
+              count: entry.nagged,
+              at: entry.naggedAt,
+              replyAt: replyMs ? new Date(replyMs).toISOString() : '',
+            }
+          : null,
+        // 点进去落在哪一条：先找他还欠着的那条，都回来了落在最近交付的那条
+        target: entry.pendingTarget || entry.target,
+      }
+    })
     .sort((a, b) => {
       if (a.pending !== b.pending) return b.pending - a.pending
       // 同是欠着几条：等得久的那一个排前面（v0.9.155）——要催就先催欠得最久的；

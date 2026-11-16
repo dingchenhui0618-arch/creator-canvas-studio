@@ -10,7 +10,8 @@ import assert from 'node:assert/strict'
 //   4) 没写收件人的只给一个数，不猜是谁，也不混进任何一个人名下；排序先看欠着几条；
 //   5) 这是整份记录的账：分页取第几页都不影响这几个数；
 //   6) 欠着几条还不算急：欠着的那几条里最早一条等了几天、这个人名下催过几次（v0.9.155）；
-//   7) 同样欠两条，等得久的排前面；时间没记下的老记录不编天数，排在知道的后头。
+//   7) 同样欠两条，等得久的排前面；时间没记下的老记录不编天数，排在知道的后头；
+//   8) 催完之后回了没有（v0.9.156）：最近一次催收之后的第一条回执才算回音；只说先后，不说因果。
 
 const { ledgerPeople, deliveryLedger } = await import('../server/delivery-ledger.mjs')
 const people = await import('../src/domain/delivery-people.ts')
@@ -33,7 +34,8 @@ const projects = [
   project('prj_b', '第二支短片', [
     // 李工：一条还欠着（11-11），一条已经对上了（11-13，比欠着的那条更新）
     { id: 'bbbb000000000001', version: 1, at: AT(11), recipient: '李工', package: pkg },
-    { id: 'bbbb000000000002', version: 2, at: AT(13), recipient: '李工', package: pkg, receipt: receiptMatch },
+    // 催过一次，第二天他就回了——「催完回了没有」的那一面（回执是 11-13 的）
+    { id: 'bbbb000000000002', version: 2, at: AT(13), recipient: '李工', package: pkg, receipt: { ...receiptMatch, at: AT(13) }, reminders: [{ at: AT(12) }] },
   ]),
   project('prj_c', '给赵工的那份', [
     // 赵工：就一条，回执已经回来
@@ -124,10 +126,14 @@ test('等得最久的那一条：只认记着时间的记录，催过几次按�
   const ledger = deliveryLedger({ projects })
   const wang = ledger.people.find((person) => person.name === '王老师 · 内容组')
   assert.equal(wang.oldestPendingAt, AT(12), '欠着的两条是 11-12 和 11-14，最早是 11-12')
-  assert.deepEqual(wang.reminded, { count: 2, at: AT(14) }, '催过两次，最近一次 11-14')
+  assert.deepEqual(
+    wang.reminded,
+    { count: 2, at: AT(14), replyAt: '' },
+    '催过两次，最近一次 11-14；她那条回执是 11-11 的，早于催收，不算催完的回音',
+  )
   const li = ledger.people.find((person) => person.name === '李工')
   assert.equal(li.oldestPendingAt, AT(11), '李工欠着的那条 11-11 发的')
-  assert.equal(li.reminded, null, '没催过就是 null，不写成「催过 0 次」')
+  assert.deepEqual(li.reminded, { count: 1, at: AT(12), replyAt: AT(13) }, '催过一次，第二天他回了回执')
   const zhao = ledger.people.find((person) => person.name === '赵工')
   assert.equal(zhao.oldestPendingAt, '', '一条都不欠着就谈不上「等了多久」')
   assert.equal(zhao.reminded, null)
@@ -158,7 +164,11 @@ test('这一枚按钮上那句「等了多久」：欠着几条都不影响，�
   assert.equal(people.personWaitText(null, now), '')
   assert.equal(people.personNaggedText({ pending: 1, reminded: { count: 2, at: AT(14) } }), '催过 2 次，最近 11-14')
   assert.equal(people.personNaggedText({ pending: 1, reminded: null }), '还没催过')
-  assert.equal(people.personNaggedText({ pending: 0, reminded: { count: 2, at: AT(14) } }), '', '都回来了就不用再说催过几次')
+  assert.equal(
+    people.personNaggedText({ pending: 0, reminded: { count: 2, at: AT(14) } }),
+    '催过 2 次，最近 11-14',
+    '回执都回来了也照实说催过几次：后面要接「催完第几天回的」',
+  )
 })
 
 test('title 说清最早一条哪天发的、催过几次、点下去落在哪', () => {
@@ -191,4 +201,46 @@ test('分页不影响「等得最久」与「催过几次」这两个数', () =>
   const first = deliveryLedger({ projects }, { limit: 2 })
   const later = deliveryLedger({ projects }, { offset: 4, limit: 2 })
   assert.deepEqual(first.people, later.people)
+})
+
+test('催完之后回了没有：最近一次催收之后的第一条回执才算回音，早于催收的不算', () => {
+  const ledger = deliveryLedger({ projects })
+  const li = ledger.people.find((person) => person.name === '李工')
+  assert.equal(li.reminded.replyAt, AT(13), '11-12 催的，11-13 回的回执')
+  const wang = ledger.people.find((person) => person.name === '王老师 · 内容组')
+  assert.equal(wang.reminded.replyAt, '', '11-11 的回执早于 11-13/11-14 那两次催收，不是催回来的')
+})
+
+test('这一枚按钮上那句「催完回了没有」：回了说第几天，没回说几天没动静', () => {
+  const now = Date.parse(AT(16))
+  assert.equal(people.personNagOutText({ pending: 0, reminded: { count: 1, at: AT(12), replyAt: AT(13) } }, now), '催完第 1 天回了')
+  assert.equal(people.personNagOutText({ pending: 1, reminded: { count: 1, at: AT(12), replyAt: AT(12) } }, now), '催完当天回了')
+  assert.equal(people.personNagOutText({ pending: 1, reminded: { count: 2, at: AT(14), replyAt: '' } }, now), '催完 2 天没动静')
+  assert.equal(people.personNagOutText({ pending: 1, reminded: { count: 1, at: AT(16), replyAt: '' } }, now), '今天刚催过')
+  assert.equal(people.personNagOutText({ pending: 1, reminded: null }, now), '', '没催过就不说催完怎么样')
+  assert.equal(people.personNagOutText({ pending: 1, reminded: { count: 1, at: '', replyAt: '' } }, now), '', '催收时间读不出来就不编天数')
+  assert.equal(people.personNagOutText({ pending: 0, reminded: { count: 1, at: AT(12), replyAt: '' } }, now), '', '不欠着又没有回音，没有可催的事')
+  assert.equal(people.personNagOutText(null, now), '')
+})
+
+test('title 里把「催完回了没有」接在后面：回来说哪天回执，没回且过三天就提一句换渠道', () => {
+  const today = people.personTitle(
+    { name: '王老师 · 内容组', count: 3, sealed: 3, pending: 2, pendingAcked: 1, oldestPendingAt: AT(12), reminded: { count: 2, at: AT(14), replyAt: '' } },
+    Date.parse(AT(16)),
+  )
+  assert.match(today, /催过 2 次，最近 11-14，催完 2 天没动静。/)
+  assert.doesNotMatch(today, /换个渠道/, '才两天，还不到换渠道的时候')
+  const late = people.personTitle(
+    { name: '王老师 · 内容组', count: 3, sealed: 3, pending: 2, oldestPendingAt: AT(12), reminded: { count: 2, at: AT(14), replyAt: '' } },
+    Date.parse(AT(19)),
+  )
+  assert.match(late, /催完 5 天没动静，换个渠道问一句。/)
+  const replied = people.personTitle(
+    { name: '李工', count: 1, sealed: 1, pending: 0, reminded: { count: 1, at: AT(12), replyAt: AT(13) } },
+    Date.parse(AT(16)),
+  )
+  assert.equal(
+    replied,
+    '李工：1 条交付，回执都回来了。催过 1 次，最近 11-12，催完第 1 天回了（11-13 的回执）。点一下打开他那边最近的那一条交付。',
+  )
 })

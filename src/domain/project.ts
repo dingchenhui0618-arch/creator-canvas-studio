@@ -1231,8 +1231,11 @@ export type DeliveryPerson = {
    * 空串 = 那几条都没记下时间，界面就不说等了几天。
    */
   oldestPendingAt?: string
-  /** 这个人名下催过几次、最近一次哪天（v0.9.155）：一次都没催过就是 null */
-  reminded?: { count: number; at: string } | null
+  /**
+   * 这个人名下催过几次、最近一次哪天（v0.9.155）：一次都没催过就是 null。
+   * replyAt（v0.9.156）是最近一次催收之后的第一条回执：空串 = 催完还没有回音。
+   */
+  reminded?: { count: number; at: string; replyAt?: string } | null
   /** 点下去要打开哪一条交付；万一哪条连 id 都没有（老记录），deliveryId 是空串 */
   target: { projectId: string; deliveryId: string; version: number }
 }

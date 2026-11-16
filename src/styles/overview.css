@@ -1240,6 +1240,19 @@
   color: var(--faint);
 }
 
+/* 催完回了没有（v0.9.156）：比「等了多久」再淡一档——那是欠账，这是你已经做过的那一下的结果。
+   前面同样一个点，三段时间不至于黏成一串。 */
+.vq-person-nag {
+  flex-shrink: 0;
+  color: var(--faint);
+}
+
+.vq-person-nag::before {
+  content: '·';
+  margin-right: 8px;
+  color: var(--faint);
+}
+
 .vq-person-note {
   color: var(--faint);
   font-size: 11px;

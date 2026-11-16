@@ -65,7 +65,7 @@ import { deliveryAskMessage } from '../domain/delivery-ask'
 import { deliveryAckedText, deliveryAckHint, deliveryAckLead } from '../domain/delivery-ack'
 import { recipientText, recipientTitle } from '../domain/delivery-recipient'
 import { replyRowText, replyRowTitle } from '../domain/delivery-reply'
-import { peopleLeadText, personSummary, personTitle, personWaitText, unlabeledText } from '../domain/delivery-people'
+import { peopleLeadText, personNagOutText, personSummary, personTitle, personWaitText, unlabeledText } from '../domain/delivery-people'
 import { deliveryRetiredHitHint, deliveryRetiredHitText } from '../domain/delivery-retired-hit'
 import {
   REVIEW_VERDICT_LABEL,
@@ -1337,13 +1337,15 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
         {/* 按人看（v0.9.154）：交出去十几条之后，「哪一条还没回来」不如「谁还欠着」好问。
             一个人一枚按钮：欠着的用虚线（与回执胶囊同一套说法），点一下落在他最近那一条交付上。
             没写收件人的只给一个数——不猜是谁，也不混进任何一个人名下。
-            v0.9.155：欠几条还不够急，补上「最早那一条等了几天」——同样欠两条，昨天刚发的和拖了六天的不是一回事。 */}
+            v0.9.155：欠几条还不够急，补上「最早那一条等了几天」——同样欠两条，昨天刚发的和拖了六天的不是一回事。
+            v0.9.156：再补「催完回了没有」——催过还没动静的，该换个渠道，不是再催一遍。 */}
         {deliveryPeople.length ? (
           <div className="vq-delivery-people">
             <p className="vq-delivery-people-lead">{peopleLeadText(deliveryPeople)}</p>
             <div className="vq-delivery-people-list">
               {deliveryPeople.map((person) => {
                 const wait = personWaitText(person)
+                const nag = personNagOutText(person)
                 return (
                   <button
                     key={person.name}
@@ -1355,6 +1357,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                     <span className="vq-person-name">{person.name}</span>
                     <span className="vq-person-count vq-mono">{personSummary(person)}</span>
                     {wait ? <span className="vq-person-wait vq-mono">{wait}</span> : null}
+                    {nag ? <span className="vq-person-nag vq-mono">{nag}</span> : null}
                   </button>
                 )
               })}
