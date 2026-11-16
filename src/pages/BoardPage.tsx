@@ -338,6 +338,7 @@ export default function BoardPage({ onToast, boardId, focus, onToggleFocus }: Bo
           <span className="bd-picker-label">画布</span>
           <Select
             size="sm"
+            className="bd-select"
             label="选择画布"
             value={canvasId}
             options={[
@@ -348,7 +349,7 @@ export default function BoardPage({ onToast, boardId, focus, onToggleFocus }: Bo
           />
         </div>
         <button className="bd-action" type="button" onClick={() => { void createCanvas() }} title="新建一块画布并绑定到工作台">
-          <Plus size={12} />新建
+          <Plus size={12} /><span className="bd-action-text">新建</span>
         </button>
         <button
           className="bd-action"
@@ -357,7 +358,7 @@ export default function BoardPage({ onToast, boardId, focus, onToggleFocus }: Bo
           aria-expanded={noteOpen}
           title="把评审结论作为文本节点写进画布"
         >
-          <Save size={12} />写笔记
+          <Save size={12} /><span className="bd-action-text">写笔记</span>
         </button>
         {noteOpen ? (
           <div className="bd-note" role="dialog" aria-label="写进画布">
@@ -395,7 +396,7 @@ export default function BoardPage({ onToast, boardId, focus, onToggleFocus }: Bo
             aria-pressed={Boolean(focus)}
           >
             {focus ? <Minimize2 size={12} /> : <Expand size={12} />}
-            {focus ? '退出专注' : '专注'}
+            <span className="bd-action-text">{focus ? '退出专注' : '专注'}</span>
           </button>
         ) : null}
         <a

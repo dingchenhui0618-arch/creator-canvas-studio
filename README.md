@@ -3859,8 +3859,30 @@ E2E 里点某一行必须先按行里的文字限定，清单每一行长得一�
   工作流页 `工作流 / 流程编排`、3 个节点 2 条连线照常渲染；无限画布页状态条读到
   **「无限画布 | 已连接 | 画布 | 新建 | 写笔记 | canvas.wavisionai.cn | 专注」**，iframe 地址 `https://canvas.wavisionai.cn?vqCredit=10`。
 - 390 宽：两页 `scrollWidth 390 = clientWidth 390`，侧栏与状态条都不撑破屏宽。
+  这条第一次跑是**红的**：状态条原本按一整行排（署名 + 状态 + 画布标签 + 选择器 + 四个按钮），390 下选择器被挤到 88px、
+  按钮连同文字一起被切在屏幕外。改成窄屏两行（第一行图标按钮、第二行整行选择器）后重新量才过，见下面「生产实测」。
 - 顺手修掉一处早先留下的坏数据：`package.json` 的 `description` 在之前某次编码修复里被二次编码成乱码（HEAD 上就是坏的），
   这一轮改回原句「VisionQA 桌面端：网页外壳 + 本地工作区（agent loop 在本机运行）」。
+
+### 生产实测（2026-11-16 15:10，标签 `20261116-1510-r173split2`）
+
+- 发布：`bash ops/deploy.sh` 一份包（`dist server scripts deploy package.json`，1.2 MB），
+  版本 **0.9.163**，公网 `https://visionqa.wavisionai.cn` 与 8799 同一份 `index-GRvcP5rT.js`；
+  `/api/health` 两个入口都 `ok:true`（redfox / vision / llm / templates 26）。
+- 一致性：本地与生产的 `dist/index.html`、`BoardPage` 的 js 与 css 三处 SHA-256 前 12 位逐一对上
+  （`110c9ebdaba7` / `06213f9faefa` / `747dc9a4f172`）——窄屏那处改动确实上去了，不是拿旧包糊过去。
+- 路由：未登录访问 `/api/projects`、`/api/templates`、`/api/runs`、`/api/canvas/status`、`/api/bdc/status`
+  一律 401（鉴权在路由匹配之前，未知路径也是 401，不是 404——这是既有行为，这一版没动）。
+- 数据与盘：1 个作品 / 28 个模板 / 8 条工作流；盘 73%；六个 unit 全 `active`
+  （`visionqa`、`visionqa-internal`、`visionqa.socket`、`bdc-web`、`bdc-enterprise`、`bdc-api`）。
+- 回滚：`bash /opt/visionqa/ops/rollback.sh --to 1` 回到部署前那份（`index-CJAG8MJP.js`）。
+- 生产真账号 + headless Chrome 重新量：状态条
+  **「无限画布 | 已连接 | 画布 | 默认画布 · 2 节点 | 新建 | 写笔记 | canvas.wavisionai.cn | 专注」**，
+  iframe `https://canvas.wavisionai.cn/__auth?k=…&loadCanvas=20261109-nmeom5h&vqCredit=10`（积分口径照旧由服务端下发）；
+  390 宽 `scrollWidth 390 = clientWidth 390`，第一行图标按钮、第二行 `默认画布 · 2 节点` 整行下拉，不再横切。
+- 验收用的临时账号与它建的数据当场删掉（账号已确认查不到，`billing-orders.json` 从来没有）；服务器上的 staging 目录一并清掉。
+  本节侧栏、无限画布、390 三张截图是**生产**那一跑的；工作流页那张是本地真服务 + 真 3 节点流程
+  （生产上不动别人的流程，只看不点）。
 
 ### 坑
 
@@ -3884,6 +3906,6 @@ E2E 里点某一行必须先按行里的文字限定，清单每一行长得一�
 
 ![无限画布页](docs/infinite-canvas-page-2026-11-16.png)
 
-390 窄屏（状态条收成一行，不撑破屏宽）：
+390 窄屏（状态条收成两行：第一行图标按钮、第二行整行下拉，不撑破屏宽）：
 
 ![390 · 无限画布](docs/infinite-canvas-390-2026-11-16.png)

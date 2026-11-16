@@ -235,9 +235,38 @@
 }
 
 @media (max-width: 760px) {
-  /* 小屏状态条先留住排队位：署名在面包屑里已经说了，地址在「新窗口」里也看得到 */
+  /* 390 宽放不下一条：署名、地址、画布标签让位（面包屑里已经说了在哪一页），
+     按钮收成图标（title 与 aria-label 还在），选择器单独占第二行——状态条自然变两行。 */
+  .bd-strip {
+    flex-wrap: wrap;
+    height: auto;
+    padding: var(--space-2) var(--space-3);
+    row-gap: var(--space-2);
+  }
   .bd-label,
-  .bd-url { display: none; }
+  .bd-url,
+  .bd-picker-label,
+  .bd-spacer { display: none; }
+  .bd-picker {
+    flex: 1 1 100%;
+    order: 3;
+    min-width: 0;
+  }
+  .bd-select {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .bd-select .vq-select__trigger {
+    width: 100%;
+    min-width: 0;
+  }
+  .bd-strip > .bd-action {
+    width: 32px;
+    padding: 0;
+    justify-content: center;
+  }
+  .bd-action-text { display: none; }
   .bd-queue { max-width: 200px; }
-  .bd-note { left: var(--space-3); width: min(340px, calc(100vw - 48px)); }
+  /* 两行状态下写笔记不再从 40px 处弹（会压住第二行的选择器），改为贴在整条状态条下方 */
+  .bd-note { top: calc(100% + var(--space-2)); left: var(--space-3); width: min(340px, calc(100vw - 48px)); }
 }
