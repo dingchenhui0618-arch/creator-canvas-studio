@@ -1798,6 +1798,42 @@
   gap: var(--space-1) var(--space-2);
 }
 
+/* 不再等这一份的回执（v0.9.158）：一行说明加一颗按钮。
+   收口之后整行换成实线边框、字压回灰——它不是待办，是这件事结束了。 */
+.vq-archive-wait {
+  display: flex;
+  flex-wrap: wrap;
+  /* 说明可能两行：标签与按钮贴齐第一行，不在两行之间居中（看着像错位） */
+  align-items: flex-start;
+  gap: var(--space-1) var(--space-2);
+  margin: var(--space-2) 0;
+  padding: var(--space-2);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.vq-archive-wait.is-closed {
+  border-style: solid;
+  background: var(--surface-raised);
+}
+
+.vq-archive-wait-text {
+  flex: 1 1 320px;
+  min-width: 0;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.vq-archive-wait.is-closed .vq-archive-wait-text {
+  color: var(--faint);
+}
+
+.vq-archive-wait-toggle {
+  flex: none;
+}
+
 .vq-archive-recipient-field {
   display: flex;
   flex: 1 1 240px;

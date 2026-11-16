@@ -46,6 +46,9 @@ import {
   deliveryLateText,
   deliveryNagLate,
   deliveryReminderText,
+  deliveryWaitClosedHint,
+  deliveryWaitClosedLead,
+  deliveryWaitClosedTotalText,
   deliveryWaitDays,
   deliveryWaitLate,
   deliveryWaitText,
@@ -263,7 +266,17 @@ function rowRelinkCappedText(row: ProjectDeliveryRow): string {
  * 换成「他点了「收到了」，收据还没贴」——不然一行里同时写着「还没收到回执」和
  * 「他点了「收到了」」，读起来像两件事打架。
  */
+/**
+ * 你自己把这一份收口了没有（v0.9.158）：收口之后这一行不再说「还没收到回执」——
+ * 回执确实没回来，但不欠着了。两件事混成一句，清单上就永远看不出哪一条已经了结。
+ */
+function rowWaitClosed(row: ProjectDeliveryRow): boolean {
+  return Boolean(row.waitClosed?.at)
+}
+
 function rowPendingLead(row: ProjectDeliveryRow): string {
+  // 收口优先于「他点了收到了」：手上有更晚的决定时，先说这个
+  if (rowWaitClosed(row)) return deliveryWaitClosedLead()
   return deliveryAckLead(row.ack) || '还没收到回执'
 }
 
@@ -274,6 +287,9 @@ function rowPendingLead(row: ProjectDeliveryRow): string {
  * 留在 title 里只会让人去找一个不存在的按钮。
  */
 function rowPendingTitle(row: ProjectDeliveryRow): string {
+  // 自己收口的那一条（v0.9.158）：只说收口这件事，不再把「催过几次 / 打开过几次」堆上来——
+  // 那些是等待期间的账，等已经结束了
+  if (rowWaitClosed(row)) return deliveryWaitClosedHint(String(row.waitClosed?.at || ''))
   const capped = Boolean(row.relinkCapped)
   // 他点过「收到了」（v0.9.151）：这一行从此不再谈「送没送到」——
   // 东西到他手上了，缺的只是验。换地址、再发一遍都不是他此刻的问题，title 里提了只会让人去找按钮。
@@ -347,7 +363,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
   const [deliveryTotal, setDeliveryTotal] = useState(0)
   const [deliverySummary, setDeliverySummary] = useState({ projects: 0, current: 0, drifted: 0, lastAt: '' })
   // 回执的四个数（v0.9.139）：封过包的几次、对上几次、对不上几次、还没回来几次
-  const [deliveryReceipts, setDeliveryReceipts] = useState<DeliveryLedgerReceipts>({ sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0, pendingStuck: 0, pendingRelinked: 0, pendingAcked: 0 })
+  const [deliveryReceipts, setDeliveryReceipts] = useState<DeliveryLedgerReceipts>({ sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0, pendingStuck: 0, pendingRelinked: 0, waitClosed: 0, pendingAcked: 0 })
   // 按人看（v0.9.154）：谁还欠着回执。整份记录的账，不随分页变；
   // 没写收件人的那些只给一个数，不猜是谁，也不混进任何人名下。
   const [deliveryPeople, setDeliveryPeople] = useState<DeliveryPerson[]>([])
@@ -422,14 +438,14 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
         lastAt: deliveryResult.value.lastAt || '',
       })
       setDeliveryHasMore(Boolean(deliveryResult.value.hasMore))
-      setDeliveryReceipts(deliveryResult.value.receipts ?? { sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0, pendingStuck: 0, pendingRelinked: 0, pendingAcked: 0 })
+      setDeliveryReceipts(deliveryResult.value.receipts ?? { sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0, pendingStuck: 0, pendingRelinked: 0, waitClosed: 0, pendingAcked: 0 })
       setDeliveryPeople(deliveryResult.value.people ?? [])
       setDeliveryUnlabeled(Number(deliveryResult.value.unlabeled) || 0)
     } else {
       setDeliveries([])
       setDeliveryTotal(0)
       setDeliverySummary({ projects: 0, current: 0, drifted: 0, lastAt: '' })
-      setDeliveryReceipts({ sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0, pendingStuck: 0, pendingRelinked: 0, pendingAcked: 0 })
+      setDeliveryReceipts({ sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0, pendingStuck: 0, pendingRelinked: 0, waitClosed: 0, pendingAcked: 0 })
       setDeliveryPeople([])
       setDeliveryUnlabeled(0)
       setDeliveryHasMore(false)
@@ -1382,6 +1398,8 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                 {deliveryReceipts.pendingRelinked ? deliveryRelinkedText(deliveryReceipts.pendingRelinked) : ''}
                 {/* 他自己点了「收到了」的那几份：东西到手了，只差验——这几份不用再问（v0.9.151） */}
                 {deliveryReceipts.pendingAcked ? deliveryAckedText(deliveryReceipts.pendingAcked) : ''}
+                {/* 你自己收口的那些（v0.9.158）：不算「还没回来」，所以单说一句 */}
+                {deliveryReceipts.waitClosed ? deliveryWaitClosedTotalText(deliveryReceipts.waitClosed) : ''}
               </p>
             ) : null}
             {deliveryReceipts.mismatched ? (
@@ -1500,7 +1518,12 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                           // （v0.9.144 天数与提醒，v0.9.145 打开情况）。
                           // 到了第三天换成警示色，并在 title 里说清「可以提一句」——不在行上写第二句。
                           <span
-                            className={'vq-delivery-receipt is-pending' + (rowWaitLate(row) ? ' is-late' : '')}
+                            className={
+                              'vq-delivery-receipt is-pending' +
+                              // 收口之后不再算「到了第三天可以提一句」（v0.9.158）：这一条不催了
+                              (rowWaitLate(row) && !rowWaitClosed(row) ? ' is-late' : '') +
+                              (rowWaitClosed(row) ? ' is-closed' : '')
+                            }
                             title={rowPendingTitle(row)}
                           >
                             {/* 一段一句、各自不拆：390 上「链接还没打 / 开」「又发过 1 / 次」这种

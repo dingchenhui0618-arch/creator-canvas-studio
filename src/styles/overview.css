@@ -1140,6 +1140,14 @@
   color: var(--warn);
 }
 
+/* 你自己收口、不再等回执的那一条（v0.9.158）：虚线换成实线、颜色压回灰。
+   它不是待办，也不是好消息——是这件事结束了，所以既不用警示色，也不该抢眼。 */
+.vq-delivery-receipt.is-closed {
+  border-style: solid;
+  border-color: var(--line);
+  color: var(--muted);
+}
+
 /* 清单顶上那句回执汇总（v0.9.139）：先说封过包的几份，再说回来了几份。
    对不上那一句单独成行、用失败色——整段染红会把「对得上」也一起说成坏消息。 */
 .vq-delivery-receipt-total {

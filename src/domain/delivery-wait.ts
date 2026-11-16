@@ -73,6 +73,31 @@ function bytesText(bytes?: number): string {
   return value ? value.toLocaleString('zh-CN') + ' B' : ''
 }
 
+/**
+ * 不再等这一份回执的那一句（v0.9.158）：行首写「已不再等回执」，不再写「还没收到回执」。
+ * 这两句不是一回事：一个是「还没回来」，一个是「不等了」。
+ */
+export function deliveryWaitClosedLead(): string {
+  return '已不再等回执'
+}
+
+/** 那一行 title：哪天收的口、为什么不再催、之后他要是回了算不算。 */
+export function deliveryWaitClosedHint(at: string): string {
+  const when = monthDayText(at)
+  return (
+    (when ? when + ' 你自己把这一份收口了：' : '你自己把这一份收口了：') +
+    '不再等它的回执——客户口头说过了、当面看过、或者这版本来就作废了，这些都可以收口。' +
+    '工作台不再把它算进「还没回来」，也不再给复制提醒、换链接、换个渠道问这些动作：这一份已经不追了。' +
+    '档案、封存包、回执链接都照留；他之后要是把收据贴回来，照样记在这一条上。'
+  )
+}
+
+/** 清单顶上那句：有几条你自己收口了——它们不在「还没回来」里，所以单说一句。 */
+export function deliveryWaitClosedTotalText(count: number): string {
+  const n = Math.max(0, Math.round(Number(count) || 0))
+  return n ? '另有 ' + n + ' 次你已经不再等回执了。' : ''
+}
+
 export type DeliveryChannelInput = {
   /** 作品名 */
   title: string

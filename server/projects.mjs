@@ -486,6 +486,14 @@ function normalizeDeliveries(raw) {
           : ''
         base.reply = { text: replyText, at: replyAt }
       }
+      // 不再等这一份的回执（v0.9.158）：发件人自己把这件事收口的那一刻。
+      // 只记时间、不记原因——收口是他自己的决定（客户口头说了、当面看过、这版作废），
+      // 不是对方的结论，所以这里不写「他没验」，也不动回执、包与链接。
+      const waitClosedAt =
+        pkg && Number.isFinite(Date.parse(String(entry.waitClosedAt || '')))
+          ? new Date(String(entry.waitClosedAt)).toISOString()
+          : ''
+      if (waitClosedAt) base.waitClosedAt = waitClosedAt
       return base
     })
     .filter((entry) => entry.version > 0)
@@ -787,6 +795,50 @@ export async function saveDeliveryResend(id, deliveryId, user = null) {
   found.updatedAt = at
   await persist(list)
   return { already: false, token, at, count: resends.length, delivery: deliveries[index] }
+}
+
+/**
+ * 不再等这一份的回执（v0.9.158）：发件人自己把这一份收口——客户口头说过了、当面看过、
+ * 或者这版本来就作废了。工作台那一串「还没收到回执」总要有个尽头，不然一条永远回不来的
+ * 交付会一直挂在那儿，把「谁还欠着」这件事稀释掉。
+ *
+ * 只改这一条交付记录上的一个时间：
+ *  - 不碰包、不碰回执、不碰回执链接与被打开的次数——收口的是「等」这件事，不是记录；
+ *  - 之后他要是把收据贴回来，照常记（回执到了，就是这件事真的结束了）；
+ *  - 已经贴过收据的不给收口：等的事已经结束，再记一个「不再等」只是多一条假记录。
+ *
+ * 返回 null = 作品 / 交付记录不存在，或者这一条没有封存包。
+ */
+export async function saveDeliveryWaitClose(id, deliveryId, closed = true, user = null) {
+  const list = await loadAll()
+  const found = list.find((item) => item.id === id && canAccess(item, user))
+  if (!found) return null
+  const deliveries = normalizeDeliveries(found.deliveries)
+  const index = deliveries.findIndex((entry) => entry.id === deliveryId && entry.package)
+  if (index < 0) return null
+  const entry = deliveries[index]
+  if (entry.receipt) return { already: true, delivery: entry }
+  if (closed) {
+    // 已经收口过的再点一次不改时间：收口是一个时刻，不是可以来回刷新的状态
+    if (entry.waitClosedAt) return { closed: true, at: String(entry.waitClosedAt), unchanged: true, delivery: entry }
+    const at = new Date().toISOString()
+    const next = { ...entry, waitClosedAt: at }
+    deliveries[index] = next
+    found.deliveries = deliveries
+    found.updatedAt = at
+    await persist(list)
+    return { closed: true, at, changed: true, delivery: next }
+  }
+  // 「继续等」：把收口撤掉，回到「还没收到回执」——点错了要能退回来。
+  if (!entry.waitClosedAt) return { closed: false, at: '', unchanged: true, delivery: entry }
+  const at = new Date().toISOString()
+  const next = { ...entry }
+  delete next.waitClosedAt
+  deliveries[index] = next
+  found.deliveries = deliveries
+  found.updatedAt = at
+  await persist(list)
+  return { closed: false, at, changed: true, delivery: next }
 }
 
 /**

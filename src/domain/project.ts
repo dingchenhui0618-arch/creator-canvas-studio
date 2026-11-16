@@ -215,6 +215,11 @@ export type ProjectDelivery = {
    * 没有 = 还没记（不是「他说没问题」），界面什么都不说。
    */
   reply?: DeliveryReply
+  /**
+   * 你自己把这一份收口了（v0.9.158）：不再等它的回执。收到哪一刻记在字符串里（ISO 时间）；
+   * 没有 = 还在等。收口之后这一行不再给催收动作，但包、回执、链接都还在。
+   */
+  waitClosedAt?: string
 }
 
 /**
@@ -1211,6 +1216,11 @@ export type ProjectDeliveryRow = {
    * 界面只说「他说了什么」，不据此判断「满意 / 不满意」。
    */
   reply?: DeliveryReply | null
+  /**
+   * 你自己把这一份收口了（v0.9.158）：不再等它的回执。{ at } 是收口那一刻；null = 还在等。
+   * 收口之后这一行不给催收动作——「还没收到回执」和「不等了」是两件事，不能混成一句。
+   */
+  waitClosed?: { at: string } | null
 }
 
 /**
@@ -1226,6 +1236,8 @@ export type DeliveryPerson = {
   pending: number
   /** 上面那些里，他自己点过「收到了」的条数（v0.9.151） */
   pendingAcked: number
+  /** 他自己收口、不再等回执的条数（v0.9.158）：不算欠着，也不等于「回执都回来了」 */
+  closed?: number
   /**
    * 欠着的那几条里最早一条是哪天发出的（v0.9.155）：等得多久只看这一条。
    * 空串 = 那几条都没记下时间，界面就不说等了几天。
@@ -1280,7 +1292,7 @@ export type DeliveryLedgerReceipts = {
   pending: number
   /**
    * pending 里已经发出超过 3 天的条数（v0.9.144）：不是第五种结论，是 pending 的一个子集，
-   * 所以 sealed = matched + mismatched + unclear + pending 这条仍然成立。
+   * 所以 sealed = matched + mismatched + unclear + pending + waitClosed 这条仍然成立。
    */
   pendingLate: number
   /**
@@ -1303,6 +1315,11 @@ export type DeliveryLedgerReceipts = {
    * 点得动「收到了」说明他打开过、东西也到手了，这几条不该再算进「可能没送到」。
    */
   pendingAcked: number
+  /**
+   * 你自己收口、不再等回执的条数（v0.9.158）：从 pending 里挪出来的那几条，
+   * 所以 sealed = matched + mismatched + unclear + pending + waitClosed。
+   */
+  waitClosed?: number
 }
 
 /**
@@ -1371,6 +1388,8 @@ export type DeliveryLanding = {
   hasPackage: boolean
   /** 这一版已经贴过的回执结论（没贴过就是 null） */
   receipt: { state: DeliveryReceipt['state'] } | null
+  /** 发件人已经收口、不再等这一条的回执（v0.9.158）：那一句「还没收到回执」就不该再说 */
+  waitClosed?: boolean
   /** 档案里找不到这条记录（旧链接 / 后来重新封过包） */
   missing: boolean
 }
@@ -1388,6 +1407,8 @@ export function deliveryLandingOf(
     version: Math.max(1, Math.round(Number(row.version) || 0)),
     hasPackage: Boolean(row.id && row.package),
     receipt: row.receipt ? { state: row.receipt.state } : null,
+    // 收口了就不说「还没收到回执」（v0.9.158）：那一句是「还在等」，这一条已经不追了
+    waitClosed: Boolean(row.waitClosedAt) && !row.receipt,
     missing: false,
   }
 }
@@ -1402,6 +1423,8 @@ export function deliveryLandingText(landing: DeliveryLanding | null | undefined)
   const head = '从工作台点进来的这一条：v' + Math.max(1, Math.round(Number(landing.version) || 1))
   if (!landing.hasPackage) return head + ' · 这一版没封存包，只有交付记录。'
   if (landing.receipt) return head + ' · 回执' + receiptStateText(landing.receipt.state) + '，收据已经摊开。'
+  if (landing.waitClosed)
+    return head + ' · 你已经不再等这一条的回执了，档案照留；他之后把收据贴回来，照样记在这一条上。'
   return head + ' · 还没收到回执，下面可以贴一段收据对一遍。'
 }
 

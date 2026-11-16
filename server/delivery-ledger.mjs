@@ -198,12 +198,21 @@ export function ledgerRows({ projects = [], counts = {}, visits = {} } = {}) {
           entry?.package && entry?.reply?.text
             ? { text: String(entry.reply.text), at: String(entry.reply.at || '') }
             : null,
+        // 不再等这一份（v0.9.158）：发件人自己把这一份收口了——客户口头说过了、当面看过、
+        // 或者这版本来就作废了。记的是「你不再等」，不是「他没验」，所以这一行既不催也不问。
+        // 回执后来真回来了，这一行照常按回执说（回执是更有力的事实）。
+        waitClosed:
+          entry?.package && Number.isFinite(Date.parse(String(entry?.waitClosedAt || '')))
+            ? { at: String(entry.waitClosedAt) }
+            : null,
         // 现在能不能「再发一次链接」：有包、还没回执、链接还在，而且确知这条地址一次都没被打开过。
         // 不知道被打开过没有（升级前发的链接）就不给这个按钮——那种情况下「再发一次」是盲发。
         // v0.9.150 起到了换地址的上限就不再给「再发一次」：那条路是「同一条消息再发一遍」，
         // 到这一步已经证明没用；行上给的是「问他一句」，那段话里带着现在这条地址。
         resendable: Boolean(
           entry?.package &&
+            // 自己已经决定不再等了（v0.9.158）：再发一次、换地址、催一句，都是在追一件你不追的事
+            !entry?.waitClosedAt &&
             !RECEIPT_STATES.includes(entry?.receipt?.state) &&
             /^[0-9a-f]{16}$/.test(String(entry?.receiptToken || '')) &&
             // 他点过「收到了」（v0.9.151）：东西已经到手，缺的不是「再发一遍」
@@ -218,6 +227,7 @@ export function ledgerRows({ projects = [], counts = {}, visits = {} } = {}) {
         // v0.9.150 起还有一条上限：换过两次就不再给换——换的是地址，不是渠道。
         relinkable: Boolean(
           entry?.package &&
+            !entry?.waitClosedAt &&
             !RECEIPT_STATES.includes(entry?.receipt?.state) &&
             /^[0-9a-f]{16}$/.test(String(entry?.receiptToken || '')) &&
             // 他都点过「收到了」了，换地址解决的不是他的问题（v0.9.151）
@@ -231,6 +241,7 @@ export function ledgerRows({ projects = [], counts = {}, visits = {} } = {}) {
         // 界面据此把「换一条新链接」换成「问他一句」——到这一步再换地址只是换个 token 重发同一条消息。
         relinkCapped: Boolean(
           entry?.package &&
+            !entry?.waitClosedAt &&
             !RECEIPT_STATES.includes(entry?.receipt?.state) &&
             /^[0-9a-f]{16}$/.test(String(entry?.receiptToken || '')) &&
             // 点过「收到了」就不再是「没送到」：不算换到头，也不劝人再换地址（v0.9.151）
@@ -242,6 +253,7 @@ export function ledgerRows({ projects = [], counts = {}, visits = {} } = {}) {
         // 现在能不能催：有包、还没回执、回执链接还留着（换过一条或从来没生过就没有）
         remindable: Boolean(
           entry?.package &&
+            !entry?.waitClosedAt &&
             !RECEIPT_STATES.includes(entry?.receipt?.state) &&
             /^[0-9a-f]{16}$/.test(String(entry?.receiptToken || '')),
         ),
@@ -287,6 +299,8 @@ export function ledgerPeople(rows) {
       sealed: 0,
       pending: 0,
       pendingAcked: 0,
+      // 他自己收口、不再等的条数（v0.9.158）：不算欠着，也不等于「都回来了」——两件事分开说
+      closed: 0,
       target: null,
       pendingTarget: null,
       pendingAt: -1,
@@ -306,8 +320,11 @@ export function ledgerPeople(rows) {
     }
     entry.count += 1
     if (row.package) entry.sealed += 1
-    // 欠着回执 = 有包、还没收据；他自己点了「收到了」的那几条也算欠着（只差验）
-    if (row.package && !row.receipt) {
+    // 不再等的（v0.9.158）：发件人自己收口了，不算欠着——「谁还欠着」问的是还在等的人。
+    // 也不能算「都回来了」：回执没回来，只是他决定不等了。
+    if (row.package && !row.receipt && row.waitClosed) entry.closed += 1
+    // 欠着回执 = 有包、还没收据、而且还在等；他自己点了「收到了」的那几条也算欠着（只差验）
+    if (row.package && !row.receipt && !row.waitClosed) {
       entry.pending += 1
       if (row.ack) entry.pendingAcked += 1
       if (atMs >= entry.pendingAt) {
@@ -353,6 +370,7 @@ export function ledgerPeople(rows) {
         sealed: entry.sealed,
         pending: entry.pending,
         pendingAcked: entry.pendingAcked,
+        closed: entry.closed,
         // 欠着的那几条里最早一条是哪天发出的（v0.9.155）：空串 = 一条都没记下时间，界面就不说等了多久
         oldestPendingAt: Number.isFinite(entry.oldestPendingMs)
           ? new Date(entry.oldestPendingMs).toISOString()
@@ -402,11 +420,17 @@ export function deliveryLedger(
   // 到这一步别再换地址了，问题多半不在链接上（收件人写错了、人家不用这个渠道），该换个人。
   // pendingAcked（v0.9.151）同样是 pending 的子集，但和 pendingUnopened 互斥：点了「收到了」，
   // 说明他打开过、也拿到了东西；这几条不该再被算进「可能没送到」的那一堆里。
-  const receipts = { sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0, pendingStuck: 0, pendingRelinked: 0, pendingAcked: 0 }
+  // waitClosed（v0.9.158）也不是第五种结论：它是「你自己收口了、不等了」的那几条，
+  // 从 pending 里挪出来单算——催收的提醒（pendingLate / pendingUnopened / pendingStuck …）
+  // 也不该再按这几条算。所以这一版的口径是
+  // sealed = matched + mismatched + unclear + pending + waitClosed，其中 pending 只剩「真还在等」的。
+  const receipts = { sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, waitClosed: 0, pendingLate: 0, pendingUnopened: 0, pendingStuck: 0, pendingRelinked: 0, pendingAcked: 0 }
   for (const row of rows) {
     if (!row.package) continue
     receipts.sealed += 1
-    if (!row.receipt) {
+    if (!row.receipt && row.waitClosed) {
+      receipts.waitClosed += 1
+    } else if (!row.receipt) {
       receipts.pending += 1
       if (row.ack) receipts.pendingAcked += 1
       const at = Date.parse(row.at)

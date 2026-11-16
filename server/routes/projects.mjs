@@ -80,6 +80,7 @@ import {
   saveDeliveryReminder,
   saveDeliveryResend,
   saveDeliveryRelink,
+  saveDeliveryWaitClose,
   deliveryReceiptLink,
   issueDeliveryReceiptToken,
   findReceiptLink,
@@ -143,6 +144,9 @@ const DELIVERY_RELINK = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f
 // 这一条是给谁的（v0.9.152）：发件人写一个称呼，工作台那一行与他要复制出去的那段话都跟着它走。
 // 称呼只留在发件人这一侧：不进包、不进公开回执页（拿着链接的人不需要知道发件人怎么称呼别人）。
 const DELIVERY_RECIPIENT = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})\/recipient$/
+// 不再等这一份的回执（v0.9.158）：发件人自己把这一份收口，工作台不再把它算进「还没回来」。
+// 只改这一条交付记录上的一个时间：不碰包、不碰回执、不碰链接与被打开的次数。
+const DELIVERY_WAIT_CLOSE = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})\/wait-close$/
 const DELIVERY_REPLY = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})\/reply$/
 // 收包人那一侧（v0.9.137）：token 就是凭证，不带登录态；GET 看这是哪一份、POST 把收据贴上去
 const PUBLIC_RECEIPT = /^\/api\/receipts\/([0-9a-f]{16})$/
@@ -1516,6 +1520,34 @@ export function createProjectsRouter() {
           return true
         }
         sendJson(res, 200, { ok: true, token: saved.token, at: saved.at, count: saved.count })
+        return true
+      }
+
+      // 不再等这一份的回执（v0.9.158）：发件人自己把这一份收口——客户口头说过了、当面看过、
+      // 或者这版本来就作废了。只在这条交付记录上记一个时间：不碰包、不碰回执、不碰链接。
+      // 之后他要是把收据贴回来，照常记；已经贴过收据的不给收口（等的事已经结束）。
+      const waitClosePath = pathname.match(DELIVERY_WAIT_CLOSE)
+      if (waitClosePath) {
+        if (req.method !== 'POST') {
+          sendJson(res, 405, { error: '不再等只能用 POST：它要在档案里记下这一刻' })
+          return true
+        }
+        if (!user && config.auth.requireAuth) {
+          sendJson(res, 401, { error: '登录已过期：回到作品页再点一次' })
+          return true
+        }
+        const body = await readBody(req)
+        // 缺省是「不再等」；只有明确写 closed:false 才是「继续等」——一个撤销要说明白
+        const saved = await saveDeliveryWaitClose(waitClosePath[1], waitClosePath[2], body?.closed !== false, user)
+        if (!saved) {
+          sendJson(res, 404, { error: '这一条交付没有封存包，没有要等回来的回执' })
+          return true
+        }
+        if (saved.already) {
+          sendJson(res, 409, { error: '这一份已经有回执了，不用再收口', code: 'RECEIPT_ALREADY' })
+          return true
+        }
+        sendJson(res, 200, { ok: true, closed: saved.closed === true, at: saved.at })
         return true
       }
 

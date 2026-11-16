@@ -48,6 +48,8 @@ test('按交付记录 id 落在那一版上：封过包的连回执结论一起�
     version: 2,
     hasPackage: true,
     receipt: { state: 'mismatch' },
+    // 有过收据就不谈「收口」（v0.9.158）：等的事已经结束了
+    waitClosed: false,
     missing: false,
   })
   const older = deliveryLandingOf(project, 'dlv-one')
@@ -59,7 +61,7 @@ test('没封包的那一版、找不到的编号、空编号各有各的说法',
   // 只有版次、没有记录编号的那一版认不出来：深链按编号找，不按版次猜
   assert.equal(deliveryLandingOf(project, 'dlv-three').missing, true)
   const noPackage = deliveryLandingOf({ deliveries: [{ version: 3, at: '', id: 'dlv-plain' }] }, 'dlv-plain')
-  assert.deepEqual(noPackage, { id: 'dlv-plain', version: 3, hasPackage: false, receipt: null, missing: false })
+  assert.deepEqual(noPackage, { id: 'dlv-plain', version: 3, hasPackage: false, receipt: null, waitClosed: false, missing: false })
   const missing = deliveryLandingOf(project, 'dlv-gone')
   assert.deepEqual(missing, { id: 'dlv-gone', version: 0, hasPackage: false, receipt: null, missing: true })
   assert.equal(deliveryLandingOf(project, ''), null)
@@ -84,4 +86,23 @@ test('那一句话四种情况都能说出口', () => {
     deliveryLandingText(deliveryLandingOf(project, 'dlv-gone')),
     '从工作台点进来的那一条已经不在这份档案里了：可能这一版后来重新封过包。',
   )
+})
+
+test('收口了的那一条不再说「还没收到回执」（v0.9.158）', () => {
+  const closedProject = {
+    deliveries: [
+      {
+        version: 1,
+        at: '2026-11-10T06:00:00.000Z',
+        id: 'dlv-closed',
+        package: { bytes: 1024, sha256: 'a'.repeat(64), fileName: 'x.zip', savedAt: '2026-11-10T06:00:00.000Z' },
+        waitClosedAt: '2026-11-16T02:00:00.000Z',
+      },
+    ],
+  }
+  const landing = deliveryLandingOf(closedProject, 'dlv-closed')
+  assert.equal(landing.waitClosed, true)
+  const text = deliveryLandingText(landing)
+  assert.match(text, /你已经不再等这一条的回执了/)
+  assert.doesNotMatch(text, /还没收到回执/)
 })

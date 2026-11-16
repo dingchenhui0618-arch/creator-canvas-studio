@@ -24,7 +24,11 @@ export function personSummary(person: DeliveryPerson | null | undefined): string
   const count = Math.max(0, Math.round(Number(person?.count) || 0))
   if (!count) return ''
   const pending = Math.max(0, Math.round(Number(person?.pending) || 0))
-  if (pending) return count + ' 条 · ' + pending + ' 条还欠着'
+  const closed = Math.max(0, Math.round(Number(person?.closed) || 0))
+  const closedTail = closed ? ' · ' + closed + ' 条不再等' : ''
+  if (pending) return count + ' 条 · ' + pending + ' 条还欠着' + closedTail
+  // 自己收口的那几条（v0.9.158）：回执没回来，但不欠着了——不能跟着说「回执都回来了」
+  if (closed) return count + ' 条 · ' + closed + ' 条不再等'
   const sealed = Math.max(0, Math.round(Number(person?.sealed) || 0))
   if (!sealed) return count + ' 条 · 没有封存包'
   return count + ' 条 · 回执都回来了'
@@ -142,7 +146,14 @@ export function personTitle(person: DeliveryPerson | null | undefined, now: numb
       '。'
     )
   }
-  const tail = sealed === count ? '回执都回来了。' : '其中 ' + sealed + ' 条封过包、回执都回来了。'
+  // 自己收口的那几条（v0.9.158）：说清「不等了」与「回来了」是两件事，不把收口算成回收
+  const closed = Math.max(0, Math.round(Number(person?.closed) || 0))
+  const returned = Math.max(0, sealed - closed)
+  const tail = closed
+    ? closed + ' 条你已经不再等回执' + (returned ? '，其余 ' + returned + ' 条回执都回来了' : '') + '。'
+    : sealed === count
+      ? '回执都回来了。'
+      : '其中 ' + sealed + ' 条封过包、回执都回来了。'
   return name + '：' + count + ' 条交付，' + tail + nag + where + '。'
 }
 
@@ -151,15 +162,18 @@ export function peopleLeadText(people: DeliveryPerson[] | null | undefined, now:
   const list = Array.isArray(people) ? people : []
   if (!list.length) return ''
   const pending = list.filter((person) => Number(person.pending) > 0).length
+  // 自己收口的那几条（v0.9.158）：单说一句——它们既不是「还欠着」，也不是「回来了」
+  const closed = list.reduce((sum, person) => sum + Math.max(0, Math.round(Number(person.closed) || 0)), 0)
+  const closedTail = closed ? '（另有 ' + closed + ' 条你已经不再等回执）' : ''
   const head = '按人看：' + list.length + ' 个人'
-  if (!pending) return head + '，回执都回来了'
+  if (!pending) return head + '，回执都回来了' + closedTail
   // 等得最久的那一份等了几天（v0.9.155）：天数说得出才加这一句，今天刚发的不算「等了」
   let longest = 0
   for (const person of list) {
     const days = oldestPendingDays(person, now)
     if (days !== null && days > longest) longest = days
   }
-  return head + '，其中 ' + pending + ' 个还欠着回执' + (longest > 0 ? '；最久的等了 ' + longest + ' 天' : '')
+  return head + '，其中 ' + pending + ' 个还欠着回执' + (longest > 0 ? '；最久的等了 ' + longest + ' 天' : '') + closedTail
 }
 
 /** 没写收件人的那些：单独一个数，不混进任何人名下 */

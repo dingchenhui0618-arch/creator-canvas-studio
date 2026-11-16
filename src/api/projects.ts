@@ -368,6 +368,17 @@ export const issueReceiptLink = (projectId: string, deliveryId: string, rotate =
     { method: 'POST', body: JSON.stringify({ rotate }) },
   )
 
+/**
+ * 不再等这一份的回执（v0.9.158）：发件人自己把这一份收口——客户口头说过了、当面看过、
+ * 或者这版本来就作废了。closed=false 是「继续等」（点错了要能退回来）。
+ * 只在这一条交付记录上记一个时间：不碰包、不碰回执、也不碰回执链接。
+ */
+export const closeDeliveryWait = (projectId: string, deliveryId: string, closed = true) =>
+  request<{ ok: boolean; closed: boolean; at: string }>(
+    deliveryPackageUrl(projectId, deliveryId) + '/wait-close',
+    { method: 'POST', body: JSON.stringify({ closed }) },
+  )
+
 /** 收包人那一侧的只读视图：token 就是凭证，不带登录态 */
 export const getReceiptLink = (token: string) =>
   request<ReceiptLinkView>('/api/receipts/' + encodeURIComponent(token))

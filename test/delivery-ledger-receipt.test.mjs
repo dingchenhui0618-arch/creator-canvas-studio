@@ -115,19 +115,24 @@ test('四个数字对得上，翻页不改变它们', () => {
   // pendingStuck（v0.9.146）是 pendingUnopened 里又发过两次还是一个样的那些，这里也没有
   // pendingRelinked（v0.9.147）是换过一条新地址、新地址也没人打开的那些，这里同样没有
   // pendingAcked（v0.9.151）是他自己点了「收到了」的那些，这里也没人点过
+  // waitClosed（v0.9.158）是发件人自己收口、不再等的那些：从 pending 里挪出去单算，这里也没有
   assert.deepEqual(receipts, {
     sealed: 3,
     matched: 1,
     mismatched: 1,
     unclear: 0,
     pending: 1,
+    waitClosed: 0,
     pendingLate: 0,
     pendingUnopened: 0,
     pendingStuck: 0,
     pendingRelinked: 0,
     pendingAcked: 0,
   })
-  assert.equal(receipts.sealed, receipts.matched + receipts.mismatched + receipts.unclear + receipts.pending)
+  assert.equal(
+    receipts.sealed,
+    receipts.matched + receipts.mismatched + receipts.unclear + receipts.pending + receipts.waitClosed,
+  )
   const second = deliveryLedger({ projects }, { offset: 2, limit: 1, now })
   assert.equal(second.items.length, 1)
   assert.deepEqual(second.receipts, receipts, '第二页的数字该和第一页一样')

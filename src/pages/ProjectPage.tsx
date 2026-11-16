@@ -20,6 +20,7 @@ import {
   getProject,
   getProjectVersionScript,
   issueReceiptLink,
+  closeDeliveryWait,
   setDeliveryRecipient,
   setDeliveryReply,
   receiptLinkUrl,
@@ -281,6 +282,8 @@ export default function ProjectPage({
   // 没打字的那几条读档案里的值——不预填任何名字，也不把上一行写的称呼带过来。
   const [recipientDrafts, setRecipientDrafts] = useState<Record<string, string>>({})
   const [recipientBusy, setRecipientBusy] = useState('')
+  // 不再等这一份的回执（v0.9.158）：收口 / 继续等的那一下正在跑哪一条（空串 = 没在跑）
+  const [waitBusy, setWaitBusy] = useState('')
   // 他回了什么（v0.9.153）：同样按交付记录编号存草稿；没打字的那几条读档案里记着的原话。
   // 草稿框里是「正在写的那一段」，与「已记下的那一段」分开，免得改到一半被别的刷新冲掉。
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({})
@@ -942,6 +945,41 @@ export default function ProjectPage({
       setReceiptError(caught instanceof Error ? caught.message : '收件人没记上')
     } finally {
       setRecipientBusy('')
+    }
+  }
+
+  // 不再等这一份的回执（v0.9.158）：发件人自己收口，随时能撤回。
+  // 收口是「等」这件事的决定——不改包、不改收据、不改链接，也不动催过几次那些数。
+  const toggleWaitClosed = async (deliveryId: string, closed: boolean) => {
+    if (!data || !deliveryId) return
+    setWaitBusy(deliveryId)
+    setReceiptError('')
+    try {
+      const result = await closeDeliveryWait(data.project.id, deliveryId, closed)
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              project: {
+                ...prev.project,
+                deliveries: (prev.project.deliveries || []).map((entry) =>
+                  entry.id === deliveryId
+                    ? { ...entry, waitClosedAt: result.closed ? result.at : undefined }
+                    : entry,
+                ),
+              },
+            }
+          : prev,
+      )
+      onToast(
+        result.closed
+          ? '收口了：这一份不再算「还没回来」，档案与链接都照留'
+          : '继续等这一份的回执了',
+      )
+    } catch (caught) {
+      setReceiptError(caught instanceof Error ? caught.message : closed ? '没收口成' : '没能改回继续等')
+    } finally {
+      setWaitBusy('')
     }
   }
 
@@ -2386,6 +2424,33 @@ export default function ProjectPage({
                             </div>
                           </div>
                         )}
+                      </div>
+                      {/* 不再等这一份的回执（v0.9.158）：这一份是「还在等」还是「不等了」，由发件人自己定。
+                          收口之后工作台不再把它算进「还没回来」，也不给催收动作；
+                          档案、封存包与回执链接都照留，他之后贴回来的收据照样记。点错了再点一次就能继续等。 */}
+                      <div className={'vq-archive-wait' + (row.waitClosedAt ? ' is-closed' : '')}>
+                        <span className="vq-archive-receipt-label">等不等回执</span>
+                        <p className="vq-archive-wait-text">
+                          {row.waitClosedAt
+                            ? stamp(row.waitClosedAt) +
+                              ' 你收口了这一份：不再等它的回执。工作台不再把它算进「还没回来」，也不给催收动作；档案、封存包与回执链接都照留，他之后贴回来的收据照样记。'
+                            : '客户口头说过、当面看过、或者这版本来就作废了——这些都可以收口。收口只记「你不再等了」，不说他没验；档案、封存包与回执链接都照留。'}
+                        </p>
+                        <button
+                          type="button"
+                          className="vq-button vq-button--quiet vq-button--sm vq-archive-wait-toggle"
+                          disabled={waitBusy === (row.id || '') || Boolean(row.receipt)}
+                          onClick={() => void toggleWaitClosed(row.id || '', !row.waitClosedAt)}
+                          title={
+                            row.receipt
+                              ? '这一份已经有回执了：等的事已经结束，不用再收口'
+                              : row.waitClosedAt
+                                ? '撤回收口：这一份回到「还没收到回执」，工作台重新把它算进待办'
+                                : '只记下「你不再等这一份的回执」：不改包、不改收据，也不动催过几次那些数'
+                          }
+                        >
+                          {waitBusy === (row.id || '') ? '正在记…' : row.waitClosedAt ? '继续等' : '不再等这一份'}
+                        </button>
                       </div>
                       <label className="vq-archive-receipt-field">
                         <span className="vq-archive-receipt-label">收据</span>
