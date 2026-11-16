@@ -62,7 +62,7 @@ const SOURCE_TAG: Record<string, string> = {
   project: '来自作品',
   adapted: '改编版',
   agent: '智能体',
-  canvas: '画布',
+  canvas: '工作流',
   shared: '官方示例',
 }
 
@@ -317,7 +317,7 @@ export function TemplateLibraryPage({
   }
 
   // 「用它做作品」：作品只绑模板，不复制脚本分镜；建完直接进作品页，
-  // 下一步（套用模板开画布）由作品页统一给，不在两个地方各写一套流程。
+  // 下一步（套用模板开工作流）由作品页统一给，不在两个地方各写一套流程。
   const startProject = async (template: ReplicaTemplate) => {
     setProjectSaving(true)
     try {
@@ -463,7 +463,7 @@ export function TemplateLibraryPage({
                 <strong>{item.title}</strong>
                 <span className="template-hook">
                   {item.kind === 'flow'
-                    ? '来自画布 · 套用后原样开回一张新画布'
+                    ? '来自工作流 · 套用后原样开回一张新工作流'
                     : isParsed(item) ? item.hook : item.author ? item.author + ' · 只有原链接，还没解析' : '只有原链接，还没解析'}
                 </span>
                 {item.kind === 'flow' || item.kind === 'adapted' || item.kind === 'agent' ? null : (
@@ -555,12 +555,12 @@ export function TemplateLibraryPage({
                     <strong>{detail.title}</strong>
                     <span className="drawer-sub">
                       {detail.kind === 'flow'
-                        ? '来自画布 · 套用后开回一张新画布 · ' + (detail.flowNodes?.length || 0) + ' 个节点'
+                        ? '来自工作流 · 套用后开回一张新工作流 · ' + (detail.flowNodes?.length || 0) + ' 个节点'
                         : detail.kind === 'agent'
                           ? '来自智能体' + (detail.agentName ? ' ' + detail.agentName : '') + ' · ' + detail.structure.length + ' 段 · ' + detail.storyboard.length + ' 镜'
                           : detail.kind === 'adapted' && detail.origin === 'project'
                             ? '来自作品《' + (detail.projectTitle || '已删的作品') + '》' +
-                              (detail.projectVersion ? ' · 第 ' + detail.projectVersion + ' 版' : ' · 还没开画布') +
+                              (detail.projectVersion ? ' · 第 ' + detail.projectVersion + ' 版' : ' · 还没开工作流') +
                               ' · ' + detail.structure.length + ' 段 · ' + detail.storyboard.length + ' 镜'
                             : (detail.author || '未知作者') + ' · ' + formatDuration(detail.durationSec)}
                       {' · 模板 ' + detail.id}
@@ -625,7 +625,7 @@ export function TemplateLibraryPage({
                         aria-label="开头钩子"
                         onChange={(event) => setAdapt({ ...adapt, hook: event.target.value })}
                       />
-                      <p className="adapt-note">改编只改这一份的脚本与分镜，原模板不动；存下来的是你自己的新模板，之后可以再改、再套到画布。</p>
+                      <p className="adapt-note">改编只改这一份的脚本与分镜，原模板不动；存下来的是你自己的新模板，之后可以再改、再套到工作流。</p>
                     </section>
                   ) : null}
 
@@ -829,7 +829,7 @@ export function TemplateLibraryPage({
                   <section className="drawer-section">
                     <div className="drawer-section-head"><h3>来源</h3><span>{sourceLabel(detail.source) || '模板'}</span></div>
                     <div className="drawer-source">
-                      {/* 以前这里只有一条「平台 · 作者 · 平台 ID + 原链接」，于是从作品/智能体/画布来的模板
+                      {/* 以前这里只有一条「平台 · 作者 · 平台 ID + 原链接」，于是从作品/智能体/工作流来的模板
                           也被写成「原链接缺失（示例数据或直链测试）」——它们本来就没有原片，不是链接丢了。 */}
                       {detail.kind === 'agent' ? (
                         <span>智能体{detail.agentName ? ' ' + detail.agentName : ''}的草稿 · 不存原视频</span>
@@ -837,7 +837,7 @@ export function TemplateLibraryPage({
                         <>
                           <span>
                             来自作品《{detail.projectTitle || '已删的作品'}》
-                            {detail.projectVersion ? ' · 第 ' + detail.projectVersion + ' 版' : ' · 还没开画布'}
+                            {detail.projectVersion ? ' · 第 ' + detail.projectVersion + ' 版' : ' · 还没开工作流'}
                             {' · 这一版的分镜不是原片，作者与互动数据不复制'}
                           </span>
                           {detail.projectId ? (
@@ -1048,14 +1048,14 @@ export function TemplateLibraryPage({
                         type="button"
                         className="vq-button vq-button--primary"
                         disabled={projectSaving}
-                        title="把这条模板变成一条作品：脚本与分镜跟着走，之后在作品页开画布、送评审"
+                        title="把这条模板变成一条作品：脚本与分镜跟着走，之后在作品页开工作流、送评审"
                         onClick={() => void startProject(detail)}
                       >
                         <Clapperboard size={14} />{projectSaving ? '建作品中' : '用它做作品'}
                       </button>
                     ) : null}
                     {/* 只存了链接的这条（v0.9.40）：主操作是解析。以前这里是一枚**禁用**的
-                        「套用到画布」还占着主按钮的位置——点不动，却把真正的下一步挤到上面去。 */}
+                        「套用到工作流」还占着主按钮的位置——点不动，却把真正的下一步挤到上面去。 */}
                     {detail.kind !== 'flow' && !isParsed(detail) ? (
                       <button
                         type="button"
@@ -1074,13 +1074,13 @@ export function TemplateLibraryPage({
                         void applyTemplate(detail.id)
                           .then((result) => {
                             setDetail({ ...detail, reuseCount: result.template.reuseCount })
-                            onToast(detail.kind === 'flow' ? '已打开画布：' + result.flow.name : '已生成画布草稿：' + result.flow.name)
+                            onToast(detail.kind === 'flow' ? '已打开工作流：' + result.flow.name : '已生成工作流草稿：' + result.flow.name)
                             onOpenCanvas(result.flow.id)
                           })
                           .catch((caught) => onToast(caught instanceof Error ? caught.message : '套用模板失败'))
                       }}
                     >
-                      <Layers size={14} />{detail.kind === 'flow' ? '在画布打开' : '套用到画布'}
+                      <Layers size={14} />{detail.kind === 'flow' ? '在工作流打开' : '套用到工作流'}
                     </button>
                     )}
                     <button className="vq-button vq-button--danger vq-button--sm" onClick={() => { void deleteTemplate(detail.id).then(() => { closeDetail(); onToast('已移到回收站，30 天内可以恢复'); void load() }) }}>

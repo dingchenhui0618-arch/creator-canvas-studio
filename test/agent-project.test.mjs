@@ -9,7 +9,7 @@ import path from 'node:path'
 //   1. 写进去的是脚本（钩子 + 段落），草稿的分镜不跟着走，也不编一份分镜进作品；
 //   2. 走作品脚本的 copy-on-write：模板与别的作品不动；
 //   3. 覆盖要说清楚：回执里带被换掉的那一份（来源与段数），不是静默替换；
-//   4. 画布那边的复刻提示词一起换——但用户手改过的提示词一个字不碰；
+//   4. 工作流那边的复刻提示词一起换——但用户手改过的提示词一个字不碰；
 //   5. 看得见才动得手：别人的作品 404，没有段落 400，没有作品 400。
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vq-agent-project-'))
@@ -54,11 +54,11 @@ const projects = [
     createdAt: at(1, 1),
     updatedAt: at(1, 1),
   },
-  // 画布出生、没有模板（v0.9.29）：脚本与分镜都还没有，正是草稿最该落的地方
+  // 工作流出生、没有模板（v0.9.29）：脚本与分镜都还没有，正是草稿最该落的地方
   {
     id: 'prj_bare',
     ownerId: 'u_a',
-    title: '照画布建的那条',
+    title: '照工作流建的那条',
     templateId: '',
     flowId: '',
     version: 1,
@@ -90,11 +90,11 @@ const projects = [
     createdAt: at(1, 3),
     updatedAt: at(2, 0),
   },
-  // 有画布：写脚本时把复刻提示词一起换掉
+  // 有工作流：写脚本时把复刻提示词一起换掉
   {
     id: 'prj_canvas',
     ownerId: 'u_a',
-    title: '有画布的那条',
+    title: '有工作流的那条',
     templateId: '',
     flowId: 'flow_rep',
     version: 1,
@@ -148,7 +148,7 @@ const AUTO_PREFIX = '按模板结构复写一条同类型脚本'
 const flows = [
   {
     id: 'flow_rep',
-    name: '有画布的那条 · 复刻脚本',
+    name: '有工作流的那条 · 复刻脚本',
     ownerId: 'u_a',
     nodes: [
       { id: 'n_input', type: 'input', position: { x: 80, y: 140 }, data: { kind: 'input', title: '原始素材', config: { text: '旧钩子' } } },
@@ -165,7 +165,7 @@ const flows = [
   },
   {
     id: 'flow_hand',
-    name: '提示词手改过那条的画布',
+    name: '提示词手改过那条的工作流',
     ownerId: 'u_a',
     nodes: [
       { id: 'n_llm', type: 'llm', position: { x: 420, y: 140 }, data: { kind: 'llm', title: '复刻脚本', config: { systemPrompt: '我自己手写的提示词：按我的口吻来' } } },
@@ -238,7 +238,7 @@ test('写进跟随模板的作品：脚本变成它自己的版本，模板一�
   assert.equal(saved.script.hook, draft.hook)
 })
 
-test('写进没有模板的作品（画布出生）：脚本落下来，不编模板也不编分镜', async () => {
+test('写进没有模板的作品（工作流出生）：脚本落下来，不编模板也不编分镜', async () => {
   const { writeDraftToProject } = await agentProject()
   const result = await writeDraftToProject({ draft, projectId: 'prj_bare', user: me })
   assert.equal(result.status, 200)
@@ -263,7 +263,7 @@ test('覆盖已经改过的脚本：回执说清换掉了几段，旧口播不�
   assert.equal(saved.script.structure.some((beat) => beat.voiceover === '我自己写的口播'), false)
 })
 
-test('有画布就把复刻提示词一起换掉；不知道是不是用户填的素材就不碰', async () => {
+test('有工作流就把复刻提示词一起换掉；不知道是不是用户填的素材就不碰', async () => {
   const { writeDraftToProject } = await agentProject()
   const result = await writeDraftToProject({ draft, projectId: 'prj_canvas', user: me })
   assert.equal(result.status, 200)
@@ -282,15 +282,15 @@ test('有画布就把复刻提示词一起换掉；不知道是不是用户填�
   assert.equal(input.data.config.text, '旧钩子')
 })
 
-test('同一份草稿再写一次：画布没变也不谎报「手改过」', async () => {
+test('同一份草稿再写一次：工作流没变也不谎报「手改过」', async () => {
   const { writeDraftToProject } = await agentProject()
   const again = await writeDraftToProject({ draft, projectId: 'prj_canvas', user: me })
   assert.equal(again.status, 200)
-  assert.equal(again.body.canvas.synced, true, '画布用的就是这份脚本')
+  assert.equal(again.body.canvas.synced, true, '工作流用的就是这份脚本')
   assert.equal(again.body.canvas.reason, 'synced', '不是 hand-edited：没变不等于被手改过')
 })
 
-test('提示词手改过：画布一个字不碰，回执如实写 hand-edited', async () => {
+test('提示词手改过：工作流一个字不碰，回执如实写 hand-edited', async () => {
   const { writeDraftToProject } = await agentProject()
   const result = await writeDraftToProject({ draft, projectId: 'prj_hand', user: me })
   assert.equal(result.status, 200, '脚本本身仍然写进去')
@@ -326,7 +326,7 @@ test('该拒的拒：没有作品、别人的作品、没有段落的草稿', as
   })
   assert.equal(shotsOnly.status, 400)
   assert.equal(shotsOnly.body.code, 'DRAFT_NO_SCRIPT')
-  assert.match(shotsOnly.body.error, /送到画布/)
+  assert.match(shotsOnly.body.error, /送到工作流/)
 })
 
 test('接口：POST /api/agents/<id>/draft/project 是第三个出口，方法不对不猜', async () => {

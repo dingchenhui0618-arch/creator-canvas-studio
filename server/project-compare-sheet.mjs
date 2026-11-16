@@ -2,12 +2,12 @@
 //
 // 为什么需要它：两版对照现在能回答「改完有没有变好」，但答案只活在作品页的弹窗里。
 // 评审、导演、甲方要讨论「这一版值不值得交」时，需要一张能转发、能打印的纸：
-// 左边 v2、右边 v3，评审与交付各写各的，画布与脚本逐项列出来。
+// 左边 v2、右边 v3，评审与交付各写各的，工作流与脚本逐项列出来。
 //
 // 三条边界：
 //  1. 纸上的数字与弹窗同一份取数（server/project-compare.mjs）：不另算一套。
 //  2. 只印有证据的东西：没评过、没交付、没快照就照实写；不拿别的版本顶，也不编「没变」。
-//  3. 纸是只读产物：不改画布、不改脚本、不写交付记录、不扣积分；AI 生成标识跟其它三张纸一致。
+//  3. 纸是只读产物：不改工作流、不改脚本、不写交付记录、不扣积分；AI 生成标识跟其它三张纸一致。
 import { brandRow, escapeHtml, paperShell, printToolbar } from './project-deliverable-html.mjs'
 import { AI_LABEL_NOTICE, aiLabelFootText } from './ai-label.mjs'
 import { deliveryDrift } from './project-status.mjs'
@@ -123,9 +123,9 @@ function canvasHtml(compare, baseLabel, targetLabel) {
   const canvas = compare.canvas
   const out = []
   out.push('<section class="cmp-section">')
-  out.push('<h2>画布</h2>')
+  out.push('<h2>工作流</h2>')
   if (!canvas) {
-    out.push('<p class="cmp-muted">有一侧画布读不到：画布这一侧不比，脚本仍按快照比。</p>')
+    out.push('<p class="cmp-muted">有一侧工作流读不到：工作流这一侧不比，脚本仍按快照比。</p>')
     out.push('</section>')
     return out.join('')
   }
@@ -196,7 +196,7 @@ function scriptHtml(compare, baseLabel, targetLabel) {
   out.push('<section class="cmp-section">')
   out.push('<h2>脚本</h2>')
   if (!script) {
-    out.push('<p class="cmp-muted">有一侧脚本没存快照：脚本这一侧不比，画布仍按节点比。</p>')
+    out.push('<p class="cmp-muted">有一侧脚本没存快照：脚本这一侧不比，工作流仍按节点比。</p>')
     out.push('</section>')
     return out.join('')
   }
@@ -329,7 +329,7 @@ export function compareSheetHtml({
 
   body.push(
     '<p class="sheet-foot">由 VisionQA 导出 · ' + escapeHtml(stamp(now.toISOString(), tz)) +
-      ' · 只读对照：不改画布、不改脚本、不写交付记录、不扣积分 · ' +
+      ' · 只读对照：不改工作流、不改脚本、不写交付记录、不扣积分 · ' +
       escapeHtml(aiLabelFootText()) + '</p>',
   )
   body.push('</div>')

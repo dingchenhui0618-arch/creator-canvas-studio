@@ -71,10 +71,10 @@ test('已经开过作品：下一步是那条作品，不是再开一条', () =>
   assert.match(entry.hint, /第 2 版/)
 })
 
-test('照模板开了作品、还没开画布：写「作品 · 还没开画布」，不写「第 0 版」', () => {
+test('照模板开了作品、还没开工作流：写「作品 · 还没开工作流」，不写「第 0 版」', () => {
   const entry = originEntry({ template: template(), templateId: 'tpl_a', project: project({ version: 0 }) })
   assert.equal(entry.kind, 'open-work')
-  assert.equal(entry.label, '作品 · 还没开画布')
+  assert.equal(entry.label, '作品 · 还没开工作流')
   assert.doesNotMatch(entry.label, /第 0 版/)
 })
 

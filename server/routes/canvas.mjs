@@ -1,5 +1,5 @@
-// /api/canvas：给画布 iframe 发一张短时信任票据（画布拿它换自己的会话）。
-// 票据只回答「现在是谁」，不带积分与业务权限；没开互通时返回 503，前端据此继续用画布原生登录。
+// /api/canvas：给无限画布 iframe 发一张短时信任票据（无限画布拿它换自己的会话）。
+// 票据只回答「现在是谁」，不带积分与业务权限；没开互通时返回 503，前端据此继续用无限画布原生登录。
 import { sendJson } from './_shared.mjs'
 import { currentUser } from '../auth.mjs'
 import { canvasTrustEnabled, mintCanvasTicket } from '../canvas-session.mjs'
@@ -18,7 +18,7 @@ export function createCanvasRouter() {
 
       if (pathname === '/api/canvas/session-token' && req.method === 'GET') {
         if (!canvasTrustEnabled()) {
-          sendJson(res, 503, { error: '画布账号互通还没开启', code: 'CANVAS_TRUST_DISABLED' })
+          sendJson(res, 503, { error: '无限画布账号互通还没开启', code: 'CANVAS_TRUST_DISABLED' })
           return true
         }
         try {
@@ -36,14 +36,14 @@ export function createCanvasRouter() {
         return true
       }
 
-      // 画布出图的排队位（v0.9.83）：画布页的状态条轮询它，只读、不扣积分、不调上游。
+      // 无限画布出图的排队位（v0.9.83）：无限画布页的状态条轮询它，只读、不扣积分、不调上游。
       // 只回聚合数（在跑几条、在等几条、最久的等了多久），票号不进这条响应。
       if (pathname === '/api/canvas/queue' && req.method === 'GET') {
         sendJson(res, 200, canvasQueueView())
         return true
       }
 
-      sendJson(res, 404, { error: '未知的画布接口：' + req.method + ' ' + pathname })
+      sendJson(res, 404, { error: '未知的无限画布接口：' + req.method + ' ' + pathname })
       return true
     },
   }

@@ -1,8 +1,8 @@
 // 两版对照纸（v0.9.121）：纸上写什么、缺数据时不写什么。
 // 这一组盯住四件事：
 //   1) 评审与交付左右各写各的：交时快照与后来重评分开，不拿最新覆盖历史；
-//   2) 画布逐项列参数、脚本逐段列口播，变了才写，没变不硬编；
-//   3) 缺画布 / 缺脚本 / 没评过 / 没交付时照实说，不拿别的版本顶；
+//   2) 工作流逐项列参数、脚本逐段列口播，变了才写，没变不硬编；
+//   3) 缺工作流 / 缺脚本 / 没评过 / 没交付时照实说，不拿别的版本顶；
 //   4) 所有用户内容先转义再进纸，标题里写 <script> 也只是一行字。
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -45,7 +45,7 @@ const compare = {
     review: { count: 1, verdict: 'needs_review', at: '2026-11-15T00:50:00.000Z', issues: issues(1, 0, 0) },
     delivery: null,
   },
-  summary: '画布改 1 个节点；脚本：1 段口播改过；钩子换过',
+  summary: '工作流改 1 个节点；脚本：1 段口播改过；钩子换过',
   canvas: {
     added: [{ id: 'n_image', title: '出图' }],
     removed: [{ id: 'n_old', title: '旧输出' }],
@@ -69,7 +69,7 @@ const compare = {
 const html = (patch = {}) =>
   compareSheetHtml({ project, compare: { ...compare, ...patch }, now: new Date('2026-11-15T01:00:00.000Z'), tzOffsetMinutes: 480, projectId: project.id })
 
-test('两版对照纸：评审、交付、画布参数、脚本口播都在，方向是 v2 → v3', () => {
+test('两版对照纸：评审、交付、工作流参数、脚本口播都在，方向是 v2 → v3', () => {
   const out = html()
   assert.match(out, /两版对照 · 毛衣折叠收纳法/)
   assert.match(out, /VERSION DIFF \/ A4/)
@@ -93,7 +93,7 @@ test('两版对照纸：评审、交付、画布参数、脚本口播都在，�
   assert.match(out, /第一版钩子/)
   assert.match(out, /第二版钩子/)
   assert.match(out, /主要多 1 个/)
-  assert.match(out, /只读对照：不改画布、不改脚本、不写交付记录、不扣积分/)
+  assert.match(out, /只读对照：不改工作流、不改脚本、不写交付记录、不扣积分/)
   assert.match(out, /data-print/)
   assert.doesNotMatch(out, /undefined/, '没数据的字段不要漏成 undefined')
 })
@@ -121,7 +121,7 @@ test('两版对照纸：交时评审三种状态分开写，不拿最新一评�
   assert.doesNotMatch(newer, /交时评审：不通过/, '交时快照不能被最近一评覆盖')
 })
 
-test('两版对照纸：缺画布 / 缺脚本 / 没评过 / 没交付时照实说', () => {
+test('两版对照纸：缺工作流 / 缺脚本 / 没评过 / 没交付时照实说', () => {
   const out = html({
     canvas: null,
     script: null,
@@ -136,16 +136,16 @@ test('两版对照纸：缺画布 / 缺脚本 / 没评过 / 没交付时照实�
       delivery: null,
     },
     reviewChange: { text: '有一版还没评审，结论与问题数不比', tone: 'unknown' },
-    notes: ['有一版的画布已被删除：画布这一侧不比，脚本仍按快照比。'],
+    notes: ['有一版的工作流已被删除：工作流这一侧不比，脚本仍按快照比。'],
   })
-  assert.match(out, /有一侧画布读不到：画布这一侧不比/)
+  assert.match(out, /有一侧工作流读不到：工作流这一侧不比/)
   assert.match(out, /有一侧脚本没存快照：脚本这一侧不比/)
   assert.match(out, /还没评过/)
   assert.match(out, /没交付/)
   assert.match(out, /看不出来/)
   assert.match(out, /这张纸没比的部分/)
-  assert.match(out, /画布已被删除/)
-  assert.doesNotMatch(out, /节点没动/, '缺画布不能说「没动」')
+  assert.match(out, /工作流已被删除/)
+  assert.doesNotMatch(out, /节点没动/, '缺工作流不能说「没动」')
   assert.doesNotMatch(out, /口播与钩子都没动/, '缺脚本不能说「没动」')
 })
 

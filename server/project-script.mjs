@@ -35,7 +35,7 @@ export function normalizeProjectScript(input, { pace = '中', totalSec = 0 } = {
     onScreen: clip(raw?.onScreen, SCRIPT_LIMITS.onScreen),
     purpose: clip(raw?.purpose, SCRIPT_LIMITS.purpose),
   }))
-  // 整段被清空的段落不落库：脚本是给画布与评审看的，空段落只会让编号对不上
+  // 整段被清空的段落不落库：脚本是给工作流与评审看的，空段落只会让编号对不上
   const kept = beats.filter((beat) => beat.beat || beat.voiceover || beat.onScreen)
   if (!kept.length) return null
   // 段名空着时按序号补：界面与提示词都按「第 N 段」引用，不留空标题

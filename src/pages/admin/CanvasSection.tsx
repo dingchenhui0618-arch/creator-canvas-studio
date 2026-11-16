@@ -4,7 +4,7 @@ import { formatDateTime } from './data'
 import { AdminHead, Badge, EmptyState, ErrorBanner, LoadingLine, RefreshButton } from './ui'
 
 /**
- * 画布身份：画布并入 VisionQA 账号后，谁从工作台进过画布都在这里。停用只影响画布，不影响工作台登录。
+ * 无限画布身份：无限画布并入 VisionQA 账号后，谁从工作台进过它都在这里。停用只影响无限画布，不影响工作台登录。
  */
 export default function CanvasSection() {
   const [data, setData] = useState<CanvasIdentityList | null>(null)
@@ -18,7 +18,7 @@ export default function CanvasSection() {
     setError('')
     listCanvasIdentities()
       .then((next) => setData(next))
-      .catch((caught) => setError(caught instanceof Error ? caught.message : '画布身份读取失败'))
+      .catch((caught) => setError(caught instanceof Error ? caught.message : '无限画布身份读取失败'))
       .finally(() => setLoading(false))
   }, [])
 
@@ -32,10 +32,10 @@ export default function CanvasSection() {
     setMessage('')
     try {
       await setCanvasIdentityAccess(item.id, !item.active)
-      setMessage(`${item.displayName} 已${item.active ? '停用画布访问' : '恢复画布访问'}`)
+      setMessage(`${item.displayName} 已${item.active ? '停用无限画布访问' : '恢复无限画布访问'}`)
       load()
     } catch (caught) {
-      setMessage(caught instanceof Error ? caught.message : '画布身份状态修改失败')
+      setMessage(caught instanceof Error ? caught.message : '无限画布身份状态修改失败')
     } finally {
       setBusyId(0)
     }
@@ -47,9 +47,9 @@ export default function CanvasSection() {
   return (
     <>
       <AdminHead
-        kicker="画布"
-        title="画布身份"
-        description="画布已并入 VisionQA 账号：从工作台进入过画布的用户会出现在这里。停用只停画布，不停工作台登录；停用后该用户下次进入会被拒绝。"
+        kicker="无限画布"
+        title="无限画布身份"
+        description="无限画布已并入 VisionQA 账号：从工作台进入过无限画布的用户会出现在这里。停用只停无限画布，不停工作台登录；停用后该用户下次进入会被拒绝。"
         actions={<RefreshButton onClick={load} busy={loading} />}
       />
 
@@ -59,8 +59,8 @@ export default function CanvasSection() {
         <section className="admin-card admin-block">
           <div className="admin-block-head">
             <div>
-              <p className="admin-label">画布服务未连接</p>
-              <p className="admin-sub">{data.reason || '画布服务暂时连不上'}。画布身份要等画布服务可用后才能读取。</p>
+              <p className="admin-label">无限画布服务未连接</p>
+              <p className="admin-sub">{data.reason || '无限画布服务暂时连不上'}。无限画布身份要等无限画布服务可用后才能读取。</p>
             </div>
           </div>
         </section>
@@ -70,7 +70,7 @@ export default function CanvasSection() {
         <section className="admin-card admin-block">
           <div className="admin-block-head">
             <div>
-              <p className="admin-label">已开通画布的账号</p>
+              <p className="admin-label">已开通无限画布的账号</p>
               <p className="admin-sub">
                 共 {data.total} 位，其中在用 {summary?.active ?? 0} 位、停用 {summary?.suspended ?? 0} 位
                 {summary?.missing ? `；${summary.missing} 位的 VisionQA 账号已删除` : ''}。
@@ -86,7 +86,7 @@ export default function CanvasSection() {
                 <thead>
                   <tr>
                     <th>VisionQA 账号</th>
-                    <th>画布身份</th>
+                    <th>无限画布身份</th>
                     <th>最近进入</th>
                     <th>状态</th>
                     <th>操作</th>
@@ -112,7 +112,7 @@ export default function CanvasSection() {
                           disabled={busyId === item.id}
                           onClick={() => void toggle(item)}
                         >
-                          {busyId === item.id ? '处理中…' : item.active ? '停用画布' : '恢复画布'}
+                          {busyId === item.id ? '处理中…' : item.active ? '停用无限画布' : '恢复无限画布'}
                         </button>
                       </td>
                     </tr>
@@ -121,7 +121,7 @@ export default function CanvasSection() {
               </table>
             </div>
           ) : (
-            <EmptyState title="还没有人进入过画布" description="从工作台点开画布后，这里会出现对应的画布身份。" />
+            <EmptyState title="还没有人进入过无限画布" description="从工作台点开无限画布后，这里会出现对应的无限画布身份。" />
           )}
           {message ? <p className="admin-hint" role="status">{message}</p> : null}
         </section>

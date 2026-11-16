@@ -1,9 +1,9 @@
 // 任意两版对照（v0.9.117）：只读接口的明细与边界。
 // 这一组盯住五件事：
 //   1) 任意两版都能选，方向按 base → target，反过来就是看「改回去了什么」；
-//   2) 画布逐项列出多 / 少 / 改的节点，脚本逐段列出多 / 少 / 改，改过的段带前后口播；
-//   3) 当前版读现在的画布与脚本，归档版读自己的快照，不拿别的版本顶替；
-//   4) 缺画布 / 缺脚本快照时明细为 null，notes 说清哪一侧不比；
+//   2) 工作流逐项列出多 / 少 / 改的节点，脚本逐段列出多 / 少 / 改，改过的段带前后口播；
+//   3) 当前版读现在的工作流与脚本，归档版读自己的快照，不拿别的版本顶替；
+//   4) 缺工作流 / 缺脚本快照时明细为 null，notes 说清哪一侧不比；
 //   5) 只读：对照前后作品、版本与脚本一个字都不变。
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -176,7 +176,7 @@ test('任意两版对照：明细逐项列出，当前版读现在的、归档�
   assert.equal(res.body.target.nodes, 3)
   assert.equal(res.body.base.beats, 2)
   assert.equal(res.body.target.beats, 3)
-  assert.match(res.body.summary, /画布/)
+  assert.match(res.body.summary, /工作流/)
   assert.match(res.body.summary, /脚本/)
   assert.match(res.body.summary, /钩子换过/)
 
@@ -226,7 +226,7 @@ test('任意两版对照：明细逐项列出，当前版读现在的、归档�
   })
   assert.deepEqual(reverse.body.canvas.fields.n_input.map((item) => [item.before, item.after]), [['第三版', '第一版']])
 
-  // 1 → 2 能看到 v2 新增的「出图」节点；2 → 3 只剩画布变化
+  // 1 → 2 能看到 v2 新增的「出图」节点；2 → 3 只剩工作流变化
   const oneToTwo = await call('GET', '/api/projects/' + built.project.id + '/versions/compare?base=1&target=2')
   assert.equal(oneToTwo.status, 200)
   assert.deepEqual(oneToTwo.body.canvas.added.map((item) => item.title), ['出图'])
@@ -340,7 +340,7 @@ test('v1 交付包没有上一版：不塞一张空对照页，说明里也不�
   assert.doesNotMatch(note, /两版对照页\.html/)
 })
 
-test('缺画布 / 缺脚本快照：明细为 null，notes 说清哪一侧不比', async () => {
+test('缺工作流 / 缺脚本快照：明细为 null，notes 说清哪一侧不比', async () => {
   // 无脚本快照：v1 开版时没存脚本
   const bareFlow = await flows.createFlow({ name: '无脚本对照 v1', nodes: nodesV1, edges: [] })
   const bare = await projects.createProject({ title: '无脚本对照', flowId: bareFlow.id })
@@ -356,9 +356,9 @@ test('缺画布 / 缺脚本快照：明细为 null，notes 说清哪一侧不比
   assert.equal(noScript.body.reviewChange.tone, 'unknown')
   assert.doesNotMatch(noScript.body.summary, /脚本跟.*一样/)
 
-  // 画布被删：v1 的画布删掉，脚本快照仍然可比
-  const goneFlow = await flows.createFlow({ name: '画布被删对照 v1', nodes: nodesV1, edges: [] })
-  const gone = await projects.createProject({ title: '画布被删对照', flowId: goneFlow.id })
+  // 工作流被删：v1 的工作流删掉，脚本快照仍然可比
+  const goneFlow = await flows.createFlow({ name: '工作流被删对照 v1', nodes: nodesV1, edges: [] })
+  const gone = await projects.createProject({ title: '工作流被删对照', flowId: goneFlow.id })
   await projects.saveProjectScript(gone.id, scriptA)
   const goneV2 = await call('POST', '/api/projects/' + gone.id + '/versions', {})
   assert.equal(goneV2.status, 201)
@@ -367,6 +367,6 @@ test('缺画布 / 缺脚本快照：明细为 null，notes 说清哪一侧不比
   assert.equal(noCanvas.status, 200)
   assert.equal(noCanvas.body.canvas, null)
   assert.ok(noCanvas.body.script)
-  assert.ok(noCanvas.body.notes.some((note) => note.includes('画布已被删除')))
+  assert.ok(noCanvas.body.notes.some((note) => note.includes('工作流已被删除')))
   assert.match(noCanvas.body.summary, /脚本/)
 })

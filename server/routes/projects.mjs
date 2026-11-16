@@ -1,8 +1,8 @@
 // /api/projects：作品（一条内容的主线对象）。
 //
-// 作品默认只存引用：脚本从模板读、画布在流程服务、评审按 projectId 关联。
+// 作品默认只存引用：脚本从模板读、工作流在流程服务、评审按 projectId 关联。
 // 唯一例外是脚本的 copy-on-write：作品页保存脚本才复制成作品自己的版本（project-script.mjs），
-// 同时把画布里自动生成的复刻提示词换成新脚本——页面之间不能各说各话。
+// 同时把工作流里自动生成的复刻提示词换成新脚本——页面之间不能各说各话。
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { sendJson, readBody } from './_shared.mjs'
@@ -113,7 +113,7 @@ const SPEND = /^\/api\/projects\/([\w-]+)\/spend$/
 const VERSIONS = /^\/api\/projects\/([\w-]+)\/versions$/
 // 某一版的脚本快照（v0.9.114）：开新版时存下的原文，只读、只给这一版
 const VERSION_SCRIPT = /^\/api\/projects\/([\w-]+)\/versions\/(\d+)\/script$/
-// 任意两版对照（v0.9.117）：只读，不写版本、不改画布、不扣积分
+// 任意两版对照（v0.9.117）：只读，不写版本、不改工作流、不扣积分
 const VERSION_COMPARE = /^\/api\/projects\/([\w-]+)\/versions\/compare$/
 const SCRIPT = /^\/api\/projects\/([\w-]+)\/script$/
 const CANVAS = /^\/api\/projects\/([\w-]+)\/canvas$/
@@ -164,7 +164,7 @@ const REVIEW_PRINT = /^\/print\/projects\/([\w-]+)\/review$/
 const COMPARE_PRINT = /^\/print\/projects\/([\w-]+)\/versions\/compare$/
 
 // 详情 / 列表里的 project 只有一份形状（server/project-briefs.mjs）：
-// 不带原始脚本、不带分享 token。画布归作品那条路（v0.9.29）回执也用同一份。
+// 不带原始脚本、不带分享 token。工作流归作品那条路（v0.9.29）回执也用同一份。
 
 // 列表只给卡片要用的那几项：模板标题、流程名、评审计数
 function templateBrief(template) {
@@ -193,14 +193,14 @@ function templateDetail(template) {
     timing: template.timing || null,
     cover: template.thumb || template.cover || '',
     reuseCount: Number(template.reuseCount) || 0,
-    // 这条模板「从哪来」：原片链接、作者与互动数（画布/智能体来的如实说没有原片）
+    // 这条模板「从哪来」：原片链接、作者与互动数（工作流/智能体来的如实说没有原片）
     origin: templateOrigin(template),
   }
 }
 
 /**
  * 作品详情：作品页与交付稿导出读同一个函数，避免两处口径分叉。
- * 运行归集要跨版本：当前版 + 归档版的画布一起查，开新版之后旧版的运行记录仍在作品里。
+ * 运行归集要跨版本：当前版 + 归档版的工作流一起查，开新版之后旧版的运行记录仍在作品里。
  */
 async function projectDetailView(project, user, { snapshots = false } = {}) {
   const projectFlows = [project.flowId, ...project.versions.map((entry) => entry.flowId)].filter(Boolean)
@@ -214,7 +214,7 @@ async function projectDetailView(project, user, { snapshots = false } = {}) {
     listRunsByFlows(projectFlows, { limit: 20 }, user),
     listAcks(user),
   ])
-  // 归档的旧版本只存了 flowId：这里顺手确认画布还在，已删掉的版本按钮要禁用而不是点开报错。
+  // 归档的旧版本只存了 flowId：这里顺手确认工作流还在，已删掉的版本按钮要禁用而不是点开报错。
   // 页面只要「这一版几段脚本」；交付稿要跟上一版对比，才把快照与节点一起带上（snapshots）。
   // 「省了几版」那一层始终留在服务端：节点数组只用来算版本行的一句话，不塞进响应。
   const versionRecords = await Promise.all(project.versions.map(async (entry) => {
@@ -243,8 +243,8 @@ async function projectDetailView(project, user, { snapshots = false } = {}) {
     }
   }))
   const versions = versionRecords.map((item) => item.view)
-  // 版本行上的「比上一版改了什么」：画布按节点配置、脚本按快照，口径与交付稿同一份实现。
-  // 当前版也要算（v3 相对 v2 改了什么），所以把当前画布与脚本一起放进来；
+  // 版本行上的「比上一版改了什么」：工作流按节点配置、脚本按快照，口径与交付稿同一份实现。
+  // 当前版也要算（v3 相对 v2 改了什么），所以把当前工作流与脚本一起放进来；
   // base 是「以旧版为底」的那一版用来对账的底座，普通版本为 0，仍按上一版算。
   const currentScript = scriptView(project, template)
   const versionRowsForDiff = [
@@ -260,12 +260,12 @@ async function projectDetailView(project, user, { snapshots = false } = {}) {
   const versionOfFlow = new Map()
   for (const entry of project.versions) versionOfFlow.set(entry.flowId, entry.n)
   if (project.flowId) versionOfFlow.set(project.flowId, project.version)
-  // 画布被删掉之后运行记录仍在（历史不该跟着消失），但「打开画布」要禁用而不是点开报错。
+  // 工作流被删掉之后运行记录仍在（历史不该跟着消失），但「打开工作流」要禁用而不是点开报错。
   // 注意这里必须放在 versions 算好之后再建：顺序反了就是一个 ReferenceError（0.2.3 生产实测踩到）。
   const liveFlows = new Set(versions.filter((entry) => entry.available).map((entry) => entry.flowId))
   if (flow) liveFlows.add(flow.id)
-  // 画布被删掉的运行：只要当时留下过快照，就还能只读回看。
-  // 这里只 stat 文件、不把快照塞进列表；available 仍表示「现在能不能打开画布」。
+  // 工作流被删掉的运行：只要当时留下过快照，就还能只读回看。
+  // 这里只 stat 文件、不把快照塞进列表；available 仍表示「现在能不能打开工作流」。
   const runs = await Promise.all(runData.items.map(async (run) => {
     const available = liveFlows.has(run.flowId)
     return {
@@ -280,7 +280,7 @@ async function projectDetailView(project, user, { snapshots = false } = {}) {
     const version = versionOfFlow.get(flowId) || 0
     runCounts[version] = (runCounts[version] || 0) + Number(amount)
   }
-  // 这条作品上花掉的积分（v0.9.65）：评审记录自己记着成本，运行记录跨版本按画布归集，
+  // 这条作品上花掉的积分（v0.9.65）：评审记录自己记着成本，运行记录跨版本按工作流归集，
   // 退过款的那次运行不算（钱已经回去了，再算一遍等于把退回的钱又花一次）。
   // 检索、复刻与智能体对话记在账号上：账本里没有作品，不硬摊过来。
   const runCredits = projectFlows.reduce((sum, flowId) => sum + Number(runData.creditsByFlow?.[flowId] || 0), 0)
@@ -359,7 +359,7 @@ async function projectDetailView(project, user, { snapshots = false } = {}) {
     versionCounts,
     // 版本行的一句话（v0.9.114）：键是版次，值写「比上一版改了什么」；比不了就没有这一项
     versionChanges,
-    // 以旧版为底的那一版跟底座对账（v0.9.116）：{ '4': { base: 1, text: '画布与脚本都没动' } }
+    // 以旧版为底的那一版跟底座对账（v0.9.116）：{ '4': { base: 1, text: '工作流与脚本都没动' } }
     versionBaseChanges,
     runs,
     runTotal: runData.total,
@@ -719,8 +719,8 @@ export function createProjectsRouter() {
           if (bucket) bucket.push(entry)
           else decisionsByProject.set(entry.projectId, [entry])
         }
-        // 运行归集：所有作品名下（含归档版本）的画布一次取回来，卡片上就能写「跑过几次」。
-        // byFlow 把运行次数按画布分组，跨版本加总才有意义——只取一条记录，这里只要计数。
+        // 运行归集：所有作品名下（含归档版本）的工作流一次取回来，卡片上就能写「跑过几次」。
+        // byFlow 把运行次数按工作流分组，跨版本加总才有意义——只取一条记录，这里只要计数。
         const projectFlows = projects.flatMap((project) => [project.flowId, ...project.versions.map((entry) => entry.flowId)])
         const runAgg = projectFlows.filter(Boolean).length
           ? await listRunsByFlows(projectFlows, { limit: 1 }, user)
@@ -740,7 +740,7 @@ export function createProjectsRouter() {
             // 总数给「评过几次」，按版本的分组给状态胶囊判断当前这一版
             reviews: { count: counters.count, lastVerdict: counters.lastVerdict, lastAt: counters.lastAt },
             versionCounts: counters.versions || {},
-            // 卡片上的花费与作品页同一套口径（评审 + 画布运行，退款不算）
+            // 卡片上的花费与作品页同一套口径（评审 + 工作流运行，退款不算）
             spend: {
               unit: config.credits.unit,
               total: Number(counters.credits || 0) + runCredits,
@@ -767,8 +767,8 @@ export function createProjectsRouter() {
 
       if (pathname === '/api/projects' && req.method === 'POST') {
         const body = await readBody(req)
-        // 从画布建作品（v0.9.29）：空白画布跑出来的东西也该能变成一条作品。
-        // 这条路没有模板，脚本在作品页现写，画布已经在了所以一出生就是 v1。
+        // 从工作流建作品（v0.9.29）：空白工作流跑出来的东西也该能变成一条作品。
+        // 这条路没有模板，脚本在作品页现写，工作流已经在了所以一出生就是 v1。
         if (String(body.flowId || '')) {
           const result = await createProjectFromCanvas({
             flowId: String(body.flowId),
@@ -781,7 +781,7 @@ export function createProjectsRouter() {
         const templateId = String(body.templateId || '')
         if (!templateId) {
           sendJson(res, 400, {
-            error: '作品要么从一条模板开始，要么从一块画布开始：先选模板或选画布',
+            error: '作品要么从一条模板开始，要么从一块工作流开始：先选模板或选工作流',
             code: 'TEMPLATE_REQUIRED',
           })
           return true
@@ -805,8 +805,8 @@ export function createProjectsRouter() {
       }
 
       const canvasPath = pathname.match(CANVAS)
-      // 画布归作品（v0.9.29）：把一块已经跑过的画布接到这条作品上。
-      // 一接上，这块画布以前的运行与之后的评审就都落进这条作品——运行记录那边也能「归到作品」。
+      // 工作流归作品（v0.9.29）：把一块已经跑过的工作流接到这条作品上。
+      // 一接上，这块工作流以前的运行与之后的评审就都落进这条作品——运行记录那边也能「归到作品」。
       if (canvasPath && req.method === 'PUT') {
         const body = await readBody(req)
         const result = await adoptCanvasForProject({ projectId: canvasPath[1], flowId: String(body.flowId || ''), user })
@@ -814,14 +814,14 @@ export function createProjectsRouter() {
         return true
       }
 
-      // 作品页开画布：第一张画布用这条作品现在的脚本生成，不再绕到模板库的 apply
+      // 作品页开工作流：第一张工作流用这条作品现在的脚本生成，不再绕到模板库的 apply
       if (canvasPath && req.method === 'POST') {
         const project = await getProject(canvasPath[1], user)
         if (!project) {
           sendJson(res, 404, { error: '作品不存在或已被删除' })
           return true
         }
-        // 已经有画布就直接回去：重复点「开画布」不该生成第二张
+        // 已经有工作流就直接回去：重复点「开工作流」不该生成第二张
         const existing = project.flowId ? await getFlow(project.flowId, user) : null
         if (existing) {
           sendJson(res, 200, { ok: true, created: false, project: projectBrief(project), flow: flowBrief(existing) })
@@ -839,7 +839,7 @@ export function createProjectsRouter() {
         const flow = await createFlow(buildReplicateDraft({ template: template || {}, script, name: project.title }), user)
         const bound = await bindProjectFlow(project.id, flow.id, user)
         if (!bound) {
-          sendJson(res, 409, { error: '画布建好了但没绑上作品：检查这条作品是否还在', code: 'BIND_FAILED' })
+          sendJson(res, 409, { error: '工作流建好了但没绑上作品：检查这条作品是否还在', code: 'BIND_FAILED' })
           return true
         }
         if (template) await reuseTemplate(template.id)
@@ -848,7 +848,7 @@ export function createProjectsRouter() {
       }
 
       // 作品页直接改脚本：第一次保存把模板脚本复制成作品自己的版本（copy-on-write），
-      // 再把画布里自动生成的复刻提示词换成新脚本。模板不动，别的作品也不动。
+      // 再把工作流里自动生成的复刻提示词换成新脚本。模板不动，别的作品也不动。
       const scriptPath = pathname.match(SCRIPT)
       if (scriptPath && req.method === 'PUT') {
         const project = await getProject(scriptPath[1], user)
@@ -891,7 +891,7 @@ export function createProjectsRouter() {
           return true
         }
         const view = scriptView(cleared, template)
-        // 回到模板脚本时画布也跟着回去；模板已被删掉就只清作品这边
+        // 回到模板脚本时工作流也跟着回去；模板已被删掉就只清作品这边
         const canvas = view
           ? await syncCanvasScript(cleared, template, view, prevHook, user)
           : { synced: false, flowId: cleared.flowId || '', reason: 'no-script' }
@@ -1008,7 +1008,7 @@ export function createProjectsRouter() {
         return true
       }
 
-      // 开一版新的：复制当前画布（节点与连线都在），旧画布归档成 vN，作品指向新画布
+      // 开一版新的：复制当前工作流（节点与连线都在），旧工作流归档成 vN，作品指向新工作流
       const versionPath = pathname.match(VERSIONS)
       if (versionPath && req.method === 'POST') {
         const project = await getProject(versionPath[1], user)
@@ -1017,7 +1017,7 @@ export function createProjectsRouter() {
           return true
         }
         if (!project.flowId) {
-          sendJson(res, 409, { error: '这条作品还没有画布：先把第一版画布开出来，再往上开新版本', code: 'NO_CANVAS' })
+          sendJson(res, 409, { error: '这条作品还没有工作流：先把第一版工作流开出来，再往上开新版本', code: 'NO_CANVAS' })
           return true
         }
         if (project.version >= PROJECT_VERSION_LIMIT) {
@@ -1029,11 +1029,11 @@ export function createProjectsRouter() {
         }
         const current = await getFlow(project.flowId, user)
         if (!current) {
-          sendJson(res, 409, { error: '这条作品绑定的画布不见了；先重新开一张画布，再版本化', code: 'FLOW_MISSING' })
+          sendJson(res, 409, { error: '这条作品绑定的工作流不见了；先重新开一张工作流，再版本化', code: 'FLOW_MISSING' })
           return true
         }
         const nextNo = project.version + 1
-        // 以旧版为底（v0.9.115）：from 指向一条更早的归档版本，复制它的画布与脚本。
+        // 以旧版为底（v0.9.115）：from 指向一条更早的归档版本，复制它的工作流与脚本。
         // 不传 from 就是原来的「从当前版往上一版」——两条路都先把当前版归档，历史不动。
         const body = await readBody(req)
         const rawFrom = body?.from
@@ -1057,7 +1057,7 @@ export function createProjectsRouter() {
           }
           if (!source.script) {
             sendJson(res, 409, {
-              error: 'v' + from + ' 开版时没有存脚本快照：没法整版回到当时，只能打开那一版画布手动改',
+              error: 'v' + from + ' 开版时没有存脚本快照：没法整版回到当时，只能打开那一版工作流手动改',
               code: 'VERSION_SCRIPT_MISSING',
             })
             return true
@@ -1065,7 +1065,7 @@ export function createProjectsRouter() {
           sourceFlow = await getFlow(source.flowId, user)
           if (!sourceFlow) {
             sendJson(res, 409, {
-              error: 'v' + from + ' 的画布已经被删除：没法以它为底再开一版',
+              error: 'v' + from + ' 的工作流已经被删除：没法以它为底再开一版',
               code: 'VERSION_FLOW_MISSING',
             })
             return true
@@ -1074,7 +1074,7 @@ export function createProjectsRouter() {
         }
         const copy = await createFlow(sourceFlow ? {
           name: ((project.title || sourceFlow.name).slice(0, 40) + ' v' + nextNo + ' · 以 v' + from + ' 为底').slice(0, 60),
-          description: '以 v' + from + ' 的画布和脚本为底重新开的一版',
+          description: '以 v' + from + ' 的工作流和脚本为底重新开的一版',
           nodes: sourceFlow.nodes,
           edges: sourceFlow.edges,
         } : {
@@ -1094,7 +1094,7 @@ export function createProjectsRouter() {
           basedOn: from,
         }, user)
         if (!updated) {
-          sendJson(res, 409, { error: '开新版本没有成功：这一版没有归档，作品仍然指向原来的画布', code: 'VERSION_FAILED' })
+          sendJson(res, 409, { error: '开新版本没有成功：这一版没有归档，作品仍然指向原来的工作流', code: 'VERSION_FAILED' })
           return true
         }
         sendJson(res, 201, { ok: true, project: updated, flow: flowBrief(copy), ...(from ? { basedOn: from } : {}) })
@@ -1102,7 +1102,7 @@ export function createProjectsRouter() {
       }
 
       // 任意两版对照（v0.9.117）：只读。方向是 base → target，两版都能从归档或当前版取。
-      // 画布与脚本各读各的：当前版读现在的，归档版读快照；哪一侧读不到就如实说，不拿别的版本顶替。
+      // 工作流与脚本各读各的：当前版读现在的，归档版读快照；哪一侧读不到就如实说，不拿别的版本顶替。
       const comparePath = pathname.match(VERSION_COMPARE)
       if (comparePath && req.method === 'GET') {
         const project = await getProject(comparePath[1], user)
@@ -2086,7 +2086,7 @@ export function createProjectsRouter() {
         if ('flowId' in body && body.flowId) {
           const flow = await getFlow(String(body.flowId), user)
           if (!flow) {
-            sendJson(res, 404, { error: '要绑定的画布不存在', code: 'FLOW_NOT_FOUND' })
+            sendJson(res, 404, { error: '要绑定的工作流不存在', code: 'FLOW_NOT_FOUND' })
             return true
           }
         }

@@ -120,13 +120,13 @@ import {
 import { stampTime as stamp, visitLine } from '../domain/share'
 import '../styles/projects.css'
 
-// 保存脚本之后画布那边发生了什么：直接说人话，不把 reason 漏到界面上
+// 保存脚本之后工作流那边发生了什么：直接说人话，不把 reason 漏到界面上
 const SCRIPT_CANVAS_NOTE: Record<string, string> = {
-  synced: '画布里的复刻提示词也换成新脚本了',
-  'no-canvas': '还没开画布，开画布时会用这条脚本生成提示词',
-  'canvas-missing': '这条作品绑的画布不在了，脚本已经存下',
-  'hand-edited': '画布里的提示词是手改过的，没有覆盖',
-  'save-failed': '画布提示词这次没写进去，稍后再存一次脚本',
+  synced: '工作流里的复刻提示词也换成新脚本了',
+  'no-canvas': '还没开工作流，开工作流时会用这条脚本生成提示词',
+  'canvas-missing': '这条作品绑的工作流不在了，脚本已经存下',
+  'hand-edited': '工作流里的提示词是手改过的，没有覆盖',
+  'save-failed': '工作流提示词这次没写进去，稍后再存一次脚本',
   'no-script': '',
 }
 
@@ -164,9 +164,9 @@ const stripStop = (value: string | undefined) => String(value || '').replace(/[�
 
 /**
  * 作品页：一条内容的完整现场。
- * 首屏只回答「下一步点哪里」（用脚本开画布 → 送评审 → 继续改 → 交付），
- * 然后是版本对照，下面才是现场：脚本、分镜、画布、评审。
- * 脚本默认跟随模板，在页内改过就复制成作品自己的版本（copy-on-write）；版本只存画布指针。
+ * 首屏只回答「下一步点哪里」（用脚本开工作流 → 送评审 → 继续改 → 交付），
+ * 然后是版本对照，下面才是现场：脚本、分镜、工作流、评审。
+ * 脚本默认跟随模板，在页内改过就复制成作品自己的版本（copy-on-write）；版本只存工作流指针。
  */
 export default function ProjectPage({
   projectId,
@@ -186,7 +186,7 @@ export default function ProjectPage({
   focusDeliveryId?: string
   onBack: () => void
   onOpenFlow: (flowId: string) => void
-  /** 只读回看一次运行（v0.9.108）：带着当时的节点状态进画布，不改画布、不扣费 */
+  /** 只读回看一次运行（v0.9.108）：带着当时的节点状态进工作流，不改工作流、不扣费 */
   onViewRun: (flowId: string, runId: string) => void
   onOpenReview: (projectId: string) => void
   /** 打开某一条评审的记录页：那里有当时的证据原图与问题锚点 */
@@ -497,8 +497,8 @@ export default function ProjectPage({
     }
   }, [compareOpen])
 
-  // 作品第一次开画布就是这里：服务端用这条作品**现在的脚本**生成输入 + 复刻两个节点，
-  // 建完立刻绑上作品（v1），再打开画布。脚本改过也不怕：画布拿到的就是新词。
+  // 作品第一次开工作流就是这里：服务端用这条作品**现在的脚本**生成输入 + 复刻两个节点，
+  // 建完立刻绑上作品（v1），再打开工作流。脚本改过也不怕：工作流拿到的就是新词。
   const openCanvas = useCallback(async () => {
     if (!data) return
     if (data.project.flowId) {
@@ -508,10 +508,10 @@ export default function ProjectPage({
     setBusy('canvas')
     try {
       const result = await openProjectCanvas(data.project.id)
-      onToast((result.created ? '已按这条脚本生成画布：' : '画布已就绪：') + result.flow.name)
+      onToast((result.created ? '已按这条脚本生成工作流：' : '工作流已就绪：') + result.flow.name)
       onOpenFlow(result.flow.id)
     } catch (caught) {
-      onToast(caught instanceof Error ? caught.message : '开画布失败')
+      onToast(caught instanceof Error ? caught.message : '开工作流失败')
     } finally {
       setBusy('')
     }
@@ -520,7 +520,7 @@ export default function ProjectPage({
   // 只读分享：开 / 停 / 复制。链接是这条作品的地址，不是账号的，所以停止只影响这一条。
   const shareLink = data?.share ? window.location.origin + '/#/share/project/' + data.share.token : ''
 
-  // 旧版脚本：点版本行上的段数才读。不动画布、不扣积分；读失败也把弹窗留着，写清原因。
+  // 旧版脚本：点版本行上的段数才读。不动工作流、不扣积分；读失败也把弹窗留着，写清原因。
   const openVersionScript = async (row: { n: number; name: string }) => {
     if (!data) return
     setVersionScript({
@@ -1209,11 +1209,11 @@ export default function ProjectPage({
 
   const remove = async () => {
     if (!data) return
-    if (!window.confirm('删除这条作品？画布与评审不会被删掉，只解除关联。')) return
+    if (!window.confirm('删除这条作品？工作流与评审不会被删掉，只解除关联。')) return
     setBusy('delete')
     try {
       await deleteProject(data.project.id)
-      onToast('已删除作品，画布与评审仍在')
+      onToast('已删除作品，工作流与评审仍在')
       onBack()
     } catch (caught) {
       onToast(caught instanceof Error ? caught.message : '删除失败')
@@ -1251,14 +1251,14 @@ export default function ProjectPage({
     }
   }
 
-  // 开新版＝复制当前画布；旧画布归档成 vN，作品立刻指向新画布。
+  // 开新版＝复制当前工作流；旧工作流归档成 vN，作品立刻指向新工作流。
   const startVersion = async () => {
     if (!data || busy) return
     setBusy('version')
     try {
       const result = await startProjectVersion(data.project.id)
       await load()
-      onToast('已开 v' + result.project.version + '：画布从上一版复制过来，接着改这一版')
+      onToast('已开 v' + result.project.version + '：工作流从上一版复制过来，接着改这一版')
     } catch (caught) {
       onToast(caught instanceof Error ? caught.message : '开新版本失败')
     } finally {
@@ -1266,12 +1266,12 @@ export default function ProjectPage({
     }
   }
 
-  // 以旧版为底开新版（v0.9.115）：点两下才执行。新一版复制旧版画布与脚本，当前版归档；
+  // 以旧版为底开新版（v0.9.115）：点两下才执行。新一版复制旧版工作流与脚本，当前版归档；
   // 不覆盖任何历史，所以不需要原生 confirm。第一下只把按钮换成「再点一次」。
   const rebaseVersion = async (row: { n: number; scriptBeats: number }) => {
     if (!data || busy) return
     if (!row.scriptBeats) {
-      onToast('这一版开版时没存脚本快照，没法整版回到当时；只能打开那一版画布手动改')
+      onToast('这一版开版时没存脚本快照，没法整版回到当时；只能打开那一版工作流手动改')
       return
     }
     if (rebaseArmed !== row.n) {
@@ -1285,7 +1285,7 @@ export default function ProjectPage({
       await load()
       onToast(
         '已以 v' + row.n + ' 为底开 v' + result.project.version +
-        '：画布和脚本回到那一版，v' + (result.project.version - 1) + ' 已归档，记录都还在',
+        '：工作流和脚本回到那一版，v' + (result.project.version - 1) + ' 已归档，记录都还在',
       )
     } catch (caught) {
       onToast(caught instanceof Error ? caught.message : '以旧版为底开新版失败')
@@ -1365,7 +1365,7 @@ export default function ProjectPage({
     try {
       const result = await resetProjectScript(data.project.id)
       await load()
-      onToast(result.script ? '已恢复成模板的脚本，画布提示词也跟着回去了' : '已清掉作品自己的脚本')
+      onToast(result.script ? '已恢复成模板的脚本，工作流提示词也跟着回去了' : '已清掉作品自己的脚本')
     } catch (caught) {
       onToast(caught instanceof Error ? caught.message : '恢复失败')
     } finally {
@@ -1416,7 +1416,7 @@ export default function ProjectPage({
   }
 
   const { project, template, flow, reviews } = data
-  // 这条作品花掉的积分（v0.9.65）：评审与画布运行分开记，退过款的那次运行不算
+  // 这条作品花掉的积分（v0.9.65）：评审与工作流运行分开记，退过款的那次运行不算
   const spend = data.spend
   // 明细里的「累计 / 本月」两枚胶囊上的数字：byMonth 按全部记录算，切范围时上面的数字不跟着缩水
   const spendByMonth = spendDetail?.byMonth || []
@@ -1470,7 +1470,7 @@ export default function ProjectPage({
     {
       n: project.version,
       flowId: project.flowId,
-      // 当前版用作品名：画布名是建版本那一刻的标题，改名后拿它当行标题会显得对不上
+      // 当前版用作品名：工作流名是建版本那一刻的标题，改名后拿它当行标题会显得对不上
       name: project.title,
       archivedAt: '',
       available: Boolean(flow),
@@ -1742,7 +1742,7 @@ export default function ProjectPage({
               else void openCanvas()
             }}
           >
-            {busy === 'canvas' ? '正在生成画布…' : !project.flowId && !script ? '先写一条脚本' : step.cta}
+            {busy === 'canvas' ? '正在生成工作流…' : !project.flowId && !script ? '先写一条脚本' : step.cta}
             <ArrowRight size={15} />
           </button>
         </div>
@@ -1774,7 +1774,7 @@ export default function ProjectPage({
               <span className="vq-mono">{project.version} 版</span>
             </h2>
             <p className="vq-project-versions-note">
-              开新版时会把这一版的脚本存一份快照，再改只影响新版；每一行写清「比上一版改了什么」，点脚本段数能翻开那一版的原文。归档版还能「以这一版为底」再开一版：画布和脚本回到那一版，当前版归档，记录都保留；那一行会标出底座，改动也按底座算。右上「两版对照」可以任选两版，逐项看画布节点与脚本口播，只读、不扣积分。
+              开新版时会把这一版的脚本存一份快照，再改只影响新版；每一行写清「比上一版改了什么」，点脚本段数能翻开那一版的原文。归档版还能「以这一版为底」再开一版：工作流和脚本回到那一版，当前版归档，记录都保留；那一行会标出底座，改动也按底座算。右上「两版对照」可以任选两版，逐项看工作流节点与脚本口播，只读、不扣积分。
             </p>
             <div className="vq-project-versions-actions">
               <button
@@ -1782,7 +1782,7 @@ export default function ProjectPage({
                 className="vq-button vq-button--ghost"
                 onClick={() => setCompareOpen(true)}
                 disabled={project.version < 2 || busy === 'version' || busy === 'rebase'}
-                title={project.version < 2 ? '至少要有两版才能对照' : '只读对照任意两版：画布节点与脚本口播逐项列出来'}
+                title={project.version < 2 ? '至少要有两版才能对照' : '只读对照任意两版：工作流节点与脚本口播逐项列出来'}
               >
                 <ScanEye size={14} />
                 两版对照
@@ -1794,7 +1794,7 @@ export default function ProjectPage({
                 disabled={busy === 'version' || busy === 'rebase'}
               >
                 <CopyPlus size={14} />
-                {busy === 'version' ? '正在复制画布…' : '开一版新的'}
+                {busy === 'version' ? '正在复制工作流…' : '开一版新的'}
               </button>
             </div>
           </div>
@@ -1826,7 +1826,7 @@ export default function ProjectPage({
                         <span
                           className="vq-version-lineage"
                           title={
-                            '这一版开版时复制的是 v' + row.basedOn + ' 的画布和脚本；下方的改动也按 v' + row.basedOn + ' 算'
+                            '这一版开版时复制的是 v' + row.basedOn + ' 的工作流和脚本；下方的改动也按 v' + row.basedOn + ' 算'
                           }
                         >
                           以 v{row.basedOn} 为底
@@ -1939,9 +1939,9 @@ export default function ProjectPage({
                       className="vq-button vq-button--ghost vq-version-open"
                       onClick={() => onOpenFlow(row.flowId)}
                       disabled={!row.available || busy === 'version' || busy === 'rebase'}
-                      title={row.available ? '在画布里打开 v' + row.n : '这一版的画布已被删除'}
+                      title={row.available ? '在工作流里打开 v' + row.n : '这一版的工作流已被删除'}
                     >
-                      {row.available ? '打开画布' : '画布已删除'}
+                      {row.available ? '打开工作流' : '工作流已删除'}
                       {row.available ? <ArrowRight size={13} /> : null}
                     </button>
                     {!row.current ? (
@@ -1952,7 +1952,7 @@ export default function ProjectPage({
                         disabled={busy === 'version' || busy === 'rebase' || !row.scriptBeats}
                         title={
                           row.scriptBeats
-                            ? '以 v' + row.n + ' 的画布和脚本为底开 v' + (project.version + 1) +
+                            ? '以 v' + row.n + ' 的工作流和脚本为底开 v' + (project.version + 1) +
                               '；v' + project.version + ' 会归档，所有记录都保留'
                             : '这一版开版时没存脚本快照，没法整版回到当时'
                         }
@@ -2867,7 +2867,7 @@ export default function ProjectPage({
               <span className="vq-mono">{data.runTotal} 次</span>
             </h2>
             <p className="vq-project-runs-note">
-              一个作品的运行跨版本归集：旧版画布跑过的记录还在，开新版不会把它们藏起来。
+              一个作品的运行跨版本归集：旧版工作流跑过的记录还在，开新版不会把它们藏起来。
             </p>
           </div>
           {data.runs.length ? (
@@ -2912,8 +2912,8 @@ export default function ProjectPage({
                           onClick={() => onViewRun(run.flowId, run.id)}
                           title={
                             run.available
-                              ? '在画布上只读回看这次运行：有画布快照时连当时的位置与参数一起回放；不改画布、不扣积分'
-                              : '这块画布已经删除，但这次运行留下了画布快照：仍可只读回看当时的位置与参数；不改任何内容、不扣积分'
+                              ? '在工作流上只读回看这次运行：有工作流快照时连当时的位置与参数一起回放；不改工作流、不扣积分'
+                              : '这条工作流已经删除，但这次运行留下了工作流快照：仍可只读回看当时的位置与参数；不改任何内容、不扣积分'
                           }
                         >
                           <ScanEye size={13} />
@@ -2925,9 +2925,9 @@ export default function ProjectPage({
                         className="vq-button vq-button--ghost vq-button--sm vq-run-open"
                         onClick={() => onOpenFlow(run.flowId)}
                         disabled={!run.available}
-                        title={run.available ? '打开 v' + run.version + ' 的画布' : '这次运行的画布已被删除，记录仍留着'}
+                        title={run.available ? '打开 v' + run.version + ' 的工作流' : '这次运行的工作流已被删除，记录仍留着'}
                       >
-                        {run.available ? '打开画布' : '画布已删除'}
+                        {run.available ? '打开工作流' : '工作流已删除'}
                         {run.available ? <ArrowRight size={13} /> : null}
                       </button>
                     </div>
@@ -2937,11 +2937,11 @@ export default function ProjectPage({
             </ol>
           ) : (
             <div className="vq-project-empty">
-              <strong>这条作品还没跑过画布</strong>
-              <span>打开画布点一次运行：每个节点的耗时、输出与失败原因都会记在这里，并按版本归集。</span>
+              <strong>这条作品还没跑过工作流</strong>
+              <span>打开工作流点一次运行：每个节点的耗时、输出与失败原因都会记在这里，并按版本归集。</span>
               <button type="button" className="vq-button vq-button--ghost" onClick={() => void openCanvas()}>
                 <Clapperboard size={13} />
-                打开画布去运行
+                打开工作流去运行
               </button>
             </div>
           )}
@@ -3016,7 +3016,7 @@ export default function ProjectPage({
                     <strong>已存成模板《{tplSheet.done.title}》</strong>
                     <span className="vq-mono">
                       {tplSheet.done.beats} 段 · {tplSheet.done.shots} 镜 ·{' '}
-                      {tplSheet.done.projectVersion ? '第 ' + tplSheet.done.projectVersion + ' 版' : '还没开画布'}
+                      {tplSheet.done.projectVersion ? '第 ' + tplSheet.done.projectVersion + ' 版' : '还没开工作流'}
                     </span>
                   </p>
                   <p className="vq-tpl-sheet-note">
@@ -3066,7 +3066,7 @@ export default function ProjectPage({
                   </p>
                   {!template ? (
                     <p className="vq-tpl-sheet-note is-warn">
-                      这条作品没有分镜（它不是从模板起的），存不成模板：模板要能被再改编，分镜得有着落。从画布起的作品，用画布里的「另存为模板」。
+                      这条作品没有分镜（它不是从模板起的），存不成模板：模板要能被再改编，分镜得有着落。从工作流起的作品，用工作流里的「另存为模板」。
                     </p>
                   ) : script?.source === 'project' ? null : (
                     <p className="vq-tpl-sheet-note is-warn">
@@ -3163,7 +3163,7 @@ export default function ProjectPage({
                     加一段
                   </button>
                   <span className="vq-script-note">
-                    保存后按口播重估「要念几秒」；画布里自动生成的复刻提示词会一起换成新脚本，模板不动。
+                    保存后按口播重估「要念几秒」；工作流里自动生成的复刻提示词会一起换成新脚本，模板不动。
                   </span>
                   <button type="button" className="vq-button vq-button--ghost" onClick={cancelScript}>
                     取消
@@ -3211,7 +3211,7 @@ export default function ProjectPage({
                 <span>
                   {template
                     ? '这条模板还没解析出脚本段落；也可以直接写一条这条作品自己的话。'
-                    : '绑定的模板已删除或不在当前账号下；脚本可以直接在这里写，开画布时用它生成复刻提示词。'}
+                    : '绑定的模板已删除或不在当前账号下；脚本可以直接在这里写，开工作流时用它生成复刻提示词。'}
                 </span>
                 <div className="vq-project-empty-actions">
                   <button type="button" className="vq-button vq-button--ghost" onClick={beginScript}>
@@ -3326,7 +3326,7 @@ export default function ProjectPage({
         <aside className="vq-project-side">
           <section className="vq-project-panel">
             <div className="vq-project-panel-head">
-              <h2>画布</h2>
+              <h2>工作流</h2>
               <Workflow size={14} />
             </div>
             {flow ? (
@@ -3336,17 +3336,17 @@ export default function ProjectPage({
                   {flow.nodes} 个节点 · 更新 {stamp(flow.updatedAt)}
                 </p>
                 <button type="button" className="vq-button vq-button--primary vq-project-full" onClick={() => void openCanvas()}>
-                  打开画布
+                  打开工作流
                   <ArrowRight size={13} />
                 </button>
               </>
             ) : (
               <div className="vq-project-empty">
-                <strong>还没开画布</strong>
+                <strong>还没开工作流</strong>
                 <span>
                   {data.script
-                    ? '用这条作品现在的脚本生成一张画布草稿：输入节点带钩子，复刻节点带完整提示词。'
-                    : '先在左边写一条脚本（或从模板库套一条），再来开画布。'}
+                    ? '用这条作品现在的脚本生成一条工作流草稿：输入节点带钩子，复刻节点带完整提示词。'
+                    : '先在左边写一条脚本（或从模板库套一条），再来开工作流。'}
                 </span>
                 <button
                   type="button"
@@ -3355,13 +3355,13 @@ export default function ProjectPage({
                   disabled={busy === 'canvas' || !data.script}
                 >
                   <Clapperboard size={13} />
-                  {busy === 'canvas' ? '生成中…' : '开画布'}
+                  {busy === 'canvas' ? '生成中…' : '开工作流'}
                 </button>
               </div>
             )}
           </section>
 
-          {/* 花费（v0.9.65）：钱花在这条作品的哪一步。只算评审与画布运行——
+          {/* 花费（v0.9.65）：钱花在这条作品的哪一步。只算评审与工作流运行——
               检索、复刻与智能体对话记在账号上，账本里没有作品，不摊过来 */}
           {spend ? (
             <section className="vq-project-panel vq-project-spend" aria-labelledby="vq-project-spend-head">
@@ -3393,7 +3393,7 @@ export default function ProjectPage({
                     </i>
                   </p>
                   <p className="vq-project-spend-row">
-                    <span>画布运行</span>
+                    <span>工作流运行</span>
                     <b>{spend.runs.count} 次</b>
                     <i>
                       {spend.runs.credits.toLocaleString('zh-CN')} {spend.unit}
@@ -3401,7 +3401,7 @@ export default function ProjectPage({
                   </p>
                 </div>
               ) : (
-                <p className="vq-project-note">这条作品还没花过积分：评一次或跑一次画布，这里就会出现数字。</p>
+                <p className="vq-project-note">这条作品还没花过积分：评一次或跑一次工作流，这里就会出现数字。</p>
               )}
               {spend.lastAt ? (
                 <p className="vq-project-note vq-mono">最近一次 · {stamp(spend.lastAt)}</p>
@@ -3474,7 +3474,7 @@ export default function ProjectPage({
                             >
                               <span className="vq-spend-item-time vq-mono">{shortStamp(entry.at)}</span>
                               <span className="vq-spend-item-text">
-                                {entry.kind === 'review' ? '视觉评审' : '画布运行'}
+                                {entry.kind === 'review' ? '视觉评审' : '工作流运行'}
                                 {entry.version ? ' · 第 ' + entry.version + ' 版' : ''}
                                 {entry.kind === 'review'
                                   ? ' · ' + (VERDICT_LABEL[entry.verdict || ''] || '结论未记录')
@@ -3765,7 +3765,7 @@ export default function ProjectPage({
                     <dt>内容类型</dt>
                     <dd>{template.contentType || '—'}</dd>
                   </div>
-                  {/* 只有真原片才写原片时长：画布 / 智能体来的模板没有原片，写 0.0s 是编的 */}
+                  {/* 只有真原片才写原片时长：工作流 / 智能体来的模板没有原片，写 0.0s 是编的 */}
                   {template.origin?.kind === 'original' ? (
                     <div>
                       <dt>原片时长</dt>
@@ -3802,13 +3802,13 @@ export default function ProjectPage({
                 ) : template.origin ? (
                   <p className="vq-project-note">
                     {template.origin.kind === 'canvas'
-                      ? '这条模板是从画布另存的，没有原片可回看。'
+                      ? '这条模板是从工作流另存的，没有原片可回看。'
                       : '这条模板是智能体草稿存的，没有原片可回看。'}
                   </p>
                 ) : null}
               </>
             ) : (
-              <p className="vq-project-note">绑定的模板已被删除或不在当前账号下；作品本身还在，画布与评审不受影响。</p>
+              <p className="vq-project-note">绑定的模板已被删除或不在当前账号下；作品本身还在，工作流与评审不受影响。</p>
             )}
           </section>
         </aside>
@@ -3837,7 +3837,7 @@ export default function ProjectPage({
               拿到链接的人不用登录就能看：开头钩子、脚本分段与口播时长、分镜、评审与运行的次数，
               还有一张评审对照纸（评审说的问题框在当时的画面上，可打印或存 PDF）。
               两版对照默认不带；需要给甲方看「这一版改了什么」时，在链接下面单独打开。
-              看不到账号、积分与完整画布。
+              看不到账号、积分与完整工作流。
             </p>
 
             {data.share ? (
@@ -3894,7 +3894,7 @@ export default function ProjectPage({
                         分享页带上两版对照
                       </span>
                       <p className="vq-share-compare-copy">
-                        v{data.project.version - 1} → v{data.project.version} 的画布参数、脚本口播、评审与交付并排；
+                        v{data.project.version - 1} → v{data.project.version} 的工作流参数、脚本口播、评审与交付并排；
                         默认关，打开后拿到链接的人也能打印这张 A4。
                       </p>
                     </div>

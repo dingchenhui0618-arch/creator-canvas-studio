@@ -129,8 +129,8 @@ test('跟上一版完全一样时就说一样，不硬找差异', () => {
     currentNodeList: nodesOf('复刻脚本'),
   })
   const markdown = build(detail)
-  assert.ok(markdown.includes('画布节点没动；脚本跟上一版一样'))
-  assert.ok(markdown.includes('- 画布：比 v1 节点没动'))
+  assert.ok(markdown.includes('工作流节点没动；脚本跟上一版一样'))
+  assert.ok(markdown.includes('- 工作流：比 v1 节点没动'))
 })
 
 test('没存快照的版本说实话：不拿现在的脚本冒充当时的', () => {
@@ -145,16 +145,16 @@ test('没存快照的版本说实话：不拿现在的脚本冒充当时的', ()
   assert.ok(!block.includes('现在的一句'), '历史版本的块里不能出现当前脚本的内容')
 })
 
-test('画布对比：多、少、改都点名；画布被删时说明只剩归档', () => {
+test('工作流对比：多、少、改都点名；工作流被删时说明只剩归档', () => {
   const removed = fixture({
     archived: [{ n: 1, name: '咖啡 v1', archivedAt: '2026-11-12T04:00:00.000Z', nodes: nodesOf('复刻脚本', '配音') }],
     currentNodeList: nodesOf('复刻脚本', '出图'),
   })
   const markdown = build(removed)
-  assert.ok(markdown.includes('画布多 1 个（出图）、少 1 个（配音）') || markdown.includes('画布多 1 个（出图）、少 1 个（配音）、改 1 个（复刻脚本）'))
+  assert.ok(markdown.includes('工作流多 1 个（出图）、少 1 个（配音）') || markdown.includes('工作流多 1 个（出图）、少 1 个（配音）、改 1 个（复刻脚本）'))
 
   const gone = fixture({ archived: [{ n: 1, name: '咖啡 v1', archivedAt: '2026-11-12T04:00:00.000Z', available: false }] })
-  assert.ok(build(gone).includes('画布已经被删除，只剩这一行归档记录'))
+  assert.ok(build(gone).includes('工作流已经被删除，只剩这一行归档记录'))
 })
 
 test('版数很多时只写最近几版，表里仍然是全量', () => {

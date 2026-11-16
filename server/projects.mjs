@@ -1,6 +1,6 @@
 // 作品（Project）：一条内容的主线对象。
 //
-// 默认只存引用：脚本留在绑定的模板上，画布在流程服务里，评审在 reviews.json 里。
+// 默认只存引用：脚本留在绑定的模板上，工作流在流程服务里，评审在 reviews.json 里。
 // 唯一例外是**脚本的 copy-on-write**：用户在作品页改脚本时，才把脚本复制成作品自己的版本
 // （见 project-script.mjs）。没改过的作品仍然跟着模板走，不会平白多一份过期副本。
 import fsp from 'node:fs/promises'
@@ -142,7 +142,7 @@ function normalizeVersion(raw, fallbackN) {
   return {
     n: normalizedN,
     flowId: String(raw?.flowId || ''),
-    name: clip(raw?.name || '未命名画布', 60),
+    name: clip(raw?.name || '未命名工作流', 60),
     archivedAt: String(raw?.archivedAt || ''),
     script: normalizeVersionScript(raw?.script),
     basedOn: normalizeBasedOn(raw?.basedOn, normalizedN),
@@ -541,11 +541,11 @@ function normalize(item) {
     title: clip(item.title || '未命名作品', 80),
     templateId: String(item.templateId || ''),
     flowId: String(item.flowId || ''),
-    // 第几版：0 表示还没开过画布，开出来就是 v1
+    // 第几版：0 表示还没开过工作流，开出来就是 v1
     version,
     // 这一版是从哪一版复制来的（v0.9.116）：0 表示接着上一版改，不是回退来的
     basedOn: normalizeBasedOn(item.basedOn, version),
-    // 归档的旧版本只存指针：画布还在流程服务里，这里不复制节点
+    // 归档的旧版本只存指针：工作流还在流程服务里，这里不复制节点
     versions,
     // 作品自己的脚本：只有用户动过才存在；没有就跟随模板（项目页读 scriptView）
     script: normalizeStoredScript(item.script),
@@ -613,8 +613,8 @@ export async function createProject({ title = '', templateId = '', flowId = '' }
     title: clip(title || '未命名作品', 80),
     templateId: String(templateId || ''),
     flowId: String(flowId || ''),
-    // 从模板建的作品还没有画布，等「开画布」才变成 v1；
-    // 从画布建的（v0.9.29）画布已经在了，一出生就是 v1——否则版本对照里会显示成 v0。
+    // 从模板建的作品还没有工作流，等「开工作流」才变成 v1；
+    // 从工作流建的（v0.9.29）工作流已经在了，一出生就是 v1——否则版本对照里会显示成 v0。
     version: flowId ? 1 : 0,
     // 出生就是 v1，没有「以哪一版为底」；之后回退开版才写这个数
     basedOn: 0,
@@ -632,7 +632,7 @@ export async function createProject({ title = '', templateId = '', flowId = '' }
 const PATCHABLE = ['title', 'flowId', 'status']
 
 /**
- * 只允许改标题、绑定的画布、状态；模板绑定建好就不改（换模板等于换一条内容）。
+ * 只允许改标题、绑定的工作流、状态；模板绑定建好就不改（换模板等于换一条内容）。
  * deliveryPackage 是路由封存好的包元数据（v0.9.125）：只有「标记交付」这一条路会带，
  * 存储层不负责打包，只负责把「这一版交出去时是什么样」与包编号一起落盘。
  */
@@ -706,7 +706,7 @@ export async function updateProject(
       }
     }
   }
-  // 第一次绑上画布就是 v1：版本计数从这里开始，之后只有「开一版新的」才会加
+  // 第一次绑上工作流就是 v1：版本计数从这里开始，之后只有「开一版新的」才会加
   if (found.flowId && !Number(found.version)) {
     found.version = 1
     changed = true
@@ -1198,14 +1198,14 @@ export async function clearProjectScript(id, user = null) {
   return normalize(found)
 }
 
-/** 只给「绑定画布」用：绑定后刷新时间，但不改标题/状态。 */
+/** 只给「绑定工作流」用：绑定后刷新时间，但不改标题/状态。 */
 export async function bindProjectFlow(id, flowId, user = null) {
   return updateProject(id, { flowId: String(flowId || '') }, user)
 }
 
 /**
- * 开新版本：当前画布存成归档（只存 flowId 与名字，不复制节点），作品改指向新画布。
- * 复制画布本身由路由做——存储层只认指针，不碰流程服务。
+ * 开新版本：当前工作流存成归档（只存 flowId 与名字，不复制节点），作品改指向新工作流。
+ * 复制工作流本身由路由做——存储层只认指针，不碰流程服务。
  */
 export async function archiveProjectVersion(id, { flowId = '', prevName = '', script = null, nextScript = undefined, basedOn = 0 } = {}, user = null) {
   const list = await loadAll()
@@ -1219,7 +1219,7 @@ export async function archiveProjectVersion(id, { flowId = '', prevName = '', sc
     {
       n: current.version,
       flowId: current.flowId,
-      name: clip(prevName || '上一版画布', 60),
+      name: clip(prevName || '上一版工作流', 60),
       archivedAt: now,
       // 归档时把这一版的脚本一起存下来：之后改脚本也只影响新版本
       script: normalizeVersionScript(script) || undefined,
@@ -1274,7 +1274,7 @@ export async function deleteProject(id, user = null) {
 // ---------- 只读分享链接 ----------
 // 分享给没有账号的人看（甲方、剪辑），所以链接本身就是凭证：24 字节随机 token。
 // 与模板分享同一套规则：停止分享就把 token 清掉，旧链接当场失效；重新开启换一个新 token。
-// 公开视图走 project-share.mjs 的白名单，不带归属、内部 id 与画布信息。
+// 公开视图走 project-share.mjs 的白名单，不带归属、内部 id 与工作流信息。
 const SHARE_TOKEN_MIN = 16
 
 function newShareToken() {

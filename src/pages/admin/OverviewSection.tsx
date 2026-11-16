@@ -64,7 +64,7 @@ export default function OverviewSection() {
             <SourceTag kind="api" source="GET /api/runs" />
           </div>
           <p className="admin-value">{runs.loading ? '—' : (runs.data?.total ?? '—')}</p>
-          <p className="admin-foot">{internal ? '画布流程实际运行记录总数，按服务端返回计。' : '画布流程的实际运行记录总数。'}</p>
+          <p className="admin-foot">{internal ? '工作流实际运行记录总数，按服务端返回计。' : '工作流的实际运行记录总数。'}</p>
         </article>
 
         <article className="admin-card admin-stat">

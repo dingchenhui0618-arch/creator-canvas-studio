@@ -55,7 +55,7 @@ type ChatMessage = {
   model?: string
   latencyMs?: number
   tools?: AgentToolsResult
-  // 结构化草稿：有它才显示三个出口（存为模板 / 送到画布 / 写进作品）
+  // 结构化草稿：有它才显示三个出口（存为模板 / 送到工作流 / 写进作品）
   draft?: AgentDraft | null
   at: number
 }
@@ -67,7 +67,7 @@ type DraftAction = {
   error: string
   template?: { id: string; title: string }
   flow?: { id: string; name: string }
-  /** 已经写进这条作品：标题 / 版次 / 段数与画布那边发生了什么 */
+  /** 已经写进这条作品：标题 / 版次 / 段数与工作流那边发生了什么 */
   project?: { id: string; title: string; version: number; beats: number; canvas: { synced: boolean; reason: string } }
   /** 「写进作品」展开后的选作品面板：选哪一条、这条现在的脚本是什么 */
   picker?: {
@@ -90,7 +90,7 @@ type AgentProjectContext = {
   hook: string
 }
 
-const versionLabel = (version: number) => (version > 0 ? '第 ' + version + ' 版' : '还没开画布')
+const versionLabel = (version: number) => (version > 0 ? '第 ' + version + ' 版' : '还没开工作流')
 
 function projectPrompt(context: AgentProjectContext) {
   const lines = ['帮我改《' + context.title + '》这一版（' + versionLabel(context.version) + '）的脚本。']
@@ -424,9 +424,9 @@ const OUTPUT_TYPE_BY_CATEGORY: Record<string, OutputType> = {
 const DEFAULT_OUTPUT_TYPE: OutputType = '脚本'
 
 // 结构化草稿卡：回复下面的一条「可以继续用的东西」。
-// 两个出口都在这里，不跳页：存完模板、建完画布之后原件还在，链接点了再走。
+// 两个出口都在这里，不跳页：存完模板、建完工作流之后原件还在，链接点了再走。
 // 结构化草稿卡：回复下面的一条「可以继续用的东西」。
-// 三个出口都在这里，不跳页：存完模板、建完画布、写进作品之后原件还在，链接点了再走。
+// 三个出口都在这里，不跳页：存完模板、建完工作流、写进作品之后原件还在，链接点了再走。
 function DraftCard({
   draft,
   action,
@@ -523,9 +523,9 @@ function DraftCard({
         {savedFlow ? (
           <span className="agx-draft-done">
             <Check size={12} />
-            已送到画布 · {savedFlow.name}
+            已送到工作流 · {savedFlow.name}
             <button type="button" onClick={() => onOpenCanvas(savedFlow.id)}>
-              打开画布
+              打开工作流
             </button>
           </span>
         ) : (
@@ -534,10 +534,10 @@ function DraftCard({
             className="vq-button vq-button--ghost"
             onClick={onSendCanvas}
             disabled={busy}
-            title="开一张新画布：脚本进了复刻提示词，可以接着改、接着跑"
+            title="开一张新工作流：脚本进了复刻提示词，可以接着改、接着跑"
           >
             <Layers size={13} />
-            {action.busy === 'canvas' ? '创建中' : '送到画布'}
+            {action.busy === 'canvas' ? '创建中' : '送到工作流'}
           </button>
         )}
         {savedProject ? (
@@ -548,9 +548,9 @@ function DraftCard({
               打开作品
             </button>
             {savedProject.canvas.synced ? (
-              <em className="agx-draft-fact">画布里的复刻提示词就是这份脚本</em>
+              <em className="agx-draft-fact">工作流里的复刻提示词就是这份脚本</em>
             ) : savedProject.canvas.reason === 'hand-edited' ? (
-              <em className="agx-draft-fact">画布提示词你手改过，没动</em>
+              <em className="agx-draft-fact">工作流提示词你手改过，没动</em>
             ) : null}
           </span>
         ) : draft.stats.beats > 0 ? (
@@ -565,7 +565,7 @@ function DraftCard({
             {action.busy === 'project' ? '写入中' : '写进作品'}
           </button>
         ) : (
-          <span className="agx-draft-note">只有分镜的草稿写不进作品：作品脚本只认段落，要镜头就送到画布</span>
+          <span className="agx-draft-note">只有分镜的草稿写不进作品：作品脚本只认段落，要镜头就送到工作流</span>
         )}
       </div>
       {picker?.open && !savedProject ? (
@@ -809,7 +809,7 @@ export function AgentsPage({
         setDraft((current) => current || projectPrompt(next))
       })
       .catch(() => {
-        // 读不到就退回到「没有上下文」：草稿照样能存模板、送画布、选一条作品写进去
+        // 读不到就退回到「没有上下文」：草稿照样能存模板、送工作流、选一条作品写进去
         if (alive) onToast?.('那条作品的上下文没读到：写完草稿再选作品也一样能写进去')
       })
     return () => {
@@ -1037,9 +1037,9 @@ export function AgentsPage({
       try {
         const result = await sendAgentDraftToCanvas(agent.id, draft)
         markDraftAction(message.id, { busy: '', flow: { id: result.flow.id, name: result.flow.name } })
-        onToast?.('已送到画布：' + result.flow.name)
+        onToast?.('已送到工作流：' + result.flow.name)
       } catch (caught) {
-        markDraftAction(message.id, { busy: '', error: caught instanceof Error ? caught.message : '送到画布失败' })
+        markDraftAction(message.id, { busy: '', error: caught instanceof Error ? caught.message : '送到工作流失败' })
       }
     },
     [markDraftAction, onToast, selectedAgent],
@@ -1131,11 +1131,11 @@ export function AgentsPage({
           canvas: result.canvas,
         },
       })
-      // 画布那边到底动没动，要在这一句里说清楚：手改过的提示词我们没碰
+      // 工作流那边到底动没动，要在这一句里说清楚：手改过的提示词我们没碰
       const canvasNote = result.canvas.synced
-        ? '，画布里的复刻提示词就是这份脚本'
+        ? '，工作流里的复刻提示词就是这份脚本'
         : result.canvas.reason === 'hand-edited'
-          ? '，画布提示词你手改过没动'
+          ? '，工作流提示词你手改过没动'
           : ''
       onToast?.('已写进《' + result.project.title + '》· ' + versionLabel(result.project.version) + '（' + beats + ' 段' + canvasNote + '）')
       // 列表缓存与横幅上的版次一起刷新：同一份草稿再写一次，读到的不能是旧的
@@ -1422,7 +1422,7 @@ export function AgentsPage({
                 type="button"
                 className="vq-button vq-button--ghost"
                 onClick={() => setProjectContext(null)}
-                title="不帮这条作品了：草稿照样能存为模板、送到画布，或写进别的作品"
+                title="不帮这条作品了：草稿照样能存为模板、送到工作流，或写进别的作品"
               >
                 不帮了
               </button>

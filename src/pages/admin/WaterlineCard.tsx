@@ -18,8 +18,8 @@ const LEVEL: Record<WaterlineLevel, { label: string; tone: 'ok' | 'warn' | 'fail
 const HEAVY_LABEL: Record<string, string> = {
   replicate: '一键复刻',
   review: '视觉评审',
-  flow_run: '画布运行',
-  canvas_gen: '画布出图',
+  flow_run: '工作流运行',
+  canvas_gen: '无限画布出图',
 }
 
 // 没有账号可挂的那一类（v0.9.79）：它的上限是整机口径，不是「每账号」
@@ -66,7 +66,7 @@ export default function WaterlineCard() {
         <div>
           <p className="admin-label">运行水位</p>
           <p className="admin-sub">
-            这台机器还能接多少活。内存到红线时，复刻、评审、画布运行与画布出图会在扣费前被拒绝（不扣积分），其余请求照常；
+            这台机器还能接多少活。内存到红线时，复刻、评审、工作流运行与无限画布出图会在扣费前被拒绝（不扣积分），其余请求照常；
             水位偏紧时重活并发降到 1——宁可慢一点，也不要两条一起把进程顶穿。
           </p>
         </div>
@@ -167,7 +167,7 @@ export default function WaterlineCard() {
           {view.heavy.queue ? (
             view.heavy.queue.waitMs > 0 ? (
               <p className="admin-hint">
-                画布出图排队位：这条通道没有账号可挂，一次批量出图会连发好几张。名额满时先排着——
+                无限画布出图排队位：这条通道没有账号可挂，一次批量出图会连发好几张。名额满时先排着——
                 每条最多等 {secondsText(view.heavy.queue.waitMs)} 秒，最多 {view.heavy.queue.maxWaiting} 条同时排；
                 排到了照常出图（响应头 X-VQ-Queue-Ms 带回等了多久），排不到才拒，拒绝发生在调上游之前，不花钱。
                 本次启动以来：排到 {view.heavy.queue.served} 条 · 等超时 {view.heavy.queue.timedOut} 条 · 排满拒 {view.heavy.queue.full} 条 ·
@@ -175,7 +175,7 @@ export default function WaterlineCard() {
               </p>
             ) : (
               <p className="admin-hint">
-                画布出图没开排队（VQ_CANVAS_QUEUE_MS=0）：名额满时后面的几张立刻被拒，一次批量出图会「先到的 2 张成功、其余失败」。
+                无限画布出图没开排队（VQ_CANVAS_QUEUE_MS=0）：名额满时后面的几张立刻被拒，一次批量出图会「先到的 2 张成功、其余失败」。
               </p>
             )
           ) : null}

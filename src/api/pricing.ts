@@ -27,7 +27,7 @@ export type PricingRow = {
   credits: number
   billable: boolean
   subsidized: boolean
-  /** 一次成本的分母是单位（张 / 秒）而不是请求：画布出图 / 出视频这两行是 true */
+  /** 一次成本的分母是单位（张 / 秒）而不是请求：无限画布出图 / 出视频这两行是 true */
   perUnit: boolean
   revenueMilli: number | null
   measured: number

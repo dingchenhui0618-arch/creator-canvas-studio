@@ -35,7 +35,7 @@ function shareHint(share: ProjectShareBrief): string {
 // 三种筛法只回答「交没交出去」：评审结论、人工拍板仍然写在胶囊里，不重复切成筛选项。
 const BUCKETS: Array<{ value: ProjectBucket; label: string; hint: string }> = [
   { value: 'all', label: '全部', hint: '账号下所有作品' },
-  { value: 'active', label: '在做', hint: '当前这一版还没交出去：待开画布、评过没交、交过旧版又开了新版都算' },
+  { value: 'active', label: '在做', hint: '当前这一版还没交出去：待开工作流、评过没交、交过旧版又开了新版都算' },
   { value: 'delivered', label: '已交付', hint: '当前这一版交出去了；交付过旧版、又开了新版的不算' },
 ]
 
@@ -44,7 +44,7 @@ const EMPTY_FACETS: ProjectListFacets = { all: 0, active: 0, delivered: 0 }
 /**
  * 作品列表：一条内容一条记录。
  * 列表只回答「做到哪一步」——脚本和分镜的段数、评审次数、最后一次改动；
- * 打开某一项才进作品页看脚本、画布与评审结论。
+ * 打开某一项才进作品页看脚本、工作流与评审结论。
  *
  * 作品多起来以后，第一件事是「找得到那一条」：标题 / 模板名搜、按交没交出去筛。
  * 筛选与计数走服务端（/api/projects?q=&state=），与状态胶囊同一套交付口径，界面不另算一遍。
@@ -148,7 +148,7 @@ export default function ProjectsPage({
       <PageHead
         kicker="作品 / PROJECTS"
         title={headLoading ? '正在读取…' : '作品'}
-        desc="一条内容一条记录：用的哪条模板、开过几块画布、评审与交付都挂在这里。搜标题或模板名找一条，按「在做 / 已交付」看还剩哪些。"
+        desc="一条内容一条记录：用的哪条模板、开过几块工作流、评审与交付都挂在这里。搜标题或模板名找一条，按「在做 / 已交付」看还剩哪些。"
         actions={
           <>
             <button type="button" className="vq-button vq-button--ghost" onClick={() => void load({ q: keyword, state: bucket })} disabled={loading}>
@@ -337,7 +337,7 @@ export default function ProjectsPage({
                   <em>运行</em>
                   <b>{item.runs?.count ? item.runs.count + ' 次' : '—'}</b>
                 </span>
-                <span title={item.spend ? '评审 ' + item.spend.reviews.credits + ' · 画布 ' + item.spend.runs.credits : undefined}>
+                <span title={item.spend ? '评审 ' + item.spend.reviews.credits + ' · 工作流 ' + item.spend.runs.credits : undefined}>
                   <em>花费</em>
                   <b>{item.spend?.total ? item.spend.total.toLocaleString('zh-CN') + ' 积分' : '—'}</b>
                 </span>

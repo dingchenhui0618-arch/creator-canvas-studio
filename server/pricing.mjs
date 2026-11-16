@@ -1,5 +1,5 @@
 // 按次算账（v0.9.81）：把「扣多少积分」和「上游花多少钱」折进同一个单位（元），
-// 回答定价时最该先答的那句话——一次检索 / 一次复刻 / 一次评审 / 一次画布运行，平台赚还是倒贴。
+// 回答定价时最该先答的那句话——一次检索 / 一次复刻 / 一次评审 / 一次工作流运行，平台赚还是倒贴。
 //
 // 三个刻意的决定：
 //   1) 汇率只有一个来源：管理员在「计费 → 档位」里定的「多少钱换多少积分」。
@@ -7,7 +7,7 @@
 //   2) 成本不在本模块里估：仍然来自 usage_events × 管理员填的上游估算单价（usage-meter）。
 //      分母只数「真有用量」的调用（live 且成功）；回填条目只有次数，算进分母会把一次成本摊薄成假的。
 //      算不出来就写「未定价」并给出原因，绝不写 0.00 冒充「成本为零、毛利 100%」。
-//   3) 不扣积分的通道（画布出图 / 出视频）也进表：它们有真实上游成本、没有对应收入。
+//   3) 不扣积分的通道（无限画布出图 / 出视频）也进表：它们有真实上游成本、没有对应收入。
 //      这一行是平台现在最该看见的账，藏起来等于把补贴当利润。
 //
 // 一条边界：这里的「收入」是按档位汇率折算的理论值，不是真实收款（支付通道还没接）；
@@ -32,15 +32,15 @@ const BILLED = [
   { action: 'replicate', label: '一键复刻', credit: 'replicate', kinds: ['replicate'] },
   { action: 'review', label: '视觉评审', credit: 'review', kinds: ['vision', 'judge'] },
   { action: 'chat', label: '智能体对话', credit: 'chat', kinds: ['text'] },
-  { action: 'flow_run', label: '画布运行', credit: 'flow_run', kinds: ['run'] },
+  { action: 'flow_run', label: '工作流运行', credit: 'flow_run', kinds: ['run'] },
 ]
 
-// 不扣积分、但有真实上游成本的通道：画布出图按张、出视频按秒。
+// 不扣积分、但有真实上游成本的通道：无限画布出图按张、出视频按秒。
 // 这两行的「一次成本」按单位算（一张 / 一秒），不是按请求：一次请求可能出 3 张，
 // 按请求摊会把「一张多少钱」抹平成「一次请求多少钱」，定价时看错的正是这个数。
 const UNBILLED = [
-  { action: 'canvas_image', label: '画布出图', credit: '', kinds: ['image'], unit: '张' },
-  { action: 'canvas_video', label: '画布出视频', credit: '', kinds: ['video'], unit: '秒' },
+  { action: 'canvas_image', label: '无限画布出图', credit: '', kinds: ['image'], unit: '张' },
+  { action: 'canvas_video', label: '无限画布出视频', credit: '', kinds: ['video'], unit: '秒' },
 ]
 
 /** 一档换算成「每积分多少钱」：积分为 0 或价格为 0（赠送档）不参与折算。 */

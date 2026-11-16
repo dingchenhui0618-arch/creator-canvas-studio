@@ -52,7 +52,7 @@ export const EDITIONS: EditionMeta[] = [
     id: 'user',
     label: '用户生产版',
     mono: 'PRODUCTION',
-    hint: '检索、复刻、模板、智能体、画布、评审',
+    hint: '检索、复刻、模板、智能体、工作流、无限画布',
     nav: [],
   },
   {
@@ -63,7 +63,7 @@ export const EDITIONS: EditionMeta[] = [
     nav: [
       { id: 'overview', label: '总览', icon: Gauge, section: 'overview' },
       { id: 'users', label: '账号', icon: Users, section: 'users' },
-      { id: 'canvas', label: '画布', icon: Frame, section: 'canvas' },
+      { id: 'canvas', label: '无限画布', icon: Frame, section: 'canvas' },
       { id: 'keys', label: '模型 Key', icon: KeyRound, section: 'keys' },
       { id: 'templates', label: '模板治理', icon: LayoutTemplate, section: 'templates' },
       { id: 'usage', label: '成本', icon: Coins, section: 'usage' },

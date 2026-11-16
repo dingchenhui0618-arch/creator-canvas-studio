@@ -34,7 +34,7 @@ export interface WaterlineReport {
     unlimited: boolean
     configLimit: number
     full: boolean
-    // 按类型的整机上限（v0.9.79）：目前只有画布出图这一类（平台令牌通道，没有账号可挂）
+    // 按类型的整机上限（v0.9.79）：目前只有无限画布出图这一类（平台令牌通道，没有账号可挂）
     kindLimits?: Record<string, number>
     // 排队位（v0.9.80）：名额满时先排一会儿再拒；计数是本进程自启动以来的累计
     queue?: {

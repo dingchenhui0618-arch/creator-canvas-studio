@@ -35,15 +35,15 @@ export async function bdcStatus() {
     admin: { url: ADMIN_URL + '/admin/', ...admin },
     api: { url: API_URL, ...api },
     deployed: web.up,
-    // 积分口径（v0.9.162）：画布嵌进来时按宿主的口径标价，画布不再自己写死「1 元 = 多少积分」。
-    // 值来自服务端配置（VQ_POINTS_PER_CNY），画布只负责按它换算展示。
+    // 积分口径（v0.9.162）：无限画布嵌进来时按宿主的口径标价，无限画布不再自己写死「1 元 = 多少积分」。
+    // 值来自服务端配置（VQ_POINTS_PER_CNY），无限画布只负责按它换算展示。
     credit: { unit: config.credits.unit, pointsPerCny: config.credits.pointsPerCny },
   }
 }
 
-// ─── 画布数据打通 ─────────────────────────────────────────────────────────────
-// 画布的 JSON 存在它自己的 workspace 里（/api/canvas/{list,load,save}），工作台不去碰它的文件，
-// 只通过本机 5312 的 HTTP 接口读写，画布的版本号（_bdCanvasRevision）由它自己维护。
+// ─── 无限画布数据打通 ─────────────────────────────────────────────────────────────
+// 无限画布的 JSON 存在它自己的 workspace 里（/api/canvas/{list,load,save}），工作台不去碰它的文件，
+// 只通过本机 5312 的 HTTP 接口读写，无限画布的版本号（_bdCanvasRevision）由它自己维护。
 const CANVAS_API = API_URL + '/api/canvas'
 const CANVAS_TIMEOUT = 8000
 
@@ -59,20 +59,20 @@ async function canvasFetch(url, init = {}) {
   return json ?? {}
 }
 
-// 画布服务（本机 5312）没起来时，fetch 抛的是英文的「fetch failed」/ECONNREFUSED，
-// 界面上会原样出现「画布列表：fetch failed」——这不是给用户看的话（v0.9.42）。
+// 无限画布服务（本机 5312）没起来时，fetch 抛的是英文的「fetch failed」/ECONNREFUSED，
+// 界面上会原样出现「无限画布列表：fetch failed」——这不是给用户看的话（v0.9.42）。
 // 翻成一句能行动的中文；原始那串留在 detail 里给排障用，不丢线索。
 export function canvasErrorMessage(error) {
   const raw = String(error?.message || error || '') || '未知错误'
   if (!/fetch failed|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|socket hang up|aborted|timeout/i.test(raw)) {
     return raw.slice(0, 160)
   }
-  return '画布服务没有连上（本机 5312）：作品、模板、评审、交付都不受影响；稍后刷新，或确认画布服务已启动。'
+  return '无限画布服务没有连上（本机 5312）：作品、模板、评审、交付都不受影响；稍后刷新，或确认无限画布服务已启动。'
 }
 
 function canvasName(raw) {
   const name = String(raw || '').trim().slice(0, 60)
-  return name || ('未命名画布 ' + new Date().toISOString().slice(0, 16).replace('T', ' '))
+  return name || ('未命名无限画布 ' + new Date().toISOString().slice(0, 16).replace('T', ' '))
 }
 
 export async function listCanvases() {
@@ -80,7 +80,7 @@ export async function listCanvases() {
     const data = await canvasFetch(CANVAS_API + '/list')
     const canvases = (data.canvases || []).map((item) => ({
       id: String(item.canvas_id || ''),
-      name: String(item.name || item.canvas_id || '未命名画布'),
+      name: String(item.name || item.canvas_id || '未命名无限画布'),
       nodeCount: Number(item.node_count || 0),
       revision: Number(item.revision || 0),
       updatedAt: Number(item.mtime || 0) * 1000,
@@ -125,11 +125,11 @@ export async function createCanvas(rawName) {
   return { ok: true, canvas: { id, name, nodeCount: 0, revision: 1, updatedAt: Date.now() } }
 }
 
-// 工作台 → 画布：往指定画布里落一个「文本」节点（评审结论的载体）。
-// 用 _bdCanvasRevision 做乐观锁，别人同时改画布时返回 stale 而不是覆盖。
+// 工作台 → 无限画布：往指定无限画布里落一个「文本」节点（评审结论的载体）。
+// 用 _bdCanvasRevision 做乐观锁，别人同时改无限画布时返回 stale 而不是覆盖。
 export async function appendCanvasNote(canvasId, rawText, rawTitle) {
   const id = String(canvasId || '').trim()
-  if (!/^[A-Za-z0-9_-]{1,80}$/.test(id)) throw new Error('画布 id 不合法')
+  if (!/^[A-Za-z0-9_-]{1,80}$/.test(id)) throw new Error('无限画布 id 不合法')
   const text = String(rawText || '').trim().slice(0, 4000)
   if (!text) throw new Error('写入内容为空')
 
@@ -139,7 +139,7 @@ export async function appendCanvasNote(canvasId, rawText, rawTitle) {
   const counter = Number(data.nodeCounter || nodes.length || 0)
   const seq = counter + 1
 
-  // 字段形状对齐画布自己的 createTextNode：正文放 prompt，params 只放卡片尺寸与来源标记
+  // 字段形状对齐无限画布自己的 createTextNode：正文放 prompt，params 只放卡片尺寸与来源标记
   const nodeId = 'node-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8)
   nodes.push({
     id: nodeId,
@@ -149,7 +149,7 @@ export async function appendCanvasNote(canvasId, rawText, rawTitle) {
     title: String(rawTitle || 'VisionQA 评审笔记').slice(0, 40),
     prompt: text,
     model: 'text',
-    // 420×300 + 缩放 1.0 = 一页纸大小的笔记卡（画布默认 360×220，结论三行就出滚动条）
+    // 420×300 + 缩放 1.0 = 一页纸大小的笔记卡（无限画布默认 360×220，结论三行就出滚动条）
     params: { _width: 420, _height: 300, _cardScale: 1, _agentTextNode: true, _source: 'visionqa-workbench' },
     refs: [],
     status: 'idle',

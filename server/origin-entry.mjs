@@ -19,10 +19,10 @@ export function canStartProject(template) {
   return beats > 0 || shots > 0
 }
 
-/** 作品的进法：版本 0 是「照模板开了作品、还没开画布」，不写「第 0 版」。 */
+/** 作品的进法：版本 0 是「照模板开了作品、还没开工作流」，不写「第 0 版」。 */
 function workLabel(project) {
   const version = Number(project?.version) || 0
-  return version > 0 ? '作品 · 第 ' + version + ' 版' : '作品 · 还没开画布'
+  return version > 0 ? '作品 · 第 ' + version + ' 版' : '作品 · 还没开工作流'
 }
 
 function workHint(project) {
@@ -30,7 +30,7 @@ function workHint(project) {
   const name = String(project?.title || '').trim() || '未命名作品'
   return version > 0
     ? '打开作品《' + name + '》第 ' + version + ' 版，接着做这一条'
-    : '《' + name + '》是照这条模板开的，还没开画布：打开作品接着开'
+    : '《' + name + '》是照这条模板开的，还没开工作流：打开作品接着开'
 }
 
 /**

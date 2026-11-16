@@ -29,10 +29,10 @@ test('能续：复用 / 还差 / 补多少写在同一行，按钮跟着 plan �
   assert.match(view.note, /上次跑完且内容没变/)
 })
 
-test('画布改过：把失效的节点数写进括号，还差的是当前画布要跑的总数', () => {
+test('工作流改过：把失效的节点数写进括号，还差的是当前工作流要跑的总数', () => {
   const view = runResumePlanView(plan({ reused: 2, rerun: 3, stale: 1 }))
   assert.equal(view.summary, '复用 2 个 · 还差 3 个（其中 1 个改过） · 补 2 积分')
-  assert.match(view.note, /改过或已不在画布上的 1 个节点会重跑/)
+  assert.match(view.note, /改过或已不在工作流上的 1 个节点会重跑/)
 })
 
 test('补 0 积分：说「不再扣费」，不写「补 0 积分」', () => {
@@ -48,12 +48,12 @@ test('不能续：用服务端给的具体原因，按钮为空', () => {
     stale: 3,
     cost: 0,
     resumable: false,
-    reason: '画布改动后没有能原样复用的节点：重新运行会用最新画布从头跑',
+    reason: '工作流改动后没有能原样复用的节点：重新运行会用最新工作流从头跑',
   }))
   assert.equal(view.resumable, false)
   assert.match(view.summary, /没有能原样复用的节点/)
   assert.equal(view.button, '')
-  assert.match(view.note, /从头运行会按最新画布跑全图/)
+  assert.match(view.note, /从头运行会按最新工作流跑全图/)
 })
 
 test('还没拿到 plan：不编数字，也不给按钮', () => {

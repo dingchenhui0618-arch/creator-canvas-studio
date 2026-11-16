@@ -217,7 +217,7 @@ export function ReplicateModal({ item, hasKey, visionReady, onClose, onDone, onO
               <p className="replicate-note">积分可以在「设置 → 积分」查看；不够就去「充值」页充一档，选完直接到账。</p>
             ) : null}
             <p className="replicate-note">
-              先按「复刻、画布与出图失败了怎么办」对一遍：
+              先按「复刻、无限画布与出图失败了怎么办」对一遍：
               <a className="vq-link" href="#/help/replicate-failed">打开排查说明</a>
             </p>
             {!hasKey && (

@@ -114,7 +114,7 @@ export const updateAdminUser = (userId: string, patch: { active?: boolean; kind?
     body: JSON.stringify(patch),
   })
 
-// 删除账号：只删登录与积分；模板、画布与运行记录保留（服务端决定，不在界面假装一并清空）
+// 删除账号：只删登录与积分；模板、工作流与运行记录保留（服务端决定，不在界面假装一并清空）
 export const deleteAdminUser = (userId: string) =>
   request<{ ok: boolean; id: string; email: string }>('/api/admin/users/' + userId, { method: 'DELETE' })
 
@@ -242,8 +242,8 @@ export const CREDIT_KIND_LABEL: Record<string, string> = {
   'review-refund': '评审退款',
   chat: '智能体对话',
   'chat-refund': '对话退款',
-  flow_run: '画布运行',
-  'flow_run-refund': '画布运行退款',
+  flow_run: '工作流运行',
+  'flow_run-refund': '工作流运行退款',
   recharge: '充值',
   grant: '管理员发放',
   deduct: '管理员扣减',

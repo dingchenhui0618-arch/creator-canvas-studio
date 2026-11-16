@@ -85,10 +85,10 @@ test('详情里的 versionChanges：v2、v3 各一句，普通详情不带节点
   assert.equal(detail.body.project.version, 3)
   assert.equal(detail.body.versions.length, 2)
   const changes = detail.body.versionChanges || {}
-  assert.match(changes['2'], /画布改 1 个（写一句）/, 'v2 应说画布改过')
+  assert.match(changes['2'], /工作流改 1 个（写一句）/, 'v2 应说工作流改过')
   assert.match(changes['2'], /脚本多 1 段（收尾）/, 'v2 应说脚本多了收尾')
   assert.match(changes['2'], /钩子换过/, 'v2 应说钩子换过')
-  assert.match(changes['3'], /画布改 1 个（写一句）/, 'v3 应说画布改过')
+  assert.match(changes['3'], /工作流改 1 个（写一句）/, 'v3 应说工作流改过')
   assert.equal(changes['1'], undefined, '最早一版没有「比上一版」')
   // 页面只需要一句话：节点数组与快照正文不进普通详情
   assert.ok(detail.body.versions.every((entry) => !('nodeList' in entry)), '普通详情不带节点数组')

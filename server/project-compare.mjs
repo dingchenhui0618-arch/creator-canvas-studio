@@ -5,10 +5,10 @@
 // 不能一个说「主要少 1 个」、纸上说别的。所以抽到这里，路由只负责校验与回包。
 //
 // 边界：
-//  1. 当前版读现在的画布与脚本；归档版读开版时存下的快照；哪一侧读不到就如实给 null。
+//  1. 当前版读现在的工作流与脚本；归档版读开版时存下的快照；哪一侧读不到就如实给 null。
 //  2. 评审按版次统计，版本划分前的老评审折进 v1（与作品页同一套 reviewsForVersion）。
 //  3. 交付只认这一版自己的记录；交时评审照写当初，不拿后来重评覆盖（v0.9.120）。
-//  4. 不改任何东西：不写作品、不写画布、不写评审、不扣积分。
+//  4. 不改任何东西：不写作品、不写工作流、不写评审、不扣积分。
 import { getFlow } from './flows.mjs'
 import { getTemplate } from './templates.mjs'
 import { scriptView } from './project-script.mjs'
@@ -67,10 +67,10 @@ export async function versionCompareView(project, user, baseNo, targetNo) {
   })
 
   const notes = []
-  if (!baseSide.canvasAvailable || !targetSide.canvasAvailable) notes.push('有一版的画布已被删除：画布这一侧不比，脚本仍按快照比。')
-  if (!baseSide.scriptAvailable || !targetSide.scriptAvailable) notes.push('有一版没存脚本快照：脚本这一侧不比，画布仍按节点比。')
+  if (!baseSide.canvasAvailable || !targetSide.canvasAvailable) notes.push('有一版的工作流已被删除：工作流这一侧不比，脚本仍按快照比。')
+  if (!baseSide.scriptAvailable || !targetSide.scriptAvailable) notes.push('有一版没存脚本快照：脚本这一侧不比，工作流仍按节点比。')
   if (!diff.script && baseSide.scriptAvailable && targetSide.scriptAvailable) notes.push('有一版的脚本没有分段：脚本这一侧没有可比的口播。')
-  if (!diff.summary) notes.push('这两版没有可比的数据：画布与脚本都读不到。')
+  if (!diff.summary) notes.push('这两版没有可比的数据：工作流与脚本都读不到。')
 
   // 评审与交付（v0.9.119）：两版各自读这一版最近一评，交付只认这一版的记录。
   // 评审按版次统计，版本划分前的老评审折进 v1（与作品页同一套 reviewsForVersion）。

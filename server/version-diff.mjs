@@ -1,4 +1,4 @@
-// 版本之间「改了什么」：画布按节点 id 比配置，脚本按段名比口播。
+// 版本之间「改了什么」：工作流按节点 id 比配置，脚本按段名比口播。
 //
 // 这段逻辑原本只活在交付稿里（project-deliverable.mjs），作品页要用同一套口径，
 // 所以抽出来。两个用途必须给出同一句话：导出的稿子和页面上的版本行不能各说各话。
@@ -6,7 +6,7 @@
 // 边界：
 //  - 节点只比 type + data.config；位置、标题、选中态不算改动（复制版本后拖一下不是新版本）。
 //  - 脚本以开新版时存的快照为准；没有快照的一侧返回空串，不拿现在的脚本冒充当时。
-//  - 画布被删掉的一侧没有节点可读，也不猜。
+//  - 工作流被删掉的一侧没有节点可读，也不猜。
 
 export const flat = (value) => String(value ?? '').replace(/\s+/g, ' ').trim()
 
@@ -32,7 +32,7 @@ const names = (list, max = 3) => {
 /**
  * 两份节点指纹比出「多了 / 少了 / 改了」，带节点 id 与标题。
  * 任意两版对照要逐项列出节点，所以保留 id；版本行的一句话再从这里的标题生成（v0.9.117）。
- * 缺一侧（画布被删）就返回 null，不猜「没改」。
+ * 缺一侧（工作流被删）就返回 null，不猜「没改」。
  */
 export function canvasDetail(prev, next) {
   if (!prev || !next) return null
@@ -124,7 +124,7 @@ export function scriptText(prev, next) {
 
 /**
  * 作品页版本行的一句话：比上一版改了什么。
- * 两侧都能比时，画布与脚本一起说；只有一侧可比就只说那一侧；都没动时收成一句。
+ * 两侧都能比时，工作流与脚本一起说；只有一侧可比就只说那一侧；都没动时收成一句。
  * 返回空串表示「没有可比对的一侧」，页面不硬写「没改」。
  */
 export function versionChangeText({ prevNodes, nextNodes, prevScript, nextScript }) {
@@ -133,9 +133,9 @@ export function versionChangeText({ prevNodes, nextNodes, prevScript, nextScript
   const scriptLine = prevScript && nextScript ? scriptText(prevScript, nextScript) : ''
   const sameCanvas = canvas && !canvas.added.length && !canvas.removed.length && !canvas.changed.length
   const sameScript = scriptLine === '跟上一版一样'
-  if (sameCanvas && sameScript) return '画布与脚本都没动'
+  if (sameCanvas && sameScript) return '工作流与脚本都没动'
   const bits = []
-  if (canvasLine) bits.push('画布' + canvasLine)
+  if (canvasLine) bits.push('工作流' + canvasLine)
   // 「脚本1 段口播改过」读不通：以数字开头时补一个冒号，与「脚本多 1 段」区分
   if (scriptLine) bits.push('脚本' + (/^\d/.test(scriptLine) ? '：' : '') + scriptLine)
   return bits.join('；')
@@ -167,7 +167,7 @@ export function versionChangesOf(rows) {
 /**
  * 以旧版为底开的那一版：改动按底座算，不按上一版算（v0.9.116）。
  * 只返回底座不是上一版的版本——底座就是上一版时，原来的「比上一版」已经说对了。
- * 返回 { '5': { base: 2, text: '画布与脚本都没动' } }；底座那一版被删或已不在表里就不返回。
+ * 返回 { '5': { base: 2, text: '工作流与脚本都没动' } }；底座那一版被删或已不在表里就不返回。
  */
 export function versionBaseChangesOf(rows) {
   const list = (Array.isArray(rows) ? rows : []).filter((row) => row && Number.isFinite(Number(row.n)))
@@ -403,7 +403,7 @@ export function reviewChangeOf(base, target) {
 }
 
 /**
- * 任意两版对照（v0.9.117）：给版本行的一句话，加上可逐项列出的画布与脚本明细。
+ * 任意两版对照（v0.9.117）：给版本行的一句话，加上可逐项列出的工作流与脚本明细。
  * 只读、不写任何东西；方向按 base → target，反过来选就是看「改回去了什么」。
  * 返回的 canvas / script 在一侧读不到时为 null，调用方照 notes 说清哪一侧不比。
  */

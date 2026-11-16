@@ -67,7 +67,7 @@ export type AgentToolsResult = {
   skipped: { id: string; label: string; reason: string }[]
 }
 
-// 结构化草稿：服务端从回复里的 ```draft 块整理出来，三个出口（存为模板 / 送到画布 / 写进作品）都用它。
+// 结构化草稿：服务端从回复里的 ```draft 块整理出来，三个出口（存为模板 / 送到工作流 / 写进作品）都用它。
 // 秒数是服务端按口播字数算的，界面上直接显示、不再自己算一遍。
 export type AgentDraftBeat = {
   beat: string
@@ -238,7 +238,7 @@ export const chatWithAgent = (
     body: JSON.stringify({ ...input, count: 1 }),
   })
 
-// 两个出口都不扣积分：没有模型调用，只是把已经产出的内容落到模板库或画布。
+// 两个出口都不扣积分：没有模型调用，只是把已经产出的内容落到模板库或工作流。
 export const saveAgentDraftAsTemplate = (id: string, draft: AgentDraft) =>
   request<{ template: { id: string; title: string; contentType: string; platformLabel: string; beats: number; shots: number; durationSec: number } }>(
     '/api/agents/' + id + '/draft/template',
@@ -251,7 +251,7 @@ export const sendAgentDraftToCanvas = (id: string, draft: AgentDraft) =>
     body: JSON.stringify({ draft }),
   })
 
-// 写进作品：只写脚本（钩子 + 段落），分镜留在草稿里——要镜头走「送到画布」。
+// 写进作品：只写脚本（钩子 + 段落），分镜留在草稿里——要镜头走「送到工作流」。
 // 服务端走作品脚本的 copy-on-write：模板与别的作品不动；回执带被换掉的那一份（来源与段数）。
 export type DraftProjectResult = {
   ok: boolean

@@ -1,6 +1,6 @@
 // 上手引导：工作台里的弹窗，不是单独一页。
 // 这一版教的是「一条作品的主线」（v0.9.41）：找 → 拆 → 做 → 交，四步各落在一级导航里；
-// 画布与评审在这里只作为「作品里的工具」出现，不再单独占一步——它们是能力，不是目的地。
+// 工作流、无限画布与评审在这里只作为「作品里的工具」出现，不再单独占一步——它们是能力，不是目的地。
 // 数字全部来自真实接口（模板、作品、交付、积分单价与余额）：哪一步还没有就把人送去哪一步，不写死。
 import { ArrowRight, Clapperboard, Compass, Package, ScanSearch, Scissors, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -48,7 +48,7 @@ const STEPS: Step[] = [
     icon: Clapperboard,
     kicker: '03 · 做 · 作品',
     title: '开成作品，一条做到尾',
-    body: '改脚本、进画布出画面、送去评审，都在同一条作品里；画布与评审是它的工具，不是另一条线。开画布不扣积分。',
+    body: '改脚本、进工作流出画面、送去评审，都在同一条作品里；工作流、无限画布与评审是它的工具，不是另一条线。开工作流不扣积分。',
   },
   {
     key: 'deliver',
@@ -128,14 +128,14 @@ export function WelcomeGuide({ onClose, onGo }: Props) {
   const prices = credits?.prices
   const balance = credits?.balance
   // 单价只写服务端真的在收的那几笔（search / replicate / review / flow_run）：
-  // 开画布、导出、分享都不计费，别让人以为「点进画布就开始烧积分」。
+  // 开工作流、导出、分享都不计费，别让人以为「点进工作流就开始烧积分」。
   const costOf = (key: Step['key']): string => {
-    // 画布这一步有两笔钱：跑一次画布、评一次画面；开画布本身不计费（这句写在卡面文案里）
+    // 工作流这一步有两笔钱：跑一次工作流、评一次画面；开工作流本身不计费（这句写在卡面文案里）
     if (key === 'project') {
       const run = prices?.flow_run
       const review = prices?.review
       if (typeof run === 'number' && typeof review === 'number') return '跑一次 ' + run + ' 积分 · 评审 ' + review + ' 积分'
-      return '跑画布与评审按次计'
+      return '跑工作流与评审按次计'
     }
     if (key === 'deliver') return '导出与分享不扣积分'
     const price = key === 'discover' ? prices?.search : prices?.replicate
@@ -201,7 +201,7 @@ export function WelcomeGuide({ onClose, onGo }: Props) {
             <h2 id="vq-guide-title">欢迎使用 VisionQA</h2>
             <p>
               一级只有四个地方：工作台、作品、发现、模板库。一条内容从「发现」里进来，在「作品」里做完，交付与分享也在那一条上；
-              画布、视觉评审、运行记录在工具区，它们是这条作品里的步骤。
+              工作流、无限画布、视觉评审、运行记录在工具区，它们是这条作品里的步骤。
             </p>
           </div>
           <button ref={closeRef} type="button" className="vq-button vq-button--icon" aria-label="关闭引导" onClick={onClose}>

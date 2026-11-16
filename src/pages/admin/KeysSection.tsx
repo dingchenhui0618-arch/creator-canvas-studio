@@ -112,7 +112,7 @@ export default function KeysSection() {
                   <tr>
                     <td>
                       <strong>文本模型</strong>
-                      <span className="admin-cell-sub">智能体对话、模板标题、画布节点</span>
+                      <span className="admin-cell-sub">智能体对话、模板标题、工作流节点</span>
                     </td>
                     <td>
                       <Badge tone={data.llm.enabled ? 'ok' : 'warn'}>{data.llm.enabled ? '已配置' : '未配置'}</Badge>

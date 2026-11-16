@@ -220,7 +220,7 @@ export const SPEND_KIND_LABEL = {
   replicate: '一键复刻',
   review: '视觉评审',
   chat: '智能体对话',
-  flow_run: '画布运行',
+  flow_run: '工作流运行',
 }
 
 /**

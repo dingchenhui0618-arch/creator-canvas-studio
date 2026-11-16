@@ -140,19 +140,19 @@ export const projectPackageAudits = (id: string) =>
 export const projectSpend = (id: string, month = '') =>
   request<ProjectSpendDetail>('/api/projects/' + id + '/spend' + (month ? '?month=' + encodeURIComponent(month) : ''))
 
-// 建作品有两条起点：一条模板（脚本与分镜先有），或者一块已经跑过的画布（v0.9.29）。
-// 从画布建的作品没有模板，脚本在作品页现写，画布已经在了所以一出生就是 v1。
+// 建作品有两条起点：一条模板（脚本与分镜先有），或者一块已经跑过的工作流（v0.9.29）。
+// 从工作流建的作品没有模板，脚本在作品页现写，工作流已经在了所以一出生就是 v1。
 export const createProject = (payload: { templateId?: string; flowId?: string; title?: string }) =>
   request<{ ok: boolean; project: Project; flow?: ProjectFlowBrief | null; runs?: { count: number } }>('/api/projects', {
     method: 'POST',
     body: JSON.stringify(payload),
   })
 
-// 把一块画布归到这条作品上：一接上，这块画布跑过的运行也一起归过来（运行只认 flowId，不复制记录）
+// 把一块工作流归到这条作品上：一接上，这块工作流跑过的运行也一起归过来（运行只认 flowId，不复制记录）
 export const adoptProjectCanvas = (id: string, flowId: string) =>
   request<{
     ok: boolean
-    /** false = 这块画布本来就归这条作品，什么都没改 */
+    /** false = 这块工作流本来就归这条作品，什么都没改 */
     changed: boolean
     project: Project
     flow: ProjectFlowBrief | null
@@ -160,7 +160,7 @@ export const adoptProjectCanvas = (id: string, flowId: string) =>
   }>('/api/projects/' + id + '/canvas', { method: 'PUT', body: JSON.stringify({ flowId }) })
 
 export const updateProject = (id: string, payload: { title?: string; flowId?: string; status?: 'active' | 'done' }) => {
-  // 标记交付时服务端会顺手封存交付包，包里的时间按导出人所在的时区写；标题 / 画布不需要这一项
+  // 标记交付时服务端会顺手封存交付包，包里的时间按导出人所在的时区写；标题 / 工作流不需要这一项
   const body = payload.status ? { ...payload, tz: -new Date().getTimezoneOffset() } : payload
   return request<{ ok: boolean; project: Project }>('/api/projects/' + id, { method: 'PATCH', body: JSON.stringify(body) })
 }
@@ -181,15 +181,15 @@ export const getProjectVersionScript = (id: string, n: number) =>
 
 /**
  * 任意两版对照（v0.9.117）：只读。base 是基准、target 是对照，方向按这两者。
- * 不写版本、不改画布、不扣积分；哪一侧读不到由 notes 说清。
+ * 不写版本、不改工作流、不扣积分；哪一侧读不到由 notes 说清。
  */
 export const compareProjectVersions = (id: string, base: number, target: number) =>
   request<ProjectVersionCompare>(
     '/api/projects/' + id + '/versions/compare?base=' + encodeURIComponent(base) + '&target=' + encodeURIComponent(target),
   )
 
-// 开一版新的：服务端复制当前画布，旧画布归档成 vN。
-// from 给更早的版次时，复制的是那一版的画布与脚本（v0.9.115）；不给就是从当前版开。
+// 开一版新的：服务端复制当前工作流，旧工作流归档成 vN。
+// from 给更早的版次时，复制的是那一版的工作流与脚本（v0.9.115）；不给就是从当前版开。
 export const startProjectVersion = (id: string, from?: number) =>
   request<{ ok: boolean; project: Project; flow: { id: string; name: string }; basedOn?: number }>(
     '/api/projects/' + id + '/versions',
@@ -221,7 +221,7 @@ export const disableProjectShare = (id: string) =>
 export const getSharedProject = (token: string) =>
   request<SharedProject & { ok: boolean }>('/api/share/project/' + encodeURIComponent(token))
 
-// 作品页开画布：第一张画布用这条作品现在的脚本生成（不再绕模板库的套用接口）
+// 作品页开工作流：第一张工作流用这条作品现在的脚本生成（不再绕模板库的套用接口）
 export const openProjectCanvas = (id: string) =>
   request<{ ok: boolean; created: boolean; project: Project; flow: { id: string; name: string; nodes: number; updatedAt: string } }>(
     '/api/projects/' + id + '/canvas',
@@ -235,7 +235,7 @@ export type ScriptSaveResult = {
   canvas: { synced: boolean; flowId: string; reason: 'synced' | 'no-canvas' | 'canvas-missing' | 'hand-edited' | 'save-failed' | 'no-script' }
 }
 
-// 保存作品自己的脚本：服务端会把画布里自动生成的复刻提示词一起换掉
+// 保存作品自己的脚本：服务端会把工作流里自动生成的复刻提示词一起换掉
 export const saveProjectScript = (
   id: string,
   payload: { hook: string; structure: Array<{ beat: string; voiceover: string; onScreen: string; startSec: number; endSec: number; purpose?: string }> },

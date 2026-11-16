@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { spentOfRun } from './flows.mjs'
 
-// 运行对照（v0.9.110）：把同一条画布的两条运行摆在一起，只读、不重跑、不扣费。
+// 运行对照（v0.9.110）：把同一条工作流的两条运行摆在一起，只读、不重跑、不扣费。
 // 页面要回答的是「这次和上次比，哪里变了、慢在哪、多花了多少」，所以这里只给
 // 逐节点的状态 / 耗时 / 输出指纹与短预览——完整输出仍在单条运行详情里，不重复搬一遍。
 
@@ -226,7 +226,7 @@ export function compareSideOf(run) {
   const project = run?.project && typeof run.project === 'object' ? run.project : null
   return {
     id: String(run?.id || ''),
-    // 跨版本对照（v0.9.113）：这一侧是哪张画布、属于作品的第几版。
+    // 跨版本对照（v0.9.113）：这一侧是哪张工作流、属于作品的第几版。
     // 没挂作品的运行 project 为 null，页面就不写「v几」。
     flowName: String(run?.flowName || ''),
     project: project
@@ -253,7 +253,7 @@ export function compareSideOf(run) {
 
 /**
  * 逐节点对照两条运行。
- * 上一版画布与这一版可能节点不同：以这次运行为主序列，上次多出来的节点排在后面并标成「这次没有」。
+ * 上一版工作流与这一版可能节点不同：以这次运行为主序列，上次多出来的节点排在后面并标成「这次没有」。
  * 相同 id 的节点如果内容或上游改过，即使输出碰巧一样也不算「一致」——指纹说的是「跑的是不是同一件事」。
  */
 export function buildRunCompare(current, previous) {

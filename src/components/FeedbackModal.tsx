@@ -112,7 +112,7 @@ export function FeedbackModal({
                 maxLength={MAX_BODY}
                 value={body}
                 disabled={busy}
-                placeholder="例如：在画布上点「运行」后，节点一直转圈，刷新后运行记录里是空的。"
+                placeholder="例如：在工作流上点「运行」后，节点一直转圈，刷新后运行记录里是空的。"
                 onChange={(event) => setBody(event.target.value)}
               />
             </label>

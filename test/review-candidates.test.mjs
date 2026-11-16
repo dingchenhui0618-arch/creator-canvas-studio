@@ -49,13 +49,13 @@ test('读盘：只给我的作品，拍板现状算进胶囊', async () => {
   assert.deepEqual(other.items.map((row) => row.projectId), ['prj_other'])
 })
 
-test('这一版叫什么：没有第 0 版，没开画布就照实说', () => {
-  assert.equal(versionLabel(0), '还没开画布')
+test('这一版叫什么：没有第 0 版，没开工作流就照实说', () => {
+  assert.equal(versionLabel(0), '还没开工作流')
   assert.equal(versionLabel(1), '第 1 版')
   assert.equal(versionLabel(3), '第 3 版')
   assert.equal(versionLabel('2'), '第 2 版', '接口里可能是字符串')
-  assert.equal(versionLabel(-4), '还没开画布')
-  assert.equal(versionLabel('abc'), '还没开画布')
+  assert.equal(versionLabel(-4), '还没开工作流')
+  assert.equal(versionLabel('abc'), '还没开工作流')
 })
 
 test('只算当前这一版：上一版评过 5 次不算到 v2 头上', () => {
@@ -77,11 +77,11 @@ test('版本划分之前记在 0 上的评审折进 v1：老作品不显示成�
   assert.equal(row.status.text, '评审 · 不通过')
 })
 
-test('胶囊跟作品卡片同一句：待开画布 / 在做 / 需人工确认 / 已交付', () => {
+test('胶囊跟作品卡片同一句：待开工作流 / 在做 / 需人工确认 / 已交付', () => {
   const noCanvas = reviewCandidateRow(project('prj_new', { version: 0, flowId: '' }), {})
   assert.equal(noCanvas.hasCanvas, false)
-  assert.equal(noCanvas.versionLabel, '还没开画布')
-  assert.equal(noCanvas.status.text, '待开画布')
+  assert.equal(noCanvas.versionLabel, '还没开工作流')
+  assert.equal(noCanvas.status.text, '待开工作流')
 
   const fresh = reviewCandidateRow(project('prj_fresh'), {})
   assert.equal(fresh.status.text, '在做')
@@ -134,7 +134,7 @@ test('limit 只截列表，total 仍是全部；上限 12、非法值回默认',
   assert.equal(reviewCandidates(projects, {}, new Map(), { limit: 'abc' }).items.length, 4, '非法值回默认')
 })
 
-test('没开画布的条数单独算：界面据此写「其中 N 条还没开画布」', () => {
+test('没开工作流的条数单独算：界面据此写「其中 N 条还没开工作流」', () => {
   const result = reviewCandidates([
     project('prj_1', { flowId: '' , version: 0 }),
     project('prj_2', { flowId: '' , version: 0 }),

@@ -3,7 +3,7 @@ import type { ReviewIssues, ReviewSummary } from '../api/review'
 
 // 作品（Project）：一条内容的主线对象。
 // 它不自带脚本与分镜——那两样在它绑定的模板上，改了模板作品跟着变；
-// 这里只描述「谁、用哪条模板、开的哪块画布、走到哪一步」。
+// 这里只描述「谁、用哪条模板、开的哪块工作流、走到哪一步」。
 export type ProjectStatus = 'active' | 'done'
 
 export type ProjectTemplateBrief = {
@@ -25,7 +25,7 @@ export type ProjectReviews = {
 }
 
 /**
- * 这条作品上花掉的积分（v0.9.65）：评审与画布运行分开记。
+ * 这条作品上花掉的积分（v0.9.65）：评审与工作流运行分开记。
  * 退过款的那次运行不算（钱已经回去了），检索 / 复刻 / 智能体对话记在账号上，不摊到作品。
  */
 export type ProjectSpend = {
@@ -37,20 +37,20 @@ export type ProjectSpend = {
   lastAt?: string
 }
 
-/** 花费明细里的一笔：评审或画布运行（v0.9.66）。退款的那笔照样列出，但不计入合计。 */
+/** 花费明细里的一笔：评审或工作流运行（v0.9.66）。退款的那笔照样列出，但不计入合计。 */
 export type ProjectSpendEntry = {
   kind: 'review' | 'run'
   id: string
   at: string
   version: number
   credits: number
-  /** 这一笔真的扣了积分没有；画布探活之类的运行是 false（金额写 0） */
+  /** 这一笔真的扣了积分没有；工作流探活之类的运行是 false（金额写 0） */
   charged?: boolean
   refunded: boolean
   /** 评审结论（review）或运行状态（run），老记录可能是空串 */
   verdict?: string
   status?: string
-  /** 评审意图或画布名：一行里说清「这笔是哪一次」 */
+  /** 评审意图或工作流名：一行里说清「这笔是哪一次」 */
   note: string
 }
 
@@ -627,7 +627,7 @@ export function receiptOutreach(receipt: DeliveryReceipt | null | undefined): st
   return '收据上有几项对不上，具体差在哪一项我在逐项里对着了。' + askVerify
 }
 
-/** 归档的旧版本：只存画布指针与名字，画布本身仍在流程服务里 */
+/** 归档的旧版本：只存工作流指针与名字，工作流本身仍在流程服务里 */
 export type ProjectVersion = {
   n: number
   flowId: string
@@ -637,7 +637,7 @@ export type ProjectVersion = {
   basedOn?: number
 }
 
-/** 作品详情会顺手确认归档画布还在，并带上节点数 */
+/** 作品详情会顺手确认归档工作流还在，并带上节点数 */
 // 归档版本额外带上开版时存下的脚本快照段数：交付稿与版本对照都靠它说「这一版几段」
 export type ProjectVersionView = ProjectVersion & {
   /** 开这一版时复制的是哪一版；0 表示接着上一版改 */
@@ -738,7 +738,7 @@ export type Project = {
   title: string
   templateId: string
   flowId: string
-  /** 第几版：0 还没开画布，开出来就是 v1 */
+  /** 第几版：0 还没开工作流，开出来就是 v1 */
   version: number
   /** 这一版是从哪一版复制来的；0 表示接着上一版改（v0.9.116） */
   basedOn?: number
@@ -1093,7 +1093,7 @@ export async function sha256HexOfBytes(bytes: ArrayBuffer): Promise<string> {
     .join('')
 }
 
-/** 一次画布运行的摘要：运行记在画布服务里，作品页把名下所有版本的运行按时间归集成一条线 */
+/** 一次工作流运行的摘要：运行记在工作流服务里，作品页把名下所有版本的运行按时间归集成一条线 */
 export type ProjectRun = {
   id: string
   flowId: string
@@ -1112,11 +1112,11 @@ export type ProjectRun = {
   failed: number
   error: string
   credits: { cost: number; refunded: boolean; kept?: number; refundedAmount?: number } | null
-  /** 这次运行跑的是第几版画布 */
+  /** 这次运行跑的是第几版工作流 */
   version: number
-  /** 那一版画布还在不在：被删掉后运行记录仍留着，但画布打不开 */
+  /** 那一版工作流还在不在：被删掉后运行记录仍留着，但工作流打不开 */
   available: boolean
-  /** 画布已删除时，这次运行是否留下了画布快照；留下就还能只读回看 */
+  /** 工作流已删除时，这次运行是否留下了工作流快照；留下就还能只读回看 */
   hasSnapshot?: boolean
 }
 
@@ -1453,9 +1453,9 @@ export type ProjectSummary = Project & {
   reviews: ProjectReviews
   /** 按版本分组的评审计数：状态胶囊只看当前这一版 */
   versionCounts: Record<string, ProjectReviews>
-  /** 这条作品名下所有版本画布一共跑过几次 */
+  /** 这条作品名下所有版本工作流一共跑过几次 */
   runs: { count: number }
-  /** 卡片上的花费：评审与画布运行加在一起，退过款的不算 */
+  /** 卡片上的花费：评审与工作流运行加在一起，退过款的不算 */
   spend?: ProjectSpend
   /** 卡片上的分享状态；从没分享过就是 null */
   share: ProjectShareBrief | null
@@ -1582,7 +1582,7 @@ export type AiLabel = {
   version: string
 }
 
-/** 分享页读到的公开视图：服务端白名单挑过，不含账号、画布与模板 id */
+/** 分享页读到的公开视图：服务端白名单挑过，不含账号、工作流与模板 id */
 export type SharedProjectShot = {
   shotNo: number
   startSec: number
@@ -1643,7 +1643,7 @@ export type ProjectDetail = {
   versionCounts: Record<string, ProjectReviews>
   /**
    * 每个版本相对上一版改了什么（v0.9.114）：键是版本号，值是一句人话。
-   * 缺这一项表示那一侧没有可比对的数据（画布被删 / 没存脚本快照），页面不硬写「没改」。
+   * 缺这一项表示那一侧没有可比对的数据（工作流被删 / 没存脚本快照），页面不硬写「没改」。
    */
   versionChanges?: Record<string, string>
   /**
@@ -1680,7 +1680,7 @@ export function projectStatus(
   decision: ProjectDecision | null = null,
 ): { text: string; tone: 'idle' | 'live' | 'ok' | 'warn' | 'fail' | 'done'; verdict: string; human?: 'pass' | 'reject' } {
   if (deliveredCurrent(project)) return { text: '已交付', tone: 'done', verdict: '' }
-  if (!project.flowId) return { text: '待开画布', tone: 'idle', verdict: '' }
+  if (!project.flowId) return { text: '待开工作流', tone: 'idle', verdict: '' }
   if (!reviews.count) return { text: '在做', tone: 'live', verdict: '' }
   const verdict = reviews.lastVerdict || ''
   if (decision && (decision.decision === 'pass' || decision.decision === 'reject')) {
@@ -1718,7 +1718,7 @@ export function reviewsForVersion(counts: Record<string, ProjectReviews>, versio
 }
 
 /**
- * 某一版画布跑过几次：与评审同一套口径，版本划分之前留下的运行算进 v1，
+ * 某一版工作流跑过几次：与评审同一套口径，版本划分之前留下的运行算进 v1，
  * 否则老作品刚开版本视图时会显示「这一版没跑过」。
  */
 export function runsForVersion(counts: Record<string, number>, version: number): number {
@@ -1731,7 +1731,7 @@ export type ProjectStepKey = 'canvas' | 'review' | 'continue' | 'deliver' | 'don
 
 /**
  * 下一步只有一件事：
- *   没画布 → 用这条脚本开画布；有画布没评审 → 送一次评审；评过了看结论——通过就交出去，有意见就照着改；
+ *   没工作流 → 用这条脚本开工作流；有工作流没评审 → 送一次评审；评过了看结论——通过就交出去，有意见就照着改；
  *   交付了 → 收尾。作品页主卡与工作台都读这一个函数，避免两处口径分叉。
  */
 export function projectStep(
@@ -1747,25 +1747,25 @@ export function projectStep(
       title: '这条已经交付',
       // 交的是哪一版要写出来：交付稿与版本对照里也记着同一件事
       hint: delivery
-        ? '交付的是 v' + delivery.version + '；画布与评审都留在记录里，开一版新的就回到「在做」，上一版的交付时间仍然查得到'
-        : '画布与评审都留在记录里，随时可以重新打开照着改',
-      cta: '再打开画布',
+        ? '交付的是 v' + delivery.version + '；工作流与评审都留在记录里，开一版新的就回到「在做」，上一版的交付时间仍然查得到'
+        : '工作流与评审都留在记录里，随时可以重新打开照着改',
+      cta: '再打开工作流',
     }
   }
   if (!project.flowId) {
     return {
       key: 'canvas',
-      label: '下一步 · 开画布',
-      title: '先开一张画布',
-      hint: '用这条作品现在的脚本生成画布草稿：输入节点带钩子、复刻节点带完整提示词',
-      cta: '用这条脚本开画布',
+      label: '下一步 · 开工作流',
+      title: '先开一条工作流',
+      hint: '用这条作品现在的脚本生成工作流草稿：输入节点带钩子、复刻节点带完整提示词',
+      cta: '用这条脚本开工作流',
     }
   }
   if (!reviews.count) {
     return {
       key: 'review',
       label: '下一步 · 送评审',
-      title: '画布有了，送一次评审',
+      title: '工作流有了，送一次评审',
       hint: '拿你这一版的画面跑一遍视觉评审，结论会记在这条作品下',
       cta: '用评审看这版',
     }
@@ -1786,7 +1786,7 @@ export function projectStep(
       label: '下一步 · 继续改',
       title: '你拍板这一版不行，按意见改',
       hint: '人已经否了这一版：按评审里指出的问题改完，再评一次；再评出新结论后需要重新拍板',
-      cta: '继续画布',
+      cta: '继续工作流',
     }
   }
   // 这一版评审通过了：下一步不再是改，而是把这版交出去
@@ -1803,7 +1803,7 @@ export function projectStep(
     key: 'continue',
     label: '下一步 · 继续做',
     title: reviews.lastVerdict === 'fail' ? '评审没过，按意见改一版' : '按评审意见改一版',
-    hint: '评审结论里的修正建议逐条落到画布上，改完可以再评一次',
-    cta: '继续画布',
+    hint: '评审结论里的修正建议逐条落到工作流上，改完可以再评一次',
+    cta: '继续工作流',
   }
 }

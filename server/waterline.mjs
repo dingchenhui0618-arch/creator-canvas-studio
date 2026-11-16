@@ -1,7 +1,7 @@
 // 运行水位：这台机器现在还能接多少活。
 //
 // 背景：单机 2 核 / 1.86 GB 内存，Node 堆上限 384 MB（systemd 里 NODE_OPTIONS=--max-old-space-size=384）。
-// 一次复刻要同时跑 ffmpeg 子进程和逐帧视觉，一次画布运行要下载并分析多张图：两条重活并行就能把内存顶穿。
+// 一次复刻要同时跑 ffmpeg 子进程和逐帧视觉，一次无限画布运行要下载并分析多张图：两条重活并行就能把内存顶穿。
 // 真被顶穿时进程会被内核或 V8 直接杀掉——所有人的会话一起断，正在跑的任务只能靠重启恢复退款，
 // 钱是退回来了，但用户看到的是一句「任务被系统中断」。
 //
@@ -12,7 +12,7 @@
 //   拒：真到红线、或全站重活已经满了，就在扣费之前拒绝，并说清「没扣积分、多久后再试」。
 //
 // 三条边界：
-//   1) 只拦重活（复刻 / 评审 / 画布运行 / 画布出图）；检索只是转发一个 HTTP、对话只有几十 KB 上下文，不跟着拦；
+//   1) 只拦重活（复刻 / 评审 / 无限画布运行 / 无限画布出图）；检索只是转发一个 HTTP、对话只有几十 KB 上下文，不跟着拦；
 //   2) 阈值可用环境变量覆盖：写 0 等于关掉那一条，VQ_WATER_GUARD=0 只量不拦；
 //   3) 判定是纯函数、读数是注入的——测试不依赖跑测试这台机器的内存大小。
 import crypto from 'node:crypto'
@@ -36,7 +36,7 @@ import {
 const MB = 1048576
 export const HEAVY_KINDS = ['replicate', 'review', 'flow_run', 'canvas_gen']
 const HEAVY = new Set(HEAVY_KINDS)
-// 没有账号可挂的重活（v0.9.79）：画布出图走平台令牌，请求里没有用户 id，
+// 没有账号可挂的重活（v0.9.79）：无限画布出图走平台令牌，请求里没有用户 id，
 // 「每账号上限」对它用不上，所以它的按类型上限落到整机（见 kindLimitFor）。
 const NO_USER_KINDS = new Set(['canvas_gen'])
 // 同一条红线 5 分钟内只记一条告警：拒绝可能连着来，告警队列不该被刷屏
@@ -212,9 +212,9 @@ export function waterlineReport() {
       unlimited: globalLimit === 0,
       configLimit: Math.max(0, Math.round(Number(config.credits.globalHeavy) || 0)),
       full: globalLimit > 0 && active.total >= globalLimit,
-      // 按类型的整机上限：目前只有画布出图（没有账号可挂的那一类）
+      // 按类型的整机上限：目前只有无限画布出图（没有账号可挂的那一类）
       kindLimits,
-      // 排队位（v0.9.80）：画布出图名额满时先排一会儿再拒——那一次「批量出图」还会不会整批失败，看这里
+      // 排队位（v0.9.80）：无限画布出图名额满时先排一会儿再拒——那一次「批量出图」还会不会整批失败，看这里
       // v0.9.93 起 waiting 也是整机口径（共享目录），queue.scope 与 countsScope 分别说明哪一层是谁的口径
       queue: admissionQueueReport('canvas_gen'),
       // 排队位那一层自己的文件目录与清理计数：排障时「为什么看到 0 条」先看这里
@@ -254,8 +254,8 @@ function alertOnce(kind, verdict, reason) {
 
 /**
  * 这一类在整机上最多放几条（v0.9.79）。
- * 只有「没有账号可挂」的通道需要它：画布出图走平台令牌，每账号上限对它无从下手，
- * 所以 VQ_CONCURRENCY_CANVAS_GEN 是整机口径——一张画布点批量出图时，机器只放这么多张。
+ * 只有「没有账号可挂」的通道需要它：无限画布出图走平台令牌，每账号上限对它无从下手，
+ * 所以 VQ_CONCURRENCY_CANVAS_GEN 是整机口径——一张无限画布点批量出图时，机器只放这么多张。
  * 守卫关掉时回 0：那一档是「只量不拦」。
  */
 export function kindLimitFor(kind, level = 'ok', guard = true) {
@@ -264,13 +264,13 @@ export function kindLimitFor(kind, level = 'ok', guard = true) {
   return capacityFor(kind, config.credits.concurrency[kind], level)
 }
 
-// ─── 画布出图的排队位（v0.9.80） ──────────────────────────────────────────────
+// ─── 无限画布出图的排队位（v0.9.80） ──────────────────────────────────────────────
 // 一次「批量出图」会连发 8 张，整机只放 2 张。v0.9.79 是第 3 张起立刻 503，
-// 画布上看到的就是「6 张失败」；可画布其实等得起（同步出图超时 1800 秒）。
+// 无限画布上看到的就是「6 张失败」；可无限画布其实等得起（同步出图超时 1800 秒）。
 // 所以名额满时先排一会儿：排到了照常出图，排不到才拒——拒绝仍然发生在调上游之前，
 // 这一单不花钱。四件事刻意做成这样：
-//   1) 给「连发」与「主付费动作」这两类排队（画布出图 v0.9.80、评审 v0.9.95）；
-//      以前只给没有账号可挂的画布排，理由是其余重活客户端重试更合适——但评审是产品主路径，
+//   1) 给「连发」与「主付费动作」这两类排队（无限画布出图 v0.9.80、评审 v0.9.95）；
+//      以前只给没有账号可挂的无限画布排，理由是其余重活客户端重试更合适——但评审是产品主路径，
 //      让用户自己再点一次是把活推回给他，所以它也有份；其余重活仍然是立刻拒；
 //   2) 排队位与名额同一个口径（v0.9.93）：都放在共享目录里，两个实例排的是同一条队，
 //      「最多 8 条同时排」是整机 8 条，不是每进程 8 条；
@@ -317,7 +317,7 @@ export function queueLimitsFor(kind) {
   }
 }
 
-/** 排队票：最长 120 字符，空值就自己发一张（画布据此问「我排第几」）。 */
+/** 排队票：最长 120 字符，空值就自己发一张（无限画布据此问「我排第几」）。 */
 function ticketOf(raw) {
   const value = String(raw || '').trim().slice(0, 120)
   return value || crypto.randomUUID()
@@ -391,7 +391,7 @@ export function queueView(kind, ticket = '') {
 }
 
 /**
- * 画布出图这一刻的样子（v0.9.83）：画布页的状态条、后台卡片、画布服务自己都读这一份。
+ * 无限画布出图这一刻的样子（v0.9.83）：无限画布页的状态条、后台卡片、无限画布服务自己都读这一份。
  * 只回聚合数——几条在跑、几条在排队、最久的等了多久、每条最多等多久；票号不出去，
  * 除非调用方点名要查自己的那一张（options.ticket），那时多回一个「你排第几」。
  */
@@ -542,7 +542,7 @@ export async function admitWaiting(kind, options = {}) {
           const waitedMs = slept ? Date.now() - startedAt : 0
           stat.served += 1
           stat.maxWaitMs = Math.max(stat.maxWaitMs, waitedMs)
-          // position 是入场名次（排到之后已经没意义，留着让画布知道「它当时排第几」）
+          // position 是入场名次（排到之后已经没意义，留着让无限画布知道「它当时排第几」）
           return { ...last, queued: waitedMs > 0, waitedMs, ticket, position: joined.position, ahead: Math.max(0, joined.position - 1) }
         }
         // 排队期间水位掉到红线：别等了，直接把红线那条回给它
@@ -665,7 +665,7 @@ export function admit(kind) {
   }
   // 守卫关掉时也占租约：后台那一屏要能看见「整机在跑几条」，只是不拦
   const cap = limits.guard ? globalHeavyCap(level) : 0
-  // 按类型的整机上限：目前只有画布出图用（见 kindLimitFor），其它重活靠每账号上限压
+  // 按类型的整机上限：目前只有无限画布出图用（见 kindLimitFor），其它重活靠每账号上限压
   const kindLimit = kindLimitFor(kind, level, limits.guard)
   const got = acquireHeavyLease(kind, { limit: cap, kindLimit })
   if (!got.ok) {
@@ -720,7 +720,7 @@ export function admissionCheck(kind) {
     limit: water.ok ? null : water.body.limit,
     scope: water.scope || (water.body && water.body.scope) || null,
     byKind: water.ok ? null : water.body.busyKinds || null,
-    // 按类型的名额（v0.9.79）：画布出图排满时，整机总名额可能还没满——预检要说清是哪一层
+    // 按类型的名额（v0.9.79）：无限画布出图排满时，整机总名额可能还没满——预检要说清是哪一层
     kindFull: Boolean(water.kindFull),
     kindActive: water.kindActive ?? null,
     kindLimit: water.kindLimit || null,

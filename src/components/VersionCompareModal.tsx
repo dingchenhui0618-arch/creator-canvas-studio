@@ -342,7 +342,7 @@ export function VersionCompareModal({
 
               <section className="vq-vcompare-section">
                 <div className="vq-vcompare-section-head">
-                  <h3>画布</h3>
+                  <h3>工作流</h3>
                   <span className="vq-mono">
                     {result.base.canvasAvailable ? result.base.nodes : '—'} → {result.target.canvasAvailable ? result.target.nodes : '—'} 节点
                     {changedFieldCount ? ' · ' + changedFieldCount + ' 项参数' : ''}
@@ -359,7 +359,7 @@ export function VersionCompareModal({
                     <p className="vq-vcompare-state">节点没动。</p>
                   )
                 ) : (
-                  <p className="vq-vcompare-state">有一侧画布读不到，画布这一侧不比。</p>
+                  <p className="vq-vcompare-state">有一侧工作流读不到，工作流这一侧不比。</p>
                 )}
               </section>
 
@@ -424,7 +424,7 @@ export function VersionCompareModal({
 
         <div className="vq-vcompare-foot">
           <p className="vq-vcompare-note">
-            只读：不改画布、不改脚本、不扣积分。节点只比类型与配置，移动位置或改标题不算；脚本按段名比口播，开版时存下的快照才算；评审读这一版最近一次，交付只认这一版的记录，交时评审照写当初、不被后来重评改写。没有快照或没评过的一侧不猜「没变」。
+            只读：不改工作流、不改脚本、不扣积分。节点只比类型与配置，移动位置或改标题不算；脚本按段名比口播，开版时存下的快照才算；评审读这一版最近一次，交付只认这一版的记录，交时评审照写当初、不被后来重评改写。没有快照或没评过的一侧不猜「没变」。
           </p>
         </div>
       </div>

@@ -1,31 +1,31 @@
-// 平台生成通道：把画布的出图 / 出视频请求，按「能力 → 模型 → 优先级 → 权重」选一把
+// 平台生成通道：把无限画布的出图 / 出视频请求，按「能力 → 模型 → 优先级 → 权重」选一把
 // 平台 Key 转发到上游；一把失败就换下一把（最多 3 把），单把 Key 坏掉不该让整次生成失败。
 //
 // 上游两种协议都接（2026-11-11 起），由 Key 的 baseUrl 自动判定，管理员贴地址时不用选协议：
 //  - ark ：火山方舟 —— /images/generations、/contents/generations/tasks[/<id>]
 //  - cgcm：SeeAPI —— /v1/images/generations[/async]、/v1/video/generations、/v1/tasks/<id>
-// 画布的出图节点按方舟写法、出视频节点在 CGCM 渠道下按 SeeAPI 写法，两套都指向本通道。
+// 无限画布的出图节点按方舟写法、出视频节点在 CGCM 渠道下按 SeeAPI 写法，两套都指向本通道。
 //
 // 与聊天链路的三点区别：
-// 1. 鉴权用平台服务令牌（Bearer），不走用户会话 —— 调用方是画布服务，不是浏览器；
+// 1. 鉴权用平台服务令牌（Bearer），不走用户会话 —— 调用方是无限画布服务，不是浏览器；
 // 2. 出图是一次同步请求；出视频是「建任务 + 轮询」，轮询必须回到建任务的那把 Key，
 //    所以任务 id 与 Key 的对应关系落盘（见 gateway-tasks.mjs）：发版重启后照样查得到结果，
 //    不会让用户为同一段片子付两次钱；
-// 3. 生成结果原样回给调用方（拿到 url 就够），不落本地磁盘 —— 备份是画布自己的事。
+// 3. 生成结果原样回给调用方（拿到 url 就够），不落本地磁盘 —— 备份是无限画布自己的事。
 import crypto from 'node:crypto'
 import { config } from './config.mjs'
 import { countRunning, finishTask, getTask, listTasks, pruneTasks, rememberTask, resetTaskStore } from './gateway-tasks.mjs'
 import { keyMaterial, listKeys, openSecret, recordRoute, reportKey, resolveKeyCandidates, sealSecret, vaultModels } from './keyvault.mjs'
 import { recordUsage } from './usage-meter.mjs'
 
-// 画布出图节点会发过来的真实模型名（来源：画布源码里的 CHANNEL_MODEL 常量，2026-11-11 核对）。
-// 后台拿它做「画布要的模型现在有没有人接」的对账，避免 Key 加上了却因为模型名对不上而用不了。
+// 无限画布出图节点会发过来的真实模型名（来源：无限画布源码里的 CHANNEL_MODEL 常量，2026-11-11 核对）。
+// 后台拿它做「无限画布要的模型现在有没有人接」的对账，避免 Key 加上了却因为模型名对不上而用不了。
 export const CANVAS_IMAGE_MODELS = [
   { model: 'doubao-seedream-4-5-251128', label: 'Seedream 4.5' },
   { model: 'doubao-seedream-5-0-pro-260628', label: 'Seedream 5.0 Pro' },
   { model: 'doubao-seedream-5-0-flash-260915', label: 'Seedream 5.0 Flash' },
-  // 画布走 SeeAPI（CGCM）那几条渠道时，发的是 SeeAPI 自己的模型名（见 deploy/bd-canvas/wire_cgcm.py
-  // 的 CGCM_MODELS），不是方舟名。2026-11-13 画布出图用的就是 image-2-pro，对账表里却没有它，
+  // 无限画布走 SeeAPI（CGCM）那几条渠道时，发的是 SeeAPI 自己的模型名（见 deploy/bd-canvas/wire_cgcm.py
+  // 的 CGCM_MODELS），不是方舟名。2026-11-13 无限画布出图用的就是 image-2-pro，对账表里却没有它，
   // 后台只能看到「Seedream 缺 Key」这种和实际失败无关的提示。
   { model: 'image-2-pro', label: 'SeeAPI Image 2 Pro' },
   { model: 'image-2.5', label: 'SeeAPI Image 2.5' },
@@ -33,8 +33,8 @@ export const CANVAS_IMAGE_MODELS = [
   { model: 'nano-banana-pro', label: 'SeeAPI Nano Banana Pro' },
 ]
 
-// 画布按方舟的真实模型名发请求，SeeAPI 用的却是自己的叫法；同一款模型两个名字，
-// 这里把「画布名 → SeeAPI 名」对上，既不用改画布，也不用让管理员两边各填一遍。
+// 无限画布按方舟的真实模型名发请求，SeeAPI 用的却是自己的叫法；同一款模型两个名字，
+// 这里把「无限画布名 → SeeAPI 名」对上，既不用改无限画布，也不用让管理员两边各填一遍。
 export const MODEL_ALIASES = {
   'doubao-seedream-5-0-pro-260628': 'seedream-5.0-pro',
 }
@@ -49,8 +49,8 @@ function acceptedModels(model) {
   return model ? (alias ? [model, alias] : [model]) : []
 }
 
-// 画布出视频节点在 CGCM 渠道下会发过来的模型名
-// （来源：画布 generation_seedance.py 的 CGCM_VIDEO_MODEL_MAP，2026-11-11 核对）。
+// 无限画布出视频节点在 CGCM 渠道下会发过来的模型名
+// （来源：无限画布 generation_seedance.py 的 CGCM_VIDEO_MODEL_MAP，2026-11-11 核对）。
 export const CANVAS_VIDEO_MODELS = [
   { model: 'seedance-2.0', label: 'Seedance 2.0' },
   { model: 'seedance-2.0-fast', label: 'Seedance 2.0 Fast' },
@@ -91,7 +91,7 @@ export function upstreamUrl(key, kind, id = '') {
 }
 
 /**
- * 画布会发的每个模型，现在有没有 Key 接得住（出图 + 出视频）。
+ * 无限画布会发的每个模型，现在有没有 Key 接得住（出图 + 出视频）。
  * 「留空 = 通用」的 Key 也算接得住，但要标明是靠通用 Key 接的 —— 否则管理员会以为模型名已经填对了。
  */
 function coverageRows(capability, keys, entries) {
@@ -135,10 +135,10 @@ export function gatewayConfigured() {
 }
 
 /**
- * 画布现在能不能生成：三样同时在位才算通——平台额度开关（VQ_GATEWAY_OPEN）、
+ * 无限画布现在能不能生成：三样同时在位才算通——平台额度开关（VQ_GATEWAY_OPEN）、
  * 服务令牌（VQ_GATEWAY_TOKEN）、至少一把声明了出图 / 出视频能力的 Key。
- * 后台与画布共用这一个判断，别再各自猜「配置了就是开了」：2026-11-13 后台就因此
- * 把「令牌已配、额度没开」显示成「通道已开启」，画布点生成却回 503。
+ * 后台与无限画布共用这一个判断，别再各自猜「配置了就是开了」：2026-11-13 后台就因此
+ * 把「令牌已配、额度没开」显示成「通道已开启」，无限画布点生成却回 503。
  */
 export function gatewayReadiness({ open, configured, image, video } = {}) {
   const missing = []
@@ -258,7 +258,7 @@ const MAX_ATTEMPTS = 3
 /**
  * 池里挑不出 Key 时的说法。要分得清两种情况：
  * 「一把都没有」和「有 Key，但没一把声明了这个模型」—— 后者才是接 Key 时最常见的坑
- * （画布发的是方舟真实模型名，管理员照着产品名填就匹配不上），
+ * （无限画布发的是方舟真实模型名，管理员照着产品名填就匹配不上），
  * 所以给用户看的还是人话，具体模型名只写进后台路由日志。
  */
 function missingKeyError(capability, model) {
@@ -296,7 +296,7 @@ function upstreamModelFor(key, model) {
 
 /**
  * 一次出图尝试：选中的那把 Key 把请求原样转发到 {baseUrl}/images/generations。
- * 成功返回上游 data（画布按 data[].url 取图）。每次尝试都单独记一条路由，
+ * 成功返回上游 data（无限画布按 data[].url 取图）。每次尝试都单独记一条路由，
  * 后台才看得出「第 1 把挂了、第 2 把接上」，而不是只留一条含糊的失败。
  */
 /** SeeAPI：502/503/504 + provider_submit_outcome_unknown = 上游接了单但没确认结果（钱可能已经扣了）。 */
@@ -349,17 +349,17 @@ async function attemptImage(key, requestBody, started, model, extraHeaders = {})
   }
   reportKey(key.id, true)
   recordRoute({ capability: 'image', model, keyId: key.id, keyName: key.name, source: 'pool', reason: key.reason, attempt: key.attempt, ms: Date.now() - started, ok: true })
-  // 上游响应原样给调用方：画布就是按方舟的 { data: [{ url }] } 取图的，
+  // 上游响应原样给调用方：无限画布就是按方舟的 { data: [{ url }] } 取图的，
   // 包一层 { data: {...} } 会让它「成功但 0 张图」。平台自己的元信息放在同级字段里。
   return { ...data, ok: true, urls, key: { id: key.id, name: key.name }, attempt: key.attempt, ms: Date.now() - started }
 }
 
 /**
  * 上游幂等键。SeeAPI 的同步出图属于「计费请求」，不带 Idempotency-Key 会直接 400
- * invalid_idempotency_key（2026-11-13 生产实测，画布上表现为「出图失败：上游凭证无效（HTTP 400）」）。
+ * invalid_idempotency_key（2026-11-13 生产实测，无限画布上表现为「出图失败：上游凭证无效（HTTP 400）」）。
  * 键的来源按优先级：正文里的 idempotency_key（部分调用方写法）→ 调用方自己的
- * Idempotency-Key 请求头（画布直连 SeeAPI 时就是这么发的，见 generation_image2.py:158-162）→
- * 平台按这次请求生成一个。前两种都要留住：同一个画布节点重试时上游才认得出是同一次请求，
+ * Idempotency-Key 请求头（无限画布直连 SeeAPI 时就是这么发的，见 generation_image2.py:158-162）→
+ * 平台按这次请求生成一个。前两种都要留住：同一个无限画布节点重试时上游才认得出是同一次请求，
  * 不会重复计费。
  */
 function idempotencyKeyFor(payload = {}, incoming = '') {
@@ -380,7 +380,7 @@ function idempotencyHeaders(key, value) {
   return keyProtocol(key) === 'cgcm' ? { 'Idempotency-Key': value } : {}
 }
 
-/** 出图张数：请求里明确要几张就记几张，没写按 1 张（画布默认一次一张）。 */
+/** 出图张数：请求里明确要几张就记几张，没写按 1 张（无限画布默认一次一张）。 */
 function imageUnits(payload = {}) {
   const count = Math.round(Number(payload.n) || 1)
   return Math.max(1, Math.min(8, count))
@@ -412,7 +412,7 @@ export async function generateImage(payload = {}, options = {}) {
   let lastError = null
   for (const key of candidates) {
     const requestBody = { ...body, model: upstreamModelFor(key, model) }
-    // SeeAPI 同步出图默认回 base64（一张图几 MB），画布要的是地址，所以不指定时按 url 要
+    // SeeAPI 同步出图默认回 base64（一张图几 MB），无限画布要的是地址，所以不指定时按 url 要
     if (keyProtocol(key) === 'cgcm' && !requestBody.response_format) requestBody.response_format = 'url'
     try {
       const result = await attemptImage(key, requestBody, started, model, idempotencyHeaders(key, idempotencyKey))
@@ -564,7 +564,7 @@ export async function pollVideoTask(taskId) {
 
 /**
  * 出图（异步任务形态）：SeeAPI 的 /v1/images/generations/async 只回任务 id，
- * 画布拿 id 轮询 /v1/tasks/<id> 取成品；方舟是同步出图，走 generateImage 那条路，没有这一步。
+ * 无限画布拿 id 轮询 /v1/tasks/<id> 取成品；方舟是同步出图，走 generateImage 那条路，没有这一步。
  */
 export async function createImageTask(payload = {}, options = {}) {
   pruneJobs()
@@ -604,7 +604,7 @@ export async function createImageTask(payload = {}, options = {}) {
 
 /**
  * 通道自己的模型目录（GET /api/gateway/v1/models，OpenAI 形态）。
- * 画布侧「测试 Key」会先探模型列表，指向本通道时用它判活；内容只来自平台 Key 池，
+ * 无限画布侧「测试 Key」会先探模型列表，指向本通道时用它判活；内容只来自平台 Key 池，
  * 不暴露上游地址与 Key 本身。
  */
 export function listPoolModels(capability = '') {

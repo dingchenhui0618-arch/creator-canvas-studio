@@ -370,7 +370,7 @@ export default function TemplatesSection() {
         {!loading && !filtered.length ? (
           <EmptyState
             title={items.length ? '没有匹配的模板' : '模板库为空'}
-            description={items.length ? '换一个关键词试试。' : '先到画布或模板库入库一条模板。'}
+            description={items.length ? '换一个关键词试试。' : '先到工作流或模板库入库一条模板。'}
           />
         ) : null}
 

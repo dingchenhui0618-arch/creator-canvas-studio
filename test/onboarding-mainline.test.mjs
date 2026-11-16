@@ -1,6 +1,6 @@
 // 上手引导讲的是「一条作品的主线」（v0.9.41）。这一层钉住三件事：
 //   1. 引导的每一步都落在一级导航里（工作台 / 作品 / 发现 / 模板库）：
-//      画布、视觉评审、智能体、运行记录是能力，不许被写成「一步」——
+//      工作流、无限画布、视觉评审、智能体、运行记录是能力，不许被写成「一步」——
 //      这正是那五个结构性问题的第一条：工具不是目的地。
 //   2. 主线四步的顺序是 找 → 拆 → 做 → 交。少一步，引导就又退回「八个各自不错的页面」。
 //   3. 引导上写的钱要对得上服务端的计费表：按次扣的只有检索 / 解析 / 评审 / 跑画布，
@@ -29,7 +29,7 @@ test('引导的每一步都落在一级导航里：画布 / 评审 / 智能体 /
   const tools = navIds(nav, 'TOOL_NAV')
 
   assert.deepEqual(primary, ['overview', 'projects', 'radar', 'templates'], '一级导航变了：引导与侧栏是同一套去处')
-  assert.deepEqual(tools, ['agents', 'canvas', 'review', 'runs'], '工具区变了：引导不能再指向已经不当工具的那一页')
+  assert.deepEqual(tools, ['agents', 'canvas', 'board', 'review', 'runs'], '工具区变了：引导不能再指向已经不当工具的那一页')
 
   const pages = [...guide.matchAll(/page:\s*'([a-z-]+)'/g)].map((match) => match[1])
   assert.ok(pages.length >= 4, '引导至少要有四步的去处，现在只有 ' + pages.length + ' 处')
@@ -64,6 +64,6 @@ test('引导上的价钱对得上服务端计费表：只有检索 / 解析 / �
     assert.match(guide, new RegExp('prices\\??\\.' + key), '引导没有读 ' + key + ' 的真实单价')
   }
   // 不计费的动作要明说，别让人以为点进画布、导出、分享就开始扣分
-  assert.match(guide, /开画布不扣积分/, '开画布不计费这件事要在卡面上说清')
+  assert.match(guide, /开工作流不扣积分/, '开工作流不计费这件事要在卡面上说清')
   assert.match(guide, /导出与分享不扣积分/, '导出与分享不计费这件事要在卡面上说清')
 })

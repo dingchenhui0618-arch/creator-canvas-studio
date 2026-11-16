@@ -108,8 +108,8 @@ function header(detail, ctx) {
       ? (decision.decision === 'pass' ? '人工通过' : '人工不通过') + ' · ' + stamp(decision.at, tz) + (decision.note ? ' · ' + flat(decision.note) : '')
       : '没有（结论由模型给出，还没人拍板）'),
   ]
-  if (flow) lines.push('- 画布：' + flow.name + '（' + flow.nodes + ' 个节点）')
-  else lines.push('- 画布：还没开')
+  if (flow) lines.push('- 工作流：' + flow.name + '（' + flow.nodes + ' 个节点）')
+  else lines.push('- 工作流：还没开')
   if (template) {
     lines.push(
       '- 模板：' + template.title + ' · ' + (template.platformLabel || '未标平台') +
@@ -222,7 +222,7 @@ function reviewSection(detail, review, tz) {
 
   const result = review.result || {}
   const verdict = VERDICT_LABEL[result.verdict] || '未给结论'
-  // 版本 0 是版本划分之前（还没开画布）的记录，标成「v0」会让人以为有第零版
+  // 版本 0 是版本划分之前（还没开工作流）的记录，标成「v0」会让人以为有第零版
   const reviewedVersion = Number(review.version) || project.version
   out.push('最新一次' + (reviewedVersion ? '（v' + reviewedVersion + '）' : '') + '：' + verdict + ' · ' + stamp(review.createdAt, tz))
   const model = result.profile || result.provider || ''
@@ -293,7 +293,7 @@ function reviewSection(detail, review, tz) {
 // ---------- 版本：每一版都写全 ----------
 //
 // 「把这版和上一版一起发我」是编导最常提的要求，但版本之间能对照的只有三样：
-// 画布（旧版画布一直留着）、评审与运行（按版本记）、以及开新版时存下的脚本快照。
+// 工作流（旧版工作流一直留着）、评审与运行（按版本记）、以及开新版时存下的脚本快照。
 // 脚本只有一份（作品级，copy-on-write），更早开的版本没有快照——这一点必须写进稿子，
 // 否则读者会以为「v1 的脚本就是现在这个样子」。
 
@@ -319,7 +319,7 @@ function versionSection(detail, tz) {
   const { project } = detail
   const out = ['', '## 版本对照']
   if (!project.version) {
-    out.push('', '还没开画布，所以只有脚本这一版。')
+    out.push('', '还没开工作流，所以只有脚本这一版。')
     return out
   }
   const archived = [...(Array.isArray(detail.versions) ? detail.versions : [])].sort((a, b) => a.n - b.n)
@@ -365,11 +365,11 @@ function versionSection(detail, tz) {
   if (previous) {
     const canvas = canvasText(canvasDelta(fingerprint(previous.nodeList), fingerprint(current.nodeList)))
     const script = scriptText(previous.script, current.script)
-    const bits = [canvas ? '画布' + canvas : '', script ? '脚本' + (/^\d/.test(script) ? '：' : '') + script : ''].filter(Boolean)
+    const bits = [canvas ? '工作流' + canvas : '', script ? '脚本' + (/^\d/.test(script) ? '：' : '') + script : ''].filter(Boolean)
     if (bits.length) out.push('', 'v' + current.n + ' 比 v' + previous.n + '：' + bits.join('；') + '。')
   }
 
-  out.push('', '| 版本 | 画布 | 节点 | 脚本 | 评审 | 运行 | 最近结论 | 归档 |', '| --- | --- | --- | --- | --- | --- | --- | --- |')
+  out.push('', '| 版本 | 工作流 | 节点 | 脚本 | 评审 | 运行 | 最近结论 | 归档 |', '| --- | --- | --- | --- | --- | --- | --- | --- |')
   for (const row of rows) {
     const counter = reviewsOf(detail.versionCounts, row.n)
     const runs = runsOf(detail.runCounts, row.n)
@@ -384,13 +384,13 @@ function versionSection(detail, tz) {
   // 每一版的现场：从新到旧，一版一小段；版数多时只写最近几版，上面的表里仍然有全量
   const blocks = rows.filter((row) => !row.current).reverse().slice(0, DELIVERABLE_LIMITS.versions)
   if (blocks.length) {
-    out.push('', '下面按从新到旧，把每一版的画布、脚本、评审与运行放在一起。')
+    out.push('', '下面按从新到旧，把每一版的工作流、脚本、评审与运行放在一起。')
     for (const row of blocks) {
       const before = byNumber.get(row.n - 1) || null
       out.push('', '### v' + row.n + ' · ' + flat(row.name), '')
       out.push(
         '- 归档：' + stamp(row.archivedAt, tz) + ' · ' +
-          (row.available ? '画布 ' + row.nodes + ' 个节点' : '画布已经被删除，只剩这一行归档记录'),
+          (row.available ? '工作流 ' + row.nodes + ' 个节点' : '工作流已经被删除，只剩这一行归档记录'),
       )
       if (deliveredVersions.has(row.n)) {
         const entry = deliveredVersions.get(row.n)
@@ -404,7 +404,7 @@ function versionSection(detail, tz) {
         )
       }
       const canvas = canvasText(canvasDelta(fingerprint(before?.nodeList), fingerprint(row.nodeList)))
-      if (before && canvas) out.push('- 画布：比 v' + before.n + ' ' + canvas)
+      if (before && canvas) out.push('- 工作流：比 v' + before.n + ' ' + canvas)
       if (row.script) {
         const hook = flat(row.script.hook)
         const delta = before ? (before.script ? scriptText(before.script, row.script) : '') : ''
@@ -454,7 +454,7 @@ function versionSection(detail, tz) {
   }
 
   if (archived.length) {
-    out.push('', '旧版本的画布还在的话能打开看，但改它不会写回那一版：要改就在最新一版上改。')
+    out.push('', '旧版本的工作流还在的话能打开看，但改它不会写回那一版：要改就在最新一版上改。')
   }
   return out
 }
@@ -463,7 +463,7 @@ function runSection(detail, tz) {
   const out = ['', '## 运行记录', '']
   const runs = Array.isArray(detail.runs) ? detail.runs : []
   if (!runs.length) {
-    out.push('还没跑过画布：跑一次之后，每个版本的耗时、失败节点与积分都会记在这里。')
+    out.push('还没跑过工作流：跑一次之后，每个版本的耗时、失败节点与积分都会记在这里。')
     return out
   }
   const shown = runs.slice(0, DELIVERABLE_LIMITS.runs)
@@ -583,7 +583,7 @@ export function projectDeliverable(detail, { review = null, now = new Date(), tz
     '---',
     '',
     '由 VisionQA 导出 · ' + (script?.structure?.length || 0) + ' 段脚本 / ' + (detail?.template?.shots || 0) + ' 个镜头' +
-      (project.flowId ? ' · 画布 ' + (detail?.flow?.nodes || 0) + ' 个节点' : '') +
+      (project.flowId ? ' · 工作流 ' + (detail?.flow?.nodes || 0) + ' 个节点' : '') +
       // 落款也带标识：稿子被截一段转发出去，标识还在
       ' · ' + aiLabelFootText(),
   ]

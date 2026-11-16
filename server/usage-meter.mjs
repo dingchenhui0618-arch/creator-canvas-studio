@@ -24,7 +24,7 @@ const KIND_LABEL = {
   video: '出视频',
   search: '检索',
   replicate: '复刻',
-  run: '画布运行',
+  run: '工作流运行',
 }
 
 const TOKEN_KINDS = new Set(['text', 'vision', 'judge'])

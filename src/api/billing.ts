@@ -18,7 +18,7 @@ export type BillingOverview = {
   /** 能不能自助到账：模式开着并且后台真的配了档位 */
   enabled: boolean
   currency: string
-  /** 积分口径（1 元 = N 积分）：服务端配置是唯一真源，画面与画布都读它 */
+  /** 积分口径（1 元 = N 积分）：服务端配置是唯一真源，充值页与无限画布都读它 */
   pointsPerCny: number
   unit: string
   /** auto = 内测直充；off = 只能提交申请由管理员发放 */

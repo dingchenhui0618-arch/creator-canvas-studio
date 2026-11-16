@@ -417,7 +417,7 @@ function stampText(value, tzOffsetMinutes) {
  */
 export function packageNote({ model, generatedAt = '', tzOffsetMinutes = 480, frameCount = 0, reviewSheetCount = 0, compareSheet = null } = {}) {
   const compareLine = compareSheet && compareSheet.base && compareSheet.target
-    ? '两版对照页.html  v' + compareSheet.base + ' → v' + compareSheet.target + ' 的画布参数、脚本口播、评审与交付并排；只读，双击打开就能打印'
+    ? '两版对照页.html  v' + compareSheet.base + ' → v' + compareSheet.target + ' 的工作流参数、脚本口播、评审与交付并排；只读，双击打开就能打印'
     : ''
   const lines = [
     'VisionQA 交付包',

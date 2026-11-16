@@ -1,4 +1,4 @@
-// 画布身份（跨系统）：VisionQA 后台用它在管理员页里看谁进过画布、并停用/恢复。
+// 无限画布身份（跨系统）：VisionQA 后台用它在管理员页里看谁进过无限画布、并停用/恢复。
 // 只走服务端到服务端：密钥放请求头，浏览器永远看不到。
 import { config } from './config.mjs'
 
@@ -25,7 +25,7 @@ export function canvasAdminConfigured() {
 
 async function callCanvas(pathname, init = {}) {
   const { secret, url } = adminSettings()
-  if (!secret || !url) throw fail('画布账号互通未配置', 'CANVAS_NOT_CONFIGURED', 503)
+  if (!secret || !url) throw fail('无限画布账号互通未配置', 'CANVAS_NOT_CONFIGURED', 503)
   const base = String(url).replace(/\/+$/, '')
   let response
   try {
@@ -39,11 +39,11 @@ async function callCanvas(pathname, init = {}) {
       signal: AbortSignal.timeout(TIMEOUT_MS),
     })
   } catch {
-    throw fail('画布服务暂时连不上', 'CANVAS_UNREACHABLE', 502)
+    throw fail('无限画布服务暂时连不上', 'CANVAS_UNREACHABLE', 502)
   }
   const data = await response.json().catch(() => null)
   if (!response.ok) {
-    const error = fail(data?.error || '画布服务拒绝了这次请求', 'CANVAS_REJECTED', 502)
+    const error = fail(data?.error || '无限画布服务拒绝了这次请求', 'CANVAS_REJECTED', 502)
     error.upstreamCode = data?.code
     throw error
   }

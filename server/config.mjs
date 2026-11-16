@@ -94,14 +94,14 @@ export const config = {
     timeoutMs: Number(process.env.VISION_TIMEOUT_MS || 300000),
     apiKey: (process.env.VISION_API_KEY || '').trim() || (visionBaseIsLocal ? readLocalToken() : ''),
   },
-  // 画布账号互通：VisionQA 签短时票据，画布企业服务用同一把共享密钥校验后换自己的会话。
+  // 无限画布账号互通：VisionQA 签短时票据，无限画布企业服务用同一把共享密钥校验后换自己的会话。
   // 没配 VQ_CANVAS_SHARED_SECRET 时整体关闭，画布仍用它的原生登录，不会意外免登录。
   canvas: {
     sharedSecret: (process.env.VQ_CANVAS_SHARED_SECRET || '').trim(),
     issuer: 'visionqa',
     audience: 'bd-canvas',
     ttlSec: Number(process.env.VQ_CANVAS_TICKET_TTL || 120),
-    // 画布企业服务的内网地址：后台「画布身份」页从这里读，不经过公网 nginx
+    // 无限画布企业服务的内网地址：后台「画布身份」页从这里读，不经过公网 nginx
     adminUrl: (process.env.VQ_CANVAS_ADMIN_URL || 'http://127.0.0.1:5313').trim(),
   },
   // 平台生成通道：画布的出图 / 出视频请求走这里，按能力选平台 Key 再转发上游。
@@ -152,7 +152,7 @@ export const config = {
     // 新账号初始额度：够试一轮检索 + 复刻，不至于一注册就卡住
     welcome: Number(process.env.VQ_CREDIT_WELCOME ?? 100),
     // 积分换算口径（v0.9.162）：界面上一律按积分标价，1 元 = N 积分。
-    // 这是唯一真源：画布的成本预估、充值页的「1 元 = N 积分」、默认档位都读它；
+    // 这是唯一真源：无限画布的成本预估、充值页的「1 元 = N 积分」、默认档位都读它；
     // 调价只改 VQ_POINTS_PER_CNY 一处，不写死在界面或画布里。
     pointsPerCny: (() => {
       const raw = Number(process.env.VQ_POINTS_PER_CNY ?? 10)
@@ -163,7 +163,7 @@ export const config = {
       replicate: Number(process.env.VQ_CREDIT_REPLICATE ?? 10),
       review: Number(process.env.VQ_CREDIT_REVIEW ?? 5),
       chat: Number(process.env.VQ_CREDIT_CHAT ?? 1),
-      // 画布整条流程跑一次（含模型调用）：按次计费，失败全额退回
+      // 工作流整条流程跑一次（含模型调用）：按次计费，失败全额退回
       flow_run: Number(process.env.VQ_CREDIT_FLOW_RUN ?? 2),
     },
     // 同一账号同时能跑几个：防连点把上游配额一次打光
@@ -172,14 +172,14 @@ export const config = {
       replicate: Number(process.env.VQ_CONCURRENCY_REPLICATE ?? 2),
       review: Number(process.env.VQ_CONCURRENCY_REVIEW ?? 1),
       chat: Number(process.env.VQ_CONCURRENCY_CHAT ?? 2),
-      // 同账号同时只允许一条画布流程在跑，避免连点把上游配额打光
+      // 同账号同时只允许一条工作流在跑，避免连点把上游配额打光
       flow_run: Number(process.env.VQ_CONCURRENCY_FLOW_RUN ?? 1),
-      // 画布出图 / 出视频走的是平台令牌（/api/gateway，没有账号可挂），
+      // 无限画布出图 / 出视频走的是平台令牌（/api/gateway，没有账号可挂），
       // 所以这一条不是「每账号」而是「整机」：同一时刻最多几张在生成。
       // 画布点「批量出图」会连发，8 张一起冲进来时整机只放 2 张，其余立刻拒（不碰上游、不花钱）。
       canvas_gen: Number(process.env.VQ_CONCURRENCY_CANVAS_GEN ?? 2),
     },
-    // 画布出图的排队位（v0.9.80）：一次「批量出图」会连发 8 张，整机只放 2 张。
+    // 无限画布出图的排队位（v0.9.80）：一次「批量出图」会连发 8 张，整机只放 2 张。
     // 以前第 3 张起立刻 503，画布上就是「6 张失败」；现在名额满时先排一会儿再拒。
     // 画布自己等得起：它的同步出图超时是 1800 秒（generation_image2.py:72），
     // 异步提交是 120 秒（:245）——所以这一档默认 90 秒，别把异步提交拖到超时。
@@ -190,14 +190,14 @@ export const config = {
     },
     // 评审的排队位（v0.9.95）：评审是产品的主付费动作（默认 5 积分一次），撞上整机的重活上限时
     // 以前立刻 503，用户只能自己再点一次。评审本身是同步等待（超时 300 秒），等得起这一档。
-    // 与画布出图共用同一套排队位（按类型各一条队），waitMs 写 0 或 maxWaiting 写 0 = 退回立刻拒。
+    // 与无限画布出图共用同一套排队位（按类型各一条队），waitMs 写 0 或 maxWaiting 写 0 = 退回立刻拒。
     reviewQueue: {
       waitMs: numEnv(process.env.VQ_REVIEW_QUEUE_MS, 60000),
       maxWaiting: numEnv(process.env.VQ_REVIEW_QUEUE_MAX, 4),
     },
-    // 画布运行的排队位（v0.9.96）：运行一条流程会下载并分析多张图，是最重的一条重活（3 积分/次），
+    // 工作流运行的排队位（v0.9.96）：运行一条流程会下载并分析多张图，是最重的一条重活（3 积分/次），
     // 撞上整机上限时以前也立刻 503。它一跑就要几十秒，用户本来就等着看节点逐个点亮，等得起这一档。
-    // 与画布出图 / 评审共用同一套排队位（按类型各一条队），写 0 = 退回立刻拒。
+    // 与无限画布出图 / 评审共用同一套排队位（按类型各一条队），写 0 = 退回立刻拒。
     runQueue: {
       waitMs: numEnv(process.env.VQ_RUN_QUEUE_MS, 60000),
       maxWaiting: numEnv(process.env.VQ_RUN_QUEUE_MAX, 4),

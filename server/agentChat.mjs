@@ -115,7 +115,7 @@ export function normalizeMemory(history) {
 }
 
 // 已接线工具：在对话前真正读一次本地数据，把摘要放进 system 消息，并在响应里回报读了什么。
-// 只读取当前账号能看到的模板与流程，不写任何东西，也不代表模型真的「操作」了画布。
+// 只读取当前账号能看到的模板与流程，不写任何东西，也不代表模型真的「操作」了工作流。
 export async function collectToolContext(agent, user = null, message = '') {
   const ids = new Set(Array.isArray(agent.tools) ? agent.tools : [])
   const used = []
@@ -129,7 +129,7 @@ export async function collectToolContext(agent, user = null, message = '') {
         blocks.push(
           '模板库最近入库（工具读取，仅供改写参考）：\n' +
             items
-              .map((item) => '- ' + item.title + '（' + item.contentType + (item.kind === 'flow' ? ' · 画布工作流' : '') + '）')
+              .map((item) => '- ' + item.title + '（' + item.contentType + (item.kind === 'flow' ? ' · 工作流工作流' : '') + '）')
               .join('\n'),
         )
       }
@@ -140,15 +140,15 @@ export async function collectToolContext(agent, user = null, message = '') {
   if (ids.has('canvas-read')) {
     try {
       const flows = (await listFlows(user)).slice(0, 6)
-      used.push({ id: 'canvas-read', label: '读取画布流程', detail: flows.length ? flows.length + ' 张' : '还没有画布流程' })
+      used.push({ id: 'canvas-read', label: '读取工作流流程', detail: flows.length ? flows.length + ' 张' : '还没有工作流流程' })
       if (flows.length) {
         blocks.push(
-          '已有画布流程（工具读取，仅供延续结构）：\n' +
+          '已有工作流流程（工具读取，仅供延续结构）：\n' +
             flows.map((flow) => '- ' + flow.name + '（' + (Array.isArray(flow.nodes) ? flow.nodes.length : 0) + ' 个节点）').join('\n'),
         )
       }
     } catch {
-      used.push({ id: 'canvas-read', label: '读取画布流程', detail: '读取失败，本次忽略' })
+      used.push({ id: 'canvas-read', label: '读取工作流流程', detail: '读取失败，本次忽略' })
     }
   }
   if (ids.has('web-read')) {

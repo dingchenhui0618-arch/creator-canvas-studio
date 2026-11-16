@@ -46,7 +46,7 @@ function flowMarkdown(template: ReplicaTemplate): string[] {
   return [
     '# ' + template.title,
     '',
-    line('类型', '画布工作流 · ' + nodes.length + ' 个节点'),
+    line('类型', '工作流工作流 · ' + nodes.length + ' 个节点'),
     line('平台', template.platformLabel),
     line('保存时间', template.createdAt ? template.createdAt.slice(0, 10) : ''),
     line('模板编号', template.id),
@@ -58,7 +58,7 @@ function flowMarkdown(template: ReplicaTemplate): string[] {
     '',
     '## 怎么用',
     '',
-    '这条是画布上另存的工作流：在模板库点「在画布打开」，会开回一张同样的新画布，把输入换成自己的素材就能跑。',
+    '这条是工作流上另存的工作流：在模板库点「在工作流打开」，会开回一张同样的新工作流，把输入换成自己的素材就能跑。',
   ]
 }
 

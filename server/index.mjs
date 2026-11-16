@@ -282,7 +282,7 @@ function beginPaid(res, user, kind, ref, { meta = null } = {}) {
   }
 }
 
-// 老数据没有归属：升级后把历史模板 / 智能体 / 画布认领给管理员，
+// 老数据没有归属：升级后把历史模板 / 智能体 / 工作流认领给管理员，
 // 否则「多用户隔离」一上线，所有人都会看不见自己升级前建的东西。
 async function migrateOwnership() {
   try {
@@ -324,7 +324,7 @@ const server = http.createServer(async (req, res) => {
     if (user) trace.userId = user.email
 
     // 登录门必须排在功能路由前面：featureRoutes 以前放在门之前，VQ_REQUIRE_AUTH=1 时
-    // /api/agents、/api/flows、/api/billing 仍然匿名可读（实测线上 200），等于把智能体提示词和画布流程公开了。
+    // /api/agents、/api/flows、/api/billing 仍然匿名可读（实测线上 200），等于把智能体提示词和工作流公开了。
     // /api/auth/* 已在 PUBLIC_API 里豁免，登录接口不受影响。
     if (needsLogin(pathname) && !user) {
       return sendJson(res, 401, { error: '未登录', loginRequired: true })
@@ -395,7 +395,7 @@ const server = http.createServer(async (req, res) => {
       return
     }
 
-    // 画布 ↔ 工作台：列画布、建画布、往画布里落评审笔记（都走画布自己的 HTTP 接口，不碰它的文件）
+    // 无限画布 ↔ 工作台：列画布、建画布、往画布里落评审笔记（都走画布自己的 HTTP 接口，不碰它的文件）
     if (pathname === '/api/bdc/canvases' && req.method === 'GET') {
       return sendJson(res, 200, await listCanvases())
     }
@@ -774,14 +774,14 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, job)
     }
 
-    // 模板库「复用此模板」：真的生成一张画布草稿（输入节点 + 复刻脚本节点），
-    // 不再是只把 reuseCount +1 的假动作。生成后前端直接跳到画布。
+    // 模板库「复用此模板」：真的生成一张工作流草稿（输入节点 + 复刻脚本节点），
+    // 不再是只把 reuseCount +1 的假动作。生成后前端直接跳到工作流。
     const applyMatch = pathname.match(/^\/api\/templates\/([\w-]+)\/apply$/)
     if (applyMatch && req.method === 'POST') {
       const template = await getTemplate(applyMatch[1], user)
       if (!template) return sendJson(res, 404, { error: '模板不存在' })
       const body = await readBody(req)
-      // 画布模板：blueprint 里存的是真节点与连线，原样建回一张新画布
+      // 工作流模板：blueprint 里存的是真节点与连线，原样建回一张新画布
       if (template.kind === 'flow' && Array.isArray(template.blueprint?.nodes) && template.blueprint.nodes.length) {
         const flow = await createFlow(
           {
@@ -825,7 +825,7 @@ const server = http.createServer(async (req, res) => {
         (template.hook || '未标注') +
         '。' +
         (timingLine ? timingLine : '') +
-        '输出可以直接进入画布继续改。'
+        '输出可以直接进入工作流继续改。'
       const flow = await createFlow(
         {
           name: String(body.name || template.title || '模板复刻').slice(0, 60),
@@ -863,7 +863,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === '/api/templates' && req.method === 'POST') {
-      // 画布「另存为模板」：把当前流程存成工作流模板（带 blueprint，可在模板库套用回画布）
+      // 工作流「另存为模板」：把当前流程存成工作流模板（带 blueprint，可在模板库套用回画布）
       const body = await readBody(req)
       const flowId = String(body.flowId || '')
       if (body.from !== 'flow' || !flowId) {
@@ -1099,7 +1099,7 @@ await migrateOwnership()
 // 顺手清掉崩溃时留下的任务临时目录。发版 = 重启 = 以前每次都可能白扣 10 积分。
 const recoveredJobs = recoverInterruptedJobs()
 if (recoveredJobs.recovered) logEvent('jobs.recovered', recoveredJobs)
-// 画布运行同一套：上次没跑完的运行标中断，并按账本把已扣积分退回（重复启动不会多退）
+// 工作流运行同一套：上次没跑完的运行标中断，并按账本把已扣积分退回（重复启动不会多退）
 const recoveredRuns = await recoverInterruptedRuns()
 if (recoveredRuns.recovered || recoveredRuns.dropped || recoveredRuns.skipped) logEvent('runs.recovered', recoveredRuns)
 // 启动先清一次过期日志（停机久了不会把过期文件一直留着），之后每小时最多再清一次
@@ -1142,7 +1142,7 @@ async function shutdown(signal) {
     logRequestError('shutdown', error, { signal })
   }
   try {
-    // 画布运行也要先标中断 + 退款再退进程：否则这条运行和它的积分一起消失
+    // 工作流运行也要先标中断 + 退款再退进程：否则这条运行和它的积分一起消失
     runsInterrupted = await interruptRunningRuns(signal === 'SIGTERM' ? '服务重启' : '服务停止')
   } catch (error) {
     logRequestError('shutdown', error, { signal, kind: 'runs' })

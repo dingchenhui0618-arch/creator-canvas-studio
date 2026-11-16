@@ -58,6 +58,8 @@ const IS_MAC = typeof navigator !== 'undefined' && /mac|iphone|ipad/i.test(navig
 
 // 重页面按路由拆包：画布带 @xyflow、智能体与模板库带各自的样式表，首屏不必等它们。
 const CanvasPage = lazy(() => import('./pages/CanvasPage'))
+// 无限画布（外部那张自由画布）单独一屏：它和工作流是两件东西，代码也分开按需加载
+const BoardPage = lazy(() => import('./pages/BoardPage'))
 const AgentsPage = lazy(() => import('./pages/AgentsPage').then((module) => ({ default: module.AgentsPage })))
 const TemplateLibraryPage = lazy(() =>
   import('./pages/TemplateLibraryPage').then((module) => ({ default: module.TemplateLibraryPage })),
@@ -241,9 +243,9 @@ function Workbench({
   // 本地工作区只在桌面外壳里成立：网页版连这一项都不显示
   const desktopBridge = getDesktop()
 
-  // 专注模式只在画布页生效：离开画布时侧栏与顶栏一定回来，不会出现「侧栏不见了」；
-  // 回到画布仍保持专注，等于记住用户上次的选择。
-  const focusOn = canvasFocus && activePage === 'canvas'
+  // 专注模式只在无限画布生效：离开时侧栏与顶栏一定回来，不会出现「侧栏不见了」；
+  // 回到无限画布仍保持专注，等于记住用户上次的选择。
+  const focusOn = canvasFocus && activePage === 'board'
   // 面包屑跟着导航层级走：工具页多一段「工具」，否则用户看不出自己已经离开了主线
   const inTools = isToolPage(activePage) || activePage === 'agent-editor'
 
@@ -341,27 +343,27 @@ function Workbench({
     setAccountMenuOpen(false)
   }, [])
 
-  // 「新建 → 资产画布」直接调画布服务建一块真画布，建完就打开它；
-  // 服务不可用时退回画布页并如实提示，不留下一个只在本地存在的新画布。
+  // 「新建 → 无限画布」直接调无限画布服务建一块真画布，建完就打开它；
+  // 服务不可用时退回无限画布页并如实提示，不留下一个只在本地存在的新画布。
   const createCanvasProject = useCallback(async () => {
-    notify('正在新建画布…')
+    notify('正在新建无限画布…')
     const stamp = new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit' }).format(new Date())
     try {
       const result = await createBdcCanvas('新画布 ' + stamp)
       if (result?.canvas?.id) {
-        navigate({ kind: 'page', page: 'canvas', canvasId: result.canvas.id })
-        notify('已新建画布：' + result.canvas.name)
+        navigate({ kind: 'page', page: 'board', boardId: result.canvas.id })
+        notify('已新建无限画布：' + result.canvas.name)
         return
       }
-      go('canvas')
-      notify('画布服务没有返回新画布，已打开画布页')
+      go('board')
+      notify('无限画布服务没有返回新画布，已打开无限画布')
     } catch (error) {
-      go('canvas')
-      notify('新建画布失败：' + (error instanceof Error ? error.message : String(error)))
+      go('board')
+      notify('新建无限画布失败：' + (error instanceof Error ? error.message : String(error)))
     }
   }, [go, notify])
 
-  // 侧栏与命令面板共用同一个跳转口径：已经在画布上不重载当前流程。
+  // 侧栏与命令面板共用同一个跳转口径：已经在工作流上不重载当前流程。
   const navTo = useCallback(
     (entry: NavEntry) => {
       if (entry.id === 'canvas' && route.kind === 'page' && route.page === 'canvas') {
@@ -392,11 +394,11 @@ function Workbench({
       navCommand(SETTINGS_NAV, '设置'),
       {
         id: 'action-new-canvas',
-        label: '新建空白画布',
-        hint: '建一块真画布，建完直接打开',
+        label: '新建无限画布',
+        hint: '在无限画布服务里建一块真画布，建完直接打开',
         group: '动作',
         icon: Plus,
-        keywords: 'new canvas 新建 空白 画布',
+        keywords: 'new canvas 新建 空白 无限画布',
         run: () => void createCanvasProject(),
       },
       {
@@ -531,17 +533,24 @@ function Workbench({
     }
     switch (route.page) {
       case 'canvas':
-        // 只有「换了画布项目」才整页重挂（不带上一块的撤销栈）。
         // flowId 故意不进 key：页面加载完会把它补进地址栏，进 key 就等于自己把自己重挂一次——
-        // 表现出来就是进画布闪一下、/api/flows 连打两遍。
+        // 表现出来就是进工作流闪一下、/api/flows 连打两遍。
         return (
           <CanvasPage
-            // 运行地址和普通画布是两种模式：进出只读查看时重挂一次，避免旧运行状态挂在新模式上。
-            key={'canvas:' + (route.canvasId || 'flow') + ':' + (route.viewRunId ? 'view' : route.resumeRunId ? 'resume' : 'edit')}
+            // 运行地址和编辑地址是两种模式：进出只读查看时重挂一次，避免旧运行状态挂在新模式上。
+            key={'canvas:' + (route.viewRunId ? 'view' : route.resumeRunId ? 'resume' : 'edit')}
             flowId={route.flowId}
             resumeRunId={route.resumeRunId}
             viewRunId={route.viewRunId}
-            canvasId={route.canvasId}
+            onToast={notify}
+          />
+        )
+      case 'board':
+        // 无限画布：外部那张自由画布整屏铺满；地址里点名哪一块就打开哪一块（#/board/<画布ID>）
+        return (
+          <BoardPage
+            key={'board:' + (route.boardId || 'last')}
+            boardId={route.boardId}
             onToast={notify}
             focus={focusOn}
             onToggleFocus={() => setCanvasFocus((value) => !value)}
@@ -607,7 +616,7 @@ function Workbench({
             userName={session.user.name}
             onCreateCanvas={() => void createCanvasProject()}
             onNavigate={go}
-            onOpenCanvas={(canvasId) => navigate({ kind: 'page', page: 'canvas', canvasId })}
+            onOpenCanvas={(canvasId) => navigate({ kind: 'page', page: 'board', boardId: canvasId })}
             // 交出去的清单点一行（v0.9.140）：带着那条交付记录过去，作品页的档案直接落在那一版上
             onOpenProject={(projectId, deliveryId) =>
               navigate({ kind: 'page', page: 'projects', projectId, ...(deliveryId ? { deliveryId } : {}) })
@@ -617,7 +626,7 @@ function Workbench({
           />
         )
       case 'agents':
-        // 结构化草稿的两个出口：存为模板去模板库，送到画布直接带着新流程进画布页
+        // 结构化草稿的两个出口：存为模板去模板库，送到工作流直接带着新流程进工作流页
         return (
           <AgentsPage
             onCreate={openNewAgent}

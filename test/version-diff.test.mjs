@@ -20,7 +20,7 @@ import {
 // 这一组盯住四件容易退化的行为：
 //   1) 节点只比类型与配置，位置 / 标题 / 选中态不是改动；
 //   2) 脚本按段名对口播，改名不算改口播，重名段落按顺序比；
-//   3) 缺一侧（画布被删 / 没存快照）不猜「没改」，能说的那一侧照说；
+//   3) 缺一侧（工作流被删 / 没存快照）不猜「没改」，能说的那一侧照说；
 //   4) 版本表按相邻版次算，当前版也要有。
 
 const node = (id, title, config, extra = {}) => ({
@@ -55,7 +55,7 @@ test('节点指纹只认类型与配置：移动位置、改标题不算改动',
   assert.equal(canvasText(delta), '节点没动')
 })
 
-test('画布比出多、少、改，并点名节点标题', () => {
+test('工作流比出多、少、改，并点名节点标题', () => {
   const before = [node('n1', '输入', { text: '旧' }), node('n2', '配音', { voice: '旧' })]
   const after = [node('n1', '输入', { text: '新' }), node('n3', '出图', { size: '9:16' })]
   const delta = canvasDelta(fingerprint(before), fingerprint(after))
@@ -87,7 +87,7 @@ test('版本行的一句话：两侧都能比时一起说，都没动时收成�
     prevScript: sameScript,
     nextScript: sameScript,
   })
-  assert.equal(same, '画布与脚本都没动')
+  assert.equal(same, '工作流与脚本都没动')
 
   const changed = versionChangeText({
     prevNodes: nodes,
@@ -95,21 +95,21 @@ test('版本行的一句话：两侧都能比时一起说，都没动时收成�
     prevScript: sameScript,
     nextScript: script('钩子', [['开场', '改过的一句']]),
   })
-  assert.equal(changed, '画布改 1 个（写一句）；脚本：1 段口播改过、钩子没变')
+  assert.equal(changed, '工作流改 1 个（写一句）；脚本：1 段口播改过、钩子没变')
 })
 
 test('缺一侧不冒充「没改」：只写能比的那一侧', () => {
   const nodes = [node('n1', '写一句', { prompt: 'A' })]
   const sameScript = script('钩子', [['开场', '同一句']])
-  // 上一版画布被删：脚本还能比，画布不猜
+  // 上一版工作流被删：脚本还能比，工作流不猜
   assert.equal(
     versionChangeText({ prevNodes: null, nextNodes: nodes, prevScript: sameScript, nextScript: sameScript }),
     '脚本跟上一版一样',
   )
-  // 上一版没存脚本快照：画布还能比
+  // 上一版没存脚本快照：工作流还能比
   assert.equal(
     versionChangeText({ prevNodes: nodes, nextNodes: nodes, prevScript: null, nextScript: sameScript }),
-    '画布节点没动',
+    '工作流节点没动',
   )
   // 两边都没有可比的数据：返回空串，页面不写「没改」
   assert.equal(
@@ -126,9 +126,9 @@ test('版本表按相邻版次算：v2、v3 各一句，最早一版没有', () 
   ]
   const changes = versionChangesOf(rows)
   assert.equal(changes['1'], undefined)
-  assert.match(changes['2'], /画布改 1 个（输入）/)
+  assert.match(changes['2'], /工作流改 1 个（输入）/)
   assert.match(changes['2'], /1 段口播改过/)
-  assert.match(changes['3'], /画布与脚本都没动/)
+  assert.match(changes['3'], /工作流与脚本都没动/)
 })
 
 test('以旧版为底：改动按底座算，不再拿上一版当基准', () => {
@@ -139,14 +139,14 @@ test('以旧版为底：改动按底座算，不再拿上一版当基准', () =>
     { n: 4, nodes: [node('n1', '输入', { text: 'v1' })], script: script('钩子 v1', [['开场', '第一版']]), base: 1 },
   ]
   const bases = versionBaseChangesOf(rows)
-  assert.deepEqual(bases['4'], { base: 1, text: '画布与脚本都没动' })
+  assert.deepEqual(bases['4'], { base: 1, text: '工作流与脚本都没动' })
   assert.equal(bases['2'], undefined, '普通版本仍按上一版算')
   assert.equal(bases['3'], undefined, '底座就是上一版时不重复给')
   // 底座那一版不在表里（被删 / 被裁掉）就不写，页面回退到「比上一版」
   assert.equal(versionBaseChangesOf([{ ...rows[3], base: 2 }])['4'], undefined)
 })
 
-test('两版对照的画布明细带节点 id：多、少、改都能逐项列出来', () => {
+test('两版对照的工作流明细带节点 id：多、少、改都能逐项列出来', () => {
   const before = [node('n1', '输入', { text: '旧' }), node('n2', '配音', { voice: '旧' })]
   const after = [node('n1', '输入', { text: '新' }), node('n3', '出图', { size: '9:16' })]
   const detail = canvasDetail(fingerprint(before), fingerprint(after))
@@ -177,7 +177,7 @@ test('任意两版：一句话与明细同源；缺一侧时明细为 null，不
     baseScript: sameScript,
     targetScript: sameScript,
   })
-  assert.equal(same.summary, '画布与脚本都没动')
+  assert.equal(same.summary, '工作流与脚本都没动')
   assert.deepEqual(same.canvas, { added: [], removed: [], changed: [] })
   assert.deepEqual(same.script.changed, [])
 

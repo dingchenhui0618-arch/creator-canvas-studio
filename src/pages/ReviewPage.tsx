@@ -628,7 +628,7 @@ export default function ReviewPage({
               className="vq-button vq-button--ghost vq-button--sm"
               onClick={() => uploadInputRef.current?.click()}
               disabled={uploadBusy}
-              title="从电脑里选一张图：只评这一张，不动作品里的画布"
+              title="从电脑里选一张图：只评这一张，不动作品里的工作流"
             >
               {uploadBusy ? <Loader2 size={13} className="vq-spin" /> : <ImagePlus size={13} />}
               {uploadBusy ? '上传中' : '选图'}
@@ -910,7 +910,7 @@ export default function ReviewPage({
                               {row.status.text}
                             </Pill>
                             <span className="review-candidate-go">
-                              {row.hasCanvas ? '评这一版' : row.delivered ? '打开作品' : '先开画布'}
+                              {row.hasCanvas ? '评这一版' : row.delivered ? '打开作品' : '先开工作流'}
                               <ArrowRight size={13} />
                             </span>
                           </button>
@@ -939,7 +939,7 @@ export default function ReviewPage({
                     <p>
                       {projectId
                         ? '把这一版要发的截图贴进来最准；没有截图时模板首帧也能评（那是原片那一帧）。画幅越接近投放尺寸，结论越可靠。'
-                        : '评的是作品的某一版；还没开画布的作品先开画布，先有这一版才谈得上能不能发。'}
+                        : '评的是作品的某一版；还没开工作流的作品先开工作流，先有这一版才谈得上能不能发。'}
                     </p>
                   </div>
                 </li>

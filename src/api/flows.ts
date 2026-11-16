@@ -30,8 +30,8 @@ export type ApiFlow = {
   createdAt: string
   updatedAt: string
   /**
-   * 这块画布挂在哪条作品的第几版：画布页据此写「在帮《X》· 第 N 版」。
-   * 空白画布（还没归作品的）是 null，页面什么也不写——不编一个「未命名作品」出来。
+   * 这块工作流挂在哪条作品的第几版：工作流页据此写「在帮《X》· 第 N 版」。
+   * 空白工作流（还没归作品的）是 null，页面什么也不写——不编一个「未命名作品」出来。
    */
   project?: RunProjectRef | null
 }
@@ -68,20 +68,20 @@ export type RunCredits = {
 }
 
 /**
- * 这条运行属于哪条作品的哪一版：服务端按画布指针现算，不带脚本与分享凭证。
- * 空白画布直接跑的运行没挂在任何作品上，就是 null。
+ * 这条运行属于哪条作品的哪一版：服务端按工作流指针现算，不带脚本与分享凭证。
+ * 空白工作流直接跑的运行没挂在任何作品上，就是 null。
  */
 export type RunProjectRef = {
   id: string
   title: string
   version: number
-  /** true = 这条运行跑的是归档的旧版画布 */
+  /** true = 这条运行跑的是归档的旧版工作流 */
   archived: boolean
 }
 
 /**
- * 一次运行开始时的画布快照（v0.9.107）：位置、标题、参数、连线都在里面。
- * 只有单条运行详情会带；旧运行没有这一项，页面必须如实退回「取当前画布」。
+ * 一次运行开始时的工作流快照（v0.9.107）：位置、标题、参数、连线都在里面。
+ * 只有单条运行详情会带；旧运行没有这一项，页面必须如实退回「取当前工作流」。
  */
 export type RunGraphSnapshot = {
   capturedAt: string
@@ -117,7 +117,7 @@ export type RunRecord = {
   billFinished?: number
   /** 有已跑完的节点、也还有没跑的，才给「继续跑」入口 */
   resumable?: boolean
-  /** 上次运行时这张画布的整图内容指纹（诊断用；局部复用看 nodeRevisions） */
+  /** 上次运行时这张工作流的整图内容指纹（诊断用；局部复用看 nodeRevisions） */
   flowRevision?: string
   /** 上次运行时每个节点的内容指纹：续跑时只复用指纹没变的节点（v0.9.103） */
   nodeRevisions?: Record<string, string>
@@ -130,7 +130,7 @@ export type RunRecord = {
   credits?: RunCredits | null
   /** 属于哪条作品的哪一版；没挂在作品上为 null / 缺省 */
   project?: RunProjectRef | null
-  /** 这次运行开始时的画布快照；只有详情接口带，旧运行时缺省 */
+  /** 这次运行开始时的工作流快照；只有详情接口带，旧运行时缺省 */
   graph?: RunGraphSnapshot | null
 }
 
@@ -139,7 +139,7 @@ export type RunResumePlan = {
   ok: boolean
   runId: string
   flowId: string
-  /** 当前画布一共几个节点 */
+  /** 当前工作流一共几个节点 */
   total: number
   /** 内容没变、可以直接复用的旧结果 */
   reused: number
@@ -154,7 +154,7 @@ export type RunResumePlan = {
 }
 
 /**
- * 运行对照（v0.9.110）：同一条画布的两条运行摆在一起。
+ * 运行对照（v0.9.110）：同一条工作流的两条运行摆在一起。
  * 服务端只返回逐节点指纹与短预览；完整输出仍在单条运行详情里。
  */
 export type RunCompareSide = {
@@ -171,9 +171,9 @@ export type RunCompareSide = {
   /** 实际花掉的积分（退回来的不算） */
   cost: number
   refunded: boolean
-  /** 这条运行在哪张画布上；跨版本对照时用它写「v1 / v2」 */
+  /** 这条运行在哪张工作流上；跨版本对照时用它写「v1 / v2」 */
   flowName?: string
-  /** 挂在哪件作品、第几版；空白画布跑的不挂作品，是 null */
+  /** 挂在哪件作品、第几版；空白工作流跑的不挂作品，是 null */
   project?: { id: string; title: string; version: number } | null
 }
 
@@ -207,12 +207,12 @@ type RunCompareBase = {
   flowId: string
   flowName: string
   current: RunCompareSide
-  /** 同一条画布上还能拿来对照的运行（不含自己，不含还在跑 / 排队的） */
+  /** 同一条工作流上还能拿来对照的运行（不含自己，不含还在跑 / 排队的） */
   options: RunCompareSide[]
   optionsTotal: number
   /** 候选超过 20 条时只返回最近 20 条 */
   optionsTruncated: boolean
-  /** 候选范围：flow = 只有同一条画布；project = 同一件作品的其它版本也在里面（v0.9.113） */
+  /** 候选范围：flow = 只有同一条工作流；project = 同一件作品的其它版本也在里面（v0.9.113） */
   optionsScoped?: 'flow' | 'project'
 }
 
@@ -225,7 +225,7 @@ export type RunCompare = RunCompareBase &
     | {
         comparable: true
         previous: RunCompareSide
-        /** 两条运行在同一件作品的不同版本画布上（v0.9.113） */
+        /** 两条运行在同一件作品的不同版本工作流上（v0.9.113） */
         crossVersion?: boolean
         project?: { id: string; title: string } | null
         graph: { changed: boolean; unknown: boolean; currentRevision: string; previousRevision: string }
@@ -245,7 +245,7 @@ export type RunCompare = RunCompareBase &
       }
   )
 
-/** 默认和同一条画布更早的那条比；传 withId 才点名另一条。 */
+/** 默认和同一条工作流更早的那条比；传 withId 才点名另一条。 */
 export const getRunCompare = (id: string, withId = '') =>
   request<RunCompare>(
     '/api/runs/' + encodeURIComponent(id) + '/compare' + (withId ? '?with=' + encodeURIComponent(withId) : ''),
@@ -288,7 +288,7 @@ export type RunQuery = {
 }
 
 /**
- * 运行的排队位（v0.9.96）：名额满时服务端先收下这一单、排在整机的一条队里（与画布出图 / 评审同一条队）。
+ * 运行的排队位（v0.9.96）：名额满时服务端先收下这一单、排在整机的一条队里（与工作流出图 / 评审同一条队）。
  * 票号是这次运行的凭据（页面自己生成），服务端只按它查名次——聚合数里看不到票号。
  */
 export type RunQueueState = {
@@ -312,7 +312,7 @@ export type RunQueueState = {
 export const getRunQueue = (ticket: string) =>
   request<RunQueueState>('/api/runs/queue?ticket=' + encodeURIComponent(ticket))
 
-/** 续跑预检：只问不跑。画布改过之后，页面据此说清「哪几个还能复用」。 */
+/** 续跑预检：只问不跑。工作流改过之后，页面据此说清「哪几个还能复用」。 */
 export const getRunResumePlan = (flowId: string, runId: string) =>
   request<RunResumePlan>('/api/flows/' + flowId + '/resume-plan?runId=' + encodeURIComponent(runId))
 
@@ -329,7 +329,7 @@ export type RunEventMessage =
 export const stopRun = (id: string) =>
   request<{ ok: boolean; id: string; status: string }>('/api/runs/' + id + '/stop', { method: 'POST' })
 
-/** 单条运行：从运行记录页点「继续运行」时，画布按地址里的 runId 把这条记录放回抽屉。 */
+/** 单条运行：从运行记录页点「继续运行」时，工作流按地址里的 runId 把这条记录放回抽屉。 */
 export async function getRun(id: string): Promise<RunRecord> {
   return request<RunRecord>('/api/runs/' + encodeURIComponent(id))
 }
@@ -344,14 +344,14 @@ export async function listRuns(query: RunQuery = {}): Promise<RunList> {
   return request<RunList>('/api/runs?' + params.toString())
 }
 
-// 画布「另存为模板」：落到模板库的工作流条目，带 blueprint，之后能原样开回一张画布
+// 工作流「另存为模板」：落到模板库的工作流条目，带 blueprint，之后能原样开回一张工作流
 export const saveFlowAsTemplate = (flowId: string, title?: string) =>
   request<{ ok: boolean; template: { id: string; title: string } }>('/api/templates', {
     method: 'POST',
     body: JSON.stringify({ from: 'flow', flowId, title }),
   })
 
-// 同时发出的同一份列表请求只打一次：进画布时页头和画布视图会各要一次列表，
+// 同时发出的同一份列表请求只打一次：进工作流时页头和工作流视图会各要一次列表，
 // 以前就是两条一模一样的 GET 并排飞出去。请求结束即释放，不做缓存，切回来仍拿最新数据。
 let listInFlight: Promise<ApiFlow[]> | null = null
 

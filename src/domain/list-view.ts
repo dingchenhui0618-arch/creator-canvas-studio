@@ -34,7 +34,7 @@ export const EMPTY_TEMPLATES_VIEW: TemplatesView = { keyword: '', type: '全部'
 
 export interface RunsView {
   keyword: string
-  /** 只看某块画布；空串表示全部流程 */
+  /** 只看某块工作流；空串表示全部流程 */
   flowId: string
   status: '' | 'success' | 'error' | 'interrupted'
 }
@@ -149,7 +149,7 @@ export function readRunsView(storage: ViewStorage): RunsView {
 }
 
 /**
- * 记下来的「只看这块画布」还算不算数：流程清单读成功、里面却没有这块画布（删了、或换了账号），
+ * 记下来的「只看这块工作流」还算不算数：流程清单读成功、里面却没有这块工作流（删了、或换了账号），
  * 就按「全部流程」算，别让人停在一份永远空的列表上；清单还没读到（或读失败）时先信记下来的那个，
  * 不为一次网络抖动把好筛选抹掉。
  */

@@ -1,6 +1,6 @@
 // 评审页从哪条作品开始：评的是「这一版的画面」，不是模板库里的某张首帧。
 //
-// 为什么放在服务端：哪一版评过几次、最近结论是什么、人拍过板没有、有没有画布，
+// 为什么放在服务端：哪一版评过几次、最近结论是什么、人拍过板没有、有没有工作流，
 // 这四件事全站只有一处口径（project-status.mjs 的 reviewsForVersion / decisionFor /
 // projectStatus / deliveredCurrent）。评审页再自己算一遍，就会出现「卡片写需人工确认、
 // 评审页写在做」这种自相矛盾——这正是 v0.9.19 收敛掉的东西，不能从新入口漏回来。
@@ -26,12 +26,12 @@ export const REVIEW_CANDIDATE_LIMIT = 4
 export const REVIEW_CANDIDATE_MAX = 12
 
 /**
- * 这一版叫什么。还没开画布的作品不叫「第 0 版」，照实说它还没有这一版。
- * 与作品页、画布横幅上的写法一致。
+ * 这一版叫什么。还没开工作流的作品不叫「第 0 版」，照实说它还没有这一版。
+ * 与作品页、工作流横幅上的写法一致。
  */
 export function versionLabel(version) {
   const n = Math.max(0, Math.round(Number(version) || 0))
-  return n ? '第 ' + n + ' 版' : '还没开画布'
+  return n ? '第 ' + n + ' 版' : '还没开工作流'
 }
 
 /**
@@ -50,7 +50,7 @@ export function reviewCandidateRow(project, counts = {}, decisions = []) {
     title: String(project?.title || '未命名作品'),
     version,
     versionLabel: versionLabel(version),
-    // 没有画布就没有「这一版」：界面据此不给「评这一版」，改给「先开画布」
+    // 没有工作流就没有「这一版」：界面据此不给「评这一版」，改给「先开工作流」
     hasCanvas: Boolean(project?.flowId),
     delivered: deliveredCurrent(project),
     reviews: {
@@ -66,7 +66,7 @@ export function reviewCandidateRow(project, counts = {}, decisions = []) {
 /**
  * 评审候选：按最近改动倒序，limit 夹在 1..12。
  * total 是全部作品数（不受 limit 影响），界面写「还有 N 条在作品里」用得上；
- * withoutCanvas 是其中还没开画布的条数，空态与说明句读它，不另外数一遍。
+ * withoutCanvas 是其中还没开工作流的条数，空态与说明句读它，不另外数一遍。
  */
 export function reviewCandidates(projects, countsByProject = {}, decisionsByProject = new Map(), { limit = REVIEW_CANDIDATE_LIMIT } = {}) {
   const rows = (Array.isArray(projects) ? projects : [])

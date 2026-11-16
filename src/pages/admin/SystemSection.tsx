@@ -526,7 +526,7 @@ export default function SystemSection() {
         description={
           internal
             ? '版本、VisionQA Canvas 三端口与数据目录说明。所有状态来自真实接口；未部署就如实写未部署。'
-            : '版本、画布服务状态与数据占用；没有数据的地方写空状态，不估算、不编造。'
+            : '版本、无限画布服务状态与数据占用；没有数据的地方写空状态，不估算、不编造。'
         }
         actions={<RefreshButton onClick={reload} busy={version.loading || bdc.loading || storage.loading} />}
       />
@@ -1143,7 +1143,7 @@ export default function SystemSection() {
           <div className="admin-block-head">
             <div>
               <p className="admin-label">VisionQA Canvas</p>
-              <p className="admin-sub">{internal ? '三端口状态，不启动、不探测额外地址。' : '画布服务的运行状态与访问地址。'}</p>
+              <p className="admin-sub">{internal ? '三端口状态，不启动、不探测额外地址。' : '无限画布服务的运行状态与访问地址。'}</p>
             </div>
             <SourceTag kind="api" source="GET /api/bdc/status" />
           </div>

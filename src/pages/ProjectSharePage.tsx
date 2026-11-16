@@ -182,7 +182,7 @@ export default function ProjectSharePage({ token }: { token: string }) {
             <a className="pshare-paper" href={compareUrl} target="_blank" rel="noreferrer">
               <GitCompare size={16} className="pshare-paper-icon" />
               <span className="pshare-paper-main">
-                <strong>两版对照 · 画布、脚本、评审与交付并排</strong>
+                <strong>两版对照 · 工作流、脚本、评审与交付并排</strong>
                 <span>左边是上一版、右边是当前版；只列改过的节点与口播，可打印或存成 PDF。分享者停用链接后，这张纸也会打不开。</span>
               </span>
               <ArrowUpRight size={14} />
@@ -328,7 +328,7 @@ export default function ProjectSharePage({ token }: { token: string }) {
             <strong>关于这个链接</strong>
             <p>
               只读分享：只展示这条作品的脚本、分镜，以及评审次数与评审对照纸；分享者可以另外打开两版对照纸。
-              上面的离线包只是把这些内容打包带走，不包含更多东西。这里不展示账号、积分与完整画布。
+              上面的离线包只是把这些内容打包带走，不包含更多东西。这里不展示账号、积分与完整工作流。
               分享者停止分享后，这个地址、两张对照纸与离线包都会立即失效。分享者能看到这条链接被打开的次数、最近一次的时间，
               以及是从微信、手机还是电脑打开的；不记录 IP，也不记录具体是谁。
             </p>

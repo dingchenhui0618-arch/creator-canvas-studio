@@ -1,7 +1,7 @@
 // 作品分享的公开视图。
 //
 // 分享链接发给没有账号的人（甲方、剪辑），所以这里只做一件事：逐字段挑出可以公开的内容，
-// 不做「整条对象去掉几个 key」——以后给作品加内部字段（积分、画布、模板 id、账号）
+// 不做「整条对象去掉几个 key」——以后给作品加内部字段（积分、工作流、模板 id、账号）
 // 不会自动漏到公开链接上。
 import path from 'node:path'
 import { config } from './config.mjs'
@@ -73,7 +73,7 @@ export function shareFrameIndex(template, image) {
   return index > 0 ? index : 0
 }
 
-/** 分镜帧图落在 framesDir/<模板 id>/<文件名>：路径只从画布帧记录里取，不接受外部拼路径。 */
+/** 分镜帧图落在 framesDir/<模板 id>/<文件名>：路径只从工作流帧记录里取，不接受外部拼路径。 */
 export function frameFileOf(template, frameIndex) {
   const frames = Array.isArray(template?.frames) ? template.frames : []
   const frame = frames.find((entry) => String(entry.index) === String(frameIndex))

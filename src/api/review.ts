@@ -87,7 +87,7 @@ export function getReviewStatus() {
 
 /**
  * 评审页首屏先问「评哪条作品的哪一版」（v0.9.37）。
- * 服务端现算：这一版评过几次、最近结论、人拍过板没有、有没有画布；
+ * 服务端现算：这一版评过几次、最近结论、人拍过板没有、有没有工作流；
  * 界面不自己算一遍，免得一处写「需人工确认」一处写「在做」。
  */
 export type ReviewCandidateStatus = { text: string; tone: string; verdict: string; human?: string }
@@ -96,7 +96,7 @@ export type ReviewCandidate = {
   projectId: string
   title: string
   version: number
-  /** 第 N 版；还没开画布时是「还没开画布」，不写第 0 版 */
+  /** 第 N 版；还没开工作流时是「还没开工作流」，不写第 0 版 */
   versionLabel: string
   hasCanvas: boolean
   delivered: boolean
@@ -109,7 +109,7 @@ export type ReviewCandidate = {
 export type ReviewCandidates = {
   /** 账号下全部作品数，不受 limit 影响 */
   total: number
-  /** 其中还没开画布的条数 */
+  /** 其中还没开工作流的条数 */
   withoutCanvas: number
   items: ReviewCandidate[]
 }

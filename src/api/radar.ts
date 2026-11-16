@@ -63,7 +63,7 @@ export const saveTemplate = (item: MediaItem) =>
 
 export const getTemplate = (id: string) => request<ReplicaTemplate>('/api/templates/' + id)
 
-// 套用模板会真的生成一张画布草稿（输入节点 + 复刻脚本节点），而不是只加复用次数
+// 套用模板会真的生成一张工作流草稿（输入节点 + 复刻脚本节点），而不是只加复用次数
 export const applyTemplate = (id: string) =>
   request<{ ok: boolean; flow: { id: string; name: string }; template: ReplicaTemplate }>('/api/templates/' + id + '/apply', {
     method: 'POST',

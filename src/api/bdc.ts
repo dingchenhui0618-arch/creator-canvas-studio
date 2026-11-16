@@ -5,7 +5,7 @@ export type BdcStatus = {
   admin: { url: string; up: boolean; status: number }
   api: { url: string; up: boolean; status: number }
   deployed: boolean
-  /** 积分口径（v0.9.162）：画布嵌进来时按它标价，主体是服务端配置 VQ_POINTS_PER_CNY */
+  /** 积分口径（v0.9.162）：无限画布嵌进来时按它标价，主体是服务端配置 VQ_POINTS_PER_CNY */
   credit?: { unit: string; pointsPerCny: number }
 }
 
@@ -19,7 +19,7 @@ export type BdcCanvas = {
 
 export const getBdcStatus = () => request<BdcStatus>('/api/bdc/status')
 
-// 画布数据打通：画布自己的 JSON 存在它那边，这里只经服务端代理读写
+// 无限画布数据打通：它自己的 JSON 存在它那边，这里只经服务端代理读写
 export const listBdcCanvases = () =>
   request<{ ok: boolean; canvases: BdcCanvas[]; error?: string }>('/api/bdc/canvases')
 

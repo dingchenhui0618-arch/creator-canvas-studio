@@ -5,7 +5,7 @@
 // 正文里不留 JSON；没有这段就没有出口，不猜、不从 Markdown 表格里反推。
 //
 // 时长不采信模型写的秒数：统一用 speech.mjs 按口播字数估（与模板、作品同一口径），
-// 这样草稿存成模板、送到画布之后，时长和「这句要念几秒」仍然是一套数。
+// 这样草稿存成模板、送到工作流之后，时长和「这句要念几秒」仍然是一套数。
 import { normalizeProjectScript } from './project-script.mjs'
 import { reconcileTimeline } from './speech.mjs'
 
@@ -125,7 +125,7 @@ export function extractDraft(reply) {
   return { draft: null, reply: source }
 }
 
-/** 送画布时喂给复刻提示词的脚本形状：和作品脚本同一套字段。 */
+/** 送工作流时喂给复刻提示词的脚本形状：和作品脚本同一套字段。 */
 export function draftToScript(draft) {
   return {
     hook: draft?.hook || '',
@@ -151,7 +151,7 @@ export function describeDraft(draft) {
 // 并说清「系统只读这个块」，模型才会把它当成交付物而不是可选的补充。
 export const DRAFT_HINT = [
   '【本次交付的固定格式，必须遵守】',
-  '正文写完之后，必须再输出一个 ```draft 代码块，作为这次结果的机器可读版本。系统只读这个块来生成「存为模板」和「送到画布」，没有它这两个出口就不可用。',
+  '正文写完之后，必须再输出一个 ```draft 代码块，作为这次结果的机器可读版本。系统只读这个块来生成「存为模板」和「送到工作流」，没有它这两个出口就不可用。',
   '不管正文已经写了口播、分镜表还是拍摄提示，都必须输出这个块；不能用表格代替，不能省略，也不能写「同上」。',
   '块里是一段 JSON，字段如下：',
   '{"title":"这条叫什么（不超过 20 字）","hook":"开头钩子原话","contentType":"脚本","structure":[{"beat":"段落名","voiceover":"要念出来的原话","onScreen":"屏幕字，可空"}],"storyboard":[{"shotNo":1,"visual":"画面","camera":"景别与运镜","caption":"这一镜的台词字幕"}]}',

@@ -13,7 +13,7 @@ import '../styles/runs.css'
 const PAGE_SIZE = 12
 
 // 续跑预检（v0.9.105）：记录里存的 resumable 是上次收尾时的判断；
-// 画布改过之后要按当前内容重算，页面才知道「还能复用几个、补多少」。
+// 工作流改过之后要按当前内容重算，页面才知道「还能复用几个、补多少」。
 type ResumePlanState = {
   runId: string
   state: 'loading' | 'ready' | 'error'
@@ -88,9 +88,9 @@ export function RunsPage({
   onOpenProject,
 }: {
   onOpenFlow?: (flowId: string) => void
-  /** 续跑入口（v0.9.104）：回到画布时把这条运行放回抽屉，已跑完的节点不再重复扣费 */
+  /** 续跑入口（v0.9.104）：回到工作流时把这条运行放回抽屉，已跑完的节点不再重复扣费 */
   onResumeRun?: (flowId: string, runId: string) => void
-  /** 只读回放（v0.9.106）：在画布上查看这次运行的节点状态，不改画布、不扣费 */
+  /** 只读回放（v0.9.106）：在工作流上查看这次运行的节点状态，不改工作流、不扣费 */
   onViewRun?: (flowId: string, runId: string) => void
   onOpenProject?: (projectId: string) => void
 }) {
@@ -102,7 +102,7 @@ export function RunsPage({
   const [flowId, setFlowId] = useState(savedView.flowId)
   const [status, setStatus] = useState<'' | 'success' | 'error' | 'interrupted'>(savedView.status)
   const [keyword, setKeyword] = useState(savedView.keyword)
-  // 流程清单读成功过没有：只在「读到了、但里面没有这块画布」时才清掉记下来的流程
+  // 流程清单读成功过没有：只在「读到了、但里面没有这条工作流」时才清掉记下来的流程
   const [flowsLoaded, setFlowsLoaded] = useState(false)
   const [query, setQuery] = useState('')
   const [offset, setOffset] = useState(0)
@@ -114,7 +114,7 @@ export function RunsPage({
   const [resumePlan, setResumePlan] = useState<ResumePlanState | null>(null)
   const [planNonce, setPlanNonce] = useState(0)
   // 归到作品（v0.9.29）：没挂在作品上的运行以前只有一句「作品页不会出现它」，
-  // 现在就地能把它收进一条作品——挂到已有作品，或者照这块画布新建一条。
+  // 现在就地能把它收进一条作品——挂到已有作品，或者照这条工作流新建一条。
   const [projects, setProjects] = useState<ProjectSummary[]>([])
   const [adoptOpen, setAdoptOpen] = useState(false)
   const [adoptId, setAdoptId] = useState('')
@@ -127,7 +127,7 @@ export function RunsPage({
     return () => window.clearTimeout(timer)
   }, [keyword])
 
-  // 记住的那块画布可能已经删了、或不是这个账号的：判据在 domain/list-view 的 resolveFlowFilter，
+  // 记住的那块工作流可能已经删了、或不是这个账号的：判据在 domain/list-view 的 resolveFlowFilter，
   // 在渲染里算，不另开一个 effect 去改 state——那会多一轮渲染，也是「effect 里 setState」的坏味道。
   const activeFlowId = resolveFlowFilter(flowId, flows.map((flow) => flow.id), flowsLoaded)
 
@@ -262,18 +262,18 @@ export function RunsPage({
   const attachProject = (project: { id: string; title: string; version: number }) => {
     if (!current) return
     const ref = { id: project.id, title: project.title, version: Math.max(1, Math.round(Number(project.version) || 1)), archived: false }
-    // 归的是整块画布，不是选中那一条运行：同一块画布上的其他运行也一起归过去了，
+    // 归的是整块工作流，不是选中那一条运行：同一条工作流上的其他运行也一起归过去了，
     // 只改当前这一行会让旁边几行继续写着「没挂在作品上」——那是假话。
     setItems((list) => list.map((item) => (item.flowId === current.flowId ? { ...item, project: ref } : item)))
   }
 
   const adoptedLine = (project: { title: string; version: number }, runs: number, how: 'bind' | 'new') => {
     const version = '第 ' + Math.max(1, Math.round(Number(project.version) || 1)) + ' 版'
-    const runsText = runs > 0 ? '这块画布跑过的 ' + runs + ' 次运行一起归过去了' : '这块画布还没有运行记录'
-    const tail = runsText + '（运行不复制记录，只认这块画布）'
+    const runsText = runs > 0 ? '这条工作流跑过的 ' + runs + ' 次运行一起归过去了' : '这条工作流还没有运行记录'
+    const tail = runsText + '（运行不复制记录，只认这条工作流）'
     return how === 'bind'
       ? '已归到《' + project.title + '》' + version + '：' + tail
-      : '照这块画布新建了《' + project.title + '》' + version + '：没有模板，脚本在作品页现写；' + tail
+      : '照这条工作流新建了《' + project.title + '》' + version + '：没有模板，脚本在作品页现写；' + tail
   }
 
   const adoptExisting = async () => {
@@ -312,9 +312,9 @@ export function RunsPage({
   return (
     <div className="runs-page">
       <PageHead
-        kicker="Runs · 画布执行记录"
+        kicker="Runs · 工作流执行记录"
         title="运行记录"
-        desc="每次画布执行都以真实模型调用为单位记录：哪个节点、多久、返回了什么、在哪一步失败；每条都写着属于哪条作品的第几版。"
+        desc="每次工作流执行都以真实模型调用为单位记录：哪个节点、多久、返回了什么、在哪一步失败；每条都写着属于哪条作品的第几版。"
         actions={
           <button type="button" className="vq-button vq-button--ghost vq-button--sm" onClick={() => void refresh()}>
             <RefreshCw size={13} />刷新
@@ -335,7 +335,7 @@ export function RunsPage({
           <input
             value={keyword}
             onChange={(event) => resetTo(() => setKeyword(event.target.value))}
-            placeholder="按作品名、画布名、运行 ID 或错误信息搜索"
+            placeholder="按作品名、工作流名、运行 ID 或错误信息搜索"
             spellCheck={false}
           />
         </label>
@@ -382,7 +382,7 @@ export function RunsPage({
         <div className="runs-empty">
           <Workflow size={18} strokeWidth={1.5} />
           <strong>{filtered ? '没有符合条件的运行记录' : '还没有运行记录'}</strong>
-          <span>{filtered ? '换个流程、状态或关键词再试。' : '去「画布」点一次运行，这里会出现逐节点结果。'}</span>
+          <span>{filtered ? '换个流程、状态或关键词再试。' : '去「工作流」点一次运行，这里会出现逐节点结果。'}</span>
         </div>
       ) : null}
 
@@ -447,7 +447,7 @@ export function RunsPage({
                         setAdoptOpen((value) => !value)
                         setAdoptError('')
                       }}
-                      title="把这次运行归到一条作品：挂到已有作品，或者照这块画布新建一条"
+                      title="把这次运行归到一条作品：挂到已有作品，或者照这条工作流新建一条"
                     >
                       <Link2 size={13} />
                       {adoptOpen ? '收起' : '归到作品'}
@@ -468,7 +468,7 @@ export function RunsPage({
                       type="button"
                       className="vq-button vq-button--ghost vq-button--sm"
                       onClick={() => setCompareRun(current)}
-                      title="把这次运行和另一条运行摆在一起：同一张画布，或同一件作品的另一版画布；逐节点看变化、耗时与扣费，只读、不重跑"
+                      title="把这次运行和另一条运行摆在一起：同一条工作流，或同一件作品的另一版工作流；逐节点看变化、耗时与扣费，只读、不重跑"
                     >
                       <GitCompareArrows size={13} />对照
                     </button>
@@ -478,7 +478,7 @@ export function RunsPage({
                       type="button"
                       className="vq-button vq-button--ghost vq-button--sm"
                       onClick={() => onViewRun(current.flowId, current.id)}
-                      title="在画布上只读查看这次运行：节点状态与输出来自这条记录，不会改动画布，也不扣积分"
+                      title="在工作流上只读查看这次运行：节点状态与输出来自这条记录，不会改动工作流，也不扣积分"
                     >
                       <Eye size={13} />查看这次运行
                     </button>
@@ -490,10 +490,10 @@ export function RunsPage({
                       onClick={() => onResumeRun(current.flowId, current.id)}
                       disabled={resumeBusy}
                       title={resumeBusy
-                        ? '正在按当前画布核对还能复用几个节点'
+                        ? '正在按当前工作流核对还能复用几个节点'
                         : planView?.resumable
                           ? planView.note
-                          : '回到画布，只补没跑完的节点；已跑完的节点直接复用，不重复扣费'}
+                          : '回到工作流，只补没跑完的节点；已跑完的节点直接复用，不重复扣费'}
                     >
                       {resumeBusy ? <Loader2 size={13} className="vq-spin" /> : <Play size={13} fill="currentColor" />}
                       {resumeBusy ? '继续运行 · 核对中' : planView?.resumable ? planView.button : '继续运行'}
@@ -505,7 +505,7 @@ export function RunsPage({
                       className="vq-button vq-button--ghost vq-button--sm"
                       onClick={() => onOpenFlow(current.flowId)}
                     >
-                      在画布打开
+                      在工作流打开
                     </button>
                   ) : null}
                 </span>
@@ -519,7 +519,7 @@ export function RunsPage({
                   {planNow.state === 'loading' ? (
                     <span className="runs-plan-main">
                       <Loader2 size={13} className="vq-spin" />
-                      正在按当前画布核对能复用几个、还要补多少积分…
+                      正在按当前工作流核对能复用几个、还要补多少积分…
                     </span>
                   ) : planNow.state === 'error' ? (
                     <>
@@ -549,7 +549,7 @@ export function RunsPage({
                 </p>
               ) : (
                 <p className="runs-detail-where is-orphan">
-                  这次运行没挂在作品上：空白画布直接跑的，作品页不会出现它。点「归到作品」把它收进一条作品，跑过的记录一起跟过去。
+                  这次运行没挂在作品上：空白工作流直接跑的，作品页不会出现它。点「归到作品」把它收进一条作品，跑过的记录一起跟过去。
                 </p>
               )}
               {!current.project && adoptOpen ? (
@@ -564,7 +564,7 @@ export function RunsPage({
                         { value: '', label: projects.length ? '选一条作品' : '账号下还没有作品' },
                         ...projects.map((item) => ({
                           value: item.id,
-                          label: item.title + ' · ' + (item.version ? '第 ' + item.version + ' 版' : '还没开画布'),
+                          label: item.title + ' · ' + (item.version ? '第 ' + item.version + ' 版' : '还没开工作流'),
                         })),
                       ]}
                       onChange={(value) => {
@@ -584,7 +584,7 @@ export function RunsPage({
                   <div className="runs-adopt-row">
                     <span className="runs-adopt-label">或者新建</span>
                     <span className="runs-adopt-hint">
-                      照这块画布建一条《{current.flowName}》：没有模板，脚本在作品页现写
+                      照这条工作流建一条《{current.flowName}》：没有模板，脚本在作品页现写
                     </span>
                     <button
                       type="button"
@@ -592,7 +592,7 @@ export function RunsPage({
                       disabled={adoptBusy}
                       onClick={() => void adoptNew()}
                     >
-                      照这块画布建一条
+                      照这条工作流建一条
                     </button>
                   </div>
                   {adoptError ? <p className="runs-adopt-error">{adoptError}</p> : null}

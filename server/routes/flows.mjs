@@ -53,8 +53,8 @@ function isOwnPath(pathname) {
 }
 
 /**
- * 对照的圈子（v0.9.113）：同一条画布，或同一件作品开过新版的其它画布。
- * 作品名下的画布由当前版 + 归档版本表决定；没挂作品的画布只有自己一张。
+ * 对照的圈子（v0.9.113）：同一条工作流，或同一件作品开过新版的其它工作流。
+ * 作品名下的工作流由当前版 + 归档版本表决定；没挂作品的工作流只有自己一张。
  */
 async function compareScopeOf(run, user) {
   const projects = await listProjects(user)
@@ -76,13 +76,13 @@ function sendStreamHead(res) {
   })
 }
 
-// 画布整条流程按次扣积分：先扣后跑，跑挂了 / 被重启打断全额退回，和检索/复刻/评审同一套账。
-// 扣费单据 ref = 运行 id（不是画布名）：账本、运行记录、恢复退款三处说同一件事。
+// 工作流整条流程按次扣积分：先扣后跑，跑挂了 / 被重启打断全额退回，和检索/复刻/评审同一套账。
+// 扣费单据 ref = 运行 id（不是工作流名）：账本、运行记录、恢复退款三处说同一件事。
 // 未登录（本地演示）时 charge 返回匿名结果，不扣费也不限流。
 // v0.9.96：名额满时先进整机的排队位（默认 60 秒 / 4 条），排到才占名额、才扣费；排队期间不花钱、不跑流程。
 async function beginRunCharge(res, user, ref, label = '', options = {}) {
   if (!user?.id) return { cost: 0, balance: null, queue: null, release: () => {} }
-  // 画布运行要下载并分析多张图，是这里最重的一条：内存到红线就不接（不扣积分、不调上游）。
+  // 工作流运行要下载并分析多张图，是这里最重的一条：内存到红线就不接（不扣积分、不调上游）。
   const water = await admitWaiting('flow_run', {
     ticket: options.ticket,
     // 只认响应侧：请求体已经读完，req.destroyed 现在是 true（见 waterline.watchClientGone）
@@ -161,7 +161,7 @@ export function createFlowsRouter() {
         return true
       }
 
-      // 画布也挂上它属于哪条作品的第几版：画布页据此写「在帮《X》· 第 N 版」并给入口。
+      // 工作流也挂上它属于哪条作品的第几版：工作流页据此写「在帮《X》· 第 N 版」并给入口。
       // 与运行记录同一张索引（projectsByFlow）、同一个 ref，三处说同一件事。
       const projectOf = async (items) => {
         const byFlow = projectsByFlow(await listProjects(user))
@@ -183,8 +183,8 @@ export function createFlowsRouter() {
       }
 
       if (pathname === '/api/runs' && req.method === 'GET') {
-        // 每条运行顺手挂上「是哪条作品的第几版」：运行自己只记 flowId，作品那侧记着画布指针。
-        // 关键词同时按作品名找：运行里的画布名可以改（也可能是「画布 3」），作品名才是人认得的。
+        // 每条运行顺手挂上「是哪条作品的第几版」：运行自己只记 flowId，作品那侧记着工作流指针。
+        // 关键词同时按作品名找：运行里的工作流名可以改（也可能是「工作流 3」），作品名才是人认得的。
         const projects = await listProjects(user)
         const keyword = url.searchParams.get('q') || ''
         const result = await listRuns({
@@ -201,7 +201,7 @@ export function createFlowsRouter() {
       }
 
       // 排队位这一刻的样子（v0.9.96）：页面在等的时候拿票号问「我第几、等了多久」。
-      // 只读；票号是凭据、只进不出，聚合数仍是整机口径（与画布出图 / 评审同一条队、同一份实现）。
+      // 只读；票号是凭据、只进不出，聚合数仍是整机口径（与工作流出图 / 评审同一条队、同一份实现）。
       if (pathname === '/api/runs/queue' && req.method === 'GET') {
         sendJson(res, 200, { ok: true, ...queueView('flow_run', url.searchParams.get('ticket') || '') })
         return true
@@ -243,8 +243,8 @@ export function createFlowsRouter() {
         return true
       }
 
-      // 运行对照（v0.9.110）：只读，不重跑、不扣费。默认找同一条画布更早的那一条；
-      // 页面也可以点名 with=<runId>。两条必须同属一张画布，跨版画布不逐节点对照。
+      // 运行对照（v0.9.110）：只读，不重跑、不扣费。默认找同一条工作流更早的那一条；
+      // 页面也可以点名 with=<runId>。两条必须同属一张工作流，跨版工作流不逐节点对照。
       const runCompareMatch = pathname.match(RUN_COMPARE)
       if (runCompareMatch) {
         if (req.method !== 'GET') {
@@ -260,7 +260,7 @@ export function createFlowsRouter() {
         const withId = String(url.searchParams.get('with') || '').trim()
         // 可对照的候选一起带回去（v0.9.111）：页面上的「对照对象」直接从这里出，
         // 不用再发一次列表请求，也不会列出正在跑 / 排队的运行。
-        // v0.9.113 起范围放宽到同一件作品的其它版本画布：开过新版之后，上一版的运行也能挑来对照。
+        // v0.9.113 起范围放宽到同一件作品的其它版本工作流：开过新版之后，上一版的运行也能挑来对照。
         const scope = await compareScopeOf(run, user)
         const peers = await compareOptionsOf(run, user, scope.flowIds)
         const options = withRunProject(peers.items, scope.byFlow).slice(0, 20).map(compareSideOf)
@@ -268,7 +268,7 @@ export function createFlowsRouter() {
           options,
           optionsTotal: peers.total,
           optionsTruncated: peers.total > options.length,
-          // 页面据此写「同一件作品的其它版本也可以挑」；只在真有多张画布时才说
+          // 页面据此写「同一件作品的其它版本也可以挑」；只在真有多张工作流时才说
           optionsScoped: scope.flowIds.length > 1 ? 'project' : 'flow',
         }
         let previous = null
@@ -282,11 +282,11 @@ export function createFlowsRouter() {
             notFound(res, '要对照的那条运行不存在')
             return true
           }
-          // 同一张画布，或同一件作品开过新版的另一张画布；别处的运行不硬凑
+          // 同一张工作流，或同一件作品开过新版的另一张工作流；别处的运行不硬凑
           const previousProject = runProjectRef(scope.byFlow, previous.flowId)
           const sameProject = Boolean(scope.project && previousProject && scope.project.id === previousProject.id)
           if (previous.flowId !== run.flowId && !sameProject) {
-            sendJson(res, 400, { error: '这两条运行不属于同一件作品：只能对照同一张画布，或同一件作品开过新版的画布' })
+            sendJson(res, 400, { error: '这两条运行不属于同一件作品：只能对照同一张工作流，或同一件作品开过新版的工作流' })
             return true
           }
           if (previous.status === 'running' || previous.status === 'queued') {
@@ -294,7 +294,7 @@ export function createFlowsRouter() {
             return true
           }
         } else {
-          // 默认仍只取同一条画布上更早的最近一条：跨版本要人自己点名，不替人改对照口径。
+          // 默认仍只取同一条工作流上更早的最近一条：跨版本要人自己点名，不替人改对照口径。
           // 最早那条没有更早的，但候选里可能还有之后的运行，页面会列出来让人挑，而不是硬说「没得对照」。
           const startedAt = String(run.startedAt || '')
           previous = peers.items.find((item) => item.flowId === run.flowId && String(item.startedAt || '') < startedAt) || null
@@ -312,8 +312,8 @@ export function createFlowsRouter() {
             ...base,
             comparable: false,
             reason: options.length
-              ? '这是这张画布上最早的一条运行；默认没有更早的可对照，可以从下面挑一条' + (scope.flowIds.length > 1 ? '运行——同一件作品的其它版本也可以。' : '之后的运行。')
-              : '这是这张画布上最早的一条运行；再跑一次之后，这里会逐节点对照两次的结果。',
+              ? '这是这张工作流上最早的一条运行；默认没有更早的可对照，可以从下面挑一条' + (scope.flowIds.length > 1 ? '运行——同一件作品的其它版本也可以。' : '之后的运行。')
+              : '这是这张工作流上最早的一条运行；再跑一次之后，这里会逐节点对照两次的结果。',
           })
           return true
         }
@@ -354,13 +354,13 @@ export function createFlowsRouter() {
           notFound(res, '要对照的那条运行不存在')
           return true
         }
-        // 与对照表同一套范围：同一张画布，或同一件作品的其它版本画布（v0.9.113）。
+        // 与对照表同一套范围：同一张工作流，或同一件作品的其它版本工作流（v0.9.113）。
         // 节点按 id 对齐：旧版有的节点在新版被删掉时，buildRunOutputDiff 会按「一边为空」处理。
         if (previous.flowId !== run.flowId) {
           const scope = await compareScopeOf(run, user)
           const previousProject = runProjectRef(scope.byFlow, previous.flowId)
           if (!scope.project || !previousProject || scope.project.id !== previousProject.id) {
-            sendJson(res, 400, { error: '这两条运行不属于同一件作品：只能对照同一张画布，或同一件作品开过新版的画布' })
+            sendJson(res, 400, { error: '这两条运行不属于同一件作品：只能对照同一张工作流，或同一件作品开过新版的工作流' })
             return true
           }
         }
@@ -385,7 +385,7 @@ export function createFlowsRouter() {
           return true
         }
         // 单条运行与列表同一口径：都带 project，页面不用两处判断。
-        // 画布快照只在详情里带：列表一次 20 条，不把几十张节点的配置一起传下去。
+        // 工作流快照只在详情里带：列表一次 20 条，不把几十张节点的配置一起传下去。
         const projects = await listProjects(user)
         const graph = await loadRunGraph(run.id)
         sendJson(res, 200, {
@@ -395,7 +395,7 @@ export function createFlowsRouter() {
         return true
       }
 
-      // 续跑预检（v0.9.103）：只读，不扣费、不写记录。页面在抽屉里先问「改过画布后
+      // 续跑预检（v0.9.103）：只读，不扣费、不写记录。页面在抽屉里先问「改过工作流后
       // 还有几个旧节点能复用、这次要补几个、补多少积分」，别拿旧记录的总数糊弄用户。
       const resumePlanMatch = pathname.match(FLOW_RESUME_PLAN)
       if (resumePlanMatch) {
@@ -420,7 +420,7 @@ export function createFlowsRouter() {
           return true
         }
         if (source.flowId !== flow.id) {
-          sendJson(res, 400, { error: '这条运行不是当前画布的，不能接着跑' })
+          sendJson(res, 400, { error: '这条运行不是当前工作流的，不能接着跑' })
           return true
         }
         try {
@@ -457,7 +457,7 @@ export function createFlowsRouter() {
         const price = Number(config.credits.prices.flow_run) || 0
         // 续跑（v0.9.103）：按节点内容指纹逐个核对，只复用内容没变的旧结果；
         // 改过的节点和它的下游会重跑，没改的上游不再重复调上游、也不再重复收费。
-        // 画布整体改过不再一刀切拒绝——拒绝的理由必须具体到「一个能复用的都没有」。
+        // 工作流整体改过不再一刀切拒绝——拒绝的理由必须具体到「一个能复用的都没有」。
         let resume = null
         let resumeCost = null
         const resumeOf = String(body?.resumeOf || '')
@@ -468,7 +468,7 @@ export function createFlowsRouter() {
             return true
           }
           if (source.flowId !== flow.id) {
-            sendJson(res, 400, { error: '这条运行不是当前画布的，不能接着跑' })
+            sendJson(res, 400, { error: '这条运行不是当前工作流的，不能接着跑' })
             return true
           }
           let plan = null
@@ -592,7 +592,7 @@ export function createFlowsRouter() {
             notFound(res, '流程不存在')
             return true
           }
-          // 保存回来的画布同样带着作品：前端把这条替换进列表时不会把「在帮哪条作品」丢掉
+          // 保存回来的工作流同样带着作品：前端把这条替换进列表时不会把「在帮哪条作品」丢掉
           sendJson(res, 200, (await projectOf([updated]))[0])
           return true
         }
@@ -615,7 +615,7 @@ export function createFlowsRouter() {
         sendJson(res, 405, { error: '不支持的方法' })
         return true
       }
-      notFound(res, '未知的画布接口')
+      notFound(res, '未知的工作流接口')
       return true
     },
   }

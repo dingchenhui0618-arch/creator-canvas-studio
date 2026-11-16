@@ -524,12 +524,12 @@ export function createAdminRouter() {
         return true
       }
 
-      // ── 画布身份（跨系统）────────────────────────────────────────
-      // 画布已并入 VisionQA 账号：这里列出从工作台进过画布的人，并允许停用/恢复。
-      // 画布服务在自己的内网端口上，用互通密钥验证；画布没配好时如实说 unavailable。
+      // ── 无限画布身份（跨系统）────────────────────────────────────────
+      // 无限画布已并入 VisionQA 账号：这里列出从工作台进过无限画布的人，并允许停用/恢复。
+      // 无限画布服务在自己的内网端口上，用互通密钥验证；无限画布没配好时如实说 unavailable。
       if (pathname === '/api/admin/canvas/users' && req.method === 'GET') {
         if (!canvasAdminConfigured()) {
-          sendJson(res, 200, { available: false, reason: '画布账号互通未配置', items: [], total: 0 })
+          sendJson(res, 200, { available: false, reason: '无限画布账号互通未配置', items: [], total: 0 })
           return true
         }
         try {
@@ -556,7 +556,7 @@ export function createAdminRouter() {
             summary: { active: activeCount, suspended: joined.length - activeCount, missing: joined.filter((item) => !item.account).length },
           })
         } catch (error) {
-          sendJson(res, 200, { available: false, reason: error?.message || '画布服务暂时连不上', code: error?.code, items: [], total: 0 })
+          sendJson(res, 200, { available: false, reason: error?.message || '无限画布服务暂时连不上', code: error?.code, items: [], total: 0 })
         }
         return true
       }
@@ -576,12 +576,12 @@ export function createAdminRouter() {
             action: 'canvas.access',
             targetType: 'canvas-user',
             targetId: String(item?.id || canvasAccess[1]),
-            targetLabel: item?.displayName || '画布身份 ' + canvasAccess[1],
+            targetLabel: item?.displayName || '无限画布身份 ' + canvasAccess[1],
             detail: { enabled: Boolean(item?.active), visionqaUserId: item?.visionqaUserId },
           })
           sendJson(res, 200, { ok: true, item: { id: item?.id, active: Boolean(item?.active), displayName: item?.displayName } })
         } catch (error) {
-          sendJson(res, error?.status || 502, { error: error?.message || '画布身份状态修改失败', code: error?.code })
+          sendJson(res, error?.status || 502, { error: error?.message || '无限画布身份状态修改失败', code: error?.code })
         }
         return true
       }
@@ -632,7 +632,7 @@ export function createAdminRouter() {
         return true
       }
 
-      // 删除账号：只删登录与积分；模板 / 画布 / 运行记录保留，避免误删别人引用过的内容
+      // 删除账号：只删登录与积分；模板 / 工作流 / 运行记录保留，避免误删别人引用过的内容
       if (accessMatch && req.method === 'DELETE') {
         const target = findUserById(accessMatch[1])
         if (!target) {

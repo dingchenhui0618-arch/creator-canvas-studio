@@ -125,7 +125,7 @@ type RunRow = {
   startedAt: string
   queuedAt?: string | null
   durationMs: number
-  // 这条运行挂在哪条作品的哪一版；空白画布直接跑的是 null
+  // 这条运行挂在哪条作品的哪一版；空白工作流直接跑的是 null
   project?: RunProjectRef | null
 }
 
@@ -140,12 +140,12 @@ type TemplateRow = {
 type Props = {
   userName: string
   onNavigate: (page: Page) => void
-  // 工作台列的是画布服务里的画布项目：点哪块就开哪块，不再只是跳到画布页
+  // 工作台列的是无限画布服务里的画布项目：点哪块就开哪块
   onOpenCanvas: (canvasId: string) => void
-  // 作品是主线：有作品时主卡先给「继续这个作品」，没有才退回最近改动的画布
+  // 作品是主线：有作品时主卡先给「继续这个作品」，没有才退回最近改动的无限画布
   // 第二个参数（v0.9.140）：交出去的清单点一行，带着那条交付记录落在作品页的档案上
   onOpenProject: (projectId: string, deliveryId?: string) => void
-  // 空白画布：直接建一块并进去，不再先弹「智能体 / 资产画布」二选一（那个弹窗把主价值藏起来了）
+  // 空白工作流：直接建一块并进去，不再先弹「智能体 / 资产画布」二选一（那个弹窗把主价值藏起来了）
   onCreateCanvas: () => void
   // 引导是弹窗：页脚「上手指引」重新打开它，不再跳一个 #/welcome 页面
   onOpenGuide: () => void
@@ -173,7 +173,7 @@ const pad2 = (value: number) => String(value).padStart(2, '0')
 const FIRST_RUN_BLOCKS = [
   { key: 'review', icon: Eye, title: '评审等你看的', when: '评过一版画面、结论是「需人工确认」或「不通过」的作品排在这里；点一行进作品改一版。' },
   { key: 'delivery', icon: Send, title: '交出去的', when: '在作品页点「交付这一版」；每一版按时间留在这儿，交付稿随时能打开。' },
-  { key: 'runs', icon: History, title: '最近运行', when: '画布跑一次运行，这里列出节点耗时与返回，并标出它挂在哪条作品上。' },
+  { key: 'runs', icon: History, title: '最近运行', when: '工作流跑一次运行，这里列出节点耗时与返回，并标出它挂在哪条作品上。' },
   { key: 'shares', icon: Share2, title: '分享出去的链接', when: '发给甲方的只读链接，这里汇总每条被打开过几次，停用之后也留着。' },
 ] as const
 
@@ -352,10 +352,19 @@ function rowPendingTitle(row: ProjectDeliveryRow): string {
 
 /**
  * 工作台只回答一个问题：下一步点哪里。
- * 首屏是一张「下一步」主卡（继续上次那块画布，没画布就从一条爆款开始）加三个场景化入口；
+ * 首屏是一张「下一步」主卡（继续上次那块无限画布，没有就从一条爆款开始）加三个场景化入口；
  * 统计压进主卡右侧，不再单开一排数字卡——数字是背景，不是任务。
  * 任何一块没有数据就写空状态并给出下一步，不用示例行填充。
  */
+
+/** 读不到无限画布列表时的那一句：消息里已经点名「无限画布」就不再叠前缀，免得读成「无限画布列表：无限画布服务…」。 */
+function canvasProblemText(result: PromiseSettledResult<{ error?: string }>): string {
+  const message = result.status === 'rejected'
+    ? String((result.reason as Error)?.message || result.reason)
+    : result.value.error || '读取失败'
+  return message.includes('无限画布') ? message : '无限画布列表：' + message
+}
+
 export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject, onCreateCanvas, onOpenGuide, onToast }: Props) {
   const { internal } = useUiMode()
   const site = useSiteInfo()
@@ -443,7 +452,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
       setCanvases(canvasResult.value.canvases ?? [])
     } else {
       setCanvases([])
-      problems.push('画布列表：' + (canvasResult.status === 'rejected' ? String((canvasResult.reason as Error)?.message || canvasResult.reason) : canvasResult.value.error || '读取失败'))
+      problems.push(canvasProblemText(canvasResult))
     }
     if (runResult.status === 'fulfilled') {
       setRuns(runResult.value.items ?? [])
@@ -967,8 +976,8 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
   const recentRuns = runs.slice(0, 6)
   const recentTemplates = templates.slice(0, 4)
 
-  // 「下一步」= 手上还没交付的那条作品；没有作品再看最近改动的画布；都没有就从一条爆款开始。
-  // 作品优先是这次产品结构收敛的核心：作品才是那条内容，画布只是它的一步。
+  // 「下一步」= 手上还没交付的那条作品；没有作品再看最近改动的无限画布；都没有就从一条爆款开始。
+  // 作品优先是这次产品结构收敛的核心：作品才是那条内容，工作流与无限画布都是它的一步。
   const latestCanvas = useMemo(() => {
     if (!canvases.length) return undefined
     return [...canvases].sort((a, b) => new Date(String(b.updatedAt ?? 0)).getTime() - new Date(String(a.updatedAt ?? 0)).getTime())[0]
@@ -1011,10 +1020,10 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
     }
     if (latestCanvas) {
       return {
-        label: '下一步 · 画布',
+        label: '下一步 · 无限画布',
         title: latestCanvas.name,
         meta: latestCanvas.nodeCount + ' 个节点 · 版本 r' + latestCanvas.revision + ' · 上次改动 ' + clockOf(latestCanvas.updatedAt),
-        cta: '继续这块画布',
+        cta: '继续无限画布',
         go: () => onOpenCanvas(latestCanvas.id),
       }
     }
@@ -1054,11 +1063,11 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
         title={loading ? '正在读取…' : firstRun ? '还没有作品' : '欢迎回来，' + userName}
         desc={
           loading
-            ? '正在读取你账号下的画布、运行与模板。'
+            ? '正在读取你账号下的无限画布、运行与模板。'
             : firstRun
               ? '一条内容从「发现」进来：检索一条 → 在模板库拆成脚本与分镜 → 开成作品改到能拍 → 交付这一版。今天先挑一条值得抄的，做完第一条，下面那些区块会自己出现。'
               : internal
-                ? '首屏主卡读的是画布服务的最近改动；运行与模板分别来自 /api/runs 与 /api/templates。没有数据的区块写空状态，不放示例数据。'
+                ? '首屏主卡读的是无限画布服务的最近改动；运行与模板分别来自 /api/runs 与 /api/templates。没有数据的区块写空状态，不放示例数据。'
                 : '先看「下一步」，或者从下面三种方式开始一条新内容。'
         }
         actions={
@@ -1072,11 +1081,11 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
               刷新
             </button>
             {/* 页头不再摆实心主按钮（v0.9.42）：工作台这一屏要回答「下一步点哪里」，
-                而画布是作品里的一步。主按钮让给下面主卡的「去检索 / 继续这个作品」，
+                而无限画布与工作流是作品里的一步。主按钮让给下面主卡的「去检索 / 继续这个作品」，
                 建画布降成次要动作——它仍然在页头，只是不抢主位。 */}
             <button type="button" className="vq-button vq-button--ghost" onClick={onCreateCanvas}>
               <Plus size={14} />
-              新建画布
+              新建无限画布
             </button>
           </>
         }
@@ -1104,7 +1113,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
             <dd>{projects.length}</dd>
           </div>
           <div>
-            <dt>画布</dt>
+            <dt>无限画布</dt>
             <dd>{canvases.length}</dd>
           </div>
           <div>
@@ -1146,7 +1155,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
           </div>
           <p className="vq-first-run-note">
             这一屏现在能做的只有一件事：从上面那张主卡进「发现」，按关键词检索一条值得抄的。
-            检索与解析按次扣积分；开画布、导出与分享不扣积分。
+            检索与解析按次扣积分；开工作流、导出与分享不扣积分。
           </p>
         </section>
       ) : (
@@ -1896,7 +1905,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
         <button type="button" className="vq-start-card" onClick={onCreateCanvas}>
           <span className="vq-start-icon"><Workflow size={16} strokeWidth={1.75} /></span>
           <span className="vq-start-copy">
-            <strong>空白画布</strong>
+            <strong>空白工作流</strong>
             <span>从零搭节点，跑一次看每个节点返回什么</span>
           </span>
           <ArrowRight size={15} />
@@ -1918,7 +1927,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
           {recentRuns.length ? (
             <div className="vq-table" role="table" aria-label="最近运行">
               <div className="vq-table-head" role="row">
-                <span role="columnheader">画布 / 作品</span>
+                <span role="columnheader">工作流 / 作品</span>
                 <span role="columnheader">状态</span>
                 <span role="columnheader">耗时</span>
                 <span role="columnheader">开始</span>
@@ -1948,7 +1957,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
           ) : (
             <div className="vq-empty vq-empty--inline">
               <strong>还没有运行记录</strong>
-              <span>去画布点一次运行，这里会按节点列出耗时与返回。</span>
+              <span>去工作流点一次运行，这里会按节点列出耗时与返回。</span>
             </div>
           )}
         </section>

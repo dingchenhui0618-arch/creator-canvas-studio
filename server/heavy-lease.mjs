@@ -17,13 +17,13 @@
 //   1) 租约只在同一台机器上互认——目录是本地 tmpfs/磁盘，多机部署要另外的协调者（没做）；
 //   2) 目录权限是 0777：两个实例一个是 visionqa、一个是 root，得互相能写；
 //      这台机器上只有这两个服务账号，信任边界写在部署文档里；
-//   3) 只有重活（复刻 / 评审 / 画布运行）占租约：检索只是转发一个 HTTP、对话只有几十 KB。
+//   3) 只有重活（复刻 / 评审 / 无限画布运行）占租约：检索只是转发一个 HTTP、对话只有几十 KB。
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
 // 与 waterline 的 HEAVY_KINDS 同一份含义。分开写是为了不让 waterline 反过来依赖这里（会成环）。
-// canvas_gen = 画布出图 / 出视频（平台令牌通道，没有账号可挂）：它同样要吃上游额度、
+// canvas_gen = 无限画布出图 / 出视频（平台令牌通道，没有账号可挂）：它同样要吃上游额度、
 // 占这台机器的连接与内存，所以一样算重活（v0.9.79）。
 const HEAVY = new Set(['replicate', 'review', 'flow_run', 'canvas_gen'])
 const DIRNAME = 'visionqa-heavy-leases-v1'
@@ -37,7 +37,7 @@ const stats = {
   created: 0,
   released: 0,
   refused: 0,
-  // 其中「总名额还有、只是这一类排满」的条数：后台能分开看是机器满了还是画布太挤
+  // 其中「总名额还有、只是这一类排满」的条数：后台能分开看是机器满了还是无限画布太挤
   kindRefused: 0,
   pruned: 0,
   lockMiss: 0,
@@ -323,7 +323,7 @@ export function acquireHeavyLease(kind, options = {}) {
   if (!HEAVY.has(wanted)) return fallback
   if (!cfg.enabled) return fallback
   const limit = Math.max(0, Math.round(Number(options.limit) || 0))
-  // 按类型的上限：只给「没有账号可限」的通道用（画布出图）。0 = 不看这一层。
+  // 按类型的上限：只给「没有账号可限」的通道用（无限画布出图）。0 = 不看这一层。
   const kindLimit = Math.max(0, Math.round(Number(options.kindLimit) || 0))
   const dir = path.resolve(cfg.dir)
   if (!ensureDir(dir)) return { ...fallback, source: 'memory', degraded: true }

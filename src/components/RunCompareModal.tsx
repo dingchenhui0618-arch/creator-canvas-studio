@@ -211,7 +211,7 @@ export function RunCompareModal({ runId, onClose }: { runId: string; onClose: ()
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [attempt, setAttempt] = useState(0)
-  // 空串 = 默认（同一条画布上更早的最近一条）；点名后带 ?with= 取任意一条已结束运行。
+  // 空串 = 默认（同一条工作流上更早的最近一条）；点名后带 ?with= 取任意一条已结束运行。
   const [withId, setWithId] = useState('')
   // 当前展开差异的节点与那一次请求的状态；同一时间只开一个，换对照对象时收起。
   const [diffOpen, setDiffOpen] = useState('')
@@ -287,7 +287,7 @@ export function RunCompareModal({ runId, onClose }: { runId: string; onClose: ()
               label="选择要对照的运行"
               value={withId}
               options={[
-                { value: '', label: '自动：这条画布上一条已结束运行' },
+                { value: '', label: '自动：这条工作流上一条已结束运行' },
                 ...data.options.map((side) => ({ value: side.id, label: optionLabel(side) })),
               ]}
               onChange={(value) => {
@@ -306,8 +306,8 @@ export function RunCompareModal({ runId, onClose }: { runId: string; onClose: ()
                     ? '同一件作品共 ' + data.optionsTotal + ' 条已结束运行（含其它版本），这里列最近 ' + data.options.length + ' 条；差值 = 当前 − 对照'
                     : '同一件作品另有 ' + data.optionsTotal + ' 条已结束运行（含其它版本）；差值 = 当前 − 对照')
                 : (data.optionsTruncated
-                    ? '同一条画布共 ' + data.optionsTotal + ' 条已结束运行，这里列最近 ' + data.options.length + ' 条；差值 = 当前 − 对照'
-                    : '同一条画布上另有 ' + data.optionsTotal + ' 条已结束运行；差值 = 当前 − 对照')}
+                    ? '同一条工作流共 ' + data.optionsTotal + ' 条已结束运行，这里列最近 ' + data.options.length + ' 条；差值 = 当前 − 对照'
+                    : '同一条工作流上另有 ' + data.optionsTotal + ' 条已结束运行；差值 = 当前 − 对照')}
             </span>
           </div>
         ) : null}
@@ -336,7 +336,7 @@ export function RunCompareModal({ runId, onClose }: { runId: string; onClose: ()
                 ? (data.optionsScoped === 'project'
                     ? '从上面「对照对象」挑一条运行（同一件作品的其它版本也可以）；运行结果本身不会因此改变。'
                     : '从上面「对照对象」挑一条之后的运行，就能逐节点对照；运行结果本身不会因此改变。')
-                : '对照需要同一张画布、或同一件作品另一版画布上的两条运行；运行结果本身不会因此改变。'}
+                : '对照需要同一条工作流、或同一件作品另一版工作流上的两条运行；运行结果本身不会因此改变。'}
             </p>
           </div>
         ) : (
@@ -367,19 +367,19 @@ export function RunCompareModal({ runId, onClose }: { runId: string; onClose: ()
 
             <p className={'rc-graph' + (data.graph.changed ? ' is-changed' : '') + (data.crossVersion ? ' is-cross' : '')}>
               {data.crossVersion
-                ? '这两条运行在同一件作品的不同版本画布上' +
+                ? '这两条运行在同一件作品的不同版本工作流上' +
                   (crossVersionText(data) ? '（' + crossVersionText(data) + '）' : '') +
                   '：逐节点按 id 对齐' +
                   (data.graph.changed
-                    ? '，画布参数或连线也改过。'
+                    ? '，工作流参数或连线也改过。'
                     : data.graph.unknown
-                      ? '；有一条没留下画布指纹，画布是否同一版无从判断。'
-                      : '，画布内容没改，只是开了新版。')
+                      ? '；有一条没留下工作流指纹，工作流是否同一版无从判断。'
+                      : '，工作流内容没改，只是开了新版。')
                 : data.graph.changed
-                  ? '这两次之间画布改过：参数或连线不同，对照按节点 id 对齐，只比同 id 节点的结果。'
+                  ? '这两次之间工作流改过：参数或连线不同，对照按节点 id 对齐，只比同 id 节点的结果。'
                   : data.graph.unknown
-                    ? '有一条运行没有留下画布指纹，无法判断是否同一版画布；下面按节点 id 对齐。'
-                    : '两条运行用的是同一版画布。'}
+                    ? '有一条运行没有留下工作流指纹，无法判断是否同一版工作流；下面按节点 id 对齐。'
+                    : '两条运行用的是同一版工作流。'}
             </p>
 
             <div className="rc-table" role="table" aria-label="逐节点对照">

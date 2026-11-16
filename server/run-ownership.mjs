@@ -1,6 +1,6 @@
 // 运行记录挂在哪个作品的哪一版上。
 //
-// 运行记录只认 flowId（逐节点结果存在流程服务里），作品自己记着当前版与归档版两张画布指针，
+// 运行记录只认 flowId（逐节点结果存在流程服务里），作品自己记着当前版与归档版两张工作流指针，
 // 所以「这条运行属于哪条作品」是一次纯索引：不写存储、不复制运行数据。
 // 和评审按 projectId 反查、模板按 templateId 反查是同一套做法——一条记录永远只有一份，
 // 作品只是它的一个视角。
@@ -10,14 +10,14 @@ const roundVersion = (value) => {
   return Number.isFinite(n) && n > 0 ? n : 0
 }
 
-/** 同一张画布被两条作品绑着时（复制画布后手动绑过）谁作数：当前版胜过归档版，再比最近改动。 */
+/** 同一张工作流被两条作品绑着时（复制工作流后手动绑过）谁作数：当前版胜过归档版，再比最近改动。 */
 function preferred(next, prev) {
   if (next.binding.archived !== prev.binding.archived) return !next.binding.archived
   return String(next.project.updatedAt || '') > String(prev.project.updatedAt || '')
 }
 
 /**
- * 画布 → 作品索引：作品的当前版与归档版都算它的。
+ * 工作流 → 作品索引：作品的当前版与归档版都算它的。
  * 值是 `{ id, title, version, archived }`——认出是哪条、第几版，不带脚本与分享凭证。
  */
 export function projectsByFlow(projects = []) {
@@ -50,8 +50,8 @@ export function projectsByFlow(projects = []) {
 }
 
 /**
- * 一条作品名下的所有画布：当前版 + 归档版。运行对照跨版本时用它圈定范围——
- * 只认这条作品自己的画布，别把别处的运行也当成可对照对象。
+ * 一条作品名下的所有工作流：当前版 + 归档版。运行对照跨版本时用它圈定范围——
+ * 只认这条作品自己的工作流，别把别处的运行也当成可对照对象。
  */
 export function projectFlowIds(project) {
   const ids = []
@@ -62,7 +62,7 @@ export function projectFlowIds(project) {
   return Array.from(new Set(ids))
 }
 
-/** 一条运行挂在哪条作品上：没挂作品（空白画布直接跑的）返回 null，页面据此写「没挂在作品上」。 */
+/** 一条运行挂在哪条作品上：没挂作品（空白工作流直接跑的）返回 null，页面据此写「没挂在作品上」。 */
 export function runProjectRef(byFlow, flowId) {
   if (!flowId || !(byFlow instanceof Map)) return null
   return byFlow.get(String(flowId)) || null
@@ -74,8 +74,8 @@ export function withRunProject(runs = [], byFlow = new Map()) {
 }
 
 /**
- * 给一块画布挂上「属于哪条作品的第几版」：画布页据此写「在帮《X》· 第 N 版」，
- * 并给「打开作品 / 去评审这一版」。没归作品（空白画布）就是 null，页面据此什么也不写。
+ * 给一块工作流挂上「属于哪条作品的第几版」：工作流页据此写「在帮《X》· 第 N 版」，
+ * 并给「打开作品 / 去评审这一版」。没归作品（空白工作流）就是 null，页面据此什么也不写。
  * 与运行、评审同一张索引、同一个 ref——三处口径不分叉。
  */
 export function withFlowProject(flows = [], byFlow = new Map()) {
@@ -83,8 +83,8 @@ export function withFlowProject(flows = [], byFlow = new Map()) {
 }
 
 /**
- * 按作品名搜索运行：运行自己只记 flowName（画布名可以改、也可能是「画布 3」），
- * 搜「毛衣」要能搜到这条作品的运行——这里把作品的当前版与归档版画布一起交回给查询。
+ * 按作品名搜索运行：运行自己只记 flowName（工作流名可以改、也可能是「工作流 3」），
+ * 搜「毛衣」要能搜到这条作品的运行——这里把作品的当前版与归档版工作流一起交回给查询。
  */
 export function projectFlowsMatching(projects = [], keyword = '') {
   const needle = String(keyword || '').trim().toLowerCase()

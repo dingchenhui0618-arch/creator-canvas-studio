@@ -7,6 +7,7 @@ export type Page =
   | 'agents'
   | 'agent-editor'
   | 'canvas'
+  | 'board'
   | 'runs'
   | 'settings'
   | 'radar'
@@ -22,7 +23,8 @@ export const pageLabels: Record<Page, string> = {
   projects: '作品',
   agents: '智能体',
   'agent-editor': '智能体编辑器',
-  canvas: '画布',
+  canvas: '工作流',
+  board: '无限画布',
   runs: '运行记录',
   settings: '设置',
   radar: '发现',

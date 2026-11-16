@@ -283,7 +283,7 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
             <div className="vq-row">
               <div className="vq-row-copy">
                 <strong>退出登录会清掉什么</strong>
-                <span>这台电脑上的对话历史、画布与检索词；看过的画面也不再从缓存里显示，下一次请求就回源</span>
+                <span>这台电脑上的对话历史、工作流与检索词；看过的画面也不再从缓存里显示，下一次请求就回源</span>
               </div>
               <span className="vq-row-value vq-mono">{internal ? 'localStorage · 图片重验' : '本机记录'}</span>
             </div>
@@ -485,7 +485,7 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
                 <strong>{prices ? prices.chat : '—'}</strong>
               </div>
               <div className="vq-price-item">
-                <span>画布运行</span>
+                <span>工作流运行</span>
                 <strong>{prices ? prices.flow_run : '—'}</strong>
               </div>
             </div>

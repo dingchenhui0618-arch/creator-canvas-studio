@@ -136,14 +136,14 @@ export function deliveryDrift(snapshot, latest) {
 /**
  * 状态胶囊：文案 + 语气 + 那条结论。
  * 语气只决定颜色，语义全在文案里，换皮不会改意思。
- *   idle 待开画布 / live 在做 / ok 评审通过 / warn 需人工确认 / fail 不通过 / done 已交付
+ *   idle 待开工作流 / live 在做 / ok 评审通过 / warn 需人工确认 / fail 不通过 / done 已交付
  *
  * 有人的拍板时写人的那一句（评审 · 人工通过 / 人工不通过）：胶囊回答的是「谁能拍板」，
  * 人拍过板就不再拿模型的「需人工确认」当结论。
  */
 export function projectStatus(project, reviews, decision = null) {
   if (deliveredCurrent(project)) return { text: '已交付', tone: 'done', verdict: '' }
-  if (!project?.flowId) return { text: '待开画布', tone: 'idle', verdict: '' }
+  if (!project?.flowId) return { text: '待开工作流', tone: 'idle', verdict: '' }
   const count = Number(reviews?.count) || 0
   if (!count) return { text: '在做', tone: 'live', verdict: '' }
   const verdict = reviews?.lastVerdict || ''

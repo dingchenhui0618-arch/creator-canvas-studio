@@ -108,7 +108,7 @@ export function CommandPalette({ commands, onClose }: { commands: PaletteCommand
 
         <div className="cp-list" id="cp-list" role="listbox" aria-label="跳转目标" ref={listRef}>
           {results.length === 0 ? (
-            <p className="cp-empty">没有匹配的页面或动作。试试「作品」「画布」「新建」。</p>
+            <p className="cp-empty">没有匹配的页面或动作。试试「作品」「工作流」「新建」。</p>
           ) : null}
           {rows.map(({ command, heading }, index) => {
             const Icon = command.icon

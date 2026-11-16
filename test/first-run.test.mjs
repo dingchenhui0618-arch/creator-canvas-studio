@@ -38,11 +38,11 @@ test('少一路计数 / 任意一路有数据，都不算空', () => {
   }
 })
 
-test('画布服务没连上时，界面上出现的是中文可行动的话，不是 fetch failed', () => {
+test('无限画布服务没连上时，界面上出现的是中文可行动的话，不是 fetch failed', () => {
   const down = canvasErrorMessage(new Error('fetch failed'))
-  assert.match(down, /画布服务没有连上/)
+  assert.match(down, /无限画布服务没有连上/)
   assert.doesNotMatch(down, /fetch failed/)
-  assert.match(canvasErrorMessage(new Error('connect ECONNREFUSED 127.0.0.1:5312')), /画布服务没有连上/)
+  assert.match(canvasErrorMessage(new Error('connect ECONNREFUSED 127.0.0.1:5312')), /无限画布服务没有连上/)
   // 真的业务错误照原文传出去：不要把「这张画布不存在」也翻成「服务没连上」
   assert.equal(canvasErrorMessage(new Error('canvas not found')), 'canvas not found')
 })

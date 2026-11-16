@@ -285,7 +285,7 @@ export default function UsersSection() {
     setDeleteError('')
     try {
       await deleteAdminUser(deleteTarget.id)
-      setDeleteMessage('已删除账号 ' + deleteTarget.email + '。该账号创建过的模板、画布与运行记录仍保留。')
+      setDeleteMessage('已删除账号 ' + deleteTarget.email + '。该账号创建过的模板、工作流与运行记录仍保留。')
       if (selectedId === deleteTarget.id) setSelectedId('')
       setDeleteTarget(null)
       setDeleteConfirm('')
@@ -386,8 +386,8 @@ export default function UsersSection() {
             <p className="admin-sub">
               将删除 {deleteTarget.email} 的登录、会话与积分记录，不能撤销。
               {internal
-                ? '服务端同时清掉 data/auth.db 里的会话与 credit_ledger，以及 preferences.json 里的模型偏好；模板、画布与运行记录保留。'
-                : '该账号创建过的模板、画布与运行记录会保留，但不再有可登录的主人。'}
+                ? '服务端同时清掉 data/auth.db 里的会话与 credit_ledger，以及 preferences.json 里的模型偏好；模板、工作流与运行记录保留。'
+                : '该账号创建过的模板、工作流与运行记录会保留，但不再有可登录的主人。'}
             </p>
             <label className="admin-delete-confirm">
               <span>输入邮箱确认</span>
@@ -727,7 +727,7 @@ export default function UsersSection() {
           <div>
             <p className="admin-label">{internal ? '真实账号' : '账号列表'}</p>
             <p className="admin-sub">
-              共 {items.length} 个账号，积分合计 {totalCredits}。数据按账号隔离：模板、智能体、画布、运行记录只有本人（或管理员）能看。
+              共 {items.length} 个账号，积分合计 {totalCredits}。数据按账号隔离：模板、智能体、工作流、运行记录只有本人（或管理员）能看。
             </p>
           </div>
         </div>

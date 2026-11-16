@@ -387,7 +387,7 @@ function RunsPanel({ refreshKey }: { refreshKey: number }) {
         {!loading && !runs.length ? (
           <EmptyState
             title={filtering ? '当前筛选下没有运行记录' : '还没有运行记录'}
-            description={filtering ? '换一个账号、流程或状态再试。' : '在画布跑一条流程后，这里会出现真实审计。'}
+            description={filtering ? '换一个账号、流程或状态再试。' : '在工作流跑一条流程后，这里会出现真实审计。'}
           />
         ) : null}
       </section>

@@ -10,8 +10,8 @@ const { projectStatus, reviewsForVersion } = await import('../server/project-sta
 const reviews = (count, verdict = '', lastAt = '2026-11-12T10:00:00.000Z', issues = null) => ({ count, lastVerdict: verdict, lastAt, issues })
 const project = (extra = {}) => ({ id: 'prj_a', status: 'active', flowId: 'flow_a', version: 1, ...extra })
 
-test('没画布说待开画布，有画布没评审说在做', () => {
-  assert.equal(projectStatus(project({ flowId: '' }), reviews(0)).text, '待开画布')
+test('没工作流说待开工作流，有工作流没评审说在做', () => {
+  assert.equal(projectStatus(project({ flowId: '' }), reviews(0)).text, '待开工作流')
   assert.equal(projectStatus(project({ flowId: '' }), reviews(0)).tone, 'idle')
   assert.equal(projectStatus(project(), reviews(0)).text, '在做')
   assert.equal(projectStatus(project(), reviews(0)).tone, 'live')

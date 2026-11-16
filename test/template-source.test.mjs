@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-// 模板来源的第二排筛选（v0.9.33）：模板库现在有五条入口（发现 / 作品 / 智能体 / 画布 / 改编），
+// 模板来源的第二排筛选（v0.9.33）：模板库现在有五条入口（发现 / 作品 / 智能体 / 工作流 / 改编），
 // 官方示例再单独一类。这一组盯四件事：
 //   1. 一张卡片只属于一个来源，优先级写在 templateSource 里，卡片标签与胶囊共用它；
 //   2. 列表按来源筛，且仍然只给当前账号看得见的那几条；
@@ -76,7 +76,7 @@ const t = await import('../server/templates.mjs')
 const userA = { id: 'u_a', name: 'A' }
 const userB = { id: 'u_b', name: 'B' }
 
-test('一张卡片只属于一个来源：作品 / 智能体 / 画布 / 改编 / 官方示例 / 发现', () => {
+test('一张卡片只属于一个来源：工作流 / 智能体 / 工作流 / 改编 / 官方示例 / 发现', () => {
   assert.equal(t.templateSource({ kind: 'replica', origin: 'ai' }), 'radar')
   assert.equal(t.templateSource({ kind: 'saved', origin: 'manual' }), 'radar')
   assert.equal(t.templateSource({ kind: 'agent' }), 'agent')
@@ -139,5 +139,5 @@ test('认不出来的来源交回 unknown，由接口回 400 而不是静默退�
   assert.deepEqual(t.parseTemplateSource('bogus'), { source: '', unknown: 'bogus' })
   // 文案里给出的可用值是这几个 key，写死在这里防止两边漂移
   assert.deepEqual(t.TEMPLATE_SOURCES.map((entry) => entry.key), ['radar', 'project', 'agent', 'canvas', 'adapted', 'shared'])
-  assert.deepEqual(t.TEMPLATE_SOURCES.map((entry) => entry.label), ['发现', '作品', '智能体', '画布', '改编', '官方示例'])
+  assert.deepEqual(t.TEMPLATE_SOURCES.map((entry) => entry.label), ['发现', '作品', '智能体', '工作流', '改编', '官方示例'])
 })

@@ -22,7 +22,7 @@ export function AccountDataCard({ email, onSignedOut }: { email: string; onSigne
     try {
       const result = await downloadAccountExport()
       const kb = Math.max(1, Math.round(result.bytes / 1024))
-      setMessage('已导出 ' + result.name + '（约 ' + kb + ' KB）：账号资料、积分流水、模板、画布流程、运行记录、智能体与评审历史。')
+      setMessage('已导出 ' + result.name + '（约 ' + kb + ' KB）：账号资料、积分流水、模板、工作流、运行记录、智能体与评审历史。')
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '导出没有完成')
     } finally {
@@ -40,7 +40,7 @@ export function AccountDataCard({ email, onSignedOut }: { email: string; onSigne
       setMessage(
         '账号已注销：' +
           (result.deleteContent
-            ? '同时删除了模板 ' + removed.templates + ' 条、画布流程 ' + removed.flows + ' 个、智能体 ' + removed.agents + ' 个、评审记录 ' + removed.reviews + ' 条。'
+            ? '同时删除了模板 ' + removed.templates + ' 条、工作流 ' + removed.flows + ' 个、智能体 ' + removed.agents + ' 个、评审记录 ' + removed.reviews + ' 条。'
             : '你创建的内容按你的选择保留在库里（不再有登录主人）。'),
       )
       onSignedOut()
@@ -58,7 +58,7 @@ export function AccountDataCard({ email, onSignedOut }: { email: string; onSigne
           <span className="vq-mono">数据 / Data</span>
           <h2>导出与注销</h2>
           <p>
-            导出是一份 JSON：账号资料（不含口令与两步验证密钥）、积分流水、模板（含回收站里的）、画布流程与运行记录、智能体、评审历史。
+            导出是一份 JSON：账号资料（不含口令与两步验证密钥）、积分流水、模板（含回收站里的）、工作流与运行记录、智能体、评审历史。
             换平台、留档或注销前先导一份。
           </p>
         </div>
@@ -118,7 +118,7 @@ export function AccountDataCard({ email, onSignedOut }: { email: string; onSigne
             </label>
             <label className="vq-check vq-account-danger-check">
               <input type="checkbox" checked={deleteContent} onChange={(event) => setDeleteContent(event.target.checked)} />
-              <span>同时删除我创建的模板、画布流程、智能体与评审记录（不勾选则内容保留在库里，但不再有登录主人）</span>
+              <span>同时删除我创建的模板、工作流、智能体与评审记录（不勾选则内容保留在库里，但不再有登录主人）</span>
             </label>
             <div className="vq-2fa-actions">
               <button

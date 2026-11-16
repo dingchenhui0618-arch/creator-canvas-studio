@@ -206,7 +206,7 @@ export function ModelSwitch() {
           <p className={'vq-model-hint' + (error ? ' is-error' : '')}>
             {error ||
               (internal
-                ? '偏好保存在服务端并按账号生效；智能体对话与画布节点在未单独指定模型时使用它。'
+                ? '偏好保存在服务端并按账号生效；智能体对话与工作流节点在未单独指定模型时使用它。'
                 : '选择后按账号保存，下次打开还是这个模型。')}
           </p>
           {!ready && (

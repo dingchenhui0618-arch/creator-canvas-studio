@@ -1,6 +1,6 @@
 // 以旧版为底开新版（v0.9.115），以及回退版的底座对账（v0.9.116）。
 // 这一组盯住五件事：
-//   1) from 指向归档版时，新画布复制那一版，新脚本也换成那一版的快照；
+//   1) from 指向归档版时，新工作流复制那一版，新脚本也换成那一版的快照；
 //   2) 当前版照常归档，v1 / v2 / v3 各自的话都还在；
 //   3) 新一版记住 basedOn，详情里的改动按底座算，不再拿上一版当基准；
 //   4) 没存脚本快照的版本不允许整版回退，409 说清原因；
@@ -64,7 +64,7 @@ const script = (hook, voiceover) => ({
   updatedAt: '2026-11-14T12:00:00.000Z',
 })
 
-test('from 指向旧版：新画布和新脚本都回到那一版，当前版照常归档', async () => {
+test('from 指向旧版：新工作流和新脚本都回到那一版，当前版照常归档', async () => {
   const v1 = await flows.createFlow({ name: '回退验收 v1', nodes: [node('第一版提示词')], edges: [] })
   const project = await projects.createProject({ title: '回退验收', flowId: v1.id })
   const A = script('第一版的钩子', '第一版的一句')
@@ -96,7 +96,7 @@ test('from 指向旧版：新画布和新脚本都回到那一版，当前版照
   assert.equal(v4.body.project.versions[2].script.hook, '第三版的钩子')
 
   const copied = await flows.getFlow(v4.body.flow.id)
-  assert.equal(copied.nodes[0].data.config.systemPrompt, '第一版提示词', '新画布要复制 v1 的节点，不是 v3 的')
+  assert.equal(copied.nodes[0].data.config.systemPrompt, '第一版提示词', '新工作流要复制 v1 的节点，不是 v3 的')
 
   const detail = await call('GET', '/api/projects/' + project.id)
   assert.equal(detail.status, 200)
@@ -106,7 +106,7 @@ test('from 指向旧版：新画布和新脚本都回到那一版，当前版照
   assert.equal(detail.body.project.basedOn, 1, 'v4 的来源要写进作品')
   assert.deepEqual(
     detail.body.versionBaseChanges['4'],
-    { base: 1, text: '画布与脚本都没动' },
+    { base: 1, text: '工作流与脚本都没动' },
     'v4 是照 v1 复制的，跟底座对账应说没动',
   )
   assert.equal(detail.body.versions[2].basedOn, 0, 'v3 不是回退来的')
@@ -165,7 +165,7 @@ test('以旧版为底的一版归档后，来源跟着它走；新版不再继�
   assert.equal(archivedV3.basedOn, 1, '归档后仍记得它是从 v1 回来的')
   assert.deepEqual(
     detail.body.versionBaseChanges['3'],
-    { base: 1, text: '画布与脚本都没动' },
+    { base: 1, text: '工作流与脚本都没动' },
     'v3 归档后，对账仍然对 v1',
   )
   assert.equal(detail.body.versionBaseChanges['4'], undefined, 'v4 接着 v3 改，不写底座对账')

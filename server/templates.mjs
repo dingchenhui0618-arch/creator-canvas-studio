@@ -43,14 +43,14 @@ async function persist(list) {
 // 一张卡片只能属于一个来源，顺序即优先级：
 //   - 官方示例（运营给的样例）单独一类，哪怕它是检索解析出来的，也不冒充「我发现的」；
 //   - 作品：做完的作品存回来的那一版（kind 仍是 adapted，靠 origin/projectId 认）；
-//   - 智能体、画布：各是一条入口，别混进「发现」；
+//   - 智能体、工作流：各是一条入口，别混进「发现」；
 //   - 改编：以另一条模板为底改出来的；
 //   - 发现：雷达检索来的（saved 待解析 + replica 已解析），以及 v0.9.2 之前没有 kind 的老条目。
 export const TEMPLATE_SOURCES = [
   { key: 'radar', label: '发现' },
   { key: 'project', label: '作品' },
   { key: 'agent', label: '智能体' },
-  { key: 'canvas', label: '画布' },
+  { key: 'canvas', label: '工作流' },
   { key: 'adapted', label: '改编' },
   { key: 'shared', label: '官方示例' },
 ]
@@ -143,7 +143,7 @@ export async function publicSourceStats() {
  *
  * 为什么值得拦：公共模板是所有人可见的那一面，「素材来源与下架通道」承诺了每条都点得回原片。
  * 一条没有源地址的记录放进去，被侵权的人连「这是哪条」都指不出来，下架也就无从谈起。
- * 画布与智能体自己产出的模板本来就没有原片，不适用这条。
+ * 工作流与智能体自己产出的模板本来就没有原片，不适用这条。
  */
 export function publicPublishBlocked(current, patch = {}) {
   // 按「这次保存之后的样子」判断：后台往往把「补上原链接」和「打开发布」一次提交，
@@ -282,9 +282,9 @@ export async function reuseTemplate(id) {
   return target
 }
 
-// 画布「另存为模板」：把一张流程的节点/连线一起存成可复用的工作流模板。
+// 工作流「另存为模板」：把一张流程的节点/连线一起存成可复用的工作流模板。
 // 与爆款模板不同，它没有视频、没有分镜，只在模板库里占一条「工作流」类型；
-// blueprint 是恢复用的真节点与连线，套用时原样建回一张新画布。
+// blueprint 是恢复用的真节点与连线，套用时原样建回一张新工作流。
 export async function createTemplateFromFlow({ flow, title = '', contentType = '工作流', tags = [], user = null }) {
   if (!flow) return null
   const list = await loadAll()
@@ -301,7 +301,7 @@ export async function createTemplateFromFlow({ flow, title = '', contentType = '
     contentType: String(contentType || '工作流').trim().slice(0, 40),
     tags: (Array.isArray(tags) ? tags : []).map((tag) => String(tag).trim()).filter(Boolean).slice(0, 12),
     platform: 'canvas',
-    platformLabel: '画布',
+    platformLabel: '工作流',
     sourceUrl: '',
     sourceId: flow.id,
     author: '',
@@ -335,7 +335,7 @@ export async function createTemplateFromFlow({ flow, title = '', contentType = '
   return template
 }
 
-// 后台治理与画布「另存为模板」共用：只允许改能决定展示与检索的字段
+// 后台治理与工作流「另存为模板」共用：只允许改能决定展示与检索的字段
 // 每次改模板先留一版快照：标题/类型/标签/原链接被改错了，能退回上一版，不用重新解析
 // 改编：以一条已解析模板为底，存成用户自己的一份新模板。
 // 官方/他人模板永远不被覆盖——改编版是 kind: 'adapted' + adaptedFrom 的新条目，之后可以再编辑、再套用。
@@ -656,7 +656,7 @@ export async function templateStats(user = null, { source = '' } = {}) {
   }
   return {
     total: list.length,
-    // 已解析只算跑过复刻、真的有脚本与分镜的；画布工作流单独计数，不混进解析口径
+    // 已解析只算跑过复刻、真的有脚本与分镜的；工作流工作流单独计数，不混进解析口径
     parsed: list.filter((item) => item.kind === 'replica').length,
     saved: list.filter((item) => item.kind === 'saved').length,
     flows: list.filter((item) => item.kind === 'flow').length,
@@ -669,7 +669,7 @@ export async function templateStats(user = null, { source = '' } = {}) {
 
 // ---------- 只读分享链接 ----------
 // 分享给外部看（剪辑、客户），所以链接本身就是凭证：24 字节随机 token，
-// 公开视图只走白名单字段，不带归属、版本历史、回收站状态和画布 blueprint。
+// 公开视图只走白名单字段，不带归属、版本历史、回收站状态和工作流 blueprint。
 // 停止分享就直接把 token 清掉，旧链接当场失效；重新开启会换一个新 token。
 const SHARE_TOKEN_MIN = 16
 

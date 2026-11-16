@@ -1,6 +1,6 @@
-// 画布信任票据：VisionQA 是唯一身份源，画布企业服务用同一把共享密钥校验这张短时 JWT，
+// 无限画布信任票据：VisionQA 是唯一身份源，无限画布企业服务用同一把共享密钥校验这张短时 JWT，
 // 换出自己的会话与影子用户。只有「换会话」这一个用途，时效默认 120 秒，不落库、不可复用。
-// 没配共享密钥时整体关闭（fail-closed）：画布继续走它自己的登录，不会误开一个免登录入口。
+// 没配共享密钥时整体关闭（fail-closed）：无限画布继续走它自己的登录，不会误开一个免登录入口。
 import crypto from 'node:crypto'
 import { config } from './config.mjs'
 
@@ -17,12 +17,12 @@ export function canvasTrustEnabled() {
 }
 
 /**
- * 签发一张画布票据。
- * 只带「是谁」和「多久内有效」，不带积分、权限位等业务数据——那些仍由画布按影子用户自己算。
+ * 签发一张无限画布票据。
+ * 只带「是谁」和「多久内有效」，不带积分、权限位等业务数据——那些仍由无限画布按影子用户自己算。
  */
 export function mintCanvasTicket(user, options = {}) {
   const secret = config.canvas.sharedSecret
-  if (!secret) throw Object.assign(new Error('画布账号互通未开启'), { code: 'CANVAS_TRUST_DISABLED', status: 503 })
+  if (!secret) throw Object.assign(new Error('无限画布账号互通未开启'), { code: 'CANVAS_TRUST_DISABLED', status: 503 })
   const now = Math.floor(Date.now() / 1000)
   const ttl = Math.max(30, Math.min(600, Number(options.ttlSec || config.canvas.ttlSec)))
   const payload = {
@@ -48,7 +48,7 @@ export function mintCanvasTicket(user, options = {}) {
 }
 
 /**
- * 校验票据（服务端自检与画布侧同款算法）。
+ * 校验票据（服务端自检与无限画布侧同款算法）。
  * 返回 { ok, payload, code }；过期、签名不符、受众不对都算失败，不做任何宽松兜底。
  */
 export function verifyCanvasTicket(token, options = {}) {

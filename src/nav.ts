@@ -1,13 +1,19 @@
 // 侧栏导航的唯一真源（P2 导航收敛，2026-11-13）。
 // 一级只回答「产品有哪四个去处」：工作台 / 作品 / 发现 / 模板库。
-// 智能体、画布、视觉评审、运行记录是「能力」——从作品或模板的某一步被带进去，
+// 智能体、工作流、无限画布、视觉评审、运行记录是「能力」——从作品或模板的某一步被带进去，
 // 所以退到工具区，仍是独立路由（收藏、历史链接都不变）。
+//
+// 两张画布从 v0.9.163 起是两件东西，不再共用一个入口（用户 2026-11-16 明确要求）：
+//   · 工作流（#/canvas）   VisionQA 自己的节点编排：输入 / 大模型 / 工具 / 条件 / 输出连成一条线；
+//   · 无限画布（#/board）  外部那张自由画布（canvas.wavisionai.cn）：素材随便摆，出图出视频在那边发生。
+// 名字分开、地址分开、页面分开，谁也不再藏在谁的「内置编排」里。
 import {
   Activity,
   Bot,
   Clapperboard,
   Compass,
   Grid2X2,
+  Infinity as InfinityIcon,
   LayoutTemplate,
   Monitor,
   ScanEye,
@@ -37,9 +43,10 @@ export const PRIMARY_NAV: readonly NavEntry[] = [
 /** 工具区：不再是目的地，而是从作品某一步带进来的能力。 */
 export const TOOL_NAV: readonly NavEntry[] = [
   { id: 'agents', label: '智能体', hint: '起草脚本、分镜与文案', icon: Bot, keywords: 'agent 助手 对话' },
-  { id: 'canvas', label: '画布', hint: '节点连起来，跑出这一版', icon: Workflow, keywords: 'flow 流程 节点 编排' },
+  { id: 'canvas', label: '工作流', hint: '节点连成一条线，一次跑出这一版', icon: Workflow, keywords: 'flow workflow 流程 节点 编排 画布' },
+  { id: 'board', label: '无限画布', hint: '自由摆放素材，在画布上出图出视频', icon: InfinityIcon, keywords: 'board infinite 无限画布 画布 白板 外部画布' },
   { id: 'review', label: '视觉评审', hint: '按帧给结论，每条带证据', icon: ScanEye, keywords: 'review 评审 检查' },
-  { id: 'runs', label: '运行记录', hint: '每次跑画布的输入、输出与积分', icon: Activity, keywords: 'run 记录 日志 历史' },
+  { id: 'runs', label: '运行记录', hint: '每次跑工作流的输入、输出与积分', icon: Activity, keywords: 'run 记录 日志 历史' },
 ]
 
 /** 底部固定项：不进一级，也不进工具区。 */

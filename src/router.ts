@@ -1,5 +1,6 @@
 // 地址栏路由：页面的唯一真源是 location.hash。
-// 约定：#/overview #/projects #/radar #/templates #/agents #/runs #/review #/canvas #/settings #/recharge
+// 约定：#/overview #/projects #/radar #/templates #/agents #/runs #/review #/canvas #/board #/settings #/recharge
+//      两张画布是两条地址（v0.9.163）：#/canvas 是 VisionQA 自己的工作流，#/board 是外部的无限画布
 //      作品：#/projects/<作品 id>；评审带作品：#/review/project/<作品 id>
 //      某一条交付：#/projects/<作品 id>/delivery/<交付记录 id>（工作台点一行直接落在那一版的档案上，v0.9.140）
 //      单条历史评审：#/review/<评审 id>（作品页点一条评审就走到这里，刷新与后退都能回到那条）
@@ -21,16 +22,20 @@ import { deliveryLinkFromSegments, deliveryLinkHash } from './domain/delivery-li
 export type ShellPage = Exclude<Page, 'login' | 'agent-editor'>
 
 export type Route =
-  // 画布有三个可寻址对象：
-  //   #/canvas/<flowId>                     内置编排的流程（模板库、运行记录跳转都走它）
-  //   #/canvas/<flowId>/run/<runId>         只读查看一次运行：把记录放回抽屉，画布不许改（v0.9.106）
-  //   #/canvas/<flowId>/resume/<runId>      特定一次运行：打开画布时把那条记录放回抽屉（v0.9.104）
-  //   #/canvas/project/<画布ID>             画布服务里的画布项目（工作台「继续上次的画布」走它）
+  // 工作流有三个可寻址对象（#/canvas，VisionQA 自己的节点编排）：
+  //   #/canvas/<flowId>                     一条流程（模板库、运行记录跳转都走它）
+  //   #/canvas/<flowId>/run/<runId>         只读查看一次运行：把记录放回抽屉，工作流不许改（v0.9.106）
+  //   #/canvas/<flowId>/resume/<runId>      特定一次运行：打开工作流时把那条记录放回抽屉（v0.9.104）
+  // 无限画布是另一条地址（v0.9.163）：
+  //   #/board                               打开上次那块无限画布
+  //   #/board/<画布ID>                      无限画布服务里的某一块画布（工作台「继续上次的无限画布」走它）
+  // 旧的 #/canvas/project/<id> 仍认：解析时直接改写成 #/board/<id>，老链接不掉进空白页。
   | {
       kind: 'page'
       page: ShellPage
       flowId?: string
-      canvasId?: string
+      /** 无限画布服务里的某一块画布：#/board/<画布ID> */
+      boardId?: string
       projectId?: string
       reviewId?: string
       /** 画布地址里点名的那条运行：刷新、前进后退后仍能回到「继续运行」 */
@@ -69,6 +74,7 @@ const USER_PAGES: readonly ShellPage[] = [
   'runs',
   'review',
   'canvas',
+  'board',
   'settings',
   'recharge',
   'local',
@@ -181,9 +187,12 @@ export function parseRoute(hash: string): Route {
   if (head === 'templates') {
     return tail ? { kind: 'page', page: 'templates', templateId: tail } : { kind: 'page', page: 'templates' }
   }
+  // 无限画布：一块画布一条地址，刷新与收藏都落在同一块上
+  if (head === 'board') return { kind: 'page', page: 'board', boardId: tail || undefined }
   if ((USER_PAGES as readonly string[]).includes(head)) {
     if (head === 'canvas') {
-      if (tail === 'project' && segments[2]) return { kind: 'page', page: 'canvas', canvasId: segments[2] }
+      // 旧地址（v0.9.162 及以前）：画布项目曾经挂在工作流页下面，现在归无限画布
+      if (tail === 'project' && segments[2]) return { kind: 'page', page: 'board', boardId: segments[2] }
       // #/canvas/<flowId>/run|resume/<runId>：缺 runId 的坏链接退回这块画布，不挡住画布本身
       const runLink = canvasRunLinkFromSegments(segments)
       if (runLink) return { kind: 'page', page: 'canvas', ...runLink }
@@ -197,8 +206,8 @@ export function parseRoute(hash: string): Route {
 /** 规范化 hash：没有任何查询串，只保留可寻址的路径。 */
 export function toHash(route: Route): string {
   if (route.kind === 'page') {
+    if (route.page === 'board') return route.boardId ? '#/board/' + encodeURIComponent(route.boardId) : '#/board'
     if (route.page === 'canvas') {
-      if (route.canvasId) return '#/canvas/project/' + encodeURIComponent(route.canvasId)
       if (route.flowId && route.viewRunId) return canvasRunViewLinkHash(route.flowId, route.viewRunId)
       if (route.flowId && route.resumeRunId) return canvasRunLinkHash(route.flowId, route.resumeRunId)
       if (route.flowId) return '#/canvas/' + encodeURIComponent(route.flowId)
@@ -226,8 +235,8 @@ export function toHash(route: Route): string {
 /** 用字符串比较路由是否相同，供 key、订阅去重和「无变化不写历史」共用。 */
 export function routeKey(route: Route): string {
   if (route.kind === 'page') {
+    if (route.page === 'board') return 'page:board:' + (route.boardId ?? '')
     if (route.page === 'canvas') {
-      if (route.canvasId) return 'page:canvas:project:' + route.canvasId
       if (route.flowId && route.viewRunId) return 'page:canvas:flow:' + route.flowId + ':view:' + route.viewRunId
       if (route.flowId && route.resumeRunId) return 'page:canvas:flow:' + route.flowId + ':resume:' + route.resumeRunId
       if (route.flowId) return 'page:canvas:flow:' + route.flowId

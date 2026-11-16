@@ -1,6 +1,6 @@
 import { request } from './client'
 
-// 画布身份：跨系统的账号视图，数据来自画布企业服务（VisionQA 服务端代理）。
+// 无限画布身份：跨系统的账号视图，数据来自无限画布企业服务（VisionQA 服务端代理）。
 export type CanvasIdentityAccount = {
   id: string
   email: string
@@ -15,7 +15,7 @@ export type CanvasIdentity = {
   lastLoginAt: string
   createdAt: string
   visionqaUserId: string
-  /** null = 这个画布身份对应的 VisionQA 账号已被删除 */
+  /** null = 这个无限画布身份对应的 VisionQA 账号已被删除 */
   account: CanvasIdentityAccount | null
 }
 

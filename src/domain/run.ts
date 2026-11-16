@@ -65,7 +65,7 @@ export function runResumeInfo(run: RunRecord | null): RunResumeInfo {
   const left = Math.max(0, total - done)
   const cost = Math.max(0, Number(run.credits?.cost) || 0)
   // 主动停止已经按跑完节点结过账：补账本里还没付的那部分。
-  // 失败 / 重启是全额退：按剩下节点占全图的比例收，不按整张画布再收一遍。
+  // 失败 / 重启是全额退：按剩下节点占全图的比例收，不按整张工作流再收一遍。
   const kept = run.credits?.settled ? Math.max(0, Number(run.credits.kept) || 0) : 0
   const nextCost = run.credits?.settled
     ? Math.max(0, cost - kept)
@@ -79,8 +79,8 @@ export function runResumeInfo(run: RunRecord | null): RunResumeInfo {
 }
 
 /**
- * 运行记录页的续跑预检文案（v0.9.105）：点「继续运行」之前先把当前画布算清楚。
- * 运行记录里存的是上次收尾时的 resumable / 节点数；画布改过之后它就会过期。
+ * 运行记录页的续跑预检文案（v0.9.105）：点「继续运行」之前先把当前工作流算清楚。
+ * 运行记录里存的是上次收尾时的 resumable / 节点数；工作流改过之后它就会过期。
  * 这里只负责把服务端刚算出的 plan 翻成人话，不替服务端判断能不能续。
  */
 export type RunResumePlanView = { resumable: boolean; summary: string; note: string; button: string }
@@ -93,8 +93,8 @@ export function runResumePlanView(plan: RunResumePlan | null): RunResumePlanView
   if (!plan.resumable) {
     return {
       resumable: false,
-      summary: String(plan.reason || '当前画布没有能原样复用的已跑节点'),
-      note: '不会复用旧结果：从头运行会按最新画布跑全图。',
+      summary: String(plan.reason || '当前工作流没有能原样复用的已跑节点'),
+      note: '不会复用旧结果：从头运行会按最新工作流跑全图。',
       button: '',
     }
   }
@@ -105,7 +105,7 @@ export function runResumePlanView(plan: RunResumePlan | null): RunResumePlanView
     resumable: true,
     summary: '复用 ' + reused + ' 个 · 还差 ' + rerun + ' 个' + staleText + ' · ' + costText,
     note: stale > 0
-      ? '上次跑过、但改过或已不在画布上的 ' + stale + ' 个节点会重跑；其余没跑完的节点这次补上。'
+      ? '上次跑过、但改过或已不在工作流上的 ' + stale + ' 个节点会重跑；其余没跑完的节点这次补上。'
       : '上次跑完且内容没变的节点直接复用，不重复调上游。',
     button: '继续运行 · ' + costText,
   }
@@ -122,9 +122,9 @@ export function runVersionLabel(project: RunProjectRef): string {
 }
 
 /**
- * 列表里的那一行：画布通常按作品名自动命名（「毛衣折叠收纳法」、新版画布是「… v2」），
- * 再抄一遍标题就是同一行重复两遍，所以画布名里已经带着标题时只写版次；
- * 画布被改过名才补上作品名。空白画布直接跑的运行如实写「没挂在作品上」。
+ * 列表里的那一行：工作流通常按作品名自动命名（「毛衣折叠收纳法」、新版工作流是「… v2」），
+ * 再抄一遍标题就是同一行重复两遍，所以工作流名里已经带着标题时只写版次；
+ * 工作流被改过名才补上作品名。空白工作流直接跑的运行如实写「没挂在作品上」。
  */
 export function runWorkLine(run: { flowName: string; project?: RunProjectRef | null }): string {
   const project = run.project

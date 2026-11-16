@@ -17,7 +17,7 @@ const PRICE_FIELDS: { key: keyof UsagePrices; label: string; hint: string }[] = 
   { key: 'judgePerCall', label: '判断模型', hint: '元 / 次' },
   { key: 'searchPerCall', label: '检索', hint: '元 / 次' },
   { key: 'replicatePerCall', label: '复刻', hint: '元 / 次' },
-  { key: 'runPerCall', label: '画布运行', hint: '元 / 次' },
+  { key: 'runPerCall', label: '工作流运行', hint: '元 / 次' },
 ]
 
 type Form = Record<keyof UsagePrices, string>
@@ -283,7 +283,7 @@ export default function UsageSection() {
                   </table>
                 </div>
               ) : (
-                <EmptyState title="还没有模型调用" description="评审、智能体对话、画布运行都会记在这里。" />
+                <EmptyState title="还没有模型调用" description="评审、智能体对话、工作流运行都会记在这里。" />
               )}
             </section>
           </div>
@@ -338,11 +338,11 @@ export default function UsageSection() {
           <section className="admin-note">
             <p>口径与边界</p>
             <ul>
-              <li>数字来自服务端 usage_events：评审、智能体对话、画布运行、出图、出视频、检索各记一条真实事件。</li>
+              <li>数字来自服务端 usage_events：评审、智能体对话、工作流运行、出图、出视频、检索各记一条真实事件。</li>
               <li>金额 = 真实用量 × 你填的单价，是估算口径；上游账单打折、赠金、退款都不会自动同步进这里。</li>
               <li>余额与积分在「账号」页：积分是对用户的虚拟倍率，不是成本，两者不互相换算。</li>
               <li>出视频按提交时长记；上游失败后退款不会自动冲回，需要按上游账单人工核对。</li>
-              <li>画布服务端自己的模型调用不经本平台通道，不在这个表里；画布只把出图/出视频转发过来。</li>
+              <li>无限画布服务端自己的模型调用不经本平台通道，不在这个表里；无限画布只把出图/出视频转发过来。</li>
               {data.backfill.count ? <li>历史回填 {data.backfill.count} 条来自积分流水（计量上线前发生过），只有次数，没有 token 与张数，也不折算金额。</li> : null}
             </ul>
           </section>

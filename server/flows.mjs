@@ -12,7 +12,7 @@ import { preferenceModel } from './preferences.mjs'
 import { outstandingCharge, refund } from './credits.mjs'
 import { currentInstanceId, liveInstanceIds } from './instances.mjs'
 
-// 画布流程：存储（data/flows.json）+ 运行记录（data/runs.json）+ 拓扑执行引擎。
+// 工作流流程：存储（data/flows.json）+ 运行记录（data/runs.json）+ 拓扑执行引擎。
 // 原子写范式与 server/templates.mjs 一致：先写 .tmp，再 rename 覆盖。
 
 export const NODE_KINDS = ['input', 'llm', 'kb', 'tool', 'condition', 'output', 'review']
@@ -32,7 +32,7 @@ export const REVIEW_PROFILES = [
 
 const flowsFile = path.join(config.dataDir, 'flows.json')
 const runsFile = path.join(config.dataDir, 'runs.json')
-// 画布快照单独放：运行记录列表只要结果，不要把几十张画的配置一起发给页面。
+// 工作流快照单独放：运行记录列表只要结果，不要把几十张画的配置一起发给页面。
 // 一次运行一个文件，读详情时才带上；清运行记录时一起清。
 const runGraphsDir = path.join(config.dataDir, 'run-graphs')
 const MAX_RUNS = 60
@@ -223,7 +223,7 @@ async function persistRuns(list) {
   await fsp.rename(tmp, runsFile)
 }
 
-// ---------- 运行画布快照 ----------
+// ---------- 运行工作流快照 ----------
 
 /** 快照文件名只认运行 id 里的安全字符，绝不把 URL 里的内容直接拼成路径。 */
 function runGraphFile(runId) {
@@ -232,9 +232,9 @@ function runGraphFile(runId) {
 }
 
 /**
- * 一次运行开始时的画布快照：位置、标题、参数、连线都留在里面。
- * 运行记录本身只记节点结果（v0.9.106 之前连位置都没有），所以「回看」只能看现在的画布；
- * 从这一版起，新运行把当时那张画布也留下，旧运行仍按「取当前画布」如实回退。
+ * 一次运行开始时的工作流快照：位置、标题、参数、连线都留在里面。
+ * 运行记录本身只记节点结果（v0.9.106 之前连位置都没有），所以「回看」只能看现在的工作流；
+ * 从这一版起，新运行把当时那张工作流也留下，旧运行仍按「取当前工作流」如实回退。
  */
 export function runGraphSnapshot(flow) {
   const nodes = (Array.isArray(flow?.nodes) ? flow.nodes : []).slice(0, 60).map(normalizeNode)
@@ -259,7 +259,7 @@ export async function saveRunGraph(runId, flow) {
   return snapshot
 }
 
-/** 读一次运行的画布快照；没有 / 损坏 / 旧格式都返回 null，页面据此回退到当前画布。 */
+/** 读一次运行的工作流快照；没有 / 损坏 / 旧格式都返回 null，页面据此回退到当前工作流。 */
 export async function loadRunGraph(runId) {
   const id = String(runId || '')
   if (!id) return null
@@ -273,8 +273,8 @@ export async function loadRunGraph(runId) {
 }
 
 /**
- * 这次运行有没有留下画布快照：作品页对「画布已删除」的运行要据此决定
- * 还开不开「查看运行」。只 stat 文件，不读整张画布，列表里查 20 条也不重。
+ * 这次运行有没有留下工作流快照：作品页对「工作流已删除」的运行要据此决定
+ * 还开不开「查看运行」。只 stat 文件，不读整张工作流，列表里查 20 条也不重。
  */
 export async function hasRunGraph(runId) {
   const id = String(runId || '')
@@ -381,7 +381,7 @@ export async function deleteFlow(id) {
 
 // ---------- 运行记录 ----------
 
-// flowIds 是关键词的补充命中集：运行只记画布名，搜作品名得由调用方先把这几块画布交进来
+// flowIds 是关键词的补充命中集：运行只记工作流名，搜作品名得由调用方先把这几块工作流交进来
 // （server/run-ownership.mjs 的 projectFlowsMatching）。它只扩大命中，不改变别的筛选。
 export async function listRuns({ flowId = '', status = '', q = '', ownerId = '', flowIds = [], limit = 20, offset = 0 } = {}, user = null) {
   const list = (await loadRuns()).filter((run) => canAccess(run, user))
@@ -414,7 +414,7 @@ export async function getRun(id, user = null) {
 }
 
 /**
- * 同一条画布上还能拿来对照的运行（v0.9.111）：排除自己，也排除还在跑 / 排队的。
+ * 同一条工作流上还能拿来对照的运行（v0.9.111）：排除自己，也排除还在跑 / 排队的。
  * 不走 /api/runs 的 50 条分页：对照的是正在看的那条，它可能已经排到历史窗口末端。
  * 不分「更早」和「更晚」——默认仍取更早的一条，但用户可以在弹窗里点名任意一条，
  * 最早那条运行也能回头挑之后的一次来看。列表按开始时间倒序，最近的在前。
@@ -422,7 +422,7 @@ export async function getRun(id, user = null) {
 export async function compareOptionsOf(run, user = null, flowIds = null) {
   if (!run) return { items: [], total: 0 }
   // flowIds 由调用方给（v0.9.113）：同一件作品开过新版后，其它版本的运行也能挑来对照；
-  // 不给就还是只看同一条画布，老的调用方行为不变。
+  // 不给就还是只看同一条工作流，老的调用方行为不变。
   const allowed = new Set((Array.isArray(flowIds) && flowIds.length ? flowIds : [run.flowId]).map(String))
   const peers = (await loadRuns())
     .filter((item) => canAccess(item, user))
@@ -473,9 +473,9 @@ export function runSummary(run) {
 }
 
 /**
- * 一个作品的运行归集：当前版与归档版的所有画布一起取，按开始时间倒序。
+ * 一个作品的运行归集：当前版与归档版的所有工作流一起取，按开始时间倒序。
  * 以前运行记录只按 flowId 筛，开一版新的之后旧版的运行就再也找不回来了；
- * 这里把作品名下所有版本画布的运行合成一条时间线，byFlow 再给版本对照提供每版跑了几次。
+ * 这里把作品名下所有版本工作流的运行合成一条时间线，byFlow 再给版本对照提供每版跑了几次。
  */
 export async function listRunsByFlows(flowIds = [], { limit = 20, all = false } = {}, user = null) {
   const wanted = new Set((Array.isArray(flowIds) ? flowIds : []).filter(Boolean))
@@ -530,9 +530,9 @@ function topoSort(nodes, edges) {
 }
 
 /**
- * 画布内容的执行指纹：只算节点 id / 类型 / 配置和连线，不算位置。
+ * 工作流内容的执行指纹：只算节点 id / 类型 / 配置和连线，不算位置。
  * 续跑要复用上次的节点输出；如果用户在这中间改了提示词、换了模型或改了连线，
- * 旧输出就不再属于这张画布，宁可拒绝复用，也不能把过期结果接着往下跑。
+ * 旧输出就不再属于这张工作流，宁可拒绝复用，也不能把过期结果接着往下跑。
  */
 function stableJson(value) {
   if (Array.isArray(value)) return '[' + value.map((item) => stableJson(item)).join(',') + ']'
@@ -545,7 +545,7 @@ function stableJson(value) {
 /**
  * 逐节点的内容指纹（v0.9.103）：节点自己的配置 + 所有上游节点的指纹 + 入线。
  * 只改下游节点时，上游节点仍然能复用；改提示词、换模型、改连线会沿着依赖链
- * 让这个节点和它的下游一起失效。位置、标题、描述不算内容——挪一下画布不该白跑。
+ * 让这个节点和它的下游一起失效。位置、标题、描述不算内容——挪一下工作流不该白跑。
  * 算法和 flowRevisionOf 分开：整图指纹继续用于诊断，局部复用看这张逐节点表。
  */
 export function nodeRevisionsOf(flow) {
@@ -613,7 +613,7 @@ export function resumeCostOf(run, price = 0) {
   const cost = Math.max(0, Number(run.credits?.cost) || Number(price) || 0)
   if (!cost) return 0
   // 主动停止已经按「跑完节点」结过账：补的正好是账本里还没付的那部分。
-  // 失败 / 重启是全额退：按剩下节点占全图的比例收，不按整张画布再收一遍。
+  // 失败 / 重启是全额退：按剩下节点占全图的比例收，不按整张工作流再收一遍。
   if (run.credits?.settled === true) return Math.max(0, cost - spentOfRun(run))
   const total = Math.max(1, Number(run.total) || 1)
   const done = (Array.isArray(run.nodes) ? run.nodes : [])
@@ -635,7 +635,7 @@ export function canResumeRun(run) {
  *   - 只复用 success / unsupported，失败节点和它下游要重跑；
  *   - 节点自己的配置或任何上游变了，这个节点就不能复用；没改的上游仍然复用；
  *   - 条件节点的分支结果也一起带回来，否则续跑会把已经走过的分支再走错；
- *   - 只认当前画布里还存在的节点，画布删了节点就自然不复用。
+ *   - 只认当前工作流里还存在的节点，工作流删了节点就自然不复用。
  * 返回的 results / edgeActive 直接喂给 runFlow，省掉已经花过钱的那几步。
  */
 export function resumeSeedFor(run, flow) {
@@ -643,7 +643,7 @@ export function resumeSeedFor(run, flow) {
   const currentRevisions = nodeRevisionsOf(flow)
   const priorRevisions = run?.nodeRevisions && typeof run.nodeRevisions === 'object' ? run.nodeRevisions : null
   const hasPriorRevisions = Boolean(priorRevisions && Object.keys(priorRevisions).length)
-  // 老运行只有整图指纹：画布没改就照旧整批复用，改了就没有可证明没变的节点。
+  // 老运行只有整图指纹：工作流没改就照旧整批复用，改了就没有可证明没变的节点。
   const wholeMatches = !run?.flowRevision || run.flowRevision === flowRevisionOf(flow)
   const results = new Map()
   let staleCount = 0
@@ -698,9 +698,9 @@ export function resumePlanFor(run, flow, price = 0) {
   const total = Array.isArray(flow?.nodes) ? flow.nodes.length : 0
   const rerun = Math.max(0, total - seed.reusedCount)
   let reason = ''
-  if (!canResumeRun(run)) reason = '这条运行没有可复用的已跑节点：重新运行会用最新画布从头跑'
-  else if (!seed.reusedCount) reason = '画布改动后没有能原样复用的节点：重新运行会用最新画布从头跑'
-  else if (!rerun) reason = '画布里的节点都已经跑过了，没有还要补的'
+  if (!canResumeRun(run)) reason = '这条运行没有可复用的已跑节点：重新运行会用最新工作流从头跑'
+  else if (!seed.reusedCount) reason = '工作流改动后没有能原样复用的节点：重新运行会用最新工作流从头跑'
+  else if (!rerun) reason = '工作流里的节点都已经跑过了，没有还要补的'
   const resumable = Boolean(canResumeRun(run) && seed.reusedCount > 0 && rerun > 0)
   return {
     runId: run?.id || '',
@@ -806,10 +806,10 @@ async function runLlm(node, ctx) {
     // 生产日志里 3000 / 4800 仍被截断，先把起点抬到 6000（truncation 时 llm.mjs 会放宽到 8000），
     // max_tokens 只是上限，实际按生成量计费，抬高它不会让正常调用变贵。
     maxTokens: 6000,
-    // 节点没选模型时用画布主人的账号级首选模型；再后面才是全局降级链
+    // 节点没选模型时用工作流主人的账号级首选模型；再后面才是全局降级链
     models: [cfg.model, ctx.ownerId ? preferenceModel(ctx.ownerId) : '', ...config.vision.fallbacks].filter(Boolean),
     log: (message) => console.log('[flows] ' + message),
-    // 计量挂在「这次运行」上：同一张画布跑十遍，后台能看出十遍各花了多少 token
+    // 计量挂在「这次运行」上：同一张工作流跑十遍，后台能看出十遍各花了多少 token
     meter: { ref: ctx.runId || '', projectId: ctx.projectId || '' },
     // 用户点「停止」时，正在等的这次上游调用要立刻中止，而不是等它自己超时（v0.9.101）
     signal: ctx.signal || undefined,
@@ -836,7 +836,7 @@ async function runReview(node, ctx = {}) {
   const profile = REVIEW_PROFILES.find((item) => item.id === cfg.profile) || REVIEW_PROFILES[0]
   const media = await loadReviewMedia(cfg.image)
   // 复用 server/review.mjs：优先 VisionQA 插件服务，不可用再走本地模型，并如实标注 provider。
-  // 画布运行里的评审同样吃内存，和 /api/review 一样放进独立 worker（v0.9.77）。
+  // 工作流运行里的评审同样吃内存，和 /api/review 一样放进独立 worker（v0.9.77）。
   const job = { ...media, intent: profile.intent, ref: ctx.runId || '' }
   const writeLog = (message) => console.log('[flows] ' + message)
   const result = reviewIsolateConfig().enabled
@@ -965,7 +965,7 @@ async function saveRun(run) {
     dropped = merged.slice(MAX_RUNS).map((item) => item.id)
     await persistRuns(merged.slice(0, MAX_RUNS))
   })
-  // 记录被挤出历史窗口，它的画布快照也不该继续占盘
+  // 记录被挤出历史窗口，它的工作流快照也不该继续占盘
   if (dropped.length) await deleteRunGraphs(dropped)
 }
 
@@ -1013,7 +1013,7 @@ function blankRun(flow, id, cost = 0, { queued = false, resumeOf = '', reusedNod
     nodes: [],
     output: '',
     ownerId: flow.ownerId || '',
-    // 续跑：这条记录接着哪条跑、复用几个节点、本次按几个节点计费、跑的是哪一版画布
+    // 续跑：这条记录接着哪条跑、复用几个节点、本次按几个节点计费、跑的是哪一版工作流
     resumeOf: resumeOf || null,
     reusedNodes: Math.max(0, Math.round(Number(reusedNodes) || 0)),
     billTotal: Math.max(0, Math.round(Number(billTotal) || 0)),
@@ -1152,7 +1152,7 @@ export function refundRunCredits(run) {
 }
 
 /**
- * 按拓扑序执行整张画布。
+ * 按拓扑序执行整张工作流。
  * onEvent 用于流式输出：run-start / node-start / node-end / run-end / run-error。
  */
 export async function runFlow(flow, { onEvent, credits = null, runId = '', resume = null } = {}) {
@@ -1217,12 +1217,12 @@ export async function runFlow(flow, { onEvent, credits = null, runId = '', resum
     credits: credits ? { cost: Math.round(Number(credits.cost) || 0), refunded: false } : null,
   }
   Object.defineProperty(run, '__stopController', { value: stopController, enumerable: false, configurable: true })
-  // 先留画布快照、再落运行记录，最后才执行：快照对应的是这次真正要跑的那张图。
+  // 先留工作流快照、再落运行记录，最后才执行：快照对应的是这次真正要跑的那张图。
   // 留档失败只退化为「没有快照」，不能因为回看资料写不进去就不跑流程。
   try {
     await saveRunGraph(run.id, flow)
   } catch (error) {
-    console.error('[flows] 运行画布快照写入失败（回看将退回当前画布）：' + String(error && error.message ? error.message : error))
+    console.error('[flows] 运行工作流快照写入失败（回看将退回当前工作流）：' + String(error && error.message ? error.message : error))
   }
   // 先落盘再执行：以前只在结束时写运行记录，进程被杀就什么也不剩，
   // 已扣的积分在账本里也永远对不上是哪次运行。
@@ -1314,7 +1314,7 @@ export async function runFlow(flow, { onEvent, credits = null, runId = '', resum
         status: 'error',
         ms: Date.now() - nodeStartedAt,
         output: null,
-        // 这里会原样显示在画布、运行记录和后台审计里：只放产品语言
+        // 这里会原样显示在工作流、运行记录和后台审计里：只放产品语言
         error: clip(publicError(error, '这个节点执行失败，请稍后重试'), 500),
         message: null,
       }

@@ -7,7 +7,7 @@
 // 认原片（identity）的优先级：
 //   1) 平台 + 平台 id（模板的 sourceId / 检索条目的 id）：链接会被加分享参数、末尾斜杠或 #，id 不会；
 //   2) 没有平台 id 时退回规范化链接——与发现页「库里的原片」同一套 originKey，不另写一份规则。
-// 画布 / 智能体 / 作品沉淀出来的模板本来就没有原片，identity 为 null，两个地方都不出现。
+// 工作流 / 智能体 / 作品沉淀出来的模板本来就没有原片，identity 为 null，两个地方都不出现。
 import { originEntry } from './origin-entry.mjs'
 import { originKey } from './taken-origins.mjs'
 import { deliveredCurrent } from './project-status.mjs'
@@ -86,7 +86,7 @@ function uniqueWorks(projects = [], ids = new Set()) {
 
 /**
  * 库里的这条模板 → 这条原片的全貌。模板详情抽屉用。
- * 没有原片（画布 / 智能体 / 作品沉淀）返回 null：抽屉里就一个字都不多写。
+ * 没有原片（工作流 / 智能体 / 作品沉淀）返回 null：抽屉里就一个字都不多写。
  */
 export function originFootprint(templates = [], projects = [], target = {}) {
   const identity = sourceIdentity(target)
@@ -147,7 +147,7 @@ export function libraryMarks(templates = [], projects = [], entries = []) {
     const works = uniqueWorks(projects, ids)
     const chosen = pickRepresentative(group, works)
     if (!chosen) continue
-    // 版本 0 要留住：照模板开了作品、还没开画布的作品是 v0，不能在这里被写成「第 1 版」
+    // 版本 0 要留住：照模板开了作品、还没开工作流的作品是 v0，不能在这里被写成「第 1 版」
     const project = works.length ? { id: works[0].id, title: works[0].title, version: Number(works[0].version) || 0 } : null
     items.push({
       id: String(entry?.id || ''),

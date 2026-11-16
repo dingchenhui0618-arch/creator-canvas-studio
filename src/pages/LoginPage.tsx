@@ -307,7 +307,7 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
               <span className="vq-mono">03</span>
               <div>
                 <strong>沉淀复用</strong>
-                <p>评审过的产物回到模板库与画布，被下一个节点引用。</p>
+                <p>评审过的产物回到模板库与工作流，被下一个节点引用。</p>
               </div>
             </li>
           </ul>
