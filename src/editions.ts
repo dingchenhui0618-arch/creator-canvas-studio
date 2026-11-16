@@ -1,5 +1,6 @@
 import {
   Activity,
+  Boxes,
   Coins,
   Flag,
   Frame,
@@ -24,6 +25,7 @@ export type AdminSection =
   | 'users'
   | 'canvas'
   | 'keys'
+  | 'models'
   | 'templates'
   | 'usage'
   | 'billing'
@@ -65,6 +67,7 @@ export const EDITIONS: EditionMeta[] = [
       { id: 'users', label: '账号', icon: Users, section: 'users' },
       { id: 'canvas', label: '无限画布', icon: Frame, section: 'canvas' },
       { id: 'keys', label: '模型 Key', icon: KeyRound, section: 'keys' },
+      { id: 'models', label: '模型与上游', icon: Boxes, section: 'models' },
       { id: 'templates', label: '模板治理', icon: LayoutTemplate, section: 'templates' },
       { id: 'usage', label: '成本', icon: Coins, section: 'usage' },
       { id: 'billing', label: '计费', icon: Receipt, section: 'billing' },

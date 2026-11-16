@@ -32,6 +32,7 @@ export const PROVIDER_PRESETS = [
   { id: 'bailian', label: '阿里云百炼', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1' },
   { id: 'volcengine', label: '火山方舟', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3' },
   { id: 'cgcm', label: 'SeeAPI / CGCM（出图出视频）', baseUrl: 'https://api.cgcm-api.com' },
+  { id: 'geteapi', label: 'GeteAPI（OpenAI 中转 · GPT / GPT-Image）', baseUrl: 'https://www.geteapi.com/v1' },
   { id: 'openai', label: 'OpenAI', baseUrl: 'https://api.openai.com/v1' },
   { id: 'custom', label: '自定义 / 中转', baseUrl: '' },
 ]

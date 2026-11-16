@@ -1743,4 +1743,233 @@
   .admin-waterline-capacity { grid-template-columns: 1fr; }
 }
 
+/* 模型与上游（v0.9.165）：两个平台的报价口径不同，表格里一个模型最多并排两条来源。
+   价格文本由服务端折算，这里只负责层次：平台名 → 单价 → 口径说明。 */
+.model-catalog-platforms {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.model-platform {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.model-platform-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.model-platform-url {
+  margin: 4px 0 0;
+  color: var(--faint);
+  overflow-wrap: anywhere;
+}
+
+.model-platform-count {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin: 0;
+}
+
+.model-platform-count strong {
+  font-size: 28px;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.model-platform-count span {
+  color: var(--faint);
+  font-size: 12px;
+}
+
+.model-platform .admin-hint {
+  margin-top: auto;
+}
+
+.model-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.model-filter-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--btn-h-sm);
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.model-filter-button:hover {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.model-filter-button[aria-pressed='true'] {
+  border-color: var(--ink);
+  background: var(--canvas);
+  color: var(--ink);
+}
+
+.model-filter-button span {
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.model-catalog-table {
+  min-width: 760px;
+}
+
+.model-catalog-table td {
+  vertical-align: top;
+}
+
+.model-catalog-table td:nth-child(1) {
+  min-width: 180px;
+}
+
+.model-catalog-table td:nth-child(3) {
+  min-width: 320px;
+}
+
+.model-catalog-model {
+  overflow-wrap: anywhere;
+}
+
+.model-offers {
+  display: grid;
+  gap: 8px;
+}
+
+.model-offers--dual {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.model-offer {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-xs);
+  background: var(--canvas);
+}
+
+.model-offer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.model-offer-platform {
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.model-offer-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--line-strong);
+}
+
+.model-offer-dot.is-on {
+  background: var(--pass);
+}
+
+.model-offer-price {
+  margin: 4px 0 0;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.model-offer-note {
+  margin: 4px 0 0;
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  .admin-page--models {
+    padding: 16px;
+  }
+
+  .model-catalog-platforms,
+  .model-offers--dual {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* 390px 下把表格折成卡片：横向滚动只剩半列，单价和接入状态都要能直接读。 */
+  .model-catalog-table {
+    display: block;
+    min-width: 0;
+  }
+
+  .model-catalog-table thead {
+    display: none;
+  }
+
+  .model-catalog-table tbody {
+    display: block;
+  }
+
+  .model-catalog-table tr {
+    display: block;
+    padding: 12px;
+    border-bottom: 1px solid var(--line-faint);
+  }
+
+  .model-catalog-table tr:last-child {
+    border-bottom: 0;
+  }
+
+  .model-catalog-table td,
+  .model-catalog-table td:nth-child(1),
+  .model-catalog-table td:nth-child(3) {
+    display: block;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .model-catalog-table td + td {
+    margin-top: 8px;
+  }
+
+  .model-catalog-table td::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 4px;
+    color: var(--faint);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+  }
+
+  .model-catalog-table .admin-cell-sub {
+    display: block;
+  }
+}
+
 

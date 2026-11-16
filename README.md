@@ -120,7 +120,7 @@ VisionQA 是给画面做**有证据的视觉评审**的工具：结论只有「�
 | 形态 | 给谁 | 导航 |
 | --- | --- | --- |
 | 用户生产版 PRODUCTION | 内容团队日常用 | 工作台 / 爆款雷达 / 模板库 / 智能体 / 工作流 / 无限画布 / 视觉评审 +（横线下）运行记录 / 设置 |
-| 后台管理版 ADMIN | 运维自己（`?edition=admin`） | 总览 / 账号 / 模型 Key / 模板治理 / 运行审计 / 系统 |
+| 后台管理版 ADMIN | 运维自己（`?edition=admin`） | 总览 / 账号 / 无限画布 / 模型 Key / 模型与上游 / 模板治理 / 成本 / 计费 / 举报处理 / 反馈 / 运行审计 / 系统 |
 
 原来的「内测测试版 LAB」整块删除：接口体检、样例对照、功能开关、诊断导出四页里，开关全是「仅记录，尚未接线」，对照页的作用是把 `src/data/mock.ts` 的假数据摆在真实接口旁边——上线版不该带这种页面。
 后台版每个数字都标「真实接口 / 本地会话」，没有接口的地方就写没有，见 [docs/editions.md](docs/editions.md)。
@@ -3981,3 +3981,62 @@ E2E 里点某一行必须先按行里的文字限定，清单每一行长得一�
 390 窄屏（面板占满整行，说明与按钮折行，不撑破屏宽）：
 
 ![390 · 这一镜的提示词](docs/project-shot-prompt-390-2026-11-16.png)
+
+## 二百三十二、每个模型接的是哪个平台、上游收多少：后台「模型与上游」（v0.9.165，2026-11-16）
+
+**结论**：出图这条线从 SeeAPI / CGCM 换到了 GeteAPI。无限画布的图片模型选择器里现在只有 GPT Image 2 / GPT Image 2.5（走 GeteAPI）与方舟那三款 Seedream；CGCM 只留出视频。后台新增一页「模型与上游」：两个平台的 63 个模型摊在同一张表上，每个模型写清平台来源与上游单价，同一个模型两家都有时并排两条价格。
+
+### 为什么
+
+- 用户在用无限画布出图时看到 CGCM 的水印 logo，要求「出图全部改掉」。原来平台只有 SeeAPI 一个出图通道，Key 池里那把也是图片 + 视频共用，水印是从上游带回来的，平台侧没有开关。
+- 后台原来也回答不了「这个模型走的哪个上游、上游收多少钱」：成本页只有「出图 / 张」一个估价，看不出是哪家、单价多少，加价还是倒贴都算不清。
+- GeteAPI 的报价（`/api/pricing`，New API 的倍率表）与 SeeAPI 的模型页（`/v1/models` 里的 `pricing_rule`）都能程序读取，价目表不手抄。
+
+### 这一版做了什么
+
+1. **接入 GeteAPI**（`server/keyvault.mjs`、`server/gateway.mjs`）：后台 Key 池多一个平台预设「GeteAPI（OpenAI 中转 · GPT / GPT-Image）」，网关按 baseUrl 自动认出 OpenAI 兼容协议——`/v1/images/generations`、Bearer 鉴权、不要 `Idempotency-Key`；出图常常只回 `b64_json`，网关原样交给调用方（`data:` 前缀只保留一份）。
+2. **出图切到 GPT Image（跨服务）**：生产 Key 池里加了两把 GeteAPI Key——出图（7 个 `gpt-image-*`，优先级 P5）与 GPT 文本（17 个，P200 排在 DeepSeek 后面当备用）；SeeAPI 那把摘掉 `image` 能力、只留 8 个视频模型。无限画布侧新增 `POST /enterprise/api/generate/gpt-image`（新模块 `generation_gpt_image.py`），图片节点可选 GPT Image 2 / 2.5，尺寸按比例落到 OpenAI 的三个尺寸；计费 `fixed_per_call` ¥0.44/张（上游 $0.06，按 7.2 折算）。旧画布里的 CGCM 图片节点在加载时自动迁到 `gpt-image-2`，视频节点不动。
+3. **后台「模型与上游」**（`server/model-catalog.mjs`、`src/pages/admin/ModelCatalogSection.tsx`）：`GET /api/admin/model-catalog` 服务端拉两家的目录（10 分钟缓存，`?force=1` 立刻重抓），按模型名合并成一行；平台卡显示连接状态与模型数，表格按能力筛选。返回里只有平台 id / 名称 / 地址 / 是否连接 / 价格，**没有任何 Key 明文、密文或请求头**。
+4. **计价口径写死在服务端一处**：GeteAPI `quota_type=0` 输入 = `model_ratio × group_ratio × 2` USD/1M、输出再乘 `completion_ratio`；`quota_type=1` = `model_price × group_ratio` USD/次；SeeAPI 的 `credit_units` 按 **1,000,000 = ¥1**（从其 dashboard bundle 核实），按次 / 按秒（分辨率）/ 按张（尺寸）分别归一，阶梯价不压成一个假装精确的数字。
+
+### 边界（写清楚，免得当成更大的东西）
+
+- **页面上是上游标价，不是我们的售价**：画布那边 ¥0.44/张 是零售价；GeteAPI 的 $0.048 是 default 分组 ×0.8 之后的价，换分组要改上游账号，不是页面。
+- **两个平台现在没有同名模型**：「并排两条来源」是能力，用同名 fixture 测过；真实目录里 Gete 与 SeeAPI 的模型名不重叠，所以现在页面上看不到双行。
+- **文本模型只进池、不改默认**：GeteAPI 的 GPT 文本是 P200 备用，DeepSeek 仍是 P100；不会悄悄换掉评审 / 对话的模型。
+- **CGCM 还在，但只出视频**：`cgcm-seedance` 那批授权一行未动；图片能力已从 Key 上摘掉，平台侧没有任何一条图片路径还能路由到 SeeAPI。
+- **价目不是账单**：页面按上游当前报价算，实际扣费以对账为准；GeteAPI 的阶梯表达式模型（`billing_mode=tiered_expr`）按基准倍率估算，note 里写明了。
+
+### 实测
+
+- 全仓 **1247/1247**（新增 `test/gateway-openai.test.mjs` 4 例、`test/model-catalog.test.mjs` 13 例），lint **0 error / 16 warning**，`tsc -b` 与 `npm run build` 干净。
+- 真实调用 1 次 GeteAPI `gpt-image-2`（用户授权、上限各 1 次）：**19.2 秒**返回 1024×1024 PNG 2.1 MB，**只回 `b64_json`**；同一轮的 SeeAPI `image-2-pro` 240 秒超时没取回图（上游可能已计费），这也是换通道的直接理由之一。
+- 生产目录接口（真 Key）：**63 行**（GeteAPI 49 + SeeAPI 14），两平台 connected；`gpt-image-2` = **$0.048 / 次**（$0.06 × 0.8），`gpt-5.6-luna` = 输入 $0.4 / 1M · 输出 $3.2 / 1M，`image-2.5` = **¥0.6 / 次**，`seedream-5.0-pro` = **¥0.3 / 张（1K）· ¥0.6 / 张（2K / 4K）**。
+- 画布侧 stub 端到端（不花上游额度）：`generation_records id=8`，`provider=gpt-image`、`model=gpt-image-2`、`status=succeeded`、扣 **440 li = ¥0.44**、媒体落盘 1 张；停掉 stub 再发一次 → 502、扣 0；参数错 → 400 不留记录。模型选择器只剩 GPT Image 2 / 2.5 + 方舟 Seedream 三款，390 宽 `scrollWidth 390 = clientWidth 390`。
+
+### 坑
+
+- **`b64_json` 自带 `data:` 前缀**：网关再拼一次就成两份前缀，画布按 data URL 解码直接失败。`extractUrls` 先看有没有前缀（v0.9.165 修）。
+- **Key 文件是 root 写的、服务跑在 `visionqa` 用户下**：seed 脚本写完必须 `chown visionqa`，否则服务读不到 Key——表现是 `/api/gateway/v1/models` 空、出图说「没有 Key」，而用 root 手工跑脚本一切正常，很容易误判。
+- **GeteAPI 忽略 `response_format: "url"`**：直接回 2.1 MB 的 `b64_json`，同步出图超时不能按 30 秒设（网关默认 120 秒）。
+- **SeeAPI 的金额字段是 `special` 不是 `retail`**：按 `retail` 读会整页「未标价」。现在 `special → retail → default` 依次取。
+- **隐藏模型要先迁老节点**：后台把 CGCM 图片模型藏掉、授权停掉之后，老画布节点点生成会 403；所以在 `deserializeCanvas` 里把旧图片模型迁到 `gpt-image-2`（视频跳过），迁移计数在加载锁释放后再自动保存。
+
+### 生产
+
+发布 `20261116-1745-r175gete`，版本 **0.9.165**；8799 与公网同一份 `index-RudyRlll.js`；`/api/health` 两个入口 `ok:true`（templates 26）；`rollback.sh --to 1` 回 **v0.9.164**（`index-B1C3jq5Z.js`）。
+
+### 截图
+
+后台「模型与上游」：平台卡（GeteAPI 49 / SeeAPI 14，均已连接）+ 计价口径 + 模型表（每行一个模型、平台来源与上游单价、接入状态）：
+
+![后台 · 模型与上游](docs/admin-model-catalog-2026-11-16.png)
+
+390 窄屏：平台卡纵向排列，目录折成卡片，模型 / 能力 / 平台与单价 / 接入状态都还能直接读：
+
+![390 · 模型与上游](docs/admin-model-catalog-390-2026-11-16.png)
+
+无限画布：图片节点选中 GPT Image 2，参数面板写着「预计 4.4 积分」，模型列表里已经没有 CGCM Image2 / Nano Banana：
+
+![无限画布 · GPT Image 2](docs/canvas-gpt-image-picker-2026-11-16.png)
+

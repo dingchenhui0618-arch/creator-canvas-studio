@@ -1,9 +1,11 @@
 // 平台生成通道：把无限画布的出图 / 出视频请求，按「能力 → 模型 → 优先级 → 权重」选一把
 // 平台 Key 转发到上游；一把失败就换下一把（最多 3 把），单把 Key 坏掉不该让整次生成失败。
 //
-// 上游两种协议都接（2026-11-11 起），由 Key 的 baseUrl 自动判定，管理员贴地址时不用选协议：
-//  - ark ：火山方舟 —— /images/generations、/contents/generations/tasks[/<id>]
-//  - cgcm：SeeAPI —— /v1/images/generations[/async]、/v1/video/generations、/v1/tasks/<id>
+// 上游三种协议都接，由 Key 的 baseUrl 自动判定，管理员贴地址时不用选协议：
+//  - ark   ：火山方舟 —— /images/generations、/contents/generations/tasks[/<id>]
+//  - cgcm  ：SeeAPI —— /v1/images/generations[/async]、/v1/video/generations、/v1/tasks/<id>
+//  - openai：OpenAI 兼容中转（GeteAPI 等）—— /v1/images/generations，Bearer 鉴权、不要幂等键，
+//            出图常常只回 b64_json（v0.9.165）
 // 无限画布的出图节点按方舟写法、出视频节点在 CGCM 渠道下按 SeeAPI 写法，两套都指向本通道。
 //
 // 与聊天链路的三点区别：
@@ -31,6 +33,9 @@ export const CANVAS_IMAGE_MODELS = [
   { model: 'image-2.5', label: 'SeeAPI Image 2.5' },
   { model: 'nano-banana-flash', label: 'SeeAPI Nano Banana Flash' },
   { model: 'nano-banana-pro', label: 'SeeAPI Nano Banana Pro' },
+  // GeteAPI（OpenAI 兼容中转）的 GPT-Image 系列（v0.9.165）：无限画布新增的图片模型，走 openai 协议。
+  { model: 'gpt-image-2', label: 'GPT Image 2' },
+  { model: 'gpt-image-2.5', label: 'GPT Image 2.5' },
 ]
 
 // 无限画布按方舟的真实模型名发请求，SeeAPI 用的却是自己的叫法；同一款模型两个名字，
@@ -63,24 +68,34 @@ export const CANVAS_VIDEO_MODELS = [
 ]
 
 /**
- * 上游协议由 Key 的 baseUrl 判定：SeeAPI / CGCM 的域名走 `cgcm` 形态，其余按火山方舟。
+ * 上游协议由 Key 的 baseUrl 判定：SeeAPI / CGCM 的域名走 `cgcm` 形态，
+ * OpenAI 兼容中转（GeteAPI 等）走 `openai`，其余按火山方舟。
  * 只认域名特征，不要求管理员多填一个「协议」字段 —— 少一个能填错的地方。
  */
 export function keyProtocol(key) {
-  return /cgcm|seeapi/i.test(String(key?.baseUrl || '')) ? 'cgcm' : 'ark'
+  const base = String(key?.baseUrl || '')
+  if (/cgcm|seeapi/i.test(base)) return 'cgcm'
+  // GeteAPI 这类 OpenAI 兼容中转：/v1/images/generations + Bearer，响应可能只有 b64_json。
+  // provider 也认一遍：管理员把地址写成反代域名时仍能按平台判对。
+  if (/geteapi|api\.openai\.com/i.test(base) || String(key?.provider || '') === 'geteapi') return 'openai'
+  return 'ark'
 }
 
-/** CGCM 的 base 允许写成 …/ 或 …/v1，两种都归到同一层再拼路径。 */
+/** CGCM 的 base 允许写成 …/ 或 …/v1，两种都归到同一层再拼路径；OpenAI 兼容的 base 始终停在 /v1。 */
 function protocolBase(key) {
   const base = trimBase(key?.baseUrl)
-  return keyProtocol(key) === 'cgcm' ? base.replace(/\/v1$/i, '') : base
+  if (keyProtocol(key) === 'cgcm') return base.replace(/\/v1$/i, '')
+  // 管理员只填域名时补上 /v1：OpenAI 图像接口是 /v1/images/generations。
+  if (keyProtocol(key) === 'openai') return /\/v1$/i.test(base) ? base : base + '/v1'
+  return base
 }
 
 /** 同一个逻辑动作在两种上游协议下的真实地址。 */
 export function upstreamUrl(key, kind, id = '') {
   const base = protocolBase(key)
-  const cgcm = keyProtocol(key) === 'cgcm'
-  if (kind === 'image') return base + (cgcm ? '/v1/images/generations' : '/images/generations')
+  const protocol = keyProtocol(key)
+  const cgcm = protocol === 'cgcm'
+  if (kind === 'image') return base + (protocol === 'openai' ? '/images/generations' : cgcm ? '/v1/images/generations' : '/images/generations')
   if (kind === 'imageAsync') return base + '/v1/images/generations/async'
   if (kind === 'videoCreate') return base + (cgcm ? '/v1/video/generations' : '/contents/generations/tasks')
   if (kind === 'task') {
@@ -180,7 +195,12 @@ function extractUrls(data) {
   const urls = []
   for (const item of items) {
     if (item?.url) urls.push(String(item.url))
-    else if (item?.b64_json) urls.push('data:image/png;base64,' + String(item.b64_json))
+    else if (item?.b64_json) {
+      // 有的上游（GeteAPI / OpenAI 系）回的 b64 自带 data: 前缀，再拼一次会变成两份前缀，
+      // 无限画布按 data URL 解码时直接失败（v0.9.165）。
+      const raw = String(item.b64_json)
+      urls.push(/^data:/i.test(raw) ? raw : 'data:image/png;base64,' + raw)
+    }
   }
   if (!urls.length && data?.url) urls.push(String(data.url))
   return urls

@@ -17,6 +17,7 @@ import { removePreference } from '../preferences.mjs'
 import { AGENT_TOOLS } from '../agents.mjs'
 import { lastWebRead, readWebPage } from '../webread.mjs'
 import { listKeys, createKey, updateKey, deleteKey, testKey, listRoutes, previewRoute, vaultModels, PROVIDER_PRESETS, CAPABILITIES } from '../keyvault.mjs'
+import { getModelCatalog } from '../model-catalog.mjs'
 import { gatewayReadiness, gatewayStatus, modelCoverage } from '../gateway.mjs'
 import { canvasAdminConfigured, listCanvasUsers, setCanvasUserAccess } from '../canvas-admin.mjs'
 import { alertCounts, ackAlert, checkDisk, flushAlertDeliveries, listAlerts, listOutbox, outboxStats, recordAlert, retryOutboxItem } from '../alerts.mjs'
@@ -376,6 +377,19 @@ export function createAdminRouter() {
         sendJson(res, 200, { ok: true, ...quotaOverview() })
         return true
       }
+      // ── 模型与上游 ────────────────────────────────────────────────
+      // 两个上游的模型、来源与单价合并成一张表。缓存 10 分钟；手动刷新用 ?force=1。
+      // 返回里只有平台 id / 名称 / 是否连接，绝不带任何 Key 明文、密文或请求头。
+      if (pathname === '/api/admin/model-catalog' && req.method === 'GET') {
+        try {
+          const force = url.searchParams.get('force') === '1'
+          sendJson(res, 200, await getModelCatalog(force))
+        } catch (error) {
+          sendJson(res, 502, { ok: false, error: error?.message || '上游模型目录读取失败', code: error?.code })
+        }
+        return true
+      }
+
       // ── 平台 Key 池 ────────────────────────────────────────────────
       // 管理员在后台随时增删改，下一次模型调用就生效（不需要重启进程）。
       // 列表只回脱敏值，明文 Key 永远不会离开服务端。
