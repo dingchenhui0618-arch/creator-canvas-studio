@@ -1839,6 +1839,56 @@
   line-height: 1.6;
 }
 
+/* 他回了什么（v0.9.153）：收据只给结论，这一段是他的原话。
+   多行输入（最多 6 行），摆在收件人下面——先写清给谁，再记他说了什么。 */
+.vq-archive-reply {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-1) var(--space-2);
+}
+
+.vq-archive-reply-field {
+  display: flex;
+  flex: 1 1 240px;
+  align-items: flex-start;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.vq-archive-reply-input {
+  box-sizing: border-box;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 56px;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.vq-archive-reply-input::placeholder {
+  color: var(--faint);
+}
+
+.vq-archive-reply-input:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.vq-archive-reply-hint {
+  flex: 1 1 100%;
+  min-width: 0;
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
 /* 回执链接（v0.9.137）：把「收据再发回来」换成「他自己贴」。
    虚线框里再嵌一块实线：上面是地址与两个动作，下面一句说清这条地址的边界。 */
 .vq-archive-receipt-link {

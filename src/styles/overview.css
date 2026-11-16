@@ -1055,6 +1055,20 @@
   color: var(--ink);
 }
 
+/* 他回了什么（v0.9.153）：收据是结论，这一行是他的原话。
+   行上只放第一行（后面还有就带省略号），整段与记下的时间都在 title 里——
+   一行字不该摊开一整段话，也不能把行高撑成两倍。 */
+.vq-delivery-reply {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* 回执（v0.9.139）：这一份他验没验、验的是不是这一份。
    与作品页交付档案里的那枚胶囊同一套形状（发丝线、11px、圆头），
    差别只在这里是清单里的一行字，不带图标；还没收到时用虚线，不抢已回来的那几行的注意力。 */

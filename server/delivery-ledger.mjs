@@ -192,6 +192,12 @@ export function ledgerRows({ projects = [], counts = {}, visits = {} } = {}) {
         // 这一条是给谁的（v0.9.152）：发件人自己写的称呼。空串 = 没写（老记录都是这样），
         // 界面就不写这一段——「不知道」与「没写」在这里是同一件事，不猜一个人名出来。
         recipient: entry?.package ? String(entry?.recipient || '') : '',
+        // 他回了什么（v0.9.153）：收包人说的原话。null = 还没记（不是「他说没问题」）——
+        // 界面据此什么都不说，不替他下结论。
+        reply:
+          entry?.package && entry?.reply?.text
+            ? { text: String(entry.reply.text), at: String(entry.reply.at || '') }
+            : null,
         // 现在能不能「再发一次链接」：有包、还没回执、链接还在，而且确知这条地址一次都没被打开过。
         // 不知道被打开过没有（升级前发的链接）就不给这个按钮——那种情况下「再发一次」是盲发。
         // v0.9.150 起到了换地址的上限就不再给「再发一次」：那条路是「同一条消息再发一遍」，

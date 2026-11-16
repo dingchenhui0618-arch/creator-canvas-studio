@@ -154,6 +154,13 @@ export type ProjectDeliveryPackage = {
 /** 他点过「收到了」的那一下（v0.9.151）：只记时间，不记是谁 */
 export type DeliveryAck = { at: string }
 
+/**
+ * 他回了什么（v0.9.153）：收包人回的那段话，发件人记在这一条交付上。
+ * at 是「记下这段话」的那一刻——不是他回话的那一刻（那一侧没有时间戳可看）。
+ * 时间读不出来时是空串：只留话，不硬编一个时间。
+ */
+export type DeliveryReply = { text: string; at: string }
+
 export type ProjectDelivery = {
   id?: string
   version: number
@@ -203,6 +210,11 @@ export type ProjectDelivery = {
    * 没有 = 没写（老记录都是这样），界面就不说这一段——不猜，也不写成「未知」。
    */
   recipient?: string
+  /**
+   * 他回了什么（v0.9.153）：收包人说的原话，发件人记在这一条上。
+   * 没有 = 还没记（不是「他说没问题」），界面什么都不说。
+   */
+  reply?: DeliveryReply
 }
 
 /**
@@ -1194,6 +1206,11 @@ export type ProjectDeliveryRow = {
    * 界面上写成「给王老师」；没写就什么都不说。
    */
   recipient?: string
+  /**
+   * 他回了什么（v0.9.153）：收包人说的原话；null = 还没记。
+   * 界面只说「他说了什么」，不据此判断「满意 / 不满意」。
+   */
+  reply?: DeliveryReply | null
 }
 
 /** 交付流水的整份数字按全部记录算，不因为只取了一页而变小 */

@@ -21,6 +21,7 @@ import {
   getProjectVersionScript,
   issueReceiptLink,
   setDeliveryRecipient,
+  setDeliveryReply,
   receiptLinkUrl,
   openProjectCanvas,
   projectPackageAudits,
@@ -102,6 +103,16 @@ import {
   recipientPlaceholder,
   recipientSavedText,
 } from '../domain/delivery-recipient'
+import {
+  REPLY_LIMIT,
+  normalizeReply,
+  replyClearedText,
+  replyEmptyText,
+  replyHint,
+  replyPlaceholder,
+  replySavedAt,
+  replySavedText,
+} from '../domain/delivery-reply'
 import { stampTime as stamp, visitLine } from '../domain/share'
 import '../styles/projects.css'
 
@@ -270,6 +281,10 @@ export default function ProjectPage({
   // 没打字的那几条读档案里的值——不预填任何名字，也不把上一行写的称呼带过来。
   const [recipientDrafts, setRecipientDrafts] = useState<Record<string, string>>({})
   const [recipientBusy, setRecipientBusy] = useState('')
+  // 他回了什么（v0.9.153）：同样按交付记录编号存草稿；没打字的那几条读档案里记着的原话。
+  // 草稿框里是「正在写的那一段」，与「已记下的那一段」分开，免得改到一半被别的刷新冲掉。
+  const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({})
+  const [replyBusy, setReplyBusy] = useState('')
   // 上次巡检（v0.9.132）：定时任务每天把封存包验一遍，这里只读它写下的结论。
   // 没巡检过就 at 为空，界面上不出现这一行——不拿「今天没验」冒充「验过了」。
   const [audits, setAudits] = useState<{
@@ -927,6 +942,42 @@ export default function ProjectPage({
       setReceiptError(caught instanceof Error ? caught.message : '收件人没记上')
     } finally {
       setRecipientBusy('')
+    }
+  }
+
+  // 他回了什么（v0.9.153）：记一段原话，或者清掉。
+  // 存的是发件人抄下来的话——不改包、不改收据、不改链接、不动那些「催过几次」的数。
+  const saveReply = async (deliveryId: string, value: string) => {
+    if (!data || !deliveryId) return
+    setReplyBusy(deliveryId)
+    setReceiptError('')
+    try {
+      const result = await setDeliveryReply(data.project.id, deliveryId, value)
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              project: {
+                ...prev.project,
+                deliveries: (prev.project.deliveries || []).map((entry) =>
+                  entry.id === deliveryId ? { ...entry, reply: result.reply || undefined } : entry,
+                ),
+              },
+            }
+          : prev,
+      )
+      // 存下之后把这一条的草稿收掉：输入框跟着档案里的原话走，不会留一份对不上的旧字
+      setReplyDrafts((prev) => {
+        const next = { ...prev }
+        delete next[deliveryId]
+        return next
+      })
+      if (!result.changed) onToast('没变：这一条本来就记着这段话')
+      else onToast(result.reply ? replySavedText() : replyClearedText())
+    } catch (caught) {
+      setReceiptError(caught instanceof Error ? caught.message : '回复没记上')
+    } finally {
+      setReplyBusy('')
     }
   }
 
@@ -2222,6 +2273,56 @@ export default function ProjectPage({
                           {/* 没写的时候先说「还没写」，再说这个称呼会出现在哪：空着不等于出错 */}
                           {row.recipient ? '' : recipientEmptyText() + ' · '}
                           {recipientHint()}
+                        </span>
+                      </div>
+                      {/* 他回了什么（v0.9.153）：收据只给一个结论（对得上 / 对不上），
+                          他真正说的那句「第 3 张背景色偏了」记在这里——跟着版次与包走，
+                          下一版要改哪几张从这里直接看，不用回聊天记录里翻。 */}
+                      <div className="vq-archive-reply">
+                        <label className="vq-archive-reply-field">
+                          <span className="vq-archive-receipt-label">他回了什么</span>
+                          <textarea
+                            className="vq-archive-reply-input"
+                            rows={2}
+                            spellCheck={false}
+                            maxLength={REPLY_LIMIT}
+                            aria-label={'v' + row.version + ' 他回了什么'}
+                            placeholder={replyPlaceholder()}
+                            value={replyDrafts[row.id || ''] ?? normalizeReply(row.reply?.text)}
+                            onChange={(event) => {
+                              // 与收件人那一行同一个坑：先取值，再进更新函数（React 之后会置空 currentTarget）
+                              const value = event.currentTarget.value
+                              setReplyDrafts((prev) => ({ ...prev, [row.id || '']: value }))
+                            }}
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          className="vq-button vq-button--quiet vq-button--sm"
+                          disabled={
+                            replyBusy === (row.id || '') ||
+                            normalizeReply(replyDrafts[row.id || ''] ?? row.reply?.text) ===
+                              normalizeReply(row.reply?.text)
+                          }
+                          onClick={() => void saveReply(row.id || '', replyDrafts[row.id || ''] ?? row.reply?.text ?? '')}
+                        >
+                          {replyBusy === (row.id || '') ? '正在记…' : '记下'}
+                        </button>
+                        {row.reply?.text ? (
+                          <button
+                            type="button"
+                            className="vq-button vq-button--ghost vq-button--sm"
+                            disabled={replyBusy === (row.id || '')}
+                            onClick={() => void saveReply(row.id || '', '')}
+                            title="清掉之后这一条回到「还没记」，包、收据、链接都不动"
+                          >
+                            清掉
+                          </button>
+                        ) : null}
+                        <span className="vq-archive-reply-hint">
+                          {/* 记着的时候先说「哪天记的」，没记的时候说「还没记」——两种都不是结论 */}
+                          {row.reply?.text ? replySavedAt(row.reply) + ' · ' : replyEmptyText() + ' · '}
+                          {replyHint()}
                         </span>
                       </div>
                       <div className="vq-archive-receipt-link">

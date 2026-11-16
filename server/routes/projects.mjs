@@ -89,6 +89,9 @@ import {
   saveDeliveryAck,
   saveDeliveryRecipient,
   RECIPIENT_LIMIT,
+  saveDeliveryReply,
+  deliveryReplyLength,
+  REPLY_LIMIT,
   newReceiptToken,
   clearProjectScript,
   enableProjectShare,
@@ -140,6 +143,7 @@ const DELIVERY_RELINK = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f
 // 这一条是给谁的（v0.9.152）：发件人写一个称呼，工作台那一行与他要复制出去的那段话都跟着它走。
 // 称呼只留在发件人这一侧：不进包、不进公开回执页（拿着链接的人不需要知道发件人怎么称呼别人）。
 const DELIVERY_RECIPIENT = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})\/recipient$/
+const DELIVERY_REPLY = /^\/api\/projects\/([\w-]+)\/delivery-packages\/([0-9a-f]{16})\/reply$/
 // 收包人那一侧（v0.9.137）：token 就是凭证，不带登录态；GET 看这是哪一份、POST 把收据贴上去
 const PUBLIC_RECEIPT = /^\/api\/receipts\/([0-9a-f]{16})$/
 // 收包人点一下「收到了」（v0.9.151）：验完之前他手上只有这一句话可以告诉发件人
@@ -1657,6 +1661,43 @@ export function createProjectsRouter() {
           return true
         }
         sendJson(res, 200, { ok: true, changed: saved.changed, recipient: saved.recipient })
+        return true
+      }
+
+      // 他回了什么（v0.9.153）：收包人回的那段话，发件人记在这一条交付上。
+      // 和收件人称呼一样只在发件人这一侧：不进包、不进回执页——
+      // 拿到链接的人不需要知道发件人这边记了什么，也不需要看见自己的话被存了一份。
+      const replyPath = pathname.match(DELIVERY_REPLY)
+      if (replyPath) {
+        if (req.method !== 'POST') {
+          sendJson(res, 405, { error: '回复只能用 POST 记：它要记进交付档案' })
+          return true
+        }
+        if (!user && config.auth.requireAuth) {
+          sendJson(res, 401, { error: '登录已过期：回到作品页再记' })
+          return true
+        }
+        const body = await readBody(req)
+        const raw = body?.reply
+        if (raw !== undefined && typeof raw !== 'string') {
+          sendJson(res, 400, { error: '回复写一段字就行：{"reply": "第 3 张背景色偏了"}', code: 'REPLY_INVALID' })
+          return true
+        }
+        const text = String(raw ?? '')
+        // 上限按字算：先把形状整理好，再数有多少个字——先截断就永远比不出「写多了」
+        if (deliveryReplyLength(text) > REPLY_LIMIT) {
+          sendJson(res, 400, {
+            error: '回复最多记 ' + REPLY_LIMIT + ' 个字、6 行：一句能直接拿去改的话就够',
+            code: 'REPLY_TOO_LONG',
+          })
+          return true
+        }
+        const saved = await saveDeliveryReply(replyPath[1], replyPath[2], text, user)
+        if (!saved) {
+          sendJson(res, 404, { error: '这一条交付没有封存包，谈不上他回了什么' })
+          return true
+        }
+        sendJson(res, 200, { ok: true, changed: saved.changed, reply: saved.reply })
         return true
       }
 

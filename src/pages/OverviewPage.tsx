@@ -63,6 +63,7 @@ import {
 import { deliveryAskMessage } from '../domain/delivery-ask'
 import { deliveryAckedText, deliveryAckHint, deliveryAckLead } from '../domain/delivery-ack'
 import { recipientText, recipientTitle } from '../domain/delivery-recipient'
+import { replyRowText, replyRowTitle } from '../domain/delivery-reply'
 import { deliveryRetiredHitHint, deliveryRetiredHitText } from '../domain/delivery-retired-hit'
 import {
   REVIEW_VERDICT_LABEL,
@@ -1435,6 +1436,14 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                               )}
                           </span>
                         )
+                      ) : null}
+                      {/* 他回了什么（v0.9.153）：收据给的是结论，他真正说的那句放在这一行最后——
+                          看到「他说：第 3 张背景色偏了」就知道下一步要改哪张，不用点进档案。
+                          没记就什么都不说（不是「他说没问题」）。 */}
+                      {row.reply?.text ? (
+                        <span className="vq-delivery-reply" title={replyRowTitle(row.reply)}>
+                          {replyRowText(row.reply)}
+                        </span>
                       ) : null}
                     </span>
                     <span className={'vq-delivery-state' + (row.current ? ' is-current' : '')}>

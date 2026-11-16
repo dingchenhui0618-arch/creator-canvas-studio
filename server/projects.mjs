@@ -35,6 +35,12 @@ const MAX_DELIVERIES = 20
 // 再长就不是称呼而是备注了——这里只放一个称呼，备注属于作品本身。
 const MAX_RECIPIENT = 24
 export const RECIPIENT_LIMIT = MAX_RECIPIENT
+// 他回了什么（v0.9.153）：收据只给一个结论（对得上 / 对不上），他真正说的那句
+// 「第 3 张背景色偏了」没有地方落。200 个字、最多 6 行：够写一段能直接拿去改的回复，
+// 再长就不是「他回了一句」，而是另一份评审——那属于评审，不属于这一条交付。
+const MAX_REPLY = 200
+const REPLY_LINES = 6
+export const REPLY_LIMIT = MAX_REPLY
 /** 一条交付记录最多带多少条包内清单：和 delivery-packages.mjs 的上限保持一致。 */
 const MAX_PACKAGE_FILES = 60
 
@@ -387,6 +393,39 @@ export function normalizeDeliveryRecipient(raw) {
   return Array.from(text).slice(0, MAX_RECIPIENT).join('')
 }
 
+/**
+ * 他回了什么（v0.9.153）：把收包人回的那段话原样留在这一条交付上。
+ *
+ * 分成两步：flattenDeliveryReply 只整理形状（去控制字符、每行空白压成一个、空行扔掉、最多 6 行），
+ * normalizeDeliveryReply 再按字截到 200。分开是为了让接口能照实说「太长了」——
+ * 先截断再比长度，永远比不出「他写多了」。
+ */
+function flattenDeliveryReply(raw) {
+  const flat = Array.from(String(raw ?? ''))
+    .map((ch) => {
+      const code = ch.codePointAt(0) || 0
+      if (code === 0x0a) return '\n'
+      return code < 0x20 || code === 0x7f ? ' ' : ch
+    })
+    .join('')
+  return flat
+    .split('\n')
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .slice(0, REPLY_LINES)
+    .join('\n')
+}
+
+/** 整理之后有多少个字（按码点算）：接口据此判断「写不下」，不是按 UTF-16 长度。 */
+export function deliveryReplyLength(raw) {
+  return Array.from(flattenDeliveryReply(raw)).length
+}
+
+/** 写进来、读回来都过这一遍：整理形状 + 按字截到 200（按码点，emoji 不被劈成半个）。 */
+export function normalizeDeliveryReply(raw) {
+  return Array.from(flattenDeliveryReply(raw)).slice(0, MAX_REPLY).join('')
+}
+
 // 交付记录：{ id, version, at, review, package, receipt }。老记录没有时间就写空串——照样是「这一版交过」，只是不知道什么时候。
 // review 同理：没有这个字段就是「当时没记评审」，不能拿这一版后来的评审冒充（v0.9.85）。
 // id/package 同理：升级前的老交付记录没有封存包，界面不能给出一个点开 404 的按钮。
@@ -438,6 +477,15 @@ function normalizeDeliveries(raw) {
       // 不进包、不进回执页（拿着链接的人不需要知道发件人怎么称呼别人）。
       const recipient = pkg ? normalizeDeliveryRecipient(entry.recipient) : ''
       if (recipient) base.recipient = recipient
+      // 他回了什么（v0.9.153）：收包人说的原话，发件人自己记在这一条上。
+      // 同样只在发件人这一侧：不进包、不进回执页。时间读不出来就只留话，不硬编一个时间出来。
+      const replyText = pkg ? normalizeDeliveryReply(entry.reply?.text) : ''
+      if (replyText) {
+        const replyAt = Number.isFinite(Date.parse(String(entry.reply?.at || '')))
+          ? new Date(String(entry.reply.at)).toISOString()
+          : ''
+        base.reply = { text: replyText, at: replyAt }
+      }
       return base
     })
     .filter((entry) => entry.version > 0)
@@ -999,6 +1047,38 @@ export async function saveDeliveryRecipient(id, deliveryId, recipient, user = nu
   found.updatedAt = new Date().toISOString()
   await persist(list)
   return { changed: true, recipient: next, delivery: deliveries[index] }
+}
+
+/**
+ * 他回了什么（v0.9.153）：把收包人回的那段话记在这一条交付上，或者传空串清掉。
+ *
+ * 只动这一项：包、收据、链接、催过几次那些数都不动；写的人还是发件人，所以照常推进 updatedAt。
+ * 同一段话再存一次不写盘（changed=false），也不刷新时间——不然点一下保存就改写了「他哪天回的」。
+ * 空串 = 清掉，这一条回到「没有回复」。
+ */
+export async function saveDeliveryReply(id, deliveryId, reply, user = null) {
+  const list = await loadAll()
+  const found = list.find((item) => item.id === id && canAccess(item, user))
+  if (!found) return null
+  const deliveries = normalizeDeliveries(found.deliveries)
+  const index = deliveries.findIndex((entry) => entry.id === deliveryId && entry.package)
+  if (index < 0) return null
+  const entry = deliveries[index]
+  const next = normalizeDeliveryReply(reply)
+  if (String(entry.reply?.text || '') === next) {
+    return { changed: false, reply: entry.reply || null, delivery: entry }
+  }
+  if (next) {
+    deliveries[index] = { ...entry, reply: { text: next, at: new Date().toISOString() } }
+  } else {
+    const cleared = { ...entry }
+    delete cleared.reply
+    deliveries[index] = cleared
+  }
+  found.deliveries = deliveries
+  found.updatedAt = new Date().toISOString()
+  await persist(list)
+  return { changed: true, reply: deliveries[index].reply || null, delivery: deliveries[index] }
 }
 
 /**

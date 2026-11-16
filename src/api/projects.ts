@@ -108,6 +108,17 @@ export const setDeliveryRecipient = (projectId: string, deliveryId: string, reci
     { method: 'POST', body: JSON.stringify({ recipient }) },
   )
 
+/**
+ * 他回了什么（v0.9.153）：把收包人回的那段话记在这一条交付上，或者传空串清掉。
+ * 只改这一项：包、收据、链接、催过几次那些数都不动；同一段话再存一次服务端不写盘（changed=false）。
+ * 清掉之后 reply 是 null，这一条回到「还没记」。
+ */
+export const setDeliveryReply = (projectId: string, deliveryId: string, reply: string) =>
+  request<{ ok: boolean; changed: boolean; reply: { text: string; at: string } | null }>(
+    deliveryPackageUrl(projectId, deliveryId) + '/reply',
+    { method: 'POST', body: JSON.stringify({ reply }) },
+  )
+
 export const getProject = (id: string) => request<ProjectDetail>('/api/projects/' + id)
 
 // 上次巡检（v0.9.132）：定时任务每天验一遍封存包，这里只读它写下的那份结论
