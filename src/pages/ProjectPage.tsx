@@ -95,6 +95,7 @@ import { deliveryOpenCount, deliveryOpenHint } from '../domain/delivery-open'
 import { deliveryResendBrief, deliveryResendHint } from '../domain/delivery-resend'
 import { RELINK_LIMIT, deliveryArchiveLine, deliveryRelinkBrief, deliveryRelinkHint } from '../domain/delivery-relink'
 import { deliveryAckText } from '../domain/delivery-ack'
+import { deliveryWaitToggleHint, deliveryWaitToggleLabel } from '../domain/delivery-wait'
 import {
   RECIPIENT_LIMIT,
   normalizeRecipient,
@@ -2442,14 +2443,15 @@ export default function ProjectPage({
                           disabled={waitBusy === (row.id || '') || Boolean(row.receipt)}
                           onClick={() => void toggleWaitClosed(row.id || '', !row.waitClosedAt)}
                           title={
+                            // 与工作台行尾那一枚同一句话（v0.9.159）：两处都在问「还等不等」
                             row.receipt
                               ? '这一份已经有回执了：等的事已经结束，不用再收口'
-                              : row.waitClosedAt
-                                ? '撤回收口：这一份回到「还没收到回执」，工作台重新把它算进待办'
-                                : '只记下「你不再等这一份的回执」：不改包、不改收据，也不动催过几次那些数'
+                              : deliveryWaitToggleHint(Boolean(row.waitClosedAt))
                           }
                         >
-                          {waitBusy === (row.id || '') ? '正在记…' : row.waitClosedAt ? '继续等' : '不再等这一份'}
+                          {waitBusy === (row.id || '')
+                            ? '正在记…'
+                            : deliveryWaitToggleLabel(Boolean(row.waitClosedAt))}
                         </button>
                       </div>
                       <label className="vq-archive-receipt-field">

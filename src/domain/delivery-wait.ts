@@ -92,6 +92,27 @@ export function deliveryWaitClosedHint(at: string): string {
   )
 }
 
+/**
+ * 收口那枚按钮上写什么（v0.9.159）：工作台那一行与作品页档案里写同一句话。
+ *
+ * 以前只有作品页档案里能收口：工作台看得见「还没收到回执」，却要为了说一句
+ * 「这版作废了，不追了」点进作品、找到那一版、再点一下。收口是等待这件事的决定，
+ * 它该在这一行上就能做完——所以那枚按钮也搬到行尾，与档案里共用这两个函数。
+ */
+export function deliveryWaitToggleLabel(closed: boolean): string {
+  return closed ? '继续等' : '不再等这一份'
+}
+
+/**
+ * 那枚按钮的 title：收口只动「等不等」这一件事。
+ * 不说「他没验」——收口记的是发件人的决定；也不承诺收口会清掉催过的账。
+ */
+export function deliveryWaitToggleHint(closed: boolean): string {
+  return closed
+    ? '撤回收口：这一份回到「还没收到回执」，工作台重新把它算进待办；催过几次、打开过几次都还在。'
+    : '不再等这一份的回执：客户口头说过了、当面看过、或者这版本来就作废了，都可以收口。只记「你不再等了」，不改包、不改收据，也不动催过几次那些数；之后他把收据贴回来，照样记在这一条上。'
+}
+
 /** 清单顶上那句：有几条你自己收口了——它们不在「还没回来」里，所以单说一句。 */
 export function deliveryWaitClosedTotalText(count: number): string {
   const n = Math.max(0, Math.round(Number(count) || 0))

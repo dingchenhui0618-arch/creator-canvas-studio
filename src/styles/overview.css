@@ -1320,6 +1320,20 @@
   flex-shrink: 0;
 }
 
+/* 收口（v0.9.159）：等待这件事的出口。它和「催 / 换渠道」不是同一档——
+   那一枚回答「下一步做什么」，这一枚回答「这件事还追不追」，所以压到最淡、排最后；
+   收口之后同一处换成「继续等」，颜色不变，它是一条能退回来的路，不是第二个动作。 */
+.vq-delivery-row .vq-delivery-wait {
+  flex: none;
+  color: var(--faint);
+  font-weight: 400;
+  transition: color var(--dur-1) var(--ease-out);
+}
+
+.vq-delivery-row .vq-delivery-wait:hover:not(:disabled) {
+  color: var(--ink);
+}
+
 .vq-delivery-more {
   margin-top: 8px;
   font-size: 12px;
@@ -1407,8 +1421,12 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
+  /* 390 上一条行尾可能有四个动作（交付稿 / 交付包 / 换个渠道问 / 不再等这一份）：
+     并排放不下，允许折成两行、靠右对齐，4px 行距——宁可两行，也不把它挤出屏。 */
   .vq-delivery-actions {
+    flex-wrap: wrap;
     justify-content: flex-end;
+    gap: 4px;
     margin: 0 12px 12px;
   }
 }

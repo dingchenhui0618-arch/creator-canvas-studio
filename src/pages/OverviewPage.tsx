@@ -7,6 +7,7 @@ import { request } from '../api/client'
 import { listBdcCanvases, type BdcCanvas } from '../api/bdc'
 import type { RunProjectRef } from '../api/flows'
 import {
+  closeDeliveryWait,
   deliverablePrintUrl,
   deliveryPackageUrl,
   listDeliveries,
@@ -52,6 +53,8 @@ import {
   deliveryWaitDays,
   deliveryWaitLate,
   deliveryWaitText,
+  deliveryWaitToggleHint,
+  deliveryWaitToggleLabel,
   monthDayText,
 } from '../domain/delivery-wait'
 import { deliveryOpenHint, deliveryOpenShort, deliveryUnopenedText } from '../domain/delivery-open'
@@ -86,6 +89,24 @@ import { runLiveText, runStatusMeta, runWorkLine } from '../domain/run'
 import { stampTime, visitLine } from '../domain/share'
 import { useSiteInfo, useUiMode } from '../api/app'
 import '../styles/overview.css'
+
+/** 服务端一页 8 条（v0.9.32）：整块重取时按这个数往前铺页，不把翻到的行弄丢。 */
+const LEDGER_PAGE_SIZE = 8
+
+/** 回执那几个数的「全是零」（v0.9.159）：读不到时用它，界面各处不必各写一份。 */
+const EMPTY_RECEIPTS: DeliveryLedgerReceipts = {
+  sealed: 0,
+  matched: 0,
+  mismatched: 0,
+  unclear: 0,
+  pending: 0,
+  pendingLate: 0,
+  pendingUnopened: 0,
+  pendingStuck: 0,
+  pendingRelinked: 0,
+  pendingAcked: 0,
+  waitClosed: 0,
+}
 
 /** 交出去之后这一版又被评过：与作品页、交付稿是同一份规则，只多一句跟在交时评审后面（v0.9.86）。 */
 function DeliveryDriftNote({ drift }: { drift: DeliveryDrift | null }) {
@@ -363,7 +384,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
   const [deliveryTotal, setDeliveryTotal] = useState(0)
   const [deliverySummary, setDeliverySummary] = useState({ projects: 0, current: 0, drifted: 0, lastAt: '' })
   // 回执的四个数（v0.9.139）：封过包的几次、对上几次、对不上几次、还没回来几次
-  const [deliveryReceipts, setDeliveryReceipts] = useState<DeliveryLedgerReceipts>({ sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0, pendingStuck: 0, pendingRelinked: 0, waitClosed: 0, pendingAcked: 0 })
+  const [deliveryReceipts, setDeliveryReceipts] = useState<DeliveryLedgerReceipts>({ ...EMPTY_RECEIPTS })
   // 按人看（v0.9.154）：谁还欠着回执。整份记录的账，不随分页变；
   // 没写收件人的那些只给一个数，不猜是谁，也不混进任何人名下。
   const [deliveryPeople, setDeliveryPeople] = useState<DeliveryPerson[]>([])
@@ -380,6 +401,8 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
   const [relinkBusy, setRelinkBusy] = useState('')
   // 正在写「问他一句」的那一条（v0.9.150）：只复制、不写盘，所以只防连点
   const [askBusy, setAskBusy] = useState('')
+  // 正在收口 / 继续等的那一条（v0.9.159）：写盘一次，等它回来再让点第二次
+  const [waitBusy, setWaitBusy] = useState('')
   const [loading, setLoading] = useState(true)
   const [errors, setErrors] = useState<string[]>([])
 
@@ -438,14 +461,14 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
         lastAt: deliveryResult.value.lastAt || '',
       })
       setDeliveryHasMore(Boolean(deliveryResult.value.hasMore))
-      setDeliveryReceipts(deliveryResult.value.receipts ?? { sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0, pendingStuck: 0, pendingRelinked: 0, waitClosed: 0, pendingAcked: 0 })
+      setDeliveryReceipts(deliveryResult.value.receipts ?? { ...EMPTY_RECEIPTS })
       setDeliveryPeople(deliveryResult.value.people ?? [])
       setDeliveryUnlabeled(Number(deliveryResult.value.unlabeled) || 0)
     } else {
       setDeliveries([])
       setDeliveryTotal(0)
       setDeliverySummary({ projects: 0, current: 0, drifted: 0, lastAt: '' })
-      setDeliveryReceipts({ sealed: 0, matched: 0, mismatched: 0, unclear: 0, pending: 0, pendingLate: 0, pendingUnopened: 0, pendingStuck: 0, pendingRelinked: 0, waitClosed: 0, pendingAcked: 0 })
+      setDeliveryReceipts({ ...EMPTY_RECEIPTS })
       setDeliveryPeople([])
       setDeliveryUnlabeled(0)
       setDeliveryHasMore(false)
@@ -538,6 +561,43 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
       setDeliveryBusy(false)
     }
   }, [deliveries, deliveryBusy])
+
+  /**
+   * 收口 / 继续等之后，把这一块重新问一遍（v0.9.159）。
+   *
+   * 为什么不自己加减：清单顶上那几个数（封过包的、回来了的、还没回来的、不再等的）与
+   * 「按人看」都是服务端按整份记录算的，一条收口还会牵动「超过三天 / 链接没打开」这些子集。
+   * 界面自己减错一个数，比多取一次请求糟得多。已经翻开几页就取几页，翻到哪儿不会因此缩回第一页。
+   */
+  const refreshLedger = useCallback(async (keep: number) => {
+    const pages = Math.max(1, Math.ceil(Math.max(keep, 1) / LEDGER_PAGE_SIZE))
+    const results = await Promise.all(
+      Array.from({ length: pages }, (_, index) => listDeliveries(index * LEDGER_PAGE_SIZE)),
+    )
+    const first = results[0]
+    const seen = new Set<string>()
+    const rows: ProjectDeliveryRow[] = []
+    for (const result of results) {
+      for (const row of result.items ?? []) {
+        const key = row.projectId + ':' + row.version
+        if (seen.has(key)) continue
+        seen.add(key)
+        rows.push(row)
+      }
+    }
+    setDeliveries(rows)
+    setDeliveryTotal(first.total ?? rows.length)
+    setDeliverySummary({
+      projects: first.projects ?? 0,
+      current: first.currentTotal ?? 0,
+      drifted: first.drifted ?? 0,
+      lastAt: first.lastAt || '',
+    })
+    setDeliveryReceipts(first.receipts ?? { ...EMPTY_RECEIPTS })
+    setDeliveryPeople(first.people ?? [])
+    setDeliveryUnlabeled(Number(first.unlabeled) || 0)
+    setDeliveryHasMore(rows.length < (first.total ?? rows.length))
+  }, [])
 
   // 交付稿在新标签里打开：与作品页同一个地址，纸的样式只写一处（v0.9.32）。
   // 被浏览器拦下就如实说一句，不假装打开了。
@@ -759,6 +819,47 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
       }
     },
     [onToast],
+  )
+  /**
+   * 收口 / 继续等（v0.9.159）：等待这件事的出口，现在也在工作台这一行上。
+   *
+   * 以前只能点进作品页、摊开那一版档案才能收口——可「这版作废了、不追了」这个念头，
+   * 恰恰是在清单上看着那一行「还没收到回执」时冒出来的。收口只记一个时间：
+   * 不碰包、不碰收据、不碰链接，也不清催过几次的账；点错了行尾就是「继续等」。
+   */
+  const toggleDeliveryWait = useCallback(
+    async (row: ProjectDeliveryRow, closed: boolean) => {
+      const deliveryId = String(row.deliveryId || '')
+      if (!deliveryId) return
+      const key = row.projectId + ':' + row.version
+      setWaitBusy(key)
+      try {
+        const result = await closeDeliveryWait(row.projectId, deliveryId, closed)
+        // 先把这一行改过来：胶囊、行首那句、动作同时换，不等整块重取回来才动
+        setDeliveries((prev) =>
+          prev.map((entry) =>
+            entry.projectId === row.projectId && entry.version === row.version
+              ? { ...entry, waitClosed: result.closed ? { at: result.at } : null }
+              : entry,
+          ),
+        )
+        onToast(closed ? '收口了：这一份不再算「还没回来」，档案与链接都照留' : '继续等这一份的回执了')
+        await refreshLedger(deliveries.length)
+      } catch (error) {
+        const status = Number((error as { status?: number })?.status) || 0
+        const code = String((error as { body?: { code?: string } })?.body?.code || '')
+        if (status === 409 && code === 'RECEIPT_ALREADY') {
+          // 这一份在别处已经收到回执了：收口 / 撤回都不再改它，把清单刷到最新给人看
+          setDeliveryError('这一份已经有回执了：等的事已经结束，清单已经刷新到最新。')
+          await refreshLedger(deliveries.length)
+        } else {
+          setDeliveryError('没改成：' + String((error as Error)?.message || error))
+        }
+      } finally {
+        setWaitBusy('')
+      }
+    },
+    [deliveries.length, onToast, refreshLedger],
   )
   const queueFiltered = queueRange !== 'all' || queueKeyword.trim() !== ''
 
@@ -1661,6 +1762,26 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                             {remindBusy === row.projectId + ':' + row.version ? '正在写…' : '复制提醒'}
                           </button>
                         )
+                      ) : null}
+                      {/* 收口（v0.9.159）：等待这件事的出口。它和「催 / 换渠道」不是同一档——
+                          那一枚回答「下一步做什么」，这一枚回答「这件事还追不追」，所以压到最淡、排最后。
+                          收口之后同一处换成「继续等」：点错了不必先点进作品页就能退回来。
+                          已经有回执的那一条不给这一枚：等的事已经结束，收口和撤回都不该再改它。 */}
+                      {row.deliveryId && row.package && !row.receipt ? (
+                        <button
+                          type="button"
+                          className={
+                            'vq-button vq-button--quiet vq-button--sm vq-delivery-wait' +
+                            (rowWaitClosed(row) ? ' is-closed' : '')
+                          }
+                          disabled={waitBusy === row.projectId + ':' + row.version}
+                          onClick={() => void toggleDeliveryWait(row, !rowWaitClosed(row))}
+                          title={deliveryWaitToggleHint(rowWaitClosed(row))}
+                        >
+                          {waitBusy === row.projectId + ':' + row.version
+                            ? '正在改…'
+                            : deliveryWaitToggleLabel(rowWaitClosed(row))}
+                        </button>
                       ) : null}
                     </div>
                   ) : null}

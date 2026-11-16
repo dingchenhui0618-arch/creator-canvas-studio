@@ -178,3 +178,20 @@ test('那一行与清单顶上怎么说：只写「你不再等」，不写「�
   // 时间读不出来就不编一个日期出来
   assert.match(wait.deliveryWaitClosedHint(''), /^你自己把这一份收口了：/)
 })
+
+test('工作台行尾那一枚：收口与继续等，两个入口说同一句话（v0.9.159）', () => {
+  // 一枚按钮只有两种状态；两处入口（工作台行尾、作品页档案）共用它，改一处两处一起改
+  assert.equal(wait.deliveryWaitToggleLabel(false), '不再等这一份')
+  assert.equal(wait.deliveryWaitToggleLabel(true), '继续等')
+
+  const closeHint = wait.deliveryWaitToggleHint(false)
+  assert.match(closeHint, /客户口头说过了、当面看过、或者这版本来就作废了/, '先说清什么时候该收口')
+  assert.match(closeHint, /只记「你不再等了」/, '收口记的是发件人的决定')
+  assert.match(closeHint, /不改包、不改收据，也不动催过几次那些数/, '别让人以为收口会把账擦掉')
+  assert.match(closeHint, /照样记在这一条上/, '之后他贴回来照样算')
+  assert.doesNotMatch(closeHint, /他没验/, '不替对方记「他没验」')
+
+  const reopenHint = wait.deliveryWaitToggleHint(true)
+  assert.match(reopenHint, /撤回收口：这一份回到「还没收到回执」，工作台重新把它算进待办/)
+  assert.match(reopenHint, /催过几次、打开过几次都还在/, '撤回也不清账')
+})
