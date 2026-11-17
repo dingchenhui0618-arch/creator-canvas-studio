@@ -39,7 +39,13 @@
 
 **门禁**：`npm test -- --test-concurrency=1` **1288/1288**（新增 5 条）；lint **0 error / 16 warning**；`tsc -b` + `vite build` 干净。
 
-**截图**（真实实例，1440 与 390 各一张，见仓库 `docs/`）：`admin-alert-provider-1440-2026-11-17.png`、`admin-alert-provider-390-2026-11-17.png`。
+**截图**（真实实例，1440 与 390 各一张）：
+
+![告警外推通道 1440](admin-alert-provider-1440-2026-11-17.png)
+
+![告警外推通道 390](admin-alert-provider-390-2026-11-17.png)
+
+接收地址下面那行「识别为 飞书机器人，按它的消息格式发送」就是本轮新增的判断结果展示。
 
 ## 生产现状（一处更正）
 
