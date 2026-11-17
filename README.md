@@ -4174,7 +4174,7 @@ E2E 里点某一行必须先按行里的文字限定，清单每一行长得一�
 
 **改法**：两段 banner 文本原样提成常量（两条 `BDCanvas-Forensic-Banner` 标记一个字没改），js 走 rollup 的字符串 banner，css 由新增的 `canvas-css-banner` 插件在 `generateBundle` 里补到样式表开头。只动 banner 这一段。
 
-**验证**：`npx vite build` 通过（2262 modules，28.09s），整条 `npm run build`（tsc + vite build + stage-frontend-dist）通过并正常 stage；3 个 js chunk 全带 js 标记、1 个 css 带 css 标记，首行已是真代码。同一修复 cherry-pick 到 `upstream-master` 后同样构建通过（28.65s），证明与 r175 那批改动无关。
+**验证**：`npx vite build` 通过（2262 modules，28.09s），整条 `npm run build`（tsc + vite build + stage-frontend-dist）通过并正常 stage；3 个 js chunk 全带 js 标记、1 个 css 带 css 标记，首行已是真代码；产物用 `npx vite preview` 起的本地静态服务能打开（`GET /` 200、主 chunk 200，测完已 kill）。同一修复 cherry-pick 到 `upstream-master` 后同样构建通过（28.65s），证明与 r175 那批改动无关。
 
 **分支**（`master` 与生产目录都没动）：`r175-merged c5eaa1e`＝合并远端 8 个 11-09 提交 + r175 GPT-Image + 构建修复；`fix-vite-banner 28192a6`＝只含构建修复（基于 `2d30d7f`），可单独合进 master。
 

@@ -57,6 +57,7 @@ build: {
 - 整条 `npm run build`（`tsc` + `vite build` + `node scripts/stage-frontend-dist.js`）：`tsc` 0 报错，`[frontend dist staged]` 正常输出。
 - 标记核实：3 个 js chunk **全部**带 `BDCanvas-Forensic-Banner: js-`，1 个 css 带 `css-`；chunk 首行是真代码，不再是 `[object Object]`。
 - 同一个修复在 `upstream-master`（`2d30d7f`）上单独 cherry-pick 后同样构建通过（28.65s），说明修复与 r175 那批改动无关。
+- 产物冒烟：`npx vite preview --port 6688` 起本地静态服务后，`GET /` 返回 **200**、`GET /assets/index-CHzeK0wR.js` 也 **200** —— 构建产物不是只「能编译」，是能被浏览器加载的成品（预览进程测完已 kill，没碰生产）。
 
 ## 六、分支与上线
 
@@ -71,6 +72,6 @@ build: {
 
 ## 七、边界
 
-- 只验证了「能构建出产物」；**没有把构建产物替换到生产**——生产换不换 `dist` 是另一个决定（要停 dev server 改静态托管），需要你点头。
+- 只验证了「能构建、且能用本地静态服务打开」；**没有把构建产物替换到生产**——生产换不换 `dist` 是另一个决定（要停 dev server 改静态托管），需要你点头。
 - 3 个 chunk 仍超过 500 kB 的告警是原有体量问题（`index` 2.2 MB、`human.esm` 1.58 MB），这次没有做拆包。
 - 画布仓库自己的 `check:release-version-sync` 等发布检查没有跑，也没改 CHANGELOG 与版本号——这次只修构建配置。
