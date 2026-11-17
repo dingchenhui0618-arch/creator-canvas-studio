@@ -164,11 +164,34 @@
   gap: 16px;
 }
 
+/* 卡片头：左边标题与说明、右边标签与动作。
+   窄屏别让右边的标签把标题挤成一列字（390 宽实测标题只剩 35 px，一行三个字）。 */
 .admin-block-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+}
+
+.admin-block-head > div:first-child {
+  flex: 1 1 240px;
+  min-width: 0;
+  /* 说明文字别跟着卡片一直拉长：一行超过 72 个字符就难读了 */
+  max-width: 72ch;
+}
+
+@media (max-width: 720px) {
+  .admin-block-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .admin-block-head > div:first-child {
+    flex: 0 1 auto;
+    width: 100%;
+  }
 }
 
 .admin-sub {
@@ -830,8 +853,10 @@
 .admin-bulk-detail { color: var(--muted, #5d5d5d); }
 
 /* 告警卡：一行一个事件，次数与最近时间靠等宽字体对齐；确认按钮固定在右侧 */
+/* 标签 + 按钮一组：多的时候自己换行，不顶住左边的标题 */
 .admin-alert-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
