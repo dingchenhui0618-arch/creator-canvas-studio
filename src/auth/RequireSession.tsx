@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import type { RegisterInput, Session, SignInInput } from './session'
+import type { RegisterInput, Session, SignInInput, SmsSignInInput } from './session'
 import { LoginPage } from '../pages/LoginPage'
 import '../styles/shell.css'
 
@@ -9,6 +9,8 @@ type Props = {
   loading?: boolean
   notice?: string
   onSignIn: (input: SignInInput) => Promise<Session>
+  /** 手机号验证码登录（短信通道没配时登录页不显示这个入口） */
+  onSignInSms?: (input: SmsSignInInput) => Promise<Session>
   /** 全屏登录页的注册入口；不传时登录页回退成「注册 + 登录」两次请求。 */
   onRegister?: (input: RegisterInput) => Promise<Session>
   /** 两步验证第二步 */
@@ -32,13 +34,14 @@ export function RequireSession({
   loading = false,
   notice,
   onSignIn,
+  onSignInSms,
   onRegister,
   onVerifyTwoFactor,
   children,
 }: Props) {
   if (!session) {
     if (loading) return <BootScreen />
-    return <LoginPage notice={notice} onSignIn={onSignIn} onRegister={onRegister} onVerifyTwoFactor={onVerifyTwoFactor} />
+    return <LoginPage notice={notice} onSignIn={onSignIn} onSignInSms={onSignInSms} onRegister={onRegister} onVerifyTwoFactor={onVerifyTwoFactor} />
   }
   return <>{children(session)}</>
 }

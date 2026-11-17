@@ -5,11 +5,13 @@ import {
   readSession,
   register as requestRegister,
   signIn as requestSignIn,
+  signInWithSms as requestSignInWithSms,
   signOut as requestSignOut,
   verifyTwoFactor as requestVerifyTwoFactor,
   type RegisterInput,
   type Session,
   type SignInInput,
+  type SmsSignInInput,
 } from './session'
 import { isLoginRequired, me as fetchMe } from '../api/auth'
 
@@ -18,6 +20,8 @@ export type SessionController = {
   /** 首屏是否还在用 /api/auth/me 校验缓存会话；true 时宿主可以渲染骨架而不是登录页。 */
   loading: boolean
   signIn: (input: SignInInput) => Promise<Session>
+  /** 手机号验证码登录（后台配了短信通道才有这个入口） */
+  signInSms: (input: SmsSignInInput) => Promise<Session>
   register: (input: RegisterInput) => Promise<Session>
   /** 两步验证第二步：challenge 来自 signIn 抛出的 TwoFactorRequired */
   verifyTwoFactor: (challenge: string, code: string, remember: boolean) => Promise<Session>
@@ -98,6 +102,13 @@ export function useSession(): SessionController {
     return next
   }, [])
 
+  const signInSms = useCallback(async (input: SmsSignInInput) => {
+    const next = await requestSignInWithSms(input)
+    epoch.current += 1
+    setState({ session: next, loading: false })
+    return next
+  }, [])
+
   const verifyTwoFactor = useCallback(async (challenge: string, code: string, remember: boolean) => {
     const next = await requestVerifyTwoFactor(challenge, code, remember)
     epoch.current += 1
@@ -119,5 +130,5 @@ export function useSession(): SessionController {
     void requestSignOut()
   }, [])
 
-  return { session: state.session, loading: state.loading, signIn, verifyTwoFactor, register, signOut }
+  return { session: state.session, loading: state.loading, signIn, signInSms, verifyTwoFactor, register, signOut }
 }

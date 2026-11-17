@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { ArrowRight, Eye, EyeOff, Loader2, Lock, Mail, ScanSearch, ShieldCheck, Ticket, User } from 'lucide-react'
+import { ArrowRight, Eye, EyeOff, Loader2, Lock, Mail, ScanSearch, ShieldCheck, Smartphone, Ticket, User } from 'lucide-react'
 import {
   AuthError,
   DEFAULT_MIN_PASSWORD_LENGTH,
@@ -9,16 +9,16 @@ import {
   TwoFactorRequired,
   register as registerAccount,
 } from '../auth/session'
-import type { RegisterInput, Session, SignInInput } from '../auth/session'
-import { checkInvite, forgotPassword, getAuthConfig } from '../api/auth'
-import type { InviteState } from '../api/auth'
+import type { RegisterInput, Session, SignInInput, SmsSignInInput } from '../auth/session'
+import { checkInvite, forgotPassword, getAuthConfig, sendSmsCode } from '../api/auth'
+import type { InviteState, SmsLoginConfig } from '../api/auth'
 import { useSiteInfo, useUiMode } from '../api/app'
 import { FeedbackModal } from '../components/FeedbackModal'
 import '../styles/shell.css'
 
 type Mode = 'signin' | 'signup'
 
-type FormErrors = { email?: string; password?: string; name?: string; terms?: string; code?: string; form?: string }
+type FormErrors = { email?: string; phone?: string; password?: string; name?: string; terms?: string; code?: string; form?: string }
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -54,6 +54,8 @@ function inviteHintOf(state: InviteState | null, checking: boolean): string {
 type Props = {
   notice?: string
   onSignIn: (input: SignInInput) => Promise<Session>
+  /** 手机号验证码登录：后台配了短信通道才用得上，没配时页面不出现这个切换 */
+  onSignInSms?: (input: SmsSignInInput) => Promise<Session>
   /**
    * 宿主的注册入口（useSession().register）。未接线时回退成「注册 + 登录」两次请求：
    * 后端注册已下发 cookie，回退路径只是为了让页面在宿主补齐之前也能用。
@@ -63,7 +65,7 @@ type Props = {
   onVerifyTwoFactor?: (challenge: string, code: string, remember: boolean) => Promise<Session>
 }
 
-export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: Props) {
+export function LoginPage({ notice, onSignIn, onSignInSms, onRegister, onVerifyTwoFactor }: Props) {
   const { internal } = useUiMode()
   const site = useSiteInfo()
   const [mode, setMode] = useState<Mode>(() => (inviteFromHash().signup ? 'signup' : 'signin'))
@@ -89,6 +91,14 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
   const [checkingInvite, setCheckingInvite] = useState(false)
   // 服务端配了邮件通道才提供自助找回；没配就如实说「找管理员」，不摆一个点了没用的入口。
   const [passwordReset, setPasswordReset] = useState(false)
+  // 短信验证码登录：只有后台配了短信通道（并且签名 / 模板 / 密钥齐）才显示这个切换。
+  const [smsConfig, setSmsConfig] = useState<SmsLoginConfig | null>(null)
+  const [smsMode, setSmsMode] = useState(false)
+  const [phone, setPhone] = useState('')
+  const [smsCode, setSmsCode] = useState('')
+  const [smsSending, setSmsSending] = useState(false)
+  const [smsCooldown, setSmsCooldown] = useState(0)
+  const [smsHint, setSmsHint] = useState('')
   const [forgotOpen, setForgotOpen] = useState(false)
   // 登录进不来时也要有一条求助路径：反馈不需要登录，留联系方式即可
   const [feedbackOpen, setFeedbackOpen] = useState(false)
@@ -114,6 +124,7 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
         if (config.minPasswordLength > 0) setMinPasswordLength(config.minPasswordLength)
         if (config.passwordPolicy) setPasswordPolicy(config.passwordPolicy)
         setPasswordReset(Boolean(config.passwordReset))
+        setSmsConfig(config.sms && config.sms.login ? config.sms : null)
       })
       .catch(() => {
         // 后端没起来：注册入口按最保守处理（不显示），登录照常可填。
@@ -149,6 +160,71 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
     }
   }, [isSignup, inviteText])
 
+  // 重发冷却按服务端给的秒数走：按钮上是倒计时，不用用户自己数。
+  useEffect(() => {
+    if (smsCooldown <= 0) return
+    const timer = window.setInterval(() => setSmsCooldown((value) => (value <= 1 ? 0 : value - 1)), 1000)
+    return () => window.clearInterval(timer)
+  }, [smsCooldown])
+
+  const sendCode = async () => {
+    if (smsSending || smsCooldown > 0) return
+    const digits = phone.replace(/[^0-9]/g, '')
+    if (!/^1[3-9][0-9]{9}$/.test(digits)) {
+      setErrors({ phone: '请输入 11 位国内手机号' })
+      return
+    }
+    setErrors({})
+    setSmsHint('')
+    setSmsSending(true)
+    try {
+      const result = await sendSmsCode(digits)
+      setSmsCooldown(Number(result.cooldownSec) || 60)
+      setSmsHint(result.message || '验证码已发出')
+    } catch (error) {
+      const detail = error as { status?: number; message?: string; field?: string }
+      if (detail?.status === 429) setSmsHint(detail.message || '发送太频繁，请稍等')
+      else setErrors({ form: detail?.message || '验证码没发出去，请稍后重试' })
+    } finally {
+      setSmsSending(false)
+    }
+  }
+
+  const submitSms = async () => {
+    if (!onSignInSms) return
+    setErrors({})
+    setInfo('')
+    const digits = phone.replace(/[^0-9]/g, '')
+    if (!/^1[3-9][0-9]{9}$/.test(digits)) {
+      setErrors({ phone: '请输入 11 位国内手机号' })
+      return
+    }
+    if (!/^[0-9]{4,8}$/.test(smsCode.trim())) {
+      setErrors({ code: '请输入短信里的数字验证码' })
+      return
+    }
+    setBusy(true)
+    try {
+      await onSignInSms({ phone: digits, code: smsCode.trim(), remember })
+      leaveAuthLink()
+    } catch (error) {
+      setBusy(false)
+      if (error instanceof TwoFactorRequired) {
+        setTwoFactor({ challenge: error.challenge, remember, email: digits })
+        setErrors({})
+        setInfo('')
+        return
+      }
+      if (error instanceof AuthError) {
+        if (error.field === 'phone') setErrors({ phone: error.message })
+        else if (error.field === 'code') setErrors({ code: error.message })
+        else setErrors({ form: error.message })
+      } else {
+        setErrors({ form: '登录没有完成，请稍后重试。' })
+      }
+    }
+  }
+
   const switchMode = (next: Mode) => {
     if (busy || next === mode) return
     setMode(next)
@@ -159,6 +235,11 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (busy) return
+    // 验证码登录没有口令：走到同一个表单的同一颗按钮，这里分流。
+    if (smsMode) {
+      await submitSms()
+      return
+    }
 
     const trimmedEmail = email.trim()
     const trimmedName = name.trim()
@@ -371,9 +452,11 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
                 ? registrationEnabled
                   ? '注册完直接进入工作台。昵称只是显示名，可以稍后再补。'
                   : '凭邀请码创建账号，开通后直接进入工作台；没有邀请码可以联系管理员。'
-                : internal
-                  ? '用手机号或邮箱继续。会话由服务端校验，凭据不进浏览器存储。'
-                  : '用手机号或邮箱继续。登录状态会安全保存，凭据不留在浏览器里。'}
+                : smsMode
+                  ? '用开通时登记的手机号收验证码。会话由服务端校验，凭据不进浏览器存储。'
+                  : internal
+                    ? '用手机号或邮箱继续。会话由服务端校验，凭据不进浏览器存储。'
+                    : '用手机号或邮箱继续。登录状态会安全保存，凭据不留在浏览器里。'}
             </p>
           </div>
 
@@ -420,6 +503,38 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
           )}
 
           <form className="vq-login-form" onSubmit={submit} noValidate>
+            {!isSignup && smsConfig && onSignInSms ? (
+              <div className="vq-login-modes" role="group" aria-label="登录方式">
+                <button
+                  type="button"
+                  className="vq-login-mode"
+                  aria-pressed={!smsMode}
+                  onClick={() => {
+                    if (busy) return
+                    setSmsMode(false)
+                    setErrors({})
+                    setSmsHint('')
+                  }}
+                  disabled={busy}
+                >
+                  口令登录
+                </button>
+                <button
+                  type="button"
+                  className="vq-login-mode"
+                  aria-pressed={smsMode}
+                  onClick={() => {
+                    if (busy) return
+                    setSmsMode(true)
+                    setErrors({})
+                    setInfo('')
+                  }}
+                  disabled={busy}
+                >
+                  验证码登录
+                </button>
+              </div>
+            ) : null}
             {isSignup && (
               <div className="vq-field">
                 <label className="vq-field-label" htmlFor="vq-invite">
@@ -465,32 +580,109 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
                 )}
               </div>
             )}
-            <div className="vq-field">
-              <label className="vq-field-label" htmlFor="vq-email">
-                {isSignup ? '邮箱' : '手机号或邮箱'} <em className="vq-mono">{isSignup ? 'email' : 'phone / email'}</em>
-              </label>
-              <span className={`vq-input${errors.email ? ' is-invalid' : ''}`}>
-                <Mail size={15} />
-                <input
-                  id="vq-email"
-                  type={isSignup ? 'email' : 'text'}
-                  name="email"
-                  inputMode={isSignup ? 'email' : 'text'}
-                  autoComplete="username"
-                  placeholder={isSignup ? EXAMPLE_EMAIL : '手机号 或 ' + EXAMPLE_EMAIL}
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  aria-invalid={Boolean(errors.email)}
-                  aria-describedby={errors.email ? 'vq-email-error' : undefined}
-                  disabled={busy}
-                />
-              </span>
-              {errors.email && (
-                <span className="vq-field-error" id="vq-email-error">
-                  {errors.email}
+            {smsMode ? (
+              <>
+                <div className="vq-field">
+                  <label className="vq-field-label" htmlFor="vq-phone">
+                    手机号 <em className="vq-mono">phone</em>
+                  </label>
+                  <span className={`vq-input${errors.phone ? ' is-invalid' : ''}`}>
+                    <Smartphone size={15} />
+                    <input
+                      id="vq-phone"
+                      type="tel"
+                      name="phone"
+                      inputMode="tel"
+                      autoComplete="tel"
+                      placeholder="11 位手机号"
+                      value={phone}
+                      onChange={(event) => {
+                        setPhone(event.target.value)
+                        if (errors.phone) setErrors((previous) => ({ ...previous, phone: undefined }))
+                      }}
+                      aria-invalid={Boolean(errors.phone)}
+                      aria-describedby={errors.phone ? 'vq-phone-error' : 'vq-phone-hint'}
+                      disabled={busy}
+                    />
+                  </span>
+                  {errors.phone ? (
+                    <span className="vq-field-error" id="vq-phone-error">
+                      {errors.phone}
+                    </span>
+                  ) : (
+                    <span className="vq-field-hint" id="vq-phone-hint">
+                      用后台开通时登记的手机号，短信验证码登录。
+                    </span>
+                  )}
+                </div>
+                <div className="vq-field">
+                  <label className="vq-field-label" htmlFor="vq-sms-code">
+                    验证码 <em className="vq-mono">sms code</em>
+                  </label>
+                  <span className={`vq-input${errors.code ? ' is-invalid' : ''}`}>
+                    <Lock size={15} />
+                    <input
+                      id="vq-sms-code"
+                      type="text"
+                      name="smsCode"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      placeholder={smsConfig ? smsConfig.codeLength + ' 位数字' : '短信里的数字'}
+                      maxLength={8}
+                      value={smsCode}
+                      onChange={(event) => {
+                        setSmsCode(event.target.value.replace(/[^0-9]/g, ''))
+                        if (errors.code) setErrors((previous) => ({ ...previous, code: undefined }))
+                      }}
+                      aria-invalid={Boolean(errors.code)}
+                      aria-describedby={errors.code ? 'vq-sms-code-error' : undefined}
+                      disabled={busy}
+                    />
+                    <button
+                      type="button"
+                      className="vq-input-action vq-input-action--wide"
+                      onClick={() => void sendCode()}
+                      disabled={busy || smsSending || smsCooldown > 0}
+                    >
+                      {smsSending ? '发送中…' : smsCooldown > 0 ? smsCooldown + 's 后重发' : '发送验证码'}
+                    </button>
+                  </span>
+                  {errors.code && (
+                    <span className="vq-field-error" id="vq-sms-code-error">
+                      {errors.code}
+                    </span>
+                  )}
+                  {smsHint && !errors.code ? <span className="vq-field-hint is-ok">{smsHint}</span> : null}
+                </div>
+              </>
+            ) : (
+              <div className="vq-field">
+                <label className="vq-field-label" htmlFor="vq-email">
+                  {isSignup ? '邮箱' : '手机号或邮箱'} <em className="vq-mono">{isSignup ? 'email' : 'phone / email'}</em>
+                </label>
+                <span className={`vq-input${errors.email ? ' is-invalid' : ''}`}>
+                  <Mail size={15} />
+                  <input
+                    id="vq-email"
+                    type={isSignup ? 'email' : 'text'}
+                    name="email"
+                    inputMode={isSignup ? 'email' : 'text'}
+                    autoComplete="username"
+                    placeholder={isSignup ? EXAMPLE_EMAIL : '手机号 或 ' + EXAMPLE_EMAIL}
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    aria-invalid={Boolean(errors.email)}
+                    aria-describedby={errors.email ? 'vq-email-error' : undefined}
+                    disabled={busy}
+                  />
                 </span>
-              )}
-            </div>
+                {errors.email && (
+                  <span className="vq-field-error" id="vq-email-error">
+                    {errors.email}
+                  </span>
+                )}
+              </div>
+            )}
 
             {isSignup && (
               <div className="vq-field">
@@ -521,6 +713,7 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
               </div>
             )}
 
+            {smsMode ? null : (
             <div className="vq-field">
               <label className="vq-field-label" htmlFor="vq-password">
                 密码 <em className="vq-mono">password</em>
@@ -561,6 +754,7 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
                 </span>
               )}
             </div>
+            )}
 
             {!isSignup && (
               <div className="vq-login-row">
@@ -573,6 +767,7 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
                   />
                   <span>记住我</span>
                 </label>
+                {smsMode ? null : (
                 <button
                   type="button"
                   className="vq-link"
@@ -594,6 +789,7 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
                 >
                   忘记密码？
                 </button>
+                )}
               </div>
             )}
 
@@ -626,7 +822,7 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
               {busy ? (
                 <>
                   <Loader2 size={15} className="vq-spin" />
-                  {isSignup ? '正在创建账号…' : '正在验证凭据…'}
+                  {isSignup ? '正在创建账号…' : smsMode ? '正在验证验证码…' : '正在验证凭据…'}
                 </>
               ) : (
                 <>

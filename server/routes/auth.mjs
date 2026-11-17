@@ -4,6 +4,7 @@ import { config } from '../config.mjs'
 import {
   findUserByEmail,
   findUserByLogin,
+  findUserByLoginName,
   findUserById,
   createUser,
   createSession,
@@ -39,6 +40,9 @@ import { generateBackupCodes, generateSecret, matchBackupCode, otpauthUrl, verif
 import { logEvent } from '../log.mjs'
 import { grant } from '../credits.mjs'
 import { mailConfigured, smtpForSending } from '../mail-config.mjs'
+import { isValidPhone, maskPhone, normalizePhone, smsForSending, smsView } from '../sms-config.mjs'
+import { sendSmsCode } from '../sms-send.mjs'
+import { issueSmsCode, recordSmsSend, sendSmsBlocked, smsCooldownSec, verifySmsCode } from '../sms-login.mjs'
 import { sendMail } from '../mailer.mjs'
 import {
   buildResetMail,
@@ -121,6 +125,20 @@ async function deliverResetMail({ to, link, ttlMinutes, email }) {
   }
 }
 
+// 登录页需要的短信开关：没配通道时 login=false，页面连「验证码登录」的标签都不显示。
+// 这里不读密钥，只读视图（smsView 已经把 AccessKey 掩掉）。
+async function smsLoginConfig() {
+  const view = await smsView()
+  return {
+    login: view.configured,
+    provider: view.provider,
+    providerLabel: view.providerLabel,
+    codeLength: view.codeLength,
+    ttlMinutes: view.ttlMinutes,
+    cooldownSec: smsCooldownSec(),
+  }
+}
+
 // 同源校验：带 Origin 且与 Host 不一致的写请求直接拒绝（cookie 会话的最低成本 CSRF 防护）
 function sameOrigin(req) {
   const origin = req.headers.origin
@@ -150,6 +168,9 @@ export function createAuthRouter() {
           passwordPolicy: '至少 ' + MIN_PASSWORD + ' 位，且同时包含字母和数字',
           // 配了邮件通道才能自助找回口令；没配时登录页如实说「找管理员」，不摆一个点了没用的入口。
           passwordReset: await mailConfigured(),
+          // 短信验证码登录：只有后台配了短信通道才在登录页出现这个入口，
+          // 码长 / 有效期 / 重发冷却一并下发，页面不用写死数字。
+          sms: await smsLoginConfig(),
         })
         return true
       }
@@ -178,6 +199,98 @@ export function createAuthRouter() {
 
       if (req.method === 'POST' && !sameOrigin(req)) {
         fail(res, 403, '来源不被信任')
+        return true
+      }
+
+      // 短信验证码登录 · 第一步：发码。
+      // 不把「这个号码有没有账号」变成探针：不存在的号码也回同一句话，只是不发码。
+      if (pathname === '/api/auth/sms/send' && req.method === 'POST') {
+        const body = await readBody(req)
+        const phone = normalizePhone(body.phone)
+        if (!isValidPhone(phone)) return (fail(res, 400, '手机号格式不正确，请输入 11 位国内手机号', 'phone'), true)
+        const channel = await smsForSending()
+        if (!channel) return (fail(res, 503, '短信登录还没开通，请用口令登录，或让管理员在后台配短信通道', 'form'), true)
+        const ip = clientIp(req)
+        const gate = sendSmsBlocked(phone, ip)
+        if (gate.blocked) {
+          res.setHeader('Retry-After', String(gate.retryAfterSec))
+          const why = gate.reason === 'cooldown' ? '刚发过一条，' : '这个号码发得太频繁，'
+          return (fail(res, 429, why + Math.max(1, Math.ceil(gate.retryAfterSec / 60)) + ' 分钟后再试', 'form'), true)
+        }
+        recordSmsSend(phone, ip)
+        const row = findUserByLoginName(phone)
+        const ttlMinutes = channel.sms.ttlMinutes || 5
+        let expiresAt = ''
+        if (row && row.is_active) {
+          const issued = issueSmsCode(phone, { userId: row.id, ip, ttlMinutes, codeLength: channel.sms.codeLength })
+          expiresAt = issued.expiresAt
+          const sent = await sendSmsCode(channel, { phone, code: issued.code, timeoutMs: 10000 })
+          if (!sent.ok) {
+            logEvent('sms-failed', { phone: maskPhone(phone), error: sent.error })
+            return (fail(res, 502, '验证码没发出去：' + sent.error, 'form'), true)
+          }
+          logEvent('sms-sent', { phone: maskPhone(phone), ms: sent.ms, provider: channel.sms.provider })
+        } else {
+          logEvent('sms-skipped', { phone: maskPhone(phone), reason: 'no-account' })
+        }
+        sendJson(res, 200, {
+          ok: true,
+          sent: true,
+          expiresAt: expiresAt || null,
+          ttlMinutes,
+          cooldownSec: smsCooldownSec(),
+          message: '如果这个手机号有账号，验证码已经发出，' + ttlMinutes + ' 分钟内有效。',
+        })
+        return true
+      }
+
+      // 短信验证码登录 · 第二步：用码换会话。开了两步验证的账号这里只发 challenge，不建会话。
+      if (pathname === '/api/auth/sms/login' && req.method === 'POST') {
+        const body = await readBody(req)
+        const phone = normalizePhone(body.phone)
+        const code = String(body.code || '').replace(/\s+/g, '')
+        const remember = Boolean(body.remember)
+        if (!isValidPhone(phone)) return (fail(res, 400, '手机号格式不正确', 'phone'), true)
+        if (!/^[0-9]{4,8}$/.test(code)) return (fail(res, 400, '请输入短信里的数字验证码', 'code'), true)
+        const key = clientIp(req) + '|sms|' + phone
+        if (tooManyAttempts(key)) return (fail(res, 429, '验证码错误次数过多，请 10 分钟后再试', 'form'), true)
+        const verified = verifySmsCode(phone, code)
+        if (!verified.ok) {
+          recordFailure(key)
+          const message =
+            verified.reason === 'expired'
+              ? '验证码已过期，请重新发送'
+              : verified.reason === 'too-many'
+                ? '这个验证码试错次数太多，请重新发送'
+                : verified.reason === 'used'
+                  ? '这个验证码已经用过了，请重新发送'
+                  : verified.reason === 'unknown'
+                    ? '没有待验证的验证码，请先点「发送验证码」'
+                    : '验证码不正确' + (verified.remaining ? '，还可以试 ' + verified.remaining + ' 次' : '')
+          return (fail(res, 401, message, 'code'), true)
+        }
+        clearFailures(key)
+        const row = findUserById(verified.userId) || findUserByLoginName(phone)
+        if (!row || !row.is_active) return (fail(res, 401, '这个手机号没有可用账号，请联系管理员', 'form'), true)
+        // 开了两步验证：验证码只证明手机号是他的，第二因子还是要过，不在这条路上抄近道。
+        if (row.totp_enabled_at) {
+          logEvent('login-sms-2fa-challenge', { phone: maskPhone(phone) })
+          sendJson(res, 200, {
+            twoFactorRequired: true,
+            challenge: signTotpChallenge(row.id, remember),
+            expiresInSec: 300,
+          })
+          return true
+        }
+        const days = remember ? config.auth.rememberDays : config.auth.sessionDays
+        const { token } = createSession(row, {
+          userAgent: req.headers['user-agent'] || '',
+          ip: clientIp(req),
+          remember,
+        })
+        setCookie(res, sessionCookie(token, days * 24 * 3600))
+        logEvent('login-sms', { phone: maskPhone(phone) })
+        sendJson(res, 200, { user: publicUser(row) })
         return true
       }
 

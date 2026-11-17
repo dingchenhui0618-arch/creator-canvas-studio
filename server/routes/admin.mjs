@@ -25,6 +25,9 @@ import { channelView, clearChannel, maskUrl, saveChannel } from '../alert-channe
 import { clearMail, mailView, saveMail, smtpForSending } from '../mail-config.mjs'
 import { sendMail } from '../mailer.mjs'
 import { resetTtlMinutes } from '../password-reset.mjs'
+import { clearSms, isValidPhone, maskPhone, normalizePhone, saveSms, smsForSending, smsView } from '../sms-config.mjs'
+import { issueSmsCode } from '../sms-login.mjs'
+import { sendSmsCode } from '../sms-send.mjs'
 import { clearClientErrors, listClientErrors } from '../client-errors.mjs'
 import { listLogs, pruneLogs } from '../log-files.mjs'
 import { listReports, reportCounts, resolveReport } from '../reports.mjs'
@@ -1151,6 +1154,80 @@ export function createAdminRouter() {
           recordAudit({ req, actor: user, action: 'mail.test', targetType: 'mail', targetId: 'channel', targetLabel: '邮件通道', detail: { to, error: String(error?.message || '') } })
           sendJson(res, 502, { ok: false, error: String(error?.message || '发信失败'), ms: Date.now() - started })
         }
+        return true
+      }
+
+      // 短信通道：手机号验证码登录靠它发码。AccessKeySecret 只回「有没有」，AccessKeyId 给掩码。
+      if (pathname === '/api/admin/sms' && req.method === 'GET') {
+        const sms = await smsView()
+        sendJson(res, 200, {
+          ok: true,
+          sms,
+          // 登录页是否出现「验证码登录」，取决于这条通道 + 签名 / 模板 / 密钥是否齐
+          smsLogin: sms.configured,
+          cooldownSec: 60,
+        })
+        return true
+      }
+
+      // 保存短信通道：密钥留空表示沿用旧密钥（只改签名 / 模板时不用重输）
+      if (pathname === '/api/admin/sms/channel' && req.method === 'PUT') {
+        const body = await readBody(req)
+        const saved = await saveSms(
+          {
+            provider: body.provider,
+            keyId: body.keyId,
+            keySecret: body.keySecret,
+            signName: body.signName,
+            templateCode: body.templateCode,
+            templateParam: body.templateParam,
+            region: body.region,
+            ttlMinutes: body.ttlMinutes,
+            codeLength: body.codeLength,
+            enabled: body.enabled !== false,
+          },
+          { by: user.email },
+        )
+        if (!saved.ok) return (sendJson(res, 400, { ok: false, error: saved.error }), true)
+        recordAudit({
+          req,
+          actor: user,
+          action: 'sms.channel.save',
+          targetType: 'sms',
+          targetId: 'channel',
+          targetLabel: '短信通道',
+          detail: { provider: saved.sms.provider, signName: saved.sms.signName, templateCode: saved.sms.templateCode, secretKept: saved.secretKept },
+        })
+        sendJson(res, 200, { ok: true, sms: await smsView(), secretKept: saved.secretKept })
+        return true
+      }
+
+      if (pathname === '/api/admin/sms/channel' && req.method === 'DELETE') {
+        await clearSms()
+        recordAudit({ req, actor: user, action: 'sms.channel.clear', targetType: 'sms', targetId: 'channel', targetLabel: '短信通道' })
+        sendJson(res, 200, { ok: true, sms: await smsView() })
+        return true
+      }
+
+      // 发一条真的测试短信：只回「已保存」等于没验，这里等服务商的结果再回话。
+      // 真通道按条计费，所以必须显式填收件号码，不默认发给自己。
+      if (pathname === '/api/admin/sms/test' && req.method === 'POST') {
+        const body = await readBody(req)
+        const phone = normalizePhone(body.phone)
+        if (!isValidPhone(phone)) return (sendJson(res, 400, { ok: false, error: '收件手机号不是 11 位国内号码' }), true)
+        const view = await smsView()
+        if (!view.configured) return (sendJson(res, 400, { ok: false, error: '还没有配置短信通道，先保存再发测试' }), true)
+        const channel = await smsForSending()
+        if (!channel) return (sendJson(res, 400, { ok: false, error: '通道配置不完整，保存后再试' }), true)
+        const issued = issueSmsCode(phone, { ttlMinutes: channel.sms.ttlMinutes, codeLength: channel.sms.codeLength })
+        const started = Date.now()
+        const sent = await sendSmsCode(channel, { phone, code: issued.code, timeoutMs: 15000 })
+        if (!sent.ok) {
+          recordAudit({ req, actor: user, action: 'sms.test', targetType: 'sms', targetId: 'channel', targetLabel: '短信通道', detail: { to: maskPhone(phone), error: sent.error } })
+          return (sendJson(res, 502, { ok: false, error: sent.error, ms: Date.now() - started }), true)
+        }
+        recordAudit({ req, actor: user, action: 'sms.test', targetType: 'sms', targetId: 'channel', targetLabel: '短信通道', detail: { to: maskPhone(phone), ms: sent.ms } })
+        sendJson(res, 200, { ok: true, ms: sent.ms, to: maskPhone(phone), provider: channel.sms.provider, requestId: sent.requestId || '' })
         return true
       }
 

@@ -147,6 +147,34 @@ type MailInfo = {
   ttlMinutes: number
 }
 
+// 短信通道：手机号验证码登录靠它发码。密钥只写不读，AccessKeyId 只给掩码。
+type SmsChannel = {
+  configured: boolean
+  provider: string
+  providerLabel: string
+  signName: string
+  templateCode: string
+  templateParam: string
+  region: string
+  keyIdMasked: string
+  hasSecret: boolean
+  ttlMinutes: number
+  codeLength: number
+  enabled: boolean
+  source: 'admin' | 'env' | 'none'
+  updatedAt: string
+  updatedBy: string
+  canEdit: boolean
+  providers: { value: string; label: string }[]
+}
+
+type SmsInfo = {
+  ok: boolean
+  sms: SmsChannel
+  smsLogin: boolean
+  cooldownSec: number
+}
+
 // 复刻任务：以前任务只存内存，发版重启就 404、扣掉的积分也不退。
 // 现在真源是 SQLite，后台能看到「这条停在哪一步、退没退」。
 type JobItem = {
@@ -976,6 +1004,8 @@ export default function SystemSection() {
         ) : null}
       </section>
 
+      <SmsChannelCard />
+
       <SiteInfoCard />
 
       <section className="admin-card admin-block">
@@ -1675,6 +1705,328 @@ function DiagnosticsCard() {
             内存里只保留最近 {data.logs.limits.access} 条请求 / {data.logs.limits.errors} 条错误，进程重启即清空；完整访问日志仍在服务器的系统日志里。
             网页读取可用 <span className="admin-mono">POST /api/admin/tools/web-read</span> 单独自检，不经过模型。
           </p>
+        </>
+      ) : null}
+    </section>
+  )
+}
+
+/**
+ * 短信通道：登录页的「验证码登录」由这里决定。
+ * fake 是本地假通道（不发真短信、只写 sms-outbox.json），用来在没有短信资质时把链路跑通；
+ * aliyun 走真实 SendSms，按条计费，所以「发测试短信」必须显式填号码。
+ */
+function SmsChannelCard() {
+  const sms = useApi<SmsInfo>('/api/admin/sms')
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState('')
+  const [testPhone, setTestPhone] = useState('')
+  const [form, setForm] = useState({
+    provider: 'aliyun',
+    keyId: '',
+    keySecret: '',
+    signName: 'VisionQA',
+    templateCode: '',
+    ttlMinutes: '5',
+    codeLength: '6',
+  })
+  const saved = sms.data?.sms
+  // 已保存的通道把「除密钥以外」的字段填回来：改个模板不用把签名、AccessKey 重打一遍
+  const prefilled = useRef('')
+  useEffect(() => {
+    if (!saved?.configured) return
+    const stamp = saved.updatedAt || 'saved'
+    if (prefilled.current === stamp) return
+    prefilled.current = stamp
+    setForm({
+      provider: saved.provider || 'aliyun',
+      keyId: '',
+      keySecret: '',
+      signName: saved.signName || 'VisionQA',
+      templateCode: saved.templateCode || '',
+      ttlMinutes: String(saved.ttlMinutes || 5),
+      codeLength: String(saved.codeLength || 6),
+    })
+  }, [saved])
+
+  const saveChannel = async () => {
+    setBusy('save')
+    setNote('')
+    try {
+      const result = await request<{ sms: SmsChannel; secretKept: boolean }>('/api/admin/sms/channel', {
+        method: 'PUT',
+        body: JSON.stringify({
+          provider: form.provider,
+          keyId: form.keyId.trim(),
+          keySecret: form.keySecret,
+          signName: form.signName.trim(),
+          templateCode: form.templateCode.trim(),
+          ttlMinutes: Number(form.ttlMinutes) || 5,
+          codeLength: Number(form.codeLength) || 6,
+        }),
+      })
+      setForm((previous) => ({ ...previous, keySecret: '' }))
+      setNote(
+        result.secretKept
+          ? '短信通道已保存，密钥沿用之前那条。登录页现在有「验证码登录」了。'
+          : '短信通道已保存。发一条测试短信确认手机能收到。',
+      )
+      sms.reload()
+    } catch (cause) {
+      setNote(cause instanceof Error ? cause.message : '保存失败')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  const clearChannel = async () => {
+    setBusy('clear')
+    setNote('')
+    try {
+      await request('/api/admin/sms/channel', { method: 'DELETE' })
+      setNote('已清掉后台配置的短信通道。登录页的「验证码登录」会消失，只能口令登录。')
+      sms.reload()
+    } catch (cause) {
+      setNote(cause instanceof Error ? cause.message : '清除失败')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  const sendTest = async () => {
+    setBusy('test')
+    setNote('')
+    try {
+      const result = await request<{ ok: boolean; ms: number; to: string; provider: string }>('/api/admin/sms/test', {
+        method: 'POST',
+        body: JSON.stringify({ phone: testPhone.trim() }),
+      })
+      setNote(
+        '测试短信已交给服务商（' + result.ms + ' ms，收件 ' + result.to + '，通道 ' + result.provider + '）。去手机上看一眼。',
+      )
+    } catch (cause) {
+      setNote(cause instanceof Error ? cause.message : '发测试短信失败')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  const isAliyun = form.provider === 'aliyun'
+
+  return (
+    <section className="admin-card admin-block">
+      <div className="admin-block-head">
+        <div>
+          <p className="admin-label">短信通道</p>
+          <p className="admin-sub">
+            手机号验证码登录靠它发码：登录页选「验证码登录」→ 点「发送验证码」→ 输入 6 位数字 → 建会话。
+            同一号码 60 秒只能发一条、1 小时 5 条；一个码最多试 5 次。密钥只写不读；没配通道时登录页不出现这个入口。
+          </p>
+        </div>
+        <div className="admin-alert-actions">
+          <SourceTag kind="api" source="GET /api/admin/sms" />
+          <button
+            type="button"
+            className="vq-button vq-button--ghost"
+            onClick={() => void sendTest()}
+            disabled={busy === 'test' || !saved?.configured || !testPhone.trim()}
+          >
+            {busy === 'test' ? '发送中…' : '发一条测试短信'}
+          </button>
+        </div>
+      </div>
+
+      {sms.loading && !sms.data ? <LoadingLine label="/api/admin/sms" /> : null}
+
+      {saved ? (
+        <>
+          <div className="admin-alert-facts">
+            <span>
+              通道 <b>{saved.configured ? '已配置' : '未配置'}</b>
+            </span>
+            <span>
+              登录页「验证码登录」<b>{sms.data?.smsLogin ? '可用' : '不可用'}</b>
+            </span>
+            <span>
+              码有效期 <b>{saved.ttlMinutes}</b> 分钟 · <b>{saved.codeLength}</b> 位
+            </span>
+            <span>
+              服务商 <b>{saved.providerLabel || '—'}</b>
+            </span>
+          </div>
+
+          <div className="admin-channel">
+            <div className="admin-channel-head">
+              <div>
+                <p className="admin-label">发码渠道</p>
+                <p className="admin-sub">
+                  阿里云是真实发码（国内约 ¥0.045/条，需要先通过企业资质、签名、模板审核）；本地假通道不发真短信，只把码写进服务器数据目录，用来验收链路。
+                </p>
+              </div>
+              <Badge tone={saved.configured ? 'ok' : 'warn'}>{saved.configured ? '能发码' : '未配置'}</Badge>
+            </div>
+
+            <dl className="admin-kv">
+              <div>
+                <dt>服务商</dt>
+                <dd>
+                  <span>{saved.providerLabel || '—'}</span>
+                  {saved.source === 'env' ? <span className="admin-cell-sub">来自环境变量 VQ_SMS_*</span> : null}
+                  {saved.source === 'admin' ? (
+                    <span className="admin-cell-sub">后台配置{saved.updatedBy ? ' · ' + saved.updatedBy : ''}</span>
+                  ) : null}
+                </dd>
+              </div>
+              <div>
+                <dt>签名 / 模板</dt>
+                <dd>
+                  <code className="admin-mono">{saved.signName || '—'}</code>
+                  {saved.templateCode ? <span className="admin-cell-sub">{saved.templateCode}</span> : null}
+                </dd>
+              </div>
+              <div>
+                <dt>AccessKey</dt>
+                <dd>
+                  <code className="admin-mono">{saved.keyIdMasked || '不需要（假通道）'}</code>
+                  <Badge tone={saved.hasSecret ? 'ok' : 'neutral'}>{saved.hasSecret ? '密钥已保存' : '无密钥'}</Badge>
+                </dd>
+              </div>
+              <div>
+                <dt>测试收件</dt>
+                <dd>
+                  <input
+                    className="vq-input"
+                    value={testPhone}
+                    onChange={(event) => setTestPhone(event.target.value)}
+                    placeholder="11 位手机号"
+                    inputMode="tel"
+                    autoComplete="off"
+                    spellCheck={false}
+                    disabled={busy === 'test'}
+                  />
+                </dd>
+              </div>
+            </dl>
+
+            {saved.canEdit ? (
+              <div className="admin-mail-form">
+                <label className="vq-field admin-mail-field">
+                  <span>服务商</span>
+                  <select
+                    className="vq-input"
+                    value={form.provider}
+                    onChange={(event) => setForm((previous) => ({ ...previous, provider: event.target.value }))}
+                    disabled={busy === 'save'}
+                  >
+                    {(saved.providers || []).map((item) => (
+                      <option key={item.value} value={item.value}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="vq-field admin-mail-field">
+                  <span>签名名称</span>
+                  <input
+                    className="vq-input"
+                    value={form.signName}
+                    onChange={(event) => setForm((previous) => ({ ...previous, signName: event.target.value }))}
+                    placeholder="例如 VisionQA"
+                    autoComplete="off"
+                    spellCheck={false}
+                    disabled={busy === 'save'}
+                  />
+                </label>
+                <label className="vq-field admin-mail-field">
+                  <span>模板 CODE</span>
+                  <input
+                    className="vq-input"
+                    value={form.templateCode}
+                    onChange={(event) => setForm((previous) => ({ ...previous, templateCode: event.target.value }))}
+                    placeholder="SMS_000000000"
+                    autoComplete="off"
+                    spellCheck={false}
+                    disabled={busy === 'save' || !isAliyun}
+                  />
+                </label>
+                <label className="vq-field admin-mail-field">
+                  <span>AccessKey ID</span>
+                  <input
+                    className="vq-input"
+                    value={form.keyId}
+                    onChange={(event) => setForm((previous) => ({ ...previous, keyId: event.target.value }))}
+                    placeholder={saved.configured && saved.keyIdMasked ? '留空沿用 ' + saved.keyIdMasked : 'LTAI...'}
+                    autoComplete="off"
+                    spellCheck={false}
+                    disabled={busy === 'save' || !isAliyun}
+                  />
+                </label>
+                <label className="vq-field admin-mail-field">
+                  <span>AccessKey Secret</span>
+                  <input
+                    className="vq-input"
+                    type="password"
+                    value={form.keySecret}
+                    onChange={(event) => setForm((previous) => ({ ...previous, keySecret: event.target.value }))}
+                    placeholder={saved.hasSecret ? '留空沿用已保存的密钥' : '只在服务端保存'}
+                    autoComplete="new-password"
+                    disabled={busy === 'save' || !isAliyun}
+                  />
+                </label>
+                <label className="vq-field admin-mail-field--port">
+                  <span>有效期（分钟）</span>
+                  <input
+                    className="vq-input"
+                    value={form.ttlMinutes}
+                    onChange={(event) => setForm((previous) => ({ ...previous, ttlMinutes: event.target.value }))}
+                    inputMode="numeric"
+                    disabled={busy === 'save'}
+                  />
+                </label>
+                <label className="vq-field admin-mail-field--port">
+                  <span>码长度</span>
+                  <input
+                    className="vq-input"
+                    value={form.codeLength}
+                    onChange={(event) => setForm((previous) => ({ ...previous, codeLength: event.target.value }))}
+                    inputMode="numeric"
+                    disabled={busy === 'save'}
+                  />
+                </label>
+                <div className="admin-doc-actions">
+                  <button
+                    type="button"
+                    className="vq-button"
+                    onClick={() => void saveChannel()}
+                    disabled={busy === 'save' || (isAliyun && (!form.signName.trim() || !form.templateCode.trim()))}
+                  >
+                    {busy === 'save' ? '保存中…' : '保存通道'}
+                  </button>
+                  {saved.source === 'admin' ? (
+                    <button
+                      type="button"
+                      className="vq-button vq-button--ghost"
+                      onClick={() => void clearChannel()}
+                      disabled={busy === 'clear'}
+                    >
+                      {busy === 'clear' ? '清除中…' : '清掉通道'}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
+            {saved.source === 'env' ? (
+              <p className="admin-hint">现在用的是服务器环境变量 VQ_SMS_*。在上面保存一条会覆盖它；清掉后台配置后又会回到环境变量。</p>
+            ) : null}
+            {saved.provider === 'aliyun' && !saved.configured ? (
+              <p className="admin-hint">
+                阿里云要先把「企业资质 → 签名 → 模板」在短信控制台申请通过：资质要营业执照，签名用 VisionQA（归属可用已备案域名），
+                {"模板正文形如「您的验证码为 ${code}，5 分钟内有效」。三者过了再把 AccessKey、签名、模板 CODE 填到这里。"}
+              </p>
+            ) : null}
+            {note ? <p className="admin-hint">{note}</p> : null}
+          </div>
         </>
       ) : null}
     </section>

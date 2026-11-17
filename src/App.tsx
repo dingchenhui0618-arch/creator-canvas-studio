@@ -1097,7 +1097,7 @@ function Workbench({
 }
 
 function App() {
-  const { session, loading: sessionLoading, signIn, verifyTwoFactor, register, signOut } = useSession()
+  const { session, loading: sessionLoading, signIn, signInSms, verifyTwoFactor, register, signOut } = useSession()
   // 服务条款 / 隐私说明：不登录也要能打开（登录页页脚可点进来）
   const route = useRoute()
   const [authNotice, setAuthNotice] = useState('')
@@ -1218,6 +1218,7 @@ function App() {
       loading={sessionLoading}
       notice={authNotice}
       onSignIn={handleSignIn}
+      onSignInSms={signInSms}
       onRegister={handleRegister}
       onVerifyTwoFactor={verifyTwoFactor}
     >

@@ -17,7 +17,7 @@ export type AuthUser = {
 }
 
 /** 后端 4xx 里指向前端字段的标记；没有 field 时归到表单级错误。 */
-export type AuthErrorField = 'email' | 'password' | 'name' | 'terms' | 'code' | 'form'
+export type AuthErrorField = 'email' | 'phone' | 'password' | 'name' | 'terms' | 'code' | 'form'
 
 export type LoginPayload = { email: string; password: string; remember: boolean }
 
@@ -60,13 +60,33 @@ export type AuthConfig = {
   passwordPolicy?: string
   /** 服务端配了邮件通道才为 true：登录页据此决定「忘记密码」是开工还是如实说找管理员。 */
   passwordReset?: boolean
+  /** 短信验证码登录：只有后台配了短信通道，login 才为 true，登录页据此显示「验证码登录」 */
+  sms?: SmsLoginConfig
+}
+
+export type SmsLoginConfig = {
+  login: boolean
+  provider: string
+  providerLabel: string
+  codeLength: number
+  ttlMinutes: number
+  cooldownSec: number
+}
+
+export type SmsCodeSent = {
+  ok: boolean
+  sent: boolean
+  expiresAt: string | null
+  ttlMinutes: number
+  cooldownSec: number
+  message: string
 }
 
 type AuthErrorBody = { error?: string; field?: unknown }
 
 export type AuthRequestError = Error & { status?: number; field: AuthErrorField; body?: AuthErrorBody }
 
-const AUTH_ERROR_FIELDS: readonly AuthErrorField[] = ['email', 'password', 'name', 'terms', 'code', 'form']
+const AUTH_ERROR_FIELDS: readonly AuthErrorField[] = ['email', 'phone', 'password', 'name', 'terms', 'code', 'form']
 
 function toField(value: unknown): AuthErrorField {
   return AUTH_ERROR_FIELDS.includes(value as AuthErrorField) ? (value as AuthErrorField) : 'form'
@@ -123,6 +143,22 @@ export async function loginTotp(challenge: string, code: string): Promise<{ user
   return request<{ user: AuthUser; backupCodeUsed: boolean }>('/api/auth/login/totp', {
     method: 'POST',
     body: JSON.stringify({ challenge, code }),
+  })
+}
+
+/** 短信验证码登录：请服务端发一条码。成功与否都不判断「这个号码有没有账号」。 */
+export function sendSmsCode(phone: string): Promise<SmsCodeSent> {
+  return request<SmsCodeSent>('/api/auth/sms/send', {
+    method: 'POST',
+    body: JSON.stringify({ phone }),
+  })
+}
+
+/** 短信验证码登录：用码换会话；开了两步验证的账号同样先拿 challenge。 */
+export function loginWithSms(payload: { phone: string; code: string; remember: boolean }): Promise<LoginResult> {
+  return request<LoginResult>('/api/auth/sms/login', {
+    method: 'POST',
+    body: JSON.stringify(payload),
   })
 }
 

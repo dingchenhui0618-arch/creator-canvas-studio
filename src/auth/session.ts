@@ -4,6 +4,7 @@
 import {
   login as requestLogin,
   loginTotp as requestLoginTotp,
+  loginWithSms as requestLoginWithSms,
   logout as requestLogout,
   register as requestRegister,
 } from '../api/auth'
@@ -36,6 +37,12 @@ export type SignInInput = {
   remember: boolean
 }
 
+export type SmsSignInInput = {
+  phone: string
+  code: string
+  remember: boolean
+}
+
 export type RegisterInput = {
   email: string
   password: string
@@ -46,7 +53,7 @@ export type RegisterInput = {
   inviteCode?: string
 }
 
-export type AuthField = 'email' | 'password' | 'name' | 'terms' | 'code' | 'form'
+export type AuthField = 'email' | 'phone' | 'password' | 'name' | 'terms' | 'code' | 'form'
 
 /**
  * 口令通过、但账号开了两步验证：此时还没有会话，只拿到一个 5 分钟有效的 challenge。
@@ -182,6 +189,14 @@ export function readSession(): Session | null {
   return null
 }
 
+// 手机号与后端同口径：去掉空格、横杠、+86 前缀，只留 11 位国内号码。
+const PHONE_PATTERN = /^1[3-9][0-9]{9}$/
+
+function normalizePhone(value: string): string {
+  const digits = value.replace(/[^0-9]/g, '')
+  return digits.length === 13 && digits.startsWith('86') ? digits.slice(2) : digits
+}
+
 function normalizeEmail(value: string): string {
   return value.trim().toLowerCase()
 }
@@ -241,6 +256,24 @@ export async function signIn(input: SignInInput): Promise<Session> {
 
   try {
     const result = await requestLogin({ email, password: input.password, remember: input.remember })
+    if ('twoFactorRequired' in result) throw new TwoFactorRequired(result.challenge)
+    const session = createSession(result.user, input.remember)
+    persistSession(session)
+    return session
+  } catch (error) {
+    if (error instanceof TwoFactorRequired) throw error
+    throw toAuthError(error, '登录没有完成，请稍后重试。')
+  }
+}
+
+/** 手机号验证码登录：码由服务端下发到手机上，这里只把它换成会话。 */
+export async function signInWithSms(input: SmsSignInInput): Promise<Session> {
+  const phone = normalizePhone(input.phone)
+  if (!PHONE_PATTERN.test(phone)) throw new AuthError('phone', '请输入 11 位国内手机号')
+  const code = input.code.trim()
+  if (!/^[0-9]{4,8}$/.test(code)) throw new AuthError('code', '请输入短信里的数字验证码')
+  try {
+    const result = await requestLoginWithSms({ phone, code, remember: input.remember })
     if ('twoFactorRequired' in result) throw new TwoFactorRequired(result.challenge)
     const session = createSession(result.user, input.remember)
     persistSession(session)

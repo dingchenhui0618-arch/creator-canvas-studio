@@ -285,6 +285,19 @@ export const config = {
     fromName: (process.env.VQ_SMTP_FROM_NAME || '').trim(),
     fromAddress: (process.env.VQ_SMTP_FROM || '').trim(),
   },
+  // 短信通道（手机号验证码登录用）：与邮件通道同一套兜底逻辑，后台配置优先。
+  // provider 只认 aliyun（真发）与 fake（本地假通道，不发真短信），密钥落数据目录 sms.json（0600）。
+  sms: {
+    provider: (process.env.VQ_SMS_PROVIDER || '').trim(),
+    keyId: (process.env.VQ_SMS_KEY_ID || '').trim(),
+    keySecret: process.env.VQ_SMS_KEY_SECRET || '',
+    signName: (process.env.VQ_SMS_SIGN_NAME || '').trim(),
+    templateCode: (process.env.VQ_SMS_TEMPLATE_CODE || '').trim(),
+    templateParam: (process.env.VQ_SMS_TEMPLATE_PARAM || 'code').trim(),
+    region: (process.env.VQ_SMS_REGION || 'cn-hangzhou').trim(),
+    ttlMinutes: Number(process.env.VQ_SMS_TTL_MINUTES || 5),
+    codeLength: Number(process.env.VQ_SMS_CODE_LENGTH || 6),
+  },
   auth: {
     dbFile: path.join(dataDir, 'auth.db'),
     cookieName: 'vq_session',
