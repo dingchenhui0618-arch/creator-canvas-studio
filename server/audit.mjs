@@ -8,6 +8,7 @@ import { logEvent } from './log.mjs'
 // 动作白名单：界面上的筛选项与行内标签都从这里来，不在前端另写一份中文
 const ACTIONS = {
   'user.access': '账号权限',
+  'user.identity': '修改账号身份',
   'user.delete': '删除账号',
   'user.password': '重置口令',
   'credits.grant': '发放积分',

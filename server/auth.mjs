@@ -186,6 +186,30 @@ export function updateUserAccess(id, patch = {}) {
   return findUserById(id)
 }
 
+// 后台改身份：邮箱、登录名（手机号）、显示名。会话按 user_id 关联，改完下一次请求就是新身份，不用重新登录。
+export function updateUserIdentity(id, patch = {}) {
+  const current = findUserById(id)
+  if (!current) return null
+  const fields = []
+  const values = []
+  if (patch.email !== undefined) {
+    fields.push('email = ?')
+    values.push(String(patch.email).trim().toLowerCase())
+  }
+  if (patch.loginName !== undefined) {
+    fields.push('login_name = ?')
+    values.push(String(patch.loginName || '').trim().toLowerCase().slice(0, 64))
+  }
+  if (patch.name !== undefined) {
+    fields.push('name = ?')
+    values.push(String(patch.name).trim().slice(0, 40))
+  }
+  if (!fields.length) return current
+  values.push(String(id))
+  openDb().prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+  return findUserById(id)
+}
+
 // 删除账号：登录、会话与积分流水一起删掉，避免残留一条登不进去、也发不了积分的幽灵账号。
 // 模板 / 画布 / 运行记录不在这里删：它们可能已被别人引用过，误删比留一条「已删除账号」的历史更糟。
 export function deleteUser(id) {

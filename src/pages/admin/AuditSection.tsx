@@ -83,6 +83,12 @@ function auditDetail(item: AuditItem): string {
     const kind = data.kind === undefined ? '未改角色' : data.kind === 'admin' ? '管理员' : '普通账号'
     return active + ' · ' + kind
   }
+  if (item.action === 'user.identity') {
+    const parts = [String(data.fields || '身份') + ' 改了']
+    if (data.email) parts.push('邮箱 ' + String(data.email))
+    if (data.username) parts.push('登录名 ' + String(data.username))
+    return parts.join(' · ')
+  }
   if (item.action === 'user.password') {
     return (data.mode === 'temporary' ? '生成临时口令' : '设置新口令') + ' · 注销旧会话 ' + Number(data.signedOut ?? 0) + ' 个'
   }

@@ -1393,6 +1393,31 @@
   margin: 0;
 }
 
+/* 改账号身份（邮箱 / 登录手机号）：就地展开一条编辑条，字段各占一列，390 宽自动落成单列 */
+.admin-identity {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  margin: 0 0 16px;
+  border: 1px solid var(--line, #e5e2db);
+  border-left: 2px solid var(--ink, #111111);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised, #ffffff);
+}
+
+.admin-identity .admin-sub {
+  margin: 4px 0 0;
+}
+
+.admin-identity > .admin-edit-grid {
+  margin-top: 0;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.admin-identity > .admin-hint {
+  margin: 0;
+}
+
 .admin-danger .admin-block-head {
   align-items: center;
 }

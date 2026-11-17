@@ -118,7 +118,10 @@ export const getSystemHealth = () => request<SystemHealth>('/api/system/health')
 
 export const listAdminUsers = () => request<{ items: AdminUser[]; total: number }>('/api/admin/users')
 
-export const updateAdminUser = (userId: string, patch: { active?: boolean; kind?: 'admin' | 'account' }) =>
+export const updateAdminUser = (
+  userId: string,
+  patch: { active?: boolean; kind?: 'admin' | 'account'; email?: string; username?: string; name?: string },
+) =>
   request<{ ok: boolean; user: AdminUser }>('/api/admin/users/' + userId, {
     method: 'PATCH',
     body: JSON.stringify(patch),

@@ -5,7 +5,7 @@ import fs from 'node:fs/promises'
 import crypto from 'node:crypto'
 import path from 'node:path'
 import { readBody, sendJson } from './_shared.mjs'
-import { currentUser, isAdmin, listUsers, findUserById, findUserByEmail, findUserByLoginName, createUser, updateUserAccess, setPassword, destroyOtherSessions, deleteUser, countAdmins } from '../auth.mjs'
+import { currentUser, isAdmin, listUsers, findUserById, findUserByEmail, findUserByLoginName, createUser, updateUserAccess, updateUserIdentity, setPassword, destroyOtherSessions, deleteUser, countAdmins } from '../auth.mjs'
 import { grant, ledgerOf, balanceOf } from '../credits.mjs'
 import { listRequests, resolveRequest } from '../credit-requests.mjs'
 import { config, redfoxEnabled, visionEnabled } from '../config.mjs'
@@ -634,22 +634,92 @@ export function createAdminRouter() {
           sendJson(res, 400, { error: '不能停用或降级当前登录的管理员账号', code: 'SELF_LOCKOUT' })
           return true
         }
-        const updated = updateUserAccess(target.id, patch)
-        logEvent('user-access', { by: user.email, to: target.email, active: updated.is_active, kind: updated.kind })
-        recordAudit({
-          req,
-          actor: user,
-          action: 'user.access',
-          targetType: 'user',
-          targetId: target.id,
-          targetLabel: target.email,
-          detail: { active: Boolean(updated.is_active), kind: updated.kind },
-        })
+        // 身份字段（邮箱 / 登录手机号 / 显示名）：先全部校验完再写，避免半截改动。
+        const identity = {}
+        const identityFields = []
+        if (body.email !== undefined) {
+          const email = String(body.email || '').trim().toLowerCase()
+          if (email) {
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+              sendJson(res, 400, { error: '邮箱格式不正确', field: 'email' })
+              return true
+            }
+            if (email.endsWith('@login.visionqa.local')) {
+              sendJson(res, 400, { error: '这是内部占位邮箱，请填真实邮箱（找回密码的信要发到这里）', field: 'email' })
+              return true
+            }
+            const owner = findUserByEmail(email)
+            if (owner && owner.id !== target.id) {
+              sendJson(res, 409, { error: '这个邮箱已经有账号了', field: 'email' })
+              return true
+            }
+            identity.email = email
+            identityFields.push('邮箱')
+          }
+        }
+        if (body.username !== undefined) {
+          const loginName = String(body.username || '').trim().toLowerCase()
+          if (loginName) {
+            if (loginName.length < 4 || loginName.length > 32 || /[\s@]/.test(loginName)) {
+              sendJson(res, 400, { error: '登录手机号（用户名）4-32 位，不能含空格和 @', field: 'username' })
+              return true
+            }
+            const owner = findUserByLoginName(loginName)
+            if (owner && owner.id !== target.id) {
+              sendJson(res, 409, { error: '这个登录手机号已经有账号了', field: 'username' })
+              return true
+            }
+          }
+          identity.loginName = loginName
+          identityFields.push('登录手机号')
+        }
+        if (body.name !== undefined) {
+          const name = String(body.name || '').trim().slice(0, 40)
+          if (name) {
+            identity.name = name
+            identityFields.push('显示名')
+          }
+        }
+        // 清空登录手机号又没真实邮箱，这个账号就再也登不进来了，直接拒掉
+        const nextLogin = identity.loginName === undefined ? String(target.login_name || '') : identity.loginName
+        const nextEmail = identity.email === undefined ? String(target.email || '') : identity.email
+        if (!nextLogin && nextEmail.endsWith('@login.visionqa.local')) {
+          sendJson(res, 400, { error: '清空登录手机号后这个账号就没法登录了：它没有真实邮箱', field: 'username' })
+          return true
+        }
+        let updated = target
+        if (identityFields.length) {
+          updated = updateUserIdentity(target.id, identity)
+          logEvent('user-identity', { by: user.email, to: target.email, fields: identityFields.join(',') })
+          recordAudit({
+            req,
+            actor: user,
+            action: 'user.identity',
+            targetType: 'user',
+            targetId: target.id,
+            targetLabel: target.email,
+            detail: { fields: identityFields.join('、'), email: updated.email, username: updated.login_name || '' },
+          })
+        }
+        if (patch.active !== undefined || patch.kind !== undefined) {
+          updated = updateUserAccess(target.id, patch)
+          logEvent('user-access', { by: user.email, to: updated.email, active: updated.is_active, kind: updated.kind })
+          recordAudit({
+            req,
+            actor: user,
+            action: 'user.access',
+            targetType: 'user',
+            targetId: target.id,
+            targetLabel: updated.email,
+            detail: { active: Boolean(updated.is_active), kind: updated.kind },
+          })
+        }
         sendJson(res, 200, {
           ok: true,
           user: {
             id: updated.id,
             email: updated.email,
+            username: updated.login_name || '',
             name: updated.name,
             kind: updated.kind,
             active: Boolean(updated.is_active),

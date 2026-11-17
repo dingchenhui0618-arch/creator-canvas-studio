@@ -51,6 +51,14 @@ export default function UsersSection() {
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [deleteError, setDeleteError] = useState('')
   const [deleteMessage, setDeleteMessage] = useState('')
+  // 改身份：邮箱与登录手机号都能改，改完立刻影响登录与找回密码
+  const [identityTarget, setIdentityTarget] = useState<AdminUser | null>(null)
+  const [identityEmail, setIdentityEmail] = useState('')
+  const [identityUsername, setIdentityUsername] = useState('')
+  const [identityName, setIdentityName] = useState('')
+  const [identityBusy, setIdentityBusy] = useState(false)
+  const [identityError, setIdentityError] = useState('')
+  const [identityMessage, setIdentityMessage] = useState('')
   const currentUserId = useMemo(() => readSession()?.user.id || '', [])
   // 建号：口令留空由服务端生成一次性临时口令，建完只显示这一次
   const [createEmail, setCreateEmail] = useState('')
@@ -306,6 +314,56 @@ export default function UsersSection() {
     }
   }
 
+  const askIdentity = (item: AdminUser) => {
+    setIdentityTarget(item)
+    setIdentityEmail(hasRealEmail(item) ? item.email : '')
+    setIdentityUsername(item.username || '')
+    setIdentityName(item.name || '')
+    setIdentityError('')
+    setIdentityMessage('')
+    setResetResult(null)
+  }
+
+  const cancelIdentity = () => {
+    setIdentityTarget(null)
+    setIdentityError('')
+  }
+
+  const saveIdentity = async () => {
+    if (!identityTarget || identityBusy) return
+    setIdentityBusy(true)
+    setIdentityError('')
+    try {
+      const patch: { email?: string; username?: string; name?: string } = {}
+      // 空邮箱表示不改：内部占位邮箱本来就不外露，也不能被清成空
+      const email = identityEmail.trim().toLowerCase()
+      if (email && email !== (hasRealEmail(identityTarget) ? identityTarget.email : '')) patch.email = email
+      const username = identityUsername.trim().toLowerCase()
+      if (username !== (identityTarget.username || '')) patch.username = username
+      const name = identityName.trim()
+      if (name && name !== identityTarget.name) patch.name = name
+      if (!Object.keys(patch).length) {
+        setIdentityError('没有改动，改完再保存')
+        setIdentityBusy(false)
+        return
+      }
+      const result = await updateAdminUser(identityTarget.id, patch)
+      const parts: string[] = []
+      if (patch.email !== undefined) parts.push('邮箱 ' + result.user.email)
+      if (patch.username !== undefined) {
+        parts.push(result.user.username ? '登录手机号 ' + result.user.username : '登录手机号已清空（只能邮箱登录）')
+      }
+      if (patch.name !== undefined) parts.push('显示名 ' + result.user.name)
+      setIdentityMessage('已保存：' + parts.join('；') + '。')
+      setIdentityTarget(null)
+      load()
+    } catch (caught) {
+      setIdentityError(caught instanceof Error ? caught.message : '保存失败')
+    } finally {
+      setIdentityBusy(false)
+    }
+  }
+
   const submit = async () => {
     const value = Number(amount)
     if (!selected) return
@@ -507,6 +565,59 @@ export default function UsersSection() {
         </div>
       ) : null}
 
+      {identityTarget ? (
+        <div className="admin-identity" role="dialog" aria-label="修改账号身份">
+          <div className="admin-identity-copy">
+            <span className="admin-label">修改账号身份</span>
+            <p className="admin-sub">
+              正在改 {accountIdentifier(identityTarget)}。邮箱决定「找回密码」的信发到哪，登录手机号决定用手机登录的是不是同一个账号；
+              改完下一次请求就按新身份认，已经登录的会话不受影响。
+            </p>
+          </div>
+          <div className="admin-edit-grid">
+            <label className="admin-edit-field">
+              <span>邮箱</span>
+              <input
+                value={identityEmail}
+                onChange={(event) => setIdentityEmail(event.target.value)}
+                placeholder="留空表示不改；要能收信的真实邮箱"
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </label>
+            <label className="admin-edit-field">
+              <span>登录手机号（用户名）</span>
+              <input
+                value={identityUsername}
+                onChange={(event) => setIdentityUsername(event.target.value)}
+                placeholder="清空则只能用邮箱登录"
+                autoComplete="off"
+                spellCheck={false}
+                inputMode="tel"
+              />
+            </label>
+            <label className="admin-edit-field">
+              <span>显示名</span>
+              <input
+                value={identityName}
+                onChange={(event) => setIdentityName(event.target.value)}
+                placeholder="留空表示不改"
+                autoComplete="off"
+              />
+            </label>
+          </div>
+          <div className="admin-doc-actions">
+            <button type="button" className="vq-button vq-button--primary" disabled={identityBusy} onClick={() => void saveIdentity()}>
+              {identityBusy ? '保存中…' : '保存'}
+            </button>
+            <button type="button" className="vq-button vq-button--ghost" disabled={identityBusy} onClick={cancelIdentity}>
+              取消
+            </button>
+          </div>
+          {identityError ? <p className="admin-hint" role="alert">{identityError}</p> : null}
+        </div>
+      ) : null}
+      {identityMessage ? <p className="admin-hint">{identityMessage}</p> : null}
       <section className="admin-card admin-block">
         <div className="admin-block-head">
           <div>
@@ -947,6 +1058,15 @@ export default function UsersSection() {
                         <button
                           type="button"
                           className="vq-button vq-button--ghost"
+                          disabled={identityBusy && identityTarget?.id === item.id}
+                          title="改邮箱、登录手机号或显示名，改完立刻生效"
+                          onClick={() => askIdentity(item)}
+                        >
+                          改身份
+                        </button>
+                        <button
+                          type="button"
+                          className="vq-button vq-button--ghost"
                           disabled={resetBusy === item.id}
                           title="生成一次性临时口令，该账号所有旧会话会退出"
                           onClick={() => void resetPassword(item)}
@@ -972,7 +1092,8 @@ export default function UsersSection() {
               「条款同意」是注册时勾选同意的条款版本与时间，注册接口要求真的勾选并匹配当前版本；
               管理员开通的账号显示「管理员开通」，本功能上线前创建的账号显示「未留痕」——不补造同意记录。
               「账号」一列显示的是登录标识：用手机号登录的账号显示手机号，内部占位邮箱不外露；这类账号没有邮箱，
-              「忘记密码」的信送不到，改口令请用同一行的「重置口令」。
+              「忘记密码」的信送不到，改口令请用同一行的「重置口令」。补真实邮箱、改登录手机号用「改身份」：
+              改了邮箱找回密码的信才发得出去，改了登录手机号下一次手机登录就认新的；两者都会记进操作日志。
             </p>
           </div>
         ) : (
