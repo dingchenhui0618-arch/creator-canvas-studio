@@ -1,7 +1,15 @@
 // 积分与系统状态：都是本轮新加的真实接口，没有就如实报错，不假装有数据。
 import { request } from './client'
 
-export type CreditPrices = { search: number; replicate: number; review: number; chat: number; flow_run: number }
+export type CreditPrices = {
+  search: number
+  replicate: number
+  review: number
+  chat: number
+  flow_run: number
+  image_gen: number
+  video_gen: number
+}
 export type CreditConcurrency = { search: number; replicate: number; review: number; chat: number; flow_run: number }
 
 export type CreditEntry = {
@@ -54,6 +62,8 @@ export type CreditsResponse = {
 export type AdminUser = {
   id: string
   email: string
+  /** 用户名（手机号）登录标识；列表与建号响应会带，PATCH / 重置口令的精简响应可能没有。 */
+  username?: string
   name: string
   workspace: string
   kind: string
@@ -177,7 +187,7 @@ export const resolveCreditRequest = (id: string, body: { action: 'grant' | 'igno
 
 // 后台建号：不填口令时服务端生成一次性临时口令（只在这次响应里返回）。
 // 建完账本里会有两笔：服务端给的初始额度 + 管理员追加的额度。
-export const createAdminUser = (input: { email: string; name?: string; kind?: 'admin' | 'account'; password?: string; credits?: number }) =>
+export const createAdminUser = (input: { email?: string; username?: string; name?: string; kind?: 'admin' | 'account'; password?: string; credits?: number }) =>
   request<{ ok: boolean; password: string; balance: number; user: AdminUser }>('/api/admin/users', {
     method: 'POST',
     body: JSON.stringify(input),

@@ -16,6 +16,8 @@ export type SessionUser = {
   id: string
   name: string
   email: string
+  /** 用户名登录的账号只有内部占位邮箱，界面优先显示用户名 */
+  username?: string
   workspace: string
   kind: SessionKind
 }

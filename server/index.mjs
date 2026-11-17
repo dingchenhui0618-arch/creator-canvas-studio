@@ -74,6 +74,7 @@ import { createAccountRouter } from './routes/account.mjs'
 import { createLocalAgentRouter } from './routes/local-agent.mjs'
 import { createStorageRouter } from './routes/storage.mjs'
 import { createMediaRouter } from './routes/media.mjs'
+import { createMediaGenRouter } from './routes/media-gen.mjs'
 import { createFramesRouter } from './routes/frames.mjs'
 import { currentUser, listUsers, clientIp, isAdmin } from './auth.mjs'
 import { recordClientError } from './client-errors.mjs'
@@ -109,6 +110,8 @@ const featureRoutes = [
   createReviewRouter(),
   // 自己传一张图来评（v0.9.87）：/api/media/upload 收原始字节，/media/uploads/* 按归属读回来
   createMediaRouter(),
+  // 智能体页的生图 / 生视频窗口：扣积分、落 data/media、轮询与鉴权下载
+  createMediaGenRouter(),
   // 模板帧图（v0.9.88）：/media/frames/* 以前匿名可读，现在要登录且只认自己看得见的模板
   createFramesRouter(),
   createBillingRouter(),
@@ -482,6 +485,8 @@ const server = http.createServer(async (req, res) => {
           { key: 'VQ_CREDIT_REPLICATE', purpose: '每次一键复刻消耗的积分', current: String(config.credits.prices.replicate) },
           { key: 'VQ_CREDIT_REVIEW', purpose: '每次视觉评审消耗的积分', current: String(config.credits.prices.review) },
           { key: 'VQ_CREDIT_CHAT', purpose: '每次智能体对话消耗的积分', current: String(config.credits.prices.chat) },
+          { key: 'VQ_CREDIT_IMAGE_GEN', purpose: '每次生图智能体生成消耗的积分', current: String(config.credits.prices.image_gen) },
+          { key: 'VQ_CREDIT_VIDEO_GEN', purpose: '每次生视频智能体生成消耗的积分', current: String(config.credits.prices.video_gen) },
           { key: 'VQ_CREDIT_WELCOME', purpose: '新账号初始积分', current: String(config.credits.welcome) },
           { key: 'VQ_ADMIN_EMAILS', purpose: '管理员邮箱（逗号分隔，可发放积分）', current: config.auth.adminEmails.join(',') },
           // 邮件通道默认在后台「系统 → 邮件通道」配；这两条只是老部署的兜底

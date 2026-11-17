@@ -2524,6 +2524,35 @@ select:focus-visible {
 }
 .vq-console-card li.is-active { border-color: var(--ink); color: var(--ink); }
 
+/* 后台门禁：非管理员直接访问 #/admin/* 时只渲染这一页，不挂后台侧栏，也不发后台请求。 */
+.vq-access-denied {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 32px;
+  background: var(--paper);
+}
+
+.vq-access-denied .vq-error-card {
+  max-width: 560px;
+}
+
+.vq-access-denied-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 720px) {
+  .vq-access-denied {
+    padding: 16px;
+  }
+
+  .vq-access-denied-actions > * {
+    flex: 1 1 100%;
+  }
+}
+
 /* 会话校验期间的全屏占位（RequireSession 的 BootScreen）：与登录页同一套墨色，不引入新色。 */
 .vq-boot {
   display: flex;

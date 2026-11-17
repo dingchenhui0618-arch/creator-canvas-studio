@@ -4042,3 +4042,68 @@ E2E 里点某一行必须先按行里的文字限定，清单每一行长得一�
 
 ![无限画布 · GPT Image 2](docs/canvas-gpt-image-picker-2026-11-16.png)
 
+## 二百三十三、账号隔离、用户名登录与智能体里的生图 / 生视频（v0.9.166，2026-11-17）
+
+**结论**：登录从「只认邮箱」扩成「邮箱或用户名（手机号）」；后台管理版只对 `kind='admin'` 的账号可见，普通账号连入口、导航和 `#/admin/*` 都进不去；智能体页新增两个窗口工具——**生图智能体**（GPT Image 2，5 积分 / 张）与**生视频智能体**（Seedance 2.0，15 积分 / 条），点开即用、不进对话。
+
+### 为什么
+
+- 用户要开两个「用户名 + 口令」的账号，但 VisionQA 的登录一直是邮箱制：没有邮箱就建不了、也登不进。
+- 后台管理版以前只靠 URL（`?edition=admin`）进入，知道地址的任何登录账号都能看到后台外壳——虽然接口会 403，但界面本身不该露出来。
+- 智能体页原来只有「聊天」一种形态；出图 / 出视频要跳到无限画布，用户希望在这里就能直接生成。
+
+### 这一版做了什么
+
+1. **用户名登录**（`server/auth.mjs`、`server/routes/auth.mjs`、`src/pages/LoginPage.tsx`）：`users` 加 `login_name`（唯一索引，可空）；登录框一个输入框，带 `@` 走邮箱、其余按用户名查；后台「账号与积分」建号可以不填邮箱，只填用户名（内部占位邮箱 `<用户名>@login.visionqa.local`，不会发信）。
+2. **后台仅管理员可见**（`src/editions.ts`、`src/App.tsx`、`src/router.ts`）：`resolveEdition({search, stored, isAdmin})` 纯函数决定形态；非管理员忽略 `?edition=admin`，`#/admin/*` 渲染无权限页、不挂后台外壳、不请求后台接口。
+3. **两个窗口智能体**（`src/pages/AgentsPage.tsx`、`server/routes/media-gen.mjs`）：生图（提示词 + 1:1/9:16/16:9 + 生成 + 预览下载）、生视频（提示词 + 4s/8s + 480p/720p + 提交 + 轮询进度 + 预览下载）。服务端 `POST /api/media/generate` 扣积分、调平台网关、落到 `data/media/<账号>/`；`GET /api/media/tasks/<id>` 只能读自己的任务，下载也走登录鉴权，**平台令牌不下发前端**。
+4. **接通体检脚本**（`scripts/connectivity-once.mjs`）：按「每个通道只真实调用一次」跑 Key 自检、文本、视觉、Gete 文本、Gete 出图、SeeAPI 出视频、本机与画布 HTTP、SMTP；报告写 `data/connectivity-<时间>.json`。
+
+### 实测
+
+- 全仓 **1271/1271** 通过；`npm run lint` **0 error / 16 warning**（与基线一致）；`tsc -b` + `vite build` 干净。
+- 账号：管理员口令已按用户要求重设，`POST /api/auth/login` 用新口令返回 **200**、`kind=admin`；用户名登录与后台建号由新增单测覆盖（`test/login-username.test.mjs` 4 例）。
+- 后台隔离：`test/admin-access.test.mjs` 10 例（管理员/普通账号、`?edition=admin`、`vq.edition` 残留、`#/admin/*` 门禁、后台导航仍 12 项）。
+- 接通体检（生产、每个通道一次）：DeepSeek 文本/视觉通；GeteAPI `gpt-image-2` 出图 **51.6 秒**通；SeeAPI `seedance-2.0` 480p/4 秒 **177 秒**出片；画布 5312/5313/6677 与 VisionQA 8799 全部 200。细节见 [docs/accounts-and-connectivity-2026-11-17.md](docs/accounts-and-connectivity-2026-11-17.md)。
+
+### 边界
+
+- **两个新账号还要用户补用户名**：用户名是手机号，在本会话里被脱敏成占位符，我这边读不到；留了 `scripts/create-accounts-once.mjs`，用户把账号粘进 `.tmp-accounts.json` 后一键建号并自动删掉明文文件。管理员账号（`usr_DHZnmjNxrF0e`）已可直接用新口令登录。
+- **邮件通道仍未配置**：`data/mail.json` 与环境变量都没有 SMTP，找回密码走不通；要接需要发信账号。
+- **出视频只验过 480p / 4 秒**：窗口里 8 秒与 720p 没真调过；失败会全额退回积分（15 积分）。
+- **生图只验过 1024×1024**：9:16 / 16:9 两个尺寸没真调过，接口按 OpenAI 规格传参。
+- **扣费口径**：1 元 = 10 积分（`VQ_POINTS_PER_CNY`），生图 5 积分/张（¥0.5，上游约 ¥0.34）、生视频 15 积分/条（¥1.5，上游约 ¥1.4）；改价只改 `VQ_CREDIT_IMAGE_GEN` / `VQ_CREDIT_VIDEO_GEN`。
+- **接通体检会花钱**：一次约 $0.05 + ¥1.4，不自动跑，只在需要时手动执行。
+
+### 坑
+
+- **SeeAPI 的模型清单在 `/v1/models`**：后台「测试」按钮原来直接拼 `/models`，404 后提示「检查 baseUrl 是否带 /v1」，把管理员指向错误方向；已修 `modelsProbeUrl`。
+- **GeteAPI 文本 Key 声明的模型不等于能服务**：`gpt-5.2` 声明在池里，上游按分组回 503「No available channel」；改成实测可用的 `gpt-5.6-luna` 才真的能当备用。
+- **推理型模型探活要留足 `max_tokens`**：`deepseek-flash` 的 `reasoning_tokens` 会把 16/24 的小额度吃满，正文为空，看起来像通道故障。
+- **SeeAPI 出视频必须带 `aspect_ratio` 与 `count`**：网关是透传，不替调用方补字段；少字段上游回 400 validation_error（不计费）。
+
+### 截图
+
+智能体页的预设区多了两个窗口工具（生图 `gpt-image-2 · 5 积分 / 张`、生视频 `SeeAPI · 15 积分 / 条`），不进对话：
+
+![智能体 · 生图与生视频窗口工具](docs/agents-media-1440.png)
+
+生图窗口：提示词、三个比例、本次扣费与「失败全额退回」明示，右下是唯一主按钮：
+
+![生图智能体窗口](docs/agents-media-image-2026-11-17.png)
+
+生视频窗口：时长与分辨率、提交后轮询进度、完成后预览与下载：
+
+![生视频智能体窗口](docs/agents-media-video-2026-11-17.png)
+
+390 窄屏：两张卡纵向排列，窗口按窄屏重排：
+
+![390 · 智能体窗口工具](docs/agents-media-390.png)
+
+管理员在用户版侧栏底部会多一条「后台管理」（只有 `kind='admin'` 渲染）；普通账号没有这一条，直接访问 `#/admin/*` 看到的是明确的无权限页：
+
+![管理员 · 后台入口](docs/admin-entry-2026-11-17.png)
+
+![普通账号 · 后台无权限页](docs/admin-isolation-denied-2026-11-17.png)
+
+

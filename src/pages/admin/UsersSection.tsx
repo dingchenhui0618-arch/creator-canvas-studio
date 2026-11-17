@@ -52,13 +52,14 @@ export default function UsersSection() {
   const currentUserId = useMemo(() => readSession()?.user.id || '', [])
   // 建号：口令留空由服务端生成一次性临时口令，建完只显示这一次
   const [createEmail, setCreateEmail] = useState('')
+  const [createUsername, setCreateUsername] = useState('')
   const [createName, setCreateName] = useState('')
   const [createKind, setCreateKind] = useState<'account' | 'admin'>('account')
   const [createCredits, setCreateCredits] = useState('100')
   const [createPassword, setCreatePassword] = useState('')
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState('')
-  const [created, setCreated] = useState<{ email: string; password: string; balance: number } | null>(null)
+  const [created, setCreated] = useState<{ email: string; username: string; password: string; balance: number } | null>(null)
   const [createdCopied, setCreatedCopied] = useState(false)
   // 额度申请队列：用户积分不够时提交，这里发放或忽略
   const [requests, setRequests] = useState<CreditRequest[]>([])
@@ -321,8 +322,13 @@ export default function UsersSection() {
   const createAccount = async () => {
     if (creating) return
     const email = createEmail.trim().toLowerCase()
-    if (!email) {
-      setCreateError('请先填邮箱')
+    const username = createUsername.trim().toLowerCase()
+    if (!email && !username) {
+      setCreateError('请填邮箱或用户名（手机号）')
+      return
+    }
+    if (username && (username.length < 4 || username.length > 32 || /[\s@]/.test(username))) {
+      setCreateError('用户名 4-32 位，不能含空格和 @')
       return
     }
     setCreating(true)
@@ -330,14 +336,21 @@ export default function UsersSection() {
     setCreated(null)
     try {
       const result = await createAdminUser({
-        email,
+        email: email || undefined,
+        username: username || undefined,
         name: createName.trim() || undefined,
         kind: createKind,
         password: createPassword.trim() || undefined,
         credits: Math.max(0, Math.trunc(Number(createCredits) || 0)),
       })
-      setCreated({ email: result.user.email, password: result.password, balance: result.balance })
+      setCreated({
+        email: result.user.email,
+        username: result.user.username || '',
+        password: result.password,
+        balance: result.balance,
+      })
       setCreateEmail('')
+      setCreateUsername('')
       setCreateName('')
       setCreateCredits('100')
       setCreatePassword('')
@@ -513,7 +526,8 @@ export default function UsersSection() {
           <div>
             <p className="admin-label">新建账号</p>
             <p className="admin-sub">
-              注册默认关闭，账号由管理员在这里开。口令留空会生成一次性临时口令，只显示这一次；给对方的初始积分会在账本里单独记一笔，和系统送的额度分得清。
+              注册默认关闭，账号由管理员在这里开。邮箱与用户名（手机号）至少填一项：只填用户名时账号会用内部占位邮箱，登录直接输用户名。
+              口令留空会生成一次性临时口令，只显示这一次；给对方的初始积分会在账本里单独记一笔，和系统送的额度分得清。
             </p>
           </div>
         </div>
@@ -523,9 +537,20 @@ export default function UsersSection() {
             <input
               value={createEmail}
               onChange={(event) => setCreateEmail(event.target.value)}
-              placeholder="对方的常用邮箱"
+              placeholder="常用邮箱；只填用户名时可留空"
               autoComplete="off"
               spellCheck={false}
+            />
+          </label>
+          <label className="admin-edit-field">
+            <span>用户名（手机号）</span>
+            <input
+              value={createUsername}
+              onChange={(event) => setCreateUsername(event.target.value)}
+              placeholder="可选；不填就只按邮箱建号"
+              autoComplete="off"
+              spellCheck={false}
+              inputMode="tel"
             />
           </label>
           <label className="admin-edit-field">
@@ -552,7 +577,7 @@ export default function UsersSection() {
               placeholder="100"
             />
           </label>
-          <label className="admin-edit-field admin-edit-field--wide">
+          <label className="admin-edit-field">
             <span>口令（8 位以上，含字母和数字）</span>
             <input
               value={createPassword}
@@ -573,7 +598,8 @@ export default function UsersSection() {
             <div className="admin-reset-copy">
               <span className="admin-label">账号已创建（口令只显示这一次）</span>
               <p className="admin-sub">
-                已创建 {created.email}，余额 {created.balance} 积分。把口令通过安全渠道交给对方，不要贴在公开频道。
+                已创建 {created.username ? created.username + '（用户名登录）' : created.email}，余额 {created.balance} 积分。
+                把口令通过安全渠道交给对方，不要贴在公开频道。
               </p>
             </div>
             <code className="admin-reset-code">{created.password}</code>
@@ -739,7 +765,7 @@ export default function UsersSection() {
             <table className="admin-table">
               <thead>
                 <tr>
-                  <th>邮箱</th>
+                  <th>账号</th>
                   <th>显示名</th>
                   <th>角色</th>
                   <th className="num-col">积分</th>
@@ -752,7 +778,10 @@ export default function UsersSection() {
               <tbody>
                 {items.map((item) => (
                   <tr key={item.id}>
-                    <td className="admin-mono">{item.email}</td>
+                    <td>
+                      <span className="admin-mono">{item.email}</span>
+                      {item.username ? <span className="admin-cell-sub">用户名 {item.username}</span> : null}
+                    </td>
                     <td>{item.name}</td>
                     <td>{roleLabel(item.kind as SessionKind)}</td>
                     <td className="admin-mono num-col">{item.credits}</td>

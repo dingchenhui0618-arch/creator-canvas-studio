@@ -163,8 +163,14 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
     const trimmedEmail = email.trim()
     const trimmedName = name.trim()
     const nextErrors: FormErrors = {}
-    if (!trimmedEmail) nextErrors.email = '请输入邮箱'
-    else if (!EMAIL_PATTERN.test(trimmedEmail)) nextErrors.email = '邮箱格式看起来不太对'
+    if (!trimmedEmail) nextErrors.email = isSignup ? '请输入邮箱' : '请输入邮箱或用户名'
+    else if (trimmedEmail.includes('@')) {
+      if (!EMAIL_PATTERN.test(trimmedEmail)) nextErrors.email = '邮箱格式看起来不太对'
+    } else if (isSignup) {
+      nextErrors.email = '注册需要邮箱'
+    } else if (trimmedEmail.length < 4 || trimmedEmail.length > 64) {
+      nextErrors.email = '用户名 4-64 位'
+    }
     if (isSignup) {
       // 只有注册校验密码长度，长度取后端下发的 minPasswordLength。
       if (!password) nextErrors.password = '请设置密码'
@@ -461,17 +467,17 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
             )}
             <div className="vq-field">
               <label className="vq-field-label" htmlFor="vq-email">
-                邮箱 <em className="vq-mono">email</em>
+                {isSignup ? '邮箱' : '邮箱或用户名'} <em className="vq-mono">{isSignup ? 'email' : 'email / username'}</em>
               </label>
               <span className={`vq-input${errors.email ? ' is-invalid' : ''}`}>
                 <Mail size={15} />
                 <input
                   id="vq-email"
-                  type="email"
+                  type={isSignup ? 'email' : 'text'}
                   name="email"
-                  inputMode="email"
+                  inputMode={isSignup ? 'email' : 'text'}
                   autoComplete="username"
-                  placeholder={EXAMPLE_EMAIL}
+                  placeholder={isSignup ? EXAMPLE_EMAIL : EXAMPLE_EMAIL + ' 或手机号'}
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   aria-invalid={Boolean(errors.email)}

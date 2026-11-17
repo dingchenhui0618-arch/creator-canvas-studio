@@ -5,7 +5,7 @@ import fs from 'node:fs/promises'
 import crypto from 'node:crypto'
 import path from 'node:path'
 import { readBody, sendJson } from './_shared.mjs'
-import { currentUser, isAdmin, listUsers, findUserById, findUserByEmail, createUser, updateUserAccess, setPassword, destroyOtherSessions, deleteUser, countAdmins } from '../auth.mjs'
+import { currentUser, isAdmin, listUsers, findUserById, findUserByEmail, findUserByLoginName, createUser, updateUserAccess, setPassword, destroyOtherSessions, deleteUser, countAdmins } from '../auth.mjs'
 import { grant, ledgerOf, balanceOf } from '../credits.mjs'
 import { listRequests, resolveRequest } from '../credit-requests.mjs'
 import { config, redfoxEnabled, visionEnabled } from '../config.mjs'
@@ -138,11 +138,16 @@ export function createAdminRouter() {
       if (pathname === '/api/admin/users' && req.method === 'POST') {
         const body = await readBody(req)
         const email = String(body.email || '').trim().toLowerCase()
+        const username = String(body.username || '').trim().toLowerCase()
         const name = String(body.name || '').trim().slice(0, 40)
         const kind = body.kind === 'admin' ? 'admin' : 'account'
-        if (!email) return (sendJson(res, 400, { error: '请输入邮箱', field: 'email' }), true)
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return (sendJson(res, 400, { error: '邮箱格式不正确', field: 'email' }), true)
-        if (findUserByEmail(email)) return (sendJson(res, 409, { error: '这个邮箱已经有账号了', field: 'email' }), true)
+        if (!email && !username) return (sendJson(res, 400, { error: '请输入邮箱或用户名', field: 'email' }), true)
+        if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return (sendJson(res, 400, { error: '邮箱格式不正确', field: 'email' }), true)
+        if (username && (username.length < 4 || username.length > 32 || /[\s@]/.test(username))) {
+          return (sendJson(res, 400, { error: '用户名 4-32 位，不能含空格和 @', field: 'username' }), true)
+        }
+        if (email && findUserByEmail(email)) return (sendJson(res, 409, { error: '这个邮箱已经有账号了', field: 'email' }), true)
+        if (username && findUserByLoginName(username)) return (sendJson(res, 409, { error: '这个用户名已经有账号了', field: 'username' }), true)
         let password = String(body.password || '').trim()
         if (password) {
           if (password.length < 8 || password.length > 200 || !/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
@@ -152,9 +157,14 @@ export function createAdminRouter() {
           // 不填口令就生成一次性临时口令，同样只在这一次响应里返回
           password = 'Vq7' + crypto.randomBytes(7).toString('base64url')
         }
+        // 只给用户名、没给邮箱的账号：内部占位邮箱保证 email 唯一，登录走 login_name（手机号）。
+        const resolvedEmail = email || username + '@login.visionqa.local'
+        if (!email && findUserByEmail(resolvedEmail)) {
+          return (sendJson(res, 409, { error: '这个用户名已经有账号了', field: 'username' }), true)
+        }
         let created
         try {
-          created = createUser({ email, password, name, kind })
+          created = createUser({ email: resolvedEmail, password, name, kind, loginName: username })
         } catch (error) {
           sendJson(res, 400, { error: '建号失败：' + String(error?.message || error) })
           return true
@@ -173,7 +183,7 @@ export function createAdminRouter() {
           ok: true,
           password,
           balance,
-          user: { id: created.id, email: created.email, name: created.name, kind: created.kind, active: Boolean(created.is_active), credits: balance },
+          user: { id: created.id, email: created.email, username: created.login_name || '', name: created.name, kind: created.kind, active: Boolean(created.is_active), credits: balance },
         }
         logEvent('user-create', { by: user.email, email, kind, balance })
         recordAudit({ req, actor: user, action: 'user.create', targetType: 'user', targetId: created.id, targetLabel: created.email, detail: { kind, balance } })

@@ -13,7 +13,7 @@
 // 只有工作台内部的页面切换走 hash，刷新与前进/后退都由浏览器负责。
 import { useSyncExternalStore } from 'react'
 import type { Page } from './domain/types'
-import { EDITION_BY_ID, type AdminSection, type EditionId } from './editions'
+import { DEFAULT_ADMIN_SECTION, EDITION_BY_ID, type AdminSection, type EditionId } from './editions'
 import { isHelpSlug, type HelpSlug } from './domain/help'
 import { canvasRunLinkFromSegments, canvasRunLinkHash, canvasRunViewLinkHash } from './domain/canvas-run-link'
 import { deliveryLinkFromSegments, deliveryLinkHash } from './domain/delivery-link'
@@ -82,7 +82,15 @@ const USER_PAGES: readonly ShellPage[] = [
 
 // 后台 section 直接取自 editions.ts，避免在路由里再抄一份会漂移的清单。
 const ADMIN_SECTIONS: readonly string[] = EDITION_BY_ID.admin.nav.map((item) => item.section ?? item.id)
-const DEFAULT_ADMIN_SECTION: AdminSection = (ADMIN_SECTIONS[0] as AdminSection | undefined) ?? 'overview'
+
+// 首屏是不是「空 hash + ?edition=admin」这种入口。App 在 /api/auth/me 确认管理员后
+// 才知道该不该进后台；只有这种入口才替用户补上后台落点，显式收藏的页面不抢。
+let initialBareEntry = false
+
+/** 本次启动是不是从一个没有 hash 的地址进来的（用于后台入口的一次性判定）。 */
+export function isInitialBareEntry(): boolean {
+  return initialBareEntry
+}
 
 /** 把路由转回 domain 里的 Page：后台没有用户 Page 语义，统一落到工作台用于面包屑兜底。 */
 export function routeToPage(route: Route): Page {
@@ -301,6 +309,7 @@ function ensureListening() {
 export function initializeRoute(preferredEdition?: EditionId): Route {
   const raw = window.location.hash
   const bare = raw === '' || raw === '#' || raw === '#/'
+  initialBareEntry = bare
   let route = parseRoute(raw)
   if (bare && preferredEdition === 'admin') {
     route = { kind: 'admin', section: DEFAULT_ADMIN_SECTION }

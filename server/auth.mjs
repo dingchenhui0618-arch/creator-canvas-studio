@@ -86,6 +86,10 @@ export function openDb() {
   ensureColumn(db, 'replicate_jobs', 'label', 'TEXT')
   ensureColumn(db, 'users', 'credits', 'INTEGER NOT NULL DEFAULT 0')
   ensureColumn(db, 'users', 'kind', "TEXT NOT NULL DEFAULT 'account'")
+  // 用户名登录（v0.9.166）：有的账号没有邮箱，用手机号当用户名。login_name 只做登录标识，
+  // 不替代 email（email 仍是唯一主键，历史数据与找回密码都还认它）。
+  ensureColumn(db, 'users', 'login_name', 'TEXT')
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_login_name ON users(login_name) WHERE login_name IS NOT NULL AND login_name <> ''")
   // 注册留痕：同意的条款版本与时间（管理员开通的账号标 admin-created，不假称用户同意过）
   ensureColumn(db, 'users', 'terms_version', 'TEXT')
   ensureColumn(db, 'users', 'terms_accepted_at', 'TEXT')
@@ -138,6 +142,7 @@ function publicUser(row) {
     name: row.name,
     workspace: row.workspace,
     kind: row.kind,
+    username: row.login_name || '',
     credits: Number(row.credits || 0),
     // 只给「有没有开」：secret、备用码永远不出接口
     twoFactor: Boolean(row.totp_enabled_at),
@@ -154,6 +159,20 @@ export function findUserByEmail(email) {
 
 export function findUserById(id) {
   return openDb().prepare('SELECT * FROM users WHERE id = ?').get(String(id)) || null
+}
+
+// 用户名（手机号）登录：与邮箱二选一，输入里带 @ 的走邮箱，其余按 login_name 查。
+export function findUserByLoginName(loginName) {
+  const value = String(loginName || '').trim().toLowerCase()
+  if (!value) return null
+  return openDb().prepare('SELECT * FROM users WHERE lower(login_name) = ?').get(value) || null
+}
+
+export function findUserByLogin(identifier) {
+  const raw = String(identifier || '').trim()
+  if (!raw) return null
+  if (raw.includes('@')) return findUserByEmail(raw)
+  return findUserByLoginName(raw)
 }
 
 // 后台账号管理：只允许改「是否在用」与角色，改动立即生效（停用后现有会话也会失效）
@@ -191,8 +210,9 @@ export function countAdmins() {
   return Number(row?.n || 0)
 }
 
-export function createUser({ email, password, name, kind = 'account', terms = null }) {
+export function createUser({ email, password, name, kind = 'account', terms = null, loginName = '' }) {
   const normalized = String(email).trim().toLowerCase()
+  const normalizedLogin = String(loginName || '').trim().toLowerCase().slice(0, 64)
   const id = 'usr_' + crypto.randomBytes(9).toString('base64url')
   const displayName = (name || '').trim() || normalized.split('@')[0] || 'VisionQA 用户'
   const welcome = Math.max(0, Math.round(Number(config.credits.welcome) || 0))
@@ -206,9 +226,9 @@ export function createUser({ email, password, name, kind = 'account', terms = nu
   try {
     database
       .prepare(
-        'INSERT INTO users (id, email, name, workspace, password_hash, kind, is_active, credits, created_at, terms_version, terms_accepted_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)',
+        'INSERT INTO users (id, email, name, workspace, password_hash, kind, is_active, credits, created_at, terms_version, terms_accepted_at, login_name) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)',
       )
-      .run(id, normalized, displayName, '个人工作区', hashPassword(password), kind, welcome, createdAt, termsVersion, termsAcceptedAt)
+      .run(id, normalized, displayName, '个人工作区', hashPassword(password), kind, welcome, createdAt, termsVersion, termsAcceptedAt, normalizedLogin || null)
     if (welcome > 0) {
       database
         .prepare('INSERT INTO credit_ledger (id, user_id, delta, balance_after, kind, ref, meta, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
@@ -577,11 +597,12 @@ export function ensureAnAdmin() {
 // 管理台用：真实账号列表（含余额），不返回口令哈希
 export function listUsers() {
   return openDb()
-    .prepare('SELECT id, email, name, workspace, kind, is_active, credits, created_at, last_login_at, terms_version, terms_accepted_at FROM users ORDER BY created_at')
+    .prepare('SELECT id, email, name, workspace, kind, is_active, credits, created_at, last_login_at, terms_version, terms_accepted_at, login_name FROM users ORDER BY created_at')
     .all()
     .map((row) => ({
       id: row.id,
       email: row.email,
+      username: row.login_name || '',
       name: row.name,
       workspace: row.workspace,
       kind: row.kind,

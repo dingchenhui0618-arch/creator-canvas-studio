@@ -56,7 +56,13 @@ test('引导上的价钱对得上服务端计费表：只有检索 / 解析 / �
   const end = config.indexOf('concurrency: {', start)
   const block = config.slice(start, end)
   const kinds = [...block.matchAll(/([a-z_]+):\s*Number\(process\.env\.VQ_CREDIT_/g)].map((match) => match[1]).sort()
-  assert.deepEqual(kinds, ['chat', 'flow_run', 'replicate', 'review', 'search'], '计费表变了：引导上写的钱要跟着改')
+  // image_gen / video_gen 是智能体页的两个窗口工具，不属于引导的四步主线；
+  // 主线的四笔钱仍然逐项对接口读数，计费表新增动作时这里要一起维护。
+  assert.deepEqual(
+    kinds,
+    ['chat', 'flow_run', 'image_gen', 'replicate', 'review', 'search', 'video_gen'],
+    '计费表变了：引导上写的钱要跟着改',
+  )
 
   const guide = read('src', 'components', 'WelcomeGuide.tsx')
   // 四笔钱都从接口读，不写死数字

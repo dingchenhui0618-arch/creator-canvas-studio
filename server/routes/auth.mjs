@@ -3,6 +3,7 @@ import { sendJson, readBody } from './_shared.mjs'
 import { config } from '../config.mjs'
 import {
   findUserByEmail,
+  findUserByLogin,
   findUserById,
   createUser,
   createSession,
@@ -275,26 +276,34 @@ export function createAuthRouter() {
 
       if (pathname === '/api/auth/login' && req.method === 'POST') {
         const body = await readBody(req)
-        const email = normalizeEmail(body.email)
+        // 登录标识：邮箱或用户名（手机号）。v0.9.166 起两者都能登，页面只给一个输入框。
+        const rawIdentifier = String(body.email || body.login || body.username || '').trim()
+        const email = rawIdentifier.includes('@') ? normalizeEmail(rawIdentifier) : ''
+        const loginName = email ? '' : rawIdentifier.toLowerCase()
         const password = String(body.password || '')
         const remember = Boolean(body.remember)
-        const key = clientIp(req) + '|' + email
+        const key = clientIp(req) + '|' + (email || loginName)
 
         if (tooManyAttempts(key)) {
           fail(res, 429, '尝试次数过多，请 10 分钟后再试')
           return true
         }
 
-        const emailError = checkEmail(email)
-        if (emailError) return (fail(res, 400, emailError, 'email'), true)
+        if (!rawIdentifier) return (fail(res, 400, '请输入邮箱或用户名', 'email'), true)
+        if (email) {
+          const emailError = checkEmail(email)
+          if (emailError) return (fail(res, 400, emailError, 'email'), true)
+        } else if (loginName.length < 4 || loginName.length > 64) {
+          return (fail(res, 400, '用户名格式不正确', 'email'), true)
+        }
         if (!password) return (fail(res, 400, '请输入密码', 'password'), true)
 
-        const row = findUserByEmail(email)
-        // 用户不存在也走一次 scrypt，避免用响应时间探测邮箱是否注册
+        const row = findUserByLogin(rawIdentifier)
+        // 用户不存在也走一次 scrypt，避免用响应时间探测账号是否注册
         const ok = row ? verifyPassword(password, row.password_hash) : verifyPassword(password, 'scrypt$16384$8$1$00$00')
         if (!row || !ok || !row.is_active) {
           recordFailure(key)
-          fail(res, 401, '邮箱或密码不正确', 'form')
+          fail(res, 401, '账号或密码不正确', 'form')
           return true
         }
 

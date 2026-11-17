@@ -4,6 +4,7 @@ import {
   Check,
   ChevronRight,
   Compass,
+  Gauge,
   Loader2,
   LogOut,
   MoreHorizontal,
@@ -40,16 +41,26 @@ import LocalWorkspacePage from './pages/LocalWorkspacePage'
 import { RequireSession } from './auth/RequireSession'
 import { useSession } from './auth/useSession'
 import { useUiMode } from './api/app'
-import { initialsFor, sessionKindLabel, type RegisterInput, type Session, type SignInInput } from './auth/session'
+import { initialsFor, sessionKindLabel, type RegisterInput, type Session, type SessionUser, type SignInInput } from './auth/session'
 import { listAgents, setPendingAgentProject } from './api/agents'
 import { createBdcCanvas } from './api/bdc'
 import { listReviewQueue } from './api/review'
 import { listFeedback } from './api/feedback'
-import { navigate, pageToRoute, routeKey, routeToPage, useRoute, type Route } from './router'
+import { isInitialBareEntry, navigate, pageToRoute, routeKey, routeToPage, useRoute, type Route } from './router'
 import { planScroll } from './domain/scroll'
 import { welcomeSeenKey } from './onboarding'
 import packageJsonRaw from '../package.json?raw'
-import { EDITION_BY_ID, EDITION_STORAGE_KEY, type AdminSection } from './editions'
+import {
+  DEFAULT_ADMIN_SECTION,
+  EDITION_BY_ID,
+  EDITION_STORAGE_KEY,
+  canAccessAdminRoute,
+  readStoredEdition,
+  rememberEdition,
+  resolveEdition,
+  stripAdminEditionQuery,
+  type AdminSection,
+} from './editions'
 
 const APP_VERSION = (JSON.parse(packageJsonRaw) as { version?: string }).version ?? '0.0.0'
 
@@ -82,6 +93,48 @@ const AgentEditorPage = lazy(() => import('./pages/AgentEditorPage'))
 function sectionLabel(section: string): string {
   const found = EDITION_BY_ID.admin.nav.find((item) => item.section === section)
   return found?.label ?? EDITION_BY_ID.admin.nav[0]?.label ?? ''
+}
+
+/**
+ * 普通账号直接访问 #/admin/* 时的落地页：不挂后台侧栏、不请求后台接口，
+ * 也不把人踢回登录页（他已经登录了，只是没有这个角色）。
+ */
+// 用户名账号的 email 是内部占位（@login.visionqa.local），界面上优先显示用户名
+function loginLabel(account: SessionUser): string {
+  if (account.username) return account.username
+  if (account.email.endsWith('@login.visionqa.local')) return account.name
+  return account.email
+}
+
+function AdminAccessDenied({
+  session,
+  onBack,
+  onSwitchAccount,
+}: {
+  session: Session
+  onBack: () => void
+  onSwitchAccount: () => void
+}) {
+  return (
+    <div className="vq-scope vq-access-denied">
+      <div className="vq-error-card" role="alert">
+        <span className="vq-error-kicker">Admin / No access</span>
+        <h1>这个账号没有后台权限</h1>
+        <p>
+          后台管理版只对管理员开放。当前登录的是 {loginLabel(session.user)}（{sessionKindLabel(session.user.kind)}）。
+          你可以继续使用用户生产版；如果这是工作账号，请联系平台管理员调整角色后再试。
+        </p>
+        <div className="vq-access-denied-actions">
+          <button type="button" className="vq-button vq-button--primary" onClick={onBack}>
+            返回工作台
+          </button>
+          <button type="button" className="vq-button vq-button--ghost" onClick={onSwitchAccount}>
+            切换账号
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 type AgentSeed = { name: string; description: string }
@@ -777,6 +830,17 @@ function Workbench({
             <>
   <div className="vq-nav-divider" role="presentation" />
             <nav className="vq-nav vq-nav--utility" aria-label="设置层">
+              {session.user.kind === 'admin' && (
+                // 后台只对管理员账号露出来：普通账号既没有这一条，也进不去 #/admin。
+                <NavItem
+                  utility
+                  icon={Gauge}
+                  label="后台管理"
+                  active={false}
+                  compact={!sidebarOpen}
+                  onClick={() => navigate({ kind: 'admin', section: DEFAULT_ADMIN_SECTION })}
+                />
+              )}
               <NavItem
                 utility
                 icon={SETTINGS_NAV.icon}
@@ -1065,6 +1129,30 @@ function App() {
     [signOut],
   )
 
+  // 首屏的形态落点：本地缓存只够避免管理员刷新时闪一下用户版；会话确认后按真实 kind 再判一次。
+  // 只在「进入时没有 hash」的地址上补后台落点，显式收藏的 #/projects 之类不抢。
+  const editionApplied = useRef(false)
+  useLayoutEffect(() => {
+    if (editionApplied.current || sessionLoading) return
+    editionApplied.current = true
+    if (!session) return
+    if (session.user.kind !== 'admin') {
+      // 普通账号带 ?edition=admin 进来：把地址栏那一项拿掉，人继续留在用户版。
+      stripAdminEditionQuery()
+      return
+    }
+    const edition = resolveEdition({
+      search: window.location.search,
+      stored: readStoredEdition(),
+      isAdmin: true,
+    })
+    // 首次用 cookie 登录、本地还没有缓存时，main 拿不到角色；确认是管理员后补记形态。
+    rememberEdition(edition)
+    if (edition === 'admin' && isInitialBareEntry() && route.kind !== 'admin') {
+      navigate({ kind: 'admin', section: DEFAULT_ADMIN_SECTION })
+    }
+  }, [session, sessionLoading, route.kind])
+
   // 帮助中心：没有账号也能看。放在 RequireSession 之前，和条款页一样整屏渲染。
   if (route.kind === 'help') {
     return (
@@ -1134,13 +1222,24 @@ function App() {
       onRegister={handleRegister}
       onVerifyTwoFactor={verifyTwoFactor}
     >
-      {(activeSession) => (
-        <Workbench
-          session={activeSession}
-          onSignOut={() => handleExit('signout')}
-          onSwitchAccount={() => handleExit('switch')}
-        />
-      )}
+      {(activeSession) => {
+        if (!canAccessAdminRoute(route, activeSession.user.kind === 'admin')) {
+          return (
+            <AdminAccessDenied
+              session={activeSession}
+              onBack={() => navigate({ kind: 'page', page: 'overview' }, { replace: true })}
+              onSwitchAccount={() => handleExit('switch')}
+            />
+          )
+        }
+        return (
+          <Workbench
+            session={activeSession}
+            onSignOut={() => handleExit('signout')}
+            onSwitchAccount={() => handleExit('switch')}
+          />
+        )
+      }}
     </RequireSession>
   )
 }

@@ -8,11 +8,14 @@ import App from './App.tsx'
 // 放在 App 之后：保证外壳补充规则晚于 App.css / shell.css / overview.css 生效。
 import './styles/nav.css'
 import { readInitialEdition } from './editions'
+import { readSession } from './auth/session'
 import { initializeRoute } from './router'
 import { installClientErrorReporting } from './lib/clientErrors'
 
 // 首屏先把地址栏规范化：空 hash 用 replaceState 补成 #/overview（或后台总览），不新增历史记录。
-initializeRoute(readInitialEdition())
+// 先拿本地缓存里的角色只为选对首屏落点，避免管理员刷新时闪一下用户版；真正的角色由 /api/auth/me
+// 在 App 里再校验，普通账号即使缓存被改成 admin 也会被 App 的门禁挡住（接口另有 403）。
+initializeRoute(readInitialEdition(readSession()?.user.kind === 'admin'))
 
 // 早于 render 装上：首屏渲染就炸的情况也要能报到服务端
 installClientErrorReporting()

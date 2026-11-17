@@ -221,6 +221,8 @@ export const SPEND_KIND_LABEL = {
   review: '视觉评审',
   chat: '智能体对话',
   flow_run: '工作流运行',
+  image_gen: '生图智能体',
+  video_gen: '生视频智能体',
 }
 
 /**

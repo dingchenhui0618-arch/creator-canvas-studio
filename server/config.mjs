@@ -165,6 +165,9 @@ export const config = {
       chat: Number(process.env.VQ_CREDIT_CHAT ?? 1),
       // 工作流整条流程跑一次（含模型调用）：按次计费，失败全额退回
       flow_run: Number(process.env.VQ_CREDIT_FLOW_RUN ?? 2),
+      // 智能体页的两个窗口工具：生成成功才留下结果，失败由 media-gen 路由全额退回
+      image_gen: Number(process.env.VQ_CREDIT_IMAGE_GEN ?? 5),
+      video_gen: Number(process.env.VQ_CREDIT_VIDEO_GEN ?? 15),
     },
     // 同一账号同时能跑几个：防连点把上游配额一次打光
     concurrency: {

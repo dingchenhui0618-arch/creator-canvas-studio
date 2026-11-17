@@ -4,10 +4,12 @@ import {
   AlertCircle,
   ArrowLeft,
   ArrowUp,
+  ArrowUpRight,
   Bot,
   Check,
   ChevronDown,
   Clapperboard,
+  Image as ImageIcon,
   Clock,
   Copy,
   Download,
@@ -38,6 +40,8 @@ import {
   writeAgentDraftToProject,
 } from '../api/agents'
 import type { AgentArtifact, AgentDraft, AgentRecord, AgentRunRecord, AgentsList, AgentToolsResult, OutputType } from '../api/agents'
+import { generateMediaImage, generateMediaVideo, getMediaTask } from '../api/media-gen'
+import type { ImageRatio, MediaKind, MediaTask, VideoDuration, VideoResolution } from '../api/media-gen'
 import { getCredits, getModelService, recheckModelService, type CreditsResponse, type ModelServiceState } from '../api/credits'
 import { getProject, listProjects } from '../api/projects'
 import type { ProjectSummary } from '../domain/project'
@@ -603,6 +607,393 @@ function DraftCard({
   )
 }
 
+function formatBytes(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+  return (bytes / 1024 / 1024).toFixed(1) + ' MB'
+}
+
+function clockOf(ms: number) {
+  const total = Math.max(0, Math.floor(ms / 1000))
+  return String(Math.floor(total / 60)).padStart(2, '0') + ':' + String(total % 60).padStart(2, '0')
+}
+
+const IMAGE_RATIO_OPTIONS: { value: ImageRatio; label: string }[] = [
+  { value: '1:1', label: '1:1 · 1024×1024' },
+  { value: '9:16', label: '9:16 · 1024×1536' },
+  { value: '16:9', label: '16:9 · 1536×1024' },
+]
+
+// 预设智能体不是聊天：点开是一张生成表单，提交后由服务端扣积分、调平台通道、落盘。
+// 这个窗口只展示真实任务状态；没有结果就不摆假预览，失败就把退款状态写清楚。
+function MediaGenDialog({
+  kind,
+  onClose,
+  onCreditsChanged,
+}: {
+  kind: MediaKind
+  onClose: () => void
+  onCreditsChanged: () => void
+}) {
+  const image = kind === 'image'
+  const [prompt, setPrompt] = useState('')
+  const [ratio, setRatio] = useState<ImageRatio>('1:1')
+  const [duration, setDuration] = useState<VideoDuration>(4)
+  const [resolution, setResolution] = useState<VideoResolution>('720p')
+  const [task, setTask] = useState<MediaTask | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [pollError, setPollError] = useState('')
+  const [credits, setCredits] = useState<CreditsResponse | null>(null)
+  const [elapsed, setElapsed] = useState(0)
+  const promptRef = useRef<HTMLTextAreaElement | null>(null)
+  const active = busy || task?.status === 'processing'
+  const pollTaskId = task?.status === 'processing' ? task.id : ''
+  const price = credits
+    ? Number(image ? credits.prices.image_gen : credits.prices.video_gen) || (image ? 5 : 15)
+    : image
+      ? 5
+      : 15
+  const canSubmit = Boolean(prompt.trim()) && !active
+
+  useEffect(() => {
+    let alive = true
+    getCredits(1)
+      .then((next) => {
+        if (alive) setCredits(next)
+      })
+      .catch(() => {
+        // 价格读不到时按页面默认值显示；真正扣费仍以服务端为准
+      })
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => promptRef.current?.focus(), 0)
+    return () => window.clearTimeout(timer)
+  }, [])
+
+  useEffect(() => {
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previous
+    }
+  }, [])
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !active) onClose()
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [active, onClose])
+
+  useEffect(() => {
+    if (!task || task.status !== 'processing') return
+    const startedAt = new Date(task.createdAt).getTime()
+    const update = () => setElapsed(Math.max(0, Date.now() - startedAt))
+    const first = window.setTimeout(update, 0)
+    const timer = window.setInterval(update, 1000)
+    return () => {
+      window.clearTimeout(first)
+      window.clearInterval(timer)
+    }
+  }, [task])
+
+  useEffect(() => {
+    if (!pollTaskId) return
+    let alive = true
+    let timer = 0
+    const poll = async () => {
+      try {
+        const response = await getMediaTask(pollTaskId)
+        if (!alive) return
+        setTask(response.task)
+        setPollError(response.warning || '')
+        if (response.task.status === 'processing') {
+          timer = window.setTimeout(poll, 2500)
+        }
+      } catch (caught) {
+        if (!alive) return
+        setPollError('查询进度失败，正在重试：' + (caught instanceof Error ? caught.message : '网络错误'))
+        timer = window.setTimeout(poll, 3500)
+      }
+    }
+    timer = window.setTimeout(poll, 1200)
+    return () => {
+      alive = false
+      window.clearTimeout(timer)
+    }
+  }, [pollTaskId])
+
+  const submit = async () => {
+    const text = prompt.trim()
+    if (!text || active) return
+    setBusy(true)
+    setError('')
+    setPollError('')
+    setTask(null)
+    try {
+      const response = image
+        ? await generateMediaImage({ prompt: text, ratio })
+        : await generateMediaVideo({ prompt: text, duration, resolution })
+      setTask(response.task)
+      if (response.task.status === 'failed') setError(response.task.error || '生成失败')
+      onCreditsChanged()
+    } catch (caught) {
+      const failure = caught as Error & {
+        body?: { code?: string; balance?: number; cost?: number; needed?: number }
+      }
+      if (failure.body?.code === 'CREDIT_INSUFFICIENT') {
+        setError('积分不足：本次需要 ' + (failure.body.cost ?? price) + ' 积分，当前余额 ' + (failure.body.balance ?? '—') + ' 积分。')
+      } else {
+        setError(failure.message || '生成失败')
+      }
+      onCreditsChanged()
+    } finally {
+      setBusy(false)
+      getCredits(1).then(setCredits).catch(() => undefined)
+    }
+  }
+
+  const reset = () => {
+    if (active) return
+    setTask(null)
+    setError('')
+    setPollError('')
+    setElapsed(0)
+  }
+
+  const requestClose = () => {
+    if (!active) onClose()
+  }
+
+  const title = image ? '生图智能体' : '生视频智能体'
+  const subtitle = image ? '提示词 · 比例 · 预览下载' : '提示词 · 时长 · 分辨率 · 进度'
+
+  return (
+    <div className="agx-media-backdrop">
+      <button type="button" className="agx-media-scrim" aria-label="关闭生成窗口" onClick={requestClose} disabled={active} />
+      <section className="agx-media-dialog" role="dialog" aria-modal="true" aria-labelledby="agx-media-title">
+        <header className="agx-media-head">
+          <span className="agx-media-icon">{image ? <ImageIcon size={18} /> : <Clapperboard size={18} />}</span>
+          <div className="agx-media-heading">
+            <span className="agx-kicker">WINDOW TOOL · {image ? 'IMAGE' : 'VIDEO'}</span>
+            <h2 id="agx-media-title">{title}</h2>
+            <p>{subtitle} · 不进入对话</p>
+          </div>
+          <button
+            type="button"
+            className="vq-button vq-button--icon"
+            onClick={requestClose}
+            disabled={active}
+            aria-label={active ? '生成中，完成后可关闭' : '关闭'}
+            title={active ? '生成中，完成后可关闭' : '关闭'}
+          >
+            <X size={15} />
+          </button>
+        </header>
+
+        <div className="agx-media-body">
+          <div className="agx-media-model">
+            <span className="agx-mono">{image ? 'gpt-image-2' : 'SeeAPI · Seedance 2.0 Fast'}</span>
+            <span>平台通道在服务端调用，令牌不下发前端</span>
+          </div>
+
+          <label className="agx-media-field">
+            <span>
+              提示词
+              <b>{prompt.length}/1200</b>
+            </span>
+            <textarea
+              ref={promptRef}
+              rows={3}
+              value={prompt}
+              maxLength={1200}
+              onChange={(event) => setPrompt(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+                  event.preventDefault()
+                  void submit()
+                }
+              }}
+              placeholder={image ? '描述画面主体、风格、光线与构图，例如：一只橘猫坐在窗台上，清晨侧光，35mm 胶片质感' : '描述镜头、动作与氛围，例如：海边日落，慢镜头推近，暖色逆光'}
+              disabled={active}
+            />
+          </label>
+
+          {image ? (
+            <div className="agx-media-field">
+              <span>比例</span>
+              <div className="agx-media-seg" role="group" aria-label="图片比例">
+                {IMAGE_RATIO_OPTIONS.map((option) => (
+                  <button
+                    type="button"
+                    key={option.value}
+                    className={ratio === option.value ? 'is-active' : ''}
+                    aria-pressed={ratio === option.value}
+                    onClick={() => setRatio(option.value)}
+                    disabled={active}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="agx-media-pair">
+              <div className="agx-media-field">
+                <span>时长</span>
+                <div className="agx-media-seg" role="group" aria-label="视频时长">
+                  {([4, 8] as VideoDuration[]).map((value) => (
+                    <button
+                      type="button"
+                      key={value}
+                      className={duration === value ? 'is-active' : ''}
+                      aria-pressed={duration === value}
+                      onClick={() => setDuration(value)}
+                      disabled={active}
+                    >
+                      {value}s
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="agx-media-field">
+                <span>分辨率</span>
+                <div className="agx-media-seg" role="group" aria-label="视频分辨率">
+                  {(['480p', '720p'] as VideoResolution[]).map((value) => (
+                    <button
+                      type="button"
+                      key={value}
+                      className={resolution === value ? 'is-active' : ''}
+                      aria-pressed={resolution === value}
+                      onClick={() => setResolution(value)}
+                      disabled={active}
+                    >
+                      {value}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="agx-media-cost">
+            <span>
+              本次 <strong>{price}</strong> 积分
+              {credits?.balance !== null && credits?.balance !== undefined ? (
+                <>
+                  {' '}· 当前余额 <strong>{credits.balance}</strong> 积分
+                </>
+              ) : null}
+            </span>
+            <span className="agx-mono">失败全额退回</span>
+          </div>
+
+          {error && !task ? (
+            <div className="agx-media-error" role="alert">
+              <AlertCircle size={15} />
+              <div>
+                <strong>没有生成</strong>
+                <p>{error}</p>
+                <small>本次未扣积分{error.includes('积分不足') ? '，充值通道未开通，请联系管理员发放' : ''}</small>
+              </div>
+            </div>
+          ) : null}
+
+          {busy && !task ? (
+            <div className="agx-media-running" role="status">
+              <span className="agx-media-spinner" />
+              <div>
+                <strong>{image ? '正在生成图片' : '正在提交视频任务'}</strong>
+                <p>{image ? '平台通道已收到请求，完成后会自动显示结果。' : '提交成功后每 2.5 秒查询一次进度。'}</p>
+              </div>
+            </div>
+          ) : null}
+
+          {task?.status === 'processing' ? (
+            <div className="agx-media-progress" role="status">
+              <div className="agx-media-progress-head">
+                <span className="agx-media-spinner" />
+                <strong>视频生成中 · 已用时 <span className="agx-mono">{clockOf(elapsed)}</span></strong>
+                <span className="agx-mono">每 2.5s 查询</span>
+              </div>
+              <div className={'agx-media-progress-track' + (task.progress === null ? ' is-indeterminate' : '')}>
+                <span style={task.progress === null ? undefined : { width: task.progress + '%' }} />
+              </div>
+              <p>{task.progress === null ? '上游还没有返回百分比；页面按任务状态与已用时间如实显示，不编进度。' : '上游进度 ' + task.progress + '%。'}</p>
+              {pollError ? <p className="agx-media-poll-warning">{pollError}</p> : null}
+            </div>
+          ) : null}
+
+          {task?.status === 'succeeded' ? (
+            <div className="agx-media-result">
+              <div className="agx-media-result-head">
+                <span className="agx-chip agx-chip--pass">生成完成</span>
+                <span className="agx-mono">{(image ? '图片' : '视频') + ' · ' + formatBytes(task.file?.bytes ?? 0)}</span>
+              </div>
+              {image ? (
+                <img className="agx-media-image" src={task.downloadUrl} alt={task.prompt} />
+              ) : (
+                <video className="agx-media-video" src={task.downloadUrl} controls playsInline preload="metadata" />
+              )}
+              <div className="agx-media-result-foot">
+                <span className="agx-mono">{task.id}</span>
+                <a className="vq-button vq-button--ghost" href={task.downloadUrl} download>
+                  <Download size={13} />
+                  下载{(image ? '图片' : '视频')}
+                </a>
+              </div>
+            </div>
+          ) : null}
+
+          {task?.status === 'failed' ? (
+            <div className="agx-media-error" role="alert">
+              <AlertCircle size={15} />
+              <div>
+                <strong>生成失败</strong>
+                <p>{error || task.error || '上游没有返回结果'}</p>
+                <small>
+                  {task.credits.refunded
+                    ? '已全额退还 ' + task.credits.cost + ' 积分（任务号 ' + task.id + '）'
+                    : '退款未完成：账本未确认退回，请联系管理员并带上任务号 ' + task.id}
+                </small>
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        <footer className="agx-media-foot">
+          <span>结果文件存在服务端 data/media，预览与下载都走登录鉴权。</span>
+          <div>
+            {task?.status === 'succeeded' ? (
+              <button type="button" className="vq-button vq-button--primary" onClick={reset}>
+                <Plus size={14} />
+                再生成
+              </button>
+            ) : task?.status === 'failed' ? (
+              <button type="button" className="vq-button vq-button--primary" onClick={() => void submit()} disabled={!canSubmit}>
+                <RotateCcw size={14} />
+                重试
+              </button>
+            ) : (
+              <button type="button" className="vq-button vq-button--primary" onClick={() => void submit()} disabled={!canSubmit}>
+                {busy || task?.status === 'processing' ? <span className="agx-media-spinner agx-media-spinner--ink" /> : image ? <ImageIcon size={14} /> : <Clapperboard size={14} />}
+                {busy ? '提交中…' : task?.status === 'processing' ? '生成中…' : image ? '生成图片' : '提交视频'}
+              </button>
+            )}
+          </div>
+        </footer>
+      </section>
+    </div>
+  )
+}
+
 export function AgentsPage({
   onCreate,
   onOpenAgent,
@@ -648,6 +1039,8 @@ export function AgentsPage({
   const [actionError, setActionError] = useState('')
   // 对话按次扣积分：输入框上方常驻「余额 / 单价」，402 时不再是一句干巴巴的失败
   const [credits, setCredits] = useState<CreditsResponse | null>(null)
+  // 预设的窗口工具：生图 / 生视频，打开的是生成表单而不是对话
+  const [mediaKind, setMediaKind] = useState<MediaKind | null>(null)
   // 模型服务状态：额度 / 凭证这类账号级故障要在输入前就说清楚，而不是让人白点一次
   const [modelState, setModelState] = useState<ModelServiceState | null>(null)
   const [rechecking, setRechecking] = useState(false)
@@ -1402,6 +1795,36 @@ export function AgentsPage({
         }
       />
 
+      <section className="agx-presets" aria-label="预设智能体">
+        <div className="agx-presets-head">
+          <div>
+            <span className="agx-kicker">PRESET AGENTS</span>
+            <h2>预设智能体</h2>
+          </div>
+          <span className="agx-presets-note">窗口工具 · 不进入对话</span>
+        </div>
+        <div className="agx-preset-grid">
+          <button type="button" className="agx-preset-card" onClick={() => setMediaKind('image')}>
+            <span className="agx-preset-icon"><ImageIcon size={18} /></span>
+            <span className="agx-preset-copy">
+              <strong>生图智能体</strong>
+              <span>提示词 → 比例 → 预览 / 下载</span>
+            </span>
+            <span className="agx-preset-meta">gpt-image-2 · {credits?.prices.image_gen ?? 5} 积分 / 张</span>
+            <ArrowUpRight size={15} className="agx-preset-arrow" />
+          </button>
+          <button type="button" className="agx-preset-card" onClick={() => setMediaKind('video')}>
+            <span className="agx-preset-icon"><Clapperboard size={18} /></span>
+            <span className="agx-preset-copy">
+              <strong>生视频智能体</strong>
+              <span>提示词 → 时长 / 分辨率 → 进度 / 下载</span>
+            </span>
+            <span className="agx-preset-meta">SeeAPI · {credits?.prices.video_gen ?? 15} 积分 / 条</span>
+            <ArrowUpRight size={15} className="agx-preset-arrow" />
+          </button>
+        </div>
+      </section>
+
       <section className="agx-stage" ref={stageRef}>
         {projectContext ? (
           <div className="agx-project" role="status">
@@ -1724,6 +2147,16 @@ export function AgentsPage({
           </div>
         )}
       </section>
+
+      {mediaKind ? (
+        <MediaGenDialog
+          kind={mediaKind}
+          onClose={() => setMediaKind(null)}
+          onCreditsChanged={() => {
+            getCredits(1).then(setCredits).catch(() => undefined)
+          }}
+        />
+      ) : null}
     </div>
   )
 }

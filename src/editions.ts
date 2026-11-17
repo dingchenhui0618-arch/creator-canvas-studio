@@ -88,23 +88,98 @@ export const DEFAULT_EDITION: EditionId = 'user'
 
 export const EDITION_STORAGE_KEY = 'vq.edition'
 
+/** 后台没有指定 section 时落在这里；路由与 App 共用，避免两处各写一个默认值。 */
+export const DEFAULT_ADMIN_SECTION: AdminSection =
+  (EDITION_BY_ID.admin.nav[0]?.section as AdminSection | undefined) ?? 'overview'
+
+export type EditionResolution = {
+  /** 地址栏查询串，直接传 window.location.search 即可；不带开头的 ? 也认。 */
+  search: string
+  /** localStorage 里的 vq.edition 原值；不是 admin/user 就忽略。 */
+  stored: string | null
+  /** 当前会话用户是否管理员。非管理员一律回用户生产版。 */
+  isAdmin: boolean
+}
+
+/**
+ * 形态判定的唯一真源（纯函数，Node 可直接测）。
+ *
+ * 顺序很重要：先看人，再看地址栏，最后才看本机记忆。
+ * - 非管理员：无论 ?edition=admin 还是本机残留 vq.edition=admin，都只能停在用户版；
+ * - 管理员：地址栏显式指定优先，其次沿用上次记忆，最后才是默认用户版。
+ * 这里只做前端落点，不是安全边界；真正的数据权限仍由 /api/admin/* 的 isAdmin 校验。
+ */
+export function resolveEdition({ search, stored, isAdmin }: EditionResolution): EditionId {
+  if (!isAdmin) return 'user'
+  const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search)
+  const requested = params.get('edition')
+  if (requested === 'admin' || requested === 'user') return requested
+  if (stored === 'admin' || stored === 'user') return stored
+  return DEFAULT_EDITION
+}
+
+/** 只读本机记忆；存储不可用时按「没有记住」处理。 */
+export function readStoredEdition(): string | null {
+  try {
+    return window.localStorage.getItem(EDITION_STORAGE_KEY)
+  } catch {
+    return null
+  }
+}
+
+/** 记住形态。只应由管理员的会话调用；存储不可用时静默忽略。 */
+export function rememberEdition(edition: EditionId): void {
+  try {
+    window.localStorage.setItem(EDITION_STORAGE_KEY, edition)
+  } catch {
+    // 隐私模式下写不进去，本次会话仍然按 resolveEdition 的结果走
+  }
+}
+
 /**
  * 对外默认永远是用户生产版。后台只有一个入口：地址栏加 ?edition=admin。
  * 这样普通用户不会在自己的侧栏里发现「形态切换」，运维也不必记 localStorage 键。
+ *
+ * 首屏调用时还没有 /api/auth/me 的结果，isAdmin 只能传本地缓存里的角色；
+ * 缓存不是权威，App 在会话校验完成后会用真实 kind 再校验一次。
  */
-export function readInitialEdition(): EditionId {
+export function readInitialEdition(isAdmin = false): EditionId {
   try {
-    const param = new URLSearchParams(window.location.search).get('edition')
-    if (param === 'admin' || param === 'user') {
-      window.localStorage.setItem(EDITION_STORAGE_KEY, param)
-      return param
-    }
-    const stored = window.localStorage.getItem(EDITION_STORAGE_KEY)
-    if (stored === 'admin' || stored === 'user') return stored
+    const edition = resolveEdition({
+      search: window.location.search,
+      stored: window.localStorage.getItem(EDITION_STORAGE_KEY),
+      isAdmin,
+    })
+    // 只有管理员才写形态记忆：普通账号即使手动加 ?edition=admin，也不留下这个开关。
+    if (isAdmin) rememberEdition(edition)
+    return edition
   } catch {
     // localStorage 不可用（隐私模式）时回到默认形态
+    return DEFAULT_EDITION
   }
-  return DEFAULT_EDITION
+}
+
+/**
+ * 非管理员带 ?edition=admin 进来时，把这一项从地址栏拿掉，避免地址栏继续暗示后台。
+ * 不动 vq.edition：那是这台机器的运维开关，管理员下次登录还要沿用。
+ */
+export function stripAdminEditionQuery(): void {
+  try {
+    const url = new URL(window.location.href)
+    if (url.searchParams.get('edition') !== 'admin') return
+    url.searchParams.delete('edition')
+    window.history.replaceState(null, '', url.pathname + url.search + url.hash)
+  } catch {
+    // 地址栏不可写时忽略；页面已经停在用户版，不影响权限判断。
+  }
+}
+
+/**
+ * 后台路由门禁：只有管理员能渲染后台外壳。
+ * 非管理员直接访问 #/admin/* 时由 App 给明确的无权限页，不挂后台导航。
+ */
+export function canAccessAdminRoute(route: { kind: string }, isAdmin: boolean): boolean {
+  return route.kind !== 'admin' || isAdmin
 }
 
 export const EDITION_ICON = { user: Activity, admin: Gauge } as const

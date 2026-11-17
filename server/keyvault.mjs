@@ -714,6 +714,13 @@ async function withJudgeCheck(result, key, capabilities) {
  * 不能安全真实调用的能力（出图 / 视频会产生费用）只探测凭证，并在结果里写明 mode，
  * 不让「/models 返回 200」冒充「模型可用」。
  */
+/** 凭证探活时模型清单的真实地址：SeeAPI 在 /v1/models，其余按 baseUrl 直拼 /models。 */
+export function modelsProbeUrl(baseUrl) {
+  const base = String(baseUrl || '').replace(/\/+$/, '')
+  if (/cgcm|seeapi/i.test(base)) return base.replace(/\/v1$/i, '') + '/v1/models'
+  return base + '/models'
+}
+
 export async function testKey(id) {
   const key = load().keys.find((item) => item.id === id)
   if (!key) throw Object.assign(new Error('Key 不存在'), { status: 404, code: 'KEY_NOT_FOUND' })
@@ -780,7 +787,9 @@ export async function testKey(id) {
 
   let result
   try {
-    const response = await probeFetch(key.baseUrl.replace(/\/+$/, '') + '/models', {
+    // SeeAPI（CGCM）的模型清单在 /v1/models，而它的 baseUrl 允许写成…/api.cgcm-api.com 或 …/v1；
+    // 直接拼 /models 会 404，后台会错误地提示「检查 baseUrl 是否带 /v1」。
+    const response = await probeFetch(modelsProbeUrl(key.baseUrl), {
       headers: { Authorization: 'Bearer ' + apiKey },
     }, 8000)
     const text = await response.text()
