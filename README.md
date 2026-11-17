@@ -4225,6 +4225,21 @@ SMTP 凭据还在你手上，代码侧却一直悬着「填进去到底能不能
 细节见 [docs/alert-payload-adapter-2026-11-17.md](docs/alert-payload-adapter-2026-11-17.md)。
 
 
+## 二百四十、0.9.169 上线：告警载荷适配进生产（2026-11-17）
+
+上一轮做完的告警载荷适配这轮发上去了。**v0.9.168 → v0.9.169**，入口 `index-umavMFkU.js`，`/api/health` ok、templates 26，回滚点 `20261117-053310`（`rollback.sh --to 1` 回 0.9.168）。
+
+**发法**：走仓库既有的发布链路——本地 `npm run build` 后打 `dist + server + scripts + package.json + deploy`（1.34 MB）的包，在服务器上 `bash scripts/deploy.sh <包> "20261117-1332-r182"`，脚本先给当前版本打快照再替换程序目录、重启、自检。**没有重跑 `install.sh`**：那会连 nginx 配置一起按模板重写，风险与这次改动无关。
+
+**验收**：服务 `visionqa` / `visionqa-internal` 均 active；`/api/version` → 0.9.169；`/api/health` ok、templates 26；`/opt/visionqa/server/alert-format.mjs` 在位；`dist/assets/AdminConsolePage-*.js` 里搜得到新文案「识别为」；公网 `visionqa.wavisionai.cn/api/version` 同样是 0.9.169。
+
+**别误会这一件的意义**：告警**现在仍然不会通知任何人**——生产上依旧没有 `alert-channel.json`、也没有 `VQ_ALERT_WEBHOOK`。这次只是把「地址给过来之后发得对不对」修完了；地址一贴、点一次「发一条测试告警」，提示会直接说是哪家机器人收下了。
+
+**边界**：没登录生产后台点页面复核（助手侧看到的管理员邮箱是被脱敏的 `[EMAIL:…]`，拼不出登录请求），核对的是版本号、入口、服务器上的新文件、dist 新文案与服务状态；部署没碰任何数据文件（`alert-outbox.json` 仍是 11-13 18:43 那份），`node_modules` 没重建（新代码无新依赖）。
+
+细节见 [docs/deploy-r182-2026-11-17.md](docs/deploy-r182-2026-11-17.md)。
+
+
 
 
 
