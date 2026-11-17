@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { listAdminUsers, createAdminUser, grantCredits, updateAdminUser, resetAdminPassword, deleteAdminUser, listCreditRequests, resolveCreditRequest, listAdminInvites, createAdminInvite, revokeAdminInvite, type AdminUser, type AdminInvite, type CreditRequest } from '../../api/credits'
+import { BULK_ACCOUNT_LIMIT, parseBulkAccounts, type BulkAccountProblem } from '../../domain/bulk-accounts'
 import { readSession } from '../../auth/session'
 import type { SessionKind } from '../../auth/session'
 import { useUiMode } from '../../api/app'
@@ -61,6 +62,12 @@ export default function UsersSection() {
   const [createError, setCreateError] = useState('')
   const [created, setCreated] = useState<{ email: string; username: string; password: string; balance: number } | null>(null)
   const [createdCopied, setCreatedCopied] = useState(false)
+  // 批量建号：一次粘贴多行，解析规则在 domain/bulk-accounts，这里只负责逐行提交与贴结果
+  const [bulkOpen, setBulkOpen] = useState(false)
+  const [bulkText, setBulkText] = useState('')
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const [bulkProblems, setBulkProblems] = useState<BulkAccountProblem[]>([])
+  const [bulkResults, setBulkResults] = useState<{ line: number; label: string; ok: boolean; detail: string }[]>([])
   // 额度申请队列：用户积分不够时提交，这里发放或忽略
   const [requests, setRequests] = useState<CreditRequest[]>([])
   const [requestBusy, setRequestBusy] = useState('')
@@ -363,6 +370,52 @@ export default function UsersSection() {
     }
   }
 
+  // 逐行建号：解析出问题的行不提交（结果里照样列出来），已经建成功的不回滚——
+  // 建号本身不可撤销地占用用户名，回滚会把已交给对方的账号悄悄删掉，比留着更糟。
+  const createBulk = async () => {
+    if (bulkBusy) return
+    const parsed = parseBulkAccounts(bulkText)
+    setBulkProblems(parsed.problems)
+    if (!parsed.rows.length) {
+      setBulkResults([])
+      return
+    }
+    setBulkBusy(true)
+    setBulkResults([])
+    const credits = Math.max(0, Math.trunc(Number(createCredits) || 0))
+    const results: { line: number; label: string; ok: boolean; detail: string }[] = []
+    for (const row of parsed.rows) {
+      const label = row.username || row.email
+      try {
+        const result = await createAdminUser({
+          email: row.email || undefined,
+          username: row.username || undefined,
+          name: row.name || undefined,
+          kind: 'account',
+          password: row.password,
+          credits,
+        })
+        results.push({
+          line: row.line,
+          label: result.user.username || result.user.email,
+          ok: true,
+          detail: '余额 ' + result.balance + ' 积分，用' + (row.username ? '用户名' : '邮箱') + '登录',
+        })
+      } catch (caught) {
+        results.push({
+          line: row.line,
+          label,
+          ok: false,
+          detail: caught instanceof Error ? caught.message : '建号失败',
+        })
+      }
+      setBulkResults([...results])
+    }
+    setBulkBusy(false)
+    if (results.every((item) => item.ok) && !parsed.problems.length) setBulkText('')
+    load()
+  }
+
   const copyCreatedPassword = async () => {
     if (!created) return
     try {
@@ -373,6 +426,9 @@ export default function UsersSection() {
       setCreatedCopied(false)
     }
   }
+
+  // 粘贴框的实时体检：只算能建几行、哪几行有问题，不提交
+  const bulkPreview = bulkText.trim() ? parseBulkAccounts(bulkText) : { rows: [], problems: [] }
 
   return (
     <>
@@ -613,6 +669,70 @@ export default function UsersSection() {
             </div>
           </div>
         ) : null}
+        <div className="admin-bulk">
+          <button
+            type="button"
+            className="vq-button vq-button--ghost"
+            aria-expanded={bulkOpen}
+            onClick={() => setBulkOpen((open) => !open)}
+          >
+            {bulkOpen ? '收起批量建号' : '批量粘贴建号'}
+          </button>
+          {bulkOpen ? (
+            <div className="admin-bulk-body">
+              <p className="admin-bulk-note">
+                一行一个账号：「用户名或邮箱　口令　姓名」。姓名可省；空格、Tab、中英文逗号都算分隔；# 开头的行忽略。
+                一次最多 {BULK_ACCOUNT_LIMIT} 个，角色一律普通账号，初始积分取上面的「初始积分」。
+              </p>
+              <textarea
+                className="admin-bulk-input"
+                value={bulkText}
+                onChange={(event) => setBulkText(event.target.value)}
+                rows={4}
+                spellCheck={false}
+                aria-label="批量建号内容"
+                placeholder={'账号 口令 姓名\n账号 口令 姓名'}
+              />
+              <div className="admin-edit-actions">
+                <button
+                  type="button"
+                  className="vq-button vq-button--primary"
+                  disabled={bulkBusy || !bulkText.trim()}
+                  onClick={() => void createBulk()}
+                >
+                  {bulkBusy ? '建号中…' : '按行建号'}
+                </button>
+                {bulkText.trim() ? (
+                  <span className="admin-bulk-note">
+                    已识别 {bulkPreview.rows.length} 行
+                    {bulkPreview.problems.length ? '，' + bulkPreview.problems.length + ' 行有问题' : ''}
+                  </span>
+                ) : null}
+              </div>
+              {bulkProblems.length ? (
+                <ul className="admin-bulk-problems">
+                  {bulkProblems.slice(0, 6).map((problem) => (
+                    <li key={problem.line + ':' + problem.reason}>
+                      第 {problem.line} 行：{problem.reason}
+                    </li>
+                  ))}
+                  {bulkProblems.length > 6 ? <li>还有 {bulkProblems.length - 6} 行没列出来</li> : null}
+                </ul>
+              ) : null}
+              {bulkResults.length ? (
+                <ul className="admin-bulk-results">
+                  {bulkResults.map((item) => (
+                    <li key={item.line}>
+                      <span className={item.ok ? 'admin-bulk-ok' : 'admin-bulk-bad'}>{item.ok ? '已建' : '失败'}</span>
+                      <b>{item.label}</b>
+                      <span className="admin-bulk-detail">{item.detail}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       </section>
       <section className="admin-card admin-block">
         <div className="admin-block-head">

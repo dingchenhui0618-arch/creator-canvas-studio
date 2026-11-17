@@ -753,6 +753,82 @@
   outline-offset: -1px;
 }
 
+/* 批量建号（v0.9.167）：和单条建号同一张卡，粘贴框拿到等宽字体，结果逐行给 */
+.admin-bulk {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line, rgba(17, 17, 17, 0.1));
+}
+
+.admin-bulk-body {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+.admin-bulk-note {
+  margin: 0;
+  color: var(--muted, #5d5d5d);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.admin-bulk-input {
+  width: 100%;
+  min-height: 96px;
+  padding: 8px;
+  color: var(--ink, #111111);
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--line-strong, #d8d3c9);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 13px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.admin-bulk-input:focus-visible {
+  outline: 2px solid var(--ink, #111111);
+  outline-offset: -1px;
+}
+
+.admin-bulk-problems {
+  margin: 0;
+  padding-left: 16px;
+  color: var(--fail, #a33838);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.admin-bulk-results {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.admin-bulk-results li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.admin-bulk-results b {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-weight: 500;
+}
+
+.admin-bulk-ok { color: var(--pass, #176b43); }
+.admin-bulk-bad { color: var(--fail, #a33838); }
+.admin-bulk-detail { color: var(--muted, #5d5d5d); }
+
 /* 告警卡：一行一个事件，次数与最近时间靠等宽字体对齐；确认按钮固定在右侧 */
 .admin-alert-actions {
   display: flex;
