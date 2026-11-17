@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { request } from '../../api/client'
 import { useUiMode } from '../../api/app'
 import { formatDateTime, formatDuration, useApi, type BdcPort, type BdcStatus, type VersionInfo } from './data'
@@ -354,6 +354,27 @@ export default function SystemSection() {
     fromName: 'VisionQA',
     fromAddress: '',
   })
+
+  // 已配置的通道要把「除了口令以外」的字段填回表单：否则改个端口得把服务器、发件人重打一遍，
+  // 还很容易顺手把账号打错。口令永远不回显，账号留空即沿用（服务端 saveMail 同样按这个口径）。
+  // 只在 updatedAt 变了（刚保存 / 换了一台）时覆盖，免得用户正在输入时被刷掉。
+  const mailPrefill = useRef('')
+  const mailSaved = mail.data?.mail
+  useEffect(() => {
+    if (!mailSaved?.configured) return
+    const stamp = mailSaved.updatedAt || 'saved'
+    if (mailPrefill.current === stamp) return
+    mailPrefill.current = stamp
+    setMailForm({
+      host: mailSaved.host || '',
+      port: String(mailSaved.port || (mailSaved.secure ? 465 : 587)),
+      secure: mailSaved.secure === true,
+      user: '',
+      pass: '',
+      fromName: mailSaved.fromName || 'VisionQA',
+      fromAddress: mailSaved.fromAddress || '',
+    })
+  }, [mailSaved])
 
   const errors = [
     version.error ? `GET /api/version：${version.error}` : '',
@@ -880,7 +901,11 @@ export default function SystemSection() {
                       className="vq-input"
                       value={mailForm.user}
                       onChange={(event) => setMailForm((previous) => ({ ...previous, user: event.target.value }))}
-                      placeholder="不需要认证就留空"
+                      placeholder={
+                        mailSaved?.configured && mailSaved.accountMasked
+                          ? '留空沿用 ' + mailSaved.accountMasked
+                          : '不需要认证就留空'
+                      }
                       autoComplete="off"
                       spellCheck={false}
                       disabled={mailBusy === 'save'}

@@ -77,12 +77,15 @@ export function validateMailConfig(input = {}) {
 export async function saveMail(input = {}, { by = '' } = {}) {
   const previous = await readMail()
   const wantsPass = String(input?.pass || '')
-  const user = String(input?.user || '').trim()
+  // 账号留空 = 沿用已保存的账号：后台表单不回显账号（只给掩码），所以只改端口 / 发件人时
+  // 不该逼人重填账号，更不该因此丢掉口令。
+  const user = String(input?.user || '').trim() || (previous?.user || '')
   const keepPass = !wantsPass && previous && previous.user === user ? previous.pass : ''
   if (!wantsPass && !keepPass && user) {
     return { ok: false, error: previous?.user && previous.user !== user ? '换了发信账号，要重新填口令' : '请填发信口令' }
   }
-  const checked = validateMailConfig({ ...input, pass: wantsPass || keepPass })
+  // user 也要一起换掉：账号留空时它是从上一份配置回填的，直接拿 input.user 去校验会报「填了口令就要填账号」
+  const checked = validateMailConfig({ ...input, user, pass: wantsPass || keepPass })
   if (!checked.ok) return { ok: false, error: checked.error }
   const saved = {
     ...checked.value,
