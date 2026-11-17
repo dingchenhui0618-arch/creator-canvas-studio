@@ -4241,6 +4241,27 @@ SMTP 凭据还在你手上，代码侧却一直悬着「填进去到底能不能
 
 细节见 [docs/deploy-r182-2026-11-17.md](docs/deploy-r182-2026-11-17.md)。
 
+## 二百四十一、邮件通道真的通了：阿里云 DirectMail 进生产（2026-11-17）
+
+「忘记密码」一直只差凭据。这轮把它办完了，而且**不是「保存成功」，是真有一封信落进了外部收件箱**。
+
+**开通**：阿里云邮件推送（DirectMail），订单 `2008555321250135`、**0 元**；额度 日 2,000 / 月 62,000 封（免费额度 2,000 封）。选它是因为生产 ECS 和域名 `wavisionai.cn` 本来就在阿里云，而 ECS 默认封 25 端口——DirectMail 的 **465 直连 TLS** 出网不受限。
+
+**配置**：发信域名 `mail.wavisionai.cn`（二级域，不占主域企业邮箱）验证通过；`wavisionai.cn` 云解析加了 4 条（`mail` MX→`mx01.dm.aliyun.com`、`mail` TXT SPF、`aliyun-cn-hangzhou._domainkey.mail` DKIM、`_dmarc.mail` DMARC），原有 5 条 A 记录没动；发信地址 **noreply@mail.wavisionai.cn**（类型「触发邮件」）+ SMTP 口令。
+
+**后台**：`PUT /api/admin/mail/channel` → `smtpdm.aliyun.com:465`、`secure:true`、发件人 `VisionQA`。填完 `mail.configured:true`、`passwordReset:true`，登录页「忘记密码」从「找管理员」变成真发信（链接 30 分钟）。口令只回掩码，明文只落在 `/var/lib/visionqa/mail.json`（`0600`）。
+
+**验收**：`POST /api/admin/mail/test` 两次 **200**（156 / 204 ms）→ 发到外部临时邮箱，**2 秒收到**，主题「VisionQA 邮件通道测试」、发信人 `VisionQA <noreply@mail.wavisionai.cn>`、中文正文完整 → 阿里云「发送详情」对账 **成功 / `250 Send Mail OK`**。
+
+**三个要记住的坑**：
+1. SMTP 口令设完 **1~2 分钟内会 535**，别急着改口令，等两分钟就是 `235`。
+2. 测试信默认发给管理员邮箱，**头两封失败了**——`收信域名 MX 地址不对`：主域 `wavisionai.cn` 没有 MX（我们只给 `mail.` 加了解析）。管理员想自己收「忘记密码」的信，得换真实邮箱或给主域配邮箱。
+3. 两个普通账号的邮箱是 `@login.visionqa.local` 占位符，**它们的找回密码永远发不出去**；真实用户注册填真邮箱才有用。
+
+**边界**：只测了 465 直连 TLS，没测 587 STARTTLS / 80；后台「系统」页 390 宽下能用但正文列只有约 215 px、中文断行；后台表单不预填已保存的 host / port / 账号（只有上面的「已配置」事实块显示），下轮顺手改。
+
+细节与 1440 / 390 两张后台截图见 [docs/smtp-directmail-2026-11-17.md](docs/smtp-directmail-2026-11-17.md)。
+
 
 
 
