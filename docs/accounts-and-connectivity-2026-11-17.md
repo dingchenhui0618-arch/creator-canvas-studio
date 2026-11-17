@@ -84,6 +84,19 @@
 
 ![后台 · 批量建号结果](admin-bulk-accounts-result-2026-11-17.png)
 
+## 用真账号走一遍（v0.9.168，2026-11-17）
+
+- 用真实账号 `mark` 在无头 Chrome 里走：智能体页有「生图智能体」「生视频智能体」两个窗口（5 积分/张、15 积分/条），侧栏没有「后台管理」，直接敲 `#/admin/users` 落在拒绝页，服务端仍是 **403**。
+- 修掉两处文案：
+  - `sessionKindLabel()` 对用户名账号返回「登录账号」，不再叫「工作邮箱」（`src/domain/account-label.ts`）。
+  - 新增 `accountIdentifier()`：服务端给用户名账号的内部占位邮箱（`@login.visionqa.local`）不再显示，侧栏、设置页、拒绝页都改用它。
+- 单测：`test/account-label.test.mjs`（6 例：用户名/邮箱/管理员/占位邮箱）。
+- 截图前把页面文本里的 11 位手机号替换成圆点，图片可以进仓库；临时会话用完已从 `sessions` 删除。
+
+![普通账号 · 智能体页（号码已打码）](agent-windows-real-account-2026-11-17.png)
+
+![普通账号 · 后台拒绝页（号码已打码）](admin-denied-real-account-2026-11-17.png)
+
 ## 已知边界
 
 - 体检脚本会真的花钱，只在需要时手动跑：`scripts/connectivity-once.mjs`（`scripts/connectivity-diagnose.mjs` 是失败后的第二轮定位）。

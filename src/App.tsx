@@ -42,6 +42,7 @@ import { RequireSession } from './auth/RequireSession'
 import { useSession } from './auth/useSession'
 import { useUiMode } from './api/app'
 import { initialsFor, sessionKindLabel, type RegisterInput, type Session, type SessionUser, type SignInInput } from './auth/session'
+import { accountIdentifier } from './domain/account-label'
 import { listAgents, setPendingAgentProject } from './api/agents'
 import { createBdcCanvas } from './api/bdc'
 import { listReviewQueue } from './api/review'
@@ -101,9 +102,7 @@ function sectionLabel(section: string): string {
  */
 // 用户名账号的 email 是内部占位（@login.visionqa.local），界面上优先显示用户名
 function loginLabel(account: SessionUser): string {
-  if (account.username) return account.username
-  if (account.email.endsWith('@login.visionqa.local')) return account.name
-  return account.email
+  return accountIdentifier(account)
 }
 
 function AdminAccessDenied({
@@ -121,7 +120,7 @@ function AdminAccessDenied({
         <span className="vq-error-kicker">Admin / No access</span>
         <h1>这个账号没有后台权限</h1>
         <p>
-          后台管理版只对管理员开放。当前登录的是 {loginLabel(session.user)}（{sessionKindLabel(session.user.kind)}）。
+          后台管理版只对管理员开放。当前登录的是 {loginLabel(session.user)}（{sessionKindLabel(session.user)}）。
           你可以继续使用用户生产版；如果这是工作账号，请联系平台管理员调整角色后再试。
         </p>
         <div className="vq-access-denied-actions">
@@ -861,12 +860,12 @@ function Workbench({
                   aria-haspopup="menu"
                   aria-expanded={accountMenuOpen}
                   onClick={() => setAccountMenuOpen((value) => !value)}
-                  title={sidebarOpen ? undefined : `${session.user.name} · ${session.user.email}`}
+                  title={sidebarOpen ? undefined : `${session.user.name} · ${accountIdentifier(session.user)}`}
                 >
                   <span className="vq-sidebar-account-avatar">{initials}</span>
                   <span className="vq-sidebar-account-copy">
                     <strong>{session.user.name}</strong>
-                    <small title={session.user.email}>{session.user.email}</small>
+                    <small title={accountIdentifier(session.user)}>{accountIdentifier(session.user)}</small>
                   </span>
                   <MoreHorizontal size={15} className="vq-sidebar-account-more" />
                 </button>
@@ -874,7 +873,7 @@ function Workbench({
                 {accountMenuOpen && (
                   <div className="vq-menu vq-sidebar-account-menu" role="menu">
                     <div className="vq-sidebar-account-menu-meta">
-                      <span className="vq-mono">{sessionKindLabel(session.user.kind)}</span>
+                      <span className="vq-mono">{sessionKindLabel(session.user)}</span>
                       <span className="vq-mono">{internal ? '服务端会话' : '已登录'}</span>
                     </div>
                     <button

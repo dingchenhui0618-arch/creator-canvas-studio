@@ -8,6 +8,7 @@ import {
   register as requestRegister,
 } from '../api/auth'
 import { clearLocalResidue } from './local-residue'
+import { accountKindLabel } from '../domain/account-label'
 
 // admin 是服务端 users.kind='admin'：能看全部数据、发放积分。界面只用来显示角色与放开管理台入口。
 export type SessionKind = 'demo' | 'account' | 'guest' | 'admin'
@@ -304,11 +305,8 @@ export async function signOut(): Promise<void> {
   }
 }
 
-export function sessionKindLabel(kind: SessionKind): string {
-  if (kind === 'admin') return '管理员'
-  if (kind === 'demo') return '账号'
-  if (kind === 'guest') return '访客会话'
-  return '工作邮箱'
+export function sessionKindLabel(user: Pick<SessionUser, 'kind' | 'username'>): string {
+  return accountKindLabel(user.kind, user.username)
 }
 
 export function initialsFor(name: string): string {

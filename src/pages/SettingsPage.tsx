@@ -16,6 +16,7 @@ import { listMyFeedback, type FeedbackItem } from '../api/feedback'
 import { FeedbackModal } from '../components/FeedbackModal'
 import { HELP_ARTICLES } from '../domain/help'
 import { initialsFor, sessionKindLabel, type Session } from '../auth/session'
+import { accountIdentifier } from '../domain/account-label'
 import '../styles/shell.css'
 import '../styles/credits.css'
 
@@ -253,13 +254,13 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
               <h2>当前会话</h2>
               <p>{internal ? '会话保存在服务端，凭据是 HttpOnly cookie；关掉浏览器再打开仍是登录状态。' : '登录状态会安全保存，关掉浏览器再打开仍然是登录状态。'}</p>
             </div>
-            <Tag>{sessionKindLabel(session.user.kind)}</Tag>
+            <Tag>{sessionKindLabel(session.user)}</Tag>
           </div>
           <div className="vq-account">
             <span className="vq-account-avatar">{initialsFor(session.user.name)}</span>
             <div className="vq-account-meta">
               <strong>{session.user.name}</strong>
-              <span>{session.user.email}</span>
+              <span>{accountIdentifier(session.user)}</span>
             </div>
             <div className="vq-account-actions">
               <button type="button" className="vq-button vq-button--ghost" onClick={onSwitchAccount}>
