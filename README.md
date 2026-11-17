@@ -4531,6 +4531,7 @@ SMTP 凭据还在你手上，代码侧却一直悬着「填进去到底能不能
 | lint | 0 error / 16 warning（持平） |
 | `npx tsc -b` | 干净 |
 | 密钥扫描 | 826 个文件，无命中 |
+| CI | [44060401962](https://github.com/dingchenhui0618-arch/creator-canvas-studio/actions/runs/44060401962) **success**（安全扫描 / Node 22 / Node 24 全绿） |
 | 版本 | 仍 `0.9.174`：本轮只改测试与文档，没有重新发布；生产仍是 `0.9.174` |
 
 ### 边界
