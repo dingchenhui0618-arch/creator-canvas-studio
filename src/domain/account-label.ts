@@ -5,6 +5,20 @@ export type AccountKind = 'demo' | 'account' | 'guest' | 'admin'
 
 const PLACEHOLDER_EMAIL_SUFFIX = '@login.visionqa.local'
 
+/** 界面需要「这是谁、怎么登录」的最小字段集合：账号、会话、后台账号表共用一套。 */
+export type AccountLike = { name?: string; email?: string; username?: string }
+
+/**
+ * 这个账号有没有能收信的邮箱。
+ * 只填用户名（手机号）建的账号，服务端塞的是内部占位邮箱，忘记密码的信永远送不到——
+ * 后台要在账号表上把这个差别说出来，而不是把占位串当邮箱显示。
+ */
+export function hasRealEmail(user: AccountLike): boolean {
+  const email = String(user.email || '').trim().toLowerCase()
+  if (!email) return false
+  return !email.endsWith(PLACEHOLDER_EMAIL_SUFFIX)
+}
+
 /**
  * kind + 登录标识 → 界面上的身份文案。
  * - 管理员：管理员
@@ -19,7 +33,7 @@ export function accountKindLabel(kind: AccountKind, username?: string): string {
 }
 
 /** 界面上显示的登录标识：优先用户名，其次真邮箱；占位邮箱一律换成姓名。 */
-export function accountIdentifier(user: { name?: string; email?: string; username?: string }): string {
+export function accountIdentifier(user: AccountLike): string {
   const username = String(user.username || '').trim()
   if (username) return username
   const email = String(user.email || '').trim()

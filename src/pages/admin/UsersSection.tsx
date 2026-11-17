@@ -4,6 +4,7 @@ import { BULK_ACCOUNT_LIMIT, parseBulkAccounts, type BulkAccountProblem } from '
 import { readSession } from '../../auth/session'
 import type { SessionKind } from '../../auth/session'
 import { useUiMode } from '../../api/app'
+import { accountIdentifier, hasRealEmail } from '../../domain/account-label'
 import { formatDateTime } from './data'
 import { AdminHead, Badge, EmptyState, ErrorBanner, LoadingLine, RefreshButton, SourceTag } from './ui'
 import '../../styles/credits.css'
@@ -42,7 +43,7 @@ export default function UsersSection() {
   const [accessMessage, setAccessMessage] = useState('')
   const [resetBusy, setResetBusy] = useState('')
   const [resetError, setResetError] = useState('')
-  const [resetResult, setResetResult] = useState<{ email: string; password: string; signedOut: number } | null>(null)
+  const [resetResult, setResetResult] = useState<{ label: string; password: string; signedOut: number } | null>(null)
   const [copied, setCopied] = useState(false)
   // 删除账号不可撤销：先展开确认条，要求手输邮箱才能提交
   const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null)
@@ -233,7 +234,7 @@ export default function UsersSection() {
       const result = await updateAdminUser(item.id, patch)
       setAccessMessage(
         (result.user.kind === 'admin' ? '已将 ' : '已把 ') +
-          item.email +
+          accountIdentifier(item) +
           (result.user.kind === 'admin' ? ' 设为管理员' : ' 设为普通账号') +
           (patch.active === false ? '，并停用登录' : patch.active === true ? '，恢复登录' : ''),
       )
@@ -253,7 +254,7 @@ export default function UsersSection() {
     setCopied(false)
     try {
       const result = await resetAdminPassword(item.id)
-      setResetResult({ email: item.email, password: result.password, signedOut: result.signedOut })
+      setResetResult({ label: accountIdentifier(item), password: result.password, signedOut: result.signedOut })
       load()
     } catch (caught) {
       setResetError(caught instanceof Error ? caught.message : '口令重置失败')
@@ -293,7 +294,7 @@ export default function UsersSection() {
     setDeleteError('')
     try {
       await deleteAdminUser(deleteTarget.id)
-      setDeleteMessage('已删除账号 ' + deleteTarget.email + '。该账号创建过的模板、工作流与运行记录仍保留。')
+      setDeleteMessage('已删除账号 ' + accountIdentifier(deleteTarget) + '。该账号创建过的模板、工作流与运行记录仍保留。')
       if (selectedId === deleteTarget.id) setSelectedId('')
       setDeleteTarget(null)
       setDeleteConfirm('')
@@ -316,7 +317,7 @@ export default function UsersSection() {
     setGrantMessage('')
     try {
       const result = await grantCredits(selected.id, Math.trunc(value), note.trim())
-      setGrantMessage('已' + (value > 0 ? '发放' : '扣减') + ' ' + Math.abs(Math.trunc(value)) + ' 积分，' + selected.email + ' 当前余额 ' + result.balance + ' 积分')
+      setGrantMessage('已' + (value > 0 ? '发放' : '扣减') + ' ' + Math.abs(Math.trunc(value)) + ' 积分，' + accountIdentifier(selected) + ' 当前余额 ' + result.balance + ' 积分')
       setNote('')
       load()
     } catch (caught) {
@@ -453,18 +454,18 @@ export default function UsersSection() {
           <div className="admin-delete-copy">
             <span className="admin-label">删除账号</span>
             <p className="admin-sub">
-              将删除 {deleteTarget.email} 的登录、会话与积分记录，不能撤销。
+              将删除 {accountIdentifier(deleteTarget)} 的登录、会话与积分记录，不能撤销。
               {internal
                 ? '服务端同时清掉 data/auth.db 里的会话与 credit_ledger，以及 preferences.json 里的模型偏好；模板、工作流与运行记录保留。'
                 : '该账号创建过的模板、工作流与运行记录会保留，但不再有可登录的主人。'}
             </p>
             <label className="admin-delete-confirm">
-              <span>输入邮箱确认</span>
+              <span>输入账号确认</span>
               <input
                 className="vq-input"
                 value={deleteConfirm}
                 onChange={(event) => setDeleteConfirm(event.target.value)}
-                placeholder={deleteTarget.email}
+                placeholder={accountIdentifier(deleteTarget)}
                 autoComplete="off"
                 spellCheck={false}
               />
@@ -474,7 +475,7 @@ export default function UsersSection() {
             <button
               type="button"
               className="vq-button vq-button--danger"
-              disabled={deleteBusy || deleteConfirm.trim().toLowerCase() !== deleteTarget.email.toLowerCase()}
+              disabled={deleteBusy || deleteConfirm.trim().toLowerCase() !== accountIdentifier(deleteTarget).toLowerCase()}
               onClick={() => void confirmDelete()}
             >
               {deleteBusy ? '删除中…' : '确认删除'}
@@ -491,7 +492,7 @@ export default function UsersSection() {
           <div className="admin-reset-copy">
             <span className="admin-label">新口令（只显示这一次）</span>
             <p className="admin-sub">
-              已重置 {resetResult.email} 的口令，该账号 {resetResult.signedOut} 个旧登录已退出。请通过安全渠道交给对方，不要贴在公开频道。
+              已重置 {resetResult.label} 的口令，该账号 {resetResult.signedOut} 个旧登录已退出。请通过安全渠道交给对方，不要贴在公开频道。
             </p>
           </div>
           <code className="admin-reset-code">{resetResult.password}</code>
@@ -899,8 +900,14 @@ export default function UsersSection() {
                 {items.map((item) => (
                   <tr key={item.id}>
                     <td>
-                      <span className="admin-mono">{item.email}</span>
-                      {item.username ? <span className="admin-cell-sub">用户名 {item.username}</span> : null}
+                      <span className="admin-mono">{accountIdentifier(item)}</span>
+                      {hasRealEmail(item) ? (
+                        item.username ? (
+                          <span className="admin-cell-sub">{item.email}</span>
+                        ) : null
+                      ) : (
+                        <span className="admin-cell-sub">没有可收信邮箱 · 找回密码收不到信</span>
+                      )}
                     </td>
                     <td>{item.name}</td>
                     <td>{roleLabel(item.kind as SessionKind)}</td>
@@ -964,6 +971,8 @@ export default function UsersSection() {
             <p className="admin-hint">
               「条款同意」是注册时勾选同意的条款版本与时间，注册接口要求真的勾选并匹配当前版本；
               管理员开通的账号显示「管理员开通」，本功能上线前创建的账号显示「未留痕」——不补造同意记录。
+              「账号」一列显示的是登录标识：用手机号登录的账号显示手机号，内部占位邮箱不外露；这类账号没有邮箱，
+              「忘记密码」的信送不到，改口令请用同一行的「重置口令」。
             </p>
           </div>
         ) : (
@@ -985,7 +994,7 @@ export default function UsersSection() {
             <select className="vq-input" value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>
               {items.map((item) => (
                 <option key={item.id} value={item.id}>
-                  {item.email}（{item.credits} 积分）
+                  {accountIdentifier(item)}（{item.credits} 积分）
                 </option>
               ))}
             </select>

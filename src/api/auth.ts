@@ -7,6 +7,8 @@ export type AuthUserKind = 'account' | 'demo' | 'guest' | 'admin'
 export type AuthUser = {
   id: string
   email: string
+  /** 用户名（手机号）登录标识；邮箱账号为空串。界面显示身份用它，不用占位邮箱。 */
+  username?: string
   name: string
   workspace: string
   kind: AuthUserKind

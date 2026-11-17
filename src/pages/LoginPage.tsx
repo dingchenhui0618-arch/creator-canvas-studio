@@ -163,7 +163,7 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
     const trimmedEmail = email.trim()
     const trimmedName = name.trim()
     const nextErrors: FormErrors = {}
-    if (!trimmedEmail) nextErrors.email = isSignup ? '请输入邮箱' : '请输入邮箱或用户名'
+    if (!trimmedEmail) nextErrors.email = isSignup ? '请输入邮箱' : '请输入手机号或邮箱'
     else if (trimmedEmail.includes('@')) {
       if (!EMAIL_PATTERN.test(trimmedEmail)) nextErrors.email = '邮箱格式看起来不太对'
     } else if (isSignup) {
@@ -372,8 +372,8 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
                   ? '注册完直接进入工作台。昵称只是显示名，可以稍后再补。'
                   : '凭邀请码创建账号，开通后直接进入工作台；没有邀请码可以联系管理员。'
                 : internal
-                  ? '使用工作邮箱继续。会话由服务端校验，凭据不进浏览器存储。'
-                  : '使用工作邮箱继续。登录状态会安全保存，凭据不留在浏览器里。'}
+                  ? '用手机号或邮箱继续。会话由服务端校验，凭据不进浏览器存储。'
+                  : '用手机号或邮箱继续。登录状态会安全保存，凭据不留在浏览器里。'}
             </p>
           </div>
 
@@ -467,7 +467,7 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
             )}
             <div className="vq-field">
               <label className="vq-field-label" htmlFor="vq-email">
-                {isSignup ? '邮箱' : '邮箱或用户名'} <em className="vq-mono">{isSignup ? 'email' : 'email / username'}</em>
+                {isSignup ? '邮箱' : '手机号或邮箱'} <em className="vq-mono">{isSignup ? 'email' : 'phone / email'}</em>
               </label>
               <span className={`vq-input${errors.email ? ' is-invalid' : ''}`}>
                 <Mail size={15} />
@@ -477,7 +477,7 @@ export function LoginPage({ notice, onSignIn, onRegister, onVerifyTwoFactor }: P
                   name="email"
                   inputMode={isSignup ? 'email' : 'text'}
                   autoComplete="username"
-                  placeholder={isSignup ? EXAMPLE_EMAIL : EXAMPLE_EMAIL + ' 或手机号'}
+                  placeholder={isSignup ? EXAMPLE_EMAIL : '手机号 或 ' + EXAMPLE_EMAIL}
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   aria-invalid={Boolean(errors.email)}
@@ -767,6 +767,11 @@ function ForgotStep({
       setError('请输入邮箱')
       return
     }
+    if (!trimmed.includes('@')) {
+      // 手机号账号没有邮箱：这里只认邮箱地址，别让对方等一封永远收不到的信
+      setError('这里只发邮件，要填邮箱地址。用手机号登录的账号没有绑定邮箱，收不到这封信——请让管理员在后台「重置口令」。')
+      return
+    }
     if (!EMAIL_PATTERN.test(trimmed)) {
       setError('邮箱格式看起来不太对')
       return
@@ -788,7 +793,7 @@ function ForgotStep({
       <div className="vq-login-form-head">
         <span className="vq-mono">Reset password</span>
         <h2>找回口令</h2>
-        <p>填登录用的邮箱，我们会发一封带一次性链接的邮件，链接 30 分钟内有效。</p>
+        <p>填绑定的邮箱，我们会发一封带一次性链接的邮件，链接 30 分钟内有效。手机号账号没有绑定邮箱，收不到这封信，请让管理员在后台「重置口令」。</p>
       </div>
 
       {note ? (
@@ -828,7 +833,7 @@ function ForgotStep({
           </span>
           <span className="vq-field-hint">
             {supportEmail ? '收不到就找管理员重置（' + supportEmail + '）。' : '收不到就找工作区管理员重置。'}
-            平台不会向你索要当前口令。
+            手机号登录的账号请直接让管理员重置。平台不会向你索要当前口令。
           </span>
         </div>
 
