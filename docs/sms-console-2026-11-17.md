@@ -73,9 +73,18 @@
 ## 下一步
 
 1. **用户配合一次身份验证**（MFA 动态码或扫脸）→ 建出 RAM 用户 `visionqa-sms` 与 AccessKey；
-2. 把 AccessKey、签名、模板 CODE 填进生产后台「系统 → 短信通道」（`/var/lib/visionqa/sms.json`，0600）；
-3. 真发一条测试短信（约 ¥0.045），核对签名、模板文案与 5 分钟有效期；那之后登录页的「验证码登录」才会出现；
-4. 签名 VisionQA 过审后：新建一条绑定 VisionQA 的验证码模板（模板签名创建后不能改绑，只能重开一条），再过审后把通道里的 `signName` + `templateCode` 换成新的。
+2. 在服务器上一条命令配通道 + 发一条真短信（约 ¥0.045），核对签名、模板文案与 5 分钟有效期；那之后登录页的「验证码登录」才会出现：
+
+```bash
+# 在 /opt/visionqa 下，文件里写 keyId / keySecret / signName / templateCode / testPhone，跑完脚本自己删掉
+node --experimental-sqlite scripts/sms-channel-once.mjs .tmp-sms-channel.json
+```
+
+脚本 `scripts/sms-channel-once.mjs` 走的是服务端模块（`saveSms` → `smsForSending` → `issueSmsCode` → `sendSmsCode`），不经过管理员会话，所以**手机号与 AccessKey 都不用出现在命令行里**，输出只打掩码（`138****8000` / `LTAI••••xx`）。用假通道自测过一遍：保存 → 发码 → 删文件，输出 `ok=true`。这也解释了为什么不用后台界面：后台表单要管理员手机号登录，而这台机器的管理员登录名本身就是手机号。
+
+3. 签名 VisionQA 过审后：新建一条绑定 VisionQA 的验证码模板（模板签名创建后不能改绑，只能重开一条），再过审后把通道里的 `signName` + `templateCode` 换成新的。
+
+> 另外记一条平台建议：控制台弹窗写着「若签名是企事业单位名称，强烈推荐直接使用平台赠送签名（无需额外申请、报备更快、通过率更高）」。也就是说即便要等 `VisionQA`，今天也已经有一条能用的路——模板已经绑在赠送签名上且状态正常。
 
 防盗刷监控这一项已经做完（见上节），不用再排。
 
