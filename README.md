@@ -4196,6 +4196,21 @@ SMTP 凭据还在你手上，代码侧却一直悬着「填进去到底能不能
 
 细节见 [docs/mail-reset-e2e-2026-11-17.md](docs/mail-reset-e2e-2026-11-17.md)。
 
+## 二百三十八、告警外推链路自检：能推、会签名、失败会排队（文档/验证轮，2026-11-17）
+
+「告警 webhook」一直等一个地址。地址没给之前先把代码验了：临时实例（`8803`）+ 本地假接收端（`2526`）+ 一个「打不通」的端口（`2527`），全走真实后台接口，**生产未动**。
+
+**跑出来的**：配之前 `channel.configured:false`、队列空 → 首次保存通道回一次签名密钥 → 触发测试告警时通道打不通，告警**进队列**（`pending`、`lastError: fetch failed`）而不是丢掉 → 把地址换成能收的（不换密钥、不重启）→ 再触发一次，接收端收到 `POST /hook`（`user-agent: VisionQA-alert/1`），`x-vq-signature` 与用密钥重算的 **HMAC-SHA256 完全一致** → 手动重试那条失败的，`state: sent`，接收端**再收到一条**、签名同样对得上 → 收尾队列 `pending 0 / dead 0`、`sentCount 2`。
+
+**顺手查出来一个真要提前说的边界**：我们的正文是通用 JSON（`{text, alert, source}`）。飞书/钉钉/Slack 机器人各自要求自己的结构，**直接把机器人地址填进来多半回 400**，队列会一直重试但人收不到。要真发进群，要么接一个中转（n8n / 自建 / 企业微信中转），要么加一层按域名判定的适配器——这个等你点头我再做。
+
+**现状**：生产至今没有 `/var/lib/visionqa/alert-channel.json`，也没有配 `VQ_ALERT_WEBHOOK`，所以线上 5xx / 额度打满 / 磁盘不足**只会落进后台告警列表，不会有人被通知**。
+
+**可复跑**：`scripts/alert-e2e/`，`ALERT_E2E_DIR=/tmp/vq-alert-e2e VQ_APP_ROOT=/opt/visionqa bash scripts/alert-e2e/run.sh`，退出码 0 即通过。
+
+细节见 [docs/alert-webhook-e2e-2026-11-17.md](docs/alert-webhook-e2e-2026-11-17.md)。
+
+
 
 
 
