@@ -62,7 +62,7 @@ type DiagnosticsInfo = {
   }
 }
 
-type AlertNotify = { at: string; ok: boolean; status: number; ms: number; error: string }
+type AlertNotify = { at: string; ok: boolean; status: number; ms: number; error: string; provider?: string; providerLabel?: string }
 
 type AlertItem = {
   id: string
@@ -84,6 +84,8 @@ type AlertChannel = {
   secretMasked: string
   signed: boolean
   enabled: boolean
+  provider: string
+  providerLabel: string
   updatedAt: string
   updatedBy: string
   canEdit: boolean
@@ -382,7 +384,7 @@ export default function SystemSection() {
         !notify
           ? '已记一条测试告警：现在没有外推通道，只留在本站队列'
           : notify.ok
-            ? '已记一条测试告警，外推成功（HTTP ' + notify.status + '，' + notify.ms + ' ms）'
+            ? '已记一条测试告警，' + (notify.providerLabel || '通道') + '收下了（HTTP ' + notify.status + '，' + notify.ms + ' ms）'
             : '已记一条测试告警，但外推失败（' + (notify.status || '连不上') + '）：' + (notify.error || '接收端没接受') + '；已进重试队列',
       )
       alerts.reload()
@@ -575,8 +577,10 @@ export default function SystemSection() {
                 <div>
                   <p className="admin-label">外推通道</p>
                   <p className="admin-sub">
-                    机器人或自建接收端都行，POST 一条 JSON：<code className="admin-mono">{'{ text, alert, source }'}</code>。
+                    飞书 / 钉钉 / 企业微信 / Slack 的群机器人直接贴地址就行，载荷按地址自动换成它要的格式；自建接收端仍收
+                    <code className="admin-mono">{'{ text, alert, source }'}</code>。
                     配了签名就带 <code className="admin-mono">x-vq-signature: sha256=…</code>（HMAC-SHA256，对请求体原文）。
+                    收到 200 还会再看业务码（飞书 code / 钉钉与企业微信 errcode / Slack ok），只看 HTTP 状态等于没验。
                     推失败不会丢：按 1 / 5 / 15 分钟重试，四次都不成才标「已失败」。
                   </p>
                 </div>
@@ -590,6 +594,9 @@ export default function SystemSection() {
                   <dt>接收地址</dt>
                   <dd>
                     <code className="admin-mono">{alerts.data.channel.urlMasked || '—'}</code>
+                    {alerts.data.channel.configured ? (
+                      <span className="admin-cell-sub">识别为 {alerts.data.channel.providerLabel}，按它的消息格式发送</span>
+                    ) : null}
                     {alerts.data.channel.source === 'env' ? <span className="admin-cell-sub">来自环境变量 VQ_ALERT_WEBHOOK</span> : null}
                     {alerts.data.channel.source === 'admin' ? <span className="admin-cell-sub">后台配置{alerts.data.channel.updatedBy ? ' · ' + alerts.data.channel.updatedBy : ''}</span> : null}
                   </dd>

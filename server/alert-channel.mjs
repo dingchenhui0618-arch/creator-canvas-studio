@@ -8,6 +8,7 @@ import fsp from 'node:fs/promises'
 import crypto from 'node:crypto'
 import path from 'node:path'
 import { config } from './config.mjs'
+import { detectProvider, providerLabel } from './alert-format.mjs'
 
 const MAX_URL_LENGTH = 500
 
@@ -127,6 +128,9 @@ export async function channelView() {
     secretMasked: maskSecret(channel.secret),
     signed: Boolean(channel.secret),
     enabled: channel.enabled,
+    // 按地址认出来的那家机器人：后台据此显示「消息按它的格式发」，用户不用自己选
+    provider: detectProvider(channel.url),
+    providerLabel: providerLabel(detectProvider(channel.url)),
     updatedAt: saved?.updatedAt || '',
     updatedBy: saved?.updatedBy || '',
     canEdit: channel.source !== 'env',

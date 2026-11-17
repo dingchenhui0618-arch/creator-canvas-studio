@@ -116,4 +116,42 @@ note('outbox after', JSON.stringify(after.json?.outbox || null))
 note('alerts counts', JSON.stringify(after.json?.counts || null))
 note('sink total', readInbox().length)
 
+// ——— 8. 假飞书：认得地址、发对格式、看业务码 ———
+const feishuOk = await call('PUT', '/api/admin/alerts/channel', { url: 'http://127.0.0.1:' + SINK_PORT + '/open-apis/bot/v2/hook/fake', rotate: false, enabled: true }, cookie)
+note('PUT channel (fake feishu)', feishuOk.status + ' provider=' + (feishuOk.json?.channel?.provider || '') + '/' + (feishuOk.json?.channel?.providerLabel || ''))
+const beforeFeishu = readInbox().length
+const feishuTest = await call('POST', '/api/admin/alerts/test', {}, cookie)
+note('POST alerts/test (fake feishu)', feishuTest.status + ' ok=' + String(feishuTest.json?.notify?.ok) + ' provider=' + (feishuTest.json?.notify?.providerLabel || ''))
+const feishuShot = await waitFor(() => {
+  const box = readInbox()
+  return box.length > beforeFeishu ? box[box.length - 1] : null
+})
+if (feishuShot) {
+  let shaped = null
+  try { shaped = JSON.parse(feishuShot.body) } catch {}
+  note('feishu payload shape', shaped ? Object.keys(shaped).join(',') : 'unparsable')
+  note('feishu payload text', shaped && shaped.content ? String(shaped.content.text).slice(0, 40) : '')
+  note('feishu signature matches', feishuShot.headers['x-vq-signature'] === sign(secret, feishuShot.body))
+} else {
+  note('feishu payload shape', 'NOT RECEIVED')
+}
+
+// ——— 9. 假飞书回 200 + code 19024：必须算失败并进队列 ———
+const feishuBad = await call('PUT', '/api/admin/alerts/channel', { url: 'http://127.0.0.1:' + SINK_PORT + '/open-apis/bot/v2/hook/reject', rotate: false, enabled: true }, cookie)
+note('PUT channel (feishu reject path)', feishuBad.status)
+const rejectTest = await call('POST', '/api/admin/alerts/test', {}, cookie)
+const rejectNotify = rejectTest.json?.notify || null
+note('POST alerts/test (feishu code 19024)', rejectTest.status + ' http=' + String(rejectNotify?.status) + ' ok=' + String(rejectNotify?.ok) + ' error=' + String(rejectNotify?.error || '').slice(0, 60))
+const rejectQueued = await waitFor(async () => {
+  const s = await call('GET', '/api/admin/alerts', null, cookie)
+  const items = s.json?.outboxItems || []
+  const hit = items.find((item) => String(item.lastError || '').includes('19024'))
+  return hit ? { item: hit, stats: s.json.outbox } : null
+})
+note('queued after business-code failure', rejectQueued ? JSON.stringify({ state: rejectQueued.item.state, lastStatus: rejectQueued.item.lastStatus, lastError: String(rejectQueued.item.lastError).slice(0, 60), sentCount: rejectQueued.stats.sentCount }) : 'NO_QUEUE_ITEM')
+
+// 收尾：把通道清掉，别把假地址留在实例里
+const cleared = await call('DELETE', '/api/admin/alerts/channel', null, cookie)
+note('DELETE channel', cleared.status + ' configured=' + String(cleared.json?.channel?.configured))
+
 console.log(JSON.stringify(out, null, 2))

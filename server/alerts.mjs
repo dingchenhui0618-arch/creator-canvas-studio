@@ -11,6 +11,7 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import { config } from './config.mjs'
 import { resolveChannel, signBody } from './alert-channel.mjs'
+import { buildPayload, detectProvider, providerLabel, readVerdict } from './alert-format.mjs'
 
 const COOLDOWN_MS = 30 * 60 * 1000
 const MAX_ALERTS = 200
@@ -97,19 +98,23 @@ function alertText(alert) {
 }
 
 // 发一条出去。返回 { channel:false } 表示现在没有通道，不算失败也不进队列。
+// 载荷按地址认出来的那家机器人给（飞书 / 钉钉 / 企微 / Slack / 通用），
+// 并且 200 也要再看业务码：这三家都会用 200 回错误码，只看 HTTP 状态等于没验。
 async function sendText(text, alert) {
   const channel = await resolveChannel()
   if (!channel.url || !channel.enabled) return { channel: false, ok: false, status: 0 }
-  const body = JSON.stringify({ text, alert: alert ? { id: alert.id, kind: alert.kind, level: alert.level, title: alert.title, detail: alert.detail, count: alert.count, lastAt: alert.lastAt } : null, source: 'visionqa' })
+  const provider = detectProvider(channel.url)
+  const body = JSON.stringify(buildPayload(provider, { text, alert }))
   const headers = { 'content-type': 'application/json', 'user-agent': 'VisionQA-alert/1' }
   if (channel.secret) headers['x-vq-signature'] = signBody(channel.secret, body)
   const startedAt = Date.now()
   try {
     const res = await fetch(channel.url, { method: 'POST', headers, body, signal: AbortSignal.timeout(SEND_TIMEOUT_MS) })
-    const detail = res.ok ? '' : String(await res.text().catch(() => '')).slice(0, 160)
-    return { channel: true, ok: res.ok, status: res.status, ms: Date.now() - startedAt, error: detail }
+    const raw = await res.text().catch(() => '')
+    const verdict = readVerdict(provider, res.status, raw)
+    return { channel: true, ok: verdict.ok, status: res.status, ms: Date.now() - startedAt, error: String(verdict.error || '').slice(0, 160), provider }
   } catch (error) {
-    return { channel: true, ok: false, status: 0, ms: Date.now() - startedAt, error: String(error?.message || error).slice(0, 160) }
+    return { channel: true, ok: false, status: 0, ms: Date.now() - startedAt, error: String(error?.message || error).slice(0, 160), provider }
   }
 }
 
@@ -145,6 +150,8 @@ async function attempt(alert) {
       status: result.status,
       ms: result.ms || 0,
       error: result.ok ? '' : String(result.error || '').slice(0, 160),
+      provider: result.provider || '',
+      providerLabel: providerLabel(result.provider),
     }
     if (result.ok) {
       const box = await loadOutbox()
