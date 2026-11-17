@@ -4166,6 +4166,22 @@ E2E 里点某一行必须先按行里的文字限定，清单每一行长得一�
 
 **边界**：打码只在截图用的 DOM 上做，不改产品行为；这些账号在界面上本来就该看到自己的登录标识。临时会话用完已从 `sessions` 删掉。
 
+## 二百三十六、画布构建为什么一直失败：banner 写成对象了（文档/运维轮，2026-11-17）
+
+前面几轮一直有个没解开的疙瘩：画布的 `npm run build` 在 `f1edd9d` 和远端 `2d30d7f` 上**都**挂，报的是 `assets/VideoFaceBlurEditor-!~{002}~.js:1:8 ERROR: Expected "]" but found "Object"`。这轮把它拆开了。
+
+**根因**：`vite.config.ts` 与 `vite.build.config.ts` 里 `output.banner` 写成了 `{ js, css }` 对象。vite 5 / rollup 4 的 banner 只认字符串，对象被 `String()` 成 `[object Object]` 拼到**每个** chunk 第一行，esbuild 转译当场报语法错。所以不是合并冲突、不是 r175 引入的——三个基线一样挂；**生产画布跑的是 `vite dev`，dev 不走 banner，线上才一直没暴露**。
+
+**改法**：两段 banner 文本原样提成常量（两条 `BDCanvas-Forensic-Banner` 标记一个字没改），js 走 rollup 的字符串 banner，css 由新增的 `canvas-css-banner` 插件在 `generateBundle` 里补到样式表开头。只动 banner 这一段。
+
+**验证**：`npx vite build` 通过（2262 modules，28.09s），整条 `npm run build`（tsc + vite build + stage-frontend-dist）通过并正常 stage；3 个 js chunk 全带 js 标记、1 个 css 带 css 标记，首行已是真代码。同一修复 cherry-pick 到 `upstream-master` 后同样构建通过（28.65s），证明与 r175 那批改动无关。
+
+**分支**（`master` 与生产目录都没动）：`r175-merged c5eaa1e`＝合并远端 8 个 11-09 提交 + r175 GPT-Image + 构建修复；`fix-vite-banner 28192a6`＝只含构建修复（基于 `2d30d7f`），可单独合进 master。
+
+**边界**：只证明「能构建出产物」，没把 `dist` 换到生产（那要停 dev server 改静态托管，等你点头）；3 个 chunk 仍超 500 kB 是原有体量问题，这次没拆包；画布仓库的版本号 / CHANGELOG / 发布检查都没动。
+
+细节、数字与分支表见 [docs/canvas-build-fix-2026-11-17.md](docs/canvas-build-fix-2026-11-17.md)。
+
 
 
 
