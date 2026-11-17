@@ -4182,6 +4182,21 @@ E2E 里点某一行必须先按行里的文字限定，清单每一行长得一�
 
 细节、数字与分支表见 [docs/canvas-build-fix-2026-11-17.md](docs/canvas-build-fix-2026-11-17.md)。
 
+## 二百三十七、找回密码整条链路先用假 SMTP 跑通（文档/验证轮，2026-11-17）
+
+SMTP 凭据还在你手上，代码侧却一直悬着「填进去到底能不能用」。这轮不等凭据，先把它演一遍：一台临时实例（`127.0.0.1:8802`，独立 `DATA_DIR`）+ 一个本地假 SMTP（`127.0.0.1:2525`），其余全走真实代码，**生产一个字节没动，也没向外发过任何真实邮件**。
+
+**12 步全绿**：配通道前 `passwordReset:false` → 后台保存通道 200（口令只回掩码）→ 「发送测试邮件」**200 + 29ms**（真和 SMTP 走完一轮对话才回话）→ 忘记密码 200（统一话术，不暴露邮箱是否存在）→ 假收件箱 2 封（测试信 1621 B、重置信 3337 B，主题「重置 VisionQA 口令（30 分钟内有效）」）→ 链接 `valid:true` → 换口令 200 `signedOut:1` → 旧口令 **401**、新口令 **200** → 同一枚 token 再用 **400**「这枚链接已经改过口令了」→ `passwordReset:true`。临时实例日志 `mail-sent` 1、`mail-link` 1、`mail-failed` **0**。
+
+顺手记一个坑：重置信正文是 `multipart/alternative` + **base64**，首轮脚本没解码就直接搜 `reset?token=`，于是「明明发成功了却显示没收到」——脚本现在先解码再取链接。
+
+**可复跑**：脚本收进 `scripts/mail-e2e/`（含 README），服务器上 `MAIL_E2E_DIR=/tmp/vq-mail-e2e VQ_APP_ROOT=/opt/visionqa bash scripts/mail-e2e/run.sh`，退出码 0 即通过；写完后从零又跑过一遍，结果一致。
+
+**边界**：假 SMTP 只证明客户端协议与产品逻辑（连得上、认证、拼信、一次性 token、改完踢旧会话）；真实服务商在 STARTTLS / 认证 / 反垃圾上仍可能不同，**凭据到位后还要真发一封给真邮箱**。生产 `/var/lib/visionqa/mail.json` 至今不存在——**线上「忘记密码」仍然发不出信，只等你给 SMTP 账号**。
+
+细节见 [docs/mail-reset-e2e-2026-11-17.md](docs/mail-reset-e2e-2026-11-17.md)。
+
+
 
 
 
