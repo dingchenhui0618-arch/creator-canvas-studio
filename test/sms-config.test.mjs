@@ -166,3 +166,44 @@ test('假通道把码写进 outbox，真通道不落明文到数据目录', asyn
   assert.equal(unknown.ok, false)
   assert.match(unknown.error, /服务商/)
 })
+
+test('签名候选：主签名在前、去重去空、最多 4 个', () => {
+  assert.deepEqual(
+    smsSend.signCandidates(' 企业名赠 ', ['企业名', '', ' 企业名赠 ']),
+    ['企业名赠', '企业名'],
+    '主签名在前，空白项丢掉，重复项只留一个',
+  )
+  assert.deepEqual(smsSend.signCandidates('', ['A', 'B']), ['A', 'B'], '主签名为空时用候选')
+  assert.deepEqual(smsSend.signCandidates('A', ['B', 'C', 'D', 'E']), ['A', 'B', 'C', 'D'], '最多试 4 个')
+  assert.deepEqual(smsSend.signCandidates(undefined, 'notarray'), [])
+})
+
+test('只有签名相关的错误码才值得换个签名重试', () => {
+  assert.equal(smsSend.isSignatureRejection('isv.SMS_SIGNATURE_ILLEGAL'), true)
+  assert.equal(smsSend.isSignatureRejection('isv.SMS_SIGN_NOT_MATCH'), true)
+  assert.equal(smsSend.isSignatureRejection('isv.BUSINESS_LIMIT_CONTROL'), false, '限流换签名也没用')
+  assert.equal(smsSend.isSignatureRejection('isv.SMS_TEMPLATE_ILLEGAL'), false, '模板错了换签名也没用')
+  assert.equal(smsSend.isSignatureRejection(''), false)
+})
+
+test('阿里云拒发时把错误码带回调用方，且响应里没有密钥', async () => {
+  const realFetch = globalThis.fetch
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ Code: 'isv.SMS_SIGNATURE_ILLEGAL', Message: '签名不合法' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  try {
+    const channel = {
+      sms: { provider: 'aliyun', keyId: KEY, keySecret: SECRET, signName: 'VisionQA', templateCode: 'SMS_000000001', templateParam: 'code', region: 'cn-hangzhou' },
+    }
+    const sent = await smsSend.sendSmsCode(channel, { phone: PHONE, code: '123456' })
+    assert.equal(sent.ok, false)
+    assert.equal(sent.errorCode, 'isv.SMS_SIGNATURE_ILLEGAL')
+    assert.equal(smsSend.isSignatureRejection(sent.errorCode), true, '调用方据此决定换下一个签名')
+    assert.match(sent.error, /签名不合法/)
+    assert.equal(JSON.stringify(sent).includes(SECRET), false)
+  } finally {
+    globalThis.fetch = realFetch
+  }
+})

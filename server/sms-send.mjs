@@ -10,6 +10,26 @@ import { config } from './config.mjs'
 const ALIYUN_ENDPOINT = 'https://dysmsapi.aliyuncs.com/'
 const ALIYUN_VERSION = '2017-05-25'
 
+/** 阿里云把「签名不对」都归在 isv.SMS_SIGN* 下：换一个候选签名重试可能就通了。 */
+export function isSignatureRejection(errorCode) {
+  return /^isv\.SMS_SIGN/i.test(String(errorCode || ''))
+}
+
+/** 候选签名：主签名在前，去空白去重，最多试 4 个（控制台里同一个赠送签名可能带「赠」也可能不带）。 */
+export function signCandidates(primary, more = []) {
+  const list = [primary, ...(Array.isArray(more) ? more : [])]
+  const seen = new Set()
+  const out = []
+  for (const raw of list) {
+    const value = String(raw || '').trim()
+    if (!value || seen.has(value)) continue
+    seen.add(value)
+    out.push(value)
+    if (out.length >= 4) break
+  }
+  return out
+}
+
 /** 阿里云 RPC 签名要求的百分号编码：空格是 %20，星号是 %2A，波浪号不编码。 */
 export function percentEncode(value) {
   return encodeURIComponent(String(value))
@@ -92,7 +112,7 @@ async function sendViaAliyun(sms, { phone, code, timeoutMs = 15000 }) {
     const code2 = String(payload?.Code || '')
     if (!response.ok || code2 !== 'OK') {
       const detail = payload ? code2 + (payload.Message ? '：' + payload.Message : '') : 'HTTP ' + response.status + ' ' + text.slice(0, 200)
-      return { ok: false, error: '阿里云没受理：' + detail, status: response.status, ms: Date.now() - started }
+      return { ok: false, error: '阿里云没受理：' + detail, errorCode: code2, status: response.status, ms: Date.now() - started }
     }
     return { ok: true, requestId: String(payload?.BizId || payload?.RequestId || ''), ms: Date.now() - started }
   } catch (error) {
