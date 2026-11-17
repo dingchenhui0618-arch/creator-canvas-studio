@@ -16,8 +16,17 @@ process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'vq-global-heavy-')
 process.env.VQ_KEY_SECRET = 'test-secret-global-heavy'
 // 跨进程租约（v0.9.78）：测试文件并行跑，名额必须各算各的
 isolateLeaseDir('vq-lease-global-heavy-')
-
 const { config } = await import('../server/config.mjs')
+// 内存水位（v0.9.71）与这一组无关：这台机器剩多少内存不该决定「全站名额」的断言。
+// 阈值写 0 = 关掉那一条判定（跟 flow-run-queue / gateway-heavy 同一个做法）；到红线时
+// admit 会先回 MEMORY_PRESSURE、比名额那一层更早，这台机器只剩 576 MB 时三条用例全挂。
+// 不能用 VQ_WATER_GUARD=0：整条守卫关掉时全站名额也一并关掉（limit 0 = 不限），不是本意。
+// 水位本身由 waterline.test.mjs 注入读数专测，那里 guard 是显式打开的。
+Object.assign(config.waterline, { tightAvailableMb: 0, criticalAvailableMb: 0, tightHeapPercent: 0, criticalHeapPercent: 0 })
+// 排队位（v0.9.80）由 flow-run-queue / gateway-queue / queue-cancel 几组专测。这一组只看
+// 「名额满就拒、拒在扣费之前」，排队写 0 退回立刻拒——否则每次被拒都要真等满 60 秒
+// （三条用例从 2 分钟降到几秒），断言不依赖排队那条路径。
+if (config.credits.runQueue) Object.assign(config.credits.runQueue, { waitMs: 0, maxWaiting: 0 })
 const auth = await import('../server/auth.mjs')
 const credits = await import('../server/credits.mjs')
 const flows = await import('../server/flows.mjs')
