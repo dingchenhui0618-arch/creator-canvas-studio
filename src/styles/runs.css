@@ -112,3 +112,71 @@
   .runs-adopt-row .runs-adopt-hint { flex-basis: 100%; }
   .runs-adopt-row .vq-button { width: 100%; justify-content: center; }
 }
+
+/* ---------- r240 窄屏：13px 字、40/44px 点按区、320 窄到塌掉的输出两列（v0.9.224） ----------
+   2026-11-19 在 390 / 768 / 1024 / 320 量这一页（14 条样例运行、一条详情、对照弹层）：
+   12px 的字有 50–62 处（统计标签、筛选标签、行里的状态与耗时、详情头的扣费、输出字段名、
+   原始返回的 JSON），不到 40px 的点按区有 12 处（刷新/回作品/对照/查看这次运行/在工作流打开
+   全走 28px 的 sm 按钮，搜索框 32、原始返回 27、翻页 28）。
+   除了字号与点按区，320 还量出三处真坏的地方：
+     · 输出的「字段 → 值」两列在 320 会塌成竖排单字（键列 88px 吃掉宽度，值只剩几个像素）；
+     · 翻页的「1–12 / 14」被折成四行；
+     · 每行右侧 70px 的窄列把标题与「作品 · 第几版」挤成两段。
+   于是这一页分三段：≤1080 抬字与按钮档位、≤700 把行的状态挪到第二行、≤560 输出改单列。
+   桌面（1081 起）一条规则都不进。 */
+@media (max-width: 1080px) {
+  .runs-page {
+    --btn-h: 40px;
+    --btn-h-sm: 40px;
+    --chip-font: 13px;
+    --chip-pill-h: 24px;
+    --chip-tag-h: 24px;
+    --text-mono: 13px;
+  }
+  /* tokens.css 的 .vq-mono 写死 12px、不读 --text-mono，这里单点抬一档 */
+  .runs-page .vq-mono { font-size: 13px; }
+  .runs-page .runs-stats span,
+  .runs-page .runs-select > span,
+  .runs-page .runs-adopt-label,
+  .runs-page .runs-plan-label,
+  .runs-page .runs-output-list dt,
+  .runs-page .runs-output-raw,
+  .runs-page .runs-node-output { font-size: 13px; }
+  /* 筛选下拉的选中值是下拉自己的 span，却被 `.runs-select span` 的 12px 一起打中了
+     （0.1.1 压过 .vq-select__value 的 0.1.0）。这里点名它，别让标签的字号漏进下拉。 */
+  .runs-page .runs-select .vq-select__value { font-size: 13px; }
+  .runs-page .runs-search { height: 40px; }
+  /* 40px 的框带 1px 边，input 按 100% 只剩 38px：直接给 40，让输入框自己的点按区够高
+     （透明背景 + 居中，画出来和贴着边框一样，不会把框撑高） */
+  .runs-page .runs-search input { height: 40px; }
+  /* 「原始返回」是 details 的 summary，27px 高：撑到 40 又不能让箭头掉到角落 */
+  .runs-page .runs-output-raw summary { display: flex; align-items: center; min-height: 40px; padding: 8px 0; }
+  .runs-page .runs-pager { flex-wrap: wrap; }
+  .runs-page .runs-pager .vq-mono { white-space: nowrap; }
+}
+
+/* 700 以下一行放不下「标题 / 作品 · 第几版 / 状态·耗时·时间」三样还带一列 70px 的右侧栏：
+   状态、耗时、时间挪到第二行整行排开，标题与版次拿到整行宽度。 */
+@media (max-width: 700px) {
+  .runs-page .runs-row { grid-template-columns: 8px minmax(0, 1fr); align-items: start; row-gap: 4px; }
+  .runs-page .runs-row-main { grid-column: 2; }
+  .runs-page .runs-row-meta { grid-column: 2; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+}
+
+@media (max-width: 560px) {
+  .runs-page { --btn-h: 44px; --btn-h-sm: 44px; }
+  .runs-page .runs-search { height: 44px; }
+  .runs-page .runs-search input { height: 44px; }
+  .runs-page .runs-output-raw summary { min-height: 44px; }
+  /* 320 上两列会塌成竖排单字：键在上、值在下，值拿到整行 */
+  .runs-page .runs-output-list > div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  /* 四个统计格在手机上两两一行。列间距收到 12px：24px 时 320 宽只剩 116px，
+     「1–12 当前区间」会断成「1–/12」「当前区/间」；数字与标签都不许从中间折 */
+  .runs-page .runs-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; }
+  .runs-page .runs-stats strong,
+  .runs-page .runs-stats span { white-space: nowrap; }
+  /* 翻页：区间一行、两个按钮一行各占一半；一行放不下时会折成「上一页/下一页」各占一行还错位 */
+  .runs-page .runs-pager { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .runs-page .runs-pager .vq-mono { grid-column: 1 / -1; margin-right: 0; }
+  .runs-page .runs-pager button { width: 100%; justify-content: center; }
+}

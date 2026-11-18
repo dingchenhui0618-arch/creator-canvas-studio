@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Activity, ArrowRight, ChevronLeft, ChevronRight, Eye, GitCompareArrows, Link2, Loader2, Play, RefreshCw, Search, Workflow } from 'lucide-react'
 import PageHead from '../components/PageHead'
 import { Select } from '../components/Select'
@@ -143,6 +143,20 @@ export function RunsPage({
     setAdoptId('')
     setAdoptError('')
     setAdoptDone('')
+  }
+
+  // 窄屏（≤1100）列表与详情是上下排的，详情落在整张清单下面。
+  // 点一行只让那一行变色，人在手机上看不出「已经打开了」，得把详情滚到眼前；
+  // 桌面两栏并排，详情一直在右边，不需要滚（也不该抢走滚动位置）。
+  const detailRef = useRef<HTMLElement | null>(null)
+  const revealDetail = () => {
+    if (!window.matchMedia('(max-width: 1100px)').matches) return
+    window.requestAnimationFrame(() => {
+      const section = detailRef.current
+      if (!section) return
+      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      section.scrollIntoView({ block: 'start', behavior: reduce ? 'auto' : 'smooth' })
+    })
   }
 
   const load = useCallback(async () => {
@@ -397,6 +411,7 @@ export function RunsPage({
                   onClick={() => {
                     setOpen(item.id)
                     resetAdopt()
+                    revealDetail()
                   }}
                 >
                   <span className={`runs-dot is-${runStatusMeta(item.status, item.canceled).tone}`} />
@@ -416,7 +431,7 @@ export function RunsPage({
           </ol>
 
           {current ? (
-            <section className="runs-detail">
+            <section className="runs-detail" ref={detailRef}>
               <div className="runs-detail-head">
                 <Activity size={14} strokeWidth={1.5} />
                 <strong>{current.flowName}</strong>

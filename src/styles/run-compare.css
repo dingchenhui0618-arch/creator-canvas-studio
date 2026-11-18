@@ -269,3 +269,16 @@
   .rc-foot > span { flex: 1 1 100%; }
 }
 
+/* ---------- r240 窄屏：弹层关闭按钮与「看改了哪几行」（v0.9.224） ----------
+   运行对照弹层是从运行记录页与工作流页两处打开共用的。2026-11-19 在 390 / 768 / 1024 量：
+   关闭按钮在 390 被标题挤成 39px 宽（44px 的高保住了，宽没保住），
+   「看改了哪几行」沿用 chip 的 24px 高。两处都撑到 40 / 44。
+   宽度不跟 --btn-h 走：这个弹层也可能开在没抬档的页面上。 */
+@media (max-width: 1080px) {
+  .rc-head .vq-button--icon { flex: 0 0 auto; width: 40px; height: 40px; }
+  .rc-diff-toggle { min-height: 40px; }
+}
+@media (max-width: 560px) {
+  .rc-head .vq-button--icon { width: 44px; height: 44px; }
+  .rc-diff-toggle { min-height: 44px; }
+}
