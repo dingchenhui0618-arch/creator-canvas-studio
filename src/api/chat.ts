@@ -10,7 +10,9 @@ export type ChatMessage = {
   at: number
   model?: string
   ms?: number
-  meta?: { tools?: string[]; thinking?: boolean; finishReason?: string; usage?: unknown } | null
+  meta?: { tools?: string[]; thinking?: boolean; finishReason?: string; usage?: unknown; files?: string[] } | null
+  // 这一轮带的附件（只留名字、字数与来源）：原文在服务端，聊天记录里不重复存
+  files?: ChatFile[]
 }
 
 export type ChatConversation = {
@@ -42,7 +44,7 @@ export const getChatConversation = (id: string) =>
 export const deleteChatConversation = (id: string) =>
   request<{ ok: boolean }>('/api/chat/conversations/' + id, { method: 'DELETE' })
 
-export const sendChatMessage = (id: string, body: { content: string; tools?: Partial<ChatToolOptions> }) =>
+export const sendChatMessage = (id: string, body: { content: string; tools?: Partial<ChatToolOptions>; files?: string[] }) =>
   request<{ ok: boolean; conversation: ChatConversation; reply: ChatMessage; model: string; cost: number; balance: number | null }>(
     '/api/chat/conversations/' + id + '/messages',
     { method: 'POST', body: JSON.stringify(body) },
@@ -83,7 +85,7 @@ function parseSseEvent(raw: string): { event: string; data: unknown } | null {
  */
 export async function streamChatMessage(
   id: string,
-  body: { content: string; tools?: Partial<ChatToolOptions> },
+  body: { content: string; tools?: Partial<ChatToolOptions>; files?: string[] },
   handlers: { onDelta?: (text: string) => void; signal?: AbortSignal } = {},
 ): Promise<ChatStreamResult> {
   const response = await fetch('/api/chat/conversations/' + id + '/messages/stream', {
@@ -139,4 +141,58 @@ export async function streamChatMessage(
   }
   if (!done) throw new Error('连接中途断开了，这次没有回上来（积分已退回）')
   return done
+}
+
+// ── 附件（r218） ─────────────────────────────────────────────────────────────
+// 附件先上传解析（服务端读成文字），发消息时只带文件号：原文不进 JSON body、也不进聊天记录。
+export type ChatFile = {
+  id: string
+  name: string
+  kind: 'text' | 'docx' | 'xlsx' | 'pdf' | string
+  kindLabel: string
+  bytes: number
+  chars: number
+  truncated: boolean
+  note: string
+  createdAt: string
+}
+
+export type ChatFileLimits = { bytes: number; fileChars: number; totalChars: number; maxPerMessage: number; keepFiles: number }
+
+export const listChatFiles = () =>
+  request<{ ok: boolean; items: ChatFile[]; limits: ChatFileLimits }>('/api/chat/files')
+
+export const getChatFile = (id: string) =>
+  request<{ ok: boolean; file: ChatFile; text: string }>('/api/chat/files/' + id)
+
+export const deleteChatFile = (id: string) =>
+  request<{ ok: boolean }>('/api/chat/files/' + id, { method: 'DELETE' })
+
+/**
+ * 上传一个附件：原始字节 + 文件名走 header（服务端不解析 multipart）。
+ * 不用 request()：那条会把 Content-Type 钉成 application/json。
+ */
+export async function uploadChatFile(file: File): Promise<ChatFile> {
+  let name = file.name
+  try {
+    name = encodeURIComponent(file.name)
+  } catch {
+    name = 'file'
+  }
+  const response = await fetch('/api/chat/files', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/octet-stream', 'x-file-name': name },
+    body: file,
+  })
+  const text = await response.text()
+  let body: { ok?: boolean; file?: ChatFile; error?: string; code?: string } | null = null
+  try {
+    body = text ? (JSON.parse(text) as { ok?: boolean; file?: ChatFile; error?: string; code?: string }) : null
+  } catch {
+    body = null
+  }
+  if (!response.ok || !body?.file) {
+    throw Object.assign(new Error(body?.error || 'HTTP ' + response.status), { status: response.status, code: body?.code })
+  }
+  return body.file
 }

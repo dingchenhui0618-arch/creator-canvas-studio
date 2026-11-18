@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowUp, Brain, Link2, Loader2, MessageSquarePlus, Search, Square, Trash2 } from 'lucide-react'
+import { ArrowUp, Brain, FileText, Link2, Loader2, MessageSquarePlus, Paperclip, Search, Square, Trash2, X } from 'lucide-react'
 import {
   createChatConversation,
   deleteChatConversation,
   getChatConversation,
   listChatConversations,
   streamChatMessage,
+  uploadChatFile,
 } from '../api/chat'
-import type { ChatConversation, ChatSummary, ChatToolOptions } from '../api/chat'
+import type { ChatConversation, ChatFile, ChatSummary, ChatToolOptions } from '../api/chat'
 import { getCredits } from '../api/credits'
 
 // 快捷创作的「对话」（r214）：一页 DeepSeek —— 长上下文、联网搜索、读链接、思考模式。
@@ -19,7 +20,8 @@ import { getCredits } from '../api/credits'
 //    右上角按钮变成「停止」，停止 = 断开连接，服务端中止上游并全额退款，不留半截回答；
 //  - 失败、空回复、停止都全额退回，界面明说「积分已退回」，余额当场刷新；
 //  - 会话在服务端：换设备、关页面回来都还在，最多 30 条会话、每条留 200 条消息；
-//  - 文件解析 / OCR / 图片理解还没接（要动上传与多模态消息），这里不放空按钮。
+//  - 附件（r218）：脚本、Word、Excel、PDF 先在服务端读成文字，再连同问题一起问模型；
+//    解析在本地做（不上传原始文件给上游），扫描件里的字读不出会直说，不做假 OCR。
 const TOOL_ITEMS: { id: keyof ChatToolOptions; label: string; hint: string; icon: typeof Search }[] = [
   { id: 'search', label: '联网搜索', hint: '回答前先搜一遍最新信息，带链接回来', icon: Search },
   { id: 'readUrl', label: '读链接', hint: '消息里带网址时，先把页面读下来再回答', icon: Link2 },
@@ -27,6 +29,11 @@ const TOOL_ITEMS: { id: keyof ChatToolOptions; label: string; hint: string; icon
 ]
 
 const TOOLS_KEY = 'vq:chatTools'
+// 附件上限与界面提示要与服务端一致（server/chat-files.mjs 的 CHAT_FILE_LIMITS）：
+// 服务端才是真拒绝的地方，这里只提前告诉用户，不靠它兜底。
+const MAX_ATTACH = 5
+const MAX_FILE_BYTES = 8 * 1024 * 1024
+const ATTACH_ACCEPT = '.txt,.md,.markdown,.csv,.tsv,.json,.log,.srt,.docx,.xlsx,.pdf,.ts,.tsx,.js,.jsx,.py,.html,.htm,.css,.yaml,.yml'
 
 function loadTools(): ChatToolOptions {
   try {
@@ -56,6 +63,12 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
   const [error, setError] = useState('')
   const [tools, setTools] = useState<ChatToolOptions>(() => loadTools())
   const [credits, setCredits] = useState<{ balance: number | null; unit: string; price: number } | null>(null)
+  // 附件：attached 是这一轮要带的，preview 是「平台读到的到底是什么字」的原文预览
+  const [attached, setAttached] = useState<ChatFile[]>([])
+  const [attaching, setAttaching] = useState(false)
+  const [attachError, setAttachError] = useState('')
+  const [preview, setPreview] = useState<{ name: string; text: string; note: string } | null>(null)
+  const fileRef = useRef<HTMLInputElement | null>(null)
   const bottomRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -113,7 +126,52 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
     setCurrent(null)
     setDraft('')
     setError('')
+    setAttached([])
+    setAttachError('')
+    setPreview(null)
     window.setTimeout(() => inputRef.current?.focus(), 0)
+  }, [])
+
+  const pickFiles = useCallback(async (list: FileList | null) => {
+    if (!list || !list.length) return
+    setAttachError('')
+    setAttaching(true)
+    const room = Math.max(0, MAX_ATTACH - attached.length)
+    const pending = Array.from(list)
+    if (pending.length > room) setAttachError('一条消息最多 ' + MAX_ATTACH + ' 个附件，多的这几个先没带上')
+    const added: ChatFile[] = []
+    for (const file of pending.slice(0, room)) {
+      if (file.size > MAX_FILE_BYTES) {
+        setAttachError(file.name + ' 有 ' + (file.size / 1024 / 1024).toFixed(1) + ' MB，超过 8 MB 上限：先压一下或截取要用的部分')
+        continue
+      }
+      try {
+        added.push(await uploadChatFile(file))
+      } catch (caught) {
+        // 服务端的拒绝都是人话（「扫描件读不出字」这类），原样显示，不自己编一个
+        setAttachError(file.name + '：' + (caught instanceof Error ? caught.message : '上传失败，稍后再试'))
+      }
+    }
+    if (added.length) setAttached((list) => [...list, ...added].slice(0, MAX_ATTACH))
+    setAttaching(false)
+    if (fileRef.current) fileRef.current.value = ''
+  }, [attached.length])
+
+  const removeAttached = useCallback((id: string) => {
+    setAttached((list) => list.filter((item) => item.id !== id))
+    setPreview(null)
+  }, [])
+
+  // 点附件名看原文：解析错了（比如 PDF 只读到半页）用户得能自己看见，而不是只信平台的说法
+  const openPreview = useCallback(async (id: string, name: string) => {
+    try {
+      const response = await fetch('/api/chat/files/' + id)
+      const body = (await response.json()) as { ok?: boolean; file?: ChatFile; text?: string; error?: string }
+      if (!response.ok || !body?.file) throw new Error(body?.error || 'HTTP ' + response.status)
+      setPreview({ name: body.file.name || name, text: body.text || '', note: body.file.note || '' })
+    } catch (caught) {
+      setAttachError((caught instanceof Error ? caught.message : '这个附件的内容读不到了'))
+    }
   }, [])
 
   const removeConversation = useCallback(async (id: string) => {
@@ -130,7 +188,8 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
 
   const send = useCallback(async () => {
     const content = draft.trim()
-    if (!content || sending) return
+    if (!content || sending || attaching) return
+    const files = attached
     setSending(true)
     setError('')
     setStreaming('')
@@ -138,7 +197,7 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
     abortRef.current = controller
     const before = current
     // 先在本地把用户这句放上去：流式首字也有延迟，空着会让人以为没点中
-    const optimistic = { id: 'local-' + Date.now(), role: 'user' as const, content, at: Date.now() }
+    const optimistic = { id: 'local-' + Date.now(), role: 'user' as const, content, at: Date.now(), files }
     // 新对话也先把这句挂上去：否则「空状态说明」会和正在生成的回答叠在一起，
     // 看起来像「还没有对话」却已经有答案在流（r217 截图时发现的排版问题）。
     setCurrent({
@@ -146,6 +205,8 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
       messages: [...(before?.messages ?? []), optimistic],
     })
     setDraft('')
+    setAttached([])
+    setPreview(null)
     let conversationId = before?.id || ''
     try {
       let conversation = before
@@ -156,7 +217,7 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
       conversationId = conversation.id
       const result = await streamChatMessage(
         conversation.id,
-        { content, tools },
+        { content, tools, files: files.map((item) => item.id) },
         {
           signal: controller.signal,
           onDelta: (text) => setStreaming((value) => value + text),
@@ -168,6 +229,8 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
       void refreshList()
     } catch (caught) {
       setStreaming('')
+      // 发送失败把附件放回输入框：不然用户得重新挑一遍文件
+      if (files.length) setAttached((list) => (list.length ? list : files))
       const stopped = controller.signal.aborted
       setError(stopped ? '已停止生成，这次不计费（积分已退回）' : caught instanceof Error ? caught.message : '这次没有回上来，稍后再试')
       // 以服务端为准：用户这句话已经落库，回答要么没有、要么是上一次的；
@@ -190,7 +253,7 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
       setSending(false)
       abortRef.current = null
     }
-  }, [current, draft, refreshList, sending, tools])
+  }, [attached, attaching, current, draft, refreshList, sending, tools])
 
   const stop = useCallback(() => {
     abortRef.current?.abort()
@@ -251,6 +314,7 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
                 <li>边生成边显示，首段字通常一两秒就到，不用干等整段</li>
                 <li>生成中途点右上角方块可以停，停止不计费；失败也全额退回</li>
                 <li>上下文带最近 30 条，不是只记上一句</li>
+                <li>脚本、Word、Excel、PDF 可以直接丢进来，平台先在本地读成文字再回答；扫描件里的字读不出，会直接说</li>
                 <li>每次对话 {credits?.price ? credits.price + ' ' + credits.unit : '按次计费'}；联网搜索与读链接都是平台自带能力</li>
               </ul>
             </div>
@@ -258,6 +322,23 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
             messages.map((message) => (
               <div className={'qc-msg qc-msg--' + message.role} key={message.id}>
                 <div className="qc-bubble">{message.content}</div>
+                {message.files?.length ? (
+                  <div className="qc-files">
+                    {message.files.map((file) => (
+                      <button
+                        type="button"
+                        key={file.id}
+                        className="qc-file"
+                        title={file.note || '看平台读到的文字'}
+                        onClick={() => void openPreview(file.id, file.name)}
+                      >
+                        <FileText size={12} />
+                        <span className="qc-file-name">{file.name}</span>
+                        <span className="qc-file-meta">{file.chars} 字{file.truncated ? ' · 已截断' : ''}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
                 <div className="qc-msg-meta">
                   <span>{message.role === 'user' ? '你' : '平台对话模型'}</span>
                   <span>{when(message.at)}</span>
@@ -312,10 +393,68 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
                 </button>
               )
             })}
+            <button
+              type="button"
+              className={'qc-tool qc-tool--attach' + (attached.length ? ' is-on' : '')}
+              onClick={() => fileRef.current?.click()}
+              disabled={sending || attaching}
+              title="附件：脚本、Word、Excel、PDF；平台先在本地读成文字再回答"
+            >
+              {attaching ? <Loader2 size={14} className="qc-spin" /> : <Paperclip size={14} />}
+              {attaching ? '解析中…' : attached.length ? '附件 ' + attached.length : '附件'}
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              className="qc-file-input"
+              multiple
+              accept={ATTACH_ACCEPT}
+              onChange={(event) => void pickFiles(event.target.files)}
+            />
             <span className="qc-credit">
               {credits ? '余额 ' + (credits.balance ?? '—') + ' ' + credits.unit + (credits.price ? ' · 每次 ' + credits.price : '') : ''}
             </span>
           </div>
+          {attached.length > 0 && (
+            <div className="qc-attach-row">
+              {attached.map((file) => (
+                <span className="qc-chip" key={file.id}>
+                  <button
+                    type="button"
+                    className="qc-chip-main"
+                    title={file.note || '看平台读到的文字'}
+                    onClick={() => void openPreview(file.id, file.name)}
+                  >
+                    <FileText size={12} />
+                    <span className="qc-chip-name">{file.name}</span>
+                    <span className="qc-chip-meta">{file.chars} 字{file.truncated ? ' · 已截断' : ''}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="qc-chip-x"
+                    aria-label={'移除附件 ' + file.name}
+                    title="移除这个附件"
+                    onClick={() => removeAttached(file.id)}
+                    disabled={sending}
+                  >
+                    <X size={12} />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          {attachError && <div className="qc-error qc-error--inline" role="alert">{attachError}</div>}
+          {preview && (
+            <div className="qc-preview">
+              <div className="qc-preview-head">
+                <span>{preview.name}{preview.note ? ' · ' + preview.note : ''}</span>
+                <button type="button" className="qc-chip-x" aria-label="收起附件原文" title="收起" onClick={() => setPreview(null)}>
+                  <X size={12} />
+                </button>
+              </div>
+              <pre className="qc-preview-body">{preview.text.slice(0, 1200)}{preview.text.length > 1200 ? '\n…' : ''}</pre>
+            </div>
+          )}
           <div className="qc-input-row">
             <textarea
               ref={inputRef}
@@ -337,13 +476,13 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
                 <Square size={14} fill="currentColor" />
               </button>
             ) : (
-              <button type="button" className="qc-send" onClick={() => void send()} disabled={!draft.trim()} aria-label="发送" title="发送（Ctrl + Enter）">
+              <button type="button" className="qc-send" onClick={() => void send()} disabled={!draft.trim() || attaching} aria-label="发送" title="发送（Ctrl + Enter）">
                 <ArrowUp size={18} />
               </button>
             )}
           </div>
           <div className="qc-hint">
-            <span>{sending ? '生成中点方块可停止，停止不计费' : 'Ctrl + Enter 发送'}</span>
+            <span>{sending ? '生成中点方块可停止，停止不计费' : 'Ctrl + Enter 发送 · 附件最多 5 个、单个 8 MB'}</span>
             <span>{toolCount ? toolCount + ' 项能力已打开' : '能力全关：只按对话回答'}</span>
           </div>
         </div>

@@ -12,10 +12,13 @@
 // 两条链路的行为必须一致，所以下面把前半段（beginChat）和收尾（finishChat / failChat）抽出来，
 // 不各写一份——以前每加一条链路就要把退款口径再抄一遍，抄漏一次就是真金白银的差评。
 //
-// 还没做的（写在 docs/quick-create-stream-2026-11-18.md）：文件解析、OCR、语音、图片理解进对话。
+// r218 接上附件：脚本/文档/表格/PDF 先在服务端读成文字，再连同问题一起问模型（server/chat-files.mjs）。
+// 附件是「这一轮的上下文」，不是文件托管：原文落盘 20 份轮转，抽出的文字跟着这条消息进上下文。
+// 还没做的：OCR（扫描件里的字）、图片理解进对话、语音、联网搜索的真实上游验证。
 import { callTextModel, callTextModelStream } from './llm.mjs'
 import { charge, priceOf, refund } from './credits.mjs'
 import { contextMessages, createConversation, getConversation, saveConversation, titleFrom } from './chat-store.mjs'
+import { CHAT_FILE_LIMITS, resolveChatFiles } from './chat-files.mjs'
 
 const MAX_INPUT = 8000
 const CONTEXT_MESSAGES = 30
@@ -49,6 +52,16 @@ export function officialTools(options = {}) {
   return tools
 }
 
+/** 这一轮带哪几个附件：先按归属读，读不到就跳过（别人的 / 已删除），不让整次对话失败。 */
+function readAttachments(userId, input = {}) {
+  const raw = Array.isArray(input?.files) ? input.files.map(String).filter(Boolean) : []
+  if (!raw.length) return { files: [], text: '', skipped: 0, chars: 0 }
+  if (raw.length > CHAT_FILE_LIMITS.maxPerMessage) {
+    throw fail(400, 'CHAT_FILES', '一条消息最多带 ' + CHAT_FILE_LIMITS.maxPerMessage + ' 个附件')
+  }
+  return resolveChatFiles(userId, raw)
+}
+
 function messageId(prefix = 'm') {
   return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 7)
 }
@@ -60,6 +73,8 @@ function beginChat(user, input = {}) {
   if (content.length > MAX_INPUT) throw fail(400, 'CHAT_TOO_LONG', '一次最多 ' + MAX_INPUT + ' 字，长文请分几条发')
   if (!user?.id) throw fail(401, 'LOGIN_REQUIRED', '请先登录')
 
+  // 附件先解析再扣费：附件读不出来（扫描件、超过 5 个）时一分钱都不该扣
+  const attachments = readAttachments(user.id, input)
   const options = chatOptionsFrom(input)
   let conv = input.conversationId ? getConversation(user.id, input.conversationId) : null
   if (input.conversationId && !conv) throw fail(404, 'CHAT_NOT_FOUND', '这条对话已经不在了')
@@ -81,7 +96,16 @@ function beginChat(user, input = {}) {
   // 界面会先建一条空会话再发第一句（这样才能「一边建一边打字」），于是标题一直停在「新对话」。
   // 第一句进来时用它的开头当标题：这是左侧列表唯一能认出来的信息（r217 实测：以前十条全是「新对话」）。
   if (!conv.messages.some((item) => item.role === 'user')) conv.title = titleFrom(content)
-  conv.messages.push({ id: messageId('u'), role: 'user', content, at: startedAt })
+  // 附件抽出来的文字跟这条消息一起存：下一轮还能用上（长对话里最早的那几轮会被上下文窗口挤掉，
+  // 挤掉就只剩文件名，界面与文档都这么说，不假装还记着）。
+  conv.messages.push({
+    id: messageId('u'),
+    role: 'user',
+    content,
+    at: startedAt,
+    files: attachments.files,
+    docText: attachments.text,
+  })
   conv = saveConversation(user.id, conv) || conv
 
   const tools = officialTools(options)
@@ -97,6 +121,7 @@ function beginChat(user, input = {}) {
     paid,
     startedAt,
     messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...contextMessages(conv.messages)],
+    attachments,
   }
 }
 
@@ -114,6 +139,7 @@ function finishChat(user, ctx, result) {
     ms: Date.now() - ctx.startedAt,
     meta: {
       tools: ctx.tools.map((item) => item.type),
+      files: ctx.attachments.files.map((item) => item.name),
       thinking: ctx.options.thinking,
       finishReason: result?.finishReason || '',
       usage: result?.usage || null,

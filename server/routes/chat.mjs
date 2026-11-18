@@ -3,9 +3,21 @@ import { readBody, sendJson } from './_shared.mjs'
 import { currentUser } from '../auth.mjs'
 import { createConversation, deleteConversation, getConversation, listConversations } from '../chat-store.mjs'
 import { sendChatMessage, streamChatMessage } from '../chat.mjs'
+import { CHAT_FILE_LIMITS, deleteChatFile, listChatFiles, publicChatFile, readChatFile, saveChatFile } from '../chat-files.mjs'
+import { readBinaryBody } from '../body-reader.mjs'
+import { refusalResponse } from '../public-error.mjs'
 
 // 会话 / 消息 / 流式三条路径：最后一段 stream 是可选的（r217）
 const CONV = /^\/api\/chat\/conversations\/([A-Za-z0-9_-]{6,40})(\/messages(\/stream)?)?$/
+// 附件：/api/chat/files 上传（原始字节）、列表；/:id 读取与删除（r218）
+const FILE_ONE = /^\/api\/chat\/files\/([A-Za-z0-9_]{6,40})$/
+
+function sendRefusal(res, error) {
+  const mapped = refusalResponse(error)
+  if (!mapped) return false
+  sendJson(res, mapped.status, { ok: false, ...mapped.body })
+  return true
+}
 
 // SSE：每个事件都是 data: <JSON>，前端按行拆。正文里有换行，所以不能裸写文本。
 function sseWrite(res, event, data) {
@@ -24,6 +36,56 @@ export function createChatRouter() {
       const user = currentUser(req)
       if (!user) {
         sendJson(res, 401, { ok: false, code: 'LOGIN_REQUIRED', error: '请先登录' })
+        return true
+      }
+
+      // ── 附件（r218） ─────────────────────────────────────────────────────
+      if (pathname === '/api/chat/files') {
+        if (req.method === 'GET') {
+          sendJson(res, 200, { ok: true, items: listChatFiles(user.id), limits: CHAT_FILE_LIMITS })
+          return true
+        }
+        if (req.method === 'POST') {
+          // 文件名走 header（百分号编码）：原始字节上传不解析 multipart，附件名只能借 header 带进来
+          let name = ''
+          try {
+            name = decodeURIComponent(String(req.headers['x-file-name'] || ''))
+          } catch {
+            name = ''
+          }
+          try {
+            const buffer = await readBinaryBody(req, { maxBytes: CHAT_FILE_LIMITS.bytes })
+            const file = saveChatFile({ userId: user.id, buffer, name })
+            sendJson(res, 200, { ok: true, file })
+            return true
+          } catch (error) {
+            if (sendRefusal(res, error)) return true
+            throw error
+          }
+        }
+        sendJson(res, 405, { ok: false, code: 'CHAT_METHOD', error: '这个接口不支持 ' + req.method })
+        return true
+      }
+
+      const fileMatched = pathname.match(FILE_ONE)
+      if (fileMatched) {
+        const fileId = fileMatched[1]
+        if (req.method === 'GET') {
+          const meta = readChatFile(user.id, fileId)
+          if (!meta) {
+            sendJson(res, 404, { ok: false, code: 'FILE_NOT_FOUND', error: '这个附件已经不在了' })
+            return true
+          }
+          // 读给自己看：让用户能确认「平台读到的到底是什么字」，而不是只能信我们
+          sendJson(res, 200, { ok: true, file: publicChatFile(meta), text: meta.text })
+          return true
+        }
+        if (req.method === 'DELETE') {
+          const removed = deleteChatFile(user.id, fileId)
+          sendJson(res, removed ? 200 : 404, removed ? { ok: true } : { ok: false, code: 'FILE_NOT_FOUND', error: '这个附件已经不在了' })
+          return true
+        }
+        sendJson(res, 405, { ok: false, code: 'CHAT_METHOD', error: '这个接口不支持 ' + req.method })
         return true
       }
 

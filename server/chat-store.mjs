@@ -17,6 +17,10 @@ const MAX_CONVERSATIONS = 30
 const MAX_MESSAGES = 200
 const MAX_TEXT = 32000
 const MAX_TITLE = 60
+// 附件抽出来的文字跟着消息存；只给最近 6 条留正文，更早的只留文件名——
+// 长对话里最早的几轮本来就会被上下文窗口挤掉（r218 的口径：不假装还记着）。
+const MAX_DOC_TEXT = 24000
+const KEEP_DOC_TEXT = 6
 const ID_RE = /^[A-Za-z0-9_-]{6,40}$/
 
 function rootDir() {
@@ -31,6 +35,22 @@ function userDir(userId) {
 
 function safeText(value, max = MAX_TEXT) {
   return String(value ?? '').slice(0, max)
+}
+
+/** 消息上的附件形状：只留界面与上下文要用的字段，正文另存 docText。 */
+function safeFiles(value) {
+  if (!Array.isArray(value) || !value.length) return undefined
+  return value.slice(0, 5).map((item) => ({
+    id: safeText(item?.id, 40),
+    name: safeText(item?.name, 80),
+    kind: safeText(item?.kind, 12),
+    kindLabel: safeText(item?.kindLabel, 12),
+    bytes: Number(item?.bytes) || 0,
+    chars: Number(item?.chars) || 0,
+    truncated: Boolean(item?.truncated),
+    note: safeText(item?.note, 120),
+    createdAt: safeText(item?.createdAt, 40),
+  }))
 }
 
 function atomicWrite(file, data) {
@@ -114,12 +134,15 @@ export function getConversation(userId, conversationId) {
       model: safeText(item.model, 80),
       ms: Number(item.ms) || 0,
       meta: item.meta && typeof item.meta === 'object' ? item.meta : null,
+      files: safeFiles(item.files),
+      docText: safeText(item.docText, MAX_DOC_TEXT),
     })),
   }
 }
 
 export function saveConversation(userId, conv) {
-  const messages = (conv.messages || []).slice(-MAX_MESSAGES).map((item) => ({
+  const kept = (conv.messages || []).slice(-MAX_MESSAGES)
+  const messages = kept.map((item, index) => ({
     id: String(item.id || ('m' + Date.now().toString(36))),
     role: item.role === 'assistant' ? 'assistant' : 'user',
     content: safeText(item.content),
@@ -127,6 +150,9 @@ export function saveConversation(userId, conv) {
     model: safeText(item.model, 80),
     ms: Number(item.ms) || 0,
     meta: item.meta && typeof item.meta === 'object' ? item.meta : null,
+    files: safeFiles(item.files),
+    // 只给最近几条留附件正文：更早的留在消息里只会让会话文件越滚越大，而且已经挤不进上下文
+    docText: index < kept.length - KEEP_DOC_TEXT ? '' : safeText(item.docText, MAX_DOC_TEXT),
   }))
   const next = {
     id: conv.id,
@@ -163,7 +189,16 @@ export function deleteConversation(userId, conversationId) {
 export function contextMessages(messages, maxCount = 30, maxChars = 60000) {
   const rows = (Array.isArray(messages) ? messages : [])
     .filter((item) => item && (item.role === 'user' || item.role === 'assistant') && String(item.content || '').trim())
-    .map((item) => ({ role: item.role, content: String(item.content).slice(0, MAX_TEXT) }))
+    .map((item) => {
+      const content = String(item.content).slice(0, MAX_TEXT)
+      const docText = typeof item.docText === 'string' ? item.docText.trim() : ''
+      if (!docText) return { role: item.role, content }
+      // 附件原文跟着那一轮一起进上下文：模型看到的是「用户这句话 + 附件里的文字」
+      const names = Array.isArray(item.files)
+        ? item.files.map((file) => String(file?.name || '')).filter(Boolean).join('、')
+        : ''
+      return { role: item.role, content: content + '\n\n【这一轮的附件' + (names ? '（' + names + '）' : '') + '】\n' + docText }
+    })
   const picked = []
   let chars = 0
   for (let index = rows.length - 1; index >= 0; index -= 1) {

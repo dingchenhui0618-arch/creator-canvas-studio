@@ -244,3 +244,165 @@ test('流式与非流式共用一条会话：前面流式的回答会在下一�
   assert.equal(result.cost, 1)
 })
 
+
+// ── r218：附件进对话 ──────────────────────────────────────────────────────────
+// 解析器全在本地跑：夹具现场拼 zip / PDF，不下载任何文档、不调用任何上游。
+const zlib = await import('node:zlib')
+const chatFiles = await import('../server/chat-files.mjs')
+
+/** 拼一个最小的 zip（docx / xlsx 都是它）：只写解析器真会读的那几个字段。 */
+function zipFixture(entries) {
+  const locals = []
+  const central = []
+  let offset = 0
+  for (const [name, text] of Object.entries(entries)) {
+    const nameBuf = Buffer.from(name, 'utf8')
+    const body = Buffer.from(text, 'utf8')
+    const data = zlib.deflateRawSync(body)
+    const local = Buffer.alloc(30)
+    local.writeUInt32LE(0x04034b50, 0)
+    local.writeUInt16LE(20, 4)
+    local.writeUInt16LE(8, 8)
+    local.writeUInt32LE(data.length, 18)
+    local.writeUInt32LE(body.length, 22)
+    local.writeUInt16LE(nameBuf.length, 26)
+    locals.push(local, nameBuf, data)
+    const cent = Buffer.alloc(46)
+    cent.writeUInt32LE(0x02014b50, 0)
+    cent.writeUInt16LE(20, 4)
+    cent.writeUInt16LE(20, 6)
+    cent.writeUInt16LE(8, 10)
+    cent.writeUInt32LE(data.length, 20)
+    cent.writeUInt32LE(body.length, 24)
+    cent.writeUInt16LE(nameBuf.length, 28)
+    cent.writeUInt32LE(offset, 42)
+    central.push(cent, nameBuf)
+    offset += local.length + nameBuf.length + data.length
+  }
+  const directory = Buffer.concat(central)
+  const eocd = Buffer.alloc(22)
+  eocd.writeUInt32LE(0x06054b50, 0)
+  eocd.writeUInt16LE(Object.keys(entries).length, 8)
+  eocd.writeUInt16LE(Object.keys(entries).length, 10)
+  eocd.writeUInt32LE(directory.length, 12)
+  eocd.writeUInt32LE(offset, 16)
+  return Buffer.concat([...locals, directory, eocd])
+}
+
+function docxFixture(paragraphs) {
+  const body = paragraphs.map((line) => '<w:p><w:r><w:t>' + line + '</w:t></w:r></w:p>').join('')
+  return zipFixture({ 'word/document.xml': '<w:document><w:body>' + body + '</w:body></w:document>' })
+}
+
+function xlsxFixture() {
+  return zipFixture({
+    'xl/sharedStrings.xml': '<sst><si><t>标题</t></si><si><t>点击率</t></si><si><t>开场三秒</t></si></sst>',
+    'xl/worksheets/sheet1.xml': '<worksheet><sheetData>' +
+      '<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row>' +
+      '<row r="2"><c r="A2" t="s"><v>2</v></c><c r="B2"><v>0.42</v></c></row>' +
+      '</sheetData></worksheet>',
+  })
+}
+
+function pdfFixture(lines) {
+  const content = 'BT /F1 12 Tf 72 720 Td ' + lines.map((line) => '(' + line + ') Tj 0 -14 Td').join(' ') + ' ET'
+  const deflated = zlib.deflateRawSync(Buffer.from(content, 'latin1'))
+  return Buffer.concat([
+    Buffer.from('%PDF-1.4\n1 0 obj\n<< /Length ' + deflated.length + ' /Filter /FlateDecode >>\nstream\n', 'latin1'),
+    deflated,
+    Buffer.from('\nendstream\nendobj\ntrailer\n<< /Root 2 0 R >>\n%%EOF\n', 'latin1'),
+  ])
+}
+
+test('附件解析：Word / Excel / PDF / 纯文本都读成文字，并说明读到的是什么', () => {
+  const docx = chatFiles.extractDocument(docxFixture(['开场三秒要抓人', '第二镜切近景']), { name: '脚本.docx' })
+  assert.equal(docx.kind, 'docx')
+  assert.match(docx.text, /开场三秒要抓人\n第二镜切近景/)
+  assert.match(docx.note, /只读了 Word 的正文/)
+
+  const xlsx = chatFiles.extractDocument(xlsxFixture(), { name: '复盘.xlsx' })
+  assert.equal(xlsx.kind, 'xlsx')
+  assert.equal(xlsx.text, '标题\t点击率\n开场三秒\t0.42')
+  assert.match(xlsx.note, /第一个工作表/)
+
+  const pdf = chatFiles.extractDocument(pdfFixture(['Hook in 3 seconds', 'Cut to close-up on the face']), { name: '参考.pdf' })
+  assert.equal(pdf.kind, 'pdf')
+  assert.match(pdf.text, /Hook in 3 seconds/)
+  assert.match(pdf.text, /Cut to close-up on the face/)
+
+  const text = chatFiles.extractDocument(Buffer.from('\uFEFF第一镜：开场三秒要抓人\n第二镜：切近景', 'utf8'), { name: '口播.txt' })
+  assert.equal(text.kind, 'text')
+  assert.equal(text.text, '第一镜：开场三秒要抓人\n第二镜：切近景')
+})
+
+test('附件解析：二进制、扫描件 PDF、超大文件都明确拒绝，不拿空内容去问模型', () => {
+  assert.throws(() => chatFiles.extractDocument(Buffer.alloc(400, 0), { name: 'x.bin' }), (error) => error.code === 'FILE_TYPE')
+  assert.throws(
+    () => chatFiles.extractDocument(Buffer.from('%PDF-1.4\n1 0 obj\n<< /Length 0 >>\nstream\n\nendstream\nendobj\n%%EOF\n'), { name: 'scan.pdf' }),
+    (error) => error.code === 'FILE_PDF_NO_TEXT' && /扫描件/.test(error.message),
+  )
+  assert.throws(() => chatFiles.extractDocument(Buffer.alloc(9 * 1024 * 1024, 0x41), { name: 'big.txt' }), (error) => error.code === 'FILE_TOO_LARGE')
+})
+
+test('附件进上下文：模型收到附件里的文字，聊天记录里只留名字、字数与截断标记', async () => {
+  const file = chatFiles.saveChatFile({
+    userId: user.id,
+    buffer: Buffer.from('第一镜：开场三秒要抓人\n第二镜：切近景看眼神\n第三镜：结尾反问', 'utf8'),
+    name: '口播脚本.txt',
+  })
+  assert.equal(file.kind, 'text')
+  assert.ok(file.chars > 10)
+  const result = await sendChatMessage(user, { content: '按这个改成分镜，每镜写清画面与台词', files: [file.id] })
+  const sent = calls[calls.length - 1]
+  const last = sent.messages[sent.messages.length - 1]
+  assert.equal(last.role, 'user')
+  assert.match(last.content, /按这个改成分镜/)
+  assert.match(last.content, /【附件 1：口播脚本\.txt/)
+  assert.match(last.content, /第二镜：切近景看眼神/, '附件里的文字要真的进上下文')
+  const stored = result.conversation.messages[0]
+  assert.equal(stored.files.length, 1)
+  assert.equal(stored.files[0].name, '口播脚本.txt')
+  assert.equal(stored.content, '按这个改成分镜，每镜写清画面与台词')
+  assert.doesNotMatch(stored.content, /第二镜/, '正文里不该重复塞附件原文')
+})
+
+test('附件跟着会话走：下一轮还在上下文里；别人的附件用不了，也不会假装看过', async () => {
+  const conversation = listConversations(user.id)[0]
+  await sendChatMessage(user, { conversationId: conversation.id, content: '第二镜再具体一点' })
+  const sent = calls[calls.length - 1]
+  assert.ok(
+    sent.messages.some((item) => /第二镜：切近景看眼神/.test(item.content)),
+    '上一轮的附件文字要跟着历史一起进上下文',
+  )
+
+  const other = auth.createUser({ email: '[EMAIL:ZP2K7M]', password: 'Passw0rd!demo', name: '别人的账号' })
+  const mine = chatFiles.saveChatFile({ userId: user.id, buffer: Buffer.from('只有我能看的内容'), name: '私密.txt' })
+  assert.equal(chatFiles.readChatFile(other.id, mine.id), null, '附件按归属读：别人的读不到')
+  await sendChatMessage(other, { content: '偷看一下', files: [mine.id] })
+  const stolen = calls[calls.length - 1]
+  assert.doesNotMatch(stolen.messages[stolen.messages.length - 1].content, /只有我能看的内容/)
+  assert.doesNotMatch(stolen.messages[stolen.messages.length - 1].content, /【附件/)
+})
+
+test('附件超限：一条消息最多 5 个，超了直接拒且一分钱不扣', async () => {
+  const before = balanceOf(user.id)
+  const ids = Array.from({ length: 6 }, (_, index) =>
+    chatFiles.saveChatFile({ userId: user.id, buffer: Buffer.from('第 ' + index + ' 份'), name: 'f' + index + '.txt' }).id,
+  )
+  await assert.rejects(
+    () => sendChatMessage(user, { content: '一次带六份', files: ids }),
+    (error) => error.code === 'CHAT_FILES' && /最多带 5 个附件/.test(error.message),
+  )
+  assert.equal(balanceOf(user.id), before, '附件本身就超限时不能先扣费')
+})
+
+test('附件截断：单个文件封顶 20000 字，标 truncated，界面能看见', () => {
+  const long = '开场三秒要抓人。'.repeat(3000)
+  const file = chatFiles.saveChatFile({ userId: user.id, buffer: Buffer.from(long, 'utf8'), name: '长稿.txt' })
+  assert.equal(file.truncated, true)
+  assert.equal(file.chars, 20000)
+  const resolved = chatFiles.resolveChatFiles(user.id, [file.id])
+  assert.equal(resolved.chars, 20000)
+  assert.match(resolved.text, /已截断/)
+  assert.ok(resolved.text.length < long.length, '上下文里只放截断后的那一段')
+})
