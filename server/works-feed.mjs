@@ -13,7 +13,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { config } from './config.mjs'
 import { listRuns } from './flows.mjs'
-import { listCanvases } from './bdc.mjs'
+import { listCanvases, loadCanvasNodes } from './bdc.mjs'
+import { visibleCanvases } from './canvas-owner.mjs'
 
 export const WORKS_KINDS = ['all', 'image', 'video', 'run', 'canvas']
 const DEFAULT_LIMIT = 24
@@ -57,9 +58,22 @@ async function mediaItems(userId) {
       at: Date.parse(task.createdAt) || 0,
       source: '快捷创作',
       detailUrl: '#/agents',
+      model: modelLabel(task.model),
     })
   }
   return rows
+}
+
+// 一次运行在作品流里能给出的东西：它跑了哪条流程、成没成、花了多久，以及**最后一段文本输出**。
+// 不把每个节点的输出都铺开（那是运行详情的事），只留一句能认出「这条跑出了什么」的摘要。
+function runSummaryText(run) {
+  const nodes = Array.isArray(run.nodes) ? run.nodes : []
+  for (let index = nodes.length - 1; index >= 0; index -= 1) {
+    const output = nodes[index]?.output
+    const text = String(output?.text || '').replace(/\s+/g, ' ').trim()
+    if (text) return text.slice(0, 96)
+  }
+  return ''
 }
 
 async function runItems(user) {
@@ -73,15 +87,87 @@ async function runItems(user) {
     previewUrl: null,
     at: Date.parse(run.finishedAt || run.startedAt) || Date.parse(run.createdAt || '') || 0,
     source: '工作流',
-    detailUrl: '#/runs',
+    // 点开就是那次运行的只读视图（#/canvas/<flowId>/run/<runId>），不再是笼统的运行记录页
+    detailUrl: run.flowId
+      ? '#/canvas/' + encodeURIComponent(run.flowId) + '/run/' + encodeURIComponent(run.id)
+      : '#/runs',
     status: run.status,
+    summary: runSummaryText(run),
+    durationMs: Number(run.durationMs) || 0,
+    flowId: run.flowId || '',
   }))
 }
 
-async function canvasItems() {
+// 界面上的模型名：用产品叫法，不把内部 id（尤其带上游前缀的）原样端给用户。
+const MODEL_LABELS = {
+  'gpt-image-2': 'GPT Image 2',
+  'seedance-2.0': 'Seedance 2.0',
+  'seedance-2.0-fast': 'Seedance 2.0 · 极速',
+  'cgcm-seedance-2-0': 'Seedance 2.0',
+  'image-2-pro': 'GPT Image 2',
+}
+
+function modelLabel(id) {
+  const raw = String(id || '').trim()
+  if (!raw) return ''
+  return MODEL_LABELS[raw.toLowerCase()] || raw.replace(/^cgcm-/i, '')
+}
+
+const RATIO_ALIAS = new Set(['1:1', '9:16', '16:9', '4:3', '3:4'])
+
+// 画布里的生成节点：只有真的出过东西的才算作品。
+// 口径（2026-11-18 在生产画布 JSON 上核对过）：type=ai-image / ai-video，
+// params._generationStatus='done'，成品在 output（形如 /api/workspace/file/...，由画布自己的 6677 提供）。
+function canvasNodeRatio(node, kind) {
+  const params = node.params || {}
+  const ratio = String(params.aspectRatio || '').trim()
+  if (RATIO_ALIAS.has(ratio)) return ratio
+  const width = Number(params._genPixelW) || 0
+  const height = Number(params._genPixelH) || 0
+  if (width > 0 && height > 0) {
+    if (width === height) return '1:1'
+    if (height > width) return '9:16'
+    return '16:9'
+  }
+  return kind === 'video' ? '16:9' : '1:1'
+}
+
+function canvasNodeItems(canvas, nodes) {
+  const rows = []
+  for (const node of nodes) {
+    if (!node || (node.type !== 'ai-image' && node.type !== 'ai-video')) continue
+    const params = node.params || {}
+    if (params._generationStatus !== 'done' && node.status !== 'done') continue
+    const output = String(node.output || '')
+    // 只代理画布自己的 workspace 地址：别的地址（外链、签名 url）不替它出流量
+    if (!output.startsWith('/api/workspace/') || output.includes('..')) continue
+    const kind = node.type === 'ai-image' ? 'image' : 'video'
+    const prompt = String(node.prompt || '').trim()
+    const query = '/api/works/canvas-file?canvas=' + encodeURIComponent(canvas.id) + '&node=' + encodeURIComponent(String(node.id || ''))
+    rows.push({
+      id: 'canvas-node:' + canvas.id + ':' + String(node.id || ''),
+      kind,
+      title: prompt.slice(0, 42) || (kind === 'image' ? '画布里的一张图' : '画布里的一条视频'),
+      aspect: canvasNodeRatio(node, kind),
+      // 视频也把代理地址给缩略图：卡片用 <video preload="metadata"> 出第一帧，点开才是播放
+      thumbUrl: query,
+      previewUrl: query,
+      at: Number(params._generationSubmittedAt) || Number(canvas.updatedAt) || 0,
+      source: '无限画布',
+      detailUrl: '#/board/' + canvas.id,
+      status: 'succeeded',
+      canvasId: canvas.id,
+      model: modelLabel(params._generationModel),
+    })
+  }
+  return rows
+}
+
+async function canvasItems(user) {
   const result = await listCanvases()
   if (!result.ok) return []
-  return result.canvases.map((canvas) => ({
+  const mine = visibleCanvases(user, result.canvases)
+  const cards = mine.map((canvas) => ({
     id: 'canvas:' + canvas.id,
     kind: 'canvas',
     title: String(canvas.name || '未命名无限画布').slice(0, 42),
@@ -93,6 +179,14 @@ async function canvasItems() {
     detailUrl: '#/board/' + canvas.id,
     nodeCount: canvas.nodeCount,
   }))
+  // 只为前 12 块画布读节点：作品流不是画布的备份，读太多会把一次请求拖成扫盘
+  const nodes = await Promise.all(mine.slice(0, 12).map((canvas) => loadCanvasNodes(canvas.id).catch(() => null)))
+  const media = []
+  nodes.forEach((loaded, index) => {
+    if (!loaded) return
+    media.push(...canvasNodeItems(mine[index], loaded.nodes).slice(0, 24))
+  })
+  return [...cards, ...media]
 }
 
 /** 三种来源合并、按时间倒序；游标是上一页最后一条的 `at:id`，不用时间戳比较（同毫秒会漏）。 */
@@ -116,7 +210,7 @@ export function mergeWorks({ media = [], runs = [], canvases = [], kind = 'all',
 }
 
 export async function listWorks(user, options = {}) {
-  const [media, canvases] = await Promise.all([mediaItems(user.id), canvasItems()])
+  const [media, canvases] = await Promise.all([mediaItems(user.id), canvasItems(user)])
   return mergeWorks({ media, runs: await runItems(user), canvases, ...options })
 }
 

@@ -46,7 +46,7 @@ test('主线四步的顺序是 找 → 拆 → 做 → 交，各自落在发现 
   assert.deepEqual(parts.map((piece) => piece.length), [3, 3, 3, 3], '每步应当写成「01 · 找 · 发现」三段：' + kickers.join(' / '))
   assert.deepEqual(parts.map((piece) => piece[0]), ['01', '02', '03', '04'])
   assert.deepEqual(parts.map((piece) => piece[1]), ['找', '拆', '做', '交'])
-  assert.deepEqual(parts.map((piece) => piece[2]), ['发现', '模板库', '作品', '交付'])
+  assert.deepEqual(parts.map((piece) => piece[2]), ['爆款雷达', '模板库', '作品', '交付'])
 })
 
 test('引导上的价钱对得上服务端计费表：只有检索 / 解析 / 评审 / 跑画布按次扣', () => {

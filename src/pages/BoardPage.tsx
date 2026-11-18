@@ -4,6 +4,7 @@ import {
   createBdcCanvas,
   getBdcStatus,
   listBdcCanvases,
+  claimBdcCanvas,
   writeBdcNote,
   type BdcCanvas,
   type BdcStatus,
@@ -133,6 +134,13 @@ export default function BoardPage({ onToast, boardId, focus, onToggleFocus }: Bo
     // 换了一块画布：地址栏跟着走，刷新与收藏都落在同一块上
     replaceRoute({ kind: 'page', page: 'board', boardId: canvasId })
   }, [boardId, canvasId])
+
+  // 第一次打开一块画布就认领它（r214）：作品流按这个归属决定「画布里的图能不能给你看」。
+  // 认领失败不打扰用户：画布照旧能打开，只是这条不会出现在自己的作品流里。
+  useEffect(() => {
+    if (!canvasId) return
+    void claimBdcCanvas(canvasId).catch(() => undefined)
+  }, [canvasId])
 
   // iframe 地址：一次性入口（种 cookie）+ 画布 id（画布自己用 ?loadCanvas= 认）
   // 票据只发给画布自己的源：postMessage 的 targetOrigin 用真实 origin，绝不用 '*'

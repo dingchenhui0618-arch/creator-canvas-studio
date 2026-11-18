@@ -1490,8 +1490,20 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
               {loadState === 'loading' && <div className="cv-overlay">{internal ? '正在读取 data/flows.json…' : '正在读取工作流…'}</div>}
               {loadState === 'ready' && !nodes.length && (
                 <div className="cv-overlay cv-overlay--empty">
-                  <strong>工作流还没有节点</strong>
-                  <p>从左侧面板拖入输入、大模型或评审节点，再用右侧的圆点连线。</p>
+                  <strong>工作流是一条内容拆成步骤的地方</strong>
+                  <p>把「检索 → 大模型 → 条件 → 输出」连成一条线，跑完的运行会带着结果进「作品」：在作品流里点那张卡，就回到这次运行的逐节点结果。</p>
+                  <div className="cv-empty-actions">
+                    <button type="button" className="vq-button vq-button--ghost" onClick={() => navigate({ kind: 'page', page: 'radar' })}>
+                      去爆款雷达找一条
+                    </button>
+                    <button type="button" className="vq-button vq-button--ghost" onClick={() => navigate({ kind: 'page', page: 'templates' })}>
+                      套用模板库的结构
+                    </button>
+                    <button type="button" className="vq-button vq-button--ghost" onClick={() => navigate({ kind: 'page', page: 'projects' })}>
+                      从作品继续
+                    </button>
+                  </div>
+                  <p className="cv-empty-note">出图与出视频在「快捷创作」和「无限画布」；这里负责把脚本、检索、条件与评审这些步骤连起来跑。</p>
                 </div>
               )}
               <div className="cv-hint">

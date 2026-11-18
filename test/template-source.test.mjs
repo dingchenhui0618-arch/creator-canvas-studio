@@ -139,5 +139,5 @@ test('认不出来的来源交回 unknown，由接口回 400 而不是静默退�
   assert.deepEqual(t.parseTemplateSource('bogus'), { source: '', unknown: 'bogus' })
   // 文案里给出的可用值是这几个 key，写死在这里防止两边漂移
   assert.deepEqual(t.TEMPLATE_SOURCES.map((entry) => entry.key), ['radar', 'project', 'agent', 'canvas', 'adapted', 'shared'])
-  assert.deepEqual(t.TEMPLATE_SOURCES.map((entry) => entry.label), ['发现', '作品', '对话预设', '工作流', '改编', '官方示例'])
+  assert.deepEqual(t.TEMPLATE_SOURCES.map((entry) => entry.label), ['爆款雷达', '作品', '对话预设', '工作流', '改编', '官方示例'])
 })

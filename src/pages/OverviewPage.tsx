@@ -1065,7 +1065,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
           loading
             ? '正在读取你账号下的无限画布、运行与模板。'
             : firstRun
-              ? '一条内容从「发现」进来：检索一条 → 在模板库拆成脚本与分镜 → 开成作品改到能拍 → 交付这一版。今天先挑一条值得抄的，做完第一条，下面那些区块会自己出现。'
+              ? '一条内容从「爆款雷达」进来：检索一条 → 在模板库拆成脚本与分镜 → 开成作品改到能拍 → 交付这一版。今天先挑一条值得抄的，做完第一条，下面那些区块会自己出现。'
               : internal
                 ? '首屏主卡读的是无限画布服务的最近改动；运行与模板分别来自 /api/runs 与 /api/templates。没有数据的区块写空状态，不放示例数据。'
                 : '先看「下一步」，或者从下面三种方式开始一条新内容。'
@@ -1154,7 +1154,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
             })}
           </div>
           <p className="vq-first-run-note">
-            这一屏现在能做的只有一件事：从上面那张主卡进「发现」，按关键词检索一条值得抄的。
+            这一屏现在能做的只有一件事：从上面那张主卡进「爆款雷达」，按关键词检索一条值得抄的。
             检索与解析按次扣积分；开工作流、导出与分享不扣积分。
           </p>
         </section>
@@ -1994,7 +1994,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
           ) : (
             <div className="vq-empty vq-empty--inline">
               <strong>模板库还是空的</strong>
-              <span>在「发现」里复刻一条内容，拆出来的脚本结构会落到这里。</span>
+              <span>在「爆款雷达」里复刻一条内容，拆出来的脚本结构会落到这里。</span>
               <button type="button" className="vq-button vq-button--ghost" onClick={() => onNavigate('radar')}>
                 去检索
                 <ArrowRight size={13} />

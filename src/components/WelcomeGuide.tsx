@@ -30,7 +30,7 @@ const STEPS: Step[] = [
     key: 'discover',
     page: 'radar',
     icon: ScanSearch,
-    kicker: '01 · 找 · 发现',
+    kicker: '01 · 找 · 爆款雷达',
     title: '先挑一条值得拆的',
     body: '按关键词看抖音与小红书的互动数据。检索不会自己跑：点一次才查一次，结果里会标出库里已经有的那条。',
   },
@@ -83,7 +83,7 @@ export function WelcomeGuide({ onClose, onGo }: Props) {
       if (!alive) return
       const [creditResult, templateResult, projectResult, deliveryResult] = results
       setCredits(creditResult.status === 'fulfilled' ? creditResult.value : null)
-      // 三路里只要一路没读到就整体当作「没读到」：宁可只写「从发现开始」，
+      // 三路里只要一路没读到就整体当作「没读到」：宁可只写「从爆款雷达开始」，
       // 也不拿 0 冒充「你还没有模板」——引导上写错状态，人会照着错的那一步走。
       if (templateResult.status === 'fulfilled' && projectResult.status === 'fulfilled' && deliveryResult.status === 'fulfilled') {
         setCounts({
@@ -164,7 +164,7 @@ export function WelcomeGuide({ onClose, onGo }: Props) {
 
   // 「下一步」只认一个去处：这一步的下一步，就是上面那张卡片。
   const next = (() => {
-    if (stage === 'find') return { label: '去发现挑一条', page: 'radar' as Page }
+    if (stage === 'find') return { label: '去爆款雷达挑一条', page: 'radar' as Page }
     if (stage === 'adapt') return { label: '去模板库挑一条', page: 'templates' as Page }
     if (stage === 'make' || stage === 'ship') return { label: '去作品接着做', page: 'projects' as Page }
     return { label: '开始使用', page: null as Page | null }
@@ -172,7 +172,7 @@ export function WelcomeGuide({ onClose, onGo }: Props) {
 
   const stateText = (() => {
     if (!counts) return '积分按次消耗，失败原路退回；单价与余额以「设置 · 积分」为准。'
-    if (stage === 'find') return '账号下还没有模板：先在「发现」挑一条加进模板库，再点「去解析」拆出脚本与分镜。'
+    if (stage === 'find') return '账号下还没有模板：先在「爆款雷达」挑一条加进模板库，再点「去解析」拆出脚本与分镜。'
     if (stage === 'adapt') {
       const pending = Math.max(0, counts.templates - counts.parsed)
       return pending
@@ -200,7 +200,7 @@ export function WelcomeGuide({ onClose, onGo }: Props) {
             <span className="vq-mono">VisionQA · 上手引导</span>
             <h2 id="vq-guide-title">欢迎使用 VisionQA</h2>
             <p>
-              一级只有四个地方：工作台、作品、发现、模板库。一条内容从「发现」里进来，在「作品」里做完，交付与分享也在那一条上；
+              一级只有四个地方：工作台、作品、爆款雷达、模板库。一条内容从「爆款雷达」里进来，在「作品」里做完，交付与分享也在那一条上；
               工作流、无限画布、视觉评审、运行记录在工具区，它们是这条作品里的步骤。
             </p>
           </div>

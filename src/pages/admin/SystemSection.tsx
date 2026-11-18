@@ -1158,7 +1158,7 @@ export default function SystemSection() {
                 })}
               </ul>
             ) : (
-              <p className="admin-hint">还没有复刻任务：从「发现」里选一条内容、或在雷达页粘贴视频直链发起复刻，这里会出现任务进度与扣退记录。</p>
+              <p className="admin-hint">还没有复刻任务：从「爆款雷达」里选一条内容、或在雷达页粘贴视频直链发起复刻，这里会出现任务进度与扣退记录。</p>
             )}
           </>
         ) : null}

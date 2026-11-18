@@ -120,7 +120,18 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
               </button>
               <div className="works-meta">
                 <p className="works-title">{item.title}</p>
-                <span className="works-time">{stamp(item.at)}</span>
+                {item.summary ? <p className="works-summary">{item.summary}</p> : null}
+                <div className="works-line">
+                  <span className="works-time">
+                    {stamp(item.at)}
+                    {item.model ? ' · ' + item.model : ''}
+                    {item.durationMs ? ' · ' + Math.max(1, Math.round(item.durationMs / 1000)) + 's' : ''}
+                    {item.status && item.kind === 'run' ? ' · ' + (item.status === 'success' ? '跑完了' : item.status === 'error' ? '失败' : '已停止') : ''}
+                  </span>
+                  <button type="button" className="works-open" onClick={() => open(item)}>
+                    {item.previewUrl ? '看大图' : item.kind === 'canvas' ? '打开画布' : '打开运行'}
+                  </button>
+                </div>
               </div>
             </article>
           )

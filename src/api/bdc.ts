@@ -23,6 +23,14 @@ export const getBdcStatus = () => request<BdcStatus>('/api/bdc/status')
 export const listBdcCanvases = () =>
   request<{ ok: boolean; canvases: BdcCanvas[]; error?: string }>('/api/bdc/canvases')
 
+// 认领画布（r214）：无限画布的 workspace 是全局的，第一次从 #/board/<id> 打开时把它记到这个账号名下，
+// 作品流只列自己认领的画布。已有主人时服务端返回 mine:false，不抢也不报错。
+export const claimBdcCanvas = (canvasId: string) =>
+  request<{ ok: boolean; mine: boolean; ownerId: string; claimed: boolean }>('/api/bdc/canvases/claim', {
+    method: 'POST',
+    body: JSON.stringify({ canvasId }),
+  })
+
 export const createBdcCanvas = (name: string) =>
   request<{ ok: boolean; canvas: BdcCanvas }>('/api/bdc/canvases', {
     method: 'POST',

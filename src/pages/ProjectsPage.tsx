@@ -57,7 +57,7 @@ export default function ProjectsPage({
 }: {
   onOpenProject: (id: string) => void
   onBrowseTemplates: () => void
-  // 模板库也是空的时，这一屏的下一步是「去发现检索一条」，不是把人送进一个空库（v0.9.42）
+  // 模板库也是空的时，这一屏的下一步是「去爆款雷达检索一条」，不是把人送进一个空库（v0.9.42）
   onDiscover: () => void
 }) {
   const [items, setItems] = useState<ProjectSummary[]>([])
@@ -190,7 +190,7 @@ export default function ProjectsPage({
               // 这里就跟着降成次要，别和它抢
               <button type="button" className={'vq-button' + (total > 0 ? ' vq-button--primary' : ' vq-button--ghost')} onClick={onDiscover}>
                 <Search size={14} />
-                去发现检索一条
+                去爆款雷达检索一条
               </button>
             ) : (
               <button type="button" className="vq-button vq-button--primary" onClick={onBrowseTemplates}>
@@ -290,17 +290,17 @@ export default function ProjectsPage({
             {templateTotal === 0 ? (
               <>
                 <span>
-                  作品要从一条拆好的模板开始，模板库现在也还是空的：先去「发现」检索一条，把脚本与分镜拆出来，再回这里点「用它做作品」。
+                  作品要从一条拆好的模板开始，模板库现在也还是空的：先去「爆款雷达」检索一条，把脚本与分镜拆出来，再回这里点「用它做作品」。
                 </span>
                 <button type="button" className="vq-button vq-button--primary" onClick={onDiscover}>
-                  去发现检索一条
+                  去爆款雷达检索一条
                   <ArrowRight size={13} />
                 </button>
               </>
             ) : templateTotal === null ? (
               <>
                 <span>
-                  作品要从一条拆好的模板开始。模板库的条数这次没读到：先看模板库有没有能用的那条；模板库也是空的，就从「发现」检索一条。
+                  作品要从一条拆好的模板开始。模板库的条数这次没读到：先看模板库有没有能用的那条；模板库也是空的，就从「爆款雷达」检索一条。
                 </span>
                 <span className="vq-projects-empty-actions">
                   <button type="button" className="vq-button" onClick={onBrowseTemplates}>
@@ -308,7 +308,7 @@ export default function ProjectsPage({
                     <ArrowRight size={13} />
                   </button>
                   <button type="button" className="vq-button vq-button--ghost" onClick={onDiscover}>
-                    去发现检索一条
+                    去爆款雷达检索一条
                   </button>
                 </span>
               </>

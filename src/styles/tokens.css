@@ -66,19 +66,19 @@
   --space-16: 64px;
 
   /* ---------- 字阶：微标签 11 起（10px 在 1x 屏上必糊），正文 14 ---------- */
-  --text-mono: 11px;
-  --text-xs: 12px;
-  --text-sm: 14px;
-  --text-body: 14px;
-  --text-md: 15px;
-  --text-lg: 16px;
+  --text-mono: 12px;
+  --text-xs: 13px;
+  --text-sm: 15px;
+  --text-body: 15px;
+  --text-md: 16px;
+  --text-lg: 17px;
   /* 阅读面（脚本、评审结论、分享页）单独一套：字号比工作台大一档，行高按中文放宽 */
-  --text-copy: 14px;
+  --text-copy: 15px;
   --leading-copy: 1.7;
-  --text-meta: 12px;
+  --text-meta: 13px;
   --leading-meta: 1.6;
-  --text-xl: 20px;
-  --text-2xl: 28px;
+  --text-xl: 21px;
+  --text-2xl: 29px;
   --text-3xl: 40px;
   --weight-light: 300;
   --weight-normal: 400;
@@ -103,8 +103,8 @@
   --chip-tag-h: 20px;
   --chip-pad: 8px;
   --chip-pad-tight: 6px;
-  --chip-font: 11px;
-  --chip-font-lg: 12px;
+  --chip-font: 12px;
+  --chip-font-lg: 13px;
 
   /* ---------- 按钮（v0.9.47 归一）：全站只三档 ----------
      小 28px（列表行 / 密集工具条）· 默认 32px · 表单 40px；圆角一律 --radius-sm，
@@ -114,8 +114,8 @@
   --btn-h-lg: 40px;
   --btn-pad-sm: 12px;
   --btn-pad: 16px;
-  --btn-font: 13px;
-  --btn-font-sm: 12px;
+  --btn-font: 14px;
+  --btn-font-sm: 13px;
   --btn-gap: 8px;
   --btn-gap-sm: 4px;
 
@@ -134,14 +134,14 @@
   --focus: 0 0 0 2px #111111;
 
   /* ---------- 页头排版：改这一处即可影响所有页头（PageHead / page-head.css） ---------- */
-  --head-title-size: 26px;
+  --head-title-size: 28px;
   --head-title-weight: 500;
   --head-title-tracking: -0.01em;
   --head-title-leading: 1.25;
-  --head-kicker-size: 11.5px;
+  --head-kicker-size: 12.5px;
   --head-kicker-weight: 500;
   --head-kicker-tracking: 0.06em;
-  --head-desc-size: 12.5px;
+  --head-desc-size: 13.5px;
   --head-desc-leading: 1.7;
 
   /* 兼容旧变量名：旧组件读这些，直接指向新品牌色 */
@@ -215,4 +215,4 @@ button, input, select, textarea { font-family: inherit; }
 .vq-frame::before { top: -1px; left: -1px; border-width: 1px 0 0 1px; }
 .vq-frame::after { right: -1px; bottom: -1px; border-width: 0 1px 1px 0; }
 
-.vq-mono { font-family: var(--font-mono); letter-spacing: 0.04em; font-size: 11px; text-transform: uppercase; color: var(--faint); }
+.vq-mono { font-family: var(--font-mono); letter-spacing: 0.04em; font-size: 12px; text-transform: uppercase; color: var(--faint); }

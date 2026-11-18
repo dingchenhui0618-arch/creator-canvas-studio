@@ -39,6 +39,9 @@ export async function chatCompletion({
   // 只在成功拿到上游 usage 时记一条；拿不到 usage 也记（tokensKnown=false），
   // 否则「调了多少次」会少算。
   meter = null,
+  // 官方全家桶才有的参数（tools / thinking 等）：原样带上去，但**不能覆盖** model/messages 等核心字段。
+  // 只有快捷创作对话会传它，其它调用方不传，行为与以前完全一致。
+  extra = null,
 }) {
   const candidates = resolveKeyCandidates({ capability, model, limit: maxKeys })
   // 池里没有任何可用 Key 时，仍按老规矩回落环境变量凭证；来源在路由日志里标 env / none。
@@ -89,7 +92,7 @@ export async function chatCompletion({
       if (signal?.aborted) throw new Error('运行已停止')
       const timeoutSignal = AbortSignal.timeout(Math.max(1000, Number(timeoutMs) || 300000))
       const requestSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal
-      const body = { model, messages, temperature, max_tokens: maxTokens }
+      const body = { ...(extra && typeof extra === 'object' ? extra : {}), model, messages, temperature, max_tokens: maxTokens }
       if (useJson) body.response_format = { type: 'json_object' }
       try {
         const response = await fetch(baseUrl + '/chat/completions', {

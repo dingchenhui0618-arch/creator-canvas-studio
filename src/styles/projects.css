@@ -26,7 +26,7 @@
   border-radius: var(--radius-pill);
   background: var(--surface-soft);
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -68,7 +68,7 @@
   margin: 0;
   padding: 0 var(--space-2) var(--space-2);
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
@@ -80,13 +80,13 @@
 
 .vq-menu-copy strong {
   color: var(--ink);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
 }
 
 .vq-menu-copy small {
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
 }
 
@@ -158,7 +158,7 @@
 .vq-project-card-source {
   overflow: hidden;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -182,7 +182,7 @@
 .vq-project-card-meta em {
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
   letter-spacing: 0.04em;
 }
@@ -198,7 +198,7 @@
   align-items: center;
   gap: var(--space-1);
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .vq-project-card:hover .vq-project-card-go {
@@ -236,7 +236,7 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 /* 分享状态（v0.9.13）：卡片上直接说这条还在不在分享。
@@ -253,7 +253,7 @@
   background: var(--surface-raised);
   color: var(--muted);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.04em;
   white-space: nowrap;
 }
@@ -385,7 +385,7 @@
   margin: var(--space-2) 0 0;
   color: rgba(255, 255, 255, 0.72);
   font-variant-numeric: tabular-nums;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .vq-project-issue-delta {
@@ -397,7 +397,7 @@
   background: var(--surface-raised);
   color: var(--muted);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .vq-project-issue-line.is-better .vq-project-issue-delta {
@@ -471,7 +471,7 @@
 .vq-project-empty span {
   max-width: 52ch;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.7;
 }
 
@@ -587,7 +587,7 @@
 .vq-shot-figure-empty {
   display: none;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 /* 原片那一帧可能被清过（模板回收站 / 过期清理）：图裂了就写「没有帧图」，不留破图 */
@@ -612,7 +612,7 @@
   border-radius: 999px;
   background: rgba(0, 0, 0, .55);
   color: #fff;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.4;
 }
 
@@ -642,7 +642,7 @@
   border: 0;
   background: none;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
   cursor: pointer;
   text-decoration: underline;
@@ -691,7 +691,7 @@
   border: 0;
   background: none;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
   cursor: pointer;
   text-decoration: underline;
@@ -717,7 +717,7 @@
   margin: 0;
   color: var(--ink);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.75;
   overflow-wrap: anywhere;
 }
@@ -733,7 +733,7 @@
 .vq-shot-prompt-hint {
   flex: 1 1 220px;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
@@ -808,14 +808,14 @@
 
 .vq-project-versions-head h2 .vq-mono {
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .vq-project-versions-note {
   flex: 1 1 260px;
   margin: 0;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
@@ -862,7 +862,7 @@
   border-radius: var(--radius-pill);
   background: var(--surface-raised);
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .vq-version-row.is-current .vq-version-n {
@@ -905,7 +905,7 @@
   border-radius: var(--radius-pill);
   background: var(--surface-raised);
   color: var(--ink);
-  font-size: 11px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -927,7 +927,7 @@
    与「交付过」那枚胶囊并列，但压到辅助层——它是留给以后的记录，不是现在的状态。 */
 .vq-version-delivered-review {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 
@@ -948,7 +948,7 @@
 .vq-version-issues,
 .vq-version-delta {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   white-space: nowrap;
 }
 
@@ -1039,7 +1039,7 @@
 .vq-version-change .vq-mono {
   flex: none;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.02em;
 }
 
@@ -1069,7 +1069,7 @@
   background: var(--surface-raised);
   color: var(--muted);
   font-family: var(--font-ui);
-  font-size: 11px;
+  font-size: 12px;
   white-space: nowrap;
   cursor: pointer;
   transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
@@ -1106,7 +1106,7 @@
   display: inline-flex;
   align-items: center;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 /* ---------- 交付档案（v0.9.126）：交过的每一版、封存包与包内清单 ---------- */
@@ -1145,14 +1145,14 @@
 
 .vq-project-archive-head h2 .vq-mono {
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .vq-project-archive-note {
   flex: 1 1 260px;
   margin: 0;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
@@ -1165,7 +1165,7 @@
   border-radius: var(--radius-sm);
   background: var(--surface-soft);
   color: var(--ink);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.6;
 }
 
@@ -1211,7 +1211,7 @@
 
 .vq-archive-main strong {
   overflow: hidden;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: var(--weight-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1222,7 +1222,7 @@
   flex-wrap: wrap;
   gap: 0;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.7;
 }
 
@@ -1242,7 +1242,7 @@
   border: 0;
   background: none;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   cursor: pointer;
   /* 哈希按小写显示：与复制到剪贴板的完整值一致，不靠 text-transform 改成大写 */
   text-transform: none;
@@ -1268,7 +1268,7 @@
 
 .vq-archive-legacy-note {
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
@@ -1303,14 +1303,14 @@
 .vq-archive-files li .vq-mono {
   flex: none;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .vq-archive-more {
   grid-column: 2 / -1;
   margin: 0;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 /* 包里那份（v0.9.129）：目录从盘上那份读出来，一条一条都能点开看，不用先解压 */
@@ -1326,7 +1326,7 @@
 .vq-archive-contents-note {
   margin: 0;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
@@ -1387,7 +1387,7 @@
 
 .vq-archive-entry .vq-mono {
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   text-transform: none;
 }
 
@@ -1419,7 +1419,7 @@
 .vq-archive-preview-head strong {
   overflow-wrap: anywhere;
   color: var(--ink);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: var(--weight-medium);
 }
 
@@ -1458,7 +1458,7 @@
 .vq-archive-preview-note {
   margin: 0;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
@@ -1511,13 +1511,13 @@
 
 .vq-archive-audit-head strong {
   color: var(--ink);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: var(--weight-medium);
 }
 
 .vq-archive-audit-meta {
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 /* 数字和单位不拆行：「用了 1 ms」被拆成两行会让读数像两个数 */
@@ -1547,7 +1547,7 @@
   justify-content: space-between;
   gap: var(--space-2);
   color: var(--fail);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.7;
 }
 
@@ -1558,14 +1558,14 @@
 .vq-archive-audit-hint {
   margin: 0;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
 .vq-archive-audit-note {
   margin: 0;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
@@ -1600,7 +1600,7 @@
   border-radius: var(--radius-sm);
   background: var(--surface-raised);
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
   transition: border-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
 }
@@ -1629,7 +1629,7 @@
 .vq-archive-verify-note {
   margin: 0;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
@@ -1660,7 +1660,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: var(--weight-medium);
 }
 
@@ -1702,7 +1702,7 @@
 
 .vq-archive-verify-server-title {
   color: var(--ink);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: var(--weight-medium);
 }
 
@@ -1712,7 +1712,7 @@
   border: 1px solid var(--line);
   border-radius: 999px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.7;
   /* 大小单位不跟着 .vq-mono 变大写 */
   text-transform: none;
@@ -1728,7 +1728,7 @@
   justify-self: start;
   width: fit-content;
   color: var(--fail);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
@@ -1736,7 +1736,7 @@
 .vq-project-archive-audit {
   margin: 8px 0 0;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
@@ -1748,7 +1748,7 @@
   justify-self: start;
   width: fit-content;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
@@ -1772,7 +1772,7 @@
 .vq-archive-receipt-hint {
   margin: 0;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
@@ -1784,7 +1784,7 @@
   gap: var(--space-1);
   margin: 0;
   color: var(--pass);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
@@ -1800,7 +1800,7 @@
 
 .vq-archive-receipt-label {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.02em;
 }
 
@@ -1814,7 +1814,7 @@
   background: var(--surface-raised);
   color: var(--ink);
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.7;
   text-transform: none;
   resize: vertical;
@@ -1839,7 +1839,7 @@
 .vq-archive-receipt-note {
   margin: 0;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
@@ -1878,7 +1878,7 @@
   display: inline-flex;
   align-items: flex-start;
   gap: var(--space-1);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: var(--weight-medium);
 }
 
@@ -1906,7 +1906,7 @@
   grid-template-columns: 96px minmax(0, 1fr);
   gap: var(--space-2);
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.7;
 }
 
@@ -1953,7 +1953,7 @@
 .vq-archive-receipt-problems {
   margin: 0;
   padding: 0 0 0 var(--space-3);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.7;
 }
 
@@ -1967,7 +1967,7 @@
   border: 1px solid var(--line);
   border-radius: 999px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.7;
   text-transform: none;
 }
@@ -1994,7 +1994,7 @@
   justify-self: start;
   max-width: 100%;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
   overflow-wrap: break-word;
 }
@@ -2037,7 +2037,7 @@
   min-width: 0;
   margin: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.6;
 }
 
@@ -2068,7 +2068,7 @@
   background: var(--surface-raised);
   color: var(--ink);
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   text-transform: none;
 }
 
@@ -2086,7 +2086,7 @@
   flex: 1 1 100%;
   min-width: 0;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
@@ -2118,7 +2118,7 @@
   background: var(--surface-raised);
   color: var(--ink);
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.6;
   resize: vertical;
 }
@@ -2136,7 +2136,7 @@
   flex: 1 1 100%;
   min-width: 0;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
@@ -2160,7 +2160,7 @@
 
 .vq-archive-receipt-linkhint {
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
@@ -2179,7 +2179,7 @@
   border-radius: var(--radius-xs);
   background: var(--surface-soft);
   color: var(--ink);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.7;
   overflow-wrap: anywhere;
   text-transform: none;
@@ -2199,14 +2199,14 @@
 .vq-archive-receipt-linknote {
   margin: 0;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
 /* 这张收据是谁贴的：发件人替他贴的 / 收包人自己贴的，一行小字 */
 .vq-archive-receipt-via {
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.7;
 }
 
@@ -2281,7 +2281,7 @@
 
 .vq-archive-receipt-loghead {
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
@@ -2298,7 +2298,7 @@
   gap: 1px;
   padding: var(--space-1) 0;
   border-top: 1px solid var(--line-faint);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
@@ -2441,7 +2441,7 @@
 
 .vq-project-runs-head h2 .vq-mono {
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .vq-project-runs-note {
@@ -2509,7 +2509,7 @@
 .vq-run-title strong {
   overflow: hidden;
   color: var(--ink);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: var(--weight-normal);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2518,7 +2518,7 @@
 .vq-run-version {
   height: 20px;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .vq-run-status {
@@ -2529,7 +2529,7 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
   background: var(--surface-raised);
-  font-size: 11px;
+  font-size: 12px;
   white-space: nowrap;
 }
 
@@ -2643,7 +2643,7 @@
 .vq-project-review-hint {
   margin: 0;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .vq-project-review-body {
@@ -2654,13 +2654,13 @@
 
 .vq-project-review-summary {
   color: var(--ink);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.7;
 }
 
 .vq-project-review-time {
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .vq-project-review-go {
@@ -2681,7 +2681,7 @@
 
 .vq-project-review-version {
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 
@@ -2723,20 +2723,20 @@
 
 .vq-review-decision-head .vq-mono {
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .vq-review-decision-hint {
   margin: 0;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.7;
 }
 
 .vq-review-decision-note {
   margin: 0;
   color: var(--ink);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.7;
 }
 
@@ -2747,7 +2747,7 @@
 
 .vq-review-decision-field > span {
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .vq-review-decision-field input {
@@ -2759,7 +2759,7 @@
   background: var(--surface-raised);
   color: var(--ink);
   font: inherit;
-  font-size: 13px;
+  font-size: 14px;
   transition: border-color var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out);
 }
 
@@ -2798,12 +2798,12 @@
 
 .vq-review-ack .vq-mono {
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
 .vq-review-ack .vq-link {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 /* 拍板记录（v0.9.26）：这条作品名下每一次拍板都留着，按拍板时间倒序。
@@ -2832,7 +2832,7 @@
 
 .vq-decision-log-head .vq-mono {
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .vq-decision-log-list {
@@ -2893,7 +2893,7 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
   background: var(--surface-soft);
   color: var(--muted);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   white-space: nowrap;
 }
 
@@ -2911,7 +2911,7 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
 
 .vq-decision-log-version {
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .vq-decision-log-body {
@@ -2922,7 +2922,7 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
 
 .vq-decision-log-state {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .vq-decision-log-state.is-current {
@@ -2931,13 +2931,13 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
 
 .vq-decision-log-meta {
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
 .vq-decision-log-note {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.7;
 }
 
@@ -2956,12 +2956,12 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
 
 .vq-decision-log-foot > span {
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.7;
 }
 
 .vq-decision-log-foot .vq-link {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 /* 小屏（v0.9.26）：一行放不下「胶囊 + 版次 + 正文 + 箭头」时，把胶囊与箭头放第一行、
@@ -3001,7 +3001,7 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
   background: var(--surface-raised);
   color: var(--muted);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   white-space: nowrap;
 }
 
@@ -3081,7 +3081,7 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
   background: transparent;
   color: var(--muted);
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
@@ -3434,7 +3434,7 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
 .vq-tpl-sheet-line .vq-mono {
   margin-left: var(--space-2);
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .vq-tpl-check {
@@ -3513,7 +3513,7 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
   margin: 0;
   overflow: hidden;
   color: var(--ink);
-  font-size: 13px;
+  font-size: 14px;
   text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3589,7 +3589,7 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
   margin: 0;
   overflow: hidden;
   color: var(--ink);
-  font-size: 13px;
+  font-size: 14px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -3728,7 +3728,7 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
 
 .vq-vcompare-picker span {
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.04em;
 }
 
@@ -3772,7 +3772,7 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
 .vq-vcompare-summary .vq-mono {
   flex: none;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.02em;
 }
 
@@ -3804,7 +3804,7 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
 .vq-vcompare-review-head .vq-mono {
   flex: none;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .vq-vcompare-review-meta,
@@ -3884,7 +3884,7 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
 
 .vq-vcompare-section-head .vq-mono {
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -3911,7 +3911,7 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
   background: var(--surface-soft);
   color: var(--muted);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1;
 }
 
@@ -3939,7 +3939,7 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
 .vq-vcompare-group-label {
   margin: 0;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.02em;
 }
 
@@ -3998,7 +3998,7 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
 .vq-vcompare-node-head .vq-mono {
   flex: none;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   white-space: nowrap;
 }
 
@@ -4020,7 +4020,7 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
 
 .vq-vcompare-field-label {
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
@@ -4052,7 +4052,7 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
 .vq-vcompare-field-arrow {
   flex: none;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .vq-vcompare-changed {
@@ -4112,7 +4112,7 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
 .vq-vcompare-hook-pair .vq-mono {
   flex: none;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .vq-vcompare-state {
@@ -4135,7 +4135,7 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
   border-radius: var(--radius-sm);
   background: var(--surface-soft);
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.7;
   list-style: none;
 }
@@ -4289,7 +4289,7 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
 
 .vq-verscript-change .vq-mono {
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.02em;
 }
 
@@ -4305,7 +4305,7 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
 
 .vq-verscript-label {
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.04em;
 }
 
@@ -4340,7 +4340,7 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
 .vq-verscript-beat-n {
   padding-top: 2px;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .vq-verscript-beat-body {
@@ -4365,7 +4365,7 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
 
 .vq-verscript-beat-head .vq-mono {
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .vq-verscript-beat-body p {
@@ -4384,7 +4384,7 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
 .vq-verscript-onscreen span {
   flex: none;
   padding-top: 1px;
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.04em;
 }
 

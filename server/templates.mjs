@@ -47,7 +47,7 @@ async function persist(list) {
 //   - 改编：以另一条模板为底改出来的；
 //   - 发现：雷达检索来的（saved 待解析 + replica 已解析），以及 v0.9.2 之前没有 kind 的老条目。
 export const TEMPLATE_SOURCES = [
-  { key: 'radar', label: '发现' },
+  { key: 'radar', label: '爆款雷达' },
   { key: 'project', label: '作品' },
   { key: 'agent', label: '对话预设' },
   { key: 'canvas', label: '工作流' },

@@ -26,10 +26,10 @@ export function visionChain() {
   return list.length ? list : modelChain()
 }
 
-async function callOnce(messages, model, { temperature = 0.3, maxTokens = 2000, json = false, meter = null, signal } = {}) {
+async function callOnce(messages, model, { temperature = 0.3, maxTokens = 2000, json = false, meter = null, signal, extra = null } = {}) {
   // max_tokens 包含推理 token：推理型模型给太小会把正文截断，chatCompletion 会按可重试错误抛出
   // signal 是「用户停止运行」的通道（v0.9.101）：传下去之后 fetch 会被立刻中止，不再换模型重试
-  const { message } = await chatCompletion({ model, messages, temperature, maxTokens, json, meter, signal })
+  const { message, finishReason, usage } = await chatCompletion({ model, messages, temperature, maxTokens, json, meter, signal, extra })
   const content = String(message.content || '').trim()
   // 推理型模型偶发把整段输出塞进 reasoning_content、content 为空：
   // 换下一个候选模型，绝不把思考过程当答案返回。
@@ -39,7 +39,7 @@ async function callOnce(messages, model, { temperature = 0.3, maxTokens = 2000, 
       { retryable: true },
     )
   }
-  return { text: content, model }
+  return { text: content, model, finishReason: String(finishReason || ''), usage: usage || null }
 }
 
 export async function callTextModel(messages, options = {}) {

@@ -114,6 +114,17 @@ function emptyCanvas(id, name) {
   }
 }
 
+/** 读一块画布的节点（作品流要把画布里出过的图/视频列出来；只读，不保存、不触发任何生成）。 */
+export async function loadCanvasNodes(canvasId) {
+  const id = String(canvasId || '').trim()
+  if (!/^[A-Za-z0-9_-]{1,80}$/.test(id)) throw new Error('无限画布 id 不合法')
+  const data = await canvasFetch(CANVAS_API + '/load/' + encodeURIComponent(id))
+  return {
+    name: String(data.name || ''),
+    nodes: Array.isArray(data.nodes) ? data.nodes : [],
+  }
+}
+
 export async function createCanvas(rawName) {
   const name = canvasName(rawName)
   const id = 'vq-' + Date.now().toString(36)

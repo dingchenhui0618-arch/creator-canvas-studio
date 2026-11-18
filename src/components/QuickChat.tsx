@@ -1,0 +1,280 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowUp, Brain, Link2, Loader2, MessageSquarePlus, Search, Trash2 } from 'lucide-react'
+import {
+  createChatConversation,
+  deleteChatConversation,
+  getChatConversation,
+  listChatConversations,
+  sendChatMessage,
+} from '../api/chat'
+import type { ChatConversation, ChatSummary, ChatToolOptions } from '../api/chat'
+import { getCredits } from '../api/credits'
+
+// 快捷创作的「对话」（r214）：一页 DeepSeek —— 长上下文、联网搜索、读链接、思考模式。
+// 为什么单独一个组件：原来那块是「对话预设」的短轮问答（带输出类型与结构化草稿），
+// 数据形状、扣费口径、上下文长度都不一样；混在一个组件里两边都会越改越乱。
+//
+// 取舍（写清楚，免得后面有人以为漏了）：
+//  - 不做流式：先拿完整回复再显示；失败全额退回，界面明说「积分已退回」；
+//  - 会话在服务端：换设备、关页面回来都还在，最多 30 条会话、每条留 200 条消息；
+//  - 文件解析 / OCR / 图片理解还没接（要动上传与多模态消息），这里不放空按钮。
+const TOOL_ITEMS: { id: keyof ChatToolOptions; label: string; hint: string; icon: typeof Search }[] = [
+  { id: 'search', label: '联网搜索', hint: '回答前先搜一遍最新信息，带链接回来', icon: Search },
+  { id: 'readUrl', label: '读链接', hint: '消息里带网址时，先把页面读下来再回答', icon: Link2 },
+  { id: 'thinking', label: '思考模式', hint: '先推理再回答，慢一些，适合拆结构', icon: Brain },
+]
+
+const TOOLS_KEY = 'vq:chatTools'
+
+function loadTools(): ChatToolOptions {
+  try {
+    const raw = JSON.parse(window.localStorage.getItem(TOOLS_KEY) || '{}')
+    return { search: Boolean(raw.search), readUrl: Boolean(raw.readUrl), thinking: Boolean(raw.thinking) }
+  } catch {
+    return { search: false, readUrl: false, thinking: false }
+  }
+}
+
+function when(at: number) {
+  if (!at) return ''
+  const date = new Date(at)
+  const hh = String(date.getHours()).padStart(2, '0')
+  const mm = String(date.getMinutes()).padStart(2, '0')
+  return hh + ':' + mm
+}
+
+export default function QuickChat({ onToast }: { onToast?: (text: string) => void }) {
+  const [items, setItems] = useState<ChatSummary[]>([])
+  const [current, setCurrent] = useState<ChatConversation | null>(null)
+  const [loadingList, setLoadingList] = useState(true)
+  const [opening, setOpening] = useState('')
+  const [draft, setDraft] = useState('')
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState('')
+  const [tools, setTools] = useState<ChatToolOptions>(() => loadTools())
+  const [credits, setCredits] = useState<{ balance: number | null; unit: string; price: number } | null>(null)
+  const bottomRef = useRef<HTMLDivElement | null>(null)
+  const inputRef = useRef<HTMLTextAreaElement | null>(null)
+
+  const messages = current?.messages ?? []
+
+  const refreshList = useCallback(async () => {
+    try {
+      const result = await listChatConversations()
+      setItems(result.items || [])
+      return result.items || []
+    } catch {
+      return []
+    } finally {
+      setLoadingList(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void refreshList()
+    getCredits(1)
+      .then((data) => setCredits({ balance: data.balance ?? null, unit: data.unit || '积分', price: Number(data.prices?.chat || 0) }))
+      .catch(() => undefined)
+  }, [refreshList])
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ block: 'end' })
+  }, [messages.length, sending])
+
+  const openConversation = useCallback(async (id: string) => {
+    if (opening || sending) return
+    setOpening(id)
+    setError('')
+    try {
+      const result = await getChatConversation(id)
+      setCurrent(result.conversation)
+    } catch {
+      setError('这条对话读不到了，可能已被删除')
+    } finally {
+      setOpening('')
+    }
+  }, [opening, sending])
+
+  const toggleTool = useCallback((id: keyof ChatToolOptions) => {
+    setTools((currentTools) => {
+      const next = { ...currentTools, [id]: !currentTools[id] }
+      try { window.localStorage.setItem(TOOLS_KEY, JSON.stringify(next)) } catch { /* 隐私模式忽略 */ }
+      return next
+    })
+  }, [])
+
+  const newConversation = useCallback(() => {
+    setCurrent(null)
+    setDraft('')
+    setError('')
+    window.setTimeout(() => inputRef.current?.focus(), 0)
+  }, [])
+
+  const removeConversation = useCallback(async (id: string) => {
+    if (!window.confirm('删除这条对话？删了就找不回来了。')) return
+    try {
+      await deleteChatConversation(id)
+      setItems((list) => list.filter((item) => item.id !== id))
+      if (current?.id === id) setCurrent(null)
+      onToast?.('已删除这条对话')
+    } catch {
+      onToast?.('删除失败，稍后重试')
+    }
+  }, [current?.id, onToast])
+
+  const send = useCallback(async () => {
+    const content = draft.trim()
+    if (!content || sending) return
+    setSending(true)
+    setError('')
+    // 先在本地把用户这句放上去：请求要几十秒，空着会让人以为没点中
+    const optimistic = { id: 'local-' + Date.now(), role: 'user' as const, content, at: Date.now() }
+    if (current) setCurrent({ ...current, messages: [...current.messages, optimistic] })
+    setDraft('')
+    try {
+      let conversation = current
+      if (!conversation) {
+        const created = await createChatConversation()
+        conversation = created.conversation
+      }
+      const result = await sendChatMessage(conversation.id, { content, tools })
+      setCurrent(result.conversation)
+      if (typeof result.balance === 'number') setCredits((value) => (value ? { ...value, balance: result.balance } : value))
+      void refreshList()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : '这次没有回上来，稍后再试')
+      if (current) setCurrent({ ...current, messages: current.messages })
+    } finally {
+      setSending(false)
+    }
+  }, [current, draft, refreshList, sending, tools])
+
+  const toolCount = useMemo(() => TOOL_ITEMS.filter((item) => tools[item.id]).length, [tools])
+
+  return (
+    <div className="qc-root">
+      <aside className="qc-side" aria-label="对话列表">
+        <div className="qc-side-head">
+          <button type="button" className="qc-new" onClick={newConversation}>
+            <MessageSquarePlus size={15} />
+            新对话
+          </button>
+          <span className="qc-count">{items.length}</span>
+        </div>
+        <div className="qc-list">
+          {loadingList && <p className="qc-side-empty">正在读取…</p>}
+          {!loadingList && items.length === 0 && <p className="qc-side-empty">还没有对话。写下第一句就开始。</p>}
+          {items.map((item) => (
+            <div className={'qc-conv' + (current?.id === item.id ? ' is-active' : '')} key={item.id}>
+              <button type="button" className="qc-conv-main" onClick={() => void openConversation(item.id)} disabled={Boolean(opening)}>
+                <span className="qc-conv-title">{item.title}</span>
+                <span className="qc-conv-meta">
+                  {item.messageCount} 条 · {when(item.updatedAt)}
+                </span>
+              </button>
+              <button
+                type="button"
+                className="qc-conv-del"
+                aria-label={'删除对话：' + item.title}
+                title="删除这条对话"
+                onClick={() => void removeConversation(item.id)}
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
+          ))}
+        </div>
+        <p className="qc-side-note">会话存在服务端，换设备回来还在；最多 30 条，旧的会自动腾位置。</p>
+      </aside>
+
+      <div className="qc-main">
+        <div className="qc-thread" aria-live="polite">
+          {messages.length === 0 ? (
+            <div className="qc-empty">
+              <strong>一页能记住上下文的对话</strong>
+              <p>写脚本、拆爆款结构、改分镜、问平台怎么用，都可以直接说。带链接时打开「读链接」，要最新信息时打开「联网搜索」。</p>
+              <ul>
+                <li>上下文带最近 30 条，不是只记上一句</li>
+                <li>每次对话 {credits?.price ? credits.price + ' ' + credits.unit : '按次计费'}，失败全额退回</li>
+                <li>联网搜索与读链接是平台的检索能力，不用另外配置</li>
+              </ul>
+            </div>
+          ) : (
+            messages.map((message) => (
+              <div className={'qc-msg qc-msg--' + message.role} key={message.id}>
+                <div className="qc-bubble">{message.content}</div>
+                <div className="qc-msg-meta">
+                  <span>{message.role === 'user' ? '你' : '平台对话模型'}</span>
+                  <span>{when(message.at)}</span>
+                  {message.model ? <span>{message.model}</span> : null}
+                  {message.ms ? <span>{(message.ms / 1000).toFixed(1)}s</span> : null}
+                </div>
+              </div>
+            ))
+          )}
+          {sending && (
+            <div className="qc-msg qc-msg--assistant">
+              <div className="qc-bubble qc-bubble--running">
+                <Loader2 size={14} className="qc-spin" />
+                {tools.thinking ? '正在思考并回答…' : tools.search ? '正在检索并回答…' : '正在回答…'}
+              </div>
+            </div>
+          )}
+          <div ref={bottomRef} />
+        </div>
+
+        {error && <div className="qc-error" role="alert">{error}</div>}
+
+        <div className="qc-composer">
+          <div className="qc-tools">
+            {TOOL_ITEMS.map((item) => {
+              const Icon = item.icon
+              const active = tools[item.id]
+              return (
+                <button
+                  type="button"
+                  key={item.id}
+                  className={'qc-tool' + (active ? ' is-on' : '')}
+                  aria-pressed={active}
+                  title={item.hint}
+                  onClick={() => toggleTool(item.id)}
+                  disabled={sending}
+                >
+                  <Icon size={14} />
+                  {item.label}
+                </button>
+              )
+            })}
+            <span className="qc-credit">
+              {credits ? '余额 ' + (credits.balance ?? '—') + ' ' + credits.unit + (credits.price ? ' · 每次 ' + credits.price : '') : ''}
+            </span>
+          </div>
+          <div className="qc-input-row">
+            <textarea
+              ref={inputRef}
+              className="qc-input"
+              rows={3}
+              value={draft}
+              placeholder="说清你要什么，例如：把这条 30 秒口播拆成 6 个分镜，每镜写清画面与台词"
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+                  event.preventDefault()
+                  void send()
+                }
+              }}
+              disabled={sending}
+            />
+            <button type="button" className="qc-send" onClick={() => void send()} disabled={sending || !draft.trim()} aria-label="发送" title="发送（Ctrl + Enter）">
+              <ArrowUp size={18} />
+            </button>
+          </div>
+          <div className="qc-hint">
+            <span>Ctrl + Enter 发送</span>
+            <span>{toolCount ? toolCount + ' 项能力已打开' : '能力全关：只按对话回答'}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

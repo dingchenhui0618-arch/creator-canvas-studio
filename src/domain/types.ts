@@ -27,7 +27,7 @@ export const pageLabels: Record<Page, string> = {
   board: '无限画布',
   runs: '运行记录',
   settings: '设置',
-  radar: '发现',
+  radar: '爆款雷达',
   templates: '模板库',
   review: '视觉评审',
   recharge: '充值',

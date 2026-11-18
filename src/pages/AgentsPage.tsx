@@ -58,6 +58,7 @@ import type { ProjectSummary } from '../domain/project'
 import { getPreferences } from '../api/preferences'
 import { useUiMode } from '../api/app'
 import PageHead from '../components/PageHead'
+import QuickChat from '../components/QuickChat'
 import { useModelOptions } from '../components/ModelSwitch'
 import { Tag } from '../components/ui'
 import '../styles/agents.css'
@@ -1481,6 +1482,9 @@ export function AgentsPage({
   // 预设的窗口工具：生图 / 生视频，打开的是生成表单而不是对话
   // 创作方式：对话走对话预设，图片 / 视频走同一条生成表单（不再开单独的窗口）
   const [composerMode, setComposerMode] = useState<'chat' | MediaKind>('chat')
+  // 对话有两种：平台对话（默认，一页 DeepSeek）与对话预设（带结构化草稿，能存模板/送工作流/写作品）。
+  // 从作品页「让 AI 起草」进来时切到预设：那条路要用到草稿的三个出口，平台对话给不了。
+  const [chatSurface, setChatSurface] = useState<'platform' | 'preset'>('platform')
   // 可用的生成模型与规格：服务端 media-models 是唯一真源，界面不自己写死模型名
   const [mediaModels, setMediaModels] = useState<MediaModelList | null>(null)
   // 模型服务状态：额度 / 凭证这类账号级故障要在输入前就说清楚，而不是让人白点一次
@@ -1493,6 +1497,10 @@ export function AgentsPage({
   const [worksLoading, setWorksLoading] = useState(false)
   const [worksError, setWorksError] = useState('')
   const [projectContext, setProjectContext] = useState<AgentProjectContext | null>(null)
+  // 从作品页「让 AI 起草」进来：那条路要用草稿的三个出口，自动落到「对话预设」，不要停在平台对话里
+  useEffect(() => {
+    if (projectContext) setChatSurface('preset')
+  }, [projectContext])
   const { internal } = useUiMode()
   // 顶栏选择的模型保存在服务端；对话预设本身没绑模型时用它作为默认值
   const preferredModelRef = useRef('')
@@ -2106,7 +2114,7 @@ export function AgentsPage({
         kicker="快捷创作 / 对话"
         title="快捷创作"
         desc="写文案、出图片、出视频都在这一个输入框里：选好方式，说清要什么。"
-        actions={
+        actions={composerMode === 'chat' && chatSurface === 'platform' ? null : (
           <div className="agx-head-actions">
           <div className="agx-history-wrap">
             <button className="vq-button vq-button--ghost" onClick={() => setHistoryOpen((open) => !open)} aria-expanded={historyOpen}>
@@ -2238,7 +2246,7 @@ export function AgentsPage({
               新建对话预设
             </button>
           </div>
-        }
+        )}
       />
 
       <section className="agx-stage" ref={stageRef}>
@@ -2269,7 +2277,49 @@ export function AgentsPage({
           </div>
         ) : null}
         <div className="agx-composer-wrap">
-          {messages.length > 0 && (
+          <div className="agx-mode-tabs agx-mode-tabs--top" role="tablist" aria-label="创作方式">
+            {COMPOSER_MODES.map((mode) => (
+              <button
+                key={mode.id}
+                role="tab"
+                aria-selected={composerMode === mode.id}
+                className={composerMode === mode.id ? 'is-active' : ''}
+                onClick={() => setComposerMode(mode.id)}
+              >
+                {mode.id === 'image' ? <ImageIcon size={14} /> : mode.id === 'video' ? <Clapperboard size={14} /> : <Bot size={14} />}
+                {mode.label}
+              </button>
+            ))}
+          </div>
+          {composerMode === 'chat' ? (
+            <div className="agx-surface-switch" role="tablist" aria-label="对话方式">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={chatSurface === 'platform'}
+                className={chatSurface === 'platform' ? 'is-active' : ''}
+                onClick={() => setChatSurface('platform')}
+              >
+                平台对话
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={chatSurface === 'preset'}
+                className={chatSurface === 'preset' ? 'is-active' : ''}
+                onClick={() => setChatSurface('preset')}
+              >
+                对话预设
+              </button>
+              <span className="agx-surface-note">
+                {chatSurface === 'platform'
+                  ? '长上下文 · 联网搜索 · 读链接 · 思考模式'
+                  : '带输出类型与草稿出口：存模板 / 送工作流 / 写进作品'}
+              </span>
+            </div>
+          ) : null}
+          {composerMode === 'chat' && chatSurface === 'platform' ? <QuickChat onToast={onToast} /> : null}
+          {composerMode === 'chat' && chatSurface === 'preset' && messages.length > 0 && (
             <div className="agx-thread-head">
               <button className="vq-button vq-button--ghost" onClick={resetConversation} disabled={Boolean(pending)}>
                 <ArrowLeft size={13} />
@@ -2280,7 +2330,7 @@ export function AgentsPage({
               </span>
             </div>
           )}
-          {messages.length > 0 && (
+          {composerMode === 'chat' && chatSurface === 'preset' && messages.length > 0 && (
             <div className="agx-thread">
               {messages.map((message) => (
                 <div className={'agx-msg agx-msg--' + message.role} key={message.id}>
@@ -2376,21 +2426,7 @@ export function AgentsPage({
             </div>
           )}
 
-          <div className={'agx-composer' + (composerMode === 'chat' && !selectedAgent ? ' is-disabled' : '')}>
-            <div className="agx-mode-tabs" role="tablist" aria-label="创作方式">
-              {COMPOSER_MODES.map((mode) => (
-                <button
-                  key={mode.id}
-                  role="tab"
-                  aria-selected={composerMode === mode.id}
-                  className={composerMode === mode.id ? 'is-active' : ''}
-                  onClick={() => setComposerMode(mode.id)}
-                >
-                  {mode.id === 'image' ? <ImageIcon size={14} /> : mode.id === 'video' ? <Clapperboard size={14} /> : <Bot size={14} />}
-                  {mode.label}
-                </button>
-              ))}
-            </div>
+          <div className={'agx-composer' + (composerMode === 'chat' && !selectedAgent ? ' is-disabled' : '')} hidden={composerMode === 'chat' && chatSurface === 'platform'}>
             {composerMode === 'chat' ? (
               <>
             {credits ? (

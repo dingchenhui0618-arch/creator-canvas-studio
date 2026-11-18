@@ -56,7 +56,7 @@ function asMedia(template: ReplicaTemplate): MediaItem {
 
 const isParsed = (template: ReplicaTemplate) => template.kind !== 'saved'
 
-// 卡片脚注上的来源标签：只有不是「发现」的才贴（发现是库里最大的一类，贴了等于每张卡都多一个词）。
+// 卡片脚注上的来源标签：只有不是「爆款雷达」的才贴（爆款雷达是库里最大的一类，贴了等于每张卡都多一个词）。
 // 文案与抽屉、来源胶囊同一套口径，服务端 templateSource 决定 key。
 const SOURCE_TAG: Record<string, string> = {
   project: '来自作品',
@@ -443,7 +443,7 @@ export function TemplateLibraryPage({
           <div className="radar-empty">
             <Layers size={22} />
             <strong>模板库还是空的</strong>
-            <span>去「发现」检索一条：点「加入模板库」先存链接与互动数据，点「解析」再拆脚本和分镜（出成片要自己拍）。</span>
+            <span>去「爆款雷达」检索一条：点「加入模板库」先存链接与互动数据，点「解析」再拆脚本和分镜（出成片要自己拍）。</span>
             <button className="vq-button vq-button--primary" onClick={onBack}>去检索一条</button>
           </div>
         )

@@ -97,6 +97,7 @@ import { inheritedListenFd, listenMode } from './listen.mjs'
 import { checkNodeVersion, MIN_NODE } from './node-version.mjs'
 import { clearModelBlock, modelServiceState } from './service-state.mjs'
 import { bdcStatus, canvasErrorMessage, listCanvases, createCanvas, appendCanvasNote } from './bdc.mjs'
+import { canvasOwnerId, claimCanvas, visibleCanvases } from './canvas-owner.mjs'
 import { modelCatalog } from './models.mjs'
 import { distFileFor } from './static-path.mjs'
 import { createCoverProxy } from './cover-proxy.mjs'
@@ -405,14 +406,43 @@ const server = http.createServer(async (req, res) => {
     }
 
     // 无限画布 ↔ 工作台：列画布、建画布、往画布里落评审笔记（都走画布自己的 HTTP 接口，不碰它的文件）
+    // 画布列表按账号过滤（r214）：无限画布的 workspace 是全局的，这里不补归属，作品流就会把
+    // 别人画布里的图端给你看。管理员看全部；其他人只看自己认领过的（无主的老画布只给管理员）。
     if (pathname === '/api/bdc/canvases' && req.method === 'GET') {
-      return sendJson(res, 200, await listCanvases())
+      const result = await listCanvases()
+      if (!result.ok) return sendJson(res, 200, result)
+      return sendJson(res, 200, { ...result, canvases: visibleCanvases(user, result.canvases) })
+    }
+
+    // 认领一块画布（打开 #/board/<id> 时自动调）：先到先得，不能抢别人的
+    if (pathname === '/api/bdc/canvases/claim' && req.method === 'POST') {
+      const body = await readBody(req)
+      const canvasId = String(body.canvasId || '')
+      if (!/^[A-Za-z0-9_-]{1,80}$/.test(canvasId)) {
+        return sendJson(res, 400, { ok: false, error: '画布 id 不合法' })
+      }
+      const listed = await listCanvases()
+      if (!listed.ok) return sendJson(res, 502, { ok: false, error: canvasErrorMessage(listed.detail) })
+      if (!listed.canvases.some((item) => item.id === canvasId)) {
+        return sendJson(res, 404, { ok: false, error: '画布不存在或已被删除' })
+      }
+      // 认领只对两种画布开放：VisionQA 自己建的（vq- 前缀）、或已经属于这个账号的。
+      // 老画布没有归属记录，谁先打开就归谁——那等于把管理员的东西送人，所以普通账号一律不给。
+      const owner = canvasOwnerId(canvasId)
+      if (!owner && !canvasId.startsWith('vq-') && user.kind !== 'admin') {
+        return sendJson(res, 403, { ok: false, code: 'CANVAS_FOREIGN', error: '这块画布不是当前账号的' })
+      }
+      const claimed = claimCanvas(canvasId, user.id, 'board-open')
+      // 已经有别的账号认领过：不抢，也不假装成功——画布应用里照旧能打开，但不出现在自己的作品流
+      return sendJson(res, 200, { ok: true, ...claimed, mine: claimed.ownerId === user.id })
     }
 
     if (pathname === '/api/bdc/canvases' && req.method === 'POST') {
       const body = await readBody(req)
       try {
-        return sendJson(res, 200, await createCanvas(body.name))
+        const created = await createCanvas(body.name)
+        if (created?.canvas?.id) claimCanvas(created.canvas.id, user.id, 'create')
+        return sendJson(res, 200, created)
       } catch (error) {
         // 502 的 error 是会出现在界面上的那句话：翻成中文，原始串留在 detail（v0.9.42）
         return sendJson(res, 502, { ok: false, error: canvasErrorMessage(error), detail: String(error?.message || error).slice(0, 160) })

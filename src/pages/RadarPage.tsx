@@ -67,7 +67,7 @@ function interactionRate(item: MediaItem) {
 
 const statValue = (value: number | undefined) => formatCount(value || 0)
 
-// 「上次检索的结果还在」：回到发现页不用重查一遍（重查就是再花一次检索费）。
+// 「上次检索的结果还在」：回到爆款雷达页不用重查一遍（重查就是再花一次检索费）。
 // 只留最近一次、最多 48 条；超过 7 天就丢掉——平台上的数字早变了，留着反而骗人。
 // 放在 sessionStorage：关掉标签页就没了，不占长期存储，也不往服务端写。
 const LAST_SEARCH_KEY = 'vq.radar.lastSearch.v1'
@@ -152,7 +152,7 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
   const [credits, setCredits] = useState<CreditsResponse | null>(null)
   const [insufficient, setInsufficient] = useState('')
   const [history, setHistory] = useState<SearchHistoryEntry[]>([])
-  // 发现页开场那块「带走的原片」：只读现算，不检索、不扣积分
+  // 爆款雷达页开场那块「带走的原片」：只读现算，不检索、不扣积分
   const [taken, setTaken] = useState<TakenOrigins | null>(null)
   // 这一屏结果是不是「上次检索」留下的（有时间就写着，重新检索或清掉才没了）
   const [restoredAt, setRestoredAt] = useState(restored?.at || '')
@@ -362,7 +362,7 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
   }, [])
 
   // 照一条已解析的模板开成作品（v0.9.39）：建完直接进作品页——下一步（开画布）由作品页统一给，
-  // 发现页不另写一套流程。能不能开由服务端的 entry 判断（kind: blocked 时按钮点不动），这里不重复一份。
+  // 爆款雷达页不另写一套流程。能不能开由服务端的 entry 判断（kind: blocked 时按钮点不动），这里不重复一份。
   const startWork = useCallback(
     async (templateId: string, title: string) => {
       if (!templateId || workSaving) return
@@ -370,7 +370,7 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
       try {
         const result = await createProject({ templateId, title })
         onToast('已开成作品：' + result.project.title)
-        // 回到发现页时这一行已经是「作品 · …」：先把这块刷新一遍，导航被拦下也看得到结果
+        // 回到爆款雷达页时这一行已经是「作品 · …」：先把这块刷新一遍，导航被拦下也看得到结果
         loadTaken()
         if (onOpenProject) onOpenProject(result.project.id)
       } catch (caught) {
@@ -417,8 +417,8 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
   return (
     <div className="page page--radar">
       <PageHead
-        kicker="内容发现"
-        title="发现"
+        kicker="爆款雷达"
+        title="爆款雷达"
         desc="按关键词检索抖音与小红书的内容与互动数据：点赞、收藏、评论、转发、播放都取原始值。挑一条加进模板库只存链接，或者直接拆成脚本与分镜。"
         actions={
           <>

@@ -15,6 +15,12 @@ export type WorkItem = {
   detailUrl: string
   status?: string
   nodeCount?: number
+  /** 工作流：最后一段输出文本的摘要；媒体：模型 id */
+  summary?: string
+  model?: string
+  durationMs?: number
+  flowId?: string
+  canvasId?: string
 }
 
 export type WorksPage = { ok: true; items: WorkItem[]; total: number; cursor: string | null }

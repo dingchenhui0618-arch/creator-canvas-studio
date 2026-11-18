@@ -36,7 +36,7 @@ export type NavEntry = {
 export const PRIMARY_NAV: readonly NavEntry[] = [
   { id: 'overview', label: '工作台', hint: '下一步该点哪里', icon: Grid2X2, keywords: 'home 首页 下一步' },
   { id: 'projects', label: '作品', hint: '一条内容从脚本到评审走到哪了', icon: Clapperboard, keywords: 'project 项目 进度' },
-  { id: 'radar', label: '发现', hint: '检索抖音与小红书的爆款，拆出结构', icon: Compass, keywords: 'radar 爆款雷达 选题 搜索' },
+  { id: 'radar', label: '爆款雷达', hint: '检索抖音与小红书的爆款，拆出结构', icon: Compass, keywords: 'radar 爆款雷达 选题 搜索' },
   { id: 'templates', label: '模板库', hint: '可复用的脚本与分镜结构', icon: LayoutTemplate, keywords: 'template 模板 结构' },
 ]
 
