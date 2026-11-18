@@ -19,6 +19,7 @@ import { initialsFor, sessionKindLabel, type Session } from '../auth/session'
 import { accountIdentifier } from '../domain/account-label'
 import '../styles/shell.css'
 import '../styles/credits.css'
+import '../styles/settings.css'
 
 type Props = {
   session: Session
@@ -235,7 +236,7 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
   const lowBalance = typeof balance === 'number' && prices ? balance < prices.search : false
 
   return (
-    <div className="vq-page">
+    <div className="vq-page vq-page--settings">
       <PageHead
         kicker="工作区设置"
         title="设置"

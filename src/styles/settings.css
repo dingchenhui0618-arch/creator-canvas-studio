@@ -1,0 +1,115 @@
+/* 设置页窄屏（r238 / v0.9.222）
+   2026-11-19 在 390 / 768 上量：这一页几乎全是原子组件，小字都停在 11.5–12.5px
+   （卡头 mono 12、Tag / Pill 12、口令说明 11.5、会话 IP 11.5、流水表头 12、价格标签 11.5、
+   反馈时间 11.5、健康行 12.5），点按区停在 28–32px（按钮 32、图标按钮 32、口令输入 32、帮助链接 31）。
+   规则一律挂在 .vq-page--settings 下：只影响设置页，1081 起一条都不生效。 */
+
+@media (max-width: 1080px) {
+  .vq-page--settings {
+    --btn-h: 40px;
+    --btn-h-sm: 40px;
+    --chip-font: 13px;
+    --chip-tag-h: 24px;
+    --chip-pill-h: 24px;
+    --text-mono: 13px;
+  }
+
+  /* 卡头、单据号、会话 IP、流水时间这类等宽小字 */
+  .vq-page--settings .vq-mono {
+    font-size: 13px;
+  }
+
+  /* 全站胶囊与标签：设置页里 13px 才看得清「口令 / 按次计费 / 待确认」 */
+  .vq-page--settings .vq-tag,
+  .vq-page--settings .vq-pill {
+    font-size: 13px;
+  }
+
+  /* 表单：字段标签 12 → 13，输入框 32 → 40（手机 44） */
+  .vq-page--settings .vq-field > span {
+    font-size: 13px;
+  }
+
+  .vq-page--settings .vq-input {
+    height: 40px;
+    padding: 0 12px;
+    font-size: 14px;
+  }
+
+  /* 说明性小字：口令、两步验证、会话、流水、单据、本月花费 */
+  .vq-page--settings .vq-password-note,
+  .vq-page--settings .vq-2fa-note,
+  .vq-page--settings .vq-session-note,
+  .vq-page--settings .vq-help-links-label,
+  .vq-page--settings .vq-ledger-more,
+  .vq-page--settings .vq-plan-note,
+  .vq-page--settings .vq-spend-note {
+    font-size: 13px;
+  }
+
+  .vq-page--settings .vq-2fa-facts {
+    font-size: 13px;
+  }
+
+  /* 行内元信息：会话时间 / IP / 到期、反馈时间、价格标签、单据时间、健康耗时 */
+  .vq-page--settings .vq-session-main small,
+  .vq-page--settings .vq-session-ip,
+  .vq-page--settings .vq-session-expire,
+  .vq-page--settings .vq-feedback-row-time,
+  .vq-page--settings .vq-price-item span,
+  .vq-page--settings .vq-receipt-main em,
+  .vq-page--settings .vq-health-row .ms,
+  .vq-page--settings .vq-spend-head span,
+  .vq-page--settings .vq-spend-chip em,
+  .vq-page--settings .vq-spend-chip i,
+  .vq-page--settings .vq-ledger td.time {
+    font-size: 13px;
+  }
+
+  /* 积分流水：表头 12 → 13；手机上（≤480）原本压到 12 的时间与类型也回到 13 */
+  .vq-page--settings .vq-ledger th {
+    font-size: 13px;
+  }
+
+  .vq-page--settings .vq-ledger td,
+  .vq-page--settings .vq-ledger td:nth-child(1),
+  .vq-page--settings .vq-ledger td:nth-child(2) {
+    font-size: 13px;
+  }
+
+  .vq-page--settings .vq-health-row strong {
+    font-size: 13px;
+  }
+
+  /* 帮助链接：原来 31px 高的一枚小胶囊，撑到 40px 才点得准 */
+  .vq-page--settings .vq-help-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+    padding: 0 12px;
+  }
+}
+
+@media (max-width: 560px) {
+  .vq-page--settings {
+    --btn-h: 44px;
+    --btn-h-sm: 44px;
+  }
+
+  .vq-page--settings .vq-button--icon {
+    width: 44px;
+    height: 44px;
+  }
+
+  .vq-page--settings .vq-input {
+    height: 44px;
+  }
+
+  .vq-page--settings .vq-help-link {
+    min-height: 44px;
+  }
+
+  .vq-page--settings .vq-session-row {
+    padding: 12px;
+  }
+}
