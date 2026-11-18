@@ -1113,3 +1113,38 @@ tsc -b 干净、密钥扫描 953 文件无命中、构建入口 index-BmcKRyHZ.j
 线上 CSS 有 vq-page--settings 与 --btn-h:40px；回滚 --to 1 回 0.9.221 入口 index-IaXs9y-3.js）。
 
 文档见 docs/settings-mobile-2026-11-19.md。
+
+## 二百九十三、视觉评审页：小字 13px、点按区 40/44px（r239 / v0.9.223）
+
+上一轮清完设置页之后，视觉评审成了剩下最差的一页：390 宽首屏 22 处 12px 的字、4 处不到 40px 的点按区；
+打开一条历史评审是 40 / 6，历史弹层 35 / 6。这一版按同一套档位收口：**1080 以下小字 13px、按钮与点按区手机 44px / 平板 40px**。
+
+判据（每页实测，<13px 文字 / <40px 点按区）：390 首屏 **22 / 4 → 0 / 0**、历史详情 **40 / 6 → 0 / 0**、
+弹层 **35 / 6 → 0 / 0**；768 首屏 **22 / 4 → 0 / 0**、详情 **40 / 6 → 0 / 0**；1024 首屏 **23 / 3 → 0 / 0**、
+详情 **41 / 5 → 0 / 0**；320 改后 **0 / 0** 且 scrollWidth == innerWidth；1440 改前改后逐元素一致（30 / 18、45 / 20）。
+
+评审页的字号与点按区几乎全走 shell 的原子（`.vq-pill` / `.vq-tag` / `.vq-mono` / `.vq-button`），
+所以主体做法是在 `.review-page` 上把原子档位抬一档：胶囊 12px / 高 22 → **13px / 高 24**，严重度标签 12 → **13px**，
+mono 小字与历史位置 12 → **13px**，问题编号盒 16×16 → **18×18**；「4 个模板首帧」折叠开关 24px 高、
+「查看全部 4 条」35px、历史行 34px、`选图` / `回作品` / `评这一版` 28px 全部抬到 **40 / 44px**。
+规则只写在 `src/styles/review.css` 末尾两段媒体查询里，桌面 1081 起一条都不进。
+共用骨架顺带修了三处：图标态搜索 30×40 → **40 / 44px 宽**、侧栏「等你看」计数 12 → **13px**、
+320 宽下被挤到 39 / 38px 的顶栏与弹层图标按钮**不参与收缩**。
+
+门禁：npm test **1575/1575**（新增 test/review-mobile.test.mjs 7 条）、lint 0 error / 26 warning（617 文件）、
+tsc -b 干净、密钥扫描 956 文件无命中、构建入口 index-C2cuw_43.js（742.25 kB）/ 样式 index-BuEIcdDe.css（356.48 kB）。
+
+![390 视觉评审改之前：胶囊与标签 12px、历史时间 12px、折叠开关 24px 高](docs/review-r239-before-review-390-landing.png)
+
+![390 视觉评审改之后：胶囊与标签 13px、历史时间与位置 13px、折叠开关 40px](docs/review-r239-after-review-390-landing.png)
+
+![390 一条历史评审改之后：锚点编号 18×18、问题标签 13px、回作品与评这一版 44px](docs/review-r239-after-review-390-detail.png)
+
+![390 历史弹层改之后：结论胶囊 13px、作品与版次行 13px、关闭按钮 44px](docs/review-r239-after-review-390-modal.png)
+
+![768 视觉评审改之后：与手机同一档小字，按钮 40px，两列排布不动](docs/review-r239-after-review-768-detail.png)
+
+生产 0.9.223（发布 20261118-204623-r239review，health ok templates 26、6 个服务 active、未登录 401、磁盘 73%；
+线上 CSS 有 .review-page .vq-mono；回滚 --to 1 回 0.9.222，发布 20261118-202923-r238mobile）。
+
+文档见 docs/review-mobile-2026-11-19.md。
