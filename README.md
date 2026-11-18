@@ -1395,3 +1395,8 @@ Edge 无头里真的通过 `<input type=file>` 选了一张真截图、截到等
 图片不进分享页、交付包、模板；只量了 320 / 390 / 1440，平板 768 未逐屏量。
 
 文档见 docs/quick-create-images-2026-11-19.md。
+
+生产 0.9.228（发布 20261118-222818-r245chatimg，health ok templates 26、6 个服务 active、未登录 /api/chat/files 与 /api/chat/files/:id/raw 均 401、磁盘 73%；
+入口 index-bCJRzIkx.js 742.61 kB、本页 AgentsPage-BTMnsm5w.js 73,499 B、agents-DhJNiDqE.css 55,907 B 公网 200，样式表里已核到 .qc-file-thumb / .qc-preview-img 与 ≤560px 的 40px 规则；
+回滚 --to 1 回 0.9.227，发布 20261118-220815-r243board2）。
+提交 c03e1db + d72f80f，CI 44411856732 success（三件全绿）。
