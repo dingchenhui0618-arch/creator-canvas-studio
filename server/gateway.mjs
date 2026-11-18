@@ -17,7 +17,7 @@
 import crypto from 'node:crypto'
 import { config } from './config.mjs'
 import { countRunning, finishTask, getTask, listTasks, pruneTasks, rememberTask, resetTaskStore } from './gateway-tasks.mjs'
-import { keyMaterial, listKeys, openSecret, recordRoute, reportKey, resolveKeyCandidates, sealSecret, vaultModels } from './keyvault.mjs'
+import { keyMaterial, listKeys, openSecret, planRoute, recordRoute, reportKey, resolveKeyCandidates, sealSecret, vaultModels } from './keyvault.mjs'
 import { recordUsage } from './usage-meter.mjs'
 
 // 无限画布出图节点会发过来的真实模型名（来源：无限画布源码里的 CHANNEL_MODEL 常量，2026-11-11 核对）。
@@ -285,6 +285,17 @@ function missingKeyError(capability, model) {
   const label = capability === 'image' ? '出图' : '出视频'
   const known = vaultModels(capability)
   const mismatch = Boolean(model) && known.length > 0 && !known.includes(model)
+  // 冷却和「压根没接 Key」是两件事，必须分开说：2026-11-18 真调 16:9 时，唯一那把出图 Key
+  // 刚被上游打挂 3 次进了 60 秒冷却，界面却回「平台还没接入出图模型，请联系管理员补一把 Key」——
+  // 管理员照着去补 Key 是白折腾，真正该做的是等一分钟再点一次。
+  const cooling = planRoute({ capability, model }).keys.filter((row) => row.state === 'cooling' && row.cooldownSec > 0)
+  if (cooling.length) {
+    const wait = Math.min(...cooling.map((row) => row.cooldownSec))
+    return gatewayError(503, 'KEY_COOLING', label + ' Key 刚被上游拒过，正在冷却，约 ' + wait + ' 秒后再点一次', {
+      retryAfterSec: wait,
+      detail: cooling.map((row) => row.name + '（' + row.reason + '）').join('；'),
+    })
+  }
   return gatewayError(
     503,
     capability === 'image' ? 'NO_IMAGE_KEY' : 'NO_VIDEO_KEY',

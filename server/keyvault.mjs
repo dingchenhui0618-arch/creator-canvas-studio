@@ -376,6 +376,8 @@ export function planRoute({ capability = 'text', model = '', acceptModels = null
       weight: key.weight,
       state,
       reason,
+      // 冷却还剩几秒要能被调用方读到：只有 reason 里的中文数字，排障时没法算「再等多久」。
+      cooldownSec: coolingSec,
     }
   })
   const eligible = rows.filter((row) => row.state === 'eligible')

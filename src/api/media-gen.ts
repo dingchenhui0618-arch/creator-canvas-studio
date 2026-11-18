@@ -5,6 +5,8 @@ import { request } from './client'
 export type MediaKind = 'image' | 'video'
 export type MediaTaskStatus = 'processing' | 'succeeded' | 'failed'
 export type ImageRatio = '1:1' | '9:16' | '16:9'
+// 出视频的比例：服务端强制要 aspect_ratio，不给就 400（2026-11-18 真调抓到的坑），所以前端必须显式给一个
+export type VideoRatio = '9:16' | '16:9' | '1:1'
 export type VideoDuration = 4 | 8
 export type VideoResolution = '480p' | '720p'
 
@@ -50,7 +52,7 @@ export const generateMediaImage = (input: { prompt: string; ratio: ImageRatio })
     body: JSON.stringify({ kind: 'image', ...input }),
   })
 
-export const generateMediaVideo = (input: { prompt: string; duration: VideoDuration; resolution: VideoResolution }) =>
+export const generateMediaVideo = (input: { prompt: string; ratio: VideoRatio; duration: VideoDuration; resolution: VideoResolution }) =>
   request<MediaTaskResponse>('/api/media/generate', {
     method: 'POST',
     body: JSON.stringify({ kind: 'video', ...input }),

@@ -25,6 +25,8 @@ let videoPolls = 0
 // 假上游按真实 SeeAPI 的规矩校验：它强制要 aspect_ratio，缺了就是 400 validation_error。
 // 2026-11-18 生产上真实踩过这一条（生视频窗口每次 4 秒就失败），所以在假上游里也把它变成硬约束。
 let lastVideoBody = null
+// 记一次真实打上游的次数：冷却中应当一次都不打，光看错误文案证明不了这一点。
+let imageAttempts = 0
 const upstream = http.createServer((req, res) => {
   const chunks = []
   req.on('data', (chunk) => chunks.push(chunk))
@@ -35,6 +37,7 @@ const upstream = http.createServer((req, res) => {
       res.end(JSON.stringify(payload))
     }
     if (req.method === 'POST' && req.url === '/v1/images/generations') {
+      imageAttempts += 1
       const body = JSON.parse(bodyText || '{}')
       if (String(body.prompt || '').includes('图失败')) {
         return send(500, { error: { code: 'upstream_rejected', message: '上游拒绝这次生图' } })
@@ -73,7 +76,7 @@ test.after(() => new Promise((resolve) => upstream.close(resolve)))
 
 const auth = await import('../server/auth.mjs')
 const credits = await import('../server/credits.mjs')
-const { createKey } = await import('../server/keyvault.mjs')
+const { createKey, reportKey } = await import('../server/keyvault.mjs')
 const { config } = await import('../server/config.mjs')
 const { createMediaGenRouter, resetMediaGenRateLimit } = await import('../server/routes/media-gen.mjs')
 
@@ -92,7 +95,7 @@ for (const user of [owner, other, failUser, videoUser, videoFailUser]) {
 
 const cookieOf = (user) => auth.sessionCookie(auth.createSession(user, { userAgent: 'test', ip: '10.0.10.1' }).token).split(';')[0]
 
-createKey({
+const imageKey = createKey({
   name: '测试 GeteAPI 生图',
   provider: 'geteapi',
   baseUrl: base + '/v1',
@@ -276,6 +279,29 @@ test('视频比例：显式给的 16:9 要透传给上游，给个不认识的�
   const ok = await call({ cookie, body: { kind: 'video', prompt: '海边日落', duration: 4, resolution: '480p', ratio: '16:9' } })
   assert.equal(ok.status, 200, JSON.stringify(ok.payload))
   assert.equal(lastVideoBody.aspect_ratio, '16:9')
+})
+
+test('出图 Key 连续失败进冷却：说的是「等一会儿再点」，不是让人去补一把 Key', async () => {
+  const user = auth.createUser({ email: email('cool'), password: 'Passw0rd!demo', name: '冷却用户', kind: 'user' })
+  credits.grant(user.id, 100, { note: 'cooldown test' })
+  const cookie = cookieOf(user)
+  const before = credits.balanceOf(user.id)
+  // 连续 3 次上游拒绝就把这把 Key 打进 60 秒冷却
+  for (let round = 0; round < 3; round += 1) {
+    const failed = await call({ cookie, body: { kind: 'image', prompt: '图失败', ratio: '1:1' } })
+    assert.equal(failed.payload.task.status, 'failed')
+  }
+  const attemptsBefore = imageAttempts
+  const cooled = await call({ cookie, body: { kind: 'image', prompt: '一只橘猫', ratio: '1:1' } })
+  assert.equal(cooled.status, 200)
+  assert.equal(cooled.payload.task.status, 'failed')
+  // 关键：不许再叫人「补一把 Key」——Key 就在池里，只是刚被上游打了一下
+  assert.match(cooled.payload.task.error, /冷却/)
+  assert.match(cooled.payload.task.error, /再点一次/)
+  assert.doesNotMatch(cooled.payload.task.error, /补一把|还没接入/)
+  assert.equal(imageAttempts, attemptsBefore, '冷却期间不该再打上游，白花时间和额度')
+  assert.equal(credits.balanceOf(user.id), before, '冷却失败要全额退回')
+  reportKey(imageKey.id, true)
 })
 
 test('非法参数 400：缺提示词、坏比例、坏时长、坏分辨率、未知 kind 都不扣费', async () => {

@@ -41,7 +41,7 @@ import {
 } from '../api/agents'
 import type { AgentArtifact, AgentDraft, AgentRecord, AgentRunRecord, AgentsList, AgentToolsResult, OutputType } from '../api/agents'
 import { generateMediaImage, generateMediaVideo, getMediaTask } from '../api/media-gen'
-import type { ImageRatio, MediaKind, MediaTask, VideoDuration, VideoResolution } from '../api/media-gen'
+import type { ImageRatio, MediaKind, MediaTask, VideoDuration, VideoRatio, VideoResolution } from '../api/media-gen'
 import { getCredits, getModelService, recheckModelService, type CreditsResponse, type ModelServiceState } from '../api/credits'
 import { getProject, listProjects } from '../api/projects'
 import type { ProjectSummary } from '../domain/project'
@@ -625,6 +625,13 @@ const IMAGE_RATIO_OPTIONS: { value: ImageRatio; label: string }[] = [
   { value: '16:9', label: '16:9 · 1536×1024' },
 ]
 
+// 出视频也讲比例：上游强制要 aspect_ratio，之前界面没给控件、代码也没传，等于每次都在几秒内被拒（2026-11-18）。
+const VIDEO_RATIO_OPTIONS: { value: VideoRatio; label: string }[] = [
+  { value: '9:16', label: '9:16 · 竖屏' },
+  { value: '16:9', label: '16:9 · 横屏' },
+  { value: '1:1', label: '1:1 · 方形' },
+]
+
 // 预设智能体不是聊天：点开是一张生成表单，提交后由服务端扣积分、调平台通道、落盘。
 // 这个窗口只展示真实任务状态；没有结果就不摆假预览，失败就把退款状态写清楚。
 function MediaGenDialog({
@@ -639,6 +646,7 @@ function MediaGenDialog({
   const image = kind === 'image'
   const [prompt, setPrompt] = useState('')
   const [ratio, setRatio] = useState<ImageRatio>('1:1')
+  const [videoRatio, setVideoRatio] = useState<VideoRatio>('9:16')
   const [duration, setDuration] = useState<VideoDuration>(4)
   const [resolution, setResolution] = useState<VideoResolution>('720p')
   const [task, setTask] = useState<MediaTask | null>(null)
@@ -740,7 +748,7 @@ function MediaGenDialog({
     try {
       const response = image
         ? await generateMediaImage({ prompt: text, ratio })
-        : await generateMediaVideo({ prompt: text, duration, resolution })
+        : await generateMediaVideo({ prompt: text, ratio: videoRatio, duration, resolution })
       setTask(response.task)
       if (response.task.status === 'failed') setError(response.task.error || '生成失败')
       onCreditsChanged()
@@ -773,7 +781,7 @@ function MediaGenDialog({
   }
 
   const title = image ? '生图智能体' : '生视频智能体'
-  const subtitle = image ? '提示词 · 比例 · 预览下载' : '提示词 · 时长 · 分辨率 · 进度'
+  const subtitle = image ? '提示词 · 比例 · 预览下载' : '提示词 · 比例 · 时长 · 分辨率'
 
   return (
     <div className="agx-media-backdrop">
@@ -845,42 +853,61 @@ function MediaGenDialog({
               </div>
             </div>
           ) : (
-            <div className="agx-media-pair">
+            <>
               <div className="agx-media-field">
-                <span>时长</span>
-                <div className="agx-media-seg" role="group" aria-label="视频时长">
-                  {([4, 8] as VideoDuration[]).map((value) => (
+                <span>比例</span>
+                <div className="agx-media-seg" role="group" aria-label="视频比例">
+                  {VIDEO_RATIO_OPTIONS.map((option) => (
                     <button
                       type="button"
-                      key={value}
-                      className={duration === value ? 'is-active' : ''}
-                      aria-pressed={duration === value}
-                      onClick={() => setDuration(value)}
+                      key={option.value}
+                      className={videoRatio === option.value ? 'is-active' : ''}
+                      aria-pressed={videoRatio === option.value}
+                      onClick={() => setVideoRatio(option.value)}
                       disabled={active}
                     >
-                      {value}s
+                      {option.label}
                     </button>
                   ))}
                 </div>
               </div>
-              <div className="agx-media-field">
-                <span>分辨率</span>
-                <div className="agx-media-seg" role="group" aria-label="视频分辨率">
-                  {(['480p', '720p'] as VideoResolution[]).map((value) => (
-                    <button
-                      type="button"
-                      key={value}
-                      className={resolution === value ? 'is-active' : ''}
-                      aria-pressed={resolution === value}
-                      onClick={() => setResolution(value)}
-                      disabled={active}
-                    >
-                      {value}
-                    </button>
-                  ))}
+              <div className="agx-media-pair">
+                <div className="agx-media-field">
+                  <span>时长</span>
+                  <div className="agx-media-seg" role="group" aria-label="视频时长">
+                    {([4, 8] as VideoDuration[]).map((value) => (
+                      <button
+                        type="button"
+                        key={value}
+                        className={duration === value ? 'is-active' : ''}
+                        aria-pressed={duration === value}
+                        onClick={() => setDuration(value)}
+                        disabled={active}
+                      >
+                        {value}s
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="agx-media-field">
+                  <span>分辨率</span>
+                  <div className="agx-media-seg" role="group" aria-label="视频分辨率">
+                    {(['480p', '720p'] as VideoResolution[]).map((value) => (
+                      <button
+                        type="button"
+                        key={value}
+                        className={resolution === value ? 'is-active' : ''}
+                        aria-pressed={resolution === value}
+                        onClick={() => setResolution(value)}
+                        disabled={active}
+                      >
+                        {value}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
+            </>
           )}
 
           <div className="agx-media-cost">
