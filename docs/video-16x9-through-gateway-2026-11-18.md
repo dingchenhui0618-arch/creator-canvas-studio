@@ -89,3 +89,11 @@ SESSION revoked
 1. 1:1 生视频（约 ¥1.4）与 480p 是否要验——等用户点头。
 2. 10 条历史未确认告警要不要标已确认。
 3. 短信签名报备中（运营商 5–7 工作日），赠送签名期间个别运营商可能收不到。
+
+## 九、顺带发现：生产的 /opt/visionqa 不是「部署版本的 git 检出」
+
+清临时文件时对比了一眼生产仓库，值得记下来：`/opt/visionqa` 的 HEAD 停在 `97d9014`（很早的一个画布提交），工作区有 **266 项未提交改动**，而 `package.json` 是 `0.9.177`、`/api/version` 也回 0.9.177——原因是我们的发版走 tarball 覆盖（`deploy.sh` 解包 dist/server/scripts/package.json），**不是 git pull**。也就是说：
+
+- 在 prod 上 `git status` 不代表「有未推送的改动」，它代表「历次部署覆盖的结果」；
+- **谁在 prod 跑 `git checkout .` / `git stash` / `git reset --hard`，都会把线上代码回退到 97d9014**；
+- 回滚只走 `ops/rollback.sh --to N`（releases 里现在有 `20261118-022842-…-v0.9.177sm`），不要在 prod 用 git 操作代码。
