@@ -1109,6 +1109,7 @@ tsc -b 干净、密钥扫描 953 文件无命中、构建入口 index-BmcKRyHZ.j
 
 ![1024 设置页：与 768 同一档，页面在外壳内部滚动](docs/settings-r238-1024-after.png)
 
-生产 0.9.222（见下方发布记录）；回滚 --to 1 回 0.9.221。
+生产 0.9.222（发布 20261118-202923-r238mobile，health ok templates 26、6 个服务 active、未登录 401、磁盘 73%；
+线上 CSS 有 vq-page--settings 与 --btn-h:40px；回滚 --to 1 回 0.9.221 入口 index-IaXs9y-3.js）。
 
 文档见 docs/settings-mobile-2026-11-19.md。

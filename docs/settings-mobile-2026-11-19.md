@@ -50,10 +50,11 @@
 
 | 项 | 结果 |
 | --- | --- |
-| 测试 | npm test 见下方发布记录（本轮新增 `test/settings-mobile.test.mjs` 7 条） |
-| lint / 类型 | 见发布记录 |
-| 构建 | 见发布记录 |
-| 生产 | 见发布记录 |
+| 测试 | npm test **1568/1568**（新增 `test/settings-mobile.test.mjs` 7 条） |
+| lint / 类型 | lint **0 error / 26 warning**（616 文件）；`tsc -b` 干净 |
+| 密钥 | 扫描 953 文件无命中 |
+| 构建 | 入口 `index-BmcKRyHZ.js`（742.25 kB）/ 样式 `index-BLi8wNb_.css`（355.14 kB） |
+| 生产 | **0.9.222**：发布 20261118-202923-r238mobile，health ok templates 26，6 个服务 active，未登录 401，磁盘 73%；线上 CSS 有 `vq-page--settings` 与 `--btn-h:40px`；回滚 `--to 1` 回 0.9.221（入口 `index-IaXs9y-3.js`） |
 
 ## 截图（390 / 768，生产模式，临时实例样例数据）
 
