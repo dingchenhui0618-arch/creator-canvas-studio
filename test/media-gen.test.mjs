@@ -387,3 +387,23 @@ test('最近生成：只列自己的、按时间倒序、按 kind 分开、未�
   const clamped = await call({ method: 'GET', target: '/api/media/tasks?limit=999', cookie })
   assert.ok(clamped.payload.tasks.length <= 24, 'limit 有上限，不能一次把目录翻完')
 })
+
+test('最近生成：失败那一条要带着原因回来，光说「失败」等于没说', async () => {
+  resetMediaGenRateLimit()
+  const user = auth.createUser({ email: email('recentfail'), password: 'Passw0rd!demo', name: '最近生成失败用户', kind: 'user' })
+  credits.grant(user.id, 100, { note: 'media recent fail test' })
+  const cookie = cookieOf(user)
+
+  const created = await call({ cookie, body: { kind: 'image', prompt: '图失败：让上游拒绝这一次', ratio: '1:1' } })
+  assert.equal(created.status, 200)
+  assert.equal(created.payload.task.status, 'failed')
+
+  const list = await call({ method: 'GET', target: '/api/media/tasks?kind=image', cookie })
+  assert.equal(list.status, 200)
+  const row = list.payload.tasks[0]
+  assert.equal(row.id, created.payload.task.id)
+  assert.equal(row.status, 'failed')
+  assert.match(row.error, /上游/, '失败原因要跟着清单一起回来，界面上才有话可写')
+  assert.equal(row.credits.refunded, true)
+  assert.equal(row.downloadUrl, '', '失败的那条没有文件可下载，别给一个点了 404 的链接')
+})

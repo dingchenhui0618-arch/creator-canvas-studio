@@ -2085,6 +2085,7 @@
 }
 .agx-media-recent-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
@@ -2136,6 +2137,18 @@
   color: var(--faint);
   font-family: var(--font-mono);
   font-size: var(--text-mono);
+}
+
+/* 失败那一条要把上游说的原因写出来：只说「失败 · 已退 5 积分」，人不知道是超时还是被拒 */
+.agx-media-recent-why {
+  flex: 1 0 100%;
+  margin: 0;
+  overflow: hidden;
+  color: var(--ink-soft);
+  font-size: var(--text-mono);
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 

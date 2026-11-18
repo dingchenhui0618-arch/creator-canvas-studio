@@ -626,6 +626,19 @@ function describeTask(task: MediaTask) {
   return parts.join(' · ') || (task.kind === 'image' ? '图片' : '视频')
 }
 
+// 清单里的时间要能一眼分辨「哪一条是上午那条」，同一提示词跑过几次时尤其要靠它
+function shortTimeOf(iso: string) {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return ''
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return pad(date.getMonth() + 1) + '-' + pad(date.getDate()) + ' ' + pad(date.getHours()) + ':' + pad(date.getMinutes())
+}
+
+// 一行里要说清「什么时候、多大、什么比例」
+function recentMetaOf(task: MediaTask) {
+  return [shortTimeOf(task.createdAt), describeTask(task)].filter(Boolean).join(' · ')
+}
+
 function clockOf(ms: number) {
   const total = Math.max(0, Math.floor(ms / 1000))
   return String(Math.floor(total / 60)).padStart(2, '0') + ':' + String(total % 60).padStart(2, '0')
@@ -690,6 +703,16 @@ function MediaGenDialog({
       alive = false
     }
   }, [kind, recentToken])
+
+  // 清单里有任务在跑：每 5 秒重取一次清单（只读元数据，不打上游、不扣积分）。
+  // 刷新过页面、或在另一个标签页提交过任务时，这一行会自己从「进行中」变成结果，不会一直挂着。
+  const recentRunning = recent.some((item) => item.status === 'processing')
+  useEffect(() => {
+    if (!recentRunning) return
+    const timer = window.setInterval(() => setRecentToken((value) => value + 1), 5000)
+    return () => window.clearInterval(timer)
+  }, [recentRunning])
+
   const active = busy || task?.status === 'processing'
   const pollTaskId = task?.status === 'processing' ? task.id : ''
   const price = credits
@@ -1050,7 +1073,7 @@ function MediaGenDialog({
                       title="打开这一条"
                     >
                       <span className="agx-media-recent-prompt">{item.prompt}</span>
-                      <span className="agx-media-recent-meta">{describeTask(item)}</span>
+                      <span className="agx-media-recent-meta">{recentMetaOf(item)}</span>
                     </button>
                     {item.status === 'succeeded' ? (
                       <a className="agx-media-recent-download" href={item.downloadUrl} download>
@@ -1059,6 +1082,11 @@ function MediaGenDialog({
                     ) : (
                       <span className="agx-media-recent-state">{item.status === 'failed' ? '失败 · 已退 ' + item.credits.cost + ' 积分' : '进行中'}</span>
                     )}
+                    {item.status === 'failed' && item.error ? (
+                      <p className="agx-media-recent-why" title={item.error}>
+                        {item.error}
+                      </p>
+                    ) : null}
                   </li>
                 ))}
               </ul>
