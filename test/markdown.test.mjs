@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { isSafeHref, parseInline, parseMarkdown } from '../src/lib/markdown-parse.ts'
+import { isSafeHref, markdownPlainText, parseInline, parseMarkdown } from '../src/lib/markdown-parse.ts'
 
 test('标题按级数为 heading，行内的加粗与代码被拆出来', () => {
   const blocks = parseMarkdown('## 结构与**钩子**\n\n### 分镜')
@@ -90,3 +90,47 @@ test('脏输入不死循环：只有竖线、只有尖括号、只有短横线',
   assert.deepEqual(parseMarkdown('-').map((b) => b.kind), ['paragraph'])
   assert.deepEqual(parseMarkdown('---').map((b) => b.kind), ['rule'])
 })
+
+// 复制回答（r247）：屏幕上渲染的是排版，剪贴板里要的是能直接粘走的字
+test('复制成纯文本：标题、加粗、表格与序号的记号都去掉，换行与缩进保住', () => {
+  const answer = [
+    '## 口播分镜',
+    '',
+    '先说**结论**：三秒内给信息。',
+    '',
+    '- 第一镜：**开场钩子**',
+    '- 第二镜：给答案',
+    '',
+    '| 镜号 | 时长 |',
+    '| --- | --- |',
+    '| 1 | 0-3s |',
+    '',
+    '\u0060\u0060\u0060js',
+    'const a = 1',
+    '  const b = 2',
+    '\u0060\u0060\u0060',
+    '',
+    '---',
+    '',
+    '参考：[一篇](https://example.com/x)',
+  ].join('\n')
+  const text = markdownPlainText(answer)
+  assert.equal(text.includes('**'), false)
+  assert.equal(text.includes('##'), false)
+  assert.equal(text.includes('| ---'), false)
+  assert.match(text, /^口播分镜$/m)
+  assert.match(text, /^先说结论：三秒内给信息。$/m)
+  assert.match(text, /^· 第一镜：开场钩子$/m)
+  assert.match(text, /^1\t0-3s$/m)
+  assert.match(text, /^  const b = 2$/m)
+  assert.match(text, /参考：一篇 https:\/\/example\.com\/x/)
+  // 分隔线不在正文里留一行光秃秃的 ---
+  assert.equal(/^---$/m.test(text), false)
+})
+
+test('复制成纯文本：空输入与只有分隔线都返回空，不吐一串空行', () => {
+  assert.equal(markdownPlainText(''), '')
+  assert.equal(markdownPlainText('   \n\n'), '')
+  assert.equal(markdownPlainText('---'), '')
+})
+

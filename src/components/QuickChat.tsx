@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowUp, Brain, ChevronDown, FileText, Link2, Loader2, MessageSquarePlus, Paperclip, Search, Square, Trash2, X } from 'lucide-react'
+import { ArrowUp, Brain, Check, ChevronDown, Copy, FileText, Link2, Loader2, MessageSquarePlus, Paperclip, Search, Square, Trash2, X } from 'lucide-react'
 import {
   createChatConversation,
   deleteChatConversation,
@@ -13,6 +13,7 @@ import {
 import type { ChatConversation, ChatFile, ChatSearchStatus, ChatSummary, ChatToolOptions } from '../api/chat'
 import { getCredits } from '../api/credits'
 import { renderMarkdown } from '../lib/markdown'
+import { markdownPlainText } from '../lib/markdown-parse'
 
 // 快捷创作的「对话」（r214）：一页 DeepSeek —— 长上下文、联网搜索、读链接、思考模式。
 // 为什么单独一个组件：原来那块是「对话预设」的短轮问答（带输出类型与结构化草稿），
@@ -27,6 +28,8 @@ import { renderMarkdown } from '../lib/markdown'
 //    解析在本地做（不上传原始文件给上游），扫描件里的字读不出会直说，不做假 OCR。
 // short：手机上输入框常驻贴底，四个能力一行放不下四个字的标签，
 // 窄屏只留两个字（搜索 / 链接 / 思考 / 附件），完整说明挂在 title 与 aria-label 上。
+// r247：Enter 发送、Shift+Enter 换行（输入法组词时不发）；每段回答一键复制纯文本；
+// 会话列表满 30 条、最早一条被腾掉时明确说出来（以前是悄悄删）。
 const TOOL_ITEMS: { id: keyof ChatToolOptions; label: string; short: string; hint: string; icon: typeof Search }[] = [
   { id: 'search', label: '联网搜索', short: '联网', hint: '平台自己搜一遍最新信息，再把前几条网页读成文字', icon: Search },
   { id: 'readUrl', label: '读链接', short: '链接', hint: '消息里带网址时，先把页面读下来再回答', icon: Link2 },
@@ -100,6 +103,8 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
   // 手机上一列排（≤900px）：会话列表默认收成一条窄条，点开才展开。
   // 桌面左栏不受影响——这个状态只决定窄屏那条列表展不展开（CSS 里只在窄屏生效）。
   const [listOpen, setListOpen] = useState(false)
+  // 哪一段回答刚复制过：按钮上给 1.6 秒「已复制」，不然点完没有任何反馈
+  const [copiedId, setCopiedId] = useState('')
   const fileRef = useRef<HTMLInputElement | null>(null)
   const bottomRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
@@ -248,6 +253,24 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
     }
   }, [current?.id, onToast])
 
+  // 复制回答（r247）：复制的是模型原文排成的纯文本（不带 ** 和 |），粘到文档 / 剪辑软件里能直接用。
+  const copyAnswer = useCallback(async (id: string, content: string) => {
+    const text = markdownPlainText(content)
+    if (!text) {
+      onToast?.('这段回答是空的，没有可复制的内容')
+      return
+    }
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('这个浏览器没有剪贴板接口')
+      await navigator.clipboard.writeText(text)
+      setCopiedId(id)
+      window.setTimeout(() => setCopiedId((value) => (value === id ? '' : value)), 1600)
+    } catch {
+      // 复制失败不假装成功：老浏览器 / 非安全上下文里没有剪贴板接口
+      onToast?.('这个浏览器不让网页写剪贴板：在回答上选中文字手动复制')
+    }
+  }, [onToast])
+
   const send = useCallback(async () => {
     const content = draft.trim()
     if (!content || sending || attaching) return
@@ -276,6 +299,10 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
       if (!conversation) {
         const created = await createChatConversation()
         conversation = created.conversation
+        // 会话列表满了（最多 30 条）时服务端会腾出最早的一条：这件事必须说出来，
+        // 不然用户只会发现「昨天那条长对话不见了」，却不知道是自己点了新对话（r247）
+        const retired = created.conversation.retired
+        if (retired?.title) onToast?.('会话列表满了：最早那条「' + retired.title + '」已经挪掉（最多 30 条）')
       }
       conversationId = conversation.id
       const result = await streamChatMessage(
@@ -317,7 +344,7 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
       setSendingImages(false)
       abortRef.current = null
     }
-  }, [attached, attaching, current, draft, refreshList, sending, tools])
+  }, [attached, attaching, current, draft, onToast, refreshList, sending, tools])
 
   const stop = useCallback(() => {
     abortRef.current?.abort()
@@ -369,7 +396,7 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
             </div>
           ))}
         </div>
-        <p className="qc-side-note">会话存在服务端，换设备回来还在；最多 30 条，旧的会自动腾位置。</p>
+        <p className="qc-side-note">会话存在服务端，换设备回来还在；最多 30 条，满了会挪掉最早的一条（会告诉你是哪条）。</p>
       </aside>
 
       <div className="qc-main">
@@ -476,6 +503,17 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
                   <span>{when(message.at)}</span>
                   {message.model ? <span>{message.model}</span> : null}
                   {message.ms ? <span>{(message.ms / 1000).toFixed(1)}s</span> : null}
+                  {message.role === 'assistant' ? (
+                    <button
+                      type="button"
+                      className={'qc-copy' + (copiedId === message.id ? ' is-done' : '')}
+                      onClick={() => void copyAnswer(message.id, message.content)}
+                      title="复制这段回答（纯文本，不带 ** 这类记号）"
+                    >
+                      {copiedId === message.id ? <Check size={12} /> : <Copy size={12} />}
+                      {copiedId === message.id ? '已复制' : '复制'}
+                    </button>
+                  ) : null}
                 </div>
               </div>
             ))
@@ -619,13 +657,16 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
               className="qc-input"
               rows={3}
               value={draft}
-              placeholder="说清你要什么，例如：口播拆分镜"
+              placeholder="说清你要什么，例如：口播拆分镜（Enter 发送）"
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-                  event.preventDefault()
-                  void send()
-                }
+                if (event.key !== 'Enter') return
+                // 输入法正在组词时按 Enter 是「选字」，不是发送：中文用户十次里九次会撞上
+                if (event.nativeEvent.isComposing) return
+                // Shift + Enter 换行；其余情况（含 Ctrl / Cmd + Enter）直接发送，跟一页 DeepSeek 一致
+                if (event.shiftKey) return
+                event.preventDefault()
+                void send()
               }}
               disabled={sending}
             />
@@ -634,7 +675,7 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
                 <Square size={14} fill="currentColor" />
               </button>
             ) : (
-              <button type="button" className="qc-send" onClick={() => void send()} disabled={!draft.trim() || attaching} aria-label="发送" title="发送（Ctrl + Enter）">
+              <button type="button" className="qc-send" onClick={() => void send()} disabled={!draft.trim() || attaching} aria-label="发送" title="发送（Enter，Shift + Enter 换行）">
                 <ArrowUp size={18} />
               </button>
             )}
@@ -645,7 +686,7 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
                 ? '生成中点方块可停止，停止不计费'
                 : !tools.readUrl && /https?:\/\//i.test(draft)
                   ? '消息里有链接：打开「读链接」，我才会先把页面读下来'
-                  : 'Ctrl + Enter 发送 · 附件最多 5 个（图片 2 张）、单个 8 MB'}
+                  : 'Enter 发送 · Shift + Enter 换行 · 附件最多 5 个（图片 2 张）、单个 8 MB'}
             </span>
             <span>{toolCount ? toolCount + ' 项能力已打开' : '能力全关：只按对话回答'}</span>
           </div>

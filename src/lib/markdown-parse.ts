@@ -168,3 +168,53 @@ export function parseInline(text: string): MarkdownInline[] {
   if (last < source.length) nodes.push({ kind: 'text', text: source.slice(last) })
   return nodes
 }
+
+function inlinePlain(text: string): string {
+  return parseInline(text)
+    .map((token) => {
+      if (token.kind === 'link') return token.href && token.href !== token.text ? token.text + ' ' + token.href : token.text
+      return token.text
+    })
+    .join('')
+}
+
+/**
+ * 复制用的纯文本（r247）：屏幕上渲染的是排版，粘进剪辑软件 / 文档里要的是字。
+ * 去掉 ** 加粗、# 标题、表格分隔行这些记号，保留换行、序号与代码块缩进；
+ * 链接留成「标题 地址」，分隔线直接丢掉（它只是视觉分段）。
+ */
+export function markdownPlainText(source: string): string {
+  const out: string[] = []
+  for (const block of parseMarkdown(source)) {
+    if (block.kind === 'code') {
+      out.push(block.text.replace(/\s+$/, ''))
+      out.push('')
+      continue
+    }
+    if (block.kind === 'table') {
+      out.push(block.header.map(inlinePlain).join('\t'))
+      for (const row of block.rows) out.push(row.map(inlinePlain).join('\t'))
+      out.push('')
+      continue
+    }
+    if (block.kind === 'heading') {
+      out.push(inlinePlain(block.text))
+      out.push('')
+      continue
+    }
+    if (block.kind === 'rule') continue
+    if (block.kind === 'quote') {
+      for (const line of block.lines) out.push(inlinePlain(line))
+      out.push('')
+      continue
+    }
+    if (block.kind === 'list') {
+      block.items.forEach((item, index) => out.push((block.ordered ? index + 1 + '. ' : '· ') + inlinePlain(item)))
+      out.push('')
+      continue
+    }
+    out.push(block.lines.map(inlinePlain).join('\n'))
+    out.push('')
+  }
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim()
+}

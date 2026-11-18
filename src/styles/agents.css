@@ -2725,11 +2725,38 @@
 
 .qc-msg-meta {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
-  font-size: 11px;
+  font-size: 13px;
   color: var(--faint);
   font-variant-numeric: tabular-nums;
 }
+
+/* 元信息一律不拆词：手机上「deepseek-flash」曾折成两行、「复制」被压成一个字一行 */
+.qc-msg-meta > span { white-space: nowrap; }
+
+/* 复制这段回答（r247）：贴在元信息行尾，点完 1.6 秒内变成「已复制」。
+   复制的是模型原文的纯文本（不带 ** 和 |），粘进文档 / 剪辑软件能直接用。 */
+.qc-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 4px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--faint);
+  font-family: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.qc-copy:hover { color: var(--ink); border-color: var(--line); background: var(--surface-raised); }
+.qc-copy.is-done { color: var(--ink); border-color: var(--line); background: var(--surface-raised); }
 
 .qc-error {
   padding: 8px 12px;
@@ -2774,7 +2801,7 @@
 .qc-tool-short { display: none; }
 .qc-tool:disabled { opacity: 0.6; cursor: default; }
 
-.qc-credit { margin-left: auto; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.qc-credit { margin-left: auto; font-size: 13px; color: var(--faint); font-variant-numeric: tabular-nums; }
 
 .qc-input-row { display: flex; align-items: flex-end; gap: 8px; }
 
@@ -2811,7 +2838,7 @@
 
 .qc-send:disabled { opacity: 0.4; cursor: default; }
 
-.qc-hint { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; color: var(--faint); }
+.qc-hint { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--faint); }
 
 /* 附件（r218）：一个附件一枚小胶囊；名字长了只截名字，不把整行撑开 */
 .qc-file-input { display: none; }
@@ -2944,8 +2971,9 @@
   .qc-tool-full { display: none; }
   .qc-tool-short { display: inline; }
   .qc-tool { height: 32px; padding: 0 8px; font-size: 13px; }
-  .qc-credit { font-size: 12px; }
-  .qc-msg-meta { font-size: 12px; }
+  /* 余额与元信息跟着桌面一起抬到 13px（r247）：手机上字小比桌面更难受 */
+  /* 复制按钮在手机上要能点中：24px 的胶囊在 390 宽只有拇指一半大 */
+  .qc-copy { height: 32px; padding: 0 12px; white-space: nowrap; }
   .qc-input { height: 64px; min-height: 64px; resize: none; }
   .qc-chip-name, .qc-file-name, .qc-link-name { max-width: 128px; }
   /* 表格在窄屏不横着拖：表头允许换行、字号降一档，宁可排两行，

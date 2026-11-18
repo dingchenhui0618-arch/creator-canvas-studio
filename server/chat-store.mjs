@@ -127,12 +127,15 @@ export function listConversations(userId) {
 
 export function createConversation(userId, options = {}) {
   const rows = readIndex(userId)
+  let retired = null
   if (rows.length >= MAX_CONVERSATIONS) {
-    // 超出上限时先删最老的一条（会话是草稿，不是作品；不提示、不阻塞）
+    // 超出上限时腾出最老的一条：不阻塞（不能因为列表满了就发不了消息），
+    // 但要把「挪掉的是哪一条」回给调用方——以前是悄悄删，用户只会觉得对话莫名少了一条（r247）
     const oldest = rows[rows.length - 1]
     if (oldest) {
       try { fs.unlinkSync(convFile(userId, oldest.id)) } catch { /* 已经不在了 */ }
       rows.pop()
+      retired = { id: oldest.id, title: oldest.title }
     }
   }
   const now = Date.now()
@@ -145,7 +148,8 @@ export function createConversation(userId, options = {}) {
   }
   atomicWrite(convFile(userId, conv.id), conv)
   writeIndex(userId, [{ id: conv.id, title: conv.title, preview: '', messageCount: 0, createdAt: now, updatedAt: now }, ...rows])
-  return conv
+  // retired 只在这次响应里带上，不写进会话文件（它不是会话自己的属性）
+  return retired ? { ...conv, retired } : conv
 }
 
 export function getConversation(userId, conversationId) {

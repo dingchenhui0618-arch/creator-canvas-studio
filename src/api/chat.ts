@@ -47,6 +47,8 @@ export type ChatConversation = {
   createdAt: number
   updatedAt: number
   messages: ChatMessage[]
+  // 会话列表满了（最多 30 条）时，新建会话会腾掉最早的一条：这里告诉界面挪的是哪一条（r247）
+  retired?: { id: string; title: string }
 }
 
 export type ChatSummary = {

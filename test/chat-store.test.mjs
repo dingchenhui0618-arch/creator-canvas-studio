@@ -65,3 +65,20 @@ test('会话最多 30 条：超过时先删最老的一条，不会无限长', (
   assert.equal(list.length, CHAT_LIMITS.MAX_CONVERSATIONS)
   assert.equal(list[0].title, '会话 ' + (CHAT_LIMITS.MAX_CONVERSATIONS + 2))
 })
+
+test('会话满了要腾位置时必须说出来：回传被挪掉的是哪一条，且它的文件真的没了（r247）', () => {
+  const user = 'u7'
+  const made = []
+  for (let index = 0; index < CHAT_LIMITS.MAX_CONVERSATIONS; index += 1) {
+    made.push(createConversation(user, { title: '老会话 ' + index }))
+  }
+  // 还没满：不该有任何东西被挪走
+  assert.equal(made.every((conv) => !conv.retired), true)
+  const oldest = made[0]
+  const extra = createConversation(user, { title: '第十一条' })
+  assert.deepEqual(extra.retired, { id: oldest.id, title: '老会话 0' })
+  assert.equal(getConversation(user, oldest.id), null)
+  assert.equal(listConversations(user).length, CHAT_LIMITS.MAX_CONVERSATIONS)
+  // retired 是这次响应里的提示，不该被当成会话自己的字段写进文件
+  assert.equal(getConversation(user, extra.id).retired, undefined)
+})
