@@ -1,7 +1,7 @@
 {
   "name": "creator-canvas-studio",
   "private": true,
-  "version": "0.9.200",
+  "version": "0.9.201",
   "description": "VisionQA 桌面端：网页外壳 + 本地工作区（agent loop 在本机运行）",
   "productName": "VisionQA",
   "author": "Wavision",
@@ -18,7 +18,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "test": "node --experimental-sqlite --experimental-strip-types --test \"test/*.test.mjs\"",
+    "test": "node --experimental-sqlite --experimental-strip-types --test --test-concurrency=4 \"test/*.test.mjs\"",
     "check:node": "node scripts/check-node.mjs",
     "scan:secrets": "node scripts/scan-secrets.mjs",
     "loadtest": "node scripts/loadtest.mjs",

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowUp, Brain, Link2, Loader2, MessageSquarePlus, Search, Trash2 } from 'lucide-react'
+import { ArrowUp, Brain, Link2, Loader2, MessageSquarePlus, Search, Square, Trash2 } from 'lucide-react'
 import {
   createChatConversation,
   deleteChatConversation,
   getChatConversation,
   listChatConversations,
-  sendChatMessage,
+  streamChatMessage,
 } from '../api/chat'
 import type { ChatConversation, ChatSummary, ChatToolOptions } from '../api/chat'
 import { getCredits } from '../api/credits'
@@ -15,7 +15,9 @@ import { getCredits } from '../api/credits'
 // 数据形状、扣费口径、上下文长度都不一样；混在一个组件里两边都会越改越乱。
 //
 // 取舍（写清楚，免得后面有人以为漏了）：
-//  - 不做流式：先拿完整回复再显示；失败全额退回，界面明说「积分已退回」；
+//  - 流式输出（r217）：一边生成一边显示，第一段字通常在 1 秒级出现；
+//    右上角按钮变成「停止」，停止 = 断开连接，服务端中止上游并全额退款，不留半截回答；
+//  - 失败、空回复、停止都全额退回，界面明说「积分已退回」，余额当场刷新；
 //  - 会话在服务端：换设备、关页面回来都还在，最多 30 条会话、每条留 200 条消息；
 //  - 文件解析 / OCR / 图片理解还没接（要动上传与多模态消息），这里不放空按钮。
 const TOOL_ITEMS: { id: keyof ChatToolOptions; label: string; hint: string; icon: typeof Search }[] = [
@@ -50,11 +52,15 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
   const [opening, setOpening] = useState('')
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
+  const [streaming, setStreaming] = useState('')
   const [error, setError] = useState('')
   const [tools, setTools] = useState<ChatToolOptions>(() => loadTools())
   const [credits, setCredits] = useState<{ balance: number | null; unit: string; price: number } | null>(null)
   const bottomRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
+  const abortRef = useRef<AbortController | null>(null)
+  // 只有「本来就在底部」才跟着滚：长回答往上翻着看的时候，每来一段就把人拽回底部很难用
+  const stickRef = useRef(true)
 
   const messages = current?.messages ?? []
 
@@ -78,8 +84,8 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
   }, [refreshList])
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ block: 'end' })
-  }, [messages.length, sending])
+    if (stickRef.current) bottomRef.current?.scrollIntoView({ block: 'end' })
+  }, [messages.length, sending, streaming.length])
 
   const openConversation = useCallback(async (id: string) => {
     if (opening || sending) return
@@ -127,27 +133,68 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
     if (!content || sending) return
     setSending(true)
     setError('')
-    // 先在本地把用户这句放上去：请求要几十秒，空着会让人以为没点中
+    setStreaming('')
+    const controller = new AbortController()
+    abortRef.current = controller
+    const before = current
+    // 先在本地把用户这句放上去：流式首字也有延迟，空着会让人以为没点中
     const optimistic = { id: 'local-' + Date.now(), role: 'user' as const, content, at: Date.now() }
-    if (current) setCurrent({ ...current, messages: [...current.messages, optimistic] })
+    // 新对话也先把这句挂上去：否则「空状态说明」会和正在生成的回答叠在一起，
+    // 看起来像「还没有对话」却已经有答案在流（r217 截图时发现的排版问题）。
+    setCurrent({
+      ...(before ?? { id: 'local', title: '新对话', createdAt: Date.now(), updatedAt: Date.now(), messages: [] }),
+      messages: [...(before?.messages ?? []), optimistic],
+    })
     setDraft('')
+    let conversationId = before?.id || ''
     try {
-      let conversation = current
+      let conversation = before
       if (!conversation) {
         const created = await createChatConversation()
         conversation = created.conversation
       }
-      const result = await sendChatMessage(conversation.id, { content, tools })
+      conversationId = conversation.id
+      const result = await streamChatMessage(
+        conversation.id,
+        { content, tools },
+        {
+          signal: controller.signal,
+          onDelta: (text) => setStreaming((value) => value + text),
+        },
+      )
+      setStreaming('')
       setCurrent(result.conversation)
       if (typeof result.balance === 'number') setCredits((value) => (value ? { ...value, balance: result.balance } : value))
       void refreshList()
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '这次没有回上来，稍后再试')
-      if (current) setCurrent({ ...current, messages: current.messages })
+      setStreaming('')
+      const stopped = controller.signal.aborted
+      setError(stopped ? '已停止生成，这次不计费（积分已退回）' : caught instanceof Error ? caught.message : '这次没有回上来，稍后再试')
+      // 以服务端为准：用户这句话已经落库，回答要么没有、要么是上一次的；
+      // 本地那份乐观消息（可能带半截回答）不能留着，否则会和服务端越走越远。
+      if (conversationId) {
+        try {
+          const fresh = await getChatConversation(conversationId)
+          setCurrent(fresh.conversation)
+        } catch {
+          if (before) setCurrent(before)
+        }
+      } else {
+        setCurrent(before ?? null)
+      }
+      getCredits(1)
+        .then((data) => setCredits((value) => (value ? { ...value, balance: data.balance ?? null } : value)))
+        .catch(() => undefined)
+      void refreshList()
     } finally {
       setSending(false)
+      abortRef.current = null
     }
   }, [current, draft, refreshList, sending, tools])
+
+  const stop = useCallback(() => {
+    abortRef.current?.abort()
+  }, [])
 
   const toolCount = useMemo(() => TOOL_ITEMS.filter((item) => tools[item.id]).length, [tools])
 
@@ -188,15 +235,23 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
       </aside>
 
       <div className="qc-main">
-        <div className="qc-thread" aria-live="polite">
+        <div
+          className="qc-thread"
+          aria-live="polite"
+          onScroll={(event) => {
+            const el = event.currentTarget
+            stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48
+          }}
+        >
           {messages.length === 0 ? (
             <div className="qc-empty">
               <strong>一页能记住上下文的对话</strong>
               <p>写脚本、拆爆款结构、改分镜、问平台怎么用，都可以直接说。带链接时打开「读链接」，要最新信息时打开「联网搜索」。</p>
               <ul>
+                <li>边生成边显示，首段字通常一两秒就到，不用干等整段</li>
+                <li>生成中途点右上角方块可以停，停止不计费；失败也全额退回</li>
                 <li>上下文带最近 30 条，不是只记上一句</li>
-                <li>每次对话 {credits?.price ? credits.price + ' ' + credits.unit : '按次计费'}，失败全额退回</li>
-                <li>联网搜索与读链接是平台的检索能力，不用另外配置</li>
+                <li>每次对话 {credits?.price ? credits.price + ' ' + credits.unit : '按次计费'}；联网搜索与读链接都是平台自带能力</li>
               </ul>
             </div>
           ) : (
@@ -214,10 +269,22 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
           )}
           {sending && (
             <div className="qc-msg qc-msg--assistant">
-              <div className="qc-bubble qc-bubble--running">
-                <Loader2 size={14} className="qc-spin" />
-                {tools.thinking ? '正在思考并回答…' : tools.search ? '正在检索并回答…' : '正在回答…'}
-              </div>
+              {streaming ? (
+                <>
+                  <div className="qc-bubble qc-bubble--stream">
+                    {streaming}
+                    <span className="qc-caret" aria-hidden="true" />
+                  </div>
+                  <div className="qc-msg-meta">
+                    <span>正在生成，可以随时停止</span>
+                  </div>
+                </>
+              ) : (
+                <div className="qc-bubble qc-bubble--running">
+                  <Loader2 size={14} className="qc-spin" />
+                  {tools.thinking ? '正在思考并回答…' : tools.search ? '正在检索并回答…' : '正在回答…'}
+                </div>
+              )}
             </div>
           )}
           <div ref={bottomRef} />
@@ -265,12 +332,18 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
               }}
               disabled={sending}
             />
-            <button type="button" className="qc-send" onClick={() => void send()} disabled={sending || !draft.trim()} aria-label="发送" title="发送（Ctrl + Enter）">
-              <ArrowUp size={18} />
-            </button>
+            {sending ? (
+              <button type="button" className="qc-send qc-send--stop" onClick={stop} aria-label="停止生成" title="停止生成（这次不计费，积分全额退回）">
+                <Square size={14} fill="currentColor" />
+              </button>
+            ) : (
+              <button type="button" className="qc-send" onClick={() => void send()} disabled={!draft.trim()} aria-label="发送" title="发送（Ctrl + Enter）">
+                <ArrowUp size={18} />
+              </button>
+            )}
           </div>
           <div className="qc-hint">
-            <span>Ctrl + Enter 发送</span>
+            <span>{sending ? '生成中点方块可停止，停止不计费' : 'Ctrl + Enter 发送'}</span>
             <span>{toolCount ? toolCount + ' 项能力已打开' : '能力全关：只按对话回答'}</span>
           </div>
         </div>

@@ -2579,6 +2579,28 @@
   color: var(--muted);
 }
 
+.qc-bubble--stream { position: relative; }
+
+/* 流式回答末尾的光标：段与段之间不跳动，靠 pre-wrap 保住模型自己的换行 */
+.qc-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -0.15em;
+  background: var(--ink);
+  animation: qc-caret 1.1s steps(2, start) infinite;
+}
+
+@keyframes qc-caret { 50% { opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .qc-caret { animation: none; }
+}
+
+/* 生成中把发送键换成停止键：同样的位置、同样的尺寸，不至于误点 */
+.qc-send--stop { background: var(--surface); border: 1px solid var(--ink); color: var(--ink); }
+
 .qc-spin { animation: qc-spin 1s linear infinite; }
 @keyframes qc-spin { to { transform: rotate(360deg); } }
 

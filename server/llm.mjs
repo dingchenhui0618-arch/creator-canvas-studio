@@ -1,5 +1,5 @@
 import { config, visionEnabled } from './config.mjs'
-import { chatCompletion, sleep } from './chatcall.mjs'
+import { chatCompletion, chatCompletionStream, sleep } from './chatcall.mjs'
 import { vaultModels } from './keyvault.mjs'
 
 // 纯文本模型调用：与 vision.mjs 共用同一套「重试 + 降级链」，供评审、智能体对话、画布节点使用
@@ -68,6 +68,44 @@ export async function callTextModel(messages, options = {}) {
       }
     }
     log?.(model + ' 不可用，切换下一个候选模型')
+  }
+  throw lastError || new Error('没有可用的模型')
+}
+
+/**
+ * 流式版本的 callTextModel（r217）：同一条模型链、同一套「失败才换模型」，
+ * 但多了两条流式专属的规矩：
+ *  - 上游不认 stream：抛 STREAM_UNSUPPORTED，由上层退回一次性回答（不在这里换模型硬试）；
+ *  - 已经吐过字再出错：直接抛出，换模型会把同一段回答重复给用户看。
+ */
+export async function callTextModelStream(messages, options = {}) {
+  if (!llmEnabled()) throw Object.assign(new Error('未配置模型凭证（VISION_API_KEY 或本地 OpenCodex）'), { code: 'NO_MODEL' })
+  const chain = options.models?.length ? options.models : modelChain()
+  const log = options.log
+  let lastError
+  let emitted = false
+  for (const model of chain) {
+    if (options.signal?.aborted) throw Object.assign(new Error('运行已停止'), { aborted: true })
+    try {
+      log?.('模型（流式）：' + model)
+      return await chatCompletionStream({
+        ...options,
+        messages,
+        model,
+        onDelta: (piece, info) => {
+          if (piece) emitted = true
+          options.onDelta?.(piece, info)
+        },
+      })
+    } catch (error) {
+      if (options.signal?.aborted) throw error
+      if (error?.code === 'STREAM_UNSUPPORTED' || error?.code === 'NO_MODEL') throw error
+      if (emitted) throw error
+      lastError = error
+      const retryable = error?.retryable || error?.name === 'AbortError' || /fetch failed/i.test(String(error?.message))
+      if (!retryable) throw error
+      log?.(model + ' 流式失败，切换下一个候选模型')
+    }
   }
   throw lastError || new Error('没有可用的模型')
 }

@@ -2,9 +2,19 @@
 import { readBody, sendJson } from './_shared.mjs'
 import { currentUser } from '../auth.mjs'
 import { createConversation, deleteConversation, getConversation, listConversations } from '../chat-store.mjs'
-import { sendChatMessage } from '../chat.mjs'
+import { sendChatMessage, streamChatMessage } from '../chat.mjs'
 
-const CONV = /^\/api\/chat\/conversations\/([A-Za-z0-9_-]{6,40})(\/messages)?$/
+// 会话 / 消息 / 流式三条路径：最后一段 stream 是可选的（r217）
+const CONV = /^\/api\/chat\/conversations\/([A-Za-z0-9_-]{6,40})(\/messages(\/stream)?)?$/
+
+// SSE：每个事件都是 data: <JSON>，前端按行拆。正文里有换行，所以不能裸写文本。
+function sseWrite(res, event, data) {
+  try {
+    res.write('event: ' + event + '\ndata: ' + JSON.stringify(data) + '\n\n')
+  } catch {
+    /* 客户端已经断开：写失败不用管，后面 await 会收到 abort */
+  }
+}
 
 export function createChatRouter() {
   return {
@@ -35,6 +45,7 @@ export function createChatRouter() {
       }
       const id = matched[1]
       const isMessages = Boolean(matched[2])
+      const isStream = Boolean(matched[3])
 
       if (!isMessages && req.method === 'GET') {
         const conv = getConversation(user.id, id)
@@ -49,6 +60,70 @@ export function createChatRouter() {
       if (!isMessages && req.method === 'DELETE') {
         const removed = deleteConversation(user.id, id)
         sendJson(res, removed ? 200 : 404, removed ? { ok: true } : { ok: false, code: 'CHAT_NOT_FOUND', error: '这条对话已经不在了' })
+        return true
+      }
+
+      if (isStream) {
+        if (req.method !== 'POST') {
+          sendJson(res, 405, { ok: false, code: 'CHAT_METHOD', error: '这个接口不支持 ' + req.method })
+          return true
+        }
+        const body = await readBody(req)
+        // 用户按「停止」= 客户端断开连接：这里立刻中止上游，交给 streamChatMessage 退款。
+        const controller = new AbortController()
+        let finished = false
+        res.on('close', () => {
+          if (!finished) controller.abort()
+        })
+        res.on('error', () => {
+          /* 断开时的 ECONNRESET 不用上报 */
+        })
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream; charset=utf-8',
+          'Cache-Control': 'no-store, no-transform',
+          Connection: 'keep-alive',
+          // nginx 默认会把 SSE 攒在缓冲里，这一行让它立刻透传（线上 /api/ 另有 proxy_buffering off）
+          'X-Accel-Buffering': 'no',
+        })
+        res.flushHeaders?.()
+        sseWrite(res, 'open', { ok: true })
+        // 思考模式首字可能要几十秒：每 15 秒一个注释心跳，别让中间层把连接当空闲掐掉
+        const heartbeat = setInterval(() => {
+          if (finished) return
+          try {
+            res.write(': ping\n\n')
+          } catch {
+            /* 断开就等 await 收尾 */
+          }
+        }, 15000)
+        try {
+          const result = await streamChatMessage(
+            user,
+            { ...body, conversationId: id },
+            {
+              signal: controller.signal,
+              onDelta: (piece) => {
+                if (piece) sseWrite(res, 'delta', { text: piece })
+              },
+            },
+          )
+          finished = true
+          sseWrite(res, 'done', { ok: true, ...result })
+          res.end()
+        } catch (error) {
+          finished = true
+          sseWrite(res, 'error', {
+            ok: false,
+            code: error?.code || 'CHAT_UPSTREAM',
+            error: error?.message || '这次没有回上来',
+            ...(error?.stopped ? { stopped: true } : {}),
+            ...(error?.balance != null ? { balance: error.balance } : {}),
+            ...(error?.needed != null ? { needed: error.needed } : {}),
+          })
+          res.end()
+        } finally {
+          clearInterval(heartbeat)
+        }
         return true
       }
 

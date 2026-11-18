@@ -170,4 +170,193 @@ export async function chatCompletion({
   throw lastError || new Error(model + ' 调用失败')
 }
 
+function abortedError() {
+  return Object.assign(new Error('运行已停止'), { aborted: true })
+}
+
+/**
+ * 流式 chat/completions（r217）：把上游的增量逐段交给 onDelta，返回拼好的完整结果。
+ *
+ * 为什么要单写一份而不在 chatCompletion 里加个开关：
+ *  - 读流、拆 SSE、拼增量、半路失败不能换 Key（会重复吐字）都是流式独有的分支，
+ *    塞进原来那套「两遍 json / 截断换模型」的结构里，两边都会看不懂；
+ *  - 但**路由与故障回退的取舍必须一致**：同一套候选 Key 解析、同一份路由日志、
+ *    同一套「没吐过字才许换下一把」的规矩，所以还是写在这个文件里复用 resolveKeyCandidates。
+ *
+ * 三个必须守住的边界：
+ * 1. 上游不认 stream（个别网关直接 400）：抛 STREAM_UNSUPPORTED，交给上层退回一次性回答，
+ *    绝不换 Key 重打（同一句话付两次钱）。
+ * 2. 已经吐过字之后再出错：宁可报错，也不换 Key 把同一段回答再说一遍。
+ * 3. finish_reason=length：正文已经有了就照常返回，由上层标「被长度上限截断」；一个字都没有才算失败。
+ */
+export async function chatCompletionStream({
+  model,
+  messages,
+  temperature = 0.3,
+  maxTokens = 2000,
+  signal,
+  timeoutMs = config.vision.timeoutMs,
+  capability = 'text',
+  maxKeys = 3,
+  meter = null,
+  extra = null,
+  onDelta,
+}) {
+  const candidates = resolveKeyCandidates({ capability, model, limit: maxKeys })
+  const attempts = candidates.length
+    ? candidates
+    : [
+        {
+          id: '',
+          name: '',
+          baseUrl: '',
+          apiKey: '',
+          attempt: 1,
+          source: config.vision.apiKey ? 'env' : 'none',
+          reason: config.vision.apiKey ? '池里没有可用 Key，回落到环境变量凭证' : '池里没有可用 Key，环境变量也没配',
+        },
+      ]
+  let lastError = null
+  let emitted = false
+  for (const candidate of attempts) {
+    const baseUrl = String(candidate.baseUrl || config.vision.baseUrl || '').replace(/\/+$/, '')
+    const apiKey = candidate.apiKey || (candidate.source === 'env' || candidate.source === 'none' ? config.vision.apiKey : '')
+    const source = candidate.id ? 'pool' : candidate.source || (apiKey ? 'env' : 'none')
+    const started = Date.now()
+    const route = (info = {}) =>
+      recordRoute({
+        capability,
+        model,
+        keyId: candidate.id,
+        keyName: candidate.name,
+        source,
+        reason: candidate.reason || (source === 'env' ? '池里没有可用 Key，回落到环境变量凭证' : '池里没有可用 Key，环境变量也没配'),
+        attempt: candidate.attempt || 1,
+        ms: Date.now() - started,
+        ...info,
+      })
+    if (!apiKey) {
+      route({ ok: false, error: '未配置模型凭证' })
+      const error = new Error('未配置模型凭证：管理员还没有在后台添加可用 Key')
+      error.code = 'NO_MODEL'
+      throw error
+    }
+    if (signal?.aborted) throw abortedError()
+    const timeoutSignal = AbortSignal.timeout(Math.max(1000, Number(timeoutMs) || 300000))
+    const requestSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal
+    const body = { ...(extra && typeof extra === 'object' ? extra : {}), model, messages, temperature, max_tokens: maxTokens, stream: true }
+    try {
+      const response = await fetch(baseUrl + '/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream', Authorization: 'Bearer ' + apiKey },
+        body: JSON.stringify(body),
+        signal: requestSignal,
+      })
+      if (!response.ok) {
+        const text = await response.text()
+        reportKey(candidate.id, false, 'HTTP ' + response.status + ' ' + text.slice(0, 160))
+        route({ ok: false, error: 'HTTP ' + response.status + ' ' + text.slice(0, 120) })
+        console.error('[chat-stream] ' + model + ' ' + response.status + ' ' + text.slice(0, 400))
+        // 上游不认流式：不换 Key、不再多烧一次钱，交给上层退回一次性回答
+        if (response.status === 400 || response.status === 422 || /stream/i.test(text)) {
+          const unsupported = new Error(model + ' 不支持流式输出（HTTP ' + response.status + '）')
+          unsupported.code = 'STREAM_UNSUPPORTED'
+          unsupported.status = 400
+          throw unsupported
+        }
+        const busy = response.status === 429 || response.status >= 500 || /overloaded/i.test(text)
+        const error = new Error(model + (busy ? ' 上游繁忙（HTTP ' + response.status + '）' : ' HTTP ' + response.status + '：' + text.slice(0, 140)))
+        error.retryable = busy
+        error.status = response.status
+        lastError = error
+        continue
+      }
+      if (!response.body) throw new Error(model + ' 没有返回流式内容')
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let content = ''
+      let reasoning = ''
+      let finishReason = ''
+      let usage = null
+      for (;;) {
+        const chunk = await reader.read()
+        if (chunk.done) break
+        buffer += decoder.decode(chunk.value, { stream: true })
+        let lineEnd = buffer.indexOf('\n')
+        while (lineEnd >= 0) {
+          const line = buffer.slice(0, lineEnd).replace(/\r$/, '')
+          buffer = buffer.slice(lineEnd + 1)
+          lineEnd = buffer.indexOf('\n')
+          // SSE 的心跳与注释行（":" 开头）直接跳过；只认 data:
+          if (!line.startsWith('data:')) continue
+          const payload = line.slice(5).trim()
+          if (!payload || payload === '[DONE]') continue
+          let parsed = null
+          try {
+            parsed = JSON.parse(payload)
+          } catch {
+            continue
+          }
+          if (parsed?.usage) usage = parsed.usage
+          const choice = parsed?.choices?.[0]
+          if (!choice) continue
+          if (choice.finish_reason) finishReason = String(choice.finish_reason)
+          const delta = choice.delta || {}
+          const think = typeof delta.reasoning_content === 'string' ? delta.reasoning_content : ''
+          if (think) {
+            reasoning += think
+            onDelta?.('', { reasoning: think })
+          }
+          const piece = typeof delta.content === 'string' ? delta.content : ''
+          if (piece) {
+            content += piece
+            emitted = true
+            onDelta?.(piece, { reasoning: '' })
+          }
+        }
+      }
+      if (!content.trim()) {
+        reportKey(candidate.id, false, '流式没有返回正文')
+        route({ ok: false, error: '流式没有返回正文' })
+        const error = new Error('模型 ' + model + (reasoning ? ' 只返回了推理过程（content 为空）' : ' 没有返回内容'))
+        error.retryable = true
+        throw error
+      }
+      reportKey(candidate.id, true)
+      route({ ok: true })
+      recordUsage({
+        kind: (meter && meter.kind) || (capability === 'vision' ? 'vision' : 'text'),
+        model,
+        projectId: (meter && meter.projectId) || '',
+        ref: (meter && meter.ref) || '',
+        tokensIn: Number(usage?.prompt_tokens) || 0,
+        tokensOut: Number(usage?.completion_tokens) || 0,
+        tokensKnown: Boolean(usage),
+        detail: model + ' · ' + capability + ' · stream',
+      })
+      return {
+        message: { role: 'assistant', content: content.trim(), reasoning_content: reasoning },
+        finishReason,
+        usage,
+        model,
+        streamed: true,
+      }
+    } catch (error) {
+      if (signal?.aborted) throw error
+      if (error?.code === 'STREAM_UNSUPPORTED' || error?.code === 'NO_MODEL') throw error
+      if (emitted) throw error
+      if (error?.status) {
+        lastError = error
+        continue
+      }
+      reportKey(candidate.id, false, String(error?.message || error))
+      route({ ok: false, error: String(error?.message || error).slice(0, 120) })
+      lastError = error
+      if (!error?.retryable) throw error
+    }
+  }
+  throw lastError || new Error(model + ' 调用失败')
+}
+
 export { sleep }

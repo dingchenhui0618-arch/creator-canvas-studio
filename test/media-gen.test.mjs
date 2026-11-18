@@ -336,24 +336,29 @@ test('出图 Key 连续失败进冷却：说的是「等一会儿再点」，不
   credits.grant(user.id, 100, { note: 'cooldown test' })
   const cookie = cookieOf(user)
   const before = credits.balanceOf(user.id)
-  // 连续 3 次上游拒绝就把这把 Key 打进 60 秒冷却
-  for (let round = 0; round < 3; round += 1) {
-    const queued = await call({ cookie, body: { kind: 'image', prompt: '图失败', ratio: '1:1' } })
-    const failed = await waitTask(queued.payload.task.id, cookie)
-    assert.equal(failed.payload.task.status, 'failed')
+  // 连续 3 次上游拒绝就把这把 Key 打进 60 秒冷却。
+  // 必须 try/finally 解除冷却：这条用例一旦中途失败（机器被占满时 waitTask 会超时），
+  // 冷却状态会留给同一个文件后面所有出图用例，一个假失败滚成四五条（r217 实测）。
+  try {
+    for (let round = 0; round < 3; round += 1) {
+      const queued = await call({ cookie, body: { kind: 'image', prompt: '图失败', ratio: '1:1' } })
+      const failed = await waitTask(queued.payload.task.id, cookie)
+      assert.equal(failed.payload.task.status, 'failed')
+    }
+    const attemptsBefore = imageAttempts
+    const cooled = await call({ cookie, body: { kind: 'image', prompt: '一只橘猫', ratio: '1:1' } })
+    assert.equal(cooled.status, 200)
+    const cooledDone = await waitTask(cooled.payload.task.id, cookie)
+    assert.equal(cooledDone.payload.task.status, 'failed')
+    // 关键：不许再叫人「补一把 Key」——Key 就在池里，只是刚被上游打了一下
+    assert.match(cooledDone.payload.task.error, /冷却/)
+    assert.match(cooledDone.payload.task.error, /再点一次/)
+    assert.doesNotMatch(cooledDone.payload.task.error, /补一把|还没接入/)
+    assert.equal(imageAttempts, attemptsBefore, '冷却期间不该再打上游，白花时间和额度')
+    assert.equal(credits.balanceOf(user.id), before, '冷却失败要全额退回')
+  } finally {
+    reportKey(imageKey.id, true)
   }
-  const attemptsBefore = imageAttempts
-  const cooled = await call({ cookie, body: { kind: 'image', prompt: '一只橘猫', ratio: '1:1' } })
-  assert.equal(cooled.status, 200)
-  const cooledDone = await waitTask(cooled.payload.task.id, cookie)
-  assert.equal(cooledDone.payload.task.status, 'failed')
-  // 关键：不许再叫人「补一把 Key」——Key 就在池里，只是刚被上游打了一下
-  assert.match(cooledDone.payload.task.error, /冷却/)
-  assert.match(cooledDone.payload.task.error, /再点一次/)
-  assert.doesNotMatch(cooledDone.payload.task.error, /补一把|还没接入/)
-  assert.equal(imageAttempts, attemptsBefore, '冷却期间不该再打上游，白花时间和额度')
-  assert.equal(credits.balanceOf(user.id), before, '冷却失败要全额退回')
-  reportKey(imageKey.id, true)
 })
 
 test('非法参数 400：缺提示词、坏比例、坏时长、坏分辨率、未知 kind 都不扣费', async () => {
