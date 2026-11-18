@@ -63,7 +63,20 @@
 | lint | 0 error / 26 warning（618 文件） |
 | 类型 | `tsc -b` 干净 |
 | 密钥扫描 | 958 文件，无命中 |
-| 构建 | 入口 `index-BPyZaQh7.js`（742.53 kB）/ 样式 `index-*.css` |
+| 构建 | 入口 `index-WLrx66J3.js`（742.53 kB）/ 样式 `index-B6nKbWgO.css`（358.25 kB） |
+
+## 生产
+
+| 项 | 结果 |
+| --- | --- |
+| 版本 | **0.9.224**（公网 `/api/version` 同值） |
+| 发布 | `20261118-210403-r240runs` |
+| health | `ok`，templates 26 |
+| 服务 | 6 个 active（visionqa / visionqa-internal / bdc-web / bdc-api / bdc-enterprise / nginx） |
+| 入口 / 样式 | `index-WLrx66J3.js` / `index-B6nKbWgO.css`，线上 CSS 有 `.runs-page .vq-mono` 与 `.rc-head .vq-button--icon` |
+| 未登录 | `/api/chat/conversations` → **401** |
+| 磁盘 | 73% |
+| 回滚 | `ops/rollback.sh --to 1` → 0.9.223（`20261118-204623-r239review`） |
 
 ## 截图
 
