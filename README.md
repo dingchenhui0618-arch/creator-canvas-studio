@@ -5017,6 +5017,26 @@ gzip_types text/css application/javascript application/json image/svg+xml;
 
 真实配置（2026-11-18 14:31，授权后在用户已登录的浏览器里做）：`New-Api-User` 请求头是必需的（只带 Bearer 会 401）；`/api/user/token` 每调一次就重签，第一次的会被第二次作废；货币符号上游回 `¤`，已归一显示 `¥`。生产实读 **¥19.6377**（quota 9,818,858 ÷ 500,000，已用 ¥0.5623），低于 ¥20 阈值标红；截图 `docs/upstream-balance-live-1440.png`。令牌只落在数据目录 0600，临时管理员会话用完撤销。`New-Api-User` 是否必需取决于站点版本，代码里可选、401 时界面提示去填。SeeAPI / CGCM 永远只能手动登记。余额是账号余额，不是单把 Key 的额度。
 
+## 二百六十八、出图不再挂在请求上：120 秒的闹钟把人等没了（2026-11-18，0.9.191）
+
+用户在生产出图，等两分钟拿到「出图失败：连不上出图上游：上游超时」，5 积分退回来了。日志对得很干净：`POST /api/media/generate` 耗时 `120034.8 ms`——不是上游报错，是**我们自己 120 秒的 `AbortSignal.timeout` 先掐断**，再被翻译成「连不上上游」。同期只读探活：出图 Key `GET /v1/models` 200、30 个模型、4.7 秒，余额 ¥19.64，**Key 是活的，问题是我们等不住**。
+
+三处改动：**①出图改后台任务**——扣费后先落一条 `processing` 就返回任务号（毫秒级），`finishImageTask()` 在后台调上游、落盘、写终态，界面按任务号轮询（生视频本来就是这套，前端一行没改，关窗口结果仍在「最近生成」）；**②超时 120 → 240 秒**（`VQ_GATEWAY_IMAGE_TIMEOUT_MS` 可覆盖，nginx `/api/` 是 300s）；**③超时单独成一种错**：`504 UPSTREAM_TIMEOUT`「上游 240 秒没回，这次按超时退回积分，稍后再点一次；上游可能已经接单，别连点」，且**超时不换 Key 重打**（换一把就是同一张图付两次钱）。进程重启带走的后台任务由 `上游超时 + 下载超时 + 60 秒` 的兜底认领并全额退回，`runningImages` 保证「活着只是慢」的任务不被误判。
+
+界面文案跟着改（行为改了文案不改是老毛病）：那条进度块原来写死「视频生成中」，出图走后台任务后图片页签会看到「视频生成中」——现在按页签分开，「出图生成中 · 已用时 00:08」加一句「出图一般 20～90 秒，最长等到 4 分钟；关掉这个窗口也会继续跑完，结果留在最近生成里」，截图 `docs/media-image-processing-1440.png`（本机临时实例 + 固定慢 25 秒的假上游）。
+
+测试 1386/1386（新增「POST 不挂在请求上」「超时说 N 秒没回、不许换 Key」两条），lint 0 error / 19 warning、tsc 干净，入口 `index-DaZMP-AY.js`，生产 0.9.192、health ok templates 26、6 服务 active、回滚点 `20261118-1522-r209imgcop`（`--to 1` 回 0.9.191）。**边界**：这轮没有真调一次出图（按约定真实调用只能用户发起），「240 秒够不够」目前只有历史耗时（19.2 / 51.6 / 81.3 秒 vs 失败那张 120 秒）作依据。细节见 `docs/media-image-async-2026-11-18.md`。
+
+## 二百六十九、无限画布换品牌切生产：11 个线上补丁一个没丢（2026-11-18，0.9.191 / 0.9.192 同期）
+
+用户拍了两件事：水印 / canary 一起删、现在切生产。切之前先看清现场——`/opt/bdcanvas` 在 `master @ c5eaa1e`，但工作区有 11 个**线上正在用**的未提交改动（`vq-theme.css` +364 行主题、我们的图标、`visionqaGate.css` 的 import、出图出视频地址走 `BD_*_BASE_URL` 环境变量、`external_id` 影子用户映射、线上 `enterprise.db`、支付配置）。硬 checkout 过去就是丢主题、丢用户映射，所以走合并：带现场改动切 `prod-rebrand-20261118`（`ff7eb55`）→ 合并 `rebrand-visionqa`（`8d97da1`，607 文件）→ 只有 `runtimeMode.ts` 一处冲突（CRLF vs 头注释，取分支那份）→ `146ebea`。合并后与分支的差异**只剩那 11 个本地补丁**，逐条核过。
+
+重启 bdc-web / bdc-api / bdc-enterprise 后：`6677` 200（370,523 B）、`5312/api/health` 200、`5313` 302、`/src/main.ts` 由 vite 转译 200（3 MB，证明前端真编译得过而不是只有外壳）。生产文案核对：`<title>VisionQA Canvas Beta 0.7.5.7 - 视频生成编辑器</title>`，`晨羽` 0 处；`modelCatalog.ts` 里 `cgcm` 125 处**全是内部 ID**（动了就会断已保存节点），用户可见名字是 `Image 2 Pro` / `Nano Banana 2` / `GPT Image 2` / `Seedance 2.0 (Fast)` / `Doubao Seedream 5.0 Pro`；`bdCanvasWatermark` / `BD_CANVAS_CANARY` 在生产 0 命中。
+
+真实渲染截图（生产，本机 Chrome 打 `https://visionqa.wavisionai.cn/#/board`）：`docs/canvas-rebrand-prod-gate-1440.png`（画布根地址的账号门）、`docs/canvas-rebrand-prod-board-1440.png`（嵌入后的画布，顶栏 VisionQA Canvas Beta 0.7.5.7、左栏 v0.9.191、状态条已连接）、`docs/canvas-rebrand-prod-menu-1440.png`（双击画布的节点菜单，一个 CGCM 都没有）。回滚两条：`git switch prod-rebrand-20261118~1` 重启，或解 `/var/backups/bdcanvas/bdcanvas-pre-rebrand-20261118-1456.tgz`。
+
+**还留着的**：后端 `enterprise_server/`（约 300 处）、`server_v2.py`（50 处）、`admin/js/`（96 处）仍是第三方名字，管理员后台那一层这轮没动；仓库根目录的上游许可文本保留、第三方归属收进 `THIRD-PARTY-NOTICES.md`（保留归属、去掉界面痕迹）；`prod-rebrand-20261118` 带着线上数据库与支付配置，**没有推远端**。细节见 `docs/infinite-canvas-rebrand-production-2026-11-18.md`。
+
 ## 协作约定：真实上游调用要用户点头（2026-11-18 起）
 
 用户明确要求：**真实调用（生图、生视频、文本、检索等任何打上游的请求）只能由用户在用户端自己发起；助手不经过用户逐次同意不得自动发起。** 只读的余额 / 健康查询不受此限，但也要先说清在查什么。之前那些「为验收而真调一次」的轮次不再复现：以后验收走本地假通道、临时实例与单测，需要真调时必须先问。
