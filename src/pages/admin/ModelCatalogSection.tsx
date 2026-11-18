@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { ModelCatalogResponse, ModelCatalogRow } from '../../api/adminModels'
 import { formatDateTime, useApi } from './data'
 import { AdminHead, Badge, EmptyState, ErrorBanner, LoadingLine, RefreshButton, SourceTag } from './ui'
+import UpstreamBalanceCard from './UpstreamBalanceCard'
 
 const CAPABILITY_LABELS: Record<ModelCatalogRow['capability'], string> = {
   text: '文本',
@@ -46,7 +47,7 @@ export default function ModelCatalogSection() {
       <AdminHead
         kicker="ADMIN / MODELS"
         title="模型与上游"
-        description="两个上游平台的模型、平台来源与上游单价。按模型名合并：同一个模型出现在两个平台时并排显示两条来源和两个价格。价格是上游标价，不含平台加价。"
+        description="一条能力只走一条主路由，其余模型降为仅参考。下面按模型名合并两个上游：同一个模型出现在两边时并排显示来源与价格，价格是上游标价，不含平台加价。"
         actions={<RefreshButton onClick={() => setRefreshAt(Date.now())} busy={loading} />}
       />
 
@@ -75,6 +76,59 @@ export default function ModelCatalogSection() {
               </article>
             ))}
           </div>
+
+          <section className="admin-card admin-block">
+            <div className="admin-block-head">
+              <div>
+                <p className="admin-label">统一路由</p>
+                <p className="admin-sub">
+                  一条能力只留一条主路由：{data.routes.primaryCount} 条在用，其余 {data.routes.referenceCount}{' '}
+                  个模型降为「仅参考」——不进选择器、不做默认。要换路由改 server/model-routes.mjs，别在别处再写一份默认模型。
+                </p>
+              </div>
+              <SourceTag kind="api" source="GET /api/admin/model-catalog" />
+            </div>
+            <div className="admin-table-wrap">
+              <table className="admin-table route-table">
+                <thead>
+                  <tr>
+                    <th>能力</th>
+                    <th>主路由模型</th>
+                    <th>平台</th>
+                    <th>上游单价</th>
+                    <th>用在哪</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.routes.routes.map((route) => (
+                    <tr key={route.capability}>
+                      <td data-label="能力">
+                        <Badge tone="ok">{route.label}</Badge>
+                      </td>
+                      <td data-label="主路由模型">
+                        <strong className="admin-mono model-catalog-model">{route.model}</strong>
+                        <span className="admin-cell-sub">
+                          {route.source === 'config' ? '来自环境变量' : '代码里定死'}
+                          {route.inCatalog ? '' : ' · 上游目录里没有这一行'}
+                        </span>
+                      </td>
+                      <td data-label="平台">{route.platformLabel}</td>
+                      <td data-label="上游单价">
+                        {route.price ? route.price.text : '—'}
+                        {route.price?.note ? <span className="admin-cell-sub">{route.price.note}</span> : null}
+                      </td>
+                      <td data-label="用在哪">
+                        <span className="admin-cell-sub">{route.usedBy.join(' · ')}</span>
+                        <span className="admin-cell-sub">同能力另有 {route.referenceCount} 个仅参考</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <UpstreamBalanceCard />
 
           {data.notes.length ? (
             <section className="admin-card admin-note">
@@ -121,6 +175,7 @@ export default function ModelCatalogSection() {
                     <tr>
                       <th>模型</th>
                       <th>能力</th>
+                      <th>路由</th>
                       <th>平台来源与上游单价</th>
                       <th>接入状态</th>
                     </tr>
@@ -133,6 +188,11 @@ export default function ModelCatalogSection() {
                         </td>
                         <td data-label="能力">
                           <Badge tone="neutral">{CAPABILITY_LABELS[row.capability]}</Badge>
+                        </td>
+                        <td data-label="路由">
+                          <Badge tone={row.route === 'primary' ? 'ok' : 'neutral'}>
+                            {row.route === 'primary' ? '主路由' : '仅参考'}
+                          </Badge>
                         </td>
                         <td data-label="平台来源与上游单价">
                           <div className={'model-offers' + (row.offers.length > 1 ? ' model-offers--dual' : '')}>

@@ -9,6 +9,7 @@
 // 3. 价格是上游标价，不替平台加价，也不把阶梯价压成一个假装精确的数字：
 //    有阶梯就在 note 里写清按哪一档折算。
 import { keyMaterial, listKeys } from './keyvault.mjs'
+import { rowRoute, routeSummary } from './model-routes.mjs'
 
 export const CATALOG_TTL_MS = 10 * 60 * 1000
 const GETE_PRICING_URL = 'https://www.geteapi.com/api/pricing'
@@ -491,7 +492,11 @@ function buildCatalog(raw, keys) {
     })
   }
 
-  const rows = mergeCatalog(entries, routability(keys))
+  // 每行带上「主路由 / 仅参考」身份：一条能力只留一条主路由，其余只做参考（见 model-routes.mjs）
+  const rows = mergeCatalog(entries, routability(keys)).map((row) => ({
+    ...row,
+    route: rowRoute(row.capability, row.model),
+  }))
   const geteNote = geteConnected
     ? raw.geteModels
       ? '已连接；模型清单同时参考公开价目表与 /v1/models。'
@@ -535,12 +540,22 @@ function buildCatalog(raw, keys) {
   if (rows.length && !rows.some((row) => row.routable)) {
     notes.push('池里没有 Key 同时声明这些模型与能力，接入状态全部为「仅参考」。')
   }
+  const summary = routeSummary(rows)
+  if (summary.referenceCount > 0) {
+    notes.push(
+      '统一路由：文本 / 视觉 / 出图 / 出视频各只有一条主路由在用，其余 ' +
+        summary.referenceCount +
+        ' 个模型降为「仅参考」——不进选择器、不做默认，价格仍列在这里备查。',
+    )
+  }
   if (!rows.length) notes.push('两个上游都没有返回可用模型。')
 
   return {
     ok: rows.length > 0,
     fetchedAt: new Date(raw.at).toISOString(),
     platforms,
+    // 统一路由表：哪条能力用哪一条、价格多少、还有多少模型降成了仅参考
+    routes: routeSummary(rows),
     rows,
     notes,
   }

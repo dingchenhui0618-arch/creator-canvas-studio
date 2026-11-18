@@ -5003,6 +5003,20 @@ gzip_types text/css application/javascript application/json image/svg+xml;
 
 边界：只动前端入口与页面结构，没动 `server/routes/media-gen.mjs` 与计费；方式页签切走不保留上次提示词；面板里的模型行是只读的（一条能力只走一条路由）。
 
+## 二百六十七、上游余额按渠道列清 + 统一路由（2026-11-18，0.9.188）
+
+后台「模型与上游」原来只有 63 个模型的价目，看不到「各家还剩多少钱」。这轮补上余额，并把模型收成一条能力一条主路由。
+
+**余额读不到的地方先查清**：只读探测（不生成、不花钱）发现 GeteAPI 是 New API 底座，`/v1/dashboard/billing/subscription` 回 200 但 `hard_limit_usd` 是 `100000000` 占位值、`credit_grants` 404，**中转 Key 读不到余额**；SeeAPI / CGCM 的余额接口全 404。要真实数只能拿 GeteAPI 账号访问令牌打 `/api/user/self`，用 `quota ÷ quota_per_unit`（本站 500000）换算。另一个坑：直接拿 `model-keys.json` 的 `apiKey` 请求会 401，因为存的是密文（`.model-keys.secret` 解密），`keyMaterial(id)` 返回的是对象不是字符串。
+
+新增 `server/upstream-balance.mjs`（`DATA_DIR/upstream-balance.json`，0600）与三个路由：`GET /api/admin/upstream-balance`、`PUT …/channel`（令牌 / 用户 ID / 阈值 / 手动金额）、`POST …/check`（真打上游再回话）。令牌只回 `hasToken` 与末四位；令牌留空 = 沿用旧令牌，`clearToken` 才清；余额缓存 10 分钟，失败只记错误不抛。三态 `low / ok / unknown`，低于阈值整行金额标红。
+
+新增 `server/model-routes.mjs`：文本 / 视觉走环境变量里的 DeepSeek，出图只走 GeteAPI `gpt-image-2`，出视频只走 SeeAPI `seedance-2.0`；模型目录每行带 `route: primary | reference`，后台表格多一列「路由」，另加一张「统一路由」卡（主路由价格 + 同能力还有多少个仅参考）。当前实测 57 个模型降为仅参考。出图 / 出视频代码本来就各自只认一个型号，这次是把后台与管理口径对齐，没有把线上切到别的模型。
+
+测试 `test/upstream-balance.test.mjs` 8 条 + `test/model-routes.test.mjs` 3 条（含 New API 真读一遍、401 说人话、令牌不出服务端）。截图 `docs/upstream-balance-1440.png`、`docs/upstream-balance-card-1440.png`、`docs/upstream-balance-390.png`，细节见 `docs/upstream-balance-and-routing-2026-11-18.md`。
+
+边界：还没有真实余额数字 —— GeteAPI 控制台要账号登录才能生成访问令牌，等用户配合一次；在那之前界面显示「未核对」。`New-Api-User` 是否必需取决于站点版本，代码里可选、401 时界面提示去填。SeeAPI / CGCM 永远只能手动登记。余额是账号余额，不是单把 Key 的额度。
+
 ## 协作约定：真实上游调用要用户点头（2026-11-18 起）
 
 用户明确要求：**真实调用（生图、生视频、文本、检索等任何打上游的请求）只能由用户在用户端自己发起；助手不经过用户逐次同意不得自动发起。** 只读的余额 / 健康查询不受此限，但也要先说清在查什么。之前那些「为验收而真调一次」的轮次不再复现：以后验收走本地假通道、临时实例与单测，需要真调时必须先问。

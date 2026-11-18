@@ -22,11 +22,36 @@ export type ModelCatalogOffer = {
   connected: boolean
 }
 
+export type ModelRouteRole = 'primary' | 'reference' | 'other'
+
 export type ModelCatalogRow = {
   model: string
   capability: 'image' | 'video' | 'text' | 'unknown'
   offers: ModelCatalogOffer[]
   routable: boolean
+  /** 统一路由下这一行的身份：主路由在用 / 仅参考 / 能力对不上 */
+  route: ModelRouteRole
+}
+
+/** 一条能力唯一在用的那条路由（服务端 model-routes.mjs 是唯一真源）。 */
+export type ModelRouteRow = {
+  capability: 'text' | 'vision' | 'image' | 'video'
+  label: string
+  platform: string
+  platformLabel: string
+  model: string
+  source: 'config' | 'fixed'
+  usedBy: string[]
+  note: string
+  inCatalog: boolean
+  price: ModelCatalogPrice | null
+  referenceCount: number
+}
+
+export type ModelRouteSummary = {
+  routes: ModelRouteRow[]
+  referenceCount: number
+  primaryCount: number
 }
 
 export type ModelCatalogPlatform = {
@@ -42,6 +67,8 @@ export type ModelCatalogResponse = {
   ok: boolean
   fetchedAt: string
   platforms: ModelCatalogPlatform[]
+  /** 统一路由：每条能力一条主路由，其余都降为仅参考 */
+  routes: ModelRouteSummary
   rows: ModelCatalogRow[]
   notes: string[]
 }

@@ -18,6 +18,7 @@ import { AGENT_TOOLS } from '../agents.mjs'
 import { lastWebRead, readWebPage } from '../webread.mjs'
 import { listKeys, createKey, updateKey, deleteKey, testKey, listRoutes, previewRoute, vaultModels, PROVIDER_PRESETS, CAPABILITIES } from '../keyvault.mjs'
 import { getModelCatalog } from '../model-catalog.mjs'
+import { balanceView, checkBalanceChannel, saveBalanceChannel } from '../upstream-balance.mjs'
 import { gatewayReadiness, gatewayStatus, modelCoverage } from '../gateway.mjs'
 import { canvasAdminConfigured, listCanvasUsers, setCanvasUserAccess } from '../canvas-admin.mjs'
 import { alertCounts, ackAlert, checkDisk, flushAlertDeliveries, listAlerts, listOutbox, outboxStats, parseAlertStatus, recordAlert, retryOutboxItem, unackAlert } from '../alerts.mjs'
@@ -401,6 +402,69 @@ export function createAdminRouter() {
         } catch (error) {
           sendJson(res, 502, { ok: false, error: error?.message || '上游模型目录读取失败', code: error?.code })
         }
+        return true
+      }
+
+// ── 上游渠道余额 ──────────────────────────────────────────────
+      // 按渠道列清楚各家还剩多少钱，低于阈值标红。GeteAPI（New API）用账号访问令牌读，
+      // SeeAPI 没有余额接口只能手动登记 —— 两种来源在界面上分开写，不混成一个「实时」。
+      // 令牌是凭证：这里只回掩码与「有没有」，明文不出服务端。
+      if (pathname === '/api/admin/upstream-balance' && req.method === 'GET') {
+        sendJson(res, 200, await balanceView({ ensureFresh: true }))
+        return true
+      }
+
+      if (pathname === '/api/admin/upstream-balance/channel' && req.method === 'PUT') {
+        const body = await readBody(req)
+        const saved = await saveBalanceChannel(
+          String(body.channelId || ''),
+          {
+            accessToken: body.accessToken,
+            newApiUser: body.newApiUser,
+            threshold: body.threshold,
+            manualAmount: body.manualAmount,
+            currency: body.currency,
+            clearToken: body.clearToken === true,
+          },
+          { by: user.email },
+        )
+        if (!saved.ok) {
+          sendJson(res, 400, { ok: false, error: saved.error })
+          return true
+        }
+        recordAudit({
+          req,
+          actor: user,
+          action: 'upstream.balance.save',
+          targetType: 'upstream',
+          targetId: saved.channel.id,
+          targetLabel: saved.channel.label,
+          detail: {
+            threshold: saved.channel.threshold,
+            manualAmount: saved.channel.manualAmount,
+            tokenKept: saved.tokenKept,
+            hasToken: saved.channel.hasToken,
+          },
+        })
+        sendJson(res, 200, { ok: true, channel: saved.channel, tokenKept: saved.tokenKept })
+        return true
+      }
+
+      // 立刻核对一次：真打上游账号接口，把结果落盘再回话，不假装成功。
+      if (pathname === '/api/admin/upstream-balance/check' && req.method === 'POST') {
+        const body = await readBody(req)
+        const id = String(body.channelId || '')
+        const result = await checkBalanceChannel(id, { by: user.email })
+        recordAudit({
+          req,
+          actor: user,
+          action: 'upstream.balance.check',
+          targetType: 'upstream',
+          targetId: id,
+          targetLabel: result.channel?.label || id,
+          detail: { ok: result.ok, amount: result.channel?.amount ?? null, error: result.error || '' },
+        })
+        sendJson(res, result.ok ? 200 : 502, { ...result, channels: (await balanceView()).channels })
         return true
       }
 

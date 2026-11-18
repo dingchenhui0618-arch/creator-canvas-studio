@@ -2145,3 +2145,61 @@
     gap: 8px;
   }
 }
+/* 上游渠道余额（v0.9.188）：按渠道列清「还剩多少钱」，低于阈值标红。
+   金额是主角、阈值是配角；来源（自动读取 / 手动登记）必须写在行里，
+   否则会把「上周手填的数」当成实时余额看。 */
+.balance-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.balance-table .balance-amount {
+  display: block;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+.balance-table .balance-amount.is-low {
+  color: var(--danger);
+}
+.balance-error {
+  display: block;
+  margin-top: 4px;
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.balance-notice {
+  margin: 8px 0 0;
+}
+.balance-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.balance-editor {
+  margin-top: 16px;
+  padding: 16px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.balance-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px 16px;
+  margin-top: 8px;
+}
+.balance-form-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+.route-table .model-catalog-model {
+  font-size: 13px;
+}
+@media (max-width: 560px) {
+  .balance-table td[data-label='操作'] .balance-actions {
+    margin-top: 4px;
+  }
+}
