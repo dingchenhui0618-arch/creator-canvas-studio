@@ -19,6 +19,8 @@ function summary(data: FlowNodeData): string {
       return data.config.expression ?? '未设置表达式'
     case 'image':
       return (data.config.ratio || '9:16') + ' · ' + (data.config.model ? '已选模型' : '默认模型')
+    case 'video':
+      return (data.config.ratio || '9:16') + ' · ' + (data.config.duration ?? 4) + ' 秒 · ' + (data.config.resolution || '720p')
     case 'review':
       return ({ brand: '品牌一致性', composition: '构图与主体', copy: '文案与卖点', a11y: '可读性与无障碍' } as Record<string, string>)[data.config.profile || 'brand'] || '品牌一致性'
     case 'output':
@@ -64,12 +66,13 @@ export function FlowNodeCard({ data, selected, isConnectable }: NodeProps<Node<F
       </div>
       <p className="cv-node-desc">{data.description || meta.hint}</p>
 
-      {/* 出图节点跑完就直接把图贴在卡片上：不用点开抽屉才知道画成了什么样 */}
+      {/* 出图 / 出视频节点跑完就直接把结果贴在卡片上：不用点开抽屉才知道画成了什么样 */}
       {data.imageUrl ? <img className="cv-node-thumb" src={data.imageUrl} alt="出图结果" loading="lazy" /> : null}
+      {data.videoUrl ? <video className="cv-node-thumb" src={data.videoUrl} muted playsInline preload="metadata" aria-label="出视频结果" /> : null}
 
       <div className="cv-node-foot">
         <span className="cv-node-summary" title={summary(data)}>{summary(data)}</span>
-        <span className="cv-node-ms">{data.ms !== undefined ? data.ms + 'ms' : '—'}</span>
+        <span className="cv-node-ms">{status === 'running' && data.progress ? data.progress : data.ms !== undefined ? data.ms + 'ms' : '—'}</span>
       </div>
 
       {meta.sources.map((handle, index) => (

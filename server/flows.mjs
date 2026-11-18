@@ -12,13 +12,15 @@ import { preferenceModel } from './preferences.mjs'
 import { outstandingCharge, refund } from './credits.mjs'
 import { currentInstanceId, liveInstanceIds } from './instances.mjs'
 import { FLOW_IMAGE_DEFAULT_RATIO, FLOW_IMAGE_RATIOS, runImageGeneration } from './flow-image.mjs'
+import { FLOW_VIDEO_DEFAULT_DURATION, FLOW_VIDEO_DEFAULT_RATIO, FLOW_VIDEO_DEFAULT_RESOLUTION, runVideoGeneration } from './flow-video.mjs'
+import { VIDEO_DURATIONS, VIDEO_RATIOS, VIDEO_RESOLUTIONS } from './media-models.mjs'
 
 // 工作流流程：存储（data/flows.json）+ 运行记录（data/runs.json）+ 拓扑执行引擎。
 // 原子写范式与 server/templates.mjs 一致：先写 .tmp，再 rename 覆盖。
 
-// image = 真出一张图（扣积分、失败退款、产物落进这次运行目录）；review = 看一张图给结论。
-// 这两个是「工作流能出东西」的关键：输入 → 大模型 → 出图 → 评审 → 输出，一条跑完就能拿去用。
-export const NODE_KINDS = ['input', 'llm', 'kb', 'tool', 'condition', 'output', 'image', 'review']
+// image = 真出一张图；video = 真出一段视频（异步任务 + 节点内轮询，每轮推进度）；review = 看一张图给结论。
+// 这三个是「工作流能出东西」的关键：输入 → 大模型 → 出图 / 出视频 → 评审 → 输出，一条跑完就能拿去用。
+export const NODE_KINDS = ['input', 'llm', 'kb', 'tool', 'condition', 'output', 'image', 'video', 'review']
 
 export const TOOLS = [
   { id: 'templates.stats', label: '模板库统计', detail: '读取模板库总数与内容类型分布' },
@@ -49,6 +51,7 @@ const DEFAULT_TITLES = {
   condition: '条件分支',
   output: '流程输出',
   image: '出图',
+  video: '出视频',
   review: '视觉评审',
 }
 
@@ -74,6 +77,9 @@ function defaultConfig(kind) {
     case 'image':
       // 模型留空 = 跟随平台统一路由（出图主路由），不把模型 id 写死进流程数据
       return { model: '', ratio: FLOW_IMAGE_DEFAULT_RATIO, prompt: '' }
+    case 'video':
+      // 与出图同一套口径：模型留空 = 跟随平台统一路由，不把模型 id 写死进流程数据
+      return { model: '', ratio: FLOW_VIDEO_DEFAULT_RATIO, duration: FLOW_VIDEO_DEFAULT_DURATION, resolution: FLOW_VIDEO_DEFAULT_RESOLUTION, prompt: '' }
     case 'review':
       return { profile: 'brand', image: '' }
     default:
@@ -140,6 +146,14 @@ function normalizeConfig(kind, raw) {
       return {
         model: trimText(source.model, 80),
         ratio: FLOW_IMAGE_RATIOS.includes(source.ratio) ? source.ratio : FLOW_IMAGE_DEFAULT_RATIO,
+        prompt: clip(source.prompt ?? '', 4000),
+      }
+    case 'video':
+      return {
+        model: trimText(source.model, 80),
+        ratio: VIDEO_RATIOS.includes(source.ratio) ? source.ratio : FLOW_VIDEO_DEFAULT_RATIO,
+        duration: VIDEO_DURATIONS.includes(Number(source.duration)) ? Number(source.duration) : FLOW_VIDEO_DEFAULT_DURATION,
+        resolution: VIDEO_RESOLUTIONS.includes(source.resolution) ? source.resolution : FLOW_VIDEO_DEFAULT_RESOLUTION,
         prompt: clip(source.prompt ?? '', 4000),
       }
     case 'review':
@@ -473,9 +487,10 @@ export function runSummary(run) {
     canceled: Boolean(run.canceled),
     failed: (Array.isArray(run.nodes) ? run.nodes : []).filter((node) => node.status === 'error').length,
     error: run.error || '',
-    // 出图节点另按张扣费，不在 credits.cost 里：单独给一个数，页面才能把「这次运行花了多少」说全
+    // 出图 / 出视频节点另按张、按条扣费，不在 credits.cost 里：分开给数，页面才能把「这次运行花了多少」说全
     imageCredits: imageCreditsOf(run),
-    spentTotal: (run.credits?.refunded ? 0 : Number(run.credits?.cost) || 0) + imageCreditsOf(run),
+    videoCredits: videoCreditsOf(run),
+    spentTotal: (run.credits?.refunded ? 0 : Number(run.credits?.cost) || 0) + imageCreditsOf(run) + videoCreditsOf(run),
     credits: run.credits ? {
       cost: Number(run.credits.cost) || 0,
       refunded: Boolean(run.credits.refunded),
@@ -512,20 +527,30 @@ export async function listRunsByFlows(flowIds = [], { limit = 20, all = false } 
         : (run.credits.refunded ? 0 : Math.max(0, Number(run.credits.cost) || 0))
       if (spent > 0) creditsByFlow[run.flowId] = (creditsByFlow[run.flowId] || 0) + spent
     }
-    // 出图那几张是真花掉的（失败的那张在 charge 时已经退回），和运行本身的扣费加在一起算
-    const images = imageCreditsOf(run)
-    if (images > 0) creditsByFlow[run.flowId] = (creditsByFlow[run.flowId] || 0) + images
+    // 出图 / 出视频那几条是真花掉的（失败的在 charge 时已经退回），和运行本身的扣费加在一起算
+    const media = imageCreditsOf(run) + videoCreditsOf(run)
+    if (media > 0) creditsByFlow[run.flowId] = (creditsByFlow[run.flowId] || 0) + media
   }
   // all：花费明细要每一笔（作品页的运行归集只取前 20 条摘要），页面摘要仍按 limit 封顶
   return { items: (all ? list : list.slice(0, count)).map(runSummary), total: list.length, byFlow, creditsByFlow }
 }
 
-/** 一次运行里出图节点真花掉的积分：只算画成了的那几张（失败的那张已经退回）。 */
-function imageCreditsOf(run) {
-  if (Number.isFinite(Number(run?.imageCredits)) && run.imageCredits !== undefined) return Math.max(0, Number(run.imageCredits) || 0)
+/** 一次运行里某一类生成节点真花掉的积分：只算成功的那几条（失败 / 超时的已经退回）。 */
+function mediaCreditsOf(run, kind, settled) {
+  if (Number.isFinite(Number(settled)) && settled !== undefined) return Math.max(0, Number(settled) || 0)
   return (Array.isArray(run?.nodes) ? run.nodes : []).reduce((sum, node) => (
-    node?.kind === 'image' && node?.status === 'success' ? sum + Math.max(0, Number(node.output?.credits) || 0) : sum
+    node?.kind === kind && node?.status === 'success' ? sum + Math.max(0, Number(node.output?.credits) || 0) : sum
   ), 0)
+}
+
+/** 出图节点真花掉的积分（老运行只看节点输出，兼容没有 imageCredits 字段的记录）。 */
+function imageCreditsOf(run) {
+  return mediaCreditsOf(run, 'image', run?.imageCredits)
+}
+
+/** 出视频节点真花掉的积分：与出图同一套口径，运行记录里单独一项。 */
+function videoCreditsOf(run) {
+  return mediaCreditsOf(run, 'video', run?.videoCredits)
 }
 
 // ---------- 拓扑与执行 ----------
@@ -800,7 +825,8 @@ function collectContext(incomingEdges, results, nodesById) {
     if (!sourceResult || !sourceResult.output) continue
     const text = typeof sourceResult.output.text === 'string' ? sourceResult.output.text : ''
     const node = nodesById.get(edge.source)
-    // 出图节点的产物是文件不是文字：把地址一起带下去，评审节点才能直接看这张图
+    // 出图 / 出视频节点的产物是文件不是文字：把地址一起带下去，
+    // 评审节点才能直接看这张图，输出节点才能把视频放进最终产物。
     values.push({
       nodeId: edge.source,
       title: node?.data?.title || edge.source,
@@ -808,6 +834,8 @@ function collectContext(incomingEdges, results, nodesById) {
       text,
       imagePath: typeof sourceResult.output.imagePath === 'string' ? sourceResult.output.imagePath : '',
       imageUrl: typeof sourceResult.output.imageUrl === 'string' ? sourceResult.output.imageUrl : '',
+      videoPath: typeof sourceResult.output.videoPath === 'string' ? sourceResult.output.videoPath : '',
+      videoUrl: typeof sourceResult.output.videoUrl === 'string' ? sourceResult.output.videoUrl : '',
     })
     if (!text) continue
     const handle = edge.targetHandle || 'in'
@@ -816,6 +844,7 @@ function collectContext(incomingEdges, results, nodesById) {
     else promptParts.push(text)
   }
   const withImage = values.find((item) => item.imagePath)
+  const withVideo = values.find((item) => item.videoPath)
   return {
     values,
     prompt: promptParts.join('\n\n'),
@@ -825,6 +854,8 @@ function collectContext(incomingEdges, results, nodesById) {
     // 上游最近一张出图（相对 DATA_DIR 的路径）：评审节点没填图片时就用它
     imagePath: withImage?.imagePath || '',
     imageUrl: withImage?.imageUrl || '',
+    videoPath: withVideo?.videoPath || '',
+    videoUrl: withVideo?.videoUrl || '',
   }
 }
 
@@ -927,6 +958,30 @@ async function runImage(node, ctx = {}) {
   })
 }
 
+/**
+ * 出视频节点：建任务、轮询到出片，产物落进这次运行目录。
+ * 提示词与出图同一个规矩：节点上填了用填的，留空用上游文本（大模型写完的分镜描述）。
+ * 轮询每轮推一条进度给运行流——三分钟的画面里页面不能只是转圈，服务端连接也靠它保活。
+ */
+async function runVideo(node, ctx = {}) {
+  const cfg = node.data.config
+  const prompt = trimText(cfg.prompt, 4000) || trimText(ctx.prompt, 2000) || trimText(ctx.text, 2000)
+  if (!prompt) throw new Error('出视频节点没有提示词：在检查器里填写，或把上游文本接到它上面')
+  if (!ctx.ownerId) throw new Error('出视频需要登录账号：这次运行没有归属账号，不能扣费也不产出')
+  return runVideoGeneration({
+    ownerId: ctx.ownerId,
+    runId: ctx.runId,
+    nodeId: node.id,
+    prompt,
+    ratio: cfg.ratio,
+    duration: cfg.duration,
+    resolution: cfg.resolution,
+    model: cfg.model,
+    signal: ctx.signal || null,
+    onProgress: ctx.onProgress || null,
+  })
+}
+
 async function runKb(node, ctx) {
   const cfg = node.data.config
   const keyword = trimText(cfg.keyword, 120) || trimText(ctx.text, 60)
@@ -975,13 +1030,18 @@ function runOutput(ctx) {
     ? parts.map((item) => '### ' + item.title + '\n' + item.text).join('\n\n')
     : '（上游没有可汇总的文本输出）'
   const images = ctx.values.filter((item) => item.imageUrl)
+  const videos = ctx.values.filter((item) => item.videoUrl)
   const lines = [text]
-  // 出图不是文字：最终输出里要把「这次画了哪几张」写清楚，否则用户拿到的是一段话、图在哪还得自己找
+  // 出图 / 出视频不是文字：最终输出里要把「这次画了哪几张、出了哪几段」写清楚，
+  // 否则用户拿到的是一段话，产物在哪还得自己找
   for (const item of images) lines.push('### 图片 · ' + item.title + '\n' + item.imageUrl)
+  for (const item of videos) lines.push('### 视频 · ' + item.title + '\n' + item.videoUrl)
   return {
     text: clip(lines.join('\n\n')),
     imageCount: images.length,
     images: images.map((item) => ({ nodeId: item.nodeId, title: item.title, url: item.imageUrl, path: item.imagePath })),
+    videoCount: videos.length,
+    videos: videos.map((item) => ({ nodeId: item.nodeId, title: item.title, url: item.videoUrl, path: item.videoPath })),
     sources: ctx.values.map((item) => ({ nodeId: item.nodeId, title: item.title, kind: item.kind })),
   }
 }
@@ -1002,6 +1062,8 @@ async function executeNode(node, ctx) {
       return { status: 'success', output: runOutput(ctx) }
     case 'image':
       return { status: 'success', output: await runImage(node, ctx) }
+    case 'video':
+      return { status: 'success', output: await runVideo(node, ctx) }
     case 'review':
       return { status: 'success', output: await runReview(node, ctx) }
     default:
@@ -1369,6 +1431,9 @@ export async function runFlow(flow, { onEvent, credits = null, runId = '', resum
         ownerId: flow.ownerId || '',
         runId: run.id,
         signal: stopController.signal,
+        // 长耗时节点（出视频）靠它把「已等多久、上游进度多少」推给页面；
+        // 顺带把流式连接保持活跃，不让 nginx 的读超时把一次正常出片掐断。
+        onProgress: (payload) => emit({ type: 'node-progress', nodeId: node.id, ...(payload || {}) }),
       }
       const executed = await executeNode(node, ctx)
       result = {
@@ -1436,9 +1501,10 @@ export async function runFlow(flow, { onEvent, credits = null, runId = '', resum
   }
   run.finishedAt = new Date().toISOString()
   run.durationMs = Date.now() - startedAt
-  // 出图节点每张另扣一次积分：记在运行上，运行抽屉与作品页才能报出完整花费
+  // 出图 / 出视频节点另扣一次积分：记在运行上，运行抽屉与作品页才能报出完整花费
   run.imageCredits = imageCreditsOf(run)
-  run.spentTotal = (run.credits?.refunded ? 0 : Number(run.credits?.cost) || 0) + run.imageCredits
+  run.videoCredits = videoCreditsOf(run)
+  run.spentTotal = (run.credits?.refunded ? 0 : Number(run.credits?.cost) || 0) + run.imageCredits + run.videoCredits
   const outputResults = run.nodes.filter((item) => item.kind === 'output' && item.output)
   const lastWithText = [...run.nodes].reverse().find((item) => item.output && typeof item.output.text === 'string' && item.output.text)
   run.output = outputResults.length

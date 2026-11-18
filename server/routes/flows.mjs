@@ -33,7 +33,8 @@ import { admitWaiting, capacityFor, queueView, watchClientGone } from '../waterl
 import { publicError } from '../public-error.mjs'
 import { buildRunCompare, buildRunOutputDiff, compareSideOf } from '../run-compare.mjs'
 import { imageNodeOptions, runAssetPath } from '../flow-image.mjs'
-import { sendAuthImage } from '../image-response.mjs'
+import { videoNodeOptions } from '../flow-video.mjs'
+import { sendAuthMedia } from '../image-response.mjs'
 
 // /api/flows 与 /api/runs 共用一个 router：
 // index.mjs 会按 prefix + extraPrefixes 分发，因此两个前缀都进到这里。
@@ -161,8 +162,14 @@ export function createFlowsRouter() {
 
       // 节点类型与工具的元信息，前端 inspector 用它渲染下拉框
       if (pathname === '/api/flows/meta' && req.method === 'GET') {
-        // image：出图节点能选哪些模型、哪几种比例、每张多少积分——界面不写死任何一个数
-        sendJson(res, 200, { nodeKinds: NODE_KINDS, tools: TOOLS, reviewProfiles: REVIEW_PROFILES, image: imageNodeOptions() })
+        // image / video：节点能选哪些模型、什么比例 / 时长 / 清晰度、各自多少积分——界面不写死任何一个数
+        sendJson(res, 200, {
+          nodeKinds: NODE_KINDS,
+          tools: TOOLS,
+          reviewProfiles: REVIEW_PROFILES,
+          image: imageNodeOptions(),
+          video: videoNodeOptions(),
+        })
         return true
       }
 
@@ -236,11 +243,17 @@ export function createFlowsRouter() {
           return true
         }
         const ext = file.split('.').pop().toLowerCase()
-        const type = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : ext === 'gif' ? 'image/gif' : 'image/jpeg'
+        const type = ext === 'png' ? 'image/png'
+          : ext === 'webp' ? 'image/webp'
+            : ext === 'gif' ? 'image/gif'
+              : ext === 'mp4' ? 'video/mp4'
+                : ext === 'webm' ? 'video/webm'
+                  : ext === 'mov' ? 'video/quicktime'
+                    : 'image/jpeg'
         // 与帧图 / 上传图同一套缓存头（private + no-cache + ETag）：退出登录或换账号后
-        // 浏览器不会把别人的图从本地缓存里再画出来。
-        if (!(await sendAuthImage(req, res, file, type))) {
-          notFound(res, '这次运行没有这张图')
+        // 浏览器不会把别人的图从本地缓存里再画出来。视频另需 Range（拖动进度条 / 边下边播）。
+        if (!(await sendAuthMedia(req, res, file, type))) {
+          notFound(res, '这次运行没有这个产物')
         }
         return true
       }

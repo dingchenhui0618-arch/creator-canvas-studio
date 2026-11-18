@@ -83,7 +83,10 @@ function cleanSummary(text) {
 function runSummaryText(run) {
   const nodes = Array.isArray(run.nodes) ? run.nodes : []
   // 有出图节点时，用那张图的说明做摘要：比输出节点汇总的 markdown 更像人话
-  const cover = [...nodes].reverse().find((node) => node?.output && typeof node.output.imageUrl === 'string' && node.output.imageUrl)
+  const cover = [...nodes].reverse().find((node) => node?.output && (
+    (typeof node.output.imageUrl === 'string' && node.output.imageUrl) ||
+    (typeof node.output.videoUrl === 'string' && node.output.videoUrl)
+  ))
   if (cover?.output?.text) {
     const text = cleanSummary(cover.output.text)
     if (text) return text
@@ -95,27 +98,33 @@ function runSummaryText(run) {
   return ''
 }
 
-// 工作流里的出图节点：这条运行真画出来的第一张图，就是这张作品卡的封面。
+// 工作流里的生成节点：这张作品卡的封面优先用真画出来的那张图，没有图再用出的那段视频。
 // 只认服务端给的自有地址（/api/runs/<id>/assets/...），不做任何跨站直连。
 function runCover(run) {
   const nodes = Array.isArray(run.nodes) ? run.nodes : []
+  let video = null
   for (const node of nodes) {
     const output = node?.output
-    if (output && typeof output.imageUrl === 'string' && output.imageUrl.startsWith('/api/runs/')) return output
+    if (!output) continue
+    if (typeof output.imageUrl === 'string' && output.imageUrl.startsWith('/api/runs/')) return { output, kind: 'image' }
+    if (!video && typeof output.videoUrl === 'string' && output.videoUrl.startsWith('/api/runs/')) video = output
   }
-  return null
+  return video ? { output: video, kind: 'video' } : null
 }
 
 async function runItems(user) {
   const { items } = await listRuns({ ownerId: user.id, limit: 50 })
   return items.map((run) => {
     const cover = runCover(run)
+    const coverOutput = cover ? cover.output : null
     return {
     id: 'run:' + run.id,
     kind: 'run',
     title: String(run.flowName || '一次工作流运行').slice(0, 42),
-    aspect: cover ? (String(cover.ratio || '') || '1:1') : 'unknown',
-    thumbUrl: cover ? cover.imageUrl : null,
+    aspect: coverOutput ? (String(coverOutput.ratio || '') || '1:1') : 'unknown',
+    // 封面是图还是视频：卡片用不同的元素画（视频出第一帧，点击进运行只读视图）
+    mediaKind: cover ? cover.kind : '',
+    thumbUrl: coverOutput ? (cover.kind === 'video' ? coverOutput.videoUrl : coverOutput.imageUrl) : null,
     previewUrl: null,
     at: Date.parse(run.finishedAt || run.startedAt) || Date.parse(run.createdAt || '') || 0,
     source: '工作流',

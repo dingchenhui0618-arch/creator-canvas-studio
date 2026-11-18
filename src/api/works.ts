@@ -10,6 +10,8 @@ export type WorkItem = {
   aspect: string
   thumbUrl: string | null
   previewUrl: string | null
+  /** 工作流运行卡上的封面是图还是视频（视频用 <video preload=metadata> 出第一帧） */
+  mediaKind?: '' | 'image' | 'video'
   at: number
   source: string
   detailUrl: string

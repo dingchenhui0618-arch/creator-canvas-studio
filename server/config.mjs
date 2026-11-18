@@ -118,6 +118,13 @@ export const config = {
     videoTimeoutMs: Number(process.env.VQ_GATEWAY_VIDEO_TIMEOUT_MS || 60000),
     publicBaseUrl: (process.env.VQ_PUBLIC_BASE_URL || 'https://visionqa.wavisionai.cn').trim().replace(/\/+$/, ''),
   },
+  // 工作流出视频节点（v0.9.200）：视频是异步任务，节点内轮询到出片为止。
+  // 上限 12 分钟：生产实测 8 秒 720p 一条 185~317 秒，留足排队；超时按失败全额退，
+  // 不换任务重跑（换一次就是再花一次钱）。轮询间隔 4 秒，且每次都推一条进度给页面。
+  flow: {
+    videoTimeoutMs: numEnv(process.env.VQ_FLOW_VIDEO_TIMEOUT_MS, 12 * 60 * 1000),
+    videoPollMs: numEnv(process.env.VQ_FLOW_VIDEO_POLL_MS, 4000),
+  },
   limits: {
     maxVideoMb: Number(process.env.MAX_VIDEO_MB || 160),
     maxFrames: Number(process.env.MAX_FRAMES || 18),

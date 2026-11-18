@@ -61,6 +61,7 @@ const nodeTypes = {
   tool: FlowNodeCard,
   condition: FlowNodeCard,
   image: FlowNodeCard,
+  video: FlowNodeCard,
   review: FlowNodeCard,
   output: FlowNodeCard,
 }
@@ -191,8 +192,9 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
   const [historyCount, setHistoryCount] = useState(0)
   const [futureCount, setFutureCount] = useState(0)
   // 工作流运行按次扣积分：运行前就把单价和余额摆出来，402 时不用去猜
-  // imagePrice = 出图节点每张多少积分：有出图节点时运行前要把它加上去，不能只报 flow_run 的价
-  const [runCredit, setRunCredit] = useState<{ price: number; imagePrice: number; balance: number | null } | null>(null)
+  // imagePrice / videoPrice = 出图每张、出视频每条多少积分：
+  // 有生成节点时运行前要把它加上去，不能只报 flow_run 的价（用户会以为花 2、实际被扣 22）
+  const [runCredit, setRunCredit] = useState<{ price: number; imagePrice: number; videoPrice: number; balance: number | null } | null>(null)
   // 运行的排队位（v0.9.96）：名额满时这一单先进整机的队，等的时候顶栏显示「第几位 · 已等几秒」。
   // 票号是这次运行的凭据：页面自己生成，服务端按它查名次；排到之后 waitedMs 记下来给运行结论用。
   const [runQueue, setRunQueue] = useState<{ position: number; waitedMs: number; waiting: number; waitMs: number } | null>(null)
@@ -249,7 +251,12 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
 
   const refreshRunCredit = useCallback(() => {
     void getCredits(1)
-      .then((data) => setRunCredit({ price: Number(data.prices.flow_run) || 0, imagePrice: Number(data.prices.image_gen) || 0, balance: data.balance }))
+      .then((data) => setRunCredit({
+        price: Number(data.prices.flow_run) || 0,
+        imagePrice: Number(data.prices.image_gen) || 0,
+        videoPrice: Number(data.prices.video_gen) || 0,
+        balance: data.balance,
+      }))
       .catch(() => setRunCredit(null))
   }, [])
 
@@ -257,12 +264,25 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
     refreshRunCredit()
   }, [refreshRunCredit])
 
-  // 运行前把钱说全：工作流本身按次扣一次，出图节点每跑一张再扣一张。
-  // 只报 flow_run 的价，用户会以为自己花 2 积分、实际被扣 12——这个提示必须现在就给。
+  // 运行前把钱说全：工作流本身按次扣一次，出图每张、出视频每条再各扣一次。
+  // 只报 flow_run 的价，用户会以为自己花 2 积分、实际被扣 22——这个提示必须现在就给。
   const imageNodeCount = nodes.filter((node) => node.data.kind === 'image').length
+  const videoNodeCount = nodes.filter((node) => node.data.kind === 'video').length
   const imageRunCost = imageNodeCount * (runCredit?.imagePrice ?? 0)
-  const runTotalCost = (runCredit?.price ?? 0) + imageRunCost
+  const videoRunCost = videoNodeCount * (runCredit?.videoPrice ?? 0)
+  const runTotalCost = (runCredit?.price ?? 0) + imageRunCost + videoRunCost
   const runBalanceShort = runCredit?.balance != null && runCredit.balance < runTotalCost
+  // 顶栏那一行：有什么节点就写什么，没有的不要占字
+  const runCostParts = [
+    '运行 ' + (runCredit?.price ?? 0),
+    ...(imageNodeCount > 0 ? ['出图 ' + imageNodeCount + ' 张 ' + imageRunCost] : []),
+    ...(videoNodeCount > 0 ? ['出视频 ' + videoNodeCount + ' 条 ' + videoRunCost] : []),
+  ]
+  const runCostTitle = [
+    '工作流按次扣 ' + (runCredit?.price ?? 0) + ' 积分',
+    ...(imageNodeCount > 0 ? ['出图每张扣 ' + (runCredit?.imagePrice ?? 0) + ' 积分（失败的那张会退回）'] : []),
+    ...(videoNodeCount > 0 ? ['出视频每条扣 ' + (runCredit?.videoPrice ?? 0) + ' 积分（失败或超时会退回）'] : []),
+  ].join('；')
 
   const graphSignature = useMemo(
     () =>
@@ -951,7 +971,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
     runQueuedRef.current = false
     setNodes((current) => current.map((node) => ({
       ...node,
-      data: { ...node.data, status: 'pending', ms: undefined, output: undefined, error: undefined },
+      data: { ...node.data, status: 'pending', ms: undefined, output: undefined, error: undefined, progress: undefined },
     })))
 
     const controller = new AbortController()
@@ -976,7 +996,18 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
         }
         if (event.type === 'node-start') {
           setNodes((current) => current.map((node) => (
-            node.id === event.nodeId ? { ...node, data: { ...node.data, status: 'running' } } : node
+            node.id === event.nodeId ? { ...node, data: { ...node.data, status: 'running', progress: undefined } } : node
+          )))
+          return
+        }
+        if (event.type === 'node-progress') {
+          // 出视频在三分钟里只有这一条活着的信号：卡片上写「已等 45s · 40%」，
+          // 让人知道它在跑，而不是卡住（服务端的读超时也靠这些字节保活）。
+          const seconds = Math.max(0, Math.round((Number(event.waitedMs) || 0) / 1000))
+          const percent = typeof event.progress === 'number' ? ' · ' + event.progress + '%' : ''
+          const progress = '已等 ' + seconds + 's' + percent
+          setNodes((current) => current.map((node) => (
+            node.id === event.nodeId ? { ...node, data: { ...node.data, status: 'running', progress } } : node
           )))
           return
         }
@@ -994,8 +1025,10 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
                     ms: node.ms,
                     error: node.error ?? undefined,
                     output: typeof node.output?.text === 'string' ? node.output.text : '',
-                    // 出图节点的结果贴在节点卡上（下游只是普通节点，不需要这项）
+                    // 出图 / 出视频的结果贴在节点卡上（下游只是普通节点，不需要这项）
                     imageUrl: typeof node.output?.imageUrl === 'string' ? node.output.imageUrl : undefined,
+                    videoUrl: typeof node.output?.videoUrl === 'string' ? node.output.videoUrl : undefined,
+                    progress: undefined,
                   },
                 }
               : item
@@ -1233,16 +1266,9 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
             <Save size={14} />保存
           </button>
           {runCredit && runTotalCost > 0 ? (
-            <span
-              className="cv-run-credit"
-              title={
-                imageNodeCount > 0
-                  ? '工作流按次扣 ' + runCredit.price + ' 积分；出图节点每张扣 ' + runCredit.imagePrice + ' 积分（失败的那张会退回）'
-                  : '工作流按次扣积分；有节点失败会全额退回'
-              }
-            >
-              {imageNodeCount > 0
-                ? '运行 ' + runCredit.price + ' + 出图 ' + imageNodeCount + ' 张 ' + imageRunCost + ' = ' + runTotalCost + ' 积分 · 余额 ' + (runCredit.balance ?? '—')
+            <span className="cv-run-credit" title={runCostTitle}>
+              {imageNodeCount + videoNodeCount > 0
+                ? runCostParts.join(' + ') + ' = ' + runTotalCost + ' 积分 · 余额 ' + (runCredit.balance ?? '—')
                 : '运行 ' + runCredit.price + ' 积分 · 余额 ' + (runCredit.balance ?? '—')}
             </span>
           ) : null}
@@ -1541,6 +1567,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
             readOnly={readOnly}
             runSnapshot={hasRunSnapshot}
             imageCredits={runCredit?.imagePrice ?? 0}
+            videoCredits={runCredit?.videoPrice ?? 0}
           />
         </div>
       )}

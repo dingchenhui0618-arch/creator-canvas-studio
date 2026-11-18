@@ -98,12 +98,13 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
       <div className="works-grid">
         {items.map((item) => {
           const Icon = KIND_ICON[item.kind] || ImageIcon
+          const isVideo = item.mediaKind === 'video' || item.kind === 'video'
           return (
             <article key={item.id} className={'works-card ' + ratioClass(item.aspect)}>
               <button type="button" className="works-thumb" onClick={() => open(item)} title={item.title}>
                 {item.thumbUrl ? (
-                  item.kind === 'video' ? (
-                    <video src={item.thumbUrl} muted preload="metadata" aria-label={item.title} />
+                  isVideo ? (
+                    <video src={item.thumbUrl} muted preload="metadata" playsInline aria-label={item.title} />
                   ) : (
                     <img src={item.thumbUrl} alt={item.title} loading="lazy" />
                   )
@@ -154,7 +155,7 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
             <X size={16} />
           </button>
           <div className="works-modal-body" onClick={(event) => event.stopPropagation()}>
-            {preview.kind === 'video' ? (
+            {(preview.mediaKind === 'video' || preview.kind === 'video') ? (
               <video src={preview.previewUrl || undefined} controls autoPlay playsInline />
             ) : (
               <img src={preview.previewUrl || undefined} alt={preview.title} />

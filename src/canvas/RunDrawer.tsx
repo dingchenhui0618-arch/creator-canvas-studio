@@ -70,6 +70,13 @@ function nodeOutputImage(output: RunNodeResult['output']): string {
   return typeof url === 'string' ? url : ''
 }
 
+/** 出视频节点同理：抽屉里给一个能直接播的播放器，而不是一串 /api/runs/... 地址。 */
+function nodeOutputVideo(output: RunNodeResult['output']): string {
+  if (!output) return ''
+  const url = output.videoUrl
+  return typeof url === 'string' ? url : ''
+}
+
 export function RunDrawer({ open, running, flowName, runId, total, nodes, record, resume = null, resumePlan = null, onResume, onRestart, queuedMs = 0, queue = null, queueElapsed = 0, cancelled = false, onCancelQueue, error, onClose, onSelectNode }: RunDrawerProps) {
   const { internal } = useUiMode()
   const progress = total > 0 ? Math.round((nodes.length / total) * 100) : 0
@@ -211,6 +218,11 @@ export function RunDrawer({ open, running, flowName, runId, total, nodes, record
                 <span className="cv-run-state">{node.reused ? '已跑过' : (STATUS_LABEL[node.status] ?? node.status)}</span>
               </button>
               {node.error && <p className="cv-run-error">{node.error}</p>}
+              {!node.error && nodeOutputVideo(node.output) ? (
+                <div className="cv-run-video">
+                  <video src={nodeOutputVideo(node.output)} controls playsInline preload="metadata" />
+                </div>
+              ) : null}
               {!node.error && nodeOutputImage(node.output) ? (
                 <a className="cv-run-image" href={nodeOutputImage(node.output)} target="_blank" rel="noreferrer" title="在新标签页看原图">
                   <img src={nodeOutputImage(node.output)} alt={node.title} loading="lazy" />

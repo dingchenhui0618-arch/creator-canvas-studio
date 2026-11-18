@@ -58,6 +58,33 @@ export function decodeDataUrl(url) {
   return { buffer, mime }
 }
 
+/** 从上游任务回执里找视频地址：SeeAPI / 方舟 / 中转几种形状都认，找不到回空串。 */
+export function extractVideoUrl(data) {
+  const candidates = [
+    data?.video_url,
+    data?.videoUrl,
+    data?.url,
+    data?.output?.video_url,
+    data?.output?.videoUrl,
+    data?.output?.url,
+    data?.content?.video_url,
+    data?.content?.videoUrl,
+    data?.data?.[0]?.url,
+    data?.result?.video_url,
+    data?.result?.videoUrl,
+    data?.result?.url,
+  ]
+  return candidates.find((value) => typeof value === 'string' && /^(https?:\/\/|data:)/i.test(value)) || ''
+}
+
+/** 上游进度：可能是 0~1 的小数，也可能是 0~100 的百分数；认不出回 null（不编一个假的）。 */
+export function progressOf(data) {
+  const raw = Number(data?.progress ?? data?.percent ?? data?.percentage)
+  if (!Number.isFinite(raw)) return null
+  const value = raw <= 1 ? raw * 100 : raw
+  return Math.max(0, Math.min(100, Math.round(value)))
+}
+
 /** 把上游给的地址变成字节 + 真实 MIME；data: 直接解，http(s) 边下边限流。 */
 export async function downloadAsset(url, kind) {
   const source = String(url || '')

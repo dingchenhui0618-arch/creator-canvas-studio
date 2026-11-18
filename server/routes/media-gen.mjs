@@ -16,7 +16,7 @@ import { createVideoTask, generateImage, generateImageEdit, pollVideoTask } from
 import { logEvent } from '../log.mjs'
 import { ASSET_LIMITS, assetUsage, listMediaAssets, locateMediaAsset, readMediaAsset, removeMediaAsset, saveMediaAsset } from '../media-assets.mjs'
 import { listMediaModels, resolveSelection } from '../media-models.mjs'
-import { DOWNLOAD_TIMEOUT_MS, downloadAsset, extensionFor } from '../media-fetch.mjs'
+import { DOWNLOAD_TIMEOUT_MS, downloadAsset, extensionFor, extractVideoUrl, progressOf } from '../media-fetch.mjs'
 import { readBinaryBody } from '../body-reader.mjs'
 import { readBody, sendJson } from './_shared.mjs'
 
@@ -426,31 +426,6 @@ async function runVideo(user, input) {
     refunded: task.credits.refunded,
   })
   return { task }
-}
-
-function extractVideoUrl(data) {
-  const candidates = [
-    data?.video_url,
-    data?.videoUrl,
-    data?.url,
-    data?.output?.video_url,
-    data?.output?.videoUrl,
-    data?.output?.url,
-    data?.content?.video_url,
-    data?.content?.videoUrl,
-    data?.data?.[0]?.url,
-    data?.result?.video_url,
-    data?.result?.videoUrl,
-    data?.result?.url,
-  ]
-  return candidates.find((value) => typeof value === 'string' && /^(https?:\/\/|data:)/i.test(value)) || ''
-}
-
-function progressOf(data) {
-  const raw = Number(data?.progress ?? data?.percent ?? data?.percentage)
-  if (!Number.isFinite(raw)) return null
-  const value = raw <= 1 ? raw * 100 : raw
-  return Math.max(0, Math.min(100, Math.round(value)))
 }
 
 async function refreshVideo(task) {

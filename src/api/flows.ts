@@ -130,7 +130,9 @@ export type RunRecord = {
   credits?: RunCredits | null
   /** 出图节点每张另扣的积分合计（只算画成了的；失败那张已退） */
   imageCredits?: number
-  /** credits（未退部分）+ 出图积分：这次运行实际花掉多少 */
+  /** 出视频节点每条另扣的积分合计（只算出了片的；失败 / 超时已退） */
+  videoCredits?: number
+  /** credits（未退部分）+ 出图 + 出视频积分：这次运行实际花掉多少 */
   spentTotal?: number
   /** 属于哪条作品的哪一版；没挂在作品上为 null / 缺省 */
   project?: RunProjectRef | null
@@ -325,6 +327,8 @@ export type RunEventMessage =
   | { type: 'run-queue'; position: number; waitedMs: number }
   | { type: 'run-start'; run: { id: string; flowId: string; flowName: string; total: number; resumeOf?: string | null; reusedNodes?: number } }
   | { type: 'node-start'; nodeId: string; index: number; total: number }
+  // 长耗时节点（出视频）的进度：每轮轮询推一条，页面写「已等 45s · 40%」，也用来保活连接
+  | { type: 'node-progress'; nodeId: string; waitedMs?: number; progress?: number | null; status?: string; note?: string }
   | { type: 'node-end'; node: RunNodeResult; index: number; total: number }
   | { type: 'run-end'; run: RunRecord }
   | { type: 'run-error'; error: string; code?: string }

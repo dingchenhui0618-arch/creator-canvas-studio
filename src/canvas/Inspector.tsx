@@ -8,6 +8,9 @@ import {
   REVIEW_PROFILE_OPTIONS,
   STATUS_TEXT,
   TOOL_OPTIONS,
+  VIDEO_DURATION_OPTIONS,
+  VIDEO_RATIO_OPTIONS,
+  VIDEO_RESOLUTION_OPTIONS,
 } from './catalog'
 import { useModelOptions } from '../components/ModelSwitch'
 import { useUiMode } from '../api/app'
@@ -25,6 +28,8 @@ type InspectorProps = {
   runSnapshot?: boolean
   /** 出图每张多少积分（来自 /api/credits 的平台价）；拿不到时不写数字，不编一个价 */
   imageCredits?: number
+  /** 出视频每条多少积分：与出图同一口径，拿不到时不编价 */
+  videoCredits?: number
 }
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
@@ -37,7 +42,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   )
 }
 
-export function Inspector({ node, onPatch, onConfig, onDuplicate, onDelete, readOnly = false, runSnapshot = false, imageCredits = 0 }: InspectorProps) {
+export function Inspector({ node, onPatch, onConfig, onDuplicate, onDelete, readOnly = false, runSnapshot = false, imageCredits = 0, videoCredits = 0 }: InspectorProps) {
   // 模型候选来自服务端 /api/models；hook 必须在提前 return 之前调用
   const modelOptions = useModelOptions()
   const { internal } = useUiMode()
@@ -226,6 +231,57 @@ export function Inspector({ node, onPatch, onConfig, onDuplicate, onDelete, read
               <div className="cv-meta-row">
                 <span>每张</span>
                 <strong>{imageCredits > 0 ? imageCredits + ' 积分' : '按平台价扣费'}</strong>
+              </div>
+            </>
+          )}
+
+          {node.data.kind === 'video' && (
+            <>
+              <Field label="提示词" hint="留空时用上游文本（例如大模型写完的分镜描述）；画面、镜头、动作写具体一点。">
+                <textarea
+                  className="cv-textarea"
+                  rows={5}
+                  value={config.prompt ?? ''}
+                  placeholder="例如：奶油白陶瓷杯放在晨光里的木桌上，镜头缓慢推近，热气升起"
+                  onChange={(event) => onConfig({ prompt: event.target.value }, 'prompt')}
+                />
+              </Field>
+              <Field label="比例" hint="竖版适合短视频；作品流按这个比例排版。">
+                <select
+                  className="cv-select"
+                  value={config.ratio ?? '9:16'}
+                  onChange={(event) => onConfig({ ratio: event.target.value }, 'ratio')}
+                >
+                  {VIDEO_RATIO_OPTIONS.map((option) => (
+                    <option key={option.ratio} value={option.ratio}>{option.label}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="时长" hint="越长越贵，也越容易超时；第一次建议先跑 4 秒。">
+                <select
+                  className="cv-select"
+                  value={String(config.duration ?? 4)}
+                  onChange={(event) => onConfig({ duration: Number(event.target.value) }, 'duration')}
+                >
+                  {VIDEO_DURATION_OPTIONS.map((option) => (
+                    <option key={option.seconds} value={String(option.seconds)}>{option.label}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="清晰度">
+                <select
+                  className="cv-select"
+                  value={config.resolution ?? '720p'}
+                  onChange={(event) => onConfig({ resolution: event.target.value }, 'resolution')}
+                >
+                  {VIDEO_RESOLUTION_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </Field>
+              <div className="cv-meta-row">
+                <span>每条</span>
+                <strong>{videoCredits > 0 ? videoCredits + ' 积分' : '按平台价扣费'}</strong>
               </div>
             </>
           )}

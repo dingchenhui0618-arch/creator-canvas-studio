@@ -64,15 +64,24 @@ export function runCreditsText(run: RunRecord | null): string {
   if (!run) return ''
   const cost = Math.max(0, Number(run.credits?.cost) || 0)
   const images = Math.max(0, Number(run.imageCredits) || 0)
+  const videos = Math.max(0, Number(run.videoCredits) || 0)
   const imageText = images > 0 ? ' + 出图 ' + images + ' 积分' : ''
-  if (!run.credits) return images > 0 ? '出图 ' + images + ' 积分' : ''
+  const videoText = videos > 0 ? ' + 出视频 ' + videos + ' 积分' : ''
+  const mediaText = imageText + videoText
+  const keptText = [images > 0 ? '出图 ' + images + ' 积分' : '', videos > 0 ? '出视频 ' + videos + ' 积分' : '']
+    .filter(Boolean)
+    .join('、')
+  if (!run.credits) {
+    if (!images && !videos) return ''
+    return [images > 0 ? '出图 ' + images + ' 积分' : '', videos > 0 ? '出视频 ' + videos + ' 积分' : ''].filter(Boolean).join(' + ')
+  }
   if (run.credits.settled) {
-    return '已跑部分 ' + run.credits.kept + ' 积分 · 已退 ' + (run.credits.refundedAmount ?? 0) + ' 积分' + imageText
+    return '已跑部分 ' + run.credits.kept + ' 积分 · 已退 ' + (run.credits.refundedAmount ?? 0) + ' 积分' + mediaText
   }
   if (run.credits.refunded) {
-    return '已退回 ' + cost + ' 积分' + (images > 0 ? '；出图 ' + images + ' 积分不退' : '')
+    return '已退回 ' + cost + ' 积分' + (keptText ? '；' + keptText + '不退' : '')
   }
-  return '消耗 ' + cost + ' 积分' + imageText
+  return '消耗 ' + cost + ' 积分' + mediaText
 }
 
 /** 续跑入口要用到的三个数：还差几个节点、这次还要补多少积分、上次复用了几个。 */

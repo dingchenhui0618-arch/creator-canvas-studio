@@ -26,9 +26,9 @@ export function toFlowEdges(edges: Edge[]): ApiFlowEdge[] {
   }))
 }
 
-// image（出图）与 review（评审）是 v0.9.199 加回来的：出图真画一张、评审看这张图，
-// 工作流才不是「只会写文案的一串节点」。老数据里没有这两种节点，加载不受影响。
-const KNOWN_KINDS = new Set(['input', 'llm', 'kb', 'tool', 'condition', 'image', 'review', 'output'])
+// image（出图）/ video（出视频）/ review（评审）：真画一张、真出一段、评审看这张图，
+// 工作流才不是「只会写文案的一串节点」。老数据里没有这几种节点，加载不受影响。
+const KNOWN_KINDS = new Set(['input', 'llm', 'kb', 'tool', 'condition', 'image', 'video', 'review', 'output'])
 
 /** 老流程里如果还有已移除的节点类型，加载时直接丢弃，不让它把画布弄脏。 */
 export function fromFlowNodes(nodes: ApiFlowNode[]): Node<FlowNodeData>[] {

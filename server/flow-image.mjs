@@ -62,10 +62,20 @@ export function runDirOf(runId) {
   return path.join(config.dataDir, 'runs', id)
 }
 
+/**
+ * 节点 id 来自工作流 JSON，是用户能起的名字：落盘前换成安全字符。
+ * 不换的话，一个 id 叫 "../auth" 的节点就能把文件写到 runs/ 之外——这是真的越界写，
+ * 不是理论风险（README 里把它记成本轮修掉的漏洞）。读取侧 runAssetPath 另有更严的白名单。
+ */
+export function safeNodeId(nodeId) {
+  const raw = String(nodeId || '').replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 48)
+  return raw || 'node'
+}
+
 /** 运行产物的绝对路径：只允许 runs/<runId>/ 下的一层文件名，不允许子目录与 .. */
 export function runAssetPath(runId, fileName) {
   const name = String(fileName || '')
-  if (!/^[A-Za-z0-9_-]{4,80}\.(png|jpg|jpeg|webp|gif)$/i.test(name)) return ''
+  if (!/^[A-Za-z0-9_-]{1,80}\.(png|jpg|jpeg|webp|gif|mp4|mov|webm)$/i.test(name)) return ''
   const dir = runDirOf(runId)
   const target = path.join(dir, name)
   return target.startsWith(dir + path.sep) ? target : ''
@@ -99,7 +109,7 @@ export async function runImageGeneration({ ownerId, runId, nodeId, prompt, ratio
     if (!url) throw new Error('出图上游没有返回图片地址')
     const asset = await downloadAsset(url, 'image')
     const ext = extensionFor(asset.mime, 'image', '')
-    const fileName = nodeId + '.' + ext
+    const fileName = safeNodeId(nodeId) + '.' + ext
     await fsp.mkdir(dir, { recursive: true, mode: 0o700 })
     await fsp.writeFile(path.join(dir, fileName), asset.buffer, { mode: 0o600 })
     const ratioLabel = RATIO_LABEL[ratio] || ratio

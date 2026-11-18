@@ -6,6 +6,7 @@ import {
   Image as ImageIcon,
   ScanEye,
   TextCursorInput,
+  Video,
   Wrench,
   type LucideIcon,
 } from 'lucide-react'
@@ -111,6 +112,18 @@ export const NODE_META: Record<FlowNodeKind, NodeMeta> = {
     defaultDescription: '把上游的画面描述画成一张图',
     defaultConfig: { model: '', ratio: '9:16', prompt: '' },
   },
+  video: {
+    kind: 'video',
+    label: '出视频',
+    mono: 'VIDEO',
+    hint: '按提示词真出一段视频，产物落进这次运行',
+    icon: Video,
+    targets: [{ id: 'in', label: 'in · 提示词（留空就用节点里写的）' }],
+    sources: [{ id: 'out', label: 'out' }],
+    defaultTitle: '出视频',
+    defaultDescription: '把上游的分镜描述拍成一段竖屏视频',
+    defaultConfig: { model: '', ratio: '9:16', duration: 4, resolution: '720p', prompt: '' },
+  },
   review: {
     kind: 'review',
     label: '评审',
@@ -139,7 +152,7 @@ export const NODE_META: Record<FlowNodeKind, NodeMeta> = {
 
 export const PALETTE_GROUPS: { label: string; kinds: FlowNodeKind[] }[] = [
   { label: '输入', kinds: ['input', 'kb'] },
-  { label: '处理', kinds: ['llm', 'image', 'tool', 'condition'] },
+  { label: '处理', kinds: ['llm', 'image', 'video', 'tool', 'condition'] },
   { label: '评审', kinds: ['review'] },
   { label: '输出', kinds: ['output'] },
 ]
@@ -149,6 +162,23 @@ export const IMAGE_RATIO_OPTIONS = [
   { ratio: '9:16', label: '9:16 竖版' },
   { ratio: '1:1', label: '1:1 方形' },
   { ratio: '16:9', label: '16:9 横版' },
+]
+
+/** 视频比例 / 时长 / 清晰度：与 server/media-models.mjs 的 VIDEO_* 一一对应，别在这里加服务端不认的选项。 */
+export const VIDEO_RATIO_OPTIONS = [
+  { ratio: '9:16', label: '9:16 竖版' },
+  { ratio: '16:9', label: '16:9 横版' },
+  { ratio: '1:1', label: '1:1 方形' },
+]
+
+export const VIDEO_DURATION_OPTIONS = [
+  { seconds: 4, label: '4 秒' },
+  { seconds: 8, label: '8 秒' },
+]
+
+export const VIDEO_RESOLUTION_OPTIONS = [
+  { value: '720p', label: '720p 高清' },
+  { value: '480p', label: '480p 省额度' },
 ]
 
 /** 评审角度：id 必须与 server/flows.mjs 的 REVIEW_PROFILES 一致。 */
