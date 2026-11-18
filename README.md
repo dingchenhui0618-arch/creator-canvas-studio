@@ -1348,3 +1348,8 @@ React Flow 的画布视口与节点盒子天生比内容窄 2px，量的时候�
 排队位是注入的假数据（没有真跑一次出图），写笔记只验弹层排布、没有真往画布写节点。
 
 文档见 docs/board-mobile-2026-11-19.md。
+
+生产 0.9.227（发布 20261118-220540-r243board，health ok templates 26、6 个服务 active、未登录 401、磁盘 73%；
+入口 index-DbGHI_Uf.js 742.61 kB / 主样式 index-B88JOElv.css 358.61 kB / 本页样式 BoardPage-CNvpmGEv.css 5,191 B；
+公网 /assets/BoardPage-CNvpmGEv.css 200 / 5,191 B / text/css；回滚 --to 1 回 0.9.226，发布 20261118-214844-r242flow）。
+提交 3f097cb + ed0a53e。
