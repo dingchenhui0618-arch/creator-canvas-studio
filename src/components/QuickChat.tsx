@@ -286,7 +286,7 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
             <MessageSquarePlus size={15} />
             新对话
           </button>
-          <span className="qc-count">{items.length}</span>
+          {items.length > 0 ? <span className="qc-count">共 {items.length} 个</span> : null}
           {/* 窄屏专用：把「历史对话」收成一条，点开才展开列表；桌面上这枚按钮不显示 */}
           <button
             type="button"

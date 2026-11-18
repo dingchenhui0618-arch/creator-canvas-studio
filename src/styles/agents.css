@@ -3128,3 +3128,157 @@
 .agx-surface-note { font-size: 11px; color: var(--faint); }
 
 .agx-composer[hidden] { display: none; }
+
+/* ---------- r241 / v0.9.225：快捷创作页窄屏读得清、点得到 ----------
+   同一套做法（见运行记录页 r240）：只在媒体查询里、选择器带 .agx-page，
+   1081px 以上一个字节不动。改的是两件事：
+   ① 12 / 11.5 / 11px 的元信息（等宽小字、标签、计数、胶囊标签）统一抬到 13px；
+   ② 28–32px 的点按区抬到 40px（≤560 抬到 44px），包括 --btn-h / --btn-h-sm 令牌、
+      自绘胶囊、创作方式页签、对话方式页签、预设分类页签、发送键、快捷创作的会话条与能力按钮。 */
+@media (max-width: 1080px) {
+  .agx-page {
+    --btn-h: 40px;
+    --btn-h-sm: 40px;
+    --chip-font: 13px;
+    --chip-tag-h: 24px;
+    --chip-pill-h: 24px;
+    --text-mono: 13px;
+  }
+
+  /* .agx-mono 的 12px 是写死的，不吃 --text-mono，必须逐个点名 */
+  .agx-page .agx-mono,
+  .agx-page .agx-kicker,
+  .agx-page .agx-popover-head,
+  .agx-page .agx-popover-note,
+  .agx-page .agx-history-item span,
+  .agx-page .agx-runs-toolbar,
+  .agx-page .agx-runs-clear,
+  .agx-page .agx-run-state,
+  .agx-page .agx-run-meta,
+  .agx-page .agx-runs-more,
+  .agx-page .agx-msg-meta,
+  .agx-page .agx-msg-meta button,
+  .agx-page .agx-msg-tools span,
+  .agx-page .agx-msg-tools button,
+  .agx-page .agx-failure small,
+  .agx-page .agx-credit-line,
+  .agx-page .agx-shortcut,
+  .agx-page .agx-library-meta,
+  .agx-page .agx-tabs em,
+  .agx-page .agx-card-current,
+  .agx-page .agx-field > span,
+  .agx-page .agx-md-table th,
+  .agx-page .agx-model-note-text small,
+  .agx-page .agx-model-note .vq-button,
+  .agx-page .agx-draft-kicker,
+  .agx-page .agx-draft-stats,
+  .agx-page .agx-draft-fact,
+  .agx-page .agx-draft-pick-label,
+  .agx-page .agx-project-kicker,
+  .agx-page .agx-project-meta,
+  .agx-page .agx-side-copy code,
+  .agx-page .agx-qc-ref-kind,
+  .agx-page .qc-count,
+  .agx-page .qc-credit,
+  .agx-page .qc-side-empty,
+  .agx-page .qc-conv-meta,
+  .agx-page .qc-side-note,
+  .agx-page .qc-msg-meta,
+  .agx-page .qc-chip-main,
+  .agx-page .qc-file,
+  .agx-page .qc-tool,
+  .agx-page .qc-link,
+  .agx-page .qc-error--inline,
+  .agx-page .qc-preview-head,
+  .agx-page .qc-preview-body,
+  .agx-page .qc-hint { font-size: 13px; }
+
+  /* 参数胶囊：标签 11.5、值 12.5、整颗 30px */
+  /* 胶囊自己带 1px 边框，里面那枚按钮实际只有 height−2：写 40 的话点按区只有 38px。
+     所以这里写 42（里面正好 40），≤560 那档写 46（里面正好 44）。 */
+  .agx-page .agx-capsule { height: 42px; }
+  /* 短值（比例 1:1、时长 4s）的触发器只有 34px 宽：整颗胶囊看着能点，实际只有这一小段可点 */
+  .agx-page .agx-capsule-trigger { min-width: 40px; }
+  .agx-page .agx-capsule > span { font-size: 13px; }
+  .agx-page .agx-capsule-trigger em { font-size: 13px; }
+  .agx-page .agx-capsule-menu button { min-height: 40px; font-size: 13px; }
+
+  /* 创作方式（对话 / 图片 / 视频）28px → 40px；对话方式（平台对话 / 对话预设）12px 28px → 13px 40px */
+  .agx-page .agx-mode-tabs button { min-height: 40px; }
+  .agx-page .agx-surface-switch button { min-height: 40px; font-size: 13px; }
+  .agx-page .agx-surface-note { font-size: 13px; }
+
+  /* 预设分类页签：原来 31px（字号 13 + 下内边距 12），点上去只有半行高 */
+  .agx-page .agx-tabs button {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+    padding: 0 4px;
+  }
+
+  .agx-page .agx-send { width: 40px; height: 40px; }
+  .agx-page .agx-popover-tabs button { height: 40px; font-size: 13px; }
+
+  /* 历史弹层（r241）：绝对定位挂在「历史」按钮右边（right: 0、宽 352），桌面按钮在页头右侧
+     所以没问题；窄屏页头左对齐，弹层有一半跑到屏幕外——390 实测左边缘 −187px，只看得见
+     一条「话记录」。窄屏改成贴底浮层：左右各 8px、最高 70vh，内容自己滚。 */
+  .agx-page .agx-popover {
+    position: fixed;
+    top: auto;
+    right: 8px;
+    bottom: 8px;
+    left: 8px;
+    width: auto;
+    max-height: 70vh;
+    z-index: 60;
+  }
+  .agx-page .agx-msg-tools span,
+  .agx-page .agx-msg-tools button { min-height: 40px; }
+
+  /* 平台对话：会话条、能力按钮 */
+  .agx-page .qc-new,
+  .agx-page .qc-side-toggle { min-height: 40px; }
+  .agx-page .qc-tool { height: 40px; }
+}
+
+@media (max-width: 560px) {
+  .agx-page {
+    --btn-h: 44px;
+    --btn-h-sm: 44px;
+    --chip-tag-h: 26px;
+    --chip-pill-h: 26px;
+  }
+
+  .agx-page .agx-capsule { height: 46px; }
+  .agx-page .agx-capsule-trigger { min-width: 44px; }
+  .agx-page .agx-capsule-menu button { min-height: 44px; }
+  .agx-page .agx-mode-tabs button { min-height: 44px; }
+  .agx-page .agx-surface-switch button { min-height: 44px; }
+  .agx-page .agx-tabs button { min-height: 44px; }
+  .agx-page .agx-send { width: 44px; height: 44px; }
+  .agx-page .agx-popover-tabs button { height: 44px; }
+  .agx-page .agx-msg-tools span,
+  .agx-page .agx-msg-tools button { min-height: 44px; }
+  .agx-page .qc-new,
+  .agx-page .qc-side-toggle { min-height: 44px; }
+  .agx-page .qc-tool { height: 44px; }
+
+  /* 分类条：5 个页签在 390 宽的内容列里需要 397px，而容器只有 290px。原来靠横向滚动
+     （nav.css 的 nowrap + overflow-x），最后一个「投放素材」永远在屏幕外——页签变大之后
+     更够不着。这里改成换行：全部看得见，不用猜还能往右滑。
+     换行后下划线会浮在第一行按钮底下，所以窄屏把激活态从下划线换成胶囊底色。 */
+  .vq-content .agx-page .agx-tabs {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-bottom: 8px;
+    overflow-x: visible;
+  }
+  .vq-content .agx-page .agx-tabs button {
+    flex: 0 0 auto;
+    padding: 0 8px;
+    border-radius: var(--radius-pill);
+  }
+  .vq-content .agx-page .agx-tabs button.is-active { background: var(--surface-soft); }
+  .vq-content .agx-page .agx-tabs button.is-active::after { display: none; }
+}
+
