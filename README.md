@@ -1445,3 +1445,9 @@ Key 只写不读，接口只回掩码与「有没有」。
 结果是搜索引擎给的，不保证每条都能打开，读不到就写「没读到」；只读前 3 条、不翻页；搜索按次计费而对话仍只扣 1 积分，差价属于待定的定价决定（D1），这一轮没改价。
 
 文档见 docs/quick-create-search-2026-11-19.md。
+
+生产 0.9.229（发布 20261118-225452-r246search，health ok templates 26、6 个服务 active、未登录 /api/chat/search 与 /api/admin/search 均 401、磁盘 73%、
+生产还没有 /var/lib/visionqa/search.json——所以线上那个「联网搜索」开关现在是禁用的，等管理员在后台填一个搜索服务；
+入口 index-ZDuJmA_M.js 742.61 kB、本页 AgentsPage-xg-fx7Rf.js 75,122 B、agents-ByO7BeQ0.css 56,790 B 公网 200，样式表里已核到 .qc-search-item / .qc-search-site 与 13px；
+回滚 --to 1 回 0.9.228，发布 20261118-222818-r245chatimg）。
+提交 a73e4ad，CI 44416195107 success（Node 22.12 / Node 24 / 安全扫描三件全绿）。
