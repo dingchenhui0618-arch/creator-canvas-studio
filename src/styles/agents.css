@@ -3282,3 +3282,31 @@
   .vq-content .agx-page .agx-tabs button.is-active::after { display: none; }
 }
 
+
+/* 图片附件（r245）：chip 里显示缩略图，点开看原图。图片没有「多少字」可数，用体积代替字数。 */
+.qc-file-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-xs);
+  object-fit: cover;
+  border: 1px solid var(--line);
+  flex: none;
+  background: var(--surface-soft);
+}
+.qc-preview-img {
+  display: block;
+  max-width: 100%;
+  max-height: 360px;
+  margin: 0 auto;
+  border-radius: var(--radius-sm);
+  object-fit: contain;
+  background: var(--surface-soft);
+}
+
+/* 手机上附件 chip 与移除键都要够得着：r245 实测 390 下 .qc-file 只有 26px 高、.qc-chip-x 24×28。 */
+@media (max-width: 560px) {
+  .qc-file,
+  .qc-chip,
+  .qc-chip-main { min-height: 40px; }
+  .qc-chip-x { width: 40px; min-height: 40px; }
+}

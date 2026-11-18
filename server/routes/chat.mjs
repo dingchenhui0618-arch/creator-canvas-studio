@@ -3,14 +3,15 @@ import { readBody, sendJson } from './_shared.mjs'
 import { currentUser } from '../auth.mjs'
 import { createConversation, deleteConversation, getConversation, listConversations } from '../chat-store.mjs'
 import { sendChatMessage, streamChatMessage } from '../chat.mjs'
-import { CHAT_FILE_LIMITS, deleteChatFile, listChatFiles, publicChatFile, readChatFile, saveChatFile } from '../chat-files.mjs'
+import { CHAT_FILE_LIMITS, deleteChatFile, listChatFiles, publicChatFile, readChatFile, readChatFileBytes, saveChatFile } from '../chat-files.mjs'
 import { readBinaryBody } from '../body-reader.mjs'
 import { refusalResponse } from '../public-error.mjs'
 
 // 会话 / 消息 / 流式三条路径：最后一段 stream 是可选的（r217）
 const CONV = /^\/api\/chat\/conversations\/([A-Za-z0-9_-]{6,40})(\/messages(\/stream)?)?$/
-// 附件：/api/chat/files 上传（原始字节）、列表；/:id 读取与删除（r218）
+// 附件：/api/chat/files 上传（原始字节）、列表；/:id 读取与删除（r218）；/:id/raw 取原图（r245）
 const FILE_ONE = /^\/api\/chat\/files\/([A-Za-z0-9_]{6,40})$/
+const FILE_RAW = /^\/api\/chat\/files\/([A-Za-z0-9_]{6,40})\/raw$/
 
 function sendRefusal(res, error) {
   const mapped = refusalResponse(error)
@@ -64,6 +65,29 @@ export function createChatRouter() {
           }
         }
         sendJson(res, 405, { ok: false, code: 'CHAT_METHOD', error: '这个接口不支持 ' + req.method })
+        return true
+      }
+
+      // 原图（r245）：缩略图与「我发的是哪一张」都靠它。只给归属账号，只发 image/*，
+      // 并带 nosniff——这里绝不允许被当成 html 渲染。
+      const rawMatched = pathname.match(FILE_RAW)
+      if (rawMatched) {
+        if (req.method !== 'GET') {
+          sendJson(res, 405, { ok: false, code: 'CHAT_METHOD', error: '这个接口不支持 ' + req.method })
+          return true
+        }
+        const raw = readChatFileBytes(user.id, rawMatched[1])
+        if (!raw) {
+          sendJson(res, 404, { ok: false, code: 'FILE_NOT_FOUND', error: '这张图已经不在了' })
+          return true
+        }
+        res.writeHead(200, {
+          'Content-Type': raw.mime,
+          'Content-Length': raw.buffer.length,
+          'Cache-Control': 'private, max-age=3600',
+          'X-Content-Type-Options': 'nosniff',
+        })
+        res.end(raw.buffer)
         return true
       }
 

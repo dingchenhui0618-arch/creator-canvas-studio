@@ -482,3 +482,98 @@ test('链接打不开：这次对话照常回答，链接标「没读到」，�
   assert.equal(balanceOf(linkUser.id), before - 1)
 })
 
+
+// ── r245：图片进对话 ──────────────────────────────────────────────────────────
+// 一张 1×1 的 PNG（67 字节）：只用来验「认得出是图 / 原样读得回来 / 真的发给上游」。
+// 模型看不看得懂图不在这一层（那要花钱调真上游），这里连一个字节都不发出去。
+const PNG_1PX = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64',
+)
+
+const files = await import('../server/chat-files.mjs')
+const imageUser = auth.createUser({ email: 'chat-image-245@example.test', password: 'Passw0rd!demo', name: '图片测试' })
+
+function attach(name = '截图.png', buffer = PNG_1PX) {
+  return files.saveChatFile({ userId: imageUser.id, buffer, name })
+}
+
+test('图片按文件头认成 image：不转文字、原图读得回来、公开形状带 mime', () => {
+  const saved = attach()
+  assert.equal(saved.kind, 'image')
+  assert.equal(saved.kindLabel, '图片')
+  assert.equal(saved.chars, 0, '图片不在本地转文字，字数是 0')
+  assert.equal(saved.truncated, false)
+  assert.equal(saved.mime, 'image/png')
+  assert.match(saved.note, /直接给模型看/)
+  assert.equal(saved.bytes, PNG_1PX.length)
+  const meta = files.readChatFile(imageUser.id, saved.id)
+  assert.equal(meta.text, '')
+  const raw = files.readChatFileBytes(imageUser.id, saved.id)
+  assert.equal(raw.mime, 'image/png')
+  assert.ok(raw.buffer.equals(PNG_1PX), '存回去的必须还是原来的字节')
+})
+
+test('改名的图片按内容也认得出，普通文字附件不受影响', () => {
+  const sneaky = files.saveChatFile({ userId: imageUser.id, buffer: PNG_1PX, name: '脚本.txt' })
+  assert.equal(sneaky.kind, 'image', '扩展名写成 .txt 也要按文件头认')
+  const text = files.saveChatFile({ userId: imageUser.id, buffer: Buffer.from('第一句口播', 'utf8'), name: 'a.txt' })
+  assert.equal(text.kind, 'text')
+  assert.equal(text.mime, '')
+  assert.equal(text.chars, 5)
+})
+
+test('带图这一轮：正文换成多模态、图片只挂在这一条上、走一次性而不是流式', async () => {
+  const before = balanceOf(imageUser.id)
+  const saved = attach('哪不对.png')
+  const deltas = []
+  const result = await streamChatMessage(
+    imageUser,
+    { content: '这张截图哪里不对', files: [saved.id] },
+    { onDelta: (text) => deltas.push(text) },
+  )
+  const body = calls[calls.length - 1]
+  assert.equal(body.stream, undefined, '带图这一轮走一次性：多模态流式不是每家上游都成立')
+  const last = body.messages[body.messages.length - 1]
+  assert.ok(Array.isArray(last.content), '正文要换成多模态数组')
+  assert.match(last.content[0].text, /这张截图哪里不对/)
+  assert.match(last.content[0].text, /（图片，由模型直接看）/, '文字里要留一行说明这一轮带的是哪张图')
+  const image = last.content.find((part) => part.type === 'image_url')
+  assert.ok(image, '必须真的把图片发上去，不能只留个文件名')
+  assert.match(image.image_url.url, /^data:image\/png;base64,/)
+  assert.equal(image.image_url.detail, 'high', '看截图要用 high，low 会把小字压糊')
+  assert.equal(deltas.join(''), '收到，这一步就这样做。', '一次性路径也要整段推给界面，不能白等')
+  assert.equal(result.reply.meta.vision, true)
+  assert.equal(result.reply.meta.streamed, false)
+  assert.equal(result.cost, 1)
+  assert.equal(balanceOf(imageUser.id), before - 1)
+})
+
+test('下一轮追问：历史里只剩一行占位说明，不再重复发图（不再付图片输入费）', async () => {
+  const [conv] = listConversations(imageUser.id)
+  const result = await sendChatMessage(imageUser, { conversationId: conv.id, content: '那文字部分呢' })
+  const body = calls[calls.length - 1]
+  assert.ok(body.messages.every((message) => typeof message.content === 'string'), '追问这一轮不该再带图')
+  assert.ok(body.messages.some((message) => /只按文件名记住/.test(message.content)), '要说明那一轮的图已经不在了')
+  assert.equal(result.reply.meta.vision, undefined)
+})
+
+test('一条消息最多 2 张图：第 3 张直接拒，一分钱不扣', async () => {
+  const a = attach('a.png')
+  const b = attach('b.png')
+  const c = attach('c.png')
+  const before = balanceOf(imageUser.id)
+  await assert.rejects(
+    () => sendChatMessage(imageUser, { content: '三张一起看', files: [a.id, b.id, c.id] }),
+    (error) => error.code === 'CHAT_IMAGES',
+  )
+  assert.equal(balanceOf(imageUser.id), before, '拒绝发生在扣费之前')
+})
+
+test('原图只给上传的人；删附件时原图一起删（不留没人能引用的截图）', () => {
+  const saved = attach('私图.png')
+  assert.equal(files.readChatFileBytes('usr_someoneelse_1', saved.id), null)
+  assert.equal(files.readChatFileBytes(imageUser.id, saved.id).buffer.length, PNG_1PX.length)
+  assert.equal(files.deleteChatFile(imageUser.id, saved.id), true)
+  assert.equal(files.readChatFileBytes(imageUser.id, saved.id), null, '删了附件就要连原图一起删')
+})

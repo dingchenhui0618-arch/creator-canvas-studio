@@ -10,11 +10,16 @@
 //  2) 单个文件 ≤ 8 MB，抽出文字后每个文件最多 20000 字、一条消息合计 24000 字，超了截断并标 truncated；
 //  3) 解析结果只属于上传的人：目录带账号 id，读的时候按归属校验，不进分享页、不进交付包；
 //  4) PDF 只读文字层：扫描件（纯图片）会明确说读不出字，不做 OCR —— OCR 需要调视觉模型，等用户授权。
+//
+// r245 起再收图片：截图/照片不在这里转文字（本地没有 OCR），而是把原图随这一轮一起交给视觉模型，
+// 图里的字由模型自己读（server/chat.mjs 拼多模态消息）。于是图片的 text 是空的，界面也明说
+// 「这一轮直接给模型看」——不能让用户以为平台在本地认了字：认错了是模型看错，不是本地 OCR 出错。
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import zlib from 'node:zlib'
 import { config } from './config.mjs'
+import { sniffMedia } from './media-assets.mjs'
 import { refusal } from './public-error.mjs'
 
 const MB = 1024 * 1024
@@ -24,6 +29,9 @@ export const CHAT_FILE_LIMITS = {
   fileChars: 20000,
   totalChars: 24000,
   maxPerMessage: 5,
+  // 图片单独一档上限：一张 1024 宽的截图按 high 细节约 1.1k token，两张已经够看清一张稿子，
+  // 再多就是在为「多传几张」付输入费用，而回答质量并不会跟着涨。
+  imagesPerMessage: 2,
   keepFiles: 20,
   zipEntryBytes: 24 * MB,
 }
@@ -35,7 +43,7 @@ export const TEXT_EXTENSIONS = [
   'ts', 'tsx', 'js', 'jsx', 'py', 'html', 'htm', 'css', 'yaml', 'yml',
 ]
 
-const KIND_LABEL = { text: '纯文本', docx: 'Word', xlsx: 'Excel', pdf: 'PDF' }
+const KIND_LABEL = { text: '纯文本', docx: 'Word', xlsx: 'Excel', pdf: 'PDF', image: '图片' }
 
 function fail(status, code, message) {
   return refusal(status, code, message)
@@ -234,6 +242,9 @@ export function sniffDocument(buffer) {
   if (!Buffer.isBuffer(buffer) || !buffer.length) return null
   const head = buffer.toString('latin1', 0, 1024)
   if (head.startsWith('%PDF-')) return { kind: 'pdf' }
+  // 图片按文件头认（与参考素材同一套签名）：改名的 html / svg 进不来，也不信扩展名
+  const media = sniffMedia(buffer)
+  if (media && media.kind === 'image') return { kind: 'image', ext: media.ext, mime: media.mime }
   if (buffer.length > 4 && buffer.readUInt32LE(0) === 0x04034b50) {
     const names = []
     const source = buffer.toString('latin1')
@@ -285,6 +296,19 @@ export function extractDocument(buffer, { name = '', maxChars = CHAT_FILE_LIMITS
   let kind = sniffed.kind
   let note = ''
   let text = ''
+  if (kind === 'image') {
+    // 本地不认字：原图原样留着，交给视觉模型看（chat.mjs 再决定怎么把它送上去）
+    return {
+      kind: 'image',
+      ext: sniffed.ext,
+      mime: sniffed.mime,
+      text: '',
+      chars: 0,
+      totalChars: 0,
+      truncated: false,
+      note: '图片：这一轮直接给模型看，本地不转文字',
+    }
+  }
   if (kind === 'pdf') {
     text = pdfToText(buffer, { maxBytes: CHAT_FILE_LIMITS.zipEntryBytes })
     if (text.replace(/\s/g, '').length < 20) {
@@ -345,6 +369,14 @@ function fileFor(userId, id) {
   return path.join(userDir(userId), validChatFileId(id) + '.json')
 }
 
+// 图片的原图与 meta 分开存：meta 是 JSON（0600），原图是原始字节（0600、扩展名由文件头定）。
+// 只读 meta 的路径（列表、预览文字）不会把原图读进内存。
+function binaryFor(userId, id, ext) {
+  const safeExt = /^(jpg|png|webp|gif)$/.test(String(ext || '')) ? String(ext) : ''
+  if (!safeExt) return ''
+  return path.join(userDir(userId), validChatFileId(id) + '.' + safeExt)
+}
+
 function atomicWrite(file, data) {
   fs.mkdirSync(path.dirname(file), { recursive: true })
   const tmp = file + '.' + crypto.randomBytes(6).toString('hex') + '.tmp'
@@ -364,6 +396,8 @@ export function publicChatFile(meta) {
     chars: meta.chars,
     truncated: Boolean(meta.truncated),
     note: meta.note || '',
+    // 图片多给一个 mime：界面要判断「这张是不是图」，也要据此决定怎么显示
+    mime: meta.kind === 'image' ? meta.mime || '' : '',
     createdAt: meta.createdAt,
   }
 }
@@ -388,12 +422,15 @@ function makeRoom(userId) {
     const id = name.slice(0, -5)
     if (!validChatFileId(id)) continue
     const meta = readMeta(userId, id)
-    if (meta) rows.push({ id, createdAt: String(meta.createdAt || '') })
+    if (meta) rows.push({ id, createdAt: String(meta.createdAt || ''), ext: meta.ext })
   }
   rows.sort((a, b) => a.createdAt.localeCompare(b.createdAt))
   while (rows.length >= CHAT_FILE_LIMITS.keepFiles) {
     const oldest = rows.shift()
     try { fs.rmSync(fileFor(userId, oldest.id), { force: true }) } catch { break }
+    // 只留 20 份：顶掉的图片连原图一起删，否则「列表里没有、磁盘里还在」会一直涨
+    const bin = oldest.ext ? binaryFor(userId, oldest.id, oldest.ext) : ''
+    if (bin) try { fs.rmSync(bin, { force: true }) } catch { /* 原图已经不在了 */ }
   }
 }
 
@@ -415,9 +452,19 @@ export function saveChatFile({ userId, buffer, name = '' }) {
     truncated: extracted.truncated,
     note: extracted.note,
     text: extracted.text,
+    ...(extracted.kind === 'image' ? { mime: extracted.mime, ext: extracted.ext } : {}),
     createdAt: new Date().toISOString(),
   }
-  atomicWrite(fileFor(id, fileId), meta)
+  const bin = extracted.kind === 'image' ? binaryFor(id, fileId, extracted.ext) : ''
+  try {
+    // 目录由 atomicWrite 顺手建，但原图先写：这个账号的第一份附件就是图片时目录还不存在
+    if (bin) fs.mkdirSync(path.dirname(bin), { recursive: true })
+    if (bin) fs.writeFileSync(bin, buffer, { mode: 0o600 })
+    atomicWrite(fileFor(id, fileId), meta)
+  } catch (error) {
+    if (bin) try { fs.rmSync(bin, { force: true }) } catch { /* 没写成功就不用删 */ }
+    throw error
+  }
   return publicChatFile(meta)
 }
 
@@ -443,7 +490,11 @@ export function deleteChatFile(userId, fileId) {
   if (!id || !validChatFileId(fileId)) return false
   const target = fileFor(id, fileId)
   const exists = fs.existsSync(target)
+  const meta = readMeta(id, fileId)
   try { fs.rmSync(target, { force: true }) } catch { return false }
+  // 删附件也要删原图：留着就是一份没人能再引用、却仍然占着磁盘的截图
+  const bin = meta?.ext ? binaryFor(id, fileId, meta.ext) : ''
+  if (bin) try { fs.rmSync(bin, { force: true }) } catch { /* 原图已经不在了 */ }
   return exists
 }
 
@@ -452,6 +503,24 @@ export function readChatFile(userId, fileId) {
   const id = safeUserId(userId)
   if (!id || !validChatFileId(fileId)) return null
   return readMeta(id, fileId)
+}
+
+/**
+ * 读图片原图（只给归属账号；不是图片、文件没了都当不存在）。
+ * 两个用处：对话把原图交给视觉模型（base64），界面显示缩略图（/api/chat/files/:id/raw）。
+ */
+export function readChatFileBytes(userId, fileId) {
+  const id = safeUserId(userId)
+  if (!id || !validChatFileId(fileId)) return null
+  const meta = readMeta(id, fileId)
+  if (!meta || meta.kind !== 'image') return null
+  const file = binaryFor(id, meta.id, meta.ext)
+  if (!file) return null
+  try {
+    return { meta, mime: meta.mime || 'image/png', buffer: fs.readFileSync(file) }
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -470,6 +539,13 @@ export function resolveChatFiles(userId, fileIds = []) {
     seen.add(fileId)
     const meta = readChatFile(userId, fileId)
     if (!meta) { skipped += 1; continue }
+    // 图片不吃字数预算（它走的是多模态那一路，不是把字塞进文本里），
+    // 但要在文字里留一行「第几张是谁」，模型才知道下面那两张图分别叫什么。
+    if (meta.kind === 'image') {
+      files.push(publicChatFile(meta))
+      blocks.push('【附件 ' + files.length + '：' + meta.name + '（图片，由模型直接看）】')
+      continue
+    }
     let text = String(meta.text || '')
     let clipped = Boolean(meta.truncated)
     const room = CHAT_FILE_LIMITS.totalChars - used

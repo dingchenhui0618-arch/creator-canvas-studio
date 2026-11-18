@@ -160,16 +160,29 @@ export async function streamChatMessage(
 export type ChatFile = {
   id: string
   name: string
-  kind: 'text' | 'docx' | 'xlsx' | 'pdf' | string
+  // r245：image 是「原图直接给模型看」，本地不转文字（chars 为 0，看 bytes 与 mime）
+  kind: 'text' | 'docx' | 'xlsx' | 'pdf' | 'image' | string
   kindLabel: string
   bytes: number
   chars: number
   truncated: boolean
   note: string
+  // 图片多一个 mime；不是图片时是空串
+  mime: string
   createdAt: string
 }
 
-export type ChatFileLimits = { bytes: number; fileChars: number; totalChars: number; maxPerMessage: number; keepFiles: number }
+export type ChatFileLimits = {
+  bytes: number
+  fileChars: number
+  totalChars: number
+  maxPerMessage: number
+  imagesPerMessage: number
+  keepFiles: number
+}
+
+/** 图片原图地址（缩略图与「我发的是哪一张」）：只给上传它的人，服务端按归属校验。 */
+export const chatFileRawUrl = (id: string) => '/api/chat/files/' + encodeURIComponent(id) + '/raw'
 
 export const listChatFiles = () =>
   request<{ ok: boolean; items: ChatFile[]; limits: ChatFileLimits }>('/api/chat/files')

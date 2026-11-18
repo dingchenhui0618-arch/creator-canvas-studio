@@ -206,7 +206,15 @@ export function contextMessages(messages, maxCount = 30, maxChars = 60000) {
   const rows = (Array.isArray(messages) ? messages : [])
     .filter((item) => item && (item.role === 'user' || item.role === 'assistant') && String(item.content || '').trim())
     .map((item) => {
-      const content = String(item.content).slice(0, MAX_TEXT)
+      let content = String(item.content).slice(0, MAX_TEXT)
+      // r245：图片只在发送那一轮真的给模型看，之后只剩这行说明。
+      // 不写这行的话，模型看到历史里那句「三张图哪里不对」会以为自己还看得见那些图。
+      const imageNames = Array.isArray(item.files)
+        ? item.files.filter((file) => String(file?.kind || '') === 'image').map((file) => String(file?.name || '')).filter(Boolean)
+        : []
+      if (imageNames.length) {
+        content += '\n\n【这一轮带过 ' + imageNames.length + ' 张图片（' + imageNames.join('、') + '）：图片只在发送那一轮参与理解，后面只按文件名记住】'
+      }
       const docText = typeof item.docText === 'string' ? item.docText.trim() : ''
       if (!docText) return { role: item.role, content }
       // 附件原文跟着那一轮一起进上下文：模型看到的是「用户这句话 + 附件里的文字」

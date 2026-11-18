@@ -16,16 +16,21 @@
 // 附件是「这一轮的上下文」，不是文件托管：原文落盘 20 份轮转，抽出的文字跟着这条消息进上下文。
 // r219 接上读链接：消息里带网址时，先在本地把页面读成文字（server/link-read.mjs），
 // 不再依赖上游 deepseek_read_url —— 一把 Key 不认这个工具就会整条请求 400。
-// 还没做的：OCR（扫描件里的字）、图片理解进对话、语音、联网搜索的真实上游验证。
-import { callTextModel, callTextModelStream } from './llm.mjs'
+// r245 接上图片：截图、手机拍的稿子原样交给视觉模型看，图里的字由模型自己读（本地不做 OCR）。
+// 只把图片放进「发送那一轮」：更早的轮次在上下文里只剩一行占位说明，不是每轮都重复付图片的输入费。
+// 带图的一轮走一次性回答（多模态 + 流式在不同上游并不都成立，一条 400 会让整次对话失败并退款）。
+// 还没做的：语音、联网搜索的真实上游验证。
+import { callTextModel, callTextModelStream, visionChain } from './llm.mjs'
 import { charge, priceOf, refund } from './credits.mjs'
 import { contextMessages, createConversation, getConversation, saveConversation, titleFrom } from './chat-store.mjs'
-import { CHAT_FILE_LIMITS, resolveChatFiles } from './chat-files.mjs'
+import { CHAT_FILE_LIMITS, readChatFileBytes, resolveChatFiles } from './chat-files.mjs'
 import { findLinks, readLinks } from './link-read.mjs'
 
 const MAX_INPUT = 8000
 const CONTEXT_MESSAGES = 30
 const MAX_OUTPUT_TOKENS = 4096
+// 截图要看字，用 high：low 会把 1024 宽的稿子压成 512，标题还行，小一号的正文就糊了。
+const IMAGE_DETAIL = 'high'
 
 const SYSTEM_PROMPT = [
   '你是平台里的创作助手，回答一律用简体中文。',
@@ -66,6 +71,23 @@ async function readMessageLinks(content, options) {
   return { ...result, found }
 }
 
+/** 这一轮的图片：读成 base64 data URL，跟文字一起拼进多模态正文（detail=high，见上面）。 */
+function imageParts(userId, files) {
+  const parts = []
+  let count = 0
+  for (const file of files) {
+    const raw = readChatFileBytes(userId, file.id)
+    if (!raw) continue
+    count += 1
+    parts.push({ type: 'text', text: '图片 ' + count + '：' + file.name })
+    parts.push({
+      type: 'image_url',
+      image_url: { url: 'data:' + raw.mime + ';base64,' + raw.buffer.toString('base64'), detail: IMAGE_DETAIL },
+    })
+  }
+  return { parts, count }
+}
+
 /** 这一轮带哪几个附件：先按归属读，读不到就跳过（别人的 / 已删除），不让整次对话失败。 */
 function readAttachments(userId, input = {}) {
   const raw = Array.isArray(input?.files) ? input.files.map(String).filter(Boolean) : []
@@ -96,6 +118,16 @@ async function beginChat(user, input = {}) {
   // 读链接放在会话校验之后：会话已经不在的请求不该先去抓一遍网页
   const linked = await readMessageLinks(content, options)
   const docText = [attachments.text, linked.text].filter(Boolean).join('\n\n')
+
+  // 图片在扣费之前读：原图读不到（被顶掉了 / 不是自己的）就不该扣这一轮的钱
+  const images = attachments.files.filter((file) => file.kind === 'image')
+  if (images.length > CHAT_FILE_LIMITS.imagesPerMessage) {
+    throw fail(400, 'CHAT_IMAGES', '一条消息最多带 ' + CHAT_FILE_LIMITS.imagesPerMessage + ' 张图片：把要问的那两张挑出来再发')
+  }
+  const pictures = imageParts(user.id, images)
+  if (images.length && !pictures.count) {
+    throw fail(422, 'CHAT_IMAGE_UNREADABLE', '这几张图的原图读不到了：重新传一次再发')
+  }
 
   const paid = charge(user.id, 'chat', {
     ref: '对话 · ' + conv.title,
@@ -131,6 +163,20 @@ async function beginChat(user, input = {}) {
   if (tools.length) extra.tools = tools
   if (options.thinking) extra.thinking = { type: 'enabled' }
 
+  const messages = [{ role: 'system', content: SYSTEM_PROMPT }, ...contextMessages(conv.messages)]
+  if (pictures.count) {
+    // 只把「这一条」换成多模态正文：文字照旧（含这一轮的附件与链接），图跟在后面。
+    // 更早的轮次不重复带图（chat-store 里留的是一行占位说明），否则每追问一句都要再付一遍图片输入费。
+    const turnText = [content, docText ? '【这一轮的附件与链接】\n' + docText : ''].filter(Boolean).join('\n\n')
+    messages[messages.length - 1] = {
+      role: 'user',
+      content: [
+        { type: 'text', text: turnText + '\n\n（下面是这一轮带的 ' + pictures.count + ' 张图，直接看原图；图里的字按你看到的写。）' },
+        ...pictures.parts,
+      ],
+    }
+  }
+
   return {
     conv,
     options,
@@ -138,9 +184,10 @@ async function beginChat(user, input = {}) {
     extra,
     paid,
     startedAt,
-    messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...contextMessages(conv.messages)],
+    messages,
     attachments,
     links: linked.links,
+    visionTurn: pictures.count > 0,
   }
 }
 
@@ -159,6 +206,8 @@ function finishChat(user, ctx, result) {
     meta: {
       tools: ctx.tools.map((item) => item.type),
       files: ctx.attachments.files.map((item) => item.name),
+      // 带图这一轮记一笔：出问题时要能分清「模型没看图」还是「看了但没看出」
+      ...(ctx.visionTurn ? { vision: true } : {}),
       thinking: ctx.options.thinking,
       finishReason: result?.finishReason || '',
       usage: result?.usage || null,
@@ -205,6 +254,8 @@ export async function sendChatMessage(user, input = {}) {
       maxTokens: MAX_OUTPUT_TOKENS,
       extra: Object.keys(ctx.extra).length ? ctx.extra : null,
       meter: { kind: 'text', ref: ctx.conv.id },
+      // 带图必须走视觉链：文本链里常是纯文本模型，图片会被静默丢掉，回答装得像看过了（llm.mjs 有同样教训）
+      ...(ctx.visionTurn ? { models: visionChain() } : {}),
     })
     return finishChat(user, ctx, result)
   } catch (error) {
@@ -220,6 +271,21 @@ export async function sendChatMessage(user, input = {}) {
 export async function streamChatMessage(user, input = {}, hooks = {}) {
   const ctx = await beginChat(user, input)
   try {
+    // 带图片的这一轮走一次性：多模态 + 流式在不同上游并不都成立，一条 400 就会让整次对话失败并退款。
+    // 一次性拿到整段再一次性推给界面（前端本来就有「没有增量就一次性显示」的分支），行为可预期。
+    if (ctx.visionTurn) {
+      const result = await callTextModel(ctx.messages, {
+        temperature: 0.6,
+        maxTokens: MAX_OUTPUT_TOKENS,
+        extra: Object.keys(ctx.extra).length ? ctx.extra : null,
+        meter: { kind: 'text', ref: ctx.conv.id },
+        models: visionChain(),
+        signal: hooks.signal,
+      })
+      const whole = String(result?.text || '').trim()
+      if (whole) hooks.onDelta?.(whole)
+      return { ...finishChat(user, ctx, result), fellBack: false, vision: true }
+    }
     let result = null
     let fellBack = false
     try {
