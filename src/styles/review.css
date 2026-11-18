@@ -447,3 +447,81 @@
 }
 
 
+
+
+/* ---------- r239 窄屏：小字 13px、按钮与点按区 40/44px（v0.9.223） ----------
+   2026-11-19 在 390 / 768 量评审页（首屏候选 + 历史列表 / 一条历史评审详情 / 历史弹层）：
+   12px 的字 22–37 处、24–35px 的点按区 4–6 处。评审页的字号与点按区都走 shell 的原子
+   （.vq-pill / .vq-tag / .vq-mono / .vq-button），所以在这一页把原子档位抬一档就够，
+   不动其它页共用的默认值。桌面 1081 起一条规则都不进，与改前逐字段一致。 */
+@media (max-width: 1080px) {
+  .review-page {
+    --btn-h: 40px;
+    --btn-h-sm: 40px;
+    --chip-font: 13px;
+    --chip-pill-h: 24px;
+    --chip-tag-h: 24px;
+    --text-mono: 13px;
+  }
+  /* .vq-mono 的 12px 写在 tokens.css 里、不吃 --text-mono，所以在这一页单点抬一档 */
+  .review-page .vq-mono { font-size: 13px; }
+  /* 这一页里仍写死 12px 的几处：不是原子，改不了 token，逐个抬到 13px */
+  .review-page .review-picker-toggle,
+  .review-page .review-thumb-fallback,
+  .review-page .review-shots-head span,
+  .review-page .review-manual label,
+  .review-page .review-credit,
+  .review-page .review-history-time,
+  .review-page .review-history-flag,
+  .review-page .review-history-where,
+  .review-page .review-issue-summary,
+  .review-page .review-obs-no,
+  .review-page .review-project-scope span,
+  .review-page .review-model-note-text small,
+  .review-page .review-anchor-no {
+    font-size: 13px;
+  }
+  /* 点按区：折叠开关与两个「更多」原来是 24–35px 高，拇指点不准 */
+  .review-page .review-picker-toggle {
+    min-height: 40px;
+    padding: 8px 12px;
+    margin: -8px -12px -8px 0;
+  }
+  .review-page .review-history-more {
+    min-height: 40px;
+    padding: 8px 12px;
+    margin: -8px -12px -8px 0;
+  }
+  .review-page .review-candidates-more {
+    min-height: 40px;
+    padding: 8px 0;
+  }
+  /* 弹层里的历史行原来 4px 上下内边距，整行不到 40 */
+  .review-page .review-history-item {
+    min-height: 40px;
+  }
+  /* 弹层的关闭按钮在 320 宽被挤到 38px：图标按钮不参与收缩 */
+  .review-page .review-history-head .vq-button--icon { flex: 0 0 auto; }
+  /* 锚点编号盒跟着字抬：16px 方盒放 13px 字左右各剩 1px，抬到 18 */
+  .review-page .review-anchor-no {
+    min-width: 18px;
+    height: 18px;
+  }
+}
+
+@media (max-width: 560px) {
+  .review-page {
+    --btn-h: 44px;
+    --btn-h-sm: 44px;
+  }
+  .review-page .review-picker-toggle,
+  .review-page .review-history-more,
+  .review-page .review-candidates-more,
+  .review-page .review-history-item {
+    min-height: 44px;
+  }
+  /* 手机上历史行的上下内边距跟着抬，别让 44px 只靠字撑出来 */
+  .review-page .review-history-item {
+    padding: 8px;
+  }
+}

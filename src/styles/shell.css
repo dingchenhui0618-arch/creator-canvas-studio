@@ -2395,7 +2395,8 @@ select:focus-visible {
 
   .vq-search {
     justify-content: center;
-    width: 30px;
+    /* r239：图标态的搜索是顶栏唯一小于 40px 的点按区（30×40），与这一层其它 40px 不一致 */
+    width: 40px;
     padding: 0 8px;
   }
 
@@ -3293,6 +3294,8 @@ select:focus-visible {
   .vq-head-kicker { --head-kicker-size: 13px; }
   .vq-head-kicker time { font-size: 13px; }
   .vq-guide .vq-mono { font-size: 13px; }
+  /* r239：「等你看」计数（侧栏展开时可见）也还是 12px */
+  .vq-nav-item em { font-size: 13px; }
   .vq-guide-head p { font-size: 13px; }
   .vq-guide-step-body { font-size: 13px; }
   .vq-guide-note { font-size: 13px; }
@@ -3321,4 +3324,7 @@ select:focus-visible {
   .vq-nav--utility .vq-nav-item,
   .vq-nav-item--utility { min-height: 44px; }
   .vq-mobile-note-close { width: 44px; height: 44px; }
+  .vq-search { width: 44px; }
+  /* 图标按钮在 320 会被顶栏挤到 39px，点按区不参与收缩 */
+  .vq-topbar .vq-button--icon { flex: 0 0 auto; }
 }
