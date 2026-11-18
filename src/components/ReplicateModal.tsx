@@ -169,11 +169,14 @@ export function ReplicateModal({ item, hasKey, visionReady, onClose, onDone, onO
                 )
               })}
             </ol>
-            <div className="replicate-logs">
-              {(job?.logs ?? []).slice(-6).map((log, index) => (
-                <div className="replicate-log" key={log.at + index}><span>{log.at.slice(11, 19)}</span>{log.text}</div>
-              ))}
-            </div>
+            {/* 第一条日志还没回来时不要画一个空框：手机上它会变成一个 16px 高的灰条（r231） */}
+            {(job?.logs ?? []).length > 0 && (
+              <div className="replicate-logs">
+                {(job?.logs ?? []).slice(-6).map((log, index) => (
+                  <div className="replicate-log" key={log.at + index}><span>{log.at.slice(11, 19)}</span>{log.text}</div>
+                ))}
+              </div>
+            )}
             <p className="replicate-note">抽帧与逐帧分析需要 30–120 秒，关闭弹窗会中止等待（后台任务仍会继续）。</p>
           </div>
         )}
