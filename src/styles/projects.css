@@ -3615,6 +3615,12 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
   .vq-project-body {
     grid-template-columns: minmax(0, 1fr);
   }
+
+  /* 1024 下网格还是两列，一张卡片只有 354px：六格落到 44px 一格，
+     「1,800 积分」被折成两行。卡片窄过一屏的 560px 之前，先换成 3 × 2。 */
+  .vq-project-card-meta {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 780px) {
@@ -3670,6 +3676,120 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
     grid-column: 1 / -1;
     justify-self: start;
     justify-content: flex-start;
+  }
+}
+
+/* ---------- 作品项目：手机端（r234） ----------
+   390 下卡片只有 290px 宽，24px 内边距把正文压到 240px：六格数据落到 74px 一格，
+   「1,800 积分」被折成「1,800 积 / 分」，长标题一行就变「…」。手机端把内边距收到 16px、
+   六格改成 2 × 3（每格 121px），标题允许两行，字号整体抬一档。
+   口径没动：780 以下才是单列，2 × 3 只在 560 以下生效，768 平板与桌面都维持原样。 */
+@media (max-width: 560px) {
+  .vq-projects-grid {
+    gap: 12px;
+  }
+
+  /* 状态胶囊是这一屏最要紧的一句话：22px / 12px 在手机上偏小，跟着 --chip-* 抬一档 */
+  .vq-project-page {
+    --chip-pill-h: 28px;
+    --chip-pill-h-lg: 32px;
+    --chip-pad: 12px;
+    --chip-font: 13px;
+    --chip-font-lg: 14px;
+  }
+
+  .vq-project-card {
+    gap: 12px;
+    padding: 16px;
+  }
+
+  /* 320 下正文只有 188px：状态胶囊（152px）+ 时间（70px）排一行要 230px，
+     卡片的网格列被撑宽、内容溢出卡片。手机上让卡头能换行，时间自己靠右占一行。 */
+  .vq-project-card-head {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  /* 240px 一行只剩十四个字：手机上给两行，超了再省略 */
+  .vq-project-card-title {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    font-size: 18px;
+    line-height: 1.45;
+    white-space: normal;
+  }
+
+  .vq-project-card-source {
+    font-size: 15px;
+  }
+
+  /* 卡头换行之后时间自己占一行：13px 并靠右，不跟着换到左边 */
+  .vq-project-card-head > .vq-mono {
+    margin-left: auto;
+    font-size: 13px;
+  }
+
+  .vq-project-card-version,
+  .vq-project-share {
+    height: 26px;
+    font-size: 13px;
+  }
+
+  /* 2 × 3：一格 121px，「1,800 积分」这种四位数也一行放得下 */
+  .vq-project-card-meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 16px;
+  }
+
+  .vq-project-card-meta em {
+    font-size: 13px;
+  }
+
+  /* 数字与单位不拆行：折开就成了「1,800 积 / 分」，还把那一路格子拉高 */
+  .vq-project-card-meta b {
+    white-space: nowrap;
+  }
+
+  .vq-project-card-go {
+    font-size: 15px;
+  }
+
+  /* 搜索框 32px、筛选胶囊 30px：手机上点不准，抬到 44 / 40px。
+     min-width: 0 是必须的：输入框的默认宽度（20 字符）会成为搜索框的最小宽度，
+     320 下 291px 的搜索框直接顶出 220px 的正文区。 */
+  .vq-toolbar-search {
+    min-width: 0;
+    height: 44px;
+    padding: 0 16px;
+  }
+
+  .vq-toolbar-search input {
+    font-size: 15px;
+  }
+
+  .vq-toolbar-search-clear {
+    width: 32px;
+    height: 32px;
+  }
+
+  /* 内边距 12px（不是 16px）：390 下三枚胶囊 + 「共 N 条」放得进一行，
+     否则计数被挤到自己一行，看着像个孤儿 */
+  .vq-project-page .vq-filter-chip {
+    height: 40px;
+    padding: 0 12px;
+    font-size: 14px;
+  }
+
+  .vq-project-page .vq-filter-chip__count {
+    font-size: 13px;
+  }
+
+  /* 计数在手机上会落到胶囊下面那一行：靠右收尾，不做成孤立的一行左对齐小字 */
+  .vq-project-page .vq-toolbar-count {
+    margin-left: auto;
+    font-size: 13px;
   }
 }
 
