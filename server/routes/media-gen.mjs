@@ -320,30 +320,35 @@ async function settleFailure(task, message) {
   }
 }
 
-async function runImage(user, input) {
-  const task = newTask(user.id, 'image', input)
-  const paid = charge(user.id, 'image_gen', {
-    ref: task.id,
-    meta: { label: '生图 · ' + input.prompt.slice(0, 40) },
-  })
-  if (!paid.ok) return { paymentFailed: paid }
-  task.credits = { cost: paid.cost, balance: paid.balance, refunded: false, refundedAt: null }
+// 正在后台跑的出图任务：用来把「进程还活着、只是慢」和「进程没了、任务卡住」分开，
+// 不然慢任务会被下面那条过期兜底误判成失败并退款，等一下又写回成功——等于白送一张图。
+const runningImages = new Set()
+
+// 过期兜底：进程重启会把后台出图带走，但元数据还留着 processing。
+// 阈值必须比「上游超时 + 下载超时」更大，否则跑得好好的任务会被判死。
+function imageStaleMs() {
+  return Math.max(5 * 60 * 1000, Number(config.gateway.imageTimeoutMs) + DOWNLOAD_TIMEOUT_MS + 60 * 1000)
+}
+
+async function finishImageTask(user, task) {
   try {
-    await writeTask(task)
     const result = await generateImage({
       model: IMAGE_MODEL,
-      prompt: input.prompt,
-      size: input.size,
+      prompt: task.prompt,
+      size: task.size,
       n: 1,
     })
     const url = Array.isArray(result?.urls) ? result.urls[0] : ''
     const asset = await downloadAsset(url, 'image')
     task.file = await saveResult(task, asset)
     task.status = 'succeeded'
+    task.error = ''
     task.finishedAt = nowIso()
     task.updatedAt = task.finishedAt
   } catch (error) {
     await settleFailure(task, failureText(error))
+  } finally {
+    runningImages.delete(task.id)
   }
   await writeTask(task)
   logEvent('media.generate', {
@@ -353,6 +358,30 @@ async function runImage(user, input) {
     status: task.status,
     cost: task.credits.cost,
     refunded: task.credits.refunded,
+  })
+}
+
+/**
+ * 出图：扣费 → 落一条 processing 的任务 → 立刻返回，真正的上游调用在后台跑完再写回结果。
+ *
+ * 为什么不挂在这次 HTTP 请求上（2026-11-18 生产事故）：gpt-image-2 慢的时候要两三分钟，
+ * 那次正好卡在 120 秒上限被我们自己掐断，用户等了 2 分钟只拿到「连不上出图上游」。
+ * 请求挂太久还有两个连带问题：关掉标签页/切后台就可能掐断，nginx 也随时会先断。
+ * 改成后台跑之后，界面按任务号轮询（本来生视频就是这么做的），关掉窗口结果也还在。
+ */
+async function runImage(user, input) {
+  const task = newTask(user.id, 'image', input)
+  const paid = charge(user.id, 'image_gen', {
+    ref: task.id,
+    meta: { label: '生图 · ' + input.prompt.slice(0, 40) },
+  })
+  if (!paid.ok) return { paymentFailed: paid }
+  task.credits = { cost: paid.cost, balance: paid.balance, refunded: false, refundedAt: null }
+  await writeTask(task)
+  runningImages.add(task.id)
+  void finishImageTask(user, task).catch((error) => {
+    runningImages.delete(task.id)
+    logEvent('media.generate.error', { by: user.email, kind: 'image', id: task.id, error: failureText(error) })
   })
   return { task }
 }
@@ -700,10 +729,11 @@ export function createMediaGenRouter() {
           warning = task.warning || ''
           task.warning = ''
           await writeTask(task)
-        } else if (task.status === 'processing' && task.kind === 'image') {
+        } else if (task.status === 'processing' && task.kind === 'image' && !runningImages.has(task.id)) {
+          // 后台没人在跑这条任务，又久到超过「上游超时 + 下载超时」，只能是进程没了（重启/崩溃）
           const age = Date.now() - new Date(task.createdAt).getTime()
-          if (age > 5 * 60 * 1000) {
-            await settleFailure(task, '生成进程中断，任务没有完成')
+          if (age > imageStaleMs()) {
+            await settleFailure(task, '生成进程中断，任务没有完成，积分已全额退回')
             await writeTask(task)
           }
         }

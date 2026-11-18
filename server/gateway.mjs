@@ -345,6 +345,16 @@ async function attemptImage(key, requestBody, started, model, extraHeaders = {})
   } catch (error) {
     reportKey(key.id, false, String(error?.message || error))
     recordRoute({ capability: 'image', model, keyId: key.id, keyName: key.name, source: 'pool', reason: key.reason, attempt: key.attempt, ms: Date.now() - started, ok: false, error: String(error?.message || error) })
+    // 超时和「连不上」是两件事。2026-11-18 生产上一张 9:16 正好卡在我们自己的 120 秒上限被掐断，
+    // 界面写的是「连不上出图上游」，管理员照着去查网络、去补 Key 都是白折腾——上游其实在排队。
+    // 另外超时的请求上游多半已经接单（钱可能照扣），所以话要说清「先退回积分、稍后再点」。
+    if (error?.name === 'TimeoutError' || /timeout|timed out/i.test(String(error?.message || ''))) {
+      const seconds = Math.round(Number(config.gateway.imageTimeoutMs) / 1000)
+      throw gatewayError(504, 'UPSTREAM_TIMEOUT', '上游 ' + seconds + ' 秒没回，这次按超时退回积分，稍后再点一次；上游可能已经接单，别连点', {
+        retryAfterSec: 30,
+        detail: String(error?.message || error).slice(0, 200),
+      })
+    }
     throw gatewayError(502, 'UPSTREAM_UNREACHABLE', '连不上出图上游：' + friendlyNetwork(error))
   }
   // 结果不明的重试只能拿同一个幂等键重放：SeeAPI 保证同键同 body 重放会回原结果、不重复扣费。
@@ -451,9 +461,11 @@ export async function generateImage(payload = {}, options = {}) {
       recordUsage({ kind: 'image', model: String(result.model || model), ref: idempotencyKey, units: imageUnits(payload), detail: '同步出图' })
       return result
     } catch (error) {
-      // 结果不明不换 Key：换一把就是重新提交一次，可能重复扣费
-      if (error?.code === 'UPSTREAM_OUTCOME_UNKNOWN') {
-        recordUsage({ kind: 'image', model, ref: idempotencyKey, ok: false, detail: '结果不明：上游可能已计费，等对账' })
+      // 结果不明不换 Key：换一把就是重新提交一次，可能重复扣费。
+      // 超时同样不换：超时是「我们等不住」，不是「上游没收」，那边很可能已经接单并计费，
+      // 这时候再拿另一把 Key 提交一次，就是让用户为同一张图付两次钱。
+      if (error?.code === 'UPSTREAM_OUTCOME_UNKNOWN' || error?.code === 'UPSTREAM_TIMEOUT') {
+        recordUsage({ kind: 'image', model, ref: idempotencyKey, ok: false, detail: error.code === 'UPSTREAM_TIMEOUT' ? '超时：上游可能已接单，等对账' : '结果不明：上游可能已计费，等对账' })
         throw error
       }
       lastError = error

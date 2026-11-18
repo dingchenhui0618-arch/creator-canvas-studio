@@ -1012,13 +1012,19 @@ function MediaGenPanel({
             <div className="agx-media-progress" role="status">
               <div className="agx-media-progress-head">
                 <span className="agx-media-spinner" />
-                <strong>视频生成中 · 已用时 <span className="agx-mono">{clockOf(elapsed)}</span></strong>
+                <strong>{image ? '出图生成中' : '视频生成中'} · 已用时 <span className="agx-mono">{clockOf(elapsed)}</span></strong>
                 <span className="agx-mono">每 2.5s 查询</span>
               </div>
               <div className={'agx-media-progress-track' + (task.progress === null ? ' is-indeterminate' : '')}>
                 <span style={task.progress === null ? undefined : { width: task.progress + '%' }} />
               </div>
-              <p>{task.progress === null ? '上游还没有返回百分比；页面按任务状态与已用时间如实显示，不编进度。' : '上游进度 ' + task.progress + '%。'}</p>
+              <p>
+                {image
+                  ? '任务已经交给上游，出图一般 20～90 秒，最长等到 4 分钟；关掉这个窗口也会继续跑完，结果会留在下面的「最近生成」里。'
+                  : task.progress === null
+                    ? '上游还没有返回百分比；页面按任务状态与已用时间如实显示，不编进度。'
+                    : '上游进度 ' + task.progress + '%。'}
+              </p>
               {pollError ? <p className="agx-media-poll-warning">{pollError}</p> : null}
             </div>
           ) : null}

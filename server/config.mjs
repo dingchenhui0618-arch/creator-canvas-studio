@@ -111,7 +111,10 @@ export const config = {
     // 渠道额度是否已开通：没开通时网关对生成请求直接 503 并说明原因，
     // 不让上游的 402 以「生成失败」的样子回到画布上。买了额度写 VQ_GATEWAY_OPEN=1。
     open: process.env.VQ_GATEWAY_OPEN === '1',
-    imageTimeoutMs: Number(process.env.VQ_GATEWAY_IMAGE_TIMEOUT_MS || 120000),
+    // 出图给足 4 分钟：gpt-image-2 实测 19~82 秒，2026-11-18 生产上有一张卡到 120 秒被我们自己掐断
+  // （界面报「连不上出图上游」，其实上游还在排队）。nginx 的 /api/ 是 proxy_read_timeout 300s，
+  // 所以 240 秒还有余量；再长就该改成异步任务，而不是把 HTTP 请求挂更久。
+  imageTimeoutMs: Number(process.env.VQ_GATEWAY_IMAGE_TIMEOUT_MS || 240000),
     videoTimeoutMs: Number(process.env.VQ_GATEWAY_VIDEO_TIMEOUT_MS || 60000),
     publicBaseUrl: (process.env.VQ_PUBLIC_BASE_URL || 'https://visionqa.wavisionai.cn').trim().replace(/\/+$/, ''),
   },

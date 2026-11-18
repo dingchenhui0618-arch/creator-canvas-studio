@@ -27,6 +27,8 @@ let videoPolls = 0
 let lastVideoBody = null
 // 记一次真实打上游的次数：冷却中应当一次都不打，光看错误文案证明不了这一点。
 let imageAttempts = 0
+// 「永不回包」的上游连接：测试收尾要主动毁掉，否则 server.close() 会一直等着它
+const held = []
 const upstream = http.createServer((req, res) => {
   const chunks = []
   req.on('data', (chunk) => chunks.push(chunk))
@@ -39,7 +41,18 @@ const upstream = http.createServer((req, res) => {
     if (req.method === 'POST' && req.url === '/v1/images/generations') {
       imageAttempts += 1
       const body = JSON.parse(bodyText || '{}')
-      if (String(body.prompt || '').includes('图失败')) {
+      const prompt = String(body.prompt || '')
+      // 永不回包：专门测「我们等不住、把请求掐断」那条路，掐断后不能再被说成「连不上上游」
+      if (prompt.includes('图超时')) {
+        held.push(res)
+        return
+      }
+      // 慢上游：证明请求不再挂在 HTTP 上，POST 应当立刻回任务号
+      if (prompt.includes('慢')) {
+        setTimeout(() => send(200, { created: 1, data: [{ b64_json: 'data:image/png;base64,' + tinyPng.toString('base64') }] }), 900)
+        return
+      }
+      if (prompt.includes('图失败')) {
         return send(500, { error: { code: 'upstream_rejected', message: '上游拒绝这次生图' } })
       }
       return send(200, { created: 1, data: [{ b64_json: 'data:image/png;base64,' + tinyPng.toString('base64') }] })
@@ -72,7 +85,10 @@ const upstream = http.createServer((req, res) => {
 let base = ''
 await new Promise((resolve) => upstream.listen(0, '127.0.0.1', resolve))
 base = 'http://127.0.0.1:' + upstream.address().port
-test.after(() => new Promise((resolve) => upstream.close(resolve)))
+test.after(() => {
+  for (const res of held) res.destroy()
+  return new Promise((resolve) => upstream.close(resolve))
+})
 
 const auth = await import('../server/auth.mjs')
 const credits = await import('../server/credits.mjs')
@@ -169,6 +185,20 @@ async function call({ method = 'POST', target = '/api/media/generate', body = nu
   return { status: res.statusCode, payload, res, raw: res.raw }
 }
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+// 出图改成了后台任务：POST 只回一条 processing，结果要靠轮询拿。
+// 假上游是本地即时响应，所以几十毫秒就能收敛；上限给 4 秒，超了就是真有问题。
+async function waitTask(id, cookie, { tries = 120, gap = 40 } = {}) {
+  for (let index = 0; index < tries; index += 1) {
+    const result = await call({ method: 'GET', target: '/api/media/tasks/' + id, cookie })
+    if (result.status !== 200) return result
+    if (result.payload.task.status !== 'processing') return result
+    await sleep(gap)
+  }
+  throw new Error('任务一直是 processing，后台没有收敛：' + id)
+}
+
 test('新增价格默认 image_gen=5、video_gen=15，且会出现在积分汇总里', () => {
   if (!process.env.VQ_CREDIT_IMAGE_GEN) assert.equal(Number(config.credits.prices.image_gen), 5)
   if (!process.env.VQ_CREDIT_VIDEO_GEN) assert.equal(Number(config.credits.prices.video_gen), 15)
@@ -177,20 +207,22 @@ test('新增价格默认 image_gen=5、video_gen=15，且会出现在积分汇�
   assert.equal(typeof summary.prices.video_gen, 'number')
 })
 
-test('生图成功：扣 5 积分、结果落 data/media/<账号>/、只有自己能读', async () => {
+test('生图成功：先回任务号、后台跑完再落盘，扣 5 积分、只有自己能读', async () => {
   const before = credits.balanceOf(owner.id)
   const result = await call({ cookie: cookieOf(owner), body: { kind: 'image', prompt: '一只橘猫', ratio: '9:16' } })
   assert.equal(result.status, 200)
-  assert.equal(result.payload.task.status, 'succeeded')
+  assert.equal(result.payload.task.status, 'processing', 'POST 不再挂着等上游，先回一条 processing')
   assert.equal(result.payload.task.model, 'gpt-image-2')
   assert.equal(result.payload.task.size, '1024x1536')
   assert.equal(result.payload.task.credits.cost, 5)
-  assert.equal(result.payload.task.credits.refunded, false)
-  assert.equal(result.payload.task.file.mime, 'image/png')
   assert.equal(credits.balanceOf(owner.id), before - 5)
 
   const id = result.payload.task.id
-  assert.equal(result.payload.task.downloadUrl, '/api/media/tasks/' + id + '/file')
+  const settled = await waitTask(id, cookieOf(owner))
+  assert.equal(settled.payload.task.status, 'succeeded')
+  assert.equal(settled.payload.task.credits.refunded, false)
+  assert.equal(settled.payload.task.file.mime, 'image/png')
+  assert.equal(settled.payload.task.downloadUrl, '/api/media/tasks/' + id + '/file')
   assert.ok(fs.existsSync(path.join(dir, 'media', owner.id, id + '.png')), '图片必须落在 data/media/<账号>/')
 
   const mine = await call({ method: 'GET', target: '/api/media/tasks/' + id, cookie: cookieOf(owner) })
@@ -211,17 +243,18 @@ test('生图成功：扣 5 积分、结果落 data/media/<账号>/、只有自�
   assert.equal(anonymous.status, 401)
 })
 
-test('生图失败：返回失败任务、原因可见、积分全额退回，重复读不会多退', async () => {
+test('生图失败：失败原因可见、积分全额退回，重复读不会多退', async () => {
   const before = credits.balanceOf(failUser.id)
   const result = await call({ cookie: cookieOf(failUser), body: { kind: 'image', prompt: '图失败', ratio: '1:1' } })
   assert.equal(result.status, 200)
-  assert.equal(result.payload.task.status, 'failed')
-  assert.match(result.payload.task.error, /上游/)
-  assert.equal(result.payload.task.credits.refunded, true)
+  const settled = await waitTask(result.payload.task.id, cookieOf(failUser))
+  assert.equal(settled.payload.task.status, 'failed')
+  assert.match(settled.payload.task.error, /上游/)
+  assert.equal(settled.payload.task.credits.refunded, true)
   assert.equal(credits.balanceOf(failUser.id), before, '失败必须全额退回')
-  assert.equal(credits.outstandingCharge(failUser.id, 'image_gen', result.payload.task.id), 0)
+  assert.equal(credits.outstandingCharge(failUser.id, 'image_gen', settled.payload.task.id), 0)
 
-  const again = await call({ method: 'GET', target: '/api/media/tasks/' + result.payload.task.id, cookie: cookieOf(failUser) })
+  const again = await call({ method: 'GET', target: '/api/media/tasks/' + settled.payload.task.id, cookie: cookieOf(failUser) })
   assert.equal(again.status, 200)
   assert.equal(credits.balanceOf(failUser.id), before, '重复读任务不能重复退款')
 })
@@ -288,17 +321,19 @@ test('出图 Key 连续失败进冷却：说的是「等一会儿再点」，不
   const before = credits.balanceOf(user.id)
   // 连续 3 次上游拒绝就把这把 Key 打进 60 秒冷却
   for (let round = 0; round < 3; round += 1) {
-    const failed = await call({ cookie, body: { kind: 'image', prompt: '图失败', ratio: '1:1' } })
+    const queued = await call({ cookie, body: { kind: 'image', prompt: '图失败', ratio: '1:1' } })
+    const failed = await waitTask(queued.payload.task.id, cookie)
     assert.equal(failed.payload.task.status, 'failed')
   }
   const attemptsBefore = imageAttempts
   const cooled = await call({ cookie, body: { kind: 'image', prompt: '一只橘猫', ratio: '1:1' } })
   assert.equal(cooled.status, 200)
-  assert.equal(cooled.payload.task.status, 'failed')
+  const cooledDone = await waitTask(cooled.payload.task.id, cookie)
+  assert.equal(cooledDone.payload.task.status, 'failed')
   // 关键：不许再叫人「补一把 Key」——Key 就在池里，只是刚被上游打了一下
-  assert.match(cooled.payload.task.error, /冷却/)
-  assert.match(cooled.payload.task.error, /再点一次/)
-  assert.doesNotMatch(cooled.payload.task.error, /补一把|还没接入/)
+  assert.match(cooledDone.payload.task.error, /冷却/)
+  assert.match(cooledDone.payload.task.error, /再点一次/)
+  assert.doesNotMatch(cooledDone.payload.task.error, /补一把|还没接入/)
   assert.equal(imageAttempts, attemptsBefore, '冷却期间不该再打上游，白花时间和额度')
   assert.equal(credits.balanceOf(user.id), before, '冷却失败要全额退回')
   reportKey(imageKey.id, true)
@@ -352,6 +387,7 @@ test('最近生成：只列自己的、按时间倒序、按 kind 分开、未�
 
   const first = await call({ cookie, body: { kind: 'image', prompt: '第一张：橘猫', ratio: '1:1' } })
   assert.equal(first.status, 200)
+  await waitTask(first.payload.task.id, cookie)
   const second = await call({ cookie, body: { kind: 'video', prompt: '第二段：海边', ratio: '16:9', duration: 4, resolution: '720p' } })
   assert.equal(second.status, 200)
   assert.equal(second.payload.task.status, 'processing')
@@ -396,7 +432,8 @@ test('最近生成：失败那一条要带着原因回来，光说「失败」�
 
   const created = await call({ cookie, body: { kind: 'image', prompt: '图失败：让上游拒绝这一次', ratio: '1:1' } })
   assert.equal(created.status, 200)
-  assert.equal(created.payload.task.status, 'failed')
+  const settled = await waitTask(created.payload.task.id, cookie)
+  assert.equal(settled.payload.task.status, 'failed')
 
   const list = await call({ method: 'GET', target: '/api/media/tasks?kind=image', cookie })
   assert.equal(list.status, 200)
@@ -446,4 +483,50 @@ test('最近生成能往回翻：游标只给更早的、翻到底 hasMore=false
   const badCursor = await call({ method: 'GET', target: '/api/media/tasks?kind=image&before=nope!', cookie })
   assert.equal(badCursor.status, 400)
   assert.equal(badCursor.payload.code, 'MEDIA_CURSOR')
+})
+
+test('出图不再挂在 HTTP 请求上：慢上游下 POST 也立刻回任务号，结果靠轮询取', async () => {
+  resetMediaGenRateLimit()
+  const user = auth.createUser({ email: email('async'), password: 'Passw0rd!demo', name: '异步出图用户', kind: 'user' })
+  credits.grant(user.id, 100, { note: 'async image test' })
+  const cookie = cookieOf(user)
+
+  const started = Date.now()
+  const queued = await call({ cookie, body: { kind: 'image', prompt: '慢图：上游要 900 毫秒才回', ratio: '1:1' } })
+  const elapsed = Date.now() - started
+  assert.equal(queued.status, 200)
+  assert.equal(queued.payload.task.status, 'processing')
+  // 假上游固定慢 900ms：POST 要是还挂着等上游，这里就必然超 900ms
+  assert.ok(elapsed < 600, 'POST 不能等上游生成，实际用了 ' + elapsed + ' ms')
+
+  const done = await waitTask(queued.payload.task.id, cookie, { tries: 200, gap: 50 })
+  assert.equal(done.payload.task.status, 'succeeded')
+  assert.ok(done.payload.task.file, '后台跑完也要把文件落下来')
+})
+
+test('上游超时：说的是「N 秒没回、已退回」，不许说成「连不上上游」，也不许换 Key 再打一次', async () => {
+  resetMediaGenRateLimit()
+  const user = auth.createUser({ email: email('slow'), password: 'Passw0rd!demo', name: '超时用户', kind: 'user' })
+  credits.grant(user.id, 100, { note: 'timeout test' })
+  const cookie = cookieOf(user)
+  const before = credits.balanceOf(user.id)
+  const original = config.gateway.imageTimeoutMs
+  config.gateway.imageTimeoutMs = 300
+  try {
+    const attemptsBefore = imageAttempts
+    const queued = await call({ cookie, body: { kind: 'image', prompt: '图超时：上游一直不回包', ratio: '1:1' } })
+    assert.equal(queued.status, 200)
+    assert.equal(queued.payload.task.status, 'processing')
+
+    const done = await waitTask(queued.payload.task.id, cookie, { tries: 100, gap: 50 })
+    assert.equal(done.payload.task.status, 'failed')
+    assert.match(done.payload.task.error, /秒没回/)
+    assert.doesNotMatch(done.payload.task.error, /连不上/, '超时不是连不上，别把人往网络问题上带')
+    assert.equal(done.payload.task.credits.refunded, true)
+    assert.equal(credits.balanceOf(user.id), before, '超时也要全额退回')
+    assert.equal(imageAttempts, attemptsBefore + 1, '超时后不许换 Key 重打：上游可能已经接单，重打就是重复扣费')
+  } finally {
+    config.gateway.imageTimeoutMs = original
+    reportKey(imageKey.id, true)
+  }
 })
