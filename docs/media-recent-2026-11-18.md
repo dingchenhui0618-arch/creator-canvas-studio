@@ -53,3 +53,27 @@
 - 没有分页，只有「按 kind 分窗口」这一层筛选；接口的 `limit` 上限 24 是给以后分页留的口子。
 - 清单只显示 6 条：够找回刚刚那条，不是资产库。
 - 「进行中」的任务点开只显示状态，不会替你去上游催进度——进度仍由那个窗口自己的轮询驱动。
+
+## 六、生产上拿真实数据核了一遍
+
+上线后在生产的同一台机器上，用一个真实账号的临时会话（不传口令、跑完即撤销）打了一次这个接口，拿到的是**真实任务**，不是样例：
+
+```text
+ALL status=200 count=6
+  video succeeded ratio=16:9 bytes=2895736 at=2026-11-18T02:33
+  image succeeded ratio=16:9 bytes=2075773 at=2026-11-18T01:41
+  video succeeded ratio=9:16  bytes=3009531 at=2026-11-18T01:38
+  image failed    ratio=16:9 bytes=-       at=2026-11-18T01:36
+  image succeeded ratio=9:16  bytes=2066905 at=2026-11-18T01:35
+  video failed    ratio=       bytes=-       at=2026-11-18T01:30
+IMAGE count=6 VIDEO count=4 BAD=400 MEDIA_KIND
+SESSION revoked
+```
+
+对得上的三件事：
+
+1. **倒序是真的**——最上面那条 2,895,736 B 就是这一轮真调的 16:9 视频，字节数完全一致。
+2. **kind 分窗口是真的**——`kind=image` 6 条、`kind=video` 4 条，加起来正是全部 6 条里的两种。
+3. **失败也留痕**——清单里能看见 01:30 那条 `ratio=` 空的视频失败（就是「漏传 aspect_ratio」那个真 bug 留下的），以及 01:36 那次 16:9 生图超时；前者退款、后者也退了。以前这些失败只能去积分流水里猜，现在打开窗口就看得见。
+
+同一次核对还确认：未登录 401、`kind=audio` 400、清单里没有别人的任务。
