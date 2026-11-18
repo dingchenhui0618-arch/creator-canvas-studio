@@ -41,6 +41,7 @@ import {
 } from '../api/agents'
 import type { AgentArtifact, AgentDraft, AgentRecord, AgentRunRecord, AgentsList, AgentToolsResult, OutputType } from '../api/agents'
 import { generateMediaImage, generateMediaVideo, getMediaTask, listMediaTasks } from '../api/media-gen'
+import { RECENT_PAGE_SIZE, mergeRecentTasks } from '../domain/media-recent'
 import type { ImageRatio, MediaKind, MediaTask, VideoDuration, VideoRatio, VideoResolution } from '../api/media-gen'
 import { getCredits, getModelService, recheckModelService, type CreditsResponse, type ModelServiceState } from '../api/credits'
 import { getProject, listProjects } from '../api/projects'
@@ -686,20 +687,25 @@ function MediaGenDialog({
   const [recentHasMore, setRecentHasMore] = useState(false)
   const [recentCapped, setRecentCapped] = useState(false)
   const [recentLoading, setRecentLoading] = useState(false)
-  // 翻过几页就要一直按这个条数取：刷新清单时不能把用户已经翻出来的更早几条丢掉
-  const recentSizeRef = useRef(6)
+  // 翻过页没有：决定这次刷新是整页替换，还是只补新出现的那几条
+  const recentPagedRef = useRef(false)
   const promptRef = useRef<HTMLTextAreaElement | null>(null)
 
   // 「最近生成」：关掉窗口之后还能把上一次的文件找回来——任务号没人记得，光存在服务端等于找不到。
   // 用 .then 取数（和本页其它请求一致）：不在 effect 里同步 setState，也不会被 set-state-in-effect 规则判违规。
   useEffect(() => {
     let alive = true
-    listMediaTasks(kind, recentSizeRef.current)
+    // 永远只取第一页：条数不跟翻页长大，也就不会被接口的 24 条上限截断
+    listMediaTasks(kind, RECENT_PAGE_SIZE)
       .then((response) => {
         if (!alive) return
-        setRecent(response.tasks || [])
-        setRecentHasMore(Boolean(response.hasMore))
-        setRecentCapped(Boolean(response.capped))
+        const tasks = response.tasks || []
+        // 翻过页就只合并、不替换：已经翻出来的更早行不能因为一次刷新就没了
+        setRecent((items) => mergeRecentTasks(items, tasks, recentPagedRef.current))
+        if (!recentPagedRef.current) {
+          setRecentHasMore(Boolean(response.hasMore))
+          setRecentCapped(Boolean(response.capped))
+        }
         setRecentError('')
       })
       .catch((caught) => {
@@ -726,12 +732,12 @@ function MediaGenDialog({
     if (!last || recentLoading) return
     setRecentLoading(true)
     try {
-      const response = await listMediaTasks(kind, 6, last.id)
+      const response = await listMediaTasks(kind, RECENT_PAGE_SIZE, last.id)
+      recentPagedRef.current = true
       setRecent((items) => {
         const seen = new Set(items.map((entry) => entry.id))
         return items.concat((response.tasks || []).filter((entry) => !seen.has(entry.id)))
       })
-      recentSizeRef.current += 6
       setRecentHasMore(Boolean(response.hasMore))
       setRecentCapped(Boolean(response.capped))
       setRecentError('')
