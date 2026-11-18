@@ -417,7 +417,7 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
   return (
     <div className="page page--radar">
       <PageHead
-        kicker="爆款雷达"
+        kicker="找爆款 / RADAR"
         title="爆款雷达"
         desc="按关键词检索抖音与小红书的内容与互动数据：点赞、收藏、评论、转发、播放都取原始值。挑一条加进模板库只存链接，或者直接拆成脚本与分镜。"
         actions={
@@ -702,9 +702,12 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
                   />
                   <span className="radar-badge">{item.platformLabel}</span>
                   <span className="radar-duration"><Film size={11} />{formatDuration(item.durationSec)}</span>
+                  {/* 手机上封面只有 88px 宽，「库里已有 · 2 条作品」放不下：条数收进 .radar-owned-count，
+                      窄屏只留「库里已有」（r230） */}
                   {mark ? (
                     <span className="radar-owned" title={'已经在模板库里：' + mark.title}>
-                      <Check size={11} />库里已有{mark.workCount ? ' · ' + mark.workCount + ' 条作品' : ''}
+                      <Check size={11} />库里已有
+                      {mark.workCount ? <span className="radar-owned-count">{' · ' + mark.workCount + ' 条作品'}</span> : null}
                     </span>
                   ) : null}
                   <button
@@ -719,7 +722,7 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
                   </button>
                 </div>
                 <div className="radar-copy">
-                  <strong className="radar-title">{item.title || '（无标题）'}</strong>
+                  <strong className="radar-title" title={item.title || undefined}>{item.title || '（无标题）'}</strong>
                   <span className="radar-author">{item.author || '未知作者'}{item.publishedAt ? ' · ' + item.publishedAt : ''}</span>
                   <div className="radar-stats">
                     {(item.stats.plays || 0) > 0 && (

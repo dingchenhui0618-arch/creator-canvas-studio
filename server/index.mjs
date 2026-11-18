@@ -245,7 +245,10 @@ registerCoverStats(() => coverProxy.stats(), (key) => coverProxy.peek(key))
 // 返回 { cost, release }；余额不足/并发超限时直接写响应并返回 null。
 // 未登录（本地演示）时既不扣费也不限流。
 function beginPaid(res, user, kind, ref, { meta = null } = {}) {
-  if (!user?.id) return { cost: 0, release: () => {} }
+  // 未登录（auth 关掉的演示实例 / 本地实例）既不扣费也不限额，但形状要和下面一致：
+  // 少一个 refund 时，检索或复刻失败走到 paid.refund() 会抛 TypeError，
+  // 用户看到的是 500 加一串 traceId，真正的原因被吞掉（r230 在临时实例上踩到）
+  if (!user?.id) return { cost: 0, release: () => {}, refund: () => {} }
   // 运行水位（v0.9.69）：内存到红线时在扣费之前拒绝——这一单不扣积分、不调上游。
   // 水位偏紧时并发上限压到 1：宁可慢一点，也不要两条重活一起把进程顶穿。
   const water = admit(kind)

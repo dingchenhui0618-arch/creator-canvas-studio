@@ -1016,7 +1016,7 @@ function Workbench({
           {mobileNoteOpen ? (
             <div className="vq-mobile-note" role="note">
               <span className="vq-mobile-note-text">
-                桌面工作台：手机上能查看，检索、拆解与评审建议在电脑上做。
+                手机也能检索、挑素材、跑工作流；画布连线与逐帧评审建议在电脑上做。
               </span>
               <button
                 type="button"
