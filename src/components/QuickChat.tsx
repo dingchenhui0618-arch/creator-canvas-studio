@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowUp, Brain, FileText, Link2, Loader2, MessageSquarePlus, Paperclip, Search, Square, Trash2, X } from 'lucide-react'
+import { ArrowUp, Brain, ChevronDown, FileText, Link2, Loader2, MessageSquarePlus, Paperclip, Search, Square, Trash2, X } from 'lucide-react'
 import {
   createChatConversation,
   deleteChatConversation,
@@ -77,6 +77,9 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
   const [attaching, setAttaching] = useState(false)
   const [attachError, setAttachError] = useState('')
   const [preview, setPreview] = useState<{ name: string; text: string; note: string } | null>(null)
+  // 手机上一列排（≤900px）：会话列表默认收成一条窄条，点开才展开。
+  // 桌面左栏不受影响——这个状态只决定窄屏那条列表展不展开（CSS 里只在窄屏生效）。
+  const [listOpen, setListOpen] = useState(false)
   const fileRef = useRef<HTMLInputElement | null>(null)
   const bottomRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
@@ -116,6 +119,8 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
     try {
       const result = await getChatConversation(id)
       setCurrent(result.conversation)
+      // 手机上选完就把列表收起来，否则答案被挤在列表下面
+      setListOpen(false)
     } catch {
       setError('这条对话读不到了，可能已被删除')
     } finally {
@@ -138,6 +143,7 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
     setAttached([])
     setAttachError('')
     setPreview(null)
+    setListOpen(false)
     window.setTimeout(() => inputRef.current?.focus(), 0)
   }, [])
 
@@ -272,15 +278,26 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
 
   return (
     <div className="qc-root">
-      <aside className="qc-side" aria-label="对话列表">
+      <aside className={'qc-side' + (listOpen ? ' is-open' : '')} aria-label="对话列表">
         <div className="qc-side-head">
           <button type="button" className="qc-new" onClick={newConversation}>
             <MessageSquarePlus size={15} />
             新对话
           </button>
           <span className="qc-count">{items.length}</span>
+          {/* 窄屏专用：把「历史对话」收成一条，点开才展开列表；桌面上这枚按钮不显示 */}
+          <button
+            type="button"
+            className="qc-side-toggle"
+            aria-expanded={listOpen}
+            aria-controls="qc-conv-list"
+            onClick={() => setListOpen((value) => !value)}
+          >
+            <span className="qc-side-toggle-text">{current?.title || '历史对话'}</span>
+            <ChevronDown size={14} className="qc-side-toggle-icon" aria-hidden="true" />
+          </button>
         </div>
-        <div className="qc-list">
+        <div className="qc-list" id="qc-conv-list">
           {loadingList && <p className="qc-side-empty">正在读取…</p>}
           {!loadingList && items.length === 0 && <p className="qc-side-empty">还没有对话。写下第一句就开始。</p>}
           {items.map((item) => (

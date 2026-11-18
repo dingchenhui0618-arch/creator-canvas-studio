@@ -2463,6 +2463,36 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* 窄屏才出现的「历史对话」折叠按钮（r221）：桌面左栏一直是展开的，不需要它 */
+.qc-side-toggle {
+  display: none;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--ink);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.qc-side-toggle:hover { border-color: var(--line-strong); }
+
+.qc-side-toggle-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qc-side-toggle-icon { flex: none; color: var(--muted); transition: transform 160ms ease; }
+.qc-side.is-open .qc-side-toggle-icon { transform: rotate(180deg); }
+
 .qc-list {
   display: flex;
   flex-direction: column;
@@ -2859,10 +2889,25 @@
 
 
 
+/* 窄屏（平板竖屏到手机）：会话列表收成一条可展开的窄条（r221）。
+   原来这里把列表压成 200px、回答区留 48vh，手机上等于「列表比回答还占地方」——
+   列表常驻 200px、加上输入框，长回答只能在 48vh 的小窗里滚两层。
+   现在：一条 32px 的「历史对话」条 + 回答区不再自己滚（整页滚）+ 输入框贴底。 */
 @media (max-width: 900px) {
-  .qc-root { grid-template-columns: minmax(0, 1fr); }
-  .qc-side { max-height: 200px; min-height: 0; }
-  .qc-thread { max-height: 48vh; min-height: 240px; }
+  .qc-root { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .qc-side { max-height: none; min-height: 0; }
+  .qc-side-head { gap: 8px; }
+  .qc-new { flex: none; padding: 0 12px; }
+  .qc-side-toggle { display: inline-flex; }
+  .qc-side .qc-list { display: none; }
+  .qc-side.is-open .qc-list { display: flex; max-height: 40vh; }
+  /* 提醒「会话存在服务端」这段在手机上不占位置：条数就在旁边 */
+  .qc-side-note { display: none; }
+  /* 回答区从 48vh 提到 58vh：列表让出来的高度给回答，输入框仍然一屏内看得见。
+     这里没改成「整页滚 + 输入框贴底」——实测本页真正的滚动容器是文档本身，
+     .vq-content 虽然写了 overflow:auto 却从不滚动，sticky 贴不住底，所以不做。
+     回答区自己滚也更适合边生成边看：新字进来只滚它，页面不跟着跳。 */
+  .qc-thread { max-height: 58vh; min-height: 280px; }
   .qc-msg { max-width: 100%; }
 }
 
