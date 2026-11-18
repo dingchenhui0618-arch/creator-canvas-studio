@@ -1355,3 +1355,4 @@ React Flow 的画布视口与节点盒子天生比内容窄 2px，量的时候�
 生产 0.9.227（发布 20261118-220815-r243board2，health ok templates 26、6 个服务 active、未登录 401、磁盘 73%；
 入口 index-DVl-vtFb.js 742.61 kB / 主样式 index-B88JOElv.css 358.61 kB / 本页样式 BoardPage-Bn0zleRL.css 5,246 B；
 公网 /assets/BoardPage-Bn0zleRL.css 200 / 5,246 B / text/css；回滚 --to 1 回 0.9.226，发布 20261118-214844-r242flow）。
+提交 3f097cb + ed0a53e + 1f69287 + cb63f59，CI 44408738720 success（Node 22.12 / Node 24 / 安全扫描三件全绿；ed0a53e 那轮被后一次推送按并发策略取消）。
