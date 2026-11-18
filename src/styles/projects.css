@@ -4876,3 +4876,165 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
     flex-direction: column;
   }
 }
+
+/* ---------- 作品详情：手机与平板（r236） ----------
+   详情页此前只有桌面一档：390 与 768 上正文 12–13px，页里的链接（改脚本 / 提示词 / 查看运行）
+   只有 19–28px 高，按在触屏上点不准。这一轮只动字号与触控区，两栏结构、面板顺序、
+   分镜与版本行的排法都不动：桌面（1081 起）一个像素不变。
+   口径：561–1080 平板与 560 以下手机共用一套字号（13 / 14 / 16 / 17），
+   触控区手机 44px、平板 40px——与作品流、作品项目同一套档位。 */
+@media (max-width: 1080px) {
+  .vq-project-detail {
+    --text-mono: 13px;
+    --text-meta: 14px;
+    --text-xs: 14px;
+    --text-sm: 16px;
+    --text-copy: 16px;
+    --text-md: 17px;
+  }
+
+  /* 「这一版通过没有」「交付于几点」这类必须读清的小字：12 → 13 */
+  .vq-project-detail .vq-head-kicker,
+  .vq-project-detail .vq-next-stats dt,
+  .vq-project-detail .vq-version-issues,
+  .vq-project-detail .vq-version-delta,
+  .vq-project-detail .vq-version-delivered-review,
+  .vq-project-detail .vq-version-review-verdict,
+  .vq-project-detail .vq-archive-legacy-note,
+  .vq-project-detail .vq-project-archive-note,
+  .vq-project-detail .vq-project-versions-note,
+  .vq-project-detail .vq-project-review-hint,
+  .vq-project-detail .vq-project-verdict,
+  .vq-project-detail .vq-run-status,
+  .vq-project-detail .vq-project-issue-delta,
+  .vq-project-detail .vq-shot-figure-tag,
+  .vq-project-detail .vq-shot-prompt-toggle,
+  .vq-project-detail .vq-shot-allcopy,
+  .vq-project-detail .vq-project-hint,
+  .vq-project-detail .vq-next-label,
+  .vq-project-detail .vq-project-review-time,
+  .vq-project-detail .vq-project-review-version,
+  .vq-project-detail .vq-version-review {
+    font-size: 13px;
+  }
+
+  /* .vq-mono 定的是 12px 字面值，不吃 --text-mono：这里单独给详情页抬到 13，
+     作品 ID、版次、时间、节拍编号都走它 */
+  .vq-page.vq-project-detail .vq-mono,
+  .vq-project-detail .vq-project-versions-head h2 .vq-mono,
+  .vq-project-detail .vq-project-runs-head h2 .vq-mono {
+    font-size: 13px;
+  }
+
+  /* 状态胶囊跟着字号抬高度：22 → 26、20 → 24，读起来不挤 */
+  .vq-project-detail .vq-version-n {
+    height: 26px;
+  }
+
+  .vq-project-detail .vq-project-verdict,
+  .vq-project-detail .vq-run-status,
+  .vq-project-detail .vq-project-issue-delta {
+    height: 24px;
+  }
+
+  /* 触控区：页内按钮一律 40px 高；「看着像一行字」的按钮同样给足高度 */
+  .vq-project-detail .vq-button {
+    min-height: 40px;
+  }
+
+  .vq-project-detail .vq-button--icon {
+    min-width: 40px;
+  }
+
+  .vq-project-detail .vq-project-back,
+  .vq-project-detail .vq-title-edit-btn,
+  .vq-project-detail .vq-script-link,
+  .vq-project-detail .vq-version-script,
+  .vq-project-detail .vq-project-origin-link,
+  .vq-project-detail .vq-project-source-link,
+  .vq-project-detail .vq-shot-prompt-toggle,
+  .vq-project-detail .vq-shot-allcopy,
+  .vq-project-detail .vq-version-review,
+  .vq-project-detail .vq-spend-toggle,
+  .vq-project-detail .vq-version-trigger,
+  .vq-project-detail .vq-next-cta {
+    align-items: center;
+    min-height: 40px;
+  }
+
+  .vq-project-detail .vq-version-review,
+  .vq-project-detail .vq-spend-toggle {
+    height: 40px;
+  }
+
+  /* 面板与栏目的隐式列默认按 max-content 撑：320 下来源面板里一串不折行的模板名
+     把整块顶到 265px（容器只有 172px）。这里把每一层都钉成 minmax(0, 1fr)，
+     省略号才有地方生效 */
+  .vq-project-detail .vq-project-col,
+  .vq-project-detail .vq-project-side,
+  .vq-project-detail .vq-project-panel,
+  .vq-project-detail .vq-project-source {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* 字号抬上去以后，「最近一评 1 阻塞 · 1 主要 · 1 次要」这类不折行的长句子
+     在 390 会把版本行顶出屏幕（实测 scrollWidth 413 > 390）：允许在版本行里折行 */
+  .vq-project-detail .vq-version-meta {
+    min-width: 0;
+  }
+
+  .vq-project-detail .vq-version-issues,
+  .vq-project-detail .vq-version-delta {
+    white-space: normal;
+  }
+
+  .vq-project-detail .vq-title-edit-btn,
+  .vq-project-detail .vq-version-trigger {
+    min-width: 40px;
+  }
+
+  .vq-project-detail .vq-next-cta {
+    height: 40px;
+  }
+}
+
+/* 320：版次行里只剩 91px 给「最近一评 …」，折行也读不成句，整行改成竖排 */
+@media (max-width: 520px) {
+  .vq-project-detail .vq-version-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-2);
+  }
+
+  .vq-project-detail .vq-version-row > .vq-version-n {
+    justify-self: start;
+  }
+
+  .vq-project-detail .vq-version-actions {
+    justify-self: start;
+  }
+}
+
+/* 手机再抬一档：44px 是能稳妥点中的下限；平板 40px 已经够用，不跟着变大 */
+@media (max-width: 560px) {
+  .vq-project-detail .vq-button,
+  .vq-project-detail .vq-project-back,
+  .vq-project-detail .vq-title-edit-btn,
+  .vq-project-detail .vq-script-link,
+  .vq-project-detail .vq-version-script,
+  .vq-project-detail .vq-project-origin-link,
+  .vq-project-detail .vq-project-source-link,
+  .vq-project-detail .vq-shot-prompt-toggle,
+  .vq-project-detail .vq-shot-allcopy,
+  .vq-project-detail .vq-version-review,
+  .vq-project-detail .vq-spend-toggle,
+  .vq-project-detail .vq-version-trigger,
+  .vq-project-detail .vq-next-cta {
+    min-height: 44px;
+  }
+
+  .vq-project-detail .vq-version-review,
+  .vq-project-detail .vq-spend-toggle,
+  .vq-project-detail .vq-next-cta {
+    height: 44px;
+  }
+}

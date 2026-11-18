@@ -1519,7 +1519,7 @@ export default function ProjectPage({
   const versionChanges = data.versionChanges || {}
 
   return (
-    <div className="page vq-page vq-project-page">
+    <div className="page vq-page vq-project-page vq-project-detail">
       <button type="button" className="vq-project-back" onClick={onBack}>
         <ArrowLeft size={13} />
         全部作品
