@@ -51,6 +51,7 @@ import { listFeedback } from './api/feedback'
 import { isInitialBareEntry, navigate, pageToRoute, routeKey, routeToPage, useRoute, type Route } from './router'
 import { planScroll } from './domain/scroll'
 import { welcomeSeenKey } from './onboarding'
+import { browserFlagStore, dismissMobileNote, mobileNoteVisible } from './domain/mobile-note'
 import packageJsonRaw from '../package.json?raw'
 import {
   DEFAULT_ADMIN_SECTION,
@@ -264,6 +265,14 @@ function Workbench({
       // 隐私模式下写不进去：下次进工作台会再弹一次，可以接受
     }
   }, [seenKey])
+
+  // 手机端那条「桌面工作台」提示（r224）：第一次看得见，点 × 之后这台浏览器不再出现。
+  // 记不住（隐私模式）时下次照常显示，比「关了却记不住」诚实。
+  const [mobileNoteOpen, setMobileNoteOpen] = useState(() => mobileNoteVisible(browserFlagStore()))
+  const closeMobileNote = useCallback(() => {
+    dismissMobileNote(browserFlagStore())
+    setMobileNoteOpen(false)
+  }, [])
 
   // 侧栏高亮、面包屑和内容页都从 hash 路由推导，页面本身不再保存 activePage。
   const activePage = routeToPage(route)
@@ -1004,9 +1013,22 @@ function Workbench({
         </header>
 
         <div className="vq-content" ref={contentRef}>
-          <p className="vq-mobile-note" role="note">
-            这是一个桌面工作台。手机上能查看，但检索、拆解与评审建议在电脑上做。
-          </p>
+          {mobileNoteOpen ? (
+            <div className="vq-mobile-note" role="note">
+              <span className="vq-mobile-note-text">
+                桌面工作台：手机上能查看，检索、拆解与评审建议在电脑上做。
+              </span>
+              <button
+                type="button"
+                className="vq-mobile-note-close"
+                aria-label="不再显示这条提示"
+                title="不再显示"
+                onClick={closeMobileNote}
+              >
+                <X size={14} aria-hidden="true" />
+              </button>
+            </div>
+          ) : null}
           <ErrorBoundary key={pageBoundaryKey}>
             <Suspense fallback={<PageSkeleton />}>{renderPage()}</Suspense>
           </ErrorBoundary>

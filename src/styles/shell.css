@@ -2987,17 +2987,37 @@ select:focus-visible {
 /* 窄屏只提示，不假装做了移动端适配 */
 .vq-mobile-note { display: none; }
 @media (max-width: 900px) {
+  /* 这条提示只值一次（r224）：以前每页顶一条 71px，翻十页看十遍同一句话。
+     现在第一次看得见，点 × 之后按浏览器记住；右侧 × 也让「收起」不靠猜。 */
   .vq-mobile-note {
-    display: block;
-    margin: 0 0 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 8px;
     padding: 8px 12px;
     border: 1px solid var(--line-faint);
     border-radius: var(--radius-sm);
     background: var(--surface);
     color: var(--muted);
     font-size: 13px;
-    line-height: 1.6;
+    line-height: 1.5;
   }
+  .vq-mobile-note-text { flex: 1 1 auto; min-width: 0; }
+  .vq-mobile-note-close {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .vq-mobile-note-close:hover { color: var(--text); background: var(--surface-raised, rgba(255, 255, 255, 0.06)); }
 }
 /* 注册条款勾选：文案有换行与两个链接，起点要和上面的输入框对齐 */
 .vq-field--terms {

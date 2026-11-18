@@ -458,7 +458,11 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
               onChange={(event) => void pickFiles(event.target.files)}
             />
             <span className="qc-credit">
-              {credits ? '余额 ' + (credits.balance ?? '—') + ' ' + credits.unit + (credits.price ? ' · 每次 ' + credits.price : '') : ''}
+              {/* 单位只写一次会看不懂（r224 实测线上一直是「余额 100 积分 · 每次 1」——
+                  1 什么？）：价格后面也带上同一套单位。 */}
+              {credits
+                ? '余额 ' + (credits.balance ?? '—') + ' ' + credits.unit + (credits.price ? ' · 每次 ' + credits.price + ' ' + credits.unit : '')
+                : ''}
             </span>
           </div>
           {attached.length > 0 && (
@@ -509,7 +513,7 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
               className="qc-input"
               rows={3}
               value={draft}
-              placeholder="说清你要什么，例如：把这条口播拆分镜"
+              placeholder="说清你要什么，例如：口播拆分镜"
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {

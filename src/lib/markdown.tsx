@@ -47,7 +47,11 @@ export function renderMarkdown(source: string): ReactNode[] {
               {block.rows.map((row, rowIndex) => (
                 <tr key={rowIndex}>
                   {row.map((cell, cellIndex) => (
-                    <td key={cellIndex}>{renderInline(cell, 'td-' + index + '-' + rowIndex + '-' + cellIndex)}</td>
+                    // data-label 只在手机（≤560）用得上：表格在那里改成一格一行的卡片，
+                    // 每格前面得重新写上它属于哪一列，否则「16-21s」孤零零一行看不出是什么（r224）
+                    <td key={cellIndex} data-label={block.header[cellIndex] || ''}>
+                      {renderInline(cell, 'td-' + index + '-' + rowIndex + '-' + cellIndex)}
+                    </td>
                   ))}
                 </tr>
               ))}

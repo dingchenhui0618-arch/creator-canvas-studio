@@ -2904,6 +2904,56 @@
   .qc-bubble.qc-md .agx-md-table td { overflow-wrap: anywhere; }
 }
 
+/* 手机（≤560）：四列表格在 390 宽每列只剩 5 个字（r224 实测「对比前后，右上角小窗放原图」
+   被切成三行、镜号挤成两字一行），比读代码还慢。窄屏改成一行一张小卡片：
+   表头收进每一格前面的小标签，纵向读下来是「镜号 4 / 时长 12-16s / 画面 … / 目的 …」。
+   选择器把 .agx-md-table 写两遍是为了压过 nav.css 的 `.vq-content .agx-md-table table`
+   （2 类 + 1 标签，写着 min-width: 480px）——否则卡片里的表格仍被撑到 480px 横着拖。 */
+@media (max-width: 560px) {
+  .vq-content .agx-md-table.agx-md-table {
+    border: 0;
+    overflow: visible;
+  }
+  .vq-content .agx-md-table.agx-md-table table {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    border-collapse: separate;
+    font-size: 13px;
+  }
+  .vq-content .agx-md-table.agx-md-table thead { display: none; }
+  .vq-content .agx-md-table.agx-md-table tbody { display: block; }
+  .vq-content .agx-md-table.agx-md-table tr {
+    display: block;
+    padding: 8px 12px;
+    margin: 0 0 8px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--surface);
+  }
+  .vq-content .agx-md-table.agx-md-table tr:last-child { margin-bottom: 0; }
+  .vq-content .agx-md-table.agx-md-table td {
+    display: block;
+    padding: 4px 0;
+    border: 0;
+    font-size: 13px;
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+  }
+  .vq-content .agx-md-table.agx-md-table td:first-child { padding-top: 0; }
+  /* 标签跟在这一格的值前面同一行（「镜号 4」「时长 12-16s」）：单独占一行会让
+     一张 4 行表多出 16 行、整段回答翻得没完，而一行之内的标签已经足够说清这是什么。 */
+  .vq-content .agx-md-table.agx-md-table td::before {
+    content: attr(data-label);
+    display: inline;
+    margin-right: 8px;
+    color: var(--faint);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.04em;
+  }
+}
+
 
 
 /* 手机（≤560）：聊天页的版头不必占掉四分之一屏（r222）。
@@ -2957,6 +3007,10 @@
 @media (max-width: 360px) {
   .qc-input { height: 88px; min-height: 88px; }
   .qc-bottom { scroll-margin-bottom: 216px; }
+  /* 320 宽时「对话 / 图片 / 视频」三枚页签放进 220px 会各自折成竖排两字（r224 截图看到
+     「对/话」「图/片」「视/频」叠成两行）；这里宁可去掉图标，也要让标签横着读。 */
+  .agx-mode-tabs button { white-space: nowrap; }
+  .agx-mode-tabs button svg { display: none; }
 }
 
 /* 快捷创作：创作方式（对话 / 图片 / 视频）与对话方式（平台对话 / 对话预设）分两行，避免挤在输入框里 */
