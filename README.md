@@ -4985,4 +4985,24 @@ gzip_types text/css application/javascript application/json image/svg+xml;
 门禁：**1363 / 1363** 测试、lint 0 error / 16 warning（560 文件）、`tsc -b` 干净、密钥扫描 851 文件无命中、nginx 配置检查通过、build 入口 `index-BVBgURYY.js`。生产 **0.9.186**，本地与公网 `/api/version` 一致，health ok templates 26，6 个服务 active，回滚点 `20261118-1315-r204gzip`（`ops/rollback.sh --to 1` 回 0.9.185）。边界：只改 `visionqa.wavisionai.cn` 一个 vhost，无限画布（vite dev 反代）与别的站点没动（同机 `redspeed.cn` / `wavisionai.cn` 的类型表里本来就有 `text/javascript`，可见漏的是这一份 vhost，不是全站）；这台 nginx 没编 brotli，走的是 gzip；`/api/` 的 JSON 此前就已压缩，这一轮只是级别 1→5；产品界面无变化，故无界面截图。细节见 `docs/nginx-gzip-2026-11-18.md`。
 
 
+## 二百六十五、发版后旧标签页不再白屏（2026-11-18，0.9.187）
 
+生产 `client-errors.json` 里躺着三条 `Failed to fetch dynamically imported module: …/assets/CanvasPage-*.js`。原因不是偶然：每次发版整包替换 `dist`，文件名带内容哈希、旧文件直接删；已经打开的标签页里入口包记着旧哈希，点进「快捷创作 / 工作流 / 后台」时请求的 `.js` 已经不存在，`/assets/` 缺文件由 nginx 回 404，动态 import 失败，白屏，只能自己按 F5。
+
+改法：`src/domain/chunk-reload.ts`（纯判定）+ `src/lib/chunkReload.ts`（接 `vite:preloadError` 与 `unhandledrejection`，重载一次）+ `ErrorBoundary` 换成「页面已更新」说明卡。规则：断网不重载；同一波 20 秒内最多 2 次，第 3 次停手；超过窗口或时钟回拨重新计数；`sessionStorage` 不可用也不影响。Vite 侧核对过源码：`handlePreloadError` 只有在 `defaultPrevented` 为真时才不 rethrow，我们的处理正是决定重载时才 `preventDefault()`。
+
+用临时实例 + 无头 Chrome 真跑三个场景（造两份等价 dist，B 把懒加载包与入口包改名；静态服务器对 `/assets/` 缺文件真回 404）：没发版点进懒加载页 0 次重载；发版后点进「快捷创作」自动重载 **1 次**后正常打开；文件真没了重载 **2 次**后停手并出现卡片，0 条未捕获异常。新增 `test/chunk-reload.test.mjs` 8 条。截图 `docs/chunk-stale-card-1440.png`、`docs/chunk-stale-card-390.png`，细节见 `docs/chunk-stale-reload-2026-11-18.md`。
+
+边界：只覆盖懒加载 chunk；入口包取不到靠卡片上的按钮；重载会丢掉正在填、还没提交的内容，文案已写明；两份 dist 是改名造出来的，不是两次真实构建（本项目压缩会去掉注释与未被引用字面量，两次构建哈希一样）。
+
+## 二百六十六、侧栏「智能体」更名「快捷创作」，出图出视频搬进输入框（2026-11-18，0.9.187）
+
+出图出视频原来佔两张「预设智能体」卡片，各弹一个窗口。名字不对（它们没有系统提示词、不进对话、不调推理），入口也分裂。现在侧栏、面包屑、页面标题统一叫**快捷创作**，一个输入框，顶部三个方式页签 `对话 / 图片 / 视频`；选图片或视频时输入框原地变成生成表单（提示词、比例、时长、分辨率、本次积分、失败全额退回），结果落在下面，不再弹窗。已有的扣费、退款、最近生成（往回翻页、processing 自动刷新）、自建智能体列表全部沿用原接口，没有新增接口。
+
+真实截图：`docs/quick-composer-chat-1440.png`、`docs/quick-composer-image-1440.png`、`docs/quick-composer-video-1440.png`、`docs/quick-composer-video-390.png`；细节见 `docs/quick-create-composer-2026-11-18.md`。
+
+边界：只动前端入口与页面结构，没动 `server/routes/media-gen.mjs` 与计费；方式页签切走不保留上次提示词；面板里的模型行是只读的（一条能力只走一条路由）。
+
+## 协作约定：真实上游调用要用户点头（2026-11-18 起）
+
+用户明确要求：**真实调用（生图、生视频、文本、检索等任何打上游的请求）只能由用户在用户端自己发起；助手不经过用户逐次同意不得自动发起。** 只读的余额 / 健康查询不受此限，但也要先说清在查什么。之前那些「为验收而真调一次」的轮次不再复现：以后验收走本地假通道、临时实例与单测，需要真调时必须先问。
