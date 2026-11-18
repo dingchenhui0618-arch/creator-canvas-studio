@@ -44,6 +44,14 @@ function loadTools(): ChatToolOptions {
   }
 }
 
+function hostOf(url: string) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '')
+  } catch {
+    return url.slice(0, 40)
+  }
+}
+
 function when(at: number) {
   if (!at) return ''
   const date = new Date(at)
@@ -339,6 +347,17 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
                     ))}
                   </div>
                 ) : null}
+                {message.links?.length ? (
+                  <div className="qc-links">
+                    {message.links.map((link) => (
+                      <span className={'qc-link' + (link.ok ? '' : ' is-failed')} key={link.url} title={link.ok ? (link.finalUrl || link.url) : link.note}>
+                        <Link2 size={12} />
+                        <span className="qc-link-name">{link.title || hostOf(link.url)}</span>
+                        <span className="qc-link-meta">{link.ok ? link.chars + ' 字' + (link.truncated ? ' · 已截断' : '') : '没读到'}</span>
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
                 <div className="qc-msg-meta">
                   <span>{message.role === 'user' ? '你' : '平台对话模型'}</span>
                   <span>{when(message.at)}</span>
@@ -482,7 +501,13 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
             )}
           </div>
           <div className="qc-hint">
-            <span>{sending ? '生成中点方块可停止，停止不计费' : 'Ctrl + Enter 发送 · 附件最多 5 个、单个 8 MB'}</span>
+            <span>
+              {sending
+                ? '生成中点方块可停止，停止不计费'
+                : !tools.readUrl && /https?:\/\//i.test(draft)
+                  ? '消息里有链接：打开「读链接」，我才会先把页面读下来'
+                  : 'Ctrl + Enter 发送 · 附件最多 5 个、单个 8 MB'}
+            </span>
             <span>{toolCount ? toolCount + ' 项能力已打开' : '能力全关：只按对话回答'}</span>
           </div>
         </div>

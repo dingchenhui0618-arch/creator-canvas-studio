@@ -3,6 +3,17 @@ import { request } from './client'
 
 export type ChatToolOptions = { search: boolean; readUrl: boolean; thinking: boolean }
 
+// 这一轮读到的链接（r219）：只留地址、标题、字数与失败原因；页面文字在服务端，不进聊天记录。
+export type ChatLink = {
+  url: string
+  finalUrl: string
+  title: string
+  ok: boolean
+  chars: number
+  truncated: boolean
+  note: string
+}
+
 export type ChatMessage = {
   id: string
   role: 'user' | 'assistant'
@@ -13,6 +24,7 @@ export type ChatMessage = {
   meta?: { tools?: string[]; thinking?: boolean; finishReason?: string; usage?: unknown; files?: string[] } | null
   // 这一轮带的附件（只留名字、字数与来源）：原文在服务端，聊天记录里不重复存
   files?: ChatFile[]
+  links?: ChatLink[]
 }
 
 export type ChatConversation = {

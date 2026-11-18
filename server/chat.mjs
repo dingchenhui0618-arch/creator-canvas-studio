@@ -14,11 +14,14 @@
 //
 // r218 接上附件：脚本/文档/表格/PDF 先在服务端读成文字，再连同问题一起问模型（server/chat-files.mjs）。
 // 附件是「这一轮的上下文」，不是文件托管：原文落盘 20 份轮转，抽出的文字跟着这条消息进上下文。
+// r219 接上读链接：消息里带网址时，先在本地把页面读成文字（server/link-read.mjs），
+// 不再依赖上游 deepseek_read_url —— 一把 Key 不认这个工具就会整条请求 400。
 // 还没做的：OCR（扫描件里的字）、图片理解进对话、语音、联网搜索的真实上游验证。
 import { callTextModel, callTextModelStream } from './llm.mjs'
 import { charge, priceOf, refund } from './credits.mjs'
 import { contextMessages, createConversation, getConversation, saveConversation, titleFrom } from './chat-store.mjs'
 import { CHAT_FILE_LIMITS, resolveChatFiles } from './chat-files.mjs'
+import { findLinks, readLinks } from './link-read.mjs'
 
 const MAX_INPUT = 8000
 const CONTEXT_MESSAGES = 30
@@ -44,12 +47,23 @@ export function chatOptionsFrom(input = {}) {
   return { search: Boolean(tools.search), readUrl: Boolean(tools.readUrl), thinking: Boolean(tools.thinking) }
 }
 
-/** 官方服务端工具：开关打开才带，关掉就是一次普通对话（不搜索、不抓链接）。 */
+/**
+ * 上游服务端工具：只有联网搜索还走上游（r219 起读链接改成我们自己在本地读）。
+ * 读链接不再带上游，是因为它不认这个工具就整条 400，而且「读到了什么」我们在本地才留得下来。
+ */
 export function officialTools(options = {}) {
   const tools = []
   if (options.search) tools.push({ type: 'deepseek_web_search' })
-  if (options.readUrl) tools.push({ type: 'deepseek_read_url' })
   return tools
+}
+
+/** 这一轮消息里的链接：开关关着就一条都不读（界面会提示打开）。 */
+async function readMessageLinks(content, options) {
+  if (!options.readUrl) return { links: [], text: '', chars: 0, requested: 0, found: [] }
+  const found = findLinks(content)
+  if (!found.length) return { links: [], text: '', chars: 0, requested: 0, found }
+  const result = await readLinks(found)
+  return { ...result, found }
 }
 
 /** 这一轮带哪几个附件：先按归属读，读不到就跳过（别人的 / 已删除），不让整次对话失败。 */
@@ -67,18 +81,21 @@ function messageId(prefix = 'm') {
 }
 
 /** 扣费 + 落用户这句话，两条链路共用。 */
-function beginChat(user, input = {}) {
+async function beginChat(user, input = {}) {
   const content = String(input?.content || '').trim()
   if (!content) throw fail(400, 'CHAT_EMPTY', '说点什么再发送')
   if (content.length > MAX_INPUT) throw fail(400, 'CHAT_TOO_LONG', '一次最多 ' + MAX_INPUT + ' 字，长文请分几条发')
   if (!user?.id) throw fail(401, 'LOGIN_REQUIRED', '请先登录')
 
-  // 附件先解析再扣费：附件读不出来（扫描件、超过 5 个）时一分钱都不该扣
-  const attachments = readAttachments(user.id, input)
+  // 附件与链接都先读完再扣费：读不出来（扫描件、超过 5 个、链接打不开）时一分钱都不该扣
   const options = chatOptionsFrom(input)
+  const attachments = readAttachments(user.id, input)
   let conv = input.conversationId ? getConversation(user.id, input.conversationId) : null
   if (input.conversationId && !conv) throw fail(404, 'CHAT_NOT_FOUND', '这条对话已经不在了')
   if (!conv) conv = createConversation(user.id, { title: titleFrom(content) })
+  // 读链接放在会话校验之后：会话已经不在的请求不该先去抓一遍网页
+  const linked = await readMessageLinks(content, options)
+  const docText = [attachments.text, linked.text].filter(Boolean).join('\n\n')
 
   const paid = charge(user.id, 'chat', {
     ref: '对话 · ' + conv.title,
@@ -104,7 +121,8 @@ function beginChat(user, input = {}) {
     content,
     at: startedAt,
     files: attachments.files,
-    docText: attachments.text,
+    links: linked.links,
+    docText,
   })
   conv = saveConversation(user.id, conv) || conv
 
@@ -122,6 +140,7 @@ function beginChat(user, input = {}) {
     startedAt,
     messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...contextMessages(conv.messages)],
     attachments,
+    links: linked.links,
   }
 }
 
@@ -179,7 +198,7 @@ function failChat(user, ctx, error) {
 }
 
 export async function sendChatMessage(user, input = {}) {
-  const ctx = beginChat(user, input)
+  const ctx = await beginChat(user, input)
   try {
     const result = await callTextModel(ctx.messages, {
       temperature: 0.6,
@@ -199,7 +218,7 @@ export async function sendChatMessage(user, input = {}) {
  * 上游不认流式：退回一次性回答，拿到整段后一次性推给界面，用户不会因为网关差异拿不到答案。
  */
 export async function streamChatMessage(user, input = {}, hooks = {}) {
-  const ctx = beginChat(user, input)
+  const ctx = await beginChat(user, input)
   try {
     let result = null
     let fellBack = false

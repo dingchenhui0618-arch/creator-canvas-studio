@@ -20,8 +20,25 @@ process.env.VQ_CREDIT_CHAT = '1'
 process.env.VQ_REQUIRE_AUTH = '1'
 
 const calls = []
+// r219：读链接会来这台假服务器抓页面，这里记下被请求过的页面地址
+const pages = []
 let mode = 'ok'
 const server = http.createServer((req, res) => {
+  if (req.method === 'GET') {
+    pages.push(req.url)
+    if (req.url === '/page.html') {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+      res.end(
+        '<html><head><title>口播测试页</title><style>p{color:red}</style></head><body><p>' +
+          '开场三秒要抓人。'.repeat(12) +
+          '</p><script>tracker()</script></body></html>',
+      )
+      return
+    }
+    res.writeHead(404, { 'Content-Type': 'text/plain' })
+    res.end('not found')
+    return
+  }
   const chunks = []
   req.on('data', (chunk) => chunks.push(chunk))
   req.on('end', () => {
@@ -88,7 +105,8 @@ test('开联网搜索 / 读链接 / 思考模式：工具与 thinking 真的发�
   assert.equal(result.reply.content, '收到，这一步就这样做。')
   assert.equal(result.cost, 1)
   const body = calls[calls.length - 1]
-  assert.deepEqual(body.tools, [{ type: 'deepseek_web_search' }, { type: 'deepseek_read_url' }])
+  // r219 起读链接改成平台自己在本地读，上游只留联网搜索这一个服务端工具
+  assert.deepEqual(body.tools, [{ type: 'deepseek_web_search' }])
   assert.deepEqual(body.thinking, { type: 'enabled' })
   assert.equal(body.messages[0].role, 'system')
   assert.equal(body.messages[body.messages.length - 1].content, '帮我把这条口播拆成六个分镜')
@@ -406,3 +424,61 @@ test('附件截断：单个文件封顶 20000 字，标 truncated，界面能看
   assert.match(resolved.text, /已截断/)
   assert.ok(resolved.text.length < long.length, '上下文里只放截断后的那一段')
 })
+
+// ── r219：读链接 ──────────────────────────────────────────────────────────────
+// 本地假服务器在 127.0.0.1 上，正常情况会被内网防护挡住：只在这几条用例里放开
+process.env.VQ_LINK_ALLOW_PRIVATE = '1'
+const linkUser = auth.createUser({ email: '[EMAIL:7HKQ2W]', password: 'Passw0rd!demo', name: '读链接' })
+const pageBase = 'http://127.0.0.1:' + server.address().port
+
+test('读链接：页面先读成文字再问模型，会话里留下「读了什么」，只扣一次费', async () => {
+  const before = balanceOf(linkUser.id)
+  const hits = pages.length
+  const result = await sendChatMessage(linkUser, {
+    content: '看看这个页面 ' + pageBase + '/page.html 讲了什么',
+    tools: { readUrl: true },
+  })
+  const sent = calls[calls.length - 1]
+  const last = sent.messages[sent.messages.length - 1]
+  assert.match(last.content, /【这一轮的链接】/)
+  assert.match(last.content, /开场三秒要抓人/, '页面正文要真的进上下文')
+  assert.doesNotMatch(last.content, /tracker\(\)/, '页面脚本不该进正文')
+  assert.equal(sent.tools, undefined, '读链接不再走上游工具')
+  const stored = result.conversation.messages[0]
+  assert.equal(stored.links.length, 1)
+  assert.equal(stored.links[0].ok, true)
+  assert.match(stored.links[0].title, /口播测试页/)
+  assert.ok(stored.links[0].chars > 40)
+  assert.equal(stored.content, '看看这个页面 ' + pageBase + '/page.html 讲了什么')
+  assert.equal(result.cost, 1)
+  assert.equal(balanceOf(linkUser.id), before - 1)
+  assert.equal(pages.length, hits + 1, '一次消息只抓一次页面')
+})
+
+test('读链接关着：消息里有网址也不抓页面', async () => {
+  const before = balanceOf(linkUser.id)
+  const hits = pages.length
+  const result = await sendChatMessage(linkUser, { content: '这个链接先别读 ' + pageBase + '/page.html' })
+  const stored = result.conversation.messages[0]
+  assert.equal(stored.links, undefined)
+  assert.equal(pages.length, hits, '开关关着就一个页面都不该抓')
+  const sent = calls[calls.length - 1]
+  assert.doesNotMatch(sent.messages[sent.messages.length - 1].content, /【这一轮的链接】/)
+  assert.equal(balanceOf(linkUser.id), before - 1)
+})
+
+test('链接打不开：这次对话照常回答，链接标「没读到」，不多扣也不白送', async () => {
+  const before = balanceOf(linkUser.id)
+  const result = await sendChatMessage(linkUser, {
+    content: '读一下 ' + pageBase + '/missing.html 这篇',
+    tools: { readUrl: true },
+  })
+  const stored = result.conversation.messages[0]
+  assert.equal(stored.links[0].ok, false)
+  assert.match(stored.links[0].note, /HTTP 404/)
+  const sent = calls[calls.length - 1]
+  assert.match(sent.messages[sent.messages.length - 1].content, /没读到/)
+  assert.equal(result.cost, 1)
+  assert.equal(balanceOf(linkUser.id), before - 1)
+})
+

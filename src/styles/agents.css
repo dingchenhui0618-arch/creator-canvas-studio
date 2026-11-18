@@ -2758,6 +2758,28 @@
 .qc-file-name { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
 .qc-file-meta { color: var(--faint); font-variant-numeric: tabular-nums; }
 
+/* 读链接（r219）：用户那句下面是「读了哪几页、多少字、为什么没读到」，和附件同一排样式 */
+.qc-links { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+
+.qc-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  min-height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.qc-link-name { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.qc-link-meta { color: var(--faint); font-variant-numeric: tabular-nums; }
+.qc-link.is-failed { border-style: dashed; color: var(--warn); }
+.qc-link.is-failed .qc-link-name { color: var(--warn); }
+
 .qc-error--inline { padding: 4px 8px; font-size: 12px; }
 
 .qc-preview { border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-soft); }
@@ -2789,7 +2811,7 @@
 }
 
 @media (max-width: 560px) {
-  .qc-chip-name, .qc-file-name { max-width: 128px; }
+  .qc-chip-name, .qc-file-name, .qc-link-name { max-width: 128px; }
 }
 
 

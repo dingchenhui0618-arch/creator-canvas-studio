@@ -53,6 +53,20 @@ function safeFiles(value) {
   }))
 }
 
+/** 消息上读到的链接（r219）：界面显示「读了哪几页、多少字、为什么没读到」，正文另存 docText。 */
+function safeLinks(value) {
+  if (!Array.isArray(value) || !value.length) return undefined
+  return value.slice(0, 2).map((item) => ({
+    url: safeText(item?.url, 400),
+    finalUrl: safeText(item?.finalUrl, 400),
+    title: safeText(item?.title, 120),
+    ok: Boolean(item?.ok),
+    chars: Number(item?.chars) || 0,
+    truncated: Boolean(item?.truncated),
+    note: safeText(item?.note, 160),
+  }))
+}
+
 function atomicWrite(file, data) {
   const dir = path.dirname(file)
   fs.mkdirSync(dir, { recursive: true })
@@ -135,6 +149,7 @@ export function getConversation(userId, conversationId) {
       ms: Number(item.ms) || 0,
       meta: item.meta && typeof item.meta === 'object' ? item.meta : null,
       files: safeFiles(item.files),
+      links: safeLinks(item.links),
       docText: safeText(item.docText, MAX_DOC_TEXT),
     })),
   }
@@ -151,6 +166,7 @@ export function saveConversation(userId, conv) {
     ms: Number(item.ms) || 0,
     meta: item.meta && typeof item.meta === 'object' ? item.meta : null,
     files: safeFiles(item.files),
+    links: safeLinks(item.links),
     // 只给最近几条留附件正文：更早的留在消息里只会让会话文件越滚越大，而且已经挤不进上下文
     docText: index < kept.length - KEEP_DOC_TEXT ? '' : safeText(item.docText, MAX_DOC_TEXT),
   }))
@@ -197,7 +213,9 @@ export function contextMessages(messages, maxCount = 30, maxChars = 60000) {
       const names = Array.isArray(item.files)
         ? item.files.map((file) => String(file?.name || '')).filter(Boolean).join('、')
         : ''
-      return { role: item.role, content: content + '\n\n【这一轮的附件' + (names ? '（' + names + '）' : '') + '】\n' + docText }
+      const linked = Array.isArray(item.links) && item.links.length
+      const label = linked ? (names ? '附件与链接' : '链接') : '附件'
+      return { role: item.role, content: content + '\n\n【这一轮的' + label + (names ? '（' + names + '）' : '') + '】\n' + docText }
     })
   const picked = []
   let chars = 0

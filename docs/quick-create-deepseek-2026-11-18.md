@@ -8,7 +8,8 @@
 - Base URL：`https://api.deepseek.com/v1`（生产 `.env` 的 VISION_BASE_URL 已指向它，Key 同一把）。
 - 模型 `deepseek-flash`：1M 上下文 / 最大 384K 输出 / 支持图像理解、Tool Calls、JSON Output。
 - Chat Completions 扩展（同一请求体里开启，服务端完成搜索与抓取）：
-  - `tools: [{"type":"deepseek_web_search"},{"type":"deepseek_read_url"}]`
+  - `tools: [{"type":"deepseek_web_search"}]`（**r219 起**：读链接改成本地实现 `server/link-read.mjs`，
+    不再带上游的 `deepseek_read_url`——一把 Key 不认它整条请求就 400，见 `docs/quick-create-links-2026-11-18.md`）
   - `thinking: {"type":"enabled"}`（思考模式；开搜索时服务端决定温度等）
   - `safety_check: {"level":"high"}`（对外服务必须开；命中返回 stop_reason=refusal）
   - `title: {"enabled":true}`（返回会话标题，在 message_delta 的 delta.title）
