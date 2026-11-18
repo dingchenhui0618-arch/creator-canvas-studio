@@ -15,7 +15,7 @@ import {
   modeTakes,
   planRefAttach,
   refAttachNote,
-  taskFileName,
+  refFileName,
 } from '../src/domain/media-refs.ts'
 
 const ROOT = path.resolve(import.meta.dirname, '..')
@@ -153,23 +153,27 @@ test('收不收这种素材：按 imageRefs / videoRefs 判，与服务端同一
 
 test('结果当素材：文件名带一段提示词和任务号尾巴，扩展名按真实类型', () => {
   assert.equal(
-    taskFileName({ id: 'mgen_AbCdEf123456', kind: 'image', prompt: '橘猫在窗台上晒太阳', file: { mime: 'image/png' } }),
+    refFileName({ id: 'mgen_AbCdEf123456', kind: 'image', prompt: '橘猫在窗台上晒太阳', file: { mime: 'image/png' } }),
     '橘猫在窗台上晒太阳-123456.png',
   )
   assert.equal(
-    taskFileName({ id: 'mgen_ZzYyXx987654', kind: 'video', prompt: '雨夜霓虹街道', file: { mime: 'video/mp4' } }),
+    refFileName({ id: 'mgen_ZzYyXx987654', kind: 'video', prompt: '雨夜霓虹街道', file: { mime: 'video/mp4' } }),
     '雨夜霓虹街道-987654.mp4',
   )
   // 截断后两端的标点要削掉：种子的提示词以逗号结尾时，名字不能拖一个「，-」
   assert.equal(
-    taskFileName({ id: 'mgen_R228ImgSample', kind: 'image', prompt: '橘猫在窗台上晒太阳，逆光，暖色，9:16 竖版', file: { mime: 'image/png' } }),
+    refFileName({ id: 'mgen_R228ImgSample', kind: 'image', prompt: '橘猫在窗台上晒太阳，逆光，暖色，9:16 竖版', file: { mime: 'image/png' } }),
     '橘猫在窗台上晒太阳，逆光，暖色-Sample.png',
   )
   // 提示词里的斜杠、冒号、空格不能带进文件名；长提示词截断，别把名字撑爆
   assert.equal(
-    taskFileName({ id: 'mgen_1234567890ab', kind: 'image', prompt: 'a/b:c 风格 参考图 很长的提示词一句话', file: { mime: 'image/jpeg' } }),
+    refFileName({ id: 'mgen_1234567890ab', kind: 'image', prompt: 'a/b:c 风格 参考图 很长的提示词一句话', file: { mime: 'image/jpeg' } }),
     'a-b-c-风格-参考图-很长的-7890ab.jpg',
   )
+  // 作品流里的编号带冒号（run:… / canvas-node:<画布>:<节点>）：尾巴只留安全字符，落到 Windows 上才存得下
+  const canvasName = refFileName({ id: 'canvas-node:cvAbc123:n_7', kind: 'image', prompt: '画布里的一张图' }, 'image/png')
+  assert.equal(canvasName, '画布里的一张图-123n_7.png')
+  assert.equal(canvasName.includes(':'), false)
 })
 
 test('界面：最近生成与结果卡都能「用作参考」，且走同一条上传递交路径', () => {

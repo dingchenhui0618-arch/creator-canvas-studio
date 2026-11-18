@@ -1,6 +1,12 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Clapperboard, Image as ImageIcon, Loader2, Play, Workflow, X } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Clapperboard, Download, Image as ImageIcon, Loader2, Play, Workflow, X } from 'lucide-react'
 import { listWorks, type WorkItem } from '../api/works'
+import { listMediaAssets, uploadMediaAsset } from '../api/media-gen'
+import type { MediaAsset } from '../api/media-gen'
+import { probeMediaFile } from '../domain/media-file'
+import { writeRefHandoff } from '../domain/media-handoff'
+import { refFileName } from '../domain/media-refs'
+import type { RefKind } from '../domain/media-refs'
 import '../styles/works.css'
 
 const FILTERS: Array<{ value: string; label: string }> = [
@@ -12,6 +18,8 @@ const FILTERS: Array<{ value: string; label: string }> = [
 ]
 
 const KIND_ICON = { image: ImageIcon, video: Play, run: Workflow, canvas: Clapperboard }
+
+const REF_ROUTE = '#/agents'
 
 function stamp(at: number): string {
   if (!at) return ''
@@ -27,6 +35,24 @@ function ratioClass(aspect: string): string {
   return 'is-unknown'
 }
 
+/** 这条作品有没有能取回的文件：快捷创作 / 工作流的成品，以及画布里出过的图与视频。 */
+function mediaUrl(item: WorkItem): string {
+  return item.previewUrl || item.thumbUrl || ''
+}
+
+/** 图片还是视频：画布节点与快捷创作看 kind，工作流封面看 mediaKind。 */
+function workKind(item: WorkItem): RefKind {
+  if (item.kind === 'video' || item.mediaKind === 'video') return 'video'
+  return 'image'
+}
+
+/** 能当参考素材的：有文件，而且确实是图或视频（画布那张「一块画布」的卡片没有文件）。 */
+function canReuse(item: WorkItem): boolean {
+  if (!mediaUrl(item)) return false
+  if (item.kind === 'image' || item.kind === 'video') return true
+  return item.mediaKind === 'image' || item.mediaKind === 'video'
+}
+
 /** 作品流：三处产物一条流，按作品自己的比例排版。默认 9:16 最密。 */
 export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: string) => void }) {
   const [kind, setKind] = useState('all')
@@ -37,6 +63,12 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
   const [more, setMore] = useState(false)
   const [error, setError] = useState('')
   const [preview, setPreview] = useState<WorkItem | null>(null)
+  // 哪一条作品正在取回文件：同一条按钮变「加入中…」，别让人连点两次传两份
+  const [busy, setBusy] = useState<{ id: string; what: 'ref' | 'save' } | null>(null)
+  const [note, setNote] = useState('')
+  const [noteError, setNoteError] = useState(false)
+  // 自己传过的素材：用来认「这一条已经加过了」，同一条作品不重复占配额
+  const libraryRef = useRef<MediaAsset[] | null>(null)
 
   const load = useCallback(async (nextKind: string, before = '', append = false) => {
     if (append) setMore(true)
@@ -69,6 +101,125 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
     else if (item.detailUrl && onOpenDetail) onOpenDetail(item.detailUrl)
   }
 
+  // 取回这条作品的文件：同一个地址既用来下载，也用来传成参考素材。
+  // 自己取字节而不是把地址丢给浏览器，是因为两种来源的文件名和类型都不一样（画布那条只有节点号）。
+  const fetchWork = async (item: WorkItem): Promise<{ blob: Blob; type: string }> => {
+    const url = mediaUrl(item)
+    if (!url) throw new Error('这条作品没有可取的文件')
+    const response = await fetch(url, { credentials: 'same-origin' })
+    if (!response.ok) throw new Error('取回这条作品失败（HTTP ' + response.status + '）')
+    const blob = await response.blob()
+    return { blob, type: blob.type || (workKind(item) === 'video' ? 'video/mp4' : 'image/png') }
+  }
+
+  const saveWork = async (item: WorkItem) => {
+    if (busy) return
+    setBusy({ id: item.id, what: 'save' })
+    setNote('')
+    setNoteError(false)
+    try {
+      const { blob, type } = await fetchWork(item)
+      const name = refFileName({ id: item.id, kind: workKind(item), prompt: item.title }, type)
+      const href = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = href
+      link.download = name
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      // 让浏览器先把下载接过去再释放：立刻 revoke 在 Safari 上会把下载掐掉
+      window.setTimeout(() => URL.revokeObjectURL(href), 4000)
+      setNote('已开始下载「' + name + '」')
+    } catch (caught) {
+      setNote(caught instanceof Error ? caught.message : '下载这条作品失败')
+      setNoteError(true)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  // 作品流 → 快捷创作：成品不该只停在「看大图」这一层。
+  // 以前这一步要人手把图下载下来、再回快捷创作传一遍；现在只做两件事——
+  // 取回字节传成参考素材（同一条上传接口，不扣积分、不打上游），把素材号交给快捷创作去挂。
+  const reuseWork = async (item: WorkItem) => {
+    if (busy) return
+    const target = workKind(item)
+    setBusy({ id: item.id, what: 'ref' })
+    setNote('')
+    setNoteError(false)
+    try {
+      let asset: MediaAsset | null = null
+      if (libraryRef.current) {
+        const name = refFileName({ id: item.id, kind: target, prompt: item.title }, '')
+        asset = libraryRef.current.find((entry) => entry.name === name && entry.kind === target) ?? null
+      }
+      if (!asset) {
+        if (!libraryRef.current) {
+          const response = await listMediaAssets(20).catch(() => null)
+          libraryRef.current = response?.assets ?? []
+          const name = refFileName({ id: item.id, kind: target, prompt: item.title }, '')
+          asset = libraryRef.current.find((entry) => entry.name === name && entry.kind === target) ?? null
+        }
+        if (!asset) {
+          const { blob, type } = await fetchWork(item)
+          const name = refFileName({ id: item.id, kind: target, prompt: item.title }, type)
+          const file = new File([blob], name, { type })
+          const meta = await probeMediaFile(file)
+          const uploaded = await uploadMediaAsset({ file, ...meta })
+          asset = uploaded.asset
+          libraryRef.current = [asset, ...(libraryRef.current ?? []).filter((entry) => entry.id !== asset?.id)]
+        }
+      }
+      writeRefHandoff(window.sessionStorage, {
+        assetId: asset.id,
+        kind: target,
+        name: asset.name,
+        from: item.source,
+        // 带过来的图是 9:16，出图就按 9:16：不然一落地就是 1:1，还得人手改一次比例
+        ratio: item.aspect,
+      })
+      setPreview(null)
+      setNote('已把这条作品带到「快捷创作」，接在参考素材里')
+      if (onOpenDetail) onOpenDetail(REF_ROUTE)
+      // 同页跳转（只是换 hash），不走整页刷新；用 assign 而不是改 location.hash，避免与页面状态机抢写
+      else window.location.assign(REF_ROUTE)
+    } catch (caught) {
+      setNote(caught instanceof Error ? caught.message : '把这条作品当参考失败')
+      setNoteError(true)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const actions = (item: WorkItem, inModal = false) => {
+    if (!canReuse(item)) return null
+    const busyRef = busy?.id === item.id && busy.what === 'ref'
+    const busySave = busy?.id === item.id && busy.what === 'save'
+    return (
+      <div className={'works-actions' + (inModal ? ' is-modal' : '')}>
+        <button
+          type="button"
+          className="works-action"
+          onClick={() => void reuseWork(item)}
+          disabled={Boolean(busy)}
+          title="把这条成品带进快捷创作，接着改或当首帧出视频"
+        >
+          {busyRef ? '加入中…' : '用作参考'}
+        </button>
+        <button
+          type="button"
+          className="works-action"
+          onClick={() => void saveWork(item)}
+          disabled={Boolean(busy)}
+          title="存到本机"
+        >
+          <Download size={12} />
+          {busySave ? '下载中…' : '下载'}
+        </button>
+      </div>
+    )
+  }
+
   return (
     <section className="works" aria-busy={loading}>
       <div className="works-bar">
@@ -87,6 +238,7 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
       </div>
 
       {error ? <p className="works-error">{error}</p> : null}
+      {note ? <p className={'works-note' + (noteError ? ' is-error' : '')}>{note}</p> : null}
 
       {!loading && !items.length && !error ? (
         <div className="works-empty">
@@ -133,6 +285,7 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
                     {item.previewUrl ? '看大图' : item.kind === 'canvas' ? '打开画布' : '打开运行'}
                   </button>
                 </div>
+                {actions(item)}
               </div>
             </article>
           )
@@ -160,7 +313,10 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
             ) : (
               <img src={preview.previewUrl || undefined} alt={preview.title} />
             )}
-            <p className="works-modal-note">{preview.title} · {stamp(preview.at)}</p>
+            <div className="works-modal-bar">
+              <p className="works-modal-note">{preview.title} · {stamp(preview.at)}</p>
+              {actions(preview, true)}
+            </div>
           </div>
         </div>
       ) : null}

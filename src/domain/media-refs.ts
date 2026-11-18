@@ -4,7 +4,8 @@
 // 而界面以前只判 maxRefs === 0（「这个方式不收素材」），于是：
 //   1) 视频页签里拿一条生成的视频当参考，当前方式可能收图不收视频，界面不拦，等服务端 400；
 //   2) 托架放满时只说「最多 N 个」，不说同一模型里哪个方式还放得下；
-//   3) 「最近生成」的结果只能下载，出图 → 拿它当参考接着改这一步要人手传一遍。
+//   3) 「最近生成」的结果只能下载，出图 → 拿它当参考接着改这一步要人手传一遍（r228 接上）；
+//      作品流里的成品同样只能看，不能接着改（r229 接上）。
 // 现在把「放不放得下、要不要换方式、换哪个」收敛成一个可单测的结论，界面只照结论改状态。
 
 export type RefKind = 'image' | 'video'
@@ -97,8 +98,12 @@ export function refAttachNote(plan: AttachPlan): string {
   return plan.alternative ? base + '：想多放几个，先切到「' + plan.alternative.label + '」' : base + '：先移除一个'
 }
 
-/** 一条生成结果当素材时的文件名：带一段提示词（人认得出来）+ 任务号尾巴（不会撞名）。 */
-export function taskFileName(task: { id: string; kind: RefKind; prompt: string; file?: { mime: string } | null }, mime = ''): string {
+/**
+ * 一条生成结果（或作品流里的某条作品）当素材时的文件名：带一段提示词（人认得出来）+ 编号尾巴（不会撞名）。
+ * id 可能是 mgen_xxx、media:mgen_xxx、run:run_xxx、canvas-node:<画布>:<节点>：
+ * 尾巴只留 [A-Za-z0-9_-]，否则画布那条会带出冒号，落到 Windows 上根本存不下。
+ */
+export function refFileName(task: { id: string; kind: RefKind; prompt: string; file?: { mime: string } | null }, mime = ''): string {
   const guessed = mime || task.file?.mime || (task.kind === 'video' ? 'video/mp4' : 'image/png')
   const ext = guessed.includes('webm')
     ? 'webm'
@@ -116,6 +121,6 @@ export function taskFileName(task: { id: string; kind: RefKind; prompt: string; 
       .replace(/[\s\\/:*?"<>|]+/g, '-')
       .slice(0, 16)
       .replace(/^[-，。、：；！？·]+|[-，。、：；！？·]+$/g, '') || '生成结果'
-  const tail = String(task.id || '').replace(/^mgen_/, '').slice(-6) || 'result'
+  const tail = String(task.id || '').replace(/[^A-Za-z0-9_-]+/g, '').slice(-6) || 'result'
   return stem + '-' + tail + '.' + ext
 }

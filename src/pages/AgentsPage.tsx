@@ -51,7 +51,10 @@ import {
   uploadMediaAsset,
 } from '../api/media-gen'
 import { RECENT_PAGE_SIZE, mergeRecentTasks } from '../domain/media-recent'
-import { planRefAttach, refAttachNote, taskFileName } from '../domain/media-refs'
+import { probeMediaFile } from '../domain/media-file'
+import { peekRefHandoff, takeRefHandoff } from '../domain/media-handoff'
+import type { RefHandoff } from '../domain/media-handoff'
+import { planRefAttach, refAttachNote, refFileName } from '../domain/media-refs'
 import type { RefKind } from '../domain/media-refs'
 import type { MediaAsset, MediaKind, MediaModel, MediaModelList, MediaTask } from '../api/media-gen'
 import { getCredits, getModelService, recheckModelService, type CreditsResponse, type ModelServiceState } from '../api/credits'
@@ -528,41 +531,6 @@ function describeRef(asset: MediaAsset) {
   return parts.join(' · ')
 }
 
-// 读文件的真实元信息：浏览器最清楚，服务端不解析媒体容器，传上去存起来给界面用
-async function probeMediaFile(file: File) {
-  const empty = { width: null as number | null, height: null as number | null, duration: null as number | null }
-  if (typeof document === 'undefined') return empty
-  const url = URL.createObjectURL(file)
-  try {
-    if (file.type.startsWith('video/')) {
-      return await new Promise<typeof empty>((resolve) => {
-        const video = document.createElement('video')
-        video.preload = 'metadata'
-        video.onloadedmetadata = () =>
-          resolve({
-            width: video.videoWidth || null,
-            height: video.videoHeight || null,
-            duration: Number.isFinite(video.duration) ? video.duration : null,
-          })
-        video.onerror = () => resolve(empty)
-        video.src = url
-      })
-    }
-    if (file.type.startsWith('image/')) {
-      return await new Promise<typeof empty>((resolve) => {
-        const image = new Image()
-        image.onload = () =>
-          resolve({ width: image.naturalWidth || null, height: image.naturalHeight || null, duration: null })
-        image.onerror = () => resolve(empty)
-        image.src = url
-      })
-    }
-    return empty
-  } finally {
-    URL.revokeObjectURL(url)
-  }
-}
-
 type MediaSelection = { model: string; mode: string; ratio: string; duration: number; resolution: string }
 
 function MediaComposer({
@@ -571,18 +539,25 @@ function MediaComposer({
   defaultModel,
   onCreditsChanged,
   onToast,
+  handoff,
+  onHandoffDone,
 }: {
   kind: MediaKind
   catalog: MediaModel[]
   defaultModel: string
   onCreditsChanged: () => void
   onToast?: (message: string) => void
+  /** 从作品流带过来的素材号：素材清单回来后挂进托架（r229） */
+  handoff?: RefHandoff | null
+  onHandoffDone?: () => void
 }) {
   const image = kind === 'image'
   const [selected, setSelected] = useState<MediaSelection>({ model: '', mode: '', ratio: '', duration: 0, resolution: '' })
   const [prompt, setPrompt] = useState('')
   const [assets, setAssets] = useState<MediaAsset[]>([])
   const [library, setLibrary] = useState<MediaAsset[]>([])
+  // 素材清单回来过没有：作品流带过来的素材要等它回来才挂得上，挂不上也要有个结论
+  const [libraryLoaded, setLibraryLoaded] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [uploading, setUploading] = useState(false)
   // 哪一条结果正在被「用作参考」：同一条按钮变「加入中…」，别让人点两遍传两份
@@ -651,7 +626,9 @@ function MediaComposer({
     let alive = true
     listMediaAssets(20)
       .then((response) => {
-        if (alive) setLibrary(response.assets || [])
+        if (!alive) return
+        setLibrary(response.assets || [])
+        setLibraryLoaded(true)
       })
       .catch(() => {
         // 清单读不到不影响上传；真正的错误在上传那一步会报出来
@@ -774,6 +751,36 @@ function MediaComposer({
     return true
   }
 
+  // 作品流里点「用作参考」跳过来的：素材在作品页已经传好了，这里只差挂上去。
+  // 等素材清单回来才动手——挂的时候要先知道这个方式收不收、放不放得下。
+  // 挂不上（比如这个方式已经放满、或者那条素材刚被删）也算用掉：原因留在 refError 里，
+  // 不然每次进这一页都重试一遍。
+  const handoffId = handoff ? handoff.assetId : ''
+  const handoffRatio = handoff?.ratio ?? ''
+  // 挂在哪个方式上要用当前的 model / assets，而这两个每次渲染都是新闭包：
+  // 经 ref 取最新的那一份，effect 的依赖就只剩「素材清单回来没有、模型表回来没有」。
+  const attachRef = useRef<(asset: MediaAsset) => boolean>(() => false)
+  const handoffDoneRef = useRef<(() => void) | undefined>(undefined)
+  useEffect(() => {
+    attachRef.current = attachAsset
+    handoffDoneRef.current = onHandoffDone
+  })
+  useEffect(() => {
+    // 模型表还没回来就先等：这时候判不出这个方式收不收，挂了也会判错
+    if (!handoffId || !libraryLoaded || !model) return
+    const asset = library.find((item) => item.id === handoffId)
+    if (asset) {
+      const attached = attachRef.current(asset)
+      // 比例跟着作品走：带过来的是 9:16 的图，出图就别默认落回 1:1
+      if (attached && handoffRatio && model.ratios.includes(handoffRatio)) {
+        setSelected((current) => ({ ...current, ratio: handoffRatio }))
+      }
+    }
+    // oxlint-disable-next-line react/set-state-in-effect
+    else setRefError('带过来的那条素材没找到了，可能已经删掉：回「作品」再点一次「用作参考」')
+    handoffDoneRef.current?.()
+  }, [handoffId, handoffRatio, libraryLoaded, library, model])
+
   // 先判「放不放得下」再传：传完才发现这个方式不收、或者已经放满，等于让人白等一次上传
   const precheckRef = (kind: RefKind): boolean => {
     const plan = planRefAttach({
@@ -823,7 +830,7 @@ function MediaComposer({
     if (refBusyId || item.status !== 'succeeded' || !item.downloadUrl) return
     const kind: RefKind = item.kind === 'video' ? 'video' : 'image'
     if (!precheckRef(kind)) return
-    const name = taskFileName(item, item.file?.mime ?? '')
+    const name = refFileName(item, item.file?.mime ?? '')
     // 同一条结果点第二次时，素材库里已经有同名的那份了：直接用，不再传一份占配额
     const existing = library.find((asset) => asset.name === name && asset.kind === kind)
     if (existing) {
@@ -1381,7 +1388,12 @@ export function AgentsPage({
   const [credits, setCredits] = useState<CreditsResponse | null>(null)
   // 预设的窗口工具：生图 / 生视频，打开的是生成表单而不是对话
   // 创作方式：对话走对话预设，图片 / 视频走同一条生成表单（不再开单独的窗口）
-  const [composerMode, setComposerMode] = useState<'chat' | MediaKind>('chat')
+  // 从「作品」点「用作参考」跳过来时，素材已经传好了：先看一眼（不删）决定落在哪个页签，
+  // 挂进托架之后才算用掉（r229）。
+  const [pendingRef, setPendingRef] = useState<RefHandoff | null>(() => peekRefHandoff(window.sessionStorage))
+  const [composerMode, setComposerMode] = useState<'chat' | MediaKind>(
+    pendingRef ? (pendingRef.kind === 'video' ? 'video' : 'image') : 'chat',
+  )
   // 对话有两种：平台对话（默认，一页 DeepSeek）与对话预设（带结构化草稿，能存模板/送工作流/写作品）。
   // 从作品页「让 AI 起草」进来时切到预设：那条路要用到草稿的三个出口，平台对话给不了。
   const [chatSurface, setChatSurface] = useState<'platform' | 'preset'>('platform')
@@ -2413,6 +2425,11 @@ export function AgentsPage({
                     kind={mode}
                     catalog={mediaModels?.[mode] ?? []}
                     defaultModel={mediaModels?.defaults[mode] ?? ''}
+                    handoff={pendingRef && pendingRef.kind === mode ? pendingRef : null}
+                    onHandoffDone={() => {
+                      takeRefHandoff(window.sessionStorage)
+                      setPendingRef(null)
+                    }}
                     onCreditsChanged={() => {
                       getCredits(1).then(setCredits).catch(() => undefined)
                     }}
