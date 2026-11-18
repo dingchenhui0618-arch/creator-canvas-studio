@@ -119,6 +119,50 @@
   .works-actions.is-modal .works-action { align-items: flex-end; min-height: 44px; padding-bottom: 2px; font-size: 14px; }
 }
 
+/* ---------- 作品流：平板（r235） ----------
+   561–1080 这一段既不是手机也不是桌面：≤900 侧栏收成图标栏、三列卡片落到 230–330px，
+   而 ≤560 那套手机尺寸又不生效，于是整条流仍是 12–14px、动作 24px 高。
+   平板是触屏：动作与筛选给到 44 / 40px，字号抬到手机那一档；列数与比例规则不动。 */
+@media (min-width: 561px) and (max-width: 1080px) {
+  .works-chip { min-height: 40px; padding: 8px 16px; font-size: 14px; }
+
+  .works-count { font-size: 13px; }
+
+  /* 三列卡片只有 230px：15px 一行放不下二十个字，给两行再省略 */
+  .works-title {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    font-size: 15px;
+    line-height: 1.5;
+    white-space: normal;
+  }
+
+  .works-summary { font-size: 14px; line-height: 1.6; }
+
+  .works-time { font-size: 13px; }
+
+  .works-tag { gap: 4px; padding: 4px 8px; font-size: 13px; }
+
+  .works-fallback { font-size: 14px; }
+
+  .works-open { font-size: 13px; }
+
+  /* 下划线要贴着字：触控区向上撑满 44px，文字仍坐在底部 */
+  .works-action { align-items: flex-end; gap: 8px; min-height: 44px; padding-bottom: 2px; font-size: 14px; }
+
+  .works-more { font-size: 13px; }
+
+  .works-more.is-button { min-height: 44px; padding: 8px 24px; font-size: 14px; }
+
+  .works-modal-note { font-size: 14px; line-height: 1.5; }
+
+  .works-modal-close { top: 8px; right: 8px; width: 44px; height: 44px; }
+
+  .works-actions.is-modal .works-action { align-items: flex-end; min-height: 44px; padding-bottom: 2px; font-size: 14px; }
+}
+
 @media (max-width: 380px) {
   /* 320：两列之间少留 4px，卡片从 104 变成 108；动作放不下会自己折行 */
   .works-grid { gap: 8px; }

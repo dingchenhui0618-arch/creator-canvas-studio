@@ -976,3 +976,40 @@ warning（610 文件）、`tsc -b` 干净、`vite build` 干净（入口 `index-
 ![1440：桌面原样，两列 562px、六格 78px、胶囊 12px / 30px](docs/projects-page-r234-1440.png)
 
 文档见 `docs/projects-page-mobile-2026-11-19.md`。
+
+## 二百八十九、平板这一档：作品流动作 44px、作品项目搜索 44px，顺手修掉 1081–1439 的六格折行（r235 / v0.9.219）
+
+手机与桌面之间（561–1080）一直没有规则：≤900 侧栏收成图标栏，作品流三列卡片只剩 230–330px，
+整条流却还是桌面尺寸——动作 24px 高、正文 12–14px；作品项目 1024 下一张卡片 354px，标签 12px、
+搜索 32px、筛选胶囊 30px、状态胶囊 22px。这一段是触屏。这一版只抬字号与触控区：
+作品流胶囊 **40px / 14px**、标题 **15px 两行**、时间与来源标签 13px、动作 **44px / 14px**、大图关闭 44×44；
+作品项目搜索 **44px**（正文 15px）、筛选 **40px / 14px**、状态胶囊 **26px / 13px**、标题 **18px 两行**、
+模板来源与「打开作品」15px、六格标签 13px。列数与比例规则一个没动
+（测试里锁了「这一段不含 grid-template-columns」）。
+
+量 1081 边界时撞上一个既有问题：1080 那条「六格 3 × 2」一过就失效，可两列卡片还不够宽 ——
+1081 一格 48.8px、1200 一格 58.7px，都放不下「1,830 积分」，折成两行（34.5–36px 高）；
+1440 的 562px（一格 78.7px）才排得下六列。补一条 1081–1439 的 3 × 2 之后：1081 一格 105.5px、
+1200 一格 125.3px，都是一行 24px，1440 保持六列。
+
+口径没动：1440 逐项与改前相同（胶囊 29px / 12.5px、动作 24px / 12px、标题 14px、搜索 32px、
+筛选 30px、六格 78.7px）；390 / 320 与 r233 / r234 相同。十个宽度（320–1440）的 clientWidth 都等于
+scrollWidth，越界元素 0。
+
+门禁：`npm test` **1543/1543**（新增 `test/works-projects-tablet.test.mjs` 7 条）、lint 0 error / 26 warning（613 文件）、
+`tsc -b` 干净、`vite build` 干净（入口 `index-Baaj3I6D.js`、样式 `index-CGUjuBgj.css`）、密钥扫描 947 文件无命中。
+生产 0.9.219：发布 `20261118-191511-20261119-r235tablet`，health ok templates 26，6 个服务 active，
+未登录 401，磁盘 72%；线上 `--chip-pill-h:26px` 1 处、`min-height:44px` 9 处，两条新 media 都在。
+回滚 `--to 1` 回 0.9.218。
+
+![768 作品流改之前：胶囊 29px、动作 24px、正文 12–14px](docs/works-tablet-r235-768-before.png)
+
+![768 作品流改之后：胶囊 40px、标题 15px 两行、动作 44px](docs/works-tablet-r235-768.png)
+
+![768 作品项目改之前：搜索 32px、筛选 30px、标签 12px](docs/projects-tablet-r235-768-before.png)
+
+![768 作品项目改之后：搜索 44px、筛选 40px、标题 18px 两行](docs/projects-tablet-r235-768.png)
+
+![1280：六格 3 × 2，「1,830 积分」不再折行](docs/projects-tablet-r235-1280.png)
+
+文档见 `docs/projects-works-tablet-2026-11-19.md`。

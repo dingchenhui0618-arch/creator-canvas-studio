@@ -3794,6 +3794,80 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
 }
 
 
+/* 1081–1439：卡片仍是两列，但一张只有 382–561px，六列落到 58–78px 一格，
+   「1,830 积分」折成「1,830 / 积分」并把这行拉高一截（1440 的 562px 才够排六列）。
+   这一段同样按 3 × 2 排；1440 及以上保持六列。 */
+@media (min-width: 1081px) and (max-width: 1439px) {
+  .vq-project-card-meta {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* ---------- 作品项目：平板（r235） ----------
+   561–1080 是触屏、但不是手机：1024 下一张卡片 354px，六格只剩 96px；
+   字号还停在桌面那一档（标签 12px、来源 14px），搜索 32px、筛选胶囊 30px、状态胶囊 22px。
+   这里只抬字号与触控区，不动列数：780 以下单列、1080 以下六格 3 × 2 都照旧。 */
+@media (min-width: 561px) and (max-width: 1080px) {
+  .vq-project-page {
+    --chip-pill-h: 26px;
+    --chip-pill-h-lg: 30px;
+    --chip-pad: 12px;
+    --chip-font: 13px;
+    --chip-font-lg: 14px;
+  }
+
+  .vq-project-card-title {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    font-size: 18px;
+    line-height: 1.45;
+    white-space: normal;
+  }
+
+  .vq-project-card-source { font-size: 15px; }
+
+  .vq-project-card-head > .vq-mono { font-size: 13px; }
+
+  .vq-project-card-version,
+  .vq-project-share {
+    height: 26px;
+    font-size: 13px;
+  }
+
+  .vq-project-card-meta em { font-size: 13px; }
+
+  /* 四位数带单位在 96px 一格放得下：不折行，别把「1,800 积分」拆成两行 */
+  .vq-project-card-meta b { white-space: nowrap; }
+
+  .vq-project-card-go { font-size: 15px; }
+
+  .vq-toolbar-search {
+    min-width: 0;
+    height: 44px;
+    padding: 0 16px;
+  }
+
+  .vq-toolbar-search input { font-size: 15px; }
+
+  .vq-toolbar-search-clear {
+    width: 32px;
+    height: 32px;
+  }
+
+  .vq-project-page .vq-filter-chip {
+    height: 40px;
+    padding: 0 12px;
+    font-size: 14px;
+  }
+
+  .vq-project-page .vq-filter-chip__count { font-size: 13px; }
+
+  .vq-project-page .vq-toolbar-count { font-size: 13px; }
+}
+
+
 /* ---------- 两版对照（v0.9.117） ----------
    只读弹窗：两个选择器 + 一句结论 + 画布/脚本明细；与版本脚本快照同一套纸面，
    正文可滚，1440 与 390 都不把视口撑破。 */
