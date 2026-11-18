@@ -37,6 +37,7 @@ import {
 import { getCredits } from '../api/credits'
 import { runCreditsText, runResumeInfo, runSpentText, runStatusMeta } from '../domain/run'
 import { diffRunGraph, type RunGraphDiff } from '../domain/run-diff'
+import { flowStepPlan } from '../domain/flow-steps'
 import { useUiMode } from '../api/app'
 import { navigate, replaceRoute } from '../router'
 import { NODE_META } from '../canvas/catalog'
@@ -44,14 +45,42 @@ import { FlowNodeCard } from '../canvas/FlowNode'
 import { Inspector } from '../canvas/Inspector'
 import { Palette } from '../canvas/Palette'
 import { RunCompareModal } from '../components/RunCompareModal'
+import { useModelOptions } from '../components/ModelSwitch'
 import { RunDrawer } from '../canvas/RunDrawer'
 import { autoLayout } from '../canvas/layout'
 import { fromFlowEdges, fromFlowNodes, toFlowEdges, toFlowNodes, validateConnection } from '../canvas/serialize'
-import type { FlowNodeData, FlowNodeKind, RunNodeStatus } from '../canvas/types'
+import type { FlowNodeData, FlowNodeKind, NodeConfig, RunNodeStatus } from '../canvas/types'
 import PageHead from '../components/PageHead'
 import { Pill } from '../components/ui'
 import '../styles/canvas.css'
 
+/** 步骤清单上那一行小字：只写这个节点真正会变的东西（模型显示名、比例、时长、分辨率）。
+ *  模型名一律走 /api/models 下发的标签（GPT Image 2 / Seedance 2.0），界面上不出现任何上游厂牌。 */
+function stepMetaText(kind: FlowNodeKind, config: NodeConfig, modelLabels: Map<string, string>): string {
+  const parts = [NODE_META[kind].label]
+  if (kind === 'llm' || kind === 'image' || kind === 'video') {
+    const label = config.model ? modelLabels.get(config.model) : ''
+    if (label) parts.push(label)
+  }
+  if (kind === 'image' && config.ratio) parts.push(config.ratio)
+  if (kind === 'video' && config.duration) parts.push(config.duration + ' 秒')
+  if (kind === 'video' && config.resolution) parts.push(config.resolution)
+  return parts.join(' · ')
+}
+
+/** 这一步在这次运行里的状态；idle 什么都不写，不占位置也不编。 */
+function stepStateText(status: RunNodeStatus, ms?: number): string {
+  if (status === 'running') return '跑着'
+  if (status === 'pending') return '等前面'
+  if (status === 'done') {
+    if (!ms) return '完成'
+    return ms >= 1000 ? '完成 ' + Math.round(ms / 1000) + 's' : '完成 ' + Math.round(ms) + 'ms'
+  }
+  if (status === 'error') return '失败'
+  if (status === 'skipped') return '跳过'
+  if (status === 'unsupported') return '不支持'
+  return ''
+}
 // React Flow 按 type 找渲染组件：新加一种节点必须在这里登记，否则画布上什么都不画
 // （v0.9.199 踩过：出图节点没登记，状态里有它、画面上没有）。
 const nodeTypes = {
@@ -664,6 +693,11 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
   }, [resumeSource, graphSignature, saveState, running, loadState])
 
   const selectedNode = useMemo(() => nodes.find((node) => node.id === selectedId) ?? null, [nodes, selectedId])
+  // 手机端没有画布可看（390 宽只剩 272×309，空状态还会压在缩放按钮上），改成按执行顺序的步骤清单（v0.9.211）。
+  // 顺序规则与服务端执行用的拓扑排序一致；模型显示名取 /api/models 的标签，不自己拼。
+  const modelOptions = useModelOptions()
+  const modelLabels = useMemo(() => new Map(modelOptions.map((item) => [item.id, item.label])), [modelOptions])
+  const stepPlan = useMemo(() => flowStepPlan(nodes, edges), [nodes, edges])
   // 这次运行里有、当前工作流上已经没有的节点：查看页只能说清「回放缺了几块」，不能假装工作流还是当时的版本。
   const runViewMissing = readOnly && runRecord
     ? runRecord.nodes.filter((result) => !nodes.some((node) => node.id === result.id)).length
@@ -1190,6 +1224,20 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
         ? '保存失败'
         : '已保存'
 
+  // 空工作流给的三条出口：桌面空状态与手机步骤清单共用同一份，免得两边文案走散。
+  const flowStartLinks = (
+    <div className="cv-empty-actions">
+      <button type="button" className="vq-button vq-button--ghost" onClick={() => navigate({ kind: 'page', page: 'radar' })}>
+        去爆款雷达找一条
+      </button>
+      <button type="button" className="vq-button vq-button--ghost" onClick={() => navigate({ kind: 'page', page: 'templates' })}>
+        套用模板库的结构
+      </button>
+      <button type="button" className="vq-button vq-button--ghost" onClick={() => navigate({ kind: 'page', page: 'projects' })}>
+        从作品继续
+      </button>
+    </div>
+  )
   return (
     <div className="page cv-page">
       <PageHead
@@ -1428,10 +1476,10 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
                   </span>
                 ) : (
                   <>
-                    <button className="cv-tool" type="button" onClick={relayout} disabled={!nodes.length}>
+                    <button className="cv-tool cv-canvas-only" type="button" onClick={relayout} disabled={!nodes.length}>
                       <LayoutGrid size={14} />自动布局
                     </button>
-                    <span className="cv-divider" />
+                    <span className="cv-divider cv-canvas-only" />
                     <button className="cv-tool" type="button" onClick={undo} disabled={!historyCount} title="Ctrl+Z">
                       <RotateCcw size={14} />撤销
                     </button>
@@ -1456,13 +1504,13 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
                     >
                       <Plus size={14} />节点
                     </button>
-                    <span className="cv-divider" />
+                    <span className="cv-divider cv-canvas-only" />
                   </>
                 )}
-                <button className="cv-tool" type="button" onClick={() => rf.fitView({ padding: 0.12, duration: 200 })}>
+                <button className="cv-tool cv-canvas-only" type="button" onClick={() => rf.fitView({ padding: 0.12, duration: 200 })}>
                   <Maximize2 size={14} />适应工作流
                 </button>
-                <span className="cv-zoom">{Math.round(zoom * 100)}%</span>
+                <span className="cv-zoom cv-canvas-only">{Math.round(zoom * 100)}%</span>
               </div>
             </div>
 
@@ -1533,17 +1581,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
                 <div className="cv-overlay cv-overlay--empty">
                   <strong>工作流是一条内容拆成步骤的地方</strong>
                   <p>把「大模型 → 出图 → 评审 → 输出」连成一条线，跑完的运行会带着结果进「作品」：在作品流里点那张卡，就回到这次运行的逐节点结果。</p>
-                  <div className="cv-empty-actions">
-                    <button type="button" className="vq-button vq-button--ghost" onClick={() => navigate({ kind: 'page', page: 'radar' })}>
-                      去爆款雷达找一条
-                    </button>
-                    <button type="button" className="vq-button vq-button--ghost" onClick={() => navigate({ kind: 'page', page: 'templates' })}>
-                      套用模板库的结构
-                    </button>
-                    <button type="button" className="vq-button vq-button--ghost" onClick={() => navigate({ kind: 'page', page: 'projects' })}>
-                      从作品继续
-                    </button>
-                  </div>
+                  {flowStartLinks}
                   <p className="cv-empty-note">出图节点每张另扣积分，运行前顶栏会算总价；出视频仍在「快捷创作」与「无限画布」。</p>
                 </div>
               )}
@@ -1555,6 +1593,56 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
                     : '只读查看：节点状态来自这次运行，工作流不会被改动'
                   : running ? '运行中：节点会按拓扑序逐个点亮' : '拖动节点右侧圆点连线；每个输入端口只接一根线'}
               </div>
+            </div>
+
+            {/* 手机端（≤760）不摆画布：那块画布在 390 宽只剩 272×309，空状态还会把缩放按钮
+                和底部提示压在文字底下。改成按执行顺序的步骤清单——能看清有几步、每步是什么、
+                点一步就选中它（下面的节点检查器照旧改参数）。桌面仍然只显示画布，这块 display:none。 */}
+            <div className="cv-steps">
+              <div className="cv-steps-head">
+                <span className="cv-kicker">按执行顺序</span>
+                <span className="cv-steps-count">{nodes.length ? nodes.length + ' 步' : '还没有步骤'}</span>
+              </div>
+              {stepPlan.cyclic ? (
+                <p className="cv-steps-warn">这条流程有环，跑不起来：回电脑上断开形成环路的连线。</p>
+              ) : null}
+              {nodes.length ? (
+                <ol className="cv-steps-list">
+                  {stepPlan.steps.map((step, index) => {
+                    const node = nodes.find((item) => item.id === step.id)
+                    if (!node) return null
+                    const meta = NODE_META[node.data.kind]
+                    const stateText = stepStateText(node.data.status ?? 'idle', node.data.ms)
+                    return (
+                      <li key={step.id}>
+                        <button
+                          type="button"
+                          className={'cv-step' + (step.id === selectedId ? ' is-active' : '')}
+                          onClick={() => selectNode(step.id)}
+                          aria-pressed={step.id === selectedId}
+                        >
+                          <span className="cv-step-no">{index + 1}</span>
+                          <span className="cv-step-body">
+                            <span className="cv-step-title">{node.data.title || meta.defaultTitle}</span>
+                            <span className="cv-step-meta">{stepMetaText(node.data.kind, node.data.config, modelLabels)}</span>
+                            {step.deps.length ? <span className="cv-step-dep">依赖第 {step.deps.join('、')} 步</span> : null}
+                          </span>
+                          {stateText ? (
+                            <span className="cv-step-state" data-state={node.data.status}>{stateText}</span>
+                          ) : null}
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ol>
+              ) : (
+                <div className="cv-steps-empty">
+                  <strong>这条工作流还没有步骤</strong>
+                  <p>把「大模型 → 出图 → 评审 → 输出」连成一条线，跑完的运行会带着结果进「作品」。连线与位置在电脑上摆。</p>
+                  {flowStartLinks}
+                </div>
+              )}
+              <p className="cv-steps-note">连线、拖动与自动布局在电脑上做；手机上按这个顺序执行，点一步改它的参数。</p>
             </div>
           </section>
 

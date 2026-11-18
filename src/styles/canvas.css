@@ -670,6 +670,97 @@
   .cv-stage { min-height: 400px; }
 }
 
+/* ---------- 手机端步骤清单（v0.9.211） ----------
+   390 宽时画布只剩 272×309：空状态（标题 + 两行说明 + 三个按钮 + 一句备注）比容器还高，
+   直接压到缩放按钮和底部提示上，文字互相盖住。手机上把画布整个换成按执行顺序的步骤清单：
+   一句一眼说清「有几步、每步是什么、依赖谁」，点一步选中改参数。桌面这块 display:none，画布照旧。 */
+.cv-steps { display: none; }
+.cv-steps-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.cv-steps-count { color: var(--muted); font-family: var(--font-mono); font-size: 12px; letter-spacing: .02em; }
+.cv-steps-warn { margin: 0; padding: 8px 12px; color: var(--warn); background: var(--warn-soft); border: 1px solid rgba(138, 91, 8, .22); border-radius: var(--radius-sm); font-size: 13px; line-height: 1.6; }
+.cv-steps-list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.cv-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  min-height: 48px;
+  padding: 12px;
+  text-align: left;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.cv-step.is-active { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
+.cv-step:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.cv-step-no {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  color: var(--muted);
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.cv-step-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.cv-step-title { font-size: 15px; font-weight: 500; line-height: 1.45; overflow-wrap: anywhere; }
+.cv-step-meta { color: var(--muted); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.cv-step-dep { color: var(--faint); font-family: var(--font-mono); font-size: 12px; letter-spacing: .02em; }
+.cv-step-state {
+  flex: none;
+  margin-left: auto;
+  padding: 0 8px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 22px;
+  white-space: nowrap;
+}
+.cv-step-state[data-state="running"] { color: var(--ink); border-color: var(--ink); }
+.cv-step-state[data-state="error"] { color: var(--warn); background: var(--warn-soft); border-color: rgba(138, 91, 8, .22); }
+.cv-steps-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 16px; border: 1px dashed var(--line); border-radius: var(--radius-md); }
+.cv-steps-empty strong { font-size: 15px; font-weight: 600; }
+.cv-steps-empty p { margin: 0; max-width: 340px; color: var(--muted); font-size: 13px; line-height: 1.65; }
+.cv-steps-note { margin: 0; color: var(--faint); font-size: 12px; line-height: 1.6; }
+
+@media (max-width: 760px) {
+  /* 画布整个不画：272×309 的缩水图放不下任何东西，空状态还会压住缩放按钮 */
+  .cv-canvas { display: none; }
+  .cv-steps { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; padding: 12px; overflow: auto; }
+  .cv-steps .cv-empty-actions { flex-wrap: wrap; }
+  /* 画布专属工具（自动布局 / 适应工作流 / 缩放百分比）在手机上不起作用：画布根本不显示，
+     留着只会让人以为能对着看不见的东西布局。节点数、连线数、加节点、撤销照旧留着。 */
+  .cv-canvas-only { display: none; }
+  /* 流程名在窄屏是单行输入框：见下面 ≤900 那段（390 与 768 都要收） */
+  /* 分组之间的竖线在小屏会掉在行尾，变成一根悬着的短竖线 */
+  .cv-toolbar .cv-divider { display: none; }
+  /* 积分预估这一行是 nowrap 的等宽字：320 宽时它有 274px，加上 68px 侧栏与 48px 内边距
+     把整页撑到 367（390 恰好放得下，所以以前没露出来）。窄屏允许折行，宁可两行不横拖。 */
+  .cv-run-credit { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+  /* 节点面板打开时，≤1024 那条「1fr + 272px」两列规则还在生效：390 宽扣掉 272px 右栏，
+     画布（这里是步骤清单）只剩 2px 宽，整块清单看不见。手机上一律单列三行：面板 / 清单 / 检查器。 */
+  .cv-workspace:has(.cv-palette) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(360px, 1fr) auto;
+  }
+  /* 面板横排时每个按钮只有几十像素，中文标签会被逐字竖排（「知/识/库」），锁一行 */
+  .cv-palette-item { white-space: nowrap; }
+}
+
+/* 流程名在窄屏是单行输入框：28px 的字 12 个字要 336px，390 宽只剩 272、768 宽只剩 276，
+   名字被切成「一条内…」。≤900 降到 22px 并给省略号，至少能看出这条流程叫什么；点进去照旧改名。 */
+@media (max-width: 900px) {
+  .cv-flow-name { font-size: 22px; text-overflow: ellipsis; }
+}
+
 /* 运行排队位（v0.9.96）：与画布出图的排队位同一套样子（发丝线 + 等宽微字 + 全站胶囊圆角），
    只在等名额时出现；排到就收起，按钮改报「运行中 Ns」。 */
 .cv-run-queue {
