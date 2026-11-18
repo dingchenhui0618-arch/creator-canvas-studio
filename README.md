@@ -873,3 +873,41 @@ r223 之后继续按清单往下走，处理的都是手机上看得见、但一
 ![320 宽：输入框 16px，两个按钮各 140×48](docs/replicate-mobile-idle-320.png)
 
 文档见 `docs/replicate-modal-mobile-2026-11-19.md`。
+
+## 二百八十六、模板详情抽屉在手机上：正文 15px、底部动作改成等宽两列（r232 / v0.9.216）
+
+抽屉在 ≤820px 本来就是整宽，问题在里面还是桌面排版：口播、分镜画面、分析条目一律 12.5–13px；
+关闭按钮 28×32（320 上只剩 22×32）；底部四个动作 32px 高（删除 28px），还是右对齐的 flex 换行，
+两行参差、删除比同行低 2px。这一屏覆盖的正好是主线上「拆结构」的全部内容，所以先把它抬到能读。
+
+现在 ≤640px：正文 15px（行高 1.7）、说明 14px、元信息 13px；标题 18px（320 上 17px）最多三行；
+关闭 40×40；底部四个动作 48px 高、等宽两列（主操作第一格、删除固定在右下角）；改编输入框 16px
+（iOS 聚焦不再放大整页）；互动数据 14px、390 三列 / 320 两列且数字不折行。390 / 320 上页面
+`scrollWidth` 分别等于 390 / 320，抽屉正文容器 `scrollWidth == clientWidth`，横向溢出 0，抽屉始终
+贴满 844 高的视口。641–760 与桌面 1440 没动。
+
+两处值得一提：① 抽屉的规则一半在 `radar.css`（随模板库懒加载分块后到），同权重写在 App.css 里会被
+盖掉——实测 `.drawer-stats` 的 14px 与 `.adapt-input` 的 16px 各输过一次，所以这版选择器统一加了
+`.template-drawer` 前缀。② 320 宽用三列网格时「播放 128.4万」被断成两行，补了 `white-space: nowrap`
+并在 ≤380px 退成两列。
+
+门禁：`npm test` **1525/1525**（新增 `test/template-drawer-mobile.test.mjs` 6 条）、lint 0 error / 26
+warning（610 文件）、`tsc -b` 干净、`vite build` 干净（入口 `index-B9jbGaj2.js`）、密钥扫描 941 文件
+无命中。生产 0.9.216：发布 `20261118-180003-20261119-0200-r232drawer`，health ok templates 26，
+6 个服务 active，未登录 401；线上 `index-J2mtVEL8.css` 里 12 条新规则全部命中（压缩器会把
+`:is(.vq-button)` 摊平成 `.vq-button` 并重排声明，所以核对要按选择器取片段、不按顺序）。
+
+![390：18px 标题、40×40 关闭、15px 口播、互动数据三列](docs/template-drawer-r232-390-top.png)
+
+![390：分镜表（左抽帧、右 15px 画面与 13px 标签）](docs/template-drawer-r232-390-shots.png)
+
+![390：导出 2×2、分享一行，底部四个 48px 等宽按钮](docs/template-drawer-r232-390-bottom.png)
+
+![390：改编模式，标题 17px、正文输入框 16px](docs/template-drawer-r232-390-adapt.png)
+
+![320：互动数据退两列、数字不断行](docs/template-drawer-r232-320-top.png)
+
+![320：最窄宽度下的分镜表](docs/template-drawer-r232-320-shots.png)
+
+文档见 `docs/template-drawer-mobile-2026-11-19.md`。
+

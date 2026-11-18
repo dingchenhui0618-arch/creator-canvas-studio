@@ -546,6 +546,74 @@ button { cursor:pointer; }
   .replicate-preview img { width: 64px; height: 40px; }
 }
 
+
+/* ---------- 模板详情抽屉：手机端（r232）----------
+   抽屉在 ≤820px 已经是整宽，但里面仍是桌面排版：正文 12.5–13px、关闭按钮只有
+   28×32（320 上是 22×32）、底部四个按钮 32px 高还右对齐成两行错位。「拆结构」
+   这一整段都在这个抽屉里，所以先把字抬到 15px、触控目标抬到 48px，底部改成
+   等宽两列（主操作第一格、删除固定在右下角）。
+
+   选择器一律带 .template-drawer 前缀：这份抽屉的一半规则在 radar.css（随模板库
+   这个懒加载分块后到），同权重写在 App.css 里会被它盖掉——实测 .drawer-stats
+   的 14px 与 .adapt-input 的 16px 都输过一次。 */
+@media (max-width: 640px) {
+  .template-drawer .drawer-head { padding: 16px; gap: 12px; }
+  .template-drawer .drawer-head > div { gap: 4px; }
+  .template-drawer .drawer-head strong { display: -webkit-box; overflow: hidden; font-size: 18px; font-weight: 700; line-height: 1.45; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+  .template-drawer .drawer-sub { font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+  .template-drawer .drawer-head .vq-button--icon { flex: 0 0 auto; width: 40px; height: 40px; }
+  .template-drawer .drawer-body { padding: 16px 16px 24px; gap: 24px; }
+  .template-drawer .drawer-section { gap: 12px; }
+  .template-drawer .drawer-section-head h3 { font-size: 15px; }
+  .template-drawer .drawer-section-head h4 { font-size: 14px; }
+  .template-drawer .drawer-section-head span { font-size: 13px; }
+  .template-drawer .drawer-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 12px; font-size: 14px; }
+  .template-drawer .drawer-stats span { white-space: nowrap; }
+  .template-drawer .drawer-stats b { font-size: 15px; }
+  .template-drawer .drawer-quote { padding: 12px; font-size: 15px; line-height: 1.7; }
+  .template-drawer .drawer-quote + .drawer-tags .tag { font-size: 13px; }
+  .template-drawer .beat-item strong { font-size: 15px; line-height: 1.5; }
+  .template-drawer .beat-item p { margin-top: 4px; font-size: 15px; line-height: 1.7; }
+  .template-drawer .beat-onscreen { font-size: 13px; }
+  .template-drawer .shot-row { grid-template-columns: 88px minmax(0, 1fr); gap: 12px; padding: 12px; }
+  .template-drawer .shot-frame em { font-size: 12px; }
+  .template-drawer .shot-copy strong { font-size: 15px; line-height: 1.6; }
+  .template-drawer .shot-copy p { font-size: 14px; }
+  .template-drawer .shot-tags span { font-size: 13px; }
+  .template-drawer .drawer-list { font-size: 15px; line-height: 1.7; }
+  .template-drawer .drawer-list--flow li { padding: 12px 0; }
+  .template-drawer .drawer-list--flow li .vq-mono, .template-drawer .drawer-list--flow li em { font-size: 12px; }
+  .template-drawer .drawer-source { gap: 8px; padding: 12px; font-size: 14px; line-height: 1.6; }
+  .template-drawer .drawer-source .vq-button { height: 44px; font-size: 14px; }
+  .template-drawer .drawer-origin { padding: 12px; }
+  .template-drawer .drawer-origin-count { font-size: 14px; }
+  .template-drawer .drawer-origin-count b { font-size: 15px; }
+  .template-drawer .drawer-origin-sibling { min-height: 32px; padding: 4px 12px; font-size: 14px; }
+  .template-drawer .drawer-origin-sibling em { font-size: 12px; }
+  .template-drawer .drawer-origin-note, .template-drawer .drawer-origin-more, .template-drawer .drawer-works-more { font-size: 13px; }
+  .template-drawer .drawer-section--pending .drawer-pending-copy { font-size: 14px; line-height: 1.7; }
+  .template-drawer .drawer-section--pending .drawer-pending-hint { font-size: 14px; }
+  .template-drawer .drawer-export-note, .template-drawer .drawer-share-note, .template-drawer .adapt-note { font-size: 14px; line-height: 1.7; }
+  .template-drawer .drawer-export-actions .vq-button { flex: 1 1 auto; min-height: 44px; font-size: 14px; }
+  .template-drawer .drawer-share-input { flex: 1 1 100%; height: 48px; font-size: 16px; }
+  .template-drawer .drawer-share-row .vq-button { flex: 1 1 auto; min-height: 44px; font-size: 14px; }
+  .template-drawer .drawer-foot { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 12px 16px 16px; }
+  .template-drawer .drawer-foot :is(.vq-button) { width: 100%; min-width: 0; height: 48px; padding: 0 8px; font-size: 15px; }
+  .template-drawer .drawer-foot :is(.vq-button--primary) { order: -1; }
+  .template-drawer .drawer-foot :is(.vq-button--danger) { grid-column: 2; margin-right: 0; }
+  .template-drawer .drawer-loading { padding: 24px 16px; font-size: 14px; }
+  /* 改编模式：输入框 16px 是 iOS 的缩放门槛（<16px 聚焦会放大整页） */
+  .template-drawer .adapt-input { min-height: 48px; padding: 12px; font-size: 16px; }
+  .template-drawer .adapt-input--title { font-size: 17px; }
+}
+
+@media (max-width: 380px) {
+  .template-drawer .drawer-head strong { font-size: 17px; }
+  .template-drawer .shot-row { grid-template-columns: 76px minmax(0, 1fr); }
+  /* 320 上三列放不下「播放 128.4万」：数字被断成两行，退成两列 */
+  .template-drawer .drawer-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 @media print {
   @page { size:A4; margin:14mm; }
   /* 纸面用深色墨、浅色线，不去挪用屏幕上的灰 */
