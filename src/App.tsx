@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
+  ArrowLeftRight,
   BookOpen,
   Check,
   ChevronRight,
@@ -747,8 +748,15 @@ function Workbench({
               <span className="vq-edition-kicker" title={EDITION_BY_ID.admin.hint}>
                 后台管理版
               </span>
-              <button type="button" className="vq-button vq-button--quiet vq-button--sm" onClick={leaveAdmin}>
-                返回生产版
+              <button
+                type="button"
+                className="vq-button vq-button--quiet vq-button--sm vq-edition-leave"
+                aria-label="返回生产版"
+                title="返回生产版"
+                onClick={leaveAdmin}
+              >
+                <ArrowLeftRight size={15} aria-hidden="true" className="vq-edition-leave-icon" />
+                <span className="vq-edition-leave-text">返回生产版</span>
               </button>
             </div>
           )}

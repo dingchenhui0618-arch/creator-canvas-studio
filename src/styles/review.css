@@ -331,6 +331,7 @@
   display:inline-flex;
   align-items:center;
   gap:4px;
+  min-height:24px;
   padding:4px 8px;
   margin:-4px -8px -4px 0;
   border:0;

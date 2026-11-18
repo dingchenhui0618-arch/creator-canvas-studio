@@ -169,9 +169,11 @@
   font-style: normal;
   line-height: 1.4;
 }
+/* 2px 上下留白让高度只有 22px，低于 24px 的触摸下限；补 min-height 到 24（padding 仍留在 4/8 栅格上）。 */
 .vq-link {
   display: inline-flex;
   align-items: center;
+  min-height: 24px;
   gap: 4px;
   padding: 2px 0;
   border: 0;
@@ -2395,6 +2397,32 @@ select:focus-visible {
     display: none;
   }
 
+  /* 900 宽以下侧栏只剩 68px 一条图标：形态条原来被压成 20px 宽的空边框，
+     「返回生产版」既看不见也点不到（后台里唯一回生产版的出口）。
+     这里把形态条收成一颗方形图标按钮，文字藏掉，aria-label 仍在。 */
+  .vq-sidebar .vq-edition-bar {
+    height: auto;
+    margin: 8px 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    justify-content: center;
+  }
+
+  .vq-sidebar .vq-edition-bar .vq-edition-kicker,
+  .vq-sidebar .vq-edition-bar .vq-edition-leave-text {
+    display: none;
+  }
+
+  .vq-sidebar .vq-edition-bar .vq-edition-leave {
+    width: var(--btn-h-sm);
+    padding: 0;
+    gap: 0;
+  }
+
+  .vq-sidebar .vq-edition-bar .vq-edition-leave-icon {
+    display: block;
+  }
 }
 
 @media (max-width: 640px) {
@@ -2681,6 +2709,8 @@ select:focus-visible {
   text-transform: none;
   color: var(--muted);
 }
+/* 图标只在 900 以下的图标侧栏里出现（那里文字藏掉了）；宽屏有文字，图标会挤掉「后台管理版」。 */
+.vq-edition-leave-icon { display: none; }
 .vq-edition-bar .vq-edition-seg { flex: none; }
 
 /* 模型切换：顶栏一个口子，列表来自服务端 /api/models（不硬编码模型名） */
