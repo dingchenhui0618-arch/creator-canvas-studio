@@ -68,6 +68,11 @@ const server = http.createServer((req, res) => {
       res.end(JSON.stringify({ error: { message: '上游炸了' } }))
       return
     }
+    if (mode === 'foreign-fail') {
+      res.writeHead(400, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: { message: 'deepseek-v3 rejected: you are not allowed to use this subscription on this device, see https://api.example.com/docs' } }))
+      return
+    }
     // 只拒流式请求：一次性请求照常成功，才能验证「降级之后仍然拿到答案」
     if (mode === 'reject-stream' && body.stream) {
       res.writeHead(400, { 'Content-Type': 'application/json' })
@@ -164,6 +169,23 @@ test('上游失败：明确说积分已退回，余额回到原值，用户这�
   assert.equal(balanceOf(user.id), before)
 })
 
+test('上游回的是英文原文：只说一句中文结论，不把型号、网址和上游说法透出来（r248）', async () => {
+  const before = balanceOf(user.id)
+  mode = 'foreign-fail'
+  await assert.rejects(
+    () => sendChatMessage(user, { content: '这次上游回英文' }),
+    (error) => {
+      const message = String(error.message)
+      assert.match(message, /积分已退回/)
+      assert.equal(message.toLowerCase().includes('deepseek'), false, '不该露出型号：' + message)
+      assert.equal(message.includes('example.com'), false, '不该露出上游地址：' + message)
+      assert.equal(message.includes('subscription'), false, '不该把上游原文原样透出：' + message)
+      return true
+    },
+  )
+  mode = 'ok'
+  assert.equal(balanceOf(user.id), before)
+})
 test('别人的会话读不到、空消息 400', async () => {
   const other = auth.createUser({ email: 'chat2@example.com', password: 'Passw0rd!demo', name: '另一个' })
   const first = listConversations(user.id)[0]

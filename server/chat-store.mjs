@@ -162,6 +162,8 @@ export function getConversation(userId, conversationId) {
     title: safeText(conv.title, MAX_TITLE) || '新对话',
     createdAt: Number(conv.createdAt) || 0,
     updatedAt: Number(conv.updatedAt) || 0,
+    // 累计被挤掉的条数：界面据此在会话顶部说明「再往前 N 条已经不在存档里」（r248）
+    dropped: Number(conv.dropped) || 0,
     messages: conv.messages.slice(-MAX_MESSAGES).map((item) => ({
       id: String(item.id || ''),
       role: item.role === 'assistant' ? 'assistant' : 'user',
@@ -179,7 +181,10 @@ export function getConversation(userId, conversationId) {
 }
 
 export function saveConversation(userId, conv) {
-  const kept = (conv.messages || []).slice(-MAX_MESSAGES)
+  const all = Array.isArray(conv.messages) ? conv.messages : []
+  const kept = all.slice(-MAX_MESSAGES)
+  // 超过上限时挪掉的是最早的几条：以前是悄悄丢，用户只会发现自己第一句话不见了（r248）
+  const droppedNow = Math.max(0, all.length - kept.length)
   const messages = kept.map((item, index) => ({
     id: String(item.id || ('m' + Date.now().toString(36))),
     role: item.role === 'assistant' ? 'assistant' : 'user',
@@ -199,6 +204,7 @@ export function saveConversation(userId, conv) {
     title: safeText(conv.title, MAX_TITLE) || '新对话',
     createdAt: Number(conv.createdAt) || Date.now(),
     updatedAt: Date.now(),
+    dropped: (Number(conv.dropped) || 0) + droppedNow,
     messages,
   }
   atomicWrite(convFile(userId, next.id), next)
@@ -213,7 +219,10 @@ export function saveConversation(userId, conv) {
     updatedAt: next.updatedAt,
   })
   writeIndex(userId, rows)
-  return getConversation(userId, next.id)
+  const saved = getConversation(userId, next.id)
+  // trimmedNow 只在这一次响应里给（这一回存盘挤掉了多少条），不写进会话文件：
+  // 它不是会话自己的属性，累计条数在 dropped 里（r248）
+  return droppedNow > 0 && saved ? { ...saved, trimmedNow: droppedNow } : saved
 }
 
 export function deleteConversation(userId, conversationId) {

@@ -52,5 +52,9 @@ export function publicError(error, fallback = '服务暂时不可用，请稍后
     .replace(/\s{2,}/g, ' ')
     .slice(0, 300)
     .trim()
-  return cleaned || fallback
+  if (!cleaned) return fallback
+  // 原文（去掉型号之后）整句都没有中文 = 上游的英文报文：对用户没有信息量，
+  // 还容易带出上游的内部说法，给一句中文结论即可，原文留在服务端日志里（r248）
+  if (!/[\u4e00-\u9fff]/.test(raw.replace(MODEL_NAME, ''))) return fallback
+  return cleaned
 }

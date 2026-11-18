@@ -24,6 +24,7 @@ import { markdownPlainText } from '../lib/markdown-parse'
 //    右上角按钮变成「停止」，停止 = 断开连接，服务端中止上游并全额退款，不留半截回答；
 //  - 失败、空回复、停止都全额退回，界面明说「积分已退回」，余额当场刷新；
 //  - 会话在服务端：换设备、关页面回来都还在，最多 30 条会话、每条留 200 条消息；
+//  - 两处上限都不静默：会话满了说挪掉的是哪条（r247），消息超过 200 条说少了多少条（r248）；
 //  - 附件（r218）：脚本、Word、Excel、PDF 先在服务端读成文字，再连同问题一起问模型；
 //    解析在本地做（不上传原始文件给上游），扫描件里的字读不出会直说，不做假 OCR。
 // short：手机上输入框常驻贴底，四个能力一行放不下四个字的标签，
@@ -315,6 +316,10 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
       )
       setStreaming('')
       setCurrent(result.conversation)
+      // 一条会话最多留 200 条消息：超出时服务端从最早的开始挪掉，这件事必须说出来，
+      // 不然用户只会发现「第一句问的话没了」，还会以为模型忘了（r248）
+      const trimmed = Number(result.conversation.trimmedNow) || 0
+      if (trimmed > 0) onToast?.('这条对话到 200 条上限了：最早的 ' + trimmed + ' 条已经从存档里挪掉，再往前翻不到了')
       if (typeof result.balance === 'number') setCredits((value) => (value ? { ...value, balance: result.balance } : value))
       void refreshList()
     } catch (caught) {
@@ -329,6 +334,9 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
         try {
           const fresh = await getChatConversation(conversationId)
           setCurrent(fresh.conversation)
+          // 失败的那一轮也可能已经挤掉了旧消息（用户那句先落库，再去问上游）：同样要说一声（r248）
+          const lost = (Number(fresh.conversation.dropped) || 0) - (Number(before?.dropped) || 0)
+          if (lost > 0) onToast?.('这条对话到 200 条上限了：最早的 ' + lost + ' 条已经从存档里挪掉，再往前翻不到了')
         } catch {
           if (before) setCurrent(before)
         }
@@ -396,7 +404,7 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
             </div>
           ))}
         </div>
-        <p className="qc-side-note">会话存在服务端，换设备回来还在；最多 30 条，满了会挪掉最早的一条（会告诉你是哪条）。</p>
+        <p className="qc-side-note">会话存在服务端，换设备回来还在；最多 30 条、每条留 200 条消息，超出时从最早的挪掉并告诉你。</p>
       </aside>
 
       <div className="qc-main">
@@ -408,6 +416,11 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
             stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48
           }}
         >
+          {current?.dropped ? (
+            <p className="qc-trimmed">
+              再往前 {current.dropped} 条已经不在存档里：一条对话最多留 200 条消息，超出的从最早的开始挪掉。
+            </p>
+          ) : null}
           {messages.length === 0 ? (
             <div className="qc-empty">
               <strong>一页能记住上下文的对话</strong>
@@ -418,7 +431,7 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
               <ul>
                 <li>边生成边显示，首段字通常一两秒就到，不用干等整段</li>
                 <li>生成中途点右上角方块可以停，停止不计费；失败也全额退回</li>
-                <li>上下文带最近 30 条，不是只记上一句</li>
+                <li>上下文带最近 30 条，不是只记上一句；存档最多留 200 条，超出的从最早的挪掉（会话顶部会写少了多少条）</li>
                 <li>脚本、Word、Excel、PDF 可以直接丢进来，平台先在本地读成文字再回答；扫描件里的字读不出，会直接说</li>
                 <li>截图、照片也能丢进来（最多 2 张）：原图直接交给模型看，图里的字由它自己读——本地不做 OCR，读错了以原图为准</li>
                 <li>

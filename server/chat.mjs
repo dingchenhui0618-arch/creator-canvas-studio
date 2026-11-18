@@ -29,6 +29,7 @@ import { contextMessages, createConversation, getConversation, saveConversation,
 import { CHAT_FILE_LIMITS, readChatFileBytes, resolveChatFiles } from './chat-files.mjs'
 import { findLinks, readLinks } from './link-read.mjs'
 import { publicSearch, searchAndRead } from './web-search.mjs'
+import { publicError } from './public-error.mjs'
 
 const MAX_INPUT = 8000
 const CONTEXT_MESSAGES = 30
@@ -179,7 +180,8 @@ async function beginChat(user, input = {}) {
     search: publicSearch(searched.search),
     docText,
   })
-  conv = saveConversation(user.id, conv) || conv
+  const savedTurn = saveConversation(user.id, conv)
+  conv = savedTurn || conv
 
   const tools = officialTools(options)
   const extra = {}
@@ -202,6 +204,8 @@ async function beginChat(user, input = {}) {
 
   return {
     conv,
+    // 发出去的那句（还没落回答）就已经挤掉了多少条：跟落回答那次合起来算这一轮一共挤掉几条
+    evicted: Number(savedTurn?.trimmedNow) || 0,
     options,
     tools,
     extra,
@@ -242,8 +246,11 @@ function finishChat(user, ctx, result) {
     },
   })
   const saved = saveConversation(user.id, ctx.conv)
+  // 这一轮一共挤掉多少条（用户那句一次、落回答一次），合起来只说一次，别报两个小数字（r248）
+  const trimmedNow = (Number(ctx.evicted) || 0) + (Number(saved?.trimmedNow) || 0)
+  const conversation = trimmedNow > 0 && saved ? { ...saved, trimmedNow } : saved
   return {
-    conversation: saved,
+    conversation,
     reply: saved.messages[saved.messages.length - 1],
     model: result?.model,
     cost: ctx.paid.cost,
@@ -265,7 +272,10 @@ function failChat(user, ctx, error) {
   const wrapped = fail(
     stopped ? 499 : error?.status || 502,
     stopped ? 'CHAT_ABORTED' : error?.code || 'CHAT_UPSTREAM',
-    stopped ? '已停止生成，这次不计费（积分已退回）' : '这次没有回上来，积分已退回：' + String(error?.message || error),
+    stopped
+      ? '已停止生成，这次不计费（积分已退回）'
+      // 上游原话常带型号、供应商地址与英文废话：走统一口径，不把报文原样丢给用户（r248）
+      : '这次没有回上来，积分已退回：' + publicError(error, '上游没有返回可用的回答，稍后再试一次'),
   )
   wrapped.detail = String(error?.stack || error).slice(0, 400)
   wrapped.stopped = stopped

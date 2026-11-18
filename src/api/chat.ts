@@ -49,6 +49,10 @@ export type ChatConversation = {
   messages: ChatMessage[]
   // 会话列表满了（最多 30 条）时，新建会话会腾掉最早的一条：这里告诉界面挪的是哪一条（r247）
   retired?: { id: string; title: string }
+  // 一条会话最多留 200 条消息：dropped 是累计被挤掉的条数（刷新后仍然知道少了多少），
+  // trimmedNow 只在刚刚这一轮挤掉消息时出现，用来提醒一次（r248）
+  dropped?: number
+  trimmedNow?: number
 }
 
 export type ChatSummary = {

@@ -82,3 +82,28 @@ test('会话满了要腾位置时必须说出来：回传被挪掉的是哪一�
   // retired 是这次响应里的提示，不该被当成会话自己的字段写进文件
   assert.equal(getConversation(user, extra.id).retired, undefined)
 })
+
+test('一条会话超过 200 条消息时必须说出少了多少条，累计数跟着会话（r248）', () => {
+  const user = 'u8'
+  const conv = createConversation(user, { title: '长对话' })
+  // 刚好到上限：一条都不该丢，也不该报「挪掉了」
+  const full = Array.from({ length: CHAT_LIMITS.MAX_MESSAGES }, (_, index) => ({ role: index % 2 ? 'assistant' : 'user', content: 'm' + index }))
+  const atCap = saveConversation(user, Object.assign({}, conv, { messages: full }))
+  assert.equal(atCap.messages.length, CHAT_LIMITS.MAX_MESSAGES)
+  assert.equal(atCap.trimmedNow, undefined)
+  assert.equal(atCap.dropped, 0)
+  // 再多两条：最早的两条被挪掉，这次要报 2，累计也是 2
+  const over = saveConversation(user, Object.assign({}, atCap, { messages: [...atCap.messages, { role: 'user', content: '追加 1' }, { role: 'assistant', content: '追加 2' }] }))
+  assert.equal(over.messages.length, CHAT_LIMITS.MAX_MESSAGES)
+  assert.equal(over.messages[0].content, 'm2')
+  assert.equal(over.trimmedNow, 2)
+  assert.equal(over.dropped, 2)
+  // 刷新后（重新读）不该再报「这一次挪了几条」，但累计少了多少条要记得，会话顶部才能一直写清楚
+  const reread = getConversation(user, conv.id)
+  assert.equal(reread.trimmedNow, undefined)
+  assert.equal(reread.dropped, 2)
+  // 再存一次没超上限的内容：不该多报，也不该把累计数清零
+  const later = saveConversation(user, Object.assign({}, reread, { messages: reread.messages }))
+  assert.equal(later.trimmedNow, undefined)
+  assert.equal(later.dropped, 2)
+})
