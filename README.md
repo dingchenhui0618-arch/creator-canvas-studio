@@ -4682,6 +4682,47 @@ node --experimental-sqlite scripts/sms-channel-once.mjs .tmp-sms-channel.json
 
 细节见 `docs/canvas-merge-and-media-2026-11-18.md`。
 
+## 二百五十二、生视频窗口补上比例、Key 冷却不再误报「请补一把 Key」（2026-11-18，0.9.176）
+
+上一轮只修了「请求漏传 `aspect_ratio`」，**界面还是没比例控件**——等于所有人只能出竖屏；另外真调时遇到的「唯一那把出图 Key 冷却 60 秒」被误报成「平台还没接入出图模型，请联系管理员补一把 Key」。
+
+### 一、比例变成一等公民
+
+- `src/api/media-gen.ts`：新增 `VideoRatio = '9:16' | '16:9' | '1:1'`，`generateMediaVideo` 必须带 `ratio`；
+- `src/pages/AgentsPage.tsx`：生视频窗口新增「比例」一行（默认 9:16 竖屏），副标题改成「提示词 · 比例 · 时长 · 分辨率」；
+- 样式复用 `.agx-media-seg` / `.agx-media-pair`：比例独占一行，时长与分辨率并排，390 宽自动落成一列。
+
+![生视频窗口 · 1440](docs/media-video-ratio-1440.png)
+
+![生视频窗口 · 390](docs/media-video-ratio-390.png)
+
+两张图都是真实渲染：本机临时实例、同一份 `dist` 产物、**普通 account 账号**（侧栏没有「后台管理」，与生产隔离行为一致）。
+
+出片确实是竖的——从生产那条真实调用（184.5 s、3.01 MB MP4）里抽第 2 秒的帧，**720×1280**：
+
+![真实视频首帧](docs/media-video-frame-2026-11-18.png)
+
+### 二、冷却、缺 Key、模型不匹配，三种情况终于分得开
+
+`missingKeyError()` 原来只分「一把都没有」和「有 Key 但没声明这个模型」，两种都在叫人补 Key。新增第三种：
+
+- `server/keyvault.mjs`：`planRoute()` 每行多给一个 `cooldownSec`（原来只有中文「冷却中，还需 N 秒」，程序读不到数字）；
+- `server/gateway.mjs`：冷却中的 Key → `503 KEY_COOLING`，文案「出图 Key 刚被上游拒过，正在冷却，约 N 秒后再点一次」，带 `retryAfterSec`，`detail` 写清哪几把、各剩几秒；
+- 前端不用改：窗口展示的是任务里的 `error` 原文，积分照旧全额退回。
+
+### 三、门禁与部署
+
+| 项 | 结果 |
+| --- | --- |
+| 全量测试 | **1335 / 1335**（新增 1 条：连续 3 次上游拒绝后必须说「冷却 / 再点一次」，且一次都不许再打上游、积分全额退回，并显式禁止出现「补一把」「还没接入」） |
+| lint / `tsc -b` / 密钥扫描 | 0 error·16 warning（持平）/ 干净 / 829 文件无命中 |
+| 构建 | `npm run build` 通过，入口 `index-ATvcwEXB.js` |
+| 生产 | **0.9.176**，公网 `/api/version` 一致，health ok templates 26，两个服务 active |
+| 回滚点 | `20261118-015446-20261118-1055-r191videor` → `ops/rollback.sh --to 1` 回 0.9.175 |
+| 提交 | `c923379` |
+
+边界：**16:9 走我们网关没真调过**（只单测透传；上游侧 11-17 曾接受过 16:9，但那条是直连探测脚本，估 ¥1.4 一条）；冷却提示只在单测里复现，没在生产人为打挂 Key。细节见 `docs/video-ratio-and-cooldown-2026-11-18.md`。
+
 
 
 
