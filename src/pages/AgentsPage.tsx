@@ -1323,6 +1323,10 @@ export function AgentsPage({
   // 平台对话面板一旦打开过就常驻，切走时只隐藏不卸载（r225）：卸载会连写了一半的提示词、
   // 正在生成的回答、附件一起丢掉——用户只是切过去看一眼图片或预设。
   const [chatMounted, setChatMounted] = useState(composerMode === 'chat')
+  // 手机端「对话预设」选好一个之后，预设库收成一行（r226）：这时人要写东西，不是继续挑。
+  // 默认 true——刚进「对话预设」时还是要先看见有哪几个预设可选（列表回来时会自动选中第一个，
+  // 那是服务端的默认值，不是用户挑的）。桌面不受影响，预设库一直展开。
+  const [presetShelfOpen, setPresetShelfOpen] = useState(true)
   // 可用的生成模型与规格：服务端 media-models 是唯一真源，界面不自己写死模型名
   const [mediaModels, setMediaModels] = useState<MediaModelList | null>(null)
   // 模型服务状态：额度 / 凭证这类账号级故障要在输入前就说清楚，而不是让人白点一次
@@ -1538,6 +1542,7 @@ export function AgentsPage({
   const selectFromCard = useCallback(
     (id: string) => {
       selectAgent(id)
+      setPresetShelfOpen(false)
       window.setTimeout(() => stageRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0)
     },
     [selectAgent],
@@ -2360,7 +2365,29 @@ export function AgentsPage({
           （滚到预设卡片时输入框已经跑到屏幕上方 -339px）。
           手机上收起来；要挑预设就切上面那枚「对话预设」页签，那里才是它的位置。
           桌面（>900）不受影响：这块仍是这一页的主要内容。 */}
-      <section className={'agx-library' + (composerMode === 'chat' && chatSurface === 'platform' ? ' is-in-platform-chat' : '')}>
+      {/* 手机端「对话预设」选好一个之后的替代入口（r226）：预设库收起来，但换预设 /
+          编辑 / 删除都还在这条上，点一下展开。桌面不显示这条，预设库一直展开。 */}
+      {composerMode === 'chat' && chatSurface === 'preset' && selectedAgent && !presetShelfOpen ? (
+        <div className="agx-library-bar">
+          <span className="agx-library-bar-text">当前「{selectedAgent.name}」</span>
+          <button
+            type="button"
+            className="vq-button vq-button--ghost"
+            aria-expanded={presetShelfOpen}
+            onClick={() => setPresetShelfOpen((value) => !value)}
+          >
+            {'换一个预设'}
+          </button>
+        </div>
+      ) : null}
+
+      <section
+        className={
+          'agx-library'
+          + (composerMode === 'chat' && chatSurface === 'platform' ? ' is-in-platform-chat' : '')
+          + (composerMode === 'chat' && chatSurface === 'preset' && selectedAgent && !presetShelfOpen ? ' is-shelf-closed' : '')
+        }
+      >
         <div className="agx-library-head">
           <h2>已自建对话预设</h2>
           <span className="agx-library-meta">
@@ -2442,11 +2469,14 @@ export function AgentsPage({
         {!loading && !loadError && visibleAgents.length > 0 && (
           <div className="agx-grid">
             {visibleAgents.map((agent) => (
-              <article className="agx-card" key={agent.id}>
+              <article className={'agx-card' + (agent.id === selectedId ? ' is-active' : '')} key={agent.id}>
                 <button className="agx-card-main" onClick={() => selectFromCard(agent.id)} aria-label={'选择 ' + agent.name}>
                   <div className="agx-card-top">
                     <span className="agx-card-name">{agent.name}</span>
-                    <Tag>{agent.category}</Tag>
+                    <span className="agx-card-tags">
+                      {agent.id === selectedId ? <span className="agx-card-current">当前</span> : null}
+                      <Tag>{agent.category}</Tag>
+                    </span>
                   </div>
                   <p className="agx-card-role">{agent.role}</p>
                   <div className="agx-card-meta">

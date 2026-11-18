@@ -97,7 +97,32 @@ test('「对话预设」页签下自建预设照旧显示', () => {
   const page = read('src', 'pages', 'AgentsPage.tsx')
   assert.match(
     page,
-    /className=\{'agx-library' \+ \(composerMode === 'chat' && chatSurface === 'platform' \? ' is-in-platform-chat' : ''\)\}/,
+    /'agx-library'\s*\n?\s*\+ \(composerMode === 'chat' && chatSurface === 'platform' \? ' is-in-platform-chat' : ''\)/,
     '只给「平台对话」加收起用的类，别把对话预设那边一起藏了',
   )
+  assert.match(page, /' is-shelf-closed'/, '「对话预设」那边收起用的是另一枚类（选好预设之后才生效）')
+})
+test('手机端选好预设后，预设库收成一行，换 / 编辑 / 删除仍在那一行里', () => {
+  const css = read('src', 'styles', 'agents.css')
+  const page = read('src', 'pages', 'AgentsPage.tsx')
+  const narrow = mediaBlocks(css, '@media (max-width: 900px)')
+  assert.ok(
+    narrow.some((block) => /\.agx-library\.is-shelf-closed\s*\{\s*display:\s*none;?\s*\}/.test(block)),
+    '≤900 才收起：桌面还是三列卡片，别把桌面的预设库一起藏了',
+  )
+  assert.doesNotMatch(outsideMedia(css), /\.agx-library\.is-shelf-closed\s*\{/, '这条不能写在所有宽度都生效的位置')
+  assert.match(css, /\.agx-library-bar\s*\{\s*display:\s*none;/, '那一行入口只在窄屏出现')
+  // 一进入「对话预设」先看得见有哪几张卡：列表回来会自动选中第一个，那不是用户挑的
+  assert.match(page, /const \[presetShelfOpen, setPresetShelfOpen\] = useState\(true\)/)
+  assert.match(page, /setPresetShelfOpen\(false\)/, '从卡片选预设之后要收起')
+  assert.match(page, /agx-library-bar-text">当前「\{selectedAgent\.name\}」/)
+  assert.match(page, /'换一个预设'/, '收起之后还要能展开回去（换预设 / 编辑 / 删除都在里面）')
+})
+
+test('当前选中的预设卡片看得出是哪一张', () => {
+  const css = read('src', 'styles', 'agents.css')
+  const page = read('src', 'pages', 'AgentsPage.tsx')
+  assert.match(page, /className=\{'agx-card' \+ \(agent\.id === selectedId \? ' is-active' : ''\)\}/)
+  assert.match(page, /<span className="agx-card-current">当前<\/span>/)
+  assert.match(css, /\.agx-card\.is-active\s*\{\s*border-color:\s*var\(--ink\)/, '只加一枚标签不够，描边也要跟上')
 })

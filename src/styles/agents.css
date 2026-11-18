@@ -865,6 +865,31 @@
   padding: 8px 8px 8px;
   border-top: 1px solid var(--line-faint);
 }
+/* 当前选中的那个预设（r226）：描边加重 + 一枚「当前」。
+   以前点完卡片除了输入框上方那枚下拉，看不出自己选的是哪一张。 */
+.agx-card.is-active {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 1px var(--ink);
+}
+.agx-card-tags {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+.agx-card-current {
+  padding: 0 4px;
+  border-radius: 6px;
+  background: var(--ink);
+  color: var(--surface);
+  font-size: 11px;
+  line-height: 18px;
+  letter-spacing: 0.02em;
+}
+/* 手机端「对话预设」的那一行替代入口：只在 ≤900 出现（见下面的窄屏块） */
+.agx-library-bar {
+  display: none;
+}
 .agx-empty {
   display: grid;
   justify-items: center;
@@ -3008,6 +3033,24 @@
    桌面（>900）照旧：那块在桌面是这一页的主要内容，不藏。 */
 @media (max-width: 900px) {
   .agx-library.is-in-platform-chat { display: none; }
+  /* 选好一个预设之后，预设库同样收起来（r226）：这时要写东西，不是继续挑。
+     换预设 / 编辑 / 删除都还在下面这一行里，点一下展开。 */
+  .agx-library.is-shelf-closed { display: none; }
+  .agx-library-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+  }
+  .agx-library-bar-text {
+    min-width: 0;
+    color: var(--muted);
+    font-size: 13px;
+  }
 }
 
 /* 手机（≤560）输入框只有 148px：留白跟着收，末尾不再空出一大块（r223）。
