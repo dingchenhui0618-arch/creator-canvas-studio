@@ -1524,5 +1524,9 @@ agents-CErZ7ny0.css 57,251 B 与 AgentsPage-lviWnYCx.js 76,772 B 公网 200，�
 
 文档见 docs/quick-create-trim-2026-11-19.md。
 
-生产 0.9.231 发布记录见下一次提交的小节（发布编号、入口文件名、回滚点与 CI 编号部署后补）。
+生产 0.9.231（发布 20261118-232817-r248trim，health ok templates 26、6 个服务 active、磁盘 73%、
+未登录 /api/chat/conversations 仍 401、入口 index-COth83wr.js 742,611 B、agents-Dgtr37Tq.css 57,456 B
+（样式表里核到 .qc-trimmed）与 AgentsPage-CTHiT7vV.js（脚本里核到「再往前」）公网 200；
+回滚 --to 1 回 0.9.230，发布 20261118-231236-r247copy）。门禁 1639 / 1639 测试（新增 3 条）、
+lint 0 error / 26 warning（624 个文件）、tsc -b 干净、密钥扫描 972 个文件无命中。
 
