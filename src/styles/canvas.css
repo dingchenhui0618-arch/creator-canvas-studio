@@ -962,3 +962,101 @@
 /* 空工作流的起手路径（r214）：不再只写「拖节点」，直接给三条能走通的路 */
 .cv-empty-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 8px; }
 .cv-empty-note { font-size: 12px; color: var(--faint); }
+
+/* ---------- r242 工作流页窄屏：小字 13px、点按区 40/44（v0.9.226） ----------
+   2026-11-19 在 320 / 390 / 768 / 1024 / 1440 量这条页面：12px 的等宽元信息在每一档都在
+   （工具栏计数、缩放百分比、节点类型与状态、检查器小标题、步骤序号与依赖），点按区更小
+   （工具条按钮 27、工作流名输入框 30、选择框 32、检查器输入框 35、画布缩放键 26）。
+   做法与 r241 快捷创作一致：只在这页的根类 .cv-page 下抬 token 与点按区，
+   1081 起一条规则都不进——桌面那套 12px 元信息 / 27px 工具条原样保留。 */
+@media (max-width: 1080px) {
+  /* 一颗 token 管一片：页内的 .vq-button 跟 --btn-h 走、状态胶囊跟 --chip-* 走 */
+  .cv-page {
+    --btn-h: 40px;
+    --btn-h-sm: 40px;
+    --chip-font: 13px;
+    --chip-pill-h: 24px;
+    --chip-tag-h: 24px;
+    --text-mono: 13px;
+  }
+
+  /* 12px 那一片：节点类型 / 状态 / 耗时、工具栏计数与缩放、检查器小标题与等宽取值、
+     步骤清单的序号与依赖、运行抽屉里的序号与状态、空状态备注、只读页脚 */
+  .cv-page .cv-save,
+  .cv-page .cv-run-credit,
+  .cv-page .cv-kicker,
+  .cv-page .cv-palette-label,
+  .cv-page .cv-palette-copy span,
+  .cv-page .cv-palette-foot,
+  .cv-page .cv-project-kicker,
+  .cv-page .cv-project-meta,
+  .cv-page .cv-toolbar-count,
+  .cv-page .cv-zoom,
+  .cv-page .cv-node-type,
+  .cv-page .cv-node-state,
+  .cv-page .cv-node-foot,
+  .cv-page .cv-handle-tags,
+  .cv-page .cv-type-mono,
+  .cv-page .cv-type-status,
+  .cv-page .cv-section-title,
+  .cv-page .cv-input--mono,
+  .cv-page .cv-textarea--mono,
+  .cv-page .cv-range-value,
+  .cv-page .cv-mono,
+  .cv-page .cv-run-index,
+  .cv-page .cv-run-ms,
+  .cv-page .cv-run-state,
+  .cv-page .cv-run-output,
+  .cv-page .cv-run-queue,
+  .cv-page .cv-runview-kicker,
+  .cv-page .cv-runview-line .vq-mono,
+  .cv-page .cv-steps-count,
+  .cv-page .cv-step-no,
+  .cv-page .cv-step-dep,
+  .cv-page .cv-step-state,
+  .cv-page .cv-steps-note,
+  .cv-page .cv-inspector-foot--readonly,
+  .cv-page .cv-empty-note {
+    font-size: 13px;
+  }
+
+  /* 点按区：工具条 27、工作流名 30、选择框 32、检查器输入框 35、画布缩放键 26、
+     节点面板关闭键 22 —— 都在 40 以下，触屏上瞄不准 */
+  /* 工具条在 761–1024 这一段本来就不换行：两组一挤就互相压住（768 上「重做」直接盖在
+     「节点」与节点计数上，改前改后都是）。40px 的点按区更宽，这里干脆允许换行。 */
+  .cv-page .cv-toolbar { height: auto; flex: 0 0 auto; min-height: 52px; padding: 4px 8px; flex-wrap: wrap; }
+  .cv-page .cv-toolbar-group { flex-wrap: wrap; }
+  .cv-page .cv-tool { height: 40px; padding: 0 12px; }
+  .cv-page .cv-divider { height: 24px; }
+  .cv-page .cv-flow-select select { height: 40px; }
+  .cv-page .cv-flow-name { min-height: 40px; }
+  .cv-page .cv-input,
+  .cv-page .cv-textarea,
+  .cv-page .cv-select { min-height: 40px; }
+  .cv-page .cv-palette-close { width: 40px; height: 40px; }
+  .cv-page .cv-palette-item { min-height: 40px; }
+  .cv-page .cv-canvas .react-flow__controls-button { width: 40px; height: 40px; }
+  .cv-page .cv-run-queue { height: 40px; }
+  .cv-page .cv-run-item-head { min-height: 40px; }
+  .cv-page .cv-step-no { width: 28px; height: 28px; }
+  .cv-page .cv-step-state { line-height: 24px; }
+}
+
+@media (max-width: 560px) {
+  .cv-page {
+    --btn-h: 44px;
+    --btn-h-sm: 44px;
+    --chip-pill-h: 26px;
+    --chip-tag-h: 26px;
+  }
+  .cv-page .cv-toolbar { min-height: 56px; }
+  .cv-page .cv-tool { height: 44px; }
+  .cv-page .cv-flow-select select,
+  .cv-page .cv-flow-name,
+  .cv-page .cv-input,
+  .cv-page .cv-textarea,
+  .cv-page .cv-select { min-height: 44px; }
+  .cv-page .cv-palette-close { width: 44px; height: 44px; }
+  .cv-page .cv-palette-item { min-height: 44px; }
+  .cv-page .cv-run-queue { height: 44px; }
+}

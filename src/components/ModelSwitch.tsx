@@ -149,6 +149,8 @@ export function ModelSwitch() {
         className={'vq-model-trigger' + (ready ? '' : ' is-empty')}
         aria-haspopup="listbox"
         aria-expanded={open}
+        /* 手机上模型名会被压成省略号（48px 宽），只留图标 + 下拉箭头：给读屏一个名字 */
+        aria-label={ready ? '选择模型：' + activeLabel : '选择模型（还没有可用模型）'}
         onClick={() => setOpen((value) => !value)}
         title={ready ? '切换模型' : '还没有可用模型'}
       >

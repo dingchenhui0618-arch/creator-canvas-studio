@@ -3286,7 +3286,10 @@ select:focus-visible {
   .vq-model-trigger { height: 40px; }
   .vq-version-trigger { min-height: 40px; }
   .vq-topbar .vq-button { height: 40px; }
-  .vq-topbar .vq-button--icon { width: 40px; }
+  /* r242：顶栏图标键会被挤出 40px（1024 量到 37）——不参与收缩 */
+  .vq-topbar .vq-button--icon { width: 40px; flex: 0 0 auto; }
+  /* r242：上手引导的关闭键 32px，首次打开时是整屏唯一能点的键 */
+  .vq-guide .vq-button--icon { width: 40px; height: 40px; }
   .vq-link { min-height: 40px; }
   .vq-filter-chip { height: 40px; font-size: 13px; }
   .vq-filter-chip__count { font-size: 13px; }
@@ -3304,6 +3307,12 @@ select:focus-visible {
   .vq-search input { height: 100%; }
   .vq-select__value { font-size: 13px; }
   .vq-model-name { font-size: 13px; }
+  /* r242：内部测试胶囊还是 12px（工作流页 768 / 1024 上就剩它一处）；
+     1024 的顶栏里胶囊 + 模型切换比右侧格子宽 23px，把模型名再收窄一点就装得下 */
+  .vq-env-pill { font-size: 13px; }
+  .vq-topbar .vq-model-trigger { max-width: 148px; }
+  /* 右侧这组原来是可收缩的，1024 上被压到 221 而内容是 232——干脆不收缩，让它整块留着 */
+  .vq-topbar .vq-topbar-right { flex: 0 0 auto; }
   .vq-version-trigger { font-size: 13px; }
   .vq-workspace-meta span,
   .vq-sidebar-account-copy small,
@@ -3327,4 +3336,16 @@ select:focus-visible {
   .vq-search { width: 44px; }
   /* 图标按钮在 320 会被顶栏挤到 39px，点按区不参与收缩 */
   .vq-topbar .vq-button--icon { flex: 0 0 auto; }
+}
+
+/* r242：顶栏右侧「内部测试」胶囊 + 模型切换在手机宽度装不下——375 时整页被撑到 381、
+   320 时到 346，还把搜索键挤成 36px。手机（≤480）只留模型切换，胶囊让位；
+   这三件也不参与收缩，免得图标键被挤成 37px。 */
+@media (max-width: 480px) {
+  .vq-topbar .vq-env-pill { display: none; }
+  /* 手机顶栏放不下模型名：只留 Bot 图标 + 箭头（48px 宽时名字已经被压成省略号，等于什么也没说） */
+  .vq-topbar .vq-model-name { display: none; }
+  .vq-topbar .vq-model-trigger { padding: 0 8px; }
+  .vq-topbar .vq-search { flex: 0 0 auto; }
+  .vq-topbar .vq-topbar-right { flex: 0 0 auto; }
 }
