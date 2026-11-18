@@ -19,12 +19,16 @@
 // r245 接上图片：截图、手机拍的稿子原样交给视觉模型看，图里的字由模型自己读（本地不做 OCR）。
 // 只把图片放进「发送那一轮」：更早的轮次在上下文里只剩一行占位说明，不是每轮都重复付图片的输入费。
 // 带图的一轮走一次性回答（多模态 + 流式在不同上游并不都成立，一条 400 会让整次对话失败并退款）。
-// 还没做的：语音、联网搜索的真实上游验证。
+// r246 接上真的联网搜索：平台自己用自己的搜索服务搜一次、自己把前 3 条网页读成文字
+// （server/web-search.mjs）。同时把上游的 deepseek_web_search 工具撤掉——上游不认它就整条 400。
+// 没配搜索服务时不假装搜过：开关在界面是禁用的，万一带了也只在上下文里写一句「没搜成」。
+// 还没做的：语音。
 import { callTextModel, callTextModelStream, visionChain } from './llm.mjs'
 import { charge, priceOf, refund } from './credits.mjs'
 import { contextMessages, createConversation, getConversation, saveConversation, titleFrom } from './chat-store.mjs'
 import { CHAT_FILE_LIMITS, readChatFileBytes, resolveChatFiles } from './chat-files.mjs'
 import { findLinks, readLinks } from './link-read.mjs'
+import { publicSearch, searchAndRead } from './web-search.mjs'
 
 const MAX_INPUT = 8000
 const CONTEXT_MESSAGES = 30
@@ -53,13 +57,28 @@ export function chatOptionsFrom(input = {}) {
 }
 
 /**
- * 上游服务端工具：只有联网搜索还走上游（r219 起读链接改成我们自己在本地读）。
- * 读链接不再带上游，是因为它不认这个工具就整条 400，而且「读到了什么」我们在本地才留得下来。
+ * 上游服务端工具：r246 起一个都不带了。
+ * 联网搜索改成平台自己搜（server/web-search.mjs），读链接 r219 就已经在本地读。
+ * 为什么不再带上游工具：上游不认这个工具就整条 400——用户打开开关换来的是一句
+ * 「这次没有回上来，积分已退回」，而他自己并不知道上游根本没这个能力。
  */
-export function officialTools(options = {}) {
-  const tools = []
-  if (options.search) tools.push({ type: 'deepseek_web_search' })
-  return tools
+export function officialTools() {
+  return []
+}
+
+/** 这一轮的联网搜索：开关关着就不搜（一条都不发）。搜不到不抛错，交给上下文里那一句如实说明。 */
+async function runSearch(content, options) {
+  if (!options.search) return { search: null, links: [], text: '', chars: 0 }
+  try {
+    return await searchAndRead(content)
+  } catch (error) {
+    return {
+      search: { ok: false, code: 'SEARCH_FAIL', query: '', provider: '', providerLabel: '', results: [], note: String(error?.message || error) },
+      links: [],
+      text: '【联网搜索没有成功：' + String(error?.message || error) + '】',
+      chars: 0,
+    }
+  }
 }
 
 /** 这一轮消息里的链接：开关关着就一条都不读（界面会提示打开）。 */
@@ -117,7 +136,10 @@ async function beginChat(user, input = {}) {
   if (!conv) conv = createConversation(user.id, { title: titleFrom(content) })
   // 读链接放在会话校验之后：会话已经不在的请求不该先去抓一遍网页
   const linked = await readMessageLinks(content, options)
-  const docText = [attachments.text, linked.text].filter(Boolean).join('\n\n')
+  // 联网搜索（r246）：用户自己贴了链接就不搜了——先把他的页面读准，
+  // 再自己搜一遍只会多读三张网页、多花十几秒，还可能把他要问的那件事带偏。
+  const searched = linked.links.length ? { search: null, links: [], text: '', chars: 0 } : await runSearch(content, options)
+  const docText = [attachments.text, linked.text, searched.text].filter(Boolean).join('\n\n')
 
   // 图片在扣费之前读：原图读不到（被顶掉了 / 不是自己的）就不该扣这一轮的钱
   const images = attachments.files.filter((file) => file.kind === 'image')
@@ -154,6 +176,7 @@ async function beginChat(user, input = {}) {
     at: startedAt,
     files: attachments.files,
     links: linked.links,
+    search: publicSearch(searched.search),
     docText,
   })
   conv = saveConversation(user.id, conv) || conv
@@ -187,6 +210,7 @@ async function beginChat(user, input = {}) {
     messages,
     attachments,
     links: linked.links,
+    search: publicSearch(searched.search),
     visionTurn: pictures.count > 0,
   }
 }
@@ -208,6 +232,8 @@ function finishChat(user, ctx, result) {
       files: ctx.attachments.files.map((item) => item.name),
       // 带图这一轮记一笔：出问题时要能分清「模型没看图」还是「看了但没看出」
       ...(ctx.visionTurn ? { vision: true } : {}),
+      // 这一轮搜了什么：出问题时同样要能分清「没搜到」还是「没接通搜索服务」
+      ...(ctx.search ? { search: { ok: ctx.search.ok, provider: ctx.search.provider, results: ctx.search.results.length } } : {}),
       thinking: ctx.options.thinking,
       finishReason: result?.finishReason || '',
       usage: result?.usage || null,

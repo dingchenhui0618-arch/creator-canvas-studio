@@ -3,6 +3,19 @@ import { request } from './client'
 
 export type ChatToolOptions = { search: boolean; readUrl: boolean; thinking: boolean }
 
+// 这一轮搜了什么（r246）：界面只列来源（标题 + 站点 + 地址），摘要与网页正文在服务端上下文里。
+export type ChatSearch = {
+  ok: boolean
+  query: string
+  provider: string
+  providerLabel: string
+  note: string
+  results: { title: string; url: string; site: string }[]
+}
+
+// 搜索服务通没通：界面据此决定「联网搜索」开关能不能点。
+export type ChatSearchStatus = { configured: boolean; providerLabel: string; note: string }
+
 // 这一轮读到的链接（r219）：只留地址、标题、字数与失败原因；页面文字在服务端，不进聊天记录。
 export type ChatLink = {
   url: string
@@ -25,6 +38,7 @@ export type ChatMessage = {
   // 这一轮带的附件（只留名字、字数与来源）：原文在服务端，聊天记录里不重复存
   files?: ChatFile[]
   links?: ChatLink[]
+  search?: ChatSearch
 }
 
 export type ChatConversation = {
@@ -180,6 +194,10 @@ export type ChatFileLimits = {
   imagesPerMessage: number
   keepFiles: number
 }
+
+/** 搜索服务有没有接通（没接通时开关禁用，并说明「先发链接来」）。 */
+export const getChatSearch = () =>
+  request<{ ok: boolean } & ChatSearchStatus>('/api/chat/search')
 
 /** 图片原图地址（缩略图与「我发的是哪一张」）：只给上传它的人，服务端按归属校验。 */
 export const chatFileRawUrl = (id: string) => '/api/chat/files/' + encodeURIComponent(id) + '/raw'

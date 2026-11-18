@@ -46,6 +46,7 @@ import { clearSiteInfo, resolveSiteInfo, saveSiteInfo, SITE_FIELDS } from '../si
 import { launchReadiness } from '../readiness.mjs'
 import { cleanOrphanFrames, clearStorageOverride, saveStorageLimit, setStorageOverride, storageOverview } from '../storage.mjs'
 import { admissionCheck, HEAVY_KINDS, waterlineReport } from '../waterline.mjs'
+import { clearSearch, saveSearch, searchView, searchWeb } from '../web-search.mjs'
 
 const MODEL_KEY = /^\/api\/admin\/model-keys\/([\w-]+)$/
 const MODEL_KEY_TEST = /^\/api\/admin\/model-keys\/([\w-]+)\/test$/
@@ -1369,6 +1370,68 @@ export function createAdminRouter() {
         recordAudit({ req, actor: user, action: 'sms.test', targetType: 'sms', targetId: 'channel', targetLabel: '短信通道', detail: { to: maskPhone(phone), ms: sent.ms } })
         await recordSmsUsage({ phone, ok: true, ms: sent.ms, provider: channel.sms.provider, requestId: sent.requestId || '', source: 'test' })
         sendJson(res, 200, { ok: true, ms: sent.ms, to: maskPhone(phone), provider: channel.sms.provider, requestId: sent.requestId || '', usage: await smsUsageView({ limit: 5 }) })
+        return true
+      }
+
+      // 搜索服务（r246）：快捷创作的「联网搜索」靠它。没配 = 界面上那个开关是禁用的，
+      // 对话也不会假装搜过。Key 只回掩码与「有没有」。
+      if (pathname === '/api/admin/search' && req.method === 'GET') {
+        sendJson(res, 200, { ok: true, search: await searchView() })
+        return true
+      }
+
+      if (pathname === '/api/admin/search' && req.method === 'PUT') {
+        const body = await readBody(req)
+        const saved = await saveSearch(
+          { provider: body.provider, endpoint: body.endpoint, key: body.key, enabled: body.enabled !== false },
+          { by: user.email },
+        )
+        if (!saved.ok) return (sendJson(res, 400, { ok: false, error: saved.error }), true)
+        recordAudit({
+          req,
+          actor: user,
+          action: 'search.channel.save',
+          targetType: 'search',
+          targetId: 'channel',
+          targetLabel: '搜索服务',
+          detail: { provider: saved.search.provider, endpoint: saved.search.endpoint, keyKept: saved.keyKept },
+        })
+        sendJson(res, 200, { ok: true, search: await searchView(), keyKept: saved.keyKept })
+        return true
+      }
+
+      if (pathname === '/api/admin/search' && req.method === 'DELETE') {
+        await clearSearch()
+        recordAudit({ req, actor: user, action: 'search.channel.clear', targetType: 'search', targetId: 'channel', targetLabel: '搜索服务' })
+        sendJson(res, 200, { ok: true, search: await searchView() })
+        return true
+      }
+
+      // 试搜一次：真发一次请求、花一次搜索服务的额度，所以按钮上写清楚。
+      // 只回标题与地址（不读网页正文）——这一步是验「Key 与地址通不通」，不是验模型。
+      if (pathname === '/api/admin/search/test' && req.method === 'POST') {
+        const body = await readBody(req)
+        const query = String(body.query || '').trim()
+        if (!query) return (sendJson(res, 400, { ok: false, error: '写一个问题再试搜' }), true)
+        const started = Date.now()
+        const result = await searchWeb(query, { limit: 5 })
+        recordAudit({
+          req,
+          actor: user,
+          action: 'search.test',
+          targetType: 'search',
+          targetId: 'channel',
+          targetLabel: '搜索服务',
+          detail: { query: query.slice(0, 60), ok: result.ok, results: result.results.length, ms: Date.now() - started },
+        })
+        sendJson(res, result.ok ? 200 : 502, {
+          ok: result.ok,
+          ms: Date.now() - started,
+          query: result.query,
+          providerLabel: result.providerLabel,
+          note: result.note,
+          results: result.results.map((row) => ({ title: row.title, url: row.url, site: row.site })),
+        })
         return true
       }
 

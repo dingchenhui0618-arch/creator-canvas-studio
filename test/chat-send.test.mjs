@@ -22,6 +22,9 @@ process.env.VQ_REQUIRE_AUTH = '1'
 const calls = []
 // r219：读链接会来这台假服务器抓页面，这里记下被请求过的页面地址
 const pages = []
+// r246：联网搜索也来这台假服务器（generic 搜索接口），这里记下被搜过的问题
+const searchQueries = []
+const origin = () => 'http://127.0.0.1:' + server.address().port
 let mode = 'ok'
 const server = http.createServer((req, res) => {
   if (req.method === 'GET') {
@@ -37,6 +40,22 @@ const server = http.createServer((req, res) => {
     }
     res.writeHead(404, { 'Content-Type': 'text/plain' })
     res.end('not found')
+    return
+  }
+  // r246：假搜索服务（后台配的 generic 接口）。两条结果：一条能读、一条 404
+  if (req.url === '/search') {
+    const collected = []
+    req.on('data', (chunk) => collected.push(chunk))
+    req.on('end', () => {
+      searchQueries.push(JSON.parse(Buffer.concat(collected).toString('utf8') || '{}'))
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({
+        results: [
+          { title: '结果一', url: origin() + '/page.html', snippet: '结果一的摘要' },
+          { title: '结果二', url: origin() + '/missing.html', snippet: '结果二的摘要' },
+        ],
+      }))
+    })
     return
   }
   const chunks = []
@@ -105,11 +124,15 @@ test('开联网搜索 / 读链接 / 思考模式：工具与 thinking 真的发�
   assert.equal(result.reply.content, '收到，这一步就这样做。')
   assert.equal(result.cost, 1)
   const body = calls[calls.length - 1]
-  // r219 起读链接改成平台自己在本地读，上游只留联网搜索这一个服务端工具
-  assert.deepEqual(body.tools, [{ type: 'deepseek_web_search' }])
+  // r246：联网搜索也改成本地搜了，上游一个服务端工具都不带（不认就是整条 400）
+  assert.equal(body.tools, undefined, '上游不再带 deepseek_web_search')
   assert.deepEqual(body.thinking, { type: 'enabled' })
   assert.equal(body.messages[0].role, 'system')
-  assert.equal(body.messages[body.messages.length - 1].content, '帮我把这条口播拆成六个分镜')
+  // 这一步还没配搜索服务：上下文里要如实写「没搜成、别编」，而不是装作搜过
+  const last = body.messages[body.messages.length - 1].content
+  assert.ok(last.startsWith('帮我把这条口播拆成六个分镜'), last)
+  assert.match(last, /联网搜索没有成功/)
+  assert.match(last, /不要编造链接或数据/)
   assert.equal(listConversations(user.id).length, 1)
   assert.equal(getConversation(user.id, result.conversation.id).messages.length, 2)
 })
@@ -121,7 +144,9 @@ test('能力全关：不带 tools / thinking，但上下文仍带上一条', asy
   assert.equal(body.tools, undefined)
   assert.equal(body.thinking, undefined)
   assert.ok(body.messages.length >= 4, '第二句要把上一轮问答一起带上，不能只带这一句')
-  assert.ok(body.messages.some((item) => item.content === '帮我把这条口播拆成六个分镜'))
+  // r246：上一轮开着联网搜索（还没接通），那一轮的上下文里留了一行「没搜成」的说明，
+  // 所以这里按开头匹配：这条消息本身没变，只是后面跟着那一轮的说明。
+  assert.ok(body.messages.some((item) => item.content.startsWith('帮我把这条口播拆成六个分镜')))
   assert.ok(result.conversation.messages.length >= 4)
 })
 
@@ -577,3 +602,75 @@ test('原图只给上传的人；删附件时原图一起删（不留没人能�
   assert.equal(files.deleteChatFile(imageUser.id, saved.id), true)
   assert.equal(files.readChatFileBytes(imageUser.id, saved.id), null, '删了附件就要连原图一起删')
 })
+
+// ── r246：联网搜索（平台自己搜 + 自己读网页） ─────────────────────────────────
+const webSearch = await import('../server/web-search.mjs')
+const searchUser = auth.createUser({ email: ['search', 'r246'].join('-') + String.fromCharCode(64) + ['example', 'test'].join('.'), password: 'Passw0rd!demo', name: '联网搜索' })
+
+test('搜索服务没接通：这一轮如实写「没搜成、别编」，照常扣一次费，不假装搜过', async () => {
+  await webSearch.clearSearch()
+  const before = balanceOf(searchUser.id)
+  const result = await sendChatMessage(searchUser, { content: '最近有什么新变化', tools: { search: true } })
+  const stored = result.conversation.messages[0]
+  assert.equal(stored.search.ok, false)
+  assert.match(stored.search.note, /还没接入搜索服务/)
+  const sent = calls[calls.length - 1]
+  const last = sent.messages[sent.messages.length - 1].content
+  assert.match(last, /联网搜索没有成功/)
+  assert.match(last, /不要编造链接或数据/)
+  assert.equal(result.reply.meta.search.ok, false, '回答上要记一笔：这轮没搜到')
+  assert.equal(result.cost, 1)
+  assert.equal(balanceOf(searchUser.id), before - 1)
+})
+
+test('搜索服务接通：搜到几条、读前几条网页，来源存进会话，第二轮不再重复搜', async () => {
+  const saved = await webSearch.saveSearch({ provider: 'generic', endpoint: pageBase + '/search' })
+  assert.equal(saved.ok, true)
+  const before = balanceOf(searchUser.id)
+  const hits = searchQueries.length
+  const result = await sendChatMessage(searchUser, { content: '最近有什么新变化', tools: { search: true } })
+  const stored = result.conversation.messages[0]
+  assert.equal(stored.search.ok, true)
+  assert.equal(stored.search.query, '最近有什么新变化')
+  assert.equal(stored.search.results.length, 2)
+  assert.equal(stored.search.results[0].title, '结果一')
+  assert.equal(stored.search.results[0].site, '127.0.0.1')
+  assert.equal(stored.search.results[0].snippet, undefined, '摘要只在上下文里，不重复存进会话')
+  assert.equal(searchQueries.length, hits + 1, '只搜一次')
+  assert.equal(searchQueries[searchQueries.length - 1].query, '最近有什么新变化')
+  const sent = calls[calls.length - 1]
+  const last = sent.messages[sent.messages.length - 1].content
+  assert.match(last, /【这一轮的联网搜索】/)
+  assert.match(last, /【联网搜索：最近有什么新变化（平台自己搜的，来源/)
+  assert.match(last, /结果一的摘要/, '摘要要进上下文')
+  assert.match(last, /开场三秒要抓人/, '搜到的网页要真的读成文字')
+  assert.match(last, /没读到/, '读不到的那条照实说')
+  assert.equal(result.cost, 1)
+  assert.equal(balanceOf(searchUser.id), before - 1)
+
+  // 追问：上一轮读到的网页跟着那一轮留在上下文里，但不会再打一次搜索服务
+  const hitsAfter = searchQueries.length
+  const follow = await sendChatMessage(searchUser, { conversationId: result.conversation.id, content: '把刚才那篇的要点列出来' })
+  assert.equal(searchQueries.length, hitsAfter, '没打开开关就不搜')
+  assert.equal(follow.conversation.messages[1].search, undefined)
+  const sent2 = calls[calls.length - 1]
+  assert.match(sent2.messages[1].content, /开场三秒要抓人/, '上一轮读到的正文还在上下文里')
+})
+
+test('这一轮用户自己贴了链接：先读他的页面，不再自己搜一遍（省一次请求、也不跑偏）', async () => {
+  const hits = searchQueries.length
+  const result = await sendChatMessage(searchUser, {
+    content: '看看 ' + pageBase + '/page.html 讲了什么',
+    tools: { search: true, readUrl: true },
+  })
+  const stored = result.conversation.messages[0]
+  assert.equal(stored.search, undefined, '自己在读链接时不再搜')
+  assert.equal(stored.links.length, 1)
+  assert.equal(searchQueries.length, hits, '一个搜索请求都不该发')
+  const sent = calls[calls.length - 1]
+  const last = sent.messages[sent.messages.length - 1].content
+  assert.match(last, /【这一轮的链接】/)
+  assert.doesNotMatch(last, /【联网搜索/)
+  await webSearch.clearSearch()
+})
+

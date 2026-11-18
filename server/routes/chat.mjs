@@ -6,6 +6,7 @@ import { sendChatMessage, streamChatMessage } from '../chat.mjs'
 import { CHAT_FILE_LIMITS, deleteChatFile, listChatFiles, publicChatFile, readChatFile, readChatFileBytes, saveChatFile } from '../chat-files.mjs'
 import { readBinaryBody } from '../body-reader.mjs'
 import { refusalResponse } from '../public-error.mjs'
+import { searchView } from '../web-search.mjs'
 
 // 会话 / 消息 / 流式三条路径：最后一段 stream 是可选的（r217）
 const CONV = /^\/api\/chat\/conversations\/([A-Za-z0-9_-]{6,40})(\/messages(\/stream)?)?$/
@@ -37,6 +38,19 @@ export function createChatRouter() {
       const user = currentUser(req)
       if (!user) {
         sendJson(res, 401, { ok: false, code: 'LOGIN_REQUIRED', error: '请先登录' })
+        return true
+      }
+
+      // 搜索服务通没通（r246）：界面据此决定「联网搜索」开关能不能点，以及点了会怎样。
+      // 只回「有没有」，Key 一律不出现在这个响应里。
+      if (pathname === '/api/chat/search' && req.method === 'GET') {
+        const view = await searchView()
+        sendJson(res, 200, {
+          ok: true,
+          configured: view.configured,
+          providerLabel: view.providerLabel,
+          note: view.configured ? '' : '平台还没接入搜索服务：想让我看具体网页，把链接发来（记得打开「读链接」）',
+        })
         return true
       }
 

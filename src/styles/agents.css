@@ -3310,3 +3310,32 @@
   .qc-chip-main { min-height: 40px; }
   .qc-chip-x { width: 40px; min-height: 40px; }
 }
+
+/* 联网搜索（r246）：用户那句下面列出「搜了什么、搜到哪几条」，来源能点开核对；
+   搜失败就直说没搜成与原因，不用一个空列表装作搜过。 */
+.qc-search { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; max-width: 100%; }
+.qc-search-head { display: inline-flex; align-items: center; gap: 4px; color: var(--faint); font-size: 13px; }
+.qc-search.is-failed .qc-search-head { color: var(--warn); }
+.qc-search-list { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.qc-search-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  max-width: 100%;
+  min-height: 24px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 13px;
+  text-decoration: none;
+}
+.qc-search-item:hover { border-color: var(--ink); color: var(--ink); }
+.qc-search-title { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.qc-search-site { color: var(--faint); font-size: 13px; }
+
+@media (max-width: 560px) {
+  .qc-search-item { min-height: 40px; }
+  .qc-search-title { max-width: 150px; }
+}

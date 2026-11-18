@@ -2203,3 +2203,13 @@
     margin-top: 4px;
   }
 }
+
+/* 搜索服务（r246）：下拉里写着「通用 JSON 接口（自建 / 本地测试）」这种长名字，390 宽会把卡片顶出去
+   （实测 .admin-channel 260/254、.admin-mail-form 244/222）。和「模型与密钥」同一套收法：
+   可收缩的网格列 + 下拉/输入框能缩到列宽，不靠截断文字。 */
+.admin-mail-form .vq-field { min-width: 0; }
+.admin-mail-form select.vq-input,
+.admin-mail-form input.vq-input { max-width: 100%; min-width: 0; }
+
+/* 搜索服务卡的两个按钮（保存 / 清掉）在 390 宽并排放不下（244 > 222）：让它换行，不挤出去。 */
+.admin-mail-form .admin-doc-actions { flex-wrap: wrap; }

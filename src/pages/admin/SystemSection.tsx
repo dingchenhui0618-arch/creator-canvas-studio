@@ -206,6 +206,23 @@ type SmsInfo = {
   usage?: SmsUsage
 }
 
+// 搜索服务（r246）：快捷创作的「联网搜索」靠它。平台自己搜、自己读网页，不把搜索交给上游。
+// Key 只写不读：接口只回掩码与「有没有」。
+type SearchChannel = {
+  configured: boolean
+  provider: string
+  providerLabel: string
+  endpoint: string
+  keyMasked: string
+  hasKey: boolean
+  enabled: boolean
+  source: 'admin' | 'env' | 'none'
+  updatedAt: string
+  updatedBy: string
+  canEdit: boolean
+  providers: { value: string; label: string }[]
+}
+
 // 复刻任务：以前任务只存内存，发版重启就 404、扣掉的积分也不退。
 // 现在真源是 SQLite，后台能看到「这条停在哪一步、退没退」。
 type JobItem = {
@@ -1099,6 +1116,8 @@ export default function SystemSection() {
       </section>
 
       <SmsChannelCard />
+
+      <SearchChannelCard />
 
       <SiteInfoCard />
 
@@ -2180,3 +2199,231 @@ function SmsChannelCard() {
     </section>
   )
 }
+
+/**
+ * 搜索服务（r246）：快捷创作的「联网搜索」靠它。
+ * 以前是把 deepseek_web_search 当上游工具：上游不认就整条 400，用户点一下开关换来一句「没回上来」。
+ * 现在平台自己搜一次，再把前几条网页读成文字（内网地址照样挡住）。没配 = 对话里那个开关是禁用的，
+ * 对话也不会假装搜过——宁可说「没搜成」，不编一条「最新消息」。
+ * 「试搜一次」会真发一次请求、花一次搜索服务的额度，所以按钮上写清楚。
+ */
+function SearchChannelCard() {
+  const status = useApi<{ ok: boolean; search: SearchChannel }>('/api/admin/search')
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState('')
+  const [probe, setProbe] = useState('短视频 爆款 结构')
+  const [hits, setHits] = useState<{ title: string; url: string; site: string }[]>([])
+  // 表单默认值直接从已保存的配置推出来（provider/endpoint 为 null = 还没改过），
+  // 不用 effect 往 state 里灌——那样每次保存完都要再灌一次，容易和用户的输入打架。
+  const saved = status.data?.search
+  const [form, setForm] = useState<{ provider: string | null; endpoint: string | null; key: string }>({
+    provider: null,
+    endpoint: null,
+    key: '',
+  })
+  const provider = form.provider ?? (saved?.provider || 'bocha')
+  const endpoint = form.endpoint ?? (saved?.endpoint || '')
+
+  const saveChannel = async () => {
+    setBusy('save')
+    setNote('')
+    try {
+      const result = await request<{ search: SearchChannel; keyKept: boolean }>('/api/admin/search', {
+        method: 'PUT',
+        body: JSON.stringify({ provider, endpoint: endpoint.trim(), key: form.key }),
+      })
+      setForm({ provider: null, endpoint: null, key: '' })
+      setNote(result.keyKept ? '搜索服务已保存，Key 沿用之前那条。' : '搜索服务已保存。点「试搜一次」确认能搜到东西。')
+      status.reload()
+    } catch (cause) {
+      setNote(cause instanceof Error ? cause.message : '保存失败')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  const clearChannel = async () => {
+    setBusy('clear')
+    setNote('')
+    try {
+      await request('/api/admin/search', { method: 'DELETE' })
+      setHits([])
+      setNote('已清掉后台配置的搜索服务。快捷创作里的「联网搜索」会变成禁用，只能发链接让我读。')
+      status.reload()
+    } catch (cause) {
+      setNote(cause instanceof Error ? cause.message : '清除失败')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  const runProbe = async () => {
+    setBusy('probe')
+    setNote('')
+    try {
+      const result = await request<{ ok: boolean; ms: number; query: string; providerLabel: string; note: string; results: { title: string; url: string; site: string }[] }>('/api/admin/search/test', {
+        method: 'POST',
+        body: JSON.stringify({ query: probe.trim() }),
+      })
+      setHits(result.results || [])
+      setNote('搜到了 ' + (result.results || []).length + ' 条（' + result.ms + ' ms，' + (result.providerLabel || '搜索服务') + '）。')
+    } catch (cause) {
+      setHits([])
+      setNote(cause instanceof Error ? cause.message : '试搜失败')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  return (
+    <section className="admin-card admin-block">
+      <div className="admin-block-head">
+        <div>
+          <p className="admin-label">搜索服务</p>
+          <p className="admin-sub">
+            快捷创作里「联网搜索」用它：平台先搜一次，再把前几条网页读成文字，连同问题一起问模型；
+            界面上把「搜了什么、读了哪几条」列出来，能点开核对。没配时那个开关是禁用的，对话也不会假装搜过。
+          </p>
+        </div>
+        <div className="admin-alert-actions">
+          <SourceTag kind="api" source="GET /api/admin/search" />
+          <button
+            type="button"
+            className="vq-button vq-button--ghost"
+            onClick={() => void runProbe()}
+            disabled={busy === 'probe' || !saved?.configured || !probe.trim()}
+          >
+            {busy === 'probe' ? '搜着…' : '试搜一次'}
+          </button>
+        </div>
+      </div>
+
+      {status.loading && !status.data ? <LoadingLine label="/api/admin/search" /> : null}
+
+      {saved ? (
+        <>
+          <div className="admin-alert-facts">
+            <span>
+              搜索服务 <b>{saved.configured ? '已接通' : '未接通'}</b>
+            </span>
+            <span>
+              服务商 <b>{saved.providerLabel || '—'}</b>
+            </span>
+            <span>
+              Key <b>{saved.hasKey ? saved.keyMasked : '未填'}</b>
+            </span>
+            <span>
+              来源 <b>{saved.source === 'admin' ? '后台配置' : saved.source === 'env' ? '环境变量' : '未配置'}</b>
+              {saved.updatedAt ? ' · ' + formatDateTime(saved.updatedAt) : ''}
+            </span>
+          </div>
+
+          <div className="admin-channel">
+            <div className="admin-channel-head">
+              <div>
+                <p className="admin-label">接入方式</p>
+                <p className="admin-sub">
+                  博查适合中文网页（按次计费）；Tavily 有免费额度、偏英文；通用 JSON 接口给自建搜索用（POST 回 results 数组）。
+                  地址只在自建 / 代理时填，填了就覆盖默认地址。
+                </p>
+              </div>
+              <Badge tone={saved.configured ? 'ok' : 'warn'}>{saved.configured ? '能搜' : '未接通'}</Badge>
+            </div>
+
+            {saved.canEdit ? (
+              <div className="admin-mail-form">
+                <label className="vq-field admin-mail-field">
+                  <span>服务商</span>
+                  <select
+                    className="vq-input"
+                    value={provider}
+                    onChange={(event) => setForm((previous) => ({ ...previous, provider: event.target.value }))}
+                    disabled={busy === 'save'}
+                  >
+                    {(saved.providers || []).map((item) => (
+                      <option key={item.value} value={item.value}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="vq-field admin-mail-field">
+                  <span>接口地址</span>
+                  <input
+                    className="vq-input"
+                    value={endpoint}
+                    onChange={(event) => setForm((previous) => ({ ...previous, endpoint: event.target.value }))}
+                    placeholder={provider === 'generic' ? '必填，例如 https://search.example.com/api' : '留空用默认地址' }
+                    autoComplete="off"
+                    spellCheck={false}
+                    disabled={busy === 'save'}
+                  />
+                </label>
+                <label className="vq-field admin-mail-field">
+                  <span>API Key</span>
+                  <input
+                    className="vq-input"
+                    type="password"
+                    value={form.key}
+                    onChange={(event) => setForm((previous) => ({ ...previous, key: event.target.value }))}
+                    placeholder={saved.hasKey ? '留空沿用已保存的 Key' : provider === 'generic' ? '自建接口不需要就留空' : '只在服务端保存'}
+                    autoComplete="new-password"
+                    disabled={busy === 'save'}
+                  />
+                </label>
+                <label className="vq-field admin-mail-field--port">
+                  <span>试搜问题</span>
+                  <input
+                    className="vq-input"
+                    value={probe}
+                    onChange={(event) => setProbe(event.target.value)}
+                    autoComplete="off"
+                    spellCheck={false}
+                    disabled={busy === 'probe'}
+                  />
+                </label>
+                <div className="admin-doc-actions">
+                  <button type="button" className="vq-button" onClick={() => void saveChannel()} disabled={busy === 'save'}>
+                    {busy === 'save' ? '保存中…' : '保存搜索服务'}
+                  </button>
+                  {saved.source === 'admin' ? (
+                    <button type="button" className="vq-button vq-button--ghost" onClick={() => void clearChannel()} disabled={busy === 'clear'}>
+                      {busy === 'clear' ? '清除中…' : '清掉搜索服务'}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
+            {hits.length ? (
+              <ul className="admin-alert-list">
+                {hits.map((row) => (
+                  <li key={row.url} className="admin-alert-row">
+                    <div className="admin-alert-copy">
+                      <strong>{row.title || row.url}</strong>
+                      <span className="admin-cell-sub admin-mono">
+                        {row.site} · {row.url}
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+
+            {saved.source === 'env' ? (
+              <p className="admin-hint">现在用的是服务器环境变量 VQ_SEARCH_*。在上面保存一条会覆盖它；清掉后台配置后又会回到环境变量。</p>
+            ) : null}
+            {!saved.configured ? (
+              <p className="admin-hint">
+                没接通时，快捷创作的「联网搜索」开关是禁用的：对话不会假装搜过，只会说「这次没搜成、别编」。
+                想让它看具体网页，把链接发进来（打开「读链接」）也行。
+              </p>
+            ) : null}
+            {note ? <p className="admin-hint">{note}</p> : null}
+          </div>
+        </>
+      ) : null}
+    </section>
+  )
+}
+

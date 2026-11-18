@@ -67,6 +67,24 @@ function safeLinks(value) {
   }))
 }
 
+/** 这一轮搜了什么（r246）：只留来源与标题给界面核对，摘要与正文只在上下文里，不重复存。 */
+function safeSearch(value) {
+  if (!value || typeof value !== 'object') return undefined
+  const results = Array.isArray(value.results) ? value.results : []
+  return {
+    ok: Boolean(value.ok),
+    query: safeText(value.query, 120),
+    provider: safeText(value.provider, 24),
+    providerLabel: safeText(value.providerLabel, 40),
+    note: safeText(value.note, 160),
+    results: results.slice(0, 6).map((item) => ({
+      title: safeText(item?.title, 120),
+      url: safeText(item?.url, 400),
+      site: safeText(item?.site, 120),
+    })),
+  }
+}
+
 function atomicWrite(file, data) {
   const dir = path.dirname(file)
   fs.mkdirSync(dir, { recursive: true })
@@ -150,6 +168,7 @@ export function getConversation(userId, conversationId) {
       meta: item.meta && typeof item.meta === 'object' ? item.meta : null,
       files: safeFiles(item.files),
       links: safeLinks(item.links),
+      search: safeSearch(item.search),
       docText: safeText(item.docText, MAX_DOC_TEXT),
     })),
   }
@@ -167,6 +186,7 @@ export function saveConversation(userId, conv) {
     meta: item.meta && typeof item.meta === 'object' ? item.meta : null,
     files: safeFiles(item.files),
     links: safeLinks(item.links),
+    search: safeSearch(item.search),
     // 只给最近几条留附件正文：更早的留在消息里只会让会话文件越滚越大，而且已经挤不进上下文
     docText: index < kept.length - KEEP_DOC_TEXT ? '' : safeText(item.docText, MAX_DOC_TEXT),
   }))
@@ -221,9 +241,14 @@ export function contextMessages(messages, maxCount = 30, maxChars = 60000) {
       const names = Array.isArray(item.files)
         ? item.files.map((file) => String(file?.name || '')).filter(Boolean).join('、')
         : ''
-      const linked = Array.isArray(item.links) && item.links.length
-      const label = linked ? (names ? '附件与链接' : '链接') : '附件'
-      return { role: item.role, content: content + '\n\n【这一轮的' + label + (names ? '（' + names + '）' : '') + '】\n' + docText }
+      // 这一轮到底带了什么，就在上下文里写清楚：附件 / 用户给的链接 / 平台自己搜的网页
+      const labelParts = []
+      if (names) labelParts.push('附件（' + names + '）')
+      if (Array.isArray(item.links) && item.links.length) labelParts.push('链接')
+      // 搜了但没搜成也要写上：否则这段 docText 会被当成「附件」的正文（r246 修正）
+      if (item.search) labelParts.push(item.search.ok ? '联网搜索' : '联网搜索（没搜成）')
+      const label = labelParts.length ? labelParts.join('、') : '附件'
+      return { role: item.role, content: content + '\n\n【这一轮的' + label + '】\n' + docText }
     })
   const picked = []
   let chars = 0

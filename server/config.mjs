@@ -308,6 +308,14 @@ export const config = {
     ttlMinutes: Number(process.env.VQ_SMS_TTL_MINUTES || 5),
     codeLength: Number(process.env.VQ_SMS_CODE_LENGTH || 6),
   },
+  // 联网搜索（r246）：平台自己搜，不再把搜索交给上游工具。
+  // 后台配过优先（数据目录 search.json），没配过读这三条环境变量；两处都没有 = 没接通，
+  // 这时候对话不会假装搜过，界面上的开关是禁用的。
+  search: {
+    provider: (process.env.VQ_SEARCH_PROVIDER || '').trim(),
+    key: String(process.env.VQ_SEARCH_KEY || ''),
+    endpoint: (process.env.VQ_SEARCH_ENDPOINT || '').trim(),
+  },
   auth: {
     dbFile: path.join(dataDir, 'auth.db'),
     cookieName: 'vq_session',

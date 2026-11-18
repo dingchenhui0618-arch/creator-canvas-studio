@@ -6,10 +6,11 @@ import {
   getChatConversation,
   listChatConversations,
   chatFileRawUrl,
+  getChatSearch,
   streamChatMessage,
   uploadChatFile,
 } from '../api/chat'
-import type { ChatConversation, ChatFile, ChatSummary, ChatToolOptions } from '../api/chat'
+import type { ChatConversation, ChatFile, ChatSearchStatus, ChatSummary, ChatToolOptions } from '../api/chat'
 import { getCredits } from '../api/credits'
 import { renderMarkdown } from '../lib/markdown'
 
@@ -27,7 +28,7 @@ import { renderMarkdown } from '../lib/markdown'
 // short：手机上输入框常驻贴底，四个能力一行放不下四个字的标签，
 // 窄屏只留两个字（搜索 / 链接 / 思考 / 附件），完整说明挂在 title 与 aria-label 上。
 const TOOL_ITEMS: { id: keyof ChatToolOptions; label: string; short: string; hint: string; icon: typeof Search }[] = [
-  { id: 'search', label: '联网搜索', short: '联网', hint: '回答前先搜一遍最新信息，带链接回来', icon: Search },
+  { id: 'search', label: '联网搜索', short: '联网', hint: '平台自己搜一遍最新信息，再把前几条网页读成文字', icon: Search },
   { id: 'readUrl', label: '读链接', short: '链接', hint: '消息里带网址时，先把页面读下来再回答', icon: Link2 },
   { id: 'thinking', label: '思考模式', short: '思考', hint: '先推理再回答，慢一些，适合拆结构', icon: Brain },
 ]
@@ -86,6 +87,8 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
   const [streaming, setStreaming] = useState('')
   const [error, setError] = useState('')
   const [tools, setTools] = useState<ChatToolOptions>(() => loadTools())
+  // 搜索服务通没通（r246）：没接通时开关是禁用的，并且写明为什么——不做一个点了没反应的开关
+  const [searchStatus, setSearchStatus] = useState<ChatSearchStatus | null>(null)
   const [credits, setCredits] = useState<{ balance: number | null; unit: string; price: number } | null>(null)
   // 附件：attached 是这一轮要带的，preview 是「平台读到的到底是什么字」的原文预览
   const [attached, setAttached] = useState<ChatFile[]>([])
@@ -105,6 +108,9 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
   const stickRef = useRef(true)
 
   const messages = current?.messages ?? []
+  // 搜索服务通没通：还没拿到状态时按「可用」处理（老部署没有这个接口也不该把开关整个封死），
+  // 明确告诉没接通时才禁用，并在 title 里写清原因。
+  const searchAvailable = searchStatus ? searchStatus.configured : true
 
   const refreshList = useCallback(async () => {
     try {
@@ -124,6 +130,24 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
       .then((data) => setCredits({ balance: data.balance ?? null, unit: data.unit || '积分', price: Number(data.prices?.chat || 0) }))
       .catch(() => undefined)
   }, [refreshList])
+
+  // 搜索服务有没有接通：没接通时把「联网搜索」关掉并说明原因，
+  // 免得用户打开一个开关、以为搜过了（r246 之前这里其实一直没真正搜过）
+  useEffect(() => {
+    getChatSearch()
+      .then((data) => {
+        setSearchStatus({ configured: Boolean(data.configured), providerLabel: data.providerLabel || '', note: data.note || '' })
+        if (!data.configured) {
+          setTools((currentTools) => {
+            if (!currentTools.search) return currentTools
+            const next = { ...currentTools, search: false }
+            try { window.localStorage.setItem(TOOLS_KEY, JSON.stringify(next)) } catch { /* 隐私模式忽略 */ }
+            return next
+          })
+        }
+      })
+      .catch(() => undefined)
+  }, [])
 
   useEffect(() => {
     if (stickRef.current) bottomRef.current?.scrollIntoView({ block: 'end' })
@@ -360,14 +384,20 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
           {messages.length === 0 ? (
             <div className="qc-empty">
               <strong>一页能记住上下文的对话</strong>
-              <p>写脚本、拆爆款结构、改分镜、问平台怎么用，都可以直接说。带链接时打开「读链接」，要最新信息时打开「联网搜索」。</p>
+              <p>
+                写脚本、拆爆款结构、改分镜、问平台怎么用，都可以直接说。带链接时打开「读链接」，要最新信息时打开「联网搜索」——搜索和读页面都在平台这一侧完成，
+                {searchAvailable ? '不依赖上游认不认某个工具' : '现在搜索服务还没接通，先发链接来我读'}。
+              </p>
               <ul>
                 <li>边生成边显示，首段字通常一两秒就到，不用干等整段</li>
                 <li>生成中途点右上角方块可以停，停止不计费；失败也全额退回</li>
                 <li>上下文带最近 30 条，不是只记上一句</li>
                 <li>脚本、Word、Excel、PDF 可以直接丢进来，平台先在本地读成文字再回答；扫描件里的字读不出，会直接说</li>
                 <li>截图、照片也能丢进来（最多 2 张）：原图直接交给模型看，图里的字由它自己读——本地不做 OCR，读错了以原图为准</li>
-                <li>每次对话 {credits?.price ? credits.price + ' ' + credits.unit : '按次计费'}；联网搜索与读链接都是平台自带能力</li>
+                <li>
+                  每次对话 {credits?.price ? credits.price + ' ' + credits.unit : '按次计费'}；读链接与联网搜索都在平台这一侧做
+                  {searchAvailable ? '：搜到的前几条网页会先读成文字，再连同问题一起问模型' : '（搜索服务还没接通：先把要看的链接发来，打开「读链接」也行）'}
+                </li>
               </ul>
             </div>
           ) : (
@@ -412,6 +442,35 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
                     ))}
                   </div>
                 ) : null}
+                {message.search ? (
+                  <div className={'qc-search' + (message.search.ok ? '' : ' is-failed')}>
+                    <div className="qc-search-head">
+                      <Search size={12} />
+                      <span>
+                        {message.search.ok
+                          ? '联网搜索：' + (message.search.query || '') + ' · ' + message.search.results.length + ' 条来源'
+                          : '联网搜索没成：' + (message.search.note || '这次没搜到')}
+                      </span>
+                    </div>
+                    {message.search.ok && message.search.results.length ? (
+                      <div className="qc-search-list">
+                        {message.search.results.map((row) => (
+                          <a
+                            className="qc-search-item"
+                            key={row.url}
+                            href={row.url}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            title={row.url}
+                          >
+                            <span className="qc-search-title">{row.title || hostOf(row.url)}</span>
+                            <span className="qc-search-site">{row.site || hostOf(row.url)}</span>
+                          </a>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
                 <div className="qc-msg-meta">
                   <span>{message.role === 'user' ? '你' : '平台对话模型'}</span>
                   <span>{when(message.at)}</span>
@@ -441,7 +500,7 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
                     : tools.thinking
                       ? '正在思考并回答…'
                       : tools.search
-                        ? '正在检索并回答…'
+                        ? '正在联网搜索并读前几条网页…（要几十秒，读到就接着回答）'
                         : '正在回答…'}
                 </div>
               )}
@@ -464,9 +523,9 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
                   className={'qc-tool' + (active ? ' is-on' : '')}
                   aria-pressed={active}
                   aria-label={item.label}
-                  title={item.hint}
+                  title={item.id === 'search' && !searchAvailable ? (searchStatus?.note || '联网搜索还没接通') : item.hint}
                   onClick={() => toggleTool(item.id)}
-                  disabled={sending}
+                  disabled={sending || (item.id === 'search' && !searchAvailable)}
                 >
                   <Icon size={14} />
                   <span className="qc-tool-full">{item.label}</span>

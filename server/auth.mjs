@@ -134,6 +134,16 @@ export function verifyPassword(password, stored) {
   }
 }
 
+// 对外报的 kind 要和管理员判定一致（r246 修）：以前只回库里的 kind，
+// 于是 VQ_ADMIN_EMAILS 里的账号在接口上是管理员（能发积分、能改配置），
+// 打开后台却是「这个账号没有后台权限」——同一件事两个答案。
+function effectiveKind(row) {
+  if (!row) return ''
+  if (row.kind === 'admin') return 'admin'
+  const email = String(row.email || '').toLowerCase()
+  return config.auth.adminEmails.includes(email) ? 'admin' : row.kind
+}
+
 function publicUser(row) {
   if (!row) return null
   return {
@@ -141,7 +151,7 @@ function publicUser(row) {
     email: row.email,
     name: row.name,
     workspace: row.workspace,
-    kind: row.kind,
+    kind: effectiveKind(row),
     username: row.login_name || '',
     credits: Number(row.credits || 0),
     // 只给「有没有开」：secret、备用码永远不出接口
