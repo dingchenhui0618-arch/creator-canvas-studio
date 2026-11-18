@@ -252,6 +252,7 @@ export function decodeText(buffer) {
   try {
     text = new TextDecoder('utf-8', { fatal: true }).decode(buffer)
   } catch {
+    // 有些运行时没带 gb18030 解码器：构造失败也算「不是我们认得的文字」，不往上抛成 500
     try {
       text = new TextDecoder('gb18030', { fatal: true }).decode(buffer)
     } catch {
