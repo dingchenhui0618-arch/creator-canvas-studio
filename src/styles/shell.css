@@ -2448,6 +2448,16 @@ select:focus-visible {
     flex-wrap: wrap;
   }
 
+  /* 卡片头同理（v0.9.184）：320 宽实测「退出登录 / 退出其它设备」两个按钮
+     按内容宽度排在标题右边，把整页顶出视口 49px。窄屏让它们换到下一行。 */
+  .vq-card-head {
+    flex-wrap: wrap;
+  }
+
+  .vq-account-actions {
+    flex-wrap: wrap;
+  }
+
   .vq-account > .vq-account-actions {
     width: 100%;
   }

@@ -748,6 +748,10 @@
 .admin-edit-field {
   display: grid;
   gap: 4px;
+  /* 列宽按「能被压缩」算：默认的 auto 列取子元素最大内容宽度，
+     下拉框里的选项文字一长就把整张卡顶宽（390 宽实测顶出视口 10px），
+     页面跟着出现横向滚动条。改成 minmax(0, 1fr) 让列跟着容器走。 */
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .admin-edit-field--wide {
@@ -1058,6 +1062,8 @@
 /* 平台 Key 池表单：select 与多选能力沿用同一套输入高度 */
 .admin-edit-field select {
   height: 32px;
+  max-width: 100%;
+  min-width: 0;
   padding: 0 8px;
   color: var(--ink, #111111);
   background: var(--surface, #ffffff);
@@ -1335,6 +1341,10 @@
   color: var(--ink, #111111);
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 11px;
+  /* 网关地址是一整条没有空格的 URL：390 宽实测它把卡片顶宽 10px，
+     整块内容跟着出现横向滚动条。允许在任意字符处断开。 */
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .admin-doc-actions {

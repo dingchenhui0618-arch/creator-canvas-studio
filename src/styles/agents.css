@@ -2182,6 +2182,13 @@
   .agx-preset-grid {
     grid-template-columns: 1fr;
   }
+  /* 390 宽实测：一张卡片只剩 184px 给说明，「提示词 → 时长 / 分辨率 → 进度 / 下载」
+     被省略号截成「…进度 / 下…」，手机上又没有 hover 可看全。窄屏直接换行，宁可多一行。 */
+  .agx-preset-copy span {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
   .agx-presets-head {
     align-items: flex-start;
     flex-direction: column;
