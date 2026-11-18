@@ -16,15 +16,13 @@ import { createVideoTask, generateImage, generateImageEdit, pollVideoTask } from
 import { logEvent } from '../log.mjs'
 import { ASSET_LIMITS, assetUsage, listMediaAssets, locateMediaAsset, readMediaAsset, removeMediaAsset, saveMediaAsset } from '../media-assets.mjs'
 import { listMediaModels, resolveSelection } from '../media-models.mjs'
+import { DOWNLOAD_TIMEOUT_MS, downloadAsset, extensionFor } from '../media-fetch.mjs'
 import { readBinaryBody } from '../body-reader.mjs'
 import { readBody, sendJson } from './_shared.mjs'
 
 // 出图 / 出视频能选哪些模型、每个模型什么规格，全在 server/media-models.mjs：
 // 那里是唯一真源，这里不再写死后备模型名（以前 IMAGE_MODEL / VIDEO_MODEL 是两份常量）。
 const MAX_PROMPT_CHARS = 1200
-const MAX_IMAGE_BYTES = 24 * 1024 * 1024
-const MAX_VIDEO_BYTES = 200 * 1024 * 1024
-const DOWNLOAD_TIMEOUT_MS = 90 * 1000
 const ACCOUNT_LIMIT = 10
 const ACCOUNT_WINDOW_MS = 60 * 1000
 const TASK_PATH = /^\/api\/media\/tasks\/([A-Za-z0-9_-]{6,80})(\/file)?$/
@@ -252,85 +250,6 @@ function upstreamVideoMode(input) {
   if (!images && !videos) return ''
   if (String(input.model).startsWith('seedance-2.0') && images && !videos) return 'image2video'
   return 'mixed2video'
-}
-
-function mimeFromExtension(url, kind) {
-  const match = String(url || '').match(/\.([A-Za-z0-9]{2,5})(?:[?#]|$)/)
-  const ext = String(match?.[1] || '').toLowerCase()
-  if (ext === 'png') return 'image/png'
-  if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg'
-  if (ext === 'webp') return 'image/webp'
-  if (ext === 'gif') return 'image/gif'
-  if (ext === 'mp4') return 'video/mp4'
-  if (ext === 'webm') return 'video/webm'
-  if (ext === 'mov') return 'video/quicktime'
-  return kind === 'image' ? 'image/png' : 'video/mp4'
-}
-
-function extensionFor(mime, kind, url) {
-  const type = String(mime || '').toLowerCase().split(';')[0]
-  const map = {
-    'image/png': 'png',
-    'image/jpeg': 'jpg',
-    'image/webp': 'webp',
-    'image/gif': 'gif',
-    'video/mp4': 'mp4',
-    'video/webm': 'webm',
-    'video/quicktime': 'mov',
-  }
-  return map[type] || mimeFromExtension(url, kind).split('/')[1] || (kind === 'image' ? 'png' : 'mp4')
-}
-
-function normalizeMime(mime, kind, url) {
-  const type = String(mime || '').toLowerCase().split(';')[0]
-  if (type.startsWith('image/') || type.startsWith('video/')) return type
-  if (type === 'application/octet-stream') return mimeFromExtension(url, kind)
-  return mimeFromExtension(url, kind)
-}
-
-function decodeDataUrl(url) {
-  const match = String(url).match(/^data:([^;,]+)?(;base64)?,([\s\S]*)$/i)
-  if (!match) throw new Error('图片 data URL 格式不对')
-  const mime = match[1] || 'image/png'
-  const payload = match[3] || ''
-  if (!match[2]) {
-    const text = decodeURIComponent(payload)
-    return { buffer: Buffer.from(text, 'utf8'), mime }
-  }
-  const buffer = Buffer.from(payload.replace(/\s+/g, ''), 'base64')
-  return { buffer, mime }
-}
-
-async function downloadAsset(url, kind) {
-  const source = String(url || '')
-  if (!source) throw new Error('上游没有返回' + (kind === 'image' ? '图片' : '视频') + '地址')
-  const maxBytes = kind === 'image' ? MAX_IMAGE_BYTES : MAX_VIDEO_BYTES
-  if (source.startsWith('data:')) {
-    const decoded = decodeDataUrl(source)
-    if (decoded.buffer.length > maxBytes) throw new Error('上游返回的文件超过大小上限')
-    return { buffer: decoded.buffer, mime: normalizeMime(decoded.mime, kind, '') }
-  }
-  if (!/^https?:\/\//i.test(source)) throw new Error('上游返回的文件地址不是 http(s)')
-  const response = await fetch(source, {
-    signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
-    redirect: 'follow',
-  })
-  if (!response.ok) throw new Error('下载上游文件失败：HTTP ' + response.status)
-  const declared = Number(response.headers.get('content-length') || 0)
-  if (Number.isFinite(declared) && declared > maxBytes) throw new Error('上游文件超过大小上限')
-  const chunks = []
-  let total = 0
-  for await (const chunk of response.body) {
-    total += chunk.length
-    if (total > maxBytes) {
-      throw new Error('上游文件超过大小上限')
-    }
-    chunks.push(Buffer.from(chunk))
-  }
-  return {
-    buffer: Buffer.concat(chunks),
-    mime: normalizeMime(response.headers.get('content-type'), kind, source),
-  }
 }
 
 async function saveResult(task, asset) {

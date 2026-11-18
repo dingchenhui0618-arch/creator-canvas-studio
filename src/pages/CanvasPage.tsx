@@ -35,7 +35,7 @@ import {
   type RunResumePlan,
 } from '../api/flows'
 import { getCredits } from '../api/credits'
-import { runResumeInfo, runSpentText, runStatusMeta } from '../domain/run'
+import { runCreditsText, runResumeInfo, runSpentText, runStatusMeta } from '../domain/run'
 import { diffRunGraph, type RunGraphDiff } from '../domain/run-diff'
 import { useUiMode } from '../api/app'
 import { navigate, replaceRoute } from '../router'
@@ -52,12 +52,16 @@ import PageHead from '../components/PageHead'
 import { Pill } from '../components/ui'
 import '../styles/canvas.css'
 
+// React Flow 按 type 找渲染组件：新加一种节点必须在这里登记，否则画布上什么都不画
+// （v0.9.199 踩过：出图节点没登记，状态里有它、画面上没有）。
 const nodeTypes = {
   input: FlowNodeCard,
   llm: FlowNodeCard,
   kb: FlowNodeCard,
   tool: FlowNodeCard,
   condition: FlowNodeCard,
+  image: FlowNodeCard,
+  review: FlowNodeCard,
   output: FlowNodeCard,
 }
 
@@ -187,7 +191,8 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
   const [historyCount, setHistoryCount] = useState(0)
   const [futureCount, setFutureCount] = useState(0)
   // 工作流运行按次扣积分：运行前就把单价和余额摆出来，402 时不用去猜
-  const [runCredit, setRunCredit] = useState<{ price: number; balance: number | null } | null>(null)
+  // imagePrice = 出图节点每张多少积分：有出图节点时运行前要把它加上去，不能只报 flow_run 的价
+  const [runCredit, setRunCredit] = useState<{ price: number; imagePrice: number; balance: number | null } | null>(null)
   // 运行的排队位（v0.9.96）：名额满时这一单先进整机的队，等的时候顶栏显示「第几位 · 已等几秒」。
   // 票号是这次运行的凭据：页面自己生成，服务端按它查名次；排到之后 waitedMs 记下来给运行结论用。
   const [runQueue, setRunQueue] = useState<{ position: number; waitedMs: number; waiting: number; waitMs: number } | null>(null)
@@ -244,13 +249,20 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
 
   const refreshRunCredit = useCallback(() => {
     void getCredits(1)
-      .then((data) => setRunCredit({ price: Number(data.prices.flow_run) || 0, balance: data.balance }))
+      .then((data) => setRunCredit({ price: Number(data.prices.flow_run) || 0, imagePrice: Number(data.prices.image_gen) || 0, balance: data.balance }))
       .catch(() => setRunCredit(null))
   }, [])
 
   useEffect(() => {
     refreshRunCredit()
   }, [refreshRunCredit])
+
+  // 运行前把钱说全：工作流本身按次扣一次，出图节点每跑一张再扣一张。
+  // 只报 flow_run 的价，用户会以为自己花 2 积分、实际被扣 12——这个提示必须现在就给。
+  const imageNodeCount = nodes.filter((node) => node.data.kind === 'image').length
+  const imageRunCost = imageNodeCount * (runCredit?.imagePrice ?? 0)
+  const runTotalCost = (runCredit?.price ?? 0) + imageRunCost
+  const runBalanceShort = runCredit?.balance != null && runCredit.balance < runTotalCost
 
   const graphSignature = useMemo(
     () =>
@@ -982,6 +994,8 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
                     ms: node.ms,
                     error: node.error ?? undefined,
                     output: typeof node.output?.text === 'string' ? node.output.text : '',
+                    // 出图节点的结果贴在节点卡上（下游只是普通节点，不需要这项）
+                    imageUrl: typeof node.output?.imageUrl === 'string' ? node.output.imageUrl : undefined,
                   },
                 }
               : item
@@ -1218,9 +1232,18 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
           <button className="vq-button vq-button--ghost" type="button" onClick={() => { void saveNow().then((ok) => toast(ok ? (internal ? '已保存到 data/flows.json' : '已保存') : '保存失败：' + saveError)) }} disabled={running || saveState === 'saving'} title="Ctrl+S">
             <Save size={14} />保存
           </button>
-          {runCredit && runCredit.price > 0 ? (
-            <span className="cv-run-credit" title="工作流按次扣积分；有节点失败会全额退回">
-              运行 {runCredit.price} 积分 · 余额 {runCredit.balance ?? '—'}
+          {runCredit && runTotalCost > 0 ? (
+            <span
+              className="cv-run-credit"
+              title={
+                imageNodeCount > 0
+                  ? '工作流按次扣 ' + runCredit.price + ' 积分；出图节点每张扣 ' + runCredit.imagePrice + ' 积分（失败的那张会退回）'
+                  : '工作流按次扣积分；有节点失败会全额退回'
+              }
+            >
+              {imageNodeCount > 0
+                ? '运行 ' + runCredit.price + ' + 出图 ' + imageNodeCount + ' 张 ' + imageRunCost + ' = ' + runTotalCost + ' 积分 · 余额 ' + (runCredit.balance ?? '—')
+                : '运行 ' + runCredit.price + ' 积分 · 余额 ' + (runCredit.balance ?? '—')}
             </span>
           ) : null}
           {runQueue ? (
@@ -1265,8 +1288,8 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
               className="vq-button vq-button--primary"
               type="button"
               onClick={() => { void handleRun() }}
-              disabled={running || loadState !== 'ready' || (runCredit != null && runCredit.balance != null && runCredit.balance < runCredit.price)}
-              title={runCredit && runCredit.balance != null && runCredit.balance < runCredit.price ? '积分不足，先让管理员发放' : '按拓扑序执行整张工作流'}
+              disabled={running || loadState !== 'ready' || runBalanceShort}
+              title={runBalanceShort ? '积分不足（含出图节点要扣的部分），先让管理员发放' : '按拓扑序执行整张工作流'}
             >
               <Play size={14} fill="currentColor" />{running ? '排队中' : '运行流程'}
             </button>
@@ -1289,15 +1312,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
             <span className="vq-mono">{runRecord ? formatRunTime(runRecord.startedAt) : '—'}</span>
             <span className="vq-mono">{runViewSpent}</span>
             <span className="vq-mono">{runNodes.length} / {runRecord?.total || '—'} 节点</span>
-            {runRecord?.credits && runRecord.credits.cost > 0 ? (
-              <span className="vq-mono">
-                {runRecord.credits.refunded
-                  ? runRecord.credits.kept != null
-                    ? '已退 ' + (runRecord.credits.refundedAmount ?? 0) + ' · 已跑部分 ' + runRecord.credits.kept + ' 积分'
-                    : '已退回 ' + runRecord.credits.cost + ' 积分'
-                  : '消耗 ' + runRecord.credits.cost + ' 积分'}
-              </span>
-            ) : null}
+            {runCreditsText(runRecord) ? <span className="vq-mono">{runCreditsText(runRecord)}</span> : null}
           </div>
           <p className="cv-runview-copy">
             {flowDeleted
@@ -1491,7 +1506,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
               {loadState === 'ready' && !nodes.length && (
                 <div className="cv-overlay cv-overlay--empty">
                   <strong>工作流是一条内容拆成步骤的地方</strong>
-                  <p>把「检索 → 大模型 → 条件 → 输出」连成一条线，跑完的运行会带着结果进「作品」：在作品流里点那张卡，就回到这次运行的逐节点结果。</p>
+                  <p>把「大模型 → 出图 → 评审 → 输出」连成一条线，跑完的运行会带着结果进「作品」：在作品流里点那张卡，就回到这次运行的逐节点结果。</p>
                   <div className="cv-empty-actions">
                     <button type="button" className="vq-button vq-button--ghost" onClick={() => navigate({ kind: 'page', page: 'radar' })}>
                       去爆款雷达找一条
@@ -1503,7 +1518,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
                       从作品继续
                     </button>
                   </div>
-                  <p className="cv-empty-note">出图与出视频在「快捷创作」和「无限画布」；这里负责把脚本、检索、条件与评审这些步骤连起来跑。</p>
+                  <p className="cv-empty-note">出图节点每张另扣积分，运行前顶栏会算总价；出视频仍在「快捷创作」与「无限画布」。</p>
                 </div>
               )}
               <div className="cv-hint">
@@ -1525,6 +1540,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
             onDelete={deleteSelected}
             readOnly={readOnly}
             runSnapshot={hasRunSnapshot}
+            imageCredits={runCredit?.imagePrice ?? 0}
           />
         </div>
       )}

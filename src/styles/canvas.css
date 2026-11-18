@@ -586,6 +586,11 @@
   word-break: break-word;
 }
 .cv-run-output--final { max-height: 220px; margin-top: 8px; background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-sm); }
+/* 出图节点的结果：抽屉里直接看图，点开看原图 */
+.cv-run-image { display: block; padding: 8px 12px; border-top: 1px solid var(--line-faint); }
+.cv-run-image img { display: block; max-width: 100%; max-height: 240px; margin: 0 auto; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-soft); object-fit: contain; }
+/* 节点卡上的缩略图：跑完一张图就直接贴出来 */
+.cv-node-thumb { display: block; width: 100%; max-height: 128px; margin: 8px 0; border: 1px solid var(--line-faint); border-radius: var(--radius-sm); background: var(--surface-soft); object-fit: cover; }
 .cv-run-error { margin: 0; padding: 8px 12px; color: var(--fail); background: var(--fail-soft); border-top: 1px solid rgba(163, 56, 56, .18); font-size: 13px; line-height: 1.5; }
 .cv-run-message { margin: 0; padding: 8px 12px; color: var(--faint); border-top: 1px solid var(--line-faint); font-size: 13px; }
 .cv-run-final { margin-top: 16px; }

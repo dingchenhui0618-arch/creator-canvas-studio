@@ -528,16 +528,17 @@ test('上游超时：说的是「N 秒没回、已退回」，不许说成「连
   const cookie = cookieOf(user)
   const before = credits.balanceOf(user.id)
   const original = config.gateway.imageTimeoutMs
-  // 300ms 在跑整套测试、机器被别的测试进程占满时连「先回一条 processing」都来不及，
-  // 会误报成「POST 直接回 failed」。这条测的是超时话术，不是响应速度，所以给 800ms 余量。
-  config.gateway.imageTimeoutMs = 800
+  // 这条测的是超时话术，不是响应速度。整套测试并发跑时机器被占满，POST 从建任务到写回响应
+  // 中间还排着别的活；窗口给太小时，任务会先超时、响应里就已经是 failed，误报成「POST 直接回 failed」。
+  // 生产的上游超时是 240 秒，这里给 3 秒仍然远小于它，断言（话术 / 全额退 / 不换 Key 重打）一条没放松。
+  config.gateway.imageTimeoutMs = 3000
   try {
     const attemptsBefore = imageAttempts
     const queued = await call({ cookie, body: { kind: 'image', prompt: '图超时：上游一直不回包', ratio: '1:1' } })
     assert.equal(queued.status, 200)
     assert.equal(queued.payload.task.status, 'processing')
 
-    const done = await waitTask(queued.payload.task.id, cookie, { tries: 100, gap: 50 })
+    const done = await waitTask(queued.payload.task.id, cookie, { tries: 160, gap: 50 })
     assert.equal(done.payload.task.status, 'failed')
     assert.match(done.payload.task.error, /秒没回/)
     assert.doesNotMatch(done.payload.task.error, /连不上/, '超时不是连不上，别把人往网络问题上带')

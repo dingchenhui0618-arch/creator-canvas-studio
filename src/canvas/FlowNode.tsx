@@ -17,6 +17,10 @@ function summary(data: FlowNodeData): string {
       return data.config.toolName ?? '未选工具'
     case 'condition':
       return data.config.expression ?? '未设置表达式'
+    case 'image':
+      return (data.config.ratio || '9:16') + ' · ' + (data.config.model ? '已选模型' : '默认模型')
+    case 'review':
+      return ({ brand: '品牌一致性', composition: '构图与主体', copy: '文案与卖点', a11y: '可读性与无障碍' } as Record<string, string>)[data.config.profile || 'brand'] || '品牌一致性'
     case 'output':
       return data.config.format === 'text' ? '纯文本' : 'Markdown'
     default:
@@ -59,6 +63,9 @@ export function FlowNodeCard({ data, selected, isConnectable }: NodeProps<Node<F
         <strong>{data.title}</strong>
       </div>
       <p className="cv-node-desc">{data.description || meta.hint}</p>
+
+      {/* 出图节点跑完就直接把图贴在卡片上：不用点开抽屉才知道画成了什么样 */}
+      {data.imageUrl ? <img className="cv-node-thumb" src={data.imageUrl} alt="出图结果" loading="lazy" /> : null}
 
       <div className="cv-node-foot">
         <span className="cv-node-summary" title={summary(data)}>{summary(data)}</span>

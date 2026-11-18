@@ -54,6 +54,27 @@ export function runSpentText(run: {
   return '排队 ' + waitText + ' · 运行 ' + runText
 }
 
+/**
+ * 一次运行花掉的积分文案（v0.9.199）：工作流按次扣一次，出图节点每张再扣一次。
+ * 只写 credits.cost 会把出图那几张藏起来——用户看到「消耗 2 积分」、余额却少了 7。
+ * refunded 时退回的是运行本身那笔；画成了的图不会退，照实写在后面。
+ * 注意别和上面的 runSpentText 搞混：那个说的是「花了多少时间」。
+ */
+export function runCreditsText(run: RunRecord | null): string {
+  if (!run) return ''
+  const cost = Math.max(0, Number(run.credits?.cost) || 0)
+  const images = Math.max(0, Number(run.imageCredits) || 0)
+  const imageText = images > 0 ? ' + 出图 ' + images + ' 积分' : ''
+  if (!run.credits) return images > 0 ? '出图 ' + images + ' 积分' : ''
+  if (run.credits.settled) {
+    return '已跑部分 ' + run.credits.kept + ' 积分 · 已退 ' + (run.credits.refundedAmount ?? 0) + ' 积分' + imageText
+  }
+  if (run.credits.refunded) {
+    return '已退回 ' + cost + ' 积分' + (images > 0 ? '；出图 ' + images + ' 积分不退' : '')
+  }
+  return '消耗 ' + cost + ' 积分' + imageText
+}
+
 /** 续跑入口要用到的三个数：还差几个节点、这次还要补多少积分、上次复用了几个。 */
 export type RunResumeInfo = { left: number; cost: number; reused: number; resumable: boolean }
 

@@ -3,7 +3,9 @@ import type { ReactNode } from 'react'
 import type { Node } from '@xyflow/react'
 import {
   CONTENT_TYPE_OPTIONS,
+  IMAGE_RATIO_OPTIONS,
   NODE_META,
+  REVIEW_PROFILE_OPTIONS,
   STATUS_TEXT,
   TOOL_OPTIONS,
 } from './catalog'
@@ -21,6 +23,8 @@ type InspectorProps = {
   readOnly?: boolean
   /** 这次运行留下了画布快照：参数取当时那一版，不是当前画布（v0.9.107） */
   runSnapshot?: boolean
+  /** 出图每张多少积分（来自 /api/credits 的平台价）；拿不到时不写数字，不编一个价 */
+  imageCredits?: number
 }
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
@@ -33,7 +37,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   )
 }
 
-export function Inspector({ node, onPatch, onConfig, onDuplicate, onDelete, readOnly = false, runSnapshot = false }: InspectorProps) {
+export function Inspector({ node, onPatch, onConfig, onDuplicate, onDelete, readOnly = false, runSnapshot = false, imageCredits = 0 }: InspectorProps) {
   // 模型候选来自服务端 /api/models；hook 必须在提前 return 之前调用
   const modelOptions = useModelOptions()
   const { internal } = useUiMode()
@@ -195,6 +199,59 @@ export function Inspector({ node, onPatch, onConfig, onDuplicate, onDelete, read
                 onChange={(event) => onConfig({ expression: event.target.value }, 'expression')}
               />
             </Field>
+          )}
+
+          {node.data.kind === 'image' && (
+            <>
+              <Field label="提示词" hint="留空时用上游文本（例如大模型写完的画面描述），不用抄两遍。">
+                <textarea
+                  className="cv-textarea"
+                  rows={5}
+                  value={config.prompt ?? ''}
+                  placeholder="例如：奶油白陶瓷杯放在晨光里的木桌上，手作质感，浅景深"
+                  onChange={(event) => onConfig({ prompt: event.target.value }, 'prompt')}
+                />
+              </Field>
+              <Field label="比例" hint="决定出图尺寸；评审与作品流都按这个比例排版。">
+                <select
+                  className="cv-select"
+                  value={config.ratio ?? '9:16'}
+                  onChange={(event) => onConfig({ ratio: event.target.value }, 'ratio')}
+                >
+                  {IMAGE_RATIO_OPTIONS.map((option) => (
+                    <option key={option.ratio} value={option.ratio}>{option.label}</option>
+                  ))}
+                </select>
+              </Field>
+              <div className="cv-meta-row">
+                <span>每张</span>
+                <strong>{imageCredits > 0 ? imageCredits + ' 积分' : '按平台价扣费'}</strong>
+              </div>
+            </>
+          )}
+
+          {node.data.kind === 'review' && (
+            <>
+              <Field label="评审角度">
+                <select
+                  className="cv-select"
+                  value={config.profile ?? 'brand'}
+                  onChange={(event) => onConfig({ profile: event.target.value }, 'profile')}
+                >
+                  {REVIEW_PROFILE_OPTIONS.map((option) => (
+                    <option key={option.id} value={option.id}>{option.label}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="评审图片" hint="留空就用上游出图那张；也可以填 frames/… 路径或图片地址。">
+                <input
+                  className="cv-input"
+                  value={config.image ?? ''}
+                  placeholder="留空 = 上游出图那张"
+                  onChange={(event) => onConfig({ image: event.target.value }, 'image')}
+                />
+              </Field>
+            </>
           )}
 
                     {node.data.kind === 'output' && (

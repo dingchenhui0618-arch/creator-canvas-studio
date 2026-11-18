@@ -11,11 +11,14 @@ import { publicError } from './public-error.mjs'
 import { preferenceModel } from './preferences.mjs'
 import { outstandingCharge, refund } from './credits.mjs'
 import { currentInstanceId, liveInstanceIds } from './instances.mjs'
+import { FLOW_IMAGE_DEFAULT_RATIO, FLOW_IMAGE_RATIOS, runImageGeneration } from './flow-image.mjs'
 
 // 工作流流程：存储（data/flows.json）+ 运行记录（data/runs.json）+ 拓扑执行引擎。
 // 原子写范式与 server/templates.mjs 一致：先写 .tmp，再 rename 覆盖。
 
-export const NODE_KINDS = ['input', 'llm', 'kb', 'tool', 'condition', 'output', 'review']
+// image = 真出一张图（扣积分、失败退款、产物落进这次运行目录）；review = 看一张图给结论。
+// 这两个是「工作流能出东西」的关键：输入 → 大模型 → 出图 → 评审 → 输出，一条跑完就能拿去用。
+export const NODE_KINDS = ['input', 'llm', 'kb', 'tool', 'condition', 'output', 'image', 'review']
 
 export const TOOLS = [
   { id: 'templates.stats', label: '模板库统计', detail: '读取模板库总数与内容类型分布' },
@@ -45,6 +48,7 @@ const DEFAULT_TITLES = {
   tool: '工具调用',
   condition: '条件分支',
   output: '流程输出',
+  image: '出图',
   review: '视觉评审',
 }
 
@@ -67,6 +71,9 @@ function defaultConfig(kind) {
       return { expression: 'length(upstream) >= 20' }
     case 'output':
       return { format: 'markdown' }
+    case 'image':
+      // 模型留空 = 跟随平台统一路由（出图主路由），不把模型 id 写死进流程数据
+      return { model: '', ratio: FLOW_IMAGE_DEFAULT_RATIO, prompt: '' }
     case 'review':
       return { profile: 'brand', image: '' }
     default:
@@ -129,6 +136,12 @@ function normalizeConfig(kind, raw) {
       return { expression: trimText(source.expression, 200) || base.expression }
     case 'output':
       return { format: source.format === 'text' ? 'text' : 'markdown' }
+    case 'image':
+      return {
+        model: trimText(source.model, 80),
+        ratio: FLOW_IMAGE_RATIOS.includes(source.ratio) ? source.ratio : FLOW_IMAGE_DEFAULT_RATIO,
+        prompt: clip(source.prompt ?? '', 4000),
+      }
     case 'review':
       return {
         profile: REVIEW_PROFILES.some((item) => item.id === source.profile) ? source.profile : base.profile,
@@ -460,6 +473,9 @@ export function runSummary(run) {
     canceled: Boolean(run.canceled),
     failed: (Array.isArray(run.nodes) ? run.nodes : []).filter((node) => node.status === 'error').length,
     error: run.error || '',
+    // 出图节点另按张扣费，不在 credits.cost 里：单独给一个数，页面才能把「这次运行花了多少」说全
+    imageCredits: imageCreditsOf(run),
+    spentTotal: (run.credits?.refunded ? 0 : Number(run.credits?.cost) || 0) + imageCreditsOf(run),
     credits: run.credits ? {
       cost: Number(run.credits.cost) || 0,
       refunded: Boolean(run.credits.refunded),
@@ -496,9 +512,20 @@ export async function listRunsByFlows(flowIds = [], { limit = 20, all = false } 
         : (run.credits.refunded ? 0 : Math.max(0, Number(run.credits.cost) || 0))
       if (spent > 0) creditsByFlow[run.flowId] = (creditsByFlow[run.flowId] || 0) + spent
     }
+    // 出图那几张是真花掉的（失败的那张在 charge 时已经退回），和运行本身的扣费加在一起算
+    const images = imageCreditsOf(run)
+    if (images > 0) creditsByFlow[run.flowId] = (creditsByFlow[run.flowId] || 0) + images
   }
   // all：花费明细要每一笔（作品页的运行归集只取前 20 条摘要），页面摘要仍按 limit 封顶
   return { items: (all ? list : list.slice(0, count)).map(runSummary), total: list.length, byFlow, creditsByFlow }
+}
+
+/** 一次运行里出图节点真花掉的积分：只算画成了的那几张（失败的那张已经退回）。 */
+function imageCreditsOf(run) {
+  if (Number.isFinite(Number(run?.imageCredits)) && run.imageCredits !== undefined) return Math.max(0, Number(run.imageCredits) || 0)
+  return (Array.isArray(run?.nodes) ? run.nodes : []).reduce((sum, node) => (
+    node?.kind === 'image' && node?.status === 'success' ? sum + Math.max(0, Number(node.output?.credits) || 0) : sum
+  ), 0)
 }
 
 // ---------- 拓扑与执行 ----------
@@ -773,19 +800,31 @@ function collectContext(incomingEdges, results, nodesById) {
     if (!sourceResult || !sourceResult.output) continue
     const text = typeof sourceResult.output.text === 'string' ? sourceResult.output.text : ''
     const node = nodesById.get(edge.source)
-    values.push({ nodeId: edge.source, title: node?.data?.title || edge.source, kind: node?.type || 'unknown', text })
+    // 出图节点的产物是文件不是文字：把地址一起带下去，评审节点才能直接看这张图
+    values.push({
+      nodeId: edge.source,
+      title: node?.data?.title || edge.source,
+      kind: node?.type || 'unknown',
+      text,
+      imagePath: typeof sourceResult.output.imagePath === 'string' ? sourceResult.output.imagePath : '',
+      imageUrl: typeof sourceResult.output.imageUrl === 'string' ? sourceResult.output.imageUrl : '',
+    })
     if (!text) continue
     const handle = edge.targetHandle || 'in'
     if (handle === 'prompt') promptParts.push(text)
     else if (handle === 'context') contextParts.push(text)
     else promptParts.push(text)
   }
+  const withImage = values.find((item) => item.imagePath)
   return {
     values,
     prompt: promptParts.join('\n\n'),
     context: contextParts.join('\n\n'),
     text: values.map((item) => item.text).filter(Boolean).join('\n\n'),
     inputText: values[0]?.text ?? '',
+    // 上游最近一张出图（相对 DATA_DIR 的路径）：评审节点没填图片时就用它
+    imagePath: withImage?.imagePath || '',
+    imageUrl: withImage?.imageUrl || '',
   }
 }
 
@@ -831,10 +870,17 @@ async function loadReviewMedia(reference) {
   return { imageBytes: bytes, mime: MEDIA_MIME[path.extname(absolute).toLowerCase()] || 'image/jpeg' }
 }
 
+/** 评审看哪张图：节点上填了就用它，留空就用上游出图刚画的那张；两者都没有才报错。 */
+export function pickReviewReference(configImage, ctxImagePath) {
+  return trimText(configImage, 300) || trimText(ctxImagePath, 300)
+}
+
 async function runReview(node, ctx = {}) {
   const cfg = node.data.config
   const profile = REVIEW_PROFILES.find((item) => item.id === cfg.profile) || REVIEW_PROFILES[0]
-  const media = await loadReviewMedia(cfg.image)
+  // 图片留空 = 评审上游出图节点刚画出来的那张图（以前这里必须手填路径，等于逼用户先自己去出图）
+  const reference = pickReviewReference(cfg.image, ctx.imagePath)
+  const media = await loadReviewMedia(reference)
   // 复用 server/review.mjs：优先 VisionQA 插件服务，不可用再走本地模型，并如实标注 provider。
   // 工作流运行里的评审同样吃内存，和 /api/review 一样放进独立 worker（v0.9.77）。
   const job = { ...media, intent: profile.intent, ref: ctx.runId || '' }
@@ -859,6 +905,26 @@ async function runReview(node, ctx = {}) {
     fixes: (result.fixes || []).slice(0, 5),
     text: clip(lines.join('\n')),
   }
+}
+
+/**
+ * 出图节点：一次运行里真画一张图。
+ * 提示词优先用节点上填的；没填就用上游文本（例如大模型写完的画面描述），这样「大模型 → 出图」
+ * 连起来就能直接跑，不用把提示词抄两遍。
+ */
+async function runImage(node, ctx = {}) {
+  const cfg = node.data.config
+  const prompt = trimText(cfg.prompt, 4000) || trimText(ctx.prompt, 2000) || trimText(ctx.text, 2000)
+  if (!prompt) throw new Error('出图节点没有提示词：在检查器里填写，或把上游文本接到它上面')
+  if (!ctx.ownerId) throw new Error('出图需要登录账号：这次运行没有归属账号，不能扣费也不产出')
+  return runImageGeneration({
+    ownerId: ctx.ownerId,
+    runId: ctx.runId,
+    nodeId: node.id,
+    prompt,
+    ratio: cfg.ratio,
+    model: cfg.model,
+  })
 }
 
 async function runKb(node, ctx) {
@@ -908,7 +974,16 @@ function runOutput(ctx) {
   const text = parts.length
     ? parts.map((item) => '### ' + item.title + '\n' + item.text).join('\n\n')
     : '（上游没有可汇总的文本输出）'
-  return { text: clip(text), sources: ctx.values.map((item) => ({ nodeId: item.nodeId, title: item.title, kind: item.kind })) }
+  const images = ctx.values.filter((item) => item.imageUrl)
+  const lines = [text]
+  // 出图不是文字：最终输出里要把「这次画了哪几张」写清楚，否则用户拿到的是一段话、图在哪还得自己找
+  for (const item of images) lines.push('### 图片 · ' + item.title + '\n' + item.imageUrl)
+  return {
+    text: clip(lines.join('\n\n')),
+    imageCount: images.length,
+    images: images.map((item) => ({ nodeId: item.nodeId, title: item.title, url: item.imageUrl, path: item.imagePath })),
+    sources: ctx.values.map((item) => ({ nodeId: item.nodeId, title: item.title, kind: item.kind })),
+  }
 }
 
 async function executeNode(node, ctx) {
@@ -925,6 +1000,8 @@ async function executeNode(node, ctx) {
       return { status: 'success', output: evaluateCondition(node.data.config.expression, ctx) }
     case 'output':
       return { status: 'success', output: runOutput(ctx) }
+    case 'image':
+      return { status: 'success', output: await runImage(node, ctx) }
     case 'review':
       return { status: 'success', output: await runReview(node, ctx) }
     default:
@@ -1359,6 +1436,9 @@ export async function runFlow(flow, { onEvent, credits = null, runId = '', resum
   }
   run.finishedAt = new Date().toISOString()
   run.durationMs = Date.now() - startedAt
+  // 出图节点每张另扣一次积分：记在运行上，运行抽屉与作品页才能报出完整花费
+  run.imageCredits = imageCreditsOf(run)
+  run.spentTotal = (run.credits?.refunded ? 0 : Number(run.credits?.cost) || 0) + run.imageCredits
   const outputResults = run.nodes.filter((item) => item.kind === 'output' && item.output)
   const lastWithText = [...run.nodes].reverse().find((item) => item.output && typeof item.output.text === 'string' && item.output.text)
   run.output = outputResults.length

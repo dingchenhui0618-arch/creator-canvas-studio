@@ -32,6 +32,8 @@ import { enter, leave } from '../gate.mjs'
 import { admitWaiting, capacityFor, queueView, watchClientGone } from '../waterline.mjs'
 import { publicError } from '../public-error.mjs'
 import { buildRunCompare, buildRunOutputDiff, compareSideOf } from '../run-compare.mjs'
+import { imageNodeOptions, runAssetPath } from '../flow-image.mjs'
+import { sendAuthImage } from '../image-response.mjs'
 
 // /api/flows 与 /api/runs 共用一个 router：
 // index.mjs 会按 prefix + extraPrefixes 分发，因此两个前缀都进到这里。
@@ -39,6 +41,8 @@ const FLOW_ITEM = /^\/api\/flows\/([\w-]+)$/
 const FLOW_RUN = /^\/api\/flows\/([\w-]+)\/run$/
 const FLOW_RESUME_PLAN = /^\/api\/flows\/([\w-]+)\/resume-plan$/
 const RUN_ITEM = /^\/api\/runs\/([\w-]+)$/
+// 工作流出图节点的产物：/api/runs/<runId>/assets/<文件名>，只有这条运行的主人能读
+const RUN_ASSET = /^\/api\/runs\/([\w-]+)\/assets\/([\w.-]+)$/
 const RUN_STOP = /^\/api\/runs\/([\w-]+)\/stop$/
 const RUN_COMPARE = /^\/api\/runs\/([\w-]+)\/compare$/
 const RUN_COMPARE_DIFF = /^\/api\/runs\/([\w-]+)\/compare\/diff$/
@@ -157,7 +161,8 @@ export function createFlowsRouter() {
 
       // 节点类型与工具的元信息，前端 inspector 用它渲染下拉框
       if (pathname === '/api/flows/meta' && req.method === 'GET') {
-        sendJson(res, 200, { nodeKinds: NODE_KINDS, tools: TOOLS, reviewProfiles: REVIEW_PROFILES })
+        // image：出图节点能选哪些模型、哪几种比例、每张多少积分——界面不写死任何一个数
+        sendJson(res, 200, { nodeKinds: NODE_KINDS, tools: TOOLS, reviewProfiles: REVIEW_PROFILES, image: imageNodeOptions() })
         return true
       }
 
@@ -204,6 +209,39 @@ export function createFlowsRouter() {
       // 只读；票号是凭据、只进不出，聚合数仍是整机口径（与工作流出图 / 评审同一条队、同一份实现）。
       if (pathname === '/api/runs/queue' && req.method === 'GET') {
         sendJson(res, 200, { ok: true, ...queueView('flow_run', url.searchParams.get('ticket') || '') })
+        return true
+      }
+
+      // 出图节点的产物：按运行归属鉴权后再读文件，绝不让任何人凭猜到的运行号看别人的图。
+      const runAssetMatch = pathname.match(RUN_ASSET)
+      if (runAssetMatch) {
+        if (req.method !== 'GET' && req.method !== 'HEAD') {
+          res.setHeader('Allow', 'GET, HEAD')
+          sendJson(res, 405, { error: '只支持 GET' })
+          return true
+        }
+        // 运行产物是账号私有内容：没有登录态直接 401，不靠上层登录门兜底
+        if (!user?.id) {
+          sendJson(res, 401, { error: '请先登录', code: 'LOGIN_REQUIRED' })
+          return true
+        }
+        const run = await getRun(runAssetMatch[1], user)
+        if (!run) {
+          notFound(res, '运行记录不存在')
+          return true
+        }
+        const file = runAssetPath(run.id, runAssetMatch[2])
+        if (!file) {
+          sendJson(res, 400, { error: '文件名不合法' })
+          return true
+        }
+        const ext = file.split('.').pop().toLowerCase()
+        const type = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : ext === 'gif' ? 'image/gif' : 'image/jpeg'
+        // 与帧图 / 上传图同一套缓存头（private + no-cache + ETag）：退出登录或换账号后
+        // 浏览器不会把别人的图从本地缓存里再画出来。
+        if (!(await sendAuthImage(req, res, file, type))) {
+          notFound(res, '这次运行没有这张图')
+        }
         return true
       }
 

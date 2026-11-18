@@ -2,7 +2,7 @@ import { Check, CircleAlert, CircleDashed, CircleSlash, Loader, X } from 'lucide
 import { NODE_META } from './catalog'
 import type { RunNodeResult, RunRecord, RunResumePlan } from '../api/flows'
 import { useUiMode } from '../api/app'
-import { runResumeInfo } from '../domain/run'
+import { runCreditsText, runResumeInfo } from '../domain/run'
 import { Pill } from '../components/ui'
 
 type RunDrawerProps = {
@@ -63,6 +63,13 @@ function nodeOutputText(output: RunNodeResult['output']): string {
   return typeof text === 'string' ? text : ''
 }
 
+/** 出图节点的产物是一个地址：抽屉里直接把它画出来，别只显示一行路径。 */
+function nodeOutputImage(output: RunNodeResult['output']): string {
+  if (!output) return ''
+  const url = output.imageUrl
+  return typeof url === 'string' ? url : ''
+}
+
 export function RunDrawer({ open, running, flowName, runId, total, nodes, record, resume = null, resumePlan = null, onResume, onRestart, queuedMs = 0, queue = null, queueElapsed = 0, cancelled = false, onCancelQueue, error, onClose, onSelectNode }: RunDrawerProps) {
   const { internal } = useUiMode()
   const progress = total > 0 ? Math.round((nodes.length / total) * 100) : 0
@@ -77,6 +84,8 @@ export function RunDrawer({ open, running, flowName, runId, total, nodes, record
   // 预检说不能续、但旧记录看起来还能续：这是「画布改过了」，要给一个明确的出口，不能只把按钮藏掉。
   const resumeBlocked = Boolean(resume) && resumePlan !== null && !resumePlan.resumable && recordedResume.resumable && !running
   const duration = record ? record.durationMs : nodes.reduce((sum, node) => sum + (node.ms || 0), 0)
+  // 花费文案由 domain/run.ts 统一出：出图那几张要单独算进来，不能只报运行本身那笔
+  const spentText = runCreditsText(record)
   // 排队也是一段时间：抽屉开着的时候顶栏会被它盖住，所以状态胶囊直接写 QUEUED，别让用户以为节点在跑
   const statusText = queue
     ? 'QUEUED'
@@ -114,15 +123,7 @@ export function RunDrawer({ open, running, flowName, runId, total, nodes, record
           </span>
         ) : null}
         {queuedMs > 0 ? <span>排队 {Math.round(queuedMs / 1000)} 秒后开始</span> : null}
-        {record?.credits && record.credits.cost > 0 ? (
-          <span>
-            {record.credits.refunded
-              ? record.credits.kept != null
-                ? '已退 ' + (record.credits.refundedAmount ?? 0) + ' 积分 · 已跑部分 ' + record.credits.kept + ' 积分'
-                : '已退回 ' + record.credits.cost + ' 积分'
-              : '消耗 ' + record.credits.cost + ' 积分'}
-          </span>
-        ) : null}
+        {spentText ? <span>{spentText}</span> : null}
       </div>
       <div className="cv-drawer-progress"><span style={{ width: progress + '%' }} /></div>
 
@@ -210,6 +211,11 @@ export function RunDrawer({ open, running, flowName, runId, total, nodes, record
                 <span className="cv-run-state">{node.reused ? '已跑过' : (STATUS_LABEL[node.status] ?? node.status)}</span>
               </button>
               {node.error && <p className="cv-run-error">{node.error}</p>}
+              {!node.error && nodeOutputImage(node.output) ? (
+                <a className="cv-run-image" href={nodeOutputImage(node.output)} target="_blank" rel="noreferrer" title="在新标签页看原图">
+                  <img src={nodeOutputImage(node.output)} alt={node.title} loading="lazy" />
+                </a>
+              ) : null}
               {!node.error && nodeOutputText(node.output) && <pre className="cv-run-output">{nodeOutputText(node.output)}</pre>}
               {!node.error && !nodeOutputText(node.output) && node.message && <p className="cv-run-message">{node.message}</p>}
             </li>

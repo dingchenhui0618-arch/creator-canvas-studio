@@ -6,7 +6,7 @@ import { RunCompareModal } from '../components/RunCompareModal'
 import { adoptProjectCanvas, createProject, listProjects } from '../api/projects'
 import type { ProjectSummary } from '../domain/project'
 import { getRunResumePlan, listFlows, listRuns, type ApiFlow, type RunRecord, type RunResumePlan } from '../api/flows'
-import { runResumeInfo, runResumePlanView, runSpentText, runStatusMeta, runVersionLabel, runWorkLine } from '../domain/run'
+import { runCreditsText, runResumeInfo, runResumePlanView, runSpentText, runStatusMeta, runVersionLabel, runWorkLine } from '../domain/run'
 import { readRunsView, resolveFlowFilter, writeRunsView, type RunsView } from '../domain/list-view'
 import '../styles/runs.css'
 
@@ -421,16 +421,10 @@ export function RunsPage({
                 <Activity size={14} strokeWidth={1.5} />
                 <strong>{current.flowName}</strong>
                 <span className="vq-mono">{runSpentText(current)}</span>
-                {current.credits && current.credits.cost > 0 ? (
-                  <span className="vq-mono">
-                    {current.credits.refunded
-                      ? current.credits.kept != null
-                        ? '已退 ' + (current.credits.refundedAmount ?? 0) + ' · 已跑部分 ' + current.credits.kept + ' 积分'
-                        : '已退回 ' + current.credits.cost + ' 积分'
-                      : current.status === 'queued'
-                        ? '排到后扣 ' + current.credits.cost + ' 积分'
-                        : '消耗 ' + current.credits.cost + ' 积分'}
-                  </span>
+                {current.status === 'queued' && current.credits && current.credits.cost > 0 ? (
+                  <span className="vq-mono">排到后扣 {current.credits.cost} 积分</span>
+                ) : runCreditsText(current) ? (
+                  <span className="vq-mono">{runCreditsText(current)}</span>
                 ) : null}
                 {current.resumeOf ? (
                   <span className="vq-mono" title="上次已跑完的节点直接复用，这次只补没跑完的部分">

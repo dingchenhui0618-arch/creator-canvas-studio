@@ -128,6 +128,10 @@ export type RunRecord = {
   error?: string | null
   /** 本次运行扣的积分；失败会退回，refunded=true */
   credits?: RunCredits | null
+  /** 出图节点每张另扣的积分合计（只算画成了的；失败那张已退） */
+  imageCredits?: number
+  /** credits（未退部分）+ 出图积分：这次运行实际花掉多少 */
+  spentTotal?: number
   /** 属于哪条作品的哪一版；没挂在作品上为 null / 缺省 */
   project?: RunProjectRef | null
   /** 这次运行开始时的工作流快照；只有详情接口带，旧运行时缺省 */

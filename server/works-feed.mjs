@@ -66,24 +66,56 @@ async function mediaItems(userId) {
 
 // 一次运行在作品流里能给出的东西：它跑了哪条流程、成没成、花了多久，以及**最后一段文本输出**。
 // 不把每个节点的输出都铺开（那是运行详情的事），只留一句能认出「这条跑出了什么」的摘要。
+/** 卡片上的一句话：去掉 markdown 记号与纯地址行（图片地址已经在封面里了）。 */
+function cleanSummary(text) {
+  return String(text || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line && !/^(\/|https?:\/\/)\S+$/.test(line))
+    .map((line) => line.replace(/^#{1,6}\s*/, ''))
+    .join(' ')
+    .replace(/\*\*/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 96)
+}
+
 function runSummaryText(run) {
   const nodes = Array.isArray(run.nodes) ? run.nodes : []
+  // 有出图节点时，用那张图的说明做摘要：比输出节点汇总的 markdown 更像人话
+  const cover = [...nodes].reverse().find((node) => node?.output && typeof node.output.imageUrl === 'string' && node.output.imageUrl)
+  if (cover?.output?.text) {
+    const text = cleanSummary(cover.output.text)
+    if (text) return text
+  }
   for (let index = nodes.length - 1; index >= 0; index -= 1) {
-    const output = nodes[index]?.output
-    const text = String(output?.text || '').replace(/\s+/g, ' ').trim()
-    if (text) return text.slice(0, 96)
+    const text = cleanSummary(nodes[index]?.output?.text)
+    if (text) return text
   }
   return ''
 }
 
+// 工作流里的出图节点：这条运行真画出来的第一张图，就是这张作品卡的封面。
+// 只认服务端给的自有地址（/api/runs/<id>/assets/...），不做任何跨站直连。
+function runCover(run) {
+  const nodes = Array.isArray(run.nodes) ? run.nodes : []
+  for (const node of nodes) {
+    const output = node?.output
+    if (output && typeof output.imageUrl === 'string' && output.imageUrl.startsWith('/api/runs/')) return output
+  }
+  return null
+}
+
 async function runItems(user) {
   const { items } = await listRuns({ ownerId: user.id, limit: 50 })
-  return items.map((run) => ({
+  return items.map((run) => {
+    const cover = runCover(run)
+    return {
     id: 'run:' + run.id,
     kind: 'run',
     title: String(run.flowName || '一次工作流运行').slice(0, 42),
-    aspect: 'unknown',
-    thumbUrl: null,
+    aspect: cover ? (String(cover.ratio || '') || '1:1') : 'unknown',
+    thumbUrl: cover ? cover.imageUrl : null,
     previewUrl: null,
     at: Date.parse(run.finishedAt || run.startedAt) || Date.parse(run.createdAt || '') || 0,
     source: '工作流',
@@ -95,7 +127,9 @@ async function runItems(user) {
     summary: runSummaryText(run),
     durationMs: Number(run.durationMs) || 0,
     flowId: run.flowId || '',
-  }))
+    // 模型名已经在摘要里（「出图完成：GPT Image 2」），这里不再重复占一行宽度
+    }
+  })
 }
 
 // 界面上的模型名：用产品叫法，不把内部 id（尤其带上游前缀的）原样端给用户。
