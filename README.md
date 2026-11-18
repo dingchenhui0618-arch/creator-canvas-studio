@@ -4798,3 +4798,22 @@ LOGIN status=200 setCookie=yes user=usr_7s55Vz… match=true kind=account
 
 
 
+
+## 二百五十五、16:9 出视频走我们自己的网关真调通过（2026-11-18，版本仍 0.9.177）
+
+r191 把比例做成界面三档后留了条边界：**只有 9:16 真出过片，16:9 只是单测里 body 对**。这条边界必须真花钱补——上一版的真 bug（漏传 `aspect_ratio`）就是单测全绿、真调 4 秒被拒。
+
+新增 `scripts/media-verify-once.mjs`：按 user id 取临时会话（不传手机号）、走 `POST /api/media/generate`、每 5 秒轮询任务、下载结果并读容器头量宽高与时长（生产机没有 ffmpeg，MP4 读 `tkhd`/`mvhd`）。
+
+| 项 | 结果 |
+| --- | --- |
+| 请求 | `ratio=16:9`、`duration=8`、`resolution=720p`，`seedance-2.0` |
+| 产物 | `video/mp4` **2,895,736 B**，`avc1`，**1280×720**，**8.10 s**，`ratio_echo=16:9` |
+| 耗时 / 积分 | **317 s**，扣 15（未退款，余额 1075 → 1060） |
+| 花费 | 约 **¥1.4**（用户 11-18 授权范围内） |
+
+![16:9 出视频 · 第 2 秒帧](docs/video-16x9-frame-720p.png)
+
+顺带记一个坑：截帧前两次全黑，`videoWidth=0`，原因是 **Chrome 后台标签页不加载媒体**——WebBridge 新开标签是 `hidden`，必须 `Page.bringToFront`（`focus-emulation`，不抢焦点）后媒体才开始解码。
+
+边界：**1:1 出视频与 480p 仍未真调**；317 s 与 184.5 s 的差别只是上游排队波动，不能推断比例影响耗时。细节见 `docs/video-16x9-through-gateway-2026-11-18.md`。

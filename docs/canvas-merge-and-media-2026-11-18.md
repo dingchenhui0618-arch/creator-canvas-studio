@@ -76,5 +76,5 @@
 
 - 画布合并走的是 **fast-forward + stash pop**，不是一次真正的 merge 提交：`c5eaa1e` 本身是干净的合并候选，生产侧的改动仍在工作区（未提交），所以「生产树 = 合并候选 + 未提交改动」这个事实要记住；下次再动画布先 `git status`。
 - `git ls-remote origin` 在这台机器上用 token 拉 GitHub 时偶发 `Failure when receiving data from the peer`，这次靠 `/tmp/bdcanvas-merge` 本地仓库 fetch，不依赖网络。
-- 生视频只真调过 `seedance-2.0 / 8s / 720p / 9:16` 这一种组合，16:9 与 1:1 没真调；480p 也没在这一版再测。
+- 生视频只真调过 `seedance-2.0 / 8s / 720p / 9:16` 这一种组合，16:9 与 1:1 没真调；480p 也没在这一版再测。（16:9 已于 2026-11-18 补测通过，见 `docs/video-16x9-through-gateway-2026-11-18.md`；1:1 与 480p 仍未验。）
 - 出图超时那次，上游是否计费无法从本地确认（GeteAPI 后台为准）。
