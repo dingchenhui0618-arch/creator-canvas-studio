@@ -88,3 +88,39 @@
   /* 时间 · 模型名一行放不下：允许折到第二行，别截成「GPT …」 */
   .works-time { white-space:normal; }
 }
+
+/* ---------- 作品流：手机端（r233） ----------
+   作品页默认就是这一条流，390 下两列卡片只有 139px（320 下 104px）：
+   字号 12–14px、按钮 24px 高，读不清也点不准。这里只抬字号与触控区，
+   不改列数与比例规则（9:16 优先、两列是定过的口径）。
+   放在 480 块之后：同权重时后写的赢，480 里那几条（隐藏「看大图」、
+   标题两行、时间折行）继续生效。 */
+@media (max-width: 560px) {
+  .works-bar { gap: 8px; }
+  .works-chip { min-height: 40px; padding: 8px 16px; font-size: 14px; }
+  .works-count { font-size: 13px; }
+  .works-title { font-size: 15px; line-height: 1.5; }
+  .works-summary { font-size: 14px; line-height: 1.6; }
+  .works-time { font-size: 13px; line-height: 1.5; }
+  /* 缩略图右下角那枚来源标签：12px 在 1x 屏上是糊的，也偏小 */
+  .works-tag { gap: 4px; padding: 4px 8px; font-size: 13px; }
+  .works-fallback { font-size: 14px; }
+  .works-open { font-size: 13px; }
+  /* 卡片上两个动作（用作参考 / 下载）之前只有 24px 高：手机上点不中 */
+  /* 底下那条下划线要贴着字：靠 flex-end 让字坐到底部，触控区仍然向上撑满 44px */
+  .works-action { align-items: flex-end; min-height: 44px; padding-bottom: 2px; gap: 8px; font-size: 14px; }
+  .works-more { font-size: 13px; }
+  .works-more.is-button { min-height: 44px; padding: 8px 24px; font-size: 14px; }
+  /* 大图：手机要把媒体让给画面本身，关闭按钮按 44px 触控区放 */
+  .works-modal { padding: 16px; }
+  .works-modal-body { gap: 12px; }
+  .works-modal-note { font-size: 14px; line-height: 1.5; }
+  .works-modal-close { top: 8px; right: 8px; width: 44px; height: 44px; }
+  .works-actions.is-modal .works-action { align-items: flex-end; min-height: 44px; padding-bottom: 2px; font-size: 14px; }
+}
+
+@media (max-width: 380px) {
+  /* 320：两列之间少留 4px，卡片从 104 变成 108；动作放不下会自己折行 */
+  .works-grid { gap: 8px; }
+}
+
