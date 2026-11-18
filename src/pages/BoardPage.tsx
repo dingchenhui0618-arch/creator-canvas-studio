@@ -334,7 +334,8 @@ export default function BoardPage({ onToast, boardId, focus, onToggleFocus }: Bo
 
   return (
     <div className="page bd-page">
-      <div className="bd-strip">
+      {/* 窄屏（≤1080）会把「无限画布」字样让给面包屑，所以状态条自带一个无障碍名 */}
+      <div className="bd-strip" role="group" aria-label="无限画布状态条">
         <span className="bd-label">无限画布</span>
         <span className="bd-state" title={bdc.web.url}>
           <span className="bd-dot" />
@@ -450,7 +451,9 @@ function CanvasQueueChip({ view, idleAt }: { view: CanvasQueueView | null; idleA
     >
       {view.waiting > 0 ? <Hourglass size={12} strokeWidth={2} /> : <span className="bd-queue-dot" />}
       在跑 {view.active}
-      {view.waiting > 0 ? ' · 排队 ' + view.waiting + '（最久 ' + seconds(view.oldestWaitMs) + 's）' : ''}
+      {view.waiting > 0 ? ' · 排队 ' + view.waiting : ''}
+      {/* 手机上先只留人数：括号里那句换成 title，压住状态条会把这行字截断（r243） */}
+      {view.waiting > 0 ? <span className="bd-queue-oldest">（最久 {seconds(view.oldestWaitMs)}s）</span> : null}
       {view.full ? ' · 排队位已满' : ''}
     </span>
   )

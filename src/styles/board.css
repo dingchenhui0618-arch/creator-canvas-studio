@@ -270,3 +270,58 @@
   /* 两行状态下写笔记不再从 40px 处弹（会压住第二行的选择器），改为贴在整条状态条下方 */
   .bd-note { top: calc(100% + var(--space-2)); left: var(--space-3); width: min(340px, calc(100vw - 48px)); }
 }
+
+/* ── 窄屏收口（r243 / v0.9.227）────────────────────────────────────────────────
+   状态条只有 42px 高、按钮 24px、字 12px——1440 上够用，768 与 1024 却装不下：
+   整条内容 780px，768 的格子只有 672px，于是整页被撑到 912px 横向滚动，
+   「新窗口」图标键被挤成 16×32。这里只在 ≤1080 生效，桌面一条规则都不动。 */
+@media (max-width: 1080px) {
+  /* 装不下就换行，不再把内容挤出自己的盒子 */
+  .bd-strip {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 52px;
+    padding: 4px var(--space-3) 4px var(--space-4);
+    row-gap: var(--space-2);
+  }
+  /* 「无限画布」在面包屑里已经写着；「画布」两个字由下拉自己说得清。
+     省下的 100px 让 768 与 1024 都能排成一行，画布多出 55px 高度。 */
+  .bd-label,
+  .bd-sep,
+  .bd-picker-label,
+  .bd-url { display: none; }
+  .bd-state,
+  .bd-queue,
+  .bd-note-hint { font-size: 13px; }
+  /* 点按区 24 → 40 */
+  .bd-action { height: 40px; padding: 0 var(--space-3); }
+  .bd-action svg { width: 14px; height: 14px; }
+  .bd-state,
+  .bd-queue { height: 26px; }
+  /* 排队位胶囊不许比状态条还宽：超了就在自己身上省略，而不是被页面裁掉半句 */
+  .bd-queue { max-width: 100%; min-width: 0; }
+  /* 弹性收缩会把图标键压成 16px：显式给宽度并禁止收缩 */
+  .bd-strip > .vq-button--icon,
+  .bd-strip .vq-button--icon { width: 40px; height: 40px; flex: 0 0 auto; }
+  /* 状态条变高后，「写笔记」弹层贴整条下方，不再从固定 40px 处冒出来压住选择器 */
+  .bd-note { top: calc(100% + var(--space-2)); left: var(--space-3); }
+}
+
+@media (max-width: 560px) {
+  /* 手机上把行间距收紧一点：375/390 一排放得下「状态 + 四个按钮」，350 以下才换行 */
+  .bd-strip { min-height: 56px; padding: 4px var(--space-2); column-gap: var(--space-2); }
+  .bd-action { height: 44px; }
+  /* ≤760 那条把按钮收成 32px 方块，宽度在这里跟上 */
+  .bd-strip > .bd-action { width: 44px; }
+  .bd-strip > .vq-button--icon,
+  .bd-strip .vq-button--icon { width: 44px; height: 44px; }
+  /* 选择器给一个 120px 的下限：宽屏和「新窗口」共处第二行，窄屏才独占一行 */
+  .bd-picker { flex: 1 1 0%; min-width: 120px; }
+  .bd-state,
+  .bd-queue { height: 28px; }
+  /* 手机上「最久 12.4s」让位：留下「在跑 3 · 排队 2」，完整那句在 title 里 */
+  .bd-queue-oldest { display: none; }
+  /* 弹层按状态条自己的宽度算（原来按 100vw 算，390 上右边缘会顶出 30px） */
+  .bd-note { width: min(340px, calc(100% - var(--space-6))); }
+  .bd-queue { flex: 0 1 auto; }
+}
