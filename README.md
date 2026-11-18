@@ -5037,6 +5037,18 @@ gzip_types text/css application/javascript application/json image/svg+xml;
 
 **还留着的**：后端 `enterprise_server/`（约 300 处）、`server_v2.py`（50 处）、`admin/js/`（96 处）仍是第三方名字，管理员后台那一层这轮没动；仓库根目录的上游许可文本保留、第三方归属收进 `THIRD-PARTY-NOTICES.md`（保留归属、去掉界面痕迹）；`prod-rebrand-20261118` 带着线上数据库与支付配置，**没有推远端**。细节见 `docs/infinite-canvas-rebrand-production-2026-11-18.md`。
 
+## 二百七十、快捷创作补上参考图 / 参考视频 / 模型选择（2026-11-18，0.9.193）
+
+用户给了私有原型仓库 `chenyuzhiyun-`（晨羽智云）让照着补：**上传参考图片、上传参考视频信息、模型选择与切换，文本要保留可切换调整**。原型 `src/QuickCreate.tsx` 里确实有这几件东西，但模型表是死的（含我们没有的 Seedream / MiniMax）、素材是 dataURL 假地址、也没有「素材怎么进上游」这一段，所以只照它的交互与结构，落地上游用我们自己的证据。
+
+四件事落地：**①参考素材**——新 `server/media-assets.mjs`，只认文件头（jpg/png/webp/gif、mp4/mov/webm），图片 ≤ 8 MB、视频 ≤ 48 MB，每账号 60 个 / 400 MB 超了顶掉最旧的，宽高与秒数由浏览器读出来随上传带上（视频在托盘里显示「6.0s · 1280×720 · 12.3 MB」这种真实信息）；**②模型与规格**——新 `server/media-models.mjs`，`GET /api/media/models` 下发模型 / 方式 / 比例 / 时长 / 清晰度与积分价，界面照它画五个下拉，默认值取统一路由（图片 gpt-image-2、视频 seedance-2.0）；**③参数跟着模型走**——切模型后比例、时长、清晰度自动落到新模型的合法值；**④文本保留**——图片与视频两个面板都挂着、只隐藏非当前的，切回来提示词、参数、素材、正在跑的任务都在原处。
+
+上游两步都有了依据：出图带参考图走 OpenAI 兼容通道的 `/images/edits`（multipart：model / prompt / size / image）；出视频带素材走 SeeAPI 的 `/v1/assets/references/upload` 换 `asset://`，再放进建任务正文的 `reference_image_urls` / `reference_video_urls` 并带 `mode`（纯文本 text2video、只带图 image2video、混着 mixed2video）——这一段抄的是无限画布 `generation_seedance.py` 里已经跑通的实现，并且**上传与建任务必须用同一把 Key**（素材挂在 Key 的账号下）。
+
+验收：测试 **1390/1390**（media-gen 14→18 条：出图真的走到 edits、参考素材真的进 `reference_*_urls`、文生模式收素材 / 参考缺素材 / 别人的素材 / 错模型一律 400 不扣费）；本机临时实例 + 假上游端到端：上传 640×480 的参考图 → 自动切「参考图」→ 生成 → edits 收到 1 次请求 → 结果「图片 · 81.3 KB · 参考 1」，切到视频页写一句再切回，图片页提示词与素材都在；390 宽 `scrollWidth = innerWidth = 390`，参数一行一个不挤成竖排。截图 `docs/quick-create-refs-1440.png`、`docs/quick-create-result-1440.png`、`docs/quick-create-video-1440.png`（模型下拉里 Seedance 2.0 Fast 标着「未真调」）、`docs/quick-create-refs-390.png`。
+
+**边界（说在前面）**：参考图出图与参考素材生视频**都还没真调过**；图片下拉只有 GPT Image 2（2.5/2.6 单次成本高于 5 积分，摆进去等于让用户点了就亏）；音频参考没做；素材库只能挑自己上传的，还不能从「最近生成」里直接拿一条结果当参考。真调要用户点头（约 $0.05 + ¥1.4）。细节见 `docs/quick-create-refs-2026-11-18.md`。
+
 ## 协作约定：真实上游调用要用户点头（2026-11-18 起）
 
 用户明确要求：**真实调用（生图、生视频、文本、检索等任何打上游的请求）只能由用户在用户端自己发起；助手不经过用户逐次同意不得自动发起。** 只读的余额 / 健康查询不受此限，但也要先说清在查什么。之前那些「为验收而真调一次」的轮次不再复现：以后验收走本地假通道、临时实例与单测，需要真调时必须先问。

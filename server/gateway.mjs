@@ -96,6 +96,10 @@ export function upstreamUrl(key, kind, id = '') {
   const protocol = keyProtocol(key)
   const cgcm = protocol === 'cgcm'
   if (kind === 'image') return base + (protocol === 'openai' ? '/images/generations' : cgcm ? '/v1/images/generations' : '/images/generations')
+  // 带参考图的出图：OpenAI 兼容通道是 multipart 的 /images/edits（GeteAPI 就属于这一类）。
+  if (kind === 'imageEdit') return base + '/images/edits'
+  // 参考素材先传到 SeeAPI，拿回 asset:// 才能放进建任务的 reference_image_urls / reference_video_urls。
+  if (kind === 'referenceUpload') return base + '/v1/assets/references/upload'
   if (kind === 'imageAsync') return base + '/v1/images/generations/async'
   if (kind === 'videoCreate') return base + (cgcm ? '/v1/video/generations' : '/contents/generations/tasks')
   if (kind === 'task') {
@@ -250,6 +254,47 @@ async function postJson(url, apiKey, body, timeoutMs, extraHeaders = {}) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey, ...extraHeaders },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(timeoutMs),
+  })
+  const text = await response.text()
+  return { response, text }
+}
+
+/**
+ * 手搓 multipart：参考图要按 OpenAI 的 /images/edits 与 SeeAPI 的素材上传接口发文件，
+ * 而我们没有引入任何 multipart 依赖（也不想为了两处调用多吃一个包）。
+ * 边界与字段名都在这里定死，不解析入站 multipart，只负责拼出站的那一个。
+ */
+function multipartBody(fields = {}, files = []) {
+  const boundary = '----vq' + crypto.randomBytes(12).toString('hex')
+  const parts = []
+  for (const [name, value] of Object.entries(fields)) {
+    if (value === undefined || value === null || value === '') continue
+    parts.push(
+      Buffer.from('--' + boundary + '\r\nContent-Disposition: form-data; name="' + name + '"\r\n\r\n' + String(value) + '\r\n'),
+    )
+  }
+  for (const file of files) {
+    const filename = String(file.filename || 'file.bin').replace(/["\r\n]/g, '_')
+    parts.push(
+      Buffer.from(
+        '--' + boundary + '\r\nContent-Disposition: form-data; name="' + file.field + '"; filename="' + filename +
+          '"\r\nContent-Type: ' + (file.mime || 'application/octet-stream') + '\r\n\r\n',
+      ),
+    )
+    parts.push(file.bytes)
+    parts.push(Buffer.from('\r\n'))
+  }
+  parts.push(Buffer.from('--' + boundary + '--\r\n'))
+  return { body: Buffer.concat(parts), contentType: 'multipart/form-data; boundary=' + boundary }
+}
+
+async function postMultipart(url, apiKey, payload, timeoutMs) {
+  const { body, contentType } = multipartBody(payload.fields, payload.files)
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': contentType, Authorization: 'Bearer ' + apiKey },
+    body,
     signal: AbortSignal.timeout(timeoutMs),
   })
   const text = await response.text()
@@ -480,6 +525,149 @@ export async function generateImage(payload = {}, options = {}) {
   })
 }
 
+/**
+ * 带参考图的出图：把一张参考图 + 提示词发给 {base}/images/edits（multipart）。
+ *
+ * 为什么单独一条、不复用 generateImage：OpenAI 兼容通道的出图是 JSON，参考图是 multipart，
+ * 两者连上游路径都不一样（/images/generations 与 /images/edits）。共用一套会写出一堆 if。
+ * 只对 OpenAI 兼容通道有意义：SeeAPI / 方舟没有这个入口，遇到就直接说清楚，不用含糊的上游错误糊过去。
+ */
+export async function generateImageEdit(payload = {}, options = {}) {
+  const started = Date.now()
+  const model = String(payload.model || '')
+  const candidates = resolveKeyCandidates({ capability: 'image', model, acceptModels: acceptedModels(model), limit: MAX_ATTEMPTS })
+  if (!candidates.length) {
+    const error = missingKeyError('image', model)
+    recordRoute({ capability: 'image', model, source: 'none', reason: '池里没有可用的出图 Key', ms: Date.now() - started, ok: false, error: error.detail })
+    throw error
+  }
+  const idempotencyKey = idempotencyKeyFor(payload, options.idempotencyKey)
+  const files = [
+    {
+      field: 'image',
+      filename: String(payload.filename || 'reference.png'),
+      mime: String(payload.mime || 'image/png'),
+      bytes: payload.image,
+    },
+  ]
+  let lastError = null
+  for (const key of candidates) {
+    if (keyProtocol(key) !== 'openai') {
+      lastError = gatewayError(400, 'IMAGE_EDIT_UNSUPPORTED', '参考图只能走 OpenAI 兼容的图片通道（GeteAPI），当前这把出图 Key 是 ' + keyProtocol(key) + ' 形态')
+      continue
+    }
+    const fields = {
+      model: upstreamModelFor(key, model),
+      prompt: String(payload.prompt || ''),
+      n: 1,
+      size: String(payload.size || '1024x1024'),
+      response_format: 'b64_json',
+    }
+    if (payload.idempotencyKey) fields.idempotency_key = payload.idempotencyKey
+    let upstream
+    try {
+      upstream = await postMultipart(upstreamUrl(key, 'imageEdit'), key.apiKey, { fields, files }, config.gateway.imageTimeoutMs)
+    } catch (error) {
+      reportKey(key.id, false, String(error?.message || error))
+      recordRoute({ capability: 'image', model, keyId: key.id, keyName: key.name, source: 'pool', reason: key.reason, attempt: key.attempt, ms: Date.now() - started, ok: false, error: String(error?.message || error) })
+      if (error?.name === 'TimeoutError' || /timeout|timed out/i.test(String(error?.message || ''))) {
+        const seconds = Math.round(Number(config.gateway.imageTimeoutMs) / 1000)
+        throw gatewayError(504, 'UPSTREAM_TIMEOUT', '上游 ' + seconds + ' 秒没回，这次按超时退回积分，稍后再点一次；上游可能已经接单，别连点', {
+          retryAfterSec: 30,
+          detail: String(error?.message || error).slice(0, 200),
+        })
+      }
+      throw gatewayError(502, 'UPSTREAM_UNREACHABLE', '连不上出图上游：' + friendlyNetwork(error))
+    }
+    if (!upstream.response.ok) {
+      const message = friendlyUpstream(upstream.response.status, upstream.text)
+      reportKey(key.id, false, 'HTTP ' + upstream.response.status + ' ' + upstream.text.slice(0, 160))
+      recordRoute({ capability: 'image', model, keyId: key.id, keyName: key.name, source: 'pool', reason: key.reason, attempt: key.attempt, ms: Date.now() - started, ok: false, error: 'HTTP ' + upstream.response.status + ' ' + upstream.text.slice(0, 160) })
+      lastError = gatewayError(502, 'UPSTREAM_REJECTED', message, {
+        upstreamStatus: upstream.response.status,
+        upstreamCode: upstreamErrorCode(upstream.text),
+        detail: upstream.text.slice(0, 300),
+      })
+      continue
+    }
+    const data = parseJson(upstream.text)
+    if (!data) {
+      lastError = gatewayError(502, 'UPSTREAM_BAD_PAYLOAD', '出图上游返回的内容无法解析')
+      continue
+    }
+    const urls = extractUrls(data)
+    if (!urls.length) {
+      lastError = gatewayError(502, 'UPSTREAM_EMPTY', '出图上游没有返回图片地址')
+      continue
+    }
+    reportKey(key.id, true)
+    recordRoute({ capability: 'image', model, keyId: key.id, keyName: key.name, source: 'pool', reason: key.reason, attempt: key.attempt, ms: Date.now() - started, ok: true })
+    recordUsage({ kind: 'image', model: String(data.model || model), ref: idempotencyKey, units: 1, detail: '参考图出图' })
+    return { ...data, ok: true, urls, key: { id: key.id, name: key.name }, attempt: key.attempt, ms: Date.now() - started }
+  }
+  throw gatewayError(lastError?.status || 502, lastError?.code || 'UPSTREAM_REJECTED', failoverMessage('参考图出图', candidates, lastError), {
+    ...(lastError?.upstreamStatus ? { upstreamStatus: lastError.upstreamStatus } : {}),
+    ...(lastError?.upstreamCode ? { upstreamCode: lastError.upstreamCode } : {}),
+    ...(lastError?.detail ? { detail: lastError.detail } : {}),
+    attempts: candidates.length,
+  })
+}
+
+/**
+ * 参考素材要先上传到 SeeAPI 换 asset://，再放进建任务正文的 reference_*_urls。
+ * 用「建任务的那把 Key」上传：素材是挂在 Key 所属账号下的，换一把 Key 上传、换另一把建任务，
+ * 上游很可能找不到这个 asset —— 所以上传与建任务必须在同一个候选上连续做完。
+ */
+async function uploadReferenceAssets(key, assets) {
+  if (keyProtocol(key) !== 'cgcm') {
+    throw gatewayError(400, 'REFERENCE_UNSUPPORTED', '参考图 / 参考视频目前只能走 SeeAPI 的出视频通道，当前这把 Key 不支持')
+  }
+  const collected = { image: [], video: [] }
+  const url = upstreamUrl(key, 'referenceUpload')
+  let index = 0
+  for (const asset of assets) {
+    index += 1
+    const kind = asset.kind === 'video' ? 'video' : 'image'
+    let upstream
+    try {
+      upstream = await postMultipart(
+        url,
+        key.apiKey,
+        {
+          fields: { kind },
+          files: [
+            {
+              field: 'file',
+              filename: 'reference_' + kind + '_' + index + '.' + String(asset.ext || (kind === 'video' ? 'mp4' : 'png')),
+              mime: String(asset.mime || (kind === 'video' ? 'video/mp4' : 'image/png')),
+              bytes: asset.bytes,
+            },
+          ],
+        },
+        config.gateway.videoTimeoutMs,
+      )
+    } catch (error) {
+      reportKey(key.id, false, String(error?.message || error))
+      throw gatewayError(502, 'REFERENCE_UPLOAD_FAILED', '参考素材上传上游失败：' + friendlyNetwork(error))
+    }
+    if (!upstream.response.ok) {
+      reportKey(key.id, false, 'HTTP ' + upstream.response.status + ' ' + upstream.text.slice(0, 160))
+      throw gatewayError(502, 'REFERENCE_UPLOAD_REJECTED', '参考素材被上游拒收' + friendlyUpstream(upstream.response.status, upstream.text), {
+        upstreamStatus: upstream.response.status,
+        upstreamCode: upstreamErrorCode(upstream.text),
+        detail: upstream.text.slice(0, 300),
+      })
+    }
+    const data = parseJson(upstream.text) || {}
+    const uri = String(data.asset_uri || data?.data?.asset_uri || '')
+    if (!uri.startsWith('asset://')) {
+      throw gatewayError(502, 'REFERENCE_UPLOAD_EMPTY', '参考素材上传后上游没有返回 asset_uri')
+    }
+    collected[kind].push(uri)
+  }
+  return collected
+}
+
 // 任务台账的清理由 gateway-tasks.mjs 负责（跑着的 2 小时、终态留 24 小时）。
 function pruneJobs() {
   pruneTasks()
@@ -532,9 +720,23 @@ export async function createVideoTask(payload = {}) {
     recordRoute({ capability: 'video', model, source: 'none', reason: '池里没有可用的出视频 Key', ms: Date.now() - started, ok: false, error: error.detail })
     throw error
   }
+  // 参考素材不直接进 JSON：先按这把 Key 传到上游换 asset://，再放进 reference_image_urls /
+  // reference_video_urls（SeeAPI 的规矩，来自无限画布 generation_seedance.py 的实现）。
+  const { referenceAssets, ...payloadRest } = payload
   let lastError = null
   for (const key of candidates) {
-    const requestBody = { ...payload, model: payload.model || key.model }
+    const requestBody = { ...payloadRest, model: payloadRest.model || key.model }
+    if (Array.isArray(referenceAssets) && referenceAssets.length) {
+      let references
+      try {
+        references = await uploadReferenceAssets(key, referenceAssets)
+      } catch (error) {
+        lastError = error
+        continue
+      }
+      if (references.image.length) requestBody.reference_image_urls = references.image
+      if (references.video.length) requestBody.reference_video_urls = references.video
+    }
     let created
     try {
       created = await attemptTask(key, 'videoCreate', requestBody, started, 'video', model, '出视频')

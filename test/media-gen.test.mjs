@@ -25,6 +25,10 @@ let videoPolls = 0
 // 假上游按真实 SeeAPI 的规矩校验：它强制要 aspect_ratio，缺了就是 400 validation_error。
 // 2026-11-18 生产上真实踩过这一条（生视频窗口每次 4 秒就失败），所以在假上游里也把它变成硬约束。
 let lastVideoBody = null
+// 参考图走的是 multipart 的 /images/edits：这里留住原始正文，断言字段与文件都真的发出去了
+let lastEditBody = ''
+// 参考素材上传（SeeAPI 的 /v1/assets/references/upload）：记下每次传的是什么类型
+const refUploads = []
 // 记一次真实打上游的次数：冷却中应当一次都不打，光看错误文案证明不了这一点。
 let imageAttempts = 0
 // 「永不回包」的上游连接：测试收尾要主动毁掉，否则 server.close() 会一直等着它
@@ -37,6 +41,18 @@ const upstream = http.createServer((req, res) => {
     const send = (status, payload) => {
       res.writeHead(status, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify(payload))
+    }
+    if (req.method === 'POST' && req.url === '/v1/images/edits') {
+      // 按 utf8 解：正文里除了文件字节还有中文字段，断言时要能直接对上提示词
+      lastEditBody = Buffer.concat(chunks).toString('utf8')
+      return send(200, { created: 1, data: [{ b64_json: 'data:image/png;base64,' + tinyPng.toString('base64') }] })
+    }
+    if (req.method === 'POST' && req.url === '/seeapi/v1/assets/references/upload') {
+      const text = Buffer.concat(chunks).toString('latin1')
+      const kind = (text.match(/name="kind"\r\n\r\n(image|video)/) || [])[1] || ''
+      const file = (text.match(/filename="([^"]+)"/) || [])[1] || ''
+      refUploads.push({ kind, file, bytes: Buffer.concat(chunks).length })
+      return send(200, { asset_uri: 'asset://' + kind })
     }
     if (req.method === 'POST' && req.url === '/v1/images/generations') {
       imageAttempts += 1
@@ -132,12 +148,13 @@ createKey({
   weight: 100,
 })
 
-function mockReq({ method = 'POST', body = null, cookie = '', headers = {} } = {}) {
+function mockReq({ method = 'POST', body = null, raw = null, cookie = '', headers = {} } = {}) {
   const req = new Readable({ read() {} })
   req.method = method
   req.headers = { ...(cookie ? { cookie } : {}), ...headers }
   req.socket = { remoteAddress: '127.0.0.1' }
-  if (body !== null) req.push(Buffer.from(String(body)))
+  if (raw !== null) req.push(Buffer.isBuffer(raw) ? raw : Buffer.from(raw))
+  else if (body !== null) req.push(Buffer.from(String(body)))
   req.push(null)
   return req
 }
@@ -170,12 +187,12 @@ function mockRes() {
   return res
 }
 
-async function call({ method = 'POST', target = '/api/media/generate', body = null, cookie = '', headers = {} } = {}) {
+async function call({ method = 'POST', target = '/api/media/generate', body = null, raw = null, cookie = '', headers = {} } = {}) {
   const router = createMediaGenRouter()
   const res = mockRes()
   const url = new URL('http://127.0.0.1' + target)
   await router.handle(
-    mockReq({ method, body: body === null ? null : JSON.stringify(body), cookie, headers }),
+    mockReq({ method, body: body === null ? null : JSON.stringify(body), raw, cookie, headers }),
     res,
     url,
     url.pathname,
@@ -511,7 +528,9 @@ test('上游超时：说的是「N 秒没回、已退回」，不许说成「连
   const cookie = cookieOf(user)
   const before = credits.balanceOf(user.id)
   const original = config.gateway.imageTimeoutMs
-  config.gateway.imageTimeoutMs = 300
+  // 300ms 在跑整套测试、机器被别的测试进程占满时连「先回一条 processing」都来不及，
+  // 会误报成「POST 直接回 failed」。这条测的是超时话术，不是响应速度，所以给 800ms 余量。
+  config.gateway.imageTimeoutMs = 800
   try {
     const attemptsBefore = imageAttempts
     const queued = await call({ cookie, body: { kind: 'image', prompt: '图超时：上游一直不回包', ratio: '1:1' } })
@@ -530,3 +549,169 @@ test('上游超时：说的是「N 秒没回、已退回」，不许说成「连
     reportKey(imageKey.id, true)
   }
 })
+
+// ---------- 参考素材 + 模型选择（2026-11-18，对照晨羽智云原型补进快捷创作） ----------
+
+function newUser(name) {
+  const user = auth.createUser({ email: email(name), password: 'Passw0rd!demo', name, kind: 'user' })
+  credits.grant(user.id, 100, { note: 'media refs test' })
+  return user
+}
+
+test('模型清单：图片一组、视频一组，未真调的照实标出来，不给前端瞎猜的空间', async () => {
+  const user = newUser('models')
+  const result = await call({ method: 'GET', target: '/api/media/models', cookie: cookieOf(user) })
+  assert.equal(result.status, 200)
+  const models = result.payload
+  assert.deepEqual(models.image.map((item) => item.id), ['gpt-image-2'])
+  assert.deepEqual(models.video.map((item) => item.id), ['seedance-2.0', 'seedance-2.0-fast'])
+  assert.equal(models.defaults.image, 'gpt-image-2')
+  assert.equal(models.defaults.video, 'seedance-2.0')
+  const seedance = models.video.find((item) => item.id === 'seedance-2.0')
+  assert.equal(seedance.verified, true, 'seedance-2.0 是真调过的，别跟着标未验')
+  assert.equal(seedance.referenceVerified, false, '参考生视频这轮没真调过，必须照实说')
+  assert.deepEqual(seedance.durations, [4, 8])
+  assert.deepEqual(seedance.resolutions, ['720p', '480p'], '默认 720p：顺序就是界面默认值')
+  assert.equal(seedance.credits, 15)
+  assert.equal(models.video.find((item) => item.id === 'seedance-2.0-fast').verified, false)
+  const reference = models.image[0].modes.find((item) => item.id === 'reference')
+  assert.equal(reference.imageRefs, 1)
+  const mixed = seedance.modes.find((item) => item.id === 'mixed')
+  assert.equal(mixed.imageRefs, 9)
+  assert.equal(mixed.videoRefs, 3)
+  const anonymous = await call({ method: 'GET', target: '/api/media/models' })
+  assert.equal(anonymous.status, 401)
+})
+
+test('参考图：上传素材 → 参考图出图真的走 /images/edits，素材信息随任务回传', async () => {
+  resetMediaGenRateLimit()
+  const user = newUser('refimage')
+  const cookie = cookieOf(user)
+  const upload = await call({
+    cookie,
+    target: '/api/media/assets?name=' + encodeURIComponent('参考猫.png') + '&width=1024&height=1536',
+    raw: tinyPng,
+  })
+  assert.equal(upload.status, 200, JSON.stringify(upload.payload))
+  const asset = upload.payload.asset
+  assert.equal(asset.kind, 'image')
+  assert.equal(asset.bytes, tinyPng.length)
+  assert.equal(asset.width, 1024)
+  assert.equal(asset.height, 1536)
+  assert.equal(asset.name, '参考猫.png')
+  assert.equal(asset.previewUrl, '/api/media/assets/' + asset.id + '/file')
+
+  // 预览：登录后能拿回原字节
+  const preview = await call({ method: 'GET', target: asset.previewUrl, cookie })
+  assert.equal(preview.status, 200)
+  assert.deepEqual(preview.raw, tinyPng)
+
+  const before = credits.balanceOf(user.id)
+  const gen = await call({
+    cookie,
+    body: { kind: 'image', model: 'gpt-image-2', mode: 'reference', prompt: '照着参考图重画一张', ratio: '9:16', assets: [asset.id] },
+  })
+  assert.equal(gen.status, 200, JSON.stringify(gen.payload))
+  assert.equal(gen.payload.task.mode, 'reference')
+  assert.equal(gen.payload.task.assets.length, 1)
+  assert.equal(gen.payload.task.assets[0].kind, 'image')
+  assert.equal(credits.balanceOf(user.id), before - 5, '参考图出图还是 5 积分')
+
+  const settled = await waitTask(gen.payload.task.id, cookie)
+  assert.equal(settled.payload.task.status, 'succeeded', settled.payload.task.error)
+  assert.equal(settled.payload.task.credits.refunded, false)
+  // 上游收到的必须是 multipart 的 edits：模型、提示词、尺寸、文件一个都不能少
+  assert.match(lastEditBody, /name="model"\r\n\r\ngpt-image-2/)
+  assert.match(lastEditBody, /name="size"\r\n\r\n1024x1536/)
+  assert.match(lastEditBody, /name="prompt"\r\n\r\n照着参考图重画一张/)
+  assert.match(lastEditBody, /name="image"; filename="reference\.png"/)
+})
+
+test('参考视频 + 参考图：先换成 asset:// 再放进 reference_*_urls，模式按见 API 的规矩给', async () => {
+  resetMediaGenRateLimit()
+  refUploads.length = 0
+  const user = newUser('refvideo')
+  const cookie = cookieOf(user)
+  const image = await call({ cookie, target: '/api/media/assets?name=' + encodeURIComponent('首帧.png'), raw: tinyPng })
+  const video = await call({
+    cookie,
+    target: '/api/media/assets?name=' + encodeURIComponent('运镜.mp4') + '&duration=6&width=1280&height=720',
+    raw: videoBytes,
+  })
+  assert.equal(image.status, 200, JSON.stringify(image.payload))
+  assert.equal(video.status, 200, JSON.stringify(video.payload))
+  assert.equal(video.payload.asset.kind, 'video')
+  assert.equal(video.payload.asset.duration, 6)
+  assert.equal(video.payload.asset.width, 1280)
+
+  const gen = await call({
+    cookie,
+    body: {
+      kind: 'video',
+      model: 'seedance-2.0',
+      mode: 'mixed',
+      prompt: '按这两段参考生成一段镜头',
+      duration: 4,
+      resolution: '720p',
+      ratio: '16:9',
+      assets: [image.payload.asset.id, video.payload.asset.id],
+    },
+  })
+  assert.equal(gen.status, 200, JSON.stringify(gen.payload))
+  assert.equal(gen.payload.task.assets.length, 2)
+  assert.equal(gen.payload.task.assets[1].duration, 6, '参考视频的时长要跟着任务走，界面上才说得清拿什么参考')
+  assert.equal(lastVideoBody.aspect_ratio, '16:9')
+  assert.equal(lastVideoBody.mode, 'mixed2video', '图和视频混着参考是 mixed2video')
+  assert.deepEqual(lastVideoBody.reference_image_urls, ['asset://image'])
+  assert.deepEqual(lastVideoBody.reference_video_urls, ['asset://video'])
+  assert.equal(refUploads.length, 2)
+  assert.deepEqual(refUploads.map((item) => item.kind), ['image', 'video'])
+  assert.match(refUploads[0].file, /^reference_image_1\.png$/)
+  assert.match(refUploads[1].file, /^reference_video_2\.mp4$/)
+})
+
+test('参考素材的规矩：文生模式不收素材、参考必须带图、别人的素材用不了、模型写错 400', async () => {
+  resetMediaGenRateLimit()
+  const user = newUser('refrules')
+  const stranger = newUser('refstranger')
+  const cookie = cookieOf(user)
+  const mine = await call({ cookie, target: '/api/media/assets?name=我的图.png', raw: tinyPng })
+  const theirs = await call({ cookie: cookieOf(stranger), target: '/api/media/assets?name=别人的图.png', raw: tinyPng })
+  const before = credits.balanceOf(user.id)
+
+  const unexpected = await call({ cookie, body: { kind: 'video', mode: 'text', prompt: '不要素材', assets: [mine.payload.asset.id] } })
+  assert.equal(unexpected.status, 400)
+  assert.equal(unexpected.payload.code, 'MEDIA_ASSETS_UNEXPECTED')
+
+  const missing = await call({ cookie, body: { kind: 'image', mode: 'reference', prompt: '少了参考图', assets: [] } })
+  assert.equal(missing.status, 400)
+  assert.equal(missing.payload.code, 'MEDIA_ASSETS_REQUIRED')
+
+  const foreign = await call({ cookie, body: { kind: 'image', mode: 'reference', prompt: '拿别人的图', assets: [theirs.payload.asset.id] } })
+  assert.equal(foreign.status, 400)
+  assert.equal(foreign.payload.code, 'MEDIA_ASSET_MISSING')
+
+  const badModel = await call({ cookie, body: { kind: 'image', model: 'gpt-image-9', prompt: '模型写错' } })
+  assert.equal(badModel.status, 400)
+  assert.equal(badModel.payload.code, 'MEDIA_MODEL')
+
+  const tooMany = await call({ cookie, body: { kind: 'image', mode: 'reference', prompt: '两张参考', assets: [mine.payload.asset.id, mine.payload.asset.id] } })
+  assert.equal(tooMany.status, 400)
+  assert.equal(tooMany.payload.code, 'MEDIA_ASSETS')
+
+  assert.equal(credits.balanceOf(user.id), before, '参数不合规一律不扣积分')
+
+  // 素材只属于上传的人：别人的 id 读不到、也下不了
+  const strangerRead = await call({ method: 'GET', target: mine.payload.asset.previewUrl, cookie: cookieOf(stranger) })
+  assert.equal(strangerRead.status, 404)
+  const list = await call({ method: 'GET', target: '/api/media/assets', cookie })
+  assert.equal(list.status, 200)
+  assert.equal(list.payload.assets.length, 1)
+  assert.equal(list.payload.assets[0].id, mine.payload.asset.id, '清单里只能有自己的素材')
+
+  const removed = await call({ method: 'DELETE', target: '/api/media/assets/' + mine.payload.asset.id, cookie })
+  assert.equal(removed.status, 200)
+  const gone = await call({ method: 'GET', target: mine.payload.asset.previewUrl, cookie })
+  assert.equal(gone.status, 404)
+})
+

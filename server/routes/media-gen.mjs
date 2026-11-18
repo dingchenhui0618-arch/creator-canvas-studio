@@ -12,23 +12,15 @@ import path from 'node:path'
 import { config } from '../config.mjs'
 import { currentUser } from '../auth.mjs'
 import { charge, outstandingCharge, refund } from '../credits.mjs'
-import { createVideoTask, generateImage, pollVideoTask } from '../gateway.mjs'
+import { createVideoTask, generateImage, generateImageEdit, pollVideoTask } from '../gateway.mjs'
 import { logEvent } from '../log.mjs'
+import { ASSET_LIMITS, assetUsage, listMediaAssets, locateMediaAsset, readMediaAsset, removeMediaAsset, saveMediaAsset } from '../media-assets.mjs'
+import { listMediaModels, resolveSelection } from '../media-models.mjs'
+import { readBinaryBody } from '../body-reader.mjs'
 import { readBody, sendJson } from './_shared.mjs'
 
-const IMAGE_MODEL = 'gpt-image-2'
-// 用实测通过的那个型号：2026-11-17 生产只真调过 seedance-2.0（480p / 4 秒 / 16:9，177 秒出片）
-const VIDEO_MODEL = 'seedance-2.0'
-const IMAGE_RATIOS = {
-  '1:1': { size: '1024x1024', label: '1:1 · 1024×1024' },
-  '9:16': { size: '1024x1536', label: '9:16 · 1024×1536' },
-  '16:9': { size: '1536x1024', label: '16:9 · 1536×1024' },
-}
-const VIDEO_DURATIONS = new Set([4, 8])
-// SeeAPI/CGCM 的出视频接口强制要 aspect_ratio（缺了直接 400 validation_error），界面没给比例控件，默认竖屏
-const VIDEO_RATIOS = new Set(['9:16', '16:9', '1:1'])
-const VIDEO_RATIO_DEFAULT = '9:16'
-const VIDEO_RESOLUTIONS = new Set(['480p', '720p'])
+// 出图 / 出视频能选哪些模型、每个模型什么规格，全在 server/media-models.mjs：
+// 那里是唯一真源，这里不再写死后备模型名（以前 IMAGE_MODEL / VIDEO_MODEL 是两份常量）。
 const MAX_PROMPT_CHARS = 1200
 const MAX_IMAGE_BYTES = 24 * 1024 * 1024
 const MAX_VIDEO_BYTES = 200 * 1024 * 1024
@@ -36,6 +28,7 @@ const DOWNLOAD_TIMEOUT_MS = 90 * 1000
 const ACCOUNT_LIMIT = 10
 const ACCOUNT_WINDOW_MS = 60 * 1000
 const TASK_PATH = /^\/api\/media\/tasks\/([A-Za-z0-9_-]{6,80})(\/file)?$/
+const ASSET_PATH = /^\/api\/media\/assets\/([A-Za-z0-9_-]{6,80})(\/file)?$/
 
 const accountHits = new Map()
 
@@ -97,10 +90,21 @@ function publicTask(task) {
     status: task.status,
     prompt: task.prompt,
     model: task.model,
+    mode: task.mode || '',
     ratio: task.ratio || '',
     size: task.size || '',
     duration: task.duration || null,
     resolution: task.resolution || '',
+    // 参考素材只回形状与大小，不回文件内容，也不暴露磁盘路径
+    assets: (Array.isArray(task.assets) ? task.assets : []).map((asset) => ({
+      id: asset.id,
+      kind: asset.kind,
+      name: asset.name || '',
+      bytes: Number(asset.bytes) || 0,
+      width: asset.width || null,
+      height: asset.height || null,
+      duration: asset.duration || null,
+    })),
     progress: Number.isFinite(Number(task.progress)) ? Math.max(0, Math.min(100, Number(task.progress))) : null,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
@@ -144,11 +148,22 @@ function newTask(userId, kind, input) {
     kind,
     status: 'processing',
     prompt: input.prompt,
-    model: kind === 'image' ? IMAGE_MODEL : VIDEO_MODEL,
+    model: input.model,
+    mode: input.mode || '',
     ratio: input.ratio || '',
     size: input.size || '',
     duration: input.duration || null,
     resolution: input.resolution || '',
+    assets: (input.assets || []).map((asset) => ({
+      id: asset.id,
+      kind: asset.kind,
+      name: asset.name || '',
+      mime: asset.mime || '',
+      bytes: Number(asset.bytes) || 0,
+      width: asset.width || null,
+      height: asset.height || null,
+      duration: asset.duration || null,
+    })),
     progress: null,
     upstreamTaskId: '',
     file: null,
@@ -165,38 +180,78 @@ function validationError(message, code = 'MEDIA_PARAMS') {
   return Object.assign(new Error(message), { status: 400, code })
 }
 
-function validateBody(body) {
-  const kind = body?.kind
-  if (kind !== 'image' && kind !== 'video') {
-    throw validationError('kind 只能是 image 或 video', 'MEDIA_KIND')
-  }
-  if (typeof body.prompt !== 'string') {
-    throw validationError('请填写提示词', 'MEDIA_PROMPT')
-  }
+// 参考素材给上游时要用扩展名：按服务端认出来的 mime 定，不用客户端给的文件名。
+const MIME_EXT = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+  'video/mp4': 'mp4',
+  'video/quicktime': 'mov',
+  'video/webm': 'webm',
+}
+
+/**
+ * 一次生成请求要做的事：把界面选的模型 / 生成方式 / 参数收敛（server/media-models.mjs），
+ * 再把参考素材按账号读出来（只认自己的），最后按生成方式校验「图几张、视频几段」。
+ *
+ * 为什么要在这里读素材而不是让前端把文件塞进 JSON：8 MB 的图 base64 之后就是 11 MB，
+ * JSON 请求体上限只有 8 MB（server/body-reader.mjs），而且把文件当字符串过一遍内存纯属浪费。
+ */
+async function prepareInput(user, body) {
+  if (typeof body?.prompt !== 'string') throw validationError('请填写提示词', 'MEDIA_PROMPT')
   const prompt = body.prompt.trim()
   if (!prompt) throw validationError('请填写提示词', 'MEDIA_PROMPT')
   if (prompt.length > MAX_PROMPT_CHARS) {
     throw validationError('提示词最多 ' + MAX_PROMPT_CHARS + ' 个字符', 'MEDIA_PROMPT_LONG')
   }
-  if (kind === 'image') {
-    const ratio = body.ratio === undefined ? '1:1' : String(body.ratio)
-    const preset = IMAGE_RATIOS[ratio]
-    if (!preset) throw validationError('比例只能是 1:1、9:16 或 16:9', 'MEDIA_RATIO')
-    return { kind, prompt, ratio, size: preset.size }
+  const selection = resolveSelection({ ...body, prompt })
+  const assets = []
+  for (const id of selection.assetIds) {
+    const found = await readMediaAsset(user.id, id)
+    if (!found) {
+      throw validationError('这个参考素材不在了（或不属于当前账号），请重新上传一次', 'MEDIA_ASSET_MISSING')
+    }
+    const meta = found.meta
+    assets.push({
+      id: meta.id,
+      kind: meta.kind,
+      name: meta.name,
+      mime: meta.mime,
+      ext: MIME_EXT[meta.mime] || (meta.kind === 'video' ? 'mp4' : 'png'),
+      bytes: Number(meta.bytes) || found.buffer.length,
+      width: meta.width || null,
+      height: meta.height || null,
+      duration: meta.duration || null,
+      buffer: found.buffer,
+    })
   }
-  const duration = body.duration === undefined ? 4 : Number(body.duration)
-  if (!VIDEO_DURATIONS.has(duration)) {
-    throw validationError('视频时长只能是 4 秒或 8 秒', 'MEDIA_DURATION')
+  const images = assets.filter((asset) => asset.kind === 'image')
+  const videos = assets.filter((asset) => asset.kind === 'video')
+  const mode = selection.modeSpec
+  if (images.length > (mode.imageRefs || 0)) {
+    throw validationError('「' + mode.label + '」最多 ' + mode.imageRefs + ' 张参考图', 'MEDIA_ASSETS_TOO_MANY')
   }
-  const resolution = body.resolution === undefined ? '720p' : String(body.resolution)
-  if (!VIDEO_RESOLUTIONS.has(resolution)) {
-    throw validationError('分辨率只能是 480p 或 720p', 'MEDIA_RESOLUTION')
+  if (videos.length > (mode.videoRefs || 0)) {
+    throw validationError('「' + mode.label + '」最多 ' + mode.videoRefs + ' 段参考视频', 'MEDIA_ASSETS_TOO_MANY')
   }
-  const ratio = body.ratio === undefined ? VIDEO_RATIO_DEFAULT : String(body.ratio)
-  if (!VIDEO_RATIOS.has(ratio)) {
-    throw validationError('视频比例只能是 9:16、16:9 或 1:1', 'MEDIA_RATIO')
+  if (mode.maxRefs === 0 && assets.length) {
+    throw validationError('「' + mode.label + '」不接受参考素材', 'MEDIA_ASSETS_UNEXPECTED')
   }
-  return { kind, prompt, duration, resolution, ratio }
+  return { ...selection, prompt, assets }
+}
+
+/**
+ * 界面上的三种方式 → SeeAPI 建任务正文里的 mode。
+ * 映射来自无限画布 generation_seedance.py：seedance-2.0 只带图 → image2video，图和视频混着 → mixed2video。
+ * 纯文本不传 mode（这条路径是 2026-11-17 起真调通过的，不在这轮改动它）。
+ */
+function upstreamVideoMode(input) {
+  const images = input.assets.filter((asset) => asset.kind === 'image').length
+  const videos = input.assets.filter((asset) => asset.kind === 'video').length
+  if (!images && !videos) return ''
+  if (String(input.model).startsWith('seedance-2.0') && images && !videos) return 'image2video'
+  return 'mixed2video'
 }
 
 function mimeFromExtension(url, kind) {
@@ -324,6 +379,10 @@ async function settleFailure(task, message) {
 // 不然慢任务会被下面那条过期兜底误判成失败并退款，等一下又写回成功——等于白送一张图。
 const runningImages = new Set()
 
+// 参考图的字节只在这一次任务里用一次：不写进任务元数据（那是磁盘上的明文清单），跑完就丢。
+// 进程重启后这条任务会被过期兜底判失败并退款，不会出现「素材没了还在跑」的中间态。
+const imageRefs = new Map()
+
 // 过期兜底：进程重启会把后台出图带走，但元数据还留着 processing。
 // 阈值必须比「上游超时 + 下载超时」更大，否则跑得好好的任务会被判死。
 function imageStaleMs() {
@@ -332,12 +391,23 @@ function imageStaleMs() {
 
 async function finishImageTask(user, task) {
   try {
-    const result = await generateImage({
-      model: IMAGE_MODEL,
-      prompt: task.prompt,
-      size: task.size,
-      n: 1,
-    })
+    // 有参考图就走 /images/edits（multipart），没有就走原来的 /images/generations
+    const reference = imageRefs.get(task.id)
+    const result = reference
+      ? await generateImageEdit({
+          model: task.model,
+          prompt: task.prompt,
+          size: task.size,
+          image: reference.buffer,
+          mime: reference.mime,
+          filename: reference.filename,
+        })
+      : await generateImage({
+          model: task.model,
+          prompt: task.prompt,
+          size: task.size,
+          n: 1,
+        })
     const url = Array.isArray(result?.urls) ? result.urls[0] : ''
     const asset = await downloadAsset(url, 'image')
     task.file = await saveResult(task, asset)
@@ -349,6 +419,7 @@ async function finishImageTask(user, task) {
     await settleFailure(task, failureText(error))
   } finally {
     runningImages.delete(task.id)
+    imageRefs.delete(task.id)
   }
   await writeTask(task)
   logEvent('media.generate', {
@@ -371,12 +442,18 @@ async function finishImageTask(user, task) {
  */
 async function runImage(user, input) {
   const task = newTask(user.id, 'image', input)
+  // 价格按「这次选的模型」算（media-models 里给的 credits），不再写死 image_gen 的全局价
   const paid = charge(user.id, 'image_gen', {
     ref: task.id,
-    meta: { label: '生图 · ' + input.prompt.slice(0, 40) },
+    amount: input.credits,
+    meta: { label: '生图 · ' + input.model + ' · ' + input.prompt.slice(0, 36) },
   })
   if (!paid.ok) return { paymentFailed: paid }
   task.credits = { cost: paid.cost, balance: paid.balance, refunded: false, refundedAt: null }
+  const reference = input.assets.find((asset) => asset.kind === 'image')
+  if (reference) {
+    imageRefs.set(task.id, { buffer: reference.buffer, mime: reference.mime, filename: 'reference.' + reference.ext })
+  }
   await writeTask(task)
   runningImages.add(task.id)
   void finishImageTask(user, task).catch((error) => {
@@ -390,19 +467,29 @@ async function runVideo(user, input) {
   const task = newTask(user.id, 'video', input)
   const paid = charge(user.id, 'video_gen', {
     ref: task.id,
-    meta: { label: '生视频 · ' + input.prompt.slice(0, 40) },
+    amount: input.credits,
+    meta: { label: '生视频 · ' + input.model + ' · ' + input.prompt.slice(0, 36) },
   })
   if (!paid.ok) return { paymentFailed: paid }
   task.credits = { cost: paid.cost, balance: paid.balance, refunded: false, refundedAt: null }
+  const mode = upstreamVideoMode(input)
   try {
     await writeTask(task)
     const created = await createVideoTask({
-      model: VIDEO_MODEL,
+      model: input.model,
       prompt: input.prompt,
       duration: input.duration,
       resolution: input.resolution,
       // 上游强制要这个字段（缺了就是 400 validation_error），不传就等于每次都失败
       aspect_ratio: input.ratio,
+      // 参考素材先传到上游换 asset://，再由 gateway 拼 reference_image_urls / reference_video_urls
+      referenceAssets: input.assets.map((asset) => ({
+        kind: asset.kind,
+        mime: asset.mime,
+        ext: asset.ext,
+        bytes: asset.buffer,
+      })),
+      ...(mode ? { mode } : {}),
     })
     task.upstreamTaskId = String(created?.id || '')
     if (!task.upstreamTaskId) throw new Error('上游没有返回视频任务 id')
@@ -558,7 +645,7 @@ async function handleGenerate(req, res, user) {
     return
   }
   const body = await readBody(req)
-  const input = validateBody(body)
+  const input = await prepareInput(user, body)
   const result = input.kind === 'image' ? await runImage(user, input) : await runVideo(user, input)
   if (result.paymentFailed) {
     const paid = result.paymentFailed
@@ -637,6 +724,59 @@ async function sendTaskFile(req, res, user, task) {
   }
 }
 
+/**
+ * 预览参考素材：图片几百 KB、视频几十 MB，按 Range 发，别一次读进内存。
+ * 只给归属账号本人（locateMediaAsset 已经按账号找过），不公开、不进分享页。
+ */
+async function sendAssetFile(req, res, found) {
+  const total = found.size
+  const range = String(req.headers?.range || '')
+  const headers = {
+    'Content-Type': found.meta.mime || 'application/octet-stream',
+    'Cache-Control': 'private, no-store',
+    'X-Content-Type-Options': 'nosniff',
+    'Accept-Ranges': 'bytes',
+  }
+  let start = 0
+  let end = total - 1
+  let status = 200
+  if (range) {
+    const match = range.match(/^bytes=(\d*)-(\d*)$/)
+    if (!match) {
+      res.writeHead(416, { 'Content-Range': 'bytes */' + total })
+      res.end()
+      return
+    }
+    start = match[1] ? Number(match[1]) : 0
+    end = match[2] ? Number(match[2]) : total - 1
+    if (start > end || start >= total) {
+      res.writeHead(416, { 'Content-Range': 'bytes */' + total })
+      res.end()
+      return
+    }
+    end = Math.min(end, total - 1)
+    status = 206
+    headers['Content-Range'] = 'bytes ' + start + '-' + end + '/' + total
+  }
+  headers['Content-Length'] = String(Math.max(0, end - start + 1))
+  res.writeHead(status, headers)
+  if (req.method === 'HEAD') {
+    res.end()
+    return
+  }
+  const stream = fs.createReadStream(found.file, { start, end })
+  try {
+    for await (const chunk of stream) {
+      if (!res.write(chunk)) {
+        await new Promise((resolve) => res.once('drain', resolve))
+      }
+    }
+    res.end()
+  } catch {
+    res.destroy?.()
+  }
+}
+
 export function createMediaGenRouter() {
   return {
     prefix: '/api/media',
@@ -695,6 +835,100 @@ export function createMediaGenRouter() {
         const before = beforeRaw
         const page = await listTasks(user.id, { kind, limit, before })
         sendJson(res, 200, { ok: true, kind, tasks: page.tasks, hasMore: page.hasMore, capped: page.capped })
+        return true
+      }
+
+      // 生成模型清单：界面下拉照这张表画，前端不再自己写一份模型名与规格
+      if (pathname === '/api/media/models') {
+        if (req.method !== 'GET') {
+          res.setHeader('Allow', 'GET')
+          sendJson(res, 405, { error: '只支持 GET' })
+          return true
+        }
+        const user = currentUser(req)
+        if (!user) {
+          sendJson(res, 401, { error: '未登录', loginRequired: true })
+          return true
+        }
+        sendJson(res, 200, { ok: true, ...listMediaModels() })
+        return true
+      }
+
+      // 参考素材：POST 原始字节上传（不是 JSON：8 MB 的图 base64 之后就是 11 MB，超过 JSON 上限）
+      if (pathname === '/api/media/assets') {
+        const user = currentUser(req)
+        if (!user) {
+          sendJson(res, 401, { error: '未登录', loginRequired: true })
+          return true
+        }
+        if (req.method === 'GET') {
+          const limit = Number(url.searchParams.get('limit') || 30)
+          sendJson(res, 200, {
+            ok: true,
+            assets: await listMediaAssets(user.id, limit),
+            usage: await assetUsage(user.id),
+            limits: { imageBytes: ASSET_LIMITS.imageBytes, videoBytes: ASSET_LIMITS.videoBytes },
+          })
+          return true
+        }
+        if (req.method === 'POST') {
+          try {
+            const buffer = await readBinaryBody(req, { maxBytes: ASSET_LIMITS.videoBytes })
+            const saved = await saveMediaAsset({
+              userId: user.id,
+              buffer,
+              name: url.searchParams.get('name') || '',
+              width: url.searchParams.get('width'),
+              height: url.searchParams.get('height'),
+              duration: url.searchParams.get('duration'),
+            })
+            logEvent('media.asset', { by: user.email, id: saved.id, kind: saved.kind, bytes: saved.bytes })
+            sendJson(res, 200, { ok: true, asset: saved })
+            return true
+          } catch (error) {
+            if (error?.status === 413) {
+              sendJson(res, 413, { error: error.message, code: error.code || 'ASSET_TOO_LARGE' })
+              return true
+            }
+            if (error?.status === 415 || error?.status === 400) {
+              sendJson(res, error.status, { error: error.message, code: error.code || 'ASSET_PARAMS' })
+              return true
+            }
+            throw error
+          }
+        }
+        res.setHeader('Allow', 'GET, POST')
+        sendJson(res, 405, { error: '只支持 GET / POST' })
+        return true
+      }
+
+      const assetMatch = pathname.match(ASSET_PATH)
+      if (assetMatch) {
+        const user = currentUser(req)
+        if (!user) {
+          sendJson(res, 401, { error: '未登录', loginRequired: true })
+          return true
+        }
+        if (req.method === 'DELETE' && !assetMatch[2]) {
+          const removed = await removeMediaAsset(user.id, assetMatch[1])
+          if (!removed) {
+            sendJson(res, 404, { error: '找不到这个素材', code: 'ASSET_NOT_FOUND' })
+            return true
+          }
+          sendJson(res, 200, { ok: true })
+          return true
+        }
+        if ((req.method === 'GET' || req.method === 'HEAD') && assetMatch[2]) {
+          const found = await locateMediaAsset(user.id, assetMatch[1])
+          if (!found) {
+            sendJson(res, 404, { error: '找不到这个素材', code: 'ASSET_NOT_FOUND' })
+            return true
+          }
+          await sendAssetFile(req, res, found)
+          return true
+        }
+        res.setHeader('Allow', assetMatch[2] ? 'GET, HEAD' : 'DELETE')
+        sendJson(res, 405, { error: '不支持这个方法' })
         return true
       }
 

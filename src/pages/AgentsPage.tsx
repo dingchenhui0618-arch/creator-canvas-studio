@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { ChangeEvent, ReactNode } from 'react'
 import {
   AlertCircle,
   ArrowLeft,
@@ -12,6 +12,7 @@ import {
   Clock,
   Copy,
   Download,
+  FolderOpen,
   History,
   Layers,
   LayoutTemplate,
@@ -19,6 +20,7 @@ import {
   Plus,
   RotateCcw,
   Trash2,
+  Upload,
   X,
 } from 'lucide-react'
 import {
@@ -39,9 +41,17 @@ import {
   writeAgentDraftToProject,
 } from '../api/agents'
 import type { AgentArtifact, AgentDraft, AgentRecord, AgentRunRecord, AgentsList, AgentToolsResult, OutputType } from '../api/agents'
-import { generateMediaImage, generateMediaVideo, getMediaTask, listMediaTasks } from '../api/media-gen'
+import {
+  generateMediaImage,
+  generateMediaVideo,
+  getMediaTask,
+  listMediaAssets,
+  listMediaModels,
+  listMediaTasks,
+  uploadMediaAsset,
+} from '../api/media-gen'
 import { RECENT_PAGE_SIZE, mergeRecentTasks } from '../domain/media-recent'
-import type { ImageRatio, MediaKind, MediaTask, VideoDuration, VideoRatio, VideoResolution } from '../api/media-gen'
+import type { MediaAsset, MediaKind, MediaModel, MediaModelList, MediaTask } from '../api/media-gen'
 import { getCredits, getModelService, recheckModelService, type CreditsResponse, type ModelServiceState } from '../api/credits'
 import { getProject, listProjects } from '../api/projects'
 import type { ProjectSummary } from '../domain/project'
@@ -629,6 +639,7 @@ function describeTask(task: MediaTask) {
     if (task.duration) parts.push(task.duration + 's')
     if (task.resolution) parts.push(task.resolution)
   }
+  if (task.assets?.length) parts.push('参考 ' + task.assets.length)
   if (task.status === 'succeeded' && task.file?.bytes) parts.push(formatBytes(task.file.bytes))
   return parts.join(' · ') || (task.kind === 'image' ? '图片' : '视频')
 }
@@ -651,34 +662,91 @@ function clockOf(ms: number) {
   return String(Math.floor(total / 60)).padStart(2, '0') + ':' + String(total % 60).padStart(2, '0')
 }
 
-const IMAGE_RATIO_OPTIONS: { value: ImageRatio; label: string }[] = [
-  { value: '1:1', label: '1:1 · 1024×1024' },
-  { value: '9:16', label: '9:16 · 1024×1536' },
-  { value: '16:9', label: '16:9 · 1536×1024' },
-]
+// （比例 / 时长 / 清晰度的选项不再写死在这里：全部由 /api/media/models 按模型下发）
 
-// 出视频也讲比例：上游强制要 aspect_ratio，之前界面没给控件、代码也没传，等于每次都在几秒内被拒（2026-11-18）。
-const VIDEO_RATIO_OPTIONS: { value: VideoRatio; label: string }[] = [
-  { value: '9:16', label: '9:16 · 竖屏' },
-  { value: '16:9', label: '16:9 · 横屏' },
-  { value: '1:1', label: '1:1 · 方形' },
-]
+// ---------- 快捷创作：图片 / 视频生成表单 ----------
+//
+// 与晨羽智云原型对齐的四件事（用户 2026-11-18 要求）：
+//  1) 参考图 / 参考视频能上传；视频要能读出「几秒、多大」，不能只给一个文件名；
+//  2) 模型能选、能切；换模型后比例 / 时长 / 清晰度按新模型的规格重画，不留上一档的残留；
+//  3) 图片与视频各自保留提示词和参数：两个面板都挂着、只把非当前的隐藏掉，切回来文字还在；
+//  4) 提示词始终可改 —— 这是表单，不是一次性弹窗。
 
-// 快捷创作里的生图 / 生视频不是聊天：它是一张生成表单，提交后由服务端扣积分、调平台通道、落盘。
-// 面板只展示真实任务状态；没有结果就不摆假预览，失败就把退款状态写清楚。
-function MediaGenPanel({
+const MEDIA_MAX_PROMPT = 1200
+
+function formatDuration(seconds: number | null | undefined) {
+  if (!seconds || !Number.isFinite(seconds)) return ''
+  return (Math.round(seconds * 10) / 10).toFixed(1) + 's'
+}
+
+// 一张参考素材下面那行小字：视频要说清「几秒、多大」，图片说明大小，别的都是废话
+function describeRef(asset: MediaAsset) {
+  const parts: string[] = []
+  const duration = formatDuration(asset.duration)
+  if (duration) parts.push(duration)
+  if (asset.width && asset.height) parts.push(asset.width + '×' + asset.height)
+  parts.push(formatBytes(asset.bytes))
+  return parts.join(' · ')
+}
+
+// 读文件的真实元信息：浏览器最清楚，服务端不解析媒体容器，传上去存起来给界面用
+async function probeMediaFile(file: File) {
+  const empty = { width: null as number | null, height: null as number | null, duration: null as number | null }
+  if (typeof document === 'undefined') return empty
+  const url = URL.createObjectURL(file)
+  try {
+    if (file.type.startsWith('video/')) {
+      return await new Promise<typeof empty>((resolve) => {
+        const video = document.createElement('video')
+        video.preload = 'metadata'
+        video.onloadedmetadata = () =>
+          resolve({
+            width: video.videoWidth || null,
+            height: video.videoHeight || null,
+            duration: Number.isFinite(video.duration) ? video.duration : null,
+          })
+        video.onerror = () => resolve(empty)
+        video.src = url
+      })
+    }
+    if (file.type.startsWith('image/')) {
+      return await new Promise<typeof empty>((resolve) => {
+        const image = new Image()
+        image.onload = () =>
+          resolve({ width: image.naturalWidth || null, height: image.naturalHeight || null, duration: null })
+        image.onerror = () => resolve(empty)
+        image.src = url
+      })
+    }
+    return empty
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
+type MediaSelection = { model: string; mode: string; ratio: string; duration: number; resolution: string }
+
+function MediaComposer({
   kind,
+  catalog,
+  defaultModel,
   onCreditsChanged,
+  onToast,
 }: {
   kind: MediaKind
+  catalog: MediaModel[]
+  defaultModel: string
   onCreditsChanged: () => void
+  onToast?: (message: string) => void
 }) {
   const image = kind === 'image'
+  const [selected, setSelected] = useState<MediaSelection>({ model: '', mode: '', ratio: '', duration: 0, resolution: '' })
   const [prompt, setPrompt] = useState('')
-  const [ratio, setRatio] = useState<ImageRatio>('1:1')
-  const [videoRatio, setVideoRatio] = useState<VideoRatio>('9:16')
-  const [duration, setDuration] = useState<VideoDuration>(4)
-  const [resolution, setResolution] = useState<VideoResolution>('720p')
+  const [assets, setAssets] = useState<MediaAsset[]>([])
+  const [library, setLibrary] = useState<MediaAsset[]>([])
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [refError, setRefError] = useState('')
   const [task, setTask] = useState<MediaTask | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -694,9 +762,25 @@ function MediaGenPanel({
   // 翻过页没有：决定这次刷新是整页替换，还是只补新出现的那几条
   const recentPagedRef = useRef(false)
   const promptRef = useRef<HTMLTextAreaElement | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+
+  // 选中的东西都做「按当前模型规格兜底」：换模型后旧比例 / 旧时长不合法，渲染时自动落到新模型的默认值，
+  // 不用在 effect 里回头改 state（那样容易写出渲染与状态打架的循环）。
+  const fallbackModel = catalog.find((item) => item.id === defaultModel) ?? catalog[0]
+  const model = catalog.find((item) => item.id === selected.model) ?? fallbackModel
+  const mode = model?.modes.find((item) => item.id === selected.mode) ?? model?.modes[0] ?? null
+  // 默认比例取模型表的第一个（图片 1:1、视频 9:16），与这轮之前的默认值一致：
+  // 换模型时只落在新模型的合法值上，不替用户偷偷改成另一个方向。
+  const ratio = model && model.ratios.includes(selected.ratio) ? selected.ratio : (model?.ratios[0] ?? '')
+  const duration = model && model.durations.includes(selected.duration) ? selected.duration : (model?.durations[0] ?? 4)
+  const resolution =
+    model && model.resolutions.includes(selected.resolution)
+      ? selected.resolution
+      : (model?.resolutions[0] ?? '720p')
+  const maxRefs = mode?.maxRefs ?? 0
+  const minRefs = mode?.minRefs ?? 0
 
   // 「最近生成」：关掉窗口之后还能把上一次的文件找回来——任务号没人记得，光存在服务端等于找不到。
-  // 用 .then 取数（和本页其它请求一致）：不在 effect 里同步 setState，也不会被 set-state-in-effect 规则判违规。
   useEffect(() => {
     let alive = true
     // 永远只取第一页：条数不跟翻页长大，也就不会被接口的 24 条上限截断
@@ -721,8 +805,22 @@ function MediaGenPanel({
     }
   }, [kind, recentToken])
 
+  // 我传过的参考素材：换设备 / 刷新之后还能直接挑回来，不用重传
+  useEffect(() => {
+    let alive = true
+    listMediaAssets(20)
+      .then((response) => {
+        if (alive) setLibrary(response.assets || [])
+      })
+      .catch(() => {
+        // 清单读不到不影响上传；真正的错误在上传那一步会报出来
+      })
+    return () => {
+      alive = false
+    }
+  }, [])
+
   // 清单里有任务在跑：每 5 秒重取一次清单（只读元数据，不打上游、不扣积分）。
-  // 刷新过页面、或在另一个标签页提交过任务时，这一行会自己从「进行中」变成结果，不会一直挂着。
   const recentRunning = recent.some((item) => item.status === 'processing')
   useEffect(() => {
     if (!recentRunning) return
@@ -754,12 +852,6 @@ function MediaGenPanel({
 
   const active = busy || task?.status === 'processing'
   const pollTaskId = task?.status === 'processing' ? task.id : ''
-  const price = credits
-    ? Number(image ? credits.prices.image_gen : credits.prices.video_gen) || (image ? 5 : 15)
-    : image
-      ? 5
-      : 15
-  const canSubmit = Boolean(prompt.trim()) && !active
 
   useEffect(() => {
     let alive = true
@@ -768,7 +860,7 @@ function MediaGenPanel({
         if (alive) setCredits(next)
       })
       .catch(() => {
-        // 价格读不到时按页面默认值显示；真正扣费仍以服务端为准
+        // 价格读不到时按模型表上的积分显示；真正扣费仍以服务端为准
       })
     return () => {
       alive = false
@@ -819,17 +911,88 @@ function MediaGenPanel({
     }
   }, [pollTaskId])
 
+  const pickFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    setRefError('')
+    if (!mode) return
+    // 加参考素材本身就说明「这次要参考着生成」：当前方式不收素材时，自动切到同一模型下
+    // 第一个收素材的方式（参考图 / 首帧 / 多模态参考），别让用户先猜该点哪个。
+    let target = mode
+    if (target.maxRefs === 0) {
+      const next = model?.modes.find((item) => item.maxRefs > 0)
+      if (!next) {
+        setRefError('这个模型没有带参考素材的方式')
+        return
+      }
+      target = next
+      setSelected((current) => ({ ...current, mode: next.id }))
+    }
+    if (assets.length >= target.maxRefs) {
+      setRefError('这个生成方式最多 ' + target.maxRefs + ' 个参考素材：先移除一个')
+      return
+    }
+    setUploading(true)
+    try {
+      const meta = await probeMediaFile(file)
+      const response = await uploadMediaAsset({ file, ...meta })
+      setAssets((items) => items.concat(response.asset))
+      setLibrary((items) => [response.asset, ...items.filter((item) => item.id !== response.asset.id)])
+      onToast?.('参考素材已加入：' + response.asset.name)
+    } catch (caught) {
+      setRefError(caught instanceof Error ? caught.message : '上传参考素材失败')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const toggleAsset = (asset: MediaAsset) => {
+    setRefError('')
+    if (assets.some((item) => item.id === asset.id)) {
+      setAssets((items) => items.filter((item) => item.id !== asset.id))
+      return
+    }
+    let target = mode
+    if (target && target.maxRefs === 0) {
+      const next = model?.modes.find((item) => item.maxRefs > 0)
+      if (!next) {
+        setRefError('这个模型没有带参考素材的方式')
+        return
+      }
+      target = next
+      setSelected((current) => ({ ...current, mode: next.id }))
+    }
+    if (target && assets.length >= target.maxRefs) {
+      setRefError('这个生成方式最多 ' + target.maxRefs + ' 个参考素材：先移除一个')
+      return
+    }
+    setAssets((items) => items.concat(asset))
+  }
+
   const submit = async () => {
     const text = prompt.trim()
-    if (!text || active) return
+    if (!text || active || !model || !mode) return
+    if (assets.length < minRefs) {
+      setError('「' + mode.label + '」需要先加参考素材')
+      return
+    }
     setBusy(true)
     setError('')
     setPollError('')
     setTask(null)
     try {
+      const input = {
+        prompt: text,
+        model: model.id,
+        mode: mode.id,
+        ratio,
+        // 文生模式不收素材：素材留在托架里不丢，但这次不发给上游（服务端也会拒）
+        assets: maxRefs > 0 ? assets.map((asset) => asset.id) : [],
+      }
       const response = image
-        ? await generateMediaImage({ prompt: text, ratio })
-        : await generateMediaVideo({ prompt: text, ratio: videoRatio, duration, resolution })
+        ? await generateMediaImage(input)
+        : await generateMediaVideo({ ...input, duration, resolution })
       setTask(response.task)
       if (response.task.status !== 'processing') setRecentToken((value) => value + 1)
       if (response.task.status === 'failed') setError(response.task.error || '生成失败')
@@ -839,7 +1002,7 @@ function MediaGenPanel({
         body?: { code?: string; balance?: number; cost?: number; needed?: number }
       }
       if (failure.body?.code === 'CREDIT_INSUFFICIENT') {
-        setError('积分不足：本次需要 ' + (failure.body.cost ?? price) + ' 积分，当前余额 ' + (failure.body.balance ?? '—') + ' 积分。')
+        setError('积分不足：本次需要 ' + (failure.body.cost ?? model.credits) + ' 积分，当前余额 ' + (failure.body.balance ?? '—') + ' 积分。')
       } else {
         setError(failure.message || '生成失败')
       }
@@ -859,7 +1022,18 @@ function MediaGenPanel({
   }
 
   const title = image ? '生图' : '生视频'
-  const subtitle = image ? '提示词 · 比例 · 预览下载' : '提示词 · 比例 · 时长 · 分辨率'
+  const blockedReason = !prompt.trim()
+    ? image
+      ? '先写一句要画什么'
+      : '先写一句要拍什么'
+    : !model
+      ? '正在读取可用模型…'
+      : assets.length < minRefs
+        ? '「' + (mode?.label ?? '') + '」需要先加参考素材'
+        : ''
+  const price = model?.credits ?? (image ? 5 : 15)
+  const canSubmit =
+    Boolean(prompt.trim()) && !active && Boolean(model) && Boolean(mode) && assets.length >= minRefs && !uploading
 
   return (
     <section className="agx-media-panel" aria-label={title}>
@@ -867,277 +1041,398 @@ function MediaGenPanel({
         <span className="agx-media-icon">{image ? <ImageIcon size={18} /> : <Clapperboard size={18} />}</span>
         <div className="agx-media-heading">
           <h2>{title}</h2>
-          <p>{subtitle} · 结果留在下面，不进对话</p>
+          <p>
+            {model ? model.label + ' · ' + model.platform + ' · 每次 ' + price + ' 积分' : '正在读取可用模型…'}
+            {model && !model.verified ? ' · 未真调' : ''}
+          </p>
         </div>
       </header>
 
-        <div className="agx-media-body">
-          <div className="agx-media-model">
-            <span className="agx-mono">{image ? 'gpt-image-2' : 'Seedance 2.0 Fast'}</span>
-            <span>{image ? '每次一张' : '每次一条'}</span>
+      <div className="agx-media-body">
+        <div className="agx-qc-params" role="group" aria-label="生成参数">
+          <Capsule
+            label="模型"
+            value={model?.id ?? ''}
+            options={catalog.map((item) => ({
+              value: item.id,
+              // 没真调过的模型在菜单里就标出来，免得用户以为它和主模型一样验过
+              label: item.verified ? item.label : item.label + ' · 未真调',
+            }))}
+            onChange={(value) => setSelected({ model: value, mode: '', ratio: '', duration: 0, resolution: '' })}
+            disabled={active || catalog.length === 0}
+            title="换模型会按新模型的规格重画比例、时长与清晰度"
+          />
+          <Capsule
+            label="方式"
+            value={mode?.id ?? ''}
+            options={(model?.modes ?? []).map((item) => ({ value: item.id, label: item.label }))}
+            onChange={(value) => setSelected((current) => ({ ...current, mode: value }))}
+            disabled={active || !model}
+            title={mode?.hint}
+          />
+          <Capsule
+            label="比例"
+            value={ratio}
+            options={(model?.ratios ?? []).map((item) => ({ value: item, label: item }))}
+            onChange={(value) => setSelected((current) => ({ ...current, ratio: value }))}
+            disabled={active || !model}
+          />
+          {!image ? (
+            <Capsule
+              label="时长"
+              value={String(duration)}
+              options={(model?.durations ?? []).map((item) => ({ value: String(item), label: item + 's' }))}
+              onChange={(value) => setSelected((current) => ({ ...current, duration: Number(value) }))}
+              disabled={active || !model}
+            />
+          ) : null}
+          {!image ? (
+            <Capsule
+              label="清晰度"
+              value={resolution}
+              options={(model?.resolutions ?? []).map((item) => ({ value: item, label: item }))}
+              onChange={(value) => setSelected((current) => ({ ...current, resolution: value }))}
+              disabled={active || !model}
+            />
+          ) : null}
+        </div>
+
+        <div className={'agx-qc-refs' + (maxRefs === 0 ? ' is-off' : '')}>
+          <div className="agx-qc-refs-head">
+            <span>
+              参考素材
+              <b>{maxRefs === 0 ? '当前方式不收' : assets.length + ' / ' + maxRefs}</b>
+            </span>
+            <div className="agx-qc-refs-actions">
+              <button
+                type="button"
+                className="vq-button vq-button--ghost"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={active || uploading || maxRefs === 0}
+              >
+                <Upload size={13} />
+                {uploading ? '上传中…' : '上传'}
+              </button>
+              <button
+                type="button"
+                className="vq-button vq-button--ghost"
+                onClick={() => {
+                  // 打开素材库时重取一次：另一个页签刚传的素材也要能直接挑到
+                  if (!pickerOpen) {
+                    listMediaAssets(20)
+                      .then((response) => setLibrary(response.assets || []))
+                      .catch(() => undefined)
+                  }
+                  setPickerOpen((value) => !value)
+                }}
+                disabled={active}
+              >
+                <FolderOpen size={13} />
+                素材库
+                {library.length ? ' · ' + library.length : ''}
+              </button>
+            </div>
           </div>
 
-          <label className="agx-media-field">
-            <span>
-              提示词
-              <b>{prompt.length}/1200</b>
-            </span>
-            <textarea
-              ref={promptRef}
-              rows={3}
-              value={prompt}
-              maxLength={1200}
-              onChange={(event) => setPrompt(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-                  event.preventDefault()
-                  void submit()
-                }
-              }}
-              placeholder={image ? '描述画面主体、风格、光线与构图，例如：一只橘猫坐在窗台上，清晨侧光，35mm 胶片质感' : '描述镜头、动作与氛围，例如：海边日落，慢镜头推近，暖色逆光'}
-              disabled={active}
-            />
-          </label>
-
-          {image ? (
-            <div className="agx-media-field">
-              <span>比例</span>
-              <div className="agx-media-seg" role="group" aria-label="图片比例">
-                {IMAGE_RATIO_OPTIONS.map((option) => (
+          {assets.length > 0 ? (
+            <ul className="agx-qc-ref-grid">
+              {assets.map((asset) => (
+                <li className="agx-qc-ref" key={asset.id}>
+                  <span className="agx-qc-ref-thumb">
+                    {asset.kind === 'video' ? (
+                      <video src={asset.previewUrl} muted playsInline preload="metadata" />
+                    ) : (
+                      <img src={asset.previewUrl} alt={asset.name} />
+                    )}
+                    {asset.kind === 'video' ? <em className="agx-qc-ref-kind">视频</em> : null}
+                  </span>
+                  <span className="agx-qc-ref-copy">
+                    <strong title={asset.name}>{asset.name}</strong>
+                    <small>{describeRef(asset)}</small>
+                  </span>
                   <button
                     type="button"
-                    key={option.value}
-                    className={ratio === option.value ? 'is-active' : ''}
-                    aria-pressed={ratio === option.value}
-                    onClick={() => setRatio(option.value)}
+                    className="agx-qc-ref-remove"
+                    onClick={() => setAssets((items) => items.filter((item) => item.id !== asset.id))}
                     disabled={active}
+                    aria-label={'移除 ' + asset.name}
                   >
-                    {option.label}
+                    <X size={12} />
                   </button>
-                ))}
-              </div>
-            </div>
+                </li>
+              ))}
+            </ul>
           ) : (
-            <>
-              <div className="agx-media-field">
-                <span>比例</span>
-                <div className="agx-media-seg" role="group" aria-label="视频比例">
-                  {VIDEO_RATIO_OPTIONS.map((option) => (
-                    <button
-                      type="button"
-                      key={option.value}
-                      className={videoRatio === option.value ? 'is-active' : ''}
-                      aria-pressed={videoRatio === option.value}
-                      onClick={() => setVideoRatio(option.value)}
-                      disabled={active}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="agx-media-pair">
-                <div className="agx-media-field">
-                  <span>时长</span>
-                  <div className="agx-media-seg" role="group" aria-label="视频时长">
-                    {([4, 8] as VideoDuration[]).map((value) => (
-                      <button
-                        type="button"
-                        key={value}
-                        className={duration === value ? 'is-active' : ''}
-                        aria-pressed={duration === value}
-                        onClick={() => setDuration(value)}
-                        disabled={active}
-                      >
-                        {value}s
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="agx-media-field">
-                  <span>分辨率</span>
-                  <div className="agx-media-seg" role="group" aria-label="视频分辨率">
-                    {(['480p', '720p'] as VideoResolution[]).map((value) => (
-                      <button
-                        type="button"
-                        key={value}
-                        className={resolution === value ? 'is-active' : ''}
-                        aria-pressed={resolution === value}
-                        onClick={() => setResolution(value)}
-                        disabled={active}
-                      >
-                        {value}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </>
+            <p className="agx-qc-refs-hint">{mode?.hint || '添加参考素材后按它生成'}</p>
           )}
-
-          <div className="agx-media-cost">
-            <span>
-              本次 <strong>{price}</strong> 积分
-              {credits?.balance !== null && credits?.balance !== undefined ? (
-                <>
-                  {' '}· 当前余额 <strong>{credits.balance}</strong> 积分
-                </>
-              ) : null}
-            </span>
-            <span className="agx-mono">失败全额退回</span>
-          </div>
-
-          {error && !task ? (
-            <div className="agx-media-error" role="alert">
-              <AlertCircle size={15} />
-              <div>
-                <strong>没有生成</strong>
-                <p>{error}</p>
-                <small>本次未扣积分{error.includes('积分不足') ? '，充值通道未开通，请联系管理员发放' : ''}</small>
-              </div>
-            </div>
+          {maxRefs === 0 && assets.length > 0 ? (
+            <p className="agx-qc-refs-hint">
+              当前方式不用参考素材：切到「{model?.modes.find((item) => item.maxRefs > 0)?.label ?? '参考'}」才会带上。
+            </p>
           ) : null}
 
-          {busy && !task ? (
-            <div className="agx-media-running" role="status">
-              <span className="agx-media-spinner" />
-              <div>
-                <strong>{image ? '正在生成图片' : '正在提交视频任务'}</strong>
-                <p>{image ? '平台通道已收到请求，完成后会自动显示结果。' : '提交成功后每 2.5 秒查询一次进度。'}</p>
-              </div>
-            </div>
-          ) : null}
-
-          {task?.status === 'processing' ? (
-            <div className="agx-media-progress" role="status">
-              <div className="agx-media-progress-head">
-                <span className="agx-media-spinner" />
-                <strong>{image ? '出图生成中' : '视频生成中'} · 已用时 <span className="agx-mono">{clockOf(elapsed)}</span></strong>
-                <span className="agx-mono">每 2.5s 查询</span>
-              </div>
-              <div className={'agx-media-progress-track' + (task.progress === null ? ' is-indeterminate' : '')}>
-                <span style={task.progress === null ? undefined : { width: task.progress + '%' }} />
-              </div>
-              <p>
-                {image
-                  ? '任务已经交给上游，出图一般 20～90 秒，最长等到 4 分钟；关掉这个窗口也会继续跑完，结果会留在下面的「最近生成」里。'
-                  : task.progress === null
-                    ? '上游还没有返回百分比；页面按任务状态与已用时间如实显示，不编进度。'
-                    : '上游进度 ' + task.progress + '%。'}
-              </p>
-              {pollError ? <p className="agx-media-poll-warning">{pollError}</p> : null}
-            </div>
-          ) : null}
-
-          {task?.status === 'succeeded' ? (
-            <div className="agx-media-result">
-              <div className="agx-media-result-head">
-                <span className="agx-chip agx-chip--pass">生成完成</span>
-                <span className="agx-mono">{(image ? '图片' : '视频') + ' · ' + formatBytes(task.file?.bytes ?? 0)}</span>
-              </div>
-              {image ? (
-                <img className="agx-media-image" src={task.downloadUrl} alt={task.prompt} />
-              ) : (
-                <video className="agx-media-video" src={task.downloadUrl} controls playsInline preload="metadata" />
-              )}
-              <div className="agx-media-result-foot">
-                <span className="agx-mono">{task.id}</span>
-                <a className="vq-button vq-button--ghost" href={task.downloadUrl} download>
-                  <Download size={13} />
-                  下载{(image ? '图片' : '视频')}
-                </a>
-              </div>
-            </div>
-          ) : null}
-
-          {task?.status === 'failed' ? (
-            <div className="agx-media-error" role="alert">
-              <AlertCircle size={15} />
-              <div>
-                <strong>生成失败</strong>
-                <p>{error || task.error || '上游没有返回结果'}</p>
-                <small>
-                  {task.credits.refunded
-                    ? '已全额退还 ' + task.credits.cost + ' 积分（任务号 ' + task.id + '）'
-                    : '退款未完成：账本未确认退回，请联系管理员并带上任务号 ' + task.id}
-                </small>
-              </div>
-            </div>
-          ) : null}
-          {recent.length > 0 ? (
-            <div className="agx-media-recent">
-              <div className="agx-media-recent-head">
-                <span>最近生成</span>
-                <span>只列你自己的任务 · 已列 {recent.length} 条</span>
-              </div>
-              <ul>
-                {recent.map((item) => (
-                  <li key={item.id} className={'agx-media-recent-row' + (item.id === task?.id ? ' is-current' : '')}>
-                    <button
-                      type="button"
-                      className="agx-media-recent-open"
-                      onClick={() => {
-                        setTask(item)
-                        setError(item.status === 'failed' ? item.error || '生成失败' : '')
-                        setPollError('')
-                      }}
-                      disabled={active}
-                      title="打开这一条"
-                    >
-                      <span className="agx-media-recent-prompt">{item.prompt}</span>
-                      <span className="agx-media-recent-meta">{recentMetaOf(item)}</span>
-                    </button>
-                    {item.status === 'succeeded' ? (
-                      <a className="agx-media-recent-download" href={item.downloadUrl} download>
-                        下载
-                      </a>
-                    ) : (
-                      <span className="agx-media-recent-state">{item.status === 'failed' ? '失败 · 已退 ' + item.credits.cost + ' 积分' : '进行中'}</span>
-                    )}
-                    {item.status === 'failed' && item.error ? (
-                      <p className="agx-media-recent-why" title={item.error}>
-                        {item.error}
-                      </p>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-              {recentHasMore ? (
-                <button type="button" className="agx-media-recent-more" onClick={() => void loadOlder()} disabled={recentLoading}>
-                  {recentLoading ? '读取中…' : '看更早的'}
+          {pickerOpen ? (
+            <div className="agx-qc-library">
+              <div className="agx-qc-library-head">
+                <span>我的素材 · 只列自己传的</span>
+                <button type="button" onClick={() => setPickerOpen(false)} aria-label="收起素材库">
+                  <X size={12} />
                 </button>
-              ) : recentCapped ? (
-                <p className="agx-media-recent-end">只往回找最近 240 个任务，更早的不在这个清单里</p>
-              ) : null}
-              {recentError ? <p className="agx-media-poll-warning">{recentError}</p> : null}
+              </div>
+              {library.length === 0 ? (
+                <p className="agx-qc-refs-hint">还没有传过素材：点「上传」传一张图或一段视频。</p>
+              ) : (
+                <ul>
+                  {library.map((asset) => {
+                    const picked = assets.some((item) => item.id === asset.id)
+                    return (
+                      <li key={asset.id}>
+                        <button
+                          type="button"
+                          className={picked ? 'is-picked' : ''}
+                          onClick={() => toggleAsset(asset)}
+                          aria-pressed={picked}
+                        >
+                          <span className="agx-qc-lib-thumb">
+                            {asset.kind === 'video' ? (
+                              <video src={asset.previewUrl} muted playsInline preload="metadata" />
+                            ) : (
+                              <img src={asset.previewUrl} alt={asset.name} />
+                            )}
+                          </span>
+                          <span className="agx-qc-lib-copy">
+                            <strong>{asset.name}</strong>
+                            <small>{describeRef(asset)}</small>
+                          </span>
+                          {picked ? <Check size={13} /> : <Plus size={13} />}
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
             </div>
-          ) : null}        </div>
+          ) : null}
 
-        <footer className="agx-media-foot">
-          <span>结果只存在你自己的账号里，别人看不到也下不了。</span>
-          <div>
-            {task?.status === 'succeeded' ? (
-              <button type="button" className="vq-button vq-button--primary" onClick={reset}>
-                <Plus size={14} />
-                再生成
-              </button>
-            ) : task?.status === 'failed' ? (
-              <button type="button" className="vq-button vq-button--primary" onClick={() => void submit()} disabled={!canSubmit}>
-                <RotateCcw size={14} />
-                重试
-              </button>
-            ) : (
-              <button type="button" className="vq-button vq-button--primary" onClick={() => void submit()} disabled={!canSubmit}>
-                {busy || task?.status === 'processing' ? <span className="agx-media-spinner agx-media-spinner--ink" /> : image ? <ImageIcon size={14} /> : <Clapperboard size={14} />}
-                {busy ? '提交中…' : task?.status === 'processing' ? '生成中…' : image ? '生成图片' : '提交视频'}
-              </button>
-            )}
+          {refError ? (
+            <p className="agx-qc-refs-error" role="alert">
+              {refError}
+            </p>
+          ) : null}
+          <input ref={fileInputRef} type="file" accept="image/*,video/*" hidden onChange={pickFile} />
+        </div>
+
+        <label className="agx-media-field">
+          <span>
+            提示词
+            <b>
+              {prompt.length}/{MEDIA_MAX_PROMPT}
+            </b>
+          </span>
+          <textarea
+            ref={promptRef}
+            rows={3}
+            value={prompt}
+            maxLength={MEDIA_MAX_PROMPT}
+            onChange={(event) => setPrompt(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+                event.preventDefault()
+                void submit()
+              }
+            }}
+            placeholder={
+              image
+                ? '描述画面主体、风格、光线与构图，例如：一只橘猫坐在窗台上，清晨侧光，35mm 胶片质感'
+                : '描述镜头、动作与氛围，例如：海边日落，慢镜头推近，暖色逆光'
+            }
+            disabled={active}
+          />
+        </label>
+
+        <div className="agx-media-cost">
+          <span>
+            本次 <strong>{price}</strong> 积分
+            {credits?.balance !== null && credits?.balance !== undefined ? (
+              <>
+                {' '}· 当前余额 <strong>{credits.balance}</strong> 积分
+              </>
+            ) : null}
+          </span>
+          <span className="agx-mono">{blockedReason || '失败全额退回'}</span>
+        </div>
+
+        {error && !task ? (
+          <div className="agx-media-error" role="alert">
+            <AlertCircle size={15} />
+            <div>
+              <strong>没有生成</strong>
+              <p>{error}</p>
+              <small>本次未扣积分{error.includes('积分不足') ? '，充值通道未开通，请联系管理员发放' : ''}</small>
+            </div>
           </div>
-        </footer>
+        ) : null}
+
+        {busy && !task ? (
+          <div className="agx-media-running" role="status">
+            <span className="agx-media-spinner" />
+            <div>
+              <strong>{image ? '正在生成图片' : '正在提交视频任务'}</strong>
+              <p>{image ? '平台通道已收到请求，完成后会自动显示结果。' : '提交成功后每 2.5 秒查询一次进度。'}</p>
+            </div>
+          </div>
+        ) : null}
+
+        {task?.status === 'processing' ? (
+          <div className="agx-media-progress" role="status">
+            <div className="agx-media-progress-head">
+              <span className="agx-media-spinner" />
+              <strong>
+                {image ? '出图生成中' : '视频生成中'} · 已用时 <span className="agx-mono">{clockOf(elapsed)}</span>
+              </strong>
+              <span className="agx-mono">每 2.5s 查询</span>
+            </div>
+            <div className={'agx-media-progress-track' + (task.progress === null ? ' is-indeterminate' : '')}>
+              <span style={task.progress === null ? undefined : { width: task.progress + '%' }} />
+            </div>
+            <p>
+              {image
+                ? '任务已经交给上游，出图一般 20～90 秒，最长等到 4 分钟；关掉这个窗口也会继续跑完，结果会留在下面的「最近生成」里。'
+                : task.progress === null
+                  ? '上游还没有返回百分比；页面按任务状态与已用时间如实显示，不编进度。'
+                  : '上游进度 ' + task.progress + '%。'}
+            </p>
+            {pollError ? <p className="agx-media-poll-warning">{pollError}</p> : null}
+          </div>
+        ) : null}
+
+        {task?.status === 'succeeded' ? (
+          <div className="agx-media-result">
+            <div className="agx-media-result-head">
+              <span className="agx-chip agx-chip--pass">生成完成</span>
+              <span className="agx-mono">
+                {(image ? '图片' : '视频') + ' · ' + formatBytes(task.file?.bytes ?? 0)}
+                {task.assets.length ? ' · 参考 ' + task.assets.length : ''}
+              </span>
+            </div>
+            {image ? (
+              <img className="agx-media-image" src={task.downloadUrl} alt={task.prompt} />
+            ) : (
+              <video className="agx-media-video" src={task.downloadUrl} controls playsInline preload="metadata" />
+            )}
+            <div className="agx-media-result-foot">
+              <span className="agx-mono">{task.id}</span>
+              <a className="vq-button vq-button--ghost" href={task.downloadUrl} download>
+                <Download size={13} />
+                下载{image ? '图片' : '视频'}
+              </a>
+            </div>
+          </div>
+        ) : null}
+
+        {task?.status === 'failed' ? (
+          <div className="agx-media-error" role="alert">
+            <AlertCircle size={15} />
+            <div>
+              <strong>生成失败</strong>
+              <p>{error || task.error || '上游没有返回结果'}</p>
+              <small>
+                {task.credits.refunded
+                  ? '已全额退还 ' + task.credits.cost + ' 积分（任务号 ' + task.id + '）'
+                  : '退款未完成：账本未确认退回，请联系管理员并带上任务号 ' + task.id}
+              </small>
+            </div>
+          </div>
+        ) : null}
+
+        {recent.length > 0 ? (
+          <div className="agx-media-recent">
+            <div className="agx-media-recent-head">
+              <span>最近生成</span>
+              <span>只列你自己的任务 · 已列 {recent.length} 条</span>
+            </div>
+            <ul>
+              {recent.map((item) => (
+                <li key={item.id} className={'agx-media-recent-row' + (item.id === task?.id ? ' is-current' : '')}>
+                  <button
+                    type="button"
+                    className="agx-media-recent-open"
+                    onClick={() => {
+                      setTask(item)
+                      setError(item.status === 'failed' ? item.error || '生成失败' : '')
+                      setPollError('')
+                    }}
+                    disabled={active}
+                    title="打开这一条"
+                  >
+                    <span className="agx-media-recent-prompt">{item.prompt}</span>
+                    <span className="agx-media-recent-meta">{recentMetaOf(item)}</span>
+                  </button>
+                  {item.status === 'succeeded' ? (
+                    <a className="agx-media-recent-download" href={item.downloadUrl} download>
+                      下载
+                    </a>
+                  ) : (
+                    <span className="agx-media-recent-state">
+                      {item.status === 'failed' ? '失败 · 已退 ' + item.credits.cost + ' 积分' : '进行中'}
+                    </span>
+                  )}
+                  {item.status === 'failed' && item.error ? (
+                    <p className="agx-media-recent-why" title={item.error}>
+                      {item.error}
+                    </p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+            {recentHasMore ? (
+              <button type="button" className="agx-media-recent-more" onClick={() => void loadOlder()} disabled={recentLoading}>
+                {recentLoading ? '读取中…' : '看更早的'}
+              </button>
+            ) : recentCapped ? (
+              <p className="agx-media-recent-end">只往回找最近 240 个任务，更早的不在这个清单里</p>
+            ) : null}
+            {recentError ? <p className="agx-media-poll-warning">{recentError}</p> : null}
+          </div>
+        ) : null}
+      </div>
+
+      <footer className="agx-media-foot">
+        <span>结果只存在你自己的账号里，别人看不到也下不了。</span>
+        <div>
+          {task?.status === 'succeeded' ? (
+            <button type="button" className="vq-button vq-button--primary" onClick={reset}>
+              <Plus size={14} />
+              再生成
+            </button>
+          ) : task?.status === 'failed' ? (
+            <button type="button" className="vq-button vq-button--primary" onClick={() => void submit()} disabled={!canSubmit}>
+              <RotateCcw size={14} />
+              重试
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="vq-button vq-button--primary"
+              onClick={() => void submit()}
+              disabled={!canSubmit}
+              title={blockedReason || undefined}
+            >
+              {busy || task?.status === 'processing' ? (
+                <span className="agx-media-spinner agx-media-spinner--ink" />
+              ) : image ? (
+                <ImageIcon size={14} />
+              ) : (
+                <Clapperboard size={14} />
+              )}
+              {busy ? '提交中…' : task?.status === 'processing' ? '生成中…' : image ? '生成图片' : '提交视频'}
+            </button>
+          )}
+        </div>
+      </footer>
     </section>
   )
 }
-
 export function AgentsPage({
   onCreate,
   onOpenAgent,
@@ -1186,6 +1481,8 @@ export function AgentsPage({
   // 预设的窗口工具：生图 / 生视频，打开的是生成表单而不是对话
   // 创作方式：对话走智能体，图片 / 视频走同一条生成表单（不再开单独的窗口）
   const [composerMode, setComposerMode] = useState<'chat' | MediaKind>('chat')
+  // 可用的生成模型与规格：服务端 media-models 是唯一真源，界面不自己写死模型名
+  const [mediaModels, setMediaModels] = useState<MediaModelList | null>(null)
   // 模型服务状态：额度 / 凭证这类账号级故障要在输入前就说清楚，而不是让人白点一次
   const [modelState, setModelState] = useState<ModelServiceState | null>(null)
   const [rechecking, setRechecking] = useState(false)
@@ -1231,6 +1528,10 @@ export function AgentsPage({
     getModelService()
       .then((next) => { if (alive) setModelState(next.model) })
       .catch(() => { if (alive) setModelState(null) })
+    // 快捷创作能选哪些模型：服务端说了算，界面照它画下拉
+    listMediaModels()
+      .then((next) => { if (alive) setMediaModels(next) })
+      .catch(() => { if (alive) setMediaModels(null) })
     return () => { alive = false }
   }, [])
 
@@ -2152,12 +2453,21 @@ export function AgentsPage({
             </div>
               </>
             ) : (
-              <MediaGenPanel
-                kind={composerMode}
-                onCreditsChanged={() => {
-                  getCredits(1).then(setCredits).catch(() => undefined)
-                }}
-              />
+              // 图片 / 视频两个面板都挂着，只把非当前的隐藏：来回切的时候提示词、参数、
+              // 参考素材、正在跑的任务都还在原处（用户 2026-11-18 明确要求文本可保留可调整）。
+              (['image', 'video'] as MediaKind[]).map((mode) => (
+                <div key={mode} hidden={composerMode !== mode}>
+                  <MediaComposer
+                    kind={mode}
+                    catalog={mediaModels?.[mode] ?? []}
+                    defaultModel={mediaModels?.defaults[mode] ?? ''}
+                    onCreditsChanged={() => {
+                      getCredits(1).then(setCredits).catch(() => undefined)
+                    }}
+                    onToast={onToast}
+                  />
+                </div>
+              ))
             )}
           </div>
         </div>
