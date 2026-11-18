@@ -1338,6 +1338,28 @@
 .agx-md strong {
   font-weight: 600;
 }
+.agx-md a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.agx-md-quote {
+  margin: 0 0 12px;
+  padding-left: 12px;
+  border-left: 2px solid var(--line-strong);
+  color: var(--muted);
+}
+.agx-md-quote p {
+  margin: 0 0 8px;
+}
+.agx-md-quote p:last-child {
+  margin-bottom: 0;
+}
+.agx-md-rule {
+  margin: 16px 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
 
 /* 模型服务不可用：贴在输入卡片顶部，说清原因与「不扣积分」，把重试决定留给用户 */
 .agx-model-note {
@@ -2572,6 +2594,19 @@
 
 .qc-msg--user .qc-bubble { background: var(--ink); color: var(--surface-raised); border-color: var(--ink); }
 
+/* 回答按 Markdown 排版（r220）：标题、列表、表格、代码块各归各位，不再把 ** 和 | 原样吐出来。
+   气泡本身是 pre-wrap（为了流式时保住模型自己的换行），块级排版要改回 normal，
+   段内换行由 <br> 补，所以不会丢行。用户自己发的话仍然按纯文本显示，不解析。 */
+.qc-bubble.qc-md {
+  font-size: 15px;
+  white-space: normal;
+  padding: 12px 16px;
+}
+.qc-bubble.qc-md a { color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
+.qc-bubble.qc-md a:hover { color: var(--muted); }
+.qc-bubble.qc-md .agx-md-table,
+.qc-bubble.qc-md .agx-md-code { max-width: 100%; box-sizing: border-box; }
+
 .qc-bubble--running {
   display: inline-flex;
   align-items: center;
@@ -2812,6 +2847,14 @@
 
 @media (max-width: 560px) {
   .qc-chip-name, .qc-file-name, .qc-link-name { max-width: 128px; }
+  /* 表格在窄屏不横着拖：表头允许换行、字号降一档，宁可排两行，
+     也别把「目的」那一列藏在滚动条后面 */
+  .qc-bubble.qc-md { padding: 12px; }
+  .qc-bubble.qc-md .agx-md-table th { white-space: normal; }
+  /* 窄屏按容器宽度均分列：中文本身可以逐字断行，固定布局比「按内容撑开再横向拖」好读 */
+  /* nav.css 给对话预设的表格压了 480px 下限，这里必须显式收回，否则窄屏仍在容器里横滚 */
+  .qc-bubble.qc-md .agx-md-table table { width: 100%; min-width: 0; table-layout: fixed; font-size: 12px; }
+  .qc-bubble.qc-md .agx-md-table td { overflow-wrap: anywhere; }
 }
 
 

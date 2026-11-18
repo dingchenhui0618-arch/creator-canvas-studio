@@ -10,6 +10,7 @@ import {
 } from '../api/chat'
 import type { ChatConversation, ChatFile, ChatSummary, ChatToolOptions } from '../api/chat'
 import { getCredits } from '../api/credits'
+import { renderMarkdown } from '../lib/markdown'
 
 // 快捷创作的「对话」（r214）：一页 DeepSeek —— 长上下文、联网搜索、读链接、思考模式。
 // 为什么单独一个组件：原来那块是「对话预设」的短轮问答（带输出类型与结构化草稿），
@@ -329,7 +330,11 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
           ) : (
             messages.map((message) => (
               <div className={'qc-msg qc-msg--' + message.role} key={message.id}>
-                <div className="qc-bubble">{message.content}</div>
+                {message.role === 'assistant' ? (
+                  <div className="qc-bubble qc-md agx-md">{renderMarkdown(message.content)}</div>
+                ) : (
+                  <div className="qc-bubble">{message.content}</div>
+                )}
                 {message.files?.length ? (
                   <div className="qc-files">
                     {message.files.map((file) => (

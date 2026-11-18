@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ChangeEvent, ReactNode } from 'react'
+import type { ChangeEvent } from 'react'
 import {
   AlertCircle,
   ArrowLeft,
@@ -61,6 +61,7 @@ import PageHead from '../components/PageHead'
 import QuickChat from '../components/QuickChat'
 import { useModelOptions } from '../components/ModelSwitch'
 import { Tag } from '../components/ui'
+import { renderMarkdown } from '../lib/markdown'
 import '../styles/agents.css'
 
 // 创作方式：一个输入框，三种去向。对话交给对话预设，图片 / 视频走服务端生成通道。
@@ -194,172 +195,6 @@ async function copyText(value: string) {
   } catch {
     return false
   }
-}
-
-// 极简 Markdown 渲染：只覆盖模型常见的标题 / 列表 / 表格 / 加粗 / 行内代码 / 代码块，
-// 不引入新依赖，也不使用 dangerouslySetInnerHTML。
-function renderInline(text: string, keyBase: string): ReactNode[] {
-  const nodes: ReactNode[] = []
-  const pattern = /(\*\*[^*]+\*\*|`[^`]+`)/g
-  let last = 0
-  let match: RegExpExecArray | null
-  while ((match = pattern.exec(text))) {
-    if (match.index > last) nodes.push(text.slice(last, match.index))
-    const token = match[0]
-    if (token.startsWith('**')) {
-      nodes.push(<strong key={keyBase + '-' + match.index}>{token.slice(2, -2)}</strong>)
-    } else {
-      nodes.push(<code key={keyBase + '-' + match.index}>{token.slice(1, -1)}</code>)
-    }
-    last = match.index + token.length
-  }
-  if (last < text.length) nodes.push(text.slice(last))
-  return nodes
-}
-
-const TABLE_SEPARATOR = /^\s*\|?[\s:|-]+\|?\s*$/
-
-function splitRow(line: string) {
-  return line
-    .trim()
-    .replace(/^\|/, '')
-    .replace(/\|$/, '')
-    .split('|')
-    .map((cell) => cell.trim())
-}
-
-function isBlockStart(line: string, next?: string) {
-  if (!line.trim()) return true
-  if (line.trim().startsWith('```')) return true
-  if (/^(#{1,6})\s+/.test(line)) return true
-  if (/^\s*[-*]\s+/.test(line)) return true
-  if (/^\s*\d+[.、)]\s+/.test(line)) return true
-  if (line.trim().startsWith('|') && next !== undefined && TABLE_SEPARATOR.test(next) && next.includes('-')) return true
-  return false
-}
-
-function renderMarkdown(source: string): ReactNode[] {
-  const lines = source.replace(/\r\n/g, '\n').split('\n')
-  const blocks: ReactNode[] = []
-  let index = 0
-  let key = 0
-  while (index < lines.length) {
-    const line = lines[index]
-    if (!line.trim()) {
-      index += 1
-      continue
-    }
-    if (line.trim().startsWith('```')) {
-      const code: string[] = []
-      index += 1
-      while (index < lines.length && !lines[index].trim().startsWith('```')) {
-        code.push(lines[index])
-        index += 1
-      }
-      index += 1
-      blocks.push(
-        <pre className="agx-md-code" key={'code-' + key++}>
-          <code>{code.join('\n')}</code>
-        </pre>,
-      )
-      continue
-    }
-    if (line.trim().startsWith('|') && index + 1 < lines.length && TABLE_SEPARATOR.test(lines[index + 1]) && lines[index + 1].includes('-')) {
-      const header = splitRow(line)
-      index += 2
-      const rows: string[][] = []
-      while (index < lines.length && lines[index].trim().startsWith('|')) {
-        rows.push(splitRow(lines[index]))
-        index += 1
-      }
-      blocks.push(
-        <div className="agx-md-table" key={'table-' + key++}>
-          <table>
-            <thead>
-              <tr>
-                {header.map((cell, cellIndex) => (
-                  <th key={cellIndex}>{renderInline(cell, 'th-' + key + '-' + cellIndex)}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, rowIndex) => (
-                <tr key={rowIndex}>
-                  {row.map((cell, cellIndex) => (
-                    <td key={cellIndex}>{renderInline(cell, 'td-' + key + '-' + rowIndex + '-' + cellIndex)}</td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>,
-      )
-      continue
-    }
-    const heading = line.match(/^(#{1,6})\s+(.*)$/)
-    if (heading) {
-      const Tag = heading[1].length <= 2 ? 'h3' : 'h4'
-      blocks.push(
-        <Tag className="agx-md-heading" key={'h-' + key++}>
-          {renderInline(heading[2], 'h-' + key)}
-        </Tag>,
-      )
-      index += 1
-      continue
-    }
-    if (/^\s*[-*]\s+/.test(line)) {
-      const items: string[] = []
-      while (index < lines.length && /^\s*[-*]\s+/.test(lines[index])) {
-        items.push(lines[index].replace(/^\s*[-*]\s+/, ''))
-        index += 1
-      }
-      blocks.push(
-        <ul className="agx-md-list" key={'ul-' + key++}>
-          {items.map((item, itemIndex) => (
-            <li key={itemIndex}>{renderInline(item, 'ul-' + key + '-' + itemIndex)}</li>
-          ))}
-        </ul>,
-      )
-      continue
-    }
-    if (/^\s*\d+[.、)]\s+/.test(line)) {
-      const items: string[] = []
-      while (index < lines.length && /^\s*\d+[.、)]\s+/.test(lines[index])) {
-        items.push(lines[index].replace(/^\s*\d+[.、)]\s+/, ''))
-        index += 1
-      }
-      blocks.push(
-        <ol className="agx-md-list" key={'ol-' + key++}>
-          {items.map((item, itemIndex) => (
-            <li key={itemIndex}>{renderInline(item, 'ol-' + key + '-' + itemIndex)}</li>
-          ))}
-        </ol>,
-      )
-      continue
-    }
-    const paragraph: string[] = []
-    while (index < lines.length && !isBlockStart(lines[index], lines[index + 1])) {
-      paragraph.push(lines[index].trim())
-      index += 1
-    }
-    if (paragraph.length) {
-      blocks.push(
-        <p key={'p-' + key++}>
-          {paragraph.map((part, partIndex) => (
-            <span key={partIndex}>
-              {renderInline(part, 'p-' + key + '-' + partIndex)}
-              {partIndex < paragraph.length - 1 ? <br /> : null}
-            </span>
-          ))}
-        </p>,
-      )
-    } else {
-      // 兜底：不认识的块按原文输出，避免死循环
-      blocks.push(<p key={'raw-' + key++}>{renderInline(line, 'raw-' + key)}</p>)
-      index += 1
-    }
-  }
-  return blocks
 }
 
 function Capsule({
@@ -1669,8 +1504,6 @@ export function AgentsPage({
     const timer = window.setTimeout(() => setArmedDelete(''), 3200)
     return () => window.clearTimeout(timer)
   }, [armedDelete])
-
-
 
   const resetConversation = useCallback(() => {
     setMessages([])
