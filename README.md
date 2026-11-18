@@ -4955,4 +4955,34 @@ r191 把比例做成界面三档后留了条边界：**只有 9:16 真出过片�
 
 门禁：**1361 / 1361** 测试、lint 0 error / 16 warning（560 文件）、`tsc -b` 干净、密钥扫描 850 文件无命中、build 入口 `index-BmI9fsKN.js`。生产 **0.9.185**，`/api/version` 本地与公网一致，health ok templates 26，回滚点 `20261118-1250-r203tablet`（`ops/rollback.sh --to 1` 回 0.9.184）。边界：只量 320 / 390 / 768 / 900 / 901 / 1024 / 1200 / 1440，别的中间宽度没逐个扫（形态条只在 900 一个断点上切换）；后台大表格仍是容器内横向滚动；本轮没碰接口、没调上游。细节见 `docs/rail-edition-2026-11-18.md`。
 
+## 二百六十四、首屏 884KB → 346KB：nginx 把 JS 漏在压缩之外（2026-11-18，0.9.186）
+
+给「手机上真的有人在用」补一条性能基线：无头 Chrome 按 390×844、禁用缓存打开公网登录页，读 `PerformanceResourceTiming` 的 `transferSize`。首屏 **884,445 B**，其中 `index.js` 一手 **723,465 B** —— 一个字节都没压。而同一个页面里 330KB 的 CSS 只传了 72KB。
+
+压缩是开着的，问题在类型表：
+
+```nginx
+gzip on;
+gzip_types text/css application/javascript application/json image/svg+xml;
+```
+
+响应头是 `Content-Type: text/javascript`。**nginx 1.27 起 `mime.types` 把 `.js` 改成了 `text/javascript`**（旧的是 `application/javascript`），类型对不上就不压。这台机器是 nginx 1.30.2，于是 CSS 一直被压、唯一的入口 JS 一直裸传——从「gzip 是开的、CSS 也是压的」那一面看完全正常，这个洞藏了很久。
+
+改 `deploy/production/nginx-app.conf`（线上那份渲染自同一模板，两边同步）：`gzip_types` 补 `text/javascript`（顺带 `application/manifest+json`、`text/xml`），补 `gzip_vary on`（原来没有 `Vary: Accept-Encoding`，中间层可能把压缩版发给不支持的客户端），`gzip_comp_level` 从默认 1 提到 5。线上改前留了 `.bak-20261118-gzip`，`nginx -t` 通过后 reload。
+
+| 项 | 改前 | 改后 |
+| --- | --- | --- |
+| 首屏总传输 | 884,445 B | **346,247 B**（−61%） |
+| JS 合计 | 736,289 B | **218,322 B**（−70%） |
+| 其中 index.js | 723,765 B | **213,160 B**（3.4:1） |
+| CSS 合计 | 72,269 B | **52,045 B** |
+| 首次内容渲染 | 532 ms | **272 ms** |
+
+服务端三条核对：不带 `Accept-Encoding` 的老客户端仍拿原文 `723,465` 字节；带 `If-None-Match` 仍是 **304**；`Cache-Control: immutable` 未动。浏览器侧 0 条控制台异常、0 条加载失败，只有预期内的 `/api/auth/me` 401。
+
+防漂移：`scripts/check-nginx.mjs` 新增三条断言（必须有 `gzip on`、`gzip_types` 必须含 `text/css` + `text/javascript` + `application/javascript`、必须有 `gzip_vary on`），`test/nginx-template.test.mjs` 加两条反向用例（改成 `gzip off`、删掉 `text/javascript` 都必须报错），从 18 条变 20 条。
+
+门禁：**1363 / 1363** 测试、lint 0 error / 16 warning（560 文件）、`tsc -b` 干净、密钥扫描 851 文件无命中、nginx 配置检查通过、build 入口 `index-BVBgURYY.js`。生产 **0.9.186**，本地与公网 `/api/version` 一致，health ok templates 26，6 个服务 active，回滚点 `20261118-1315-r204gzip`（`ops/rollback.sh --to 1` 回 0.9.185）。边界：只改 `visionqa.wavisionai.cn` 一个 vhost，无限画布（vite dev 反代）与别的站点没动；这台 nginx 没编 brotli，走的是 gzip；`/api/` 的 JSON 此前就已压缩，这一轮只是级别 1→5；产品界面无变化，故无界面截图。细节见 `docs/nginx-gzip-2026-11-18.md`。
+
+
 

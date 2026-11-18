@@ -208,6 +208,21 @@ export function checkAppBody(text, { rendered = false } = {}) {
   const root = bodyOf('/')
   if (root && findDirective(root, 'try_files') === null) issues.push(where + '：location / 没有 try_files，刷新深链接会 404')
 
+  // 静态产物必须真发压缩。2026-11-18 实测：线上 gzip_types 只有 application/javascript，
+  // 而 nginx 1.27 起 .js 的 MIME 是 text/javascript —— CSS 压了（330KB→72KB），723KB 的 index.js 裸传。
+  if (findDirective(outer, 'gzip') !== 'on') {
+    issues.push(where + '：没有 gzip on，静态产物整包裸传（实测 index.js 723KB、index.css 330KB）')
+  }
+  const gzipTypes = (findDirective(outer, 'gzip_types') || '').split(/\s+/).filter(Boolean)
+  for (const mime of ['text/css', 'text/javascript', 'application/javascript']) {
+    if (!gzipTypes.includes(mime)) {
+      issues.push(where + '：gzip_types 少了 ' + mime + ' —— 少 text/javascript 时 nginx 1.27+ 的 .js 不会被压缩')
+    }
+  }
+  if (findDirective(outer, 'gzip_vary') !== 'on') {
+    issues.push(where + '：没有 gzip_vary on，中间层可能把压缩版发给不支持的客户端')
+  }
+
   // 安全头：server 段必须整套；任何自己写了 add_header 的 location 也必须整套（nginx 不会合并）
   const baseHeaders = new Set(headerNames(outer))
   for (const header of SECURITY_HEADERS) if (!baseHeaders.has(header)) issues.push(where + '：顶层（继承的那一层）缺 ' + header)

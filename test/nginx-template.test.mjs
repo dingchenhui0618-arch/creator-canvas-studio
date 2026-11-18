@@ -203,3 +203,15 @@ test('应用段里出现 listen 或证书，检查器必须拦（那些归外壳
   const issues = checkAppBody(read('nginx-app.conf') + '\nserver {\n    listen 8443;\n}\n')
   assert.ok(has(issues, '应用段里出现了 listen'))
 })
+
+test('反向用例：gzip_types 少了 text/javascript，检查器必须拦（.js 会裸传）', () => {
+  const issues = mutated('nginx-app.conf', (text) =>
+    text.replace('gzip_types text/css text/javascript application/javascript', 'gzip_types text/css application/javascript'),
+  )
+  assert.ok(has(issues, 'gzip_types 少了 text/javascript'))
+})
+
+test('反向用例：gzip 关掉，检查器必须拦', () => {
+  const issues = mutated('nginx-app.conf', (text) => text.replace('gzip on;', 'gzip off;'))
+  assert.ok(has(issues, '没有 gzip on'))
+})
