@@ -54,7 +54,7 @@ export const EDITIONS: EditionMeta[] = [
     id: 'user',
     label: '用户生产版',
     mono: 'PRODUCTION',
-    hint: '检索、复刻、模板、智能体、工作流、无限画布',
+    hint: '检索、复刻、模板、快捷创作、工作流、无限画布',
     nav: [],
   },
   {

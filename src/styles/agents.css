@@ -1587,144 +1587,71 @@
   }
 }
 
-/* ---------- 预设智能体：两个窗口工具（生图 / 生视频） ---------- */
-.agx-presets {
-  margin-bottom: var(--space-6);
-}
-.agx-presets-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--space-4);
-  padding-bottom: var(--space-3);
-  border-bottom: 1px solid var(--line-faint);
-}
-.agx-presets-head h2 {
-  margin: var(--space-1) 0 0;
-  color: var(--ink);
-  font-size: var(--text-lg);
-  font-weight: var(--weight-medium);
-  letter-spacing: -0.01em;
-}
-.agx-presets-note {
-  color: var(--faint);
-  font-family: var(--font-mono);
-  font-size: var(--text-mono);
-  letter-spacing: 0.05em;
-}
-.agx-preset-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-3);
-  margin-top: var(--space-3);
-}
-.agx-preset-card {
-  display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) 16px;
-  grid-template-areas:
-    'icon copy arrow'
-    'icon meta arrow';
-  gap: 0 var(--space-3);
+/* ---------- 快捷创作：一个输入框里的三种方式（对话 / 图片 / 视频） ---------- */
+.agx-mode-tabs {
+  display: inline-flex;
   align-items: center;
-  padding: var(--space-3);
-  color: var(--ink);
-  text-align: left;
-  background: var(--surface);
+  gap: var(--space-1);
+  padding: var(--space-1);
+  margin-bottom: var(--space-3);
+  background: var(--surface-soft);
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-pill);
+}
+.agx-mode-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 28px;
+  padding: var(--space-1) var(--space-3);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-pill);
   cursor: pointer;
   transition:
-    border-color var(--dur-1) var(--ease-out),
-    background-color var(--dur-1) var(--ease-out),
-    transform var(--dur-1) var(--ease-out);
+    color var(--dur-1) var(--ease-out),
+    background-color var(--dur-1) var(--ease-out);
 }
-.agx-preset-card:hover {
-  background: var(--surface-raised);
-  border-color: var(--line-strong);
-}
-.agx-preset-card:active {
-  transform: translateY(1px);
-}
-.agx-preset-icon {
-  grid-area: icon;
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
+.agx-mode-tabs button:hover {
   color: var(--ink);
-  background: var(--surface-raised);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
 }
-.agx-preset-copy {
-  grid-area: copy;
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-.agx-preset-copy strong {
+.agx-mode-tabs button.is-active {
   color: var(--ink);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line);
 }
-.agx-preset-copy span {
-  overflow: hidden;
-  color: var(--faint);
-  font-size: var(--text-xs);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.agx-preset-meta {
-  grid-area: meta;
-  margin-top: var(--space-1);
-  color: var(--faint);
-  font-family: var(--font-mono);
-  font-size: var(--text-mono);
-}
-.agx-preset-arrow {
-  grid-area: arrow;
-  align-self: start;
-  margin-top: 2px;
-  color: var(--faint);
-}
-.agx-preset-card:hover .agx-preset-arrow {
-  color: var(--ink);
+.agx-mode-tabs button:focus-visible {
+  outline: 2px solid var(--line-strong);
+  outline-offset: 2px;
 }
 
-/* ---------- 生成窗口 ---------- */
-.agx-media-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  display: flex;
+/* 生成面板长在输入框里：不再有遮罩、不再有独立窗口的边框与阴影 */
+.agx-media-panel {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.agx-media-panel .agx-media-head {
   align-items: center;
-  justify-content: center;
-  padding: var(--space-6);
+  padding: 0 0 var(--space-3);
 }
-.agx-media-scrim {
-  position: absolute;
-  inset: 0;
+.agx-media-panel .agx-media-heading h2 {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+.agx-media-panel .agx-media-body {
+  flex: none;
+  gap: var(--space-3);
+  max-height: 52vh;
   padding: 0;
-  background: rgba(17, 17, 17, 0.36);
-  border: 0;
-  cursor: default;
 }
-.agx-media-scrim:disabled {
-  cursor: default;
+.agx-media-panel .agx-media-foot {
+  padding: var(--space-3) 0 0;
 }
-.agx-media-dialog {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  width: min(720px, 100%);
-  max-height: calc(100vh - 48px);
-  overflow: hidden;
-  background: var(--surface-raised);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 30px 80px rgba(17, 17, 17, 0.22);
-}
+
+/* ---------- 生成表单 ---------- */
 .agx-media-head {
   display: flex;
   flex: 0 0 auto;
@@ -2179,37 +2106,8 @@
 
 
 @media (max-width: 720px) {
-  .agx-preset-grid {
-    grid-template-columns: 1fr;
-  }
-  /* 390 宽实测：一张卡片只剩 184px 给说明，「提示词 → 时长 / 分辨率 → 进度 / 下载」
-     被省略号截成「…进度 / 下…」，手机上又没有 hover 可看全。窄屏直接换行，宁可多一行。 */
-  .agx-preset-copy span {
-    overflow: visible;
-    text-overflow: clip;
-    white-space: normal;
-  }
-  .agx-presets-head {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: var(--space-1);
-  }
-  .agx-media-backdrop {
-    align-items: stretch;
-    padding: 0;
-  }
-  .agx-media-dialog {
-    width: 100%;
-    height: 100%;
-    max-height: 100vh;
-    border: 0;
-    border-radius: 0;
-  }
-  .agx-media-head {
-    padding: var(--space-3);
-  }
-  .agx-media-body {
-    padding: var(--space-3);
+  .agx-media-panel .agx-media-body {
+    max-height: none;
   }
   .agx-media-pair {
     grid-template-columns: 1fr;

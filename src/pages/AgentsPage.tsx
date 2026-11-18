@@ -4,7 +4,6 @@ import {
   AlertCircle,
   ArrowLeft,
   ArrowUp,
-  ArrowUpRight,
   Bot,
   Check,
   ChevronDown,
@@ -52,6 +51,13 @@ import PageHead from '../components/PageHead'
 import { useModelOptions } from '../components/ModelSwitch'
 import { Tag } from '../components/ui'
 import '../styles/agents.css'
+
+// 创作方式：一个输入框，三种去向。对话交给智能体，图片 / 视频走服务端生成通道。
+const COMPOSER_MODES: { id: 'chat' | MediaKind; label: string }[] = [
+  { id: 'chat', label: '对话' },
+  { id: 'image', label: '图片' },
+  { id: 'video', label: '视频' },
+]
 
 type ChatMessage = {
   id: string
@@ -658,15 +664,13 @@ const VIDEO_RATIO_OPTIONS: { value: VideoRatio; label: string }[] = [
   { value: '1:1', label: '1:1 · 方形' },
 ]
 
-// 预设智能体不是聊天：点开是一张生成表单，提交后由服务端扣积分、调平台通道、落盘。
-// 这个窗口只展示真实任务状态；没有结果就不摆假预览，失败就把退款状态写清楚。
-function MediaGenDialog({
+// 快捷创作里的生图 / 生视频不是聊天：它是一张生成表单，提交后由服务端扣积分、调平台通道、落盘。
+// 面板只展示真实任务状态；没有结果就不摆假预览，失败就把退款状态写清楚。
+function MediaGenPanel({
   kind,
-  onClose,
   onCreditsChanged,
 }: {
   kind: MediaKind
-  onClose: () => void
   onCreditsChanged: () => void
 }) {
   const image = kind === 'image'
@@ -777,22 +781,6 @@ function MediaGenDialog({
   }, [])
 
   useEffect(() => {
-    const previous = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = previous
-    }
-  }, [])
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !active) onClose()
-    }
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
-  }, [active, onClose])
-
-  useEffect(() => {
     if (!task || task.status !== 'processing') return
     const startedAt = new Date(task.createdAt).getTime()
     const update = () => setElapsed(Math.max(0, Date.now() - startedAt))
@@ -870,40 +858,23 @@ function MediaGenDialog({
     setElapsed(0)
   }
 
-  const requestClose = () => {
-    if (!active) onClose()
-  }
-
-  const title = image ? '生图智能体' : '生视频智能体'
+  const title = image ? '生图' : '生视频'
   const subtitle = image ? '提示词 · 比例 · 预览下载' : '提示词 · 比例 · 时长 · 分辨率'
 
   return (
-    <div className="agx-media-backdrop">
-      <button type="button" className="agx-media-scrim" aria-label="关闭生成窗口" onClick={requestClose} disabled={active} />
-      <section className="agx-media-dialog" role="dialog" aria-modal="true" aria-labelledby="agx-media-title">
-        <header className="agx-media-head">
-          <span className="agx-media-icon">{image ? <ImageIcon size={18} /> : <Clapperboard size={18} />}</span>
-          <div className="agx-media-heading">
-            <span className="agx-kicker">WINDOW TOOL · {image ? 'IMAGE' : 'VIDEO'}</span>
-            <h2 id="agx-media-title">{title}</h2>
-            <p>{subtitle} · 不进入对话</p>
-          </div>
-          <button
-            type="button"
-            className="vq-button vq-button--icon"
-            onClick={requestClose}
-            disabled={active}
-            aria-label={active ? '生成中，完成后可关闭' : '关闭'}
-            title={active ? '生成中，完成后可关闭' : '关闭'}
-          >
-            <X size={15} />
-          </button>
-        </header>
+    <section className="agx-media-panel" aria-label={title}>
+      <header className="agx-media-head">
+        <span className="agx-media-icon">{image ? <ImageIcon size={18} /> : <Clapperboard size={18} />}</span>
+        <div className="agx-media-heading">
+          <h2>{title}</h2>
+          <p>{subtitle} · 结果留在下面，不进对话</p>
+        </div>
+      </header>
 
         <div className="agx-media-body">
           <div className="agx-media-model">
-            <span className="agx-mono">{image ? 'gpt-image-2' : 'SeeAPI · Seedance 2.0 Fast'}</span>
-            <span>平台通道在服务端调用，令牌不下发前端</span>
+            <span className="agx-mono">{image ? 'gpt-image-2' : 'Seedance 2.0 Fast'}</span>
+            <span>{image ? '每次一张' : '每次一条'}</span>
           </div>
 
           <label className="agx-media-field">
@@ -1137,7 +1108,7 @@ function MediaGenDialog({
           ) : null}        </div>
 
         <footer className="agx-media-foot">
-          <span>结果文件存在服务端 data/media，预览与下载都走登录鉴权。</span>
+          <span>结果只存在你自己的账号里，别人看不到也下不了。</span>
           <div>
             {task?.status === 'succeeded' ? (
               <button type="button" className="vq-button vq-button--primary" onClick={reset}>
@@ -1157,8 +1128,7 @@ function MediaGenDialog({
             )}
           </div>
         </footer>
-      </section>
-    </div>
+    </section>
   )
 }
 
@@ -1208,7 +1178,8 @@ export function AgentsPage({
   // 对话按次扣积分：输入框上方常驻「余额 / 单价」，402 时不再是一句干巴巴的失败
   const [credits, setCredits] = useState<CreditsResponse | null>(null)
   // 预设的窗口工具：生图 / 生视频，打开的是生成表单而不是对话
-  const [mediaKind, setMediaKind] = useState<MediaKind | null>(null)
+  // 创作方式：对话走智能体，图片 / 视频走同一条生成表单（不再开单独的窗口）
+  const [composerMode, setComposerMode] = useState<'chat' | MediaKind>('chat')
   // 模型服务状态：额度 / 凭证这类账号级故障要在输入前就说清楚，而不是让人白点一次
   const [modelState, setModelState] = useState<ModelServiceState | null>(null)
   const [rechecking, setRechecking] = useState(false)
@@ -1825,9 +1796,9 @@ export function AgentsPage({
   return (
     <div className="page agx-page">
       <PageHead
-        kicker="智能体 / 对话"
-        title="智能体"
-        desc="选择一个智能体，描述你要它做的事。"
+        kicker="快捷创作 / 对话"
+        title="快捷创作"
+        desc="写文案、出图片、出视频都在这一个输入框里：选好方式，说清要什么。"
         actions={
           <div className="agx-head-actions">
           <div className="agx-history-wrap">
@@ -1962,36 +1933,6 @@ export function AgentsPage({
           </div>
         }
       />
-
-      <section className="agx-presets" aria-label="预设智能体">
-        <div className="agx-presets-head">
-          <div>
-            <span className="agx-kicker">PRESET AGENTS</span>
-            <h2>预设智能体</h2>
-          </div>
-          <span className="agx-presets-note">窗口工具 · 不进入对话</span>
-        </div>
-        <div className="agx-preset-grid">
-          <button type="button" className="agx-preset-card" onClick={() => setMediaKind('image')}>
-            <span className="agx-preset-icon"><ImageIcon size={18} /></span>
-            <span className="agx-preset-copy">
-              <strong>生图智能体</strong>
-              <span>提示词 → 比例 → 预览 / 下载</span>
-            </span>
-            <span className="agx-preset-meta">gpt-image-2 · {credits?.prices.image_gen ?? 5} 积分 / 张</span>
-            <ArrowUpRight size={15} className="agx-preset-arrow" />
-          </button>
-          <button type="button" className="agx-preset-card" onClick={() => setMediaKind('video')}>
-            <span className="agx-preset-icon"><Clapperboard size={18} /></span>
-            <span className="agx-preset-copy">
-              <strong>生视频智能体</strong>
-              <span>提示词 → 时长 / 分辨率 → 进度 / 下载</span>
-            </span>
-            <span className="agx-preset-meta">SeeAPI · {credits?.prices.video_gen ?? 15} 积分 / 条</span>
-            <ArrowUpRight size={15} className="agx-preset-arrow" />
-          </button>
-        </div>
-      </section>
 
       <section className="agx-stage" ref={stageRef}>
         {projectContext ? (
@@ -2128,7 +2069,23 @@ export function AgentsPage({
             </div>
           )}
 
-          <div className={'agx-composer' + (selectedAgent ? '' : ' is-disabled')}>
+          <div className={'agx-composer' + (composerMode === 'chat' && !selectedAgent ? ' is-disabled' : '')}>
+            <div className="agx-mode-tabs" role="tablist" aria-label="创作方式">
+              {COMPOSER_MODES.map((mode) => (
+                <button
+                  key={mode.id}
+                  role="tab"
+                  aria-selected={composerMode === mode.id}
+                  className={composerMode === mode.id ? 'is-active' : ''}
+                  onClick={() => setComposerMode(mode.id)}
+                >
+                  {mode.id === 'image' ? <ImageIcon size={14} /> : mode.id === 'video' ? <Clapperboard size={14} /> : <Bot size={14} />}
+                  {mode.label}
+                </button>
+              ))}
+            </div>
+            {composerMode === 'chat' ? (
+              <>
             {credits ? (
               <div className="agx-credit-line">
                 余额 <strong>{credits.balance ?? '—'}</strong> {credits.unit} · 每次对话 <strong>{credits.prices.chat}</strong> {credits.unit}
@@ -2187,6 +2144,15 @@ export function AgentsPage({
                 </button>
               </div>
             </div>
+              </>
+            ) : (
+              <MediaGenPanel
+                kind={composerMode}
+                onCreditsChanged={() => {
+                  getCredits(1).then(setCredits).catch(() => undefined)
+                }}
+              />
+            )}
           </div>
         </div>
       </section>
@@ -2316,15 +2282,6 @@ export function AgentsPage({
         )}
       </section>
 
-      {mediaKind ? (
-        <MediaGenDialog
-          kind={mediaKind}
-          onClose={() => setMediaKind(null)}
-          onCreditsChanged={() => {
-            getCredits(1).then(setCredits).catch(() => undefined)
-          }}
-        />
-      ) : null}
     </div>
   )
 }
