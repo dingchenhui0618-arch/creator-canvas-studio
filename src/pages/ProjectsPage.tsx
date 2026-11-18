@@ -6,6 +6,7 @@ import { listProjects } from '../api/projects'
 import { listTemplates } from '../api/radar'
 import { reviewsForVersion, type ProjectBucket, type ProjectListFacets, type ProjectShareBrief, type ProjectSummary } from '../domain/project'
 import { readProjectsView, writeProjectsView, type ProjectsView } from '../domain/list-view'
+import WorksWall from '../components/WorksWall'
 import { CLIENT_LABEL, stampTime } from '../domain/share'
 import '../styles/projects.css'
 
@@ -72,6 +73,9 @@ export default function ProjectsPage({
   const [error, setError] = useState('')
   // 空作品页的下一步要看模板库有没有东西：只问总条数，不拉整库（v0.9.42）
   const [templateTotal, setTemplateTotal] = useState<number | null>(null)
+  // 两个视图：创作成果（三处产物合成一条流）与作品项目（现有的交付列表）。
+  // 默认先看成果——用户打开「作品」最先想看的是自己做过什么，而不是交付状态。
+  const [view, setView] = useState<'works' | 'projects'>('works')
   const searchRef = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async (filter: { q: string; state: ProjectBucket }) => {
@@ -143,6 +147,28 @@ export default function ProjectsPage({
 
   const headLoading = loading && !items.length
 
+  if (view === 'works') {
+    return (
+      <div className="page vq-page vq-project-page">
+        <PageHead
+          kicker="作品 / WORKS"
+          title="作品"
+          desc="快捷创作生成的图片与视频、跑过的工作流、无限画布里的画布，都收在这一条流里。按作品自己的比例排版，9:16 竖版优先。"
+          actions={
+            <button type="button" className="vq-button vq-button--ghost" onClick={() => setView('projects')}>
+              作品项目
+            </button>
+          }
+        />
+        <WorksWall
+          onOpenDetail={(url) => {
+            if (url.startsWith('#')) window.location.hash = url
+          }}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="page vq-page vq-project-page" aria-busy={loading}>
       <PageHead
@@ -151,6 +177,9 @@ export default function ProjectsPage({
         desc="一条内容一条记录：用的哪条模板、开过几块工作流、评审与交付都挂在这里。搜标题或模板名找一条，按「在做 / 已交付」看还剩哪些。"
         actions={
           <>
+            <button type="button" className="vq-button vq-button--ghost" onClick={() => setView('works')}>
+              创作成果
+            </button>
             <button type="button" className="vq-button vq-button--ghost" onClick={() => void load({ q: keyword, state: bucket })} disabled={loading}>
               <RefreshCw size={14} className={loading ? 'vq-spin' : undefined} />
               刷新

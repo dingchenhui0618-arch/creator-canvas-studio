@@ -96,7 +96,7 @@ export type DesktopEvent =
     }
   | {
       type: 'memory'
-      /** recall：这一轮用到了哪几条；changed：记忆被改写（智能体记了一条，或用户删了）；distilled：后台提炼跑完 */
+      /** recall：这一轮用到了哪几条；changed：记忆被改写（对话预设记了一条，或用户删了）；distilled：后台提炼跑完 */
       phase: 'recall' | 'changed' | 'distilled'
       entries?: { id: string; text: string }[]
       total?: number

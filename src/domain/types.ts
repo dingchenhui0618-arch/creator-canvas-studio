@@ -22,7 +22,7 @@ export const pageLabels: Record<Page, string> = {
   overview: '工作台',
   projects: '作品',
   agents: '快捷创作',
-  'agent-editor': '智能体编辑器',
+  'agent-editor': '对话预设编辑器',
   canvas: '工作流',
   board: '无限画布',
   runs: '运行记录',
@@ -52,7 +52,7 @@ export type CanvasNodeData = {
   artifactId?: string
 }
 
-/** 一次性能力模板：智能体在运行时可调用的固定步骤与输出类型。 */
+/** 一次性能力模板：对话预设在运行时可调用的固定步骤与输出类型。 */
 export type SkillDefinition = {
   id: string
   name: string
@@ -61,7 +61,7 @@ export type SkillDefinition = {
   output: string
 }
 
-/** 适配器暴露给智能体的工具。未接入真实服务时只有演示能力。 */
+/** 适配器暴露给对话预设的工具。未接入真实服务时只有演示能力。 */
 export type ToolDefinition = {
   id: string
   name: string
@@ -80,7 +80,7 @@ export type AgentIOField = {
 
 export type AgentStatus = 'draft' | 'published'
 
-/** 产品域模型：智能体定义与画布、运行、产物解耦。 */
+/** 产品域模型：对话预设定义与画布、运行、产物解耦。 */
 export type AgentDefinition = {
   id: string
   name: string

@@ -1,4 +1,4 @@
-// 智能体页两个窗口工具的接口契约：与 server/routes/media-gen.mjs 一一对应。
+// 对话预设页两个窗口工具的接口契约：与 server/routes/media-gen.mjs 一一对应。
 // 生成任务由服务端扣积分、落 data/media；前端只拿任务状态与鉴权下载地址。
 import { request } from './client'
 

@@ -1,4 +1,4 @@
-/* 智能体模块 · VisionQA v2
+/* 对话预设模块 · VisionQA v2
    近黑白、发丝线、等宽元数据；颜色只在「通过 / 待确认 / 问题」和运行失败时出现。
    页面作用域内重申 tokens.css 的 v2 值，避免被旧 App.css 的 :root 覆盖。 */
 .agx-page {
@@ -720,7 +720,7 @@
   cursor: not-allowed;
 }
 
-/* ---------- 已自建智能体 ---------- */
+/* ---------- 已自建对话预设 ---------- */
 .agx-library {
   margin-top: 32px;
   padding-top: 24px;
@@ -1243,7 +1243,7 @@
     transition: none;
   }
 }
-/* 智能体消息里的轻量 Markdown（标题 / 列表 / 表格 / 代码 / 加粗） */
+/* 对话预设消息里的轻量 Markdown（标题 / 列表 / 表格 / 代码 / 加粗） */
 .agx-msg--agent .agx-bubble {
   white-space: normal;
 }
@@ -1379,7 +1379,7 @@
   font-size: 11.5px;
 }
 
-/* ---------- 结构化草稿卡：智能体回复的两个出口 ---------- */
+/* ---------- 结构化草稿卡：对话预设回复的两个出口 ---------- */
 .agx-draft {
   display: flex;
   flex-direction: column;
@@ -1532,7 +1532,7 @@
   font-size: var(--btn-font-sm);
 }
 
-/* 从作品页「让智能体写」过来：一条横幅写明在帮哪条作品、这一版现在是什么 */
+/* 从作品页「让 AI 起草」过来：一条横幅写明在帮哪条作品、这一版现在是什么 */
 .agx-project {
   display: flex;
   align-items: center;

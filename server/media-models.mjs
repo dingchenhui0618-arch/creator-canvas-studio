@@ -58,8 +58,8 @@ export const MEDIA_MODEL_SPECS = [
   {
     id: 'gpt-image-2',
     kind: 'image',
-    label: 'GPT Image 2',
-    platform: 'GeteAPI',
+    label: '图像模型 2',
+    platform: '平台图像通道',
     // 文生图 2026-11-17 / 11-18 真调过（含 9:16、16:9）；参考图走 /images/edits，这轮没真调过
     verified: true,
     referenceVerified: false,
@@ -72,8 +72,8 @@ export const MEDIA_MODEL_SPECS = [
   {
     id: 'seedance-2.0',
     kind: 'video',
-    label: 'Seedance 2.0',
-    platform: 'SeeAPI',
+    label: '视频模型 2',
+    platform: '平台视频通道',
     verified: true,
     referenceVerified: false,
     modes: VIDEO_MODES,
@@ -85,8 +85,8 @@ export const MEDIA_MODEL_SPECS = [
   {
     id: 'seedance-2.0-fast',
     kind: 'video',
-    label: 'Seedance 2.0 Fast',
-    platform: 'SeeAPI',
+    label: '视频模型 2 · 极速',
+    platform: '平台视频通道',
     verified: false,
     referenceVerified: false,
     modes: VIDEO_MODES,

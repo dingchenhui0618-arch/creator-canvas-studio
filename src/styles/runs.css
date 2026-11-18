@@ -2,7 +2,7 @@
   display: flex;
   flex-direction: column;
   gap: 24px;
-  /* 页面内边距必须与工作台/智能体一致：不写 padding 时内容会贴到侧栏和窗口边缘 */
+  /* 页面内边距必须与工作台/对话预设一致：不写 padding 时内容会贴到侧栏和窗口边缘 */
   width: 100%;
   max-width: 1280px;
   margin: 0 auto;

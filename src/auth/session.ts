@@ -160,7 +160,7 @@ export function clearResidue(): string[] {
  */
 export function persistSession(session: Session): void {
   // 先看上一份是谁：换账号（不是同一账号刷新）时，上一个账号留在这台电脑上的痕迹要清掉，
-  // 否则新账号一进智能体面板就能看到上一个人的对话历史。
+  // 否则新账号一进对话预设面板就能看到上一个人的对话历史。
   const previous = readSession()
   clearStoredSession()
   if (previous && previous.user.id !== session.user.id) clearResidue()

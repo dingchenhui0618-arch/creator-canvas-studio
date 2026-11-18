@@ -3520,7 +3520,7 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
 }
 
 /* 来源面板：模板名点得开（v0.9.35 起模板有单条地址 #/templates/<id>），
-   下面是这条模板的原片——有地址才给「打开原片」，画布 / 智能体来的如实说没有。 */
+   下面是这条模板的原片——有地址才给「打开原片」，画布 / 对话预设来的如实说没有。 */
 .vq-project-source-link {
   display: inline-flex;
   align-items: center;

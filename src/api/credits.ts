@@ -253,7 +253,7 @@ export const CREDIT_KIND_LABEL: Record<string, string> = {
   'replicate-refund': '复刻退款',
   review: '视觉评审',
   'review-refund': '评审退款',
-  chat: '智能体对话',
+  chat: '对话',
   'chat-refund': '对话退款',
   flow_run: '工作流运行',
   'flow_run-refund': '工作流运行退款',

@@ -69,7 +69,7 @@ const APP_VERSION = (JSON.parse(packageJsonRaw) as { version?: string }).version
 // 快速跳转的快捷键提示按平台显示；功能本身两个修饰键都收。
 const IS_MAC = typeof navigator !== 'undefined' && /mac|iphone|ipad/i.test(navigator.platform || navigator.userAgent)
 
-// 重页面按路由拆包：画布带 @xyflow、智能体与模板库带各自的样式表，首屏不必等它们。
+// 重页面按路由拆包：画布带 @xyflow、对话预设与模板库带各自的样式表，首屏不必等它们。
 const CanvasPage = lazy(() => import('./pages/CanvasPage'))
 // 无限画布（外部那张自由画布）单独一屏：它和工作流是两件东西，代码也分开按需加载
 const BoardPage = lazy(() => import('./pages/BoardPage'))
@@ -140,7 +140,7 @@ function AdminAccessDenied({
 type AgentSeed = { name: string; description: string }
 
 /**
- * 智能体编辑器路由：地址里可能给的是 id（外链）或名称（列表入口只回传名称）。
+ * 对话预设编辑器路由：地址里可能给的是 id（外链）或名称（列表入口只回传名称）。
  * 先把引用解析成 AgentEditorPage 需要的 { name, description }，再交给编辑器。
  */
 function AgentEditorRoute({
@@ -180,20 +180,20 @@ function AgentEditorRoute({
     }
   }, [agentRef])
 
-  if (status === 'loading') return <PageSkeleton label="正在打开智能体编辑器" />
+  if (status === 'loading') return <PageSkeleton label="正在打开对话预设编辑器" />
   if (status === 'missing') {
     return (
       <div className="vq-error-fallback" role="alert">
         <div className="vq-error-card">
-          <span className="vq-error-kicker">智能体 / 未找到</span>
-          <h1>找不到这个智能体</h1>
-          <p>地址里的智能体可能已被删除，或链接中的编号不属于当前工作区。返回列表重新选择，或新建一个。</p>
+          <span className="vq-error-kicker">对话预设 / 未找到</span>
+          <h1>找不到这个对话预设</h1>
+          <p>地址里的对话预设可能已被删除，或链接中的编号不属于当前工作区。返回列表重新选择，或新建一个。</p>
           <div className="vq-error-actions">
             <button type="button" className="vq-button vq-button--primary" onClick={onBack}>
-              返回智能体列表
+              返回对话预设列表
             </button>
             <button type="button" className="vq-button vq-button--ghost" onClick={() => onNavigate('agent-editor')}>
-              新建智能体
+              新建对话预设
             </button>
           </div>
         </div>
@@ -625,7 +625,7 @@ function Workbench({
             onOpenReview={(projectId) => navigate({ kind: 'page', page: 'review', projectId })}
             onOpenReviewRecord={(reviewId) => navigate({ kind: 'page', page: 'review', reviewId })}
             onOpenAgents={(projectId) => {
-              // 一次性交接：智能体页读到这条作品就清掉，之后再进不会还挂着上一条
+              // 一次性交接：对话预设页读到这条作品就清掉，之后再进不会还挂着上一条
               setPendingAgentProject(projectId)
               go('agents')
             }}

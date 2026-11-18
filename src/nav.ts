@@ -1,6 +1,6 @@
 // 侧栏导航的唯一真源（P2 导航收敛，2026-11-13）。
 // 一级只回答「产品有哪四个去处」：工作台 / 作品 / 发现 / 模板库。
-// 智能体、工作流、无限画布、视觉评审、运行记录是「能力」——从作品或模板的某一步被带进去，
+// 对话预设、工作流、无限画布、视觉评审、运行记录是「能力」——从作品或模板的某一步被带进去，
 // 所以退到工具区，仍是独立路由（收藏、历史链接都不变）。
 //
 // 两张画布从 v0.9.163 起是两件东西，不再共用一个入口（用户 2026-11-16 明确要求）：
@@ -74,7 +74,7 @@ export function isToolPage(page: Page): boolean {
   return TOOL_IDS.includes(page)
 }
 
-/** 侧栏高亮：智能体编辑器仍归到智能体这一项，不让编辑器把侧栏全灭。 */
+/** 侧栏高亮：对话预设编辑器仍归到对话预设这一项，不让编辑器把侧栏全灭。 */
 export function isNavActive(entry: NavEntry, page: Page): boolean {
   if (entry.id === 'agents') return page === 'agents' || page === 'agent-editor'
   return page === entry.id

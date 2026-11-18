@@ -19,8 +19,8 @@ const CREDIT_UNITS_PER_CNY = 1_000_000
 const FETCH_TIMEOUT_MS = 12_000
 
 const PLATFORM_META = {
-  geteapi: { id: 'geteapi', label: 'GeteAPI', baseUrl: 'https://www.geteapi.com' },
-  seeapi: { id: 'seeapi', label: 'SeeAPI / CGCM', baseUrl: 'https://api.cgcm-api.com' },
+  geteapi: { id: 'geteapi', label: '主通道 A', baseUrl: 'https://www.geteapi.com' },
+  seeapi: { id: 'seeapi', label: '主通道 B', baseUrl: 'https://api.cgcm-api.com' },
 }
 
 const PLATFORM_ORDER = ['geteapi', 'seeapi']

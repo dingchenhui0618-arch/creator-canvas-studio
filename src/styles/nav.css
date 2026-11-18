@@ -162,7 +162,7 @@
 
 /* ---------- 小屏：数据页 ---------- */
 @media (max-width: 720px) {
-  /* 页面内边距收到 16px：运行记录、智能体、模板库、工作台、后台。 */
+  /* 页面内边距收到 16px：运行记录、对话预设、模板库、工作台、后台。 */
   .vq-content .runs-page,
   .vq-content .agx-page,
   .vq-content .page.page--templates,
@@ -197,7 +197,7 @@
     gap: 8px;
   }
 
-  /* 智能体：分类条在自己的容器里横向滚动；卡片只留模型与最近运行。 */
+  /* 对话预设：分类条在自己的容器里横向滚动；卡片只留模型与最近运行。 */
   .vq-content .agx-head {
     flex-direction: column;
     align-items: flex-start;
@@ -226,7 +226,7 @@
     gap: 4px 12px;
   }
 
-  /* 智能体回复里的 Markdown 表格：只让表格容器横滚，不撑开整页。 */
+  /* 对话预设回复里的 Markdown 表格：只让表格容器横滚，不撑开整页。 */
   .vq-content .agx-md-table,
   .vq-content .admin-table-wrap {
     max-width: 100%;

@@ -87,7 +87,7 @@ function KeyFieldGrid({
     <div className="admin-edit-grid">
       <label className="admin-edit-field">
         <span>名称</span>
-        <input value={value.name} onChange={(event) => onChange({ ...value, name: event.target.value })} placeholder="例如 DeepSeek 官方" />
+        <input value={value.name} onChange={(event) => onChange({ ...value, name: event.target.value })} placeholder="例如 平台对话模型" />
       </label>
       <label className="admin-edit-field">
         <span>渠道</span>

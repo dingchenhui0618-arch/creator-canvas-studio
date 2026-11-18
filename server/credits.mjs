@@ -219,10 +219,10 @@ export const SPEND_KIND_LABEL = {
   search: '检索',
   replicate: '一键复刻',
   review: '视觉评审',
-  chat: '智能体对话',
+  chat: '对话',
   flow_run: '工作流运行',
-  image_gen: '生图智能体',
-  video_gen: '生视频智能体',
+  image_gen: '图片生成',
+  video_gen: '视频生成',
 }
 
 /**

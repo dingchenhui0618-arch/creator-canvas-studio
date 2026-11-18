@@ -35,7 +35,7 @@ function chatError(code, httpStatus, message, extra = {}) {
 
 function upstreamStatusSuggestion(status) {
   if (status === 401 || status === 403) return '凭证无效或无权限：检查 .env 的 VISION_API_KEY，或本机 ~/.codex/auth.json 是否过期。'
-  if (status === 404) return '模型名不存在：访问 ' + config.vision.baseUrl + '/models 查看可用模型，再在智能体里改模型。'
+  if (status === 404) return '模型名不存在：访问 ' + config.vision.baseUrl + '/models 查看可用模型，再在对话页换一个模型。'
   if (status === 429) return '上游限流：等待一会儿再重试，或在参数行换一个模型。'
   if (status >= 500) return '上游模型服务异常：稍后重试，或换一个候选模型。'
   return '检查请求参数（模型名、温度、max_tokens）后重试。'
@@ -227,7 +227,7 @@ function buildMessages(agent, message, outputType, memory = [], toolContext = { 
     .filter((tool) => tool && tool.state === 'planned')
     .map((tool) => tool.label + '（还没有接线，本次不会执行）')
   const system = [
-    '你是「' + agent.name + '」，一个' + agent.category + '方向的创作智能体。',
+    '你是「' + agent.name + '」，一个' + agent.category + '方向的创作助手。',
     '职责：' + agent.role,
     '',
     '行为规则：',

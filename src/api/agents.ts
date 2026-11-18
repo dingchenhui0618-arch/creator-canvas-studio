@@ -1,4 +1,4 @@
-// 智能体 API 客户端：与 server/routes/agents.mjs 的契约一一对应。
+// 对话预设 API 客户端：与 server/routes/agents.mjs 的契约一一对应。
 import { request as apiRequest } from './client'
 import type { Project, ProjectScript } from '../domain/project'
 
@@ -164,7 +164,7 @@ type RequestError = Error & {
   attempted?: string[]
 }
 
-// 公共请求封装（src/api/client.ts）只抛带 status 的 Error；这里补上智能体接口的结构化字段。
+// 公共请求封装（src/api/client.ts）只抛带 status 的 Error；这里补上对话预设接口的结构化字段。
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     return await apiRequest<T>(path, init)
@@ -183,8 +183,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 // 跨页面的一次性选中意图（编辑页点「开始对话」→ 列表页选中它）。
 // 用模块变量而不是 sessionStorage，避免 React StrictMode 双重挂载时被提前消费。
 let pendingSelectAgentId = ''
-// 作品页「让智能体写」带过来的那条作品：模块变量而不是地址参数——地址栏里不出现内部 id，
-// 与上面那个「选中哪一个智能体」同一种一次性交接。
+// 作品页「让 AI 起草」带过来的那条作品：模块变量而不是地址参数——地址栏里不出现内部 id，
+// 与上面那个「选中哪一个对话预设」同一种一次性交接。
 let pendingAgentProjectId = ''
 
 export function setPendingAgentProject(id: string) {

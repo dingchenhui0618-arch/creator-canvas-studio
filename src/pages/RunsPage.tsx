@@ -36,7 +36,7 @@ const NODE_KIND_LABEL: Record<string, string> = {
   vision: '视觉',
   output: '输出',
   review: '评审',
-  agent: '智能体',
+  agent: '对话预设',
 }
 
 // 节点返回：用户要看的是「这一步拿回了什么」，不是一段 JSON。

@@ -62,7 +62,7 @@ import { useModelOptions } from '../components/ModelSwitch'
 import { Tag } from '../components/ui'
 import '../styles/agents.css'
 
-// 创作方式：一个输入框，三种去向。对话交给智能体，图片 / 视频走服务端生成通道。
+// 创作方式：一个输入框，三种去向。对话交给对话预设，图片 / 视频走服务端生成通道。
 const COMPOSER_MODES: { id: 'chat' | MediaKind; label: string }[] = [
   { id: 'chat', label: '对话' },
   { id: 'image', label: '图片' },
@@ -100,7 +100,7 @@ type DraftAction = {
   }
 }
 
-// 作品页「让智能体写」带过来的上下文：标题、版次与这一版现在的脚本（标题与段数）。
+// 作品页「让 AI 起草」带过来的上下文：标题、版次与这一版现在的脚本（标题与段数）。
 // 只用来写一句「在帮哪条作品」和预填输入框，不往对话里塞任何作品内部数据。
 type AgentProjectContext = {
   id: string
@@ -434,7 +434,7 @@ function Capsule({
   )
 }
 
-// 切到某个智能体时，输出类型跟着它的主场景走；用户仍可在参数行手动改。
+// 切到某个对话预设时，输出类型跟着它的主场景走；用户仍可在参数行手动改。
 const OUTPUT_TYPE_BY_CATEGORY: Record<string, OutputType> = {
   内容复刻: '脚本',
   视觉评审: '评审',
@@ -1042,7 +1042,7 @@ function MediaComposer({
         <div className="agx-media-heading">
           <h2>{title}</h2>
           <p>
-            {model ? model.label + ' · ' + model.platform + ' · 每次 ' + price + ' 积分' : '正在读取可用模型…'}
+            {model ? model.label + ' · 每次 ' + price + ' 积分' : '正在读取可用模型…'}
             {model && !model.verified ? ' · 未真调' : ''}
           </p>
         </div>
@@ -1479,7 +1479,7 @@ export function AgentsPage({
   // 对话按次扣积分：输入框上方常驻「余额 / 单价」，402 时不再是一句干巴巴的失败
   const [credits, setCredits] = useState<CreditsResponse | null>(null)
   // 预设的窗口工具：生图 / 生视频，打开的是生成表单而不是对话
-  // 创作方式：对话走智能体，图片 / 视频走同一条生成表单（不再开单独的窗口）
+  // 创作方式：对话走对话预设，图片 / 视频走同一条生成表单（不再开单独的窗口）
   const [composerMode, setComposerMode] = useState<'chat' | MediaKind>('chat')
   // 可用的生成模型与规格：服务端 media-models 是唯一真源，界面不自己写死模型名
   const [mediaModels, setMediaModels] = useState<MediaModelList | null>(null)
@@ -1488,13 +1488,13 @@ export function AgentsPage({
   const [rechecking, setRechecking] = useState(false)
   // 每条回复的三个出口各自记状态：存过模板的那条不再显示「存为模板」按钮
   const [draftActions, setDraftActions] = useState<Record<string, DraftAction>>({})
-  // 「写进作品」要选一条：列表按需取一次，读完留着；作品上下文来自作品页的「让智能体写」
+  // 「写进作品」要选一条：列表按需取一次，读完留着；作品上下文来自作品页的「让 AI 起草」
   const [works, setWorks] = useState<ProjectSummary[] | null>(null)
   const [worksLoading, setWorksLoading] = useState(false)
   const [worksError, setWorksError] = useState('')
   const [projectContext, setProjectContext] = useState<AgentProjectContext | null>(null)
   const { internal } = useUiMode()
-  // 顶栏选择的模型保存在服务端；智能体本身没绑模型时用它作为默认值
+  // 顶栏选择的模型保存在服务端；对话预设本身没绑模型时用它作为默认值
   const preferredModelRef = useRef('')
 
   const draftRef = useRef<HTMLTextAreaElement>(null)
@@ -1568,7 +1568,7 @@ export function AgentsPage({
         nextAgent ? (OUTPUT_TYPE_BY_CATEGORY[nextAgent.category] ?? DEFAULT_OUTPUT_TYPE) : DEFAULT_OUTPUT_TYPE,
       )
     } catch (caught) {
-      setLoadError(caught instanceof Error ? caught.message : '智能体列表加载失败')
+      setLoadError(caught instanceof Error ? caught.message : '对话预设列表加载失败')
     } finally {
       setLoading(false)
     }
@@ -1626,8 +1626,8 @@ export function AgentsPage({
     bottomRef.current?.scrollIntoView({ block: 'nearest' })
   }, [messages.length, pending])
 
-  // 从作品页的「让智能体写」进来：读一眼这条作品现在这一版，写进横幅、预填一次输入框。
-  // 一次性交接，读完就清掉——之后再进智能体页不该还挂着上一条作品。
+  // 从作品页的「让 AI 起草」进来：读一眼这条作品现在这一版，写进横幅、预填一次输入框。
+  // 一次性交接，读完就清掉——之后再进对话预设页不该还挂着上一条作品。
   useEffect(() => {
     const staged = peekPendingAgentProject()
     if (!staged) return
@@ -1674,14 +1674,14 @@ export function AgentsPage({
     (id: string) => {
       clearPendingSelectAgent()
       setSelectedId(id)
-      // 换智能体时把上一台的运行记录清掉，避免弹层里先闪一下别人的记录
+      // 换对话预设时把上一台的运行记录清掉，避免弹层里先闪一下别人的记录
       setRuns([])
       setRunsTotal(0)
       setRunsLoadedId('')
       setRunsError('')
       setExpandedRun('')
       const agent = agents.find((item) => item.id === id)
-      // 顶栏的账号偏好优先；没有偏好时沿用智能体自己的模型
+      // 顶栏的账号偏好优先；没有偏好时沿用对话预设自己的模型
       setModel(preferredModelRef.current || agent?.model || '')
       if (agent) {
         setOutputType(OUTPUT_TYPE_BY_CATEGORY[agent.category] ?? DEFAULT_OUTPUT_TYPE)
@@ -2092,7 +2092,7 @@ export function AgentsPage({
   }, [data?.models, model, modelLabels])
 
   const agentOptions = useMemo(
-    () => (agents.length ? agents.map((item) => ({ value: item.id, label: item.name })) : [{ value: '', label: '还没有智能体' }]),
+    () => (agents.length ? agents.map((item) => ({ value: item.id, label: item.name })) : [{ value: '', label: '还没有对话预设' }]),
     [agents],
   )
 
@@ -2160,7 +2160,7 @@ export function AgentsPage({
                       {runs.length > 0 && (
                         <div className="agx-runs-toolbar">
                           <span>
-                            {selectedAgent?.name ?? '智能体'} · 共 {runsTotal} 次
+                            {selectedAgent?.name ?? '对话预设'} · 共 {runsTotal} 次
                           </span>
                           <button
                             type="button"
@@ -2173,7 +2173,7 @@ export function AgentsPage({
                       )}
                       {runsError && <p className="agx-popover-empty">{runsError}</p>}
                       {!runsError && runs.length === 0 && (
-                        <p className="agx-popover-empty">{runsLoading ? '正在读取运行记录…' : '这个智能体还没有运行记录'}</p>
+                        <p className="agx-popover-empty">{runsLoading ? '正在读取运行记录…' : '这个对话预设还没有运行记录'}</p>
                       )}
                       {runs.map((run) => {
                         const open = expandedRun === run.id
@@ -2226,7 +2226,7 @@ export function AgentsPage({
                           {runsLoading ? '加载中…' : '加载更多'}
                         </button>
                       )}
-                      <p className="agx-popover-note">运行记录存在服务端，成功与失败都会留档；清空只删这个智能体的记录。</p>
+                      <p className="agx-popover-note">运行记录存在服务端，成功与失败都会留档；清空只删这个对话预设的记录。</p>
                     </div>
                   )}
                 </div>
@@ -2235,7 +2235,7 @@ export function AgentsPage({
           </div>
             <button className="vq-button vq-button--primary" onClick={onCreate}>
               <Plus size={15} />
-              新建智能体
+              新建对话预设
             </button>
           </div>
         }
@@ -2276,7 +2276,7 @@ export function AgentsPage({
                 新建对话
               </button>
               <span className="agx-mono">
-                {selectedAgent?.name ?? '未选择智能体'} · {outputType} · {messages.length} 条
+                {selectedAgent?.name ?? '未选择预设'} · {outputType} · {messages.length} 条
               </span>
             </div>
           )}
@@ -2307,7 +2307,7 @@ export function AgentsPage({
                   ) : null}
                   <div className="agx-msg-meta">
                     <span>
-                      {message.role === 'user' ? '你' : selectedAgent?.name ?? '智能体'} · {formatClock(new Date(message.at).toISOString())}
+                      {message.role === 'user' ? '你' : selectedAgent?.name ?? '对话预设'} · {formatClock(new Date(message.at).toISOString())}
                       {message.model ? ' · ' + modelLabel(message.model) : ''}
                       {message.latencyMs ? ' · ' + (message.latencyMs / 1000).toFixed(1) + 's' : ''}
                     </span>
@@ -2425,16 +2425,16 @@ export function AgentsPage({
               }}
               placeholder={
                 loading
-                  ? '正在读取智能体列表…'
+                  ? '正在读取对话预设列表…'
                   : selectedAgent
                     ? '描述你要它做的事，例如：把这条 30 秒口播拆成分镜表'
-                    : '还没有智能体：先新建一个，保存后就能直接对话'
+                    : '还没有对话预设：先新建一个，保存后就能直接对话'
               }
               disabled={!selectedAgent || loading}
             />
             <div className="agx-composer-bar">
               <div className="agx-params">
-                <Capsule label="智能体" value={selectedId} options={agentOptions} onChange={selectAgent} disabled={Boolean(pending)} />
+                <Capsule label="对话预设" value={selectedId} options={agentOptions} onChange={selectAgent} disabled={Boolean(pending)} />
                 <Capsule
                   label="输出"
                   value={outputType}
@@ -2475,7 +2475,7 @@ export function AgentsPage({
 
       <section className="agx-library">
         <div className="agx-library-head">
-          <h2>已自建智能体</h2>
+          <h2>已自建对话预设</h2>
           <span className="agx-library-meta">
             {agents.length} 个 · 累计 {data?.runs ?? 0} 次运行
           </span>
@@ -2529,11 +2529,11 @@ export function AgentsPage({
             <div className="agx-empty-icon">
               <Bot size={19} />
             </div>
-            <strong>还没有自建智能体</strong>
+            <strong>还没有自建对话预设</strong>
             <p>把一次性的创作判断写成系统提示词和知识，保存后就能在这里反复调用。</p>
             <button className="vq-button vq-button--primary" onClick={onCreate}>
               <Plus size={14} />
-              新建智能体
+              新建对话预设
             </button>
           </div>
         )}
@@ -2543,11 +2543,11 @@ export function AgentsPage({
             <div className="agx-empty-icon">
               <Bot size={19} />
             </div>
-            <strong>这个分类还没有智能体</strong>
-            <p>换一个分类看看，或者新建一个「{category}」方向的智能体。</p>
+            <strong>这个分类还没有对话预设</strong>
+            <p>换一个分类看看，或者新建一个「{category}」方向的对话预设。</p>
             <button className="vq-button vq-button--ghost" onClick={onCreate}>
               <Plus size={14} />
-              新建智能体
+              新建对话预设
             </button>
           </div>
         )}

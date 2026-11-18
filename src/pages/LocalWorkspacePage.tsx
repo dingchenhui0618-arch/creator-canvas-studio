@@ -132,10 +132,10 @@ function toFeed(messages: ThreadMessage[]): FeedItem[] {
   return items
 }
 
-// 记忆从哪来的要看得见：用户命令、智能体自己记、后台提炼，三种来源别混着写。
+// 记忆从哪来的要看得见：用户命令、对话预设自己记、后台提炼，三种来源别混着写。
 const MEMORY_SOURCE: Record<string, string> = {
   user: '你让记的',
-  agent: '智能体记的',
+  agent: '对话记的',
   distill: '后台提炼',
 }
 

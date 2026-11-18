@@ -159,11 +159,11 @@ export type TemplateAnalysis = {
 export type ReplicaTemplate = {
   thumb?: string
   id: string
-  /** saved：只存了链接与互动数据；replica：跑过一键复刻；adapted：以某条为底改编出的我的一版；flow：画布另存的工作流；agent：智能体的结构化草稿存成的模板 */
+  /** saved：只存了链接与互动数据；replica：跑过一键复刻；adapted：以某条为底改编出的我的一版；flow：画布另存的工作流；agent：对话预设的结构化草稿存成的模板 */
   kind: 'saved' | 'replica' | 'adapted' | 'flow' | 'agent'
   /** kind === 'adapted' 时才有：改编自哪条模板 */
   adaptedFrom?: string
-  /** kind === 'agent' 时才有：这份草稿来自哪个智能体 */
+  /** kind === 'agent' 时才有：这份草稿来自哪个对话预设 */
   agentId?: string
   agentName?: string
   savedAt?: string
@@ -328,7 +328,7 @@ export type ReplicateJob = {
   refunded?: boolean
 }
 
-/** 模板来源：一张卡片只属于一个来源（官方示例优先，其次是作品 / 智能体 / 画布 / 改编，其余算发现） */
+/** 模板来源：一张卡片只属于一个来源（官方示例优先，其次是作品 / 对话预设 / 画布 / 改编，其余算发现） */
 export type TemplateSourceKey = 'radar' | 'project' | 'agent' | 'canvas' | 'adapted' | 'shared'
 
 /** 来源胶囊：key 与文案都由服务端给，前端不另写一份分类表 */

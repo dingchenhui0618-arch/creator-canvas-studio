@@ -985,7 +985,7 @@ export default function UsersSection() {
           <div>
             <p className="admin-label">{internal ? '真实账号' : '账号列表'}</p>
             <p className="admin-sub">
-              共 {items.length} 个账号，积分合计 {totalCredits}。数据按账号隔离：模板、智能体、工作流、运行记录只有本人（或管理员）能看。
+              共 {items.length} 个账号，积分合计 {totalCredits}。数据按账号隔离：模板、对话预设、工作流、运行记录只有本人（或管理员）能看。
             </p>
           </div>
         </div>

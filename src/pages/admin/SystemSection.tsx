@@ -1711,7 +1711,7 @@ function DiagnosticsCard() {
               </dd>
             </div>
             <div>
-              <dt>智能体工具</dt>
+              <dt>对话工具</dt>
               <dd>
                 <span className="admin-mono">
                   {data.tools.list.filter((tool) => tool.state === 'ready').map((tool) => tool.label).join(' · ')}

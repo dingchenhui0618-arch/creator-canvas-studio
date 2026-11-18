@@ -457,7 +457,7 @@
   background: var(--surface);
 }
 .lw-memory-text { margin: 0; color: var(--ink); font-size: var(--text-xs); line-height: 1.6; word-break: break-word; }
-/* 记忆的来源（你让记的 / 智能体记的 / 后台提炼）用一枚小小的胶囊，不抢正文 */
+/* 记忆的来源（你让记的 / 对话记的 / 后台提炼）用一枚小小的胶囊，不抢正文 */
 .lw-memory-meta-text { display: inline-flex; align-items: center; gap: var(--space-1); }
 .lw-memory-src {
   padding: 0 var(--space-1);

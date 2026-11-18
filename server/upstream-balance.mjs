@@ -25,14 +25,14 @@ const FETCH_TIMEOUT_MS = 8000
 export const BALANCE_CHANNELS = [
   {
     id: 'geteapi',
-    label: 'GeteAPI',
+    label: '主通道 A',
     kind: 'newapi',
     baseUrl: 'https://www.geteapi.com',
     note: 'New API 底座：用账号访问令牌读 /api/user/self。中转 Key 读不到余额，面板里的硬限额是占位值。',
   },
   {
     id: 'seeapi',
-    label: 'SeeAPI / CGCM',
+    label: '主通道 B',
     kind: 'manual',
     baseUrl: 'https://api.cgcm-api.com',
     note: '上游没有余额接口（/v1/dashboard、/api/balance 全 404），只能按对账单手动登记。',

@@ -136,7 +136,7 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
   const [snapshot, setSnapshot] = useState<{ platform: string; q: string; start: string; end: string } | null>(restored?.snapshot || null)
   const [quota, setQuota] = useState<{ code: string; message: string; rechargeUrl?: string; goodsName?: string } | null>(null)
   const [loading, setLoading] = useState(false)
-  // 进页面不自动检索：红狐按次计费，必须由用户点「检索」才发请求。
+  // 进页面不自动检索：检索按次计费，必须由用户点「检索」才发请求。
   // 但「上次检索的结果」不算检索：那是已经付过费的条目，原样放回来，不重新请求
   const [searched, setSearched] = useState(Boolean(restored))
   const [error, setError] = useState('')

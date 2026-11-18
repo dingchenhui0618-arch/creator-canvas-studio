@@ -1,4 +1,4 @@
-/* 雷达封面：示例数据时不用渐变占位，改成单色检视底板 */
+/* 雷达封面：9:16 竖版（r213），示例数据时不用渐变占位，改成单色检视底板 */
 .radar-cover { background:var(--surface-raised); border-bottom:1px solid var(--line); }
 .radar-cover::before {
   content:'';

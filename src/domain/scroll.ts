@@ -25,7 +25,7 @@ export type ScrollPlan = 'top' | 'keep'
 export function planScroll(previous: ScrollRoute | null, next: ScrollRoute): ScrollPlan {
   // 首次渲染没有「上一页」，内容区本来就是 0。
   if (!previous) return 'top'
-  // 后台 / 合规页 / 只读分享 / 智能体编辑器各自整屏：一律从上面开始。
+  // 后台 / 合规页 / 只读分享 / 对话预设编辑器各自整屏：一律从上面开始。
   if (previous.kind !== 'page' || next.kind !== 'page') return 'top'
   if (previous.page !== next.page) return 'top'
   if (next.page === 'templates' || next.page === 'canvas') return 'keep'

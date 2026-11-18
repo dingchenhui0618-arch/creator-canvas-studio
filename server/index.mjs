@@ -76,6 +76,8 @@ import { createStorageRouter } from './routes/storage.mjs'
 import { createMediaRouter } from './routes/media.mjs'
 import { createMediaGenRouter } from './routes/media-gen.mjs'
 import { createFramesRouter } from './routes/frames.mjs'
+import { createWorksRouter } from './routes/works.mjs'
+import { createChatRouter } from './routes/chat.mjs'
 import { currentUser, listUsers, clientIp, isAdmin } from './auth.mjs'
 import { recordClientError } from './client-errors.mjs'
 import { createReport } from './reports.mjs'
@@ -114,6 +116,10 @@ const featureRoutes = [
   createMediaGenRouter(),
   // 模板帧图（v0.9.88）：/media/frames/* 以前匿名可读，现在要登录且只认自己看得见的模板
   createFramesRouter(),
+  // 作品流（r213）：快捷创作 / 工作流 / 画布的产物合成一条
+  createWorksRouter(),
+  // 快捷创作对话（r213）：长上下文会话、联网搜索、文件解析
+  createChatRouter(),
   createBillingRouter(),
   createCreditsRouter(),
   // 素材占用：设置页要看「自己的帧图占了多少盘」（v0.9.68）

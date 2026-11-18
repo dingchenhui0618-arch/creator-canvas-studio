@@ -215,7 +215,7 @@
   .vq-ledger th {
     white-space: nowrap;
   }
-  /* 手机列窄：时间与类型用 11px，否则「11/13 12:28」「智能体对话」会互相压到 */
+  /* 手机列窄：时间与类型用 11px，否则「11/13 12:28」「对话」会互相压到 */
   .vq-ledger td:nth-child(1),
   .vq-ledger td:nth-child(2) {
     font-size: 11px;

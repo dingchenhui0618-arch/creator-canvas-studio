@@ -482,7 +482,7 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
                 <strong>{prices ? prices.review : '—'}</strong>
               </div>
               <div className="vq-price-item">
-                <span>智能体对话</span>
+                <span>对话</span>
                 <strong>{prices ? prices.chat : '—'}</strong>
               </div>
               <div className="vq-price-item">

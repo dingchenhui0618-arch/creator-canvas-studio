@@ -102,7 +102,7 @@ export function createAgentsRouter() {
           }
           const agent = await getAgent(id, user)
           if (!agent) {
-            sendJson(res, 404, { error: '智能体不存在：' + id })
+            sendJson(res, 404, { error: '对话预设不存在：' + id })
             return true
           }
           const body = await readBody(req)
@@ -263,7 +263,7 @@ export function createAgentsRouter() {
           }
           const agent = await getAgent(id, user)
           if (!agent) {
-            sendJson(res, 404, { error: '智能体不存在：' + id })
+            sendJson(res, 404, { error: '对话预设不存在：' + id })
             return true
           }
           const body = await readBody(req)
@@ -310,7 +310,7 @@ export function createAgentsRouter() {
         if (segments.length === 2 && action === 'history') {
           const agent = await getAgent(id, user)
           if (!agent) {
-            sendJson(res, 404, { error: '智能体不存在：' + id })
+            sendJson(res, 404, { error: '对话预设不存在：' + id })
             return true
           }
           if (req.method === 'GET') {
@@ -344,7 +344,7 @@ export function createAgentsRouter() {
           if (req.method === 'GET') {
             const agent = await getAgent(id, user)
             if (!agent) {
-              sendJson(res, 404, { error: '智能体不存在：' + id })
+              sendJson(res, 404, { error: '对话预设不存在：' + id })
               return true
             }
             sendJson(res, 200, agent)
@@ -353,12 +353,12 @@ export function createAgentsRouter() {
           if (req.method === 'PATCH' || req.method === 'PUT') {
             const body = await readBody(req)
             if (!(await getAgent(id, user))) {
-              sendJson(res, 404, { error: '智能体不存在：' + id })
+              sendJson(res, 404, { error: '对话预设不存在：' + id })
               return true
             }
             const agent = await updateAgent(id, body)
             if (!agent) {
-              sendJson(res, 404, { error: '智能体不存在：' + id })
+              sendJson(res, 404, { error: '对话预设不存在：' + id })
               return true
             }
             sendJson(res, 200, agent)
@@ -366,12 +366,12 @@ export function createAgentsRouter() {
           }
           if (req.method === 'DELETE') {
             if (!(await getAgent(id, user))) {
-              sendJson(res, 404, { error: '智能体不存在：' + id })
+              sendJson(res, 404, { error: '对话预设不存在：' + id })
               return true
             }
             const done = await deleteAgent(id)
             if (!done) {
-              sendJson(res, 404, { error: '智能体不存在：' + id })
+              sendJson(res, 404, { error: '对话预设不存在：' + id })
               return true
             }
             sendJson(res, 200, { ok: true, id })

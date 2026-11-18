@@ -116,7 +116,7 @@ export default function UpstreamBalanceCard() {
         <div>
           <p className="admin-label">上游渠道余额</p>
           <p className="admin-sub">
-            按渠道列清楚还剩多少钱，低于阈值标红。GeteAPI 用账号访问令牌自动读；SeeAPI / CGCM
+            按渠道列清楚还剩多少钱，低于阈值标红。主通道 A 用账号访问令牌自动读；主通道 B
             上游没有余额接口，只能按对账单手动登记 —— 两种来源分列，别把它当成同一个实时数。
           </p>
         </div>
@@ -222,7 +222,7 @@ export default function UpstreamBalanceCard() {
                       <input
                         type="password"
                         autoComplete="off"
-                        placeholder={channel.hasToken ? '留空沿用原来的令牌' : '在 GeteAPI 控制台 → 设置 → 访问令牌 生成'}
+                        placeholder={channel.hasToken ? '留空沿用原来的令牌' : '在渠道控制台 → 设置 → 访问令牌 生成'}
                         value={draft.accessToken}
                         onChange={(event) => setDraft({ ...draft, accessToken: event.target.value })}
                       />
@@ -275,7 +275,7 @@ export default function UpstreamBalanceCard() {
       ) : null}
 
       <p className="admin-hint">
-        GeteAPI 的分组倍率与价格来自公开价目表；余额来自账号接口的 quota ÷ quota_per_unit。中转 Key
+        主通道 A 的分组倍率与价格来自公开价目表；余额来自账号接口的 quota ÷ quota_per_unit。中转 Key
         本身读不到余额（/v1/dashboard 那个硬限额是占位值），别拿它当余额。
       </p>
     </section>

@@ -352,7 +352,7 @@
   width: 100%;
 }
 
-/* 表单里的下拉要和 38px 的输入框同高，不能矮一截（智能体编辑器、举报弹窗） */
+/* 表单里的下拉要和 38px 的输入框同高，不能矮一截（对话预设编辑器、举报弹窗） */
 .vq-field .vq-select--block .vq-select__trigger,
 .agx-field .vq-select--block .vq-select__trigger {
   height: 38px;

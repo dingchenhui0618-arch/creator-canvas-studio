@@ -49,7 +49,7 @@ async function persist(list) {
 export const TEMPLATE_SOURCES = [
   { key: 'radar', label: '发现' },
   { key: 'project', label: '作品' },
-  { key: 'agent', label: '智能体' },
+  { key: 'agent', label: '对话预设' },
   { key: 'canvas', label: '工作流' },
   { key: 'adapted', label: '改编' },
   { key: 'shared', label: '官方示例' },

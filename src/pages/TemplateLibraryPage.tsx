@@ -61,7 +61,7 @@ const isParsed = (template: ReplicaTemplate) => template.kind !== 'saved'
 const SOURCE_TAG: Record<string, string> = {
   project: '来自作品',
   adapted: '改编版',
-  agent: '智能体',
+  agent: '对话预设',
   canvas: '工作流',
   shared: '官方示例',
 }
@@ -549,7 +549,7 @@ export function TemplateLibraryPage({
                         : detail.kind === 'adapted'
                           ? (detail.origin === 'project' ? '来自作品 · ' : '改编版 · ') + (detail.contentType || '脚本')
                           : detail.kind === 'agent'
-                            ? '智能体 · ' + (detail.contentType || '脚本')
+                            ? '对话预设 · ' + (detail.contentType || '脚本')
                             : (isParsed(detail) ? detail.contentType : '待解析') + ' · ' + detail.platformLabel}
                     </span>
                     <strong>{detail.title}</strong>
@@ -557,7 +557,7 @@ export function TemplateLibraryPage({
                       {detail.kind === 'flow'
                         ? '来自工作流 · 套用后开回一张新工作流 · ' + (detail.flowNodes?.length || 0) + ' 个节点'
                         : detail.kind === 'agent'
-                          ? '来自智能体' + (detail.agentName ? ' ' + detail.agentName : '') + ' · ' + detail.structure.length + ' 段 · ' + detail.storyboard.length + ' 镜'
+                          ? '来自对话预设' + (detail.agentName ? ' ' + detail.agentName : '') + ' · ' + detail.structure.length + ' 段 · ' + detail.storyboard.length + ' 镜'
                           : detail.kind === 'adapted' && detail.origin === 'project'
                             ? '来自作品《' + (detail.projectTitle || '已删的作品') + '》' +
                               (detail.projectVersion ? ' · 第 ' + detail.projectVersion + ' 版' : ' · 还没开工作流') +
@@ -829,10 +829,10 @@ export function TemplateLibraryPage({
                   <section className="drawer-section">
                     <div className="drawer-section-head"><h3>来源</h3><span>{sourceLabel(detail.source) || '模板'}</span></div>
                     <div className="drawer-source">
-                      {/* 以前这里只有一条「平台 · 作者 · 平台 ID + 原链接」，于是从作品/智能体/工作流来的模板
+                      {/* 以前这里只有一条「平台 · 作者 · 平台 ID + 原链接」，于是从作品/对话预设/工作流来的模板
                           也被写成「原链接缺失（示例数据或直链测试）」——它们本来就没有原片，不是链接丢了。 */}
                       {detail.kind === 'agent' ? (
-                        <span>智能体{detail.agentName ? ' ' + detail.agentName : ''}的草稿 · 不存原视频</span>
+                        <span>对话预设{detail.agentName ? ' ' + detail.agentName : ''}的草稿 · 不存原视频</span>
                       ) : detail.kind === 'adapted' && (detail.origin === 'project' || detail.projectId) ? (
                         <>
                           <span>

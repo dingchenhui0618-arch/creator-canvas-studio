@@ -8,7 +8,7 @@ const ENDPOINTS: { key: keyof GatewayStatus['endpoints']; label: string; note: s
   { key: 'imagesAsync', label: '出图 · 异步建任务', note: '只回任务 id，再按 id 轮询取图' },
   { key: 'videoCreate', label: '出视频 · 建任务', note: '返回任务 id，无限画布按 id 轮询' },
   { key: 'videoPoll', label: '出视频 · 轮询', note: '回到建任务的那把 Key 查进度' },
-  { key: 'taskPoll', label: '任务 · 查结果', note: 'SeeAPI 形态的通用查任务地址' },
+  { key: 'taskPoll', label: '任务 · 查结果', note: '异步任务形态的通用查任务地址' },
 ]
 
 const GROUPS: { capability: 'image' | 'video'; label: string }[] = [
@@ -76,7 +76,7 @@ export default function GatewaySection() {
         <div>
           <p className="admin-label">生成通道</p>
           <p className="admin-sub">
-            无限画布的出图 / 出视频请求已经走这里：按能力选平台 Key 再转发上游。方舟与 SeeAPI（CGCM）两种上游协议都接，
+            无限画布的出图 / 出视频请求已经走这里：按能力选平台 Key 再转发。两种接入协议都支持，
             贴 Key 时只管贴地址，协议按地址自动认。令牌与上游 Key 都不进浏览器。
           </p>
         </div>

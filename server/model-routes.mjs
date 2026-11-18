@@ -13,7 +13,7 @@ import { config } from './config.mjs'
 
 /** 平台展示名：与 model-catalog.mjs 的 PLATFORM_META 保持一致。 */
 const PLATFORM_LABELS = {
-  deepseek: 'DeepSeek',
+  deepseek: '平台对话模型',
   geteapi: 'GeteAPI',
   seeapi: 'SeeAPI / CGCM',
   ark: '火山方舟',
@@ -34,7 +34,7 @@ export function primaryRoutes() {
       platformLabel: PLATFORM_LABELS.deepseek,
       model: textModel,
       source: 'config',
-      usedBy: ['对话', '评审', '改写', '自建智能体'],
+      usedBy: ['对话', '评审', '改写', '自建对话预设'],
       note: '评审与对话都在它上面。GeteAPI 的 gpt-5.6-luna 只做备用，不在选择器里出现。',
     },
     {
@@ -54,7 +54,7 @@ export function primaryRoutes() {
       platformLabel: PLATFORM_LABELS.geteapi,
       model: 'gpt-image-2',
       source: 'fixed',
-      usedBy: ['快捷创作 · 图片', '无限画布出图', '智能体生图'],
+      usedBy: ['快捷创作 · 图片', '无限画布出图', '对话预设生图'],
       note: 'GeteAPI 的 GPT Image 2。其余图片模型（2.5、Nano Banana、Seedream 系）只做参考，不下发。',
     },
     {
@@ -64,7 +64,7 @@ export function primaryRoutes() {
       platformLabel: PLATFORM_LABELS.seeapi,
       model: 'seedance-2.0',
       source: 'fixed',
-      usedBy: ['快捷创作 · 视频', '无限画布出视频', '智能体生视频'],
+      usedBy: ['快捷创作 · 视频', '无限画布出视频', '对话预设生视频'],
       note: 'SeeAPI 的 Seedance 2.0。fast / mini / 2.5 / minimax / wan 一律仅参考。',
     },
   ]

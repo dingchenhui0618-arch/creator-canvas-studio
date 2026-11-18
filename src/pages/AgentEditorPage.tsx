@@ -83,7 +83,7 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
       setLoading(true)
       setLoadError('')
       try {
-        // 新智能体默认沿用顶栏选择的模型；没选过才用平台默认
+        // 新对话预设默认沿用顶栏选择的模型；没选过才用平台默认
         const [data, prefs] = await Promise.all([listAgents(), getPreferences().catch(() => ({ model: '' }))])
         if (!alive) return
         setMeta(data)
@@ -101,7 +101,7 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
         setForm(next)
       } catch (caught) {
         if (!alive) return
-        setLoadError(caught instanceof Error ? caught.message : '智能体列表加载失败')
+        setLoadError(caught instanceof Error ? caught.message : '对话预设列表加载失败')
       } finally {
         if (alive) setLoading(false)
       }
@@ -194,7 +194,7 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
     setSaveError('')
     try {
       await deleteAgent(editingId)
-      onToast('已删除该智能体')
+      onToast('已删除该对话预设')
       onNavigate('agents')
     } catch (caught) {
       setSaveError(caught instanceof Error ? caught.message : '删除失败')
@@ -227,10 +227,10 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
         kicker={
           <button type="button" className="agx-head-back" onClick={onBack}>
             <ArrowLeft size={12} />
-            返回智能体
+            返回对话预设
           </button>
         }
-        title={editingId ? form.name || '编辑智能体' : '新建智能体'}
+        title={editingId ? form.name || '编辑对话预设' : '新建对话预设'}
         desc={
           internal
             ? '保存即写入 data/agents.json，回到列表就能直接对话。'
@@ -249,7 +249,7 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
           </button>
             <button className="vq-button vq-button--primary" onClick={() => void save()} disabled={saving || !ready}>
               <Check size={14} />
-              {saving ? '保存中…' : editingId ? '保存修改' : '创建智能体'}
+              {saving ? '保存中…' : editingId ? '保存修改' : '创建对话预设'}
             </button>
           </div>
         }
@@ -258,7 +258,7 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
       {loadError && (
         <div className="agx-alert">
           <AlertCircle size={14} />
-          <span>读取智能体列表失败：{loadError}。你仍然可以尝试保存，失败原因会显示在按钮下方。</span>
+          <span>读取对话预设列表失败：{loadError}。你仍然可以尝试保存，失败原因会显示在按钮下方。</span>
         </div>
       )}
 
@@ -448,7 +448,7 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
                 {editingId ? 'PATCH /api/agents/' + editingId : 'POST /api/agents'}
               </span>
             ) : (
-              <span className="agx-mono">{editingId ? '编辑已有智能体' : '新建智能体'}</span>
+              <span className="agx-mono">{editingId ? '编辑已有对话预设' : '新建对话预设'}</span>
             )}
             <div>
               <button className="vq-button vq-button--ghost" onClick={onBack}>
@@ -456,7 +456,7 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
               </button>
               <button className="vq-button vq-button--primary" onClick={() => void save()} disabled={saving || !ready}>
                 <Check size={14} />
-                {saving ? '保存中…' : editingId ? '保存修改' : '创建智能体'}
+                {saving ? '保存中…' : editingId ? '保存修改' : '创建对话预设'}
               </button>
             </div>
           </footer>
@@ -467,7 +467,7 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
             <span className="agx-kicker">列表预览</span>
             <div className="agx-preview">
               <div className="agx-card-top">
-                <span className="agx-card-name">{form.name || '未命名智能体'}</span>
+                <span className="agx-card-name">{form.name || '未命名对话预设'}</span>
                 <Tag>{form.category}</Tag>
               </div>
               <p className="agx-card-role">{form.role || '一句话职责会显示在这里。'}</p>
@@ -509,7 +509,7 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
               <MessageSquareText size={14} />
             </div>
             <p className="agx-side-copy">
-              保存后回到列表，选中这个智能体，写清要做的事就能开始。
+              保存后回到列表，选中这个对话预设，写清要做的事就能开始。
             </p>
             <button className="vq-button vq-button--ghost" onClick={startChat} disabled={!editingId}>
               <MessageSquareText size={14} />

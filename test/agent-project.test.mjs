@@ -383,7 +383,7 @@ test('接口：POST /api/agents/<id>/draft/project 是第三个出口，方法�
 
   const noAgent = await call('POST', '/api/agents/agt_nope/draft/project', { draft, projectId: 'prj_route' })
   assert.equal(noAgent.status, 404)
-  assert.match(noAgent.body.error, /智能体不存在/)
+  assert.match(noAgent.body.error, /对话预设不存在/)
 
   const wrongMethod = await call('PUT', '/api/agents/' + agent.id + '/draft/project', { draft, projectId: 'prj_route' })
   assert.equal(wrongMethod.status, 405)

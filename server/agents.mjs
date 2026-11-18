@@ -268,7 +268,7 @@ export async function getAgent(id, user = null) {
 export async function createAgent(input, user = null) {
   const list = await loadAll()
   const data = normalizeInput(input)
-  if (list.some((item) => item.name === data.name)) throw invalid('已有同名智能体：' + data.name)
+  if (list.some((item) => item.name === data.name)) throw invalid('已有同名对话预设：' + data.name)
   const createdAt = now()
   const agent = {
     id: 'agt_' + randomUUID().slice(0, 8),
@@ -289,7 +289,7 @@ export async function updateAgent(id, input) {
   const current = list.find((item) => item.id === id)
   if (!current) return null
   const data = normalizeInput(input, { partial: true })
-  if (data.name && list.some((item) => item.id !== id && item.name === data.name)) throw invalid('已有同名智能体：' + data.name)
+  if (data.name && list.some((item) => item.id !== id && item.name === data.name)) throw invalid('已有同名对话预设：' + data.name)
   const updated = { ...current, ...data, updatedAt: now() }
   await persist(list.map((item) => (item.id === id ? updated : item)))
   return updated

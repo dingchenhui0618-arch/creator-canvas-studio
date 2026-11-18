@@ -192,7 +192,7 @@ export default function ProjectPage({
   onOpenReview: (projectId: string) => void
   /** 打开某一条评审的记录页：那里有当时的证据原图与问题锚点 */
   onOpenReviewRecord: (reviewId: string) => void
-  /** 让智能体起草这一版脚本：带着这条作品的上下文去智能体页，草稿写完能直接写回这一版 */
+  /** 让对话预设起草这一版脚本：带着这条作品的上下文去对话预设页，草稿写完能直接写回这一版 */
   onOpenAgents: (projectId: string) => void
   onBrowseTemplates: () => void
   /** 打开这条作品用的那条模板：来源面板里点模板名就走这里（地址是 #/templates/<模板 id>） */
@@ -3017,10 +3017,10 @@ export default function ProjectPage({
                       type="button"
                       className="vq-script-link"
                       onClick={() => onOpenAgents(data.project.id)}
-                      title="带着这条作品这一版的要求去智能体页；草稿写完点「写进作品」就换成本版的脚本（模板不动）"
+                      title="带着这条作品这一版的要求去对话预设页；草稿写完点「写进作品」就换成本版的脚本（模板不动）"
                     >
                       <Bot size={12} />
-                      让智能体写
+                      让 AI 起草
                     </button>
                     <button
                       type="button"
@@ -3432,7 +3432,7 @@ export default function ProjectPage({
           </section>
 
           {/* 花费（v0.9.65）：钱花在这条作品的哪一步。只算评审与工作流运行——
-              检索、复刻与智能体对话记在账号上，账本里没有作品，不摊过来 */}
+              检索、复刻与对话记在账号上，账本里没有作品，不摊过来 */}
           {spend ? (
             <section className="vq-project-panel vq-project-spend" aria-labelledby="vq-project-spend-head">
               <div className="vq-project-panel-head">
@@ -3477,7 +3477,7 @@ export default function ProjectPage({
                 <p className="vq-project-note vq-mono">最近一次 · {stamp(spend.lastAt)}</p>
               ) : null}
               <p className="vq-project-note">
-                退过款的运行不算（钱已经退回）；检索、复刻与智能体对话记在账号上，去设置页「本月花在哪」看。
+                退过款的运行不算（钱已经退回）；检索、复刻与对话记在账号上，去设置页「本月花在哪」看。
               </p>
               {spendOpen ? (
                 <div className="vq-project-spend-detail" id="vq-project-spend-detail">
@@ -3835,7 +3835,7 @@ export default function ProjectPage({
                     <dt>内容类型</dt>
                     <dd>{template.contentType || '—'}</dd>
                   </div>
-                  {/* 只有真原片才写原片时长：工作流 / 智能体来的模板没有原片，写 0.0s 是编的 */}
+                  {/* 只有真原片才写原片时长：工作流 / 对话预设来的模板没有原片，写 0.0s 是编的 */}
                   {template.origin?.kind === 'original' ? (
                     <div>
                       <dt>原片时长</dt>
@@ -3873,7 +3873,7 @@ export default function ProjectPage({
                   <p className="vq-project-note">
                     {template.origin.kind === 'canvas'
                       ? '这条模板是从工作流另存的，没有原片可回看。'
-                      : '这条模板是智能体草稿存的，没有原片可回看。'}
+                      : '这条模板是对话预设草稿存的，没有原片可回看。'}
                   </p>
                 ) : null}
               </>

@@ -5,7 +5,7 @@
 //      某一条交付：#/projects/<作品 id>/delivery/<交付记录 id>（工作台点一行直接落在那一版的档案上，v0.9.140）
 //      单条历史评审：#/review/<评审 id>（作品页点一条评审就走到这里，刷新与后退都能回到那条）
 //      单条模板：#/templates/<模板 id>（作品页「来源」里点模板名走进来，刷新与后退都还在这条模板上）
-//      智能体编辑：#/agents/new 与 #/agents/<id 或唯一名称>
+//      对话预设编辑：#/agents/new 与 #/agents/<id 或唯一名称>
 //      帮助中心：#/help 是目录，#/help/<slug> 是单篇（公开可读，不登录也能看）
 //      后台管理：#/admin/<section>，section 取自 editions.ts 的后台导航。
 //
