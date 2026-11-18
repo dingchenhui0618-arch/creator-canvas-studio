@@ -465,6 +465,45 @@ async function refreshVideo(task) {
   task.updatedAt = nowIso()
 }
 
+// 「最近生成」：把某个账号自己的任务按时间倒序列出来。
+// 关掉窗口之后，结果文件还在 data/media/<账号>/，但任务号没人记得——所以必须有一份清单，
+// 否则「生成了但没下载」就等于白花钱。这里只读任务元数据，不打上游、不扣积分。
+const LIST_MAX = 24
+const LIST_DEFAULT = 8
+const LIST_SCAN = 240
+
+async function listTasks(userId, { kind = '', limit = LIST_DEFAULT } = {}) {
+  let names = []
+  try {
+    names = await fsp.readdir(taskMetaDir())
+  } catch {
+    return []
+  }
+  const candidates = []
+  for (const name of names) {
+    if (!name.endsWith('.json')) continue
+    const file = path.join(taskMetaDir(), name)
+    try {
+      const stat = await fsp.stat(file)
+      candidates.push({ name, at: stat.mtimeMs })
+    } catch {
+      // 文件刚被清理掉，跳过
+    }
+  }
+  // 任务状态每次变化都会重写元数据，mtime 只能用来找「最近动过的」，排序仍按 createdAt
+  candidates.sort((a, b) => b.at - a.at)
+  const found = []
+  for (const item of candidates.slice(0, LIST_SCAN)) {
+    const task = await readTask(item.name.slice(0, -5))
+    if (!task) continue
+    if (String(task.userId) !== String(userId)) continue
+    if (kind && task.kind !== kind) continue
+    found.push(task)
+  }
+  found.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+  return found.slice(0, limit).map(publicTask)
+}
+
 async function handleGenerate(req, res, user) {
   const limit = rateLimited(user.id)
   if (limit) {
@@ -586,6 +625,28 @@ export function createMediaGenRouter() {
           logEvent('media.generate.error', { by: user.email, error: failureText(error) })
           sendJson(res, 500, { error: '生成任务没有建立，请稍后再试', code: 'MEDIA_INTERNAL' })
         }
+        return true
+      }
+
+      if (pathname === '/api/media/tasks') {
+        if (req.method !== 'GET') {
+          res.setHeader('Allow', 'GET')
+          sendJson(res, 405, { error: '只支持 GET' })
+          return true
+        }
+        const user = currentUser(req)
+        if (!user) {
+          sendJson(res, 401, { error: '未登录', loginRequired: true })
+          return true
+        }
+        const kind = String(url.searchParams.get('kind') || '').trim()
+        if (kind && kind !== 'image' && kind !== 'video') {
+          sendJson(res, 400, { error: 'kind 只能是 image 或 video', code: 'MEDIA_KIND' })
+          return true
+        }
+        const raw = Number(url.searchParams.get('limit') || LIST_DEFAULT)
+        const limit = Number.isFinite(raw) ? Math.max(1, Math.min(LIST_MAX, Math.trunc(raw))) : LIST_DEFAULT
+        sendJson(res, 200, { ok: true, kind, tasks: await listTasks(user.id, { kind, limit }) })
         return true
       }
 

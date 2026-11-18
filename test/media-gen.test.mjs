@@ -340,3 +340,50 @@ test('未登录不能发起生成', async () => {
   assert.equal(result.status, 401)
   assert.equal(result.payload.loginRequired, true)
 })
+test('最近生成：只列自己的、按时间倒序、按 kind 分开、未登录不给看', async () => {
+  resetMediaGenRateLimit()
+  const user = auth.createUser({ email: email('recent'), password: 'Passw0rd!demo', name: '最近生成用户', kind: 'user' })
+  credits.grant(user.id, 100, { note: 'media recent test' })
+  const cookie = cookieOf(user)
+
+  const empty = await call({ method: 'GET', target: '/api/media/tasks', cookie })
+  assert.equal(empty.status, 200)
+  assert.deepEqual(empty.payload.tasks, [], '没生成过就给空清单，不是报错')
+
+  const first = await call({ cookie, body: { kind: 'image', prompt: '第一张：橘猫', ratio: '1:1' } })
+  assert.equal(first.status, 200)
+  const second = await call({ cookie, body: { kind: 'video', prompt: '第二段：海边', ratio: '16:9', duration: 4, resolution: '720p' } })
+  assert.equal(second.status, 200)
+  assert.equal(second.payload.task.status, 'processing')
+
+  const all = await call({ method: 'GET', target: '/api/media/tasks', cookie })
+  assert.equal(all.status, 200)
+  assert.deepEqual(
+    all.payload.tasks.map((item) => item.id),
+    [second.payload.task.id, first.payload.task.id],
+    '新的一条排最前；还在跑的那条也要在清单里',
+  )
+  assert.equal(all.payload.tasks[0].status, 'processing')
+  assert.equal(all.payload.tasks[1].status, 'succeeded')
+  assert.ok(all.payload.tasks[1].downloadUrl, '成功的那条要能直接下载')
+
+  const onlyImages = await call({ method: 'GET', target: '/api/media/tasks?kind=image', cookie })
+  assert.equal(onlyImages.payload.kind, 'image')
+  assert.deepEqual(onlyImages.payload.tasks.map((item) => item.id), [first.payload.task.id])
+
+  const mine = [first.payload.task.id, second.payload.task.id]
+  const stranger = await call({ method: 'GET', target: '/api/media/tasks', cookie: cookieOf(other) })
+  assert.equal(stranger.status, 200)
+  assert.ok(!stranger.payload.tasks.some((item) => mine.includes(item.id)), '别人的清单里不能出现我的任务')
+
+  const anonymous = await call({ method: 'GET', target: '/api/media/tasks' })
+  assert.equal(anonymous.status, 401)
+  assert.equal(anonymous.payload.loginRequired, true)
+
+  const badKind = await call({ method: 'GET', target: '/api/media/tasks?kind=audio', cookie })
+  assert.equal(badKind.status, 400)
+  assert.equal(badKind.payload.code, 'MEDIA_KIND')
+
+  const clamped = await call({ method: 'GET', target: '/api/media/tasks?limit=999', cookie })
+  assert.ok(clamped.payload.tasks.length <= 24, 'limit 有上限，不能一次把目录翻完')
+})

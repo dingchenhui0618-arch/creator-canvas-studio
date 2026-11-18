@@ -40,7 +40,7 @@ import {
   writeAgentDraftToProject,
 } from '../api/agents'
 import type { AgentArtifact, AgentDraft, AgentRecord, AgentRunRecord, AgentsList, AgentToolsResult, OutputType } from '../api/agents'
-import { generateMediaImage, generateMediaVideo, getMediaTask } from '../api/media-gen'
+import { generateMediaImage, generateMediaVideo, getMediaTask, listMediaTasks } from '../api/media-gen'
 import type { ImageRatio, MediaKind, MediaTask, VideoDuration, VideoRatio, VideoResolution } from '../api/media-gen'
 import { getCredits, getModelService, recheckModelService, type CreditsResponse, type ModelServiceState } from '../api/credits'
 import { getProject, listProjects } from '../api/projects'
@@ -614,6 +614,18 @@ function formatBytes(bytes: number) {
   return (bytes / 1024 / 1024).toFixed(1) + ' MB'
 }
 
+// 最近生成那一行要能用一句话说清「多大、什么比例、几秒」，否则清单只是堆任务号
+function describeTask(task: MediaTask) {
+  const parts: string[] = []
+  if (task.ratio) parts.push(task.ratio)
+  if (task.kind === 'video') {
+    if (task.duration) parts.push(task.duration + 's')
+    if (task.resolution) parts.push(task.resolution)
+  }
+  if (task.status === 'succeeded' && task.file?.bytes) parts.push(formatBytes(task.file.bytes))
+  return parts.join(' · ') || (task.kind === 'image' ? '图片' : '视频')
+}
+
 function clockOf(ms: number) {
   const total = Math.max(0, Math.floor(ms / 1000))
   return String(Math.floor(total / 60)).padStart(2, '0') + ':' + String(total % 60).padStart(2, '0')
@@ -655,7 +667,29 @@ function MediaGenDialog({
   const [pollError, setPollError] = useState('')
   const [credits, setCredits] = useState<CreditsResponse | null>(null)
   const [elapsed, setElapsed] = useState(0)
+  const [recent, setRecent] = useState<MediaTask[]>([])
+  const [recentError, setRecentError] = useState('')
+  const [recentToken, setRecentToken] = useState(0)
   const promptRef = useRef<HTMLTextAreaElement | null>(null)
+
+  // 「最近生成」：关掉窗口之后还能把上一次的文件找回来——任务号没人记得，光存在服务端等于找不到。
+  // 用 .then 取数（和本页其它请求一致）：不在 effect 里同步 setState，也不会被 set-state-in-effect 规则判违规。
+  useEffect(() => {
+    let alive = true
+    listMediaTasks(kind, 6)
+      .then((response) => {
+        if (!alive) return
+        setRecent(response.tasks || [])
+        setRecentError('')
+      })
+      .catch((caught) => {
+        if (!alive) return
+        setRecentError(caught instanceof Error ? caught.message : '读取最近生成失败')
+      })
+    return () => {
+      alive = false
+    }
+  }, [kind, recentToken])
   const active = busy || task?.status === 'processing'
   const pollTaskId = task?.status === 'processing' ? task.id : ''
   const price = credits
@@ -721,6 +755,7 @@ function MediaGenDialog({
         const response = await getMediaTask(pollTaskId)
         if (!alive) return
         setTask(response.task)
+        if (response.task.status !== 'processing') setRecentToken((value) => value + 1)
         setPollError(response.warning || '')
         if (response.task.status === 'processing') {
           timer = window.setTimeout(poll, 2500)
@@ -750,6 +785,7 @@ function MediaGenDialog({
         ? await generateMediaImage({ prompt: text, ratio })
         : await generateMediaVideo({ prompt: text, ratio: videoRatio, duration, resolution })
       setTask(response.task)
+      if (response.task.status !== 'processing') setRecentToken((value) => value + 1)
       if (response.task.status === 'failed') setError(response.task.error || '生成失败')
       onCreditsChanged()
     } catch (caught) {
@@ -993,7 +1029,42 @@ function MediaGenDialog({
               </div>
             </div>
           ) : null}
-        </div>
+          {recent.length > 0 ? (
+            <div className="agx-media-recent">
+              <div className="agx-media-recent-head">
+                <span>最近生成</span>
+                <span>只列你自己的任务 · 最多 6 条</span>
+              </div>
+              <ul>
+                {recent.map((item) => (
+                  <li key={item.id} className={'agx-media-recent-row' + (item.id === task?.id ? ' is-current' : '')}>
+                    <button
+                      type="button"
+                      className="agx-media-recent-open"
+                      onClick={() => {
+                        setTask(item)
+                        setError(item.status === 'failed' ? item.error || '生成失败' : '')
+                        setPollError('')
+                      }}
+                      disabled={active}
+                      title="打开这一条"
+                    >
+                      <span className="agx-media-recent-prompt">{item.prompt}</span>
+                      <span className="agx-media-recent-meta">{describeTask(item)}</span>
+                    </button>
+                    {item.status === 'succeeded' ? (
+                      <a className="agx-media-recent-download" href={item.downloadUrl} download>
+                        下载
+                      </a>
+                    ) : (
+                      <span className="agx-media-recent-state">{item.status === 'failed' ? '失败 · 已退 ' + item.credits.cost + ' 积分' : '进行中'}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              {recentError ? <p className="agx-media-poll-warning">{recentError}</p> : null}
+            </div>
+          ) : null}        </div>
 
         <footer className="agx-media-foot">
           <span>结果文件存在服务端 data/media，预览与下载都走登录鉴权。</span>

@@ -58,5 +58,15 @@ export const generateMediaVideo = (input: { prompt: string; ratio: VideoRatio; d
     body: JSON.stringify({ kind: 'video', ...input }),
   })
 
+export type MediaTaskListResponse = {
+  ok: boolean
+  kind: string
+  tasks: MediaTask[]
+}
+
+// 「最近生成」：只回当前账号自己的任务，服务端按时间倒序；kind 用来分窗口（生图 / 生视频）。
+export const listMediaTasks = (kind: MediaKind, limit = 6) =>
+  request<MediaTaskListResponse>('/api/media/tasks?kind=' + kind + '&limit=' + limit)
+
 export const getMediaTask = (id: string) =>
   request<MediaTaskResponse>('/api/media/tasks/' + encodeURIComponent(id))
