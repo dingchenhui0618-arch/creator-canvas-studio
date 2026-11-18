@@ -75,6 +75,8 @@ gzip_min_length 1024;
 ## 五、边界
 
 - 只改了 `visionqa.wavisionai.cn` 这一个 vhost；`canvas.wavisionai.cn`（无限画布，vite dev 反代）、演示站、别的站点没动；
+- 同一台机器上 `redspeed.cn` 与 `wavisionai.cn` 的 `gzip_types` 里本来就有 `text/javascript`——说明这不是「全站都漏」，而是 VisionQA 这一份 vhost 从老版本模板渲染出来、一直没跟上；
+- `visionqa.dionysusding.cn`（演示站，反代 3210）根本没有 `gzip_types`，只压 `text/html`；本轮没动，留作后续；
 - 这台 nginx 没编 brotli 模块（`nginx -V` 里只有 `http_gzip_static`），所以走 gzip；要 brotli 得先换编译参数或装模块；
 - `/api/` 的 JSON 本来就在 `gzip_types` 里、此前就已压缩，这一轮只是把压缩级别从 1 提到 5，没有新增对接口响应的压缩；
 - 数字来自本机到这台服务器的公网链路（约 15–20ms RTT），换网络绝对值会变，比例不变；

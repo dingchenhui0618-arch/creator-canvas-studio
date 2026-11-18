@@ -4982,7 +4982,7 @@ gzip_types text/css application/javascript application/json image/svg+xml;
 
 防漂移：`scripts/check-nginx.mjs` 新增三条断言（必须有 `gzip on`、`gzip_types` 必须含 `text/css` + `text/javascript` + `application/javascript`、必须有 `gzip_vary on`），`test/nginx-template.test.mjs` 加两条反向用例（改成 `gzip off`、删掉 `text/javascript` 都必须报错），从 18 条变 20 条。
 
-门禁：**1363 / 1363** 测试、lint 0 error / 16 warning（560 文件）、`tsc -b` 干净、密钥扫描 851 文件无命中、nginx 配置检查通过、build 入口 `index-BVBgURYY.js`。生产 **0.9.186**，本地与公网 `/api/version` 一致，health ok templates 26，6 个服务 active，回滚点 `20261118-1315-r204gzip`（`ops/rollback.sh --to 1` 回 0.9.185）。边界：只改 `visionqa.wavisionai.cn` 一个 vhost，无限画布（vite dev 反代）与别的站点没动；这台 nginx 没编 brotli，走的是 gzip；`/api/` 的 JSON 此前就已压缩，这一轮只是级别 1→5；产品界面无变化，故无界面截图。细节见 `docs/nginx-gzip-2026-11-18.md`。
+门禁：**1363 / 1363** 测试、lint 0 error / 16 warning（560 文件）、`tsc -b` 干净、密钥扫描 851 文件无命中、nginx 配置检查通过、build 入口 `index-BVBgURYY.js`。生产 **0.9.186**，本地与公网 `/api/version` 一致，health ok templates 26，6 个服务 active，回滚点 `20261118-1315-r204gzip`（`ops/rollback.sh --to 1` 回 0.9.185）。边界：只改 `visionqa.wavisionai.cn` 一个 vhost，无限画布（vite dev 反代）与别的站点没动（同机 `redspeed.cn` / `wavisionai.cn` 的类型表里本来就有 `text/javascript`，可见漏的是这一份 vhost，不是全站）；这台 nginx 没编 brotli，走的是 gzip；`/api/` 的 JSON 此前就已压缩，这一轮只是级别 1→5；产品界面无变化，故无界面截图。细节见 `docs/nginx-gzip-2026-11-18.md`。
 
 
 
