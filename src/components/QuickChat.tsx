@@ -409,7 +409,7 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
               )}
             </div>
           )}
-          <div ref={bottomRef} />
+          <div ref={bottomRef} className="qc-bottom" />
         </div>
 
         {error && <div className="qc-error" role="alert">{error}</div>}

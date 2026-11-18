@@ -2876,6 +2876,10 @@
 }
 
 @media (max-width: 560px) {
+  /* 输入框现在常驻贴底，它占的高度就是一直看得见的高度：手机上收一收（r222）。
+     Ctrl+Enter 在手机上没意义，附件上限挂在附件按钮的 title 里；两行提示留着白占 34px。 */
+  .qc-hint { display: none; }
+  .qc-input { min-height: 56px; resize: none; }
   .qc-chip-name, .qc-file-name, .qc-link-name { max-width: 128px; }
   /* 表格在窄屏不横着拖：表头允许换行、字号降一档，宁可排两行，
      也别把「目的」那一列藏在滚动条后面 */
@@ -2888,6 +2892,20 @@
 }
 
 
+
+/* 手机（≤560）：聊天页的版头不必占掉四分之一屏（r222）。
+   标题缩一档、说明收进空状态（空状态里已经把用法写全）、上下留白收紧；
+   只动这一页的页头，不改全局 .vq-head 的尺度。 */
+@media (max-width: 560px) {
+  .agx-page .vq-head {
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    gap: 8px;
+  }
+  .agx-page .vq-head-kicker { margin-bottom: 4px; }
+  .agx-page .vq-head-title { font-size: 22px; line-height: 1.3; }
+  .agx-page .vq-head-desc { display: none; }
+}
 
 /* 窄屏（平板竖屏到手机）：会话列表收成一条可展开的窄条（r221）。
    原来这里把列表压成 200px、回答区留 48vh，手机上等于「列表比回答还占地方」——
@@ -2903,11 +2921,13 @@
   .qc-side.is-open .qc-list { display: flex; max-height: 40vh; }
   /* 提醒「会话存在服务端」这段在手机上不占位置：条数就在旁边 */
   .qc-side-note { display: none; }
-  /* 回答区从 48vh 提到 58vh：列表让出来的高度给回答，输入框仍然一屏内看得见。
-     这里没改成「整页滚 + 输入框贴底」——实测本页真正的滚动容器是文档本身，
-     .vq-content 虽然写了 overflow:auto 却从不滚动，sticky 贴不住底，所以不做。
-     回答区自己滚也更适合边生成边看：新字进来只滚它，页面不跟着跳。 */
-  .qc-thread { max-height: 58vh; min-height: 280px; }
+  /* 回答区跟着页面走：窄屏整页滚，输入框 sticky 贴在屏幕底部（r222）。
+     前提是 shell 在 ≤900 把 .vq-content 的 overflow 放开——overflow:auto 就算不滚，
+     也会成为 sticky 的参照容器，按钮就贴不住底（r221 实测）。 */
+  .qc-thread { max-height: none; min-height: 320px; }
+  .qc-composer { position: sticky; bottom: 8px; z-index: 3; }
+  /* 滚到末尾时给贴底输入框留出位置：不留的话最后一段回答会被输入框挡住 */
+  .qc-bottom { scroll-margin-bottom: 272px; }
   .qc-msg { max-width: 100%; }
 }
 

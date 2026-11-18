@@ -2330,6 +2330,14 @@ select:focus-visible {
     overflow: visible;
   }
 
+  /* 窄屏是文档级滚动，.vq-content 自己也就不该再当滚动容器（r222）。
+     overflow:auto 的元素即使从不滚动，也会成为 position:sticky 的参照——
+     快捷创作的输入框要贴屏幕底，就必须把这一层的 overflow 放开。
+     真会横向撑开的东西（表格、代码块）各自有 overflow 容器，不受影响。 */
+  .vq-content {
+    overflow: visible;
+  }
+
   .vq-sidebar {
     position: sticky;
     top: 0;
