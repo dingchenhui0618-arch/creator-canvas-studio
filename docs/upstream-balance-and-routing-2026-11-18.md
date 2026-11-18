@@ -58,7 +58,25 @@ POST /api/admin/upstream-balance/check    真打一次上游账号接口，结�
 - `test/model-routes.test.mjs` 3 条：四条能力各一条主路由、同能力其它模型一律仅参考、汇总按目录现算。
 - 真实渲染：`docs/upstream-balance-1440.png`（整页）、`docs/upstream-balance-card-1440.png`（余额表，GeteAPI 标红 / SeeAPI 正常）、`docs/upstream-balance-390.png`（390 无横向溢出）。截图来自本机临时实例（临时 DATA_DIR + 管理员账号 + 同一份 dist），样例余额是写入的，不是真余额。
 
-## 五、边界
+## 五、真实配置与真实余额（2026-11-18 14:31）
+
+授权后在你已登录的浏览器里走完整条路，踩了三个坑，都写进代码或文档了：
+
+1. **`New-Api-User` 是必需的**：只带 `Authorization: Bearer <access token>` 打 `/api/user/self` 会 401（实测）；带上账号 id 才 200。所以界面里「New API 用户 ID」不是可选项的摆设，401 时要填。
+2. **`/api/user/token` 每调一次就重签**：第一次拿到的令牌被我第二次调用冲掉，服务端核对直接 401。教训：生成一次就用，别为了「确认一下」再调。
+3. **货币符号回的是 `¤`**（通用货币符），不是 `¥`。已加 `currencySymbol()` 归一：`¤` 与空串按 `¥` 显示，别的符号照用。
+
+真实结果（生产，`GET /api/admin/upstream-balance`）：
+
+```json
+{ "id": "geteapi", "amount": 19.6377, "used": 0.5623, "currency": "¥", "state": "low", "source": "auto", "threshold": 20 }
+```
+
+`19.6377` 就是面板上的 ¥19.64（quota 9,818,858 ÷ 500,000），**低于 ¥20 阈值所以标红**。SeeAPI 仍是「未核对」，等对账单手动登记。生产截图：`docs/upstream-balance-live-1440.png`（真实生产、真实余额，不是样例数据）。
+
+令牌与临时管理员会话都已清理：令牌只落在 `/var/lib/visionqa/upstream-balance.json`（0600、visionqa:visionqa），临时会话用 `destroySession` 撤销，本机临时文件已删。
+
+## 六、边界
 
 - **还没有真实余额数字**：GeteAPI 控制台需要账号登录才能生成访问令牌，这一步等用户配合一次。在那之前界面显示「未核对」，手动登记的渠道照常可用。
 - `New-Api-User` 是否必需取决于站点版本：代码里是可选项，401 时界面会提示去填用户 ID。

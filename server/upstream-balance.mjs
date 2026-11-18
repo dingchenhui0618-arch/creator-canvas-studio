@@ -53,6 +53,17 @@ export function quotaToAmount(quota, perUnit) {
   return Math.round((value / unit) * 10000) / 10000
 }
 
+/**
+ * 货币符号归一。GeteAPI 的 /api/status 里 custom_currency_symbol 回的是 '¤'（通用货币符），
+ * 但本站配额按人民币计价（quota_per_unit = 500000，面板显示 ¥），所以 '¤' 与空串都按 ¥ 显示；
+ * 上游真的给了别的符号就照用，不替它猜。
+ */
+export function currencySymbol(raw) {
+  const value = String(raw || '').trim()
+  if (!value || value === '¤') return '¥'
+  return value.slice(0, 4)
+}
+
 /** 三态：low（低于阈值）/ ok / unknown（没核对过、没令牌或上游读失败）。 */
 export function balanceState(amount, threshold) {
   if (amount === null || amount === undefined || !Number.isFinite(Number(amount))) return 'unknown'
@@ -79,14 +90,21 @@ function emptyChannel(id) {
   return { accessToken: '', newApiUser: '', threshold: DEFAULT_THRESHOLD, manualAmount: null, last: null, updatedAt: '', updatedBy: '' }
 }
 
+/** null / 空串都要当成「没有数」，不能经 Number() 变成 0——那会把「核对失败」显示成余额 0。 */
+function toAmountOrNull(value) {
+  if (value === null || value === undefined || value === '') return null
+  const num = Number(value)
+  return Number.isFinite(num) ? num : null
+}
+
 function normalizeChannel(file, id) {
   const raw = file?.channels?.[id]
   if (!raw || typeof raw !== 'object') return emptyChannel(id)
-  const amount = raw.manualAmount === null || raw.manualAmount === undefined ? null : Number(raw.manualAmount)
+  const amount = toAmountOrNull(raw.manualAmount)
   const last = raw.last && typeof raw.last === 'object'
     ? {
-        amount: Number.isFinite(Number(raw.last.amount)) ? Number(raw.last.amount) : null,
-        used: Number.isFinite(Number(raw.last.used)) ? Number(raw.last.used) : null,
+        amount: toAmountOrNull(raw.last.amount),
+        used: toAmountOrNull(raw.last.used),
         currency: String(raw.last.currency || ''),
         source: raw.last.source === 'auto' ? 'auto' : 'manual',
         at: String(raw.last.at || ''),
@@ -97,7 +115,7 @@ function normalizeChannel(file, id) {
     accessToken: String(raw.accessToken || ''),
     newApiUser: String(raw.newApiUser || ''),
     threshold: clampNumber(raw.threshold, DEFAULT_THRESHOLD, 0, 1e7),
-    manualAmount: Number.isFinite(amount) && amount >= 0 ? amount : null,
+    manualAmount: amount !== null && amount >= 0 ? amount : null,
     last,
     updatedAt: String(raw.updatedAt || ''),
     updatedBy: String(raw.updatedBy || ''),
@@ -194,7 +212,7 @@ export async function checkNewApiBalance(meta, channel, { timeoutMs = FETCH_TIME
   try {
     const status = await fetchJson(base + '/api/status', { timeoutMs })
     const perUnit = Number(status?.data?.quota_per_unit) || 500000
-    const currency = String(status?.data?.custom_currency_symbol || '')
+    const currency = currencySymbol(status?.data?.custom_currency_symbol)
     const self = await fetchJson(base + '/api/user/self', { headers, timeoutMs })
     if (self?.success === false) throw new Error(String(self?.message || '账号接口没有返回成功'))
     const data = self?.data || {}

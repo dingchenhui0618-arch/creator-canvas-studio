@@ -18,6 +18,7 @@ async function fresh() {
 }
 
 const realFetch = globalThis.fetch
+const CNY_SYMBOL = '\u00a4'
 
 test('quota 换算：500000 quota = 1 个货币单位，余额按四位小数留', async () => {
   const { quotaToAmount } = await fresh()
@@ -39,11 +40,19 @@ test('阈值判定：低于是 low，等于不算低，没核对过是 unknown',
   assert.equal(balanceState(12, undefined), 'ok')
 })
 
+test('货币符号归一：上游回的通用货币符按 ¥ 显示，真给了别的符号就照用', async () => {
+  const { currencySymbol } = await fresh()
+  assert.equal(currencySymbol(CNY_SYMBOL), '¥')
+  assert.equal(currencySymbol(''), '¥')
+  assert.equal(currencySymbol('$'), '$')
+  assert.equal(currencySymbol('EUR'), 'EUR')
+})
+
 test('令牌只回末四位：保存后视图里拿不到明文', async () => {
   fs.rmSync(path.join(dir, 'upstream-balance.json'), { force: true })
   const { saveBalanceChannel, maskToken } = await fresh()
   const token = 'abcdef1234567890'
-  const saved = await saveBalanceChannel('geteapi', { accessToken: token, threshold: 30 }, { by: '[EMAIL:ADMIN]' })
+  const saved = await saveBalanceChannel('geteapi', { accessToken: token, threshold: 30 }, { by: 'admin@test' })
   assert.equal(saved.ok, true)
   assert.equal(saved.channel.hasToken, true)
   assert.equal(saved.channel.tokenMask, maskToken(token))
@@ -102,7 +111,7 @@ test('New API 余额真读一遍：quota ÷ quota_per_unit，带上 New-Api-User
   globalThis.fetch = async (url, init = {}) => {
     calls.push({ url: String(url), headers: init.headers || {} })
     if (String(url).endsWith('/api/status')) {
-      return new Response(JSON.stringify({ data: { quota_per_unit: 500000, custom_currency_symbol: '¥' } }), { status: 200 })
+      return new Response(JSON.stringify({ data: { quota_per_unit: 500000, custom_currency_symbol: CNY_SYMBOL } }), { status: 200 })
     }
     if (String(url).endsWith('/api/user/self')) {
       return new Response(JSON.stringify({ success: true, data: { id: 42, quota: 10000000, used_quota: 2500000 } }), { status: 200 })
@@ -143,6 +152,30 @@ test('上游 401 时说人话：令牌失效或少了 New-Api-User，不把原�
     // 失败也要落盘：界面上要能看到「上次核对失败、原因是什么」，而不是悄悄回退成「没核对过」
     assert.equal(result.channel.state, 'unknown')
     assert.match(result.channel.error, /访问令牌/)
+  } finally {
+    globalThis.fetch = realFetch
+  }
+})
+
+test('核对失败后余额显示「没有数」，不是 0（null 不能被 Number() 变成 0）', async () => {
+  fs.rmSync(path.join(dir, 'upstream-balance.json'), { force: true })
+  const { saveBalanceChannel, checkBalanceChannel, balanceView } = await fresh()
+  await saveBalanceChannel('geteapi', { accessToken: 'will-fail', threshold: 20 })
+  globalThis.fetch = async (url) => {
+    if (String(url).endsWith('/api/status')) {
+      return new Response(JSON.stringify({ data: { quota_per_unit: 500000 } }), { status: 200 })
+    }
+    // 上游回 200 但 success:false（New API 的坏令牌就这样回），必须当成失败
+    return new Response(JSON.stringify({ success: false, message: 'Unauthorized, invalid access token' }), { status: 200 })
+  }
+  try {
+    const result = await checkBalanceChannel('geteapi', { by: 'test' })
+    assert.equal(result.ok, false)
+    assert.equal(result.channel.amount, null)
+    const view = await balanceView()
+    const gete = view.channels.find((item) => item.id === 'geteapi')
+    assert.equal(gete.amount, null)
+    assert.equal(gete.state, 'unknown')
   } finally {
     globalThis.fetch = realFetch
   }

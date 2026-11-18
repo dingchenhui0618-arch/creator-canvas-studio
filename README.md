@@ -5015,7 +5015,7 @@ gzip_types text/css application/javascript application/json image/svg+xml;
 
 测试 `test/upstream-balance.test.mjs` 8 条 + `test/model-routes.test.mjs` 3 条（含 New API 真读一遍、401 说人话、令牌不出服务端）。截图 `docs/upstream-balance-1440.png`、`docs/upstream-balance-card-1440.png`、`docs/upstream-balance-390.png`，细节见 `docs/upstream-balance-and-routing-2026-11-18.md`。
 
-边界：还没有真实余额数字 —— GeteAPI 控制台要账号登录才能生成访问令牌，等用户配合一次；在那之前界面显示「未核对」。`New-Api-User` 是否必需取决于站点版本，代码里可选、401 时界面提示去填。SeeAPI / CGCM 永远只能手动登记。余额是账号余额，不是单把 Key 的额度。
+真实配置（2026-11-18 14:31，授权后在用户已登录的浏览器里做）：`New-Api-User` 请求头是必需的（只带 Bearer 会 401）；`/api/user/token` 每调一次就重签，第一次的会被第二次作废；货币符号上游回 `¤`，已归一显示 `¥`。生产实读 **¥19.6377**（quota 9,818,858 ÷ 500,000，已用 ¥0.5623），低于 ¥20 阈值标红；截图 `docs/upstream-balance-live-1440.png`。令牌只落在数据目录 0600，临时管理员会话用完撤销。`New-Api-User` 是否必需取决于站点版本，代码里可选、401 时界面提示去填。SeeAPI / CGCM 永远只能手动登记。余额是账号余额，不是单把 Key 的额度。
 
 ## 协作约定：真实上游调用要用户点头（2026-11-18 起）
 
