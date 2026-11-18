@@ -25,6 +25,9 @@ const IMAGE_RATIOS = {
   '16:9': { size: '1536x1024', label: '16:9 · 1536×1024' },
 }
 const VIDEO_DURATIONS = new Set([4, 8])
+// SeeAPI/CGCM 的出视频接口强制要 aspect_ratio（缺了直接 400 validation_error），界面没给比例控件，默认竖屏
+const VIDEO_RATIOS = new Set(['9:16', '16:9', '1:1'])
+const VIDEO_RATIO_DEFAULT = '9:16'
 const VIDEO_RESOLUTIONS = new Set(['480p', '720p'])
 const MAX_PROMPT_CHARS = 1200
 const MAX_IMAGE_BYTES = 24 * 1024 * 1024
@@ -189,7 +192,11 @@ function validateBody(body) {
   if (!VIDEO_RESOLUTIONS.has(resolution)) {
     throw validationError('分辨率只能是 480p 或 720p', 'MEDIA_RESOLUTION')
   }
-  return { kind, prompt, duration, resolution }
+  const ratio = body.ratio === undefined ? VIDEO_RATIO_DEFAULT : String(body.ratio)
+  if (!VIDEO_RATIOS.has(ratio)) {
+    throw validationError('视频比例只能是 9:16、16:9 或 1:1', 'MEDIA_RATIO')
+  }
+  return { kind, prompt, duration, resolution, ratio }
 }
 
 function mimeFromExtension(url, kind) {
@@ -365,6 +372,8 @@ async function runVideo(user, input) {
       prompt: input.prompt,
       duration: input.duration,
       resolution: input.resolution,
+      // 上游强制要这个字段（缺了就是 400 validation_error），不传就等于每次都失败
+      aspect_ratio: input.ratio,
     })
     task.upstreamTaskId = String(created?.id || '')
     if (!task.upstreamTaskId) throw new Error('上游没有返回视频任务 id')

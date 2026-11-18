@@ -4643,6 +4643,46 @@ node --experimental-sqlite scripts/sms-channel-once.mjs .tmp-sms-channel.json
 - 赠送签名是「可用-异常」（三个运营商都在报备），真发时的送达率仍不敢保证；
 - 别名与运营商名称一律不写进仓库：文档里的签名示例用「企业名称」占位。
 
+## 二百五十一、画布合并到 c5eaa1e、生视频窗口的 aspect_ratio 真 bug（2026-11-18，0.9.175）
+
+用户早上给了三条授权：MFA（短信）、画布选 **A**、同意真调出图出视频。画布与真调这一轮做完了，短信那条仍卡在身份验证。
+
+### 一、画布：ff 到 `c5eaa1e`，只冲突了一处重复代码
+
+`/opt/bdcanvas` 现场并不干净：`f1edd9d` 上有 14 个已跟踪文件被改（含 `enterprise.db`、`generation_*.py`、`vq-theme.css`）和 23 个未跟踪文件。按「整树备份 35 MB → `git stash -u` → `merge --ff-only candidate` → `stash pop`」走，只有 `src/features/startup/runtimeMode.ts` 冲突，原因是上游把 `TRUSTED_HOSTS` 那段**重复贴了一遍**；删掉重复块、保留生产侧写法即解决。
+
+重启 `bdc-web` / `bdc-api` / `bdc-enterprise` 后：6677 与 5312 均 200、5313 302（跳登录），浏览器真实打开 `canvas.wavisionai.cn` 标题正常、Beta 0.7.5.7、**无 vite 错误浮层**。回滚靠 `/var/backups/bdcanvas-premerge-.tgz` 或 `git reset --hard f1edd9d && git stash pop`。
+
+### 二、生视频窗口从上线起就没成功过：缺 `aspect_ratio`
+
+真调 8s/720p 时 4 秒失败（HTTP 400 `validation_error`）。拿池里的 Key 直接对上游探针，原文是 `aspect_ratio is required.`——**SeeAPI 强制要这个字段，而智能体页的生视频窗口没有比例控件，请求体里也从来没传**。也就是说这个功能每次都在几秒内被拒、退款，纯靠单测抓不到（假上游不校验）。
+
+- 修法：`media-gen.mjs` 加 `VIDEO_RATIOS`（默认 `9:16`）、校验 `ratio`、把 `aspect_ratio` 传给 `createVideoTask`；
+- 测试：**假上游也按真上游的规矩办**——没有 `aspect_ratio` 就回 400，并新增「显式 16:9 要透传 / 4:3 要 400 且不扣积分」用例。
+
+### 三、真调结果（0.9.175 生产，mark 账号）
+
+| 用例 | 结果 | 耗时 | 文件 | 积分 |
+| --- | --- | --- | --- | --- |
+| 生图 9:16（1024×1536） | 成功 | 81.3 s | PNG 2.07 MB | 5 |
+| 生图 16:9 第一次 | 上游超时（网关 120 s） | 124 s | — | 5，已退 |
+| 生图 16:9 第二次 | 成功 | 26.8 s | PNG 2.08 MB | 5 |
+| 生视频 8s / 720p | 成功 | 184.5 s | MP4 3.01 MB | 15 |
+
+出图超时是上游不稳，不是我们的 bug（同一条请求重发 26.8 秒就回）。但连续失败会把唯一那把出图 Key 打进 60 秒冷却，界面却显示「请联系管理员补一把出图 Key」——提示会误导，记进待办。
+
+### 门禁与部署
+
+| 项 | 结果 |
+| --- | --- |
+| 全量测试 | **1334 / 1334**（+1 视频比例用例） |
+| lint / `tsc -b` / 密钥扫描 | 0 error·16 warning（持平）/ 干净 / 828 文件无命中 |
+| 生产 | 0.9.175，入口 `index-Dz2cpipN.js`，health ok templates 26 |
+| 回滚点 | `20261118-013458-v0.9.175video` → `ops/rollback.sh --to 1` 回 0.9.174 |
+
+细节见 `docs/canvas-merge-and-media-2026-11-18.md`。
+
+
 
 
 

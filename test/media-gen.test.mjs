@@ -22,6 +22,9 @@ const tinyPng = Buffer.from(
 const videoBytes = Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from('ftypisom'), Buffer.alloc(64, 7)])
 
 let videoPolls = 0
+// 假上游按真实 SeeAPI 的规矩校验：它强制要 aspect_ratio，缺了就是 400 validation_error。
+// 2026-11-18 生产上真实踩过这一条（生视频窗口每次 4 秒就失败），所以在假上游里也把它变成硬约束。
+let lastVideoBody = null
 const upstream = http.createServer((req, res) => {
   const chunks = []
   req.on('data', (chunk) => chunks.push(chunk))
@@ -40,6 +43,10 @@ const upstream = http.createServer((req, res) => {
     }
     if (req.method === 'POST' && req.url === '/seeapi/v1/video/generations') {
       const body = JSON.parse(bodyText || '{}')
+      lastVideoBody = body
+      if (!body.aspect_ratio) {
+        return send(400, { error: { code: 'validation_error', message: 'aspect_ratio is required.', type: 'invalid_request_error' } })
+      }
       const id = String(body.prompt || '').includes('视频失败') ? 'up_fail' : 'up_ok'
       return send(200, { id, status: 'queued' })
     }
@@ -224,6 +231,7 @@ test('生视频：建任务后轮询，成功落 mp4、扣 15 积分；失败任
   assert.equal(created.payload.task.status, 'processing')
   assert.equal(created.payload.task.credits.cost, 15)
   assert.equal(credits.balanceOf(videoUser.id), before - 15)
+  assert.equal(lastVideoBody.aspect_ratio, '9:16', '界面没给比例控件，默认竖屏；缺这个字段上游直接 400')
   const id = created.payload.task.id
 
   const first = await call({ method: 'GET', target: '/api/media/tasks/' + id, cookie: cookieOf(videoUser) })
@@ -252,6 +260,22 @@ test('生视频：建任务后轮询，成功落 mp4、扣 15 积分；失败任
   assert.match(failed.payload.task.error, /上游合成失败/)
   assert.equal(failed.payload.task.credits.refunded, true)
   assert.equal(credits.balanceOf(videoFailUser.id), failBefore)
+})
+
+test('视频比例：显式给的 16:9 要透传给上游，给个不认识的比例 400 且不扣费', async () => {
+  const user = auth.createUser({ email: email('ratio'), password: 'Passw0rd!demo', name: '比例用户', kind: 'user' })
+  credits.grant(user.id, 100, { note: 'video ratio test' })
+  const cookie = cookieOf(user)
+  const before = credits.balanceOf(user.id)
+
+  const bad = await call({ cookie, body: { kind: 'video', prompt: '海边日落', duration: 4, resolution: '480p', ratio: '4:3' } })
+  assert.equal(bad.status, 400)
+  assert.equal(bad.payload.code, 'MEDIA_RATIO')
+  assert.equal(credits.balanceOf(user.id), before, '比例不认识不能扣积分')
+
+  const ok = await call({ cookie, body: { kind: 'video', prompt: '海边日落', duration: 4, resolution: '480p', ratio: '16:9' } })
+  assert.equal(ok.status, 200, JSON.stringify(ok.payload))
+  assert.equal(lastVideoBody.aspect_ratio, '16:9')
 })
 
 test('非法参数 400：缺提示词、坏比例、坏时长、坏分辨率、未知 kind 都不扣费', async () => {
