@@ -2714,6 +2714,10 @@
 }
 
 .qc-tool.is-on { border-color: var(--ink); color: var(--ink); background: var(--surface-raised); }
+
+/* 能力按钮的两种标签：桌面用全称，手机上用两个字（r223） */
+.qc-tool-full { display: inline; }
+.qc-tool-short { display: none; }
 .qc-tool:disabled { opacity: 0.6; cursor: default; }
 
 .qc-credit { margin-left: auto; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
@@ -2879,7 +2883,16 @@
   /* 输入框现在常驻贴底，它占的高度就是一直看得见的高度：手机上收一收（r222）。
      Ctrl+Enter 在手机上没意义，附件上限挂在附件按钮的 title 里；两行提示留着白占 34px。 */
   .qc-hint { display: none; }
-  .qc-input { min-height: 56px; resize: none; }
+  /* 输入框常驻贴底，高度就是一直看得见的高度（201px ≈ 一屏 24%，r223 收到约 146px）：
+     ① 四个能力按钮换成两字标签，一行放得下，不再占两行；
+     ② 文本域固定 64px（两行多一点），要写长文在里面滚，不拿整屏换预览；
+     ③ 触摸目标反而从 28 抬到 32，字从 12 抬到 13——收高度不能靠抠小的。 */
+  .qc-tool-full { display: none; }
+  .qc-tool-short { display: inline; }
+  .qc-tool { height: 32px; padding: 0 8px; font-size: 13px; }
+  .qc-credit { font-size: 12px; }
+  .qc-msg-meta { font-size: 12px; }
+  .qc-input { height: 64px; min-height: 64px; resize: none; }
   .qc-chip-name, .qc-file-name, .qc-link-name { max-width: 128px; }
   /* 表格在窄屏不横着拖：表头允许换行、字号降一档，宁可排两行，
      也别把「目的」那一列藏在滚动条后面 */
@@ -2926,9 +2939,24 @@
      也会成为 sticky 的参照容器，按钮就贴不住底（r221 实测）。 */
   .qc-thread { max-height: none; min-height: 320px; }
   .qc-composer { position: sticky; bottom: 8px; z-index: 3; }
-  /* 滚到末尾时给贴底输入框留出位置：不留的话最后一段回答会被输入框挡住 */
+  /* 滚到末尾时给贴底输入框留出位置：不留的话最后一段回答会被输入框挡住。
+     输入框在 ≤560 收到 148px，这里留 200 = 148 + 离底 8 + 16px 空隙；
+     561–900 输入框还有两行提示（约 165px），沿用 272 够用。 */
   .qc-bottom { scroll-margin-bottom: 272px; }
   .qc-msg { max-width: 100%; }
+}
+
+/* 手机（≤560）输入框只有 148px：留白跟着收，末尾不再空出一大块（r223）。
+   这条必须排在上面那档之后，否则被 272 盖掉。 */
+@media (max-width: 560px) {
+  .qc-bottom { scroll-margin-bottom: 200px; }
+}
+
+/* 320 窄机：一行只放得下约 10 个字，提示语要三行；给到 88px，
+   宁可输入框高一点，也不把第三行切一半。四个能力按钮在这宽度也折成两行。 */
+@media (max-width: 360px) {
+  .qc-input { height: 88px; min-height: 88px; }
+  .qc-bottom { scroll-margin-bottom: 216px; }
 }
 
 /* 快捷创作：创作方式（对话 / 图片 / 视频）与对话方式（平台对话 / 对话预设）分两行，避免挤在输入框里 */

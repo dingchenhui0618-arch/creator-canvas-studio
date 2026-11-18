@@ -23,10 +23,12 @@ import { renderMarkdown } from '../lib/markdown'
 //  - 会话在服务端：换设备、关页面回来都还在，最多 30 条会话、每条留 200 条消息；
 //  - 附件（r218）：脚本、Word、Excel、PDF 先在服务端读成文字，再连同问题一起问模型；
 //    解析在本地做（不上传原始文件给上游），扫描件里的字读不出会直说，不做假 OCR。
-const TOOL_ITEMS: { id: keyof ChatToolOptions; label: string; hint: string; icon: typeof Search }[] = [
-  { id: 'search', label: '联网搜索', hint: '回答前先搜一遍最新信息，带链接回来', icon: Search },
-  { id: 'readUrl', label: '读链接', hint: '消息里带网址时，先把页面读下来再回答', icon: Link2 },
-  { id: 'thinking', label: '思考模式', hint: '先推理再回答，慢一些，适合拆结构', icon: Brain },
+// short：手机上输入框常驻贴底，四个能力一行放不下四个字的标签，
+// 窄屏只留两个字（搜索 / 链接 / 思考 / 附件），完整说明挂在 title 与 aria-label 上。
+const TOOL_ITEMS: { id: keyof ChatToolOptions; label: string; short: string; hint: string; icon: typeof Search }[] = [
+  { id: 'search', label: '联网搜索', short: '联网', hint: '回答前先搜一遍最新信息，带链接回来', icon: Search },
+  { id: 'readUrl', label: '读链接', short: '链接', hint: '消息里带网址时，先把页面读下来再回答', icon: Link2 },
+  { id: 'thinking', label: '思考模式', short: '思考', hint: '先推理再回答，慢一些，适合拆结构', icon: Brain },
 ]
 
 const TOOLS_KEY = 'vq:chatTools'
@@ -425,12 +427,14 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
                   key={item.id}
                   className={'qc-tool' + (active ? ' is-on' : '')}
                   aria-pressed={active}
+                  aria-label={item.label}
                   title={item.hint}
                   onClick={() => toggleTool(item.id)}
                   disabled={sending}
                 >
                   <Icon size={14} />
-                  {item.label}
+                  <span className="qc-tool-full">{item.label}</span>
+                  <span className="qc-tool-short">{item.short}</span>
                 </button>
               )
             })}
@@ -440,6 +444,7 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
               onClick={() => fileRef.current?.click()}
               disabled={sending || attaching}
               title="附件：脚本、Word、Excel、PDF；平台先在本地读成文字再回答"
+              aria-label="附件"
             >
               {attaching ? <Loader2 size={14} className="qc-spin" /> : <Paperclip size={14} />}
               {attaching ? '解析中…' : attached.length ? '附件 ' + attached.length : '附件'}
@@ -497,12 +502,14 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
             </div>
           )}
           <div className="qc-input-row">
+            {/* 窄屏文本域固定两行（64px），提示语要放得下两行，否则第三个字行会被切一半；
+                更长的用法示例放在空状态与「附件」的 title 里（r223） */}
             <textarea
               ref={inputRef}
               className="qc-input"
               rows={3}
               value={draft}
-              placeholder="说清你要什么，例如：把这条 30 秒口播拆成 6 个分镜，每镜写清画面与台词"
+              placeholder="说清你要什么，例如：把这条口播拆分镜"
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
