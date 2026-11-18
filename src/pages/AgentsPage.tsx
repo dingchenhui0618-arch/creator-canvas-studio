@@ -51,6 +51,8 @@ import {
   uploadMediaAsset,
 } from '../api/media-gen'
 import { RECENT_PAGE_SIZE, mergeRecentTasks } from '../domain/media-recent'
+import { planRefAttach, refAttachNote, taskFileName } from '../domain/media-refs'
+import type { RefKind } from '../domain/media-refs'
 import type { MediaAsset, MediaKind, MediaModel, MediaModelList, MediaTask } from '../api/media-gen'
 import { getCredits, getModelService, recheckModelService, type CreditsResponse, type ModelServiceState } from '../api/credits'
 import { getProject, listProjects } from '../api/projects'
@@ -515,13 +517,14 @@ function formatDuration(seconds: number | null | undefined) {
   return (Math.round(seconds * 10) / 10).toFixed(1) + 's'
 }
 
-// 一张参考素材下面那行小字：视频要说清「几秒、多大」，图片说明大小，别的都是废话
+// 一张参考素材下面那行小字：视频要说清「几秒、多大」，图片说明大小，别的都是废话。
+// 数字和单位之间用不换行空格粘住：390 宽这一行会被挤成两行，别让「KB」单独掉到下一行。
 function describeRef(asset: MediaAsset) {
   const parts: string[] = []
   const duration = formatDuration(asset.duration)
-  if (duration) parts.push(duration)
+  if (duration) parts.push(duration.replace(' ', '\u00a0'))
   if (asset.width && asset.height) parts.push(asset.width + '×' + asset.height)
-  parts.push(formatBytes(asset.bytes))
+  parts.push(formatBytes(asset.bytes).replace(' ', '\u00a0'))
   return parts.join(' · ')
 }
 
@@ -582,6 +585,8 @@ function MediaComposer({
   const [library, setLibrary] = useState<MediaAsset[]>([])
   const [pickerOpen, setPickerOpen] = useState(false)
   const [uploading, setUploading] = useState(false)
+  // 哪一条结果正在被「用作参考」：同一条按钮变「加入中…」，别让人点两遍传两份
+  const [refBusyId, setRefBusyId] = useState('')
   const [refError, setRefError] = useState('')
   const [task, setTask] = useState<MediaTask | null>(null)
   const [busy, setBusy] = useState(false)
@@ -747,35 +752,53 @@ function MediaComposer({
     }
   }, [pollTaskId])
 
+  // 把一条已经落到服务端的素材挂进托架：换不换方式、放不放得下都按 domain/media-refs 的结论走。
+  // 上传、从素材库挑、把生成结果当参考，三个入口共用这一段，规则不会各写一套。
+  const attachAsset = (asset: MediaAsset): boolean => {
+    const plan = planRefAttach({
+      modes: model?.modes ?? [],
+      current: mode,
+      kind: asset.kind,
+      count: assets.length,
+      alreadyIn: assets.some((item) => item.id === asset.id),
+    })
+    if (!plan.ok) {
+      setRefError(refAttachNote(plan))
+      return false
+    }
+    if (plan.switched) setSelected((current) => ({ ...current, mode: plan.modeId }))
+    setAssets((items) => items.concat(asset))
+    setLibrary((items) => [asset, ...items.filter((item) => item.id !== asset.id)])
+    setRefError('')
+    onToast?.(refAttachNote(plan))
+    return true
+  }
+
+  // 先判「放不放得下」再传：传完才发现这个方式不收、或者已经放满，等于让人白等一次上传
+  const precheckRef = (kind: RefKind): boolean => {
+    const plan = planRefAttach({
+      modes: model?.modes ?? [],
+      current: mode,
+      kind,
+      count: assets.length,
+      alreadyIn: false,
+    })
+    if (plan.ok) return true
+    setRefError(refAttachNote(plan))
+    return false
+  }
+
   const pickFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
-    setRefError('')
     if (!mode) return
-    // 加参考素材本身就说明「这次要参考着生成」：当前方式不收素材时，自动切到同一模型下
-    // 第一个收素材的方式（参考图 / 首帧 / 多模态参考），别让用户先猜该点哪个。
-    let target = mode
-    if (target.maxRefs === 0) {
-      const next = model?.modes.find((item) => item.maxRefs > 0)
-      if (!next) {
-        setRefError('这个模型没有带参考素材的方式')
-        return
-      }
-      target = next
-      setSelected((current) => ({ ...current, mode: next.id }))
-    }
-    if (assets.length >= target.maxRefs) {
-      setRefError('这个生成方式最多 ' + target.maxRefs + ' 个参考素材：先移除一个')
-      return
-    }
+    if (!precheckRef(file.type.startsWith('video/') ? 'video' : 'image')) return
     setUploading(true)
     try {
       const meta = await probeMediaFile(file)
       const response = await uploadMediaAsset({ file, ...meta })
-      setAssets((items) => items.concat(response.asset))
-      setLibrary((items) => [response.asset, ...items.filter((item) => item.id !== response.asset.id)])
-      onToast?.('参考素材已加入：' + response.asset.name)
+      attachAsset(response.asset)
     } catch (caught) {
       setRefError(caught instanceof Error ? caught.message : '上传参考素材失败')
     } finally {
@@ -784,26 +807,44 @@ function MediaComposer({
   }
 
   const toggleAsset = (asset: MediaAsset) => {
-    setRefError('')
     if (assets.some((item) => item.id === asset.id)) {
+      setRefError('')
       setAssets((items) => items.filter((item) => item.id !== asset.id))
       return
     }
-    let target = mode
-    if (target && target.maxRefs === 0) {
-      const next = model?.modes.find((item) => item.maxRefs > 0)
-      if (!next) {
-        setRefError('这个模型没有带参考素材的方式')
-        return
-      }
-      target = next
-      setSelected((current) => ({ ...current, mode: next.id }))
-    }
-    if (target && assets.length >= target.maxRefs) {
-      setRefError('这个生成方式最多 ' + target.maxRefs + ' 个参考素材：先移除一个')
+    attachAsset(asset)
+  }
+
+  // 「最近生成」里的结果直接当参考：出一张图 → 拿它接着改 / 当首帧出视频，是复刻最常走的一步。
+  // 以前这里只有下载，用户要自己把文件再传一遍才算「用上了刚生成的东西」。
+  // 走的是同一条上传接口（取回字节 → 读真实宽高 / 时长 → 传），不新增接口、不扣积分。
+  // 名字不能以 use 开头：那会被当成 Hook，只能在组件顶层调用
+  const addTaskResultAsRef = async (item: MediaTask) => {
+    if (refBusyId || item.status !== 'succeeded' || !item.downloadUrl) return
+    const kind: RefKind = item.kind === 'video' ? 'video' : 'image'
+    if (!precheckRef(kind)) return
+    const name = taskFileName(item, item.file?.mime ?? '')
+    // 同一条结果点第二次时，素材库里已经有同名的那份了：直接用，不再传一份占配额
+    const existing = library.find((asset) => asset.name === name && asset.kind === kind)
+    if (existing) {
+      attachAsset(existing)
       return
     }
-    setAssets((items) => items.concat(asset))
+    setRefBusyId(item.id)
+    try {
+      const response = await fetch(item.downloadUrl, { credentials: 'same-origin' })
+      if (!response.ok) throw new Error('取回这条结果失败（HTTP ' + response.status + '）')
+      const blob = await response.blob()
+      const type = blob.type || item.file?.mime || (kind === 'video' ? 'video/mp4' : 'image/png')
+      const file = new File([blob], name, { type })
+      const meta = await probeMediaFile(file)
+      const uploaded = await uploadMediaAsset({ file, ...meta })
+      attachAsset(uploaded.asset)
+    } catch (caught) {
+      setRefError(caught instanceof Error ? caught.message : '把这条结果加进参考失败')
+    } finally {
+      setRefBusyId('')
+    }
   }
 
   const submit = async () => {
@@ -1158,10 +1199,23 @@ function MediaComposer({
             )}
             <div className="agx-media-result-foot">
               <span className="agx-mono">{task.id}</span>
-              <a className="vq-button vq-button--ghost" href={task.downloadUrl} download>
-                <Download size={13} />
-                下载{image ? '图片' : '视频'}
-              </a>
+              <span className="agx-media-result-actions">
+                {/* 刚生成出来的这张图 / 这条视频，下一步通常就是拿它接着改或当首帧：给一个直接入口 */}
+                <button
+                  type="button"
+                  className="vq-button vq-button--ghost"
+                  onClick={() => void addTaskResultAsRef(task)}
+                  disabled={Boolean(refBusyId)}
+                  title={refBusyId === task.id ? '正在加入参考素材' : image ? '把这张图加进参考图，接着改' : '把这条视频加进参考视频'}
+                >
+                  <Plus size={13} />
+                  {refBusyId === task.id ? '加入参考中…' : '用作参考'}
+                </button>
+                <a className="vq-button vq-button--ghost" href={task.downloadUrl} download>
+                  <Download size={13} />
+                  下载{image ? '图片' : '视频'}
+                </a>
+              </span>
             </div>
           </div>
         ) : null}
@@ -1205,9 +1259,20 @@ function MediaComposer({
                     <span className="agx-media-recent-meta">{recentMetaOf(item)}</span>
                   </button>
                   {item.status === 'succeeded' ? (
-                    <a className="agx-media-recent-download" href={item.downloadUrl} download>
-                      下载
-                    </a>
+                    <>
+                      <button
+                        type="button"
+                        className="agx-media-recent-ref"
+                        onClick={() => void addTaskResultAsRef(item)}
+                        disabled={Boolean(refBusyId) || active}
+                        title={image ? '把这条结果加进参考图，接着改' : '把这条结果加进参考视频'}
+                      >
+                        {refBusyId === item.id ? '加入中…' : '用作参考'}
+                      </button>
+                      <a className="agx-media-recent-download" href={item.downloadUrl} download>
+                        下载
+                      </a>
+                    </>
                   ) : (
                     <span className="agx-media-recent-state">
                       {item.status === 'failed' ? '失败 · 已退 ' + item.credits.cost + ' 积分' : '进行中'}

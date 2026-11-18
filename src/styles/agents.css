@@ -2001,6 +2001,13 @@
   padding-top: var(--space-2);
   border-top: 1px solid var(--line-faint);
 }
+/* 「用作参考」和「下载」并排：结果卡下面两个动作靠右成组，别被 space-between 拆到两端 */
+.agx-media-result-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
 .agx-media-foot {
   display: flex;
   flex: 0 0 auto;
@@ -2105,6 +2112,28 @@
 }
 .agx-media-recent-download:hover {
   color: var(--ink);
+}
+/* 最近生成每行的「用作参考」：和下载同样粗细，但它是动作不是链接，所以不用下划线配色 */
+.agx-media-recent-ref {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  min-height: 24px;
+  padding: 0;
+  color: var(--ink-soft);
+  font-size: var(--text-mono);
+  text-decoration: none;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+.agx-media-recent-ref:hover:not(:disabled) {
+  color: var(--ink);
+}
+.agx-media-recent-ref:disabled {
+  color: var(--faint);
+  cursor: default;
 }
 .agx-media-recent-state {
   flex: 0 0 auto;
