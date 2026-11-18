@@ -1051,7 +1051,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
   })
 
   return (
-    <div className="vq-page">
+    <div className="vq-page vq-page--overview">
       <PageHead
         kicker={
           <>

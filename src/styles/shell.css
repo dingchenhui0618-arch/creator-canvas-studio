@@ -3273,3 +3273,52 @@ select:focus-visible {
   .vq-session-main { flex: 1 1 100%; }
 }
 
+
+/* ---------- r237 窄屏骨架：顶栏 / 侧栏 / 筛选条 / 上手引导（v0.9.221） ----------
+   2026-11-19 在 390 / 768 / 1024 量工作台、模板库、爆款雷达：三页共用骨架上还剩
+   12–12.5px 的字和 24–34px 的点按区（导航 34、搜索 30、版本 28、筛选片 30、文字链接 24）。
+   骨架每页共用，所以在这一层统一抬一档：平板 40px、手机 44px；桌面 1081 起一行不动。 */
+@media (max-width: 1080px) {
+  .vq-scope { --text-mono: 13px; }
+  .vq-nav-item { min-height: 40px; }
+  .vq-search { height: 40px; }
+  .vq-model-trigger { height: 40px; }
+  .vq-version-trigger { min-height: 40px; }
+  .vq-topbar .vq-button { height: 40px; }
+  .vq-topbar .vq-button--icon { width: 40px; }
+  .vq-link { min-height: 40px; }
+  .vq-filter-chip { height: 40px; font-size: 13px; }
+  .vq-filter-chip__count { font-size: 13px; }
+  .vq-select__trigger { min-height: 40px; }
+  .vq-head-kicker { --head-kicker-size: 13px; }
+  .vq-head-kicker time { font-size: 13px; }
+  .vq-guide .vq-mono { font-size: 13px; }
+  .vq-guide-head p { font-size: 13px; }
+  .vq-guide-step-body { font-size: 13px; }
+  .vq-guide-note { font-size: 13px; }
+  .vq-nav--utility .vq-nav-item,
+  .vq-nav-item--utility { min-height: 40px; }
+  .vq-search input { height: 100%; }
+  .vq-select__value { font-size: 13px; }
+  .vq-model-name { font-size: 13px; }
+  .vq-version-trigger { font-size: 13px; }
+  .vq-workspace-meta span,
+  .vq-sidebar-account-copy small,
+  .vq-user-trigger-text small { font-size: 13px; }
+  .vq-mobile-note-close { width: 40px; height: 40px; }
+}
+
+@media (max-width: 560px) {
+  .vq-nav-item { min-height: 44px; }
+  .vq-search { height: 44px; }
+  .vq-model-trigger { height: 44px; }
+  .vq-version-trigger { min-height: 44px; min-width: 44px; }
+  .vq-topbar .vq-button { height: 44px; }
+  .vq-topbar .vq-button--icon { width: 44px; }
+  .vq-link { min-height: 44px; }
+  .vq-filter-chip { height: 44px; }
+  .vq-select__trigger { min-height: 44px; }
+  .vq-nav--utility .vq-nav-item,
+  .vq-nav-item--utility { min-height: 44px; }
+  .vq-mobile-note-close { width: 44px; height: 44px; }
+}

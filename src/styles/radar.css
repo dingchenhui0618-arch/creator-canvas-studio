@@ -723,3 +723,81 @@
   .page--radar .radar-author { font-size:11px; }
   .page--radar .radar-stats { font-size:11.5px; }
 }
+
+/* ---------- r237 爆款雷达 / 模板库窄屏（v0.9.221） ----------
+   2026-11-19 实测 390：雷达每张卡 9 处 11–12px 的互动数、作者、平台徽标，操作按钮 32；
+   模板库「用这条改编 / 去解析」11.5px、30—32px 高，筛选说明 12 / 12.5。
+   平板 40px、手机 44px；桌面 1081 起不动。r230 的紧凑行（≤820）保留版式，只把字号与点按区抬上来。 */
+@media (max-width: 1080px) {
+  .page--radar,
+  .page--templates {
+    --btn-h: 40px;
+    --btn-h-sm: 40px;
+    --text-mono: 13px;
+    --chip-font: 13px;
+    --chip-tag-h: 24px;
+  }
+  .page--radar .radar-title,
+  .page--templates .template-copy > strong { font-size: 16px; }
+  .page--radar .radar-author,
+  .page--radar .radar-badge,
+  .page--radar .radar-owned { font-size: 13px; }
+  .page--radar .radar-stats { font-size: 13px; }
+  .page--radar .radar-stats .radar-rate { font-size: 13px; }
+  .page--radar .radar-idle span { font-size: 13px; }
+  .page--radar .radar-actions .vq-button { height: 40px; min-height: 40px; }
+  .page--radar .radar-restored-clear { min-height: 40px; }
+  .page--radar .vq-mono { font-size: 13px; }
+  .page--templates .template-facet__label,
+  .page--templates .template-filter-note,
+  .page--templates .template-stats,
+  .page--templates .template-adapt { font-size: 13px; }
+  .page--templates .template-hook { font-size: 14px; }
+  .page--templates .template-adapt { height: 40px; }
+  .page--radar .inline-search,
+  .page--templates .inline-search { height: 44px; }
+  .page--radar .inline-search input,
+  .page--templates .inline-search input { height: 100%; }
+  .page--templates .vq-mono { font-size: 13px; }
+}
+
+@media (max-width: 560px) {
+  .page--radar,
+  .page--templates { --btn-h: 44px; --btn-h-sm: 44px; }
+  .page--radar .radar-actions .vq-button { height: 44px; min-height: 44px; }
+  .page--radar .radar-restored-clear { min-height: 44px; }
+  .page--templates .template-adapt { height: 44px; }
+  .page--radar .inline-search,
+  .page--templates .inline-search { height: 44px; }
+}
+
+/* ---------- r237 模板库卡片：≤820 和爆款雷达一样改紧凑行 ----------
+   2026-11-19 实测 390：一张卡 761px、26 条 19,262px，一屏看不到第二条；
+   768 上一张卡 1,374px（单列 + 9:16 封面撑满整宽）。改成「左 96px 封面 + 右文案」，
+   封面仍是 9:16，文案列保住标题、钩子、互动数、来源与「用这条改编」。 */
+@media (max-width: 820px) {
+  .page--templates .template-card {
+    display: grid;
+    grid-template-columns: 96px minmax(0, 1fr);
+    align-items: start;
+    padding: 8px;
+  }
+  .page--templates .template-cover {
+    width: 96px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+  }
+  .page--templates .template-copy { padding: 0 0 0 12px; }
+  .page--templates .template-foot { flex-wrap: wrap; }
+  .page--templates .template-meta { flex-wrap: wrap; }
+  .page--templates .template-meta > span,
+  .page--templates .template-stats > span { white-space: nowrap; }
+}
+
+/* 320（iPhone SE 一档）：紧凑行的文案列只剩约 108px，「解析后才能改编与开作品」
+   这类整句放不下；封面收到 80px、整句允许折行，数字短语仍不拆。 */
+@media (max-width: 360px) {
+  .page--templates .template-card { grid-template-columns: 80px minmax(0, 1fr); }
+  .page--templates .template-cover { width: 80px; }
+  .page--templates .template-meta > span { white-space: normal; }
+}

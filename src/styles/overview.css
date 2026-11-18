@@ -1573,3 +1573,26 @@
     white-space: normal;
   }
 }
+
+/* ---------- r237 工作台窄屏（v0.9.221） ----------
+   390 / 768 / 1024 上工作台的剩余小字只有三处：vq-mono 12、下一步标签 12、统计说明 12，
+   点击区是「继续这个作品」36 与文字链接 24（链接由 shell.css 统一抬）。
+   平板 40px、手机 44px；桌面 1081 起不动。 */
+@media (max-width: 1080px) {
+  .vq-page--overview {
+    --btn-h: 40px;
+    --btn-h-sm: 40px;
+    --text-mono: 13px;
+    --chip-font: 13px;
+    --chip-tag-h: 24px;
+  }
+  .vq-page--overview .vq-mono { font-size: 13px; }
+  .vq-page--overview .vq-next-label { font-size: 13px; }
+  .vq-page--overview .vq-next-stats dt { font-size: 13px; }
+  .vq-page--overview .vq-next-cta { height: 40px; }
+}
+
+@media (max-width: 560px) {
+  .vq-page--overview { --btn-h: 44px; --btn-h-sm: 44px; }
+  .vq-page--overview .vq-next-cta { height: 44px; }
+}
