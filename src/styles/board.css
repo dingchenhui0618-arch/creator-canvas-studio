@@ -307,6 +307,12 @@
   .bd-note { top: calc(100% + var(--space-2)); left: var(--space-3); }
 }
 
+/* 561–760 这一段原来把按钮收成 32px 方块（只留图标）；40px 的下限也得管到这里，
+   否则 600 / 700 上三个按钮是 32×40——宽度不够点。 */
+@media (max-width: 760px) {
+  .bd-strip > .bd-action { width: 40px; }
+}
+
 @media (max-width: 560px) {
   /* 手机上把行间距收紧一点：375/390 一排放得下「状态 + 四个按钮」，350 以下才换行 */
   .bd-strip { min-height: 56px; padding: 4px var(--space-2); column-gap: var(--space-2); }

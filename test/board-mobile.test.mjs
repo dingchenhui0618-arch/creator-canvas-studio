@@ -83,6 +83,8 @@ function firstRule(css, selector) {
 
 const band = mediaBlocks(boardCss, '(max-width: 1080px)', '.bd-strip').at(-1)
 const phone = mediaBlocks(boardCss, '(max-width: 560px)', '.bd-strip').at(-1)
+// ≤760 那条把状态条按钮收成方块（只留图标），宽度必须自己在 761 那一段之后补回来
+const block760 = mediaBlocks(boardCss, '(max-width: 760px)', 'width: 40px').at(-1)
 
 test('无限画布状态条的窄屏规则只在 ≤1080 / ≤560 两段里，加在文件末尾', () => {
   assert.ok(band, 'board.css 缺少 ≤1080 的状态条规则')
@@ -129,6 +131,16 @@ test('排队位胶囊与写笔记弹层不再顶出状态条', () => {
   assert.match(decls(phone, '.bd-queue-oldest'), /display:\s*none/)
   assert.match(decls(phone, '.bd-picker'), /flex:\s*1 1 0%/)
   assert.match(decls(phone, '.bd-picker'), /min-width:\s*120px/)
+})
+
+test('561–760 只留图标的按钮也是 40px 宽（原来被钉在 32px）', () => {
+  assert.ok(block760, 'board.css 缺少 40px 见方的 760 段')
+  assert.match(decls(block760, '.bd-strip > .bd-action'), /width:\s*40px/)
+  // 层叠顺序：760 段要排在 560 段之前，手机上才轮得到 44px
+  const at1080 = boardCss.lastIndexOf('@media (max-width: 1080px)')
+  const at760 = boardCss.lastIndexOf('@media (max-width: 760px)')
+  const at560 = boardCss.lastIndexOf('@media (max-width: 560px)')
+  assert.ok(at1080 < at760 && at760 < at560, '三段顺序要是 1080 → 760 → 560')
 })
 
 test('560 以下再抬一档到 44px', () => {
