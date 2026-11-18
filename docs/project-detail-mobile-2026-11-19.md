@@ -45,7 +45,7 @@
 | 测试 | npm test **1551/1551**（新增 test/project-detail-mobile.test.mjs 8 条：档位、字号、触控区、44/40 分档、320 竖排、隐式列、桌面未放大、字号下限） |
 | 静态检查 | lint **0 error / 26 warning**（614 文件）、tsc -b 干净、密钥扫描 949 文件无命中 |
 | 构建 | 入口 index-BHOLhzk7.js（742,219 B）、样式 index-J4Shf-PJ.css（349,943 B） |
-| 生产 | 0.9.220（发布记录见下） |
+| 生产 | 0.9.220：发布 20261118-194818-20261119-034700-r236deta，health ok templates 26，6 个服务 active，未登录 401，磁盘 73%；线上 CSS 有 vq-project-detail、--text-mono:13px、min-height:44px 10 处；回滚 --to 1 回 0.9.219（r235tablet） |
 | 真实上游调用 | **0 次**（截图与量测都在本机临时实例 + 样例数据上跑） |
 
 ## 五、截图

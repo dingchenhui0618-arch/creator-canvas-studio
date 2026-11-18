@@ -1041,4 +1041,6 @@ tsc -b 干净、密钥扫描 949 文件无命中、构建入口 index-BHOLhzk7.j
 
 ![1024：内容宽 796px，字号与触控区同 768 一档](docs/project-detail-r236-1024.png)
 
+生产 0.9.220（发布 20261118-194818-20261119-034700-r236deta，health ok templates 26、6 个服务 active、未登录 401、磁盘 73%；回滚 --to 1 回 0.9.219）。
+
 文档见 docs/project-detail-mobile-2026-11-19.md。
