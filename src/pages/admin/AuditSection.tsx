@@ -113,7 +113,7 @@ export default function AuditSection() {
         description={
           view === 'runs'
             ? '真实运行记录，按开始时间倒序；可按账号、流程与状态筛选，点开一行查看逐节点状态与输出。'
-            : '管理员动作留痕：谁在什么时候改了账号、重置了口令或发放了积分。普通用户的检索与评审在积分流水与运行记录里。'
+            : '管理员动作留痕：谁在什么时候改了账号、重置了口令、发放了积分或确认、撤回了告警。普通用户的检索与评审在积分流水与运行记录里。'
         }
         actions={<RefreshButton onClick={() => setRefreshKey((value) => value + 1)} />}
       />

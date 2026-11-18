@@ -199,6 +199,8 @@ export async function recordAlert({ kind = 'test', title, detail = '', level = '
       lastAt: new Date(now).toISOString(),
       ackAt: null,
       ackBy: '',
+      unackAt: null,
+      unackBy: '',
     }
     list.unshift(alert)
     if (list.length > MAX_ALERTS) list.splice(MAX_ALERTS)
@@ -317,8 +319,27 @@ export async function ackAlert(id, by = '') {
   if (!target) return null
   target.ackAt = new Date().toISOString()
   target.ackBy = String(by || '').slice(0, 120)
+  // 重新确认就把上一轮的撤回痕迹清掉：界面上只该看到这条告警当前的状态
+  target.unackAt = null
+  target.unackBy = ''
   await persist(list)
   return target
+}
+
+// 撤回确认：点错了要能改回来，不能只有「往前一个方向」。
+// 撤回不删数据，只把 ackAt / ackBy 清空，另记 unackAt / unackBy——谁在什么时候把它退回去的，
+// 未确认视图里看得见。告警内容（次数、首次/最近时间）一律不动，不是新建一条。
+export async function unackAlert(id, by = '') {
+  const list = await loadAll()
+  const target = list.find((item) => item.id === id)
+  if (!target) return { ok: false, reason: 'not-found' }
+  if (!target.ackAt) return { ok: false, reason: 'not-acked', alert: target }
+  target.unackAt = new Date().toISOString()
+  target.unackBy = String(by || '').slice(0, 120)
+  target.ackAt = null
+  target.ackBy = ''
+  await persist(list)
+  return { ok: true, alert: target }
 }
 
 // 磁盘剩余：低于阈值才告警，避免「每天都有告警」变成没人看。

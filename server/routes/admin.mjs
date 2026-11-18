@@ -20,7 +20,7 @@ import { listKeys, createKey, updateKey, deleteKey, testKey, listRoutes, preview
 import { getModelCatalog } from '../model-catalog.mjs'
 import { gatewayReadiness, gatewayStatus, modelCoverage } from '../gateway.mjs'
 import { canvasAdminConfigured, listCanvasUsers, setCanvasUserAccess } from '../canvas-admin.mjs'
-import { alertCounts, ackAlert, checkDisk, flushAlertDeliveries, listAlerts, listOutbox, outboxStats, parseAlertStatus, recordAlert, retryOutboxItem } from '../alerts.mjs'
+import { alertCounts, ackAlert, checkDisk, flushAlertDeliveries, listAlerts, listOutbox, outboxStats, parseAlertStatus, recordAlert, retryOutboxItem, unackAlert } from '../alerts.mjs'
 import { channelView, clearChannel, maskUrl, saveChannel } from '../alert-channel.mjs'
 import { clearMail, mailView, saveMail, smtpForSending } from '../mail-config.mjs'
 import { sendMail } from '../mailer.mjs'
@@ -1523,7 +1523,21 @@ export function createAdminRouter() {
       if (alertAck && req.method === 'POST') {
         const done = await ackAlert(alertAck[1], user.email)
         if (!done) return (sendJson(res, 404, { error: '没有这条告警' }), true)
+        recordAudit({ req, actor: user, action: 'alert.ack', targetType: 'alert', targetId: done.id, targetLabel: done.title, detail: { kind: done.kind, count: done.count } })
         sendJson(res, 200, { ok: true, alert: done, counts: await alertCounts() })
+        return true
+      }
+
+      // 撤回确认：点错了能改回来。不是删除，告警本身一条不动，只把 ackAt/ackBy 退回。
+      if (alertAck && req.method === 'DELETE') {
+        const undone = await unackAlert(alertAck[1], user.email)
+        if (!undone.ok) {
+          // 没确认过的不能「撤回」：分开报，别让界面把 404 与 409 说成同一句
+          if (undone.reason === 'not-acked') return (sendJson(res, 409, { error: '这条告警还没被确认，没有可撤回的确认', alert: undone.alert }), true)
+          return (sendJson(res, 404, { error: '没有这条告警' }), true)
+        }
+        recordAudit({ req, actor: user, action: 'alert.unack', targetType: 'alert', targetId: undone.alert.id, targetLabel: undone.alert.title, detail: { kind: undone.alert.kind, count: undone.alert.count } })
+        sendJson(res, 200, { ok: true, alert: undone.alert, counts: await alertCounts() })
         return true
       }
 

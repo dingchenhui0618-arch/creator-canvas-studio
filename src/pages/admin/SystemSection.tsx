@@ -75,6 +75,8 @@ type AlertItem = {
   lastAt: string
   ackAt: string | null
   ackBy: string
+  unackAt: string | null
+  unackBy: string
   notify?: AlertNotify
 }
 
@@ -599,6 +601,22 @@ export default function SystemSection() {
     }
   }
 
+  // 撤回确认：在「已确认」里撤回后这条会离开当前视图，所以顺手切回未确认——不要让行凭空消失。
+  const unack = async (item: AlertItem) => {
+    setBusy(item.id)
+    setAlertNote('')
+    try {
+      await request('/api/admin/alerts/' + item.id + '/ack', { method: 'DELETE' })
+      setAlertNote('已撤回确认：这条回到「未确认」，可以再确认一次。')
+      setAlertStatus('open')
+      alerts.reload()
+    } catch (cause) {
+      setAlertNote(cause instanceof Error ? cause.message : '撤回失败')
+    } finally {
+      setBusy('')
+    }
+  }
+
   return (
     <>
       <AdminHead
@@ -795,12 +813,25 @@ export default function SystemSection() {
                           已确认 {formatDateTime(item.ackAt)}
                           {item.ackBy ? ' · ' + item.ackBy : ''}
                         </span>
+                      ) : item.unackAt ? (
+                        <span className="admin-cell-sub">
+                          曾于 {formatDateTime(item.unackAt)} 撤回确认{item.unackBy ? ' · ' + item.unackBy : ''}
+                        </span>
                       ) : null}
                     </div>
-                    {item.ackAt ? null : (
+                    {item.ackAt ? (
                       <button
                         type="button"
-                        className="vq-button vq-button--ghost vq-button--icon"
+                        className="vq-button vq-button--ghost vq-button--sm"
+                        onClick={() => void unack(item)}
+                        disabled={busy === item.id}
+                      >
+                        {busy === item.id ? '撤回中…' : '撤回确认'}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="vq-button vq-button--ghost vq-button--sm"
                         onClick={() => void ack(item)}
                         disabled={busy === item.id}
                       >
