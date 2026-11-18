@@ -683,16 +683,23 @@ function MediaGenDialog({
   const [recent, setRecent] = useState<MediaTask[]>([])
   const [recentError, setRecentError] = useState('')
   const [recentToken, setRecentToken] = useState(0)
+  const [recentHasMore, setRecentHasMore] = useState(false)
+  const [recentCapped, setRecentCapped] = useState(false)
+  const [recentLoading, setRecentLoading] = useState(false)
+  // 翻过几页就要一直按这个条数取：刷新清单时不能把用户已经翻出来的更早几条丢掉
+  const recentSizeRef = useRef(6)
   const promptRef = useRef<HTMLTextAreaElement | null>(null)
 
   // 「最近生成」：关掉窗口之后还能把上一次的文件找回来——任务号没人记得，光存在服务端等于找不到。
   // 用 .then 取数（和本页其它请求一致）：不在 effect 里同步 setState，也不会被 set-state-in-effect 规则判违规。
   useEffect(() => {
     let alive = true
-    listMediaTasks(kind, 6)
+    listMediaTasks(kind, recentSizeRef.current)
       .then((response) => {
         if (!alive) return
         setRecent(response.tasks || [])
+        setRecentHasMore(Boolean(response.hasMore))
+        setRecentCapped(Boolean(response.capped))
         setRecentError('')
       })
       .catch((caught) => {
@@ -712,6 +719,28 @@ function MediaGenDialog({
     const timer = window.setInterval(() => setRecentToken((value) => value + 1), 5000)
     return () => window.clearInterval(timer)
   }, [recentRunning])
+
+  // 「看更早的」：拿这一页最后一条的任务号当 cursor，只追加、不重排已经看到的
+  const loadOlder = async () => {
+    const last = recent[recent.length - 1]
+    if (!last || recentLoading) return
+    setRecentLoading(true)
+    try {
+      const response = await listMediaTasks(kind, 6, last.id)
+      setRecent((items) => {
+        const seen = new Set(items.map((entry) => entry.id))
+        return items.concat((response.tasks || []).filter((entry) => !seen.has(entry.id)))
+      })
+      recentSizeRef.current += 6
+      setRecentHasMore(Boolean(response.hasMore))
+      setRecentCapped(Boolean(response.capped))
+      setRecentError('')
+    } catch (caught) {
+      setRecentError(caught instanceof Error ? caught.message : '读取更早的任务失败')
+    } finally {
+      setRecentLoading(false)
+    }
+  }
 
   const active = busy || task?.status === 'processing'
   const pollTaskId = task?.status === 'processing' ? task.id : ''
@@ -1056,7 +1085,7 @@ function MediaGenDialog({
             <div className="agx-media-recent">
               <div className="agx-media-recent-head">
                 <span>最近生成</span>
-                <span>只列你自己的任务 · 最多 6 条</span>
+                <span>只列你自己的任务 · 已列 {recent.length} 条</span>
               </div>
               <ul>
                 {recent.map((item) => (
@@ -1090,6 +1119,13 @@ function MediaGenDialog({
                   </li>
                 ))}
               </ul>
+              {recentHasMore ? (
+                <button type="button" className="agx-media-recent-more" onClick={() => void loadOlder()} disabled={recentLoading}>
+                  {recentLoading ? '读取中…' : '看更早的'}
+                </button>
+              ) : recentCapped ? (
+                <p className="agx-media-recent-end">只往回找最近 240 个任务，更早的不在这个清单里</p>
+              ) : null}
               {recentError ? <p className="agx-media-poll-warning">{recentError}</p> : null}
             </div>
           ) : null}        </div>

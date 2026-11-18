@@ -62,11 +62,17 @@ export type MediaTaskListResponse = {
   ok: boolean
   kind: string
   tasks: MediaTask[]
+  // 还有更早的能翻；capped 时说明服务端只往回扫了有限的元数据，别假装翻到底了
+  hasMore: boolean
+  capped: boolean
 }
 
 // 「最近生成」：只回当前账号自己的任务，服务端按时间倒序；kind 用来分窗口（生图 / 生视频）。
-export const listMediaTasks = (kind: MediaKind, limit = 6) =>
-  request<MediaTaskListResponse>('/api/media/tasks?kind=' + kind + '&limit=' + limit)
+// before 传上一页最后一条的任务号，就能往回翻更早的（按位置取，不按时间比，同毫秒的多条也不会漏）。
+export const listMediaTasks = (kind: MediaKind, limit = 6, before = '') =>
+  request<MediaTaskListResponse>(
+    '/api/media/tasks?kind=' + kind + '&limit=' + limit + (before ? '&before=' + encodeURIComponent(before) : ''),
+  )
 
 export const getMediaTask = (id: string) =>
   request<MediaTaskResponse>('/api/media/tasks/' + encodeURIComponent(id))

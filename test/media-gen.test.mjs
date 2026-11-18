@@ -407,3 +407,43 @@ test('最近生成：失败那一条要带着原因回来，光说「失败」�
   assert.equal(row.credits.refunded, true)
   assert.equal(row.downloadUrl, '', '失败的那条没有文件可下载，别给一个点了 404 的链接')
 })
+
+test('最近生成能往回翻：游标只给更早的、翻到底 hasMore=false、坏游标 400、翻不到别人的', async () => {
+  resetMediaGenRateLimit()
+  const user = auth.createUser({ email: email('recentpage'), password: 'Passw0rd!demo', name: '最近生成翻页用户', kind: 'user' })
+  credits.grant(user.id, 200, { note: 'media recent paging test' })
+  const cookie = cookieOf(user)
+
+  // 一次建 8 条：不加间隔也照样翻得完，游标是按位置取的，不按时间比
+  const created = []
+  for (let i = 0; i < 8; i += 1) {
+    const result = await call({ cookie, body: { kind: 'image', prompt: '第 ' + i + ' 张：橘猫', ratio: '1:1' } })
+    assert.equal(result.status, 200)
+    created.push(result.payload.task.id)
+  }
+  const newestFirst = created.slice().reverse()
+
+  const first = await call({ method: 'GET', target: '/api/media/tasks?kind=image&limit=3', cookie })
+  assert.equal(first.status, 200)
+  assert.deepEqual(first.payload.tasks.map((item) => item.id), newestFirst.slice(0, 3), '第一页是最近 3 条')
+  assert.equal(first.payload.hasMore, true)
+  assert.equal(first.payload.capped, false, '这里一共 8 条，没碰到扫描上限')
+
+  const second = await call({ method: 'GET', target: '/api/media/tasks?kind=image&limit=3&before=' + newestFirst[2], cookie })
+  assert.deepEqual(second.payload.tasks.map((item) => item.id), newestFirst.slice(3, 6), '第二页接着更早的三条')
+  assert.equal(second.payload.hasMore, true)
+
+  const third = await call({ method: 'GET', target: '/api/media/tasks?kind=image&limit=3&before=' + newestFirst[5], cookie })
+  assert.deepEqual(third.payload.tasks.map((item) => item.id), newestFirst.slice(6), '第三页剩两条')
+  assert.equal(third.payload.hasMore, false, '翻到底就是没有更多，别给一个点了没反应的按钮')
+
+  const all = [first, second, third].flatMap((page) => page.payload.tasks.map((item) => item.id))
+  assert.deepEqual(all, newestFirst, '三页拼起来不重不漏')
+
+  const strangerCursor = await call({ method: 'GET', target: '/api/media/tasks?kind=image&limit=3&before=' + first.payload.tasks[0].id, cookie: cookieOf(other) })
+  assert.deepEqual(strangerCursor.payload.tasks, [], '拿别人的任务号当游标，翻不出任何东西')
+
+  const badCursor = await call({ method: 'GET', target: '/api/media/tasks?kind=image&before=nope!', cookie })
+  assert.equal(badCursor.status, 400)
+  assert.equal(badCursor.payload.code, 'MEDIA_CURSOR')
+})

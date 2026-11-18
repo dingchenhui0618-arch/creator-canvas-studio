@@ -2139,6 +2139,32 @@
   font-size: var(--text-mono);
 }
 
+/* 往回翻：一页 6 条，翻到底就不给按钮，扫描窗口外的那部分要如实说「不在清单里」 */
+.agx-media-recent-more {
+  justify-self: start;
+  padding: var(--space-1) var(--space-2);
+  color: var(--ink-soft);
+  font-size: var(--text-mono);
+  background: none;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+}
+.agx-media-recent-more:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: var(--line);
+}
+.agx-media-recent-more:disabled {
+  color: var(--faint);
+  cursor: default;
+}
+.agx-media-recent-end {
+  margin: 0;
+  color: var(--faint);
+  font-size: var(--text-mono);
+  line-height: 1.5;
+}
+
 /* 失败那一条要把上游说的原因写出来：只说「失败 · 已退 5 积分」，人不知道是超时还是被拒 */
 .agx-media-recent-why {
   flex: 1 0 100%;

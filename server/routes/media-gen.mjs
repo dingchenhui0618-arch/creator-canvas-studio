@@ -472,12 +472,16 @@ const LIST_MAX = 24
 const LIST_DEFAULT = 8
 const LIST_SCAN = 240
 
-async function listTasks(userId, { kind = '', limit = LIST_DEFAULT } = {}) {
+// 往回翻：cursor 是上一页最后一条的 id，按它在排序后的位置往后取。
+// 不拿 createdAt 比较：同毫秒创建的两条会被 `<` 漏掉，而 id 位置游标永远不重不漏。
+// 清单先按 mtime 取最近 LIST_SCAN 份元数据再按 createdAt 排序——超出这个窗口的更早任务不算「没有更多」，
+// 而是 capped=true，界面要照着这个说清楚，不能假装已经翻到底。
+async function listTasks(userId, { kind = '', limit = LIST_DEFAULT, before = '' } = {}) {
   let names = []
   try {
     names = await fsp.readdir(taskMetaDir())
   } catch {
-    return []
+    return { tasks: [], hasMore: false, capped: false }
   }
   const candidates = []
   for (const name of names) {
@@ -492,6 +496,7 @@ async function listTasks(userId, { kind = '', limit = LIST_DEFAULT } = {}) {
   }
   // 任务状态每次变化都会重写元数据，mtime 只能用来找「最近动过的」，排序仍按 createdAt
   candidates.sort((a, b) => b.at - a.at)
+  const capped = candidates.length > LIST_SCAN
   const found = []
   for (const item of candidates.slice(0, LIST_SCAN)) {
     const task = await readTask(item.name.slice(0, -5))
@@ -501,7 +506,14 @@ async function listTasks(userId, { kind = '', limit = LIST_DEFAULT } = {}) {
     found.push(task)
   }
   found.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
-  return found.slice(0, limit).map(publicTask)
+  let start = 0
+  if (before) {
+    const index = found.findIndex((task) => task.id === before)
+    // 游标那一条已经不在窗口里（被删、或被挤出扫描范围）：这一页就是空的，不猜位置
+    if (index < 0) return { tasks: [], hasMore: false, capped }
+    start = index + 1
+  }
+  return { tasks: found.slice(start, start + limit).map(publicTask), hasMore: found.length > start + limit, capped }
 }
 
 async function handleGenerate(req, res, user) {
@@ -646,7 +658,14 @@ export function createMediaGenRouter() {
         }
         const raw = Number(url.searchParams.get('limit') || LIST_DEFAULT)
         const limit = Number.isFinite(raw) ? Math.max(1, Math.min(LIST_MAX, Math.trunc(raw))) : LIST_DEFAULT
-        sendJson(res, 200, { ok: true, kind, tasks: await listTasks(user.id, { kind, limit }) })
+        const beforeRaw = String(url.searchParams.get('before') || '').trim()
+        if (beforeRaw && !/^[A-Za-z0-9_-]{6,80}$/.test(beforeRaw)) {
+          sendJson(res, 400, { error: 'before 要是上一页最后一条的任务号', code: 'MEDIA_CURSOR' })
+          return true
+        }
+        const before = beforeRaw
+        const page = await listTasks(user.id, { kind, limit, before })
+        sendJson(res, 200, { ok: true, kind, tasks: page.tasks, hasMore: page.hasMore, capped: page.capped })
         return true
       }
 
