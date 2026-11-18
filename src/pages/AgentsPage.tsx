@@ -1320,6 +1320,9 @@ export function AgentsPage({
   // 对话有两种：平台对话（默认，一页 DeepSeek）与对话预设（带结构化草稿，能存模板/送工作流/写作品）。
   // 从作品页「让 AI 起草」进来时切到预设：那条路要用到草稿的三个出口，平台对话给不了。
   const [chatSurface, setChatSurface] = useState<'platform' | 'preset'>('platform')
+  // 平台对话面板一旦打开过就常驻，切走时只隐藏不卸载（r225）：卸载会连写了一半的提示词、
+  // 正在生成的回答、附件一起丢掉——用户只是切过去看一眼图片或预设。
+  const [chatMounted, setChatMounted] = useState(composerMode === 'chat')
   // 可用的生成模型与规格：服务端 media-models 是唯一真源，界面不自己写死模型名
   const [mediaModels, setMediaModels] = useState<MediaModelList | null>(null)
   // 模型服务状态：额度 / 凭证这类账号级故障要在输入前就说清楚，而不是让人白点一次
@@ -2117,7 +2120,11 @@ export function AgentsPage({
                 role="tab"
                 aria-selected={composerMode === mode.id}
                 className={composerMode === mode.id ? 'is-active' : ''}
-                onClick={() => setComposerMode(mode.id)}
+                onClick={() => {
+                  setComposerMode(mode.id)
+                  // 从图片 / 视频切回对话：平台对话面板第一次出现时要挂上（之后一直常驻）
+                  if (mode.id === 'chat') setChatMounted(true)
+                }}
               >
                 {mode.id === 'image' ? <ImageIcon size={14} /> : mode.id === 'video' ? <Clapperboard size={14} /> : <Bot size={14} />}
                 {mode.label}
@@ -2151,7 +2158,13 @@ export function AgentsPage({
               </span>
             </div>
           ) : null}
-          {composerMode === 'chat' && chatSurface === 'platform' ? <QuickChat onToast={onToast} /> : null}
+          {/* 平台对话面板常驻：切到「对话预设」或图片 / 视频时只隐藏、不卸载（r225）。
+              .qc-root 是 display:grid，hidden 属性在它身上不生效，所以外面套一层容器。 */}
+          {chatMounted ? (
+            <div className="agx-quickchat" hidden={!(composerMode === 'chat' && chatSurface === 'platform')}>
+              <QuickChat onToast={onToast} />
+            </div>
+          ) : null}
           {composerMode === 'chat' && chatSurface === 'preset' && messages.length > 0 && (
             <div className="agx-thread-head">
               <button className="vq-button vq-button--ghost" onClick={resetConversation} disabled={Boolean(pending)}>
@@ -2342,7 +2355,12 @@ export function AgentsPage({
         </div>
       </section>
 
-      <section className="agx-library">
+      {/* 手机端「平台对话」时，下面这一整块自建预设跟当前这段对话无关：
+          它把页面拉长一倍（r225 实测 390 宽 979px），还会把贴底的输入框顶出视口
+          （滚到预设卡片时输入框已经跑到屏幕上方 -339px）。
+          手机上收起来；要挑预设就切上面那枚「对话预设」页签，那里才是它的位置。
+          桌面（>900）不受影响：这块仍是这一页的主要内容。 */}
+      <section className={'agx-library' + (composerMode === 'chat' && chatSurface === 'platform' ? ' is-in-platform-chat' : '')}>
         <div className="agx-library-head">
           <h2>已自建对话预设</h2>
           <span className="agx-library-meta">
