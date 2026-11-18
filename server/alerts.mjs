@@ -289,6 +289,14 @@ export async function outboxStats() {
   }
 }
 
+// 列表口径只认这三个，别的值一律按「未确认」：后台那个筛选按钮拼错不会把已确认的混进待办。
+// 「已确认」是一个可以翻回来看的视图——确认不等于删除，ackAt / ackBy 落盘了就要看得见。
+export function parseAlertStatus(raw) {
+  const value = String(raw || '').trim()
+  if (value === 'acked' || value === 'all' || value === 'open') return value
+  return 'open'
+}
+
 export async function listAlerts({ status = 'open', limit = 50 } = {}) {
   const list = await loadAll()
   const filtered = status === 'all' ? list : status === 'acked' ? list.filter((item) => item.ackAt) : list.filter((item) => !item.ackAt)
@@ -300,7 +308,7 @@ export async function alertCounts() {
   const open = list.filter((item) => !item.ackAt)
   const byKind = {}
   for (const item of open) byKind[item.kind] = (byKind[item.kind] || 0) + 1
-  return { open: open.length, total: list.length, byKind }
+  return { open: open.length, acked: list.length - open.length, total: list.length, byKind }
 }
 
 export async function ackAlert(id, by = '') {

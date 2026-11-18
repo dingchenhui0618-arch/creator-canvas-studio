@@ -20,7 +20,7 @@ import { listKeys, createKey, updateKey, deleteKey, testKey, listRoutes, preview
 import { getModelCatalog } from '../model-catalog.mjs'
 import { gatewayReadiness, gatewayStatus, modelCoverage } from '../gateway.mjs'
 import { canvasAdminConfigured, listCanvasUsers, setCanvasUserAccess } from '../canvas-admin.mjs'
-import { alertCounts, ackAlert, checkDisk, flushAlertDeliveries, listAlerts, listOutbox, outboxStats, recordAlert, retryOutboxItem } from '../alerts.mjs'
+import { alertCounts, ackAlert, checkDisk, flushAlertDeliveries, listAlerts, listOutbox, outboxStats, parseAlertStatus, recordAlert, retryOutboxItem } from '../alerts.mjs'
 import { channelView, clearChannel, maskUrl, saveChannel } from '../alert-channel.mjs'
 import { clearMail, mailView, saveMail, smtpForSending } from '../mail-config.mjs'
 import { sendMail } from '../mailer.mjs'
@@ -1082,11 +1082,13 @@ export function createAdminRouter() {
       // 告警：5xx / 模型上游失败 / 磁盘不足 三类。没有外部通道也能在后台看，
       // 配了 VQ_ALERT_WEBHOOK 的会在记告警时同步往外推一条。
       if (pathname === '/api/admin/alerts' && req.method === 'GET') {
-        const status = url.searchParams.get('status') === 'all' ? 'all' : 'open'
+        // 未确认 / 已确认 / 全部：确认过的告警还能翻回来，不然「确认」这个动作等于删除
+        const status = parseAlertStatus(url.searchParams.get('status'))
         const items = await listAlerts({ status, limit: Number(url.searchParams.get('limit')) || 50 })
         const counts = await alertCounts()
         const disk = await checkDisk()
         sendJson(res, 200, {
+          status,
           items,
           counts,
           disk,

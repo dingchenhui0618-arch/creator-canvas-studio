@@ -876,6 +876,13 @@
   font-weight: 500;
 }
 
+
+/* 告警口径：未确认 / 已确认 / 全部。确认过的不再从界面上消失，翻得回来（0.9.182） */
+.admin-alert-tabs {
+  margin: 8px 0 12px;
+}
+
+
 .admin-alert-list {
   display: grid;
   gap: 8px;
@@ -894,6 +901,20 @@
   border-radius: var(--radius-xs);
   background: var(--surface-subtle, #f8f7f4);
 }
+
+/* 390 宽：一条告警横排只剩 150px 文本列，徽标、说明、按钮会挤成一列断字。
+   窄屏改成单列，按钮跟着内容走（后台其余表格仍是横向滚动，不动它们） */
+@media (max-width: 560px) {
+  .admin-alert-row {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: start;
+  }
+
+  .admin-alert-row > .vq-button {
+    justify-self: start;
+  }
+}
+
 
 .admin-alert-copy {
   display: grid;

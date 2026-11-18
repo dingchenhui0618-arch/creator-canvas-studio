@@ -74,6 +74,7 @@ type AlertItem = {
   firstAt: string
   lastAt: string
   ackAt: string | null
+  ackBy: string
   notify?: AlertNotify
 }
 
@@ -114,9 +115,13 @@ type OutboxItem = {
   createdAt: string
 }
 
+// 告警列表的口径：未确认是待办，已确认是可以翻回来的历史——确认不该等于删除
+type AlertStatus = 'open' | 'acked' | 'all'
+
 type AlertsInfo = {
+  status: AlertStatus
   items: AlertItem[]
-  counts: { open: number; total: number; byKind: Record<string, number> }
+  counts: { open: number; acked: number; total: number; byKind: Record<string, number> }
   disk: { ok: boolean; freeBytes: number; totalBytes: number; thresholdBytes: number }
   channel: AlertChannel
   outbox: OutboxStats
@@ -382,7 +387,8 @@ export default function SystemSection() {
   const version = useApi<VersionInfo>('/api/version')
   const bdc = useApi<BdcStatus>('/api/bdc/status')
   const storage = useApi<StorageInfo>('/api/admin/storage')
-  const alerts = useApi<AlertsInfo>('/api/admin/alerts')
+  const [alertStatus, setAlertStatus] = useState<AlertStatus>('open')
+  const alerts = useApi<AlertsInfo>('/api/admin/alerts?status=' + alertStatus)
   const jobs = useApi<JobsInfo>('/api/admin/jobs')
   const backups = useApi<BackupsInfo>('/api/admin/backups')
   const mail = useApi<MailInfo>('/api/admin/mail')
@@ -749,11 +755,30 @@ export default function SystemSection() {
               {channelNote ? <p className="admin-hint">{channelNote}</p> : null}
             </div>
 
+            <div className="admin-tabs admin-alert-tabs" role="tablist" aria-label="告警口径">
+              {([
+                ['open', '未确认', alerts.data.counts.open],
+                ['acked', '已确认', alerts.data.counts.acked],
+                ['all', '全部', alerts.data.counts.total],
+              ] as const).map(([value, label, count]) => (
+                <button
+                  key={value}
+                  type="button"
+                  role="tab"
+                  aria-selected={alertStatus === value}
+                  className={'admin-tab' + (alertStatus === value ? ' is-active' : '')}
+                  onClick={() => setAlertStatus(value)}
+                >
+                  {label} {count}
+                </button>
+              ))}
+            </div>
+
             {alerts.data.items.length ? (
               <ul className="admin-alert-list">
                 {alerts.data.items.map((item) => (
                   <li key={item.id} className="admin-alert-row">
-                    <Badge tone={item.kind === 'test' ? 'neutral' : item.level === 'warn' ? 'warn' : 'fail'}>
+                    <Badge tone={item.ackAt ? 'neutral' : item.kind === 'test' ? 'neutral' : item.level === 'warn' ? 'warn' : 'fail'}>
                       {ALERT_KIND_LABEL[item.kind] || item.kind}
                     </Badge>
                     <div className="admin-alert-copy">
@@ -765,20 +790,34 @@ export default function SystemSection() {
                           ? ' · 外推' + (item.notify.ok ? ' HTTP ' + item.notify.status + '（' + item.notify.ms + ' ms）' : '失败（' + (item.notify.status || '连不上') + '）')
                           : ''}
                       </span>
+                      {item.ackAt ? (
+                        <span className="admin-cell-sub">
+                          已确认 {formatDateTime(item.ackAt)}
+                          {item.ackBy ? ' · ' + item.ackBy : ''}
+                        </span>
+                      ) : null}
                     </div>
-                    <button
-                      type="button"
-                      className="vq-button vq-button--ghost vq-button--icon"
-                      onClick={() => void ack(item)}
-                      disabled={busy === item.id}
-                    >
-                      {busy === item.id ? '确认中…' : '确认'}
-                    </button>
+                    {item.ackAt ? null : (
+                      <button
+                        type="button"
+                        className="vq-button vq-button--ghost vq-button--icon"
+                        onClick={() => void ack(item)}
+                        disabled={busy === item.id}
+                      >
+                        {busy === item.id ? '确认中…' : '确认'}
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="admin-hint admin-hint--ok">没有未确认的告警：5xx、上游失败与磁盘水位都正常。</p>
+              <p className="admin-hint admin-hint--ok">
+                {alertStatus === 'open'
+                  ? '没有未确认的告警：5xx、上游失败与磁盘水位都正常。'
+                  : alertStatus === 'acked'
+                    ? '还没有确认过的告警。'
+                    : '还没有任何告警。'}
+              </p>
             )}
 
             {alerts.data.outboxItems.length ? (
