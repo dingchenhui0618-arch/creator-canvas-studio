@@ -6,6 +6,7 @@ import { config } from '../server/config.mjs'
 import { smsForSending, normalizePhone, isValidPhone, maskPhone, maskKeyId } from '../server/sms-config.mjs'
 import { issueSmsCode } from '../server/sms-login.mjs'
 import { sendSmsCode } from '../server/sms-send.mjs'
+import { recordSmsUsage } from '../server/sms-usage.mjs'
 
 const userId = process.argv[2] || 'usr_7s55Vz2pejJ_'
 
@@ -30,9 +31,11 @@ if (!channel) {
 const issued = issueSmsCode(phone, { ttlMinutes: channel.sms.ttlMinutes, codeLength: channel.sms.codeLength })
 const started = Date.now()
 const sent = await sendSmsCode(channel, { phone, code: issued.code, timeoutMs: 15000 })
+// 运维脚本发的也是真短信：同样记一条，后台「最近发码」里不会漏
+await recordSmsUsage({ phone, ok: Boolean(sent.ok), error: sent.error || '', errorCode: sent.errorCode || '', ms: sent.ms, provider: channel.sms.provider, requestId: sent.requestId || '', source: 'test' })
 console.log(
   'SEND ok=' + Boolean(sent.ok) + ' to=' + maskPhone(phone) + ' key=' + maskKeyId(channel.sms.keyId) +
     ' ttl=' + channel.sms.ttlMinutes + 'min ms=' + (Date.now() - started) +
-    (sent.ok ? ' bizId=' + String(sent.bizId || '').slice(0, 14) + '…' : ' error=' + sent.error + ' code=' + (sent.errorCode || '')),
+    (sent.ok ? ' bizId=' + String(sent.requestId || '') : ' error=' + sent.error + ' code=' + (sent.errorCode || '')),
 )
 process.exit(sent.ok ? 0 : 4)

@@ -42,6 +42,7 @@ import { grant } from '../credits.mjs'
 import { mailConfigured, smtpForSending } from '../mail-config.mjs'
 import { isValidPhone, maskPhone, normalizePhone, smsForSending, smsView } from '../sms-config.mjs'
 import { sendSmsCode } from '../sms-send.mjs'
+import { recordSmsUsage } from '../sms-usage.mjs'
 import { issueSmsCode, recordSmsSend, sendSmsBlocked, smsCooldownSec, verifySmsCode } from '../sms-login.mjs'
 import { sendMail } from '../mailer.mjs'
 import {
@@ -227,9 +228,12 @@ export function createAuthRouter() {
           const sent = await sendSmsCode(channel, { phone, code: issued.code, timeoutMs: 10000 })
           if (!sent.ok) {
             logEvent('sms-failed', { phone: maskPhone(phone), error: sent.error })
+            // 后台要能看到「最近为什么发不出去」：失败也留一条，带服务商的错误码
+            await recordSmsUsage({ phone, ok: false, error: sent.error, errorCode: sent.errorCode || '', ms: sent.ms, provider: channel.sms.provider, source: 'login' })
             return (fail(res, 502, '验证码没发出去：' + sent.error, 'form'), true)
           }
           logEvent('sms-sent', { phone: maskPhone(phone), ms: sent.ms, provider: channel.sms.provider })
+          await recordSmsUsage({ phone, ok: true, ms: sent.ms, provider: channel.sms.provider, requestId: sent.requestId || '', source: 'login' })
         } else {
           logEvent('sms-skipped', { phone: maskPhone(phone), reason: 'no-account' })
         }

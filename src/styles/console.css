@@ -2099,3 +2099,18 @@
 }
 
 
+
+/* 最近发码（v0.9.177）：一行是「结果 + 号码 + 时间/耗时/原因」。
+   1440 宽保持 结果在左、内容占满中间；窄屏后台正文本来就只有两百来像素，
+   三列会挤成竖条，所以 ≤560px 改成一列上下排，别让号码被压成两行。 */
+.admin-sms-row {
+  margin: 0;
+}
+
+@media (max-width: 560px) {
+  .admin-sms-row {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 8px;
+  }
+}

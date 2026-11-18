@@ -28,6 +28,7 @@ import { resetTtlMinutes } from '../password-reset.mjs'
 import { clearSms, isValidPhone, maskPhone, normalizePhone, saveSms, smsForSending, smsView } from '../sms-config.mjs'
 import { issueSmsCode } from '../sms-login.mjs'
 import { sendSmsCode } from '../sms-send.mjs'
+import { recordSmsUsage, smsUsageView } from '../sms-usage.mjs'
 import { clearClientErrors, listClientErrors } from '../client-errors.mjs'
 import { listLogs, pruneLogs } from '../log-files.mjs'
 import { listReports, reportCounts, resolveReport } from '../reports.mjs'
@@ -1236,6 +1237,8 @@ export function createAdminRouter() {
           // 登录页是否出现「验证码登录」，取决于这条通道 + 签名 / 模板 / 密钥是否齐
           smsLogin: sms.configured,
           cooldownSec: 60,
+          // 最近发过几次、被服务商拒过没有。号码只给掩码；手机是否真收到要去阿里云发送记录看
+          usage: await smsUsageView({ limit: 5 }),
         })
         return true
       }
@@ -1294,10 +1297,12 @@ export function createAdminRouter() {
         const sent = await sendSmsCode(channel, { phone, code: issued.code, timeoutMs: 15000 })
         if (!sent.ok) {
           recordAudit({ req, actor: user, action: 'sms.test', targetType: 'sms', targetId: 'channel', targetLabel: '短信通道', detail: { to: maskPhone(phone), error: sent.error } })
-          return (sendJson(res, 502, { ok: false, error: sent.error, ms: Date.now() - started }), true)
+          await recordSmsUsage({ phone, ok: false, error: sent.error, errorCode: sent.errorCode || '', ms: sent.ms, provider: channel.sms.provider, source: 'test' })
+          return (sendJson(res, 502, { ok: false, error: sent.error, ms: Date.now() - started, usage: await smsUsageView({ limit: 5 }) }), true)
         }
         recordAudit({ req, actor: user, action: 'sms.test', targetType: 'sms', targetId: 'channel', targetLabel: '短信通道', detail: { to: maskPhone(phone), ms: sent.ms } })
-        sendJson(res, 200, { ok: true, ms: sent.ms, to: maskPhone(phone), provider: channel.sms.provider, requestId: sent.requestId || '' })
+        await recordSmsUsage({ phone, ok: true, ms: sent.ms, provider: channel.sms.provider, requestId: sent.requestId || '', source: 'test' })
+        sendJson(res, 200, { ok: true, ms: sent.ms, to: maskPhone(phone), provider: channel.sms.provider, requestId: sent.requestId || '', usage: await smsUsageView({ limit: 5 }) })
         return true
       }
 

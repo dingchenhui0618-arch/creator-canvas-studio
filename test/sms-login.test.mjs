@@ -97,6 +97,22 @@ test('配了 fake 通道后登录页能看到验证码入口，发码进假收�
   assert.equal(sent.body.includes(code), false, '接口响应里不能回显验证码')
 })
 
+test('发码会留一条结果：号码只留掩码，接口回了什么就记什么', async () => {
+  const smsUsage = await import('../server/sms-usage.mjs')
+  fs.rmSync(path.join(dir, 'sms-usage.json'), { force: true })
+  const sent = await call('POST', '/api/auth/sms/send', { phone: PHONE })
+  assert.equal(sent.statusCode, 200, sent.body)
+  const view = await smsUsage.smsUsageView()
+  assert.equal(view.total, 1)
+  assert.equal(view.ok, 1, '假通道受理成功')
+  assert.equal(view.items[0].phone, smsConfig.maskPhone(PHONE))
+  assert.equal(view.items[0].source, 'login')
+  assert.equal(JSON.stringify(view).includes(PHONE), false, '明文号码不进视图：' + JSON.stringify(view))
+  // 没账号的号码不发码，也就不该留记录（否则日志会变成账号探针的旁路）
+  await call('POST', '/api/auth/sms/send', { phone: UNKNOWN })
+  assert.equal((await smsUsage.smsUsageView()).total, 1)
+})
+
 test('码换会话：同一枚码只能用一次', async () => {
   await call('POST', '/api/auth/sms/send', { phone: PHONE })
   const code = await lastCode(PHONE)

@@ -168,11 +168,35 @@ type SmsChannel = {
   providers: { value: string; label: string }[]
 }
 
+// 发码结果：只留掩码号码与「服务商当时怎么答的」。
+// 手机是否真收到不在我们这儿——那要去阿里云发送记录看回执（最长 72 小时）。
+type SmsUsageItem = {
+  at: string
+  phone: string
+  ok: boolean
+  source: 'login' | 'test'
+  provider: string
+  error: string
+  errorCode: string
+  ms: number | null
+  requestId: string
+}
+
+type SmsUsage = {
+  total: number
+  ok: number
+  failed: number
+  lastAt: string
+  lastOk: boolean | null
+  items: SmsUsageItem[]
+}
+
 type SmsInfo = {
   ok: boolean
   sms: SmsChannel
   smsLogin: boolean
   cooldownSec: number
+  usage?: SmsUsage
 }
 
 // 复刻任务：以前任务只存内存，发版重启就 404、扣掉的积分也不退。
@@ -1731,6 +1755,7 @@ function SmsChannelCard() {
     codeLength: '6',
   })
   const saved = sms.data?.sms
+  const usage = sms.data?.usage
   // 已保存的通道把「除密钥以外」的字段填回来：改个模板不用把签名、AccessKey 重打一遍
   const prefilled = useRef('')
   useEffect(() => {
@@ -1804,6 +1829,8 @@ function SmsChannelCard() {
       setNote(
         '测试短信已交给服务商（' + result.ms + ' ms，收件 ' + result.to + '，通道 ' + result.provider + '）。去手机上看一眼。',
       )
+      // 刚发出去的那条要立刻出现在下面的「最近发码」里
+      sms.reload()
     } catch (cause) {
       setNote(cause instanceof Error ? cause.message : '发测试短信失败')
     } finally {
@@ -1854,6 +1881,57 @@ function SmsChannelCard() {
               服务商 <b>{saved.providerLabel || '—'}</b>
             </span>
           </div>
+          {usage ? (
+            <div className="admin-channel">
+              <div className="admin-channel-head">
+                <div>
+                  <p className="admin-label">最近发码</p>
+                  <p className="admin-sub">
+                    记的是我们把码交给服务商时它的答复：受理成功、被拒原因、耗时。手机有没有收到，要去阿里云「发送记录」看回执（最长 72 小时）；运营商实名报备平均 5–7 个工作日，报备完成前个别号码可能收不到。
+                  </p>
+                </div>
+                {usage.total ? (
+                  <Badge tone={usage.failed ? 'fail' : 'ok'}>{usage.failed ? '有 ' + usage.failed + ' 次没发出去' : '都交出去了'}</Badge>
+                ) : null}
+              </div>
+
+              <div className="admin-alert-facts">
+                <span>
+                  留档 <b>{usage.total}</b> 条
+                </span>
+                <span>
+                  受理成功 <b>{usage.ok}</b>
+                </span>
+                <span>
+                  没发出去 <b>{usage.failed}</b>
+                </span>
+                <span>
+                  最近一次 <b>{usage.lastAt ? formatDateTime(usage.lastAt) : '—'}</b>
+                  {usage.lastAt ? ' · ' + (usage.lastOk ? '受理成功' : '失败') : ''}
+                </span>
+              </div>
+
+              {usage.items.length ? (
+                <ul className="admin-alert-list">
+                  {usage.items.map((item) => (
+                    <li key={item.at + item.phone + item.source} className="admin-alert-row admin-sms-row">
+                      <Badge tone={item.ok ? 'ok' : 'fail'}>{item.ok ? (item.source === 'test' ? '测试短信' : '验证码') : '没发出去'}</Badge>
+                      <div className="admin-alert-copy">
+                        <strong>{item.phone || '（号码不可用）'}</strong>
+                        <span className="admin-cell-sub admin-mono">
+                          {formatDateTime(item.at)} · {item.source === 'test' ? '后台测试' : '登录发码'}
+                          {item.ms === null ? '' : ' · ' + item.ms + ' ms'}
+                          {item.ok ? '' : ' · ' + (item.error || item.errorCode || '失败')}
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="admin-hint">还没发过码。上线后这里会按新旧列出每一次发码的结果。</p>
+              )}
+            </div>
+          ) : null}
 
           <div className="admin-channel">
             <div className="admin-channel-head">
