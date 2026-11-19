@@ -26,17 +26,47 @@ test('图片 / 视频与对话同一个骨架：左 240px 列表 + 右边工作�
   assert.match(rule(css, '.qc-root'), /grid-template-columns: 240px minmax\(0, 1fr\)/)
 })
 
-test('输入卡密度与「平台对话」一致：8px 内边距、中圆角', () => {
-  const card = rule(css, '.agx-composer--media')
+test('输入卡密度与「平台对话」一致：8px 内边距、中圆角（r259 起是默认值）', () => {
+  // r256 时这条密度只写在 .agx-composer--media 上，对话预设那张卡还是 24px 圆角 + 16px 内边距；
+  // r259 把密度提到 .agx-composer 本身，两种输入卡这才真正是一个控件。
+  const card = rule(css, '.agx-composer')
   assert.match(card, /padding: 8px/)
   assert.match(card, /border-radius: var\(--radius-md\)/)
-  assert.match(rule(css, '.qc-composer'), /padding: 8px/)
+  const platform = rule(css, '.qc-composer')
+  assert.match(platform, /padding: 8px/)
+  assert.match(platform, /border-radius: var\(--radius-md\)/)
+  // 媒体输入卡不许再把密度覆盖回去（覆盖回来就等于又胖一圈）
+  assert.ok(
+    !/\.agx-composer--media\s*\{[^}]*padding/.test(css),
+    '图片 / 视频又把内边距覆盖回去了',
+  )
 })
 
-test('媒体面板不再自带标题头与独立面板壳', () => {
-  assert.ok(!page.includes('agx-media-panel'), '还留着独立面板壳 .agx-media-panel')
+test('媒体面板不再自带标题头：只留一层负责挂载的壳', () => {
+  // 这层壳不是「独立面板」（没有标题头、没有自己的边框与内边距），
+  // 它的作用只是让图片 / 视频两个面板都挂着、只隐藏不卸载（切回来提示词还在）。
+  const panel = rule(css, '.agx-page--media .agx-media-panel')
+  assert.match(panel, /display: flex/)
+  assert.ok(!/border|padding/.test(panel), '这层壳又长出边框或内边距了')
+  assert.match(css, /\.agx-page--media \.agx-media-panel\[hidden\] \{\s*display: none;/)
+  assert.ok(page.includes('className="agx-media-panel"'), '两个媒体面板的挂载壳没了')
   assert.ok(!page.includes('agx-media-head'), '还留着自己的标题头 .agx-media-head')
   assert.ok(page.includes('agx-composer--media'), '图片 / 视频没有用统一的输入卡外壳')
+})
+
+test('图片 / 视频也收进一屏：只有结果区滚，输入卡钉在底部（r259）', () => {
+  assert.ok(page.includes('agx-page--media'), '页面没有图片 / 视频的布局标记')
+  assert.match(rule(css, '.page.agx-page--media'), /height: 100%/)
+  assert.match(rule(css, '.agx-page--media .agx-media-out'), /overflow-y: auto/)
+  assert.match(rule(css, '.agx-page--media .agx-composer--media'), /margin-top: auto/)
+  // 「已自建对话预设」是对话页签的内容，图片 / 视频下不许把页面再撑高一段
+  assert.match(css, /\.agx-page--media \.agx-library \{\s*display: none;/)
+})
+
+test('当前方式不收参考素材时，参考区收成一行（r259）', () => {
+  assert.ok(page.includes('const refsIdle = maxRefs === 0 && assets.length === 0'), '没有判断「托架空且方式不收」')
+  assert.ok(page.includes('agx-qc-refs-idle'), '没有那一行说明')
+  assert.match(rule(css, '.agx-qc-refs-idle'), /font-size: var\(--text-xs\)/)
 })
 
 test('工作流不再占页签：只在页签右边留一条入口（r257）', () => {

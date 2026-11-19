@@ -410,6 +410,120 @@
     max-height: none;
   }
 }
+/* 图片 / 视频页签也收进一屏（r259）：原来这块是「内容多高就多高」，出一次图以后结果卡、
+   输入卡、下面那排「已自建对话预设」一起把页面撑成两屏——生成时视线要来回滚。
+   现在跟平台对话用一个骨架：左边「最近生成」拉满、右边「这次的结果」自己滚、
+   输入卡钉在工作面底部；「已自建对话预设」本来就不属于这一页，图片 / 视频下收起来。 */
+@media (min-width: 901px) {
+  .page.agx-page--media {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+  }
+  .agx-page--media > .vq-head,
+  .agx-page--media > .vq-page-head {
+    flex: none;
+  }
+  .agx-page--media .agx-stage {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .agx-page--media .agx-project {
+    flex: none;
+  }
+  .agx-page--media .agx-composer-wrap {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .agx-page--media .agx-mode-row {
+    flex: none;
+  }
+  /* 图片与视频两个面板都挂着、只隐藏一个：这层壳平时要能撑满，隐藏时真的不占地方。
+     只认这一层（r259）：原来按 > div 写，把同级的 .agx-mode-row 也一起撑成了 flex:1。 */
+  .agx-page--media .agx-media-panel {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  .agx-page--media .agx-media-panel[hidden] {
+    display: none;
+  }
+  .agx-page--media .agx-media-shell {
+    flex: 1 1 auto;
+    align-items: stretch;
+    min-height: 0;
+  }
+  .agx-page--media .agx-media-side {
+    max-height: none;
+    min-height: 0;
+  }
+  /* 最近生成拉满左栏、清单自己滚：任务多了不能把整页撑长。
+     头一行（「最近生成 · 已列 N 条」）不跟着滚，滚的只有 ul——
+     .agx-media-recent 自身是 grid，直接拉满会把三行一起撑高，所以这里改成 flex 列。 */
+  .agx-page--media .agx-media-side .agx-media-recent {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .agx-page--media .agx-media-side .agx-media-recent ul {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    align-content: start;
+  }
+  /* 输入卡比一屏还高时（1024×768 五颗参数胶囊要折三行），让整列能滚，
+     而不是把结果区压成一条缝、或者把输入卡裁掉半截 */
+  .agx-page--media .agx-media-main {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+  }
+  /* 结果区按自己的内容高，多了就在里面滚：出图 / 出视频的结果一张图就可能比屏幕高。
+     至少留 88px，不然窄一点的桌面上它会被输入卡挤没。 */
+  .agx-page--media .agx-media-out {
+    flex: 0 1 auto;
+    min-height: 88px;
+    overflow-y: auto;
+  }
+  /* 还没有结果时这块就是工作区本身：让「一句话出一张图」那张卡铺满，
+     别在上方留一截看不出用途的空白 */
+  .agx-page--media .agx-media-out.is-empty {
+    flex: 1 1 auto;
+  }
+  /* 输入卡钉在这一列底部：结果少的时候留白在上面，结果多的时候它也不被推下去 */
+  .agx-page--media .agx-composer--media {
+    flex: none;
+    margin-top: auto;
+  }
+}
+/* 矮一点的桌面屏（≤820px 高）：先让「一句话出一张图」这段说明让位——
+   它只是第一次进来看一眼的话，输入卡才是要用的东西。没有结果时这块是空的
+   （.agx-media-out:empty 不收），所以不会留一条空档。 */
+@media (min-width: 901px) and (max-height: 820px) {
+  .agx-page--media .agx-media-out.is-empty {
+    display: none;
+  }
+}
+.agx-page--media .agx-library {
+  display: none;
+}
+/* 当前方式不收参考素材、托架里也空着：整块参考区收成一行（r259） */
+.agx-qc-refs-idle {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+}
+
 .agx-thread-head {
   display: flex;
   align-items: center;
@@ -571,13 +685,14 @@
 }
 
 /* composer：一块卡片，输入区在上，参数与发送收在底部同一行。
-   2026-11-12：圆角跟着全局尺度走（--radius-xl = 主输入区），内部间距回到 4/8 栅格；
-   外面那一圈是产品里最常被看到的面，所以它的圆角比卡片再柔一档。 */
+   2026-11-12：内部间距回到 4/8 栅格。r259：密度对齐「平台对话」那张 .qc-composer
+   （8px 内边距、radius-md）——同一页切页签时，输入卡原来是 24px 圆角 + 16px 内边距，
+   比平台对话「胖一圈」，看着不像同一个控件。 */
 .agx-composer {
-  padding: 16px 16px 12px;
+  padding: 8px;
   background: var(--surface-raised);
   border: 1px solid var(--line-strong);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-card);
   transition: border-color var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out),
     background-color var(--dur-2) var(--ease-out);
@@ -605,9 +720,10 @@
 .agx-textarea {
   display: block;
   width: 100%;
-  min-height: 92px;
-  max-height: 260px;
-  padding: 4px 4px 12px;
+  /* 与 .qc-input 同一档（r259）：72px 起、240px 封顶，多写的字在框里滚 */
+  min-height: 72px;
+  max-height: 240px;
+  padding: 8px;
   color: var(--ink);
   background: transparent;
   border: 0;
@@ -632,7 +748,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding-top: 12px;
+  padding-top: 8px;
   border-top: 1px solid var(--line-faint);
 }
 .agx-params {
@@ -1815,6 +1931,8 @@
 }
 .agx-media-side .agx-media-recent ul {
   display: grid;
+  /* 轨道按容器宽算，不按最长那条的内容宽算（r259：失败原话曾把整条清单撑宽） */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-2);
 }
 .agx-media-side-empty {
@@ -1888,13 +2006,8 @@
 .agx-composer--media .agx-qc-library {
   margin: 0 4px var(--space-3);
 }
-/* 输入卡与「平台对话」那个输入框同一档密度（r256）：8px 内边距、中圆角。
-   对话页签的输入框是 .qc-composer（radius-md / padding 8），媒体这边原来是 24px 圆角 +
-   16px 内边距，切过来那个「胖一圈」的感觉就是从这里来的。 */
-.agx-composer--media {
-  padding: 8px;
-  border-radius: var(--radius-md);
-}
+/* 输入卡与「平台对话」那个输入框同一档密度（r256 起）：8px 内边距、中圆角。
+   r259 把这条密度写成了 .agx-composer 的默认值，媒体这边不再单独覆盖。 */
 .agx-composer--media .agx-credit-line {
   padding: 0 4px 8px;
 }
@@ -2156,6 +2269,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  min-width: 0;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
   background: var(--surface-soft);
@@ -2166,9 +2280,12 @@
   background: var(--surface);
   border-color: var(--line);
 }
+/* r259：标题行整行铺开、动作另起一行。
+   原来「提示词 + 操作按钮」挤在一行，240px 的左栏里提示词被压成「生成…」三个字，
+   一条都认不出是哪张图；现在提示词最多两行，动作（用作参考 / 下载）落在下面一行。 */
 .agx-media-recent-open {
   display: grid;
-  flex: 1;
+  flex: 1 0 100%;
   gap: var(--space-1);
   min-width: 0;
   padding: 0;
@@ -2179,12 +2296,14 @@
   cursor: pointer;
 }
 .agx-media-recent-prompt {
+  display: -webkit-box;
   overflow: hidden;
   color: var(--ink);
   font-size: var(--text-xs);
   line-height: 1.5;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 .agx-media-recent-meta {
   color: var(--faint);
@@ -2256,9 +2375,13 @@
   line-height: 1.5;
 }
 
-/* 失败那一条要把上游说的原因写出来：只说「失败 · 已退 5 积分」，人不知道是超时还是被拒 */
+/* 失败那一条要把上游说的原因写出来：只说「失败 · 已退 5 积分」，人不知道是超时还是被拒。
+   r259：这一行是 nowrap，它的 min-width 会等于整句上游原文，把整行撑得比左栏还宽——
+   生产上就出现了「用作参考 / 下载」被裁掉、列表底下多一条横向滚动条。所以显式给 min-width:0，
+   让省略号真的出现，而不是把行撑开。 */
 .agx-media-recent-why {
   flex: 1 0 100%;
+  min-width: 0;
   margin: 0;
   overflow: hidden;
   color: var(--ink-soft);

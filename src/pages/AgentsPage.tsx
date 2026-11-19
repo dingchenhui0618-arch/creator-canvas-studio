@@ -912,6 +912,10 @@ function MediaComposer({
   }
 
   const title = image ? '生图' : '生视频'
+  // 当前方式不收参考素材、托架里也没有东西时，整块参考区收成一行（r259）：
+  // 原来它固定占 82px，两个按钮还是灰的——1024×768 上光这一块就把「这次的结果」挤没了。
+  const refsIdle = maxRefs === 0 && assets.length === 0
+  const refModeLabel = model?.modes.find((item) => item.maxRefs > 0)?.label ?? ''
   const blockedReason = !prompt.trim()
     ? image
       ? '先写一句要画什么'
@@ -997,7 +1001,8 @@ function MediaComposer({
         <p className="agx-media-side-note">只列你自己生成的任务，别人看不到也下不了。</p>
       </aside>
       <div className="agx-media-main">
-      <div className="agx-media-out">
+      {/* 空面板：矮屏上整块让位（CSS 只对 ≤820px 高的桌面生效），1440×900 照旧显示这段说明 */}
+      <div className={'agx-media-out' + (!task && !busy && !error ? ' is-empty' : '')}>
         {/* 没结果时这块也要有内容，否则右栏只剩一个输入框、上面一片空，
             和「对话」页签（上面是对话、下面是输入框）看着就不是一个东西（r256）。 */}
         {!task && !busy && !error ? (
@@ -1130,6 +1135,13 @@ function MediaComposer({
         
 
         <div className={'agx-qc-refs' + (maxRefs === 0 ? ' is-off' : '')}>
+          {refsIdle ? (
+            <p className="agx-qc-refs-idle">
+              「{mode?.label ?? '当前方式'}」不收参考素材
+              {refModeLabel ? '：切到「' + refModeLabel + '」才会带上' : ''}
+            </p>
+          ) : (
+          <>
           <div className="agx-qc-refs-head">
             <span>
               参考素材
@@ -1202,6 +1214,9 @@ function MediaComposer({
               当前方式不用参考素材：切到「{model?.modes.find((item) => item.maxRefs > 0)?.label ?? '参考'}」才会带上。
             </p>
           ) : null}
+
+          </>
+          )}
 
           {pickerOpen ? (
             <div className="agx-qc-library">
@@ -2073,7 +2088,14 @@ export function AgentsPage({
   }, [flows, projectContext])
 
   return (
-    <div className={'page agx-page' + (composerMode === 'chat' && chatSurface === 'platform' ? ' agx-page--platform' : '')}>
+    <div
+      className={
+        'page agx-page'
+        + (composerMode === 'chat' && chatSurface === 'platform' ? ' agx-page--platform' : '')
+        // 图片 / 视频也收进一屏（r259）：与平台对话同一个骨架，只有中间那块自己滚
+        + (composerMode === 'image' || composerMode === 'video' ? ' agx-page--media' : '')
+      }
+    >
       <PageHead
         kicker="快捷创作 / 对话"
         title="快捷创作"
@@ -2484,7 +2506,7 @@ export function AgentsPage({
               再套一层就是卡片里再套一张卡片（r256 实测，整块会溢出到输入卡外面）。 */}
           {composerMode === 'image' || composerMode === 'video'
             ? (['image', 'video'] as MediaKind[]).map((mode) => (
-                <div key={mode} hidden={composerMode !== mode}>
+                <div className="agx-media-panel" key={mode} hidden={composerMode !== mode}>
                   <MediaComposer
                     kind={mode}
                     catalog={mediaModels?.[mode] ?? []}
