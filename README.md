@@ -2080,3 +2080,27 @@ r259 把图片 / 视频收进一屏，剩下的那条边界是：**1024×768 上
 边界：只覆盖「这次的结果」那张卡——左边「最近生成」仍只有文字，不能缩略图预览，也不能点开看大图；
 没有缩放 / 拖动 / 左右翻；作品流页的封面还没接同一个浮层；**0 次真实上游调用、0 费用**。
 文档见 docs/lightbox-2026-11-19.md。
+
+## 三百一十四、最近生成也带缩略图：找图不用再读提示词（r261 / v0.9.244）
+
+左边「最近生成」从 r195 起就只有文字：一条提示词、一行时间与比例、两个动作。r259 把提示词从「生成…」三个字救成两行，但**想找上周那张海边礁石，还是得一条条读**。这一轮每行左边补一块 48×48 缩略图，点它直接开 r260 那个看大图浮层；顺手把后台 `console.css` 里最后 27 处 12px 小字与 7 个 30/32px 的输入控件一起抬了——用户第 4 条「字有点小」到这一轮才算扫完。
+
+![最近生成带缩略图（1440）：图片直接显示，视频显示第 0.1 秒那一帧并压一个播放角标](docs/media-recent-thumbs-1440.png)
+
+![点缩略图开的是同一个看大图浮层，头行标注「来自「最近生成」」](docs/media-recent-lightbox-1440.png)
+
+![视频页签的最近生成：两行都是真解出来的封面帧](docs/media-recent-thumbs-video-1440.png)
+
+![390 宽：缩略图 48px，提示词与动作都在屏内，没有横向滚动](docs/media-recent-thumbs-390.png)
+
+![后台系统页 1440：正文最小 13px，输入框 36px](docs/admin-fonts-1440.png)
+
+**缩略图没有新增接口**：图片直接用结果文件；视频用 `preload="metadata"` 拉头部数据、`loadedmetadata` 后把 `currentTime` 设到 0.1 秒画出封面帧，不下载整条片子，也不依赖生产没有的 ffmpeg。失败 / 进行中的行留同尺寸占位块，列表不会错位。
+
+**浮层改成「正在看哪一条」**：r260 是布尔值，默认永远看结果区那条；r261 改成 `zoomTask`，结果区缩略图、动作栏、左边缩略图三个入口都开它，切页签时自动收掉（两个面板都挂着只隐藏，浮层不能留在屏幕上）。量到的尺寸：1440 图 692²/卡片 718×806、1024 图 560²、390 图 356² 且三个按钮都在屏内，两处窄屏 `scrollWidth == innerWidth`。
+
+**后台字号地板**：`console.css` 里 12px / 11.5px / 12.5px 共 27 处统一到 13px（与用户侧 `--text-2xs` 一档），`.admin-edit-field input/select`、`.admin-search input`、`.admin-usage-range .vq-input`、`.admin-run-filter select`、`.admin-audit-input`、`.admin-report-actions .admin-input` 七个控件 30/32px → 36px。逐元素量 computed font-size：1440 与 390 的最小字号都是 13px，小于 13px 的元素 0 个，整页无横向溢出。
+
+三个坑记在 [docs/media-recent-thumbs-2026-11-19.md](docs/media-recent-thumbs-2026-11-19.md)：①`.agx-media-recent-open` 原来 `flex: 1 0 100%`，加缩略图要包一层 body 再改 `1 1 auto`；②两个面板都挂着，探针点「第一个缩略图」拿到的是隐藏面板那张，浮层被 `!hidden` 拦住、看起来像没反应，必须用 `.agx-media-panel:not([hidden])` 作用域；③无头 Chrome 后台标签页不解视频帧，封面要手动 seek。
+
+门禁：测试 1714/1714、lint 0 error / 25 warning、`tsc -b` 干净、build 入口 `index-DX7ItUW3.js`、密钥扫描无命中；生产 0.9.244 已上线，回滚 `--to 1` 回 0.9.243。边界：缩略图是 48×48 居中裁切；浮层没有缩放 / 拖动 / 翻页；作品流封面还没接这个浮层。

@@ -2300,6 +2300,14 @@
   color: var(--ink-soft);
   font-size: var(--text-xs);
 }
+/* 浮层可能是从左边「最近生成」点开的：说清这条不是右边正在看的那一条 */
+.agx-lightbox-note {
+  margin-left: auto;
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: var(--text-mono);
+  white-space: nowrap;
+}
 .agx-lightbox-close {
   display: inline-flex;
   align-items: center;
@@ -2430,9 +2438,59 @@
 /* r259：标题行整行铺开、动作另起一行。
    原来「提示词 + 操作按钮」挤在一行，240px 的左栏里提示词被压成「生成…」三个字，
    一条都认不出是哪张图；现在提示词最多两行，动作（用作参考 / 下载）落在下面一行。 */
+/* 每行左边一块缩略图（r261）：以前只有文字，想找一张图得挨条读提示词。
+   缩略图是「看大图」的入口（cursor: zoom-in），右边文字那半仍然是「打开这一条」。 */
+.agx-media-recent-body {
+  display: flex;
+  flex: 1 0 100%;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.agx-media-recent-thumb {
+  position: relative;
+  display: grid;
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  overflow: hidden;
+  place-items: center;
+  background: #0e0e10;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-xs);
+  cursor: zoom-in;
+}
+.agx-media-recent-thumb img,
+.agx-media-recent-thumb video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.agx-media-recent-thumb:hover {
+  border-color: var(--line);
+}
+.agx-media-recent-thumb.is-placeholder {
+  color: var(--faint);
+  background: var(--surface);
+  cursor: default;
+}
+.agx-media-recent-thumb-play {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  display: grid;
+  width: 16px;
+  height: 16px;
+  color: #ffffff;
+  place-items: center;
+  background: rgba(8, 8, 9, 0.62);
+  border-radius: 50%;
+}
 .agx-media-recent-open {
   display: grid;
-  flex: 1 0 100%;
+  flex: 1 1 auto;
   gap: var(--space-1);
   min-width: 0;
   padding: 0;

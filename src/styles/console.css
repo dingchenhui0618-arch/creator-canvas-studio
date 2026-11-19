@@ -33,7 +33,7 @@
   margin: 0 0 8px;
   color: var(--faint, #8a8a8a);
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: 0.16em;
 }
 
@@ -99,7 +99,7 @@
 .admin-label {
   color: var(--faint, #8a8a8a);
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   letter-spacing: 0.1em;
   line-height: 1.4;
@@ -141,7 +141,7 @@
   border-radius: 999px;
   color: var(--faint, #8a8a8a);
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: 0.05em;
   line-height: 1.5;
   white-space: nowrap;
@@ -238,7 +238,7 @@
 
 .admin-mono {
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: 0.01em;
 }
 
@@ -262,7 +262,7 @@
   background: var(--canvas, #faf9f7);
   color: var(--faint, #8a8a8a);
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   letter-spacing: 0.1em;
   text-align: left;
@@ -416,7 +416,7 @@
   gap: 4px;
   margin-top: 4px;
   color: var(--faint, #8a8a8a);
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 400;
   line-height: 1.55;
 }
@@ -426,7 +426,7 @@
 .admin-cell-time {
   color: var(--muted, #6b6b6b);
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 11.5px;
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -546,7 +546,7 @@
   margin: 0;
   color: var(--faint, #8a8a8a);
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: 0.04em;
 }
 
@@ -602,7 +602,7 @@
   margin: 0 0 8px;
   color: var(--muted, #5c5c5c);
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: 0.1em;
 }
 
@@ -621,7 +621,7 @@
   background: var(--canvas, #faf9f7);
   color: var(--muted, #5c5c5c);
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .admin-hint {
@@ -761,12 +761,12 @@
 .admin-edit-field > span {
   color: var(--faint, #8a8a8a);
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: 0.04em;
 }
 
 .admin-edit-field input {
-  height: 32px;
+  height: 36px;
   padding: 0 8px;
   color: var(--ink, #111111);
   background: var(--surface, #ffffff);
@@ -1001,7 +1001,7 @@
 /* 成本页：单价表单、按天柱状与数字列。
    数字列统一等宽 + 右对齐，扫一眼就能比较大小；柱子只用一行高的轨道，不加大面积色块。 */
 .admin-usage-range { flex: 0 0 auto; justify-content: flex-end; }
-.admin-usage-range .vq-input { height: 30px; padding: 0 8px; }
+.admin-usage-range .vq-input { height: 36px; padding: 0 8px; }
 .admin-price-form {
   display: flex;
   flex-wrap: wrap;
@@ -1010,11 +1010,11 @@
   margin-top: 12px;
 }
 .admin-price-field { flex: 0 1 calc(25% - 9px); min-width: 96px; }
-.admin-price-field small { color: var(--faint, #8a8a8a); font-size: 12px; line-height: 1.4; }
+.admin-price-field small { color: var(--faint, #8a8a8a); font-size: 13px; line-height: 1.4; }
 .admin-price-form .admin-doc-actions { flex: 1 1 100%; }
 .admin-usage-days { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .admin-bar { display: grid; grid-template-columns: 56px minmax(0, 1fr) 64px; align-items: center; gap: 12px; }
-.admin-bar > .admin-mono { color: var(--muted, #5d5d5d); font-size: 12px; }
+.admin-bar > .admin-mono { color: var(--muted, #5d5d5d); font-size: 13px; }
 .admin-bar-track { display: block; height: 6px; border-radius: 999px; background: var(--line-faint, rgba(17, 17, 17, .06)); overflow: hidden; }
 .admin-bar-fill { display: block; height: 100%; border-radius: 999px; background: var(--ink, #111111); opacity: .72; }
 .admin-num { text-align: right; font-variant-numeric: tabular-nums; }
@@ -1052,7 +1052,7 @@
   border: 1px solid var(--line, #e7e2d9);
   border-radius: var(--radius-xs);
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: 0.04em;
 }
 
@@ -1064,7 +1064,7 @@
 
 /* 平台 Key 池表单：select 与多选能力沿用同一套输入高度 */
 .admin-edit-field select {
-  height: 32px;
+  height: 36px;
   max-width: 100%;
   min-width: 0;
   padding: 0 8px;
@@ -1150,7 +1150,7 @@
 
 .admin-search input {
   width: 100%;
-  height: 32px;
+  height: 36px;
   padding: 0 12px;
   border: 1px solid var(--line, #e6e3dd);
   border-radius: var(--radius-xs);
@@ -1269,7 +1269,7 @@
   cursor: pointer;
   color: var(--faint, #8a8a8a);
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: 0.05em;
 }
 
@@ -1283,7 +1283,7 @@
   background: var(--canvas, #faf9f7);
   color: var(--muted, #5c5c5c);
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
@@ -1343,7 +1343,7 @@
 .admin-doc-row code {
   color: var(--ink, #111111);
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 12px;
+  font-size: 13px;
   /* 网关地址是一整条没有空格的 URL：390 宽实测它把卡片顶宽 10px，
      整块内容跟着出现横向滚动条。允许在任意字符处断开。 */
   min-width: 0;
@@ -1480,7 +1480,7 @@
 }
 
 .admin-run-filter select {
-  height: 30px;
+  height: 36px;
   padding: 0 24px 0 8px;
   border: 1px solid var(--line, #e5e2db);
   border-radius: var(--radius-sm);
@@ -1534,7 +1534,7 @@
 
 .admin-audit-input {
   width: 240px;
-  height: 30px;
+  height: 36px;
   font-size: 13px;
 }
 
@@ -1546,7 +1546,7 @@
 
 .admin-audit-source {
   color: var(--faint, #8a8a8a);
-  font-size: 12px;
+  font-size: 13px;
   white-space: nowrap;
 }
 
@@ -1583,14 +1583,14 @@
   justify-content: space-between;
   gap: 8px;
   color: var(--faint, #8a8a8a);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .admin-diag-errors p {
   margin: 4px 0 0;
   color: var(--muted, #5c5c5c);
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.6;
   word-break: break-all;
 }
@@ -1712,7 +1712,7 @@
 
 .admin-error-details summary {
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: 0.04em;
   color: var(--ink-faint, #6f6f6f);
 }
@@ -1726,7 +1726,7 @@
   border-radius: var(--radius-xs);
   background: var(--surface, #fbfbfb);
   font-family: var(--font-mono, monospace);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.65;
   color: var(--ink-soft, #333);
   white-space: pre-wrap;
@@ -1742,10 +1742,10 @@
 .admin-report-row { display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; border: 1px solid var(--line, #e7e2d9); border-radius: var(--radius-sm); background: var(--surface-subtle, #f8f7f4); }
 .admin-report-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 12px; }
 .admin-report-head strong { font-size: 14px; font-weight: 500; }
-.admin-report-detail { margin: 0; font-size: 12.5px; line-height: 1.7; color: var(--ink-soft, #333); }
+.admin-report-detail { margin: 0; font-size: 13px; line-height: 1.7; color: var(--ink-soft, #333); }
 .admin-report-url { overflow-wrap: anywhere; }
 .admin-report-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
-.admin-report-actions .admin-input { flex: 1 1 260px; min-width: 0; height: 30px; padding: 0 8px; border: 1px solid var(--line-strong, #e0dbd2); border-radius: var(--radius-xs); background: var(--surface, #fff); font-size: 13px; }
+.admin-report-actions .admin-input { flex: 1 1 260px; min-width: 0; height: 36px; padding: 0 8px; border: 1px solid var(--line-strong, #e0dbd2); border-radius: var(--radius-xs); background: var(--surface, #fff); font-size: 13px; }
 .admin-report-actions .admin-input:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(17, 17, 17, .28); }
 
 /* ---------- 上线就绪 + 站点公示（v0.9.67） ----------
@@ -1987,7 +1987,7 @@
 .model-filter-button span {
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .model-catalog-table {
@@ -2037,7 +2037,7 @@
 .model-offer-platform {
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: 0.04em;
 }
 
@@ -2065,7 +2065,7 @@
 .model-offer-note {
   margin: 4px 0 0;
   color: var(--faint);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.55;
   overflow-wrap: anywhere;
 }
@@ -2123,7 +2123,7 @@
     margin-bottom: 4px;
     color: var(--faint);
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: 13px;
     letter-spacing: 0.08em;
   }
 

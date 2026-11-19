@@ -84,12 +84,13 @@ test('结果区点开看大图（r260）：矮屏上 1:1 的图不再只能看�
   // 缩略图本身是入口，另外结果卡动作栏里还有一个明确的「看大图 / 放大看」
   assert.ok(page.includes('agx-media-zoom'), '缩略图不是「看大图」的入口')
   assert.ok(page.includes('agx-lightbox'), '没有看大图的浮层')
-  assert.ok(page.includes("lightbox && !hidden && task?.status === 'succeeded'"), '浮层没有只对成功结果开，或被隐藏的面板还会把浮层留在屏幕上')
+  // r261：浮层记的是「正在看哪一条」（zoomTask），左边「最近生成」也开这一个
+  assert.ok(page.includes("zoomTask && !hidden && zoomTask.status === 'succeeded'"), '浮层没有只对成功结果开，或被隐藏的面板还会把浮层留在屏幕上')
   assert.match(page, /role="dialog"/)
   assert.match(page, /aria-modal="true"/)
   assert.ok(page.includes("event.key === 'Escape'"), 'Esc 关不掉浮层')
   // 关掉浮层的三个出口：叉、关闭按钮、Esc；「再生成 / 清掉结果」也要顺手带上
-  assert.match(page, /const reset = \(\) => \{\s*if \(active\) return\s*setLightbox\(false\)/)
+  assert.match(page, /const reset = \(\) => \{\s*if \(active\) return\s*setZoomTask\(null\)/)
   // 浮层必须是整页固定层，压过窄屏历史弹层（z-index 60）
   const box = rule(css, '.agx-lightbox')
   assert.match(box, /position: fixed/)
@@ -109,4 +110,29 @@ test('平台对话铺满一屏：只有线程滚，输入卡不出屏幕（r257�
   assert.match(thread, /min-height: 0/)
   assert.match(rule(css, '.page.agx-page--platform'), /height: 100%/)
   assert.match(rule(css, '.agx-page--platform .agx-quickchat'), /flex: 1 1 auto/)
+})
+
+// r261：左边「最近生成」以前只有文字，想找一张图得挨条读提示词。
+// 现在每行左边一块 48px 缩略图：图片直接显示，视频取第 0.1 秒当封面（只读 metadata，不下整条），
+// 点缩略图开的是右边同一个看大图浮层。
+test('最近生成带缩略图，点开是同一个看大图浮层（r261）', () => {
+  assert.ok(page.includes('function RecentThumb('), '没有最近生成的缩略图组件')
+  assert.ok(page.includes('agx-media-recent-thumb'), '每行没有缩略图')
+  assert.ok(page.includes('onClick={() => setZoomTask(item)}'), '点缩略图没有开看大图浮层')
+  assert.ok(page.includes('element.currentTime = 0.1'), '视频封面没有取第 0.1 秒那一帧')
+  assert.match(page, /<video ref=\{videoRef\} src=\{task.downloadUrl\} muted playsInline preload="metadata"/)
+  // 两个面板都挂着只隐藏：切页签时浮层要收掉，不然它会盖住刚切过去的那一页
+  assert.match(page, /useEffect\(\(\) => \{[\s\S]{0,220}?if \(hidden\) setZoomTask\(null\)/, '切页签没有把浮层收掉')
+  // 缩略图与文字是兄弟：缩略图开浮层、文字打开这一条，点哪儿都不会误触另一个
+  const thumb = rule(css, '.agx-media-recent-thumb')
+  assert.match(thumb, /width: 48px/)
+  assert.match(thumb, /height: 48px/)
+  assert.match(thumb, /cursor: zoom-in/)
+  assert.match(rule(css, '.agx-media-recent-thumb img,\n.agx-media-recent-thumb video'), /object-fit: cover/)
+  // 缩略图那一列 48px 之后，文字那半必须能收缩，否则提示词会把动作按钮挤到看不见
+  assert.match(rule(css, '.agx-media-recent-body'), /min-width: 0/)
+  assert.match(rule(css, '.agx-media-recent-open'), /flex: 1 1 auto/)
+  // 从「最近生成」点开的浮层要说清它不是右边正在看的那一条
+  assert.ok(page.includes('agx-lightbox-note'), '浮层没有说明这条来自最近生成')
+  assert.match(rule(css, '.agx-lightbox-note'), /margin-left: auto/)
 })

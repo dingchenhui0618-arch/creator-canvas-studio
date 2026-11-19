@@ -19,6 +19,7 @@ import {
   LayoutTemplate,
   Maximize2,
   Pencil,
+  Play,
   Plus,
   RotateCcw,
   Trash2,
@@ -500,6 +501,38 @@ function shortTimeOf(iso: string) {
   return pad(date.getMonth() + 1) + '-' + pad(date.getDate()) + ' ' + pad(date.getHours()) + ':' + pad(date.getMinutes())
 }
 
+// 「最近生成」每行左边这一小块（r261）：以前只有文字，想找一张图得挨条读提示词。
+// 图片直接当缩略图；视频只读 metadata、跳到第 0.1 秒取那一帧当封面，再压一个播放角标——
+// 不下载整条视频，也不为它另做一套接口。
+function RecentThumb({ task }: { task: MediaTask }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  useEffect(() => {
+    const element = videoRef.current
+    if (!element) return
+    const seek = () => {
+      try {
+        element.currentTime = 0.1
+      } catch {
+        // 元数据还没到，等 loadedmetadata 再来一次
+      }
+    }
+    if (element.readyState >= 1) seek()
+    element.addEventListener('loadedmetadata', seek, { once: true })
+    return () => element.removeEventListener('loadedmetadata', seek)
+  }, [task.id])
+  if (task.kind === 'image') {
+    return <img src={task.downloadUrl} alt="" loading="lazy" />
+  }
+  return (
+    <>
+      <video ref={videoRef} src={task.downloadUrl} muted playsInline preload="metadata" aria-hidden="true" />
+      <span className="agx-media-recent-thumb-play" aria-hidden="true">
+        <Play size={10} />
+      </span>
+    </>
+  )
+}
+
 // 一行里要说清「什么时候、多大、什么比例」
 function recentMetaOf(task: MediaTask) {
   return [shortTimeOf(task.createdAt), describeTask(task)].filter(Boolean).join(' · ')
@@ -591,7 +624,9 @@ function MediaComposer({
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   // 点开看大图（r260）：1024×768 这种矮屏上结果区只剩 88px，1:1 的图只能看到中间一条，
   // 又不想逼人先下载再看——整页浮层，图按视口缩放，Esc 关。
-  const [lightbox, setLightbox] = useState(false)
+  // r261：左边「最近生成」的缩略图开的是同一个浮层，所以这里记「正在看哪一条」，
+  // 不是「结果区开没开」——否则点最近生成会顺手把结果区那条也换掉。
+  const [zoomTask, setZoomTask] = useState<MediaTask | null>(null)
   const lightboxCloseRef = useRef<HTMLButtonElement | null>(null)
 
   // 选中的东西都做「按当前模型规格兜底」：换模型后旧比例 / 旧时长不合法，渲染时自动落到新模型的默认值，
@@ -745,17 +780,24 @@ function MediaComposer({
 
   // 浮层开着时：Esc 关、焦点落在关闭按钮上，键盘用户不至于卡在浮层里出不去
   useEffect(() => {
-    if (!lightbox) return
+    if (!zoomTask) return
     lightboxCloseRef.current?.focus()
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault()
-        setLightbox(false)
+        setZoomTask(null)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [lightbox])
+  }, [zoomTask])
+
+  // 切到另一个页签时把浮层收掉：两个面板都挂着只隐藏，浮层留在屏幕上会盖住刚切过去的页签。
+  // 这里就是「属性变了同步收一下本地状态」，没有别的推导路径，按仓库里既有的写法显式放过这一条。
+  useEffect(() => {
+    // eslint-disable-next-line react/set-state-in-effect
+    if (hidden) setZoomTask(null)
+  }, [hidden])
 
   // 把一条已经落到服务端的素材挂进托架：换不换方式、放不放得下都按 domain/media-refs 的结论走。
   // 上传、从素材库挑、把生成结果当参考，三个入口共用这一段，规则不会各写一套。
@@ -927,7 +969,7 @@ function MediaComposer({
 
   const reset = () => {
     if (active) return
-    setLightbox(false)
+    setZoomTask(null)
     setTask(null)
     setError('')
     setPollError('')
@@ -964,20 +1006,38 @@ function MediaComposer({
                     <ul>
                       {recent.map((item) => (
                         <li key={item.id} className={'agx-media-recent-row' + (item.id === task?.id ? ' is-current' : '')}>
-                          <button
-                            type="button"
-                            className="agx-media-recent-open"
-                            onClick={() => {
-                              setTask(item)
-                              setError(item.status === 'failed' ? item.error || '生成失败' : '')
-                              setPollError('')
-                            }}
-                            disabled={active}
-                            title="打开这一条"
-                          >
-                            <span className="agx-media-recent-prompt">{item.prompt}</span>
-                            <span className="agx-media-recent-meta">{recentMetaOf(item)}</span>
-                          </button>
+                          <div className="agx-media-recent-body">
+                            {/* 缩略图是「看大图」的入口：看得见的那一块点一下就能整页看，不用先换到右边 */}
+                            {item.status === 'succeeded' ? (
+                              <button
+                                type="button"
+                                className="agx-media-recent-thumb"
+                                onClick={() => setZoomTask(item)}
+                                title="看大图（Esc 关闭）"
+                                aria-label={'看大图：' + item.prompt}
+                              >
+                                <RecentThumb task={item} />
+                              </button>
+                            ) : (
+                              <span className="agx-media-recent-thumb is-placeholder" aria-hidden="true">
+                                {item.status === 'failed' ? <AlertCircle size={14} /> : <Clock size={14} />}
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              className="agx-media-recent-open"
+                              onClick={() => {
+                                setTask(item)
+                                setError(item.status === 'failed' ? item.error || '生成失败' : '')
+                                setPollError('')
+                              }}
+                              disabled={active}
+                              title="打开这一条"
+                            >
+                              <span className="agx-media-recent-prompt">{item.prompt}</span>
+                              <span className="agx-media-recent-meta">{recentMetaOf(item)}</span>
+                            </button>
+                          </div>
                           {item.status === 'succeeded' ? (
                             <>
                               <button
@@ -1096,7 +1156,7 @@ function MediaComposer({
               <button
                 type="button"
                 className="agx-media-zoom"
-                onClick={() => setLightbox(true)}
+                onClick={() => setZoomTask(task)}
                 title="点开看大图（Esc 关闭）"
                 aria-label="点开看大图"
               >
@@ -1115,7 +1175,7 @@ function MediaComposer({
                 <button
                   type="button"
                   className="vq-button vq-button--ghost"
-                  onClick={() => setLightbox(true)}
+                  onClick={() => setZoomTask(task)}
                   title={image ? '整页看这张图（Esc 关闭）' : '整页看这条视频（Esc 关闭）'}
                 >
                   <Maximize2 size={13} />
@@ -1409,55 +1469,57 @@ function MediaComposer({
       </div>
 
       </div>
-      {lightbox && !hidden && task?.status === 'succeeded' ? (
-        // 整页浮层：图按视口缩放，不让 340px 的缩略图上限限制「看清楚」这件事
+      {zoomTask && !hidden && zoomTask.status === 'succeeded' ? (
+        // 整页浮层：图按视口缩放，不让 340px 的缩略图上限限制「看清楚」这件事。
+        // r261：右边结果区、左边「最近生成」的缩略图都开这一个浮层，看的是 zoomTask 那一条。
         <div
           className="agx-lightbox"
           role="dialog"
           aria-modal="true"
-          aria-label={image ? '查看大图' : '查看视频'}
-          onClick={() => setLightbox(false)}
+          aria-label={zoomTask.kind === 'image' ? '查看大图' : '查看视频'}
+          onClick={() => setZoomTask(null)}
         >
           <figure className="agx-lightbox-card" onClick={(event) => event.stopPropagation()}>
             <div className="agx-lightbox-head">
               <span>
-                {image ? '生成结果' : '生成的视频'} · {formatBytes(task.file?.bytes ?? 0)}
+                {zoomTask.kind === 'image' ? '生成结果' : '生成的视频'} · {formatBytes(zoomTask.file?.bytes ?? 0)}
               </span>
+              {zoomTask.id === task?.id ? null : <span className="agx-lightbox-note">来自「最近生成」</span>}
               <button
                 ref={lightboxCloseRef}
                 type="button"
                 className="agx-lightbox-close"
-                onClick={() => setLightbox(false)}
+                onClick={() => setZoomTask(null)}
                 aria-label="关闭"
                 title="关闭（Esc）"
               >
                 <X size={16} />
               </button>
             </div>
-            <div className={'agx-lightbox-stage' + (image ? '' : ' is-video')}>
-              {image ? (
-                <img src={task.downloadUrl} alt={task.prompt} />
+            <div className={'agx-lightbox-stage' + (zoomTask.kind === 'image' ? '' : ' is-video')}>
+              {zoomTask.kind === 'image' ? (
+                <img src={zoomTask.downloadUrl} alt={zoomTask.prompt} />
               ) : (
-                <video src={task.downloadUrl} controls playsInline preload="metadata" />
+                <video src={zoomTask.downloadUrl} controls playsInline preload="metadata" />
               )}
             </div>
             <figcaption className="agx-lightbox-caption">
-              <p>{task.prompt}</p>
+              <p>{zoomTask.prompt}</p>
               <div className="agx-lightbox-actions">
-                <a className="vq-button vq-button--ghost" href={task.downloadUrl} download>
+                <a className="vq-button vq-button--ghost" href={zoomTask.downloadUrl} download>
                   <Download size={13} />
-                  下载{image ? '原图' : '视频'}
+                  下载{zoomTask.kind === 'image' ? '原图' : '视频'}
                 </a>
                 <button
                   type="button"
                   className="vq-button vq-button--ghost"
-                  onClick={() => void addTaskResultAsRef(task)}
+                  onClick={() => void addTaskResultAsRef(zoomTask)}
                   disabled={Boolean(refBusyId)}
                 >
                   <Plus size={13} />
-                  {refBusyId === task.id ? '加入参考中…' : '用作参考'}
+                  {refBusyId === zoomTask.id ? '加入参考中…' : '用作参考'}
                 </button>
-                <button type="button" className="vq-button vq-button--ghost" onClick={() => setLightbox(false)}>
+                <button type="button" className="vq-button vq-button--ghost" onClick={() => setZoomTask(null)}>
                   关闭
                 </button>
               </div>
