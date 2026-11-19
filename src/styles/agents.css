@@ -1675,74 +1675,130 @@
 }
 
 /* 生成面板长在输入框里：不再有遮罩、不再有独立窗口的边框与阴影 */
-.agx-media-panel {
+/* 图片 / 视频与「对话」共用同一个外壳（r256）：同一个 .agx-composer 卡片、
+   同一条余额行、同一种参数胶囊、同一个圆形发送键。这里只补「卡片下面那条结果流」。 */
+/* 和「对话」页签同一个骨架（r256）：左边一条列表、右边一块工作面，输入卡贴在工作面底部。
+   对话那边左边是会话、上面是消息、下面是输入；这边左边是「最近生成」、上面是这次的结果、
+   下面是同一个输入卡——切页签时视线的落点不变。 */
+.agx-media-shell {
   display: grid;
-  gap: var(--space-3);
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
   min-width: 0;
 }
-.agx-media-panel .agx-media-head {
-  align-items: center;
-  padding: 0 0 var(--space-3);
-}
-.agx-media-panel .agx-media-heading h2 {
-  margin: 0;
-  font-size: var(--text-lg);
-}
-.agx-media-panel .agx-media-body {
-  flex: none;
-  gap: var(--space-3);
-  max-height: 52vh;
-  padding: 0;
-}
-.agx-media-panel .agx-media-foot {
-  padding: var(--space-3) 0 0;
-}
-
-/* ---------- 生成表单 ---------- */
-.agx-media-head {
+.agx-media-side {
   display: flex;
-  flex: 0 0 auto;
-  align-items: flex-start;
-  gap: var(--space-3);
-  padding: var(--space-4) var(--space-4) var(--space-3);
-  border-bottom: 1px solid var(--line-faint);
-}
-.agx-media-icon {
-  display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  color: var(--ink);
-  background: var(--surface-soft);
+  flex-direction: column;
+  gap: 8px;
+  min-height: 320px;
+  max-height: 560px;
+  padding: 8px;
+  overflow: hidden;
+  background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
 }
-.agx-media-heading {
-  flex: 1;
-  min-width: 0;
-}
-.agx-media-heading h2 {
-  margin: var(--space-1) 0 2px;
-  color: var(--ink);
-  font-size: var(--text-xl);
-  font-weight: var(--weight-medium);
-  letter-spacing: -0.01em;
-}
-.agx-media-heading p {
-  margin: 0;
-  color: var(--faint);
-  font-size: var(--text-xs);
-}
-.agx-media-body {
-  display: grid;
-  flex: 1 1 auto;
-  align-content: start;
-  gap: var(--space-3);
+.agx-media-side .agx-media-recent {
   min-height: 0;
-  padding: var(--space-4);
   overflow-y: auto;
 }
+.agx-media-side .agx-media-recent ul {
+  display: grid;
+  gap: var(--space-2);
+}
+.agx-media-side-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+}
+.agx-media-side-note {
+  margin: 0;
+  padding-top: var(--space-2);
+  color: var(--faint);
+  font-size: var(--text-mono);
+  line-height: 1.6;
+  border-top: 1px solid var(--line-faint);
+}
+.agx-media-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.agx-media-out {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+/* 没有结果时占住右栏上半部分：与「对话」页签上面那块说明同一张卡的样子 */
+.agx-media-intro {
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.agx-media-intro strong {
+  display: block;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 500;
+}
+.agx-media-intro p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.65;
+}
+.agx-media-out:empty {
+  display: none;
+}
+/* 参考素材不再是卡片里的第二个框：就在输入框上面一行，说明 + 两个按钮 */
+.agx-composer--media .agx-qc-refs {
+  gap: var(--space-2);
+  padding: 0 4px var(--space-3);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+.agx-composer--media .agx-qc-ref {
+  grid-template-columns: 40px minmax(0, 1fr) 24px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+.agx-composer--media .agx-qc-ref-thumb {
+  width: 40px;
+  height: 40px;
+}
+.agx-composer--media .agx-qc-ref-grid {
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+}
+.agx-composer--media .agx-qc-library {
+  margin: 0 4px var(--space-3);
+}
+/* 输入卡与「平台对话」那个输入框同一档密度（r256）：8px 内边距、中圆角。
+   对话页签的输入框是 .qc-composer（radius-md / padding 8），媒体这边原来是 24px 圆角 +
+   16px 内边距，切过来那个「胖一圈」的感觉就是从这里来的。 */
+.agx-composer--media {
+  padding: 8px;
+  border-radius: var(--radius-md);
+}
+.agx-composer--media .agx-credit-line {
+  padding: 0 4px 8px;
+}
+.agx-media-count {
+  color: var(--faint);
+  font-size: var(--text-mono);
+}
+.agx-media-note {
+  margin: 0;
+  color: var(--faint);
+  font-size: var(--text-mono);
+  line-height: 1.6;
+}
+
 .agx-media-model {
   display: flex;
   flex-wrap: wrap;
@@ -1753,46 +1809,6 @@
   color: var(--faint);
   font-size: var(--text-xs);
   border-bottom: 1px dashed var(--line);
-}
-.agx-media-field {
-  display: grid;
-  gap: var(--space-2);
-}
-.agx-media-field > span {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-2);
-  color: var(--ink-soft);
-  font-size: var(--text-xs);
-}
-.agx-media-field > span b {
-  color: var(--faint);
-  font-family: var(--font-mono);
-  font-size: var(--text-mono);
-  font-weight: 400;
-}
-.agx-media-field textarea {
-  width: 100%;
-  min-height: 88px;
-  padding: 10px var(--space-3);
-  color: var(--ink);
-  font: inherit;
-  font-size: var(--text-sm);
-  line-height: 1.6;
-  resize: vertical;
-  background: var(--surface-raised);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
-}
-.agx-media-field textarea:focus {
-  border-color: var(--ink);
-  outline: none;
-  box-shadow: var(--ring-soft);
-}
-.agx-media-field textarea:disabled {
-  color: var(--faint);
-  background: var(--surface-soft);
 }
 .agx-media-seg {
   display: flex;
@@ -1825,24 +1841,6 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-3);
-}
-.agx-media-cost {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  color: var(--ink-soft);
-  font-size: var(--text-xs);
-  background: var(--surface-soft);
-  border: 1px solid var(--line-faint);
-  border-radius: var(--radius-xs);
-}
-.agx-media-cost strong {
-  color: var(--ink);
-  font-family: var(--font-mono);
-  font-weight: 500;
 }
 .agx-media-running,
 .agx-media-progress {
@@ -1956,9 +1954,15 @@
   font-size: var(--text-mono);
   line-height: 1.5;
 }
+/* 结果卡（r256）：它现在排在输入卡下面的结果流里，不再挤在表单内部，
+   所以要有自己的一层：与对话消息同一种卡片（白面 + 1px 线 + 中圆角）。 */
 .agx-media-result {
   display: grid;
   gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
 }
 .agx-media-result-head,
 .agx-media-result-foot {
@@ -2008,37 +2012,11 @@
   align-items: center;
   gap: var(--space-2);
 }
-.agx-media-foot {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  background: var(--surface);
-  border-top: 1px solid var(--line-faint);
-}
-.agx-media-foot > span {
-  color: var(--faint);
-  font-size: var(--text-mono);
-  line-height: 1.5;
-}
-.agx-media-foot > div {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: var(--space-2);
-}
-.agx-media-foot .vq-button {
-  gap: var(--btn-gap-sm);
-}
 
 /* 「最近生成」：关掉窗口之后还能把上一次的文件找回来，不然生成了没下载等于白花钱 */
 .agx-media-recent {
   display: grid;
   gap: var(--space-2);
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--line-faint);
 }
 .agx-media-recent-head {
   display: flex;
@@ -2181,20 +2159,161 @@
 }
 
 
-@media (max-width: 720px) {
-  .agx-media-panel .agx-media-body {
+
+/* ---------- 快捷创作里的「工作流」页签（r256） ----------
+   它不是输入框，是一张清单：说明一句、几行最近的工作流、一行计费口径。
+   和输入卡同一个宽度与圆角，只是没有输入区，所以看上去仍是「同一个窗口里的另一种去向」。 */
+.agx-flowpanel {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: 16px 16px 12px;
+  background: var(--surface-raised);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-card);
+}
+.agx-flowpanel-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.agx-flowpanel-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  color: var(--ink);
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.agx-flowpanel-copy {
+  flex: 1;
+  min-width: 0;
+}
+.agx-flowpanel-copy strong {
+  display: block;
+  color: var(--ink);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+.agx-flowpanel-copy p {
+  margin: 2px 0 0;
+  color: var(--faint);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+}
+.agx-flowpanel-new {
+  flex: 0 0 auto;
+}
+.agx-flowpanel-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.agx-flowpanel-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: 'name go' 'meta go' 'when go';
+  align-items: center;
+  gap: 2px var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease-out), background-color var(--dur-1) var(--ease-out);
+}
+.agx-flowpanel-row:hover {
+  background: var(--surface-raised);
+  border-color: var(--line-strong);
+}
+.agx-flowpanel-row:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+.agx-flowpanel-name {
+  grid-area: name;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agx-flowpanel-meta {
+  grid-area: meta;
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+.agx-flowpanel-when {
+  grid-area: when;
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: var(--text-mono);
+}
+.agx-flowpanel-go {
+  grid-area: go;
+  color: var(--faint);
+}
+.agx-flowpanel-row:hover .agx-flowpanel-go {
+  color: var(--ink);
+}
+.agx-flowpanel-empty {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+}
+.agx-flowpanel-empty p {
+  margin: 0;
+}
+.agx-flowpanel-error {
+  margin: 0;
+  color: var(--fail);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+}
+.agx-flowpanel-note {
+  margin: 0;
+  padding-top: var(--space-2);
+  color: var(--faint);
+  font-size: var(--text-mono);
+  line-height: 1.6;
+  border-top: 1px solid var(--line-faint);
+}
+.agx-flowpanel-spin {
+  animation: agx-media-spin 0.8s linear infinite;
+}
+
+/* 窄屏与「对话」一致：一条竖着排，输入卡在前，最近生成收到后面（r256） */
+@media (max-width: 900px) {
+  .agx-media-shell {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+  .agx-media-side {
+    order: 2;
+    min-height: 0;
     max-height: none;
   }
+  .agx-media-main {
+    order: 1;
+  }
+}
+
+@media (max-width: 720px) {
   .agx-media-pair {
     grid-template-columns: 1fr;
-  }
-  .agx-media-foot {
-    align-items: stretch;
-    flex-direction: column;
-    padding: var(--space-3);
-  }
-  .agx-media-foot > div {
-    justify-content: flex-end;
   }
   .agx-media-image,
   .agx-media-video {
