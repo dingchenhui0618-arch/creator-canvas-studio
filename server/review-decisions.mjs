@@ -12,6 +12,7 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { config } from './config.mjs'
 import { canAccess } from './owner.mjs'
+import { readStoreArray } from './json-store.mjs'
 
 const decisionsFile = path.join(config.dataDir, 'review-decisions.json')
 // 一个账号最多留 200 条：一条拍板对应一次评审，攒不到那么多还留着
@@ -20,13 +21,16 @@ const MAX_DECISIONS = 200
 let cache = null
 let writeChain = Promise.resolve()
 
+let readError = null
+
 async function loadAll() {
   if (cache) return cache
   try {
-    const parsed = JSON.parse(await fsp.readFile(decisionsFile, 'utf8'))
-    cache = Array.isArray(parsed) ? parsed : []
-  } catch {
-    cache = []
+    cache = await readStoreArray(decisionsFile, '人工拍板')
+    readError = null
+  } catch (error) {
+    readError = error
+    throw error
   }
   return cache
 }
@@ -38,6 +42,8 @@ function enqueueWrite(task) {
 }
 
 async function persist(list) {
+  // 这一次读失败过就不许写回：一份读不出来的旧文件被一条新记录覆盖，等于把整份历史删了（r267）
+  if (readError) throw readError
   cache = list
   await fsp.mkdir(config.dataDir, { recursive: true })
   const tmp = decisionsFile + '.' + process.pid + '.' + Math.random().toString(36).slice(2) + '.tmp'

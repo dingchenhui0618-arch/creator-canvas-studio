@@ -5,6 +5,7 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { config } from './config.mjs'
 import { canAccess } from './owner.mjs'
+import { readStoreArray } from './json-store.mjs'
 
 const reviewsFile = path.join(config.dataDir, 'reviews.json')
 const MAX_REVIEWS = 200
@@ -12,13 +13,16 @@ const MAX_REVIEWS = 200
 let cache = null
 let writeChain = Promise.resolve()
 
+let readError = null
+
 async function loadAll() {
   if (cache) return cache
   try {
-    const parsed = JSON.parse(await fsp.readFile(reviewsFile, 'utf8'))
-    cache = Array.isArray(parsed) ? parsed : []
-  } catch {
-    cache = []
+    cache = await readStoreArray(reviewsFile, '评审历史')
+    readError = null
+  } catch (error) {
+    readError = error
+    throw error
   }
   return cache
 }
@@ -30,6 +34,8 @@ function enqueueWrite(task) {
 }
 
 async function persist(list) {
+  // 这一次读失败过就不许写回：一份读不出来的旧文件被一条新记录覆盖，等于把整份历史删了（r267）
+  if (readError) throw readError
   cache = list
   await fsp.mkdir(config.dataDir, { recursive: true })
   const tmp = reviewsFile + '.' + process.pid + '.' + Math.random().toString(36).slice(2) + '.tmp'

@@ -10,6 +10,7 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { config } from './config.mjs'
+import { readStoreArray, storeUnreadable } from './json-store.mjs'
 import { resolveChannel, signBody } from './alert-channel.mjs'
 import { buildPayload, detectProvider, providerLabel, readVerdict } from './alert-format.mjs'
 
@@ -33,18 +34,23 @@ let outboxChain = Promise.resolve()
 // 投递链：recordAlert 只往这里排队，绝不等它
 let notifyChain = Promise.resolve()
 
+let readError = null
+
 async function loadAll() {
   if (cache) return cache
   try {
-    const parsed = JSON.parse(await fsp.readFile(file(), 'utf8'))
-    cache = Array.isArray(parsed) ? parsed : []
-  } catch {
-    cache = []
+    cache = await readStoreArray(file(), '告警')
+    readError = null
+  } catch (error) {
+    readError = error
+    throw error
   }
   return cache
 }
 
 function persist(list) {
+  // 这一次读失败过就不许写回（r267）：一条新告警覆盖掉整份告警历史，等于把现场毁了
+  if (readError) throw readError
   cache = list
   const target = file()
   writeChain = writeChain
@@ -58,21 +64,40 @@ function persist(list) {
   return writeChain
 }
 
+let outboxReadError = null
+
 async function loadOutbox() {
   if (outbox) return outbox
+  let text
   try {
-    const parsed = JSON.parse(await fsp.readFile(outboxFile(), 'utf8'))
-    outbox = {
-      items: Array.isArray(parsed?.items) ? parsed.items : [],
-      sent: { count: Number(parsed?.sent?.count) || 0, lastAt: String(parsed?.sent?.lastAt || ''), lastStatus: Number(parsed?.sent?.lastStatus) || 0 },
+    text = await fsp.readFile(outboxFile(), 'utf8')
+  } catch (error) {
+    // 还没有这份文件是正常的（没配通道、没推过东西）；读不动就不一样了（r267）
+    if (error && error.code === 'ENOENT') {
+      outboxReadError = null
+      outbox = { items: [], sent: { count: 0, lastAt: '', lastStatus: 0 } }
+      return outbox
     }
-  } catch {
-    outbox = { items: [], sent: { count: 0, lastAt: '', lastStatus: 0 } }
+    outboxReadError = storeUnreadable('告警外推队列', error)
+    throw outboxReadError
+  }
+  let parsed
+  try {
+    parsed = JSON.parse(text)
+  } catch (error) {
+    outboxReadError = storeUnreadable('告警外推队列', error)
+    throw outboxReadError
+  }
+  outboxReadError = null
+  outbox = {
+    items: Array.isArray(parsed?.items) ? parsed.items : [],
+    sent: { count: Number(parsed?.sent?.count) || 0, lastAt: String(parsed?.sent?.lastAt || ''), lastStatus: Number(parsed?.sent?.lastStatus) || 0 },
   }
   return outbox
 }
 
 function persistOutbox(next) {
+  if (outboxReadError) throw outboxReadError
   outbox = next
   const target = outboxFile()
   outboxChain = outboxChain

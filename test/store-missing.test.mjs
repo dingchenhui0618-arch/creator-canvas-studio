@@ -36,3 +36,37 @@ test('没有 flows.json / runs.json：空库，建一条工作流正常', async 
   assert.ok(flow && flow.id)
   assert.equal((await flows.listFlows(me)).length, 1)
 })
+// 其余用户数据存储同一条规矩（r267）：没有文件就是空库，第一条记录照常落盘。
+const reviews = await import('../server/reviews.mjs')
+const history = await import('../server/agent-history.mjs')
+const search = await import('../server/search-history.mjs')
+const acks = await import('../server/review-acks.mjs')
+const decisions = await import('../server/review-decisions.mjs')
+const reports = await import('../server/reports.mjs')
+const feedback = await import('../server/feedback.mjs')
+const clientErrors = await import('../server/client-errors.mjs')
+const alerts = await import('../server/alerts.mjs')
+
+test('没有评审 / 运行记录 / 检索 / 已看过 / 拍板：空列表，不报错', async () => {
+  assert.equal((await reviews.listReviews({}, me)).total, 0)
+  assert.equal((await history.listAgentRuns('ag_1')).total, 0)
+  assert.deepEqual(await search.listSearchHistory(me), [])
+  assert.deepEqual(await acks.listAcks(me), [])
+  assert.deepEqual(await decisions.listDecisions(me), [])
+})
+
+test('没有举报 / 反馈 / 前端异常 / 告警：空列表，写第一条正常落盘', async () => {
+  assert.deepEqual((await reports.listReports({})).items, [])
+  const report = await reports.createReport({ target: { kind: 'template', id: 'tpl_1' }, detail: '这条模板是我拍的原创' })
+  assert.equal(report.ok, true)
+  assert.deepEqual((await feedback.listFeedback({})).items, [])
+  const note = await feedback.createFeedback({ kind: 'problem', body: '作品页打不开', user: me })
+  assert.equal(note.ok, true)
+  assert.equal((await clientErrors.listClientErrors({})).total, 0)
+  assert.deepEqual(await alerts.listAlerts({}), [])
+  const alert = await alerts.recordAlert({ kind: 'test', title: '新装一条测试告警' })
+  assert.ok(alert && alert.id)
+  assert.equal((await alerts.listAlerts({})).length, 1)
+  // 没有 alert-outbox.json 是正常的：没有外推通道就不该报错
+  assert.deepEqual(await alerts.listOutbox({}), [])
+})

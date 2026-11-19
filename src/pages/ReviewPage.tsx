@@ -829,11 +829,13 @@ export default function ReviewPage({
                   查看全部 {historyTotal} 条 <ArrowRight size={11} />
                 </button>
               ) : (
-                <span className="vq-mono">{reviews.length}</span>
+                // 读不出来的时候别在标题旁写「0」：那是在说「一条都没有」，和下面的报错自相矛盾（r267）
+                <span className="vq-mono">{historyError ? '—' : reviews.length}</span>
               )}
             </div>
-            {historyError ? <p className="review-empty">{historyError}</p> : null}
-            {reviews.length ? (
+            {historyError ? (
+              <p className="review-empty">{historyError}</p>
+            ) : reviews.length ? (
               <ul>
                 {reviews.map((item) => (
                   <li key={item.id}>

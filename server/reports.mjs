@@ -2,6 +2,7 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { config } from './config.mjs'
+import { readStoreArray } from './json-store.mjs'
 
 // 侵权 / 不当内容举报：分享页与公共模板都能报，不要求登录（被侵权的人不一定有账号）。
 // 落 data/reports.json，最多 500 条；同一 IP 对同一条模板 10 分钟内只算一次，
@@ -22,13 +23,16 @@ const CATEGORY_KEYS = new Set(Object.keys(REPORT_CATEGORIES))
 let cache = null
 let writeChain = Promise.resolve()
 
+let readError = null
+
 async function loadAll() {
   if (cache) return cache
   try {
-    const parsed = JSON.parse(await fsp.readFile(path.join(config.dataDir, 'reports.json'), 'utf8'))
-    cache = Array.isArray(parsed) ? parsed : []
-  } catch {
-    cache = []
+    cache = await readStoreArray(path.join(config.dataDir, 'reports.json'), '举报队列')
+    readError = null
+  } catch (error) {
+    readError = error
+    throw error
   }
   return cache
 }
@@ -40,6 +44,8 @@ function enqueueWrite(task) {
 }
 
 async function persist(list) {
+  // 这一次读失败过就不许写回：一份读不出来的旧文件被一条新记录覆盖，等于把整份历史删了（r267）
+  if (readError) throw readError
   cache = list
   return enqueueWrite(async () => {
     await fsp.mkdir(config.dataDir, { recursive: true })

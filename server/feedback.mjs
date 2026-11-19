@@ -10,6 +10,7 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { config } from './config.mjs'
+import { readStoreArray } from './json-store.mjs'
 
 const CAP = 1000
 const DEDUPE_MS = 10 * 60 * 1000
@@ -32,13 +33,16 @@ const STATUS_KEYS = new Set(Object.keys(FEEDBACK_STATUS))
 let cache = null
 let writeChain = Promise.resolve()
 
+let readError = null
+
 async function loadAll() {
   if (cache) return cache
   try {
-    const parsed = JSON.parse(await fsp.readFile(path.join(config.dataDir, 'feedback.json'), 'utf8'))
-    cache = Array.isArray(parsed) ? parsed : []
-  } catch {
-    cache = []
+    cache = await readStoreArray(path.join(config.dataDir, 'feedback.json'), '反馈')
+    readError = null
+  } catch (error) {
+    readError = error
+    throw error
   }
   return cache
 }
@@ -50,6 +54,8 @@ function enqueueWrite(task) {
 }
 
 async function persist(list) {
+  // 这一次读失败过就不许写回：一份读不出来的旧文件被一条新记录覆盖，等于把整份历史删了（r267）
+  if (readError) throw readError
   cache = list
   return enqueueWrite(async () => {
     await fsp.mkdir(config.dataDir, { recursive: true })

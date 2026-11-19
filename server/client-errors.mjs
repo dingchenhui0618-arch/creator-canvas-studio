@@ -1,6 +1,7 @@
 import fsp from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { config } from './config.mjs'
+import { readStoreArray } from './json-store.mjs'
 
 // 前端异常上报：浏览器里炸了的东西（脚本错误、未处理的 Promise、React 渲染抛错）
 // 在服务端留一份，后台「系统」页能直接看到，不用等用户截图、也不用翻 journal。
@@ -17,14 +18,16 @@ const KINDS = new Set(['error', 'unhandledrejection', 'react', 'resource'])
 let cache = null
 let writeChain = Promise.resolve()
 
+let readError = null
+
 async function loadAll() {
   if (cache) return cache
   try {
-    const text = await fsp.readFile(config.clientErrorsFile, 'utf8')
-    const parsed = JSON.parse(text)
-    cache = Array.isArray(parsed) ? parsed : []
-  } catch {
-    cache = []
+    cache = await readStoreArray(config.clientErrorsFile, '前端异常记录')
+    readError = null
+  } catch (error) {
+    readError = error
+    throw error
   }
   return cache
 }
@@ -36,6 +39,8 @@ function enqueueWrite(task) {
 }
 
 async function persist(list) {
+  // 这一次读失败过就不许写回：一份读不出来的旧文件被一条新记录覆盖，等于把整份历史删了（r267）
+  if (readError) throw readError
   cache = list
   return enqueueWrite(async () => {
     await fsp.mkdir(config.dataDir, { recursive: true })

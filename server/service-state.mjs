@@ -45,12 +45,13 @@ export function noteModelFailure(error, modelName = '') {
   model.lastModel = String(modelName || '').slice(0, 80)
   // 出过失败就不再算「已验证」：即使 5 分钟后自动失效，也要等下一次真实成功才算数
   model.verifiedAt = 0
+  // 告警存储自己读不出来时不能再把异常抛给这个请求（r267）
   void recordAlert({
     kind: 'model-blocked',
     title: (INTERNAL_LABEL[code] || INTERNAL_LABEL.unknown) + '：' + String(modelName || '模型'),
     detail: String(error?.message || error || '').slice(0, 300),
     dedupeKey: 'model-blocked|' + code + '|' + String(modelName || ''),
-  })
+  }).catch(() => {})
   return true
 }
 
