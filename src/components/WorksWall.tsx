@@ -9,9 +9,10 @@ import { probeMediaFile } from '../domain/media-file'
 import { writeRefHandoff } from '../domain/media-handoff'
 import { refFileName } from '../domain/media-refs'
 import type { RefKind } from '../domain/media-refs'
+import { readWorksFilter, runStatusLabel, workDetailLabel, writeWorksFilter, type WorksFilter } from '../domain/works-view'
 import '../styles/works.css'
 
-const FILTERS: Array<{ value: string; label: string }> = [
+const FILTERS: Array<{ value: WorksFilter; label: string }> = [
   { value: 'all', label: '全部' },
   { value: 'image', label: '图片' },
   { value: 'video', label: '视频' },
@@ -57,7 +58,8 @@ function canReuse(item: WorkItem): boolean {
 
 /** 作品流：三处产物一条流，按作品自己的比例排版。默认 9:16 最密。 */
 export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: string) => void }) {
-  const [kind, setKind] = useState('all')
+  // 筛选跟着会话走：点开一次运行再回来，刚才筛的「工作流」还在（r266）
+  const [kind, setKind] = useState<WorksFilter>(() => readWorksFilter(window.sessionStorage))
   const [items, setItems] = useState<WorkItem[]>([])
   const [cursor, setCursor] = useState<string | null>(null)
   const [total, setTotal] = useState(0)
@@ -72,7 +74,7 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
   // 自己传过的素材：用来认「这一条已经加过了」，同一条作品不重复占配额
   const libraryRef = useRef<MediaAsset[] | null>(null)
 
-  const load = useCallback(async (nextKind: string, before = '', append = false) => {
+  const load = useCallback(async (nextKind: WorksFilter, before = '', append = false) => {
     if (append) setMore(true)
     else setLoading(true)
     setError('')
@@ -91,6 +93,8 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
 
   useEffect(() => { void load(kind) }, [kind, load])
 
+  useEffect(() => { writeWorksFilter(window.sessionStorage, kind) }, [kind])
+
   useEffect(() => {
     if (!preview) return
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setPreview(null) }
@@ -98,9 +102,18 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
     return () => document.removeEventListener('keydown', onKey)
   }, [preview])
 
+  // 去作品出处（那次运行的只读视图 / 那块画布）是「离开作品流」的动作：
+  // 只在人明确点了它的按钮时才走，点缩略图不再顺手把人带走（r266）。
+  const goDetail = (item: WorkItem) => {
+    if (!item.detailUrl) return
+    setPreview(null)
+    if (onOpenDetail) onOpenDetail(item.detailUrl)
+    else window.location.assign(item.detailUrl)
+  }
+
   const open = (item: WorkItem) => {
     if (item.previewUrl) setPreview(item)
-    else if (item.detailUrl && onOpenDetail) onOpenDetail(item.detailUrl)
+    else goDetail(item)
   }
 
   // 取回这条作品的文件：同一个地址既用来下载，也用来传成参考素材。
@@ -193,31 +206,44 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
     }
   }
 
-  const actions = (item: WorkItem) => {
-    if (!canReuse(item)) return null
+  // 卡片上是「接着用这条成品」（用作参考 / 下载），浮层里再加一条「去出处」——
+  // 有封面的运行卡以前点缩略图就整页跳走，现在跳转是个写着去哪儿的按钮（r266）。
+  const actions = (item: WorkItem, options: { detail?: boolean } = {}) => {
+    const reuse = canReuse(item)
+    const detail = options.detail ? workDetailLabel(item) : ''
+    if (!reuse && !detail) return null
     const busyRef = busy?.id === item.id && busy.what === 'ref'
     const busySave = busy?.id === item.id && busy.what === 'save'
     return (
       <div className="works-actions">
-        <button
-          type="button"
-          className="works-action"
-          onClick={() => void reuseWork(item)}
-          disabled={Boolean(busy)}
-          title="把这条成品带进快捷创作，接着改或当首帧出视频"
-        >
-          {busyRef ? '加入中…' : '用作参考'}
-        </button>
-        <button
-          type="button"
-          className="works-action"
-          onClick={() => void saveWork(item)}
-          disabled={Boolean(busy)}
-          title="存到本机"
-        >
-          <Download size={12} />
-          {busySave ? '下载中…' : '下载'}
-        </button>
+        {reuse ? (
+          <button
+            type="button"
+            className="works-action"
+            onClick={() => void reuseWork(item)}
+            disabled={Boolean(busy)}
+            title="把这条成品带进快捷创作，接着改或当首帧出视频"
+          >
+            {busyRef ? '加入中…' : '用作参考'}
+          </button>
+        ) : null}
+        {reuse ? (
+          <button
+            type="button"
+            className="works-action"
+            onClick={() => void saveWork(item)}
+            disabled={Boolean(busy)}
+            title="存到本机"
+          >
+            <Download size={12} />
+            {busySave ? '下载中…' : '下载'}
+          </button>
+        ) : null}
+        {detail ? (
+          <button type="button" className="works-action" onClick={() => goDetail(item)} title="离开作品流，去那一次运行 / 那块画布">
+            {detail}
+          </button>
+        ) : null}
       </div>
     )
   }
@@ -253,6 +279,7 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
         {items.map((item) => {
           const Icon = KIND_ICON[item.kind] || ImageIcon
           const isVideo = item.mediaKind === 'video' || item.kind === 'video'
+          const statusLabel = item.kind === 'run' ? runStatusLabel(item.status) : ''
           return (
             <article key={item.id} className={'works-card ' + ratioClass(item.aspect)}>
               <button type="button" className="works-thumb" onClick={() => open(item)} title={item.title}>
@@ -281,13 +308,13 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
                     {stamp(item.at)}
                     {item.model ? ' · ' + item.model : ''}
                     {item.durationMs ? ' · ' + Math.max(1, Math.round(item.durationMs / 1000)) + 's' : ''}
-                    {item.status && item.kind === 'run' ? ' · ' + (item.status === 'success' ? '跑完了' : item.status === 'error' ? '失败' : '已停止') : ''}
+                    {statusLabel ? ' · ' + statusLabel : null}
                   </span>
                   <button type="button" className="works-open" onClick={() => open(item)}>
                     {item.previewUrl ? (isVideo ? '看视频' : '看大图') : item.kind === 'canvas' ? '打开画布' : '打开运行'}
                   </button>
                 </div>
-                {actions(item)}
+                {actions(item, { detail: Boolean(item.previewUrl) })}
               </div>
             </article>
           )
@@ -314,7 +341,7 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
           head={preview.source + ' · ' + stamp(preview.at)}
           note={preview.model || null}
           caption={preview.summary ? preview.title + ' · ' + preview.summary : preview.title}
-          actions={actions(preview)}
+          actions={actions(preview, { detail: true })}
           onClose={() => setPreview(null)}
         />
       ) : null}

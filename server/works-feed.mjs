@@ -112,23 +112,32 @@ function runCover(run) {
   return video ? { output: video, kind: 'video' } : null
 }
 
-async function runItems(user) {
-  const { items } = await listRuns({ ownerId: user.id, limit: 50 })
-  return items.map((run) => {
-    const cover = runCover(run)
-    const coverOutput = cover ? cover.output : null
-    return {
+/**
+ * 一次运行在作品流里的一张卡（r266）。
+ *
+ * 以前的毛病：运行卡有封面（那张真画出来的图）却把 previewUrl 写成 null，
+ * 于是点缩略图不是看大图，而是整页跳到运行视图——同一张图，在作品流的图片卡上点开是看大图，
+ * 在运行卡上点开是换页面，两套行为。现在封面同时当预览，跳转收进浮层里的显式按钮。
+ *
+ * 还在跑 / 排队的运行不进作品流：作品流回答的是「做过什么」，没成品的进去只会被当成「已停止」。
+ */
+export function runWorkItem(run) {
+  if (!run || run.status === 'running' || run.status === 'queued') return null
+  const cover = runCover(run)
+  const coverOutput = cover ? cover.output : null
+  const coverUrl = coverOutput ? (cover.kind === 'video' ? coverOutput.videoUrl : coverOutput.imageUrl) : null
+  return {
     id: 'run:' + run.id,
     kind: 'run',
     title: String(run.flowName || '一次工作流运行').slice(0, 42),
     aspect: coverOutput ? (String(coverOutput.ratio || '') || '1:1') : 'unknown',
-    // 封面是图还是视频：卡片用不同的元素画（视频出第一帧，点击进运行只读视图）
+    // 封面是图还是视频：卡片用不同的元素画（视频出第一帧，点开才是播放）
     mediaKind: cover ? cover.kind : '',
-    thumbUrl: coverOutput ? (cover.kind === 'video' ? coverOutput.videoUrl : coverOutput.imageUrl) : null,
-    previewUrl: null,
+    thumbUrl: coverUrl,
+    previewUrl: coverUrl,
     at: Date.parse(run.finishedAt || run.startedAt) || Date.parse(run.createdAt || '') || 0,
     source: '工作流',
-    // 点开就是那次运行的只读视图（#/canvas/<flowId>/run/<runId>），不再是笼统的运行记录页
+    // 没有产物时才退化成「打开这次运行」；有产物时跳转是浮层里的一个按钮，不再抢缩略图
     detailUrl: run.flowId
       ? '#/canvas/' + encodeURIComponent(run.flowId) + '/run/' + encodeURIComponent(run.id)
       : '#/runs',
@@ -137,8 +146,12 @@ async function runItems(user) {
     durationMs: Number(run.durationMs) || 0,
     flowId: run.flowId || '',
     // 模型名已经在摘要里（「出图完成：GPT Image 2」），这里不再重复占一行宽度
-    }
-  })
+  }
+}
+
+async function runItems(user) {
+  const { items } = await listRuns({ ownerId: user.id, limit: 50 })
+  return items.map((run) => runWorkItem(run)).filter(Boolean)
 }
 
 // 界面上的模型名：用产品叫法，不把内部 id（尤其带上游前缀的）原样端给用户。
