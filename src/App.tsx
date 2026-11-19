@@ -723,6 +723,8 @@ function Workbench({
             onReviewProject={(projectId) => navigate({ kind: 'page', page: 'review', projectId })}
             onClearReview={() => navigate({ kind: 'page', page: 'review' })}
             onOpenProjects={() => navigate({ kind: 'page', page: 'projects' })}
+            // 存成模板之后直接落到那一条上（r253）：新模板在库里哪一页都不用自己找
+            onOpenTemplate={(templateId) => navigate({ kind: 'page', page: 'templates', templateId })}
           />
         )
       case 'settings':

@@ -488,6 +488,11 @@ export function TemplateLibraryPage({
                   ) : (
                     <span>解析后才能改编与开作品</span>
                   )}
+                  {/* 这条是评过什么才存下来的（r253）：卡片自己说清，不用点开抽屉才知道。
+                      只有从作品沉淀、且当时那一版评过的模板才有这个字段，没有就不写。 */}
+                  {templateReviewText(item.review) ? (
+                    <span className={'template-review is-' + (item.review?.verdict || 'pass')}>{templateReviewText(item.review)}</span>
+                  ) : null}
                   {/* 用量的位置放在这排数字里，不挤脚注：脚注要留给平台、作者与「用这条改编」按钮 */}
                   {item.projectCount ? <span className="template-uses">{item.projectCount} 条作品在用</span> : null}
                 </div>

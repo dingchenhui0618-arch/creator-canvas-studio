@@ -397,6 +397,16 @@
   white-space: nowrap;
 }
 
+/* 卡片上的评审结论（r253）：这条是评过什么才存下来的，卡片自己说清。
+   只从作品沉淀、且当时那一版评过的模板才有这个字段；颜色跟结论走，字不加大到抢标题。 */
+.template-review {
+  color: var(--pass);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.template-review.is-needs_review { color: var(--warn); }
+.template-review.is-fail { color: var(--fail); }
+
 .drawer-works-more {
   margin: 0;
   color: var(--faint);

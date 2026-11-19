@@ -255,8 +255,26 @@
 .rv-next-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .rv-next-actions .vq-button { min-height: 40px; }
 /* 存成模板的结果就写在按钮下面（r252）：成功说清「几段几镜、评过什么」，失败说原话 */
-.rv-next-note { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.rv-next-note { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
 .rv-next-note.is-bad { color: var(--fail); }
+/* 存完那一行带一个「看这条模板」（r253）：字跟着正文 14px，不另起一个按钮占掉整行 */
+.rv-next-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 0 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--pass);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  vertical-align: baseline;
+}
+.rv-next-link:hover { text-decoration: underline; }
+.rv-next-link svg { flex: none; }
 @media (max-width: 760px) {
   .rv-next-actions .vq-button { flex: 1 1 100%; }
 }

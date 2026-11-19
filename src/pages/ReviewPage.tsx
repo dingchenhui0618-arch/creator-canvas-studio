@@ -123,6 +123,7 @@ export default function ReviewPage({
   onOpenReview,
   onReviewProject,
   onClearReview,
+  onOpenTemplate,
   onOpenProjects,
   onOpenFlow,
 }: {
@@ -139,6 +140,8 @@ export default function ReviewPage({
   onClearReview?: () => void
   /** 候选之外的「还有 N 条」去作品列表 */
   onOpenProjects?: () => void
+  /** 存成模板之后直接去看它（r253）：沉淀完还要自己去找一遍，这一步原本是断的 */
+  onOpenTemplate?: (templateId: string) => void
 } = {}) {
   const { internal } = useUiMode()
   // 从作品页进来时，这次评审的结论会挂在那条作品下；标题只为把话说清楚（读不到就不显示名字）
@@ -201,7 +204,7 @@ export default function ReviewPage({
   // 「存成模板」那一下的结果（r252）：按钮就地变成结果，不弹窗、不跳走——
   // 人还站在这次评审的结论前面，做完这件事再看要不要回作品。
   // id 记的是这条结果属于哪一次评审：换了一条结论就自然回到 idle，不用 effect 再 setState 一次。
-  const [tplSave, setTplSave] = useState<{ id: string; status: 'idle' | 'saving' | 'done' | 'error'; text: string }>({ id: '', status: 'idle', text: '' })
+  const [tplSave, setTplSave] = useState<{ id: string; status: 'idle' | 'saving' | 'done' | 'error'; text: string; templateId: string }>({ id: '', status: 'idle', text: '', templateId: '' })
 
   useEffect(() => {
     if (!projectId) return
@@ -578,7 +581,7 @@ export default function ReviewPage({
 
   // 换了一条结论（重评 / 打开另一条记录）：「存成模板」那一下的结果不能跟着带到下一条上
   const reviewKey = result?.reviewId || ''
-  const tplState = tplSave.id === reviewKey ? tplSave : { id: '', status: 'idle' as const, text: '' }
+  const tplState = tplSave.id === reviewKey ? tplSave : { id: '', status: 'idle' as const, text: '', templateId: '' }
 
   /**
    * 把这一版沉淀成模板（r252）：只写模板库新的一条，不动作品、不动它绑的模板。
@@ -587,7 +590,7 @@ export default function ReviewPage({
   const saveTemplateNow = useCallback(async () => {
     const id = reviewScope?.id
     if (!id || tplState.status === 'saving') return
-    setTplSave({ id: reviewKey, status: 'saving', text: '' })
+    setTplSave({ id: reviewKey, status: 'saving', text: '', templateId: '' })
     try {
       const saved = await saveProjectAsTemplate(id)
       const review = saved.template.review
@@ -596,10 +599,12 @@ export default function ReviewPage({
         id: reviewKey,
         status: 'done',
         text: '已存成模板《' + saved.template.title + '》（' + saved.template.beats + ' 段 · ' + saved.template.shots + ' 镜' +
-          (verdict ? ' · 评审' + verdict : '') + '），在模板库里能查到。',
+          (verdict ? ' · 评审' + verdict : '') + '）。',
+        // 存完就该能直接打开它：以前只留一句「在模板库里能查到」，等于让人自己再翻一遍
+        templateId: saved.template.id,
       })
     } catch (error) {
-      setTplSave({ id: reviewKey, status: 'error', text: error instanceof Error ? error.message : '存成模板没成功，稍后再试' })
+      setTplSave({ id: reviewKey, status: 'error', text: error instanceof Error ? error.message : '存成模板没成功，稍后再试', templateId: '' })
     }
   }, [reviewScope, reviewKey, tplState.status])
 
@@ -1149,6 +1154,16 @@ export default function ReviewPage({
                   {tplState.text ? (
                     <p className={'rv-next-note' + (tplState.status === 'error' ? ' is-bad' : '')} role="status">
                       {tplState.text}
+                      {tplState.status === 'done' && tplState.templateId && onOpenTemplate ? (
+                        <button
+                          type="button"
+                          className="rv-next-link"
+                          onClick={() => onOpenTemplate(tplState.templateId)}
+                        >
+                          看这条模板
+                          <ArrowRight size={13} strokeWidth={1.75} />
+                        </button>
+                      ) : null}
                     </p>
                   ) : null}
                 </section>
