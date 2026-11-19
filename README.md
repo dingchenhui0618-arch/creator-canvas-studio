@@ -2202,3 +2202,34 @@ r259 把图片 / 视频收进一屏，剩下的那条边界是：**1024×768 上
 口径与边界写在 [docs/works-run-preview-2026-11-19.md](docs/works-run-preview-2026-11-19.md)：画布里出的图「打开画布」只有单测覆盖（临时实例没有画布应用）；运行卡封面只取一个产物，多图不翻页；筛选只在同一标签页内保留，已翻页数不记。
 
 门禁：测试 **1751/1751**（新增 works-feed 4 条、works-view 7 条，改 media-handoff 1 条源码断言）、lint 0 error / 25 warning（634 文件）、`tsc -b` 干净、build 入口 `index-BQcTKTSl.js`、密钥扫描无命中。生产 **0.9.248** 已上线，回滚 `--to 1` 回 0.9.247。本轮 0 次真实上游调用、0 费用。
+
+## 三百一十九、用户数据文件读不出来时不再当空库：七份补齐，评审页不再同时说「读不出来」和「还没有」（r267 / v0.9.249）
+
+上一轮（r265）只收了模板库、作品库、工作流、运行记录四份数据，其余仍是「读失败当空库」的老写法：文件坏一次，页面显示「一条都没有」，用户随手新建一条就把整份历史覆盖掉。这一轮把剩下的用户数据补齐，并修掉两处界面上自相矛盾的写法。
+
+| 存储 | 读不出来时 | 写回 |
+| --- | --- | --- |
+| 评审历史 `reviews.json` | 视觉评审页「最近评审」报读不出来 | 拒绝，一个字节不动 |
+| 智能体运行记录 `agent-runs.json` | 运行记录列表报错 | 拒绝 |
+| 检索历史 `search-history.json` | 爆款雷达本地空列表（检索照常） | 拒绝 |
+| 已看过 `review-acks.json` / 人工拍板 `review-decisions.json` | 待办与拍板读不出来 | 拒绝 |
+| 举报 `reports.json` / 反馈 `feedback.json` / 前端异常 `client-errors.json` | 后台对应分块报错 | 拒绝 |
+| 告警 `alerts.json` 与外推队列 `alert-outbox.json` | 告警页与队列报错（队列是对象形态，单独判） | 拒绝 |
+
+写法与 r265 相同：`loadAll` 走 [server/json-store.mjs](server/json-store.mjs) 的 `readStoreArray`（只有 ENOENT 算空库），`persist` 开头一句「这次读失败过就不许写回」。文件修好后下一次请求自动恢复，不用重启。
+
+**顺手修的两处**：
+
+1. `server/service-state.mjs` 里 `void recordAlert(...)` 没有 `catch` —— 告警存储是坏文件时，模型失败这条路径会留下一个未处理的 Promise 拒绝。现在补上 `.catch(() => {})`，告警写不进去不该把请求也打挂。
+2. 视觉评审页的「最近评审」在读取失败时，下面照样渲染「还没有评审记录」、标题旁还写一个「0」。现在失败只报读不出来，计数显示「—」。
+
+![1440：评审历史文件写坏时只报读不出来，计数显示「—」，不再写「还没有评审记录」](docs/r267-review-store-error-1440.png)
+
+![390 宽：同一句话折三行，scrollWidth 仍是 390](docs/r267-review-store-error-390.png)
+
+收紧读取条件之前先只读核对了生产数据的形状，确认不会被误判成损坏：`reviews.json` array:3、`agent-runs.json` array:14、`client-errors.json` array:21、`alerts.json` array:16、`alert-outbox.json` object(items,sent)，其余都是空数组。
+
+口径与边界写在 [docs/store-integrity-user-data-2026-11-19.md](docs/store-integrity-user-data-2026-11-19.md)：`agents.json` 仍是「坏文件改名备份 + 空列表」（智能体列表是每个创作页的入口，直接抛错会让整站不可用，留作下一轮按「界面说明 + 修复入口」处理）；检索历史与前端异常这类偏便利的数据在前端是静默空列表；没做自动修复与坏文件恢复入口。
+
+门禁：测试 **1760/1760**（新增 store-corrupt-user-data 7 条、store-missing 扩 2 条）、lint 0 error / 25 warning（635 文件）、`tsc -b` 干净、build 入口 `index-sCbYe-at.js`、密钥扫描 1014 文件无命中。生产 0.9.249 已上线，发布标签 `20261119-121210-20261119-2024-r267store`，health ok templates 26，回滚 `--to 1` 回 0.9.248。本轮 0 次真实上游调用、0 费用。
+
