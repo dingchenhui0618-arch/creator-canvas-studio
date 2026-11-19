@@ -236,6 +236,28 @@
 .review-gaps li { font-size:13px; color:var(--muted); line-height:1.6; }
 .review-note { margin:0; padding-top:12px; border-top:1px solid var(--line); color:var(--faint); font-size:13px; line-height:1.6; }
 
+/* 评完之后往哪走（r251）：结论一出来就把下一步写在这里，不用再自己去作品页找入口 */
+.rv-next {
+  display: grid;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+}
+/* 通过 = 可以往交付走；另外两种还要动手，左边那条线不抢绿 */
+.rv-next.is-pass { border-left-color: var(--pass); }
+.rv-next-text { display: grid; gap: 4px; min-width: 0; }
+.rv-next-title { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -.01em; color: var(--ink); }
+.rv-next.is-fix .rv-next-title, .rv-next.is-loose .rv-next-title { color: var(--ink-soft); }
+.rv-next-copy { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.65; overflow-wrap: anywhere; }
+.rv-next-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.rv-next-actions .vq-button { min-height: 40px; }
+@media (max-width: 760px) {
+  .rv-next-actions .vq-button { flex: 1 1 100%; }
+}
+
 /* åˆ¤æ–­å±‚ï¼ˆJevï¼‰ï¼šä¸Žç»“è®ºå¹¶æŽ’ï¼Œå›žç­”ã€Œè¿™ä»½ç»“è®ºç«™ä¸ç«™å¾—ä½ã€ï¼Œä¸æŠ¢ç»“è®ºçš„ä½ç½® */
 .review-judge { display:flex; flex-direction:column; gap:12px; padding:12px 16px; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface); }
 .review-judge.is-off { background:transparent; border-style:dashed; }

@@ -717,6 +717,8 @@ function Workbench({
             projectId={route.projectId}
             reviewId={route.reviewId}
             onOpenProject={(projectId) => navigate({ kind: 'page', page: 'projects', projectId })}
+            // 评完能直接回工作流改这段结构（r251）：只有这条作品接了工作流时结果页才给这个出口
+            onOpenFlow={(flowId) => navigate({ kind: 'page', page: 'canvas', flowId })}
             onOpenReview={(reviewId) => navigate({ kind: 'page', page: 'review', reviewId })}
             onReviewProject={(projectId) => navigate({ kind: 'page', page: 'review', projectId })}
             onClearReview={() => navigate({ kind: 'page', page: 'review' })}

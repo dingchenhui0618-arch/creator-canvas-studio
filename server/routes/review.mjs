@@ -243,8 +243,10 @@ export function createReviewRouter() {
         const projectId = body.projectId ? String(body.projectId) : ''
         // 作品的第几版：评审落库时按当前版本记账，多版本对照才不会串
         let projectVersion = 0
+        // 评审记在哪条作品、哪一版：POST 的响应里也要带回去（r251）
+        let scopedProject = null
         if (projectId) {
-          const scopedProject = await getProject(projectId, user)
+          scopedProject = await getProject(projectId, user)
           if (!scopedProject) {
             sendJson(res, 404, { error: '这次评审要记入的作品不见了，评审没有开始，也未扣积分', code: 'PROJECT_NOT_FOUND' })
             return true
@@ -359,6 +361,12 @@ export function createReviewRouter() {
             ...result,
             reviewId: saved.id,
             credits: { cost: paid.cost, balance: paid.balance },
+            // 评完就要知道这条结论记在哪条作品的第几版（r251）：以前只有 GET /api/review/:id
+            // 现算归属，POST 不带，结果页只能自己猜——工作流那条 run-end 上一轮踩过同一个坑。
+            project: scopedProject
+              ? { id: projectId, title: scopedProject.title, version: projectVersion, flowId: String(scopedProject.flowId || '') }
+              : null,
+            version: projectVersion,
             ...(queuedAt ? { queue: queuedAt } : {}),
           })
         } catch (error) {

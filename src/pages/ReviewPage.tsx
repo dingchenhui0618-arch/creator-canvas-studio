@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { ArrowRight, ChevronDown, Clapperboard, Crosshair, Hourglass, ImagePlus, Loader2, Play, RefreshCw, ScanEye, TriangleAlert } from 'lucide-react'
+import { ArrowRight, ChevronDown, Clapperboard, Crosshair, FolderOpen, Hourglass, ImagePlus, Loader2, Play, RefreshCw, ScanEye, TriangleAlert, Workflow } from 'lucide-react'
 import { getReview, getReviewCandidates, getReviewQueue, getReviewStatus, listReviews, runReview, type JudgeResult, type ReviewCandidates, type ReviewResult, type ReviewStatus, type ReviewSummary } from '../api/review'
 import { getCredits, getModelService, recheckModelService, type CreditsResponse, type ModelServiceState } from '../api/credits'
 import { listTemplates, coverSrc } from '../api/radar'
@@ -15,6 +15,7 @@ import {
   reviewTimeLabel,
   reviewVersionLabel,
 } from '../domain/review'
+import { reviewNextActionLabel, reviewNextPlan, type ReviewNextAction, type ReviewNextScope } from '../domain/review-next'
 import { anchorNumber, evidenceAreaLabel, reviewAnchorBadges, reviewAnchorMarks } from '../domain/review-anchors'
 import type { ReplicaTemplate } from '../domain/radar'
 import { consumeReviewTarget, onReviewRequest, type ReviewTarget } from '../state/review'
@@ -43,6 +44,13 @@ function percent(value: number | null | undefined) {
  * 这一次评审的问题数（v0.9.84）：结论下面先给一行数字，再往下看逐条。
  * 严重度没记全时把「另有 N 条」写出来——0 个阻塞和「没记」不是一回事。
  */
+/** 「接下来」三个出口的图标：与工作流底栏同一套线性图标，同一描边 */
+function NextIcon({ action }: { action: ReviewNextAction }) {
+  if (action === 'openFlow') return <Workflow size={14} strokeWidth={1.75} />
+  if (action === 'openProjects') return <Clapperboard size={14} strokeWidth={1.75} />
+  return <FolderOpen size={14} strokeWidth={1.75} />
+}
+
 function ReviewIssueSummary({ observations }: { observations: ReviewResult['observations'] }) {
   const issues = issueCountsOf(observations)
   const line = issueLine(issues)
@@ -115,10 +123,13 @@ export default function ReviewPage({
   onReviewProject,
   onClearReview,
   onOpenProjects,
+  onOpenFlow,
 }: {
   projectId?: string
   reviewId?: string
   onOpenProject?: (projectId: string) => void
+  /** 回工作流改结构：只有这条作品接了工作流时才有这个出口 */
+  onOpenFlow?: (flowId: string) => void
   /** 打开某一条历史评审：地址换成 #/review/<评审 id>，刷新与后退都能回到那条 */
   onOpenReview?: (reviewId: string) => void
   /** 接着评这条作品当前这一版：新评审挂在作品下，有归属 */
@@ -131,6 +142,8 @@ export default function ReviewPage({
   const { internal } = useUiMode()
   // 从作品页进来时，这次评审的结论会挂在那条作品下；标题只为把话说清楚（读不到就不显示名字）
   const [projectTitle, setProjectTitle] = useState('')
+  // 这一版是第几版、有没有接工作流（r251）：底栏要说清「回哪一版」「能不能回工作流改」
+  const [projectMeta, setProjectMeta] = useState<{ version: number; flowId: string }>({ version: 0, flowId: '' })
   // 作品页已经贴好的画面（v0.9.161）：从作品页点「送评审」过来时优先给这几镜，不用再传一次
   const [projectShots, setProjectShots] = useState<Array<{ shotNo: number; media: string }>>([])
   const [status, setStatus] = useState<ReviewStatus | null>(null)
@@ -192,6 +205,7 @@ export default function ReviewPage({
       .then((data) => {
         if (!alive) return
         setProjectTitle(data.project.title)
+        setProjectMeta({ version: Number(data.project.version) || 0, flowId: String(data.project.flowId || '') })
         const own = data.project.shots || {}
         setProjectShots(
           Object.entries(own)
@@ -522,6 +536,51 @@ export default function ReviewPage({
   }, [pinned])
 
   // 正在打开地址里那条评审：打开的还是另一条（或还没打开）就算加载中，不用另存一个状态
+  /**
+   * 这次结论记在哪条作品下（r251）。三个来源各有各的道理，都不猜：
+   *   刚评完 → 服务端在响应里现算的归属（project + 那一版 + 有没有工作流）；
+   *   看历史 → 记录自己的归属与版次（作品后来改名、加版本都不改写旧结论）；
+   *   从作品页进来还没评 → 地址里那条作品（服务端确认过才可能走到这里）。
+   */
+  const reviewScope = useMemo<ReviewNextScope | null>(() => {
+    if (openedId) {
+      if (!openedScope) return null
+      return { id: openedScope.id, title: openedScope.title, version: openedScope.version, flowId: projectMeta.flowId }
+    }
+    const fresh = result?.project
+    if (fresh && fresh.id) {
+      return { id: fresh.id, title: fresh.title, version: Number(fresh.version) || 0, flowId: String(fresh.flowId || '') }
+    }
+    if (projectId) return { id: projectId, title: projectTitle, version: projectMeta.version, flowId: projectMeta.flowId }
+    return null
+  }, [openedId, openedScope, projectId, projectMeta, projectTitle, result])
+
+  // 评完之后往哪走：出口与文案都在 domain/review-next.ts，这里只把真实数字递进去
+  const reviewNext = useMemo(
+    () => (result
+      ? reviewNextPlan({
+          verdict: result.verdict,
+          issues: issueCountsOf(result.observations),
+          fixes: result.fixes?.length || 0,
+          project: reviewScope,
+          history: Boolean(openedId),
+        })
+      : null),
+    [openedId, result, reviewScope],
+  )
+
+  const handleReviewNext = (action: ReviewNextAction) => {
+    if (action === 'openFlow') {
+      if (reviewScope?.flowId) onOpenFlow?.(reviewScope.flowId)
+      return
+    }
+    if (action === 'openProject') {
+      if (reviewScope?.id) onOpenProject?.(reviewScope.id)
+      return
+    }
+    onOpenProjects?.()
+  }
+
   const recordLoading = Boolean(reviewId) && openedId !== reviewId && !openError
 
   /**
@@ -1009,6 +1068,30 @@ export default function ReviewPage({
                   {result.queue ? ' · 排队 ' + Math.round(result.queue.waitedMs / 1000) + ' 秒后开始' : ''}
                 </span>
               </div>
+
+              {/* 评完之后往哪走（r251）：以前到「说明」就结束了，结论记在哪一版、
+                  能不能交付、该回作品还是回工作流，全靠自己再找一遍 */}
+              {reviewNext ? (
+                <section className={'rv-next is-' + reviewNext.tone} aria-label="接下来">
+                  <div className="rv-next-text">
+                    <h3 className="rv-next-title">{reviewNext.title}</h3>
+                    <p className="rv-next-copy">{reviewNext.copy}</p>
+                  </div>
+                  <div className="rv-next-actions">
+                    {reviewNext.actions.map((action, index) => (
+                      <button
+                        key={action}
+                        type="button"
+                        className={'vq-button ' + (index === 0 ? 'vq-button--primary' : 'vq-button--ghost') + ' vq-button--sm'}
+                        onClick={() => handleReviewNext(action)}
+                      >
+                        <NextIcon action={action} />
+                        {reviewNextActionLabel(action, reviewScope)}
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
 
               <ReviewIssueSummary observations={result.observations} />
 

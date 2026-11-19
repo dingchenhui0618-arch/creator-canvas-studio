@@ -53,6 +53,12 @@ export type JudgeResult =
 export type ReviewResult = {
   requestId: string
   reviewId?: string
+  /**
+   * 这次评审记在哪条作品、哪一版（r251）：服务端落库时现算，POST 与 GET 都带。
+   * 没挂作品时明确是 null——不靠「字段不在」让人猜（工作流 run-end 上一轮踩过这个坑）。
+   */
+  project?: { id: string; title: string; version: number; flowId?: string } | null
+  version?: number
   credits?: { cost: number; balance: number | null }
   provider: string
   profile: string
