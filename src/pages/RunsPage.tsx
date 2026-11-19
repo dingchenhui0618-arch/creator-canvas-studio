@@ -336,11 +336,12 @@ export function RunsPage({
         }
       />
 
+      {/* 读失败时这四个数不能写 0：0 条运行和「没读到」是两件事（r269）。 */}
       <div className="runs-stats">
-        <div><strong>{total}</strong><span>{filtered ? '筛选结果' : '总运行'}</span></div>
-        <div><strong>{pageSuccess}</strong><span>本页成功</span></div>
-        <div><strong>{pageFailed + pageInterrupted}</strong><span>{pageInterrupted ? '本页未完成' : '本页失败'}</span></div>
-        <div><strong>{total ? pageStart + '–' + pageEnd : '0'}</strong><span>当前区间</span></div>
+        <div><strong>{error ? '—' : total}</strong><span>{filtered ? '筛选结果' : '总运行'}</span></div>
+        <div><strong>{error ? '—' : pageSuccess}</strong><span>本页成功</span></div>
+        <div><strong>{error ? '—' : pageFailed + pageInterrupted}</strong><span>{pageInterrupted ? '本页未完成' : '本页失败'}</span></div>
+        <div><strong>{error ? '—' : total ? pageStart + '–' + pageEnd : '0'}</strong><span>当前区间</span></div>
       </div>
 
       <div className="runs-filters">
@@ -392,7 +393,8 @@ export function RunsPage({
       {error ? <p className="runs-note is-error">{error}</p> : null}
       {loading ? <p className="runs-note">读取运行记录…</p> : null}
 
-      {!loading && !items.length ? (
+      {/* 读失败时上面已经有一句错误说明：这里再写「还没有运行记录」就是自相矛盾（r269）。 */}
+      {!loading && !error && !items.length ? (
         <div className="runs-empty">
           <Workflow size={18} strokeWidth={1.5} />
           <strong>{filtered ? '没有符合条件的运行记录' : '还没有运行记录'}</strong>

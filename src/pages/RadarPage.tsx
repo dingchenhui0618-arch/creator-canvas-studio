@@ -423,7 +423,8 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
         actions={
           <>
             <Pill dot tone={hasKey ? (quota ? 'fail' : 'live') : 'mock'}>
-              {hasKey ? (quota ? '检索服务异常' : '检索服务已连接') : '示例数据模式'}
+              {/* hasKey 只说明「配了凭证」，不等于这条链路此刻通：写「已连接」是在替上游打包票（r269）。 */}
+              {hasKey ? (quota ? '检索服务异常' : '检索通道已配置') : '示例数据模式'}
             </Pill>
             <span
               className={'radar-credit' + (insufficient || (credits && credits.balance !== null && credits.balance < credits.prices.search) ? ' is-low' : '')}
@@ -641,7 +642,8 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
       ) : error ? (
         <div className="radar-banner radar-banner--error">
           <AlertCircle size={15} />
-          <span>{error}</span>
+          {/* 失败的话服务端已经把这笔积分退回去了（server/index.mjs 的 /api/search）：说清楚，别让人以为白花了钱。 */}
+          <span>{error}。这一次没有扣积分；可以换个平台或过一会儿再点一次「重新检索」。</span>
         </div>
       ) : null}
 
@@ -666,7 +668,8 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
         </div>
       ) : null}
 
-      {searched && (
+      {/* 这次检索失败时不报条数与「示例数据」：那几个 0 会让人以为真的搜到 0 条（r269）。 */}
+      {searched && !error && (
         <div className="radar-summary">
           <span>
             <strong>{sorted.length}</strong> 条已加载
@@ -826,7 +829,9 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
             ))}
           </div>
         </div>
-      ) : !sorted.length && !loading ? (
+      ) : !sorted.length && !loading && !error && !insufficient ? (
+        // 检索失败 / 积分不足时，上面已经有一条说明为什么没结果：
+        // 这里再写「没有检索到内容」会让人以为关键词太窄（r269）。
         <div className="radar-empty">
           <Sparkles size={22} />
           <strong>没有检索到内容</strong>

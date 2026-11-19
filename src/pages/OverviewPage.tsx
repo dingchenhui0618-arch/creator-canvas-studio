@@ -1050,6 +1050,10 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
     failed: errors.length,
   })
 
+  // 哪一块这次没读到（r269）：读失败的区块不许再说「还没有…」——
+  // 空列表和读不到是两件事，说成一件会让人去点一条根本不存在的下一步。
+  const sectionFailed = (label: string) => errors.some((line) => line.startsWith(label + '：'))
+
   return (
     <div className="vq-page vq-page--overview">
       <PageHead
@@ -1873,8 +1877,12 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
           </>
         ) : (
           <div className="vq-empty vq-empty--inline">
-            <strong>还没交出去过</strong>
-            <span>标记交付之后，这里按时间排：交的是哪条作品的哪一版、什么时候、现在还算不算数。</span>
+            <strong>{sectionFailed('交付记录') ? '交付记录这次没取到' : '还没交出去过'}</strong>
+            <span>
+              {sectionFailed('交付记录')
+                ? '这不代表没交过：原因写在页面顶部那条红字里，点右上角「刷新」再取一次。'
+                : '标记交付之后，这里按时间排：交的是哪条作品的哪一版、什么时候、现在还算不算数。'}
+            </span>
             <button type="button" className="vq-button vq-button--ghost" onClick={() => onNavigate('projects')}>
               去作品列表
               <ArrowRight size={13} />
@@ -1954,6 +1962,11 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                 )
               })}
             </div>
+          ) : sectionFailed('运行记录') ? (
+            <div className="vq-empty vq-empty--inline">
+              <strong>运行记录这次没取到</strong>
+              <span>这不代表一条都没跑过：原因写在页面顶部那条红字里，点右上角「刷新」再取一次。</span>
+            </div>
           ) : (
             <div className="vq-empty vq-empty--inline">
               <strong>还没有运行记录</strong>
@@ -1991,6 +2004,12 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
                 <ArrowRight size={13} />
               </button>
             </>
+          ) : sectionFailed('模板库') ? (
+            // 模板库读失败时不能再写「还是空的」：那会把人送去检索一版其实已经有的模板（r269）。
+            <div className="vq-empty vq-empty--inline">
+              <strong>模板库这次没取到</strong>
+              <span>不确定里面有没有模板：原因写在页面顶部那条红字里，点右上角「刷新」再取一次。</span>
+            </div>
           ) : (
             <div className="vq-empty vq-empty--inline">
               <strong>模板库还是空的</strong>
@@ -2047,8 +2066,12 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
           </div>
         ) : (
           <div className="vq-empty vq-empty--inline">
-            <strong>还没有分享出去的链接</strong>
-            <span>在作品页点「分享」，把链接发给甲方；这里会汇总每条被打开过几次，停用后也留着。</span>
+            <strong>{sectionFailed('分享记录') ? '分享记录这次没取到' : '还没有分享出去的链接'}</strong>
+            <span>
+              {sectionFailed('分享记录')
+                ? '这不代表一条分享都没有：原因写在页面顶部那条红字里，点右上角「刷新」再取一次。'
+                : '在作品页点「分享」，把链接发给甲方；这里会汇总每条被打开过几次，停用后也留着。'}
+            </span>
             <button type="button" className="vq-button vq-button--ghost" onClick={() => onNavigate('projects')}>
               去作品列表
               <ArrowRight size={13} />

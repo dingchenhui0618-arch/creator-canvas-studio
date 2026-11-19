@@ -189,6 +189,17 @@ export async function postJson(pathname, payload, headers = {}, options = {}) {
   })
 }
 
+// 上游连不上时 fetch 抛的是英文的「fetch failed」/ECONNREFUSED/证书错误：那不是给用户看的话
+// （r269 实测：检索失败时界面上写着「fetch failed；fetch failed」）。网络类一律翻成一句人话，
+// 具体是哪种原因留在服务端日志里。业务侧的原文（积分不足、凭证不可用）不动。
+const NETWORK_ERROR_RE = /fetch failed|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|socket hang up|aborted|terminated|other side closed|certificate|TLS/i
+function friendlySearchError(message) {
+  const text = String(message || '').trim()
+  if (!text) return '检索服务没有返回原因'
+  if (NETWORK_ERROR_RE.test(text)) return '连不上检索服务（网络或上游暂时不可用）'
+  return text
+}
+
 async function requestOnce(pathname, payload, headers) {
   const response = await fetch(config.redfox.baseUrl + pathname, {
     method: 'POST',
@@ -261,7 +272,7 @@ export async function searchMedia({ platform, keyword, startDate, endDate, pageN
   settled.forEach((entry) => {
     if (entry.status === 'fulfilled') { items.push(...entry.value.items); total += Number(entry.value.total) || 0 }
     else {
-      errors.push(String(entry.reason?.message || entry.reason))
+      errors.push(friendlySearchError(String(entry.reason?.message || entry.reason)))
       if (entry.reason?.code === 'REDFOX_QUOTA') quota = entry.reason
     }
   })
@@ -271,7 +282,8 @@ export async function searchMedia({ platform, keyword, startDate, endDate, pageN
       throw Object.assign(new Error('检索服务返回 3105（凭证不可用），请到后台确认检索凭证状态'), { code: 'REDFOX_DISABLED' })
     }
     const rateLimited = errors.some((message) => /过于频繁|限流/.test(message))
-    throw Object.assign(new Error(errors.join('；')), { code: rateLimited ? 'REDFOX_RATE' : 'REDFOX_ERROR' })
+    // 两个平台同时失败时常常是同一句话（都是网络不通）：去重，别在界面上念两遍。
+    throw Object.assign(new Error([...new Set(errors)].join('；')), { code: rateLimited ? 'REDFOX_RATE' : 'REDFOX_ERROR' })
   }
   const field = SORT_FIELDS.includes(sort) ? sort : 'likes'
   items.sort((a, b) => (Number(b.stats[field]) || 0) - (Number(a.stats[field]) || 0))
