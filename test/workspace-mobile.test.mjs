@@ -163,11 +163,14 @@ test('新加的两段里没有小于 13px 的字', () => {
   }
 })
 
-test('桌面（1081 起）一行没动：27px 工具条、12px 元信息、35px 输入框、26px 缩放键', () => {
+// r242 那条「桌面一行没动」的护栏：桌面仍是 27px 工具条、42px 工具条高、40px 输入框。
+// r255 起桌面元信息由 12px 抬到 13px（用户说「字太小」），所以这里锁 13px——
+// 再往回改小要被这条拦下来。
+test('桌面（1081 起）：27px 工具条、13px 元信息、26px 缩放键', () => {
   assert.match(firstRule(canvasCss, '.cv-tool'), /height:\s*27px/)
   assert.match(firstRule(canvasCss, '.cv-toolbar'), /height:\s*42px/)
-  assert.match(firstRule(canvasCss, '.cv-toolbar-count'), /font-size:\s*12px/)
-  assert.match(firstRule(canvasCss, '.cv-zoom'), /font-size:\s*12px/)
+  assert.match(firstRule(canvasCss, '.cv-toolbar-count'), /font-size:\s*13px/)
+  assert.match(firstRule(canvasCss, '.cv-zoom'), /font-size:\s*13px/)
   assert.match(firstRule(canvasCss, '.cv-page .cv-tool'), /height:\s*40px/)
   assert.ok(!firstRule(canvasCss, '.cv-flow-name').includes('min-height'), '流程名输入框基样式不加 min-height')
   assert.match(firstRule(canvasCss, '.cv-step-no'), /width:\s*24px/)

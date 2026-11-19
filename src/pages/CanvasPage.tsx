@@ -9,6 +9,7 @@ import {
   ReactFlowProvider,
   addEdge,
   useEdgesState,
+  useNodesInitialized,
   useNodesState,
   useReactFlow,
   type Connection,
@@ -116,6 +117,17 @@ type CanvasPageProps = {
 type Snapshot = { nodes: Node<FlowNodeData>[]; edges: Edge[] }
 
 type SaveState = 'saved' | 'saving' | 'dirty' | 'error'
+
+// 画布「铺满」的最小可读缩放（r255）：一条 6 步的流程横着排是 1684px，1440 宽屏的画布只有
+// 810px，fitView 会一路缩到 0.44——节点标题 15px 被缩成 9.3px，等于看不清字。
+// 0.75 是卡片标题仍能读的下限（15px × 0.75 ≈ 11px），与 focusNode 的取值保持一致。
+// 低于它宁可不铺满：从左往右看，剩下的拖过去。
+const MIN_READ_ZOOM = 0.75
+// 铺满时四周留的边（React Flow 的 padding 语义：把包围盒按这个比例放大再看，
+// 所以能看到的宽度是画布宽 / (1 + 0.12)，不是画布宽 × 0.88）
+const FIT_PADDING = 0.12
+// 卡片宽度写死在 canvas.css 的 .cv-node 上（240px）；算「画布装不装得下」时要用同一个数
+const NODE_CARD_WIDTH = 240
 
 function formatRunTime(iso: string): string {
   const date = new Date(iso)
@@ -230,6 +242,8 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
   const [startError, setStartError] = useState('')
   const [startBusy, setStartBusy] = useState('')
   const [zoom, setZoom] = useState(1)
+  // 铺满时被可读下限挡住（r255）：画布装不下整条流程，提示一句「往右拖」，别让人以为后面几步丢了
+  const [fitClamped, setFitClamped] = useState(false)
   const [historyCount, setHistoryCount] = useState(0)
   const [futureCount, setFutureCount] = useState(0)
   // 工作流运行按次扣积分：运行前就把单价和余额摆出来，402 时不用去猜
@@ -304,6 +318,45 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
   useEffect(() => {
     refreshRunCredit()
   }, [refreshRunCredit])
+
+  // 铺满画布，但不超过可读下限（r255）：先按默认铺满，缩放低于 MIN_READ_ZOOM 就退回下限，
+  // 并把视口对到最左边那一列——从第 1 步开始看，而不是把两头都裁掉。
+  // 桌面端节点标题 15px、0.75 倍还有 11px；0.44 倍只剩 9px，等于看不清。
+  const fitCanvas = useCallback((duration = 0) => {
+    // 铺满要等 React Flow 落下视口再读，否则读到的是上一次的缩放（v0.9.238 实测：
+    // 读早了就把 0.44 原样放过去，提示说「已按能看清字的大小显示」而画面还是缩着的）
+    const clampBack = () => {
+      // 用 React Flow 自己那份节点：nodesRef 是在 effect 里同步的，节点刚落下时它还是空的，
+      // 读它会以为「没有节点」而直接跳过夹紧（r255 实测 6 步流程因此停在 0.44）
+      const list = rf.getNodes()
+      if (!list.length) {
+        setFitClamped(false)
+        return
+      }
+      const minX = Math.min(...list.map((node) => node.position.x))
+      const maxX = Math.max(...list.map((node) => node.position.x)) + NODE_CARD_WIDTH
+      const canvasW = stageRef.current?.clientWidth ?? 0
+      // 「装不下」按几何算，不看这一次的缩放：铺满会被调用好几次（节点量好尺寸、切流程、
+      // 点适应），按缩放判会把提示闪没（r255 实测 4 步那条有提示、6 步那条没有）。
+      const usable = canvasW / (1 + FIT_PADDING)
+      const overflow = canvasW > 0 && (maxX - minX) * MIN_READ_ZOOM > usable
+      setFitClamped(overflow)
+      if (!overflow) return
+      const viewport = rf.getViewport()
+      if (!Number.isFinite(viewport.zoom) || viewport.zoom >= MIN_READ_ZOOM - 0.001) return
+      void rf.setViewport({ x: 16 - minX * MIN_READ_ZOOM, y: viewport.y, zoom: MIN_READ_ZOOM }, { duration })
+    }
+    void rf.fitView({ padding: FIT_PADDING, maxZoom: 1, duration: 0 }).then(clampBack, clampBack)
+  }, [rf])
+
+  // 节点量出尺寸之后再铺一次：React Flow 的 <ReactFlow fitView> 会在尺寸就绪时自己铺满，
+  // 那一次铺满不受可读下限约束，会把刚夹好的视口又缩回去（r255 实测 0.75 → 0.44）。
+  // 所以关掉自带的那次 fitView，改成这里在「全部节点量好」和「换了一条流程」时铺。
+  const nodesInitialized = useNodesInitialized()
+  useEffect(() => {
+    if (!nodesInitialized) return
+    fitCanvas()
+  }, [fitCanvas, flowId, nodesInitialized])
 
   // 运行前把钱说全：工作流本身按次扣一次，出图每张、出视频每条再各扣一次。
   // 只报 flow_run 的价，用户会以为自己花 2 积分、实际被扣 22——这个提示必须现在就给。
@@ -580,7 +633,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
         // 工作流已经删除：没有「当前工作流」可对照，不显示差异行，也不写「一致」。
         if (deletedFlow) setPreviewBase(null)
         setLoadState('ready')
-        window.setTimeout(() => rf.fitView({ padding: 0.12 }), 80)
+        window.setTimeout(() => fitCanvas(), 80)
       } catch (error) {
         if (!alive) return
         setLoadError(error instanceof Error ? error.message : String(error))
@@ -591,7 +644,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
     return () => {
       alive = false
     }
-  }, [applyFlow, initialFlowId, initialResumeId, initialViewId, rf])
+  }, [applyFlow, fitCanvas, initialFlowId, initialResumeId, initialViewId])
 
   // 从运行记录点「查看」或「继续运行」进来（v0.9.104 / v0.9.106）：地址里带着 runId，
   // 工作流就绪后把那条记录放回抽屉——关过页面、换过设备、隔天再回来，都不必先记得上次停在哪一屏。
@@ -641,7 +694,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
             setEdges(fromFlowEdges(graph.edges, keepIds))
             setSelectedId(pinned[0]?.id ?? '')
             setRunGraph(graph)
-            window.setTimeout(() => rf.fitView({ padding: 0.12, duration: 200 }), 80)
+            window.setTimeout(() => fitCanvas(200), 80)
           } else {
             setRunGraph(null)
             setNodes((current) => current.map(withResult))
@@ -666,7 +719,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
       alive = false
       window.clearTimeout(timer)
     }
-  }, [openRunId, readOnly, flowId, loadState, rf, setEdges, setNodes, toast])
+  }, [openRunId, fitCanvas, readOnly, flowId, loadState, setEdges, setNodes, toast])
 
   // 自动保存：只比较节点/连线/流程名的投影，选中态变化不会触发保存
   useEffect(() => {
@@ -863,9 +916,9 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
     if (readOnly) return
     pushHistory()
     setNodes((current) => autoLayout(current, edgesRef.current))
-    window.setTimeout(() => rf.fitView({ padding: 0.12, duration: 200 }), 60)
+    window.setTimeout(() => fitCanvas(200), 60)
     toast('已按依赖层级重新布局')
-  }, [pushHistory, readOnly, setNodes, rf, toast])
+  }, [fitCanvas, pushHistory, readOnly, setNodes, toast])
 
   const focusNode = useCallback((id: string) => {
     selectNode(id)
@@ -883,8 +936,8 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
     const target = flowsRef.current.find((flow) => flow.id === nextId)
     if (!target) return
     applyFlow(target)
-    window.setTimeout(() => rf.fitView({ padding: 0.12 }), 80)
-  }, [applyFlow, running, saveNow, rf, toast])
+    window.setTimeout(() => fitCanvas(), 80)
+  }, [applyFlow, fitCanvas, running, saveNow, toast])
 
   const createNewFlow = useCallback(async () => {
     if (running) return
@@ -958,14 +1011,14 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
       }
       setFlows((current) => [target, ...current.filter((flow) => flow.id !== target.id)])
       applyFlow(target)
-      window.setTimeout(() => rf.fitView({ padding: 0.12 }), 80)
+      window.setTimeout(() => fitCanvas(), 80)
       toast(note)
     } catch (error) {
       toast('没建成：' + (error instanceof Error ? error.message : String(error)))
     } finally {
       setStartBusy('')
     }
-  }, [applyFlow, rf, startBusy, toast])
+  }, [applyFlow, fitCanvas, startBusy, toast])
 
   // 另存为模板 = 写进模板库的工作流条目（带 blueprint），不是再复制一张流程
   const saveAsTemplate = useCallback(async () => {
@@ -1611,12 +1664,48 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
                     <span className="cv-divider cv-canvas-only" />
                   </>
                 )}
-                <button className="cv-tool cv-canvas-only" type="button" onClick={() => rf.fitView({ padding: 0.12, duration: 200 })}>
+                <button className="cv-tool cv-canvas-only" type="button" onClick={() => fitCanvas(200)}>
                   <Maximize2 size={14} />适应工作流
                 </button>
                 <span className="cv-zoom cv-canvas-only">{Math.round(zoom * 100)}%</span>
               </div>
             </div>
+
+            {/* 步骤条（r255）：画布铺满时，一条 6 步的流程会缩到 0.44 倍、标题只剩 9px 高，
+                光看画布读不出这条流程干什么。这一行把每一步按执行顺序摊平，字号永远是 100%，
+                点一步就选中它并把画布居中过去。手机上本来就有整块步骤清单（.cv-steps），
+                这条只在 ≥1081 显示。 */}
+            {nodes.length ? (
+              <div className="cv-flowline">
+                <span className="cv-flowline-kicker">按执行顺序</span>
+                <ol className="cv-flowline-list">
+                  {stepPlan.steps.map((step, index) => {
+                    const node = nodes.find((item) => item.id === step.id)
+                    if (!node) return null
+                    const meta = NODE_META[node.data.kind]
+                    const state = node.data.status ?? 'idle'
+                    const stateText = stepStateText(state, node.data.ms)
+                    return (
+                      <li className="cv-flowline-slot" key={step.id}>
+                        <button
+                          type="button"
+                          className={'cv-flowline-item' + (step.id === selectedId ? ' is-active' : '')}
+                          onClick={() => focusNode(step.id)}
+                          aria-pressed={step.id === selectedId}
+                          title={stepMetaText(node.data.kind, node.data.config, modelLabels)}
+                        >
+                          <span className="cv-flowline-no">{index + 1}</span>
+                          <span className="cv-flowline-title">{node.data.title || meta.defaultTitle}</span>
+                          <span className="cv-flowline-dot" data-state={state} aria-hidden />
+                          {stateText ? <span className="cv-flowline-state">{stateText}</span> : null}
+                        </button>
+                        {index < stepPlan.steps.length - 1 ? <span className="cv-flowline-arrow" aria-hidden>→</span> : null}
+                      </li>
+                    )
+                  })}
+                </ol>
+              </div>
+            ) : null}
 
             <div
               className={'cv-canvas' + (readOnly ? ' is-readonly' : '')}
@@ -1647,10 +1736,12 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
                 onNodeClick={(_, node) => selectNode(node.id)}
                 onNodeDragStart={() => { if (!readOnly) pushHistory() }}
                 onPaneClick={() => selectNode('')}
-                onMoveEnd={(_, viewport) => setZoom(viewport.zoom)}
+                onMoveEnd={(_, viewport) => {
+                  setZoom(viewport.zoom)
+                  // 自己放大到能看清就收回「被可读下限挡住」那句提示
+                  if (viewport.zoom > MIN_READ_ZOOM + 0.01) setFitClamped(false)
+                }}
                 deleteKeyCode={null}
-                fitView
-                fitViewOptions={{ padding: 0.12 }}
                 zoomOnDoubleClick={false}
                 onDoubleClick={(event) => {
                   if (readOnly) return
@@ -1669,8 +1760,10 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
               >
                 <Background color="rgba(17,17,17,.12)" gap={22} size={1} />
                 <Controls showInteractive={false} />
-                {/* 空工作流不挂小地图：以前是一块空白白框浮在右下角，看着像没加载完 */}
-                {nodes.length ? (
+                {/* 空工作流不挂小地图：以前是一块空白白框浮在右下角，看着像没加载完。
+                    折行之后（r255）两排的最后一张正好落在小地图底下，六步以内的流程一屏看得完，
+                    小地图只是挡住卡片：只有「缩放被压到可读下限」或节点更多时才挂。 */}
+                {nodes.length && (fitClamped || nodes.length > 6) ? (
                   <MiniMap
                     pannable
                     zoomable={false}
@@ -1697,6 +1790,10 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
                     ? '只读查看：工作流是这次运行开始时的快照，不会被改动'
                     : '只读查看：节点状态来自这次运行，工作流不会被改动'
                   : running ? '运行中：节点会按拓扑序逐个点亮' : '拖动节点右侧圆点连线；每个输入端口只接一根线'}
+                {/* 画布装不下整条流程时实话实说：缩放停在了能看清字的大小，后面的步骤要往右拖 */}
+                {fitClamped && !readOnly ? (
+                  <span className="cv-hint-extra">装不下全流程：往右拖，或点上面的步骤条</span>
+                ) : null}
               </div>
             </div>
 

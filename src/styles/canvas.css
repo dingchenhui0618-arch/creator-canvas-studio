@@ -278,8 +278,84 @@
 .cv-tool:hover:not(:disabled) { color: var(--ink); background: #f4f4f4; border-color: var(--line); }
 .cv-tool:disabled { opacity: .38; cursor: not-allowed; }
 .cv-divider { width: 1px; height: 15px; margin: 0 4px; background: var(--line); }
-.cv-toolbar-count { padding: 0 8px; color: var(--faint); font-family: var(--font-mono); font-size: 12px; letter-spacing: .04em; white-space: nowrap; }
-.cv-zoom { padding: 0 8px; color: var(--faint); font-family: var(--font-mono); font-size: 12px; }
+.cv-toolbar-count { padding: 0 8px; color: var(--faint); font-family: var(--font-mono); font-size: 13px; letter-spacing: .04em; white-space: nowrap; }
+.cv-zoom { padding: 0 8px; color: var(--faint); font-family: var(--font-mono); font-size: 13px; }
+
+/* ---------- 步骤条（r255） ----------
+   画布铺满时一条 6 步的流程会缩到 0.44 倍：卡片 240px 宽被画成 106px，标题只剩 9px 高，
+   等于读不出这条流程在干什么。这一行把每一步按执行顺序摊平，字号不跟画布缩放走，
+   点一步就选中它、画布居中过去。挤不下时横向滚动，不换行也不缩字。 */
+.cv-flowline {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+.cv-flowline-kicker {
+  flex: 0 0 auto;
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: .08em;
+  white-space: nowrap;
+}
+.cv-flowline-list {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 2px 0;
+  min-width: 0;
+  overflow-x: auto;
+  list-style: none;
+  scrollbar-width: thin;
+  /* 挤不下时右边淡出一点，说明「后面还有」；背景同色，装得下时看不出这层遮罩 */
+  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+}
+.cv-flowline-slot { display: flex; align-items: center; gap: 4px; }
+.cv-flowline-item {
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  color: var(--muted);
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.cv-flowline-item:hover { color: var(--ink); border-color: rgba(17, 17, 17, .32); }
+.cv-flowline-item.is-active { color: var(--ink); border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
+.cv-flowline-item:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.cv-flowline-no {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+}
+.cv-flowline-item.is-active .cv-flowline-no { color: var(--ink); border-color: var(--ink); }
+.cv-flowline-title { font-weight: 500; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+.cv-flowline-dot { width: 5px; height: 5px; flex: 0 0 auto; border-radius: 50%; background: #c9c9c9; }
+.cv-flowline-dot[data-state="running"] { background: var(--ink); animation: cv-pulse 1.2s ease-in-out infinite; }
+.cv-flowline-dot[data-state="done"] { background: var(--ink); }
+.cv-flowline-dot[data-state="error"] { background: var(--fail); }
+.cv-flowline-dot[data-state="skipped"] { background: var(--faint); }
+.cv-flowline-dot[data-state="unsupported"] { background: var(--warn); }
+.cv-flowline-state { color: var(--faint); font-family: var(--font-mono); font-size: 12px; }
+.cv-flowline-arrow { color: var(--faint); font-size: 12px; }
 
 .cv-canvas { position: relative; flex: 1; min-height: 0; }
 .cv-canvas .react-flow { background: var(--canvas); }
@@ -343,6 +419,11 @@
   font-size: 13px;
   pointer-events: none;
 }
+.cv-hint-extra {
+  padding-left: 8px;
+  border-left: 1px solid var(--line);
+  color: var(--muted);
+}
 .cv-hint-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--faint); }
 .cv-hint-dot[data-running="true"] { background: var(--ink); animation: cv-pulse 1.2s ease-in-out infinite; }
 
@@ -363,8 +444,8 @@
 .cv-node[data-status="running"] { border-color: var(--ink); }
 .cv-node[data-status="error"] { border-color: rgba(163, 56, 56, .55); }
 .cv-node-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.cv-node-type { color: var(--faint); font-family: var(--font-mono); font-size: 12px; letter-spacing: .16em; text-transform: uppercase; }
-.cv-node-state { display: inline-flex; align-items: center; gap: 4px; color: var(--faint); font-family: var(--font-mono); font-size: 12px; white-space: nowrap; }
+.cv-node-type { color: var(--faint); font-family: var(--font-mono); font-size: 13px; letter-spacing: .16em; text-transform: uppercase; }
+.cv-node-state { display: inline-flex; align-items: center; gap: 4px; color: var(--faint); font-family: var(--font-mono); font-size: 13px; white-space: nowrap; }
 .cv-dot { width: 5px; height: 5px; border-radius: 50%; background: #c9c9c9; flex: 0 0 auto; }
 .cv-dot[data-status="running"] { background: var(--ink); animation: cv-pulse 1.2s ease-in-out infinite; }
 .cv-dot[data-status="done"] { background: var(--ink); }
@@ -382,12 +463,12 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-xs);
 }
-.cv-node-heading strong { font-size: 15px; font-weight: 600; letter-spacing: -.01em; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.cv-node-heading strong { font-size: 16px; font-weight: 600; letter-spacing: -.01em; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .cv-node-desc {
   margin: 8px 0 0;
-  min-height: 31px;
+  min-height: 33px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.5;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -404,7 +485,7 @@
   border-top: 1px solid var(--line-faint);
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
 }
 .cv-node-summary { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .cv-node-ms { flex: 0 0 auto; }
@@ -419,7 +500,7 @@
   gap: 16px;
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
   pointer-events: none;
 }
 
@@ -756,6 +837,8 @@ body:has(.cv-next) .vq-toast { bottom: 152px; }
 @media (max-width: 760px) {
   /* 画布整个不画：272×309 的缩水图放不下任何东西，空状态还会压住缩放按钮 */
   .cv-canvas { display: none; }
+  /* 步骤条也不留：下面那块 .cv-steps 就是同一份步骤清单，写得还更全（带依赖与参数） */
+  .cv-flowline { display: none; }
   .cv-steps { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; padding: 12px; overflow: auto; }
   /* 起手清单在手机上要整行折：标题一行、状态与动作一行（r249） */
   .cv-steps-empty .cv-start { width: 100%; padding: 12px; }
@@ -1109,6 +1192,8 @@ body:has(.cv-next) .vq-toast { bottom: 152px; }
   .cv-page .cv-tool { height: 40px; padding: 0 12px; }
   .cv-page .cv-divider { height: 24px; }
   .cv-page .cv-flow-select select { height: 40px; }
+  /* 步骤条在这一档是横向滚动的一行按钮：24px 高的胶囊在触屏上瞄不准，抬到 40 */
+  .cv-page .cv-flowline-item { height: 40px; }
   .cv-page .cv-flow-name { min-height: 40px; }
   .cv-page .cv-input,
   .cv-page .cv-textarea,
