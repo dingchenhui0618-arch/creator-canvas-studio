@@ -325,7 +325,9 @@
 }
 .cv-overlay strong { color: var(--ink); font-size: 15px; font-weight: 600; }
 .cv-overlay p { margin: 0; max-width: 340px; line-height: 1.65; }
-.cv-overlay--empty { background: transparent; }
+/* 起手清单（r249）之后这块会长到 400px 上下：矮屏（1440×800 / 768×1024）要能滚，
+   居中也要用 safe center，否则滚起来顶部会被裁掉。 */
+.cv-overlay--empty { background: transparent; overflow-y: auto; justify-content: safe center; padding: 24px 24px 48px; }
 .cv-hint {
   position: absolute;
   left: 12px;
@@ -735,7 +737,12 @@
   /* 画布整个不画：272×309 的缩水图放不下任何东西，空状态还会压住缩放按钮 */
   .cv-canvas { display: none; }
   .cv-steps { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; padding: 12px; overflow: auto; }
-  .cv-steps .cv-empty-actions { flex-wrap: wrap; }
+  /* 起手清单在手机上要整行折：标题一行、状态与动作一行（r249） */
+  .cv-steps-empty .cv-start { width: 100%; padding: 12px; }
+  .cv-steps-empty .cv-start-row { flex-wrap: wrap; gap: 4px 8px; min-height: 48px; }
+  .cv-steps-empty .cv-start-title { flex: 1 1 100%; white-space: normal; }
+  .cv-steps-empty .cv-start-meta { flex: 1 1 auto; }
+  .cv-steps-empty .cv-start-go { flex: 0 0 auto; min-height: 40px; }
   /* 画布专属工具（自动布局 / 适应工作流 / 缩放百分比）在手机上不起作用：画布根本不显示，
      留着只会让人以为能对着看不见的东西布局。节点数、连线数、加节点、撤销照旧留着。 */
   .cv-canvas-only { display: none; }
@@ -959,9 +966,56 @@
 }
 
 
-/* 空工作流的起手路径（r214）：不再只写「拖节点」，直接给三条能走通的路 */
-.cv-empty-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 8px; }
-.cv-empty-note { font-size: 12px; color: var(--faint); }
+/* 空工作流上的起手清单（r249 / v0.9.232）
+   r214 那版是三颗「点了就跳走」的按钮——更糟的是外层 .cv-overlay 是 pointer-events: none，
+   按钮继承了去，桌面空状态那三颗实测一个都点不动。这一块自己把点击收回来
+   （pointer-events: auto），并把「手上的作品与模板」直接摊在画布上：点一行就地建好。
+   文案尺寸按用户 2026-11-19 的要求走：行标题 14px、说明与动作 13px，桌面也不缩到 12px。 */
+.cv-start {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(520px, 100%);
+  margin-top: 8px;
+  padding: 16px;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.cv-start-head { display: flex; flex-direction: column; gap: 4px; }
+.cv-start-kicker { color: var(--ink); font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+.cv-start-hint { color: var(--muted); font-size: 13px; line-height: 1.6; }
+.cv-start-note { margin: 0; color: var(--faint); font-size: 13px; line-height: 1.6; }
+.cv-start-group { display: flex; flex-direction: column; gap: 8px; }
+.cv-start-label { color: var(--faint); font-size: 13px; font-weight: 500; }
+.cv-start-list { display: flex; flex-direction: column; gap: 8px; }
+.cv-start-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  color: var(--ink);
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .12s ease, background .12s ease;
+}
+.cv-start-row:hover { border-color: var(--line-strong); background: #f7f7f7; }
+.cv-start-row:disabled { opacity: .55; cursor: default; }
+.cv-start-title { flex: 1 1 auto; min-width: 0; font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv-start-meta { flex: 0 0 auto; color: var(--faint); font-size: 13px; white-space: nowrap; }
+.cv-start-go { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; color: var(--ink); font-size: 13px; white-space: nowrap; }
+.cv-start-fallback { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
+.cv-start-fallback-label { color: var(--faint); font-size: 13px; }
+.cv-empty-note { font-size: 13px; color: var(--faint); }
 
 /* ---------- r242 工作流页窄屏：小字 13px、点按区 40/44（v0.9.226） ----------
    2026-11-19 在 320 / 390 / 768 / 1024 / 1440 量这条页面：12px 的等宽元信息在每一档都在
@@ -1016,7 +1070,13 @@
   .cv-page .cv-step-state,
   .cv-page .cv-steps-note,
   .cv-page .cv-inspector-foot--readonly,
-  .cv-page .cv-empty-note {
+  .cv-page .cv-empty-note,
+  .cv-page .cv-start-hint,
+  .cv-page .cv-start-note,
+  .cv-page .cv-start-label,
+  .cv-page .cv-start-meta,
+  .cv-page .cv-start-go,
+  .cv-page .cv-start-fallback-label {
     font-size: 13px;
   }
 

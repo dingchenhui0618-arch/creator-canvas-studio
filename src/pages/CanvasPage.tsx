@@ -35,11 +35,15 @@ import {
   type RunResumePlan,
 } from '../api/flows'
 import { getCredits } from '../api/credits'
+import { listProjects, openProjectCanvas } from '../api/projects'
+import { applyTemplate, listTemplates } from '../api/radar'
 import { runCreditsText, runResumeInfo, runSpentText, runStatusMeta } from '../domain/run'
 import { diffRunGraph, type RunGraphDiff } from '../domain/run-diff'
 import { flowStepPlan } from '../domain/flow-steps'
+import { canvasStartPlan, type CanvasStartItem, type CanvasStartPlan } from '../domain/canvas-start'
 import { useUiMode } from '../api/app'
 import { navigate, replaceRoute } from '../router'
+import { readSession } from '../auth/session'
 import { NODE_META } from '../canvas/catalog'
 import { FlowNodeCard } from '../canvas/FlowNode'
 import { Inspector } from '../canvas/Inspector'
@@ -51,6 +55,7 @@ import { autoLayout } from '../canvas/layout'
 import { fromFlowEdges, fromFlowNodes, toFlowEdges, toFlowNodes, validateConnection } from '../canvas/serialize'
 import type { FlowNodeData, FlowNodeKind, NodeConfig, RunNodeStatus } from '../canvas/types'
 import PageHead from '../components/PageHead'
+import CanvasStart from '../components/CanvasStart'
 import { Pill } from '../components/ui'
 import '../styles/canvas.css'
 
@@ -217,6 +222,12 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
   // 运行对照（v0.9.110）：只读弹窗，打开时才去读对照对象；不在工作流页加载时预取
   const [compareOpen, setCompareOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
+  // 起手清单（r249）：空工作流上摊开「手上的作品与模板」，点了就在原地建好。
+  // 以前这里只有三个按钮，而且它们其实点不动（外层浮层 pointer-events: none 被继承）。
+  const [startPlan, setStartPlan] = useState<CanvasStartPlan>({ projects: [], templates: [], total: 0 })
+  const [startLoading, setStartLoading] = useState(false)
+  const [startError, setStartError] = useState('')
+  const [startBusy, setStartBusy] = useState('')
   const [zoom, setZoom] = useState(1)
   const [historyCount, setHistoryCount] = useState(0)
   const [futureCount, setFutureCount] = useState(0)
@@ -406,6 +417,8 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
   // 只读回看只加载一次：工作流删了 / 没有快照时没有 applyFlow 可以把 loadedFlowRef 填上，
   // 少了这道闸，渲染一次就再拉一次 flows + run，会变成一串 404。
   const viewLoadRef = useRef('')
+  // 起手清单只按「这条空工作流」拉一次：每换一条空流程才重新读作品与模板
+  const startLoadRef = useRef('')
 
   const applyFlow = useCallback((flow: ApiFlow, resumeRunId?: string, viewRunId?: string) => {
     skipSave.current = true
@@ -885,6 +898,74 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
     }
   }, [applyFlow, running, saveNow, toast])
 
+  // 起手清单（r249）：空工作流上直接读「手上的作品与模板」。
+  // 只在空画布、非只读、已加载完时才读，每换一条空流程读一次；读不到就说清读不到，
+  // 手动起手那三颗按钮照样能用。
+  useEffect(() => {
+    if (loadState !== 'ready' || readOnly || nodes.length) return
+    const key = flowIdRef.current || 'blank'
+    if (startLoadRef.current === key) return
+    startLoadRef.current = key
+    let alive = true
+    setStartLoading(true)
+    setStartError('')
+    // 模板这里不按 type 筛：接口的 type 是内容类型（脚本 / 图集），不是 kind，
+    // 「来自工作流的模板」由 canvasStartPlan 按 kind === 'flow' 自己挑。
+    Promise.all([listProjects(), listTemplates()])
+      .then(([projects, templates]) => {
+        if (!alive) return
+        // 只拿自己的作品起手：公共示例作品绑不上工作流，点了只会给一句看不懂的报错
+        setStartPlan(canvasStartPlan(projects.items, templates.items, {
+          currentFlowId: flowIdRef.current,
+          ownerId: readSession()?.user.id || '',
+        }))
+      })
+      .catch((error: unknown) => {
+        if (!alive) return
+        setStartPlan({ projects: [], templates: [], total: 0 })
+        setStartError(error instanceof Error ? error.message : '读取失败')
+      })
+      .finally(() => {
+        if (alive) setStartLoading(false)
+      })
+    return () => {
+      alive = false
+    }
+  }, [loadState, readOnly, nodes.length, flowId])
+
+  // 点一条起手项：建好（或打开）那条工作流，直接落在当前画布上，不跳页。
+  const pickStart = useCallback(async (item: CanvasStartItem) => {
+    if (startBusy) return
+    setStartBusy(item.id)
+    try {
+      let target: ApiFlow
+      let note = ''
+      if (item.source === 'project') {
+        if (item.flowId) {
+          target = await getFlow(item.flowId)
+          note = '打开了《' + item.title + '》的工作流'
+        } else {
+          const result = await openProjectCanvas(item.id)
+          target = await getFlow(result.flow.id)
+          note = (result.created ? '已按《' + item.title + '》的脚本开了工作流：' : '《' + item.title + '》的工作流已就绪：') +
+            (target.nodes.length || result.flow.nodes || 0) + ' 个节点'
+        }
+      } else {
+        const result = await applyTemplate(item.id)
+        target = await getFlow(result.flow.id)
+        note = '已套用模板「' + item.title + '」：' + target.nodes.length + ' 个节点'
+      }
+      setFlows((current) => [target, ...current.filter((flow) => flow.id !== target.id)])
+      applyFlow(target)
+      window.setTimeout(() => rf.fitView({ padding: 0.12 }), 80)
+      toast(note)
+    } catch (error) {
+      toast('没建成：' + (error instanceof Error ? error.message : String(error)))
+    } finally {
+      setStartBusy('')
+    }
+  }, [applyFlow, rf, startBusy, toast])
+
   // 另存为模板 = 写进模板库的工作流条目（带 blueprint），不是再复制一张流程
   const saveAsTemplate = useCallback(async () => {
     if (running) return
@@ -1224,19 +1305,19 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
         ? '保存失败'
         : '已保存'
 
-  // 空工作流给的三条出口：桌面空状态与手机步骤清单共用同一份，免得两边文案走散。
+  // 空工作流上的起手清单（r249）：桌面空状态与手机步骤清单共用同一份，免得两边文案走散。
+  // 主力是「按这条作品的脚本开 / 套用这条模板」——点了就地建好；三条跳走的出口沉到最后一行。
   const flowStartLinks = (
-    <div className="cv-empty-actions">
-      <button type="button" className="vq-button vq-button--ghost" onClick={() => navigate({ kind: 'page', page: 'radar' })}>
-        去爆款雷达找一条
-      </button>
-      <button type="button" className="vq-button vq-button--ghost" onClick={() => navigate({ kind: 'page', page: 'templates' })}>
-        套用模板库的结构
-      </button>
-      <button type="button" className="vq-button vq-button--ghost" onClick={() => navigate({ kind: 'page', page: 'projects' })}>
-        从作品继续
-      </button>
-    </div>
+    <CanvasStart
+      plan={startPlan}
+      loading={startLoading}
+      error={startError}
+      busyId={startBusy}
+      onPick={(item) => { void pickStart(item) }}
+      onBlank={() => setPaletteOpen(true)}
+      onOpenRadar={() => navigate({ kind: 'page', page: 'radar' })}
+      onOpenTemplates={() => navigate({ kind: 'page', page: 'templates' })}
+    />
   )
   return (
     <div className="page cv-page">
@@ -1579,8 +1660,9 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
               {loadState === 'loading' && <div className="cv-overlay">{internal ? '正在读取 data/flows.json…' : '正在读取工作流…'}</div>}
               {loadState === 'ready' && !nodes.length && (
                 <div className="cv-overlay cv-overlay--empty">
-                  <strong>工作流是一条内容拆成步骤的地方</strong>
-                  <p>把「大模型 → 出图 → 评审 → 输出」连成一条线，跑完的运行会带着结果进「作品」：在作品流里点那张卡，就回到这次运行的逐节点结果。</p>
+                  {/* 空状态只留一行标题 + 一张起手清单 + 一行费用说明：
+                      以前那三段说明加起来比清单还高，1440×900 上清单底部直接被画布切掉。 */}
+                  <strong>这条工作流还没有步骤</strong>
                   {flowStartLinks}
                   <p className="cv-empty-note">出图节点每张另扣积分，运行前顶栏会算总价；出视频仍在「快捷创作」与「无限画布」。</p>
                 </div>
@@ -1638,7 +1720,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
               ) : (
                 <div className="cv-steps-empty">
                   <strong>这条工作流还没有步骤</strong>
-                  <p>把「大模型 → 出图 → 评审 → 输出」连成一条线，跑完的运行会带着结果进「作品」。连线与位置在电脑上摆。</p>
+                  <p>跑完的运行会带着结果进「作品」；连线与位置在电脑上摆。</p>
                   {flowStartLinks}
                 </div>
               )}
