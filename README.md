@@ -1930,6 +1930,47 @@ scrollWidth 390 无横向溢出；页面异常 0。门禁 1701 / 1701 测试（�
 24px 圆角；工作流入口只读元数据、打开不扣积分；收起「已自建对话预设」只发生在平台对话这一面。文档见
 docs/quick-create-layout-2026-11-19.md。
 
-下一轮（用户本轮同时提出）：Key 与联网搜索的配置收在一处——现在模型 Key 与联网搜索各存一把、分在两个页面，
-要并到「模型与上游」一处，并让联网搜索默认沿用平台对话那把 Key。
+> r258 做完了这一件：Key 池、联网搜索都并进「模型与上游」，搜索默认沿用平台对话那把 DeepSeek Key，见下一节。
 
+## 三百一十一、Key 与联网搜索收到「模型与上游」一处，搜索跟对话共用一把 Key（r258 / v0.9.241）
+
+用户原话：「联网搜索和 deepseek 官网的 key 共用，这里的相关都共用……key 和联网搜索相关的配置统一收在一处，别各写各的」。
+
+**一、以前确实是两处，而且搜索一直是死的。** 模型 Key 在后台「模型 Key」页、模型目录与上游价格在「模型与上游」页、
+联网搜索在「系统」页最下面还要再填一把博查 / Tavily 的 Key。结果就是生产上 `/var/lib/visionqa/search.json` 根本不存在，
+快捷创作里那个「联网搜索」开关一直是灰的——不是没做，是配置放错了地方，还要第二把 Key。
+
+**二、DeepSeek 在 2026-11-13 把搜索开放成接口了**，同一个 Key、同一份余额：
+`POST https://api.deepseek.com/v1/tools/search`（body `{query, count, need_content}`）直接回结构化结果
+`title / url / snippet / summary / site_name / date / rerank_score / authority`；另有 `/v1/tools/fetch` 抓网页。
+对话里的服务端工具（`deepseek_web_search`）仍然不能碰：r246 就是被「上游不认这个工具整条 400」坑过。
+所以这一轮走**独立搜索接口**，对话请求一个字没动。
+
+服务端（`server/web-search.mjs`）：新增 `PLATFORM_PROVIDER = 'deepseek'` 并设为默认通道；
+`platformSearchConfig()` 按「离对话最近」的顺序取 Key——Key 池里 `provider=deepseek` 的启用 Key → 地址在
+`api.deepseek.com` 的启用 Key → 环境变量那份对话凭证；`search.json` 里**不再存 Key**；请求 `need_content:false`
+（正文仍由 link-read 自己读，不重复买）；结果用 `summary`（600～800 字）进上下文，界面只列标题 / 站点 / 地址；
+401 / 402 / 400 都说人话，不把上游英文原文丢给用户；没有平台 Key 时**不许保存**，直接说去哪儿加。
+
+**三、后台三页并成一页。** 「模型与上游」从上到下：平台卡 → 联网搜索 → 统一路由 → 模型目录 → Key 池 →
+路由决策 → 出图 / 出视频通道 → 当前生效的接入 → 上游余额 → 计价口径。导航删掉「模型 Key」这一项（12 → 11），
+旧收藏的 `#/admin/keys` 由 `parseAdminSection` 映射到 `models`，不落总览也不 404。共用通道时搜索卡片上
+**没有第二个 Key 输入框**，只有一行「用「Key 池」里那把 平台对话：sk-••••58」；只有换成博查 / Tavily / 自建接口时
+才出现地址与 Key，而且仍在同一张卡里。
+
+![1440：模型与上游顶部——联网搜索已接通，Key 写的是「跟平台对话共用」那把](docs/admin-models-search-1440.png)
+
+![390：同一个搜索卡片单列排版，scrollWidth 390 = innerWidth 390](docs/admin-models-search-390.png)
+
+![390：搜索卡片在窄屏下的完整样子](docs/admin-search-card-390.png)
+
+验收：`test/web-search.test.mjs` 12/12（新增 3 条：没平台 Key 不许开通且不另存一份、请求打到 `/v1/tools/search`
+且 Bearer 用平台那把、401/402/400 的话术）；新增 `test/admin-one-place.test.mjs` 4 条（一页装下 Key 池 / 搜索 /
+路由 / 通道、导航没有第二个 Key 入口、`#/admin/keys` 落同一页、系统页不再有搜索卡片）；`test/admin-access.test.mjs`
+改成 11 项且 `section:'keys'` 为 0。全量 1709/1709、lint 0 error / 26 warning、tsc -b 干净、build 通过。
+临时实例（假 Key、假上游）实测 1440×1000 与 390×844 都渲染出「联网搜索 已接通」与共用 Key 那一行，390 无横向溢出；
+`#/admin/keys` 真跳转落到同一页。
+
+边界：**这一轮没有真实调用 DeepSeek 搜索接口**——第一次「试搜一次」由用户在用户端点（按次计费，跟对话同一份余额）；
+博查 / Tavily / 通用接口逻辑没动，只是搬了家；只读前 3 条网页、合计 12000 字，不做图片搜索、不用 `/tools/fetch` 兜底。
+文档见 docs/key-search-one-place-2026-11-19.md。

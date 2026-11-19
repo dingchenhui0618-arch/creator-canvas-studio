@@ -55,6 +55,16 @@ test('管理员：后台路由照常放行', () => {
   assert.equal(canAccessAdminRoute({ kind: 'admin', section: 'models' }, true), true)
 })
 
-test('后台导航仍是 12 项（门禁不删导航）', () => {
-  assert.equal(EDITION_BY_ID.admin.nav.length, 12)
+test('后台导航 11 项：r258 把「模型 Key」并进「模型与上游」，没有多出第二处 Key 配置', () => {
+  assert.equal(EDITION_BY_ID.admin.nav.length, 11)
+  assert.equal(
+    EDITION_BY_ID.admin.nav.filter((item) => item.section === 'keys').length,
+    0,
+    '导航里不该再出现「模型 Key」这一项',
+  )
+  assert.equal(
+    EDITION_BY_ID.admin.nav.filter((item) => item.section === 'models').length,
+    1,
+    '「模型与上游」是 Key、搜索、路由唯一的入口',
+  )
 })

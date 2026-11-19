@@ -11,6 +11,8 @@ process.env.DATA_DIR = dir
 // 测试里的网页地址是 127.0.0.1（假页面），读链接默认会挡住内网地址
 process.env.VQ_LINK_ALLOW_PRIVATE = '1'
 
+const { createKey, deleteKey } = await import('../server/keyvault.mjs')
+
 const {
   SEARCH_LIMITS,
   buildQuery,
@@ -24,6 +26,9 @@ const {
   searchView,
   searchWeb,
   validateSearch,
+  PLATFORM_PROVIDER,
+  deepseekEndpoint,
+  platformSearchConfig,
 } = await import('../server/web-search.mjs')
 
 const json = (payload, status = 200) =>
@@ -203,6 +208,109 @@ test('搜索没成时上下文里写的是「别编」：不是空的、也不�
   assert.match(result.text, /联网搜索没有成功/)
   assert.match(result.text, /不要编造链接或数据/)
   assert.deepEqual(result.links, [])
+})
+
+test('DeepSeek 搜索跟平台对话共用一把 Key：没有平台 Key 不许开通，开了也不另存一份', async () => {
+  await clearSearch()
+  const refused = await saveSearch({ provider: 'deepseek' })
+  assert.equal(refused.ok, false)
+  assert.match(refused.error, /还没配/)
+  assert.match(refused.error, /Key 池/)
+
+  // 平台对话那把 Key：一条 DeepSeek Key，声明文本能力（别的能力不参与搜索）
+  const created = createKey({
+    name: '平台对话',
+    provider: 'deepseek',
+    baseUrl: 'https://api.deepseek.com/v1',
+    apiKey: 'sk-platform-deepseek-0001',
+    capabilities: ['text'],
+  })
+  try {
+    const saved = await saveSearch({ provider: 'deepseek' }, { by: 'admin@example.com' })
+    assert.equal(saved.ok, true)
+    assert.equal(saved.platformKeySource, 'pool')
+    assert.equal((await readSearch()).key, '', '共用 Key：search.json 里一个 Key 都不存')
+
+    const view = await searchView()
+    assert.equal(view.configured, true)
+    assert.equal(view.provider, PLATFORM_PROVIDER)
+    assert.equal(view.usesPlatformKey, true)
+    assert.equal(view.platformKey.available, true)
+    assert.equal(view.platformKey.source, 'pool')
+    assert.equal(view.platformKey.masked, maskSearchKey('sk-platform-deepseek-0001'))
+    assert.ok(!JSON.stringify(view).includes('sk-platform-deepseek-0001'), '平台 Key 明文不能出现在接口里')
+
+    assert.equal(deepseekEndpoint('https://api.deepseek.com/v1'), 'https://api.deepseek.com/v1/tools/search')
+    assert.equal(deepseekEndpoint('https://api.deepseek.com/v1/'), 'https://api.deepseek.com/v1/tools/search')
+    assert.equal(platformSearchConfig()?.source, 'pool')
+  } finally {
+    await clearSearch()
+    deleteKey(created.id)
+  }
+  assert.equal(platformSearchConfig(), null, '删掉平台 Key 之后就没有可共用的 Key 了')
+  assert.equal((await searchView()).platformKey.available, false)
+})
+
+test('DeepSeek 搜索：请求打到 /v1/tools/search，结构化结果按标题 / 地址 / 站点 / 摘要归一', async () => {
+  const created = createKey({
+    name: '平台对话',
+    provider: 'deepseek',
+    baseUrl: 'https://api.deepseek.com/v1',
+    apiKey: 'sk-platform-deepseek-0002',
+    capabilities: ['text'],
+  })
+  try {
+    const saved = await saveSearch({ provider: 'deepseek' })
+    assert.equal(saved.ok, true)
+    const seen = []
+    const fake = async (url, init) => {
+      seen.push({ url, headers: init.headers, body: JSON.parse(init.body) })
+      return json({
+        results: [
+          { title: '爆款结构', url: 'https://a.example.com/1', snippet: '界面用短摘要', summary: '模型读的长摘要：前三秒给冲突', site_name: '示例号', rerank_score: 2.4 },
+          { title: '同一条', url: 'https://a.example.com/1#part', summary: '重复地址' },
+          { title: '', url: 'https://b.example.com/2', snippet: '没有摘要' },
+        ],
+      })
+    }
+    const result = await searchWeb('短视频 爆款 结构', { fetchImpl: fake })
+    assert.equal(result.ok, true)
+    assert.equal(result.provider, 'deepseek')
+    assert.equal(seen[0].url, 'https://api.deepseek.com/v1/tools/search')
+    assert.equal(seen[0].headers.authorization, 'Bearer sk-platform-deepseek-0002')
+    assert.equal(seen[0].body.query, '短视频 爆款 结构')
+    assert.equal(seen[0].body.count, SEARCH_LIMITS.results + 2)
+    assert.equal(seen[0].body.need_content, false, '正文我们自己读，不重复买一次')
+    assert.equal(result.results.length, 2, '带 # 的算同一条')
+    assert.deepEqual(result.results[0], {
+      title: '爆款结构',
+      url: 'https://a.example.com/1',
+      site: '示例号',
+      snippet: '模型读的长摘要：前三秒给冲突',
+    })
+    assert.equal(result.results[1].title, 'b.example.com', '没标题用域名')
+  } finally {
+    await clearSearch()
+    deleteKey(created.id)
+  }
+})
+
+test('DeepSeek 搜索出错：401/402/400 说清是 Key、余额还是请求，不把上游的英文原文丢给用户', async () => {
+  const config = { provider: 'deepseek', key: 'sk-x', endpoint: 'https://api.deepseek.com/v1/tools/search', enabled: true }
+  const unauthorized = await searchWeb('问题', { config, fetchImpl: async () => json({ error: { message: 'invalid key' } }, 401) })
+  assert.equal(unauthorized.code, 'SEARCH_KEY')
+  assert.match(unauthorized.note, /Key 池/)
+
+  const poor = await searchWeb('问题', { config, fetchImpl: async () => new Response('{}', { status: 402 }) })
+  assert.equal(poor.code, 'SEARCH_BALANCE')
+  assert.match(poor.note, /余额/)
+
+  const bad = await searchWeb('问题', {
+    config,
+    fetchImpl: async () => json({ error: { message: "'count' must be between 1 and 50" } }, 400),
+  })
+  assert.equal(bad.code, 'SEARCH_REQUEST')
+  assert.match(bad.note, /count/)
 })
 
 test.after(() => {

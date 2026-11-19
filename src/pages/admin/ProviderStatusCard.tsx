@@ -3,11 +3,9 @@ import docUrl from '../../../docs/replication-pipeline.md?url'
 import { request } from '../../api/client'
 import { useUiMode } from '../../api/app'
 import { useApi } from './data'
-import { AdminHead, Badge, ErrorBanner, LoadingLine, RefreshButton, SourceTag } from './ui'
-import ModelKeyPool from './ModelKeyPool'
-import ModelRoutePanel from './ModelRoutePanel'
-import GatewaySection from './GatewaySection'
+import { Badge, ErrorBanner, LoadingLine, SourceTag } from './ui'
 
+// 当前生效的接入（r258）：从原来的「模型 Key」页并进「模型与上游」——Key、路由、通道、搜索现在只在一页里配。
 const DOC_PATH = 'docs/replication-pipeline.md'
 
 type ProviderConfig = {
@@ -30,7 +28,7 @@ type ProviderConfig = {
 
 type Probe = { ok: boolean; status?: number; count?: number; models?: string[]; error?: string }
 
-export default function KeysSection() {
+export default function ProviderStatusCard() {
   const config = useApi<ProviderConfig>('/api/config')
   const [probe, setProbe] = useState<Probe | null>(null)
   const [probing, setProbing] = useState(false)
@@ -65,20 +63,6 @@ export default function KeysSection() {
 
   return (
     <>
-      <AdminHead
-        kicker="ADMIN / KEYS"
-        title="模型与密钥"
-        description={
-          internal
-            ? '内部测试环境：模型标识、上游地址、凭证末四位与环境变量清单全部展开，仅管理员可见。'
-            : '平台当前接入的模型与检索服务，以及它们现在能不能用。'
-        }
-        actions={<RefreshButton onClick={config.reload} busy={config.loading} />}
-      />
-
-      <ModelKeyPool />
-      <ModelRoutePanel />
-      <GatewaySection />
 
       {config.error ? <ErrorBanner message={`GET /api/config：${config.error}`} onRetry={config.reload} /> : null}
       {config.loading && !data ? <LoadingLine label="/api/config" /> : null}

@@ -3,6 +3,11 @@ import type { ModelCatalogResponse, ModelCatalogRow } from '../../api/adminModel
 import { formatDateTime, useApi } from './data'
 import { AdminHead, Badge, EmptyState, ErrorBanner, LoadingLine, RefreshButton, SourceTag } from './ui'
 import UpstreamBalanceCard from './UpstreamBalanceCard'
+import ModelKeyPool from './ModelKeyPool'
+import ModelRoutePanel from './ModelRoutePanel'
+import GatewaySection from './GatewaySection'
+import ProviderStatusCard from './ProviderStatusCard'
+import SearchCard from './SearchCard'
 
 const CAPABILITY_LABELS: Record<ModelCatalogRow['capability'], string> = {
   text: '文本',
@@ -47,7 +52,7 @@ export default function ModelCatalogSection() {
       <AdminHead
         kicker="ADMIN / MODELS"
         title="模型与上游"
-        description="一条能力只走一条主路由，其余模型降为仅参考。下面按模型名合并两个上游：同一个模型出现在两边时并排显示来源与价格，价格是上游标价，不含平台加价。"
+        description="Key、统一路由、出图出视频通道、联网搜索、上游余额都只在这一页配；下面按模型名合并上游目录，同一个模型出现在两边时并排显示来源与价格，价格是上游标价，不含平台加价。"
         actions={<RefreshButton onClick={() => setRefreshAt(Date.now())} busy={loading} />}
       />
 
@@ -76,6 +81,8 @@ export default function ModelCatalogSection() {
               </article>
             ))}
           </div>
+
+          <SearchCard />
 
           <section className="admin-card admin-block">
             <div className="admin-block-head">
@@ -127,6 +134,11 @@ export default function ModelCatalogSection() {
               </table>
             </div>
           </section>
+
+          <ModelKeyPool />
+          <ModelRoutePanel />
+          <GatewaySection />
+          <ProviderStatusCard />
 
           <UpstreamBalanceCard />
 

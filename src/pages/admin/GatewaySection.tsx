@@ -25,7 +25,7 @@ const BLOCKER_LABEL: Record<GatewayBlocker, string> = {
 const BLOCKER_FIX: Record<GatewayBlocker, string> = {
   open: '平台额度开关没打开：在服务器 /opt/visionqa/.env 写 VQ_GATEWAY_OPEN=1 再重启 visionqa，生成才会放行。这个开关跟着上游额度走，后台不给「一键开启」按钮，免得点了以为能生成。',
   token: '服务令牌还没配置：通道会直接回 503，不会匿名放行。',
-  keys: '还没有声明出图 / 出视频能力的 Key：在「模型 Key」里贴一把，并勾上对应能力。',
+  keys: '还没有声明出图 / 出视频能力的 Key：在下面「Key 池」里贴一把，并勾上对应能力。',
 }
 
 // 模型都有人接、但通道整体不通时，别把「点哪个都能生成」写在页面上。

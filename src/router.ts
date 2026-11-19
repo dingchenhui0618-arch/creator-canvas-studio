@@ -129,6 +129,9 @@ function decodeSegment(value: string): string {
 }
 
 function parseAdminSection(value: string | undefined): AdminSection {
+  // r258：「模型 Key」并进「模型与上游」之后，旧收藏的 #/admin/keys 直接落到那一页，
+  // 不猜成总览、也不给 404——Key 与联网搜索现在只有这一处能改。
+  if (value === 'keys') return 'models'
   if (value && ADMIN_SECTIONS.includes(value)) return value as AdminSection
   return DEFAULT_ADMIN_SECTION
 }

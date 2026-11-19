@@ -111,7 +111,7 @@ export default function OverviewSection() {
                 <Badge tone={health.data.vision ? 'ok' : 'warn'}>
                   {health.data.vision ? '已配置' : '未配置'}
                 </Badge>
-                <span>{internal ? '模型标识与地址在「模型 Key」页，需要时再展开技术详情。' : '模型由平台统一维护；需要时联系维护人员。'}</span>
+                <span>{internal ? '模型标识与地址在「模型与上游」页，需要时再展开技术详情。' : '模型由平台统一维护；需要时联系维护人员。'}</span>
               </dd>
             </div>
             <div>

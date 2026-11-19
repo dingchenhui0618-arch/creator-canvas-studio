@@ -993,6 +993,9 @@
 .admin-mail-field { flex: 1 1 240px; min-width: 0; }
 .admin-mail-field--port { flex: 0 0 112px; min-width: 0; }
 .admin-mail-field--check { flex: 0 0 auto; padding-bottom: 8px; }
+/* 联网搜索（r258）：共用 Key 那一格占满一行，下面这行说明跟着走 */
+.admin-mail-field--wide { flex: 1 1 100%; }
+.admin-search-shared { margin: 4px 0 0; font-size: var(--text-meta); line-height: 1.6; color: var(--text-muted); }
 .admin-mail-form .admin-doc-actions { flex: 1 1 100%; }
 
 /* 成本页：单价表单、按天柱状与数字列。
@@ -2205,7 +2208,7 @@
 }
 
 /* 搜索服务（r246）：下拉里写着「通用 JSON 接口（自建 / 本地测试）」这种长名字，390 宽会把卡片顶出去
-   （实测 .admin-channel 260/254、.admin-mail-form 244/222）。和「模型与密钥」同一套收法：
+   （实测 .admin-channel 260/254、.admin-mail-form 244/222）。和「模型与上游」同一套收法：
    可收缩的网格列 + 下拉/输入框能缩到列宽，不靠截断文字。 */
 .admin-mail-form .vq-field { min-width: 0; }
 .admin-mail-form select.vq-input,

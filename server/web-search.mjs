@@ -12,10 +12,16 @@
 //
 // 为什么不用自己爬搜索引擎：那些结果的版权条款只允许「在 RSS 阅读器里给自己看」，
 // 拿它做商业产品的一部分是踩线。要搜就接一个正经的搜索服务，Key 由管理员在后台填。
+//
+// r258：默认通道换成 DeepSeek 自己的搜索接口（POST {base}/tools/search，2026-11-13 随「全家桶应用 API」
+// 一起开放）。它跟平台对话用**同一把 Key、同一份余额**，后台不用再填第二把 Key——这就是「联网搜索和对话共用
+// 一个 Key」的做法。结构化的 title/url/summary 直接回来，来源卡片照旧，读前几条网页仍走我们自己的 link-read。
+// 博查 / Tavily / 自建接口留着当备选：真有需要时在**同一张卡**里换，不另开一处配置。
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { config } from './config.mjs'
 import { readLinks } from './link-read.mjs'
+import { keyMaterial, listKeys } from './keyvault.mjs'
 
 export const SEARCH_LIMITS = {
   // 一次最多回几条结果、真的去读前几条网页
@@ -29,7 +35,11 @@ export const SEARCH_LIMITS = {
   timeoutMs: 10000,
 }
 
+/** 默认通道：DeepSeek 的搜索接口，跟平台对话共用同一把 Key。 */
+export const PLATFORM_PROVIDER = 'deepseek'
+
 export const PROVIDERS = {
+  [PLATFORM_PROVIDER]: { label: 'DeepSeek 搜索（跟平台对话共用一把 Key）', endpoint: '' },
   bocha: { label: '博查 Bocha', endpoint: 'https://api.bochaai.com/v1/web-search' },
   tavily: { label: 'Tavily', endpoint: 'https://api.tavily.com/search' },
   // 通用接口：POST {query,count} 回 {results:[{title,url,snippet}]}，给自建服务与本地 E2E 用
@@ -37,6 +47,77 @@ export const PROVIDERS = {
 }
 
 export const searchFile = () => path.join(config.dataDir, 'search.json')
+
+/** 平台对话那把 Key 的地址（https://api.deepseek.com/v1）→ 搜索接口地址（…/v1/tools/search）。 */
+export function deepseekEndpoint(baseUrl) {
+  const base = String(baseUrl || '').trim().replace(/\/+$/, '')
+  if (!base) return ''
+  if (/\/tools\/search$/.test(base)) return base
+  return base + '/tools/search'
+}
+
+function isDeepseekHost(baseUrl) {
+  try {
+    return /\.deepseek\.com$/i.test(new URL(baseUrl).hostname)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 平台自己那把 DeepSeek Key：联网搜索跟对话共用它，所以搜索不再单独存 Key。
+ * 取法按「离对话最近」的顺序：
+ *   1. Key 池里 provider 声明为 deepseek 的启用 Key（后台「模型与上游 → Key 池」）；
+ *   2. Key 池里地址落在 api.deepseek.com 的启用 Key（有的部署只按地址建 Key）；
+ *   3. 环境变量那份对话凭证（VISION_API_KEY + VISION_BASE_URL），且地址确实是 DeepSeek 官方。
+ * 都没有就返回 null——界面据此说「先把平台对话那把 Key 加进去」，而不是让人再填一把。
+ */
+export function platformSearchConfig(options = {}) {
+  const listImpl = options.listKeysImpl || listKeys
+  const materialOf = options.materialOf || keyMaterial
+  let items = options.items
+  if (!items) {
+    try {
+      items = listImpl().items || []
+    } catch {
+      items = []
+    }
+  }
+  const pick =
+    items.find((item) => item.enabled && String(item.provider || '') === 'deepseek') ||
+    items.find((item) => item.enabled && isDeepseekHost(item.baseUrl))
+  if (pick) {
+    const material = materialOf(pick.id)
+    if (material?.apiKey && material.enabled !== false) {
+      const endpoint = deepseekEndpoint(material.baseUrl || 'https://api.deepseek.com/v1')
+      if (endpoint) {
+        return {
+          key: material.apiKey,
+          endpoint,
+          keyMasked: maskSearchKey(material.apiKey),
+          source: 'pool',
+          keyId: pick.id,
+          keyName: pick.name || '',
+          baseUrl: material.baseUrl || '',
+        }
+      }
+    }
+  }
+  const envKey = String(options.envApiKey ?? config.vision.apiKey ?? '').trim()
+  const envBase = String(options.envBaseUrl ?? config.vision.baseUrl ?? '').trim()
+  if (envKey && isDeepseekHost(envBase)) {
+    return {
+      key: envKey,
+      endpoint: deepseekEndpoint(envBase),
+      keyMasked: maskSearchKey(envKey),
+      source: 'env',
+      keyId: '',
+      keyName: '平台对话凭证（环境变量）',
+      baseUrl: envBase,
+    }
+  }
+  return null
+}
 
 function fail(status, code, message) {
   const error = new Error(message)
@@ -97,6 +178,9 @@ export function validateSearch(input = {}) {
   const provider = String(input?.provider || '').trim()
   if (!provider) return { ok: false, error: '请选择搜索服务商' }
   if (!PROVIDERS[provider]) return { ok: false, error: '不认识的搜索服务商' }
+  if (provider === PLATFORM_PROVIDER) {
+    return { ok: true, value: { provider, endpoint: '', enabled: input?.enabled !== false } }
+  }
   const endpoint = cleanEndpoint(input?.endpoint)
   if (endpoint === null) return { ok: false, error: '搜索服务地址要是 http/https 的网址' }
   if (provider === 'generic' && !endpoint) return { ok: false, error: '通用接口必须填地址' }
@@ -107,6 +191,24 @@ export function validateSearch(input = {}) {
 export async function saveSearch(input = {}, { by = '' } = {}) {
   const previous = await readSearch()
   const provider = String(input?.provider || '').trim()
+  // 跟平台对话共用 Key：这里不存任何 Key，只记「用哪条通道 + 开没开」。
+  // 平台那把 Key 还没有时直接拒绝，并说清去哪儿加——不要让人以为保存成功、结果搜不了。
+  if (provider === PLATFORM_PROVIDER) {
+    const platform = platformSearchConfig()
+    if (!platform) {
+      return { ok: false, error: '平台对话的 DeepSeek Key 还没配：先在「模型与上游 → Key 池」加一把 DeepSeek Key，再回来开通联网搜索' }
+    }
+    const saved = {
+      provider: PLATFORM_PROVIDER,
+      endpoint: '',
+      key: '',
+      enabled: input?.enabled !== false,
+      updatedAt: new Date().toISOString(),
+      updatedBy: String(by || '').slice(0, 120),
+    }
+    await persist(saved)
+    return { ok: true, search: saved, keyKept: false, platformKeySource: platform.source }
+  }
   const wantsKey = String(input?.key || '')
   const keepKey = !wantsKey && previous && previous.provider === provider ? previous.key : ''
   const checked = validateSearch({ provider, endpoint: String(input?.endpoint || '').trim() || (previous && previous.provider === provider ? previous.endpoint : ''), enabled: input?.enabled !== false })
@@ -144,10 +246,26 @@ function fromEnv() {
 /** 生效中的搜索服务：后台配置优先，其次环境变量；两处都没有 = 没接通。 */
 export async function resolveSearch() {
   const saved = await readSearch()
-  if (saved?.provider) return { source: 'admin', search: saved }
+  if (saved?.provider === PLATFORM_PROVIDER) {
+    // 共用 Key：search.json 里没有 Key，调用前现从平台对话那把取。
+    const platform = platformSearchConfig()
+    if (!platform) return { source: 'none', search: { ...saved, key: '', endpoint: '' }, platform: null, reason: 'no-platform-key' }
+    return {
+      source: 'admin',
+      search: { ...saved, key: platform.key, endpoint: platform.endpoint },
+      platform,
+      reason: '',
+    }
+  }
+  if (saved?.provider) return { source: 'admin', search: saved, platform: platformSearchConfig() }
   const env = fromEnv()
-  if (env) return { source: 'env', search: env }
-  return { source: 'none', search: null }
+  if (env && env.provider === PLATFORM_PROVIDER) {
+    const platform = platformSearchConfig()
+    if (platform) return { source: 'env', search: { ...env, key: platform.key, endpoint: platform.endpoint }, platform }
+    return { source: 'none', search: null, platform: null, reason: 'no-platform-key' }
+  }
+  if (env) return { source: 'env', search: env, platform: platformSearchConfig() }
+  return { source: 'none', search: null, platform: platformSearchConfig() }
 }
 
 /** 对外安全视图：Key 只给掩码与「有没有」。 */
@@ -155,16 +273,25 @@ export async function searchView() {
   const resolved = await resolveSearch()
   const saved = await readSearch()
   const search = resolved.search
+  const platform = resolved.platform === undefined ? platformSearchConfig() : resolved.platform
   const configured = Boolean(search?.provider) && search.enabled !== false && (search.provider === 'generic' || Boolean(search.key))
+  const usesPlatformKey = (search?.provider || saved?.provider || '') === PLATFORM_PROVIDER
   return {
     configured,
-    provider: search?.provider || '',
-    providerLabel: PROVIDERS[search?.provider || '']?.label || '',
+    provider: search?.provider || saved?.provider || '',
+    providerLabel: PROVIDERS[search?.provider || saved?.provider || '']?.label || '',
     endpoint: search?.endpoint || '',
     keyMasked: maskSearchKey(search?.key || ''),
     hasKey: Boolean(search?.key),
     enabled: search ? search.enabled !== false : false,
     source: resolved.source,
+    reason: resolved.reason || '',
+    usesPlatformKey,
+    // 卡片上「用哪把 Key」：共用的那把从 Key 池现取，只回掩码与来源。
+    platformKey: platform
+      ? { available: true, masked: platform.keyMasked, source: platform.source, name: platform.keyName, baseUrl: platform.baseUrl }
+      : { available: false, masked: '', source: '', name: '', baseUrl: '' },
+    defaultProvider: PLATFORM_PROVIDER,
     updatedAt: saved?.updatedAt || '',
     updatedBy: saved?.updatedBy || '',
     canEdit: resolved.source !== 'env',
@@ -209,6 +336,29 @@ function clip(value, max) {
 
 /** 各家返回的字段名不一样，统一成 {title,url,snippet,site}；只认 http/https 的地址。 */
 export function normalizeResults(provider, payload, limit = SEARCH_LIMITS.results) {
+  // DeepSeek 搜索接口回的是结构化结果：title / url / summary（长摘要）/ snippet / site_name。
+  // summary 是给模型读的（600～800 字），snippet 是给界面看的；这里优先 summary、只截 320 字进上下文。
+  if (provider === PLATFORM_PROVIDER) {
+    const rows = payload && Array.isArray(payload.results) ? payload.results : []
+    const out = []
+    const seen = new Set()
+    for (const row of rows) {
+      if (!row || typeof row !== 'object') continue
+      const url = String(row.url || '').trim()
+      if (!/^https?:\/\//i.test(url)) continue
+      const key = url.replace(/#.*$/, '')
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push({
+        title: clip(row.title || row.site_name || hostOf(url), 120) || hostOf(url),
+        url: key,
+        site: clip(row.site_name || hostOf(url), 60),
+        snippet: clip(row.summary || row.snippet || row.content || '', 320),
+      })
+      if (out.length >= limit) break
+    }
+    return out
+  }
   let list = []
   if (provider === 'bocha') {
     const data = payload && typeof payload.data === 'object' && payload.data ? payload.data : payload
@@ -242,11 +392,19 @@ export function normalizeResults(provider, payload, limit = SEARCH_LIMITS.result
 async function callSearch(provider, searchConfig, query, options = {}) {
   const fetchImpl = options.fetchImpl || globalThis.fetch
   const timeoutMs = Number(options.timeoutMs) || SEARCH_LIMITS.timeoutMs
-  const endpoint = String(searchConfig.endpoint || PROVIDERS[provider].endpoint || '').trim()
+  const endpoint = String(
+    searchConfig.endpoint ||
+      (provider === PLATFORM_PROVIDER ? deepseekEndpoint('https://api.deepseek.com/v1') : PROVIDERS[provider].endpoint) ||
+      '',
+  ).trim()
   if (!endpoint) throw fail(500, 'SEARCH_ENDPOINT', '搜索服务没有地址')
   const headers = { 'content-type': 'application/json', accept: 'application/json', 'user-agent': 'VisionQA-Search/1.0' }
   let body = null
-  if (provider === 'bocha') {
+  if (provider === PLATFORM_PROVIDER) {
+    // 跟平台对话同一把 Key：鉴权、余额、计费口径都在一起，不另存一份。
+    headers.authorization = 'Bearer ' + searchConfig.key
+    body = { query, count: Math.max(1, Math.min(50, SEARCH_LIMITS.results + 2)), need_content: false }
+  } else if (provider === 'bocha') {
     headers.authorization = 'Bearer ' + searchConfig.key
     body = { query, count: SEARCH_LIMITS.results + 2, summary: false, freshness: 'noLimit' }
   } else if (provider === 'tavily') {
@@ -270,6 +428,15 @@ async function callSearch(provider, searchConfig, query, options = {}) {
   }
   const raw = await response.text().catch(() => '')
   if (!response.ok) {
+    if (provider === PLATFORM_PROVIDER) {
+      if (response.status === 401) throw fail(401, 'SEARCH_KEY', '这把 DeepSeek Key 不能用于搜索（401）：搜索与对话共用同一把，去「模型与上游 → Key 池」核对')
+      if (response.status === 402) throw fail(402, 'SEARCH_BALANCE', 'DeepSeek 账户余额不足（402）：联网搜索与对话共用同一份余额')
+      if (response.status === 400) {
+        let why = ''
+        try { why = String(JSON.parse(raw)?.error?.message || '') } catch { why = '' }
+        throw fail(400, 'SEARCH_REQUEST', '搜索请求被拒' + (why ? '：' + why.slice(0, 120) : '（400）'))
+      }
+    }
     let detail = ''
     try { const parsed = JSON.parse(raw); detail = parsed.error || parsed.message || parsed.msg || '' } catch { detail = '' }
     throw fail(502, 'SEARCH_STATUS', '搜索服务回了 HTTP ' + response.status + (detail ? '：' + String(detail).slice(0, 120) : ''))

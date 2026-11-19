@@ -3,7 +3,6 @@ import type { AdminSection } from '../../editions'
 import AuditSection from './AuditSection'
 import BillingSection from './BillingSection'
 import CanvasSection from './CanvasSection'
-import KeysSection from './KeysSection'
 import ModelCatalogSection from './ModelCatalogSection'
 import OverviewSection from './OverviewSection'
 import SystemSection from './SystemSection'
@@ -19,7 +18,6 @@ export default function AdminConsolePage({ section }: { section: AdminSection })
       {section === 'overview' ? <OverviewSection /> : null}
       {section === 'users' ? <UsersSection /> : null}
       {section === 'canvas' ? <CanvasSection /> : null}
-      {section === 'keys' ? <KeysSection /> : null}
       {section === 'models' ? <ModelCatalogSection /> : null}
       {section === 'templates' ? <TemplatesSection /> : null}
       {section === 'usage' ? <UsageSection /> : null}
