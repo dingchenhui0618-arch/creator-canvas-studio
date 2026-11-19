@@ -254,6 +254,9 @@
 .rv-next-copy { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.65; overflow-wrap: anywhere; }
 .rv-next-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .rv-next-actions .vq-button { min-height: 40px; }
+/* 存成模板的结果就写在按钮下面（r252）：成功说清「几段几镜、评过什么」，失败说原话 */
+.rv-next-note { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.rv-next-note.is-bad { color: var(--fail); }
 @media (max-width: 760px) {
   .rv-next-actions .vq-button { flex: 1 1 100%; }
 }

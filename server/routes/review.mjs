@@ -6,6 +6,7 @@ import { reviewCandidatesFor } from '../review-candidates.mjs'
 import { ackReview, unackReview } from '../review-acks.mjs'
 import { saveDecision, clearDecision, clearDecisions, DECISION_KINDS } from '../review-decisions.mjs'
 import { getProject, listProjects } from '../projects.mjs'
+import { projectTemplateReady } from '../project-template-ready.mjs'
 import { projectsById, withReviewProject } from '../review-ownership.mjs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
@@ -357,6 +358,16 @@ export function createReviewRouter() {
             projectId,
             version: projectVersion,
           })
+          // 这一版能不能直接沉淀成模板（r252）：判断与作品页那张卡片同一处。
+          // 读模板与脚本都在本地，不调上游；读失败就当不能存——宁可少一个出口，也不给一个点了报错的按钮。
+          let templatable = false
+          if (scopedProject) {
+            try {
+              templatable = (await projectTemplateReady(scopedProject, user)).ok
+            } catch {
+              templatable = false
+            }
+          }
           sendJson(res, 200, {
             ...result,
             reviewId: saved.id,
@@ -367,6 +378,8 @@ export function createReviewRouter() {
               ? { id: projectId, title: scopedProject.title, version: projectVersion, flowId: String(scopedProject.flowId || '') }
               : null,
             version: projectVersion,
+            // 有脚本、有分镜才为 true：评审页据此决定「存成模板」这个出口给不给
+            templatable,
             ...(queuedAt ? { queue: queuedAt } : {}),
           })
         } catch (error) {

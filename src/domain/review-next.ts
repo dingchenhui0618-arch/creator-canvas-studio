@@ -7,7 +7,7 @@
 import type { ReviewIssues } from '../api/review'
 import { issueCount, issueLine } from './review.ts'
 
-export type ReviewNextAction = 'openProject' | 'openFlow' | 'openProjects'
+export type ReviewNextAction = 'openProject' | 'openFlow' | 'openProjects' | 'saveTemplate'
 
 /** pass 往交付走；fix 要先改；loose 没挂作品 / 只看历史，所以不给动手的出口 */
 export type ReviewNextTone = 'pass' | 'fix' | 'loose'
@@ -32,6 +32,8 @@ export type ReviewNextInput = {
   project?: ReviewNextScope | null
   /** 打开的是已经落库的旧记录：只读，只给「回去看这一版」 */
   history?: boolean
+  /** 这一版能不能直接沉淀成模板：服务端判断（有脚本、有分镜），前端照着做，不自己猜 */
+  templatable?: boolean
 }
 
 // 按钮上放不下一整条标题：按字数截断，具体是哪条作品正文里写着
@@ -56,6 +58,8 @@ function whereText(project: ReviewNextScope): string {
 export function reviewNextActionLabel(action: ReviewNextAction, project?: ReviewNextScope | null): string {
   if (action === 'openProject') return project ? '回《' + clip(project.title) + '》这一版' : '去作品页'
   if (action === 'openFlow') return '打开工作流'
+  // 沉淀的是「这一段结构」，不是这条作品：按钮上不写作品名，免得像在复制作品
+  if (action === 'saveTemplate') return '存成模板'
   return '去作品流'
 }
 
@@ -99,11 +103,19 @@ export function reviewNextPlan(input: ReviewNextInput): ReviewNextPlan {
 
   if (input.verdict === 'pass') {
     const more = fixes > 0 ? '另有 ' + fixes + ' 条建议，想再打磨也可以改完再评一次。' : ''
+    // 沉淀模板只在这一版真有脚本、真有分镜时才给（服务端判断）：评通过的那一刻，
+    // 这段结构正好值得留在库里，下一条作品从它开始——这是主线的最后一站。
+    const sink = input.templatable === true
+      ? '想留成下一条的底子，现在就能把这一版存成模板。'
+      : ''
+    const passActions: ReviewNextAction[] = input.templatable === true
+      ? flow ? ['openProject', 'saveTemplate', 'openFlow'] : ['openProject', 'saveTemplate']
+      : actions
     return {
       tone: 'pass',
       title: '这一版可以往交付走',
-      copy: where + '这次没查出必须先解决的问题。确认这一版、封成交付包都在作品页。' + more,
-      actions,
+      copy: where + '这次没查出必须先解决的问题。确认这一版、封成交付包都在作品页。' + more + sink,
+      actions: passActions,
     }
   }
 

@@ -84,6 +84,40 @@ test('按钮字：回作品带作品名，太长按字数截断，其余两个�
   assert.equal(reviewNextActionLabel('openProjects', project), '去作品流')
 })
 
+// ---- 沉淀模板（r252）：评通过那一刻，这段结构正好值得留在库里 ----
+
+test('通过、且这一版真有脚本与分镜：多一个「存成模板」，排在作品后面、工作流前面', () => {
+  const plan = reviewNextPlan({ verdict: 'pass', project: withFlow, templatable: true })
+  assert.deepEqual(plan.actions, ['openProject', 'saveTemplate', 'openFlow'])
+  assert.equal(plan.copy.endsWith('想留成下一条的底子，现在就能把这一版存成模板。'), true)
+  // 没接工作流时也一样给：沉淀模板与工作流无关
+  assert.deepEqual(reviewNextPlan({ verdict: 'pass', project, templatable: true }).actions, ['openProject', 'saveTemplate'])
+})
+
+test('存不成模板的那一版（没脚本 / 没分镜）：正文不多写一句，按钮也不给', () => {
+  const plan = reviewNextPlan({ verdict: 'pass', project, templatable: false })
+  assert.deepEqual(plan.actions, ['openProject'])
+  assert.equal(plan.copy.includes('存成模板'), false)
+  // 服务端没给这个字段（老记录、单独评一张图）：按「不能存」处理，不猜成能存
+  assert.equal(reviewNextPlan({ verdict: 'pass', project }).copy.includes('存成模板'), false)
+})
+
+test('不通过、需人工确认：即使能存成模板也不给这个出口——沉淀的是评过的那一版', () => {
+  assert.deepEqual(reviewNextPlan({ verdict: 'fail', project, issues, templatable: true }).actions, ['openProject'])
+  assert.deepEqual(reviewNextPlan({ verdict: 'needs_review', project, issues, templatable: true }).actions, ['openProject'])
+})
+
+test('回头看的旧记录：只读，能存也不给「存成模板」', () => {
+  const plan = reviewNextPlan({ verdict: 'pass', project, history: true, templatable: true })
+  assert.deepEqual(plan.actions, ['openProject'])
+  assert.equal(plan.copy.includes('存成模板'), false)
+})
+
+test('按钮字：存成模板不写作品名（沉淀的是结构，不是把作品复制一份）', () => {
+  assert.equal(reviewNextActionLabel('saveTemplate', project), '存成模板')
+  assert.equal(reviewNextActionLabel('saveTemplate', null), '存成模板')
+})
+
 test('三种结论的语气分开：通过往交付走，另外两种都还要动手', () => {
   assert.equal(reviewNextPlan({ verdict: 'pass', project }).tone, 'pass')
   assert.equal(reviewNextPlan({ verdict: 'needs_review', project }).tone, 'fix')

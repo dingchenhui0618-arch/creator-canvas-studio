@@ -59,6 +59,11 @@ export type ReviewResult = {
    */
   project?: { id: string; title: string; version: number; flowId?: string } | null
   version?: number
+  /**
+   * 这一版能不能直接沉淀成模板（r252）：服务端按「有脚本、有分镜」判断，与作品页那张卡片同一处。
+   * 为 false 时结果页不给「存成模板」这个出口——不给点了才报错的按钮。
+   */
+  templatable?: boolean
   credits?: { cost: number; balance: number | null }
   provider: string
   profile: string

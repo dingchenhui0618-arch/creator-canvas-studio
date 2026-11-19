@@ -15,7 +15,7 @@ import {
   revokeTemplateShare,
 } from '../api/radar'
 import { downloadTemplateMarkdown } from '../lib/templateExport'
-import { describeTiming, paceLabel } from '../domain/radar'
+import { describeTiming, paceLabel, templateReviewText } from '../domain/radar'
 import { readTemplatesView, writeTemplatesView, type TemplatesView } from '../domain/list-view'
 import type { MediaItem, ReplicaTemplate, ScriptBeat, StoryboardShot, TemplateSourceCount, TemplateSourceKey } from '../domain/radar'
 import { requestReview } from '../state/review'
@@ -561,6 +561,7 @@ export function TemplateLibraryPage({
                           : detail.kind === 'adapted' && detail.origin === 'project'
                             ? '来自作品《' + (detail.projectTitle || '已删的作品') + '》' +
                               (detail.projectVersion ? ' · 第 ' + detail.projectVersion + ' 版' : ' · 还没开工作流') +
+                              (templateReviewText(detail.review) ? ' · ' + templateReviewText(detail.review) : '') +
                               ' · ' + detail.structure.length + ' 段 · ' + detail.storyboard.length + ' 镜'
                             : (detail.author || '未知作者') + ' · ' + formatDuration(detail.durationSec)}
                       {' · 模板 ' + detail.id}
@@ -838,6 +839,7 @@ export function TemplateLibraryPage({
                           <span>
                             来自作品《{detail.projectTitle || '已删的作品'}》
                             {detail.projectVersion ? ' · 第 ' + detail.projectVersion + ' 版' : ' · 还没开工作流'}
+                            {templateReviewText(detail.review) ? ' · ' + templateReviewText(detail.review) : ''}
                             {' · 这一版的分镜不是原片，作者与互动数据不复制'}
                           </span>
                           {detail.projectId ? (

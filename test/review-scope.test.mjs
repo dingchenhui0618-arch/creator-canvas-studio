@@ -53,6 +53,25 @@ const mediaDir = path.join(config.dataDir, 'media')
 fs.mkdirSync(mediaDir, { recursive: true })
 fs.writeFileSync(path.join(mediaDir, 'shot.jpg'), Buffer.from('not-a-real-jpeg-but-small-enough'))
 
+// 一条有脚本、有分镜的模板：从它起的作品才做得出「存成模板」这件事（r252）
+fs.writeFileSync(path.join(config.dataDir, 'templates.json'), JSON.stringify([{
+  id: 'tpl_scope',
+  ownerId: '',
+  kind: 'replica',
+  origin: 'ai',
+  title: '能沉淀的模板',
+  contentType: '口播',
+  tags: [],
+  platform: 'douyin',
+  platformLabel: '抖音',
+  structure: [{ beat: '开场', startSec: 0, endSec: 3, voiceover: '第一句', onScreen: '三分钟' }],
+  storyboard: [{ shotNo: 1, startSec: 0, endSec: 3, visual: '杯子放下', camera: '近景', caption: '', audio: '', purpose: '', frameUrl: '' }],
+  video: { width: 1080, height: 1920, fps: 30, duration: 3 },
+  reuseCount: 0,
+  createdAt: '2026-11-19T00:00:00.000Z',
+  updatedAt: '2026-11-19T00:00:00.000Z',
+}], null, 2), 'utf8')
+
 const me = auth.createUser({ email: '[EMAIL:RS1]', password: 'Passw0rd!demo', name: '归属用例' })
 const cookie = auth.sessionCookie(auth.createSession(me, { userAgent: 'test', ip: '10.0.7.1' }).token).split(';')[0]
 
@@ -106,10 +125,29 @@ test('挂在作品上的评审：POST 响应带回作品、版次与那条工作
   assert.ok(result.payload.reviewId.length > 0)
 })
 
+// 沉淀模板（r252）：结果页要不要给「存成模板」，由服务端按「有脚本、有分镜」现算。
+// 前端不自己猜——判错的代价是一个点了就报错的按钮。
+test('从有脚本有分镜的模板起的作品：结论里带 templatable，结果页才给「存成模板」', async () => {
+  const project = await createProject({ title: '能沉淀的那条', templateId: 'tpl_scope' }, me)
+  const result = await postReview({ media: 'media/shot.jpg', intent: '沉淀验收', projectId: project.id })
+  assert.equal(result.status, 200, JSON.stringify(result.payload))
+  assert.equal(result.payload.templatable, true)
+  assert.equal(result.payload.project.id, project.id)
+})
+
+test('没有分镜的那条（只从工作流起）：templatable 为 false，不给那个按钮', async () => {
+  const project = await createProject({ title: '只从工作流起的', flowId: 'flow_bare_1' }, me)
+  const result = await postReview({ media: 'media/shot.jpg', intent: '沉淀验收', projectId: project.id })
+  assert.equal(result.status, 200, JSON.stringify(result.payload))
+  assert.equal(result.payload.templatable, false)
+})
+
 test('单独评一张画面：project 明确为 null，不靠「字段不在」让人猜', async () => {
   const result = await postReview({ media: 'media/shot.jpg', intent: '单独评一张' })
   assert.equal(result.status, 200, JSON.stringify(result.payload))
   assert.equal(Object.hasOwn(result.payload, 'project'), true)
   assert.equal(result.payload.project, null)
   assert.equal(result.payload.version, 0)
+  // 没挂作品就没有「这一版」，也就没有沉淀模板这回事
+  assert.equal(result.payload.templatable, false)
 })

@@ -72,5 +72,7 @@ export function projectTemplateReply({ template = null, project = null, script =
     beats: Array.isArray(template.structure) ? template.structure.length : 0,
     shots: Array.isArray(template.storyboard) ? template.storyboard.length : 0,
     scriptSource: String(script?.source || ''),
+    // 沉淀时那一版评过什么（r252）：没评过就是 null，界面据此写「评审通过」而不是编一个
+    review: template.review || null,
   }
 }

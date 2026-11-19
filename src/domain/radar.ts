@@ -202,6 +202,8 @@ export type ReplicaTemplate = {
   projectId?: string
   projectTitle?: string
   projectVersion?: number
+  /** origin === 'project' 时才有：沉淀那一刻这一版的评审结论（r252），没评过就是 null */
+  review?: { verdict: string; at: string; issueCount?: number } | null
   reuseCount: number
   /** 公共模板：运营放进来的示例，所有账号都看得见（ownerId 为空） */
   shared?: boolean
@@ -258,6 +260,19 @@ export type LibraryMark = {
 }
 
 /** 模板详情里「用这条模板的作品」那一行：够认出是哪条、走到哪一步 */
+/**
+ * 「这条模板是评过什么存下来的」（r252）。只在从作品沉淀的那条上有值：
+ * 模板讲的是结构，评审结论是它出生时的证据，两件事都要说清，但不混成一句话。
+ * 认不出的结论返回空字符串——不把没评过写成一种结论。
+ */
+export function templateReviewText(review?: { verdict?: string } | null): string {
+  const verdict = String(review?.verdict || '')
+  if (verdict === 'pass') return '评审通过'
+  if (verdict === 'needs_review') return '评审需人工确认'
+  if (verdict === 'fail') return '评审不通过'
+  return ''
+}
+
 export type TemplateProjectRef = {
   id: string
   title: string

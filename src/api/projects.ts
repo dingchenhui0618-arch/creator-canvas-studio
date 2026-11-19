@@ -262,6 +262,8 @@ export type ProjectTemplateSaveResult = {
     beats: number
     shots: number
     scriptSource: string
+    /** 沉淀时那一版的评审结论（r252）：没评过就是 null，界面据此写「评审通过」而不是编一个 */
+    review?: { verdict: string; at: string; issueCount?: number } | null
   }
   /** 这一版的脚本还是模板那份：界面要先把「存出来几乎一样」说出来 */
   sameAsTemplate: boolean

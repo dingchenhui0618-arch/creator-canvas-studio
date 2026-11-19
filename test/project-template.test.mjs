@@ -234,6 +234,27 @@ test('第二道闸：没有段落或没有分镜，落库函数自己也不写',
 })
 
 test('接口：POST /api/projects/<id>/template 存得住；别人的作品 404；GET 405', async () => {
+  // 沉淀时把这一版最近一次评审的结论一起记下来（r252）：模板库要能说清「它是评过什么存下来的」。
+  // 这里直接写一份评审记录，不走模型——测的是「读哪一条、怎么记」，不是评审本身。
+  fs.writeFileSync(path.join(dir, 'reviews.json'), JSON.stringify([{
+    id: 'rev_pf',
+    ownerId: 'u_a',
+    projectId: 'prj_follow',
+    version: 0,
+    intent: '沉淀前的那次评审',
+    source: { kind: 'template', label: '', media: 'media/a.jpg', imageUrl: '' },
+    credits: { cost: 1, balance: 10 },
+    result: {
+      verdict: 'pass',
+      summary: '可以发',
+      observations: [
+        { id: 'o1', dimension: '构图', severity: 'major', statement: '主体偏左', evidence: null, confidence: 0.8 },
+        { id: 'o2', dimension: '文字', severity: 'minor', statement: '副标题太小', evidence: null, confidence: 0.7 },
+      ],
+      fixes: [],
+    },
+    createdAt: '2026-11-19T01:00:00.000Z',
+  }], null, 2), 'utf8')
   const { createProjectsRouter } = await import('../server/routes/projects.mjs')
   const router = createProjectsRouter()
   const call = async (method, pathname, body) => {
@@ -272,6 +293,10 @@ test('接口：POST /api/projects/<id>/template 存得住；别人的作品 404�
   assert.equal(saved.body.template.beats, 3)
   assert.equal(saved.body.template.shots, 2)
   assert.equal(saved.body.sameAsTemplate, true, '脚本没改过，回执也要说实话')
+  // 沉淀时那一版评过什么：结论与问题数跟着模板走，界面据此写「评审通过」
+  assert.deepEqual(saved.body.template.review, { verdict: 'pass', at: '2026-11-19T01:00:00.000Z', issueCount: 2 })
+  const stored = readJson('templates.json').find((item) => item.id === saved.body.template.id)
+  assert.equal(stored.review.verdict, 'pass', '落库的模板自己也记着，不只在回执里')
 
   const rejected = await call('POST', '/api/projects/prj_bare_script/template', {})
   assert.equal(rejected.status, 400)

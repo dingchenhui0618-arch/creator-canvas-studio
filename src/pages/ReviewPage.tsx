@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { ArrowRight, ChevronDown, Clapperboard, Crosshair, FolderOpen, Hourglass, ImagePlus, Loader2, Play, RefreshCw, ScanEye, TriangleAlert, Workflow } from 'lucide-react'
+import { ArrowRight, ChevronDown, Clapperboard, Copy, Crosshair, FolderOpen, Hourglass, ImagePlus, Loader2, Play, RefreshCw, ScanEye, TriangleAlert, Workflow } from 'lucide-react'
 import { getReview, getReviewCandidates, getReviewQueue, getReviewStatus, listReviews, runReview, type JudgeResult, type ReviewCandidates, type ReviewResult, type ReviewStatus, type ReviewSummary } from '../api/review'
 import { getCredits, getModelService, recheckModelService, type CreditsResponse, type ModelServiceState } from '../api/credits'
 import { listTemplates, coverSrc } from '../api/radar'
 import { uploadRejection, uploadReviewImage } from '../api/media'
-import { getProject } from '../api/projects'
+import { getProject, saveProjectAsTemplate } from '../api/projects'
 import {
   ISSUE_LABEL,
   ISSUE_TONE,
@@ -48,6 +48,7 @@ function percent(value: number | null | undefined) {
 function NextIcon({ action }: { action: ReviewNextAction }) {
   if (action === 'openFlow') return <Workflow size={14} strokeWidth={1.75} />
   if (action === 'openProjects') return <Clapperboard size={14} strokeWidth={1.75} />
+  if (action === 'saveTemplate') return <Copy size={14} strokeWidth={1.75} />
   return <FolderOpen size={14} strokeWidth={1.75} />
 }
 
@@ -197,6 +198,10 @@ export default function ReviewPage({
   const startedRef = useRef(0)
   // 钉住锚点时把画面滚进视野（窄屏上问题行在画面下面）
   const canvasRef = useRef<HTMLDivElement | null>(null)
+  // 「存成模板」那一下的结果（r252）：按钮就地变成结果，不弹窗、不跳走——
+  // 人还站在这次评审的结论前面，做完这件事再看要不要回作品。
+  // id 记的是这条结果属于哪一次评审：换了一条结论就自然回到 idle，不用 effect 再 setState 一次。
+  const [tplSave, setTplSave] = useState<{ id: string; status: 'idle' | 'saving' | 'done' | 'error'; text: string }>({ id: '', status: 'idle', text: '' })
 
   useEffect(() => {
     if (!projectId) return
@@ -555,7 +560,8 @@ export default function ReviewPage({
     return null
   }, [openedId, openedScope, projectId, projectMeta, projectTitle, result])
 
-  // 评完之后往哪走：出口与文案都在 domain/review-next.ts，这里只把真实数字递进去
+  // 评完之后往哪走：出口与文案都在 domain/review-next.ts，这里只把真实数字递进去。
+  // 「能不能存成模板」那个 true/false 来自服务端（有脚本、有分镜），前端不自己猜。
   const reviewNext = useMemo(
     () => (result
       ? reviewNextPlan({
@@ -564,10 +570,38 @@ export default function ReviewPage({
           fixes: result.fixes?.length || 0,
           project: reviewScope,
           history: Boolean(openedId),
+          templatable: result.templatable === true,
         })
       : null),
     [openedId, result, reviewScope],
   )
+
+  // 换了一条结论（重评 / 打开另一条记录）：「存成模板」那一下的结果不能跟着带到下一条上
+  const reviewKey = result?.reviewId || ''
+  const tplState = tplSave.id === reviewKey ? tplSave : { id: '', status: 'idle' as const, text: '' }
+
+  /**
+   * 把这一版沉淀成模板（r252）：只写模板库新的一条，不动作品、不动它绑的模板。
+   * 服务端两道闸（没脚本 / 没分镜不落库）也会再拦一次，这里的错照原话说出来。
+   */
+  const saveTemplateNow = useCallback(async () => {
+    const id = reviewScope?.id
+    if (!id || tplState.status === 'saving') return
+    setTplSave({ id: reviewKey, status: 'saving', text: '' })
+    try {
+      const saved = await saveProjectAsTemplate(id)
+      const review = saved.template.review
+      const verdict = review ? VERDICT_LABEL[review.verdict] || '' : ''
+      setTplSave({
+        id: reviewKey,
+        status: 'done',
+        text: '已存成模板《' + saved.template.title + '》（' + saved.template.beats + ' 段 · ' + saved.template.shots + ' 镜' +
+          (verdict ? ' · 评审' + verdict : '') + '），在模板库里能查到。',
+      })
+    } catch (error) {
+      setTplSave({ id: reviewKey, status: 'error', text: error instanceof Error ? error.message : '存成模板没成功，稍后再试' })
+    }
+  }, [reviewScope, reviewKey, tplState.status])
 
   const handleReviewNext = (action: ReviewNextAction) => {
     if (action === 'openFlow') {
@@ -576,6 +610,10 @@ export default function ReviewPage({
     }
     if (action === 'openProject') {
       if (reviewScope?.id) onOpenProject?.(reviewScope.id)
+      return
+    }
+    if (action === 'saveTemplate') {
+      void saveTemplateNow()
       return
     }
     onOpenProjects?.()
@@ -1078,18 +1116,41 @@ export default function ReviewPage({
                     <p className="rv-next-copy">{reviewNext.copy}</p>
                   </div>
                   <div className="rv-next-actions">
-                    {reviewNext.actions.map((action, index) => (
-                      <button
-                        key={action}
-                        type="button"
-                        className={'vq-button ' + (index === 0 ? 'vq-button--primary' : 'vq-button--ghost') + ' vq-button--sm'}
-                        onClick={() => handleReviewNext(action)}
-                      >
-                        <NextIcon action={action} />
-                        {reviewNextActionLabel(action, reviewScope)}
-                      </button>
-                    ))}
+                    {reviewNext.actions.map((action, index) => {
+                      // 存成模板做完就不留一个照样能点的按钮：存档没有「再来一次」的意义
+                      if (action === 'saveTemplate') {
+                        if (tplState.status === 'done') return null
+                        return (
+                          <button
+                            key={action}
+                            type="button"
+                            className="vq-button vq-button--ghost vq-button--sm"
+                            onClick={() => handleReviewNext(action)}
+                            disabled={tplState.status === 'saving'}
+                          >
+                            <Copy size={14} strokeWidth={1.75} />
+                            {tplState.status === 'saving' ? '存模板中…' : tplState.status === 'error' ? '再存一次' : '存成模板'}
+                          </button>
+                        )
+                      }
+                      return (
+                        <button
+                          key={action}
+                          type="button"
+                          className={'vq-button ' + (index === 0 ? 'vq-button--primary' : 'vq-button--ghost') + ' vq-button--sm'}
+                          onClick={() => handleReviewNext(action)}
+                        >
+                          <NextIcon action={action} />
+                          {reviewNextActionLabel(action, reviewScope)}
+                        </button>
+                      )
+                    })}
                   </div>
+                  {tplState.text ? (
+                    <p className={'rv-next-note' + (tplState.status === 'error' ? ' is-bad' : '')} role="status">
+                      {tplState.text}
+                    </p>
+                  ) : null}
                 </section>
               ) : null}
 

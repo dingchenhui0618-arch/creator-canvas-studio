@@ -448,13 +448,31 @@ export async function createTemplateFromDraft({ draft, agent = null, user = null
   return template
 }
 
+/**
+ * 沉淀时这一版评过什么（r252）：模板库要能说清「这条是从一次评通过的版本存下来的」。
+ * 只留结论、时间与问题数，不留证据图与评审全文——模板讲的是结构，评审档案在作品页。
+ * 认不出的结论一律当「没评过」，不把空字符串写成一种结论。
+ */
+function reviewSnapshot(review) {
+  if (!review || typeof review !== 'object') return null
+  const verdict = String(review.verdict || '')
+  if (verdict !== 'pass' && verdict !== 'needs_review' && verdict !== 'fail') return null
+  const counted = Math.round(Number(review.issueCount) || 0)
+  const issues = review.issues && typeof review.issues === 'object' ? review.issues : null
+  return {
+    verdict,
+    at: String(review.at || ''),
+    issueCount: issues && Number.isFinite(Number(issues.counted)) ? Math.max(0, Math.round(Number(issues.counted))) : Math.max(0, counted),
+  }
+}
+
 // 作品「存成模板」：把做完的这一版沉淀回模板库，下一条作品从它开始。
 // 与「改编」共用同一套段 / 镜整理（同一处上限、同一套字段），区别只在来源与归属：
 //   - kind 仍是 adapted（它确实是以绑定模板为底改出来的），adaptedFrom 指向那条模板；
 //   - origin 标成 project，并记下是哪条作品的第几版——模板详情里能说清它从哪来；
 //   - 原片的作者、链接、互动数据与帧图一概不复制：那是那条视频的，不是这一版的。
 // 没有分镜就不落库（模板要能再被改编），判断在 server/project-template.mjs，这里只当第二道闸。
-export async function createTemplateFromProject({ source = null, project = null, script = null, title = '', user = null }) {
+export async function createTemplateFromProject({ source = null, project = null, script = null, title = '', user = null, review = null }) {
   if (!project) return null
   const beats = (Array.isArray(script?.structure) ? script.structure : []).slice(0, ADAPT_MAX_BEATS).map((beat, index) => ({
     startSec: Number(beat?.startSec) || index * 3,
@@ -506,6 +524,8 @@ export async function createTemplateFromProject({ source = null, project = null,
     analysis: null,
     frames: [],
     cover: '',
+    // 沉淀时那一版的评审结论（r252）：之后作品再重评也不改写这里，它记的是「存下来的那一刻」
+    review: reviewSnapshot(review),
     video: source?.video || { width: 0, height: 0, fps: 0, duration: 0 },
     reuseCount: 0,
     ownerId: user?.id || '',

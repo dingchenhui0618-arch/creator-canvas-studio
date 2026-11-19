@@ -11,7 +11,8 @@ import { currentUser, isAdmin } from '../auth.mjs'
 import { normalizeShotNo, shotFrameBlock } from '../project-shots.mjs'
 import { config } from '../config.mjs'
 import { createTemplateFromProject, getTemplate, listTemplates, reuseTemplate } from '../templates.mjs'
-import { projectTemplateReply, projectTemplateSpec } from '../project-template.mjs'
+import { projectTemplateReply } from '../project-template.mjs'
+import { projectTemplateReady } from '../project-template-ready.mjs'
 import { templateOrigin } from '../project-source.mjs'
 import { createFlow, getFlow, hasRunGraph, listRunsByFlows } from '../flows.mjs'
 import { normalizeProjectScript, scriptPace, scriptView } from '../project-script.mjs'
@@ -904,13 +905,16 @@ export function createProjectsRouter() {
       const templateFromPath = pathname.match(TEMPLATE_FROM)
       if (templateFromPath && req.method === 'POST') {
         const project = await getProject(templateFromPath[1], user)
-        const template = project?.templateId ? await getTemplate(project.templateId, user) : null
-        const script = project ? scriptView(project, template) : null
-        const spec = projectTemplateSpec({ project, template, script })
+        // 判断与评审页那个「存成模板」出口同一处（project-template-ready.mjs），两边不会各说一套
+        const { spec, script, template } = await projectTemplateReady(project, user)
         if (spec.status !== 200) {
           sendJson(res, spec.status, spec.body)
           return true
         }
+        // 沉淀时把这一版最近一次的评审结论一起记下来（r252）：模板库要能说清「这条是评过什么存下来的」。
+        // 口径与作品页状态胶囊、拍板一致（reviewsForVersion），不为这个数另算一套。
+        const counters = (await reviewCountsByProject(user))[project.id]
+        const latest = reviewsForVersion(counters?.versions || {}, Number(project.version) || 0)
         const body = await readBody(req)
         const saved = await createTemplateFromProject({
           source: template,
@@ -918,6 +922,7 @@ export function createProjectsRouter() {
           script: spec.body.script,
           title: String(body?.title || '').trim(),
           user,
+          review: { verdict: latest.lastVerdict, at: latest.lastAt, issues: latest.issues },
         })
         if (!saved) {
           sendJson(res, 409, {
