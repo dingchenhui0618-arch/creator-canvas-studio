@@ -1571,3 +1571,9 @@ toast「已按《毛衣折叠收纳法》的脚本开了工作流：2 个节点�
 没有脚本的作品点了会得到服务端 409 的原文；本轮 0 次真实上游调用（开工作流只建草稿，不跑节点、不扣积分）。
 
 文档见 docs/canvas-start-2026-11-19.md。
+
+生产 0.9.232（发布 20261119-000653-r249start，health ok templates 26、6 个服务 active、磁盘 73%、
+未登录 /api/projects 仍 401、入口 index-D4R-53t_.js 742,626 B、CanvasPage-BeSyRBZd.css 32,323 B
+（样式表里核到 .cv-start-row 4 处）与 CanvasPage-BWllnrGv.js（脚本里核到「从你手上的东西起手」）公网 200；
+回滚 --to 1 回 0.9.231，发布 20261118-232817-r248trim）。门禁 1648 / 1648 测试（新增 9 条）、
+lint 0 error / 26 warning（627 个文件）、tsc -b 干净、密钥扫描 973 个文件无命中。
