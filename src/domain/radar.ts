@@ -163,6 +163,8 @@ export type ReplicaTemplate = {
   kind: 'saved' | 'replica' | 'adapted' | 'flow' | 'agent'
   /** kind === 'adapted' 时才有：改编自哪条模板 */
   adaptedFrom?: string
+  /** 来源那条的标题（r254，详情接口现算）：找不到（被删 / 别人的）就是空串，界面写「另一条模板」 */
+  adaptedFromTitle?: string
   /** kind === 'agent' 时才有：这份草稿来自哪个对话预设 */
   agentId?: string
   agentName?: string

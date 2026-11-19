@@ -570,7 +570,9 @@ export function TemplateLibraryPage({
                               ' · ' + detail.structure.length + ' 段 · ' + detail.storyboard.length + ' 镜'
                             : (detail.author || '未知作者') + ' · ' + formatDuration(detail.durationSec)}
                       {' · 模板 ' + detail.id}
-                      {detail.kind === 'adapted' && detail.adaptedFrom ? ' · 改编自 ' + detail.adaptedFrom : ''}
+                      {detail.kind === 'adapted' && detail.adaptedFrom
+                        ? ' · 改编自' + (detail.adaptedFromTitle ? '《' + detail.adaptedFromTitle + '》' : '另一条模板')
+                        : ''}
                     </span>
                   </div>
                   <button className="vq-button vq-button--icon" onClick={closeDetail} aria-label="关闭"><X size={16} /></button>
@@ -863,7 +865,26 @@ export function TemplateLibraryPage({
                           ) : null}
                         </>
                       ) : detail.kind === 'adapted' ? (
-                        <span>改编自{detail.adaptedFrom ? '模板 ' + detail.adaptedFrom : '另一条模板'} · 原片的作者、链接与互动数据不复制</span>
+                        // 改编自谁（r254）：以前这里写的是「改编自模板 tpl_xxxxxxxx」，一串原始 id 谁也认不出；
+                        // 标题现算不出来（来源被删 / 不在当前账号下）就直说「另一条模板」，不摆一个死 id
+                        <>
+                          <span>
+                            {detail.adaptedFromTitle ? '改编自《' + detail.adaptedFromTitle + '》' : '改编自另一条模板'}
+                            {detail.adaptedFrom && !detail.adaptedFromTitle ? '（原来的那条已删除或不在当前账号下）' : ''}
+                            {' · 原片的作者、链接与互动数据不复制'}
+                          </span>
+                          {detail.adaptedFrom && detail.adaptedFromTitle ? (
+                            <button
+                              type="button"
+                              className="vq-button vq-button--ghost vq-button--sm"
+                              title={'打开来源模板：' + detail.adaptedFrom}
+                              onClick={() => onOpenTemplate?.(detail.adaptedFrom as string)}
+                              disabled={!onOpenTemplate}
+                            >
+                              <ArrowRight size={13} />打开这条模板
+                            </button>
+                          ) : null}
+                        </>
                       ) : (
                         <>
                           <span>

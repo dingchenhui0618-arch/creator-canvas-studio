@@ -72,6 +72,18 @@ export function parseTemplateSource(raw) {
   return known ? { source: known.key, unknown: '' } : { source: '', unknown: value }
 }
 
+/**
+ * 改编自谁（r254）：模板上只存了来源那条的 id，抽屉里直接写一个 `tpl_xxx` 谁看得懂。
+ * 只在「当前账号看得见的那份列表」里找标题——被删的、别人的、没授权的都找不到，
+ * 这时回空串让界面写「另一条模板」，既不假装查到了，也不把别人的模板标题漏出去。
+ */
+export function adaptedFromTitle(template, list = []) {
+  const from = String(template?.adaptedFrom || '')
+  if (!from) return ''
+  const source = list.find((item) => item && item.id === from)
+  return source ? String(source.title || '') : ''
+}
+
 export async function listTemplates({ q = '', contentType = '', platform = '', kind = '', source = '' } = {}, user = null) {
   const list = await loadAll()
   const keyword = q.trim()

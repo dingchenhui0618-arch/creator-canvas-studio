@@ -27,6 +27,7 @@ import {
   updateTemplate,
   templateStats,
   templateSource,
+  adaptedFromTitle,
   parseTemplateSource,
   TEMPLATE_SOURCES,
   saveTemplateFromItem,
@@ -1096,6 +1097,9 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, {
         ...template,
         source: templateSource(template),
+        // 「改编自 tpl_xxx」在抽屉里是一个原始 id（r254）：这里把来源那条的标题一起给出去，
+        // 找不到（被删 / 别人的）就回空串，界面写「另一条模板」
+        adaptedFromTitle: adaptedFromTitle(template, templates),
         ...templateWorksView(byTemplate.get(id) || []),
         footprint: originFootprint(templates, flattenTemplateWorks(byTemplate), template),
       })
