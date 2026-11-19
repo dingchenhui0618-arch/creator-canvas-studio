@@ -17,6 +17,7 @@ import {
   History,
   Layers,
   LayoutTemplate,
+  Maximize2,
   Pencil,
   Plus,
   RotateCcw,
@@ -547,6 +548,7 @@ function MediaComposer({
   onToast,
   handoff,
   onHandoffDone,
+  hidden,
 }: {
   kind: MediaKind
   catalog: MediaModel[]
@@ -556,6 +558,8 @@ function MediaComposer({
   /** 从作品流带过来的素材号：素材清单回来后挂进托架（r229） */
   handoff?: RefHandoff | null
   onHandoffDone?: () => void
+  /** 图片 / 视频两个面板都挂着、只隐藏：被隐藏的那一个不许把自己的浮层留在屏幕上（r260） */
+  hidden?: boolean
 }) {
   const image = kind === 'image'
   const [selected, setSelected] = useState<MediaSelection>({ model: '', mode: '', ratio: '', duration: 0, resolution: '' })
@@ -585,6 +589,10 @@ function MediaComposer({
   const recentPagedRef = useRef(false)
   const promptRef = useRef<HTMLTextAreaElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  // 点开看大图（r260）：1024×768 这种矮屏上结果区只剩 88px，1:1 的图只能看到中间一条，
+  // 又不想逼人先下载再看——整页浮层，图按视口缩放，Esc 关。
+  const [lightbox, setLightbox] = useState(false)
+  const lightboxCloseRef = useRef<HTMLButtonElement | null>(null)
 
   // 选中的东西都做「按当前模型规格兜底」：换模型后旧比例 / 旧时长不合法，渲染时自动落到新模型的默认值，
   // 不用在 effect 里回头改 state（那样容易写出渲染与状态打架的循环）。
@@ -734,6 +742,20 @@ function MediaComposer({
       window.clearTimeout(timer)
     }
   }, [pollTaskId])
+
+  // 浮层开着时：Esc 关、焦点落在关闭按钮上，键盘用户不至于卡在浮层里出不去
+  useEffect(() => {
+    if (!lightbox) return
+    lightboxCloseRef.current?.focus()
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setLightbox(false)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [lightbox])
 
   // 把一条已经落到服务端的素材挂进托架：换不换方式、放不放得下都按 domain/media-refs 的结论走。
   // 上传、从素材库挑、把生成结果当参考，三个入口共用这一段，规则不会各写一套。
@@ -905,6 +927,7 @@ function MediaComposer({
 
   const reset = () => {
     if (active) return
+    setLightbox(false)
     setTask(null)
     setError('')
     setPollError('')
@@ -1069,13 +1092,35 @@ function MediaComposer({
               </span>
             </div>
             {image ? (
-              <img className="agx-media-image" src={task.downloadUrl} alt={task.prompt} />
+              // 缩略图本身就是「看大图」的入口：看得见的地方点一下就放大，不用先下载
+              <button
+                type="button"
+                className="agx-media-zoom"
+                onClick={() => setLightbox(true)}
+                title="点开看大图（Esc 关闭）"
+                aria-label="点开看大图"
+              >
+                <img className="agx-media-image" src={task.downloadUrl} alt={task.prompt} />
+                <span className="agx-media-zoom-hint">
+                  <Maximize2 size={12} />
+                  看大图
+                </span>
+              </button>
             ) : (
               <video className="agx-media-video" src={task.downloadUrl} controls playsInline preload="metadata" />
             )}
             <div className="agx-media-result-foot">
               <span className="agx-mono">{task.id}</span>
               <span className="agx-media-result-actions">
+                <button
+                  type="button"
+                  className="vq-button vq-button--ghost"
+                  onClick={() => setLightbox(true)}
+                  title={image ? '整页看这张图（Esc 关闭）' : '整页看这条视频（Esc 关闭）'}
+                >
+                  <Maximize2 size={13} />
+                  {image ? '看大图' : '放大看'}
+                </button>
                 {/* 刚生成出来的这张图 / 这条视频，下一步通常就是拿它接着改或当首帧：给一个直接入口 */}
                 <button
                   type="button"
@@ -1364,6 +1409,62 @@ function MediaComposer({
       </div>
 
       </div>
+      {lightbox && !hidden && task?.status === 'succeeded' ? (
+        // 整页浮层：图按视口缩放，不让 340px 的缩略图上限限制「看清楚」这件事
+        <div
+          className="agx-lightbox"
+          role="dialog"
+          aria-modal="true"
+          aria-label={image ? '查看大图' : '查看视频'}
+          onClick={() => setLightbox(false)}
+        >
+          <figure className="agx-lightbox-card" onClick={(event) => event.stopPropagation()}>
+            <div className="agx-lightbox-head">
+              <span>
+                {image ? '生成结果' : '生成的视频'} · {formatBytes(task.file?.bytes ?? 0)}
+              </span>
+              <button
+                ref={lightboxCloseRef}
+                type="button"
+                className="agx-lightbox-close"
+                onClick={() => setLightbox(false)}
+                aria-label="关闭"
+                title="关闭（Esc）"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className={'agx-lightbox-stage' + (image ? '' : ' is-video')}>
+              {image ? (
+                <img src={task.downloadUrl} alt={task.prompt} />
+              ) : (
+                <video src={task.downloadUrl} controls playsInline preload="metadata" />
+              )}
+            </div>
+            <figcaption className="agx-lightbox-caption">
+              <p>{task.prompt}</p>
+              <div className="agx-lightbox-actions">
+                <a className="vq-button vq-button--ghost" href={task.downloadUrl} download>
+                  <Download size={13} />
+                  下载{image ? '原图' : '视频'}
+                </a>
+                <button
+                  type="button"
+                  className="vq-button vq-button--ghost"
+                  onClick={() => void addTaskResultAsRef(task)}
+                  disabled={Boolean(refBusyId)}
+                >
+                  <Plus size={13} />
+                  {refBusyId === task.id ? '加入参考中…' : '用作参考'}
+                </button>
+                <button type="button" className="vq-button vq-button--ghost" onClick={() => setLightbox(false)}>
+                  关闭
+                </button>
+              </div>
+            </figcaption>
+          </figure>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -2509,6 +2610,7 @@ export function AgentsPage({
                 <div className="agx-media-panel" key={mode} hidden={composerMode !== mode}>
                   <MediaComposer
                     kind={mode}
+                    hidden={composerMode !== mode}
                     catalog={mediaModels?.[mode] ?? []}
                     defaultModel={mediaModels?.defaults[mode] ?? ''}
                     handoff={pendingRef && pendingRef.kind === mode ? pendingRef : null}

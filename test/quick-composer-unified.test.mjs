@@ -7,7 +7,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 const ROOT = path.resolve(import.meta.dirname, '..')
-const css = fs.readFileSync(path.join(ROOT, 'src', 'styles', 'agents.css'), 'utf8')
+// CSS 在 Windows 检出里是 CRLF：rules 里写多行选择器时先把换行统一成 LF 再匹配
+const css = fs.readFileSync(path.join(ROOT, 'src', 'styles', 'agents.css'), 'utf8').replace(/\r\n/g, '\n')
 const page = fs.readFileSync(path.join(ROOT, 'src', 'pages', 'AgentsPage.tsx'), 'utf8')
 
 // 只认行首那条规则（允许缩进）：同一段选择器可能是别处的后缀（.agx-page--platform .qc-root）
@@ -77,6 +78,28 @@ test('工作流不再占页签：只在页签右边留一条入口（r257）', (
   // 挂在这条作品上的那条流程优先，其次进流程列表：入口写清「几条 / 在帮谁」
   assert.ok(page.includes('flow.project?.id === projectContext.id'), '入口没有认「在帮哪条作品」')
   assert.ok(page.includes("'工作流 · ' + list.length + ' 条'"), '入口上没有流程条数')
+})
+
+test('结果区点开看大图（r260）：矮屏上 1:1 的图不再只能看见一条', () => {
+  // 缩略图本身是入口，另外结果卡动作栏里还有一个明确的「看大图 / 放大看」
+  assert.ok(page.includes('agx-media-zoom'), '缩略图不是「看大图」的入口')
+  assert.ok(page.includes('agx-lightbox'), '没有看大图的浮层')
+  assert.ok(page.includes("lightbox && !hidden && task?.status === 'succeeded'"), '浮层没有只对成功结果开，或被隐藏的面板还会把浮层留在屏幕上')
+  assert.match(page, /role="dialog"/)
+  assert.match(page, /aria-modal="true"/)
+  assert.ok(page.includes("event.key === 'Escape'"), 'Esc 关不掉浮层')
+  // 关掉浮层的三个出口：叉、关闭按钮、Esc；「再生成 / 清掉结果」也要顺手带上
+  assert.match(page, /const reset = \(\) => \{\s*if \(active\) return\s*setLightbox\(false\)/)
+  // 浮层必须是整页固定层，压过窄屏历史弹层（z-index 60）
+  const box = rule(css, '.agx-lightbox')
+  assert.match(box, /position: fixed/)
+  assert.match(box, /inset: 0/)
+  assert.match(box, /z-index: 70/)
+  // 缩略图仍卡 340px；浮层里的图按视口缩放，不带这个上限
+  assert.match(rule(css, '.agx-media-image,\n.agx-media-video'), /max-height: 340px/)
+  // 必须是具体数值：在「高度由内容决定」的弹性盒里，百分比 max-height 会退化成 none
+  assert.match(rule(css, '.agx-lightbox-stage img,\n.agx-lightbox-stage video'), /max-height: calc\(100vh - 208px\)/)
+  assert.ok(!/agx-lightbox-stage img[^{]*\{[^}]*340px/.test(css), '浮层里的图还受缩略图上限管')
 })
 
 test('平台对话铺满一屏：只有线程滚，输入卡不出屏幕（r257）', () => {
