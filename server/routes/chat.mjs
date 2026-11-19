@@ -5,7 +5,7 @@ import { createConversation, deleteConversation, getConversation, listConversati
 import { sendChatMessage, streamChatMessage } from '../chat.mjs'
 import { CHAT_FILE_LIMITS, deleteChatFile, listChatFiles, publicChatFile, readChatFile, readChatFileBytes, saveChatFile } from '../chat-files.mjs'
 import { readBinaryBody } from '../body-reader.mjs'
-import { refusalResponse } from '../public-error.mjs'
+import { publicError, refusalResponse } from '../public-error.mjs'
 import { searchView } from '../web-search.mjs'
 
 // 会话 / 消息 / 流式三条路径：最后一段 stream 是可选的（r217）
@@ -215,7 +215,8 @@ export function createChatRouter() {
           sseWrite(res, 'error', {
             ok: false,
             code: error?.code || 'CHAT_UPSTREAM',
-            error: error?.message || '这次没有回上来',
+            // 流式与非流式同一套口径（r263）：上游英文报文、模型型号、平台配置名都不原样交给用户
+            error: publicError(error, '这次没有回上来'),
             ...(error?.stopped ? { stopped: true } : {}),
             ...(error?.balance != null ? { balance: error.balance } : {}),
             ...(error?.needed != null ? { needed: error.needed } : {}),
@@ -236,7 +237,7 @@ export function createChatRouter() {
           sendJson(res, error?.status || 502, {
             ok: false,
             code: error?.code || 'CHAT_UPSTREAM',
-            error: error?.message || '这次没有回上来',
+            error: publicError(error, '这次没有回上来'),
             ...(error?.detail ? { detail: error.detail } : {}),
             ...(error?.balance != null ? { balance: error.balance } : {}),
             ...(error?.needed != null ? { needed: error.needed } : {}),

@@ -63,6 +63,7 @@ import type { RefKind } from '../domain/media-refs'
 import type { MediaAsset, MediaKind, MediaModel, MediaModelList, MediaTask } from '../api/media-gen'
 import { getCredits, getModelService, recheckModelService, type CreditsResponse, type ModelServiceState } from '../api/credits'
 import { getProject, listProjects } from '../api/projects'
+import { safeFetch } from '../api/client'
 import type { ProjectSummary } from '../domain/project'
 import { getPreferences } from '../api/preferences'
 import { useUiMode } from '../api/app'
@@ -910,7 +911,7 @@ function MediaComposer({
     }
     setRefBusyId(item.id)
     try {
-      const response = await fetch(item.downloadUrl, { credentials: 'same-origin' })
+      const response = await safeFetch(item.downloadUrl, { credentials: 'same-origin' })
       if (!response.ok) throw new Error('取回这条结果失败（HTTP ' + response.status + '）')
       const blob = await response.blob()
       const type = blob.type || item.file?.mime || (kind === 'video' ? 'video/mp4' : 'image/png')

@@ -1,7 +1,8 @@
+import { safeFetch } from './client'
 import type { LibraryMark, MediaItem, ReplicaTemplate, ReplicateJob, SearchHistoryEntry, SearchResult, SharedTemplate, TakenOrigins, TemplateList } from '../domain/radar'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...init })
+  const response = await safeFetch(path, { headers: { 'Content-Type': 'application/json' }, ...init })
   const text = await response.text()
   let json: unknown = null
   try { json = text ? JSON.parse(text) : null } catch { json = null }

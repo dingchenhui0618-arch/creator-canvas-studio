@@ -46,6 +46,11 @@ export function publicError(error, fallback = '服务暂时不可用，请稍后
   if (/ETIMEDOUT|fetch failed|timed out|ECONNREFUSED|EAI_AGAIN/i.test(raw)) {
     return '模型服务连接超时，请稍后重试'
   }
+  // 配置类报错（模型凭证、家目录 token、.env、服务进程名）是写给运维的（r263）：
+  // 用户看到「VISION_API_KEY」既改不了也不该知道；给一句结论，原文留在服务端日志。
+  if (/VISION_[A-Z_]+|OpenCodex|~\/\.codex|\.env\b/.test(raw)) {
+    return '模型服务没有配置好：这次不计费，请联系管理员'
+  }
   const cleaned = raw
     .replace(MODEL_NAME, '模型服务')
     .replace(/https?:\/\/\S+/g, '')

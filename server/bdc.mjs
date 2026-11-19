@@ -1,4 +1,4 @@
-import { config } from './config.mjs'
+import { config, internalMode } from './config.mjs'
 
 // BD Canvas 探活：BD Canvas 是 Source-Available 项目，源码不随本仓库分发，
 // 只在本机部署后通过 127.0.0.1:6677（网页入口）/ 5313（后台管理）访问。
@@ -62,12 +62,15 @@ async function canvasFetch(url, init = {}) {
 // 无限画布服务（本机 5312）没起来时，fetch 抛的是英文的「fetch failed」/ECONNREFUSED，
 // 界面上会原样出现「无限画布列表：fetch failed」——这不是给用户看的话（v0.9.42）。
 // 翻成一句能行动的中文；原始那串留在 detail 里给排障用，不丢线索。
-export function canvasErrorMessage(error) {
+export function canvasErrorMessage(error, { internal = internalMode() } = {}) {
   const raw = String(error?.message || error || '') || '未知错误'
   if (!/fetch failed|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|socket hang up|aborted|timeout/i.test(raw)) {
     return raw.slice(0, 160)
   }
-  return '无限画布服务没有连上（本机 5312）：作品、模板、评审、交付都不受影响；稍后刷新，或确认无限画布服务已启动。'
+  // 端口号与「去启动服务」只对开发/运维有意义（v0.9.246）：用户没有那台机器上的 shell，
+  // 告诉他 5312 只会变成一句看不懂的报错。内部环境仍保留可排障的原话。
+  if (internal) return '无限画布服务没有连上（本机 5312）：作品、模板、评审、交付都不受影响；稍后刷新，或确认无限画布服务已启动。'
+  return '无限画布暂时连不上：作品、模板、评审、交付都不受影响；过一会儿刷新再试。'
 }
 
 function canvasName(raw) {

@@ -183,7 +183,7 @@ test('界面：最近生成与结果卡都能「用作参考」，且走同一�
   assert.ok(page.includes('const addTaskResultAsRef = async (item: MediaTask) =>'))
   assert.equal(page.includes('useTaskAsReference'), false)
   // 取回结果字节 + 读元信息 + 走既有上传接口：不新增接口、不在前端扣积分
-  assert.ok(page.includes("await fetch(item.downloadUrl, { credentials: 'same-origin' })"))
+  assert.ok(page.includes("await safeFetch(item.downloadUrl, { credentials: 'same-origin' })"))
   assert.ok(page.includes('await uploadMediaAsset({ file, ...meta })'))
   assert.ok(page.includes('const attachAsset = (asset: MediaAsset)'))
   // 两处入口：最近生成每行一个，结果卡下面一个

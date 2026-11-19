@@ -1,4 +1,4 @@
-import { request } from './client'
+import { request, safeFetch } from './client'
 import type { FlowNodeKind, NodeConfig } from '../canvas/types'
 
 // 与 server/flows.mjs 的字段保持一一对应；服务端会丢弃 status / ms 等运行态字段。
@@ -403,7 +403,7 @@ export async function runFlowStream(
   /** 续跑（v0.9.102）：接着这条运行跑，只补没跑完的节点，只付没付过的那部分 */
   resumeOf = '',
 ): Promise<RunRecord> {
-  const response = await fetch('/api/flows/' + id + '/run', {
+  const response = await safeFetch('/api/flows/' + id + '/run', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

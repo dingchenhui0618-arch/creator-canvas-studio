@@ -113,7 +113,8 @@ test('作品卡：成品能「用作参考」和「下载」，两处入口（�
 test('作品卡：三种来源都能取回文件，而且只走自己的接口', () => {
   // 画布节点与工作流封面都在自己名下：一个走代理地址，一个走运行产物地址
   assert.ok(wall.includes("return item.previewUrl || item.thumbUrl || ''"))
-  assert.ok(wall.includes("fetch(url, { credentials: 'same-origin' })"))
+  // r263：统一走 safeFetch（网络失败翻成中文），但仍必须是带 cookie 的同源请求
+  assert.ok(wall.includes("safeFetch(url, { credentials: 'same-origin' })"))
   // 不发明新接口、不在前端扣积分、不打上游
   assert.equal(wall.includes('/api/media/generate'), false)
   assert.equal(wall.includes('/api/works/reuse'), false)

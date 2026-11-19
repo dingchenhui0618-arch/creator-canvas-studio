@@ -223,19 +223,28 @@ function upstreamErrorCode(text) {
  * 真因是 SeeAPI 的 invalid_idempotency_key（平台漏发幂等键），为此白查了一轮 Key。
  * 之后再被拒，看一眼 code 就知道该修哪：幂等键、模型名、额度还是凭证。
  */
-function friendlyUpstream(status, text) {
+export function friendlyUpstream(status, text) {
   const body = String(text || '')
   const code = upstreamErrorCode(body)
   const suffix = '（HTTP ' + (status || '?') + (code ? ' ' + code : '') + '）'
   // 幂等键要排在凭证前面：invalid_idempotency_key 里也带「invalid … key」，
   // 早先的宽匹配就是把它误报成「凭证无效」的。
   if (/invalid_idempotency_key|idempotency.?key/i.test(body)) return '上游要求带幂等键，平台这次没带上' + suffix
+  // 内容策略（r264）：2026-11-19 生产真调「生成一只橘猫」被上游 400 挡回，原文是
+  // 「the image we created may violate our content policies」——一张猫并没有违规，
+  // 这是上游自己的内容审核误判。以前一律写「上游拒绝了这次生成」，读起来像我们发错了参数；
+  // 单独说清楚「不是你操作的问题、换个说法再试、这次不计费」。
+  if (/content polic|safety system|moderation|content_policy|违规|内容政策/i.test(body)) {
+    return '上游按内容策略挡回了这次生成（不是你操作的问题，换个说法再试；这次不计费）' + suffix
+  }
   if (/^(invalid_api_key|invalid_token|unauthorized|forbidden|authentication_failed|permission_denied)$/i.test(code) || /invalid[_ ]?api[_ ]?key|unauthorized|forbidden|凭证/i.test(body)) return '上游凭证无效' + suffix
   if (/insufficient|quota|balance|余额|额度/i.test(body)) return '上游额度不足' + suffix
   if (/rate.?limit|429|too many requests/i.test(body)) return '上游限流' + suffix
   if (/provider_submit_outcome_unknown|outcome_unknown/i.test(code)) return '上游接单了但没确认结果' + suffix
   if (/model_not_found|invalid_model|does not exist|unserved/i.test(body)) return '上游不认识这个模型名' + suffix
-  if (status >= 500) return '上游暂不可用' + suffix
+  // 5xx（2026-11-19 生产实测 GeteAPI 连续三次 500 do_request_failed）：让用户知道该等一会儿再点，
+  // 而不是怀疑自己填错了提示词。积分会全额退回，界面另外会说退款。
+  if (status >= 500) return '上游暂不可用，过几分钟再点一次' + suffix
   return '上游拒绝了这次生成' + suffix
 }
 

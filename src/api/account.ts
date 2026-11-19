@@ -1,5 +1,5 @@
 // 账号自助：导出自己的全部数据、注销账号。两个动作都只作用于当前登录账号。
-import { request } from './client'
+import { request, safeFetch } from './client'
 
 export type AccountExport = {
   format: string
@@ -18,7 +18,7 @@ export type AccountExport = {
  * 走 fetch 而不是 <a href>，因为要带会话 cookie 并读出文件名；服务端返回的是附件。
  */
 export async function downloadAccountExport(): Promise<{ name: string; bytes: number }> {
-  const response = await fetch('/api/account/export', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+  const response = await safeFetch('/api/account/export', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
   if (!response.ok) {
     const text = await response.text()
     let message = '导出失败（HTTP ' + response.status + '）'

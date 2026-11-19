@@ -461,7 +461,19 @@ async function refreshVideo(task) {
       task.updatedAt = task.finishedAt
       task.warning = ''
     } catch (error) {
-      await settleFailure(task, '上游已出片，但保存文件失败：' + failureText(error))
+      // 取回文件失败要说得清楚（r264）：上游已经出片（钱花掉了），我们这边拿回来时网络抖了。
+      // 已重试过就是「重试也没拿回来」，这时候全额退回积分并让用户再点一次，而不是留一句英文原始错误。
+      const tries = Number(error?.attempts || 1)
+      const detail = failureText(error)
+      const head = error?.cert
+        ? '上游已出片，但它给的下载地址证书对不上（上游 CDN 配置问题，不是你的操作）'
+        : '上游已出片，但取回文件失败（试了 ' + tries + ' 次）'
+      await settleFailure(
+        task,
+        error?.cert
+          ? head + '：这次已全额退回积分，请稍后再生成一次'
+          : head + '：这次已全额退回积分，稍后重新生成一次；' + detail,
+      )
     }
     return
   }

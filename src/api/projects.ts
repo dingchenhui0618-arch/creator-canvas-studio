@@ -1,4 +1,4 @@
-import { request } from './client'
+import { request, safeFetch } from './client'
 import type {
   DeliveryLedger,
   DeliveryReceiptResult,
@@ -285,7 +285,7 @@ const tzOffset = () => String(-new Date().getTimezoneOffset())
  * 交付稿与交付包走同一段逻辑——两边的错误文案、文件名解析不该各写一份。
  */
 async function downloadFrom(endpoint: string, fallbackName: string): Promise<{ name: string; bytes: number }> {
-  const response = await fetch(endpoint, { credentials: 'same-origin' })
+  const response = await safeFetch(endpoint, { credentials: 'same-origin' })
   if (!response.ok) {
     const text = await response.text()
     let message = '导出没有成功（HTTP ' + response.status + '）'

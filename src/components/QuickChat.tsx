@@ -12,6 +12,7 @@ import {
 } from '../api/chat'
 import type { ChatConversation, ChatFile, ChatSearchStatus, ChatSummary, ChatToolOptions } from '../api/chat'
 import { getCredits } from '../api/credits'
+import { safeFetch } from '../api/client'
 import { renderMarkdown } from '../lib/markdown'
 import { markdownPlainText } from '../lib/markdown-parse'
 
@@ -227,7 +228,7 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
   // 点附件名看原文：解析错了（比如 PDF 只读到半页）用户得能自己看见，而不是只信平台的说法
   const openPreview = useCallback(async (id: string, name: string) => {
     try {
-      const response = await fetch('/api/chat/files/' + id)
+      const response = await safeFetch('/api/chat/files/' + id)
       const body = (await response.json()) as { ok?: boolean; file?: ChatFile; text?: string; error?: string }
       if (!response.ok || !body?.file) throw new Error(body?.error || 'HTTP ' + response.status)
       setPreview({

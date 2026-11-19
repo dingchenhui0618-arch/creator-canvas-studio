@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Clapperboard, Download, Image as ImageIcon, Loader2, Play, Workflow } from 'lucide-react'
 import MediaLightbox from './MediaLightbox'
 import { listWorks, type WorkItem } from '../api/works'
+import { safeFetch } from '../api/client'
 import { listMediaAssets, uploadMediaAsset } from '../api/media-gen'
 import type { MediaAsset } from '../api/media-gen'
 import { probeMediaFile } from '../domain/media-file'
@@ -107,7 +108,7 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
   const fetchWork = async (item: WorkItem): Promise<{ blob: Blob; type: string }> => {
     const url = mediaUrl(item)
     if (!url) throw new Error('这条作品没有可取的文件')
-    const response = await fetch(url, { credentials: 'same-origin' })
+    const response = await safeFetch(url, { credentials: 'same-origin' })
     if (!response.ok) throw new Error('取回这条作品失败（HTTP ' + response.status + '）')
     const blob = await response.blob()
     return { blob, type: blob.type || (workKind(item) === 'video' ? 'video/mp4' : 'image/png') }

@@ -1,4 +1,4 @@
-import { config, visionEnabled } from './config.mjs'
+import { config, internalMode, visionEnabled } from './config.mjs'
 import { AGENT_TOOLS } from './agents.mjs'
 import { listTemplates } from './templates.mjs'
 import { listFlows } from './flows.mjs'
@@ -33,12 +33,49 @@ function chatError(code, httpStatus, message, extra = {}) {
   return Object.assign(new Error(message), { code, httpStatus, ...extra })
 }
 
+// 出错文案分两套，和「失败详情只在内部环境显示」同一口径（v0.9.246）：
+// 用户侧只说发生了什么、下一步做什么；.env、Key 名、本机端口这些排障线索只在内部环境出现——
+// 普通账号没有 .env，也没有权限重启服务，把排障步骤写给他看只会更慌。
+export function chatErrorCopy(kind, { internal = internalMode(), detail = '' } = {}) {
+  const dev = Boolean(internal)
+  switch (kind) {
+    case 'no_model':
+      return dev
+        ? { message: '服务端没有可用的模型凭证，无法调用本地模型', suggestion: '在项目 .env 里配置 VISION_API_KEY，或确认本机 ~/.codex/auth.json 存在；配置后需要重启 API。' }
+        : { message: '平台现在没有可用的对话模型，这一条没有发出去', suggestion: '联系管理员开通对话模型；其它功能不受影响。' }
+    case 'no_candidates':
+      return dev
+        ? { message: '没有配置任何候选模型', suggestion: '在 .env 里设置 VISION_MODEL 与 VISION_FALLBACKS 后重启 API。' }
+        : { message: '平台现在没有可选的对话模型', suggestion: '稍后再试，或联系管理员补上可用模型。' }
+    case 'timeout':
+      return dev
+        ? { message: '模型调用超时：' + detail, suggestion: '缩短输入或换更快的模型；也可以调大 VISION_TIMEOUT_MS 后重试。' }
+        : { message: '模型这次没在时限内回完，这一条没有产出', suggestion: '把要求写短一点再试，或换一个更快的模型。' }
+    case 'network':
+      return dev
+        ? { message: '无法连接本地模型端点 ' + config.vision.baseUrl + '：' + detail, suggestion: '确认 OpenCodex 在 127.0.0.1:10100 运行，或检查 .env 里的 VISION_BASE_URL。' }
+        : { message: '连不上模型服务，这一条没有发出去', suggestion: '稍后重试，或换一个模型；一直失败请告诉管理员。' }
+    case 'auth':
+      return { message: '', suggestion: dev ? '凭证无效或无权限：检查 .env 的 VISION_API_KEY，或本机 ~/.codex/auth.json 是否过期。' : '这个模型暂时用不了（平台侧的授权没过），换一个模型可以继续。' }
+    case 'not_found':
+      return { message: '', suggestion: dev ? '模型名不存在：访问 ' + config.vision.baseUrl + '/models 查看可用模型，再在对话页换一个模型。' : '这个模型暂时不在可选清单里，换一个模型再试。' }
+    case 'rate_limit':
+      return { message: '', suggestion: dev ? '上游限流：等待一会儿再重试，或在参数行换一个模型。' : '上游这会儿在限流，等一两分钟再试，或换一个模型。' }
+    case 'server':
+      return { message: '', suggestion: dev ? '上游模型服务异常：稍后重试，或换一个候选模型。' : '模型服务这次出错了，稍后重试或换一个模型。' }
+    case 'empty':
+      return { message: '', suggestion: dev ? '换一个模型重试；如果多次为空，检查 OpenCodex 里该模型的可用状态。' : '再问一次，或换一个模型重试。' }
+    default:
+      return { message: '', suggestion: dev ? '检查请求参数（模型名、温度、max_tokens）后重试。' : '再试一次；连续失败请联系管理员。' }
+  }
+}
+
 function upstreamStatusSuggestion(status) {
-  if (status === 401 || status === 403) return '凭证无效或无权限：检查 .env 的 VISION_API_KEY，或本机 ~/.codex/auth.json 是否过期。'
-  if (status === 404) return '模型名不存在：访问 ' + config.vision.baseUrl + '/models 查看可用模型，再在对话页换一个模型。'
-  if (status === 429) return '上游限流：等待一会儿再重试，或在参数行换一个模型。'
-  if (status >= 500) return '上游模型服务异常：稍后重试，或换一个候选模型。'
-  return '检查请求参数（模型名、温度、max_tokens）后重试。'
+  if (status === 401 || status === 403) return chatErrorCopy('auth').suggestion
+  if (status === 404) return chatErrorCopy('not_found').suggestion
+  if (status === 429) return chatErrorCopy('rate_limit').suggestion
+  if (status >= 500) return chatErrorCopy('server').suggestion
+  return chatErrorCopy('generic').suggestion
 }
 
 function upstreamCode(status) {
@@ -52,22 +89,17 @@ function upstreamCode(status) {
 function translateUpstreamError(error, attempted) {
   const message = String(error?.message || error)
   if (error?.code === 'NO_MODEL') {
-    return chatError('NO_MODEL', 503, message, {
-      suggestion: '在项目 .env 里配置 VISION_API_KEY，或确认本机 ~/.codex/auth.json 存在；配置后需要重启 API。',
-      attempted,
-    })
+    const copy = chatErrorCopy('no_model')
+    // 生产口径连 message 也换掉：llm.mjs 的原文写着 VISION_API_KEY 与 OpenCodex，这是给运维看的
+    return chatError('NO_MODEL', 503, internalMode() ? message : copy.message, { suggestion: copy.suggestion, attempted })
   }
   if (error?.name === 'AbortError' || /abort|timed? ?out|超时/i.test(message)) {
-    return chatError('TIMEOUT', 504, '模型调用超时：' + message, {
-      suggestion: '缩短输入或换更快的模型；也可以调大 VISION_TIMEOUT_MS 后重试。',
-      attempted,
-    })
+    const copy = chatErrorCopy('timeout', { detail: message })
+    return chatError('TIMEOUT', 504, copy.message, { suggestion: copy.suggestion, attempted })
   }
   if (/fetch failed|ECONNREFUSED|ECONNRESET|ENOTFOUND|ENETUNREACH|network/i.test(message)) {
-    return chatError('NETWORK', 502, '无法连接本地模型端点 ' + config.vision.baseUrl + '：' + message, {
-      suggestion: '确认 OpenCodex 在 127.0.0.1:10100 运行，或检查 .env 里的 VISION_BASE_URL。',
-      attempted,
-    })
+    const copy = chatErrorCopy('network', { detail: message })
+    return chatError('NETWORK', 502, copy.message, { suggestion: copy.suggestion, attempted })
   }
   const statusMatch = message.match(/HTTP (\d{3})/)
   if (statusMatch) {
@@ -80,15 +112,9 @@ function translateUpstreamError(error, attempted) {
     })
   }
   if (/没有返回内容/.test(message)) {
-    return chatError('EMPTY', 502, message, {
-      suggestion: '换一个模型重试；如果多次为空，检查 OpenCodex 里该模型的可用状态。',
-      attempted,
-    })
+    return chatError('EMPTY', 502, message, { suggestion: chatErrorCopy('empty').suggestion, attempted })
   }
-  return chatError('UPSTREAM', 502, message, {
-    suggestion: '检查模型名与本地模型端点后重试。',
-    attempted,
-  })
+  return chatError('UPSTREAM', 502, message, { suggestion: chatErrorCopy('generic').suggestion, attempted })
 }
 
 // 会话记忆：只带最近几轮，换算成字符预算，避免多轮对话把上下文顶爆。
@@ -261,15 +287,13 @@ function buildMessages(agent, message, outputType, memory = [], toolContext = { 
 
 export async function chatWithAgent({ agent, message, outputType, model, history, user = null, log }) {
   if (!llmEnabled() || !visionEnabled()) {
-    throw chatError('NO_MODEL', 503, '服务端没有可用的模型凭证，无法调用本地模型', {
-      suggestion: '在项目 .env 里配置 VISION_API_KEY，或确认本机 ~/.codex/auth.json 存在；配置后需要重启 API。',
-    })
+    const copy = chatErrorCopy('no_model')
+    throw chatError('NO_MODEL', 503, copy.message, { suggestion: copy.suggestion })
   }
   const candidates = modelCandidates(model)
   if (!candidates.length) {
-    throw chatError('NO_MODEL', 503, '没有配置任何候选模型', {
-      suggestion: '在 .env 里设置 VISION_MODEL 与 VISION_FALLBACKS 后重启 API。',
-    })
+    const copy = chatErrorCopy('no_candidates')
+    throw chatError('NO_MODEL', 503, copy.message, { suggestion: copy.suggestion })
   }
   const toolContext = await collectToolContext(agent, user, message)
   const memory = normalizeMemory(history)

@@ -1,5 +1,5 @@
 // 快捷创作对话（r214）：会话与消息都在服务端，关页面回来还在。
-import { request } from './client'
+import { request, safeFetch } from './client'
 
 export type ChatToolOptions = { search: boolean; readUrl: boolean; thinking: boolean }
 
@@ -120,7 +120,7 @@ export async function streamChatMessage(
   body: { content: string; tools?: Partial<ChatToolOptions>; files?: string[] },
   handlers: { onDelta?: (text: string) => void; signal?: AbortSignal } = {},
 ): Promise<ChatStreamResult> {
-  const response = await fetch('/api/chat/conversations/' + id + '/messages/stream', {
+  const response = await safeFetch('/api/chat/conversations/' + id + '/messages/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
     body: JSON.stringify(body),
@@ -228,7 +228,7 @@ export async function uploadChatFile(file: File): Promise<ChatFile> {
   } catch {
     name = 'file'
   }
-  const response = await fetch('/api/chat/files', {
+  const response = await safeFetch('/api/chat/files', {
     method: 'POST',
     headers: { 'Content-Type': 'application/octet-stream', 'x-file-name': name },
     body: file,
