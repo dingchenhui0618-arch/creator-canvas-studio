@@ -41,6 +41,7 @@ import { runCreditsText, runResumeInfo, runSpentText, runStatusMeta } from '../d
 import { diffRunGraph, type RunGraphDiff } from '../domain/run-diff'
 import { flowStepPlan } from '../domain/flow-steps'
 import { canvasStartPlan, type CanvasStartItem, type CanvasStartPlan } from '../domain/canvas-start'
+import { runNextPlan, type RunNextAction, type RunNextPlan } from '../domain/run-next'
 import { useUiMode } from '../api/app'
 import { navigate, replaceRoute } from '../router'
 import { readSession } from '../auth/session'
@@ -1009,6 +1010,28 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
     }
   }, [applyFlow, running, toast])
 
+  // 跑完之后往哪走（r250）：运行结果抽屉底栏的出口。
+  // 送去评审 / 打开作品都按这次运行记下的作品走（RunRecord.project），不是当前这条工作流现猜。
+  const runNext = useMemo<RunNextPlan | null>(() => {
+    if (readOnly) return null
+    return runNextPlan({ record: runRecord, nodes: runNodes, running, flowId })
+  }, [flowId, readOnly, runRecord, runNodes, running])
+
+  const handleRunNext = useCallback((action: RunNextAction) => {
+    const project = runRecord?.project
+    if (action === 'review') {
+      if (!project) return
+      navigate({ kind: 'page', page: 'review', projectId: project.id })
+      return
+    }
+    if (action === 'openProject') {
+      if (!project) return
+      navigate({ kind: 'page', page: 'projects', projectId: project.id })
+      return
+    }
+    void saveAsTemplate()
+  }, [runRecord, saveAsTemplate])
+
   // 运行排队这段时间的秒表与名次（v0.9.96）：只在「点了运行、还没回来」时跑。
   // 第一次立刻问，别等一个轮询周期；排到了（position 变 null）就把条子收起来——
   // 后面是节点在跑，按钮改成「运行中 Ns」，和评审页同一套说法。
@@ -1760,6 +1783,8 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
         cancelled={runCancelled}
         onCancelQueue={readOnly ? undefined : cancelRunQueue}
         error={runError}
+        next={runNext}
+        onNext={handleRunNext}
         onClose={() => setDrawerOpen(false)}
         onSelectNode={focusNode}
       />

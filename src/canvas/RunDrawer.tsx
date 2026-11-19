@@ -1,8 +1,9 @@
-import { Check, CircleAlert, CircleDashed, CircleSlash, Loader, X } from 'lucide-react'
+import { Check, CircleAlert, CircleDashed, CircleSlash, ClipboardCheck, Copy, FolderOpen, Loader, X } from 'lucide-react'
 import { NODE_META } from './catalog'
 import type { RunNodeResult, RunRecord, RunResumePlan } from '../api/flows'
 import { useUiMode } from '../api/app'
 import { runCreditsText, runResumeInfo } from '../domain/run'
+import { runNextActionLabel, type RunNextAction, type RunNextPlan } from '../domain/run-next'
 import { Pill } from '../components/ui'
 
 type RunDrawerProps = {
@@ -31,6 +32,9 @@ type RunDrawerProps = {
   /** 排队时可以在这里退出（v0.9.97）：顶栏被抽屉盖住时，这个入口仍然够得着 */
   onCancelQueue?: () => void
   error: string
+  /** 跑完之后往哪走（r250）：底栏直接给出口，不用关掉抽屉自己找 */
+  next?: RunNextPlan | null
+  onNext?: (action: RunNextAction) => void
   onClose: () => void
   onSelectNode: (nodeId: string) => void
 }
@@ -77,7 +81,13 @@ function nodeOutputVideo(output: RunNodeResult['output']): string {
   return typeof url === 'string' ? url : ''
 }
 
-export function RunDrawer({ open, running, flowName, runId, total, nodes, record, resume = null, resumePlan = null, onResume, onRestart, queuedMs = 0, queue = null, queueElapsed = 0, cancelled = false, onCancelQueue, error, onClose, onSelectNode }: RunDrawerProps) {
+function NextIcon({ action }: { action: RunNextAction }) {
+  if (action === 'review') return <ClipboardCheck size={14} strokeWidth={1.75} />
+  if (action === 'saveTemplate') return <Copy size={14} />
+  return <FolderOpen size={14} />
+}
+
+export function RunDrawer({ open, running, flowName, runId, total, nodes, record, resume = null, resumePlan = null, onResume, onRestart, queuedMs = 0, queue = null, queueElapsed = 0, cancelled = false, onCancelQueue, error, next = null, onNext, onClose, onSelectNode }: RunDrawerProps) {
   const { internal } = useUiMode()
   const progress = total > 0 ? Math.round((nodes.length / total) * 100) : 0
   const recordedResume = runResumeInfo(resume || record)
@@ -242,10 +252,32 @@ export function RunDrawer({ open, running, flowName, runId, total, nodes, record
         )}
       </div>
 
-      <footer className="cv-drawer-foot">
-        <span>{internal ? '运行记录写入 data/runs.json' : '运行记录保存在你的账号下'}</span>
-        <span className="cv-mono">{internal ? 'GET /api/runs' : '最近一次运行'}</span>
-      </footer>
+      {next && onNext ? (
+        <footer className={'cv-next is-' + next.tone} aria-label="接下来">
+          <div className="cv-next-text">
+            <strong className="cv-next-title">{next.title}</strong>
+            <p className="cv-next-copy">{next.copy}</p>
+          </div>
+          <div className="cv-next-actions">
+            {next.actions.map((action, index) => (
+              <button
+                key={action}
+                className={'vq-button ' + (index === 0 ? 'vq-button--primary' : 'vq-button--ghost') + ' vq-button--sm'}
+                type="button"
+                onClick={() => onNext(action)}
+              >
+                <NextIcon action={action} />
+                {runNextActionLabel(action)}
+              </button>
+            ))}
+          </div>
+        </footer>
+      ) : (
+        <footer className="cv-drawer-foot">
+          <span>{internal ? '运行记录写入 data/runs.json' : '运行记录保存在你的账号下'}</span>
+          <span className="cv-mono">{internal ? 'GET /api/runs' : '最近一次运行'}</span>
+        </footer>
+      )}
     </aside>
   )
 }

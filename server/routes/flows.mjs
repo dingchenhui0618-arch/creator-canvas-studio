@@ -565,6 +565,10 @@ export function createFlowsRouter() {
           return true
         }
         const creditNote = paid.cost > 0 ? { cost: paid.cost } : null
+        // run-end 也要带上「这次跑的是哪条作品的哪一版」（r250）：只查一次索引，
+        // 运行中途改绑定本来就不会落到这条记录上。以前只有 /api/runs/:id 补这一项，
+        // 流式跑完那一刻抽屉拿不到作品，会把一条绑好的运行写成「还没挂到作品上」。
+        const runProject = runProjectRef(projectsByFlow(await listProjects(user)), flow.id)
         // 钱已经扣了：记录必须马上从「排队中」翻过来，否则进程此刻被杀，启动恢复会把它当没花钱的单撤掉
         await markRunStarted(runId)
         try {
@@ -588,7 +592,7 @@ export function createFlowsRouter() {
                 const withCredits = event.run?.credits
                   ? { ...event.run, credits: { ...event.run.credits, balance: balanceOf(user?.id) } }
                   : event.run
-                res.write(JSON.stringify({ ...event, run: withCredits }) + '\n')
+                res.write(JSON.stringify({ ...event, run: { ...withCredits, project: runProject } }) + '\n')
                 return
               }
               res.write(JSON.stringify(event) + '\n')
@@ -607,6 +611,7 @@ export function createFlowsRouter() {
           sendJson(res, 200, {
             ...run,
             credits: run.credits ? { ...run.credits, balance: balanceOf(user?.id) } : null,
+            project: runProject,
             ...(paid.queue ? { queue: paid.queue } : {}),
           })
         } catch (error) {

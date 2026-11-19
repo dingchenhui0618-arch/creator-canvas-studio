@@ -601,6 +601,26 @@
 .cv-run-final { margin-top: 16px; }
 .cv-run-final .cv-section-title { margin-bottom: 0; }
 .cv-drawer-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 16px; color: var(--faint); border-top: 1px solid var(--line); font-size: 13px; }
+/* 跑完之后（r250）：抽屉底栏直接写下一步。以前跑完这一屏只有逐节点结果，
+   用户看着结果不知道该点哪里，得关掉抽屉自己找——结果在哪，下一步就在哪。 */
+.cv-next { display: grid; gap: 8px; padding: 12px 16px; background: var(--surface-raised); border-top: 1px solid var(--line); }
+.cv-next-text { display: grid; gap: 4px; min-width: 0; }
+.cv-next-title { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+.cv-next.is-partial .cv-next-title,
+.cv-next.is-stopped .cv-next-title { color: var(--ink-soft); }
+.cv-next-copy { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.cv-next-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.cv-next-actions .vq-button { min-height: 40px; }
+@media (max-width: 760px) {
+  .cv-next-actions .vq-button { flex: 1 1 100%; }
+}
+/* 提示条要让开这块底栏（r250）：它固定在右下 24px，而抽屉底栏正好是新的下一步按钮。
+   不挪的话「运行完成 · 0.0s」会压住「打开作品」两三秒，那一瞬间点下去是点在提示条上。 */
+body:has(.cv-next) .vq-toast { bottom: 152px; }
+@media (max-width: 760px) {
+  body:has(.cv-next) .vq-toast { bottom: 264px; }
+}
+
 
 @keyframes cv-pulse {
   0%, 100% { opacity: 1; }
