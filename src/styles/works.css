@@ -41,7 +41,8 @@
   display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
 }
 .works-line { display:flex; align-items:center; justify-content:space-between; gap:8px; min-width:0; }
-.works-open { flex:none; border:0; background:none; padding:0; color:var(--muted); font-size: var(--text-2xs); cursor:pointer; }
+/* 看大图入口：字是 13px，但触控区给到 24px——它以前只有 19px 高，鼠标点得中、手指点不中（r262） */
+.works-open { flex:none; display:inline-flex; align-items:center; min-height:24px; border:0; background:none; padding:0; color:var(--muted); font-size: var(--text-2xs); cursor:pointer; }
 .works-open:hover { color:var(--ink); text-decoration:underline; }
 .works-title { margin:0; font-size:14px; line-height:1.45; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .works-time { flex:1; min-width:0; font-size: var(--text-2xs); color:var(--faint); font-family:var(--font-mono); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -50,17 +51,6 @@
   color:var(--muted); font-size: var(--text-2xs); background:none; border:0;
 }
 .works-more.is-button { padding:4px 16px; border:1px solid var(--line); border-radius:999px; cursor:pointer; }
-.works-modal {
-  position:fixed; inset:0; z-index:80; display:grid; place-items:center; padding:24px;
-  background:rgba(20,19,17,.72);
-}
-.works-modal-body { max-width:min(92vw,880px); max-height:88vh; display:flex; flex-direction:column; gap:8px; }
-.works-modal-body img, .works-modal-body video { max-width:100%; max-height:78vh; object-fit:contain; border-radius:var(--radius-md); }
-.works-modal-note { margin:0; color:#e9e6df; font-size: var(--text-2xs); font-family:var(--font-mono); }
-.works-modal-close {
-  position:absolute; top:16px; right:16px; display:grid; place-items:center; width:32px; height:32px;
-  border-radius:50%; border:1px solid rgba(255,255,255,.3); background:rgba(0,0,0,.35); color:#fff; cursor:pointer;
-}
 /* 卡片上那两个动作（r229）：成品不只停在「看大图」，还要能存下来、能接着改。
    390 宽两列只有 ~165px，所以单独一行、允许折行，不跟时间挤同一行。 */
 .works-actions { display:flex; flex-wrap:wrap; align-items:center; gap:4px 12px; }
@@ -73,9 +63,6 @@
 .works-action:disabled { color:var(--faint); border-bottom-color:transparent; cursor:default; }
 .works-note { margin:0; color:var(--muted); font-size:13px; }
 .works-note.is-error { color:var(--warn); }
-.works-modal-bar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; }
-.works-actions.is-modal .works-action { color:#e9e6df; border-bottom-color:rgba(255,255,255,.32); }
-.works-actions.is-modal .works-action:hover { color:#fff; border-bottom-color:rgba(255,255,255,.6); }
 
 @media (max-width:1080px) { .works-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
 @media (max-width:768px) { .works-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
@@ -111,12 +98,6 @@
   .works-action { align-items: flex-end; min-height: 44px; padding-bottom: 2px; gap: 8px; font-size: 14px; }
   .works-more { font-size: 13px; }
   .works-more.is-button { min-height: 44px; padding: 8px 24px; font-size: 14px; }
-  /* 大图：手机要把媒体让给画面本身，关闭按钮按 44px 触控区放 */
-  .works-modal { padding: 16px; }
-  .works-modal-body { gap: 12px; }
-  .works-modal-note { font-size: 14px; line-height: 1.5; }
-  .works-modal-close { top: 8px; right: 8px; width: 44px; height: 44px; }
-  .works-actions.is-modal .works-action { align-items: flex-end; min-height: 44px; padding-bottom: 2px; font-size: 14px; }
 }
 
 /* ---------- 作品流：平板（r235） ----------
@@ -156,11 +137,6 @@
 
   .works-more.is-button { min-height: 44px; padding: 8px 24px; font-size: 14px; }
 
-  .works-modal-note { font-size: 14px; line-height: 1.5; }
-
-  .works-modal-close { top: 8px; right: 8px; width: 44px; height: 44px; }
-
-  .works-actions.is-modal .works-action { align-items: flex-end; min-height: 44px; padding-bottom: 2px; font-size: 14px; }
 }
 
 @media (max-width: 380px) {

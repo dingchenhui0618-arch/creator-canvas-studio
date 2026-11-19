@@ -66,6 +66,7 @@ import { getProject, listProjects } from '../api/projects'
 import type { ProjectSummary } from '../domain/project'
 import { getPreferences } from '../api/preferences'
 import { useUiMode } from '../api/app'
+import MediaLightbox from '../components/MediaLightbox'
 import PageHead from '../components/PageHead'
 import QuickChat from '../components/QuickChat'
 import { listFlows, type ApiFlow } from '../api/flows'
@@ -1470,62 +1471,39 @@ function MediaComposer({
 
       </div>
       {zoomTask && !hidden && zoomTask.status === 'succeeded' ? (
-        // 整页浮层：图按视口缩放，不让 340px 的缩略图上限限制「看清楚」这件事。
+        // r262：「看大图」全产品一套浮层（快捷创作 / 作品流共用 MediaLightbox），
+        // 图按视口缩放，不让 340px 的缩略图上限限制「看清楚」这件事。
         // r261：右边结果区、左边「最近生成」的缩略图都开这一个浮层，看的是 zoomTask 那一条。
-        <div
-          className="agx-lightbox"
-          role="dialog"
-          aria-modal="true"
-          aria-label={zoomTask.kind === 'image' ? '查看大图' : '查看视频'}
-          onClick={() => setZoomTask(null)}
-        >
-          <figure className="agx-lightbox-card" onClick={(event) => event.stopPropagation()}>
-            <div className="agx-lightbox-head">
-              <span>
-                {zoomTask.kind === 'image' ? '生成结果' : '生成的视频'} · {formatBytes(zoomTask.file?.bytes ?? 0)}
-              </span>
-              {zoomTask.id === task?.id ? null : <span className="agx-lightbox-note">来自「最近生成」</span>}
+        <MediaLightbox
+          kind={zoomTask.kind === 'image' ? 'image' : 'video'}
+          src={zoomTask.downloadUrl}
+          alt={zoomTask.prompt}
+          head={(zoomTask.kind === 'image' ? '生成结果' : '生成的视频') + ' · ' + formatBytes(zoomTask.file?.bytes ?? 0)}
+          note={zoomTask.id === task?.id ? null : '来自「最近生成」'}
+          caption={zoomTask.prompt}
+          closeRef={lightboxCloseRef}
+          onClose={() => setZoomTask(null)}
+          actions={
+            <>
+              <a className="vq-button vq-button--ghost" href={zoomTask.downloadUrl} download>
+                <Download size={13} />
+                下载{zoomTask.kind === 'image' ? '原图' : '视频'}
+              </a>
               <button
-                ref={lightboxCloseRef}
                 type="button"
-                className="agx-lightbox-close"
-                onClick={() => setZoomTask(null)}
-                aria-label="关闭"
-                title="关闭（Esc）"
+                className="vq-button vq-button--ghost"
+                onClick={() => void addTaskResultAsRef(zoomTask)}
+                disabled={Boolean(refBusyId)}
               >
-                <X size={16} />
+                <Plus size={13} />
+                {refBusyId === zoomTask.id ? '加入参考中…' : '用作参考'}
               </button>
-            </div>
-            <div className={'agx-lightbox-stage' + (zoomTask.kind === 'image' ? '' : ' is-video')}>
-              {zoomTask.kind === 'image' ? (
-                <img src={zoomTask.downloadUrl} alt={zoomTask.prompt} />
-              ) : (
-                <video src={zoomTask.downloadUrl} controls playsInline preload="metadata" />
-              )}
-            </div>
-            <figcaption className="agx-lightbox-caption">
-              <p>{zoomTask.prompt}</p>
-              <div className="agx-lightbox-actions">
-                <a className="vq-button vq-button--ghost" href={zoomTask.downloadUrl} download>
-                  <Download size={13} />
-                  下载{zoomTask.kind === 'image' ? '原图' : '视频'}
-                </a>
-                <button
-                  type="button"
-                  className="vq-button vq-button--ghost"
-                  onClick={() => void addTaskResultAsRef(zoomTask)}
-                  disabled={Boolean(refBusyId)}
-                >
-                  <Plus size={13} />
-                  {refBusyId === zoomTask.id ? '加入参考中…' : '用作参考'}
-                </button>
-                <button type="button" className="vq-button vq-button--ghost" onClick={() => setZoomTask(null)}>
-                  关闭
-                </button>
-              </div>
-            </figcaption>
-          </figure>
-        </div>
+              <button type="button" className="vq-button vq-button--ghost" onClick={() => setZoomTask(null)}>
+                关闭
+              </button>
+            </>
+          }
+        />
       ) : null}
     </div>
   )

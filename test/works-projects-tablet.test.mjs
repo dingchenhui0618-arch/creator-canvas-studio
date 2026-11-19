@@ -12,6 +12,8 @@ const ROOT = path.resolve(import.meta.dirname, '..')
 const worksCss = fs.readFileSync(path.join(ROOT, 'src', 'styles', 'works.css'), 'utf8')
 const projectsCss = fs.readFileSync(path.join(ROOT, 'src', 'styles', 'projects.css'), 'utf8')
 const shellCss = fs.readFileSync(path.join(ROOT, 'src', 'styles', 'shell.css'), 'utf8')
+// r262：「看大图」浮层与快捷创作共用，浮层样式在 media-lightbox.css
+const lightboxCss = fs.readFileSync(path.join(ROOT, 'src', 'styles', 'media-lightbox.css'), 'utf8')
 
 /** 取一段 @media 块（按花括号配对），可选再加一层「必须包含某个选择器」的过滤。 */
 function mediaBlocks(css, query, mustContain) {
@@ -91,7 +93,9 @@ test('作品流平板段：动作 44px、筛选 40px，正文抬到 13–15px', 
   assert.match(decls(works, '.works-open'), /font-size:\s*13px/)
   assert.match(decls(works, '.works-fallback'), /font-size:\s*14px/)
 
-  const close = decls(works, '.works-modal-close')
+  // 平板也是触屏：共用浮层的关闭按钮在这一段放到 44px
+  const tabletLightbox = mediaBlocks(lightboxCss, '(max-width: 1080px)', '.vq-lightbox-close')[0]
+  const close = decls(tabletLightbox, '.vq-lightbox-close')
   assert.match(close, /width:\s*44px/)
   assert.match(close, /height:\s*44px/)
 })

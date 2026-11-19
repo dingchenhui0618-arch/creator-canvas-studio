@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Clapperboard, Download, Image as ImageIcon, Loader2, Play, Workflow, X } from 'lucide-react'
+import { Clapperboard, Download, Image as ImageIcon, Loader2, Play, Workflow } from 'lucide-react'
+import MediaLightbox from './MediaLightbox'
 import { listWorks, type WorkItem } from '../api/works'
 import { listMediaAssets, uploadMediaAsset } from '../api/media-gen'
 import type { MediaAsset } from '../api/media-gen'
@@ -191,12 +192,12 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
     }
   }
 
-  const actions = (item: WorkItem, inModal = false) => {
+  const actions = (item: WorkItem) => {
     if (!canReuse(item)) return null
     const busyRef = busy?.id === item.id && busy.what === 'ref'
     const busySave = busy?.id === item.id && busy.what === 'save'
     return (
-      <div className={'works-actions' + (inModal ? ' is-modal' : '')}>
+      <div className="works-actions">
         <button
           type="button"
           className="works-action"
@@ -282,7 +283,7 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
                     {item.status && item.kind === 'run' ? ' · ' + (item.status === 'success' ? '跑完了' : item.status === 'error' ? '失败' : '已停止') : ''}
                   </span>
                   <button type="button" className="works-open" onClick={() => open(item)}>
-                    {item.previewUrl ? '看大图' : item.kind === 'canvas' ? '打开画布' : '打开运行'}
+                    {item.previewUrl ? (isVideo ? '看视频' : '看大图') : item.kind === 'canvas' ? '打开画布' : '打开运行'}
                   </button>
                 </div>
                 {actions(item)}
@@ -302,23 +303,19 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
         <p className="works-more">已经到底了</p>
       ) : null}
 
-      {preview ? (
-        <div className="works-modal" role="dialog" aria-modal="true" onClick={() => setPreview(null)}>
-          <button type="button" className="works-modal-close" onClick={() => setPreview(null)} aria-label="关闭">
-            <X size={16} />
-          </button>
-          <div className="works-modal-body" onClick={(event) => event.stopPropagation()}>
-            {(preview.mediaKind === 'video' || preview.kind === 'video') ? (
-              <video src={preview.previewUrl || undefined} controls autoPlay playsInline />
-            ) : (
-              <img src={preview.previewUrl || undefined} alt={preview.title} />
-            )}
-            <div className="works-modal-bar">
-              <p className="works-modal-note">{preview.title} · {stamp(preview.at)}</p>
-              {actions(preview, true)}
-            </div>
-          </div>
-        </div>
+      {/* r262：作品流的「看大图」和快捷创作共用同一个浮层——
+          以前这里是自己一套 880px 的弹层，没有卡片底，放大后跟背后的卡片文字叠在一起。 */}
+      {preview && preview.previewUrl ? (
+        <MediaLightbox
+          kind={workKind(preview)}
+          src={preview.previewUrl}
+          alt={preview.title}
+          head={preview.source + ' · ' + stamp(preview.at)}
+          note={preview.model || null}
+          caption={preview.summary ? preview.title + ' · ' + preview.summary : preview.title}
+          actions={actions(preview)}
+          onClose={() => setPreview(null)}
+        />
       ) : null}
     </section>
   )

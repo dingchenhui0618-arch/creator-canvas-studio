@@ -10,6 +10,11 @@ const ROOT = path.resolve(import.meta.dirname, '..')
 // CSS 在 Windows 检出里是 CRLF：rules 里写多行选择器时先把换行统一成 LF 再匹配
 const css = fs.readFileSync(path.join(ROOT, 'src', 'styles', 'agents.css'), 'utf8').replace(/\r\n/g, '\n')
 const page = fs.readFileSync(path.join(ROOT, 'src', 'pages', 'AgentsPage.tsx'), 'utf8')
+// r262：「看大图」抽成共用浮层（快捷创作 + 作品流），浮层的样式搬到了独立文件
+const lightboxCss = fs.readFileSync(path.join(ROOT, 'src', 'styles', 'media-lightbox.css'), 'utf8').replace(/\r\n/g, '\n')
+const lightbox = fs.readFileSync(path.join(ROOT, 'src', 'components', 'MediaLightbox.tsx'), 'utf8')
+const worksPage = fs.readFileSync(path.join(ROOT, 'src', 'components', 'WorksWall.tsx'), 'utf8')
+const worksCss = fs.readFileSync(path.join(ROOT, 'src', 'styles', 'works.css'), 'utf8').replace(/\r\n/g, '\n')
 
 // 只认行首那条规则（允许缩进）：同一段选择器可能是别处的后缀（.agx-page--platform .qc-root）
 function rule(source, selector) {
@@ -83,24 +88,25 @@ test('工作流不再占页签：只在页签右边留一条入口（r257）', (
 test('结果区点开看大图（r260）：矮屏上 1:1 的图不再只能看见一条', () => {
   // 缩略图本身是入口，另外结果卡动作栏里还有一个明确的「看大图 / 放大看」
   assert.ok(page.includes('agx-media-zoom'), '缩略图不是「看大图」的入口')
-  assert.ok(page.includes('agx-lightbox'), '没有看大图的浮层')
+  assert.ok(page.includes('MediaLightbox'), '没有看大图的浮层')
   // r261：浮层记的是「正在看哪一条」（zoomTask），左边「最近生成」也开这一个
   assert.ok(page.includes("zoomTask && !hidden && zoomTask.status === 'succeeded'"), '浮层没有只对成功结果开，或被隐藏的面板还会把浮层留在屏幕上')
-  assert.match(page, /role="dialog"/)
-  assert.match(page, /aria-modal="true"/)
+  // r262 起这两个属性在共用浮层组件里
+  assert.match(lightbox, /role="dialog"/)
+  assert.match(lightbox, /aria-modal="true"/)
   assert.ok(page.includes("event.key === 'Escape'"), 'Esc 关不掉浮层')
   // 关掉浮层的三个出口：叉、关闭按钮、Esc；「再生成 / 清掉结果」也要顺手带上
   assert.match(page, /const reset = \(\) => \{\s*if \(active\) return\s*setZoomTask\(null\)/)
   // 浮层必须是整页固定层，压过窄屏历史弹层（z-index 60）
-  const box = rule(css, '.agx-lightbox')
+  const box = rule(lightboxCss, '.vq-lightbox')
   assert.match(box, /position: fixed/)
   assert.match(box, /inset: 0/)
   assert.match(box, /z-index: 70/)
   // 缩略图仍卡 340px；浮层里的图按视口缩放，不带这个上限
   assert.match(rule(css, '.agx-media-image,\n.agx-media-video'), /max-height: 340px/)
   // 必须是具体数值：在「高度由内容决定」的弹性盒里，百分比 max-height 会退化成 none
-  assert.match(rule(css, '.agx-lightbox-stage img,\n.agx-lightbox-stage video'), /max-height: calc\(100vh - 208px\)/)
-  assert.ok(!/agx-lightbox-stage img[^{]*\{[^}]*340px/.test(css), '浮层里的图还受缩略图上限管')
+  assert.match(rule(lightboxCss, '.vq-lightbox-stage img,\n.vq-lightbox-stage video'), /max-height: calc\(100vh - 208px\)/)
+  assert.ok(!/vq-lightbox-stage img[^{]*\{[^}]*340px/.test(lightboxCss), '浮层里的图还受缩略图上限管')
 })
 
 test('平台对话铺满一屏：只有线程滚，输入卡不出屏幕（r257）', () => {
@@ -133,6 +139,28 @@ test('最近生成带缩略图，点开是同一个看大图浮层（r261）', (
   assert.match(rule(css, '.agx-media-recent-body'), /min-width: 0/)
   assert.match(rule(css, '.agx-media-recent-open'), /flex: 1 1 auto/)
   // 从「最近生成」点开的浮层要说清它不是右边正在看的那一条
-  assert.ok(page.includes('agx-lightbox-note'), '浮层没有说明这条来自最近生成')
-  assert.match(rule(css, '.agx-lightbox-note'), /margin-left: auto/)
+  assert.ok(page.includes("'来自「最近生成」'"), '浮层没有说明这条来自最近生成')
+  assert.match(rule(lightboxCss, '.vq-lightbox-note'), /margin-left: auto/)
+})
+
+// r262：作品流的「看大图」和快捷创作共用同一个浮层。
+// 以前作品流有自己一套 880px 弹层（.works-modal）：没有卡片底、图放大后跟背后的卡片文字叠在一起，
+// 也没有「卡片跟着图收窄」——同一件事在同一个产品里不该有两种样子。
+test('作品流与快捷创作共用同一个看大图浮层（r262）', () => {
+  assert.ok(page.includes('<MediaLightbox'), '快捷创作没有用共用浮层')
+  assert.ok(worksPage.includes('<MediaLightbox'), '作品流没有用共用浮层')
+  assert.ok(worksPage.includes("import MediaLightbox from './MediaLightbox'"), '作品流没有引那个组件')
+  // 作品流自己那套弹层必须彻底退场：组件、类名、样式都不许留
+  assert.ok(!worksPage.includes('works-modal'), '作品流还留着旧的弹层 DOM')
+  assert.ok(!worksCss.includes('works-modal'), '作品流还留着旧的弹层样式')
+  // 浮层是同一个：整页固定层、压暗、Esc 关、图按视口缩放
+  assert.match(lightbox, /role="dialog"/)
+  assert.match(lightbox, /aria-modal="true"/)
+  assert.match(lightboxCss, /background: rgba\(8, 8, 9, 0\.78\)/)
+  // 视频点开就播：静音自动播浏览器才不拦（作品流那套 autoPlay 不带 muted，一打开就停在 0:00）
+  assert.match(lightbox, /<video src=\{src\} controls playsInline preload="metadata" autoPlay=\{videoAutoPlay\} muted=\{videoAutoPlay\}/)
+  // 卡片上的「看大图」字是 13px，但触控区不能只有 19px
+  assert.match(rule(worksCss, '.works-open'), /min-height:\s*24px/)
+  // 视频那一条的入口写「看视频」，别让一条片子挂着「看大图」
+  assert.ok(worksPage.includes("isVideo ? '看视频' : '看大图'"), '视频卡片还写着「看大图」')
 })

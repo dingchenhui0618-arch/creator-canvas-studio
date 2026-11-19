@@ -1,0 +1,139 @@
+/* 看大图浮层（r262）：快捷创作与作品流共用。
+   整页固定层、压暗背景、卡片跟着图收窄、图按视口高度缩放——
+   同一件事（点开看大图）全产品只留这一套样式。 */
+.vq-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: var(--space-6);
+  background: rgba(8, 8, 9, 0.78);
+}
+.vq-lightbox-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  /* 卡片宽度跟着图走：1:1 的图不该被套进 1120 的白框里、左右各留一条黑边。
+     width:auto 在居中 grid 里按内容收缩，图有 max-height 限制时宽度由比例算出来。 */
+  width: auto;
+  max-width: min(1120px, 100%);
+  max-height: 100%;
+  margin: 0;
+  padding: var(--space-3);
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.vq-lightbox-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  color: var(--ink-soft);
+  font-size: var(--text-xs);
+}
+/* 顶部右边那枚小字（「来自最近生成」、模型名）：贴着关闭按钮，不跟标题抢位置 */
+.vq-lightbox-note {
+  margin-left: auto;
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: var(--text-mono);
+  white-space: nowrap;
+}
+.vq-lightbox-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  color: var(--ink-soft);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.vq-lightbox-close:hover {
+  color: var(--ink);
+  background: var(--surface-soft);
+}
+.vq-lightbox-stage {
+  display: grid;
+  flex: 1 1 auto;
+  width: 100%;
+  place-items: center;
+  min-height: 0;
+  overflow: auto;
+  /* 看图就得有个「观看台」：浅灰底会把 1:1 的图配上一圈白边，像没加载完 */
+  background: #0e0e10;
+  border-radius: var(--radius-sm);
+}
+.vq-lightbox-stage img,
+.vq-lightbox-stage video {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  /* 必须是具体数值：图片在「高度由内容决定」的弹性盒里拿百分比 max-height 会变成 none，
+     1024 的图就把卡片顶到 1138px、超出 900 高的窗口（r260 实测过）。 */
+  max-height: calc(100vh - 208px);
+  height: auto;
+  object-fit: contain;
+}
+.vq-lightbox-caption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.vq-lightbox-caption p {
+  flex: 1 1 320px;
+  max-width: 72ch;
+  margin: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+.vq-lightbox-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* 触屏平板（561–1080）也是手指点：关闭按钮放到 44px，别只给手机那一档 */
+@media (max-width: 1080px) {
+  .vq-lightbox-close {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+@media (max-width: 560px) {
+  .vq-lightbox {
+    padding: var(--space-2);
+  }
+  .vq-lightbox-card {
+    gap: var(--space-2);
+    padding: var(--space-2);
+  }
+  .vq-lightbox-caption p {
+    flex: 1 1 100%;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+  }
+  .vq-lightbox-actions .vq-button {
+    flex: 1 1 auto;
+  }
+  /* 手机上关闭按钮是主要出口：触控区给到 44px */
+  .vq-lightbox-close {
+    width: 44px;
+    height: 44px;
+  }
+}

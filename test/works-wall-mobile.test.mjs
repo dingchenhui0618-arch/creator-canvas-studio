@@ -10,22 +10,24 @@ import path from 'node:path'
 
 const ROOT = path.resolve(import.meta.dirname, '..')
 const css = fs.readFileSync(path.join(ROOT, 'src', 'styles', 'works.css'), 'utf8')
+// r262：「看大图」换成和快捷创作共用的浮层，手机那几条（44px 关闭按钮、画面边距）跟着搬到了这里
+const lightboxCss = fs.readFileSync(path.join(ROOT, 'src', 'styles', 'media-lightbox.css'), 'utf8')
 
 /** 取一段 @media 块（按花括号配对），可选再加一层「必须包含某个选择器」的过滤。 */
-function mediaBlocks(query, mustContain) {
+function blocksIn(source, query, mustContain) {
   const out = []
   let from = 0
   for (;;) {
-    const start = css.indexOf('@media ' + query, from)
+    const start = source.indexOf('@media ' + query, from)
     if (start < 0) break
     let depth = 0
-    const open = css.indexOf('{', start)
-    for (let index = open; index < css.length; index += 1) {
-      if (css[index] === '{') depth += 1
-      if (css[index] === '}') {
+    const open = source.indexOf('{', start)
+    for (let index = open; index < source.length; index += 1) {
+      if (source[index] === '{') depth += 1
+      if (source[index] === '}') {
         depth -= 1
         if (depth === 0) {
-          out.push(css.slice(open, index + 1))
+          out.push(source.slice(open, index + 1))
           from = index + 1
           break
         }
@@ -36,8 +38,8 @@ function mediaBlocks(query, mustContain) {
   return mustContain ? out.filter((block) => block.includes(mustContain)) : out
 }
 
-const phone = mediaBlocks('(max-width: 560px)', '.works-action')[0]
-const small = mediaBlocks('(max-width: 380px)', '.works-grid')[0]
+const phone = blocksIn(css, '(max-width: 560px)', '.works-action')[0]
+const small = blocksIn(css, '(max-width: 380px)', '.works-grid')[0]
 
 function rule(block, selector) {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -70,12 +72,17 @@ test('筛选胶囊 40px 高、14px 字：12.5px / 29px 的胶囊在手机上又�
   assert.match(chip, /padding:\s*8px 16px/, '胶囊内边距走 4/8 栅格')
 })
 
-test('大图弹窗：关闭按钮 44×44，说明 14px，画面让出 16px 边距', () => {
-  const close = rule(phone, '.works-modal-close')
+test('大图浮层（r262 起与快捷创作共用）：关闭按钮 44×44，画面边距收到 8px', () => {
+  const phoneLightbox = blocksIn(lightboxCss, '(max-width: 560px)', '.vq-lightbox-close')[0]
+  assert.ok(phoneLightbox, 'media-lightbox.css 里应该有手机那一条')
+  const close = rule(phoneLightbox, '.vq-lightbox-close')
   assert.match(close, /width:\s*44px/, '关闭按钮 44px 宽（原来 32px）')
   assert.match(close, /height:\s*44px/, '关闭按钮 44px 高')
-  assert.match(rule(phone, '.works-modal-note'), /font-size:\s*14px/, '大图下面的标题与时间 14px')
-  assert.match(rule(phone, '.works-modal'), /padding:\s*16px/, '弹窗边距收到 16px，媒体更宽')
+  // 手机上画面优先：卡片内边距与浮层边距都收到 8px，390 下画面本身仍有 356px
+  assert.match(rule(phoneLightbox, '.vq-lightbox'), /padding:\s*var\(--space-2\)/, '浮层边距 8px')
+  assert.match(rule(phoneLightbox, '.vq-lightbox-card'), /padding:\s*var\(--space-2\)/, '卡片内边距 8px')
+  // 说明文字 13px 是产品字号地板（--text-mono），不再往下掉
+  assert.match(lightboxCss, /\.vq-lightbox-note \{[^}]*font-size:\s*var\(--text-mono\)/, '浮层小字走 13px 地板')
 })
 
 test('两列与按比例排版的口径不许被顺手改掉', () => {

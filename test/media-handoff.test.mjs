@@ -98,14 +98,16 @@ test('交接：存储不可用（隐私模式 / 读就抛 / 配额满）时不�
   assert.equal(takeRefHandoff(broken), null)
 })
 
-test('作品卡：成品能「用作参考」和「下载」，两处入口（卡片与大图）都在', () => {
-  // 入口来自同一个动作函数，卡片与大图各渲染一次
+test('作品卡：成品能「用作参考」和「下载」，两处入口（卡片与看大图）都在', () => {
+  // 入口来自同一个动作函数：卡片上渲染一次，看大图浮层里再渲染一次（r262 起浮层是共用的 MediaLightbox）
   assert.ok(wall.includes('const reuseWork = async (item: WorkItem) =>'))
   assert.ok(wall.includes('const saveWork = async (item: WorkItem) =>'))
   assert.ok(wall.includes('用作参考'))
   assert.ok(wall.includes('{busyRef ? \'加入中…\' : \'用作参考\'}'))
   assert.ok(wall.includes('{busySave ? \'下载中…\' : \'下载\'}'))
-  assert.ok(wall.includes('actions(item)') && wall.includes('actions(preview, true)'))
+  assert.ok(wall.includes('actions(item)'))
+  // 浮层那一次：同一套动作交给共用的看大图浮层
+  assert.ok(wall.includes('actions={actions(preview)}'), '看大图浮层里没有「用作参考 / 下载」')
 })
 
 test('作品卡：三种来源都能取回文件，而且只走自己的接口', () => {
