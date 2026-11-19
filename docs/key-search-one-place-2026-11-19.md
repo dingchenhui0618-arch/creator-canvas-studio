@@ -71,3 +71,21 @@ DeepSeek 随「全家桶应用 API」一起开放了两个接口，**用同一�
 - 本次**没有**真实调用 DeepSeek 搜索接口：按约定，花钱的调用由用户在用户端点。第一次「试搜一次」如果回 401/402，按卡片上的话术处理即可（换 Key / 充值）。
 - 博查 / Tavily / 通用接口的逻辑没动，只是搬了家；它们的 Key 仍然单独存在 `search.json`。
 - 搜索只读前 3 条网页、合计 12000 字，跟 r246 一致；不做图片搜索、不做 `/tools/fetch` 的兜底抓取（`link-read` 已经够用，且更可控）。
+
+## 六、生产上线（2026-11-19 13:44）
+
+| 项 | 值 |
+| --- | --- |
+| 版本 | `0.9.241`，入口 `index-DlXzwBQ-.js` |
+| 发布标签 | `20261119-1345-r258search` |
+| health | ok，templates 26 |
+| `/var/lib/visionqa/search.json` | 已写入（0600、visionqa:visionqa，165 B）：`provider=deepseek`，无 Key |
+| `GET /api/chat/search`（真实账号会话） | `configured:true`，`providerLabel:"DeepSeek 搜索（跟平台对话共用一把 Key）"` |
+| 快捷创作里的「联网搜索」开关 | `disabled:false`、`aria-pressed:false`、title 为「平台自己搜一遍最新信息，再把前几条网页读成文字」 |
+| 后台「模型与上游」 | 「联网搜索 已接通 / 通道 DeepSeek 搜索（跟平台对话共用一把 Key）/ Key sk-••••09 / 用「Key 池」里那把 DeepSeek 官方（原环境变量）」 |
+
+上线用的临时管理员会话与验收用的普通账号会话**都已从 sessions 撤销**（deleted=1 / deleted=1，回到 21 条），临时文件已删。
+
+生产截图：`docs/prod-admin-search-1440.png`、`docs/prod-quick-search-toggle-1440.png`。
+
+开通这一步本身**没有任何上游调用**；第一次真实搜索（点「试搜一次」，或在对话里打开「联网搜索」发一句）由用户发起。

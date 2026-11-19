@@ -1964,6 +1964,10 @@ docs/quick-create-layout-2026-11-19.md。
 
 ![390：搜索卡片在窄屏下的完整样子](docs/admin-search-card-390.png)
 
+![生产：模型与上游顶部——联网搜索已接通，Key 就是平台对话那把「DeepSeek 官方（原环境变量）」sk-••••09](docs/prod-admin-search-1440.png)
+
+![生产：快捷创作里「联网搜索」这个开关现在能点了（r246 起它一直是灰的）](docs/prod-quick-search-toggle-1440.png)
+
 验收：`test/web-search.test.mjs` 12/12（新增 3 条：没平台 Key 不许开通且不另存一份、请求打到 `/v1/tools/search`
 且 Bearer 用平台那把、401/402/400 的话术）；新增 `test/admin-one-place.test.mjs` 4 条（一页装下 Key 池 / 搜索 /
 路由 / 通道、导航没有第二个 Key 入口、`#/admin/keys` 落同一页、系统页不再有搜索卡片）；`test/admin-access.test.mjs`
