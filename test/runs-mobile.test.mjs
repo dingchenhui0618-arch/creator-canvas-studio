@@ -115,7 +115,7 @@ test('1080 以下：标签 / mono / 输出字段全部 13px', () => {
 test('筛选下拉的选中值不被标签的 12px 压住（.runs-select span 打中过 .vq-select__value）', () => {
   assert.match(decls(band, '.runs-page .runs-select .vq-select__value'), /font-size:\s*13px/)
   // 基样式仍是标签的 12px：这一条只治窄屏，不把桌面的标签字号一起改了
-  assert.match(firstRule(runsCss, '.runs-select span'), /font-size:\s*12px/)
+  assert.match(firstRule(runsCss, '.runs-select span'), /font-size:\s*(?:12px|var\(--text-2xs\))/)
 })
 
 test('1080 以下：搜索框 40px、「原始返回」撑到 40px 点按区', () => {
@@ -189,12 +189,12 @@ test('运行对照弹层：关闭按钮与「看改了哪几行」在窄屏撑�
 })
 
 test('桌面（1081 起）基样式一个像素没动', () => {
-  assert.match(firstRule(tokensCss, '.vq-mono'), /font-size:\s*12px/)
+  assert.match(firstRule(tokensCss, '.vq-mono'), /font-size:\s*(?:12px|var\(--text-2xs\))/)
   assert.match(firstRule(tokensCss, ':root'), /--btn-h:\s*32px/)
   assert.match(firstRule(tokensCss, ':root'), /--btn-h-sm:\s*28px/)
-  assert.match(firstRule(runsCss, '.runs-stats span'), /font-size:\s*12px/)
-  assert.match(firstRule(runsCss, '.runs-output-list dt'), /font-size:\s*12px/)
-  assert.match(firstRule(runsCss, '.runs-node-output'), /font-size:\s*12px/)
+  assert.match(firstRule(runsCss, '.runs-stats span'), /font-size:\s*(?:12px|var\(--text-2xs\))/)
+  assert.match(firstRule(runsCss, '.runs-output-list dt'), /font-size:\s*(?:12px|var\(--text-2xs\))/)
+  assert.match(firstRule(runsCss, '.runs-node-output'), /font-size:\s*(?:12px|var\(--text-2xs\))/)
   assert.match(firstRule(runsCss, '.runs-search'), /height:\s*34px/)
   assert.match(firstRule(runsCss, '.runs-row'), /grid-template-columns:\s*8px 1fr auto/)
   assert.match(firstRule(runsCss, '.runs-output-list > div'), /grid-template-columns:\s*minmax\(88px, 140px\)/)

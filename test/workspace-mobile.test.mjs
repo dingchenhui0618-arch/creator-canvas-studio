@@ -178,7 +178,7 @@ test('桌面（1081 起）：27px 工具条、13px 元信息、26px 缩放键', 
 })
 
 test('顶栏：内部测试胶囊 1080 以下 13px，1024 收窄模型名，480 以下胶囊与模型名都让位', () => {
-  assert.match(firstRule(shellCss, '.vq-env-pill'), /font-size:\s*12px/)
+  assert.match(firstRule(shellCss, '.vq-env-pill'), /font-size:\s*(?:12px|var\(--text-2xs\))/)
   assert.ok(shellBand, 'shell.css 缺少 ≤1080 的顶栏规则')
   assert.match(decls(shellBand, '.vq-env-pill'), /font-size:\s*13px/)
   assert.match(decls(shellBand, '.vq-topbar .vq-model-trigger'), /max-width:\s*148px/)

@@ -165,8 +165,8 @@ test('桌面（1081 起）保持原样：42px 状态条、24px 按钮、12px 小
   assert.match(firstRule(boardCss, '.bd-strip'), /height:\s*42px/)
   assert.match(firstRule(boardCss, '.bd-action'), /height:\s*24px/)
   assert.match(firstRule(boardCss, '.bd-action'), /font-size:\s*13px/)
-  assert.match(firstRule(boardCss, '.bd-state'), /font-size:\s*12px/)
-  assert.match(firstRule(boardCss, '.bd-label'), /font-size:\s*12px/)
+  assert.match(firstRule(boardCss, '.bd-state'), /font-size:\s*(?:12px|var\(--text-2xs\))/)
+  assert.match(firstRule(boardCss, '.bd-label'), /font-size:\s*(?:12px|var\(--text-2xs\))/)
   // 选择器触发器的高度由 shell 的全局窄屏规则管，这一页不该自己写死
   assert.ok(!boardCss.includes('.vq-select__trigger {\n    height'), '状态条不该自己改选择器高度')
 })

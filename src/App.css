@@ -371,7 +371,7 @@ button { cursor:pointer; }
 .replicate-done div { display:flex; flex-direction:column; gap:4px; }
 .replicate-done strong { font-size:15px; }
 .replicate-done span { font-size:13px; color:var(--ink-faint); }
-.replicate-credit { font-family:var(--font-mono),monospace; font-size:12px; color:var(--ink-faint); }
+.replicate-credit { font-family:var(--font-mono),monospace; font-size: var(--text-2xs); color:var(--ink-faint); }
 .replicate-preview { display:flex; gap:8px; }
 .replicate-preview img { width:72px; height:44px; object-fit:cover; border-radius:var(--radius-sm); border:1px solid var(--line); }
 .replicate-hook { display:flex; flex-direction:column; gap:8px; padding:12px 12px; border-radius:var(--radius-md); background:#f6f4ef; }
@@ -576,20 +576,20 @@ button { cursor:pointer; }
   .template-drawer .beat-item p { margin-top: 4px; font-size: 15px; line-height: 1.7; }
   .template-drawer .beat-onscreen { font-size: 13px; }
   .template-drawer .shot-row { grid-template-columns: 88px minmax(0, 1fr); gap: 12px; padding: 12px; }
-  .template-drawer .shot-frame em { font-size: 12px; }
+  .template-drawer .shot-frame em { font-size: var(--text-2xs); }
   .template-drawer .shot-copy strong { font-size: 15px; line-height: 1.6; }
   .template-drawer .shot-copy p { font-size: 14px; }
   .template-drawer .shot-tags span { font-size: 13px; }
   .template-drawer .drawer-list { font-size: 15px; line-height: 1.7; }
   .template-drawer .drawer-list--flow li { padding: 12px 0; }
-  .template-drawer .drawer-list--flow li .vq-mono, .template-drawer .drawer-list--flow li em { font-size: 12px; }
+  .template-drawer .drawer-list--flow li .vq-mono, .template-drawer .drawer-list--flow li em { font-size: var(--text-2xs); }
   .template-drawer .drawer-source { gap: 8px; padding: 12px; font-size: 14px; line-height: 1.6; }
   .template-drawer .drawer-source .vq-button { height: 44px; font-size: 14px; }
   .template-drawer .drawer-origin { padding: 12px; }
   .template-drawer .drawer-origin-count { font-size: 14px; }
   .template-drawer .drawer-origin-count b { font-size: 15px; }
   .template-drawer .drawer-origin-sibling { min-height: 32px; padding: 4px 12px; font-size: 14px; }
-  .template-drawer .drawer-origin-sibling em { font-size: 12px; }
+  .template-drawer .drawer-origin-sibling em { font-size: var(--text-2xs); }
   .template-drawer .drawer-origin-note, .template-drawer .drawer-origin-more, .template-drawer .drawer-works-more { font-size: 13px; }
   .template-drawer .drawer-section--pending .drawer-pending-copy { font-size: 14px; line-height: 1.7; }
   .template-drawer .drawer-section--pending .drawer-pending-hint { font-size: 14px; }

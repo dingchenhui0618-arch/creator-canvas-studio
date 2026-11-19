@@ -168,13 +168,13 @@ test('新写的两段里没有比 13px 还小的字号', () => {
 })
 
 test('桌面（1081 起）基样式一个像素没动', () => {
-  assert.match(firstRule(tokensCss, '.vq-mono'), /font-size:\s*12px/)
-  assert.match(firstRule(reviewCss, '.review-history-time'), /font-size:\s*12px/)
-  assert.match(firstRule(reviewCss, '.review-history-flag'), /font-size:\s*12px/)
+  assert.match(firstRule(tokensCss, '.vq-mono'), /font-size:\s*(?:12px|var\(--text-2xs\))/)
+  assert.match(firstRule(reviewCss, '.review-history-time'), /font-size:\s*(?:12px|var\(--text-2xs\))/)
+  assert.match(firstRule(reviewCss, '.review-history-flag'), /font-size:\s*(?:12px|var\(--text-2xs\))/)
   assert.match(firstRule(reviewCss, '.review-picker-toggle'), /min-height:\s*24px/)
-  assert.match(firstRule(reviewCss, '.review-obs-no'), /font-size:\s*12px/)
+  assert.match(firstRule(reviewCss, '.review-obs-no'), /font-size:\s*(?:12px|var\(--text-2xs\))/)
   assert.match(firstRule(shellCss, '.vq-search'), /height:\s*30px/)
-  assert.match(firstRule(shellCss, '.vq-nav-item em'), /font-size:\s*12px/)
+  assert.match(firstRule(shellCss, '.vq-nav-item em'), /font-size:\s*(?:12px|var\(--text-2xs\))/)
   assert.match(firstRule(tokensCss, ':root'), /--btn-h:\s*32px/)
   assert.match(firstRule(tokensCss, ':root'), /--btn-h-sm:\s*28px/)
 })

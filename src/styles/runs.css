@@ -12,7 +12,7 @@
 .runs-stats { display:flex; gap:32px; padding:12px 0; border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
 .runs-stats div { display:flex; align-items:baseline; gap:8px; }
 .runs-stats strong { font-size:20px; font-weight:600; letter-spacing:-.02em; }
-.runs-stats span { font-family:var(--font-mono); font-size: 12px; letter-spacing:.06em; text-transform:uppercase; color:var(--faint); }
+.runs-stats span { font-family:var(--font-mono); font-size: var(--text-2xs); letter-spacing:.06em; text-transform:uppercase; color:var(--faint); }
 .runs-body { display:grid; grid-template-columns:minmax(0,360px) minmax(0,1fr); gap:24px; align-items:start; }
 .runs-list { display:flex; flex-direction:column; gap:1px; margin:0; padding:0; list-style:none; border-top:1px solid var(--line); }
 .runs-row { display:grid; grid-template-columns:8px 1fr auto; align-items:center; gap:12px; width:100%; padding:12px 8px; border:0; border-bottom:1px solid var(--line); border-left:2px solid transparent; background:transparent; text-align:left; cursor:pointer; }
@@ -54,12 +54,12 @@
 .runs-output-list { display: grid; gap: 0; margin: 8px 0 0; border: 1px solid var(--line-faint); border-radius: var(--radius-sm); background: var(--surface-raised); }
 .runs-output-list > div { display: grid; grid-template-columns: minmax(88px, 140px) minmax(0, 1fr); gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--line-faint); }
 .runs-output-list > div:last-child { border-bottom: 0; }
-.runs-output-list dt { color: var(--faint); font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.04em; overflow-wrap: anywhere; }
+.runs-output-list dt { color: var(--faint); font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: 0.04em; overflow-wrap: anywhere; }
 .runs-output-list dd { margin: 0; color: var(--ink); font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
 .runs-output-raw { margin-top: 8px; font-size: 13px; color: var(--muted); }
 .runs-output-raw summary { cursor: pointer; padding: 4px 0; color: var(--faint); }
 .runs-output-raw summary:hover { color: var(--ink); }
-.runs-node-output { margin:0; max-height:160px; overflow:auto; padding:8px 12px; border:1px solid var(--line-faint); border-radius:var(--radius-sm); background:var(--surface-raised); font-family:var(--font-mono); font-size: 12px; line-height:1.6; color:var(--muted); white-space:pre-wrap; }
+.runs-node-output { margin:0; max-height:160px; overflow:auto; padding:8px 12px; border:1px solid var(--line-faint); border-radius:var(--radius-sm); background:var(--surface-raised); font-family:var(--font-mono); font-size: var(--text-2xs); line-height:1.6; color:var(--muted); white-space:pre-wrap; }
 .runs-note { margin:0; color:var(--faint); font-size:13px; }
 .runs-note.is-error { color:var(--fail); }
 .runs-empty { display:flex; flex-direction:column; gap:8px; padding:32px; border:1px dashed var(--line-strong); border-radius:var(--radius-md); color:var(--faint); }
@@ -71,7 +71,7 @@
 .runs-search input { flex:1; min-width:0; height:100%; border:0; background:transparent; color:var(--ink); font-family:inherit; font-size:13px; }
 .runs-search input:focus { outline:none; }
 .runs-select { display:flex; align-items:center; gap:8px; }
-.runs-select span { font-family:var(--font-mono); font-size:12px; letter-spacing:.05em; color:var(--faint); }
+.runs-select span { font-family:var(--font-mono); font-size: var(--text-2xs); letter-spacing:.05em; color:var(--faint); }
 .runs-select select { height:34px; padding:0 24px 0 8px; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface); color:var(--ink); font-family:inherit; font-size:13px; }
 .runs-pager { display:flex; align-items:center; justify-content:flex-end; gap:8px; padding-top:8px; border-top:1px solid var(--line); }
 .runs-pager .vq-mono { margin-right:8px; color:var(--faint); font-size:13px; }
@@ -80,7 +80,7 @@
    面板两行「标签 + 控件」：一行挂到已有作品，一行照这块画布新建；间距只走 4/8pt。 */
 .runs-adopt { display:flex; flex-direction:column; gap:8px; padding:12px; border:1px solid var(--line); border-radius:var(--radius-md); background:var(--surface-raised); }
 .runs-adopt-row { display:flex; align-items:center; flex-wrap:wrap; gap:8px 12px; }
-.runs-adopt-label { min-width:72px; color:var(--faint); font-family:var(--font-mono); font-size:12px; letter-spacing:.05em; }
+.runs-adopt-label { min-width:72px; color:var(--faint); font-family:var(--font-mono); font-size: var(--text-2xs); letter-spacing:.05em; }
 .runs-adopt-hint { flex:1 1 240px; min-width:0; color:var(--muted); font-size:13px; }
 .runs-adopt-error { margin:0; color:var(--fail); font-size:13px; }
 .runs-adopt-done { margin:0; color:var(--muted); font-size:13px; }
@@ -90,7 +90,7 @@
 .runs-plan { display:grid; grid-template-columns:auto minmax(0,1fr); align-items:center; gap:8px 12px; padding:12px; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface-raised); }
 .runs-plan.is-ready { border-color:rgba(23,107,67,.24); background:var(--pass-soft); }
 .runs-plan.is-blocked { border-color:rgba(138,91,8,.26); background:var(--warn-soft); }
-.runs-plan-label { color:var(--faint); font-family:var(--font-mono); font-size:12px; letter-spacing:.05em; white-space:nowrap; }
+.runs-plan-label { color:var(--faint); font-family:var(--font-mono); font-size: var(--text-2xs); letter-spacing:.05em; white-space:nowrap; }
 .runs-plan.is-ready .runs-plan-label { color:var(--pass); }
 .runs-plan.is-blocked .runs-plan-label { color:var(--warn); }
 .runs-plan-main { display:flex; align-items:center; gap:8px; min-width:0; color:var(--ink); font-size:13px; font-weight:600; }

@@ -65,9 +65,11 @@
   --space-12: 48px;
   --space-16: 64px;
 
-  /* ---------- 字阶：微标签 11 起（10px 在 1x 屏上必糊），正文 14 ---------- */
-  --text-mono: 12px;
-  --text-xs: 13px;
+  /* ---------- 字阶（2026-11-19 r257 抬一档）：最小档 13（原来是 11/11.5/12/12.5 混着写），
+     正文 15；元数据比最小档再高半档 13.5 便于在 1x 屏上一眼看清。 ---------- */
+  --text-2xs: 13px;
+  --text-mono: 13px;
+  --text-xs: 13.5px;
   --text-sm: 15px;
   --text-body: 15px;
   --text-md: 16px;
@@ -75,7 +77,7 @@
   /* 阅读面（脚本、评审结论、分享页）单独一套：字号比工作台大一档，行高按中文放宽 */
   --text-copy: 15px;
   --leading-copy: 1.7;
-  --text-meta: 13px;
+  --text-meta: 14px;
   --leading-meta: 1.6;
   --text-xl: 21px;
   --text-2xl: 29px;
@@ -103,7 +105,7 @@
   --chip-tag-h: 20px;
   --chip-pad: 8px;
   --chip-pad-tight: 6px;
-  --chip-font: 12px;
+  --chip-font: 13px;
   --chip-font-lg: 13px;
 
   /* ---------- 按钮（v0.9.47 归一）：全站只三档 ----------
@@ -138,10 +140,10 @@
   --head-title-weight: 500;
   --head-title-tracking: -0.01em;
   --head-title-leading: 1.25;
-  --head-kicker-size: 12.5px;
+  --head-kicker-size: 13px;
   --head-kicker-weight: 500;
   --head-kicker-tracking: 0.06em;
-  --head-desc-size: 13.5px;
+  --head-desc-size: 14px;
   --head-desc-leading: 1.7;
 
   /* 兼容旧变量名：旧组件读这些，直接指向新品牌色 */
@@ -215,4 +217,4 @@ button, input, select, textarea { font-family: inherit; }
 .vq-frame::before { top: -1px; left: -1px; border-width: 1px 0 0 1px; }
 .vq-frame::after { right: -1px; bottom: -1px; border-width: 0 1px 1px 0; }
 
-.vq-mono { font-family: var(--font-mono); letter-spacing: 0.04em; font-size: 12px; text-transform: uppercase; color: var(--faint); }
+.vq-mono { font-family: var(--font-mono); letter-spacing: 0.04em; font-size: var(--text-2xs); text-transform: uppercase; color: var(--faint); }

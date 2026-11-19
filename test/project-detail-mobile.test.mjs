@@ -129,7 +129,7 @@ test('桌面（1081 起）没被顺手放大：基样式仍是 12/13px 与 19–
   assert.match(firstRule(projectsCss, '.vq-version-review'), /height:\s*24px/)
   assert.match(firstRule(projectsCss, '.vq-script-link'), /font-size:\s*var\(--text-meta\)/)
   assert.doesNotMatch(firstRule(projectsCss, '.vq-script-link'), /min-height/)
-  assert.match(firstRule(projectsCss, '.vq-project-verdict'), /font-size:\s*12px/)
+  assert.match(firstRule(projectsCss, '.vq-project-verdict'), /font-size:\s*(?:12px|var\(--text-2xs\))/)
   // 新块里不许出现 1081 以上的媒体查询：这一轮只动窄屏
   assert.ok(!projectsCss.includes('min-width: 1081px) and (max-width: 1439px) {\n  .vq-project-detail'), '详情页不该在桌面段里加规则')
 })

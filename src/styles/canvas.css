@@ -42,7 +42,7 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   letter-spacing: .04em;
   white-space: nowrap;
   transition: color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out),
@@ -57,7 +57,7 @@
 .cv-save.is-error .cv-save-dot { background: var(--fail); }
 .cv-head-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 /* 运行前的积分口径：按次扣，失败退回；数字用等宽，避免和按钮抢注意力 */
-.cv-run-credit { font-family: var(--font-mono); font-size: 12px; letter-spacing: .02em; color: var(--faint); white-space: nowrap; }
+.cv-run-credit { font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: .02em; color: var(--faint); white-space: nowrap; }
 .cv-flow-select { position: relative; display: inline-flex; align-items: center; }
 .cv-flow-select select {
   appearance: none;
@@ -132,7 +132,7 @@
 .cv-palette-head { display: flex; align-items: flex-start; gap: 8px; padding: 16px 16px 8px; }
 .cv-kicker {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   letter-spacing: .16em;
   text-transform: uppercase;
   color: var(--faint);
@@ -145,7 +145,7 @@
   color: var(--faint);
   border-top: 1px solid var(--line-faint);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   letter-spacing: .14em;
   text-transform: uppercase;
 }
@@ -180,7 +180,7 @@
 }
 .cv-palette-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .cv-palette-copy strong { font-size: 13px; font-weight: 500; }
-.cv-palette-copy span { color: var(--faint); font-family: var(--font-mono); font-size: 12px; letter-spacing: .12em; }
+.cv-palette-copy span { color: var(--faint); font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: .12em; }
 .cv-palette-plus { flex: 0 0 auto; color: var(--faint); opacity: 0; transition: opacity .12s ease; }
 .cv-palette-item:hover .cv-palette-plus { opacity: 1; }
 .cv-palette-foot {
@@ -190,7 +190,7 @@
   border-top: 1px solid var(--line);
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
 }
 
 /* ---------- 中间画布 ---------- */
@@ -221,7 +221,7 @@
   flex: 0 0 auto;
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   letter-spacing: .08em;
 }
 .cv-project-title {
@@ -240,7 +240,7 @@
   min-width: 0;
   color: var(--muted);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   letter-spacing: .02em;
   white-space: nowrap;
   overflow: hidden;
@@ -298,7 +298,7 @@
   flex: 0 0 auto;
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   letter-spacing: .08em;
   white-space: nowrap;
 }
@@ -342,7 +342,7 @@
   flex: 0 0 auto;
   color: var(--muted);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--text-2xs);
   border: 1px solid var(--line);
   border-radius: 50%;
 }
@@ -354,8 +354,8 @@
 .cv-flowline-dot[data-state="error"] { background: var(--fail); }
 .cv-flowline-dot[data-state="skipped"] { background: var(--faint); }
 .cv-flowline-dot[data-state="unsupported"] { background: var(--warn); }
-.cv-flowline-state { color: var(--faint); font-family: var(--font-mono); font-size: 12px; }
-.cv-flowline-arrow { color: var(--faint); font-size: 12px; }
+.cv-flowline-state { color: var(--faint); font-family: var(--font-mono); font-size: var(--text-2xs); }
+.cv-flowline-arrow { color: var(--faint); font-size: var(--text-2xs); }
 
 .cv-canvas { position: relative; flex: 1; min-height: 0; }
 .cv-canvas .react-flow { background: var(--canvas); }
@@ -377,7 +377,7 @@
   border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, .88);
 }
-.cv-canvas .react-flow__edge-text { fill: var(--faint); font-family: var(--font-mono); font-size: 12px; }
+.cv-canvas .react-flow__edge-text { fill: var(--faint); font-family: var(--font-mono); font-size: var(--text-2xs); }
 .cv-canvas .react-flow__edge-textbg { fill: var(--canvas); }
 .cv-canvas .react-flow__edge.selected .react-flow__edge-path { stroke: var(--ink); }
 .cv-canvas .react-flow__node { cursor: grab; }
@@ -525,18 +525,18 @@
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-xs);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   letter-spacing: .1em;
 }
 .cv-type-row div { flex: 1; min-width: 0; }
 .cv-type-row strong { display: block; font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
 .cv-type-row div span { display: block; margin-top: 4px; color: var(--faint); font-size: 13px; line-height: 1.45; }
-.cv-type-status { flex: 0 0 auto; color: var(--faint); font-family: var(--font-mono); font-size: 12px; white-space: nowrap; }
+.cv-type-status { flex: 0 0 auto; color: var(--faint); font-family: var(--font-mono); font-size: var(--text-2xs); white-space: nowrap; }
 .cv-type-status[data-status="error"] { color: var(--fail); }
 .cv-type-status[data-status="done"] { color: var(--ink); }
 .cv-inspector-body { flex: 1; min-height: 0; overflow: auto; }
 .cv-section { display: grid; gap: 12px; padding: 16px; border-bottom: 1px solid var(--line); }
-.cv-section-title { color: var(--faint); font-family: var(--font-mono); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; }
+.cv-section-title { color: var(--faint); font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: .14em; text-transform: uppercase; }
 .cv-field { display: grid; gap: 4px; }
 .cv-field-label { color: var(--muted); font-size: 13px; }
 .cv-field-hint { color: var(--faint); font-size: 13px; line-height: 1.5; }
@@ -552,16 +552,16 @@
   font-size: 13px;
 }
 .cv-input:focus, .cv-textarea:focus, .cv-select:focus { outline: none; border-color: var(--ink); }
-.cv-input--mono, .cv-textarea--mono { font-family: var(--font-mono); font-size: 12px; letter-spacing: .02em; }
+.cv-input--mono, .cv-textarea--mono { font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: .02em; }
 .cv-textarea { min-height: 64px; resize: vertical; line-height: 1.55; }
 .cv-textarea--short { min-height: 44px; }
 .cv-select { appearance: none; }
 .cv-range-row { display: flex; align-items: center; gap: 12px; }
 .cv-range { flex: 1; accent-color: var(--ink); }
-.cv-range-value { color: var(--muted); font-family: var(--font-mono); font-size: 12px; }
+.cv-range-value { color: var(--muted); font-family: var(--font-mono); font-size: var(--text-2xs); }
 .cv-meta-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 13px; }
 .cv-meta-row strong { color: var(--ink); font-size: 13px; font-weight: 500; }
-.cv-mono { font-family: var(--font-mono); font-size: 12px; letter-spacing: .03em; }
+.cv-mono { font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: .03em; }
 .cv-node-error { margin: 0; padding: 8px 8px; color: var(--fail); background: var(--fail-soft); border: 1px solid rgba(163, 56, 56, .2); border-radius: var(--radius-xs); font-size: 13px; line-height: 1.5; word-break: break-word; }
 .cv-inspector-foot { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
 .cv-inspector-empty { display: grid; justify-items: start; gap: 12px; padding: 24px 16px; }
@@ -644,7 +644,7 @@
   cursor: pointer;
 }
 .cv-run-item-head:hover { background: #f7f7f7; }
-.cv-run-index { color: var(--faint); font-family: var(--font-mono); font-size: 12px; }
+.cv-run-index { color: var(--faint); font-family: var(--font-mono); font-size: var(--text-2xs); }
 .cv-run-status { display: grid; place-items: center; color: var(--faint); }
 .cv-run-item.is-success .cv-run-status { color: var(--ink); }
 .cv-run-item.is-error .cv-run-status { color: var(--fail); }
@@ -652,8 +652,8 @@
 .cv-run-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .cv-run-title strong { overflow: hidden; font-size: 13px; font-weight: 500; white-space: nowrap; text-overflow: ellipsis; }
 .cv-run-title .cv-mono { color: var(--faint); font-size: 13px; }
-.cv-run-ms { color: var(--muted); font-family: var(--font-mono); font-size: 12px; }
-.cv-run-state { color: var(--faint); font-family: var(--font-mono); font-size: 12px; }
+.cv-run-ms { color: var(--muted); font-family: var(--font-mono); font-size: var(--text-2xs); }
+.cv-run-state { color: var(--faint); font-family: var(--font-mono); font-size: var(--text-2xs); }
 .cv-run-output {
   margin: 0;
   max-height: 180px;
@@ -663,7 +663,7 @@
   background: #fafafa;
   border-top: 1px solid var(--line-faint);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   line-height: 1.65;
   white-space: pre-wrap;
   word-break: break-word;
@@ -779,7 +779,7 @@ body:has(.cv-next) .vq-toast { bottom: 152px; }
    一句一眼说清「有几步、每步是什么、依赖谁」，点一步选中改参数。桌面这块 display:none，画布照旧。 */
 .cv-steps { display: none; }
 .cv-steps-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.cv-steps-count { color: var(--muted); font-family: var(--font-mono); font-size: 12px; letter-spacing: .02em; }
+.cv-steps-count { color: var(--muted); font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: .02em; }
 .cv-steps-warn { margin: 0; padding: 8px 12px; color: var(--warn); background: var(--warn-soft); border: 1px solid rgba(138, 91, 8, .22); border-radius: var(--radius-sm); font-size: 13px; line-height: 1.6; }
 .cv-steps-list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .cv-step {
@@ -809,12 +809,12 @@ body:has(.cv-next) .vq-toast { bottom: 152px; }
   border: 1px solid var(--line);
   border-radius: 999px;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
 }
 .cv-step-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .cv-step-title { font-size: 15px; font-weight: 500; line-height: 1.45; overflow-wrap: anywhere; }
 .cv-step-meta { color: var(--muted); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
-.cv-step-dep { color: var(--faint); font-family: var(--font-mono); font-size: 12px; letter-spacing: .02em; }
+.cv-step-dep { color: var(--faint); font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: .02em; }
 .cv-step-state {
   flex: none;
   margin-left: auto;
@@ -823,7 +823,7 @@ body:has(.cv-next) .vq-toast { bottom: 152px; }
   border: 1px solid var(--line);
   border-radius: 999px;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   line-height: 22px;
   white-space: nowrap;
 }
@@ -832,7 +832,7 @@ body:has(.cv-next) .vq-toast { bottom: 152px; }
 .cv-steps-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 16px; border: 1px dashed var(--line); border-radius: var(--radius-md); }
 .cv-steps-empty strong { font-size: 15px; font-weight: 600; }
 .cv-steps-empty p { margin: 0; max-width: 340px; color: var(--muted); font-size: 13px; line-height: 1.65; }
-.cv-steps-note { margin: 0; color: var(--faint); font-size: 12px; line-height: 1.6; }
+.cv-steps-note { margin: 0; color: var(--faint); font-size: var(--text-2xs); line-height: 1.6; }
 
 @media (max-width: 760px) {
   /* 画布整个不画：272×309 的缩水图放不下任何东西，空状态还会压住缩放按钮 */
@@ -886,7 +886,7 @@ body:has(.cv-next) .vq-toast { bottom: 152px; }
   border: 1px solid rgba(138, 91, 8, .22);
   border-radius: var(--radius-pill);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   letter-spacing: .02em;
   white-space: nowrap;
 }
@@ -943,12 +943,12 @@ body:has(.cv-next) .vq-toast { bottom: 152px; }
   gap: 8px;
   color: var(--muted);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   letter-spacing: .12em;
   text-transform: uppercase;
   white-space: nowrap;
 }
-.cv-runview-line .vq-mono { color: var(--faint); font-size: 12px; }
+.cv-runview-line .vq-mono { color: var(--faint); font-size: var(--text-2xs); }
 .cv-runview-copy,
 .cv-runview-warn {
   margin: 0;
@@ -1058,7 +1058,7 @@ body:has(.cv-next) .vq-toast { bottom: 152px; }
   justify-content: space-between;
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   letter-spacing: .04em;
 }
 @media (max-width: 760px) {

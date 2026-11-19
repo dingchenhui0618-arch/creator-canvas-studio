@@ -170,14 +170,14 @@ test('桌面（1081 起）基样式一个像素没动', () => {
   assert.match(firstRule(shellCss, '.vq-nav-item'), /min-height:\s*34px/)
   assert.match(firstRule(shellCss, '.vq-search'), /height:\s*30px/)
   assert.match(firstRule(shellCss, '.vq-filter-chip'), /height:\s*30px/)
-  assert.match(firstRule(shellCss, '.vq-filter-chip'), /font-size:\s*12\.5px/)
+  assert.match(firstRule(shellCss, '.vq-filter-chip'), /font-size:\s*(?:12\.5px|var\(--text-2xs\))/)
   assert.match(firstRule(shellCss, '.vq-link'), /min-height:\s*24px/)
   assert.match(firstRule(overviewCss, '.vq-next-cta'), /height:\s*36px/)
-  assert.match(firstRule(overviewCss, '.vq-next-label'), /font-size:\s*12px/)
-  assert.match(firstRule(radarCss, '.radar-author'), /font-size:\s*11\.5px/)
+  assert.match(firstRule(overviewCss, '.vq-next-label'), /font-size:\s*(?:12px|var\(--text-2xs\))/)
+  assert.match(firstRule(radarCss, '.radar-author'), /font-size:\s*(?:11\.5px|var\(--text-2xs\))/)
   assert.match(firstRule(radarCss, '.radar-title'), /font-size:\s*15px/)
   assert.match(firstRule(radarCss, '.template-adapt'), /height:\s*32px/)
-  assert.match(firstRule(radarCss, '.template-adapt'), /font-size:\s*11\.5px/)
+  assert.match(firstRule(radarCss, '.template-adapt'), /font-size:\s*(?:11\.5px|var\(--text-2xs\))/)
 })
 
 test('新加的几段里没有小于 13px 的字', () => {

@@ -65,14 +65,14 @@
 .agx-mono {
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.03em;
 }
 .agx-kicker {
   display: block;
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.04em;
 }
 
@@ -111,7 +111,7 @@
   border-bottom: 1px solid var(--line-faint);
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -148,7 +148,7 @@
   margin-top: 4px;
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
 }
 
 /* 历史弹层：本机对话 / 服务端运行记录 */
@@ -164,7 +164,7 @@
   border: 0;
   border-radius: var(--radius-sm);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.04em;
 }
 .agx-popover-tabs button.is-active {
@@ -178,7 +178,7 @@
 .agx-popover-note {
   margin: 8px 8px 4px;
   color: var(--faint);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   line-height: 1.6;
 }
 .agx-runs {
@@ -195,14 +195,14 @@
   padding: 4px 8px;
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
 }
 .agx-runs-clear {
   padding: 0;
   color: var(--faint);
   background: none;
   border: 0;
-  font-size: 12px;
+  font-size: var(--text-2xs);
 }
 .agx-runs-clear.is-armed {
   color: var(--fail);
@@ -235,7 +235,7 @@
   border: 1px solid var(--line);
   border-radius: 999px;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.04em;
 }
 .agx-run.is-error .agx-run-state {
@@ -255,7 +255,7 @@
   grid-column: 1 / -1;
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
 }
 .agx-run-detail {
   display: flex;
@@ -298,7 +298,7 @@
   background: none;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  font-size: 12px;
+  font-size: var(--text-2xs);
 }
 .agx-runs-more:hover {
   color: var(--ink);
@@ -321,7 +321,7 @@
   border: 1px solid var(--line-faint);
   border-radius: 999px;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
 }
 .agx-msg-tools span.is-muted {
   color: var(--faint);
@@ -339,6 +339,76 @@
 .agx-composer-wrap {
   width: min(900px, 100%);
   margin: 0 auto;
+}
+
+/* 平台对话铺满视口（r257）：以前线程 56vh + 输入卡按文档流往下排，1440×900 上输入卡
+   掉到屏幕外约 40px，底下「Enter 发送 · Shift+Enter 换行」整行被切掉。现在整页收进一屏，
+   只有对话线程自己滚，输入卡永远在屏幕里；作品条 / 页签 / 输入卡都不参与收缩。 */
+/* 平台对话是一屏聊天：下面那块「已自建对话预设」在桌面也收起来（r257）。
+   要看预设清单就切上面的「对话预设」页签——那里才是它的位置。 */
+.agx-page--platform .agx-library {
+  display: none;
+}
+
+@media (min-width: 901px) {
+  .page.agx-page--platform {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+  }
+  .agx-page--platform > .vq-head,
+  .agx-page--platform > .vq-page-head {
+    flex: none;
+  }
+  .agx-page--platform .agx-stage {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .agx-page--platform .agx-project {
+    flex: none;
+  }
+  .agx-page--platform .agx-composer-wrap {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .agx-page--platform .agx-mode-row,
+  .agx-page--platform .agx-surface-switch {
+    flex: none;
+  }
+  .agx-page--platform .agx-quickchat {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  /* 网格行要定高，否则线程按自己的内容长出去（r257 实测：线程 256、容器 133，输入卡被挤到屏幕外） */
+  .agx-page--platform .qc-root {
+    grid-template-rows: minmax(0, 1fr);
+    align-items: stretch;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  .agx-page--platform .qc-main {
+    min-height: 0;
+  }
+  .agx-page--platform .qc-thread {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+  }
+  .agx-page--platform .qc-side {
+    height: 100%;
+    min-height: 0;
+    max-height: none;
+  }
+  .agx-page--platform .qc-list {
+    max-height: none;
+  }
 }
 .agx-thread-head {
   display: flex;
@@ -401,7 +471,7 @@
   gap: 8px;
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.02em;
 }
 .agx-msg-meta button {
@@ -413,7 +483,7 @@
   background: none;
   border: 0;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
 }
 .agx-msg-meta button:hover {
   color: var(--ink);
@@ -487,7 +557,7 @@
 .agx-failure small {
   color: var(--fail);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
 }
 .agx-failure > div {
   display: flex;
@@ -523,7 +593,7 @@
 .agx-credit-line {
   padding: 0 4px 8px;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.02em;
   font-variant-numeric: tabular-nums;
   color: var(--ink-faint);
@@ -595,7 +665,7 @@
 .agx-capsule > span {
   color: var(--faint);
   font-family: var(--font-ui);
-  font-size: 11.5px;
+  font-size: var(--text-2xs);
 }
 .agx-capsule-trigger {
   display: inline-flex;
@@ -613,7 +683,7 @@
 }
 .agx-capsule-trigger em {
   overflow: hidden;
-  font-size: 12.5px;
+  font-size: var(--text-2xs);
   font-style: normal;
   font-weight: 500;
   text-overflow: ellipsis;
@@ -660,7 +730,7 @@
   border: 0;
   border-radius: var(--radius-sm);
   font-family: var(--font-ui);
-  font-size: 12.5px;
+  font-size: var(--text-2xs);
   text-align: left;
   white-space: nowrap;
   cursor: pointer;
@@ -685,7 +755,7 @@
   border-radius: var(--radius-xs);
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.02em;
   white-space: nowrap;
 }
@@ -740,7 +810,7 @@
 .agx-library-meta {
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.02em;
   font-variant-numeric: tabular-nums;
 }
@@ -780,7 +850,7 @@
   margin-left: 4px;
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   font-style: normal;
   font-weight: 400;
 }
@@ -882,7 +952,7 @@
   border-radius: 6px;
   background: var(--ink);
   color: var(--surface);
-  font-size: 11px;
+  font-size: var(--text-2xs);
   line-height: 18px;
   letter-spacing: 0.02em;
 }
@@ -996,7 +1066,7 @@
   gap: 12px;
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -1207,7 +1277,7 @@
   border: 1px solid var(--line-faint);
   border-radius: var(--radius-xs);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
 }
 .agx-side-note {
   display: block;
@@ -1345,7 +1415,7 @@
   background: var(--surface);
   border-bottom: 1px solid var(--line);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   font-weight: 500;
   letter-spacing: 0.06em;
   text-align: left;
@@ -1416,14 +1486,14 @@
 .agx-model-note-text small {
   color: var(--fail);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   overflow-wrap: anywhere;
 }
 .agx-model-note .vq-button {
   flex: none;
   height: var(--btn-h-sm);
   color: var(--fail);
-  font-size: 11.5px;
+  font-size: var(--text-2xs);
 }
 
 /* ---------- 结构化草稿卡：对话预设回复的两个出口 ---------- */
@@ -1446,7 +1516,7 @@
 .agx-draft-kicker {
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.08em;
 }
 .agx-draft-head strong {
@@ -1461,7 +1531,7 @@
   gap: 8px;
   color: var(--muted);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.02em;
 }
 .agx-draft-stats span + span::before {
@@ -1521,7 +1591,7 @@
 }
 .agx-draft-fact {
   color: var(--faint);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   font-style: normal;
   font-family: var(--font-mono);
 }
@@ -1544,7 +1614,7 @@
   flex: none;
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.08em;
 }
 .agx-draft-select {
@@ -1595,7 +1665,7 @@
 .agx-project-kicker {
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.08em;
 }
 .agx-project strong {
@@ -1607,7 +1677,7 @@
 .agx-project-meta {
   color: var(--muted);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.02em;
 }
 .agx-project-actions {
@@ -1670,6 +1740,46 @@
   box-shadow: inset 0 0 0 1px var(--line);
 }
 .agx-mode-tabs button:focus-visible {
+  outline: 2px solid var(--line-strong);
+  outline-offset: 2px;
+}
+
+/* 页签与「工作流」入口同一行（r257）：工作流不再占一个页签，只在右边留一条去路 */
+.agx-mode-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.agx-mode-row .agx-mode-tabs {
+  margin-bottom: 0;
+}
+.agx-flow-link {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 32px;
+  padding: 0 var(--space-3);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition:
+    color var(--dur-1) var(--ease-out),
+    border-color var(--dur-1) var(--ease-out),
+    background-color var(--dur-1) var(--ease-out);
+}
+.agx-flow-link:hover {
+  color: var(--ink);
+  background: var(--surface-raised);
+  border-color: var(--line-strong);
+}
+.agx-flow-link:focus-visible {
   outline: 2px solid var(--line-strong);
   outline-offset: 2px;
 }
@@ -2160,141 +2270,6 @@
 
 
 
-/* ---------- 快捷创作里的「工作流」页签（r256） ----------
-   它不是输入框，是一张清单：说明一句、几行最近的工作流、一行计费口径。
-   和输入卡同一个宽度与圆角，只是没有输入区，所以看上去仍是「同一个窗口里的另一种去向」。 */
-.agx-flowpanel {
-  display: grid;
-  gap: var(--space-3);
-  min-width: 0;
-  padding: 16px 16px 12px;
-  background: var(--surface-raised);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-card);
-}
-.agx-flowpanel-head {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-2);
-}
-.agx-flowpanel-icon {
-  display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  color: var(--ink);
-  background: var(--surface-soft);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-}
-.agx-flowpanel-copy {
-  flex: 1;
-  min-width: 0;
-}
-.agx-flowpanel-copy strong {
-  display: block;
-  color: var(--ink);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
-}
-.agx-flowpanel-copy p {
-  margin: 2px 0 0;
-  color: var(--faint);
-  font-size: var(--text-xs);
-  line-height: 1.6;
-}
-.agx-flowpanel-new {
-  flex: 0 0 auto;
-}
-.agx-flowpanel-list {
-  display: grid;
-  gap: var(--space-2);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.agx-flowpanel-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-areas: 'name go' 'meta go' 'when go';
-  align-items: center;
-  gap: 2px var(--space-3);
-  width: 100%;
-  padding: var(--space-2) var(--space-3);
-  text-align: left;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: border-color var(--dur-1) var(--ease-out), background-color var(--dur-1) var(--ease-out);
-}
-.agx-flowpanel-row:hover {
-  background: var(--surface-raised);
-  border-color: var(--line-strong);
-}
-.agx-flowpanel-row:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 2px;
-}
-.agx-flowpanel-name {
-  grid-area: name;
-  overflow: hidden;
-  color: var(--ink);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.agx-flowpanel-meta {
-  grid-area: meta;
-  color: var(--muted);
-  font-size: var(--text-xs);
-}
-.agx-flowpanel-when {
-  grid-area: when;
-  color: var(--faint);
-  font-family: var(--font-mono);
-  font-size: var(--text-mono);
-}
-.agx-flowpanel-go {
-  grid-area: go;
-  color: var(--faint);
-}
-.agx-flowpanel-row:hover .agx-flowpanel-go {
-  color: var(--ink);
-}
-.agx-flowpanel-empty {
-  display: grid;
-  gap: var(--space-2);
-  justify-items: start;
-  margin: 0;
-  color: var(--muted);
-  font-size: var(--text-xs);
-  line-height: 1.6;
-}
-.agx-flowpanel-empty p {
-  margin: 0;
-}
-.agx-flowpanel-error {
-  margin: 0;
-  color: var(--fail);
-  font-size: var(--text-xs);
-  line-height: 1.6;
-}
-.agx-flowpanel-note {
-  margin: 0;
-  padding-top: var(--space-2);
-  color: var(--faint);
-  font-size: var(--text-mono);
-  line-height: 1.6;
-  border-top: 1px solid var(--line-faint);
-}
-.agx-flowpanel-spin {
-  animation: agx-media-spin 0.8s linear infinite;
-}
-
 /* 窄屏与「对话」一致：一条竖着排，输入卡在前，最近生成收到后面（r256） */
 @media (max-width: 900px) {
   .agx-media-shell {
@@ -2442,7 +2417,7 @@
   left: 2px;
   padding: 0 var(--space-1);
   color: #ffffff;
-  font-size: 12px;
+  font-size: var(--text-2xs);
   font-style: normal;
   line-height: 16px;
   background: rgba(16, 18, 24, 0.72);
@@ -3163,7 +3138,7 @@
     margin-right: 8px;
     color: var(--faint);
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--text-2xs);
     letter-spacing: 0.04em;
   }
 }
@@ -3279,13 +3254,13 @@
   border-radius: var(--radius-pill);
   background: var(--surface);
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   cursor: pointer;
 }
 
 .agx-surface-switch button.is-active { border-color: var(--ink); color: var(--ink); background: var(--surface-raised); }
 
-.agx-surface-note { font-size: 11px; color: var(--faint); }
+.agx-surface-note { font-size: var(--text-2xs); color: var(--faint); }
 
 .agx-composer[hidden] { display: none; }
 

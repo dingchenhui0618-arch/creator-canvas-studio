@@ -73,7 +73,7 @@
 }
 .vq-spend-head span {
   color: var(--faint);
-  font-size: 12px;
+  font-size: var(--text-2xs);
 }
 .vq-spend-chips {
   display: flex;
@@ -92,7 +92,7 @@
 }
 .vq-spend-chip em {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   font-style: normal;
 }
 .vq-spend-chip b {
@@ -103,13 +103,13 @@
 }
 .vq-spend-chip i {
   color: var(--faint);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   font-style: normal;
 }
 .vq-spend-note {
   margin: 0;
   color: var(--faint);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   line-height: 1.6;
 }
 
@@ -130,7 +130,7 @@
 .vq-price-item span {
   display: block;
   color: var(--muted);
-  font-size: 11.5px;
+  font-size: var(--text-2xs);
 }
 .vq-price-item strong {
   display: block;
@@ -150,7 +150,7 @@
 .vq-ledger th {
   padding: 8px 12px 8px 0;
   color: var(--faint);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   font-weight: 500;
   letter-spacing: 0.06em;
   text-align: left;
@@ -170,7 +170,7 @@
 .vq-ledger td.time {
   color: var(--muted);
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: var(--text-2xs);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -218,7 +218,7 @@
   /* 手机列窄：时间与类型用 11px，否则「11/13 12:28」「对话」会互相压到 */
   .vq-ledger td:nth-child(1),
   .vq-ledger td:nth-child(2) {
-    font-size: 12px;
+    font-size: var(--text-2xs);
   }
   .vq-ledger td:nth-child(2) {
     white-space: nowrap;
@@ -242,7 +242,7 @@
   padding-top: 12px;
   border-top: 1px solid var(--line-faint);
   color: var(--faint);
-  font-size: 11.5px;
+  font-size: var(--text-2xs);
   font-variant-numeric: tabular-nums;
 }
 
@@ -295,7 +295,7 @@
 }
 .vq-plan-note {
   color: var(--faint);
-  font-size: 11.5px;
+  font-size: var(--text-2xs);
   line-height: 1.6;
 }
 .vq-plan-note--lead {
@@ -332,7 +332,7 @@
 .vq-receipt-main em {
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   font-style: normal;
 }
 .vq-receipt-meta {
@@ -359,7 +359,7 @@
   background: var(--surface-raised);
 }
 .vq-health-row strong {
-  font-size: 12.5px;
+  font-size: var(--text-2xs);
   font-weight: 500;
 }
 .vq-health-row .detail {
@@ -372,7 +372,7 @@
 .vq-health-row .ms {
   color: var(--faint);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
@@ -440,13 +440,13 @@
 .vq-password-note {
   margin: 8px 0 0;
   color: var(--faint);
-  font-size: 11.5px;
+  font-size: var(--text-2xs);
   line-height: 1.6;
 }
 .vq-field--wide { flex: 1 1 220px; }
 .vq-field > span {
   color: var(--faint);
-  font-size: 12px;
+  font-size: var(--text-2xs);
   letter-spacing: 0.06em;
 }
 .vq-input {
@@ -456,7 +456,7 @@
   background: var(--surface-raised);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
-  font-size: 12.5px;
+  font-size: var(--text-2xs);
   font-family: inherit;
 }
 .vq-input:focus-visible {

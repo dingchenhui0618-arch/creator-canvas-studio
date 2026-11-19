@@ -97,7 +97,7 @@ test('作品流平板段：动作 44px、筛选 40px，正文抬到 13–15px', 
 })
 
 test('作品流桌面口径没被放大：12.5px 胶囊、24px 动作、14px 标题', () => {
-  assert.match(firstRule(worksCss, '.works-chip'), /font-size:\s*12\.5px/)
+  assert.match(firstRule(worksCss, '.works-chip'), /font-size:\s*(?:12\.5px|var\(--text-2xs\))/)
   assert.match(firstRule(worksCss, '.works-action'), /min-height:\s*24px/)
   assert.match(firstRule(worksCss, '.works-title'), /font-size:\s*14px/)
   assert.match(firstRule(worksCss, '.works-grid'), /repeat\(4,/)
@@ -160,7 +160,7 @@ test('作品项目桌面口径没被放大：17px 标题、32px 搜索、30px �
   assert.match(firstRule(shellCss, '.vq-toolbar-search'), /height:\s*32px/)
   assert.match(firstRule(shellCss, '.vq-toolbar-search input'), /font-size:\s*14px/)
   assert.match(firstRule(shellCss, '.vq-filter-chip'), /height:\s*30px/)
-  assert.match(firstRule(shellCss, '.vq-filter-chip'), /font-size:\s*12\.5px/)
-  assert.match(firstRule(projectsCss, '.vq-project-card-meta em'), /font-size:\s*12px/)
+  assert.match(firstRule(shellCss, '.vq-filter-chip'), /font-size:\s*(?:12\.5px|var\(--text-2xs\))/)
+  assert.match(firstRule(projectsCss, '.vq-project-card-meta em'), /font-size:\s*(?:12px|var\(--text-2xs\))/)
   assert.match(firstRule(projectsCss, '.vq-project-card-go'), /font-size:\s*14px/)
 })

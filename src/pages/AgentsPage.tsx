@@ -11,6 +11,7 @@ import {
   Image as ImageIcon,
   Clock,
   Copy,
+  ArrowUpRight,
   Download,
   FolderOpen,
   History,
@@ -65,21 +66,20 @@ import { getPreferences } from '../api/preferences'
 import { useUiMode } from '../api/app'
 import PageHead from '../components/PageHead'
 import QuickChat from '../components/QuickChat'
-import { FlowPanel } from '../components/FlowPanel'
+import { listFlows, type ApiFlow } from '../api/flows'
 import { useModelOptions } from '../components/ModelSwitch'
 import { Tag } from '../components/ui'
 import { renderMarkdown } from '../lib/markdown'
 import '../styles/agents.css'
 
-// 创作方式：一个输入框，四种去向。对话交给对话预设，图片 / 视频走服务端生成通道，
-// 工作流是「这次创作的做法」（r256）：以前它只在侧栏有一个入口，点进去是一张和这次创作看不到
-// 关系的画布，用户说「别让它变成孤零零一个独立页」，所以把手上那几条摊在这里。
-type ComposerMode = 'chat' | MediaKind | 'flow'
+// 创作方式：一个输入框，三种去向。对话交给对话预设，图片 / 视频走服务端生成通道。
+// 工作流不当第四个页签（r257）：它是要摆节点、要跑起来才有意义的画布，摊成一张清单只是把另一页
+// 搬过来（用户：「别硬塞进去」）。这里只留一个入口，写清手上有几条、是不是在帮这条作品。
+type ComposerMode = 'chat' | MediaKind
 const COMPOSER_MODES: { id: ComposerMode; label: string }[] = [
   { id: 'chat', label: '对话' },
   { id: 'image', label: '图片' },
   { id: 'video', label: '视频' },
-  { id: 'flow', label: '工作流' },
 ]
 
 type ChatMessage = {
@@ -1417,6 +1417,8 @@ export function AgentsPage({
   const [presetShelfOpen, setPresetShelfOpen] = useState(true)
   // 可用的生成模型与规格：服务端 media-models 是唯一真源，界面不自己写死模型名
   const [mediaModels, setMediaModels] = useState<MediaModelList | null>(null)
+  // 工作流入口上的数：手上有几条、是不是挂着这条作品。只读元数据，打开不扣积分（r257）
+  const [flows, setFlows] = useState<ApiFlow[] | null>(null)
   // 模型服务状态：额度 / 凭证这类账号级故障要在输入前就说清楚，而不是让人白点一次
   const [modelState, setModelState] = useState<ModelServiceState | null>(null)
   const [rechecking, setRechecking] = useState(false)
@@ -1434,6 +1436,14 @@ export function AgentsPage({
   const { internal } = useUiMode()
   // 顶栏选择的模型保存在服务端；对话预设本身没绑模型时用它作为默认值
   const preferredModelRef = useRef('')
+
+  useEffect(() => {
+    let alive = true
+    listFlows()
+      .then((list) => { if (alive) setFlows(list) })
+      .catch(() => { if (alive) setFlows([]) })
+    return () => { alive = false }
+  }, [])
 
   const draftRef = useRef<HTMLTextAreaElement>(null)
   const stageRef = useRef<HTMLElement>(null)
@@ -2037,12 +2047,37 @@ export function AgentsPage({
   const modelBlocked = modelState?.available === false
   const canSend = Boolean(selectedAgent && draft.trim() && !pending && !loading && !modelBlocked)
 
+  // 工作流入口：挂着这条作品的那条优先（「这条作品的工作流」），否则进流程列表
+  const flowEntry = useMemo(() => {
+    const list = flows ?? []
+    const linked = projectContext ? list.find((flow) => flow.project?.id === projectContext.id) : undefined
+    if (linked) {
+      return {
+        id: linked.id,
+        label: '这条作品的工作流',
+        title: '打开《' + (linked.project?.title || linked.name) + '》的工作流',
+      }
+    }
+    if (list.length === 0) {
+      return {
+        id: '',
+        label: flows === null ? '工作流' : '起一条工作流',
+        title: '还没有工作流：进工作流页从作品或模板起手',
+      }
+    }
+    return {
+      id: '',
+      label: '工作流 · ' + list.length + ' 条',
+      title: '手上的 ' + list.length + ' 条工作流：点一下进流程列表',
+    }
+  }, [flows, projectContext])
+
   return (
-    <div className="page agx-page">
+    <div className={'page agx-page' + (composerMode === 'chat' && chatSurface === 'platform' ? ' agx-page--platform' : '')}>
       <PageHead
         kicker="快捷创作 / 对话"
         title="快捷创作"
-        desc="写文案、出图片、出视频、看工作流都在这一页：选好方式，说清要什么。"
+        desc="写文案、出图片、出视频都在这一页：选好方式，说清要什么。工作流从右上角一步进去。"
         actions={composerMode === 'chat' && chatSurface === 'platform' ? null : (
           <div className="agx-head-actions">
           <div className="agx-history-wrap">
@@ -2206,31 +2241,37 @@ export function AgentsPage({
           </div>
         ) : null}
         <div className="agx-composer-wrap">
-          <div className="agx-mode-tabs agx-mode-tabs--top" role="tablist" aria-label="创作方式">
-            {COMPOSER_MODES.map((mode) => (
-              <button
-                key={mode.id}
-                role="tab"
-                aria-selected={composerMode === mode.id}
-                className={composerMode === mode.id ? 'is-active' : ''}
-                onClick={() => {
-                  setComposerMode(mode.id)
-                  // 从图片 / 视频切回对话：平台对话面板第一次出现时要挂上（之后一直常驻）
-                  if (mode.id === 'chat') setChatMounted(true)
-                }}
-              >
-                {mode.id === 'image' ? (
-                  <ImageIcon size={14} />
-                ) : mode.id === 'video' ? (
-                  <Clapperboard size={14} />
-                ) : mode.id === 'flow' ? (
-                  <Workflow size={14} />
-                ) : (
-                  <Bot size={14} />
-                )}
-                {mode.label}
-              </button>
-            ))}
+          <div className="agx-mode-row">
+            <div className="agx-mode-tabs agx-mode-tabs--top" role="tablist" aria-label="创作方式">
+              {COMPOSER_MODES.map((mode) => (
+                <button
+                  key={mode.id}
+                  role="tab"
+                  aria-selected={composerMode === mode.id}
+                  className={composerMode === mode.id ? 'is-active' : ''}
+                  onClick={() => {
+                    setComposerMode(mode.id)
+                    // 从图片 / 视频切回对话：平台对话面板第一次出现时要挂上（之后一直常驻）
+                    if (mode.id === 'chat') setChatMounted(true)
+                  }}
+                >
+                  {mode.id === 'image' ? (
+                    <ImageIcon size={14} />
+                  ) : mode.id === 'video' ? (
+                    <Clapperboard size={14} />
+                  ) : (
+                    <Bot size={14} />
+                  )}
+                  {mode.label}
+                </button>
+              ))}
+            </div>
+            {/* 入口联动（r257）：不是把工作流摊成清单，只给一条去路——几条、在帮谁，点一下进画布 */}
+            <button type="button" className="agx-flow-link" onClick={() => onOpenCanvas(flowEntry.id)} title={flowEntry.title}>
+              <Workflow size={14} />
+              {flowEntry.label}
+              <ArrowUpRight size={13} aria-hidden />
+            </button>
           </div>
           {composerMode === 'chat' ? (
             <div className="agx-surface-switch" role="tablist" aria-label="对话方式">
@@ -2373,10 +2414,6 @@ export function AgentsPage({
             </div>
           )}
 
-          {/* 工作流页签不套输入卡：它不是「发一段话」，而是手上那几条流程的清单（r256） */}
-          {composerMode === 'flow' ? (
-            <FlowPanel onOpenFlow={onOpenCanvas} onToast={onToast} />
-          ) : null}
           <div className={'agx-composer' + (composerMode === 'chat' && !selectedAgent ? ' is-disabled' : '')} hidden={composerMode !== 'chat' || chatSurface === 'platform'}>
             {composerMode === 'chat' ? (
               <>

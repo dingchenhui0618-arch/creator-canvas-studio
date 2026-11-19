@@ -82,7 +82,7 @@ const band = mediaBlocks(agentsCss, '(max-width: 1080px)', '.agx-page').at(-1)
 const phone = mediaBlocks(agentsCss, '(max-width: 560px)', '.agx-page').at(-1)
 
 test('快捷创作的窄屏规则只在 ≤1080 / ≤560 两段里，根元素仍是 agx-page', () => {
-  assert.ok(pageSource.includes('className="page agx-page"'), '快捷创作页根元素要还是 agx-page')
+  assert.ok(pageSource.includes('page agx-page'), '快捷创作页根元素要还是 agx-page')
   assert.ok(band, 'agents.css 缺少 ≤1080 的快捷创作页规则')
   assert.ok(phone, 'agents.css 缺少 ≤560 的快捷创作页规则')
   const outside = agentsCss.slice(0, agentsCss.indexOf('@media (max-width: 1080px)', agentsCss.length - 12000))
@@ -192,13 +192,13 @@ test('新增的窄屏规则里没有小于 13px 的字', () => {
 })
 
 test('桌面基线没被改：12 / 11.5px 与 28 / 30 / 32px 仍是原值', () => {
-  assert.match(firstRule(agentsCss, '.agx-mono'), /font-size:\s*12px/)
+  assert.match(firstRule(agentsCss, '.agx-mono'), /font-size:\s*(?:12px|var\(--text-2xs\))/)
   assert.match(firstRule(agentsCss, '.agx-capsule'), /height:\s*30px/)
-  assert.match(firstRule(agentsCss, '.agx-capsule > span'), /font-size:\s*11\.5px/)
-  assert.match(firstRule(agentsCss, '.agx-capsule-trigger em'), /font-size:\s*12\.5px/)
+  assert.match(firstRule(agentsCss, '.agx-capsule > span'), /font-size:\s*(?:11\.5px|var\(--text-2xs\))/)
+  assert.match(firstRule(agentsCss, '.agx-capsule-trigger em'), /font-size:\s*(?:12\.5px|var\(--text-2xs\))/)
   assert.match(firstRule(agentsCss, '.agx-mode-tabs button'), /min-height:\s*28px/)
-  assert.match(firstRule(agentsCss, '.agx-surface-switch button'), /font-size:\s*12px/)
-  assert.match(firstRule(agentsCss, '.agx-surface-note'), /font-size:\s*11px/)
+  assert.match(firstRule(agentsCss, '.agx-surface-switch button'), /font-size:\s*(?:12px|var\(--text-2xs\))/)
+  assert.match(firstRule(agentsCss, '.agx-surface-note'), /font-size:\s*(?:11px|var\(--text-2xs\))/)
   assert.match(firstRule(agentsCss, '.agx-tabs button'), /padding:\s*0 0 12px/)
   assert.match(firstRule(agentsCss, '.agx-popover-tabs button'), /height:\s*24px/)
   assert.match(firstRule(agentsCss, '.qc-new'), /min-height:\s*32px/)
