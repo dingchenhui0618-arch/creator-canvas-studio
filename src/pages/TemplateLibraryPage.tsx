@@ -134,6 +134,8 @@ export function TemplateLibraryPage({
 
   // 顶部汇总那格「作品在用」：直接用列表接口现算的总数，不再累加 reuseCount 那种只增不减的计数器
   const [projectTotal, setProjectTotal] = useState(0)
+  // 作品还指着一条已经删掉/在回收站里的模板（r265）：不算进上面那格，单独说一句
+  const [orphanTotal, setOrphanTotal] = useState(0)
   const typeOptions = useMemo(() => pickTypes(byType, pending), [byType, pending])
   // 分类被后台改名后，旧分类已经不在标签里：渲染时直接落回「全部」，不用再开一个 setState 副作用
   const activeType = type === '全部' || typeOptions.includes(type) ? type : '全部'
@@ -172,6 +174,7 @@ export function TemplateLibraryPage({
       setTotal(result.total || 0)
       setSources(result.sources || [])
       setProjectTotal(result.projectTotal || 0)
+      setOrphanTotal(result.orphanTotal || 0)
 
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
@@ -352,11 +355,28 @@ export function TemplateLibraryPage({
         }
       />
 
-      <div className="asset-summary template-summary">
-        <div><span className="section-kicker">模板总数</span><strong>{total}</strong><span>条</span></div>
-        <div><span className="section-kicker">已解析</span><strong>{parsed}</strong><span>有脚本与分镜</span></div>
-        <div><span className="section-kicker">作品在用</span><strong>{projectTotal}</strong><span>条</span></div>
-      </div>
+      {/* 一条都没读回来又报着错时，不能把 0 当成「库是空的」摆出来（r265）：
+          那样用户会以为模板全没了，而真正的原因在下面那句报错里。 */}
+      {error && !items.length ? null : (
+        <div className="asset-summary template-summary">
+          <div><span className="section-kicker">模板总数</span><strong>{total}</strong><span>条</span></div>
+          <div><span className="section-kicker">已解析</span><strong>{parsed}</strong><span>有脚本与分镜</span></div>
+          <div><span className="section-kicker">作品在用</span><strong>{projectTotal}</strong><span>条</span></div>
+        </div>
+      )}
+
+      {/* 两格数字自相矛盾的来源只有一种：作品还指着一条已经不在库里的模板。
+          不把那条作品偷偷漏掉——直接说清是为什么，并给出去回收站的入口（r265）。 */}
+      {orphanTotal > 0 && items.length ? (
+        <div className="template-filter-note">
+          <span>
+            另有 <b>{orphanTotal}</b> 条作品用的模板已经删除或还在回收站里，没算进上面「作品在用」
+          </span>
+          <button type="button" className="vq-button vq-button--ghost vq-button--sm" onClick={() => setTrashOpen(true)}>
+            打开回收站
+          </button>
+        </div>
+      ) : null}
 
       <div className="asset-toolbar">
         <label className="inline-search">
@@ -425,9 +445,22 @@ export function TemplateLibraryPage({
         </div>
       ) : null}
 
-      {error && <div className="radar-banner radar-banner--error"><AlertCircle size={15} /><span>{error}</span></div>}
+      {/* 列表已经读回来过、只是这次刷新失败：留着一屏旧数据，上面挂一条提示 */}
+      {error && items.length ? (
+        <div className="radar-banner radar-banner--error"><AlertCircle size={15} /><span>{error}</span></div>
+      ) : null}
 
-      {!loading && !items.length ? (
+      {/* 一条都没读回来又报着错：只说读不出来和怎么重试，绝不写「模板库还是空的」（r265） */}
+      {!loading && error && !items.length ? (
+        <div className="radar-empty">
+          <AlertCircle size={22} />
+          <strong>模板库现在读不出来</strong>
+          <span>{error}</span>
+          <button className="vq-button vq-button--ghost" onClick={() => void load()} disabled={loading}>再试一次</button>
+        </div>
+      ) : null}
+
+      {!loading && !error && !items.length ? (
         total > 0 ? (
           // 库里有东西、只是这次没筛到：说清是哪几个条件没匹配上，别写成「模板库还是空的」
           <div className="radar-empty">

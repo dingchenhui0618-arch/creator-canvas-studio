@@ -44,9 +44,10 @@ import {
   publicTemplateView,
   publicPublishBlocked,
   adoptUnowned as adoptUnownedTemplates,
+  listTemplateIds,
 } from './templates.mjs'
 import { sourcesSummary } from './sources.mjs'
-import { flattenTemplateWorks, projectsByTemplate, templateWorksView, totalProjectCount, withProjectCount } from './template-usage.mjs'
+import { flattenTemplateWorks, projectsByTemplate, templateWorksView, usageTotals, withProjectCount } from './template-usage.mjs'
 import { takenOrigins, ORIGIN_LIMIT } from './taken-origins.mjs'
 import { originFootprint, libraryMarks } from './source-footprint.mjs'
 import { listProjects } from './projects.mjs'
@@ -958,7 +959,7 @@ const server = http.createServer(async (req, res) => {
         })
       }
       // 卡片上那句「几条作品在用」现算：模板库与作品是两组数据，计数器（reuseCount）不会因为删作品而回落
-      const [stats, list, byTemplate] = await Promise.all([
+      const [stats, list, byTemplate, liveIds] = await Promise.all([
         templateStats(user, { source }),
         listTemplates({
           q: url.searchParams.get('q') || '',
@@ -968,8 +969,16 @@ const server = http.createServer(async (req, res) => {
           source,
         }, user),
         projectsByTemplate(user),
+        listTemplateIds(user),
       ])
-      return sendJson(res, 200, { items: withProjectCount(list, byTemplate), projectTotal: totalProjectCount(byTemplate), ...stats })
+      // 「作品在用」只数库里看得见的模板（r265）：模板被删到回收站后作品还指着它，
+      // 那一条不该让这一格大于「模板总数」；单独回 orphanTotal，界面用一句话交代。
+      const usage = usageTotals(byTemplate, liveIds)
+      return sendJson(res, 200, {
+        items: withProjectCount(list, byTemplate),
+        ...usage,
+        ...stats,
+      })
     }
 
     // 版本历史：每次改标题/类型/标签/原链接前留一版快照，最多 10 版，可回滚
@@ -1147,8 +1156,15 @@ await migrateOwnership()
 // 顺手清掉崩溃时留下的任务临时目录。发版 = 重启 = 以前每次都可能白扣 10 积分。
 const recoveredJobs = recoverInterruptedJobs()
 if (recoveredJobs.recovered) logEvent('jobs.recovered', recoveredJobs)
-// 工作流运行同一套：上次没跑完的运行标中断，并按账本把已扣积分退回（重复启动不会多退）
-const recoveredRuns = await recoverInterruptedRuns()
+// 工作流运行同一套：上次没跑完的运行标中断，并按账本把已扣积分退回（重复启动不会多退）。
+// 运行记录文件读不出来时只是跳过这一步（r265）：不能因为一份坏文件让整站起不来，
+// 用户侧读运行记录会拿到「数据读不出来」的明确报错，坏文件也不会被覆盖。
+let recoveredRuns = { recovered: 0, refunded: 0, dropped: 0, skipped: 0 }
+try {
+  recoveredRuns = await recoverInterruptedRuns()
+} catch (error) {
+  logRequestError('', error, { scope: 'recover-runs' })
+}
 if (recoveredRuns.recovered || recoveredRuns.dropped || recoveredRuns.skipped) logEvent('runs.recovered', recoveredRuns)
 // 启动先清一次过期日志（停机久了不会把过期文件一直留着），之后每小时最多再清一次
 const prunedLogs = await startLogRetention()

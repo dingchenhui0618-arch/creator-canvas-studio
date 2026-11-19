@@ -3,6 +3,7 @@ import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import { config } from './config.mjs'
 import { canAccess } from './owner.mjs'
+import { readStoreArray } from './json-store.mjs'
 import { callTextModel } from './llm.mjs'
 import { reviewVisual } from './review.mjs'
 import { reviewIsolateConfig, runReviewIsolated } from './isolate.mjs'
@@ -212,18 +213,23 @@ function normalizeEdges(rawEdges, nodes) {
   return edges
 }
 
+// 读不出来时记住这次失败：写操作必须停手，不能拿一张工作流覆盖整份流程库（r265）
+let flowsReadError = null
+
 async function loadFlows() {
   if (flowCache) return flowCache
   try {
-    const parsed = JSON.parse(await fsp.readFile(flowsFile, 'utf8'))
-    flowCache = Array.isArray(parsed) ? parsed : []
-  } catch {
-    flowCache = []
+    flowCache = await readStoreArray(flowsFile, '工作流')
+    flowsReadError = null
+  } catch (error) {
+    flowsReadError = error
+    throw error
   }
   return flowCache
 }
 
 async function persistFlows(list) {
+  if (flowsReadError) throw flowsReadError
   flowCache = list
   await fsp.mkdir(config.dataDir, { recursive: true })
   const tmp = flowsFile + '.tmp'
@@ -231,18 +237,22 @@ async function persistFlows(list) {
   await fsp.rename(tmp, flowsFile)
 }
 
+let runsReadError = null
+
 async function loadRuns() {
   if (runCache) return runCache
   try {
-    const parsed = JSON.parse(await fsp.readFile(runsFile, 'utf8'))
-    runCache = Array.isArray(parsed) ? parsed : []
-  } catch {
-    runCache = []
+    runCache = await readStoreArray(runsFile, '运行记录')
+    runsReadError = null
+  } catch (error) {
+    runsReadError = error
+    throw error
   }
   return runCache
 }
 
 async function persistRuns(list) {
+  if (runsReadError) throw runsReadError
   runCache = list
   await fsp.mkdir(config.dataDir, { recursive: true })
   const tmp = runsFile + '.tmp'

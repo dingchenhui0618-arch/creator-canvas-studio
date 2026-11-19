@@ -44,7 +44,7 @@ fs.writeFileSync(path.join(dir, 'templates.json'), JSON.stringify([], null, 2), 
 fs.writeFileSync(path.join(dir, 'reviews.json'), JSON.stringify([], null, 2), 'utf8')
 fs.writeFileSync(path.join(dir, 'flows.json'), JSON.stringify([], null, 2), 'utf8')
 
-const { projectsByTemplate, withProjectCount, totalProjectCount, templateProjectRef, templateWorksView, TEMPLATE_PROJECT_LIMIT } = await import('../server/template-usage.mjs')
+const { projectsByTemplate, withProjectCount, totalProjectCount, usageTotals, templateProjectRef, templateWorksView, TEMPLATE_PROJECT_LIMIT } = await import('../server/template-usage.mjs')
 const { deleteProject } = await import('../server/projects.mjs')
 
 const me = { id: 'u_a' }
@@ -75,6 +75,18 @@ test('卡片上的计数：模板库每项挂 projectCount，没被用过写 0',
   const items = withProjectCount([{ id: 'tpl_a' }, { id: 'tpl_b' }, { id: 'tpl_c' }], byTemplate)
   assert.deepEqual(items.map((item) => item.projectCount), [2, 1, 0])
   assert.equal(totalProjectCount(byTemplate), 3)
+})
+
+// r265：顶部两格不许自相矛盾。「作品在用」只数库里看得见的模板，
+// 作品还指着一条已经删掉/在回收站里的模板时，那条单独记 orphan，界面用一句话交代。
+test('作品指着库里没有的模板：不算进「作品在用」，单独记 orphan', async () => {
+  const byTemplate = await projectsByTemplate(me)
+  // 这个夹具的模板库是空的（0 条）：三组作品全都指不到能看见的模板
+  assert.deepEqual(usageTotals(byTemplate, []), { projectTotal: 0, orphanTotal: 3 })
+  // 库里只剩 tpl_a：tpl_a 名下 2 条作品算在用，tpl_b 名下那 1 条记 orphan
+  assert.deepEqual(usageTotals(byTemplate, ['tpl_a']), { projectTotal: 2, orphanTotal: 1 })
+  // 全都在库里：orphan 归零，和原来的总数一致
+  assert.deepEqual(usageTotals(byTemplate, ['tpl_a', 'tpl_b']), { projectTotal: 3, orphanTotal: 0 })
 })
 
 test('删掉作品，用量跟着回落（不像 reuseCount 只增不减）', async () => {

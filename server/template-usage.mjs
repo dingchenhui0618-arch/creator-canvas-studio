@@ -59,6 +59,23 @@ export function totalProjectCount(byTemplate) {
   return total
 }
 
+/**
+ * 顶部汇总只数「库里看得见的模板」名下的作品（r265）：
+ * 作品还指着的模板如果已经删掉、在回收站里、或者属于别的账号，它不该让「作品在用」
+ * 比「模板总数」还大 —— 那样两格自相矛盾，用户也没法在列表里找到那条模板。
+ * 这类作品单独回一个 orphan 数，界面用一句话说清楚，不假装它不存在。
+ */
+export function usageTotals(byTemplate, liveIds = []) {
+  const live = new Set(liveIds)
+  let projectTotal = 0
+  let orphanTotal = 0
+  for (const [templateId, list] of byTemplate) {
+    if (live.has(templateId)) projectTotal += list.length
+    else orphanTotal += list.length
+  }
+  return { projectTotal, orphanTotal }
+}
+
 // 模板详情里最多列 8 条：一条模板名下作品多时，抽屉不该被这一块占满
 export const TEMPLATE_PROJECT_LIMIT = 8
 

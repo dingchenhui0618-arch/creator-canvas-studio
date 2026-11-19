@@ -8,6 +8,7 @@ import path from 'node:path'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { config } from './config.mjs'
 import { canAccess } from './owner.mjs'
+import { readStoreArray } from './json-store.mjs'
 import { MAX_SHOT_FRAMES, normalizeShotFrames, shotFramesView } from './project-shots.mjs'
 import { normalizeStoredScript } from './project-script.mjs'
 import { visitKey } from './share-visits.mjs'
@@ -55,14 +56,17 @@ export function newReceiptToken() {
 
 let cache = null
 let writeChain = Promise.resolve()
+// 读不出来时记住这次失败：写操作必须停手，不能拿一条新作品覆盖整份作品库
+let readError = null
 
 async function loadAll() {
   if (cache) return cache
   try {
-    const parsed = JSON.parse(await fsp.readFile(projectsFile, 'utf8'))
-    cache = Array.isArray(parsed) ? parsed : []
-  } catch {
-    cache = []
+    cache = await readStoreArray(projectsFile, '作品库')
+    readError = null
+  } catch (error) {
+    readError = error
+    throw error
   }
   return cache
 }
@@ -75,6 +79,7 @@ function enqueueWrite(task) {
 }
 
 async function persist(list) {
+  if (readError) throw readError
   cache = list
   return enqueueWrite(async () => {
     await fsp.mkdir(config.dataDir, { recursive: true })

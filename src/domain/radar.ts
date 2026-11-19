@@ -366,4 +366,6 @@ export type TemplateList = {
   sources?: TemplateSourceCount[]
   /** 这批模板名下共有几条作品在用：作品是现算的，不是复用次数的计数器 */
   projectTotal?: number
+  /** 作品还指着一条已经删掉/回收站里的模板：不算进 projectTotal，界面单独交代一句（r265） */
+  orphanTotal?: number
 }

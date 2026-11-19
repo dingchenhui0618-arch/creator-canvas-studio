@@ -3,18 +3,21 @@ import path from 'node:path'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { config } from './config.mjs'
 import { canAccess } from './owner.mjs'
+import { readStoreArray } from './json-store.mjs'
 import { draftTiming } from './agent-draft.mjs'
 
 let cache = null
+// 读不出来时记住这次失败：后面的写操作必须停手（见 persist），不能拿一条新数据覆盖整份内容
+let readError = null
 
 async function loadAll() {
   if (cache) return cache
   try {
-    const text = await fsp.readFile(config.templatesFile, 'utf8')
-    const parsed = JSON.parse(text)
-    cache = Array.isArray(parsed) ? parsed : []
-  } catch {
-    cache = []
+    cache = await readStoreArray(config.templatesFile, '模板库')
+    readError = null
+  } catch (error) {
+    readError = error
+    throw error
   }
   return cache
 }
@@ -30,6 +33,7 @@ function enqueueWrite(task) {
 }
 
 async function persist(list) {
+  if (readError) throw readError
   cache = list
   return enqueueWrite(async () => {
     await fsp.mkdir(config.dataDir, { recursive: true })
@@ -697,6 +701,16 @@ export async function templateStats(user = null, { source = '' } = {}) {
     byType,
     sources,
   }
+}
+
+/**
+ * 这个账号看得见、又不在回收站里的模板 id（r265）。
+ * 模板库顶部「作品在用」只数这些：作品还指着一条已经删掉/回收站里的模板时，
+ * 那个数不能算进来，否则会出现「模板总数 0、作品在用 1」这种自相矛盾的两格。
+ */
+export async function listTemplateIds(user = null) {
+  const list = (await loadAll()).filter((item) => canAccess(item, user)).filter((item) => !item.deletedAt)
+  return list.map((item) => item.id)
 }
 
 // ---------- 只读分享链接 ----------
