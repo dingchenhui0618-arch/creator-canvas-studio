@@ -2229,6 +2229,9 @@ export function AgentsPage({
     }
   }, [flows, projectContext])
 
+  // 智能体文件坏了的时候服务端会带一条说明（r268）：见下面页头下那条警告。
+  const storeNotice = data?.storeNotice ?? null
+
   return (
     <div
       className={
@@ -2378,6 +2381,17 @@ export function AgentsPage({
       />
 
       <section className="agx-stage" ref={stageRef}>
+        {/* 智能体文件坏了（r268）：不说清楚的话，用户看到的是几份「看起来正常」的默认预设，
+            改一次就把新文件写下去、原件只剩备份；备份也失败时更是一个字都不该写。 */}
+        {storeNotice?.degraded ? (
+          <div className="agx-store-warn" role="alert">
+            <AlertCircle size={15} aria-hidden />
+            <div className="agx-store-warn-text">
+              <span>{storeNotice.message}</span>
+              {storeNotice.backup ? <small>备份文件：{storeNotice.backup}</small> : null}
+            </div>
+          </div>
+        ) : null}
         {projectContext ? (
           <div className="agx-project" role="status">
             <span className="agx-project-kicker">在帮</span>

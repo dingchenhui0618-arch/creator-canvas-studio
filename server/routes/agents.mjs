@@ -3,6 +3,7 @@ import {
   AGENT_CATEGORIES,
   AGENT_TOOLS,
   agentStats,
+  agentStoreNotice,
   createAgent,
   deleteAgent,
   getAgent,
@@ -78,6 +79,8 @@ export function createAgentsRouter() {
               defaultModel: models[0] || '',
               outputTypes: OUTPUT_TYPES.map((item) => ({ id: item.id, label: item.label })),
               vision: { enabled: visionEnabled() },
+              // 智能体文件坏了的时候这里带一条说明（含备份名与还能不能写）；没坏过就是 null。
+              storeNotice: agentStoreNotice(),
             })
             return true
           }

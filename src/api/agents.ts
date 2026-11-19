@@ -35,6 +35,15 @@ export type AgentTool = {
 
 export type AgentCategoryMeta = { id: string; label: string; hint: string }
 
+// 智能体文件坏了的时候服务端会带这条说明：现在显示的是不是默认预设、原文件备份叫什么、还能不能写。
+export type AgentStoreNotice = {
+  degraded: boolean
+  canWrite: boolean
+  at: string
+  backup: string
+  message: string
+}
+
 export type AgentsList = {
   items: AgentRecord[]
   total: number
@@ -46,6 +55,7 @@ export type AgentsList = {
   defaultModel: string
   outputTypes: { id: string; label: string }[]
   vision: { enabled: boolean }
+  storeNotice?: AgentStoreNotice | null
 }
 
 export type AgentInput = {

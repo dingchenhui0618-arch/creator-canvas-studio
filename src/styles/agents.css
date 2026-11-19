@@ -1139,6 +1139,36 @@
   font-size: var(--btn-font-sm);
 }
 
+/* 智能体文件坏了（r268）：这条只说「数据读不出来」，所以用警告色而不是失败色——
+   页面还能用，但用户得知道现在这几份是默认预设、原件备份在哪、还能不能改。
+   字号跟全站一致走 13px 地板，不靠 12px 小字糊过去。 */
+.agx-store-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 24px 0 0;
+  padding: 12px;
+  color: var(--warn);
+  background: var(--warn-soft);
+  border: 1px solid rgba(138, 91, 8, 0.22);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.agx-store-warn svg { flex: none; margin-top: 2px; }
+.agx-store-warn-text { display: grid; gap: 4px; min-width: 0; }
+.agx-store-warn-text small { color: var(--ink-soft); font-size: 13px; overflow-wrap: anywhere; }
+/* 备份也失败时是真不能写了：换失败色，别让「只是提示」的观感盖过后果。 */
+.agx-store-warn.is-blocked {
+  color: var(--fail);
+  background: var(--fail-soft);
+  border-color: rgba(163, 56, 56, 0.24);
+}
+/* 快捷创作页里下面那条输入卡是 900px 居中：警告条跟着同宽，不然会在页面上比输入卡宽出一截。 */
+.agx-page .agx-stage > .agx-store-warn {
+  max-width: 900px;
+  margin: 0 auto 16px;
+}
 /* ---------- 编辑器 ---------- */
 .agx-editor-layout {
   display: grid;

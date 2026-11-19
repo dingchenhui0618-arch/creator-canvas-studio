@@ -3,6 +3,7 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { config } from './config.mjs'
 import { canAccess } from './owner.mjs'
+import { storeUnreadable } from './json-store.mjs'
 
 // 智能体存储：data/agents.json，原子写与 templates.mjs 同一套范式。
 export const AGENT_CATEGORIES = [
@@ -42,6 +43,10 @@ const agentsFile = path.join(config.dataDir, 'agents.json')
 
 let cache = null
 let writeChain = Promise.resolve()
+// 文件坏了的时候，界面要知道：这里记一条说明给 GET /api/agents。
+// 备份成功 → 还能用（先显示默认预设，写一次就生成新文件）；备份失败 → 一律不写，免得把原件盖掉。
+let storeNotice = null
+let writeBlocked = null
 
 const now = () => new Date().toISOString()
 const daysAgo = (days) => new Date(Date.now() - days * 86400000).toISOString()
@@ -174,32 +179,58 @@ function withKnownModel(agent) {
   return knownModels().includes(model) ? agent : { ...agent, model: config.vision.model }
 }
 
+// 文件坏了：先把原件挪去 .broken-<时间戳>，再决定还能不能写。
+// 挪得走 → 原件保住了，界面先给默认预设，用户下一次新建/修改就生成一份新文件；
+// 挪不走（权限、只读盘、被占用）→ 一个字节都不许写，否则新文件会盖掉唯一一份原件。
+async function quarantineBroken(error) {
+  const backup = agentsFile + '.broken-' + Date.now()
+  let backupName = ''
+  try {
+    await fsp.rename(agentsFile, backup)
+    backupName = path.basename(backup)
+    console.error('[agents] agents.json 解析失败，已备份到 ' + backup)
+  } catch (renameError) {
+    console.error('[agents] agents.json 解析失败，且备份失败：' + (renameError?.message || renameError))
+    writeBlocked = storeUnreadable('智能体', error)
+  }
+  storeNotice = {
+    degraded: true,
+    canWrite: !writeBlocked,
+    at: now(),
+    backup: backupName,
+    message: writeBlocked
+      ? '智能体数据读不出来（文件可能损坏），而且没能备份原文件：为了不覆盖它，现在不能新建或修改对话预设，请联系管理员处理。'
+      : '智能体数据读不出来（文件可能损坏）：原文件已备份，现在显示的是默认预设，新建或修改会生成一份新文件。',
+  }
+}
+
 async function loadAll() {
   if (cache) return cache
   try {
     const raw = await fsp.readFile(agentsFile, 'utf8')
     const parsed = JSON.parse(raw)
-    cache = (Array.isArray(parsed) ? parsed : []).map(withKnownModel).map(withKnownTools)
+    // 顶层不是数组也是坏文件：以前被当成空库，下一次写入会把整份历史换成一条。
+    if (!Array.isArray(parsed)) throw new Error('顶层不是数组')
+    cache = parsed.map(withKnownModel).map(withKnownTools)
   } catch (error) {
     if (error?.code === 'ENOENT') {
       cache = seedAgents()
       await persist(cache)
     } else {
-      // 文件损坏时不静默覆盖：先备份，再给内存一个空列表，下一次写入会生成新文件
-      const backup = agentsFile + '.broken-' + Date.now()
-      try {
-        await fsp.rename(agentsFile, backup)
-        console.error('[agents] agents.json 解析失败，已备份到 ' + backup)
-      } catch {
-        console.error('[agents] agents.json 解析失败：' + (error?.message || error))
-      }
-      cache = []
+      await quarantineBroken(error)
+      cache = seedAgents()
     }
   }
   return cache
 }
 
+// 给接口用：没坏过就是 null，坏了就带一条说明（含原文件备份名与还能不能写）。
+export function agentStoreNotice() {
+  return storeNotice
+}
+
 function persist(list) {
+  if (writeBlocked) throw writeBlocked
   cache = list
   const snapshot = JSON.stringify(list, null, 2)
   const task = writeChain.then(async () => {

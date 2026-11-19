@@ -262,6 +262,17 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
         </div>
       )}
 
+      {/* 智能体文件坏了（r268）：在这里保存会先生成一份新文件，得让用户知道原来的那份在哪。 */}
+      {meta?.storeNotice?.degraded ? (
+        <div className={'agx-store-warn' + (meta.storeNotice.canWrite ? '' : ' is-blocked')} role="alert">
+          <AlertCircle size={15} aria-hidden />
+          <div className="agx-store-warn-text">
+            <span>{meta.storeNotice.message}</span>
+            {meta.storeNotice.backup ? <small>备份文件：{meta.storeNotice.backup}</small> : null}
+          </div>
+        </div>
+      ) : null}
+
       <div className="agx-editor-layout">
         <main className="agx-editor-main" aria-busy={loading}>
           <section className="agx-form-section">
