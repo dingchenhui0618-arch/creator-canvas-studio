@@ -56,6 +56,7 @@ import { RunDrawer } from '../canvas/RunDrawer'
 import { autoLayout } from '../canvas/layout'
 import { fromFlowEdges, fromFlowNodes, toFlowEdges, toFlowNodes, validateConnection } from '../canvas/serialize'
 import type { FlowNodeData, FlowNodeKind, NodeConfig, RunNodeStatus } from '../canvas/types'
+import { clearUnsaved, setUnsaved } from '../domain/unsaved-guard'
 import PageHead from '../components/PageHead'
 import CanvasStart from '../components/CanvasStart'
 import { Pill } from '../components/ui'
@@ -117,6 +118,9 @@ type CanvasPageProps = {
 type Snapshot = { nodes: Node<FlowNodeData>[]; edges: Edge[] }
 
 type SaveState = 'saved' | 'saving' | 'dirty' | 'error'
+
+// 这条工作流的登记名（r270）：离开拦截只认这一条，别的页面登记的不动
+const CANVAS_UNSAVED_OWNER = 'canvas-flow'
 
 // 画布「铺满」的最小可读缩放（r255）：一条 6 步的流程横着排是 1684px，1440 宽屏的画布只有
 // 810px，fitView 会一路缩到 0.44——节点标题 15px 被缩成 9.3px，等于看不清字。
@@ -738,6 +742,22 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
     }, 900)
     return () => window.clearTimeout(timer)
   }, [graphSignature, loadState, readOnly, saveNow])
+
+  // 这次没保存成功（r270）：以前只有保存按钮上那一行小字，切页照样悄悄丢掉改动。
+  // 只拦「保存失败」这一种——自动保存中的那 900 毫秒会自己存下来，为它弹窗只会打岔。
+  useEffect(() => {
+    if (readOnly || loadState !== 'ready' || saveState !== 'error') {
+      clearUnsaved(CANVAS_UNSAVED_OWNER)
+      return
+    }
+    setUnsaved({
+      owner: CANVAS_UNSAVED_OWNER,
+      message:
+        '这个工作流这次没保存成功' + (saveError ? '（' + saveError + '）' : '') +
+        '，现在离开改动就丢了。留在这页按 Ctrl+S 再存一次试试。',
+    })
+    return () => clearUnsaved(CANVAS_UNSAVED_OWNER)
+  }, [readOnly, loadState, saveState, saveError])
 
   // 续跑预检：等工作流存完再问，免得服务端拿旧内容算出一份会过期的复用数。
   // 只读请求，不扣费、不写记录；失败就退回旧记录的估算，不让抽屉整块消失。

@@ -17,6 +17,7 @@ import { DEFAULT_ADMIN_SECTION, EDITION_BY_ID, type AdminSection, type EditionId
 import { isHelpSlug, type HelpSlug } from './domain/help'
 import { canvasRunLinkFromSegments, canvasRunLinkHash, canvasRunViewLinkHash } from './domain/canvas-run-link'
 import { deliveryLinkFromSegments, deliveryLinkHash } from './domain/delivery-link'
+import { clearUnsaved, shouldAskBeforeLeave, unsavedNote } from './domain/unsaved-guard'
 
 /** 外壳里真正占一屏的用户页面；登录与编辑器各自有独立入口。 */
 export type ShellPage = Exclude<Page, 'login' | 'agent-editor'>
@@ -291,6 +292,15 @@ function isAuthEntryLink(hash: string): boolean {
 
 function handleHashChange() {
   const route = parseRoute(window.location.hash)
+  // 浏览器的后退 / 前进也是「离开这一页」（r270）：先把地址改回去，再问同一句话。
+  // 不这么做的话，只有侧栏和链接被拦住，按一下后退照样悄悄丢。
+  const note = unsavedNote()
+  if (note && snapshot && routeKey(route) !== routeKey(snapshot)) {
+    window.history.pushState(null, '', toHash(snapshot))
+    leaveRequest = { route, replace: true, message: note.message, owner: note.owner }
+    publishLeave()
+    return
+  }
   const canonical = toHash(route)
   // 非法或旧格式的 hash 用 replaceState 修正，不额外压一条历史。
   if (window.location.hash !== canonical && !isAuthEntryLink(window.location.hash)) {
@@ -324,8 +334,8 @@ export function initializeRoute(preferredEdition?: EditionId): Route {
   return route
 }
 
-/** 写路由：默认压一条历史（浏览器后退可用），replace 只改当前条目。 */
-export function navigate(route: Route, options: { replace?: boolean } = {}) {
+/** 真正落地址；拦不拦由 navigate 决定，这里不做判断。 */
+function writeRoute(route: Route, options: { replace?: boolean } = {}) {
   ensureListening()
   const hash = toHash(route)
   if (window.location.hash !== hash) {
@@ -333,6 +343,87 @@ export function navigate(route: Route, options: { replace?: boolean } = {}) {
     else window.location.hash = hash
   }
   publish(route)
+}
+
+/**
+ * 还没保存就跳走时挂在这里的那一次跳转（r270）。
+ *
+ * 为什么放在路由层：侧栏、命令面板、页里的链接、页头返回都走 navigate，
+ * 挨个页面自己拦一定会漏；这里拦一次，所有入口都算数。
+ * 不直接 window.confirm：那是浏览器的原生框，和这套界面不是一个东西，
+ * 也挡不住「到底丢了哪一句」——所以挂起这次跳转，由 App 用弹窗问。
+ */
+export type LeaveRequest = {
+  route: Route
+  replace: boolean
+  /** 问用户的那句话：哪个页面、丢了什么 */
+  message: string
+  /** 谁的登记。用户选了「丢下改动」就把它撤掉，免得下一次跳转又被它拦住 */
+  owner: string
+}
+
+let leaveRequest: LeaveRequest | null = null
+const leaveListeners = new Set<() => void>()
+
+function publishLeave() {
+  for (const listener of leaveListeners) listener()
+}
+
+export function subscribeLeave(listener: () => void): () => void {
+  leaveListeners.add(listener)
+  return () => {
+    leaveListeners.delete(listener)
+  }
+}
+
+export function getLeaveRequest(): LeaveRequest | null {
+  return leaveRequest
+}
+
+/** 挂着的「还没保存就走了」这件事，给 App 画弹窗用。 */
+export function useLeaveRequest(): LeaveRequest | null {
+  return useSyncExternalStore(subscribeLeave, getLeaveRequest, getLeaveRequest)
+}
+
+/** 写路由：默认压一条历史（浏览器后退可用），replace 只改当前条目。 */
+export function navigate(route: Route, options: { replace?: boolean } = {}) {
+  ensureListening()
+  const note = unsavedNote()
+  if (note && shouldAskBeforeLeave(true, routeKey(getRouteSnapshot()), routeKey(route))) {
+    leaveRequest = { route, replace: Boolean(options.replace), message: note.message, owner: note.owner }
+    publishLeave()
+    return
+  }
+  writeRoute(route, options)
+}
+
+/** 用户选了「丢下改动，走」：把刚才拦下的那次跳转执行掉。 */
+export function confirmLeave(): void {
+  const request = leaveRequest
+  leaveRequest = null
+  publishLeave()
+  if (!request) return
+  // 用户已经选了「丢下」：先撤登记再落地址。
+  // 不撤的话，紧接着的 hashchange 会被当成又一次「没保存就想走」，弹窗自己弹回来。
+  clearUnsaved(request.owner)
+  writeRoute(request.route, { replace: request.replace })
+}
+
+/** 用户选了「留在这页」：这次跳转忘掉，什么都不写。 */
+export function cancelLeave(): void {
+  if (!leaveRequest) return
+  leaveRequest = null
+  publishLeave()
+}
+
+/**
+ * 换人（退出登录 / 切换账号）时清掉挂着的拦截：
+ * 上一位用户的编辑已经随会话消失，不能拿它拦住下一位用户的第一次点击。
+ */
+export function resetLeaveRequest(): void {
+  if (!leaveRequest) return
+  leaveRequest = null
+  publishLeave()
 }
 
 /** 只改地址栏、不触发重渲染：画布页内切流程时同步 flowId，避免整页重挂载。 */

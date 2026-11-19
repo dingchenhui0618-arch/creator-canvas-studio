@@ -48,7 +48,20 @@ import { listAgents, setPendingAgentProject } from './api/agents'
 import { createBdcCanvas } from './api/bdc'
 import { listReviewQueue } from './api/review'
 import { listFeedback } from './api/feedback'
-import { isInitialBareEntry, navigate, pageToRoute, routeKey, routeToPage, useRoute, type Route } from './router'
+import {
+  cancelLeave,
+  confirmLeave,
+  isInitialBareEntry,
+  navigate,
+  pageToRoute,
+  resetLeaveRequest,
+  routeKey,
+  routeToPage,
+  useLeaveRequest,
+  useRoute,
+  type Route,
+} from './router'
+import { setUnsaved, unsavedNote } from './domain/unsaved-guard'
 import { planScroll } from './domain/scroll'
 import { welcomeSeenKey } from './onboarding'
 import { browserFlagStore, dismissMobileNote, mobileNoteVisible } from './domain/mobile-note'
@@ -278,6 +291,8 @@ function Workbench({
   const activePage = routeToPage(route)
   // 路由的稳定标识：换页时用它触发角标对一次数，不必把整个 route 对象塞进依赖
   const routeId = routeKey(route)
+  // 还没保存就走（r270）：页面登记、路由挂起、这里出弹窗——三处共用同一个真源
+  const leaveRequest = useLeaveRequest()
 
   // 错误边界按「页」隔离，而不是按整条地址（v0.9.43）：
   // 同一页里发生的地址变化——打开单条模板的抽屉、打开一条历史评审、作品参数变化——
@@ -315,6 +330,19 @@ function Workbench({
     setToast(message)
     window.clearTimeout(toastTimer.current)
     toastTimer.current = window.setTimeout(() => setToast(''), 2400)
+  }, [])
+
+  // 关标签页 / 刷新时浏览器只让我们拦一下，不让写自己的话（r270）。
+  // 应用内的跳转由路由出弹窗（说清丢了什么），这一层只兜住「页面正在被关掉」。
+  useEffect(() => {
+    const guard = (event: BeforeUnloadEvent) => {
+      if (!unsavedNote()) return
+      event.preventDefault()
+      // 现代浏览器只看有没有返回值；老浏览器还会把这句话显示出来
+      event.returnValue = '这一页还有没保存的改动'
+    }
+    window.addEventListener('beforeunload', guard)
+    return () => window.removeEventListener('beforeunload', guard)
   }, [])
 
   // 只读取 /api/version 的真实版本号；接口不存在时如实说明，不伪造进度。
@@ -1041,6 +1069,33 @@ function Workbench({
 
       {paletteOpen ? <CommandPalette commands={paletteCommands} onClose={() => setPaletteOpen(false)} /> : null}
 
+      {leaveRequest && (
+        <div className="vq-modal-backdrop" onMouseDown={cancelLeave}>
+          <div
+            className="vq-leave-modal"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="vq-leave-title"
+            aria-describedby="vq-leave-body"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="vq-leave-head">
+              <span className="vq-mono">还没保存 / UNSAVED</span>
+              <h2 id="vq-leave-title">这一段还没存下来</h2>
+            </div>
+            <p id="vq-leave-body" className="vq-leave-body">{leaveRequest.message}</p>
+            <div className="vq-leave-actions">
+              <button type="button" className="vq-button vq-button--danger" onClick={confirmLeave}>
+                丢下改动，离开
+              </button>
+              <button type="button" className="vq-button vq-button--primary" onClick={cancelLeave} autoFocus>
+                留在这页
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {updateOpen && (
         <div className="vq-modal-backdrop" onMouseDown={() => setUpdateOpen(false)}>
           <div
@@ -1156,6 +1211,9 @@ function App() {
 
   const handleExit = useCallback(
     (mode: 'signout' | 'switch') => {
+      // 换人之后上一页的编辑已经随会话消失：别让那一段拦住下一位用户的第一次点击。
+      setUnsaved(null)
+      resetLeaveRequest()
       setAuthNotice(mode === 'switch' ? '已退出当前会话，请使用另一个账号登录。' : '已退出登录。')
       signOut()
     },

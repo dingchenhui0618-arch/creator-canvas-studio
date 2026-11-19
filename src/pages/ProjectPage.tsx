@@ -80,6 +80,7 @@ import {
   type ProjectSpendDetail,
   type ProjectVersionScriptSnapshot,
 } from '../domain/project'
+import { clearUnsaved, setUnsaved } from '../domain/unsaved-guard'
 import { ackReview, decideReview, clearReviewDecision, unackReview } from '../api/review'
 import { allShotPrompts, beatForShot, shotPrompt, shotPromptHint, type ShotPromptScriptSource } from '../domain/shot-prompt'
 import {
@@ -122,6 +123,9 @@ import { stampTime as stamp, visitLine } from '../domain/share'
 import '../styles/projects.css'
 
 // 保存脚本之后工作流那边发生了什么：直接说人话，不把 reason 漏到界面上
+// 脚本草稿的登记名（r270）：离开拦截只认这一条，别的页面登记的不动
+const SCRIPT_UNSAVED_OWNER = 'project-script'
+
 const SCRIPT_CANVAS_NOTE: Record<string, string> = {
   synced: '工作流里的复刻提示词也换成新脚本了',
   'no-canvas': '还没开工作流，开工作流时会用这条脚本生成提示词',
@@ -212,6 +216,9 @@ export default function ProjectPage({
   // 脚本就地编辑：草稿只在内存里，保存后才写进作品（copy-on-write）
   const [scriptEditing, setScriptEditing] = useState(false)
   const [scriptDraft, setScriptDraft] = useState<{ hook: string; structure: ScriptBeat[] } | null>(null)
+  // 开编辑那一刻的草稿长什么样（r270）：靠它判断「改了还是没改」，
+  // 只看 scriptDraft 会把「打开看一眼就关」也算成改动。
+  const [scriptBaseline, setScriptBaseline] = useState('')
   // 只读分享：链接在这个作品上，弹窗里开、停、复制；token 只从作品详情拿
   const [shareOpen, setShareOpen] = useState(false)
   const [shareBusy, setShareBusy] = useState<'' | 'enable' | 'disable' | 'copy' | 'compare'>('')
@@ -1322,6 +1329,24 @@ export default function ProjectPage({
     }
   }
 
+  // 草稿改没改（r270）：基线是开编辑那一刻的样子，逐字比。8 段以内，比一次不心疼。
+  const scriptDirty = Boolean(
+    scriptEditing && scriptDraft && JSON.stringify(scriptDraft) !== scriptBaseline,
+  )
+
+  // 有改动就登记，跳走时路由会先问一句；存好、取消、卸载都把它撤掉。
+  useEffect(() => {
+    if (!scriptDirty) {
+      clearUnsaved(SCRIPT_UNSAVED_OWNER)
+      return
+    }
+    setUnsaved({
+      owner: SCRIPT_UNSAVED_OWNER,
+      message: '这条作品的脚本改了还没保存，现在离开就丢了。想留着就选「留在这页」，写完点「保存脚本」。',
+    })
+    return () => clearUnsaved(SCRIPT_UNSAVED_OWNER)
+  }, [scriptDirty])
+
   // 进入脚本编辑：用自己的版本，没有就把当前看到的（模板脚本）拷一份草稿出来，
   // 保存时才真正落库——不想改就取消，作品不会平白多一份副本。
   const beginScript = () => {
@@ -1329,7 +1354,9 @@ export default function ProjectPage({
     const structure: ScriptBeat[] = script?.structure?.length
       ? script.structure.map((beat) => ({ ...beat }))
       : [{ beat: '', startSec: 0, endSec: 0, voiceover: '', onScreen: '', purpose: '' }]
-    setScriptDraft({ hook: script?.hook || '', structure })
+    const draft = { hook: script?.hook || '', structure }
+    setScriptDraft(draft)
+    setScriptBaseline(JSON.stringify(draft))
     setScriptEditing(true)
   }
 
@@ -1358,8 +1385,12 @@ export default function ProjectPage({
   }
 
   const cancelScript = () => {
+    // 改了才问（r270）：打开看一眼就关不必拦，写了一半关掉才需要一句确认
+    if (scriptDirty && !window.confirm('这条脚本草稿有改动，取消就丢了。要继续取消吗？')) return
+    clearUnsaved(SCRIPT_UNSAVED_OWNER)
     setScriptEditing(false)
     setScriptDraft(null)
+    setScriptBaseline('')
   }
 
   const saveScript = async () => {
@@ -1374,8 +1405,11 @@ export default function ProjectPage({
     setBusy('script')
     try {
       const result = await saveProjectScript(data.project.id, { hook: scriptDraft.hook.trim(), structure })
+      // 先撤登记再关编辑：后面 load() 会重渲染，不能让「已存好」的一页还挂着拦截
+      clearUnsaved(SCRIPT_UNSAVED_OWNER)
       setScriptEditing(false)
       setScriptDraft(null)
+      setScriptBaseline('')
       await load()
       const note = SCRIPT_CANVAS_NOTE[result.canvas?.reason || ''] || ''
       onToast('脚本已保存' + (note ? '：' + note : ''))

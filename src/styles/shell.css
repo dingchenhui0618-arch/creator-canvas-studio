@@ -2186,6 +2186,51 @@ select:focus-visible {
   background: rgba(17, 17, 17, 0.34);
 }
 
+/* 离开前的拦截（r270）：骨架与更新弹窗一套，语气是「还没保存」而不是「确定吗」。
+   危险动作用 danger 放在左，默认动作 primary 在右并拿住焦点——误按回车是「留下」。 */
+.vq-leave-modal {
+  width: min(420px, 100%);
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-raise);
+}
+
+.vq-leave-head {
+  display: grid;
+  gap: 8px;
+}
+
+.vq-leave-head h2 {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.vq-leave-body {
+  margin: 12px 0 24px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+.vq-leave-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 560px) {
+  .vq-leave-actions {
+    flex-direction: column-reverse;
+  }
+
+  .vq-leave-actions .vq-button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
 .vq-update-modal {
   width: min(440px, 100%);
   padding: 16px 24px 16px;

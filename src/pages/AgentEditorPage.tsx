@@ -17,7 +17,11 @@ import { useModelOptions } from '../components/ModelSwitch'
 import { Tag } from '../components/ui'
 import { useUiMode } from '../api/app'
 import { getPreferences } from '../api/preferences'
+import { clearUnsaved, setUnsaved } from '../domain/unsaved-guard'
 import '../styles/agents.css'
+
+// 这份表单的登记名（r270）：离开拦截只认这一条
+const AGENT_UNSAVED_OWNER = 'agent-editor'
 
 type AgentEditorPageProps = {
   onBack: () => void
@@ -67,6 +71,8 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
   const [loadError, setLoadError] = useState('')
   const [editingId, setEditingId] = useState('')
   const [form, setForm] = useState<AgentForm>(() => blankForm())
+  // 打开这一页时表单长什么样（r270）：逐字比一次就知道有没有改过
+  const [baseline, setBaseline] = useState('')
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [armedDelete, setArmedDelete] = useState(false)
@@ -89,8 +95,10 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
         setMeta(data)
         const record: AgentRecord | undefined = seed ? data.items.find((item) => item.name === seed.name) : undefined
         if (record) {
+          const loaded = hydrate(record)
           setEditingId(record.id)
-          setForm(hydrate(record))
+          setForm(loaded)
+          setBaseline(JSON.stringify(loaded))
           return
         }
         const next = blankForm(prefs.model || data.defaultModel)
@@ -99,6 +107,7 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
           next.role = seed.description
         }
         setForm(next)
+        setBaseline(JSON.stringify(next))
       } catch (caught) {
         if (!alive) return
         setLoadError(caught instanceof Error ? caught.message : '对话预设列表加载失败')
@@ -115,6 +124,22 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
   const patch = useCallback((value: Partial<AgentForm>) => {
     setForm((current) => ({ ...current, ...value }))
   }, [])
+
+  // 改了没存（r270）：只比表单本身，选中态、模型目录回来都不算改动。
+  const dirty = Boolean(baseline) && JSON.stringify(form) !== baseline
+
+  // 有改动就登记，跳走时路由先问一句；存好、卸载都撤掉。
+  useEffect(() => {
+    if (!dirty) {
+      clearUnsaved(AGENT_UNSAVED_OWNER)
+      return
+    }
+    setUnsaved({
+      owner: AGENT_UNSAVED_OWNER,
+      message: '这个对话预设改了还没保存，现在离开就丢了。想留着就选「留在这页」，写完点「保存修改」。',
+    })
+    return () => clearUnsaved(AGENT_UNSAVED_OWNER)
+  }, [dirty])
 
   const checks = useMemo(
     () => [
@@ -174,6 +199,8 @@ export default function AgentEditorPage({ onBack, onNavigate, onToast, agent: se
     }
     try {
       const saved = editingId ? await updateAgent(editingId, input) : await createAgent(input)
+      // 先撤登记再跳：刚存好的这一页不能被自己刚才的改动拦下
+      clearUnsaved(AGENT_UNSAVED_OWNER)
       onToast(editingId ? '已更新「' + saved.name + '」' : '已创建「' + saved.name + '」，回到列表即可对话')
       onNavigate('agents')
     } catch (caught) {
