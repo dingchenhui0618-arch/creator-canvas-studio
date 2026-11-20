@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Check, CircleAlert, Expand, Hourglass, Maximize2, Minimize2, Plus, Save } from 'lucide-react'
+import { Check, CircleAlert, Expand, Hourglass, Maximize2, Minimize2, Plus, RefreshCw, Save, TriangleAlert } from 'lucide-react'
 import {
   createBdcCanvas,
   getBdcStatus,
@@ -14,6 +14,13 @@ import { getCanvasQueue, type CanvasQueueView } from '../api/canvasQueue'
 import { useUiMode } from '../api/app'
 import { navigate, replaceRoute } from '../router'
 import { Select } from '../components/Select'
+import {
+  boardCanvasLabel,
+  canvasListRead,
+  canvasNotice,
+  resolveBoardCanvas,
+  type CanvasListRead,
+} from '../domain/board-canvas'
 import '../styles/board.css'
 
 // 无限画布（v0.9.163，用户 2026-11-16 明确要求）：
@@ -55,10 +62,17 @@ export default function BoardPage({ onToast, boardId, focus, onToggleFocus }: Bo
   const [checked, setChecked] = useState(false)
   const [canvases, setCanvases] = useState<BdcCanvas[]>([])
   const [missing, setMissing] = useState(false)
+  // 「上次打开的那块画布不在了」：换成列表第一块是唯一能走的路，但状态条要说出这一句（r273）
+  const [stale, setStale] = useState(false)
+  // 画布列表这一次读成没读成。读不到时既不能说「暂无已保存的画布」，也不能清掉记忆（r273）
+  const [listRead, setListRead] = useState<CanvasListRead | null>(null)
+  const [listBusy, setListBusy] = useState(false)
   const [canvasId, setCanvasId] = useState(() => {
     if (boardId) return boardId
     try { return window.localStorage.getItem('vq:bdcCanvas') || '' } catch { return '' }
   })
+  // 「上次打开的那块」：解析落点时用它，用户自己换画布 / 新建之后跟着改
+  const rememberedRef = useRef(canvasId)
   const [frameKey, setFrameKey] = useState(0)
   const [noteOpen, setNoteOpen] = useState(false)
   const [noteText, setNoteText] = useState('')
@@ -89,35 +103,55 @@ export default function BoardPage({ onToast, boardId, focus, onToggleFocus }: Bo
     return () => window.clearTimeout(timer)
   }, [loadStatus])
 
-  const reloadCanvases = useCallback(async () => {
+  // 读一次画布列表：两种失败都认（HTTP 抛错，或 200 但 ok:false——服务端已经把英文翻成中文）。
+  // 折成 CanvasListRead 之后由 domain/board-canvas 决定落点，界面照结果说话（r273）。
+  const loadCanvases = useCallback(async () => {
+    setListBusy(true)
+    let read: CanvasListRead
+    let listed: BdcCanvas[] = []
     try {
       const res = await listBdcCanvases()
-      setCanvases(res.canvases || [])
-      return res
-    } catch {
-      return null
+      read = canvasListRead(res)
+      if (read.state === 'ok') listed = res.canvases || []
+    } catch (error) {
+      read = canvasListRead(null, error)
     }
+    setCanvases(listed)
+    setListRead(read)
+    setListBusy(false)
+    return { read, listed }
   }, [])
+
+  // 落点：读到了就按链接点名 / 上次打开 / 列表第一块依次落；
+  // 读不到就照上次那块打开——清掉记忆是最坏的一种猜（r273）。
+  const applyList = useCallback((read: CanvasListRead, listed: BdcCanvas[]) => {
+    const choice = resolveBoardCanvas({ boardId, remembered: rememberedRef.current, listed, read })
+    setMissing(choice.missing)
+    setStale(choice.stale)
+    rememberedRef.current = choice.canvasId
+    setCanvasId(choice.canvasId)
+  }, [boardId])
+
+  const retryList = useCallback(() => {
+    void loadCanvases().then(({ read, listed }) => applyList(read, listed))
+  }, [applyList, loadCanvases])
 
   useEffect(() => {
     if (!bdc?.deployed) return
     let cancelled = false
-    void listBdcCanvases()
-      .then((res) => {
+    // 与上面的探活同一套做法：把第一次读放到下一个宏任务里，
+    // 免得 effect 里同步 setState 再多渲染一轮（也免得这条 lint 一直响）
+    const timer = window.setTimeout(() => {
+      void loadCanvases().then(({ read, listed }) => {
         if (cancelled) return
-        const list = res.canvases || []
-        setCanvases(list)
-        // 链接里的画布可能已被删掉：直说，不悄悄换成列表第一块
-        setMissing(Boolean(boardId) && !list.some((item) => item.id === boardId))
-        setCanvasId((current) => {
-          const wanted = boardId || current
-          if (wanted && list.some((item) => item.id === wanted)) return wanted
-          return list[0]?.id || ''
-        })
+        applyList(read, listed)
       })
-      .catch(() => undefined)
-    return () => { cancelled = true }
-  }, [bdc?.deployed, boardId])
+    }, 0)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [bdc?.deployed, applyList, loadCanvases])
 
   // 选中的画布同时记住三处：本地、地址栏、iframe
   useEffect(() => {
@@ -231,14 +265,20 @@ export default function BoardPage({ onToast, boardId, focus, onToggleFocus }: Bo
     try {
       const res = await createBdcCanvas(`新画布-${stamp}`)
       if (res?.canvas) {
-        setCanvases((list) => [res.canvas, ...list])
-        setCanvasId(res.canvas.id)
-        toast('已新建画布：' + res.canvas.name)
+        const created = res.canvas
+        setCanvases((list) => [created, ...list])
+        // 新画布就是接下来要看的那块：记忆跟着改，重读列表时不至于又跳回旧的
+        rememberedRef.current = created.id
+        setCanvasId(created.id)
+        setStale(false)
+        toast('已新建画布：' + created.name)
+        // 列表之前没读到时，新画布有名字了：顺手再读一次，选择器该恢复可用
+        retryList()
       }
     } catch (error) {
       toast(error instanceof Error ? error.message : '新建画布失败')
     }
-  }, [toast])
+  }, [retryList, toast])
 
   const writeNote = useCallback(async () => {
     const text = noteText.trim()
@@ -252,7 +292,8 @@ export default function BoardPage({ onToast, boardId, focus, onToggleFocus }: Bo
       await writeBdcNote(canvasId, text, 'VisionQA 评审笔记')
       setNoteText('')
       setNoteOpen(false)
-      await reloadCanvases()
+      const after = await loadCanvases()
+      applyList(after.read, after.listed)
       setFrameKey((key) => key + 1)
       toast('已写进画布，画布正在重载')
     } catch (error) {
@@ -260,9 +301,13 @@ export default function BoardPage({ onToast, boardId, focus, onToggleFocus }: Bo
     } finally {
       setNoteBusy(false)
     }
-  }, [canvasId, noteText, reloadCanvases, toast])
+  }, [applyList, canvasId, loadCanvases, noteText, toast])
 
   const current = canvases.find((item) => item.id === canvasId)
+  // 状态条那一条提醒：读不到列表 / 上次那块不在了；一次只说一句
+  const notice = listRead ? canvasNotice({ read: listRead, choice: { stale, canvasId }, listed: canvases }) : ''
+  const listFailed = listRead?.state === 'failed'
+  const pickerLabel = boardCanvasLabel({ read: listRead ?? { state: 'ok' }, canvases, canvasId })
 
   // 连接中：先给一条细状态条，不白屏、不假装已打开
   if (!checked) {
@@ -341,6 +386,34 @@ export default function BoardPage({ onToast, boardId, focus, onToggleFocus }: Bo
           <span className="bd-dot" />
           {localOnly ? '本机已连接' : '已连接'}
         </span>
+        {/* 画布列表读不到 / 上次那块不在了：先说这一句，再说现在在哪块画布上（r273）。
+            读不到时那一条本身就是「重试」按钮；「换了一块」那条只说明，不占点击。 */}
+        {notice ? (
+          listFailed ? (
+            <>
+              <span className="bd-warn" title={notice}>
+                <TriangleAlert size={12} strokeWidth={2} />
+                <span className="bd-warn-text">画布列表没读到</span>
+              </span>
+              {/* 重试是这一屏唯一能走回来的路：走状态条里同一套按钮，窄屏才有 40/44px 的点按区 */}
+              <button
+                className="bd-action"
+                type="button"
+                onClick={retryList}
+                disabled={listBusy}
+                title={notice}
+                aria-label="重新读一次画布列表"
+              >
+                <RefreshCw size={12} /><span className="bd-action-text">{listBusy ? '读取中' : '重试'}</span>
+              </button>
+            </>
+          ) : (
+            <span className="bd-warn" title={notice}>
+              <TriangleAlert size={12} strokeWidth={2} />
+              <span className="bd-warn-text">{notice}</span>
+            </span>
+          )
+        ) : null}
         <CanvasQueueChip view={queueView} idleAt={queueIdleAt} />
         <span className="bd-sep" aria-hidden="true" />
         <div className="bd-picker">
@@ -350,11 +423,19 @@ export default function BoardPage({ onToast, boardId, focus, onToggleFocus }: Bo
             className="bd-select"
             label="选择画布"
             value={canvasId}
-            options={[
-              { value: '', label: canvases.length ? '未指定（默认画布）' : '暂无已保存的画布' },
-              ...canvases.map((item) => ({ value: item.id, label: item.name + ' · ' + item.nodeCount + ' 节点' })),
-            ]}
-            onChange={(value) => setCanvasId(value)}
+            /* 读不到列表就没有名字可挑：选择器收成一只只说明现状的框，重试在左边那一条上 */
+            disabled={listFailed}
+            options={listFailed
+              ? [{ value: canvasId, label: pickerLabel }]
+              : [
+                  { value: '', label: canvases.length ? '未指定（默认画布）' : '暂无已保存的画布' },
+                  ...canvases.map((item) => ({ value: item.id, label: item.name + ' · ' + item.nodeCount + ' 节点' })),
+                ]}
+            onChange={(value) => {
+              rememberedRef.current = value
+              setStale(false)
+              setCanvasId(value)
+            }}
           />
         </div>
         <button className="bd-action" type="button" onClick={() => { void createCanvas() }} title="新建一块画布并绑定到工作台">

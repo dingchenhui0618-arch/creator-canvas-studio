@@ -96,6 +96,31 @@
 }
 .bd-queue.is-done { color: var(--muted); }
 
+/* 画布列表读不到 / 上次那块不在了（r273）：与排队位同一副骨架（发丝线 + 等宽微字 + 胶囊圆角），
+   用警示色区分；文字允许自己省略，它说的是一句完整的话，不该把状态条撑破。
+   以前这里没有这一条，读不到列表时选择器直接写「暂无已保存的画布」——把一次故障说成「你没有画布」。 */
+.bd-warn {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--space-2);
+  height: 24px;
+  min-width: 0;
+  max-width: 380px;
+  padding: 0 var(--space-2);
+  overflow: hidden;
+  color: var(--warn);
+  background: var(--warn-soft);
+  border: 1px solid rgba(138, 91, 8, .22);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  letter-spacing: .02em;
+  white-space: nowrap;
+}
+.bd-warn svg { flex: none; }
+.bd-warn-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
 .bd-sep {
   width: 1px;
   height: 16px;
@@ -292,14 +317,17 @@
   .bd-url { display: none; }
   .bd-state,
   .bd-queue,
+  .bd-warn,
   .bd-note-hint { font-size: 13px; }
   /* 点按区 24 → 40 */
   .bd-action { height: 40px; padding: 0 var(--space-3); }
   .bd-action svg { width: 14px; height: 14px; }
   .bd-state,
-  .bd-queue { height: 26px; }
+  .bd-queue,
+  .bd-warn { height: 26px; }
   /* 排队位胶囊不许比状态条还宽：超了就在自己身上省略，而不是被页面裁掉半句 */
-  .bd-queue { max-width: 100%; min-width: 0; }
+  .bd-queue,
+  .bd-warn { max-width: 100%; min-width: 0; }
   /* 弹性收缩会把图标键压成 16px：显式给宽度并禁止收缩 */
   .bd-strip > .vq-button--icon,
   .bd-strip .vq-button--icon { width: 40px; height: 40px; flex: 0 0 auto; }
