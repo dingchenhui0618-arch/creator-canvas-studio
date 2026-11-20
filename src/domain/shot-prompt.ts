@@ -126,5 +126,5 @@ export type ShotPromptScriptSource = 'own' | 'template' | 'none'
 /** 提示词面板顶上那句说明：拼的是哪几样东西、有没有动过原话、会不会花钱。 */
 export function shotPromptHint(source: ShotPromptScriptSource): string {
   const from = source === 'own' ? '与这条作品自己的脚本' : source === 'template' ? '与模板那一段脚本' : ''
-  return '由这一镜的画面、机位' + from + '拼成，没有经过模型改写；贴进无限画布的生图框就能出图，出图会花你自己的额度。'
+  return '由这一镜的画面、机位' + from + '拼成，没有经过模型改写；点「出这一镜」就用这一条画一张（花你自己的积分），也可以复制走去别处出图。'
 }

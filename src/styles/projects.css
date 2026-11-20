@@ -626,6 +626,8 @@
   align-items: flex-start;
   gap: var(--space-1);
   padding-top: 2px;
+  /* 这一列会随内容变宽：min-width:0 才让它在格子里收得住（r276 加出图按钮时 390 溢出到 429） */
+  min-width: 0;
 }
 
 .vq-shot-attach {
@@ -635,6 +637,43 @@
 
 .vq-shot-file {
   display: none;
+}
+
+/* 逐镜出图（r276）：这一镜的提示词本来就在这一页现拼，出图也收回到这一行来。
+   按钮上写着这一下花多少；失败那行横跨整行，把钱退没退、要不要充值写在同一句里。 */
+.vq-shot-gen {
+  white-space: nowrap;
+}
+
+.vq-shot-gen:disabled {
+  color: var(--faint);
+  cursor: not-allowed;
+}
+
+.vq-shot-gen-note {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--canvas);
+  color: var(--muted);
+  font-size: var(--text-2xs);
+  line-height: 1.7;
+}
+
+.vq-shot-gen-note svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--warn);
+}
+
+.vq-shot-gen-note span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .vq-shot-clear {
@@ -764,6 +803,7 @@
     grid-column: 2;
     grid-row: 3;
     flex-direction: row;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--space-2);
   }

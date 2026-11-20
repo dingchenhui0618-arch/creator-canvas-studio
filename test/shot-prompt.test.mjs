@@ -105,6 +105,8 @@ test('面板那句说明：脚本从哪来就怎么说，永远说清没有模�
   assert.doesNotMatch(shotPromptHint('none'), /脚本/)
   for (const source of ['own', 'template', 'none']) {
     assert.match(shotPromptHint(source), /没有经过模型改写/)
-    assert.match(shotPromptHint(source), /会花你自己的额度/)
+    // r276：出图这一步已经收进作品页，说明里要给出「就地画」与「复制走」两个出口
+    assert.match(shotPromptHint(source), /点「出这一镜」/)
+    assert.match(shotPromptHint(source), /花你自己的积分/)
   }
 })

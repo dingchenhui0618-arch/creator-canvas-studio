@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, ArrowRight, BookmarkPlus, Bot, Check, ChevronDown, Clapperboard, ClipboardCheck, Copy, CopyPlus, Download, ExternalLink, FileCheck2, FileText, GitCompare, Link2, Package, Pencil, Plus, Printer, RefreshCw, RotateCcw, ScanEye, Share2, Trash2, Upload, Workflow, X } from 'lucide-react'
+import { AlertCircle, ArrowLeft, ArrowRight, BookmarkPlus, Bot, Check, ChevronDown, Clapperboard, ClipboardCheck, Copy, CopyPlus, Download, ExternalLink, FileCheck2, FileText, GitCompare, Link2, Package, Pencil, Plus, Printer, RefreshCw, RotateCcw, ScanEye, Share2, Sparkles, Trash2, Upload, Workflow, X } from 'lucide-react'
 import PageHead from '../components/PageHead'
 import ProjectStatusPill from '../components/ProjectStatus'
 import { VersionScriptModal } from '../components/VersionScriptModal'
@@ -39,6 +39,9 @@ import {
   type ProjectTemplateSaveResult,
 } from '../api/projects'
 import { uploadRejection, uploadReviewImage } from '../api/media'
+import { generateMediaImage, getMediaTask, listMediaModels } from '../api/media-gen'
+import { safeFetch } from '../api/client'
+import { getCredits } from '../api/credits'
 import { describeTiming, type ScriptBeat } from '../domain/radar'
 import { formatCount } from '../api/radar'
 import {
@@ -83,6 +86,7 @@ import {
 import { clearUnsaved, setUnsaved } from '../domain/unsaved-guard'
 import { ackReview, decideReview, clearReviewDecision, unackReview } from '../api/review'
 import { allShotPrompts, beatForShot, shotPrompt, shotPromptHint, type ShotPromptScriptSource } from '../domain/shot-prompt'
+import { SHOT_GEN_ATTACH_FAILED, SHOT_GEN_WAIT_MS, shotGenFailNote, shotGenFileName, shotGenPriceLabel, shotGenRatio, shotGenView, type ShotGenView } from '../domain/shot-generate'
 import {
   ISSUE_LABEL,
   deliveryDrift,
@@ -138,6 +142,13 @@ const SCRIPT_CANVAS_NOTE: Record<string, string> = {
 const KIND_LABEL: Record<string, string> = { replica: '原片拆解', adapted: '改编版', flow: '工作流', saved: '待解析' }
 
 const pad2 = (value: number) => String(value).padStart(2, '0')
+
+// 逐镜出图（r276）这一行此刻长什么样：正在画 / 正在贴 / 失败（失败带着退没退款那句话）。
+// 「画好了」不进状态——它紧接着就变成贴画面，只在界面上闪一下，不留一行要人读的中间态。
+type ShotGenRow =
+  | Extract<ShotGenView, { state: 'running' }>
+  | { state: 'attach' }
+  | (Extract<ShotGenView, { state: 'failed' }> & { note?: string })
 
 // 花费明细里的时间：只到分钟，年份省掉——同一屏里不会有跨年的几笔
 function shortStamp(value: string): string {
@@ -209,6 +220,12 @@ export default function ProjectPage({
   const [busy, setBusy] = useState<'' | 'canvas' | 'done' | 'delete' | 'title' | 'version' | 'rebase' | 'script' | 'export' | 'zip'>('')
   // 哪一镜正在贴画面（v0.9.161）：上传 + 记账两段，按镜头号显示「正在贴…」，不让整页转圈
   const [shotBusy, setShotBusy] = useState(0)
+  // 逐镜出图（r276）：哪几镜在画、画到哪；只有点「出这一镜」才动它，进页面不出图
+  const [shotGen, setShotGen] = useState<Record<number, ShotGenRow>>({})
+  // 出图模型与单价：与「快捷创作 → 图片」读同一份 /api/media/models，界面不自己写死模型名与价格
+  const [imageModel, setImageModel] = useState<{ id: string; label: string; price: number | null; ratios: string[] } | null>(null)
+  const [imageModelNote, setImageModelNote] = useState('')
+  const [balance, setBalance] = useState<number | null>(null)
   // 哪一镜的提示词摊开着（v0.9.164）：提示词是现拼的，不是存下来的，所以只记镜头号
   const [promptNo, setPromptNo] = useState(0)
   const [renaming, setRenaming] = useState(false)
@@ -375,6 +392,37 @@ export default function ProjectPage({
     }, 0)
     return () => window.clearTimeout(timer)
   }, [load])
+
+  // 出图的模型、单价与余额（r276）：模型与单价只认服务端那一份真源，余额只认账本。
+  // 读不到就说读不到，并且把「出这一镜」按住——不许拿一个猜的价格哄人点下去花钱。
+  useEffect(() => {
+    let alive = true
+    void listMediaModels()
+      .then((list) => {
+        if (!alive) return
+        const wanted = list.defaults?.image || list.image?.[0]?.id || ''
+        const found = (list.image || []).find((item) => item.id === wanted) || (list.image || [])[0] || null
+        if (!found) {
+          setImageModel(null)
+          setImageModelNote('出图通道还没接上模型：先去「快捷创作 → 图片」看看那边能不能出图')
+          return
+        }
+        setImageModel({
+          id: found.id,
+          label: found.label,
+          price: Number(found.credits) > 0 ? Math.round(Number(found.credits)) : null,
+          ratios: Array.isArray(found.ratios) ? found.ratios : [],
+        })
+        setImageModelNote('')
+      })
+      .catch(() => {
+        if (!alive) return
+        setImageModel(null)
+        setImageModelNote('读不到出图模型与单价：这一下没连上服务，稍后刷新再看')
+      })
+    getCredits(1).then((result) => { if (alive) setBalance(typeof result.balance === 'number' ? result.balance : null) }).catch(() => { if (alive) setBalance(null) })
+    return () => { alive = false }
+  }, [])
 
   // 巡检结论跟首屏一起取：只读一份报告，读不到就不显示这一行（不挡作品页）
   useEffect(() => {
@@ -845,6 +893,90 @@ export default function ProjectPage({
     }
   }
 
+  // 逐镜出图（r276）：整条创作链里最后一段「得换个应用自己干」的活，收成这一下点击。
+  // 顺序是「出图 → 取回字节 → 传成自己的素材 → 记到这一镜」：四段各有各的说法，
+  // 画完但没贴上时不许说成「出图失败」——图在，钱也花了，只是还没记到这一镜。
+  const generateShotFrame = useCallback(async (shotNo: number) => {
+    const board = data?.template
+    if (!board?.storyboard?.length || !imageModel) return
+    const current = shotGen[shotNo]
+    if (current?.state === 'running' || current?.state === 'attach') return
+    const shot = board.storyboard.find((item, index) => Math.max(1, Math.round(Number(item.shotNo) || index + 1)) === shotNo)
+    if (!shot) return
+    const beats = data?.script?.structure?.length ? data.script.structure : board.structure
+    const prompt = shotPrompt(shot, beatForShot(shot, beats), {
+      platform: board.origin?.platform || '',
+      scriptSource: data?.script?.source === 'project' ? 'own' : 'template',
+    })
+    const mark = (next: ShotGenRow) => setShotGen((rows) => ({ ...rows, [shotNo]: next }))
+    const fail = (view: Extract<ShotGenView, { state: 'failed' }>) => mark({ ...view, note: shotGenFailNote(view) })
+
+    mark({ state: 'running', progress: 0, label: '正在提交…' })
+    let task
+    try {
+      const started = await generateMediaImage({
+        prompt,
+        model: imageModel.id,
+        mode: 'text2image',
+        ratio: shotGenRatio(imageModel.ratios),
+      })
+      task = started.task
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : String(caught)
+      fail({ state: 'failed', message, refunded: false, cost: 0, topUp: /积分不足|余额不足/.test(message) })
+      return
+    }
+
+    try {
+      let view = shotGenView(task)
+      const deadline = Date.now() + SHOT_GEN_WAIT_MS
+      while (view.state === 'running' && Date.now() < deadline) {
+        mark(view)
+        await new Promise((resolve) => window.setTimeout(resolve, 2500))
+        task = (await getMediaTask(task.id)).task
+        view = shotGenView(task)
+      }
+      if (view.state === 'running') {
+        // 服务端还在画：关掉这一页不影响它，回来能在「最近生成」里找到；这里绝不叫人重试
+        fail({
+          state: 'failed',
+          message: '画了 4 分钟还没回来：关掉这一页它也会画完，回到「快捷创作 → 图片 → 最近生成」能找到这一张，别在这里重复点。',
+          refunded: false,
+          cost: 0,
+          topUp: false,
+        })
+        return
+      }
+      if (view.state === 'failed') {
+        fail(view)
+        return
+      }
+      // 到这儿钱已经花了：后面任何一步没成就说「图在哪、怎么贴」，不再说「失败了」
+      mark({ state: 'attach' })
+      try {
+        const response = await safeFetch(view.downloadUrl)
+        if (!response.ok) throw new Error('HTTP ' + response.status)
+        const blob = await response.blob()
+        const file = new File([blob], shotGenFileName(shotNo, blob.type || view.mime), { type: blob.type || view.mime })
+        const uploaded = await uploadReviewImage(file)
+        await setProjectShotFrame(projectId, shotNo, uploaded.media)
+        await load()
+        setShotGen((rows) => {
+          const next = { ...rows }
+          delete next[shotNo]
+          return next
+        })
+        getCredits(1).then((result) => setBalance(typeof result.balance === 'number' ? result.balance : null)).catch(() => undefined)
+        onToast('第 ' + shotNo + ' 镜的画面出好了 · 这张图也在「快捷创作 → 图片 → 最近生成」里')
+      } catch {
+        fail({ state: 'failed', message: SHOT_GEN_ATTACH_FAILED, refunded: false, cost: 0, topUp: false })
+      }
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : '这一下的状态没读到'
+      fail({ state: 'failed', message: message + '：任务号 ' + task.id + '，去「最近生成」看它现在是哪一步', refunded: false, cost: 0, topUp: false })
+    }
+  }, [data, imageModel, load, onToast, projectId, shotGen])
+
   // 分镜提示词（v0.9.164）：现拼现用，不落库——拼错了改一句文案就能修，盘上也不会多一份会过期的副本。
   // 复制的是一个镜头或整条作品的提示词；出图本身仍发生在无限画布，额度也由那边扣。
   const copyShotText = async (shotNo: number, all = false) => {
@@ -863,8 +995,8 @@ export default function ProjectPage({
     try {
       await navigator.clipboard.writeText(text)
       onToast(all
-        ? '已复制 ' + board.storyboard.length + ' 镜的提示词 · 出图会花你自己的额度'
-        : '已复制第 ' + shotNo + ' 镜的提示词 · 贴进无限画布的生图框就能出图')
+        ? '已复制 ' + board.storyboard.length + ' 镜的提示词 · 也可以直接点每一镜的「出这一镜」'
+        : '已复制第 ' + shotNo + ' 镜的提示词 · 要现成画面就点「出这一镜」')
     } catch {
       onToast('浏览器没给剪贴板权限：展开提示词后手动选中复制')
     }
@@ -3307,7 +3439,7 @@ export default function ProjectPage({
                   <button
                     type="button"
                     className="vq-shot-allcopy"
-                    title={'把这一版 ' + template.storyboard.length + ' 镜的提示词按顺序一次复制走：贴进无限画布的生图框就能出图，出图会花你自己的额度'}
+                    title={'把这一版 ' + template.storyboard.length + ' 镜的提示词按顺序一次复制走：想贴到别处出图可以拿走；要现成画面就点每一镜的「出这一镜」'}
                     onClick={() => void copyShotText(0, true)}
                   >
                     <Copy size={12} />
@@ -3331,6 +3463,10 @@ export default function ProjectPage({
                   const own = data.project.shots?.[String(shotNo)] || null
                   const source = own ? '/media/' + own.media : shot.frameUrl || ''
                   const busy = shotBusy === shotNo
+                  // 逐镜出图（r276）：这一镜此刻在画还是在贴、上次失败说了什么
+                  const gen = shotGen[shotNo]
+                  const genBusy = gen?.state === 'running' || gen?.state === 'attach'
+                  const genInsufficient = Boolean(imageModel?.price && balance !== null && balance < imageModel.price)
                   return (
                     <li key={index} className="vq-shot-row">
                       <span className="vq-mono vq-shot-index">{pad2(shotNo)}</span>
@@ -3358,6 +3494,24 @@ export default function ProjectPage({
                         {shot.caption ? <span className="vq-shot-caption">字幕 · {shot.caption}</span> : null}
                       </div>
                       <div className="vq-shot-actions">
+                        {/* 逐镜出图（r276）：这一镜的提示词本来就在这一页现拼，出图也收回来。
+                            只有点这一下才花钱；价格与余额写在按钮上，不够就按住并写「还差 N 积分」。 */}
+                        <button
+                          type="button"
+                          className="vq-button vq-button--ghost vq-button--sm vq-shot-gen"
+                          disabled={genBusy || !imageModel || genInsufficient}
+                          title={
+                            !imageModel
+                              ? (imageModelNote || '出图通道还没就绪')
+                              : genInsufficient
+                                ? '积分不够：去「充值」页充一档再回来出这一镜'
+                                : '用这一镜的提示词在平台里真画一张（' + imageModel.label + '），画完自动贴到这一镜；一次 ' + (imageModel.price ?? 0) + ' 积分'
+                          }
+                          onClick={() => void generateShotFrame(shotNo)}
+                        >
+                          <Sparkles size={12} />
+                          {gen?.state === 'running' ? gen.label : gen?.state === 'attach' ? '正在贴' : '出这一镜 · ' + shotGenPriceLabel(imageModel?.price, balance)}
+                        </button>
                         <label
                           className={'vq-button vq-button--ghost vq-button--sm vq-shot-attach' + (busy ? ' is-busy' : '')}
                           title={
@@ -3395,13 +3549,29 @@ export default function ProjectPage({
                           type="button"
                           className="vq-shot-prompt-toggle"
                           aria-expanded={promptNo === shotNo}
-                          title="看这一镜的出图提示词：由分镜与脚本现拼，贴进无限画布的生图框就能出图"
+                          title="看这一镜的出图提示词：由分镜与脚本现拼，点「出这一镜」就是用这一条去画"
                           onClick={() => setPromptNo(promptNo === shotNo ? 0 : shotNo)}
                         >
                           <FileText size={12} />
                           提示词
                         </button>
                       </div>
+                      {/* 出图失败那行：钱退没退、要不要充值写在同一句里，不用去别处对账 */}
+                      {gen?.state === 'failed' ? (
+                        <p className="vq-shot-gen-note" role="status">
+                          <AlertCircle size={12} />
+                          <span>
+                            {gen.message}
+                            {gen.note ? ' ' + gen.note : ''}
+                            {gen.topUp ? (
+                              <>
+                                {' '}
+                                <a className="vq-link" href="#/recharge" title="去充值页选一档，到账后回来再点一次">去充值</a>
+                              </>
+                            ) : null}
+                          </span>
+                        </p>
+                      ) : null}
                       {promptNo === shotNo ? (
                         <div className="vq-shot-prompt" role="region" aria-label={'第 ' + shotNo + ' 镜的出图提示词'}>
                           <p className="vq-shot-prompt-text">
