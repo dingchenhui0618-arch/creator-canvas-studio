@@ -2607,11 +2607,11 @@ export function AgentsPage({
               >
                 对话预设
               </button>
-              <span className="agx-surface-note">
-                {chatSurface === 'platform'
-                  ? '长上下文 · 联网搜索 · 读链接 · 思考模式'
-                  : '带输出类型与草稿出口：存模板 / 送工作流 / 写进作品'}
-              </span>
+              {/* r287：平台对话下面那排开关就是「联网检索 / 读链接 / 思考模式」，
+                  这里再列一遍等于同一屏说两次，拥挤感主要来自这行；预设那一侧没有开关，才需要说明。 */}
+              {chatSurface === 'preset' ? (
+                <span className="agx-surface-note">带输出类型与草稿出口：存模板 / 送工作流 / 写进作品</span>
+              ) : null}
             </div>
           ) : null}
           {/* 平台对话面板常驻：切到「对话预设」或图片 / 视频时只隐藏、不卸载（r225）。

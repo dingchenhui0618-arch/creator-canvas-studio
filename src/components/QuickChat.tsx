@@ -426,15 +426,13 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
             <div className="qc-empty">
               <strong>一页能记住上下文的对话</strong>
               <p>写脚本、拆爆款结构、改分镜、问平台怎么用，都可以直接说。</p>
+              {/* r287：四条并成两条——原来这一屏上「能力」被说了三遍（这四条、下面那排开关、
+                  AgentsPage 的对话方式那一行），空状态不该比对话本身还重。 */}
               <ul>
                 <li>边生成边显示，首段一两秒就到；中途可以停，停止与失败都不计费</li>
-                <li>脚本、Word、Excel、PDF 与截图都可以丢进来：文字先在本地读成文字，图直接交给模型看（不做 OCR）</li>
                 <li>
-                  带链接时打开「读链接」，要最新信息时打开「联网搜索」——都在平台这一侧完成
-                  {searchAvailable ? '' : '；搜索服务还没接通，先发链接来读'}
-                </li>
-                <li>
-                  上下文带最近 30 条，存档最多 200 条；每次对话 {credits?.price ? credits.price + ' ' + credits.unit : '按次计费'}
+                  附件丢脚本 / Word / Excel / PDF 与截图（图不做 OCR）；带链接先开「读链接」
+                  {searchAvailable ? '，要最新信息再开「联网搜索」' : '（联网搜索还没接通）'}；上下文带最近 30 条
                 </li>
               </ul>
             </div>
@@ -587,7 +585,7 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
               className={'qc-tool qc-tool--attach' + (attached.length ? ' is-on' : '')}
               onClick={() => fileRef.current?.click()}
               disabled={sending || attaching}
-              title="附件：脚本、Word、Excel、PDF、图片（截图直接交给模型看）"
+              title="附件：脚本、Word、Excel、PDF、图片（截图直接交给模型看）；最多 5 个（图片 2 张），单个 8 MB"
               aria-label="附件"
             >
               {attaching ? <Loader2 size={14} className="qc-spin" /> : <Paperclip size={14} />}
@@ -697,7 +695,7 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
                 ? '生成中点方块可停止，停止不计费'
                 : !tools.readUrl && /https?:\/\//i.test(draft)
                   ? '消息里有链接：打开「读链接」，我才会先把页面读下来'
-                  : 'Enter 发送 · Shift + Enter 换行 · 附件最多 5 个（图片 2 张）、单个 8 MB'}
+                  : 'Enter 发送 · Shift + Enter 换行'}
             </span>
             <span>{toolCount ? toolCount + ' 项能力已打开' : '能力全关：只按对话回答'}</span>
           </div>
