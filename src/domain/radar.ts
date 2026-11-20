@@ -1,4 +1,6 @@
-export type Platform = 'douyin' | 'xiaohongshu'
+// 'link' 是「用户自己贴的直链」（r291）：它没有平台，界面写「自备链接」，
+// 分镜提示词那边认不出竖屏就不写比例，不冒充平台内容。
+export type Platform = 'douyin' | 'xiaohongshu' | 'link'
 
 export type MediaItem = {
   id: string

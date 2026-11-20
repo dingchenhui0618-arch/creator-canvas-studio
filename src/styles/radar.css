@@ -616,6 +616,42 @@
   font-size: var(--text-2xs);
 }
 
+/* 自备链接（r291）：检索之外的第二条入口。安静的一行，不做成第二条主按钮——
+   检索仍然是这一屏的主线，这里只是告诉人「一条都没有也能拆」。 */
+.radar-manual {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  margin: 0 0 var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  color: var(--ink-soft);
+  background: var(--surface-soft);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-md);
+  font-size: 14px;
+}
+
+.radar-manual > svg {
+  flex: none;
+  color: var(--faint);
+}
+
+.radar-manual-copy {
+  flex: 1;
+  min-width: 220px;
+  line-height: 1.6;
+}
+
+@media (max-width: 760px) {
+  /* 手机上说明自己占满一行，按钮落到下一行靠右：挤在一行时中文只剩几字宽、整行被拉高到 175px（r291 实测） */
+  .radar-manual > svg { align-self: flex-start; margin-top: 4px; }
+  /* 说明从图标右边开始排（basis 200px 才挤得下），只有按钮单独落到下一行：
+     basis 100% 会让图标独占一行、整行高到 163px（r291 实测） */
+  .radar-manual-copy { flex: 1 1 200px; min-width: 0; }
+  .radar-manual .vq-button { flex: 0 0 auto; margin-left: auto; }
+}
+
 /* 上次检索的结果还在（v0.9.36）：一条安静的说明行，别做成警告条——它不是错误 */
 .radar-restored {
   display: flex;

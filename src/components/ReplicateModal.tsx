@@ -3,6 +3,7 @@ import { AlertCircle, ArrowRight, Check, ExternalLink, Film, Loader2, Sparkles, 
 import { getJob, getTemplate, formatDuration, startReplicate } from '../api/radar'
 import { getCredits, type CreditsResponse } from '../api/credits'
 import { useUiMode } from '../api/app'
+import { checkVideoLink, manualMediaItem } from '../domain/video-link'
 import type { MediaItem, ReplicaTemplate, ReplicateJob } from '../domain/radar'
 
 const STEPS = [
@@ -21,7 +22,7 @@ const stepIndex = (step: string) => {
   return STEPS.findIndex((item) => item.key === step)
 }
 
-export function ReplicateModal({ item, hasKey, visionReady, onClose, onDone, onOpenTemplates, mode = 'replicate' }: {
+export function ReplicateModal({ item, hasKey, visionReady, onClose, onDone, onOpenTemplates, mode = 'replicate', manual = false }: {
   item: MediaItem
   hasKey: boolean
   visionReady: boolean
@@ -33,6 +34,9 @@ export function ReplicateModal({ item, hasKey, visionReady, onClose, onDone, onO
   // 同一套流程两个入口名（v0.9.40）：从只存了链接的模板进来叫「解析」，从检索卡片叫「一键复刻」。
   // 已经点开「去解析这条」的人，弹窗标题不该再叫「一键复刻」。
   mode?: 'replicate' | 'parse'
+  // 自备链接（r291）：手上没有检索卡片，链接由用户自己粘。此时直链输入框是主角，
+  // 不再有「视频来源」那一行，也不再有「原链接」可退回。
+  manual?: boolean
 }) {
   const parseMode = mode === 'parse'
   const { internal } = useUiMode()
@@ -82,13 +86,19 @@ export function ReplicateModal({ item, hasKey, visionReady, onClose, onDone, onO
     }, 900)
   }
 
+  // 自备链接：边粘边判，认不出就在输入框下面说清为什么，不让人点了才开始扣费再失败
+  const linkCheck = manual ? checkVideoLink(url) : null
+  const linkReason = linkCheck && !linkCheck.ok ? (url.trim() ? linkCheck.reason : '') : ''
+
   const begin = async () => {
     setPhase('running')
     setError('')
     setJob(null)
     setTemplate(null)
     try {
-      const result = await startReplicate(item, url.trim())
+      // 平台跟着链接走：直链没有平台，写「自备链接」；抖音 / 小红书的链接由链接本身定平台
+      const payload = manual ? manualMediaItem(url) : item
+      const result = await startReplicate(payload, url.trim())
       setSpent(result.credits ?? null)
       getCredits(1).then(setCredits).catch(() => undefined)
       poll(result.jobId)
@@ -98,7 +108,8 @@ export function ReplicateModal({ item, hasKey, visionReady, onClose, onDone, onO
     }
   }
 
-  const canRun = Boolean(url.trim() || item.url)
+  // 自备链接必须是一条认得出的链接才算能跑；检索卡片仍按原链接 / 直链二选一
+  const canRun = manual ? Boolean(linkCheck?.ok) : Boolean(url.trim() || item.url)
   const currentIndex = job ? stepIndex(job.step) : -1
 
   return (
@@ -106,33 +117,60 @@ export function ReplicateModal({ item, hasKey, visionReady, onClose, onDone, onO
       <div className="replicate-modal" onMouseDown={(event) => event.stopPropagation()}>
         <header className="replicate-head">
           <div>
-            <span className="section-kicker">{parseMode ? '解析这条原片' : '一键复刻'}</span>
-            <strong>{item.title || '（无标题）'}</strong>
-            <span className="replicate-sub">{item.platformLabel}{item.author ? ' · ' + item.author : ''}</span>
+            <span className="section-kicker">{manual ? '拆我自己的链接' : parseMode ? '解析这条原片' : '一键复刻'}</span>
+            <strong>{item.title || (manual ? '自备链接' : '（无标题）')}</strong>
+            <span className="replicate-sub">
+              {manual ? (linkCheck?.ok ? linkCheck.label : '自己粘一条链接，不经过检索') : item.platformLabel}
+              {item.author ? ' · ' + item.author : ''}
+            </span>
           </div>
           <button className="vq-button vq-button--icon" onClick={onClose} aria-label="关闭"><X size={16} /></button>
         </header>
 
         {phase === 'idle' && (
           <div className="replicate-body">
-            <div className="replicate-field">
-              <label>视频来源</label>
-              <div className="replicate-source">
-                <span className={`source-chip ${item.url ? 'is-ready' : 'is-off'}`}><Film size={13} />{item.url ? item.platformLabel + ' 原链接' : '示例数据无真实链接'}</span>
-                <span className="replicate-hint">优先用原链接解析；解析失败时用下面的直链</span>
+            {/* 自备链接（r291）：没有「来源」可退，直接让链接输入框当主角 */}
+            {manual ? null : (
+              <div className="replicate-field">
+                <label>视频来源</label>
+                <div className="replicate-source">
+                  <span className={`source-chip ${item.url ? 'is-ready' : 'is-off'}`}><Film size={13} />{item.url ? item.platformLabel + ' 原链接' : '示例数据无真实链接'}</span>
+                  <span className="replicate-hint">优先用原链接解析；解析失败时用下面的直链</span>
+                </div>
               </div>
-            </div>
+            )}
             <div className="replicate-field">
-              <label htmlFor="direct-url">视频直链（可选，mp4 地址可直接跑通全流程）</label>
+              <label htmlFor="direct-url">
+                {manual ? '视频链接' : '视频直链（可选，mp4 地址可直接跑通全流程）'}
+              </label>
               <input
                 id="direct-url"
                 value={url}
+                autoFocus={manual}
                 onChange={(event) => setUrl(event.target.value)}
-                placeholder="https://... .mp4"
+                placeholder={manual ? 'https://v.douyin.com/… 或 https://… .mp4' : 'https://... .mp4'}
+                aria-invalid={linkReason ? true : undefined}
+                aria-describedby={manual ? 'direct-url-hint' : undefined}
               />
+              {manual ? (
+                <p
+                  id="direct-url-hint"
+                  className={'replicate-link-hint' + (linkReason ? ' is-warn' : linkCheck?.ok ? ' is-ok' : '')}
+                >
+                  {linkReason || (linkCheck?.ok ? '识别为' + linkCheck.label + '，点「开始拆解」就按复刻计费' : '抖音 / 小红书的内容页链接，或 .mp4 / .mov / .webm 直链；整段分享文案直接粘进来也行')}
+                </p>
+              ) : null}
             </div>
             <div className="replicate-checks">
-              <span className={hasKey ? 'is-ok' : 'is-warn'}>{hasKey ? '解析服务已配置；解析失败时用直链兜底' : '解析服务未接入：只能用直链视频'}</span>
+              <span className={hasKey ? 'is-ok' : 'is-warn'}>
+                {manual
+                  ? hasKey
+                    ? '解析服务已配置：抖音 / 小红书链接交给它解析'
+                    : '解析服务未接入：只能拆 .mp4 / .mov / .webm 直链'
+                  : hasKey
+                    ? '解析服务已配置；解析失败时用直链兜底'
+                    : '解析服务未接入：只能用直链视频'}
+              </span>
               <span className={visionReady ? 'is-ok' : 'is-warn'}>{visionReady ? '视觉模型就绪，逐帧分析可运行' : internal ? '视觉模型未就绪，需要在服务端配置凭证' : '视觉能力暂未就绪，请联系管理员'}</span>
               {price !== null ? (
                 <span className={insufficient ? 'is-warn' : 'is-ok'}>
@@ -144,7 +182,7 @@ export function ReplicateModal({ item, hasKey, visionReady, onClose, onDone, onO
             <div className="replicate-foot">
               <button className="vq-button vq-button--ghost" onClick={onClose}>取消</button>
               <button className="vq-button vq-button--primary" disabled={!canRun || insufficient} onClick={() => void begin()}>
-                <Sparkles size={15} />{parseMode ? '开始解析' : '开始复刻'}
+                <Sparkles size={15} />{manual ? '开始拆解' : parseMode ? '开始解析' : '开始复刻'}
               </button>
             </div>
           </div>
@@ -226,6 +264,9 @@ export function ReplicateModal({ item, hasKey, visionReady, onClose, onDone, onO
             {!hasKey && (
               <p className="replicate-note">解析服务还没接入：平台链接无法解析。可以先粘贴一条 mp4 直链验证拆帧与模板流程，或先让管理员接入解析服务。</p>
             )}
+            {manual ? (
+              <p className="replicate-note">换一条能直接下载的 .mp4 直链，或抖音 / 小红书的内容页链接再试一次；这一单的积分已经退回。</p>
+            ) : null}
             <div className="replicate-foot">
               <button className="vq-button vq-button--ghost" onClick={onClose}>关闭</button>
               <button className="vq-button vq-button--primary" onClick={() => setPhase('idle')}>重试</button>

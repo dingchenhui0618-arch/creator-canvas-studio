@@ -24,6 +24,7 @@ import type { MediaItem, ReplicaTemplate, ScriptBeat, StoryboardShot, TemplateSo
 import { requestReview } from '../state/review'
 import { createProject } from '../api/projects'
 import { ReplicateModal } from '../components/ReplicateModal'
+import { manualMediaItem } from '../domain/video-link'
 import { TrashModal, type TrashSource } from '../components/TrashModal'
 import { deletedLabel, leftDays } from '../domain/trash'
 import { ReportModal } from '../components/ReportModal'
@@ -128,6 +129,8 @@ export function TemplateLibraryPage({
   const lastRequested = useRef('')
   const [health, setHealth] = useState<{ redfox: boolean; vision: boolean }>({ redfox: false, vision: false })
   const [replicateItem, setReplicateItem] = useState<MediaItem | null>(null)
+  // 自备链接（r291）：库空着、或者手上已经有一条时，不逼人先去雷达检索
+  const [manualOpen, setManualOpen] = useState(false)
   const [trashOpen, setTrashOpen] = useState(false)
   const [shareBusy, setShareBusy] = useState(false)
   const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null)
@@ -506,8 +509,11 @@ export function TemplateLibraryPage({
           <div className="radar-empty">
             <Layers size={22} />
             <strong>模板库还是空的</strong>
-            <span>去「爆款雷达」检索一条：点「加入模板库」先存链接与互动数据，点「解析」再拆脚本和分镜（出成片要自己拍）。</span>
-            <button className="vq-button vq-button--primary" onClick={onBack}>去检索一条</button>
+            <span>去「爆款雷达」检索一条：点「加入模板库」先存链接与互动数据，点「解析」再拆脚本和分镜（出成片要自己拍）。手上已经有一条的话，也可以直接粘链接来拆。</span>
+            <div className="template-empty-actions">
+              <button className="vq-button vq-button--primary" onClick={onBack}>去检索一条</button>
+              <button className="vq-button vq-button--ghost" onClick={() => setManualOpen(true)}>拆自己的链接</button>
+            </div>
           </div>
         )
       ) : (
@@ -1210,26 +1216,34 @@ export function TemplateLibraryPage({
 
       {/* 弹窗挂在 body 上（v0.9.40）：抽屉也是 portal 到 body 的，弹窗留在页面树里
           会被抽屉遮罩压住——从抽屉里点「去解析这条」，弹窗发灰、点击还会落到遮罩上。 */}
-      {replicateItem && createPortal(
+      {(replicateItem || manualOpen) && createPortal(
         <ReplicateModal
-          item={replicateItem}
+          item={manualOpen ? manualMediaItem('') : (replicateItem as MediaItem)}
+          manual={manualOpen}
           mode="parse"
           hasKey={health.redfox}
           visionReady={health.vision}
-          onClose={() => setReplicateItem(null)}
+          onClose={() => { setReplicateItem(null); setManualOpen(false) }}
           onDone={(title, upgradedId) => {
+            const wasManual = manualOpen
             setReplicateItem(null)
+            setManualOpen(false)
             void load()
             if (upgradedId) {
-              // 解析把这条原地升级了新 id：抽屉跟着换到升级后的那条，用户眼前就是脚本与分镜
-              onToast('解析完成，这条已升级成已解析模板：' + title)
+              // 解析把这条原地升级了新 id：抽屉跟着换到升级后的那条，用户眼前就是脚本与分镜。
+              // 自备链接拆出来的是新模板，说法不一样（不是「升级」）
+              onToast((wasManual ? '解析完成，已存入模板库：' : '解析完成，这条已升级成已解析模板：') + title)
               openTemplate(upgradedId)
+              return
+            }
+            if (wasManual) {
+              onToast('解析完成，模板已更新：' + title)
               return
             }
             closeDetail()
             onToast('解析完成，模板已更新：' + title)
           }}
-          onOpenTemplates={() => { setReplicateItem(null); closeDetail(); void load() }}
+          onOpenTemplates={() => { setReplicateItem(null); setManualOpen(false); closeDetail(); void load() }}
         />,
         document.body,
       )}

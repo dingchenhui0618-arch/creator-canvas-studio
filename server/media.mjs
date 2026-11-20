@@ -5,8 +5,8 @@ import dns from 'node:dns/promises'
 import net from 'node:net'
 import { config } from './config.mjs'
 import { resolveVideoUrl } from './redfox.mjs'
+import { classifyVideoLink } from './video-link.mjs'
 
-const DIRECT_MEDIA = /\.(mp4|m4v|mov|webm)(\?|#|$)/i
 const MAX_REDIRECTS = 3
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36'
 
@@ -145,17 +145,25 @@ export async function acquireVideo({ url, platform }, jobDir, onProgress) {
 
   if (!url) throw new Error('没有可用的视频地址：请粘贴 mp4 直链')
 
-  if (DIRECT_MEDIA.test(url)) {
-    await assertPublicHttpUrl(url)
-    await downloadToFile(url, target, onProgress)
-    return { file: target, resolvedFrom, resolvedUrl: url }
+  // 平台以链接本身为准（r291）：用户自己贴链接时，客户端并不知道这是什么平台，
+  // 以前它只能传一个瞎猜的 platform，传错就被这里拦成「无法识别的链接」——
+  // 明明链接是好的。现在先按链接判，识别不出时才退回客户端声明的平台（老路径）。
+  const link = classifyVideoLink(url)
+
+  if (link.kind === 'direct') {
+    await assertPublicHttpUrl(link.url)
+    await downloadToFile(link.url, target, onProgress)
+    return { file: target, resolvedFrom, resolvedUrl: link.url }
   }
 
-  if (platform !== 'douyin' && platform !== 'xiaohongshu') {
-    throw new Error('无法识别的链接：既不是可直接下载的视频（.mp4/.m4v/.mov/.webm），也不是抖音/小红书内容链接')
+  const declared = platform === 'douyin' || platform === 'xiaohongshu' ? platform : ''
+  const targetPlatform = link.kind === 'douyin' || link.kind === 'xiaohongshu' ? link.kind : declared
+  if (!targetPlatform) {
+    // 这条提示要直接可用：说清两种能用的链接，而不是只说「无法识别」
+    throw new Error('无法识别的链接：' + link.reason)
   }
 
-  const resolved = await resolveVideoUrl(platform, url)
+  const resolved = await resolveVideoUrl(targetPlatform, link.url || url)
   resolvedFrom = 'redfox-parse'
   await downloadToFile(resolved.downloadUrl, target, onProgress)
   return { file: target, resolvedFrom, resolvedUrl: resolved.downloadUrl, remoteTitle: resolved.title, remoteCover: resolved.cover }

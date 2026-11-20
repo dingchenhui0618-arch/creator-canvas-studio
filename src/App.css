@@ -319,6 +319,9 @@ button { cursor:pointer; }
 .radar-empty strong { color:var(--ink); font-size: 16px; }
 .radar-empty span { max-width:360px; font-size: 14px; line-height:1.7; }
 .radar-empty :is(.vq-button) { margin-top:8px; }
+/* 空状态有两个出口时并排一行，手机上占满一行（r291） */
+.template-empty-actions { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; }
+.template-empty-actions :is(.vq-button) { margin-top:8px; }
 .radar-card--skeleton { padding:0 0 16px; }
 .skeleton { background:linear-gradient(90deg,#efece5,#f7f5f0,#efece5); background-size:200% 100%; animation:shimmer 1.4s linear infinite; border-radius:var(--radius-sm); }
 @keyframes shimmer { to { background-position:-200% 0 } }
@@ -343,6 +346,10 @@ button { cursor:pointer; }
 .source-chip.is-ready { border-color:#cfd8cd; background:#eef4ee; color:#4b7959; }
 .source-chip.is-off { border-color:#ecdcbd; background:#fdf5e6; color:#8a6a2f; }
 .replicate-hint { font-size: 14px; color:var(--ink-faint); }
+/* 自备链接输入框下的判定行（r291）：认得出就说认成了哪种，认不出就说为什么，不用点了才知道 */
+.replicate-link-hint { margin:0; font-size: 14px; line-height:1.6; color:var(--ink-faint); }
+.replicate-link-hint.is-warn { color:#8a6a2f; }
+.replicate-link-hint.is-ok { color:#4b7959; }
 .replicate-checks { display:grid; gap:8px; font-size: 14px; }
 .replicate-checks .is-ok::before { content:'✓ '; font-weight:800; }
 .replicate-checks .is-warn::before { content:'! '; font-weight:800; }
@@ -522,6 +529,7 @@ button { cursor:pointer; }
   .replicate-source { gap: 8px; }
   .source-chip { padding: 4px 8px; font-size: 15px; }
   .replicate-hint { font-size: 15px; line-height: 1.6; }
+  .replicate-link-hint { font-size: 15px; line-height: 1.6; }
   .replicate-checks { gap: 8px; font-size: 15px; line-height: 1.6; }
   .replicate-foot { position: sticky; bottom: 0; gap: 8px; margin-top: 0; padding: 12px 0 16px; background: var(--surface); }
   .replicate-foot .vq-button { flex: 1; min-height: 48px; font-size: 16px; }

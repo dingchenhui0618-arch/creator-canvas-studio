@@ -4,6 +4,7 @@ import {
   AlertCircle,
   ArrowRight,
   BookmarkPlus,
+  ClipboardPaste,
   Check,
   Clock,
   ExternalLink,
@@ -20,6 +21,7 @@ import {
 } from 'lucide-react'
 import { clearSearchHistory, coverSrc, formatCount, formatDuration, getHealth, getTakenOrigins, listSearchHistory, lookupLibrary, saveTemplate, searchMedia, toggleSearchFavorite } from '../api/radar'
 import type { LibraryMark, MediaItem, SearchHistoryEntry, TakenOrigins } from '../domain/radar'
+import { manualMediaItem } from '../domain/video-link'
 import { ago, stampTime } from '../domain/share'
 import { createProject } from '../api/projects'
 import { ReplicateModal } from '../components/ReplicateModal'
@@ -143,6 +145,8 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
   const [hasKey, setHasKey] = useState(false)
   const [visionReady, setVisionReady] = useState(false)
   const [modalItem, setModalItem] = useState<MediaItem | null>(null)
+  // 自备链接（r291）：检索服务不可用、额度用完、或者手上已经有一条时，这是唯一能进拆解的口子
+  const [manualOpen, setManualOpen] = useState(false)
   // 这一屏里哪几条已经在库里：按平台 id 认（链接带分享参数也认得出来），只读现查，不检索、不扣积分
   const [marks, setMarks] = useState<Record<string, LibraryMark>>({})
   const [savingId, setSavingId] = useState('')
@@ -478,6 +482,18 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
           每次检索消耗 <strong>{credits.prices.search}</strong> {credits.unit}，检索失败会原路退回；示例结果不扣积分。
         </p>
       ) : null}
+
+      {/* 自备链接（r291）：检索不是唯一入口。检索服务挂着、额度用完、或者人手上已经有片子时，
+          这里能直接把一条链接拆成脚本与分镜——走的是同一条复刻管线，同价、失败同退。 */}
+      <div className="radar-manual">
+        <ClipboardPaste size={14} />
+        <span className="radar-manual-copy">
+          手上已经有一条？抖音 / 小红书链接或 .mp4 直链都能直接拆成脚本与分镜（不检索，按复刻计费）。
+        </span>
+        <button type="button" className="vq-button vq-button--ghost vq-button--sm" onClick={() => setManualOpen(true)}>
+          拆自己的链接
+        </button>
+      </div>
 
       {history.length ? (
         <div className="radar-history">
@@ -839,21 +855,25 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
         </div>
       ) : null}
 
-      {modalItem && createPortal(
+      {/* 两个入口同一张弹窗：卡片上点「一键复刻」，或者自己粘一条链接（manual）。
+          分叉只有两处——传进去的 item，和跑完后要不要把卡片翻成「库里已有」。 */}
+      {(modalItem || manualOpen) && createPortal(
         <ReplicateModal
-          item={modalItem}
+          item={manualOpen ? manualMediaItem('') : (modalItem as MediaItem)}
+          manual={manualOpen}
           hasKey={hasKey}
           visionReady={visionReady}
-          onClose={() => setModalItem(null)}
+          onClose={() => { setModalItem(null); setManualOpen(false) }}
           onDone={(title) => {
-      const done = modalItem
-      setModalItem(null)
-      loadTaken()
-      onToast('复刻完成，已存入模板库：' + title)
-      // 这张卡片当场翻成「库里已有」：再点「加入模板库」只会被去重成一句「已经在库里了」
-      if (done) refreshMark(done)
-    }}
-          onOpenTemplates={() => { setModalItem(null); onOpenTemplates() }}
+            const done = manualOpen ? null : modalItem
+            setModalItem(null)
+            setManualOpen(false)
+            loadTaken()
+            onToast((manualOpen ? '解析完成，已存入模板库：' : '复刻完成，已存入模板库：') + title)
+            // 这张卡片当场翻成「库里已有」：再点「加入模板库」只会被去重成一句「已经在库里了」
+            if (done) refreshMark(done)
+          }}
+          onOpenTemplates={() => { setModalItem(null); setManualOpen(false); onOpenTemplates() }}
         />,
         document.body,
       )}
