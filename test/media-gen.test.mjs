@@ -802,3 +802,118 @@ test('两个界面都接上了删除：最近生成与作品流浮层走同一�
 })
 
 
+// ---------- r288：对话框里一句话直接生成 ----------
+// 这一节验的是「同一套生成管线被对话框复用」：不经过文本模型、不扣对话那 1 积分，
+// 只扣生成积分；任务、退款、落盘、最近生成全是原来的那套（所以这里只验接线与归属）。
+const { sendChatMessage, streamChatMessage } = await import('../server/chat.mjs')
+const { getConversation } = await import('../server/chat-store.mjs')
+
+test('对话框里 /生图：不走文本模型、不扣对话费，直接建出图片任务并落到会话里', async () => {
+  resetMediaGenRateLimit()
+  const user = newUser('chatimg')
+  const cookie = cookieOf(user)
+  const before = credits.balanceOf(user.id)
+
+  const result = await streamChatMessage(user, { content: '/生图 9:16 咖啡店门口的雨夜海报' }, {})
+  assert.equal(result.cost, 0, '这一轮没走对话模型：对话那 1 积分不该扣')
+  assert.equal(result.media.kind, 'image')
+  assert.equal(result.media.model, 'gpt-image-2')
+  assert.equal(result.media.ratio, '9:16')
+  assert.equal(result.media.size, '1024x1536')
+  assert.equal(result.media.credits.cost, 5)
+  assert.equal(result.balance, before - 5, '只扣生成的 5 积分')
+  assert.equal(credits.balanceOf(user.id), before - 5)
+  assert.match(result.reply.content, /已开始生成图片/)
+  assert.match(result.reply.content, /gpt-image-2 · 9:16 · 1024x1536/)
+  assert.match(result.reply.content, /最近生成/)
+
+  // 会话里要留得住这两条：关掉页面回来还能看到那张卡片（卡片按 meta.media.id 轮询）
+  const stored = getConversation(user.id, result.conversation.id)
+  assert.equal(stored.messages.length, 2)
+  assert.equal(stored.messages[0].content, '/生图 9:16 咖啡店门口的雨夜海报')
+  assert.equal(stored.messages[1].meta.media.id, result.media.id)
+  assert.equal(stored.messages[1].meta.media.downloadUrl, '/api/media/tasks/' + result.media.id + '/file')
+
+  const settled = await waitTask(result.media.id, cookie)
+  assert.equal(settled.payload.task.status, 'succeeded')
+  assert.ok(fs.existsSync(path.join(dir, 'media', user.id, result.media.id + '.png')))
+})
+
+test('对话框里 /生视频：比例、时长、清晰度按用户说的发给上游，扣 15 积分', async () => {
+  resetMediaGenRateLimit()
+  const user = newUser('chatvid')
+  const cookie = cookieOf(user)
+  const before = credits.balanceOf(user.id)
+  videoPolls = 0
+
+  const result = await sendChatMessage(user, { content: '/生视频 16:9 8秒 480p 海边日落' })
+  assert.equal(result.cost, 0)
+  assert.equal(result.media.kind, 'video')
+  assert.equal(result.media.duration, 8)
+  assert.equal(result.media.resolution, '480p')
+  assert.equal(credits.balanceOf(user.id), before - 15)
+  assert.equal(lastVideoBody.aspect_ratio, '16:9', '对话框里的比例也必须真的发给上游')
+  assert.equal(Number(lastVideoBody.duration), 8)
+  assert.equal(String(lastVideoBody.resolution), '480p')
+  assert.match(result.reply.content, /视频要几分钟/)
+
+  const first = await call({ method: 'GET', target: '/api/media/tasks/' + result.media.id, cookie })
+  assert.equal(first.status, 200)
+  const done = await call({ method: 'GET', target: '/api/media/tasks/' + result.media.id, cookie })
+  assert.equal(done.payload.task.status, 'succeeded')
+})
+
+test('对话框生成失败：任务标失败、积分全额退回，会话里那句话还在', async () => {
+  resetMediaGenRateLimit()
+  const user = newUser('chatfail')
+  const cookie = cookieOf(user)
+  const before = credits.balanceOf(user.id)
+
+  const result = await sendChatMessage(user, { content: '/生图 图失败 一只橘猫' })
+  assert.equal(result.media.status, 'processing')
+  const settled = await waitTask(result.media.id, cookie)
+  assert.equal(settled.payload.task.status, 'failed')
+  assert.equal(settled.payload.task.credits.refunded, true)
+  assert.equal(credits.balanceOf(user.id), before, '失败必须全额退回')
+  const stored = getConversation(user.id, result.conversation.id)
+  assert.equal(stored.messages.length, 2, '失败也要留下「我让他画了什么」')
+})
+
+test('积分不够：一个字节都不发给上游，说清楚要多少、还差多少', async () => {
+  resetMediaGenRateLimit()
+  const user = newUser('chatpoor')
+  credits.charge(user.id, 'chat', { ref: '清空余额', amount: credits.balanceOf(user.id) })
+  const attempts = imageAttempts
+  await assert.rejects(() => sendChatMessage(user, { content: '/生图 一只橘猫' }), (error) => {
+    assert.equal(error.status, 402)
+    assert.match(error.message, /积分不足/)
+    return true
+  })
+  assert.equal(imageAttempts, attempts, '余额不够就不该打上游')
+})
+
+test('带着附件下生成指令：明确拒绝并引导到页签，一分钱不扣', async () => {
+  resetMediaGenRateLimit()
+  const user = newUser('chatref')
+  const { saveChatFile } = await import('../server/chat-files.mjs')
+  const file = saveChatFile({ userId: user.id, buffer: tinyPng, name: '参考.png' })
+  const before = credits.balanceOf(user.id)
+  await assert.rejects(() => sendChatMessage(user, { content: '/生图 照这张改', files: [file.id] }), (error) => {
+    assert.equal(error.code, 'MEDIA_CHAT_REF')
+    assert.match(error.message, /图片.*视频.*页签/)
+    return true
+  })
+  assert.equal(credits.balanceOf(user.id), before)
+})
+
+test('只说「怎么生成图」：照旧走对话模型，不扣生成积分', async () => {
+  resetMediaGenRateLimit()
+  const user = newUser('chatask')
+  const before = credits.balanceOf(user.id)
+  // 这个测试文件没有配文本 Key：走到对话模型就会失败；重点是要证明它「没有」去生成
+  await assert.rejects(() => sendChatMessage(user, { content: '怎么生成图？' }), (error) => {
+    assert.equal(String(error.code || '').startsWith('MEDIA_'), false, '不该被当成生成指令')
+    return true
+  })
+  assert.notEqual(credits.balanceOf(user.id), before - 5, '不该扣生成积分')
+})

@@ -42,6 +42,14 @@ function rateLimited(userId) {
   return null
 }
 
+/**
+ * 账号级限流（r288）：对话框里直接生成也走同一个桶，不能靠换个入口绕过 10 次/分钟的闸。
+ * 返回 null 表示放行，否则是 { retryAfterSec }。
+ */
+export function mediaRateLimit(userId) {
+  return rateLimited(userId)
+}
+
 /** 测试与本地重置用：清掉进程内的账号限流桶。 */
 export function resetMediaGenRateLimit() {
   accountHits.clear()
@@ -81,7 +89,7 @@ function clip(value, max = 500) {
   return String(value || '').replace(/\s+/g, ' ').trim().slice(0, max)
 }
 
-function publicTask(task) {
+export function publicTask(task) {
   const credits = task.credits || {}
   return {
     id: task.id,
@@ -360,7 +368,7 @@ async function finishImageTask(user, task) {
  * 请求挂太久还有两个连带问题：关掉标签页/切后台就可能掐断，nginx 也随时会先断。
  * 改成后台跑之后，界面按任务号轮询（本来生视频就是这么做的），关掉窗口结果也还在。
  */
-async function runImage(user, input) {
+export async function runImage(user, input) {
   const task = newTask(user.id, 'image', input)
   // 价格按「这次选的模型」算（media-models 里给的 credits），不再写死 image_gen 的全局价
   const paid = charge(user.id, 'image_gen', {
@@ -383,7 +391,7 @@ async function runImage(user, input) {
   return { task }
 }
 
-async function runVideo(user, input) {
+export async function runVideo(user, input) {
   const task = newTask(user.id, 'video', input)
   const paid = charge(user.id, 'video_gen', {
     ref: task.id,

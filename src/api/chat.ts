@@ -16,6 +16,25 @@ export type ChatSearch = {
 // 搜索服务通没通：界面据此决定「联网搜索」开关能不能点。
 export type ChatSearchStatus = { configured: boolean; providerLabel: string; note: string }
 
+// 这一轮是「直接生成」（r288）：会话里只留任务号与规格，进度与结果按任务号轮询
+// /api/media/tasks/:id（只读元数据、不打上游、不扣积分），所以改一次状态不用重写聊天记录。
+export type ChatMediaInfo = {
+  id: string
+  kind: 'image' | 'video'
+  status: 'processing' | 'succeeded' | 'failed'
+  model: string
+  mode?: string
+  ratio: string
+  size: string
+  duration: number | null
+  resolution: string
+  prompt: string
+  // 失败时说清是哪一步没成：卡片在「已失败」状态下不轮询，原因只能从这里带出来
+  error?: string
+  downloadUrl: string
+  credits: { cost: number; balance: number | null; refunded: boolean }
+}
+
 // 这一轮读到的链接（r219）：只留地址、标题、字数与失败原因；页面文字在服务端，不进聊天记录。
 export type ChatLink = {
   url: string
@@ -34,7 +53,9 @@ export type ChatMessage = {
   at: number
   model?: string
   ms?: number
-  meta?: { tools?: string[]; thinking?: boolean; finishReason?: string; usage?: unknown; files?: string[] } | null
+  meta?:
+    | { tools?: string[]; thinking?: boolean; finishReason?: string; usage?: unknown; files?: string[]; streamed?: boolean; media?: ChatMediaInfo }
+    | null
   // 这一轮带的附件（只留名字、字数与来源）：原文在服务端，聊天记录里不重复存
   files?: ChatFile[]
   links?: ChatLink[]
@@ -90,6 +111,8 @@ export type ChatStreamResult = {
   balance: number | null
   truncated?: boolean
   fellBack?: boolean
+  // 生成指令这一轮：任务已经建好，界面按 media.id 轮询结果（r288）
+  media?: ChatMediaInfo
 }
 
 export type ChatStreamFailure = { code?: string; error?: string; balance?: number; stopped?: boolean }

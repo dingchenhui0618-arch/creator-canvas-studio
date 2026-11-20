@@ -15,6 +15,7 @@ import { getCredits } from '../api/credits'
 import { safeFetch } from '../api/client'
 import { renderMarkdown } from '../lib/markdown'
 import { markdownPlainText } from '../lib/markdown-parse'
+import MediaTaskCard from './MediaTaskCard'
 
 // 快捷创作的「对话」（r214）：一页 DeepSeek —— 长上下文、联网搜索、读链接、思考模式。
 // 为什么单独一个组件：原来那块是「对话预设」的短轮问答（带输出类型与结构化草稿），
@@ -360,6 +361,9 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
   }, [])
 
   const toolCount = useMemo(() => TOOL_ITEMS.filter((item) => tools[item.id]).length, [tools])
+  // 这一条会不会被当成生成指令（r288）：与服务端同一组前缀，只用来提前说清「要扣生成积分」。
+  // 真正的判定在 server/media-intent.mjs，这里重复的只是那句提示，不参与扣费。
+  const genCommand = /^\s*\/(生图|生视频|图|视频|画图)(\s|$)/.test(draft)
 
   return (
     <div className="qc-root">
@@ -429,6 +433,10 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
               {/* r287：四条并成两条——原来这一屏上「能力」被说了三遍（这四条、下面那排开关、
                   AgentsPage 的对话方式那一行），空状态不该比对话本身还重。 */}
               <ul>
+                <li>
+                  直接生成：以「/生图」「/生视频」开头，后面写清要什么（如 /生图 9:16 咖啡店门口的雨夜海报），
+                  按图片 / 视频的积分价扣费，失败全额退回
+                </li>
                 <li>边生成边显示，首段一两秒就到；中途可以停，停止与失败都不计费</li>
                 <li>
                   附件丢脚本 / Word / Excel / PDF 与截图（图不做 OCR）；带链接先开「读链接」
@@ -444,6 +452,7 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
                 ) : (
                   <div className="qc-bubble">{message.content}</div>
                 )}
+                {message.meta?.media ? <MediaTaskCard media={message.meta.media} /> : null}
                 {message.files?.length ? (
                   <div className="qc-files">
                     {message.files.map((file) => (
@@ -693,9 +702,11 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
             <span>
               {sending
                 ? '生成中点方块可停止，停止不计费'
-                : !tools.readUrl && /https?:\/\//i.test(draft)
-                  ? '消息里有链接：打开「读链接」，我才会先把页面读下来'
-                  : 'Enter 发送 · Shift + Enter 换行'}
+                : genCommand
+                  ? '以 / 开头：这条直接生成，按图片 / 视频的积分价扣费'
+                  : !tools.readUrl && /https?:\/\//i.test(draft)
+                    ? '消息里有链接：打开「读链接」，我才会先把页面读下来'
+                    : 'Enter 发送 · Shift + Enter 换行'}
             </span>
             <span>{toolCount ? toolCount + ' 项能力已打开' : '能力全关：只按对话回答'}</span>
           </div>

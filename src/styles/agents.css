@@ -3377,6 +3377,103 @@
   overflow-wrap: anywhere;
 }
 
+/* 对话框里直接生成的那条任务（r288）：卡片跟着回答走，不另开窗口。
+   进行中只报「在跑 + 已等多久」，不编进度；成功给缩略图（图）/ 播放器（视频）与下载；
+   失败照实说原因与退款状态，别让人以为积分白花了。 */
+.qc-media {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.qc-media.is-done { border-color: var(--line-strong); }
+
+.qc-media-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.qc-media-kind {
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 24px;
+}
+
+.qc-media-spec { min-width: 0; overflow-wrap: anywhere; }
+
+.qc-media-run { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.qc-media-run-note { color: var(--faint); }
+
+.qc-media-thumb {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--surface-soft);
+}
+
+/* 高度封顶 240px（窄屏 320px）：会话框只有三百来像素高，一张 9:16 原图会把整段对话淹掉；
+   要看全图点一下，在新标签页里开原图。 */
+.qc-media-thumb img { display: block; width: auto; height: auto; max-width: 100%; max-height: 240px; }
+
+.qc-media-video {
+  display: block;
+  width: 100%;
+  max-width: 360px;
+  max-height: 240px;
+  border-radius: var(--radius-sm);
+  background: #000;
+}
+
+.qc-media-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+.qc-media-dl {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  color: var(--ink);
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.qc-media-dl:hover { border-color: var(--line-strong); background: var(--surface-raised); }
+
+.qc-media-note { margin: 0; color: var(--faint); font-size: 13px; line-height: 1.6; }
+
+.qc-media-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid rgba(163, 56, 56, 0.3);
+  border-radius: var(--radius-sm);
+  background: var(--fail-soft);
+  color: var(--fail);
+  font-size: 13px;
+}
+
+.qc-media-error p { margin: 0 0 4px; line-height: 1.6; }
+
 @media (max-width: 560px) {
   /* 输入框现在常驻贴底，它占的高度就是一直看得见的高度：手机上收一收（r222）。
      Ctrl+Enter 在手机上没意义，附件上限挂在附件按钮的 title 里；两行提示留着白占 34px。 */
@@ -3393,6 +3490,7 @@
   .qc-copy { height: 32px; padding: 0 12px; white-space: nowrap; }
   .qc-input { height: 64px; min-height: 64px; resize: none; }
   .qc-chip-name, .qc-file-name, .qc-link-name { max-width: 128px; }
+  .qc-media-thumb img, .qc-media-video { max-height: 320px; }
   /* 表格在窄屏不横着拖：表头允许换行、字号降一档，宁可排两行，
      也别把「目的」那一列藏在滚动条后面 */
   .qc-bubble.qc-md { padding: 12px; }

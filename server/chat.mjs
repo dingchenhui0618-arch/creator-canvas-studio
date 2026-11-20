@@ -22,6 +22,9 @@
 // r246 接上真的联网搜索：平台自己用自己的搜索服务搜一次、自己把前 3 条网页读成文字
 // （server/web-search.mjs）。同时把上游的 deepseek_web_search 工具撤掉——上游不认它就整条 400。
 // 没配搜索服务时不假装搜过：开关在界面是禁用的，万一带了也只在上下文里写一句「没搜成」。
+// r288 接上直接生成：一句话开头是「/生图」「生成一段视频」这类指令时，这一轮不走对话模型，
+// 直接交给现成的生成管线（server/media-intent.mjs 认指令，server/chat-media.mjs 开任务）；
+// 生成积分照旧由媒体管线扣、失败照旧全额退，对话那 1 积分不扣。问「怎么生成图」不会被当成命令。
 // 还没做的：语音。
 import { callTextModel, callTextModelStream, visionChain } from './llm.mjs'
 import { charge, priceOf, refund } from './credits.mjs'
@@ -30,6 +33,8 @@ import { CHAT_FILE_LIMITS, readChatFileBytes, resolveChatFiles } from './chat-fi
 import { findLinks, readLinks } from './link-read.mjs'
 import { publicSearch, searchAndRead } from './web-search.mjs'
 import { publicError } from './public-error.mjs'
+import { parseMediaIntent } from './media-intent.mjs'
+import { startChatMedia } from './chat-media.mjs'
 
 const MAX_INPUT = 8000
 const CONTEXT_MESSAGES = 30
@@ -129,12 +134,19 @@ async function beginChat(user, input = {}) {
   if (content.length > MAX_INPUT) throw fail(400, 'CHAT_TOO_LONG', '一次最多 ' + MAX_INPUT + ' 字，长文请分几条发')
   if (!user?.id) throw fail(401, 'LOGIN_REQUIRED', '请先登录')
 
-  // 附件与链接都先读完再扣费：读不出来（扫描件、超过 5 个、链接打不开）时一分钱都不该扣
-  const options = chatOptionsFrom(input)
-  const attachments = readAttachments(user.id, input)
+  // 会话先认下来（r288）：生成指令也要落进会话里，开任务失败时用户那句话不能凭空消失
   let conv = input.conversationId ? getConversation(user.id, input.conversationId) : null
   if (input.conversationId && !conv) throw fail(404, 'CHAT_NOT_FOUND', '这条对话已经不在了')
   if (!conv) conv = createConversation(user.id, { title: titleFrom(content) })
+
+  // r288：开头就是「/生图」「生成一段视频」这类指令时，不走对话模型，直接接到现成的生成管线。
+  // 认不出来就照常当对话回答——问「怎么生成图」不会被当成要花积分。
+  const media = parseMediaIntent(content)
+  if (media) return beginMediaChat(user, conv, content, media, input)
+
+  // 附件与链接都先读完再扣费：读不出来（扫描件、超过 5 个、链接打不开）时一分钱都不该扣
+  const options = chatOptionsFrom(input)
+  const attachments = readAttachments(user.id, input)
   // 读链接放在会话校验之后：会话已经不在的请求不该先去抓一遍网页
   const linked = await readMessageLinks(content, options)
   // 联网搜索（r246）：用户自己贴了链接就不搜了——先把他的页面读准，
@@ -219,6 +231,108 @@ async function beginChat(user, input = {}) {
   }
 }
 
+/**
+ * 生成指令这一轮：不扣对话积分、不调文本模型，只把用户那句话落库，交给 finishMediaChat 去开任务。
+ * 附件在这里就拒掉：带参考图要先把图入成媒体素材，那是「图片 / 视频」页签的活，对话只做文生图 / 文生视频。
+ */
+function beginMediaChat(user, conv, content, plan, input) {
+  if (plan.error) throw fail(400, plan.code || 'MEDIA_PROMPT', plan.error)
+  if (Array.isArray(input?.files) && input.files.length) {
+    throw fail(400, 'MEDIA_CHAT_REF', '对话框里直接生成暂时只按文字来：要带参考图 / 参考视频，请用上面的「图片」「视频」页签')
+  }
+  if (!conv.messages.some((item) => item.role === 'user')) conv.title = titleFrom(content)
+  conv.messages.push({ id: messageId('u'), role: 'user', content, at: Date.now() })
+  const saved = saveConversation(user.id, conv)
+  return { conv: saved || conv, media: plan, evicted: Number(saved?.trimmedNow) || 0 }
+}
+
+/** 存进回答里的那条生成记录：界面拿 id 去轮询 /api/media/tasks/:id，别再存一份会过期的进度。 */
+function mediaMeta(task) {
+  const credits = task.credits || {}
+  return {
+    id: task.id,
+    kind: task.kind,
+    status: task.status,
+    model: task.model,
+    mode: task.mode || '',
+    ratio: task.ratio || '',
+    size: task.size || '',
+    duration: task.duration || null,
+    resolution: task.resolution || '',
+    prompt: task.prompt,
+    // 失败原因是任务自己的结论：卡片在「已失败」时不轮询，不带上它就只剩一句「没有返回结果」
+    error: task.error || '',
+    // 下载地址按任务号推出来：刚建出来时还没有文件（downloadUrl 为空），但卡片等成功后再拿它当链接，
+    // 这样刷新页面也能直接下载，不用额外一次请求。
+    downloadUrl: '/api/media/tasks/' + task.id + '/file',
+    credits: {
+      cost: Number(credits.cost) || 0,
+      balance: typeof credits.balance === 'number' ? credits.balance : null,
+      refunded: Boolean(credits.refunded),
+    },
+  }
+}
+
+/** 这一轮的平台回话：说清模型、规格、扣了多少、去哪儿看结果；参数被改过的先照实写。 */
+function mediaReply(task, plan) {
+  const credits = task.credits || {}
+  const spec = [
+    task.model,
+    task.ratio,
+    task.kind === 'image' ? task.size : '',
+    task.kind === 'video' ? task.duration + ' 秒' : '',
+    task.resolution,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+  const lines = []
+  if (plan.notes?.length) lines.push(...plan.notes.map((note) => note + '。'))
+  if (task.status === 'failed') {
+    lines.push('这次没有生成出来：' + (task.error || '上游没有返回结果') + '。')
+    lines.push(
+      credits.refunded
+        ? '这 ' + credits.cost + ' 积分已全额退回。'
+        : '积分还没确认退回，带着任务号 ' + task.id + ' 找管理员。',
+    )
+    return lines.join('\n')
+  }
+  const balance = typeof credits.balance === 'number' ? '，余额 ' + credits.balance + ' 积分' : ''
+  lines.push('已开始生成' + (task.kind === 'image' ? '图片' : '视频') + '：' + spec + ' · ' + credits.cost + ' 积分' + balance + '。')
+  lines.push(
+    task.kind === 'image'
+      ? '出图一般 20～90 秒，最长等到 4 分钟；关掉这一页也会跑完，结果在下面这张卡片里，也留在「最近生成」里。'
+      : '视频要几分钟（真调过 3～6 分钟）；关掉这一页也会跑完，结果在下面这张卡片里，也留在「最近生成」里。',
+  )
+  return lines.join('\n')
+}
+
+/** 生成指令的收尾：开任务、落一条平台回答、回给界面（这一轮不计对话费）。 */
+async function finishMediaChat(user, ctx) {
+  const startedAt = Date.now()
+  const task = await startChatMedia(user, ctx.media)
+  ctx.conv.messages.push({
+    id: messageId('a'),
+    role: 'assistant',
+    content: mediaReply(task, ctx.media),
+    at: Date.now(),
+    model: task.model,
+    ms: Date.now() - startedAt,
+    meta: { media: mediaMeta(task), streamed: false },
+  })
+  const saved = saveConversation(user.id, ctx.conv)
+  const trimmedNow = (Number(ctx.evicted) || 0) + (Number(saved?.trimmedNow) || 0)
+  const conversation = trimmedNow > 0 && saved ? { ...saved, trimmedNow } : saved
+  return {
+    conversation,
+    reply: conversation.messages[conversation.messages.length - 1],
+    model: task.model,
+    // 这一轮没走对话模型：对话的 1 积分不扣，生成积分记在 task.credits 里
+    cost: 0,
+    balance: typeof task.credits?.balance === 'number' ? task.credits.balance : null,
+    media: mediaMeta(task),
+  }
+}
+
 /** 落回答 + 返回给前端；正文为空算这次没成，交给 failChat 退款。 */
 function finishChat(user, ctx, result) {
   const reply = String(result?.text ?? result?.message?.content ?? '').trim()
@@ -284,6 +398,8 @@ function failChat(user, ctx, error) {
 
 export async function sendChatMessage(user, input = {}) {
   const ctx = await beginChat(user, input)
+  // r288：生成指令这一轮只开任务，不经过文本模型（也就不扣对话那 1 积分）
+  if (ctx.media) return finishMediaChat(user, ctx)
   try {
     const result = await callTextModel(ctx.messages, {
       temperature: 0.6,
@@ -306,6 +422,8 @@ export async function sendChatMessage(user, input = {}) {
  */
 export async function streamChatMessage(user, input = {}, hooks = {}) {
   const ctx = await beginChat(user, input)
+  // 生成指令没有逐字输出：开完任务一次性把结论交回去，界面照样是「发送 → 卡片出现」
+  if (ctx.media) return finishMediaChat(user, ctx)
   try {
     // 带图片的这一轮走一次性：多模态 + 流式在不同上游并不都成立，一条 400 就会让整次对话失败并退款。
     // 一次性拿到整段再一次性推给界面（前端本来就有「没有增量就一次性显示」的分支），行为可预期。
