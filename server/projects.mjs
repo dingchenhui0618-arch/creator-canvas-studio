@@ -9,7 +9,7 @@ import { randomBytes, randomUUID } from 'node:crypto'
 import { config } from './config.mjs'
 import { canAccess } from './owner.mjs'
 import { readStoreArray } from './json-store.mjs'
-import { MAX_SHOT_FRAMES, normalizeShotFrames, shotFramesView } from './project-shots.mjs'
+import { MAX_SHOT_FRAMES, normalizeShotFrames, parseShotMedia, shotFramesView } from './project-shots.mjs'
 import { removeProjectShotFrames, removeUserShotFrames } from './shot-frame-store.mjs'
 import { normalizeStoredScript } from './project-script.mjs'
 import { visitKey } from './share-visits.mjs'
@@ -202,6 +202,26 @@ export async function listProjectTrash(user = null) {
     .filter((entry) => canAccess(entry?.project, user))
     .sort((a, b) => String(b.deletedAt).localeCompare(String(a.deletedAt)))
     .map(trashEntryView)
+}
+
+/**
+ * 回收站里那些作品还挂着的画面（r280）。
+ * 清「没被引用的画面」时不能把它们当孤儿删掉：回收站里的作品恢复时要连画面一起回来。
+ * 只回编号、标题与画面记录，不回别人的东西（按 canAccess 过滤）。
+ */
+export async function trashShotFrames(user = null) {
+  const raw = await loadTrash()
+  const out = []
+  for (const entry of Array.isArray(raw) ? raw : []) {
+    const project = entry?.project || {}
+    if (!canAccess(project, user)) continue
+    out.push({
+      id: String(project.id || ''),
+      title: String(project.title || '未命名作品'),
+      shots: normalizeShotFrames(project.shots),
+    })
+  }
+  return out
 }
 
 const clip = (value, max) => String(value ?? '').slice(0, max)
@@ -903,6 +923,36 @@ export async function setProjectShotFrames(id, entries, user = null) {
     await persist(list)
   }
   return { status: 200, changed: applied.length > 0, applied, kept, overwritten, refused, shots: shotFramesView(frames) }
+}
+
+/**
+ * 一键清空这条作品的工作流画面（r280）：只摘掉指向分镜画面库的记录，手贴的上传图不动。
+ *
+ * 为什么要有这一步：分镜画面库每账号封顶 800 张 / 1.2 GB，到顶之后贴回分镜会被拒，
+ * 而此前唯一的出路是「撤掉几镜画面」或「彻底删除作品」——前者要点 N 次，后者把作品一起丢了。
+ * 摘掉记录之后分镜回到原片帧，画面结构还在；要那张图可以从运行记录里再贴一次。
+ * 文件由调用方在摘完之后清掉（先摘记录、后删文件，顺序反了会留下一批读不出来的破图）。
+ */
+export async function revokeProjectShotFrames(id, user = null) {
+  const list = await loadAll()
+  const found = list.find((item) => item.id === id && canAccess(item, user))
+  if (!found) return { status: 404, code: 'PROJECT_NOT_FOUND', error: '作品不存在或已被删除' }
+  const frames = normalizeShotFrames(found.shots)
+  const kept = {}
+  let cleared = 0
+  for (const [key, value] of Object.entries(frames)) {
+    if (parseShotMedia(value.media)?.kind === 'store') {
+      cleared += 1
+      continue
+    }
+    kept[key] = value
+  }
+  if (cleared) {
+    found.shots = kept
+    found.updatedAt = new Date().toISOString()
+    await persist(list)
+  }
+  return { status: 200, cleared, project: normalize(found), shots: shotFramesView(kept) }
 }
 
 /**

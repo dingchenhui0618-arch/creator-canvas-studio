@@ -6,7 +6,15 @@ import { SessionsCard } from '../components/SessionsCard'
 import { AccountDataCard } from '../components/AccountDataCard'
 import PageHead from '../components/PageHead'
 import { getBillingOverview, type BillingOverview } from '../api/billing'
-import { formatSize, getStorage, type StorageUsage } from '../api/storage'
+import {
+  clearShotFrameProject,
+  clearUnusedShotFrames,
+  formatSize,
+  getShotFrames,
+  getStorage,
+  type ShotFrameOverview,
+  type StorageUsage,
+} from '../api/storage'
 import { useUiMode } from '../api/app'
 import { creditKindLabel, getCredits, getMyCreditRequest, requestCredits, requestPlan, getSystemHealth, type CreditEntry, type CreditRequest, type CreditsResponse, type SystemHealth } from '../api/credits'
 import type { BillingPlan } from '../api/billing'
@@ -58,6 +66,14 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
   const [billingError, setBillingError] = useState('')
   const [credits, setCredits] = useState<CreditsResponse | null>(null)
   const [storage, setStorage] = useState<StorageUsage | null>(null)
+  // 工作流画面（r280）：点「管理」才去读，平时不多打一次接口
+  const [sfOpen, setSfOpen] = useState(false)
+  const [sfData, setSfData] = useState<ShotFrameOverview | null>(null)
+  const [sfLoading, setSfLoading] = useState(false)
+  const [sfBusy, setSfBusy] = useState('')
+  const [sfArmed, setSfArmed] = useState('')
+  const [sfError, setSfError] = useState('')
+  const [sfMessage, setSfMessage] = useState('')
   const [creditsError, setCreditsError] = useState('')
   const [ledgerMore, setLedgerMore] = useState<CreditEntry[]>([])
   const [ledgerLoading, setLedgerLoading] = useState(false)
@@ -104,6 +120,62 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
       })
       .catch((caught) => setCreditsError(caught instanceof Error ? caught.message : '积分读取失败'))
   }, [])
+
+  const refreshStorage = useCallback(() => {
+    getStorage()
+      .then(setStorage)
+      .catch(() => {})
+  }, [])
+
+  const loadShotFrames = useCallback(() => {
+    setSfLoading(true)
+    getShotFrames()
+      .then((data) => {
+        setSfData(data)
+        setSfError('')
+      })
+      .catch((caught) => setSfError(caught instanceof Error ? caught.message : '画面占用读取失败'))
+      .finally(() => setSfLoading(false))
+  }, [])
+
+  const toggleShotFrames = () => {
+    const next = !sfOpen
+    setSfOpen(next)
+    setSfArmed('')
+    setSfMessage('')
+    if (next) loadShotFrames()
+  }
+
+  // 清画面是两步：先点「清空」变「确认清空」，再点才真清。一条一条点，不做批量
+  const runClear = async (target: string, projectId: string) => {
+    if (sfBusy) return
+    if (sfArmed !== target) {
+      setSfArmed(target)
+      setSfMessage('')
+      return
+    }
+    setSfBusy(target)
+    setSfError('')
+    try {
+      const result = projectId ? await clearShotFrameProject(projectId) : await clearUnusedShotFrames()
+      if (projectId) {
+        setSfMessage(
+          '已清空「' + (result.title || '这条作品') + '」的 ' + (result.shotsCleared ?? 0) + ' 镜画面，腾出 ' +
+            formatSize(result.bytes) + '；分镜回到原片帧。',
+        )
+      } else {
+        setSfMessage('清掉 ' + result.removed + ' 张没人引用的画面，腾出 ' + formatSize(result.bytes) + '。')
+      }
+      setSfArmed('')
+      loadShotFrames()
+      refreshStorage()
+    } catch (caught) {
+      setSfError(caught instanceof Error ? caught.message : '清理失败，请稍后再试')
+      setSfArmed('')
+    } finally {
+      setSfBusy('')
+    }
+  }
 
   useEffect(() => {
     getBillingOverview()
@@ -447,20 +519,111 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
             ) : null}
 
             {storage?.shotFrames ? (
-              <div className="vq-row">
-                <div className="vq-row-copy">
-                  <strong>工作流画面</strong>
-                  <span>
-                    {'工作流跑完贴回分镜的图存在单独的库里，不占上面「上传素材」那 20 张。每账号上限 ' +
-                      storage.shotFrames.maxFiles + ' 张 / ' + formatSize(storage.shotFrames.maxBytes) +
-                      '；把某一镜换回原片，那张图就跟着清掉。'}
-                  </span>
+              <>
+                <div className="vq-row vq-shotframes-head-row">
+                  <div className="vq-row-copy">
+                    <strong>工作流画面</strong>
+                    <span>
+                      {'工作流跑完贴回分镜的图存在单独的库里，不占上面「上传素材」那 20 张。每账号上限 ' +
+                        storage.shotFrames.maxFiles + ' 张 / ' + formatSize(storage.shotFrames.maxBytes) +
+                        '；把某一镜换回原片，那张图就跟着清掉。'}
+                    </span>
+                  </div>
+                  <div className="vq-shotframes-side">
+                    <span className="vq-credit-balance vq-credit-balance--used">
+                      <b>{formatSize(storage.shotFrames.bytes)}</b>
+                      <span>{storage.shotFrames.files} 张画面</span>
+                    </span>
+                    <button
+                      type="button"
+                      className="vq-button vq-button--ghost vq-shotframes-toggle"
+                      onClick={toggleShotFrames}
+                      aria-expanded={sfOpen}
+                    >
+                      {sfOpen ? '收起' : '管理'}
+                    </button>
+                  </div>
                 </div>
-                <span className="vq-credit-balance vq-credit-balance--used">
-                  <b>{formatSize(storage.shotFrames.bytes)}</b>
-                  <span>{storage.shotFrames.files} 张画面</span>
-                </span>
-              </div>
+
+                {sfOpen ? (
+                  <div className="vq-shotframes">
+                    <div className="vq-shotframes-head">
+                      <strong>按作品看占用</strong>
+                      <span>
+                        {sfLoading && !sfData
+                          ? '读取中…'
+                          : sfData
+                            ? sfData.projects.length + ' 条作品 · 合计 ' + formatSize(sfData.usage.bytes) +
+                              '（上限 ' + formatSize(sfData.usage.maxBytes) + '）'
+                            : '—'}
+                      </span>
+                    </div>
+                    {sfError ? <p className="vq-shotframes-note is-danger">{sfError}</p> : null}
+                    {sfMessage ? <p className="vq-shotframes-note is-ok">{sfMessage}</p> : null}
+                    {sfData && sfData.orphans.files > 0 ? (
+                      <div className="vq-shotframes-row">
+                        <div className="vq-shotframes-copy">
+                          <b>
+                            没人引用的 {sfData.orphans.files} 张 · {formatSize(sfData.orphans.bytes)}
+                          </b>
+                          <span>文件还在盘上，作品里已经没有地方指着它（多半是贴图时中途断掉）。清掉不影响任何分镜。</span>
+                        </div>
+                        <button
+                          type="button"
+                          className={
+                            'vq-button vq-shotframes-act ' +
+                            (sfArmed === 'unused' ? 'vq-button--danger' : 'vq-button--ghost')
+                          }
+                          onClick={() => void runClear('unused', '')}
+                          disabled={sfBusy === 'unused'}
+                        >
+                          {sfBusy === 'unused' ? '清理中…' : sfArmed === 'unused' ? '确认清掉' : '清掉'}
+                        </button>
+                      </div>
+                    ) : null}
+                    {sfData && sfData.projects.length ? (
+                      <div className="vq-shotframes-list">
+                        {sfData.projects.map((row) => (
+                          <div className="vq-shotframes-row" key={row.projectId}>
+                            <div className="vq-shotframes-copy">
+                              <b>
+                                {row.title}
+                                {row.inTrash ? <em className="vq-shotframes-tag">回收站</em> : null}
+                              </b>
+                              <span>
+                                {row.files} 张 · {formatSize(row.bytes)}
+                                {row.newestAt ? ' · 最近 ' + formatStamp(row.newestAt) : ''}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              className={
+                                'vq-button vq-shotframes-act ' +
+                                (sfArmed === row.projectId ? 'vq-button--danger' : 'vq-button--ghost')
+                              }
+                              onClick={() => void runClear(row.projectId, row.projectId)}
+                              disabled={sfBusy === row.projectId}
+                            >
+                              {sfBusy === row.projectId
+                                ? '清理中…'
+                                : sfArmed === row.projectId
+                                  ? '确认清空'
+                                  : '清空画面'}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : sfLoading ? null : sfData ? (
+                      <p className="vq-shotframes-note">
+                        还没有工作流画面：跑一次工作流，在工作台点「贴回分镜」之后，这里会按作品列出来。
+                      </p>
+                    ) : null}
+                    <p className="vq-shotframes-note">
+                      清空只把这条作品的镜头退回原片帧，画面结构不动；那张图还在运行记录里，可以再贴回来。手贴的图不在这里，也不会被清掉。
+                    </p>
+                  </div>
+                ) : null}
+              </>
             ) : null}
 
             {spend && spend.items.length ? (

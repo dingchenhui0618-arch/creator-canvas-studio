@@ -12,6 +12,34 @@ export interface ShotFrameUsage {
   maxProjectFiles: number
 }
 
+/** 按作品拆开的一行（r280）：哪条作品占了多少张、多少字节。 */
+export interface ShotFrameProjectRow {
+  projectId: string
+  title: string
+  inTrash: boolean
+  files: number
+  bytes: number
+  newestAt: string
+}
+
+/** 工作流画面的对账（r280）：总量、按作品拆开、以及「有 N 张没人引用」。 */
+export interface ShotFrameOverview {
+  ok: boolean
+  usage: ShotFrameUsage
+  projects: ShotFrameProjectRow[]
+  orphans: { files: number; bytes: number }
+}
+
+export interface ShotFrameClearResult {
+  ok: boolean
+  scope: 'project' | 'unused'
+  removed: number
+  bytes: number
+  projectId?: string
+  title?: string
+  shotsCleared?: number
+}
+
 export interface StorageUsage {
   ok: boolean
   bytes: number
@@ -65,6 +93,21 @@ export function formatSize(bytes?: number | null): string {
 }
 
 export const getStorage = () => request<StorageUsage>('/api/storage')
+
+/** 工作流画面（r280）：清之前先看清是哪条作品占的。 */
+export const getShotFrames = () => request<ShotFrameOverview>('/api/storage/shotframes')
+
+export const clearShotFrameProject = (projectId: string) =>
+  request<ShotFrameClearResult>('/api/storage/shotframes/clear', {
+    method: 'POST',
+    body: JSON.stringify({ projectId }),
+  })
+
+export const clearUnusedShotFrames = () =>
+  request<ShotFrameClearResult>('/api/storage/shotframes/clear', {
+    method: 'POST',
+    body: JSON.stringify({ scope: 'unused' }),
+  })
 
 export const getAdminStorage = () => request<AdminStorage>('/api/admin/storage')
 

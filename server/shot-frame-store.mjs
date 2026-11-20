@@ -121,6 +121,146 @@ export async function shotFrameUsage(userId) {
   return { files, bytes, projects, maxFiles: SHOT_FRAME_LIMITS.maxAccountFiles, maxBytes: SHOT_FRAME_LIMITS.maxAccountBytes, maxProjectFiles: SHOT_FRAME_LIMITS.maxProjectFiles }
 }
 
+/**
+ * 按作品拆开看占用（r280）：只回编号与数字，作品标题由调用方去作品库拼。
+ * 为什么要拆：封顶 800 张 / 1.2 GB 之后，只显示一个总数回答不了「是哪条作品占的」，
+ * 用户想腾地方也没处下手。按字节从大到小排，一眼能看出该清哪一条。
+ */
+export async function shotFrameBreakdown(userId) {
+  const uid = storeId(userId)
+  const projects = []
+  if (!uid) return { projects, files: 0, bytes: 0 }
+  let dirs = []
+  try {
+    dirs = await fsp.readdir(path.join(shotFramesRoot(), uid), { withFileTypes: true })
+  } catch {
+    return { projects, files: 0, bytes: 0 }
+  }
+  let files = 0
+  let bytes = 0
+  for (const dir of dirs) {
+    if (!dir.isDirectory() || !storeId(dir.name)) continue
+    const rows = await listFiles(path.join(shotFramesRoot(), uid, dir.name))
+    if (!rows.length) continue
+    let size = 0
+    let newest = 0
+    for (const row of rows) {
+      size += row.size
+      if (row.mtime > newest) newest = row.mtime
+    }
+    files += rows.length
+    bytes += size
+    projects.push({
+      projectId: dir.name,
+      files: rows.length,
+      bytes: size,
+      newestAt: newest ? new Date(newest).toISOString() : '',
+    })
+  }
+  projects.sort((a, b) => b.bytes - a.bytes || a.projectId.localeCompare(b.projectId))
+  return { projects, files, bytes }
+}
+
+/**
+ * 清空一条作品的画面目录（r280「一键清空」）。
+ * 调用方必须先把作品记录里指向这些文件的镜头摘掉——顺序反了就会留下一批读不出来的破图。
+ */
+export async function clearProjectShotFrames(userId, projectId) {
+  const uid = storeId(userId)
+  const pid = storeId(projectId)
+  if (!uid || !pid) return { removed: 0, bytes: 0 }
+  const dir = path.join(shotFramesRoot(), uid, pid)
+  const rows = await listFiles(dir)
+  let bytes = 0
+  for (const row of rows) bytes += row.size
+  await fsp.rm(dir, { recursive: true, force: true }).catch(() => {})
+  return { removed: rows.length, bytes }
+}
+
+/**
+ * 只清没人引用的文件（r280）：referenced = { [作品编号]: [media, ...] }，含回收站里那些作品。
+ *
+ * 什么时候会有孤儿：贴图时先写文件、再落记录，中间断掉（进程被杀、磁盘满）就留一张没人认的；
+ * 或者作品被彻底删掉、目录却没删成。它们永远读不出来，却一直占着账号额度。
+ * 回收站里的作品不算孤儿：恢复要连画面一起回来（所以调用方必须把回收站也算进 referenced）。
+ */
+export async function collectUnreferencedShotFrames({ userId, referenced = {} } = {}) {
+  const uid = storeId(userId)
+  if (!uid) return { removed: 0, bytes: 0 }
+  let dirs = []
+  try {
+    dirs = await fsp.readdir(path.join(shotFramesRoot(), uid), { withFileTypes: true })
+  } catch {
+    return { removed: 0, bytes: 0 }
+  }
+  let removed = 0
+  let bytes = 0
+  for (const dir of dirs) {
+    if (!dir.isDirectory() || !storeId(dir.name)) continue
+    const pid = dir.name
+    const names = new Set()
+    for (const media of Array.isArray(referenced?.[pid]) ? referenced[pid] : []) {
+      const name = shotFrameFileName(media, uid, pid)
+      if (name) names.add(name)
+    }
+    const folder = path.join(shotFramesRoot(), uid, pid)
+    for (const row of await listFiles(folder)) {
+      if (names.has(row.name)) continue
+      try {
+        await fsp.rm(row.file, { force: true })
+        removed += 1
+        bytes += row.size
+      } catch {
+        // 删不掉就留着：下一轮再清，不能因为清理失败把整个操作判成失败
+      }
+    }
+    // 目录空了就一起收掉：账号目录里留一堆空目录，下次按作品翻页会误以为还有东西
+    try {
+      const rest = await fsp.readdir(folder)
+      if (!rest.length) await fsp.rmdir(folder).catch(() => {})
+    } catch {
+      // 目录已经不在了：正常
+    }
+  }
+  return { removed, bytes }
+}
+
+/** 只数不清（r280 面板上那句「有 N 张没人引用」）：与清理用同一套判定，不另写一份。 */
+export async function shotFrameOrphans({ userId, referenced = {} } = {}) {
+  const uid = storeId(userId)
+  if (!uid) return { files: 0, bytes: 0, projects: [] }
+  let dirs = []
+  try {
+    dirs = await fsp.readdir(path.join(shotFramesRoot(), uid), { withFileTypes: true })
+  } catch {
+    return { files: 0, bytes: 0, projects: [] }
+  }
+  let files = 0
+  let bytes = 0
+  const projects = []
+  for (const dir of dirs) {
+    if (!dir.isDirectory() || !storeId(dir.name)) continue
+    const pid = dir.name
+    const names = new Set()
+    for (const media of Array.isArray(referenced?.[pid]) ? referenced[pid] : []) {
+      const name = shotFrameFileName(media, uid, pid)
+      if (name) names.add(name)
+    }
+    let count = 0
+    let size = 0
+    for (const row of await listFiles(path.join(shotFramesRoot(), uid, pid))) {
+      if (names.has(row.name)) continue
+      count += 1
+      size += row.size
+    }
+    if (!count) continue
+    files += count
+    bytes += size
+    projects.push({ projectId: pid, files: count, bytes: size })
+  }
+  return { files, bytes, projects }
+}
+
 /** 一条作品的目录里只留还在用的文件：换掉的、撤销的、写了一半的都在这里清掉。 */
 export async function sweepProjectShotFrames({ userId, projectId, keep = [] } = {}) {
   const uid = storeId(userId)
@@ -170,7 +310,7 @@ export async function saveShotFrame({ userId, projectId, buffer }) {
       'SHOT_STORE_FULL',
       '工作流画面存到上限了（已有 ' + usage.files + ' 张 / ' + mb + ' MB，上限 ' +
         SHOT_FRAME_LIMITS.maxAccountFiles + ' 张 / ' + SHOT_FRAME_LIMITS.maxAccountBytes / MB +
-        ' MB）：先撤掉几镜画面，或彻底删除不用的作品',
+        ' MB）：到设置页的「工作流画面」点「管理」，清掉不用的作品画面，再回来贴',
     )
   }
 

@@ -113,3 +113,146 @@
     padding: 12px;
   }
 }
+
+
+/* 工作流画面（r280）：一行右列是「占用 + 管理」，展开后按作品一条一条列。
+   有定额就得有对账的地方——不然到上限那刻只有一句「到上限了」，用户没有下手的入口。
+   间距只走 4/8pt 栅格；窄屏右列换行、按钮单独占一行，不挤成一条缝。 */
+.vq-shotframes-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.vq-shotframes-toggle {
+  flex: none;
+}
+
+.vq-shotframes {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.vq-shotframes-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.vq-shotframes-head strong {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.vq-shotframes-head span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.vq-shotframes-list {
+  display: grid;
+  gap: 8px;
+}
+
+.vq-shotframes-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line-faint);
+}
+
+.vq-shotframes-row:first-child {
+  border-top: 0;
+}
+
+.vq-shotframes-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.vq-shotframes-copy b {
+  font-size: 14px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.vq-shotframes-copy span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.vq-shotframes-tag {
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 400;
+}
+
+.vq-shotframes-act {
+  flex: none;
+}
+
+.vq-shotframes-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.vq-shotframes-note.is-danger {
+  color: var(--fail);
+}
+
+.vq-shotframes-note.is-ok {
+  color: var(--ink);
+}
+
+@media (max-width: 560px) {
+  .vq-shotframes-side {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .vq-shotframes-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .vq-shotframes-act {
+    width: 100%;
+  }
+}
+
+/* 390 实测（r280）：右列「占用 + 收起」按内容宽度占掉大半，左边的说明被挤成一条 40px 宽的竖排。
+   窄屏把说明整行留在上面，占用与按钮换到下一行两端对齐；1440 仍是同一行左右分开。 */
+@media (max-width: 720px) {
+  .vq-shotframes-head-row {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .vq-shotframes-head-row .vq-row-copy {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .vq-shotframes-head-row .vq-shotframes-side {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
