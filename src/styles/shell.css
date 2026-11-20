@@ -1586,8 +1586,9 @@ select:focus-visible {
   align-items: baseline;
 }
 
+/* 对比度：0.38 的白在 #111 上只有 3.57:1，提亮到 0.55（约 5.5:1） */
 .vq-login-facts .vq-mono {
-  color: rgba(255, 255, 255, 0.38);
+  color: rgba(255, 255, 255, 0.55);
   font-size: 13px;
 }
 
@@ -1642,11 +1643,11 @@ select:focus-visible {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: rgba(255, 255, 255, 0.42);
+  color: rgba(255, 255, 255, 0.58);
 }
 
 .vq-login-evidence-meta .vq-mono {
-  color: rgba(255, 255, 255, 0.42);
+  color: rgba(255, 255, 255, 0.58);
   font-size: 13px;
 }
 
@@ -1661,7 +1662,7 @@ select:focus-visible {
 }
 
 .vq-login-brand-foot .vq-mono {
-  color: rgba(255, 255, 255, 0.36);
+  color: rgba(255, 255, 255, 0.55);
   font-size: 13px;
 }
 
@@ -1695,8 +1696,21 @@ select:focus-visible {
 .vq-login-form-head p {
   margin: 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.65;
+}
+
+/* 登录页是全站第一屏：输入框 44 高、正文 15px，别让人凑近屏幕认字 */
+.vq-login .vq-input {
+  height: 44px;
+}
+
+.vq-login .vq-input input {
+  font-size: 15px;
+}
+
+.vq-login .vq-field-label {
+  font-size: 14px;
 }
 
 .vq-banner {
@@ -1769,12 +1783,13 @@ select:focus-visible {
 .vq-input input {
   flex: 1;
   min-width: 0;
+  height: 100%;
   border: 0;
   outline: 0;
   background: transparent;
   color: var(--ink);
   font-family: var(--font-ui);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .vq-input input::placeholder {
@@ -1784,8 +1799,8 @@ select:focus-visible {
 .vq-input-action {
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
+  width: 32px;
+  height: 32px;
   border: 0;
   border-radius: var(--radius-xs);
   background: transparent;
@@ -1846,14 +1861,15 @@ select:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  min-height: 24px;
   color: var(--muted);
   font-size: 13px;
   cursor: pointer;
 }
 
 .vq-check input {
-  width: 13px;
-  height: 13px;
+  width: 24px;
+  height: 24px;
   margin: 0;
   accent-color: var(--ink);
 }
@@ -2480,8 +2496,29 @@ select:focus-visible {
 }
 
 @media (max-width: 640px) {
+  /* 手机第一屏就是表单（r286）：品牌故事整块挪到表单下面。
+     以前 390 宽时品牌栏占满一屏，想登录得先滚一屏——登录框在首屏之外。 */
+  .vq-login-panel {
+    order: 1;
+    padding: 24px 24px 32px;
+  }
+
+  .vq-login-brand {
+    order: 2;
+    padding: 24px 24px 32px;
+  }
+
+  .vq-login-brand-body {
+    margin-top: 16px;
+  }
+
+  .vq-login-brand-body h1 {
+    font-size: 24px;
+  }
+
   .vq-login-facts {
     grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
   }
 
   .vq-topbar {
