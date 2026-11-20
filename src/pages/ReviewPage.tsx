@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { ArrowRight, ChevronDown, Clapperboard, Copy, Crosshair, FolderOpen, Hourglass, ImagePlus, Loader2, Play, RefreshCw, ScanEye, TriangleAlert, Workflow } from 'lucide-react'
-import { getReview, getReviewCandidates, getReviewQueue, getReviewStatus, listReviews, runReview, type JudgeResult, type ReviewCandidates, type ReviewResult, type ReviewStatus, type ReviewSummary } from '../api/review'
+import { getReview, getReviewCandidates, getReviewQueue, getReviewStatus, listReviews, runReview, type JudgeResult, type ReviewCandidates, type ReviewResult, type ReviewSummary } from '../api/review'
 import { getCredits, getModelService, recheckModelService, type CreditsResponse, type ModelServiceState } from '../api/credits'
 import { listTemplates, coverSrc } from '../api/radar'
 import { uploadRejection, uploadReviewImage } from '../api/media'
@@ -16,6 +16,7 @@ import {
   reviewVersionLabel,
 } from '../domain/review'
 import { reviewNextActionLabel, reviewNextPlan, type ReviewNextAction, type ReviewNextScope } from '../domain/review-next'
+import { pickedReadiness, readNotice, reviewReadiness, statusReadOf, templateShelf, templatesReadOf, type ReviewStatusRead, type ReviewTemplatesRead } from '../domain/review-ready'
 import { anchorNumber, evidenceAreaLabel, reviewAnchorBadges, reviewAnchorMarks } from '../domain/review-anchors'
 import type { ReplicaTemplate } from '../domain/radar'
 import { consumeReviewTarget, onReviewRequest, type ReviewTarget } from '../state/review'
@@ -150,7 +151,10 @@ export default function ReviewPage({
   const [projectMeta, setProjectMeta] = useState<{ version: number; flowId: string }>({ version: 0, flowId: '' })
   // 作品页已经贴好的画面（v0.9.161）：从作品页点「送评审」过来时优先给这几镜，不用再传一次
   const [projectShots, setProjectShots] = useState<Array<{ shotNo: number; media: string }>>([])
-  const [status, setStatus] = useState<ReviewStatus | null>(null)
+  // 评审服务状态与模板库分开认（r274）：读到了才说读到了，读不到只说读不到
+  const [statusRead, setStatusRead] = useState<ReviewStatusRead | null>(null)
+  const [templatesRead, setTemplatesRead] = useState<ReviewTemplatesRead | null>(null)
+  const [readBusy, setReadBusy] = useState(false)
   const [templates, setTemplates] = useState<ReplicaTemplate[]>([])
   const [picked, setPicked] = useState<Picked | null>(null)
   const [result, setResult] = useState<ReviewResult | null>(null)
@@ -293,6 +297,22 @@ export default function ReviewPage({
     return () => document.removeEventListener('paste', onPaste)
   }, [uploadImage])
 
+  /**
+   * 评审服务状态与模板库分开读（r274 / v0.9.256）：两条互不相干的接口。
+   * 以前它们挤在一个 Promise.all 里——模板库一失手就一起丢掉，页面接着写「评审模型 未配置」，
+   * 还把「开始评审」锁死；模板列表同时说「0 个模板首帧」「模板库还是空的」。
+   * 现在各认各的：谁没读到只说谁，页头留一条「重新读取」。
+   */
+  const loadReadiness = useCallback(async () => {
+    setReadBusy(true)
+    // allSettled 而不是 all：一件失手不该把另一件已经读到的结果一起扔掉
+    const [health, shelf] = await Promise.allSettled([getReviewStatus(), listTemplates({})])
+    setStatusRead(health.status === 'fulfilled' ? statusReadOf(health.value) : statusReadOf(null, health.reason))
+    setTemplatesRead(shelf.status === 'fulfilled' ? templatesReadOf(shelf.value) : templatesReadOf(null, shelf.reason))
+    setTemplates(shelf.status === 'fulfilled' ? shelf.value.items : [])
+    setReadBusy(false)
+  }, [])
+
   useEffect(() => {
     let alive = true
     getCredits(1).then((next) => { if (alive) setCredits(next) }).catch(() => { if (alive) setCredits(null) })
@@ -310,13 +330,8 @@ export default function ReviewPage({
     getReviewCandidates(4)
       .then((data) => { if (alive) setCandidates(data) })
       .catch((caught) => { if (alive) setCandidatesError(caught instanceof Error ? caught.message : '作品列表读取失败') })
-    Promise.all([getReviewStatus(), listTemplates({})])
-      .then(([health, list]) => {
-        if (!alive) return
-        setStatus(health)
-        setTemplates(list.items)
-      })
-      .catch(() => undefined)
+    // 让这一帧先画完再读：读到的状态在下一帧落地，不在同一帧里连锁改状态
+    const readinessTimer = window.setTimeout(() => { void loadReadiness() }, 0)
     const stop = onReviewRequest((target: ReviewTarget) => {
       pick({
         media: target.media,
@@ -333,9 +348,10 @@ export default function ReviewPage({
     }
     return () => {
       alive = false
+      window.clearTimeout(readinessTimer)
       stop()
     }
-  }, [pick])
+  }, [pick, loadReadiness])
 
   useEffect(() => {
     if (!running) return
@@ -390,6 +406,18 @@ export default function ReviewPage({
   }
 
   const modelBlocked = modelState?.available === false
+  // 页头两只胶囊、按钮能不能点、页尾那句「谁出的结论」，全由读到的状态算（r274）
+  const readiness = reviewReadiness({ read: statusRead, modelBlocked, internal })
+  const notice = readNotice({ status: statusRead, templates: templatesRead })
+  const shelf = templateShelf(templatesRead)
+  // 这次挑的画面能不能评：没画面 / 打不开 / 可以评，三件事分开说（r274）
+  const pickedState = pickedReadiness({
+    media: picked?.media,
+    imageUrl: picked?.imageUrl,
+    preview: picked?.preview,
+    broken: previewBroken,
+    hasResult: Boolean(result),
+  })
 
   // 只退排队：入口只在名次条在时出现（排到之后条子就收起），不会把一条正在跑的评审当成「退队」
   const cancelQueue = () => {
@@ -641,11 +669,11 @@ export default function ReviewPage({
         desc="评的是你这条作品的这一版能不能发：选这一版的画面、按 visual-baseline 出结论、逐条看证据锚点；也能单独评一张图，那种结论不挂作品。"
         actions={
           <div className="review-head-status">
-            <Pill tone={status?.service ? 'pass' : 'warn'}>
-              <ScanEye size={13} /> 评审引擎 {status?.service ? '本地服务' : '平台模型'}
+            <Pill tone={readiness.engineTone}>
+              <ScanEye size={13} /> 评审引擎 {readiness.engineLabel}
             </Pill>
-            <Pill tone={status?.model && !modelBlocked ? 'pass' : 'fail'}>
-              评审模型 {status?.model ? (modelBlocked ? '暂时不可用' : '可用') : '未配置'}
+            <Pill tone={readiness.modelTone}>
+              评审模型 {readiness.modelLabel}
             </Pill>
             {credits ? (
               <Pill title="评审按次扣积分，失败原路退回">
@@ -665,6 +693,21 @@ export default function ReviewPage({
           </div>
           <button type="button" className="vq-button vq-button--ghost vq-button--sm" onClick={() => void recheckModel()} disabled={rechecking}>
             <RefreshCw size={12} /> {rechecking ? '检测中' : '重新检测'}
+          </button>
+        </div>
+      ) : null}
+
+      {/* 状态或模板库没读到（r274）：说清「没读到」不是「没有」，并留一条重试。
+          与上面那条分开：那条说的是「模型此刻不可用」，这条说的是「我们没问到」 */}
+      {notice.text ? (
+        <div className="review-model-note is-warn" role="status">
+          <TriangleAlert size={14} />
+          <div className="review-model-note-text">
+            <span>{notice.text}</span>
+            {internal && notice.detail ? <small>{notice.detail}</small> : null}
+          </div>
+          <button type="button" className="vq-button vq-button--ghost vq-button--sm" onClick={() => void loadReadiness()} disabled={readBusy}>
+            <RefreshCw size={12} /> {readBusy ? '读取中' : '重新读取'}
           </button>
         </div>
       ) : null}
@@ -689,7 +732,7 @@ export default function ReviewPage({
               title={pickerExpanded ? '收起模板首帧' : '展开模板首帧与图片地址'}
               onClick={() => setPickerOpen(!pickerExpanded)}
             >
-              {templates.length} 个模板首帧
+              {shelf.toggle}
               <ChevronDown size={12} className={pickerExpanded ? 'is-open' : undefined} />
             </button>
           </div>
@@ -788,7 +831,7 @@ export default function ReviewPage({
                     <span className="review-thumb-name">{item.title}</span>
                   </button>
                 ))}
-                {!templates.length ? <p className="review-empty">模板库还是空的，先去「爆款雷达」复刻一条。</p> : null}
+                {shelf.emptyNote ? <p className="review-empty">{shelf.emptyNote}</p> : null}
               </div>
 
               <div className="review-manual">
@@ -817,7 +860,7 @@ export default function ReviewPage({
             </>
           ) : (
             <p className="review-empty">
-              评的是你这条作品这一版能不能发；只想单独评一张图（结论不挂作品）时，点上面「{templates.length} 个模板首帧」展开。
+              评的是你这条作品这一版能不能发；只想单独评一张图（结论不挂作品）时，点上面「{shelf.toggle}」展开。
             </p>
           )}
 
@@ -870,7 +913,7 @@ export default function ReviewPage({
             <div className="review-canvas" ref={canvasRef}>
               <div className="review-canvas-frame vq-frame">
                 <div className={`review-canvas-shot${pinned ? ' is-pinned' : ''}`}>
-                  {picked.preview && !previewBroken ? (
+                  {pickedState.tone === 'ready' ? (
                     <>
                       <img src={picked.preview} alt={picked.label} onError={() => setPreviewBroken(true)} />
                       {marks.map((mark) => (
@@ -906,11 +949,11 @@ export default function ReviewPage({
                       ))}
                     </>
                   ) : (
-                    // 原图没了也要能看懂：结论、锚点、修正建议都还在，只是画面不在了
+                    // 没有画面与「原图没了」不是一件事（r274）：文案在 domain/review-ready.ts 里分三档
                     <div className="review-canvas-missing" role="status">
                       <TriangleAlert size={16} />
-                      <strong>评审时的画面已经不在了</strong>
-                      <span>模板帧被清理、或远程图片失效；这条结论与下面每条问题的锚点仍然有效。</span>
+                      <strong>{pickedState.title}</strong>
+                      <span>{pickedState.copy}</span>
                     </div>
                   )}
                 </div>
@@ -947,7 +990,13 @@ export default function ReviewPage({
                           </button>
                         </span>
                       ) : null}
-                      <button type="button" className="vq-button vq-button--primary vq-button--sm" disabled={running || !status?.model || modelBlocked} onClick={run}>
+                      <button
+                        type="button"
+                        className="vq-button vq-button--primary vq-button--sm"
+                        disabled={running || !readiness.canRun || !pickedState.canRun}
+                        title={readiness.holdReason || pickedState.holdReason || undefined}
+                        onClick={run}
+                      >
                         {running ? <Loader2 size={13} className="spin" /> : <Play size={13} />}
                         {running ? (queue ? '排队中' : '评审中 ' + elapsed + 's') : result ? '重新评审' : '开始评审'}
                       </button>
@@ -1062,15 +1111,7 @@ export default function ReviewPage({
                   <div><strong>看证据</strong><p>每条判断带像素锚点：点问题行或图上编号钉住对应区域，再点一下或按 Esc 取消；没有证据的写进「无法判断」。</p></div>
                 </li>
               </ol>
-              <p className="review-empty-note">
-                {status?.service
-                  ? internal
-                    ? '当前由 VisionQA 插件服务出结论；fixture provider 只证明链路可用，不代表模型准确率。'
-                    : '当前由本地评审服务出结论，结果里会标明来源。'
-                  : internal
-                    ? 'VisionQA 插件服务未启动（127.0.0.1:6300），当前由本地视觉模型按同一套 visual-baseline 规则评审，provider 会写进结果。'
-                    : '本次由平台视觉模型按同一套评审规则出结论，结果里会标明来源。'}
-              </p>
+              <p className="review-empty-note">{readiness.engineNote}</p>
             </div>
           )}
 

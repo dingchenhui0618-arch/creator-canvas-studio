@@ -423,6 +423,14 @@
   margin-top: 2px;
   color: var(--fail);
 }
+/* 读不到（r274）：不是失败，是没问到——语气降一档，别用红条吓人 */
+.review-model-note.is-warn {
+  color: var(--warn);
+  border-left-color: var(--warn);
+  background: var(--warn-soft);
+}
+.review-model-note.is-warn > svg { color: var(--warn); }
+.review-model-note.is-warn .review-model-note-text small { color: var(--warn); }
 .review-model-note-text {
   display: grid;
   flex: 1;
