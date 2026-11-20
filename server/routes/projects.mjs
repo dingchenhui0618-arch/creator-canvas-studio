@@ -17,7 +17,7 @@ import { templateOrigin } from '../project-source.mjs'
 import { createFlow, getFlow, getRun, hasRunGraph, listRunsByFlows } from '../flows.mjs'
 import { runAssetPath } from '../flow-image.mjs'
 import { projectFlowIds } from '../run-ownership.mjs'
-import { saveUpload } from '../uploads.mjs'
+import { saveShotFrame, sweepProjectShotFrames } from '../shot-frame-store.mjs'
 import { publicError } from '../public-error.mjs'
 import { normalizeProjectScript, scriptPace, scriptView } from '../project-script.mjs'
 import { versionBaseChangesOf, versionChangesOf } from '../version-diff.mjs'
@@ -2063,7 +2063,8 @@ export function createProjectsRouter() {
 
       // 一次运行按分镜画出来的图，一次贴回分镜（r278）。
       // 三道核对：作品是我的、这次运行是我的并且确实是这条作品的工作流跑出来的、镜头号在分镜范围内。
-      // 图先复制成自己的上传素材再记到作品上：运行目录是将来的清理对象，分镜上的画面不能跟着消失。
+      // 图先存进分镜画面库（r279，shotframes/<账号>/<作品>/）再记到作品上：运行目录是将来的清理对象，
+      // 分镜上的画面不能跟着消失；而且它不再占用「上传素材」那 20 个位置——那 20 个是用户自己传的图。
       // 只认开工作流时按分镜建的 n_shot_NN 节点，用户自己拉的出图节点没有镜号，不往分镜上硬塞。
       const shotFromRunPath = pathname.match(SHOT_FROM_RUN)
       if (shotFromRunPath && req.method === 'POST') {
@@ -2118,8 +2119,8 @@ export function createProjectsRouter() {
             continue
           }
           try {
-            const uploaded = await saveUpload({ userId: user.id, buffer })
-            entries.push({ shotNo: image.shotNo, media: uploaded.media, from: run.id })
+            const stored = await saveShotFrame({ userId: user.id, projectId: project.id, buffer })
+            entries.push({ shotNo: image.shotNo, media: stored.media, from: run.id })
           } catch (error) {
             failed.push({ shotNo: image.shotNo, reason: publicError(error, '这张图没贴上') })
           }
@@ -2133,6 +2134,13 @@ export function createProjectsRouter() {
           sendJson(res, saved.status, { error: saved.error, code: saved.code })
           return true
         }
+        // 换掉的那几镜原来的图不再被引用：清掉，免得一条作品反复贴几轮攒出一堆死图。
+        // 清理失败不影响这次贴图的结果（画面上已经有图了），下一轮贴图会再扫一遍。
+        await sweepProjectShotFrames({
+          userId: user.id,
+          projectId: project.id,
+          keep: Object.values(saved.shots || {}).map((row) => row?.media || ''),
+        }).catch(() => {})
         sendJson(res, 200, {
           ok: true,
           runId: run.id,
@@ -2160,7 +2168,7 @@ export function createProjectsRouter() {
         const body = await readBody(req)
         const shotNo = normalizeShotNo(shotFramePath[2])
         const media = String(body.media || '')
-        const blocked = shotFrameBlock({ media, user, shotNo, shotCount, admin: isAdmin(user) })
+        const blocked = shotFrameBlock({ media, user, shotNo, shotCount, admin: isAdmin(user), projectId: project.id })
         if (blocked) {
           sendJson(res, blocked.status, { error: blocked.error, code: blocked.code })
           return true
@@ -2170,6 +2178,12 @@ export function createProjectsRouter() {
           sendJson(res, saved.status, { error: saved.error, code: saved.code })
           return true
         }
+        // 换图 / 撤销之后，这一镜原来那张分镜画面没人用了：清掉（上传素材不碰，那是用户自己的东西）
+        await sweepProjectShotFrames({
+          userId: user.id,
+          projectId: project.id,
+          keep: Object.values(saved.shots || {}).map((row) => row?.media || ''),
+        }).catch(() => {})
         sendJson(res, 200, { ok: true, changed: saved.changed, shots: saved.shots, templateShots: shotCount })
         return true
       }

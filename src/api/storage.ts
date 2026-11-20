@@ -2,6 +2,16 @@
 // 上限与积分额度是两回事：积分是「能花多少」，这里是「能占多少盘」。
 import { request } from './client'
 
+/** 工作流画面（r279）：工作流跑完贴回分镜的图存自己的库，不占「上传素材」那 20 张。 */
+export interface ShotFrameUsage {
+  files: number
+  bytes: number
+  projects: number
+  maxFiles: number
+  maxBytes: number
+  maxProjectFiles: number
+}
+
 export interface StorageUsage {
   ok: boolean
   bytes: number
@@ -12,6 +22,7 @@ export interface StorageUsage {
   remainingBytes: number | null
   over: boolean
   percent: number | null
+  shotFrames?: ShotFrameUsage
 }
 
 export interface StorageAccountRow {

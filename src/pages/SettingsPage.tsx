@@ -446,6 +446,23 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
               </div>
             ) : null}
 
+            {storage?.shotFrames ? (
+              <div className="vq-row">
+                <div className="vq-row-copy">
+                  <strong>工作流画面</strong>
+                  <span>
+                    {'工作流跑完贴回分镜的图存在单独的库里，不占上面「上传素材」那 20 张。每账号上限 ' +
+                      storage.shotFrames.maxFiles + ' 张 / ' + formatSize(storage.shotFrames.maxBytes) +
+                      '；把某一镜换回原片，那张图就跟着清掉。'}
+                  </span>
+                </div>
+                <span className="vq-credit-balance vq-credit-balance--used">
+                  <b>{formatSize(storage.shotFrames.bytes)}</b>
+                  <span>{storage.shotFrames.files} 张画面</span>
+                </span>
+              </div>
+            ) : null}
+
             {spend && spend.items.length ? (
               <div className="vq-spend">
                 <div className="vq-spend-head">

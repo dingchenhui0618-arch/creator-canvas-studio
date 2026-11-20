@@ -13,8 +13,11 @@ import { currentUser, isAdmin } from '../auth.mjs'
 import { refusalResponse } from '../public-error.mjs'
 import { logEvent } from '../log.mjs'
 import { UPLOAD_LIMITS, listUploads, resolveUpload, saveUpload, uploadUsage } from '../uploads.mjs'
+import { resolveShotFrame } from '../shot-frame-store.mjs'
 
 const UPLOAD_PATH = /^\/media\/uploads\/([A-Za-z0-9_-]{3,64})\/([^/]+)$/
+// 分镜画面库（r279）：工作流回贴的画面存在自己的目录里，读法与上传素材一致——登录 + 只给本人（管理员排障可读）
+const SHOT_FRAME_PATH = /^\/media\/shotframes\/([A-Za-z0-9_-]{3,64})\/([A-Za-z0-9_-]{3,64})\/([^/]+)$/
 
 function sendRefusal(res, error) {
   const mapped = refusalResponse(error)
@@ -26,7 +29,7 @@ function sendRefusal(res, error) {
 export function createMediaRouter() {
   return {
     prefix: '/api/media',
-    extraPrefixes: ['/media/uploads'],
+    extraPrefixes: ['/media/uploads', '/media/shotframes'],
     async handle(req, res, url, pathname) {
       // 上传：登录门在 index.mjs 里已经挡过一次（/api/* 都要登录）；这里再判一次，
       // 因为这条路由也会被单测直接调用，行为不该依赖外面那一层。
@@ -67,7 +70,8 @@ export function createMediaRouter() {
       }
 
       const match = pathname.match(UPLOAD_PATH)
-      if (match) {
+      const shotMatch = pathname.match(SHOT_FRAME_PATH)
+      if (match || shotMatch) {
         if (req.method !== 'GET') {
           res.setHeader('Allow', 'GET')
           sendJson(res, 405, { error: '只支持 GET' })
@@ -78,7 +82,7 @@ export function createMediaRouter() {
           sendJson(res, 401, { error: '未登录', loginRequired: true })
           return true
         }
-        const [, ownerId, fileName] = match
+        const ownerId = (match || shotMatch)[1]
         // 归属：自己的图自己看；管理员排障时能看所有人的。别人一律 404——
         // 「这条路径存不存在」本身也不该告诉别人。
         if (ownerId !== user.id && !isAdmin(user)) {
@@ -86,7 +90,9 @@ export function createMediaRouter() {
           res.end('not found')
           return true
         }
-        const target = resolveUpload(ownerId, fileName)
+        const target = match
+          ? resolveUpload(ownerId, match[2])
+          : resolveShotFrame(shotMatch[1], shotMatch[2], shotMatch[3])
         if (!target) {
           res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' })
           res.end('not found')

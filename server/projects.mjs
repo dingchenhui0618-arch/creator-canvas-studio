@@ -10,6 +10,7 @@ import { config } from './config.mjs'
 import { canAccess } from './owner.mjs'
 import { readStoreArray } from './json-store.mjs'
 import { MAX_SHOT_FRAMES, normalizeShotFrames, shotFramesView } from './project-shots.mjs'
+import { removeProjectShotFrames, removeUserShotFrames } from './shot-frame-store.mjs'
 import { normalizeStoredScript } from './project-script.mjs'
 import { visitKey } from './share-visits.mjs'
 // 交付那一刻的评审结论要从评审库现读；只读、不写评审（v0.9.85）
@@ -186,6 +187,8 @@ async function pruneTrash(list, now = Date.now()) {
   for (const entry of expired) {
     const id = String(entry?.project?.id || '')
     if (id) await dropProjectDeliveryPackages(id).catch(() => {})
+    // 过期就等于这个作品不在了：它贴的分镜画面也一起走（r279，画面独立存，不再靠上传素材的顶替顺带清掉）
+    if (id) await removeProjectShotFrames(entry?.project?.ownerId, id).catch(() => {})
   }
   return { list: alive, expired }
 }
@@ -1478,6 +1481,8 @@ export async function purgeProject(id, user = null) {
   if (index < 0) return { status: 404 }
   if (!canAccess(raw[index].project, user)) return { status: 403 }
   await dropProjectDeliveryPackages(id).catch(() => {})
+  // 彻底删除 = 这条作品的分镜画面也一起清掉；回收站里的作品不动（恢复要连画面一起回来）
+  await removeProjectShotFrames(raw[index].project?.ownerId, id).catch(() => {})
   await persistTrash(raw.filter((_, i) => i !== index))
   return { status: 200 }
 }
@@ -1568,6 +1573,8 @@ export async function deleteProjectsByOwner(ownerId) {
     }
     await persistTrash(raw.filter((entry) => String(entry?.project?.ownerId || '') !== ownerId))
   }
+  // 账号注销：分镜画面库整棵一起清（r279）
+  await removeUserShotFrames(ownerId).catch(() => {})
   if (!mine.length) return 0
   await persist(list.filter((item) => item.ownerId !== ownerId))
   return mine.length

@@ -122,13 +122,17 @@ export const setDeliveryReply = (projectId: string, deliveryId: string, reply: s
 
 export const getProject = (id: string) => request<ProjectDetail>('/api/projects/' + id)
 
-/** 这一版每一镜的画面（v0.9.161）：media 传自己上传的那张（uploads/…），传空字符串等于撤销这一镜。 */
+/**
+ * 这一版每一镜的画面（v0.9.161）：media 是「自己账号下的一张图」——
+ * 手贴的传自己上传的那张（uploads/…），工作流回贴的是分镜画面库里的（shotframes/…，r279）；
+ * 传空字符串等于撤销这一镜（画面文件会被清掉，上传素材不碰）。
+ */
 export type ProjectShotFrames = Record<string, { media: string; frameUrl: string; at: string; from?: string }>
 
 /**
  * 一次运行按分镜画出来的图，一次贴回分镜（r278）。
- * 服务端按出图节点的 id（n_shot_NN）认镜号，先把图复制成自己的上传素材再记到作品上——
- * 运行目录是将来的清理对象，分镜上的画面不能跟着消失。
+ * 服务端按出图节点的 id（n_shot_NN）认镜号，先把图存进分镜画面库再记到作品上——
+ * 运行目录是将来的清理对象，分镜上的画面不能跟着消失；它也不占「上传素材」那 20 个位置（r279）。
  * 已经记着这次运行同一张图的镜回在 kept 里（重贴不会重复占位置），
  * 原来有画面被换掉的回在 overwritten 里（页面对用户说清楚换了几镜）。
  */

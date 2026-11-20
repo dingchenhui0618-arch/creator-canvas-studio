@@ -3,6 +3,7 @@
 import { sendJson } from './_shared.mjs'
 import { currentUser } from '../auth.mjs'
 import { storageOf } from '../storage.mjs'
+import { shotFrameUsage } from '../shot-frame-store.mjs'
 
 export function createStorageRouter() {
   return {
@@ -18,7 +19,10 @@ export function createStorageRouter() {
         sendJson(res, 401, { error: '未登录', loginRequired: true })
         return true
       }
-      sendJson(res, 200, { ok: true, ...(await storageOf(user.id)) })
+      // 工作流画面（r279）单独一栏：它存在自己的库里，不占「上传素材」那 20 张，
+      // 但有每账号上限 —— 页面上看得见用量，才不会在贴满时只收到一句「到上限了」。
+      const [storage, shotFrames] = await Promise.all([storageOf(user.id), shotFrameUsage(user.id)])
+      sendJson(res, 200, { ok: true, ...storage, shotFrames })
       return true
     },
   }

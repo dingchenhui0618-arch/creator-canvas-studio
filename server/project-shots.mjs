@@ -4,7 +4,8 @@
 // 而「这一镜我打算这么拍」是你自己的东西，只属于这条作品的这一版。模板里一个字不动。
 //
 // 三条边界：
-//   1) 只认自己账号目录下的上传图（uploads/<账号>/<文件名>），与评审入口同一道归属校验；
+//   1) 只认自己账号下的图：手贴的走上传素材（uploads/<账号>/<文件名>），
+//      工作流回贴的走分镜画面库（shotframes/<账号>/<作品>/<文件名>，r279），两边同一道归属校验；
 //   2) 镜头号必须是模板分镜里存在的那几镜——没有分镜就没有「第几镜」，不凭空造一个；
 //   3) 传空等于撤销：这一镜回到「还没贴画面」，不删除那张图本身（那张图可能还被别的镜用着）。
 //
@@ -14,8 +15,35 @@
 /** 一条作品最多记几镜的画面：模板分镜上限 24 镜，留一倍余量，防止脏数据把记录撑大。 */
 export const MAX_SHOT_FRAMES = 48
 
-/** uploads/<账号>/<文件名>：与 /api/review 的 media 是同一套写法，评审那条链路不用改。 */
-export const SHOT_MEDIA = /^uploads\/([A-Za-z0-9_-]{3,64})\/([A-Za-z0-9._-]{1,80})$/
+/**
+ * 手贴的画面：uploads/<账号>/<文件名>——与 /api/review 的 media 是同一套写法，评审那条链路不用改。
+ * 这是「用户自己传进来的一张图」，所以贴上去只是记个引用，不复制字节。
+ */
+export const SHOT_MEDIA_UPLOAD = /^uploads\/([A-Za-z0-9_-]{3,64})\/([A-Za-z0-9._-]{1,80})$/
+
+/**
+ * 回贴的画面：shotframes/<账号>/<作品>/<文件名>——工作流跑完画的图，存进分镜画面库（r279）。
+ * 文件名按分镜画面库自己的起名规则卡死（时间戳-随机串.扩展名）：这里没有历史数据要兼容，
+ * 不许写入一条「存进去却永远读不出来」的路径。
+ */
+export const SHOT_MEDIA_STORE = /^shotframes\/([A-Za-z0-9_-]{3,64})\/([A-Za-z0-9_-]{3,64})\/(\d{10,16}-[0-9a-f]{8,24}\.(?:jpg|png|webp))$/
+
+/** 老名字（r278 只有一种来源时留下的）：现存的代码都改用 parseShotMedia。 */
+export const SHOT_MEDIA = SHOT_MEDIA_UPLOAD
+
+/**
+ * 认一条画面路径：返回 { kind: 'upload' | 'store', ownerId, projectId, name } 或 null。
+ * kind 决定「这张图从哪读」：upload 走上传素材（要登录、只给本人），store 走分镜画面库（同样只给本人）。
+ * projectId 只有 store 才有：分镜画面是某一条作品的产物，不能挂到别的作品上。
+ */
+export function parseShotMedia(media) {
+  const value = String(media ?? '')
+  const upload = value.match(SHOT_MEDIA_UPLOAD)
+  if (upload) return { kind: 'upload', ownerId: upload[1], projectId: '', name: upload[2] }
+  const store = value.match(SHOT_MEDIA_STORE)
+  if (store) return { kind: 'store', ownerId: store[1], projectId: store[2], name: store[3] }
+  return null
+}
 
 /**
  * 开工作流时按分镜建的出图节点 id：n_shot_01、n_shot_12（见 server/script-draft.mjs）。
@@ -35,7 +63,7 @@ export function normalizeShotNo(value) {
 
 /**
  * 记录形状：{ "1": { media, at, from } }。
- * 读的时候不猜：不是 uploads/ 开头的、镜头号不认识的、时间不是时间的，一律丢掉；
+ * 读的时候不猜：不是 uploads/ 或 shotframes/ 开头的、镜头号不认识的、时间不是时间的，一律丢掉；
  * from 是可选的一项（这批图是哪次运行画的），不是运行号的就不认，其余照旧。
  */
 export function normalizeShotFrames(raw) {
@@ -45,7 +73,7 @@ export function normalizeShotFrames(raw) {
     const shotNo = normalizeShotNo(key)
     if (!shotNo) continue
     const media = String(value?.media || '')
-    if (!SHOT_MEDIA.test(media)) continue
+    if (!parseShotMedia(media)) continue
     const at = String(value?.at || '')
     if (!at || Number.isNaN(Date.parse(at))) continue
     const from = String(value?.from || '')
@@ -57,8 +85,9 @@ export function normalizeShotFrames(raw) {
 /**
  * 能不能把这把图挂到这一镜：返回 null 表示可以，否则返回要回给页面的状态。
  * 与评审入口同一句话术：不属于你的图说「不在你的账号下」，不说「不存在」（不泄露别人的文件在不在）。
+ * projectId（r279）：分镜画面库里的一条画面只属于画它的那条作品，挂到别的作品上不算。
  */
-export function shotFrameBlock({ media, user, shotNo, shotCount, admin = false }) {
+export function shotFrameBlock({ media, user, shotNo, shotCount, admin = false, projectId = '' }) {
   if (!shotNo) {
     return { status: 400, code: 'SHOT_NO_INVALID', error: '镜头号不对：只认分镜里第几镜（正整数）' }
   }
@@ -72,17 +101,20 @@ export function shotFrameBlock({ media, user, shotNo, shotCount, admin = false }
       error: '这条作品的分镜只有 ' + shotCount + ' 镜，第 ' + shotNo + ' 镜不存在',
     }
   }
-  const matched = String(media || '').match(SHOT_MEDIA)
-  if (!matched) {
+  const parsed = parseShotMedia(media)
+  if (!parsed) {
     // 传空 = 撤销这一镜（页面上的「用回原片」）。镜头号与分镜范围上面已经核过了，
     // 空不空都只改这一条作品的这一镜，不碰任何文件，所以这里放行。
     // （r278 实测发现：以前这行把空值也当「不是自己的图」挡成 400，撤销按钮点了只会弹一句报错。）
     if (!String(media || '')) return null
-    return { status: 400, code: 'MEDIA_INVALID', error: '画面要用自己上传的图：先在这里传一张 jpg / png / webp' }
+    return { status: 400, code: 'MEDIA_INVALID', error: '画面要用自己账号下的图：在这里传一张 jpg / png / webp，或者跑完工作流点「贴回分镜」' }
   }
-  const owner = matched[1]
-  if (!admin && String(user?.id || '') !== owner) {
+  if (!admin && String(user?.id || '') !== parsed.ownerId) {
     return { status: 404, code: 'MEDIA_FORBIDDEN', error: '这张图不在你的账号下：画面没有记上，也没有删任何东西' }
+  }
+  const scope = String(projectId || '')
+  if (parsed.kind === 'store' && scope && parsed.projectId !== scope) {
+    return { status: 400, code: 'MEDIA_INVALID', error: '这张画面是另一条作品的：工作流画面只能贴回画它的那条作品' }
   }
   return null
 }

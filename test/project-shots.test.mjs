@@ -35,6 +35,7 @@ fs.writeFileSync(templatesFile, JSON.stringify([template], null, 2), 'utf8')
 const templateBefore = fs.readFileSync(templatesFile, 'utf8')
 
 const shots = await import('../server/project-shots.mjs')
+const store = await import('../server/shot-frame-store.mjs')
 const p = await import('../server/projects.mjs')
 
 const userA = { id: 'u_a', name: 'A' }
@@ -52,15 +53,21 @@ test('镜头号只认正整数：第 0 镜、第 1.5 镜、文字都不认', () 
   assert.equal(shots.normalizeShotNo(shots.MAX_SHOT_FRAMES + 1), 0)
 })
 
-test('记录只留 uploads/ 下的图与真实时间，别的东西一律丢掉', () => {
+test('记录只留自己账号下的图与真实时间，别的东西一律丢掉', () => {
   const kept = shots.normalizeShotFrames({
     1: { media: mine, at: '2026-11-16T01:00:00.000Z' },
     2: { media: 'https://example.com/a.jpg', at: '2026-11-16T01:00:00.000Z' },
     3: { media: theirs, at: '不是时间' },
+    4: { media: 'shotframes/u_a/prj_aaaa1111/1730000000-abcdef12.png', at: '2026-11-20T01:00:00.000Z' },
+    5: { media: 'shotframes/u_a/prj_aaaa1111/../../etc/passwd', at: '2026-11-20T01:00:00.000Z' },
     x: { media: mine, at: '2026-11-16T01:00:00.000Z' },
   })
-  assert.deepEqual(Object.keys(kept), ['1'], '只留下第 1 镜：外链、坏时间、不认识的镜头号都不算')
+  assert.deepEqual(Object.keys(kept), ['1', '4'], '上传素材与分镜画面库两种都认；外链、坏时间、不认识的镜头号、路径穿越都不算')
   assert.deepEqual(shots.normalizeShotFrames(null), {})
+  assert.deepEqual(shots.parseShotMedia('uploads/u_a/a.png'), { kind: 'upload', ownerId: 'u_a', projectId: '', name: 'a.png' })
+  assert.deepEqual(shots.parseShotMedia('shotframes/u_a/prj_aaaa1111/1730000000-abcdef12.png'), { kind: 'store', ownerId: 'u_a', projectId: 'prj_aaaa1111', name: '1730000000-abcdef12.png' })
+  assert.equal(shots.parseShotMedia('shotframes/u_a/prj_aaaa1111/a.png'), null, '分镜画面库的文件名要按它自己的起名规则')
+  assert.equal(shots.parseShotMedia('shotframes/u_a/a.png'), null, '分镜画面库里必须有作品这一段')
 })
 
 test('挂之前先核：没有分镜、越界、别人的图都挡住', () => {
@@ -222,7 +229,8 @@ test('回贴入口在两处都摆得出来：运行记录那一行、分镜列�
   assert.match(routes, /runShotImages\(run, shotCount\)/, '按分镜认镜号')
   assert.ok(routes.includes('projectFlowIds(project).includes('), '只认这条作品自己的工作流')
   assert.ok(routes.includes('planRunAttach(images, project.shots, run.id)'), '回贴前先分堆，重贴不白复制 8 张图')
-  assert.ok(routes.includes('saveUpload({ userId: user.id, buffer })'), '图先复制成自己的上传素材，运行目录被清也不丢')
+  assert.ok(routes.includes('saveShotFrame({ userId: user.id, projectId: project.id, buffer })'), '图先存进分镜画面库，运行目录被清也不丢')
+  assert.ok(routes.includes('sweepProjectShotFrames('), '换图 / 撤销之后把没人用的那张清掉')
   const page = fs.readFileSync(new URL('../src/pages/ProjectPage.tsx', import.meta.url), 'utf8')
   assert.ok(page.includes('attachRunShotFrames(projectId, run.id)'))
   assert.ok(page.includes('vq-run-shots'), '运行记录那一行有入口')
@@ -253,5 +261,115 @@ test('传空是撤销，不是「不是你的图」：以前撤销按钮点了�
   assert.match(badShot.error, /镜头号/)
   const noBoard = shots.shotFrameBlock({ media: '', user: userA, shotNo: 1, shotCount: 0 })
   assert.equal(noBoard.status, 409, '没有分镜就没有「第几镜」，空值也一样')
-  assert.match(shots.shotFrameBlock({ media: 'https://example.com/a.png', user: userA, shotNo: 1, shotCount: 3 }).error, /自己上传的图/)
+  assert.match(shots.shotFrameBlock({ media: 'https://example.com/a.png', user: userA, shotNo: 1, shotCount: 3 }).error, /自己账号下的图/)
+})
+// ---------- r279：分镜画面自己的库（不再吃上传额度） ----------
+
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+const fakePng = (bytes = 64) => Buffer.concat([PNG_SIGNATURE, Buffer.alloc(Math.max(1, bytes))])
+
+test('分镜画面存进自己的目录：路径带账号与作品，字节与类型都记对', async () => {
+  const project = await p.createProject({ title: '画面库', templateId: template.id }, userA)
+  const saved = await store.saveShotFrame({ userId: userA.id, projectId: project.id, buffer: fakePng(128) })
+  assert.match(saved.media, new RegExp('^shotframes/u_a/' + project.id + '/\\d{10,16}-[0-9a-f]{12}\\.png$'))
+  assert.equal(saved.imageUrl, '/media/' + saved.media, '页面直接拿这个地址显示')
+  assert.equal(saved.bytes, 128 + PNG_SIGNATURE.length)
+  assert.equal(saved.mime, 'image/png')
+  const onDisk = path.join(dir, saved.media)
+  assert.equal(fs.existsSync(onDisk), true, '文件真的落在这个账号 / 这条作品的目录里')
+  assert.equal(fs.statSync(onDisk).size, saved.bytes)
+  assert.equal(saved.media.startsWith('uploads/'), false, '不再塞进上传素材：那 20 个位置是用户自己传的图')
+  // 这条作品自己的画面：解析出来的路径就在这个目录里
+  const target = store.resolveShotFrame(userA.id, project.id, saved.media.split('/').pop())
+  assert.equal(target.file, onDisk)
+  assert.equal(target.mime, 'image/png')
+})
+
+test('只认图片文件头与上限：别的文件、太大的一律收不进来', async () => {
+  const project = await p.createProject({ title: '画面库校验', templateId: template.id }, userA)
+  await assert.rejects(() => store.saveShotFrame({ userId: userA.id, projectId: project.id, buffer: Buffer.from('<html>hi</html>') }), (error) => {
+    assert.equal(error.status, 415, '按内容看不是图：扩展名骗不过去')
+    return true
+  })
+  await assert.rejects(() => store.saveShotFrame({ userId: userA.id, projectId: project.id, buffer: Buffer.alloc(store.SHOT_FRAME_LIMITS.maxBytes + 1) }), (error) => {
+    assert.equal(error.status, 413)
+    return true
+  })
+  await assert.rejects(() => store.saveShotFrame({ userId: 'u_a', projectId: '../etc', buffer: fakePng() }), (error) => {
+    assert.equal(error.status, 400, '作品编号不像编号，直接拒：路径里要拼它')
+    return true
+  })
+})
+
+test('文件名只认服务端起的形状：路径穿越与别的目录都不解析', () => {
+  assert.equal(store.resolveShotFrame('u_a', 'prj_aaaa1111', '../../etc/passwd'), null)
+  assert.equal(store.resolveShotFrame('u_a', 'prj_aaaa1111', 'x.png'), null, '不是「时间戳-随机串」的名字不认')
+  assert.equal(store.resolveShotFrame('u_a', 'prj_aaaa1111', '1730000000-abcdef12.png').file.includes('prj_aaaa1111'), true)
+  assert.equal(store.shotFrameFileName('uploads/u_a/a.png', 'u_a', 'prj_aaaa1111'), '', '别的库的路径不是这条作品的画面')
+  assert.equal(store.shotFrameFileName('shotframes/u_a/prj_bbbb2222/1730000000-abcdef12.png', 'u_a', 'prj_aaaa1111'), '', '别的作品的画面不认')
+})
+
+test('换图 / 撤销之后，没人用的那张从盘上清掉', async () => {
+  const project = await p.createProject({ title: '清理', templateId: template.id }, userA)
+  const one = await store.saveShotFrame({ userId: userA.id, projectId: project.id, buffer: fakePng(32) })
+  const two = await store.saveShotFrame({ userId: userA.id, projectId: project.id, buffer: fakePng(48) })
+  const swept = await store.sweepProjectShotFrames({ userId: userA.id, projectId: project.id, keep: [two.media] })
+  assert.deepEqual(swept, { removed: 1, kept: 1 })
+  assert.equal(fs.existsSync(path.join(dir, one.media)), false, '换掉的那张不在盘上了')
+  assert.equal(fs.existsSync(path.join(dir, two.media)), true, '还在用的那张不能动')
+  const usage = await store.shotFrameUsage(userA.id)
+  assert.equal(usage.maxFiles, store.SHOT_FRAME_LIMITS.maxAccountFiles, '用量带着上限，页面据此说实数')
+  assert.equal(usage.files >= 1, true)
+})
+
+test('分镜画面能挂进作品；别的作品的、别人的一律挡住', async () => {
+  const project = await p.createProject({ title: '挂画面', templateId: template.id }, userA)
+  const other = await p.createProject({ title: '另一条', templateId: template.id }, userA)
+  const saved = await store.saveShotFrame({ userId: userA.id, projectId: project.id, buffer: fakePng(32) })
+  assert.equal(shots.shotFrameBlock({ media: saved.media, user: userA, shotNo: 1, shotCount: 3, projectId: project.id }), null, '自己作品的画面可以挂')
+  const crossed = shots.shotFrameBlock({ media: saved.media, user: userA, shotNo: 1, shotCount: 3, projectId: other.id })
+  assert.equal(crossed.status, 400, '另一条作品不能拿这条作品的画面')
+  assert.match(crossed.error, /另一条作品/)
+  const foreign = shots.shotFrameBlock({ media: 'shotframes/u_b/prj_aaaa1111/1730000000-abcdef12.png', user: userA, shotNo: 1, shotCount: 3, projectId: project.id })
+  assert.equal(foreign.status, 404, '别人账号下的画面按「不在你账号下」回')
+
+  const set = await p.setProjectShotFrames(project.id, [{ shotNo: 1, media: saved.media, from: 'run_cccc3333' }], userA)
+  assert.equal(set.status, 200)
+  const read = await p.getProject(project.id, userA)
+  assert.equal(read.shots['1'].media, saved.media, '分镜画面库的路径也记得进作品')
+})
+
+test('账号总量封顶：满了明说，不悄悄顶掉别人的画面', async () => {
+  const limits = store.SHOT_FRAME_LIMITS
+  const before = limits.maxAccountFiles
+  const project = await p.createProject({ title: '封顶', templateId: template.id }, userA)
+  try {
+    const usage = await store.shotFrameUsage(userA.id)
+    limits.maxAccountFiles = usage.files
+    await assert.rejects(() => store.saveShotFrame({ userId: userA.id, projectId: project.id, buffer: fakePng(16) }), (error) => {
+      assert.equal(error.status, 409)
+      assert.match(error.message, /上限/)
+      return true
+    })
+  } finally {
+    limits.maxAccountFiles = before
+  }
+})
+
+test('彻底删除作品时画面一起走；回收站里不动', async () => {
+  const project = await p.createProject({ title: '删了就走', templateId: template.id }, userA)
+  const saved = await store.saveShotFrame({ userId: userA.id, projectId: project.id, buffer: fakePng(32) })
+  const onDisk = path.join(dir, saved.media)
+  await p.setProjectShotFrames(project.id, [{ shotNo: 1, media: saved.media, from: 'run_dddd4444' }], userA)
+  await p.deleteProject(project.id, userA)
+  assert.equal(fs.existsSync(onDisk), true, '进回收站不等于删掉：恢复要连画面一起回来')
+  await p.purgeProject(project.id, userA)
+  assert.equal(fs.existsSync(onDisk), false, '彻底删除之后画面不留')
+})
+
+test('读回来的那条路由也接上了：/media/shotframes 按归属给图', () => {
+  const media = fs.readFileSync(new URL('../server/routes/media.mjs', import.meta.url), 'utf8')
+  assert.ok(media.includes('/media/shotframes'), '登录门与路由前缀都认得这条路径')
+  assert.ok(media.includes('resolveShotFrame('), '读图走分镜画面库的解析，不拼路径')
+  assert.ok(media.includes("extraPrefixes: ['/media/uploads', '/media/shotframes']"))
 })
