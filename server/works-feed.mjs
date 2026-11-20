@@ -245,12 +245,23 @@ async function canvasItems(user) {
   return [...cards, ...media]
 }
 
-/** 三种来源合并、按时间倒序；游标是上一页最后一条的 `at:id`，不用时间戳比较（同毫秒会漏）。 */
+/**
+ * 三种来源合并、按时间倒序；游标是上一页最后一条的 `at:id`，不用时间戳比较（同毫秒会漏）。
+ *
+ * counts（r272）：**先数全部、再筛**，所以筛到「视频」时，界面仍然知道另外几类各有几条。
+ * 以前只回一个按筛选后算的 total，「视频这一栏是空的」与「账号下一条作品都没有」在界面上
+ * 长成一模一样的一句话——空状态只好猜，猜成「还没有作品」，把人指去重新生成。
+ */
 export function mergeWorks({ media = [], runs = [], canvases = [], kind = 'all', limit = DEFAULT_LIMIT, before = '' } = {}) {
   const wanted = String(kind || 'all')
   if (!WORKS_KINDS.includes(wanted)) return { error: 'WORKS_KIND' }
   const size = Math.min(MAX_LIMIT, Math.max(1, Number(limit) || DEFAULT_LIMIT))
-  let items = [...media, ...runs, ...canvases]
+  const merged = [...media, ...runs, ...canvases]
+  const counts = { all: merged.length, image: 0, video: 0, run: 0, canvas: 0 }
+  for (const item of merged) {
+    if (item && Object.prototype.hasOwnProperty.call(counts, item.kind) && item.kind !== 'all') counts[item.kind] += 1
+  }
+  let items = merged
   if (wanted !== 'all') items = items.filter((item) => item.kind === wanted)
   items.sort((a, b) => (b.at - a.at) || String(b.id).localeCompare(String(a.id)))
   let start = 0
@@ -262,7 +273,7 @@ export function mergeWorks({ media = [], runs = [], canvases = [], kind = 'all',
   }
   const page = items.slice(start, start + size)
   const cursor = start + size < items.length && page.length ? page[page.length - 1].at + ':' + page[page.length - 1].id : null
-  return { items: page, total: items.length, cursor }
+  return { items: page, total: items.length, cursor, counts }
 }
 
 export async function listWorks(user, options = {}) {

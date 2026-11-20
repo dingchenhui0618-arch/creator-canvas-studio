@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Clapperboard, Download, Image as ImageIcon, Loader2, Play, Workflow } from 'lucide-react'
 import MediaLightbox from './MediaLightbox'
-import { listWorks, type WorkItem } from '../api/works'
+import { listWorks, type WorkItem, type WorksCounts } from '../api/works'
 import { safeFetch } from '../api/client'
 import { listMediaAssets, uploadMediaAsset } from '../api/media-gen'
 import type { MediaAsset } from '../api/media-gen'
@@ -21,6 +21,26 @@ const FILTERS: Array<{ value: WorksFilter; label: string }> = [
 ]
 
 const KIND_ICON = { image: ImageIcon, video: Play, run: Workflow, canvas: Clapperboard }
+
+const NO_COUNTS: WorksCounts = { all: 0, image: 0, video: 0, run: 0, canvas: 0 }
+
+/** 筛到某一类而这一类是空的：说清「是这一类没有」，不是「账号下什么都没有」。 */
+const FILTER_NOUN: Record<WorksFilter, string> = {
+  all: '作品',
+  image: '图片',
+  video: '视频',
+  run: '工作流运行',
+  canvas: '无限画布',
+}
+
+/** 这一类的东西从哪里来：空状态里给一条真能走的路，不笼统地叫人「去生成一条」。 */
+const FILTER_HINT: Record<WorksFilter, string> = {
+  all: '',
+  image: '「快捷创作 → 图片」生成的图会进这里。',
+  video: '「快捷创作 → 视频」或工作流里出的视频会进这里。',
+  run: '跑过一次工作流（哪怕失败或中途停止）就会进这里。',
+  canvas: '在无限画布上出过图或视频，就会进这里；只摆过素材、没出过东西的画布不算。',
+}
 
 const REF_ROUTE = '#/agents'
 
@@ -63,6 +83,8 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
   const [items, setItems] = useState<WorkItem[]>([])
   const [cursor, setCursor] = useState<string | null>(null)
   const [total, setTotal] = useState(0)
+  // 每一类各几条（r272）：筛到空的一类时，靠 counts.all 才分得清「这一类没有」与「一条都没有」
+  const [counts, setCounts] = useState<WorksCounts>(NO_COUNTS)
   const [loading, setLoading] = useState(true)
   const [more, setMore] = useState(false)
   const [error, setError] = useState('')
@@ -74,6 +96,8 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
   // 自己传过的素材：用来认「这一条已经加过了」，同一条作品不重复占配额
   const libraryRef = useRef<MediaAsset[] | null>(null)
 
+  const showCounts = counts.all > 0 || !loading
+
   const load = useCallback(async (nextKind: WorksFilter, before = '', append = false) => {
     if (append) setMore(true)
     else setLoading(true)
@@ -83,6 +107,8 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
       setItems((current) => (append ? [...current, ...page.items.filter((item) => !current.some((row) => row.id === item.id))] : page.items))
       setCursor(page.cursor)
       setTotal(page.total)
+      // 老服务端没有 counts：退回「只知道当前这一类」，空状态就不多说一句别的
+      if (page.counts) setCounts(page.counts)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '作品流读取失败')
     } finally {
@@ -251,28 +277,49 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
   return (
     <section className="works" aria-busy={loading}>
       <div className="works-bar">
-        {FILTERS.map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            className={'works-chip' + (kind === item.value ? ' is-active' : '')}
-            onClick={() => setKind(item.value)}
-            aria-pressed={kind === item.value}
-          >
-            {item.label}
-          </button>
-        ))}
+        {/* 每一栏带条数（r272）：不点进去就知道「视频那栏有没有东西」，不用一栏一栏试 */}
+        {FILTERS.map((item) => {
+          const zero = showCounts && counts[item.value] === 0
+          return (
+            <button
+              key={item.value}
+              type="button"
+              className={'works-chip' + (kind === item.value ? ' is-active' : '') + (zero ? ' is-zero' : '')}
+              onClick={() => setKind(item.value)}
+              aria-pressed={kind === item.value}
+              aria-label={showCounts ? item.label + '，' + counts[item.value] + ' 条' : item.label}
+            >
+              {item.label}
+              {showCounts ? <span className="works-chip-count">{counts[item.value]}</span> : null}
+            </button>
+          )
+        })}
         <span className="works-count">{loading ? '正在读取…' : '共 ' + total + ' 条'}</span>
       </div>
 
       {error ? <p className="works-error">{error}</p> : null}
       {note ? <p className={'works-note' + (noteError ? ' is-error' : '')}>{note}</p> : null}
 
+      {/* 空状态先说清是哪一种空（r272）：
+          「视频这一栏没有」被写成「还没有作品」，等于告诉一个做了 200 张图的人「你什么都没做过」，
+          还顺手把人指去重新生成。现在这一栏有别的类，就给一句话 + 一条回「全部」的路。 */}
       {!loading && !items.length && !error ? (
-        <div className="works-empty">
-          <strong>还没有作品</strong>
-          <p>去「快捷创作」生成一张图或一条视频，或在工作流里跑一次，产物会自动出现在这里。</p>
-        </div>
+        kind !== 'all' && counts.all > 0 ? (
+          <div className="works-empty">
+            <strong>{FILTER_NOUN[kind]}这一类还没有作品</strong>
+            <p>
+              {FILTER_HINT[kind]}账号下现在有 {counts.all} 条别的作品，切回「全部」就能看到。
+            </p>
+            <button type="button" className="vq-button vq-button--ghost works-empty-action" onClick={() => setKind('all')}>
+              看全部 {counts.all} 条
+            </button>
+          </div>
+        ) : (
+          <div className="works-empty">
+            <strong>还没有作品</strong>
+            <p>去「快捷创作」生成一张图或一条视频、在工作流里跑一次，或在无限画布上出图出视频——产物都会自动出现在这里。</p>
+          </div>
+        )
       ) : null}
 
       <div className="works-grid">

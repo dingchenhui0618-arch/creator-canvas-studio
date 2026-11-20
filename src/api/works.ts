@@ -25,7 +25,10 @@ export type WorkItem = {
   canvasId?: string
 }
 
-export type WorksPage = { ok: true; items: WorkItem[]; total: number; cursor: string | null }
+/** 每一类各有多少条（r272）：先数全部再按筛选切，所以筛到某一类时也知道其他类有没有东西。 */
+export type WorksCounts = { all: number; image: number; video: number; run: number; canvas: number }
+
+export type WorksPage = { ok: true; items: WorkItem[]; total: number; cursor: string | null; counts?: WorksCounts }
 
 /** 一页作品。kind=all 时三种来源一起按时间排；before 是上一页返回的 cursor。 */
 export function listWorks(params: { kind?: string; before?: string; limit?: number } = {}): Promise<WorksPage> {

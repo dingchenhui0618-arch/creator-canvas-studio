@@ -155,7 +155,7 @@ export async function collectToolContext(agent, user = null, message = '') {
         blocks.push(
           '模板库最近入库（工具读取，仅供改写参考）：\n' +
             items
-              .map((item) => '- ' + item.title + '（' + item.contentType + (item.kind === 'flow' ? ' · 工作流工作流' : '') + '）')
+              .map((item) => '- ' + item.title + '（' + item.contentType + (item.kind === 'flow' ? ' · 工作流' : '') + '）')
               .join('\n'),
         )
       }

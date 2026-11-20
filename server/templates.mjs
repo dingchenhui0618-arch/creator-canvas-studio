@@ -692,7 +692,7 @@ export async function templateStats(user = null, { source = '' } = {}) {
   }
   return {
     total: list.length,
-    // 已解析只算跑过复刻、真的有脚本与分镜的；工作流工作流单独计数，不混进解析口径
+    // 已解析只算跑过复刻、真的有脚本与分镜的；工作流另存下来的模板单独计数，不混进解析口径
     parsed: list.filter((item) => item.kind === 'replica').length,
     saved: list.filter((item) => item.kind === 'saved').length,
     flows: list.filter((item) => item.kind === 'flow').length,

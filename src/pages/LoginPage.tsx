@@ -822,7 +822,7 @@ export function LoginPage({ notice, onSignIn, onSignInSms, onRegister, onVerifyT
               {busy ? (
                 <>
                   <Loader2 size={15} className="vq-spin" />
-                  {isSignup ? '正在创建账号…' : smsMode ? '正在验证验证码…' : '正在验证凭据…'}
+                  {isSignup ? '正在创建账号…' : smsMode ? '正在核对验证码…' : '正在验证凭据…'}
                 </>
               ) : (
                 <>

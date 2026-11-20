@@ -113,3 +113,36 @@ test('还在跑 / 排队中的运行不进作品流（以前会被当成「已�
   assert.equal(runWorkItem({ id: 'run_5', flowId: 'f', flowName: '排队中', status: 'queued' }), null)
   assert.equal(runWorkItem(null), null)
 })
+
+// ---------- r272：每一类各几条，先数再筛 ----------
+
+test('counts 先数全部再按筛选切：筛到空的一类时，仍知道别的类有几条', () => {
+  const page = mergeWorks({
+    media: [media('a', 100), media('b', 90)],
+    runs: [run('c', 80)],
+    canvases: [canvas('d', 70)],
+    kind: 'video',
+  })
+  assert.equal(page.items.length, 0)
+  assert.equal(page.total, 0)
+  assert.deepEqual(page.counts, { all: 4, image: 2, video: 0, run: 1, canvas: 1 })
+})
+
+test('什么都没做过时 counts 全是 0，空状态才敢说「还没有作品」', () => {
+  const page = mergeWorks({})
+  assert.deepEqual(page.counts, { all: 0, image: 0, video: 0, run: 0, canvas: 0 })
+})
+
+test('counts 不认识的 kind 不计数（也不把 all 撑大）', () => {
+  const page = mergeWorks({ media: [media('a', 100), { id: 'x:1', kind: 'weird', at: 50 }] })
+  assert.equal(page.counts.all, 2)
+  assert.equal(page.counts.image, 1)
+  assert.equal(Object.prototype.hasOwnProperty.call(page.counts, 'weird'), false)
+})
+
+test('翻页时 counts 仍是全量，不跟着这一页变', () => {
+  const rows = [media('a', 100), media('b', 90), media('c', 80)]
+  const first = mergeWorks({ media: rows, runs: [run('r', 70)], limit: 2 })
+  assert.equal(first.items.length, 2)
+  assert.equal(first.counts.all, 4)
+})

@@ -127,7 +127,7 @@ export default function SharePage({ token }: { token: string }) {
           <span className="share-kicker">模板分享 / SHARED TEMPLATE</span>
           <h1>{template.title}</h1>
           <div className="share-meta">
-            <span>{isFlow ? '工作流工作流' : parsed ? template.contentType : '待解析'}</span>
+            <span>{isFlow ? '工作流' : parsed ? template.contentType : '待解析'}</span>
             <span>{template.platformLabel}</span>
             {template.author ? <span>{template.author}</span> : null}
             {isFlow ? <span>{(template.flowNodes || []).length} 个节点</span> : <span>{formatDuration(template.durationSec)}</span>}
@@ -160,7 +160,7 @@ export default function SharePage({ token }: { token: string }) {
                 ))}
               </ul>
             ) : null}
-            <p className="share-note">这是工作流上另存的工作流。要在自己的工作流里照着搭一遍，需要登录 VisionQA 后套用这条模板。</p>
+            <p className="share-note">这条模板是从一条工作流另存下来的。要照它搭一遍，登录 VisionQA 后在模板库点「在工作流打开」，会开出一张结构相同的新工作流，把输入换成自己的素材就能跑。</p>
           </Block>
         ) : (
           <>

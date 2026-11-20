@@ -6,6 +6,15 @@
   color:var(--muted); font-size: var(--text-2xs); cursor:pointer;
 }
 .works-chip.is-active { color:var(--ink); border-color:var(--line-strong); background:var(--surface-raised); }
+/* 每一栏的条数（r272）：比标签弱一档（数字是辅助信息），选中时跟着提亮；等宽数字，切筛选时不抖 */
+.works-chip-count { margin-left:4px; font-family:var(--font-mono); font-size:var(--text-2xs); color:var(--faint); }
+.works-chip.is-active .works-chip-count { color:var(--ink-soft); }
+/* 一条都没有的那一栏压暗一档：扫一眼就知道「视频这栏是空的」，不用点进去确认 */
+.works-chip.is-zero { color:var(--faint); }
+.works-chip.is-zero .works-chip-count { color:var(--faint); }
+/* 已经选中它（例如正停在这条空栏里）就不再压暗，否则像是被禁用了 */
+.works-chip.is-active.is-zero { color:var(--ink); }
+.works-chip.is-active.is-zero .works-chip-count { color:var(--ink-soft); }
 .works-count { margin-left:auto; font-size:13px; color:var(--faint); font-family:var(--font-mono); }
 .works-error { margin:0; color:var(--warn); font-size:14px; }
 .works-empty {
@@ -14,6 +23,8 @@
 }
 .works-empty strong { display:block; font-size:16px; margin-bottom:4px; }
 .works-empty p { margin:0; color:var(--muted); font-size:14px; }
+/* 空状态里那条回「全部」的路：与说明隔 12px，别和文字挤在一起 */
+.works-empty-action { margin-top:12px; }
 
 .works-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; align-items:start; }
 .works-card { display:flex; flex-direction:column; gap:8px; min-width:0; }

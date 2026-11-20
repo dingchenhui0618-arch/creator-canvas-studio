@@ -1611,7 +1611,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
             <Palette onAdd={addFromPalette} onClose={() => setPaletteOpen(false)} disabled={loadState !== 'ready'} />
           ) : null}
 
-          <section className="cv-stage" aria-label="工作流工作流">
+          <section className="cv-stage" aria-label="工作流画布">
             {/* 工作流是从作品某一步被带进来的能力：先写清在帮哪条作品、哪一版，再给两个出口。
                 空白工作流不写——没有作品就别编一条出来。 */}
             {flowProject && !readOnly ? (
