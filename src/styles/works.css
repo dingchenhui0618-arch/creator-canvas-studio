@@ -32,6 +32,29 @@
 .works-empty p { margin:0; color:var(--muted); font-size:14px; }
 /* 空状态里那条回「全部」的路：与说明隔 12px，别和文字挤在一起 */
 .works-empty-action { margin-top:12px; }
+/* 有一处来源没读到（r284）：一行说明 + 一枚「重新读取」，压到跟搜索说明同一档，
+   不抢卡片的注意力，但必须比空状态更早被看到——它解释的就是「为什么这一栏是空的」。 */
+.works-gap {
+  display:flex; flex-wrap:wrap; align-items:flex-start; gap:8px; margin:0; padding:12px;
+  border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface);
+  color:var(--muted); font-size:13px; line-height:1.7;
+}
+.works-gap > svg { flex:none; margin-top:4px; color:var(--warn); }
+.works-gap-copy { flex:1 1 240px; min-width:0; }
+.works-gap-retry {
+  flex:none; min-height:24px; padding:0 8px; border:1px solid var(--line); border-radius:var(--radius-sm);
+  background:transparent; color:var(--ink-soft); font-size:13px; cursor:pointer;
+}
+.works-gap-retry:hover:not(:disabled) { border-color:var(--line-strong); color:var(--ink); }
+.works-gap-retry:disabled { opacity:.6; cursor:default; }
+@media (max-width:560px) {
+  /* 手机上那一行会折成三行，按钮沉到最后单独一行、抬到 32px 好点 */
+  .works-gap { padding:12px; }
+  .works-gap-retry { min-height:32px; padding:0 12px; }
+}
+/* 空状态里的两条路并排（r284）：重新读取与「看全部」 */
+.works-empty-actions { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; }
+
 
 .works-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; align-items:start; }
 .works-card { display:flex; flex-direction:column; gap:8px; min-width:0; }

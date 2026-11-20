@@ -232,3 +232,73 @@ test('搜作品：路由把 q 转给 listWorks，前端把 q 放进查询串', a
   const client = fs.readFileSync(new URL('../src/api/works.ts', import.meta.url), 'utf8')
   assert.match(client, /query\.set\('q'/)
 })
+// ---------- r284：读不到 ≠ 没有 ----------
+
+test('degraded 跟着一页一起回去，读到的来源不留空串', () => {
+  const page = mergeWorks({
+    media: [media('a', 100)],
+    degraded: { canvas: '无限画布暂时连不上', runs: '   ', media: '' },
+  })
+  assert.deepEqual(page.degraded, { canvas: '无限画布暂时连不上' })
+})
+
+test('都读到了就是空的 degraded（界面据此不喊一句话）', () => {
+  assert.deepEqual(mergeWorks({ media: [media('a', 100)] }).degraded, {})
+  assert.deepEqual(mergeWorks({ degraded: undefined }).degraded, {})
+})
+
+test('读不到的那一处不影响别的来源：图还是图，counts 不会把缺口算成 0 条作品', () => {
+  const page = mergeWorks({ media: [media('a', 100)], degraded: { canvas: '画布挂了' } })
+  assert.equal(page.items.length, 1)
+  assert.equal(page.counts.all, 1)
+  // 0 是「这一类一条都没有」，界面对照 degraded 才知道它其实是「没读到」
+  assert.equal(page.counts.canvas, 0)
+  assert.equal(page.degraded.canvas, '画布挂了')
+})
+
+test('翻页时 degraded 照旧带着（不能只在第一页说）', () => {
+  const rows = [media('a', 100), media('b', 90), media('c', 80)]
+  const first = mergeWorks({ media: rows, limit: 2, degraded: { canvas: '画布挂了' } })
+  const second = mergeWorks({ media: rows, limit: 2, before: first.cursor, degraded: { canvas: '画布挂了' } })
+  assert.equal(second.items.length, 1)
+  assert.equal(second.degraded.canvas, '画布挂了')
+})
+
+test('超过扫描上限时按 mtime 取最新的，不按目录里碰巧的顺序', async () => {
+  const fs = await import('node:fs')
+  const os = await import('node:os')
+  const path = await import('node:path')
+  const { newestNames } = await import('../server/works-feed.mjs')
+  const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'vq-works-mtime-'))
+  try {
+    // 名字按字母排序与时间顺序相反：老的那份叫 z，新的那份叫 a
+    const specs = [{ name: 'z.json', at: Date.now() - 3_000_000 }, { name: 'm.json', at: Date.now() - 1_000_000 }, { name: 'a.json', at: Date.now() }]
+    for (const spec of specs) {
+      const file = path.join(dir, spec.name)
+      await fs.promises.writeFile(file, '{}')
+      await fs.promises.utimes(file, new Date(spec.at), new Date(spec.at))
+    }
+    assert.deepEqual(await newestNames(dir, specs.map((spec) => spec.name), 2), ['a.json', 'm.json'])
+    // 上限比文件多就是全给
+    assert.equal((await newestNames(dir, specs.map((spec) => spec.name), 10)).length, 3)
+    // 名字刚好被删掉：排到最后，但不能把清单弄丢
+    const kept = await newestNames(dir, ['ghost.json', 'a.json'], 2)
+    assert.deepEqual(kept, ['a.json', 'ghost.json'])
+  } finally {
+    await fs.promises.rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('作品流接线：三个来源各自回 { items, error }，路由把整页（含 degraded）交出去', async () => {
+  const fs = await import('node:fs')
+  const feed = fs.readFileSync(new URL('../server/works-feed.mjs', import.meta.url), 'utf8')
+  // 每一处读失败只影响自己那一栏
+  assert.match(feed, /if \(error\?\.code === 'ENOENT'\) return \{ items: \[\], error: '' \}/)
+  assert.match(feed, /error: '工作流的运行记录这次没读出来'/)
+  assert.match(feed, /if \(!result\.ok\) return \{ items: \[\], error:/)
+  // 三处并行读，一处坏不能把整条流拖成 500
+  assert.match(feed, /Promise\.all\(\[mediaItems\(user\.id\), canvasItems\(user\), runItems\(user\)\]\)/)
+  const route = fs.readFileSync(new URL('../server/routes/works.mjs', import.meta.url), 'utf8')
+  assert.match(route, /sendJson\(res, 200, \{ ok: true, \.\.\.result \}\)/)
+})
+

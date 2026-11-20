@@ -29,16 +29,44 @@ function safeId(value) {
   return String(value || '')
 }
 
+/**
+ * 目录里的名字是文件系统的顺序，不是时间的顺序（r284）。
+ * 只扫前 400 个名字，超了以后「最近 400 份」就成了一句谎话——可能把昨天那张漏掉、留着三个月前的。
+ * 所以超过上限时先按 mtime 取最新的 400 个；没超就照原样读，不多做 400 次 stat。
+ */
+export async function newestNames(dir, names, limit) {
+  const stats = await Promise.all(names.map(async (name) => {
+    try {
+      const info = await fs.promises.stat(path.join(dir, name))
+      return { name, at: Number(info.mtimeMs) || 0 }
+    } catch {
+      // 刚好被删掉 / 读不到：排到最后，别让一条坏名字带掉整份清单
+      return { name, at: 0 }
+    }
+  }))
+  stats.sort((a, b) => (b.at - a.at) || String(a.name).localeCompare(String(b.name)))
+  return stats.slice(0, Math.max(0, limit)).map((row) => row.name)
+}
+
+/**
+ * 三处来源各读各的，任何一处读不到都不许变成「这一类没有作品」（r284）。
+ * 画布服务挂了被画成「你画布里没出过东西」，等于告诉用户他的作品没了——
+ * 这与作品流自己的口径（空 / 坏要分开）相反。所以每个来源都回 `{ items, error }`，
+ * error 是**给用户看的那一句**，由 mergeWorks 原样带到界面。
+ */
 async function mediaItems(userId) {
+  const dir = taskDir()
   let names = []
   try {
-    names = await fs.promises.readdir(taskDir())
-  } catch {
-    return []
+    names = (await fs.promises.readdir(dir)).filter((name) => name.endsWith('.json'))
+  } catch (error) {
+    // 新账号一张都没生成过时这个目录根本不存在——那是「还没有」，不是「读不到」。
+    if (error?.code === 'ENOENT') return { items: [], error: '' }
+    return { items: [], error: '快捷创作的作品这次没读出来' }
   }
+  if (names.length > TASK_SCAN) names = await newestNames(dir, names, TASK_SCAN)
   const rows = []
   for (const name of names.slice(0, TASK_SCAN)) {
-    if (!name.endsWith('.json')) continue
     let task = null
     try {
       task = JSON.parse(await fs.promises.readFile(path.join(taskDir(), name), 'utf8'))
@@ -61,7 +89,7 @@ async function mediaItems(userId) {
       model: modelLabel(task.model),
     })
   }
-  return rows
+  return { items: rows, error: '' }
 }
 
 // 一次运行在作品流里能给出的东西：它跑了哪条流程、成没成、花了多久，以及**最后一段文本输出**。
@@ -150,8 +178,13 @@ export function runWorkItem(run) {
 }
 
 async function runItems(user) {
-  const { items } = await listRuns({ ownerId: user.id, limit: 50 })
-  return items.map((run) => runWorkItem(run)).filter(Boolean)
+  try {
+    const { items } = await listRuns({ ownerId: user.id, limit: 50 })
+    return { items: items.map((run) => runWorkItem(run)).filter(Boolean), error: '' }
+  } catch {
+    // 运行记录存在本机 JSON 里：读不出来是这台机器/盘的事，不是「你没跑过工作流」
+    return { items: [], error: '工作流的运行记录这次没读出来' }
+  }
 }
 
 // 界面上的模型名：用产品叫法，不把内部 id（尤其带上游前缀的）原样端给用户。
@@ -221,7 +254,9 @@ function canvasNodeItems(canvas, nodes) {
 
 async function canvasItems(user) {
   const result = await listCanvases()
-  if (!result.ok) return []
+  // 无限画布是另一个应用：它没连上时 listCanvases 已经翻成一句中文（server/bdc.mjs 的 canvasErrorMessage）。
+  // 这句原样交出去，界面才能说「没读到」而不是「你没有」。
+  if (!result.ok) return { items: [], error: String(result.error || '无限画布这次没连上') }
   const mine = visibleCanvases(user, result.canvases)
   const cards = mine.map((canvas) => ({
     id: 'canvas:' + canvas.id,
@@ -242,7 +277,7 @@ async function canvasItems(user) {
     if (!loaded) return
     media.push(...canvasNodeItems(mine[index], loaded.nodes).slice(0, 24))
   })
-  return [...cards, ...media]
+  return { items: [...cards, ...media], error: '' }
 }
 
 /**
@@ -268,7 +303,20 @@ function haystack(item) {
     .toLowerCase()
 }
 
-export function mergeWorks({ media = [], runs = [], canvases = [], kind = 'all', limit = DEFAULT_LIMIT, before = '', q = '' } = {}) {
+// 哪几个来源这次没读到（r284）：键是来源，值是给用户看的那一句。
+// 界面据此把数字写成「—」、空状态写成「没读到」，而不是把读失败说成「你没有」。
+export const WORKS_SOURCES = ['media', 'runs', 'canvas']
+
+function cleanDegraded(value) {
+  const out = {}
+  for (const key of WORKS_SOURCES) {
+    const message = String(value?.[key] || '').trim()
+    if (message) out[key] = message
+  }
+  return out
+}
+
+export function mergeWorks({ media = [], runs = [], canvases = [], degraded = {}, kind = 'all', limit = DEFAULT_LIMIT, before = '', q = '' } = {}) {
   const wanted = String(kind || 'all')
   if (!WORKS_KINDS.includes(wanted)) return { error: 'WORKS_KIND' }
   const size = Math.min(MAX_LIMIT, Math.max(1, Number(limit) || DEFAULT_LIMIT))
@@ -294,12 +342,17 @@ export function mergeWorks({ media = [], runs = [], canvases = [], kind = 'all',
   }
   const page = items.slice(start, start + size)
   const cursor = start + size < items.length && page.length ? page[page.length - 1].at + ':' + page[page.length - 1].id : null
-  return { items: page, total: items.length, cursor, counts, scanned, q: needle }
+  return { items: page, total: items.length, cursor, counts, scanned, q: needle, degraded: cleanDegraded(degraded) }
 }
 
 export async function listWorks(user, options = {}) {
-  const [media, canvases] = await Promise.all([mediaItems(user.id), canvasItems(user)])
-  return mergeWorks({ media, runs: await runItems(user), canvases, ...options })
+  // 三个来源并行读，谁也拦不住谁：一处慢/坏不能把整条作品流拖成 500
+  const [media, canvases, runs] = await Promise.all([mediaItems(user.id), canvasItems(user), runItems(user)])
+  const degraded = {}
+  if (media.error) degraded.media = media.error
+  if (runs.error) degraded.runs = runs.error
+  if (canvases.error) degraded.canvas = canvases.error
+  return mergeWorks({ media: media.items, runs: runs.items, canvases: canvases.items, degraded, ...options })
 }
 
 export function publicWork(item) {

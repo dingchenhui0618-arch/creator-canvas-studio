@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Clapperboard, Download, Image as ImageIcon, Loader2, Play, Search, Workflow, X } from 'lucide-react'
+import { AlertCircle, Clapperboard, Download, Image as ImageIcon, Loader2, Play, Search, Workflow, X } from 'lucide-react'
 import MediaLightbox from './MediaLightbox'
-import { listWorks, type WorkItem, type WorksCounts } from '../api/works'
+import { listWorks, type WorkItem, type WorksCounts, type WorksDegraded } from '../api/works'
 import { safeFetch } from '../api/client'
 import { deleteMediaTask, listMediaAssets, uploadMediaAsset } from '../api/media-gen'
 import type { MediaAsset } from '../api/media-gen'
@@ -9,7 +9,20 @@ import { probeMediaFile } from '../domain/media-file'
 import { writeRefHandoff } from '../domain/media-handoff'
 import { refFileName } from '../domain/media-refs'
 import type { RefKind } from '../domain/media-refs'
-import { readWorksFilter, readWorksQuery, runStatusLabel, workDetailLabel, WORKS_QUERY_MAX, writeWorksFilter, writeWorksQuery, type WorksFilter } from '../domain/works-view'
+import {
+  readWorksFilter,
+  readWorksQuery,
+  runStatusLabel,
+  workDetailLabel,
+  worksChipCount,
+  worksEmptyKind,
+  worksKindGap,
+  worksSourceGaps,
+  WORKS_QUERY_MAX,
+  writeWorksFilter,
+  writeWorksQuery,
+  type WorksFilter,
+} from '../domain/works-view'
 import '../styles/works.css'
 
 const FILTERS: Array<{ value: WorksFilter; label: string }> = [
@@ -43,6 +56,11 @@ const FILTER_HINT: Record<WorksFilter, string> = {
 }
 
 const REF_ROUTE = '#/agents'
+
+/** 来源给的那句话自己带句号（服务端就是这么写的），拼进我们的句子里之前先去掉，免得「。。」 */
+function stripPeriod(text: string): string {
+  return String(text || '').replace(/[。.；;\s]+$/, '')
+}
 
 /** 删完之后说一句「释放了多少」：单位跟服务端字节数一致，不四舍五入成 0 MB。 */
 function mbText(bytes: number): string {
@@ -105,6 +123,8 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
   const [total, setTotal] = useState(0)
   // 每一类各几条（r272）：筛到空的一类时，靠 counts.all 才分得清「这一类没有」与「一条都没有」
   const [counts, setCounts] = useState<WorksCounts>(NO_COUNTS)
+  // 哪几处来源这次没读到（r284）：读不到不许画成「没有」，画布服务挂了不能等于「画布里没出过东西」
+  const [degraded, setDegraded] = useState<WorksDegraded>({})
   const [loading, setLoading] = useState(true)
   const [more, setMore] = useState(false)
   const [error, setError] = useState('')
@@ -121,6 +141,10 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
   const [deleting, setDeleting] = useState('')
 
   const showCounts = counts.all > 0 || !loading
+  // 读不到的来源不写数字（写 0 会被当成「这一类是空的」），空状态也换一句话
+  const gaps = worksSourceGaps(degraded)
+  const emptyKind = worksEmptyKind(kind, counts, degraded)
+  const reload = () => void load(kind, '', false, query)
 
   const load = useCallback(async (nextKind: WorksFilter, before = '', append = false, nextQuery = '') => {
     if (append) setMore(true)
@@ -132,6 +156,7 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
       setCursor(page.cursor)
       setTotal(page.total)
       setScanned(Number(page.scanned) || 0)
+      setDegraded(page.degraded || {})
       // 老服务端没有 counts：退回「只知道当前这一类」，空状态就不多说一句别的
       if (page.counts) setCounts(page.counts)
     } catch (caught) {
@@ -352,7 +377,11 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
       <div className="works-bar">
         {/* 每一栏带条数（r272）：不点进去就知道「视频那栏有没有东西」，不用一栏一栏试 */}
         {FILTERS.map((item) => {
-          const zero = showCounts && counts[item.value] === 0
+          // 这一栏的来源这次读到了吗：读不到就写「—」，也不压暗（压暗＝这一类是空的）
+          const gap = worksKindGap(item.value, degraded)
+          const countText = worksChipCount(item.value, counts[item.value], degraded, showCounts)
+          const zero = showCounts && counts[item.value] === 0 && !gap
+          const countTitle = gap || (item.value === 'all' && gaps.length ? '有一处来源没读到，这个总数不完整' : undefined)
           return (
             <button
               key={item.value}
@@ -360,10 +389,18 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
               className={'works-chip' + (kind === item.value ? ' is-active' : '') + (zero ? ' is-zero' : '')}
               onClick={() => setKind(item.value)}
               aria-pressed={kind === item.value}
-              aria-label={showCounts ? item.label + '，' + counts[item.value] + ' 条' : item.label}
+              aria-label={
+                gap
+                  ? item.label + '，这次没读到'
+                  : item.value === 'all' && gaps.length
+                    ? '全部，读到 ' + counts.all + ' 条，有一处来源没读到'
+                    : showCounts
+                      ? item.label + '，' + counts[item.value] + ' 条'
+                      : item.label
+              }
             >
               {item.label}
-              {showCounts ? <span className="works-chip-count">{counts[item.value]}</span> : null}
+              {countText ? <span className="works-chip-count" title={countTitle}>{countText}</span> : null}
             </button>
           )
         })}
@@ -394,8 +431,15 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
             </button>
           ) : null}
         </label>
+        {/* 有来源没读到时不说「共 N 条」：漏了一处的数字不是总数（r284） */}
         <span className="works-count">
-          {loading ? '正在读取…' : (query.trim() ? '匹配 ' + total + ' 条' : '共 ' + total + ' 条')}
+          {loading
+            ? '正在读取…'
+            : query.trim()
+              ? '匹配 ' + total + ' 条'
+              : gaps.length
+                ? '读到 ' + total + ' 条'
+                : '共 ' + total + ' 条'}
         </span>
       </div>
 
@@ -411,6 +455,22 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
         </p>
       ) : null}
 
+      {/* 有一处来源没读到（r284）：先说清是哪一处、那句话怎么讲，再给「重新读取」。
+          以前这里把读失败直接画成「这一类还没有作品」——画布服务挂的那一刻，
+          在画布里出过东西的人会被告知他从来没在画布里出过东西。 */}
+      {gaps.length ? (
+        <p className="works-gap" role="status">
+          <AlertCircle size={14} aria-hidden="true" />
+          <span className="works-gap-copy">
+            {'这次没读到：' + gaps.map((gap) => stripPeriod(gap.message)).join('；')}
+            {'。这不是「那里没有作品」——别的来源照常显示，读不到的那一部分数字写「—」。'}
+          </span>
+          <button type="button" className="works-gap-retry" onClick={reload} disabled={loading}>
+            {loading ? '读取中…' : '重新读取'}
+          </button>
+        </p>
+      ) : null}
+
       {error ? <p className="works-error">{error}</p> : null}
       {note ? <p className={'works-note' + (noteError ? ' is-error' : '')}>{note}</p> : null}
 
@@ -418,7 +478,29 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
           「视频这一栏没有」被写成「还没有作品」，等于告诉一个做了 200 张图的人「你什么都没做过」，
           还顺手把人指去重新生成。现在这一栏有别的类，就给一句话 + 一条回「全部」的路。 */}
       {!loading && !items.length && !error ? (
-        query.trim() && counts.all === 0 ? (
+        emptyKind === 'unreadable' ? (
+          <div className="works-empty">
+            <strong>{kind === 'all' ? '作品流这次没读全' : FILTER_NOUN[kind] + '这次没读到'}</strong>
+            <p>
+              {kind === 'all'
+                ? '这次没读到：' + gaps.map((gap) => stripPeriod(gap.message)).join('；') + '。所以现在还不能说「还没有作品」。'
+                : stripPeriod(worksKindGap(kind, degraded) || '读不到') + '。这不是「这里没有作品」'}
+              {kind !== 'all' && counts.all > 0
+                ? '；别的栏目现在有 ' + counts.all + ' 条，切回「全部」就能看到。'
+                : '；过一会儿点「重新读取」再试。'}
+            </p>
+            <span className="works-empty-actions">
+              <button type="button" className="vq-button works-empty-action" onClick={reload} disabled={loading}>
+                重新读取
+              </button>
+              {kind !== 'all' && counts.all > 0 ? (
+                <button type="button" className="vq-button vq-button--ghost works-empty-action" onClick={() => setKind('all')}>
+                  看全部 {counts.all} 条
+                </button>
+              ) : null}
+            </span>
+          </div>
+        ) : query.trim() && counts.all === 0 ? (
           <div className="works-empty">
             <strong>没有匹配「{query.trim()}」的作品</strong>
             <p>

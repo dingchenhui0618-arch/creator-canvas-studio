@@ -18,6 +18,7 @@ import { ASSET_LIMITS, assetUsage, listMediaAssets, locateMediaAsset, readMediaA
 import { listMediaModels, resolveSelection } from '../media-models.mjs'
 import { DOWNLOAD_TIMEOUT_MS, downloadAsset, extensionFor, extractVideoUrl, progressOf } from '../media-fetch.mjs'
 import { readBinaryBody } from '../body-reader.mjs'
+import { writeFileAtomic } from '../atomic-write.mjs'
 import { readBody, sendJson } from './_shared.mjs'
 
 // 出图 / 出视频能选哪些模型、每个模型什么规格，全在 server/media-models.mjs：
@@ -119,12 +120,12 @@ function publicTask(task) {
   }
 }
 
+// 写任务元数据：原子写 + 撞到「文件正被读」时重试（r284）。
+// 这里失败一次，代价不是一条日志：这条任务会永远停在「进行中」，用户已经付过的积分也看不到结果。
+// 最近生成 / 作品流每 2.5 秒轮询同一个文件，Windows 上 rename 覆盖被打开的旧文件会直接 EPERM。
 async function writeTask(task) {
   await fsp.mkdir(taskMetaDir(), { recursive: true, mode: 0o700 })
-  const target = taskMetaFile(task.id)
-  const tmp = target + '.' + process.pid + '.tmp'
-  await fsp.writeFile(tmp, JSON.stringify(task, null, 2), { mode: 0o600 })
-  await fsp.rename(tmp, target)
+  await writeFileAtomic(taskMetaFile(task.id), JSON.stringify(task, null, 2))
 }
 
 async function readTask(id) {

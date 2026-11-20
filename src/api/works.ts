@@ -28,6 +28,12 @@ export type WorkItem = {
 /** 每一类各有多少条（r272）：先数全部再按筛选切，所以筛到某一类时也知道其他类有没有东西。 */
 export type WorksCounts = { all: number; image: number; video: number; run: number; canvas: number }
 
+/** 三个来源：快捷创作的图与视频、工作流的运行记录、无限画布。 */
+export type WorksSource = 'media' | 'runs' | 'canvas'
+
+/** 哪几个来源这次没读到（r284），值是给用户看的那一句；都读到了就是空对象。 */
+export type WorksDegraded = Partial<Record<WorksSource, string>>
+
 export type WorksPage = {
   ok: true
   items: WorkItem[]
@@ -38,6 +44,8 @@ export type WorksPage = {
   scanned?: number
   /** 服务端认的那个关键词（截断 / 小写之后），用来确认这一页答的是不是当前这个问题 */
   q?: string
+  /** 这次有来源没读到（r284）：界面不能把「读不到」画成「没有」，数字写「—」、空状态说没读到 */
+  degraded?: WorksDegraded
 }
 
 /**
