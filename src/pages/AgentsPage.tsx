@@ -60,6 +60,8 @@ import { probeMediaFile } from '../domain/media-file'
 import { peekRefHandoff, takeRefHandoff } from '../domain/media-handoff'
 import type { RefHandoff } from '../domain/media-handoff'
 import { planRefAttach, refAttachNote, refFileName } from '../domain/media-refs'
+import { planTaskRetry, retryCredits } from '../domain/media-retry'
+import type { MediaRetryInput } from '../domain/media-retry'
 import type { RefKind } from '../domain/media-refs'
 import type { MediaAsset, MediaKind, MediaModel, MediaModelList, MediaTask } from '../api/media-gen'
 import { getCredits, getModelService, recheckModelService, type CreditsResponse, type ModelServiceState } from '../api/credits'
@@ -962,29 +964,27 @@ function MediaComposer({
     }
   }
 
-  const submit = async () => {
-    const text = prompt.trim()
-    if (!text || active || !model || !mode) return
-    if (assets.length < minRefs) {
-      setError('「' + mode.label + '」需要先加参考素材')
-      return
-    }
+  // 真正交一次生成（r283）：界面上的「生成」「再生成一次」「最近生成里的再来一次」都走这一段。
+  // 参数由调用方给死，不读闭包里的 state——「把旧任务的参数填回输入框、紧接着提交」那种调用
+  // 如果读 state，拿到的是还没生效的上一帧，等于用错参数又扣一次积分。
+  const runGeneration = async (input: MediaRetryInput, priced: number) => {
+    if (active) return
     setBusy(true)
     setError('')
     setPollError('')
     setTask(null)
     try {
-      const input = {
-        prompt: text,
-        model: model.id,
-        mode: mode.id,
-        ratio,
+      const payload = {
+        prompt: input.prompt,
+        model: input.modelId,
+        mode: input.modeId,
+        ratio: input.ratio,
         // 文生模式不收素材：素材留在托架里不丢，但这次不发给上游（服务端也会拒）
-        assets: maxRefs > 0 ? assets.map((asset) => asset.id) : [],
+        assets: input.assetIds,
       }
       const response = image
-        ? await generateMediaImage(input)
-        : await generateMediaVideo({ ...input, duration, resolution })
+        ? await generateMediaImage(payload)
+        : await generateMediaVideo({ ...payload, duration: input.duration, resolution: input.resolution })
       setTask(response.task)
       if (response.task.status !== 'processing') setRecentToken((value) => value + 1)
       if (response.task.status === 'failed') setError(response.task.error || '生成失败')
@@ -994,7 +994,7 @@ function MediaComposer({
         body?: { code?: string; balance?: number; cost?: number; needed?: number }
       }
       if (failure.body?.code === 'CREDIT_INSUFFICIENT') {
-        setError('积分不足：本次需要 ' + (failure.body.cost ?? model.credits) + ' 积分，当前余额 ' + (failure.body.balance ?? '—') + ' 积分。')
+        setError('积分不足：本次需要 ' + (failure.body.cost ?? priced) + ' 积分，当前余额 ' + (failure.body.balance ?? '—') + ' 积分。')
       } else {
         setError(failure.message || '生成失败')
       }
@@ -1005,13 +1005,56 @@ function MediaComposer({
     }
   }
 
-  const reset = () => {
-    if (active) return
+  const submit = async () => {
+    const text = prompt.trim()
+    if (!text || active || !model || !mode) return
+    if (assets.length < minRefs) {
+      setError('「' + mode.label + '」需要先加参考素材')
+      return
+    }
+    await runGeneration(
+      {
+        prompt: text,
+        modelId: model.id,
+        modeId: mode.id,
+        ratio,
+        duration,
+        resolution,
+        assetIds: maxRefs > 0 ? assets.map((asset) => asset.id) : [],
+      },
+      model.credits,
+    )
+  }
+
+  // 「再来一次」（r283）：失败的那条不用回去重填提示词，按它自己记下的参数原样再交一次。
+  // 上游超时、5xx 这类失败换个时间点常常就过了，所以重试比删掉更该是失败行的第一个动作。
+  // 参数怎么搬由 domain/media-retry 算（模型下线、比例 / 时长已经不在当前规格里的兜底都在那儿），
+  // 这里只管两件事：把参数填回输入框让人看见跑的是哪一份，然后提交。
+  // 点了就扣积分，按钮上已经写清扣多少；失败照旧全额退回。
+  const retryFromTask = async (item: MediaTask) => {
+    if (active) {
+      onToast?.('先等这一条跑完，再点再来一次')
+      return
+    }
+    const plan = planTaskRetry(item, catalog)
+    if (!plan.ok) {
+      setRecentError(plan.reason)
+      onToast?.(plan.reason)
+      return
+    }
+    setPrompt(plan.input.prompt)
+    setSelected({
+      model: plan.input.modelId,
+      mode: plan.input.modeId,
+      ratio: plan.input.ratio,
+      duration: plan.input.duration,
+      resolution: plan.input.resolution,
+    })
+    setAssets(plan.assets)
+    setRefError('')
+    setRecentError('')
     setZoomTask(null)
-    setTask(null)
-    setError('')
-    setPollError('')
-    setElapsed(0)
+    await runGeneration(plan.input, retryCredits(item, catalog, image ? 5 : 15))
   }
 
   const title = image ? '生图' : '生视频'
@@ -1091,11 +1134,27 @@ function MediaComposer({
                                 下载
                               </a>
                             </>
-                          ) : (
-                            <span className="agx-media-recent-state">
-                              {item.status === 'failed' ? '失败 · 已退 ' + item.credits.cost + ' 积分' : '进行中'}
-                            </span>
-                          )}
+                          ) : item.status === 'processing' ? (
+                            <span className="agx-media-recent-state">进行中</span>
+                          ) : null}
+                          {/* 再来一次（r283）：失败行的第一个动作该是重试，不是删掉。
+                              点了就按这条的参数再交一次，按钮上写清会再扣多少积分。
+                              排在最前（删掉在它右边）——重试是失败那一行最该做的事。 */}
+                          {item.status === 'failed' ? (
+                            <button
+                              type="button"
+                              className="agx-media-recent-retry"
+                              onClick={() => void retryFromTask(item)}
+                              disabled={active || deletingId === item.id}
+                              title={
+                                '按这条的提示词与参数再生成一次：会再扣 ' +
+                                retryCredits(item, catalog, price) +
+                                ' 积分，失败照旧全额退回'
+                              }
+                            >
+                              再来一次
+                            </button>
+                          ) : null}
                           {/* 删掉这条（r282）：失败的那几条与不要的成品总得有个出口。
                               还在跑的锁住；删之前要点两下，删的是记录与文件，不退积分。 */}
                           <button
@@ -1112,9 +1171,12 @@ function MediaComposer({
                           >
                             {deletingId === item.id ? '删除中…' : armedTaskDelete === item.id ? '确认删掉' : '删掉'}
                           </button>
-                          {item.status === 'failed' && item.error ? (
+                          {/* 失败那行的「失败 · 已退 N 积分」并到原因这一行（r283）：
+                              那一行只有 190 来 px 宽，「再来一次」和「删掉」要能并排站得下，
+                              状态文字就得让位到第二行，跟上游原话连成一句。 */}
+                          {item.status === 'failed' ? (
                             <p className="agx-media-recent-why" title={item.error}>
-                              {item.error}
+                              {'失败 · 已退 ' + item.credits.cost + ' 积分' + (item.error ? ' · ' + item.error : '')}
                             </p>
                           ) : null}
                         </li>
@@ -1250,9 +1312,17 @@ function MediaComposer({
                   <Download size={13} />
                   下载{image ? '图片' : '视频'}
                 </a>
-                <button type="button" className="vq-button vq-button--ghost" onClick={reset} title="清掉这次结果，按同样的提示词再来一次">
+                {/* 「再生成」以前只是把结果收掉、并不真的再跑一次（标题却写着「按同样的提示词再来一次」）：
+                    r283 起它真的照这条任务再交一次，按钮上写清会再扣多少积分。 */}
+                <button
+                  type="button"
+                  className="vq-button vq-button--ghost"
+                  onClick={() => void retryFromTask(task)}
+                  disabled={active}
+                  title="按这条的提示词、参数与参考素材再生成一次：会再扣积分，失败照旧全额退回"
+                >
                   <RotateCcw size={13} />
-                  再生成
+                  再生成一次 · {retryCredits(task, catalog, price)} 积分
                 </button>
               </span>
             </div>
@@ -1270,6 +1340,20 @@ function MediaComposer({
                   ? '已全额退还 ' + task.credits.cost + ' 积分（任务号 ' + task.id + '）'
                   : '退款未完成：账本未确认退回，请联系管理员并带上任务号 ' + task.id}
               </small>
+              {/* 失败当场就能重来（r283）：以前这里只有一句原因，要重来得自己把提示词、比例、
+                  参考素材全部重填一遍，多数人干脆就不试了。 */}
+              <span className="agx-media-error-actions">
+                <button
+                  type="button"
+                  className="vq-button vq-button--ghost"
+                  onClick={() => void retryFromTask(task)}
+                  disabled={active}
+                  title="按这条的提示词、参数与参考素材再生成一次：会再扣积分，失败照旧全额退回"
+                >
+                  <RotateCcw size={13} />
+                  再来一次 · {retryCredits(task, catalog, price)} 积分
+                </button>
+              </span>
             </div>
           </div>
         ) : null}

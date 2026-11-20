@@ -95,8 +95,12 @@ test('结果区点开看大图（r260）：矮屏上 1:1 的图不再只能看�
   assert.match(lightbox, /role="dialog"/)
   assert.match(lightbox, /aria-modal="true"/)
   assert.ok(page.includes("event.key === 'Escape'"), 'Esc 关不掉浮层')
-  // 关掉浮层的三个出口：叉、关闭按钮、Esc；「再生成 / 清掉结果」也要顺手带上
-  assert.match(page, /const reset = \(\) => \{\s*if \(active\) return\s*setZoomTask\(null\)/)
+  // 关掉浮层的三个出口：叉、关闭按钮、Esc；面板上要重跑的那一下（r283 的「再生成一次」）也要顺手收掉
+  assert.match(
+    page,
+    /const retryFromTask = async \(item: MediaTask\) => \{[\s\S]{0,1600}?setZoomTask\(null\)/,
+    '重跑之前要先把浮层收掉',
+  )
   // 浮层必须是整页固定层，压过窄屏历史弹层（z-index 60）
   const box = rule(lightboxCss, '.vq-lightbox')
   assert.match(box, /position: fixed/)

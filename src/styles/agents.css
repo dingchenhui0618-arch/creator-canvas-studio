@@ -2207,6 +2207,13 @@
   font-size: var(--text-mono);
   line-height: 1.5;
 }
+/* 失败当场重来（r283）：按钮跟在原因下面一行，别跟红字挤在同一行里读不清 */
+.agx-media-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
 /* 结果卡（r256）：它现在排在输入卡下面的结果流里，不再挤在表单内部，
    所以要有自己的一层：与对话消息同一种卡片（白面 + 1px 线 + 中圆角）。 */
 .agx-media-result {
@@ -2459,6 +2466,31 @@
   font-family: var(--font-mono);
   font-size: var(--text-mono);
 }
+/* 再来一次（r283）：失败行的第一个动作。跟「用作参考」同样轻，但它是按钮不是链接——
+   带一圈细边，和「删掉」区分开（删掉自己靠 margin-left:auto 留在最右）。 */
+.agx-media-recent-retry {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 var(--space-1);
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: var(--text-mono);
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+}
+.agx-media-recent-retry:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+.agx-media-recent-retry:disabled {
+  color: var(--faint);
+  cursor: default;
+  opacity: 0.6;
+}
 /* 删掉这条（r282）：平时跟「用作参考」同样轻，上膛之后才变成危险色——
    删除是这一行里唯一不可逆的动作，不能跟其它按钮长得一样。
    24px 高是仓库里「准」尺寸的触摸目标，和 r203 补过的那批一致。 */
@@ -2495,6 +2527,7 @@
 @media (max-width: 560px) {
   .agx-media-recent-ref,
   .agx-media-recent-download,
+  .agx-media-recent-retry,
   .agx-media-recent-del {
     display: inline-flex;
     align-items: center;
