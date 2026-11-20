@@ -65,7 +65,7 @@
 ## 门禁
 
 测试 1880/1880（+3：删除成功与文件消失、四种拒法、界面接线）、lint 0 error / 24 warning（654 文件）、
-tsc -b 干净、构建入口 index-DLgVI1ej.js（780.74 kB，gzip 232.28 kB）。
+tsc -b 干净、构建入口 index-7D9l2Rw_.js（780,748 B）。
 
 ## 截图
 
