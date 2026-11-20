@@ -825,7 +825,7 @@ export async function updateProject(
  * 只改这一条作品的 shots，模板一个字不动——分镜是模板的，画面是你的。
  * 传空等于撤销这一镜：不改那张图本身（它可能还被别的镜、别的作品用着）。
  */
-export async function setProjectShotFrame(id, shotNo, media, user = null) {
+export async function setProjectShotFrame(id, shotNo, media, user = null, options = {}) {
   const list = await loadAll()
   const found = list.find((item) => item.id === id && canAccess(item, user))
   if (!found) return { status: 404, code: 'PROJECT_NOT_FOUND', error: '作品不存在或已被删除' }
@@ -833,17 +833,18 @@ export async function setProjectShotFrame(id, shotNo, media, user = null) {
   const key = String(shotNo)
   const before = frames[key] || null
   const next = String(media || '')
+  const from = String(options?.from || '')
   let changed = false
   if (!next) {
     if (before) {
       delete frames[key]
       changed = true
     }
-  } else if (!before || before.media !== next) {
+  } else if (!before || before.media !== next || (from && before.from !== from)) {
     if (Object.keys(frames).length >= MAX_SHOT_FRAMES) {
       return { status: 409, code: 'SHOT_FRAMES_LIMIT', error: '这条作品记的画面已经到 ' + MAX_SHOT_FRAMES + ' 张，先撤掉几镜' }
     }
-    frames[key] = { media: next, at: new Date().toISOString() }
+    frames[key] = from ? { media: next, at: new Date().toISOString(), from } : { media: next, at: new Date().toISOString() }
     changed = true
   }
   if (changed) {
@@ -852,6 +853,53 @@ export async function setProjectShotFrame(id, shotNo, media, user = null) {
     await persist(list)
   }
   return { status: 200, changed, project: normalize(found), shots: shotFramesView(frames) }
+}
+
+/**
+ * 一次贴回多镜（r278）：工作流跑完按分镜画了 8 张，就别叫页面发 8 次请求、也别让作品文件写 8 遍。
+ *
+ * entries = [{ shotNo, media, from }]：每一条都已经过了归属与镜头号校验（调用方核过图是自己的、
+ * 镜号在这条作品的分镜里）。这里只做记录本身：
+ *  - 同一镜已经记着这次运行的同一张图 → 不动（kept），重贴一次不该重复占位置；
+ *  - 这一镜原来有画面（手贴的或上一次运行画的）→ 换掉，并回给页面说清换了几镜（overwritten）；
+ *  - 超出 MAX_SHOT_FRAMES → 这一镜不动，记一条 refused 回来，不静默丢。
+ * 只写一次盘，不论贴了几镜。
+ */
+export async function setProjectShotFrames(id, entries, user = null) {
+  const list = await loadAll()
+  const found = list.find((item) => item.id === id && canAccess(item, user))
+  if (!found) return { status: 404, code: 'PROJECT_NOT_FOUND', error: '作品不存在或已被删除' }
+  const frames = normalizeShotFrames(found.shots)
+  const kept = []
+  const applied = []
+  const overwritten = []
+  const refused = []
+  const at = new Date().toISOString()
+  for (const entry of Array.isArray(entries) ? entries : []) {
+    const shotNo = Math.max(1, Math.round(Number(entry?.shotNo) || 0))
+    const media = String(entry?.media || '')
+    const from = String(entry?.from || '')
+    if (!media) continue
+    const key = String(shotNo)
+    const before = frames[key] || null
+    if (before && (before.media === media || (from && before.from === from))) {
+      kept.push(shotNo)
+      continue
+    }
+    if (!before && Object.keys(frames).length >= MAX_SHOT_FRAMES) {
+      refused.push({ shotNo, reason: '这条作品记的画面已经到 ' + MAX_SHOT_FRAMES + ' 张，先撤掉几镜' })
+      continue
+    }
+    if (before) overwritten.push(shotNo)
+    frames[key] = from ? { media, at, from } : { media, at }
+    applied.push({ shotNo, media })
+  }
+  if (applied.length) {
+    found.shots = frames
+    found.updatedAt = at
+    await persist(list)
+  }
+  return { status: 200, changed: applied.length > 0, applied, kept, overwritten, refused, shots: shotFramesView(frames) }
 }
 
 /**

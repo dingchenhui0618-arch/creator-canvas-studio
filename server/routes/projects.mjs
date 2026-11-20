@@ -8,13 +8,17 @@ import path from 'node:path'
 import { sendJson, readBody } from './_shared.mjs'
 import { flowBrief, projectBrief } from '../project-briefs.mjs'
 import { currentUser, isAdmin } from '../auth.mjs'
-import { normalizeShotNo, shotFrameBlock } from '../project-shots.mjs'
+import { normalizeShotNo, planRunAttach, runShotImages, shotFrameBlock } from '../project-shots.mjs'
 import { config } from '../config.mjs'
 import { createTemplateFromProject, getTemplate, listTemplates, reuseTemplate } from '../templates.mjs'
 import { projectTemplateReply } from '../project-template.mjs'
 import { projectTemplateReady } from '../project-template-ready.mjs'
 import { templateOrigin } from '../project-source.mjs'
-import { createFlow, getFlow, hasRunGraph, listRunsByFlows } from '../flows.mjs'
+import { createFlow, getFlow, getRun, hasRunGraph, listRunsByFlows } from '../flows.mjs'
+import { runAssetPath } from '../flow-image.mjs'
+import { projectFlowIds } from '../run-ownership.mjs'
+import { saveUpload } from '../uploads.mjs'
+import { publicError } from '../public-error.mjs'
 import { normalizeProjectScript, scriptPace, scriptView } from '../project-script.mjs'
 import { versionBaseChangesOf, versionChangesOf } from '../version-diff.mjs'
 import { versionCompareView } from '../project-compare.mjs'
@@ -78,6 +82,7 @@ import {
   bindProjectFlow,
   saveProjectScript,
   setProjectShotFrame,
+  setProjectShotFrames,
   saveDeliveryReceipt,
   saveDeliveryReminder,
   saveDeliveryResend,
@@ -112,6 +117,8 @@ import {
 const ITEM = /^\/api\/projects\/([\w-]+)$/
 // 这一版某一镜的画面（v0.9.161）：POST 挂一张、传空撤销
 const SHOT_FRAME = /^\/api\/projects\/([\w-]+)\/shots\/(\d+)$/
+// 把一次运行按分镜画出来的图一次贴回这条作品的分镜（r278）
+const SHOT_FROM_RUN = /^\/api\/projects\/([\w-]+)\/shots\/from-run$/
 // 作品的花费明细（v0.9.66）：合计在详情里，明细单独取，点开才读
 const SPEND = /^\/api\/projects\/([\w-]+)\/spend$/
 const VERSIONS = /^\/api\/projects\/([\w-]+)\/versions$/
@@ -2051,6 +2058,92 @@ export function createProjectsRouter() {
           return true
         }
         sendJson(res, 200, await projectSpendDetail(project, user, { month: String(url.searchParams.get('month') || '') }))
+        return true
+      }
+
+      // 一次运行按分镜画出来的图，一次贴回分镜（r278）。
+      // 三道核对：作品是我的、这次运行是我的并且确实是这条作品的工作流跑出来的、镜头号在分镜范围内。
+      // 图先复制成自己的上传素材再记到作品上：运行目录是将来的清理对象，分镜上的画面不能跟着消失。
+      // 只认开工作流时按分镜建的 n_shot_NN 节点，用户自己拉的出图节点没有镜号，不往分镜上硬塞。
+      const shotFromRunPath = pathname.match(SHOT_FROM_RUN)
+      if (shotFromRunPath && req.method === 'POST') {
+        if (!user?.id) {
+          sendJson(res, 401, { error: '请先登录', code: 'LOGIN_REQUIRED' })
+          return true
+        }
+        const project = await getProject(shotFromRunPath[1], user)
+        if (!project) {
+          sendJson(res, 404, { error: '作品不存在或已被删除', code: 'PROJECT_NOT_FOUND' })
+          return true
+        }
+        const template = project.templateId ? await getTemplate(project.templateId, user) : null
+        const shotCount = Array.isArray(template?.storyboard) ? template.storyboard.length : 0
+        if (!shotCount) {
+          sendJson(res, 409, { error: '这条作品还没有分镜：画面要挂在某一镜上，先在模板里拆出分镜', code: 'NO_STORYBOARD' })
+          return true
+        }
+        const body = await readBody(req)
+        const runId = String(body.runId || '')
+        const run = runId ? await getRun(runId, user) : null
+        if (!run) {
+          sendJson(res, 404, { error: '没有这次运行：编号不对，或者它不在你的账号下', code: 'RUN_NOT_FOUND' })
+          return true
+        }
+        if (!projectFlowIds(project).includes(String(run.flowId || ''))) {
+          sendJson(res, 409, { error: '这次运行不是这条作品的：只贴这条作品自己的工作流画出来的图', code: 'RUN_NOT_THIS_PROJECT' })
+          return true
+        }
+        const images = runShotImages(run, shotCount)
+        if (!images.length) {
+          sendJson(res, 409, {
+            error: '这次运行没有按分镜出图：先用「开工作流」给每一镜建出图节点，跑完再回来贴',
+            code: 'RUN_NO_SHOT_IMAGES',
+          })
+          return true
+        }
+        // 已经贴过这次运行的镜不再复制一份：先分堆，只复制这次新画的那几张
+        const plan = planRunAttach(images, project.shots, run.id)
+        const entries = []
+        const failed = []
+        for (const image of plan.toCopy) {
+          let buffer = null
+          try {
+            const file = runAssetPath(run.id, image.file)
+            buffer = file ? await fsp.readFile(file) : null
+          } catch {
+            buffer = null
+          }
+          if (!buffer) {
+            failed.push({ shotNo: image.shotNo, reason: '这次运行的这张图已经不在了' })
+            continue
+          }
+          try {
+            const uploaded = await saveUpload({ userId: user.id, buffer })
+            entries.push({ shotNo: image.shotNo, media: uploaded.media, from: run.id })
+          } catch (error) {
+            failed.push({ shotNo: image.shotNo, reason: publicError(error, '这张图没贴上') })
+          }
+        }
+        if (!entries.length && !plan.kept.length) {
+          sendJson(res, 409, { error: '这次运行的图都读不回来：可能运行目录已经被清掉了', code: 'RUN_ASSETS_MISSING', failed })
+          return true
+        }
+        const saved = await setProjectShotFrames(project.id, entries, user)
+        if (saved.status !== 200) {
+          sendJson(res, saved.status, { error: saved.error, code: saved.code })
+          return true
+        }
+        sendJson(res, 200, {
+          ok: true,
+          runId: run.id,
+          applied: saved.applied,
+          kept: [...plan.kept, ...saved.kept],
+          overwritten: saved.overwritten,
+          refused: saved.refused,
+          failed,
+          shots: saved.shots,
+          templateShots: shotCount,
+        })
         return true
       }
 

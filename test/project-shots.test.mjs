@@ -123,3 +123,135 @@ test('页面读的形状：没贴过的镜留着，说清「原片帧」', () =>
   assert.equal(rows[1].frameUrl, '/media/frames/tpl_shots/frame-02.jpg', '没贴过的镜仍给原片帧做对照')
   assert.equal(rows[2].frameUrl, '', '原片就没有帧的镜如实空着')
 })
+
+// ---------- r278：运行画完的图怎么回贴到分镜 ----------
+
+const runOf = (nodes) => ({ id: 'run_test0001', flowId: 'flow_1', nodes })
+
+test('只认按分镜建的出图节点：跳过、失败、别的 id 都不算，镜号必须在分镜范围内', () => {
+  const run = runOf([
+    { id: 'n_input', kind: 'input', status: 'success', output: { text: '原始素材' } },
+    { id: 'n_llm', kind: 'llm', status: 'success', output: { text: '脚本' } },
+    { id: 'n_shot_01', kind: 'image', status: 'success', output: { imagePath: 'runs/run_test0001/n_shot_01.png' } },
+    // 第 2 镜这次没画成：没有图，不该占着第 2 镜
+    { id: 'n_shot_02', kind: 'image', status: 'error', output: null },
+    // 第 3 镜上游没跑到
+    { id: 'n_shot_03', kind: 'image', status: 'skipped', output: null },
+    // 模板只拆出 3 镜，第 4 镜的节点不该往里塞
+    { id: 'n_shot_04', kind: 'image', status: 'success', output: { imagePath: 'runs/run_test0001/n_shot_04.png' } },
+    // 用户自己拉的出图节点：没有镜号
+    { id: 'n_image_7', kind: 'image', status: 'success', output: { imagePath: 'runs/run_test0001/n_image_7.png' } },
+    // 出图节点但没有落盘路径（老运行 / 上游只回了地址）
+    { id: 'n_shot_05', kind: 'image', status: 'success', output: { imageUrl: '/api/runs/run_test0001/x.png' } },
+  ])
+  assert.deepEqual(shots.runShotImages(run, 3), [{ shotNo: 1, file: 'n_shot_01.png' }], '只有第 1 镜是对的：第 2/3 镜没画成、第 4 镜超出分镜、第 5 镜没有落盘路径')
+  assert.deepEqual(shots.runShotImages(run, 0), [], '没有分镜就一张都不贴')
+  assert.deepEqual(shots.runShotImages(null, 5), [])
+})
+
+test('同一镜被复制成两个节点时只算第一次，顺序按镜号', () => {
+  const run = runOf([
+    { id: 'n_shot_02', kind: 'image', status: 'success', output: { imagePath: 'runs/run_test0001/n_shot_02.png' } },
+    { id: 'n_shot_01', kind: 'image', status: 'success', output: { imagePath: 'runs/run_test0001/n_shot_01.png' } },
+    { id: 'n_shot_02', kind: 'image', status: 'success', output: { imagePath: 'runs/run_test0001/n_shot_02_copy.png' } },
+  ])
+  assert.deepEqual(shots.runShotImages(run, 3), [
+    { shotNo: 1, file: 'n_shot_01.png' },
+    { shotNo: 2, file: 'n_shot_02.png' },
+  ])
+})
+
+test('一次贴多镜：同一次运行再贴不重复占位置，原来有画面的记成「换掉」', async () => {
+  const project = await p.createProject({ title: '回贴作品', templateId: template.id }, userA)
+  const first = await p.setProjectShotFrames(project.id, [
+    { shotNo: 1, media: 'uploads/u_a/run-a-1.png', from: 'run_aaaa1111' },
+    { shotNo: 2, media: 'uploads/u_a/run-a-2.png', from: 'run_aaaa1111' },
+  ], userA)
+  assert.equal(first.status, 200)
+  assert.deepEqual(first.applied.map((row) => row.shotNo), [1, 2])
+  assert.deepEqual(first.overwritten, [], '这两镜原来是空的，不算换掉')
+  assert.deepEqual(first.kept, [])
+
+  const again = await p.setProjectShotFrames(project.id, [
+    { shotNo: 1, media: 'uploads/u_a/run-a-1b.png', from: 'run_aaaa1111' },
+    { shotNo: 2, media: 'uploads/u_a/run-a-2.png', from: 'run_aaaa1111' },
+  ], userA)
+  assert.deepEqual(again.kept, [1, 2], '同一次运行画的镜不重复贴：换一份新文件名也不该顶上去')
+  assert.deepEqual(again.applied, [])
+  assert.equal(again.changed, false)
+
+  const read = await p.getProject(project.id, userA)
+  assert.equal(read.shots['1'].media, 'uploads/u_a/run-a-1.png', '记录还是第一次那张')
+  assert.equal(read.shots['1'].from, 'run_aaaa1111', '记着这批图是哪次运行画的')
+
+  const second = await p.setProjectShotFrames(project.id, [
+    { shotNo: 1, media: 'uploads/u_a/run-b-1.png', from: 'run_bbbb2222' },
+  ], userA)
+  assert.deepEqual(second.applied.map((row) => row.shotNo), [1])
+  assert.deepEqual(second.overwritten, [1], '换了一次运行画的图：要说清第 1 镜原来有画面')
+  assert.equal((await p.getProject(project.id, userA)).shots['1'].from, 'run_bbbb2222')
+})
+
+test('不是自己的作品贴不进去：批量这条路同样核归属', async () => {
+  const project = await p.createProject({ title: '别人的回贴', templateId: template.id }, userA)
+  const blocked = await p.setProjectShotFrames(project.id, [
+    { shotNo: 1, media: 'uploads/u_b/run-1.png', from: 'run_bbbb2222' },
+  ], userB)
+  assert.equal(blocked.status, 404, '别人的作品，批量接口也不让写')
+  assert.equal(await p.getProject(project.id, userB), null)
+})
+
+test('贴回来的记录：from 只认运行号，页面读的形状带上它', () => {
+  const kept = shots.normalizeShotFrames({
+    1: { media: mine, at: '2026-11-20T10:00:00.000Z', from: 'run_abc12345' },
+    2: { media: mine, at: '2026-11-20T10:00:00.000Z', from: '不是运行号' },
+    3: { media: mine, at: '2026-11-20T10:00:00.000Z', from: '/etc/passwd' },
+  })
+  assert.equal(kept['1'].from, 'run_abc12345')
+  assert.equal(kept['2'].from, undefined, '不像运行号的一律不记，不拿它当凭证')
+  assert.equal(kept['3'].from, undefined)
+  const view = shots.shotFramesView(kept)
+  assert.equal(view['1'].from, 'run_abc12345')
+  assert.equal(view['1'].frameUrl, '/media/' + mine)
+  assert.equal(view['2'].from, undefined, '没有 from 的记录不长出这个字段')
+})
+
+test('回贴入口在两处都摆得出来：运行记录那一行、分镜列表上面那句提示', () => {
+  const routes = fs.readFileSync(new URL('../server/routes/projects.mjs', import.meta.url), 'utf8')
+  assert.ok(routes.includes('from-run'), '路由按这个形状注册')
+  assert.match(routes, /runShotImages\(run, shotCount\)/, '按分镜认镜号')
+  assert.ok(routes.includes('projectFlowIds(project).includes('), '只认这条作品自己的工作流')
+  assert.ok(routes.includes('planRunAttach(images, project.shots, run.id)'), '回贴前先分堆，重贴不白复制 8 张图')
+  assert.ok(routes.includes('saveUpload({ userId: user.id, buffer })'), '图先复制成自己的上传素材，运行目录被清也不丢')
+  const page = fs.readFileSync(new URL('../src/pages/ProjectPage.tsx', import.meta.url), 'utf8')
+  assert.ok(page.includes('attachRunShotFrames(projectId, run.id)'))
+  assert.ok(page.includes('vq-run-shots'), '运行记录那一行有入口')
+  assert.ok(page.includes('vq-shot-backfeed'), '分镜上面那句提示带着同一个入口')
+})
+
+test('回贴前先分堆：已经贴过这次运行的镜不再复制一份', () => {
+  const images = [
+    { shotNo: 1, file: 'a.png' },
+    { shotNo: 2, file: 'b.png' },
+    { shotNo: 3, file: 'c.png' },
+  ]
+  const frames = {
+    1: { media: 'uploads/u_a/x.png', at: '2026-11-20T10:00:00.000Z', from: 'run_abc12345' },
+    2: { media: 'uploads/u_a/y.png', at: '2026-11-20T10:00:00.000Z' },
+  }
+  const plan = shots.planRunAttach(images, frames, 'run_abc12345')
+  assert.deepEqual(plan.kept, [1], '第 1 镜已经是这次运行画的图了')
+  assert.deepEqual(plan.toCopy.map((row) => row.shotNo), [2, 3], '第 2 镜是手贴的、第 3 镜空着，都要复制')
+  assert.deepEqual(shots.planRunAttach(images, frames, 'run_other9').toCopy.map((row) => row.shotNo), [1, 2, 3], '换一次运行：原来那几张都要被换掉，所以都得复制')
+  assert.deepEqual(shots.planRunAttach(null, null, 'run_abc12345'), { toCopy: [], kept: [] })
+})
+
+test('传空是撤销，不是「不是你的图」：以前撤销按钮点了只会弹一句报错', () => {
+  assert.equal(shots.shotFrameBlock({ media: '', user: userA, shotNo: 1, shotCount: 3 }), null, '空值 = 这一镜用回原片，放行')
+  const badShot = shots.shotFrameBlock({ media: '', user: userA, shotNo: 0, shotCount: 3 })
+  assert.equal(badShot.status, 400, '但镜头号还是要对')
+  assert.match(badShot.error, /镜头号/)
+  const noBoard = shots.shotFrameBlock({ media: '', user: userA, shotNo: 1, shotCount: 0 })
+  assert.equal(noBoard.status, 409, '没有分镜就没有「第几镜」，空值也一样')
+  assert.match(shots.shotFrameBlock({ media: 'https://example.com/a.png', user: userA, shotNo: 1, shotCount: 3 }).error, /自己上传的图/)
+})

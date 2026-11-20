@@ -3070,6 +3070,44 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
   line-height: var(--leading-meta);
 }
 
+/* 运行画完的图贴回分镜（r278）：一句提示 + 就地一个入口。
+   提示排在分镜列表上面一行，按钮跟着句子走；窄屏时按钮换行也不会撑破面板。 */
+.vq-shot-backfeed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.vq-shot-backfeed-go {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  /* 与后台输入控件同一档高度（r261 的 36px）：这句话旁边只有这一个能点的东西，
+     手机上按不准就等于没给入口。 */
+  min-height: 36px;
+  padding: 4px 12px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: var(--text-2xs);
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.vq-shot-backfeed-go:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.vq-shot-backfeed-go:disabled {
+  color: var(--faint);
+  cursor: progress;
+}
+
 /* 作品的花费（v0.9.65）：面板头右边是合计，下面两行分开写评审与画布运行。
    数字用等宽、右对齐——这一块回答「花了多少」，不是文案。 */
 .vq-project-spend-split {

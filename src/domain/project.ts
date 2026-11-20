@@ -750,7 +750,8 @@ export type Project = {
    * 这一版每一镜的画面（v0.9.161）：键是镜头号，值是自己出的那张图。
    * 只属于这条作品，模板里一个字都不动：分镜跟着模板，画面是你自己的。
    */
-  shots?: Record<string, { media: string; at: string }>
+  /** 每一镜贴的画面（v0.9.161）；from 是这批图由哪次运行画的（r278），手工贴的没有这一项 */
+  shots?: Record<string, { media: string; at: string; from?: string }>
   createdAt: string
   updatedAt: string
 }
@@ -1110,6 +1111,13 @@ export type ProjectRun = {
   /** 用户停止 / 页面断开导致的中断，不是服务重启 */
   canceled?: boolean
   failed: number
+  /**
+   * 这次运行按分镜画成了几张图（r278）：作品页据此给「贴回分镜」入口。
+   * 只数成功的出图节点，跳过与失败的没有图可贴。
+   */
+  imageNodes?: number
+  /** 这次运行里出图节点真花掉的积分（r278）：运行本身那 2 积分之外的单列一项 */
+  imageCredits?: number
   error: string
   credits: { cost: number; refunded: boolean; kept?: number; refundedAmount?: number } | null
   /** 这次运行跑的是第几版工作流 */

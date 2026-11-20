@@ -496,6 +496,9 @@ export function runSummary(run) {
     resumable: canResumeRun(run),
     canceled: Boolean(run.canceled),
     failed: (Array.isArray(run.nodes) ? run.nodes : []).filter((node) => node.status === 'error').length,
+    // 画成了几张（r278）：作品页据此决定摆不摆「贴回分镜」，也据此说「这次画了 N 张」。
+    // 只数成功的：跳过 / 失败的那几张没有图可贴，别把数算大。
+    imageNodes: (Array.isArray(run.nodes) ? run.nodes : []).filter((node) => node.kind === 'image' && node.status === 'success').length,
     error: run.error || '',
     // 出图 / 出视频节点另按张、按条扣费，不在 credits.cost 里：分开给数，页面才能把「这次运行花了多少」说全
     imageCredits: imageCreditsOf(run),

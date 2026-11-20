@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AlertCircle, ArrowLeft, ArrowRight, BookmarkPlus, Bot, Check, ChevronDown, Clapperboard, ClipboardCheck, Copy, CopyPlus, Download, ExternalLink, FileCheck2, FileText, GitCompare, Link2, Package, Pencil, Plus, Printer, RefreshCw, RotateCcw, ScanEye, Share2, Sparkles, Trash2, Upload, Workflow, X } from 'lucide-react'
+import { AlertCircle, ArrowLeft, ArrowRight, BookmarkPlus, Bot, Check, ChevronDown, Clapperboard, ClipboardCheck, Copy, CopyPlus, Download, ExternalLink, FileCheck2, FileText, GitCompare, ImageDown, Link2, Package, Pencil, Plus, Printer, RefreshCw, RotateCcw, ScanEye, Share2, Sparkles, Trash2, Upload, Workflow, X } from 'lucide-react'
 import PageHead from '../components/PageHead'
 import ProjectStatusPill from '../components/ProjectStatus'
 import { VersionScriptModal } from '../components/VersionScriptModal'
@@ -17,6 +17,7 @@ import {
   downloadProjectDeliverable,
   downloadProjectDeliverableZip,
   enableProjectShare,
+  attachRunShotFrames,
   getProject,
   getProjectVersionScript,
   issueReceiptLink,
@@ -80,6 +81,7 @@ import {
   type Project,
   type ProjectDelivery,
   type ProjectDetail,
+  type ProjectRun,
   type ProjectSpendDetail,
   type ProjectVersionScriptSnapshot,
 } from '../domain/project'
@@ -220,6 +222,8 @@ export default function ProjectPage({
   const [busy, setBusy] = useState<'' | 'canvas' | 'done' | 'delete' | 'title' | 'version' | 'rebase' | 'script' | 'export' | 'zip'>('')
   // 哪一镜正在贴画面（v0.9.161）：上传 + 记账两段，按镜头号显示「正在贴…」，不让整页转圈
   const [shotBusy, setShotBusy] = useState(0)
+  // 哪一次运行正在把画好的图贴回分镜（r278）：按运行号显示「正在贴…」，一次贴一版
+  const [frameAttach, setFrameAttach] = useState('')
   // 逐镜出图（r276）：哪几镜在画、画到哪；只有点「出这一镜」才动它，进页面不出图
   const [shotGen, setShotGen] = useState<Record<number, ShotGenRow>>({})
   // 出图模型与单价：与「快捷创作 → 图片」读同一份 /api/media/models，界面不自己写死模型名与价格
@@ -902,6 +906,29 @@ export default function ProjectPage({
       onToast(String((reason as Error)?.message || reason))
     } finally {
       setShotBusy(0)
+    }
+  }
+
+  // 运行画完的图贴回分镜（r278）：8 镜跑一次就有 8 张，一镜一镜点「贴画面」等于白跑这一趟。
+  // 镜号由服务端按出图节点 id（n_shot_NN）认，这里只说「贴哪一次运行」；
+  // 同一个镜头的图不重复占位置，原来有画面的镜会被换掉——换掉几镜要在 toast 里说出来。
+  const attachRunFrames = async (run: ProjectRun) => {
+    if (frameAttach) return
+    setFrameAttach(run.id)
+    try {
+      const result = await attachRunShotFrames(projectId, run.id)
+      await load()
+      const lines: string[] = []
+      if (result.applied.length) lines.push(result.applied.length + ' 张画面贴回分镜')
+      else lines.push('这 ' + result.kept.length + ' 镜已经是这次运行画的图了，没有重复贴')
+      if (result.overwritten.length) lines.push('其中 ' + result.overwritten.length + ' 镜原来有画面，换掉了')
+      if (result.failed.length) lines.push(result.failed.length + ' 张没贴上')
+      if (result.refused.length) lines.push(result.refused.length + ' 镜没记上（画面已经到上限）')
+      onToast(lines.join(' · '))
+    } catch (reason) {
+      onToast(String((reason as Error)?.message || reason))
+    } finally {
+      setFrameAttach('')
     }
   }
 
@@ -1643,6 +1670,12 @@ export default function ProjectPage({
   // 别等跑完一次才发现「原来这次不是只出一段文字」。节点本身不扣钱，钱在运行时。
   const storyboardShots = template?.storyboard?.length || 0
   const shotEachPrice = imageModel?.price ?? 0
+  // 最近一次「按分镜画了图」的运行（r278）：分镜那边据此提示「跑完了，一键贴回来」。
+  // 已经贴过这次运行的镜就不再提示——提示永远指向「还差这一步」的那一次。
+  const latestShotRun = data.runs.find((run) => (run.imageNodes ?? 0) > 0 && run.status === 'success') || null
+  const latestShotRunAttached = latestShotRun
+    ? Object.values(project.shots || {}).some((frame) => frame.from === latestShotRun.id)
+    : false
   // 状态与「下一步」只看当前这一版评过没有：新版刚开出来时不能因为上一版评过就跳过评审
   const currentReviews = reviewsForVersion(data.versionCounts, project.version)
   // 「这一版比上一版好在哪」：只在前后两版都评过、且都记了严重度时才算得出来（v0.9.84）
@@ -3112,13 +3145,18 @@ export default function ProjectPage({
                         <span>{run.total} 节点{run.failed ? ' · ' + run.failed + ' 个失败' : ''}</span>
                         {(run.queuedMs ?? 0) >= 1000 ? <span>排队 {duration(run.queuedMs ?? 0)}</span> : null}
                         <span>{duration(run.durationMs)}</span>
+                        {/* 出图那几张是另按张扣的（r278）：只写运行那 2 积分，会让「余额少了 42」对不上账 */}
                         <span>
                           {run.credits && run.credits.cost
-                            ? run.credits.kept != null
+                            ? (run.credits.kept != null
                               ? '已跑 ' + run.credits.kept + ' 积分 · 已退 ' + (run.credits.refundedAmount ?? 0)
-                              : run.credits.cost + ' 积分' + (run.credits.refunded ? '（已退）' : '')
-                            : '不计费'}
+                              : run.credits.cost + ' 积分' + (run.credits.refunded ? '（已退）' : '')) +
+                              ((run.imageCredits ?? 0) > 0 ? (run.credits.refunded ? ' · 出图 ' + run.imageCredits + ' 积分（不退）' : ' + 出图 ' + run.imageCredits + ' 积分') : '')
+                            : (run.imageCredits ?? 0) > 0
+                              ? '出图 ' + run.imageCredits + ' 积分'
+                              : '不计费'}
                         </span>
+                        {(run.imageNodes ?? 0) > 0 ? <span>画了 {run.imageNodes} 张</span> : null}
                         <span className="vq-mono">{stamp(run.startedAt)}</span>
                       </span>
                       {run.error ? <p className={'vq-run-error' + (run.canceled ? ' is-stopped' : '')}>{run.error}</p> : null}
@@ -3137,6 +3175,22 @@ export default function ProjectPage({
                         >
                           <ScanEye size={13} />
                           查看运行
+                        </button>
+                      ) : null}
+                      {/* 这次运行按分镜画的图一次贴回去（r278）：不摆这个入口，8 张图就只能一镜一镜手贴 */}
+                      {(run.imageNodes ?? 0) > 0 && !live ? (
+                        <button
+                          type="button"
+                          className="vq-button vq-button--ghost vq-button--sm vq-run-shots"
+                          disabled={Boolean(frameAttach)}
+                          title={
+                            '把这次运行按分镜画好的 ' + run.imageNodes + ' 张图一次贴回分镜：第 NN 镜对应「第 NN 镜 · 出图」节点；' +
+                            '已经贴过这次运行同一张图的镜不重复贴，原来有画面的镜会被换成这次的'
+                          }
+                          onClick={() => void attachRunFrames(run)}
+                        >
+                          <ImageDown size={13} />
+                          {frameAttach === run.id ? '正在贴…' : '贴回分镜'}
                         </button>
                       ) : null}
                       <button
@@ -3472,6 +3526,22 @@ export default function ProjectPage({
               <p className="vq-project-note">
                 脚本是这条作品自己的（{script.structure.length} 段），分镜仍是模板那 {template.shots} 镜；
                 分镜要换，就在模板里改编这一版。
+              </p>
+            ) : null}
+            {/* 跑完工作流之后，分镜这边自己说一句「图已经画好了，一键贴回来」（r278）：
+                运行记录在上面、分镜在下面，不提醒的话这一步很容易被漏掉 */}
+            {template && template.storyboard.length && latestShotRun && !latestShotRunAttached ? (
+              <p className="vq-project-note vq-shot-backfeed">
+                运行 {latestShotRun.id} 按分镜画了 {latestShotRun.imageNodes} 张，
+                <button
+                  type="button"
+                  className="vq-shot-backfeed-go"
+                  disabled={Boolean(frameAttach)}
+                  onClick={() => void attachRunFrames(latestShotRun)}
+                >
+                  <ImageDown size={12} />
+                  {frameAttach === latestShotRun.id ? '正在贴…' : '贴回分镜'}
+                </button>
               </p>
             ) : null}
             {template && template.storyboard.length ? (

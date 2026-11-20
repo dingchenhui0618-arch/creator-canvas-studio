@@ -123,7 +123,32 @@ export const setDeliveryReply = (projectId: string, deliveryId: string, reply: s
 export const getProject = (id: string) => request<ProjectDetail>('/api/projects/' + id)
 
 /** 这一版每一镜的画面（v0.9.161）：media 传自己上传的那张（uploads/…），传空字符串等于撤销这一镜。 */
-export type ProjectShotFrames = Record<string, { media: string; frameUrl: string; at: string }>
+export type ProjectShotFrames = Record<string, { media: string; frameUrl: string; at: string; from?: string }>
+
+/**
+ * 一次运行按分镜画出来的图，一次贴回分镜（r278）。
+ * 服务端按出图节点的 id（n_shot_NN）认镜号，先把图复制成自己的上传素材再记到作品上——
+ * 运行目录是将来的清理对象，分镜上的画面不能跟着消失。
+ * 已经记着这次运行同一张图的镜回在 kept 里（重贴不会重复占位置），
+ * 原来有画面被换掉的回在 overwritten 里（页面对用户说清楚换了几镜）。
+ */
+export type ShotFramesFromRun = {
+  ok: boolean
+  runId: string
+  applied: { shotNo: number; media: string }[]
+  kept: number[]
+  overwritten: number[]
+  refused: { shotNo: number; reason: string }[]
+  failed: { shotNo: number; reason: string }[]
+  shots: ProjectShotFrames
+  templateShots: number
+}
+
+export const attachRunShotFrames = (projectId: string, runId: string) =>
+  request<ShotFramesFromRun>('/api/projects/' + encodeURIComponent(projectId) + '/shots/from-run', {
+    method: 'POST',
+    body: JSON.stringify({ runId }),
+  })
 
 export function setProjectShotFrame(projectId: string, shotNo: number, media: string) {
   return request<{ ok: boolean; changed: boolean; shots: ProjectShotFrames; templateShots: number }>(
