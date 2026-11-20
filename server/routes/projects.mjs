@@ -26,7 +26,6 @@ import {
   reviewCountsByProject,
   reviewSpend,
   reviewSummaryByVersion,
-  detachReviewsFromProject,
 } from '../reviews.mjs'
 import { projectDeliverable } from '../project-deliverable.mjs'
 import { projectSpendDetail } from '../project-spend.mjs'
@@ -39,8 +38,8 @@ import { getShareVisits, getShareVisitsByKey } from '../share-visits.mjs'
 // 回执链接被打开过几次（v0.9.145）：收包人那一侧不登录，只能靠这条地址本身记
 import { getReceiptVisits, recordReceiptOpen } from '../receipt-visits.mjs'
 import { shareBriefsByProject } from '../share-summary.mjs'
-import { ackFor, dropAcksForProject, listAcks } from '../review-acks.mjs'
-import { dropDecisionsForProject, listDecisions } from '../review-decisions.mjs'
+import { ackFor, listAcks } from '../review-acks.mjs'
+import { listDecisions } from '../review-decisions.mjs'
 import { decisionFor, decisionHistory, reviewsForVersion } from '../project-status.mjs'
 import { projectListQuery } from '../project-list.mjs'
 import { canStartProject } from '../origin-entry.mjs'
@@ -103,6 +102,10 @@ import {
   disableProjectShare,
   archiveProjectVersion,
   deleteProject,
+  listProjectTrash,
+  purgeProject,
+  restoreProject,
+  PROJECT_TRASH_DAYS,
   PROJECT_VERSION_LIMIT,
 } from '../projects.mjs'
 
@@ -2075,6 +2078,51 @@ export function createProjectsRouter() {
         return true
       }
 
+      // 回收站（v0.9.253）：删掉的作品 30 天内能原样放回去，所以这三个入口都在这里，
+      // 且都排在 ITEM 前面 —— 'trash' 本身会被 ITEM 的正则当成一个作品号。
+      if (pathname === '/api/projects/trash' && req.method === 'GET') {
+        const items = await listProjectTrash(user)
+        sendJson(res, 200, { items, days: PROJECT_TRASH_DAYS })
+        return true
+      }
+
+      const restoreMatch = pathname.match(/^\/api\/projects\/([\w-]+)\/restore$/)
+      if (restoreMatch && req.method === 'POST') {
+        const result = await restoreProject(restoreMatch[1], user)
+        if (result.status === 404) {
+          sendJson(res, 404, { error: '回收站里没有这条作品：可能已经恢复过，或者超过 30 天被清掉了', code: 'TRASH_NOT_FOUND' })
+          return true
+        }
+        if (result.status === 403) {
+          sendJson(res, 403, { error: '这条作品属于另一个账号，不能恢复', code: 'NOT_OWNER' })
+          return true
+        }
+        if (result.status === 409) {
+          const message = result.code === 'PROJECT_LIMIT'
+            ? '作品数量已经到上限，先删掉一些再恢复这一条'
+            : '这条作品已经在库里了，不用恢复'
+          sendJson(res, 409, { error: message, code: result.code || 'RESTORE_CONFLICT' })
+          return true
+        }
+        sendJson(res, 200, { ok: true, project: result.project, restored: result.restored })
+        return true
+      }
+
+      const purgeMatch = pathname.match(/^\/api\/projects\/trash\/([\w-]+)$/)
+      if (purgeMatch && req.method === 'DELETE') {
+        const result = await purgeProject(purgeMatch[1], user)
+        if (result.status === 404) {
+          sendJson(res, 404, { error: '回收站里没有这条作品', code: 'TRASH_NOT_FOUND' })
+          return true
+        }
+        if (result.status === 403) {
+          sendJson(res, 403, { error: '这条作品属于另一个账号，不能删除', code: 'NOT_OWNER' })
+          return true
+        }
+        sendJson(res, 200, { ok: true })
+        return true
+      }
+
       const item = pathname.match(ITEM)
       if (item && req.method === 'GET') {
         const project = await getProject(item[1], user)
@@ -2137,18 +2185,13 @@ export function createProjectsRouter() {
       }
 
       if (item && req.method === 'DELETE') {
+        // 删掉的作品进回收站：作品记录、评审、已看过、拍板一起暂存，恢复时原样放回
         const removed = await deleteProject(item[1], user)
         if (!removed) {
           sendJson(res, 404, { error: '作品不存在或已被删除' })
           return true
         }
-        // 评审记录留着当历史，但不再挂在已删除的作品上
-        const detached = await detachReviewsFromProject(removed.id)
-        // 「已看过」是待办上的便利贴：作品没了，便利贴一起撕掉
-        const droppedAcks = await dropAcksForProject(removed.id)
-        // 人拍板是这条作品的结论，作品没了也不该留在盘上冒充别的作品的记录
-        const droppedDecisions = await dropDecisionsForProject(removed.id)
-        sendJson(res, 200, { ok: true, removed: { id: removed.id, detachedReviews: detached, droppedAcks, droppedDecisions } })
+        sendJson(res, 200, { ok: true, removed: removed.project, trash: removed.trash })
         return true
       }
 

@@ -254,15 +254,54 @@ export async function reviewSummaryByVersion(projectId, user = null) {
   return counts
 }
 
-/** 作品被删掉后，旧评审保留为历史，但不再挂在任何作品上。 */
-export async function detachReviewsFromProject(projectId) {
-  if (!projectId) return 0
+/**
+ * 作品删掉后，旧评审保留为历史，但不再挂在任何作品上。
+ * 返回被摘下来的那几条（v0.9.253）：回收站要原样放回去，所以调用方拿得到内容，
+ * 不再是「摘掉了 3 条」这样一个数——数没法恢复，内容可以。
+ */
+export async function takeReviewsForProject(projectId) {
+  if (!projectId) return []
   const list = await loadAll()
   const hit = list.filter((item) => item.projectId === projectId)
-  if (!hit.length) return 0
+  if (!hit.length) return []
+  // 先留一份还带着 projectId 的副本，再摘——顺序反了，存进回收站的副本就没了归属，恢复时挂不回去
+  const snapshot = hit.map((item) => ({ ...item }))
   for (const item of hit) delete item.projectId
   await persist(list)
-  return hit.length
+  return snapshot
+}
+
+/**
+ * 从回收站恢复作品：把当时摘下来的评审挂回去。
+ * 评审记录本身在删除时只是摘掉 projectId、没有从库里删掉（它是历史），所以这里是「补回关联」，
+ * 不是「重新插入」；只有记录真的不在了（比如被清理过）才补一条，避免同一份评审变成两条。
+ */
+export async function restoreReviews(items = []) {
+  const rows = (Array.isArray(items) ? items : []).filter((item) => item && item.id)
+  if (!rows.length) return 0
+  const list = await loadAll()
+  const byId = new Map(list.map((item) => [item.id, item]))
+  let touched = 0
+  for (const row of rows) {
+    const existing = byId.get(row.id)
+    if (existing) {
+      if (!existing.projectId && row.projectId) {
+        existing.projectId = row.projectId
+        touched += 1
+      }
+      continue
+    }
+    list.push({ ...row })
+    byId.set(row.id, row)
+    touched += 1
+  }
+  if (touched) await persist(list)
+  return touched
+}
+
+/** 作品被删掉后，旧评审保留为历史，但不再挂在任何作品上。 */
+export async function detachReviewsFromProject(projectId) {
+  return (await takeReviewsForProject(projectId)).length
 }
 
 /** 注销账号时用：删掉这个人名下的评审记录。 */

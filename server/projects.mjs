@@ -13,7 +13,10 @@ import { MAX_SHOT_FRAMES, normalizeShotFrames, shotFramesView } from './project-
 import { normalizeStoredScript } from './project-script.mjs'
 import { visitKey } from './share-visits.mjs'
 // 交付那一刻的评审结论要从评审库现读；只读、不写评审（v0.9.85）
-import { reviewSummaryByVersion } from './reviews.mjs'
+// 回收站（v0.9.253）要用到摘/放：删作品时把评审、已看过、拍板一起收走，恢复时原样放回
+import { restoreReviews, reviewSummaryByVersion, takeReviewsForProject } from './reviews.mjs'
+import { restoreAcks, takeAcksForProject } from './review-acks.mjs'
+import { restoreDecisions, takeDecisionsForProject } from './review-decisions.mjs'
 import { reviewsForVersion } from './project-status.mjs'
 // 交付包封存（v0.9.125）：标记交付时落一份 zip，之后改模板 / 开新版都不动它
 import {
@@ -23,6 +26,14 @@ import {
 } from './delivery-packages.mjs'
 
 const projectsFile = path.join(config.dataDir, 'projects.json')
+// 回收站（v0.9.253）：删掉的作品连评审、已看过、拍板一起暂存在这里，30 天内可以原样放回去。
+// 单独一份文件，不往 projects.json 里塞 deleted 标记：作品列表、作品流、模板使用统计、评审候选
+// 全都读那份文件，一处漏过滤就有人看见「已经删掉的作品」。
+const trashFile = path.join(config.dataDir, 'projects-trash.json')
+const TRASH_DAYS = 30
+export const PROJECT_TRASH_DAYS = TRASH_DAYS
+const TRASH_DAY_MS = 24 * 60 * 60 * 1000
+const MAX_TRASH = 60
 const MAX_PROJECTS = 200
 const STATUSES = ['active', 'done']
 // 一条作品最多保留 20 版：再多就不是「对照」而是流水账，旧版本也不该无限长下去
@@ -103,6 +114,91 @@ async function persist(list) {
     await fsp.rm(tmp, { force: true }).catch(() => {})
     throw lastError
   })
+}
+
+// ---------- 回收站 ----------
+let trashCache = null
+let trashReadError = null
+let trashWriteChain = Promise.resolve()
+
+async function loadTrash() {
+  if (trashCache) return trashCache
+  try {
+    trashCache = await readStoreArray(trashFile, '作品回收站')
+    trashReadError = null
+  } catch (error) {
+    trashReadError = error
+    throw error
+  }
+  return trashCache
+}
+
+function enqueueTrashWrite(task) {
+  const next = trashWriteChain.then(task, task)
+  trashWriteChain = next.catch(() => {})
+  return next
+}
+
+async function persistTrash(list) {
+  if (trashReadError) throw trashReadError
+  trashCache = list
+  return enqueueTrashWrite(async () => {
+    await fsp.mkdir(config.dataDir, { recursive: true })
+    const tmp = trashFile + '.' + process.pid + '.' + Math.random().toString(36).slice(2) + '.tmp'
+    await fsp.writeFile(tmp, JSON.stringify(list, null, 2), 'utf8')
+    await fsp.rename(tmp, trashFile)
+  })
+}
+
+function trashEntryView(entry) {
+  const project = entry?.project || {}
+  const deletedAt = String(entry?.deletedAt || '')
+  const expiresAt = deletedAt ? new Date(Date.parse(deletedAt) + TRASH_DAYS * TRASH_DAY_MS).toISOString() : ''
+  return {
+    id: String(project.id || ''),
+    title: String(project.title || '未命名作品'),
+    version: Number(project.version) || 0,
+    status: String(project.status || 'active'),
+    deletedAt,
+    expiresAt,
+    days: TRASH_DAYS,
+    // 恢复后回来的是什么：模板、脚本、版本、交付包都在作品记录里，另外三样单独暂存
+    reviews: Array.isArray(entry?.reviews) ? entry.reviews.length : 0,
+    acks: Array.isArray(entry?.acks) ? entry.acks.length : 0,
+    decisions: Array.isArray(entry?.decisions) ? entry.decisions.length : 0,
+    deliveries: Array.isArray(project.deliveries) ? project.deliveries.length : 0,
+  }
+}
+
+/**
+ * 清掉过期条目：整份重写一次，同时把它们的交付包文件删掉。
+ * 只在读回收站/删除/恢复时按需触发，不额外挂定时器——没人用的回收站不该一直吃 CPU。
+ */
+async function pruneTrash(list, now = Date.now()) {
+  const alive = []
+  const expired = []
+  for (const entry of Array.isArray(list) ? list : []) {
+    const at = Date.parse(String(entry?.deletedAt || ''))
+    if (Number.isFinite(at) && now - at > TRASH_DAYS * TRASH_DAY_MS) expired.push(entry)
+    else alive.push(entry)
+  }
+  if (!expired.length) return { list: alive, expired }
+  for (const entry of expired) {
+    const id = String(entry?.project?.id || '')
+    if (id) await dropProjectDeliveryPackages(id).catch(() => {})
+  }
+  return { list: alive, expired }
+}
+
+/** 回收站列表：只回这个人看得见的条目，最新删的在前。 */
+export async function listProjectTrash(user = null) {
+  const raw = await loadTrash()
+  const { list, expired } = await pruneTrash(raw)
+  if (expired.length) await persistTrash(list)
+  return list
+    .filter((entry) => canAccess(entry?.project, user))
+    .sort((a, b) => String(b.deletedAt).localeCompare(String(a.deletedAt)))
+    .map(trashEntryView)
 }
 
 const clip = (value, max) => String(value ?? '').slice(0, max)
@@ -1265,15 +1361,77 @@ export async function archiveProjectVersion(id, { flowId = '', prevName = '', sc
   return normalize(found)
 }
 
+/**
+ * 删作品（v0.9.253 起可撤销）：不再一删到底，而是整条搬进回收站。
+ * 评审、已看过、拍板当场从各自的库里摘下来，和作品一起暂存——恢复时原样放回，
+ * 不会出现「作品回来了但评审全没了」。交付包文件也先留着，30 天到期或彻底删除时才真删。
+ */
 export async function deleteProject(id, user = null) {
   const list = await loadAll()
   const index = list.findIndex((item) => item.id === id && canAccess(item, user))
   if (index < 0) return null
   const [removed] = list.splice(index, 1)
   await persist(list)
-  // 作品没了，它封存的交付包也不该留在盘上
-  await dropProjectDeliveryPackages(id)
-  return normalize(removed)
+  const [reviews, acks, decisions] = await Promise.all([
+    takeReviewsForProject(id).catch(() => []),
+    takeAcksForProject(id).catch(() => []),
+    takeDecisionsForProject(id).catch(() => []),
+  ])
+  const raw = await loadTrash()
+  const { list: alive } = await pruneTrash(raw)
+  const entry = {
+    id: 'trash_' + randomUUID().replace(/-/g, '').slice(0, 12),
+    project: removed,
+    deletedAt: new Date().toISOString(),
+    deletedBy: String(user?.id || ''),
+    reviews,
+    acks,
+    decisions,
+  }
+  const next = [entry, ...alive]
+  // 超出上限的旧条目被挤出去，包也一起清掉：回收站不是第二个作品库
+  for (const dropped of next.slice(MAX_TRASH)) {
+    const goneId = String(dropped?.project?.id || '')
+    if (goneId) await dropProjectDeliveryPackages(goneId).catch(() => {})
+  }
+  await persistTrash(next.slice(0, MAX_TRASH))
+  return { project: normalize(removed), trash: trashEntryView(entry) }
+}
+
+/**
+ * 从回收站恢复：作品记录原样回去（标题、脚本、分镜、版本、交付记录都在记录里），
+ * 评审/已看过/拍板按当时摘下来的原样放回。同一个作品已经在库里时不重复插入。
+ */
+export async function restoreProject(id, user = null) {
+  const raw = await loadTrash()
+  const index = raw.findIndex((entry) => String(entry?.project?.id || '') === id)
+  if (index < 0) return { status: 404 }
+  const entry = raw[index]
+  if (!canAccess(entry.project, user)) return { status: 403 }
+  const list = await loadAll()
+  if (list.some((item) => item.id === id)) return { status: 409, code: 'ALREADY_EXISTS' }
+  if (list.length >= MAX_PROJECTS) return { status: 409, code: 'PROJECT_LIMIT' }
+  const restored = { ...entry.project, updatedAt: new Date().toISOString() }
+  list.push(restored)
+  await persist(list)
+  const back = {
+    reviews: await restoreReviews(entry.reviews || []).catch(() => 0),
+    acks: await restoreAcks(entry.acks || []).catch(() => 0),
+    decisions: await restoreDecisions(entry.decisions || []).catch(() => 0),
+  }
+  await persistTrash(raw.filter((_, i) => i !== index))
+  return { status: 200, project: normalize(restored), restored: back }
+}
+
+/** 彻底删除：交付包文件与回收站条目一起清掉，之后不能恢复。 */
+export async function purgeProject(id, user = null) {
+  const raw = await loadTrash()
+  const index = raw.findIndex((entry) => String(entry?.project?.id || '') === id)
+  if (index < 0) return { status: 404 }
+  if (!canAccess(raw[index].project, user)) return { status: 403 }
+  await dropProjectDeliveryPackages(id).catch(() => {})
+  await persistTrash(raw.filter((_, i) => i !== index))
+  return { status: 200 }
 }
 
 // ---------- 只读分享链接 ----------
@@ -1348,11 +1506,20 @@ export async function getProjectByShareToken(token) {
   return found ? normalize(found) : null
 }
 
-/** 注销账号时用。 */
+/** 注销账号时用：本人名下的作品与回收站条目都清干净（回收站不算「账号还在」）。 */
 export async function deleteProjectsByOwner(ownerId) {
   if (!ownerId) return 0
   const list = await loadAll()
   const mine = list.filter((item) => item.ownerId === ownerId)
+  const raw = await loadTrash()
+  const trashMine = raw.filter((entry) => String(entry?.project?.ownerId || '') === ownerId)
+  if (trashMine.length) {
+    for (const entry of trashMine) {
+      const id = String(entry?.project?.id || '')
+      if (id) await dropProjectDeliveryPackages(id).catch(() => {})
+    }
+    await persistTrash(raw.filter((entry) => String(entry?.project?.ownerId || '') !== ownerId))
+  }
   if (!mine.length) return 0
   await persist(list.filter((item) => item.ownerId !== ownerId))
   return mine.length

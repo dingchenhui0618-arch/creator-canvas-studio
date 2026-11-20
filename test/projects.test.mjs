@@ -78,14 +78,17 @@ test('评审按 projectId 计数，并给出最近一次结论', async () => {
 })
 
 test('删作品后评审留为历史，不再挂在任何作品上', async () => {
+  // r271 起删除 = 进回收站：评审当场摘下来（摘的动作搬进了 deleteProject，不再由调用方补一刀）
   const removed = await p.deleteProject(projectId, userA)
-  assert.equal(removed.id, projectId)
-  const detached = await r.detachReviewsFromProject(projectId)
-  assert.equal(detached, 2)
+  assert.equal(removed.project.id, projectId)
   const all = await r.listReviews({ limit: 10 }, userA)
   assert.ok(all.items.every((item) => !item.projectId))
   assert.equal(await p.getProject(projectId, userA), null)
   assert.equal(await p.deleteProject(projectId, userA), null, '删过的不能再删一次')
+  // 收尾：恢复回来、再删一次、彻底删除——免得给后面的用例留下一条「在回收站里的作品」
+  assert.equal((await p.restoreProject(projectId, userA)).status, 200)
+  assert.equal((await p.deleteProject(projectId, userA)).project.id, projectId)
+  assert.equal((await p.purgeProject(projectId, userA)).status, 200)
 })
 
 test('第一张画布把作品推进 v1，开一版新的归档旧画布、版本号递增', async () => {

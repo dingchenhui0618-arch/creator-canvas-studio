@@ -255,15 +255,20 @@ test('重新打开这一版：记录与包一起收回，地址 404', async () =
   assert.match(String(gone.body), /没有封存包/)
 })
 
-test('作品删掉：封存目录一起清掉，旧地址 404', async () => {
+test('作品删掉：进回收站时包先留着，彻底删除才清目录、旧地址 404', async () => {
   const marked = await call('PATCH', '/api/projects/prj_pkg', { status: 'done' })
   assert.equal(marked.status, 200)
   const delivery = JSON.parse(marked.body).project.deliveries[0]
   const removed = await call('DELETE', '/api/projects/prj_pkg')
   assert.equal(removed.status, 200)
-  assert.equal(fs.existsSync(path.join(dir, 'delivery-packages', 'prj_pkg')), false)
+  // r271：删除 = 进回收站。包要留着，否则「恢复」回来的是没有交付记录的空壳
+  assert.equal(fs.existsSync(path.join(dir, 'delivery-packages', 'prj_pkg')), true)
   const gone = await call('GET', '/api/projects/prj_pkg/delivery-packages/' + delivery.id)
-  assert.equal(gone.status, 404)
+  assert.equal(gone.status, 404, '作品已经不在库里，旧地址照旧 404')
+  // 彻底删除：目录与条目一起清掉
+  const purged = await call('DELETE', '/api/projects/trash/prj_pkg')
+  assert.equal(purged.status, 200)
+  assert.equal(fs.existsSync(path.join(dir, 'delivery-packages', 'prj_pkg')), false)
 })
 
 test('存储层：路径不认外部目录、空包不写、只保留还挂着的包', async () => {

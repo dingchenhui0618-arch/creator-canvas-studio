@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowRight, Clapperboard, RefreshCw, Search, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowRight, Clapperboard, RefreshCw, Search, Trash2, X } from 'lucide-react'
 import PageHead from '../components/PageHead'
 import ProjectStatusPill from '../components/ProjectStatus'
-import { listProjects } from '../api/projects'
+import { TrashModal, type TrashSource } from '../components/TrashModal'
+import { deletedLabel, leftDays } from '../domain/trash'
+import { listProjectTrash, listProjects, purgeProject, restoreProject } from '../api/projects'
 import { listTemplates } from '../api/radar'
 import { reviewsForVersion, type ProjectBucket, type ProjectListFacets, type ProjectShareBrief, type ProjectSummary } from '../domain/project'
 import { readProjectsView, writeProjectsView, type ProjectsView } from '../domain/list-view'
@@ -54,8 +56,10 @@ export default function ProjectsPage({
   onOpenProject,
   onBrowseTemplates,
   onDiscover,
+  onToast,
 }: {
   onOpenProject: (id: string) => void
+  onToast: (message: string) => void
   onBrowseTemplates: () => void
   // 模板库也是空的时，这一屏的下一步是「去爆款雷达检索一条」，不是把人送进一个空库（v0.9.42）
   onDiscover: () => void
@@ -76,6 +80,8 @@ export default function ProjectsPage({
   // 两个视图：创作成果（三处产物合成一条流）与作品项目（现有的交付列表）。
   // 默认先看成果——用户打开「作品」最先想看的是自己做过什么，而不是交付状态。
   const [view, setView] = useState<'works' | 'projects'>('works')
+  // 回收站（v0.9.253）：删掉的作品在这里留 30 天，恢复会把评审、已看过、拍板一起带回来
+  const [trashOpen, setTrashOpen] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async (filter: { q: string; state: ProjectBucket }) => {
@@ -120,6 +126,31 @@ export default function ProjectsPage({
 
   const filtered = keyword.trim() !== '' || bucket !== 'all'
 
+  // 回收站的数据源（v0.9.253）：删掉的作品留 30 天，恢复会把评审、已看过、拍板一起带回来，
+  // 所以行上直接写清「回来的是什么」，点之前就知道。
+  const trashSource = useMemo<TrashSource>(() => ({
+    kicker: '作品 · 回收站',
+    heading: '删掉的作品还能捡回来',
+    ariaLabel: '作品回收站',
+    note: '删掉的作品在这里留 {days} 天。恢复会把脚本、分镜、版本、交付记录，连同删除时一起收走的评审、已看过与拍板按原样放回去；过期或「彻底删除」之后不能恢复。',
+    emptyText: '回收站是空的。删掉的作品会先来这里，不会直接消失。',
+    restoredToast: (title) => '已恢复「' + title + '」，回到作品列表',
+    purgedToast: (title) => '已彻底删除「' + title + '」',
+    load: async () => {
+      const result = await listProjectTrash()
+      const days = result.days || 30
+      const items = (result.items || []).map((item) => {
+        const bits = ['v' + item.version, deletedLabel(item.deletedAt), leftDays(item.deletedAt, days) + ' 天后清空']
+        if (item.reviews) bits.push('恢复带回评审 ' + item.reviews + ' 条')
+        if (item.deliveries) bits.push('交付 ' + item.deliveries + ' 份')
+        return { id: item.id, title: item.title, meta: bits.join(' · ') }
+      })
+      return { items, days }
+    },
+    restore: async (id) => { await restoreProject(id) },
+    purge: async (id) => { await purgeProject(id) },
+  }), [])
+
   const reset = useCallback(() => {
     setKeyword('')
     setBucket('all')
@@ -155,9 +186,16 @@ export default function ProjectsPage({
           title="作品"
           desc="快捷创作生成的图片与视频、跑过的工作流、无限画布里的画布，都收在这一条流里。按作品自己的比例排版，9:16 竖版优先。"
           actions={
-            <button type="button" className="vq-button vq-button--ghost" onClick={() => setView('projects')}>
-              作品项目
-            </button>
+            <>
+              {/* 回收站放在两个视图的页头（v0.9.253）：删完作品会回到「创作成果」，那里也得能找回来 */}
+              <button type="button" className="vq-button vq-button--ghost" onClick={() => setTrashOpen(true)}>
+                <Trash2 size={14} />
+                回收站
+              </button>
+              <button type="button" className="vq-button vq-button--ghost" onClick={() => setView('projects')}>
+                作品项目
+              </button>
+            </>
           }
         />
         <WorksWall
@@ -165,6 +203,14 @@ export default function ProjectsPage({
             if (url.startsWith('#')) window.location.hash = url
           }}
         />
+        {trashOpen && (
+          <TrashModal
+            source={trashSource}
+            onClose={() => setTrashOpen(false)}
+            onToast={onToast}
+            onRestored={() => { void load({ q: keyword, state: bucket }) }}
+          />
+        )}
       </div>
     )
   }
@@ -179,6 +225,10 @@ export default function ProjectsPage({
           <>
             <button type="button" className="vq-button vq-button--ghost" onClick={() => setView('works')}>
               创作成果
+            </button>
+            <button type="button" className="vq-button vq-button--ghost" onClick={() => setTrashOpen(true)}>
+              <Trash2 size={14} />
+              回收站
             </button>
             <button type="button" className="vq-button vq-button--ghost" onClick={() => void load({ q: keyword, state: bucket })} disabled={loading}>
               <RefreshCw size={14} className={loading ? 'vq-spin' : undefined} />
@@ -383,6 +433,15 @@ export default function ProjectsPage({
           ))}
         </div>
       ) : null}
+
+      {trashOpen && (
+        <TrashModal
+          source={trashSource}
+          onClose={() => setTrashOpen(false)}
+          onToast={onToast}
+          onRestored={() => { void load({ q: keyword, state: bucket }) }}
+        />
+      )}
     </div>
   )
 }

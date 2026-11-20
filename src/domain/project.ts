@@ -1448,6 +1448,27 @@ export type ProjectBucket = 'all' | 'active' | 'delivered'
 /** 分面计数：按关键字算、不按当前状态算——换了状态，另一排数字仍然是真的 */
 export type ProjectListFacets = { all: number; active: number; delivered: number }
 
+/**
+ * 回收站里的一条（v0.9.253）：删掉的作品在这里留 30 天。
+ * 恢复会把作品记录、（删除时摘下来的）评审、已看过、拍板一起放回去，所以这里把件数一并带出来，
+ * 让人在点「恢复」之前就知道会回来什么。
+ */
+export type ProjectTrashItem = {
+  id: string
+  title: string
+  version: number
+  status: string
+  deletedAt: string
+  /** 到期时间：过这一刻就真清了 */
+  expiresAt: string
+  /** 保留天数，服务端下发，界面不写死 */
+  days: number
+  reviews: number
+  acks: number
+  decisions: number
+  deliveries: number
+}
+
 export type ProjectSummary = Project & {
   template: ProjectTemplateBrief | null
   reviews: ProjectReviews

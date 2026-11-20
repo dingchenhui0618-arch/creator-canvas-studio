@@ -144,17 +144,43 @@ export async function clearDecisions(projectId, user = null) {
   return removed
 }
 
-/** 作品删掉后，拍板记录一起清掉：留着只会让读的人多一次对不上的查找。 */
-export async function dropDecisionsForProject(projectId) {
-  if (!projectId) return 0
-  let removed = 0
+/**
+ * 作品删掉后，拍板记录一起清掉：留着只会让读的人多一次对不上的查找。
+ * 返回清掉的那几条（v0.9.253）：作品进回收站时可撤销，拍板也要能一起回来。
+ */
+export async function takeDecisionsForProject(projectId) {
+  if (!projectId) return []
+  let taken = []
   await enqueueWrite(async () => {
     const list = await loadAll()
     const keep = list.filter((item) => item.projectId !== projectId)
-    removed = list.length - keep.length
-    if (removed) await persist(keep)
+    taken = list.filter((item) => item.projectId === projectId).map((item) => ({ ...item }))
+    if (taken.length) await persist(keep)
   })
-  return removed
+  return taken
+}
+
+/** 恢复作品时把拍板放回去；已经存在的号跳过。 */
+export async function restoreDecisions(items = []) {
+  const rows = (Array.isArray(items) ? items : []).filter((item) => item && item.id)
+  if (!rows.length) return 0
+  let added = 0
+  await enqueueWrite(async () => {
+    const list = await loadAll()
+    const known = new Set(list.map((item) => item.id))
+    for (const row of rows) {
+      if (known.has(row.id)) continue
+      list.push({ ...row })
+      known.add(row.id)
+      added += 1
+    }
+    if (added) await persist(list)
+  })
+  return added
+}
+
+export async function dropDecisionsForProject(projectId) {
+  return (await takeDecisionsForProject(projectId)).length
 }
 
 /** 注销账号时用。 */

@@ -11,7 +11,10 @@ import {
   formatDuration,
   getHealth,
   getTemplate,
+  listTemplateTrash,
   listTemplates,
+  purgeTemplate,
+  restoreTemplate,
   revokeTemplateShare,
 } from '../api/radar'
 import { downloadTemplateMarkdown } from '../lib/templateExport'
@@ -21,7 +24,8 @@ import type { MediaItem, ReplicaTemplate, ScriptBeat, StoryboardShot, TemplateSo
 import { requestReview } from '../state/review'
 import { createProject } from '../api/projects'
 import { ReplicateModal } from '../components/ReplicateModal'
-import { TrashModal } from '../components/TrashModal'
+import { TrashModal, type TrashSource } from '../components/TrashModal'
+import { deletedLabel, leftDays } from '../domain/trash'
 import { ReportModal } from '../components/ReportModal'
 import type { ReportTarget } from '../api/reports'
 import { CoverImage } from '../components/CoverImage'
@@ -136,6 +140,32 @@ export function TemplateLibraryPage({
   const [projectTotal, setProjectTotal] = useState(0)
   // 作品还指着一条已经删掉/在回收站里的模板（r265）：不算进上面那格，单独说一句
   const [orphanTotal, setOrphanTotal] = useState(0)
+  // 回收站的数据源（r271）：界面是通用的那份，这里只交代「读什么、恢复什么、怎么拼说明」
+  const trashSource = useMemo<TrashSource>(() => ({
+    kicker: '模板库 · 回收站',
+    heading: '删掉的模板还能捡回来',
+    ariaLabel: '模板回收站',
+    note: '删除的模板在这里留 {days} 天，期间可以恢复；过期或彻底删除后，抽出来的帧也会一起清掉，不能撤销。',
+    emptyText: '回收站是空的。删掉的模板会先来这里，不会直接消失。',
+    restoredToast: (title) => '已恢复「' + title + '」，回到模板库',
+    purgedToast: (title) => '已彻底删除「' + title + '」',
+    load: async () => {
+      const result = await listTemplateTrash()
+      const days = result.days || 30
+      const items = (result.items || []).map((item) => ({
+        id: item.id,
+        title: item.title || '未命名模板',
+        thumb: item.thumb || '',
+        meta: [item.platformLabel || '', item.contentType || '', deletedLabel(item.deletedAt), leftDays(item.deletedAt, days) + ' 天后清空']
+          .filter(Boolean)
+          .join(' · '),
+      }))
+      return { items, days }
+    },
+    restore: async (id) => { await restoreTemplate(id) },
+    purge: async (id) => { await purgeTemplate(id) },
+  }), [])
+
   const typeOptions = useMemo(() => pickTypes(byType, pending), [byType, pending])
   // 分类被后台改名后，旧分类已经不在标签里：渲染时直接落回「全部」，不用再开一个 setState 副作用
   const activeType = type === '全部' || typeOptions.includes(type) ? type : '全部'
@@ -1171,6 +1201,7 @@ export function TemplateLibraryPage({
 
       {trashOpen && (
         <TrashModal
+          source={trashSource}
           onClose={() => setTrashOpen(false)}
           onToast={onToast}
           onRestored={() => { void load() }}

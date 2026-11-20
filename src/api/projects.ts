@@ -16,6 +16,7 @@ import type {
   ProjectVersionCompare,
   ProjectVersionScriptSnapshot,
   ProjectSummary,
+  ProjectTrashItem,
   PackageContents,
   ReceiptLinkResult,
   ReceiptLinkView,
@@ -196,8 +197,24 @@ export const startProjectVersion = (id: string, from?: number) =>
     { method: 'POST', body: JSON.stringify(from ? { from } : {}) },
   )
 
+// 删作品（v0.9.253）：不再一删到底，进回收站留 30 天；回执里带着这一条的到期时间
 export const deleteProject = (id: string) =>
-  request<{ ok: boolean; removed: { id: string; detachedReviews: number } }>('/api/projects/' + id, { method: 'DELETE' })
+  request<{ ok: boolean; removed: Project; trash: ProjectTrashItem }>('/api/projects/' + id, { method: 'DELETE' })
+
+/** 回收站列表：删掉的作品 30 天内能原样放回去。 */
+export const listProjectTrash = () =>
+  request<{ items: ProjectTrashItem[]; days: number }>('/api/projects/trash')
+
+/** 从回收站恢复：作品记录、评审、已看过、拍板一起回来。 */
+export const restoreProject = (id: string) =>
+  request<{ ok: boolean; project: Project; restored: { reviews: number; acks: number; decisions: number } }>(
+    '/api/projects/' + id + '/restore',
+    { method: 'POST' },
+  )
+
+/** 彻底删除：包文件与回收站条目一起清掉，之后不能恢复。 */
+export const purgeProject = (id: string) =>
+  request<{ ok: boolean }>('/api/projects/trash/' + id, { method: 'DELETE' })
 
 // 作品级只读分享：发给没有账号的人看脚本与分镜；停止后旧链接立即失效。
 // compare 是分享者自己的选择：默认不带两版对照，打开后拿到链接的人才能打印这张纸。

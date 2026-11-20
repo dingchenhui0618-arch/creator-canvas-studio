@@ -136,17 +136,43 @@ export async function unackReview(projectId, user = null) {
   return removed
 }
 
-/** 作品删掉后，便利贴也一起撕掉：留着只会让读的人多一次对不上的查找。 */
-export async function dropAcksForProject(projectId) {
-  if (!projectId) return 0
-  let removed = 0
+/**
+ * 作品删掉后，便利贴也一起撕掉：留着只会让读的人多一次对不上的查找。
+ * 返回撕下来的那几条（v0.9.253）：作品进了回收站，恢复时便利贴也要回到原处。
+ */
+export async function takeAcksForProject(projectId) {
+  if (!projectId) return []
+  let taken = []
   await enqueueWrite(async () => {
     const list = await loadAll()
     const keep = list.filter((item) => item.projectId !== projectId)
-    removed = list.length - keep.length
-    if (removed) await persist(keep)
+    taken = list.filter((item) => item.projectId === projectId).map((item) => ({ ...item }))
+    if (taken.length) await persist(keep)
   })
-  return removed
+  return taken
+}
+
+/** 恢复作品时把便利贴放回去；已经存在的号跳过。 */
+export async function restoreAcks(items = []) {
+  const rows = (Array.isArray(items) ? items : []).filter((item) => item && item.id)
+  if (!rows.length) return 0
+  let added = 0
+  await enqueueWrite(async () => {
+    const list = await loadAll()
+    const known = new Set(list.map((item) => item.id))
+    for (const row of rows) {
+      if (known.has(row.id)) continue
+      list.push({ ...row })
+      known.add(row.id)
+      added += 1
+    }
+    if (added) await persist(list)
+  })
+  return added
+}
+
+export async function dropAcksForProject(projectId) {
+  return (await takeAcksForProject(projectId)).length
 }
 
 /** 注销账号时用。 */

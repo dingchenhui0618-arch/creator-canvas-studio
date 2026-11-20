@@ -1244,11 +1244,13 @@ export default function ProjectPage({
 
   const remove = async () => {
     if (!data) return
-    if (!window.confirm('删除这条作品？工作流与评审不会被删掉，只解除关联。')) return
+    // v0.9.253：删掉的作品进回收站，30 天内能原样恢复——所以这里敢直说「去哪能找回来」
+    if (!window.confirm('把这条作品移到回收站？脚本、分镜、版本、交付记录和评审会一起进去，30 天内可以在「作品 → 回收站」恢复。')) return
     setBusy('delete')
     try {
-      await deleteProject(data.project.id)
-      onToast('已删除作品，工作流与评审仍在')
+      const result = await deleteProject(data.project.id)
+      const days = result.trash?.days || 30
+      onToast('已移到回收站，' + days + ' 天内在「作品 → 回收站」可以恢复')
       onBack()
     } catch (caught) {
       onToast(caught instanceof Error ? caught.message : '删除失败')
