@@ -74,18 +74,18 @@ test('详情页的档位只挂在 vq-project-detail 上，不连带作品项目�
 
 test('详情页 1080 以下字号抬一档：正文 16、小字 13、面板标题 17', () => {
   const root = decls(band, '.vq-project-detail')
-  assert.match(root, /--text-mono:\s*13px/)
-  assert.match(root, /--text-meta:\s*14px/)
-  assert.match(root, /--text-copy:\s*16px/)
-  assert.match(root, /--text-md:\s*17px/)
+  assert.match(root, /--text-mono:\s*14px/)
+  assert.match(root, /--text-meta:\s*15px/)
+  assert.match(root, /--text-copy:\s*17px/)
+  assert.match(root, /--text-md:\s*18px/)
 
   // 12px 的小字整组抬到 13：结论胶囊、运行状态、版本行、节拍编号走 .vq-mono
   for (const selector of ['.vq-project-verdict', '.vq-run-status', '.vq-version-issues', '.vq-project-archive-note', '.vq-project-versions-note']) {
     const body = decls(band, '.vq-project-detail ' + selector)
-    assert.match(body, /font-size:\s*13px/, selector + ' 应该抬到 13px')
+    assert.match(body, /font-size:\s*14px/, selector + ' 应该抬到 13px')
   }
   const mono = decls(band, '.vq-page.vq-project-detail .vq-mono')
-  assert.match(mono, /font-size:\s*13px/)
+  assert.match(mono, /font-size:\s*14px/)
 })
 
 test('详情页 1080 以下触控区：按钮 40px、链接类按钮 40px、胶囊高度跟着抬', () => {
@@ -100,7 +100,7 @@ test('详情页 1080 以下触控区：按钮 40px、链接类按钮 40px、胶�
   // 有显式 height 的那几条要一起改，不然 min-height 压不过 height: 24px
   assert.ok(allDecls(band, '.vq-project-detail .vq-version-review').some((body) => /height:\s*40px/.test(body)), '评审胶囊要显式给 height: 40px')
   assert.match(decls(band, '.vq-project-detail .vq-version-n'), /height:\s*26px/)
-  assert.match(decls(band, '.vq-project-detail .vq-project-verdict'), /font-size:\s*13px/)
+  assert.match(decls(band, '.vq-project-detail .vq-project-verdict'), /font-size:\s*14px/)
   assert.ok(allDecls(band, '.vq-project-detail .vq-project-verdict').some((body) => /height:\s*24px/.test(body)), '结论胶囊要显式给 height: 24px')
 })
 
@@ -125,7 +125,7 @@ test('栏目的隐式列钉成 minmax(0, 1fr)：来源面板的长模板名不�
   assert.match(decls(band, '.vq-project-detail .vq-project-source'), /grid-template-columns:\s*minmax\(0,\s*1fr\)/)
 })
 
-test('桌面（1081 起）没被顺手放大：基样式仍是 12/13px 与 19–24px 的按钮', () => {
+test('桌面（1081 起）没被顺手放大：基样式仍是 12/14px 与 19–24px 的按钮', () => {
   assert.match(firstRule(projectsCss, '.vq-version-review'), /height:\s*24px/)
   assert.match(firstRule(projectsCss, '.vq-script-link'), /font-size:\s*var\(--text-meta\)/)
   assert.doesNotMatch(firstRule(projectsCss, '.vq-script-link'), /min-height/)
@@ -134,7 +134,7 @@ test('桌面（1081 起）没被顺手放大：基样式仍是 12/13px 与 19–
   assert.ok(!projectsCss.includes('min-width: 1081px) and (max-width: 1439px) {\n  .vq-project-detail'), '详情页不该在桌面段里加规则')
 })
 
-test('新块里的字号不低于 13px，也没有 11 以下的碎字号', () => {
+test('新块里的字号不低于 14px，也没有 11 以下的碎字号', () => {
   for (const block of [band, phone, narrow]) {
     for (const match of block.matchAll(/font-size:\s*([0-9.]+)px/g)) {
       assert.ok(Number(match[1]) >= 13, '字号不该小于 13px：' + match[0])

@@ -45,7 +45,7 @@ function rule(block, selector) {
   return match[0]
 }
 
-test('手机抽屉的正文抬到 15px：这是「拆结构」读得最久的一屏', () => {
+test('手机抽屉的正文抬到 16px：这是「拆结构」读得最久的一屏', () => {
   assert.ok(phone, 'src/App.css 里应该有 @media (max-width: 640px) 的模板抽屉规则')
   for (const [selector, label] of [
     ['.template-drawer .drawer-quote', '开头钩子'],
@@ -54,10 +54,10 @@ test('手机抽屉的正文抬到 15px：这是「拆结构」读得最久的一
     ['.template-drawer .shot-copy strong', '分镜画面'],
     ['.template-drawer .drawer-list', '爆款分析'],
   ]) {
-    assert.match(rule(phone, selector), /font-size:\s*15px/, label + ' 在手机上应该是 15px（原来是 13px）')
+    assert.match(rule(phone, selector), /font-size:\s*16px/, label + ' 在手机上应该是 15px（原来是 13px）')
   }
   assert.match(rule(phone, '.template-drawer .drawer-head strong'), /font-size:\s*18px/, '抽屉标题 18px')
-  assert.match(rule(phone, '.template-drawer .drawer-sub'), /font-size:\s*13px/, '副标题这类元信息 13px，比正文低一档')
+  assert.match(rule(phone, '.template-drawer .drawer-sub'), /font-size:\s*14px/, '副标题这类元信息 13px，比正文低一档')
 })
 
 test('手机抽屉的触控目标：关闭 40×40，底部按钮 48px', () => {
@@ -66,7 +66,7 @@ test('手机抽屉的触控目标：关闭 40×40，底部按钮 48px', () => {
   assert.match(close, /height:\s*40px/, '关闭按钮 40px 高')
   const foot = rule(phone, '.template-drawer .drawer-foot :is(.vq-button)')
   assert.match(foot, /height:\s*48px/, '底部按钮 48px 高（原来是 32px，删除按钮 28px）')
-  assert.match(foot, /font-size:\s*15px/, '底部按钮字号 15px')
+  assert.match(foot, /font-size:\s*16px/, '底部按钮字号 15px')
 })
 
 test('底部四个按钮改成等宽两列：主操作第一格，删除固定在右下角', () => {
@@ -84,13 +84,13 @@ test('互动数据不再被挤断：390 三列、320 退两列且数字不换行
   assert.match(rule(small, '.template-drawer .drawer-stats'), /grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/, '320 上两列，「播放 128.4万」才放得下')
 })
 
-test('改编模式的输入框 16px：14px 的输入框会让 iOS 聚焦时整页放大', () => {
-  assert.match(rule(phone, '.template-drawer .adapt-input'), /font-size:\s*16px/, '改编输入框 16px')
+test('改编模式的输入框 17px：15px 的输入框会让 iOS 聚焦时整页放大', () => {
+  assert.match(rule(phone, '.template-drawer .adapt-input'), /font-size:\s*17px/, '改编输入框 16px')
   assert.match(rule(phone, '.template-drawer .adapt-input'), /min-height:\s*48px/, '输入框至少 48px 高')
-  assert.match(rule(phone, '.template-drawer .drawer-share-input'), /font-size:\s*16px/, '只读分享链接输入框也一样')
+  assert.match(rule(phone, '.template-drawer .drawer-share-input'), /font-size:\s*17px/, '只读分享链接输入框也一样')
 })
 
-test('抽屉里的说明文字都要 14px 起：12.5px 的等着实看不清', () => {
+test('抽屉里的说明文字都要 15px 起：12.5px 的等着实看不清', () => {
   for (const [selector, label] of [
     ['.template-drawer .drawer-section-head h3', '分组标题'],
     ['.template-drawer .drawer-source', '来源一行'],
@@ -98,6 +98,6 @@ test('抽屉里的说明文字都要 14px 起：12.5px 的等着实看不清', (
     ['.template-drawer .drawer-export-note, .template-drawer .drawer-share-note, .template-drawer .adapt-note', '导出与分享说明'],
   ]) {
     const found = rule(phone, selector)
-    assert.match(found, /font-size:\s*(1[45]|2\d)px/, label + ' 在手机上不该低于 14px')
+    assert.match(found, /font-size:\s*(1[5-9]|2\d)px/, label + ' 在手机上不该低于 15px')
   }
 })

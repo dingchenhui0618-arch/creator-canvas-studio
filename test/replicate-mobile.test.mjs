@@ -46,10 +46,10 @@ test('手机上弹窗改成整宽底部面板：不留 24px 外边距，从底�
   assert.match(phone, /\.replicate-modal\s*\{[^}]*border-radius:\s*20px 20px 0 0/, '只圆上面两个角，贴底的两个角是直的')
 })
 
-test('手机上输入框 16px：13px 的输入框会让 iOS 聚焦时整页放大', () => {
-  assert.match(phone, /\.replicate-field input\s*\{[^}]*font-size:\s*16px/, '输入框字号必须是 16px，否则 iOS 一聚焦就放大')
+test('手机上输入框 17px：14px 的输入框会让 iOS 聚焦时整页放大', () => {
+  assert.match(phone, /\.replicate-field input\s*\{[^}]*font-size:\s*17px/, '输入框字号必须是 16px，否则 iOS 一聚焦就放大')
   assert.match(phone, /\.replicate-field input\s*\{[^}]*height:\s*48px/, '输入框高度 48px，手指好点')
-  assert.match(phone, /\.replicate-field label\s*\{[^}]*font-size:\s*14px/, '字段标题 14px 起，13px 在手机上偏小')
+  assert.match(phone, /\.replicate-field label\s*\{[^}]*font-size:\s*15px/, '字段标题 14px 起，13px 在手机上偏小')
 })
 
 test('手机上按钮与关闭都是够大的触控目标（48 / 40）', () => {
@@ -67,7 +67,7 @@ test('抽帧缩略图在手机上换行：5 张 72px 一排是 392px，塞不进
   assert.match(small, /\.replicate-preview img\s*\{[^}]*width:\s*64px/, '320 上缩略图 64px 宽，三张一行放得下')
 })
 
-test('正文不再一律 13px：说明、校验、步骤在手机上都 14px', () => {
+test('正文不再一律 14px：说明、校验、步骤在手机上都 15px', () => {
   for (const [selector, label] of [
     ['.replicate-hint', '直链提示'],
     ['.replicate-checks', '三条校验'],
@@ -75,10 +75,10 @@ test('正文不再一律 13px：说明、校验、步骤在手机上都 14px', (
     ['.replicate-step strong, .replicate-step span', '进度步骤'],
   ]) {
     const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/, /g, ',\\s*')
-    assert.match(phone, new RegExp(escaped + '\\s*\\{[^}]*font-size:\\s*14px'), label + ' 在手机上应该是 14px')
+    assert.match(phone, new RegExp(escaped + '\\s*\\{[^}]*font-size:\\s*15px'), label + ' 在手机上应该是 15px')
   }
 })
 
-test('第一条日志还没回来时不画空框：手机上它会变成一条 16px 的灰条', () => {
+test('第一条日志还没回来时不画空框：手机上它会变成一条 17px 的灰条', () => {
   assert.match(tsx, /\(job\?\.logs \?\? \[\]\)\.length > 0/, '日志容器要等有内容再渲染')
 })

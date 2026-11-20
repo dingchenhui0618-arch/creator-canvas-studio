@@ -26,7 +26,7 @@
 .share-brand-dot { width: 8px; height: 8px; border-radius: var(--radius-xs); background: var(--ink); flex: none; }
 .share-brand-name {
   font-family: var(--font-mono);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 500;
   letter-spacing: .08em;
   text-transform: uppercase;
@@ -109,16 +109,16 @@
 }
 
 .share-page .beat-list { padding-left: var(--space-4); }
-.share-page .beat-item strong { font-size: 14px; }
-.share-page .beat-item p { font-size: 14px; }
-.share-page .beat-onscreen { font-size: 13px; }
-.share-page .shot-copy strong { font-size: 14px; }
+.share-page .beat-item strong { font-size: 15px; }
+.share-page .beat-item p { font-size: 15px; }
+.share-page .beat-onscreen { font-size: 14px; }
+.share-page .shot-copy strong { font-size: 15px; }
 .share-page .shot-copy p { font-size: var(--text-2xs); }
 
-.share-list { margin: 0; padding-left: var(--space-4); display: flex; flex-direction: column; gap: var(--space-2); font-size: 14px; line-height: 1.7; color: var(--muted); }
+.share-list { margin: 0; padding-left: var(--space-4); display: flex; flex-direction: column; gap: var(--space-2); font-size: 15px; line-height: 1.7; color: var(--muted); }
 
 .share-node-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
-.share-node-list li { display: flex; align-items: baseline; gap: var(--space-3); padding: var(--space-2) 0; border-bottom: 1px solid var(--line-faint); font-size: 14px; }
+.share-node-list li { display: flex; align-items: baseline; gap: var(--space-3); padding: var(--space-2) 0; border-bottom: 1px solid var(--line-faint); font-size: 15px; }
 .share-node-list li:last-child { border-bottom: 0; }
 .share-node-index { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--faint); }
 .share-node-list em { margin-left: auto; font-family: var(--font-mono); font-style: normal; font-size: var(--text-2xs); letter-spacing: .04em; text-transform: uppercase; color: var(--faint); }
@@ -129,7 +129,7 @@
 .share-source a { display: inline-flex; align-items: center; gap: var(--space-1); color: var(--ink); font-weight: var(--weight-medium); }
 
 .share-foot { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-6); padding-top: var(--space-6); border-top: 1px solid var(--line); }
-.share-foot-copy { display: flex; flex-direction: column; gap: var(--space-2); max-width: 560px; font-size: 13px; line-height: 1.8; color: var(--faint); }
+.share-foot-copy { display: flex; flex-direction: column; gap: var(--space-2); max-width: 560px; font-size: 14px; line-height: 1.8; color: var(--faint); }
 
 .share-state {
   display: flex;

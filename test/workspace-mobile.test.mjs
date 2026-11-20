@@ -95,12 +95,12 @@ test('1080 以下：token 抬一档，页内的按钮与胶囊跟着走', () => 
   const root = decls(band, '.cv-page')
   assert.match(root, /--btn-h:\s*40px/)
   assert.match(root, /--btn-h-sm:\s*40px/)
-  assert.match(root, /--chip-font:\s*13px/)
+  assert.match(root, /--chip-font:\s*14px/)
   assert.match(root, /--chip-pill-h:\s*24px/)
-  assert.match(root, /--text-mono:\s*13px/)
+  assert.match(root, /--text-mono:\s*14px/)
 })
 
-test('1080 以下：12px 那一片逐个点名抬到 13px', () => {
+test('1080 以下：13px 那一片逐个点名抬到 14px', () => {
   for (const selector of [
     '.cv-page .cv-save',
     '.cv-page .cv-run-credit',
@@ -124,7 +124,7 @@ test('1080 以下：12px 那一片逐个点名抬到 13px', () => {
     '.cv-page .cv-steps-note',
     '.cv-page .cv-empty-note',
   ]) {
-    assert.match(decls(band, selector), /font-size:\s*13px/, selector + ' 要抬到 13px')
+    assert.match(decls(band, selector), /font-size:\s*14px/, selector + ' 要抬到 13px')
   }
 })
 
@@ -155,7 +155,7 @@ test('560 以下再抬一档到 44px', () => {
   assert.match(decls(phone, '.cv-page .cv-palette-item'), /min-height:\s*44px/)
 })
 
-test('新加的两段里没有小于 13px 的字', () => {
+test('新加的两段里没有小于 14px 的字', () => {
   for (const block of [band, phone]) {
     for (const match of block.matchAll(/font-size:\s*([\d.]+)px/g)) {
       assert.ok(Number(match[1]) >= 13, '新段落里还有 ' + match[1] + 'px 的字')
@@ -166,21 +166,21 @@ test('新加的两段里没有小于 13px 的字', () => {
 // r242 那条「桌面一行没动」的护栏：桌面仍是 27px 工具条、42px 工具条高、40px 输入框。
 // r255 起桌面元信息由 12px 抬到 13px（用户说「字太小」），所以这里锁 13px——
 // 再往回改小要被这条拦下来。
-test('桌面（1081 起）：27px 工具条、13px 元信息、26px 缩放键', () => {
+test('桌面（1081 起）：27px 工具条、14px 元信息、26px 缩放键', () => {
   assert.match(firstRule(canvasCss, '.cv-tool'), /height:\s*27px/)
   assert.match(firstRule(canvasCss, '.cv-toolbar'), /height:\s*42px/)
-  assert.match(firstRule(canvasCss, '.cv-toolbar-count'), /font-size:\s*13px/)
-  assert.match(firstRule(canvasCss, '.cv-zoom'), /font-size:\s*13px/)
+  assert.match(firstRule(canvasCss, '.cv-toolbar-count'), /font-size:\s*14px/)
+  assert.match(firstRule(canvasCss, '.cv-zoom'), /font-size:\s*14px/)
   assert.match(firstRule(canvasCss, '.cv-page .cv-tool'), /height:\s*40px/)
   assert.ok(!firstRule(canvasCss, '.cv-flow-name').includes('min-height'), '流程名输入框基样式不加 min-height')
   assert.match(firstRule(canvasCss, '.cv-step-no'), /width:\s*24px/)
   assert.match(firstRule(canvasCss, '.cv-step-state'), /line-height:\s*22px/)
 })
 
-test('顶栏：内部测试胶囊 1080 以下 13px，1024 收窄模型名，480 以下胶囊与模型名都让位', () => {
+test('顶栏：内部测试胶囊 1080 以下 14px，1024 收窄模型名，480 以下胶囊与模型名都让位', () => {
   assert.match(firstRule(shellCss, '.vq-env-pill'), /font-size:\s*(?:12px|var\(--text-2xs\))/)
   assert.ok(shellBand, 'shell.css 缺少 ≤1080 的顶栏规则')
-  assert.match(decls(shellBand, '.vq-env-pill'), /font-size:\s*13px/)
+  assert.match(decls(shellBand, '.vq-env-pill'), /font-size:\s*14px/)
   assert.match(decls(shellBand, '.vq-topbar .vq-model-trigger'), /max-width:\s*148px/)
   assert.match(decls(shellBand, '.vq-topbar .vq-topbar-right'), /flex:\s*0 0 auto/)
   assert.match(decls(shellBand, '.vq-topbar .vq-button--icon'), /flex:\s*0 0 auto/)

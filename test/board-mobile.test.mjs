@@ -109,9 +109,9 @@ test('1080 以下：让位的那几处（页面名 / 分隔线 / 选择器标签
   }
 })
 
-test('1080 以下：12px 的字抬到 13px，点按区 24 → 40px', () => {
+test('1080 以下：13px 的字抬到 14px，点按区 24 → 40px', () => {
   for (const selector of ['.bd-state', '.bd-queue', '.bd-note-hint']) {
-    assert.match(decls(band, selector), /font-size:\s*13px/, selector + ' 要抬到 13px')
+    assert.match(decls(band, selector), /font-size:\s*14px/, selector + ' 要抬到 13px')
   }
   assert.match(decls(band, '.bd-action'), /height:\s*40px/)
   assert.match(decls(band, '.bd-action'), /padding:\s*0 var\(--space-3\)/)
@@ -153,7 +153,7 @@ test('560 以下再抬一档到 44px', () => {
   assert.match(decls(phone, '.bd-state'), /height:\s*28px/)
 })
 
-test('新加的两段里没有小于 13px 的字', () => {
+test('新加的两段里没有小于 14px 的字', () => {
   for (const block of [band, phone]) {
     for (const match of block.matchAll(/font-size:\s*([\d.]+)px/g)) {
       assert.ok(Number(match[1]) >= 13, '新段落里还有 ' + match[1] + 'px 的字')
@@ -161,10 +161,10 @@ test('新加的两段里没有小于 13px 的字', () => {
   }
 })
 
-test('桌面（1081 起）保持原样：42px 状态条、24px 按钮、12px 小字', () => {
+test('桌面（1081 起）保持原样：42px 状态条、24px 按钮、13px 小字', () => {
   assert.match(firstRule(boardCss, '.bd-strip'), /height:\s*42px/)
   assert.match(firstRule(boardCss, '.bd-action'), /height:\s*24px/)
-  assert.match(firstRule(boardCss, '.bd-action'), /font-size:\s*13px/)
+  assert.match(firstRule(boardCss, '.bd-action'), /font-size:\s*14px/)
   assert.match(firstRule(boardCss, '.bd-state'), /font-size:\s*(?:12px|var\(--text-2xs\))/)
   assert.match(firstRule(boardCss, '.bd-label'), /font-size:\s*(?:12px|var\(--text-2xs\))/)
   // 选择器触发器的高度由 shell 的全局窄屏规则管，这一页不该自己写死

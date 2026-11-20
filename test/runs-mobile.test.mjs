@@ -91,14 +91,14 @@ test('运行记录页的窄屏规则只在 ≤1080 / ≤700 / ≤560 三段里�
   assert.ok(!outside.includes('.runs-page .vq-mono'), '13px 的 mono 规则要在 ≤1080 里')
 })
 
-test('1080 以下：标签 / mono / 输出字段全部 13px', () => {
+test('1080 以下：标签 / mono / 输出字段全部 14px', () => {
   const root = decls(band, '.runs-page')
   assert.match(root, /--btn-h:\s*40px/)
   assert.match(root, /--btn-h-sm:\s*40px/)
-  assert.match(root, /--chip-font:\s*13px/)
-  assert.match(root, /--text-mono:\s*13px/)
+  assert.match(root, /--chip-font:\s*14px/)
+  assert.match(root, /--text-mono:\s*14px/)
   // tokens.css 里 .vq-mono 的 12px 不吃 --text-mono，所以页面里单点抬
-  assert.match(decls(band, '.runs-page .vq-mono'), /font-size:\s*13px/)
+  assert.match(decls(band, '.runs-page .vq-mono'), /font-size:\s*14px/)
   for (const selector of [
     '.runs-page .runs-stats span',
     '.runs-page .runs-select > span',
@@ -108,12 +108,12 @@ test('1080 以下：标签 / mono / 输出字段全部 13px', () => {
     '.runs-page .runs-output-raw',
     '.runs-page .runs-node-output',
   ]) {
-    assert.match(decls(band, selector), /font-size:\s*13px/, selector + ' 要 13px')
+    assert.match(decls(band, selector), /font-size:\s*14px/, selector + ' 要 13px')
   }
 })
 
-test('筛选下拉的选中值不被标签的 12px 压住（.runs-select span 打中过 .vq-select__value）', () => {
-  assert.match(decls(band, '.runs-page .runs-select .vq-select__value'), /font-size:\s*13px/)
+test('筛选下拉的选中值不被标签的 13px 压住（.runs-select span 打中过 .vq-select__value）', () => {
+  assert.match(decls(band, '.runs-page .runs-select .vq-select__value'), /font-size:\s*14px/)
   // 基样式仍是标签的 12px：这一条只治窄屏，不把桌面的标签字号一起改了
   assert.match(firstRule(runsCss, '.runs-select span'), /font-size:\s*(?:12px|var\(--text-2xs\))/)
 })
@@ -154,7 +154,7 @@ test('手机（560 以下）：按钮 44px，输出改成键在上、值在下',
   assert.match(decls(phone, '.runs-page .runs-pager .vq-mono'), /grid-column:\s*1 \/ -1/)
 })
 
-test('新写的三段里没有比 13px 还小的字号', () => {
+test('新写的三段里没有比 14px 还小的字号', () => {
   for (const [label, block] of [['≤1080', band], ['≤700', rowBand], ['≤560', phone]]) {
     for (const rule of rulesOf(block)) {
       const match = rule.body.match(/font-size:\s*([\d.]+)px/)

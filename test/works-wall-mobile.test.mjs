@@ -48,27 +48,27 @@ function rule(block, selector) {
   return match[0]
 }
 
-test('手机作品流的正文抬到 15/14px：标题原来是 14px、说明 13px', () => {
+test('手机作品流的正文抬到 15/15px：标题原来是 15px、说明 14px', () => {
   assert.ok(phone, 'src/styles/works.css 里应该有 @media (max-width: 560px) 的作品流规则')
-  assert.match(rule(phone, '.works-title'), /font-size:\s*15px/, '卡片标题 15px')
-  assert.match(rule(phone, '.works-summary'), /font-size:\s*14px/, '工作流那句摘要是唯一的说明文字，14px')
-  assert.match(rule(phone, '.works-time'), /font-size:\s*13px/, '时间与模型名 13px（原来 12px）')
-  assert.match(rule(phone, '.works-fallback'), /font-size:\s*14px/, '没有封面时的占位文字 14px')
-  assert.match(rule(phone, '.works-more'), /font-size:\s*13px/, '「已经到底了」13px')
+  assert.match(rule(phone, '.works-title'), /font-size:\s*16px/, '卡片标题 15px')
+  assert.match(rule(phone, '.works-summary'), /font-size:\s*15px/, '工作流那句摘要是唯一的说明文字，14px')
+  assert.match(rule(phone, '.works-time'), /font-size:\s*14px/, '时间与模型名 13px（原来 12px）')
+  assert.match(rule(phone, '.works-fallback'), /font-size:\s*15px/, '没有封面时的占位文字 14px')
+  assert.match(rule(phone, '.works-more'), /font-size:\s*14px/, '「已经到底了」13px')
 })
 
 test('卡片上的动作用 44px 触控区：24px 高的文字链接手机上点不中', () => {
   const action = rule(phone, '.works-action')
   assert.match(action, /min-height:\s*44px/, '用作参考 / 下载 至少 44px 高')
-  assert.match(action, /font-size:\s*14px/, '动作文字 14px（原来 12px）')
+  assert.match(action, /font-size:\s*15px/, '动作文字 14px（原来 12px）')
   assert.match(action, /align-items:\s*flex-end/, '字坐到底部，底下那条下划线才贴着字')
   assert.match(rule(phone, '.works-more.is-button'), /min-height:\s*44px/, '「看更早的」同样 44px')
 })
 
-test('筛选胶囊 40px 高、14px 字：12.5px / 29px 的胶囊在手机上又小又难点', () => {
+test('筛选胶囊 40px 高、15px 字：12.5px / 29px 的胶囊在手机上又小又难点', () => {
   const chip = rule(phone, '.works-chip')
   assert.match(chip, /min-height:\s*40px/, '胶囊至少 40px 高')
-  assert.match(chip, /font-size:\s*14px/, '胶囊文字 14px')
+  assert.match(chip, /font-size:\s*15px/, '胶囊文字 14px')
   assert.match(chip, /padding:\s*8px 16px/, '胶囊内边距走 4/8 栅格')
 })
 

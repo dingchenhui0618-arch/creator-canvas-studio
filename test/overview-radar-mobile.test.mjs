@@ -104,14 +104,14 @@ test('骨架（导航 / 顶栏搜索 / 版本 / 筛选片 / 文字链接）在 1
   for (const minHeightOf of ['.vq-version-trigger', '.vq-link', '.vq-select__trigger']) assert.match(decls(shellBand, minHeightOf), /min-height:\s*40px/)
   const chip = decls(shellBand, '.vq-filter-chip')
   assert.match(chip, /height:\s*40px/)
-  assert.match(chip, /font-size:\s*13px/)
+  assert.match(chip, /font-size:\s*14px/)
 })
 
 test('骨架的字：筛选片说明 13、kicker 13、上手引导 13', () => {
-  assert.match(decls(shellBand, '.vq-filter-chip__count'), /font-size:\s*13px/)
-  assert.match(decls(shellBand, '.vq-head-kicker'), /--head-kicker-size:\s*13px/)
-  assert.match(decls(shellBand, '.vq-guide-step-body'), /font-size:\s*13px/)
-  assert.match(decls(shellBand, '.vq-guide-head p'), /font-size:\s*13px/)
+  assert.match(decls(shellBand, '.vq-filter-chip__count'), /font-size:\s*14px/)
+  assert.match(decls(shellBand, '.vq-head-kicker'), /--head-kicker-size:\s*14px/)
+  assert.match(decls(shellBand, '.vq-guide-step-body'), /font-size:\s*14px/)
+  assert.match(decls(shellBand, '.vq-guide-head p'), /font-size:\s*14px/)
 })
 
 test('手机（560 以下）骨架抬到 44px', () => {
@@ -124,9 +124,9 @@ test('工作台：按钮两个档位、三处小字 13、主按钮 40/44', () =>
   const root = decls(overviewBand, '.vq-page--overview')
   assert.match(root, /--btn-h:\s*40px/)
   assert.match(root, /--btn-h-sm:\s*40px/)
-  assert.match(decls(overviewBand, '.vq-page--overview .vq-mono'), /font-size:\s*13px/)
-  assert.match(decls(overviewBand, '.vq-page--overview .vq-next-label'), /font-size:\s*13px/)
-  assert.match(decls(overviewBand, '.vq-page--overview .vq-next-stats dt'), /font-size:\s*13px/)
+  assert.match(decls(overviewBand, '.vq-page--overview .vq-mono'), /font-size:\s*14px/)
+  assert.match(decls(overviewBand, '.vq-page--overview .vq-next-label'), /font-size:\s*14px/)
+  assert.match(decls(overviewBand, '.vq-page--overview .vq-next-stats dt'), /font-size:\s*14px/)
   assert.match(decls(overviewBand, '.vq-page--overview .vq-next-cta'), /height:\s*40px/)
   assert.match(decls(overviewPhone, '.vq-page--overview .vq-next-cta'), /height:\s*44px/)
   assert.match(decls(overviewPhone, '.vq-page--overview'), /--btn-h:\s*44px/)
@@ -136,18 +136,18 @@ test('爆款雷达 / 模板库：字号 13、按钮 40、标题 16、搜索框 4
   const root = decls(radarBand, '.page--radar')
   assert.match(root, /--btn-h:\s*40px/)
   assert.match(root, /--btn-h-sm:\s*40px/)
-  assert.match(root, /--chip-font:\s*13px/)
+  assert.match(root, /--chip-font:\s*14px/)
   for (const selector of ['.page--radar .radar-author', '.page--radar .radar-badge', '.page--radar .radar-owned']) {
-    assert.match(decls(radarBand, selector), /font-size:\s*13px/, selector)
+    assert.match(decls(radarBand, selector), /font-size:\s*14px/, selector)
   }
-  assert.match(decls(radarBand, '.page--radar .radar-stats'), /font-size:\s*13px/)
-  assert.match(decls(radarBand, '.page--radar .radar-stats .radar-rate'), /font-size:\s*13px/)
+  assert.match(decls(radarBand, '.page--radar .radar-stats'), /font-size:\s*14px/)
+  assert.match(decls(radarBand, '.page--radar .radar-stats .radar-rate'), /font-size:\s*14px/)
   assert.match(decls(radarBand, '.page--radar .radar-actions .vq-button'), /height:\s*40px/)
-  assert.match(decls(radarBand, '.page--radar .radar-title'), /font-size:\s*16px/)
+  assert.match(decls(radarBand, '.page--radar .radar-title'), /font-size:\s*17px/)
   const adapt = allDecls(radarBand, '.page--templates .template-adapt').join(' ')
-  assert.match(adapt, /font-size:\s*13px/)
+  assert.match(adapt, /font-size:\s*14px/)
   assert.match(adapt, /height:\s*40px/)
-  assert.match(decls(radarBand, '.page--templates .template-stats'), /font-size:\s*13px/)
+  assert.match(decls(radarBand, '.page--templates .template-stats'), /font-size:\s*14px/)
   assert.match(decls(radarBand, '.page--radar .inline-search'), /height:\s*44px/)
 })
 
@@ -175,12 +175,12 @@ test('桌面（1081 起）基样式一个像素没动', () => {
   assert.match(firstRule(overviewCss, '.vq-next-cta'), /height:\s*36px/)
   assert.match(firstRule(overviewCss, '.vq-next-label'), /font-size:\s*(?:12px|var\(--text-2xs\))/)
   assert.match(firstRule(radarCss, '.radar-author'), /font-size:\s*(?:11\.5px|var\(--text-2xs\))/)
-  assert.match(firstRule(radarCss, '.radar-title'), /font-size:\s*15px/)
+  assert.match(firstRule(radarCss, '.radar-title'), /font-size:\s*16px/)
   assert.match(firstRule(radarCss, '.template-adapt'), /height:\s*32px/)
   assert.match(firstRule(radarCss, '.template-adapt'), /font-size:\s*(?:11\.5px|var\(--text-2xs\))/)
 })
 
-test('新加的几段里没有小于 13px 的字', () => {
+test('新加的几段里没有小于 14px 的字', () => {
   for (const block of [shellBand, shellPhone, overviewBand, overviewPhone, radarBand, radarPhone, compact, tiny]) {
     for (const match of block.matchAll(/font-size:\s*([0-9.]+)px/g)) {
       assert.ok(Number(match[1]) >= 13, '新规则里不该出现 ' + match[1] + 'px 的字')

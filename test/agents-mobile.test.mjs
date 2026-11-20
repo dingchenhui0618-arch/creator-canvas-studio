@@ -89,12 +89,12 @@ test('快捷创作的窄屏规则只在 ≤1080 / ≤560 两段里，根元素�
   assert.ok(!outside.includes('.agx-page .agx-mono'), '13px 的 mono 规则要在 ≤1080 里')
 })
 
-test('1080 以下：小字统一 13px（mono / 标签 / 计数 / 胶囊）', () => {
+test('1080 以下：小字统一 14px（mono / 标签 / 计数 / 胶囊）', () => {
   const root = decls(band, '.agx-page')
   assert.match(root, /--btn-h:\s*40px/)
   assert.match(root, /--btn-h-sm:\s*40px/)
-  assert.match(root, /--chip-font:\s*13px/)
-  assert.match(root, /--text-mono:\s*13px/)
+  assert.match(root, /--chip-font:\s*14px/)
+  assert.match(root, /--text-mono:\s*14px/)
   // .agx-mono 的 12px 写死在 agents.css 里，不吃 --text-mono，所以要逐个点名
   for (const selector of [
     '.agx-page .agx-mono',
@@ -108,12 +108,12 @@ test('1080 以下：小字统一 13px（mono / 标签 / 计数 / 胶囊）', () 
     '.agx-page .qc-tool',
     '.agx-page .qc-preview-head',
   ]) {
-    assert.match(decls(band, selector), /font-size:\s*13px/, selector + ' 要 13px')
+    assert.match(decls(band, selector), /font-size:\s*14px/, selector + ' 要 13px')
   }
-  assert.match(decls(band, '.agx-page .agx-capsule > span'), /font-size:\s*13px/)
-  assert.match(decls(band, '.agx-page .agx-capsule-trigger em'), /font-size:\s*13px/)
-  assert.match(decls(band, '.agx-page .agx-surface-note'), /font-size:\s*13px/)
-  assert.match(decls(band, '.agx-page .agx-surface-switch button'), /font-size:\s*13px/)
+  assert.match(decls(band, '.agx-page .agx-capsule > span'), /font-size:\s*14px/)
+  assert.match(decls(band, '.agx-page .agx-capsule-trigger em'), /font-size:\s*14px/)
+  assert.match(decls(band, '.agx-page .agx-surface-note'), /font-size:\s*14px/)
+  assert.match(decls(band, '.agx-page .agx-surface-switch button'), /font-size:\s*14px/)
 })
 
 test('1080 以下：28–32px 的点按区抬到 40px', () => {
@@ -181,7 +181,7 @@ test('左栏不再在「新对话」和「历史对话」之间孤零零显示�
   assert.match(chatSource, /items\.length > 0 \? <span className="qc-count">共 \{items\.length\} 个<\/span> : null/)
 })
 
-test('新增的窄屏规则里没有小于 13px 的字', () => {
+test('新增的窄屏规则里没有小于 14px 的字', () => {
   for (const [name, block] of [['≤1080', band], ['≤560', phone]]) {
     for (const rule of rulesOf(block)) {
       const match = rule.body.match(/font-size:\s*([\d.]+)px/)

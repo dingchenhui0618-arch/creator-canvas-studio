@@ -8,32 +8,32 @@
   .vq-page--settings {
     --btn-h: 40px;
     --btn-h-sm: 40px;
-    --chip-font: 13px;
+    --chip-font: 14px;
     --chip-tag-h: 24px;
     --chip-pill-h: 24px;
-    --text-mono: 13px;
+    --text-mono: 14px;
   }
 
   /* 卡头、单据号、会话 IP、流水时间这类等宽小字 */
   .vq-page--settings .vq-mono {
-    font-size: 13px;
+    font-size: 14px;
   }
 
   /* 全站胶囊与标签：设置页里 13px 才看得清「口令 / 按次计费 / 待确认」 */
   .vq-page--settings .vq-tag,
   .vq-page--settings .vq-pill {
-    font-size: 13px;
+    font-size: 14px;
   }
 
   /* 表单：字段标签 12 → 13，输入框 32 → 40（手机 44） */
   .vq-page--settings .vq-field > span {
-    font-size: 13px;
+    font-size: 14px;
   }
 
   .vq-page--settings .vq-input {
     height: 40px;
     padding: 0 12px;
-    font-size: 14px;
+    font-size: 15px;
   }
 
   /* 说明性小字：口令、两步验证、会话、流水、单据、本月花费 */
@@ -44,11 +44,11 @@
   .vq-page--settings .vq-ledger-more,
   .vq-page--settings .vq-plan-note,
   .vq-page--settings .vq-spend-note {
-    font-size: 13px;
+    font-size: 14px;
   }
 
   .vq-page--settings .vq-2fa-facts {
-    font-size: 13px;
+    font-size: 14px;
   }
 
   /* 行内元信息：会话时间 / IP / 到期、反馈时间、价格标签、单据时间、健康耗时 */
@@ -63,22 +63,22 @@
   .vq-page--settings .vq-spend-chip em,
   .vq-page--settings .vq-spend-chip i,
   .vq-page--settings .vq-ledger td.time {
-    font-size: 13px;
+    font-size: 14px;
   }
 
   /* 积分流水：表头 12 → 13；手机上（≤480）原本压到 12 的时间与类型也回到 13 */
   .vq-page--settings .vq-ledger th {
-    font-size: 13px;
+    font-size: 14px;
   }
 
   .vq-page--settings .vq-ledger td,
   .vq-page--settings .vq-ledger td:nth-child(1),
   .vq-page--settings .vq-ledger td:nth-child(2) {
-    font-size: 13px;
+    font-size: 14px;
   }
 
   .vq-page--settings .vq-health-row strong {
-    font-size: 13px;
+    font-size: 14px;
   }
 
   /* 帮助链接：原来 31px 高的一枚小胶囊，撑到 40px 才点得准 */
@@ -148,13 +148,13 @@
 }
 
 .vq-shotframes-head strong {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 500;
 }
 
 .vq-shotframes-head span {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .vq-shotframes-list {
@@ -182,20 +182,20 @@
 }
 
 .vq-shotframes-copy b {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 500;
   overflow-wrap: anywhere;
 }
 
 .vq-shotframes-copy span {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .vq-shotframes-tag {
   margin-left: 8px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   font-style: normal;
   font-weight: 400;
 }
@@ -207,7 +207,7 @@
 .vq-shotframes-note {
   margin: 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
 }
 

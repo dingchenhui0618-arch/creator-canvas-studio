@@ -49,13 +49,13 @@
 
 .vq-section-head h2 {
   margin: 4px 0 0;
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 500;
   letter-spacing: -0.01em;
 }
 
 .vq-section-head .vq-mono {
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .vq-task-grid {
@@ -90,7 +90,7 @@
 }
 
 .vq-task strong {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   line-height: 1.4;
 }
@@ -98,7 +98,7 @@
 .vq-task p {
   margin: 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
 }
 
@@ -113,7 +113,7 @@
 }
 
 .vq-task-foot .vq-mono {
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .vq-task-go {
@@ -121,7 +121,7 @@
   align-items: center;
   gap: 4px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .vq-task:hover .vq-task-go {
@@ -168,7 +168,7 @@
   min-height: 46px;
   border-bottom: 1px solid var(--line-faint);
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .vq-table-row:last-child {
@@ -188,14 +188,14 @@
 .vq-table-name strong {
   overflow: hidden;
   color: var(--ink);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .vq-table-name .vq-mono {
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .vq-table-row .vq-pill {
@@ -214,14 +214,14 @@
 }
 
 .vq-empty strong {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 500;
 }
 
 .vq-empty span {
   max-width: 56ch;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.7;
 }
 
@@ -241,7 +241,7 @@
   border-radius: var(--radius-sm);
   background: var(--fail-soft);
   color: var(--fail);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 /* 模板行：最近入库的脚本结构 */
@@ -274,7 +274,7 @@
 }
 
 .vq-template-copy strong {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 500;
   line-height: 1.4;
 }
@@ -293,11 +293,11 @@
   padding-top: 16px;
   border-top: 1px solid var(--line);
   color: var(--faint);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .vq-overview-foot .vq-mono {
-  font-size: 13px;
+  font-size: 14px;
 }
 
 /* 页脚右侧三个入口：没有间距时「服务条款/隐私说明/上手指引」会挤成一句话 */
@@ -363,7 +363,7 @@
   margin: var(--space-2) 0 0;
   color: rgba(255, 255, 255, 0.6);
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 14px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -379,7 +379,7 @@
   background: #ffffff;
   color: var(--ink);
   font: inherit;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 500;
   cursor: pointer;
   transition: transform var(--dur-1) var(--ease-out), box-shadow var(--dur-2) var(--ease-out);
@@ -489,7 +489,7 @@
 }
 
 .vq-start-copy strong {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   line-height: 1.4;
 }
@@ -500,7 +500,7 @@
   -webkit-line-clamp: 2;
   overflow: hidden;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.5;
 }
 
@@ -535,7 +535,7 @@
 .vq-first-run-sub {
   margin: var(--space-1) 0 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
 }
 
@@ -573,21 +573,21 @@
 }
 
 .vq-first-run-copy strong {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   line-height: 1.4;
 }
 
 .vq-first-run-copy span {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
 }
 
 .vq-first-run-note {
   margin: var(--space-4) 0 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.7;
 }
 
@@ -687,7 +687,7 @@
 .vq-review-queue-sub {
   margin: 4px 0 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
 }
 
@@ -708,7 +708,7 @@
 /* 首屏只排 3 条：第 4 条以后由这一行交代「还有几条」，点开排到服务端上限（v0.9.24） */
 .vq-review-queue-more {
   margin-top: 8px;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 /*
@@ -727,7 +727,7 @@
   border: 1px solid var(--line-faint);
   border-radius: var(--radius-sm);
   background: var(--surface);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
 }
 
@@ -838,7 +838,7 @@
   border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
 }
 
@@ -889,7 +889,7 @@
 
 .vq-review-queue-copy strong {
   overflow: hidden;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 500;
   line-height: 1.4;
   text-overflow: ellipsis;
@@ -973,7 +973,7 @@
 .vq-delivery-sub {
   margin: 4px 0 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
 }
 
@@ -1030,7 +1030,7 @@
 
 .vq-delivery-copy strong {
   overflow: hidden;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 500;
   line-height: 1.4;
   text-overflow: ellipsis;
@@ -1063,7 +1063,7 @@
   max-width: 100%;
   overflow: hidden;
   color: var(--ink);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.5;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1161,7 +1161,7 @@
 .vq-delivery-receipt-total {
   margin: 8px 0 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
 }
 
@@ -1209,7 +1209,7 @@
   background: var(--surface-raised);
   color: var(--ink);
   font: inherit;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.5;
   text-align: left;
   cursor: pointer;
@@ -1344,7 +1344,7 @@
 
 .vq-delivery-more {
   margin-top: 8px;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 /* 翻页：与评审队列的 pager 同一形状（一条发丝线、12px 字、右边一个动作） */
@@ -1359,7 +1359,7 @@
   border: 1px solid var(--line-faint);
   border-radius: var(--radius-sm);
   background: var(--surface);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
 }
 
@@ -1454,7 +1454,7 @@
 .vq-share-summary-sub {
   margin: 4px 0 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
 }
 
@@ -1497,7 +1497,7 @@
 
 .vq-share-summary-copy strong {
   overflow: hidden;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 500;
   line-height: 1.4;
   text-overflow: ellipsis;
@@ -1509,7 +1509,7 @@
   align-items: center;
   gap: 8px;
   color: var(--faint);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.5;
 }
 
@@ -1537,7 +1537,7 @@
   gap: 4px;
   flex-shrink: 0;
   color: var(--faint);
-  font-size: 13px;
+  font-size: 14px;
   white-space: nowrap;
 }
 
@@ -1582,13 +1582,13 @@
   .vq-page--overview {
     --btn-h: 40px;
     --btn-h-sm: 40px;
-    --text-mono: 13px;
-    --chip-font: 13px;
+    --text-mono: 14px;
+    --chip-font: 14px;
     --chip-tag-h: 24px;
   }
-  .vq-page--overview .vq-mono { font-size: 13px; }
-  .vq-page--overview .vq-next-label { font-size: 13px; }
-  .vq-page--overview .vq-next-stats dt { font-size: 13px; }
+  .vq-page--overview .vq-mono { font-size: 14px; }
+  .vq-page--overview .vq-next-label { font-size: 14px; }
+  .vq-page--overview .vq-next-stats dt { font-size: 14px; }
   .vq-page--overview .vq-next-cta { height: 40px; }
 }
 

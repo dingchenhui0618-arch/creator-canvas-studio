@@ -93,16 +93,16 @@ test('评审页窄屏规则只在 ≤1080 / ≤560 两段里，页面根元素�
   assert.ok(!outside.includes('.review-page .vq-mono'), '13px 的 mono 规则要在 ≤1080 里')
 })
 
-test('1080 以下：胶囊 / 标签 / mono 全部 13px', () => {
+test('1080 以下：胶囊 / 标签 / mono 全部 14px', () => {
   const root = decls(band, '.review-page')
   assert.match(root, /--btn-h:\s*40px/)
   assert.match(root, /--btn-h-sm:\s*40px/)
-  assert.match(root, /--chip-font:\s*13px/)
+  assert.match(root, /--chip-font:\s*14px/)
   assert.match(root, /--chip-pill-h:\s*24px/)
   assert.match(root, /--chip-tag-h:\s*24px/)
-  assert.match(root, /--text-mono:\s*13px/)
+  assert.match(root, /--text-mono:\s*14px/)
   // tokens.css 里 .vq-mono 的 12px 不吃 --text-mono，所以页面里单点抬
-  assert.match(decls(band, '.review-page .vq-mono'), /font-size:\s*13px/)
+  assert.match(decls(band, '.review-page .vq-mono'), /font-size:\s*14px/)
   for (const selector of [
     '.review-page .review-picker-toggle',
     '.review-page .review-thumb-fallback',
@@ -118,7 +118,7 @@ test('1080 以下：胶囊 / 标签 / mono 全部 13px', () => {
     '.review-page .review-model-note-text small',
     '.review-page .review-anchor-no',
   ]) {
-    assert.match(decls(band, selector), /font-size:\s*13px/, selector + ' 要 13px')
+    assert.match(decls(band, selector), /font-size:\s*14px/, selector + ' 要 13px')
   }
 })
 
@@ -150,14 +150,14 @@ test('手机（560 以下）：按钮 44px，点按区跟着抬', () => {
   assert.match(decls(phone, '.review-page .review-history-item'), /padding:\s*8px/)
 })
 
-test('共用骨架：图标态搜索 40/44px，「等你看」计数 13px，顶栏图标按钮不收缩', () => {
+test('共用骨架：图标态搜索 40/44px，「等你看」计数 14px，顶栏图标按钮不收缩', () => {
   assert.match(decls(shellIconSearch, '.vq-search'), /width:\s*40px/)
   assert.match(decls(shellPhone, '.vq-search'), /width:\s*44px/)
-  assert.match(decls(shellTablet, '.vq-nav-item em'), /font-size:\s*13px/)
+  assert.match(decls(shellTablet, '.vq-nav-item em'), /font-size:\s*14px/)
   assert.match(decls(shellPhone, '.vq-topbar .vq-button--icon'), /flex:\s*0 0 auto/)
 })
 
-test('新写的两段里没有比 13px 还小的字号', () => {
+test('新写的两段里没有比 14px 还小的字号', () => {
   for (const [label, block] of [['≤1080', band], ['≤560', phone]]) {
     for (const rule of rulesOf(block)) {
       const match = rule.body.match(/font-size:\s*([\d.]+)px/)

@@ -56,7 +56,7 @@ function firstRule(selector) {
   return match[1]
 }
 
-test('手机卡片：内边距收到 16px，六格数据改 2 × 3，数字不再折行', () => {
+test('手机卡片：内边距收到 17px，六格数据改 2 × 3，数字不再折行', () => {
   assert.ok(phone, 'src/styles/projects.css 里应该有 @media (max-width: 560px) 的作品项目规则')
   const card = decls(phone, '.vq-project-card')
   assert.match(card, /padding:\s*16px/, '卡片内边距 16px（原来 24px，240px 正文太窄）')
@@ -65,7 +65,7 @@ test('手机卡片：内边距收到 16px，六格数据改 2 × 3，数字不�
   assert.match(meta, /grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/, '六格改成 2 × 3')
   assert.match(meta, /gap:\s*8px 16px/, '格间距走 4/8 栅格')
   assert.match(decls(phone, '.vq-project-card-meta b'), /white-space:\s*nowrap/, '「1,800 积分」不许折成两行')
-  assert.match(decls(phone, '.vq-project-card-meta em'), /font-size:\s*13px/, '标签 13px（原来 12px）')
+  assert.match(decls(phone, '.vq-project-card-meta em'), /font-size:\s*14px/, '标签 13px（原来 12px）')
 })
 
 test('手机标题放到 18px 且允许两行：一行 240px 只剩十四个字', () => {
@@ -76,34 +76,34 @@ test('手机标题放到 18px 且允许两行：一行 240px 只剩十四个字'
   assert.match(title, /display:\s*-webkit-box/, '多行截断要用 -webkit-box')
 })
 
-test('手机上其余文字抬一档：来源与「打开作品」15px、时间与版次 13px', () => {
-  assert.match(decls(phone, '.vq-project-card-source'), /font-size:\s*15px/, '模板来源 15px')
-  assert.match(decls(phone, '.vq-project-card-go'), /font-size:\s*15px/, '「打开作品」15px')
-  assert.match(decls(phone, '.vq-project-card-head > .vq-mono'), /font-size:\s*13px/, '右上角时间 13px')
+test('手机上其余文字抬一档：来源与「打开作品」16px、时间与版次 14px', () => {
+  assert.match(decls(phone, '.vq-project-card-source'), /font-size:\s*16px/, '模板来源 15px')
+  assert.match(decls(phone, '.vq-project-card-go'), /font-size:\s*16px/, '「打开作品」15px')
+  assert.match(decls(phone, '.vq-project-card-head > .vq-mono'), /font-size:\s*14px/, '右上角时间 13px')
   const version = decls(phone, '.vq-project-card-version')
   assert.match(version, /height:\s*26px/, '版次胶囊 26px 高')
-  assert.match(version, /font-size:\s*13px/, '版次胶囊 13px')
+  assert.match(version, /font-size:\s*14px/, '版次胶囊 13px')
   assert.match(decls(phone, '.vq-project-share'), /height:\s*26px/, '分享状态胶囊同样 26px')
 })
 
 test('状态胶囊与搜索、筛选的点击区：胶囊 28px、搜索 44px、筛选 40px', () => {
   const page = decls(phone, '.vq-project-page')
   assert.match(page, /--chip-pill-h:\s*28px/, '状态胶囊 28px 高（原来 22px）')
-  assert.match(page, /--chip-font:\s*13px/, '胶囊文字 13px（原来 12px）')
+  assert.match(page, /--chip-font:\s*14px/, '胶囊文字 13px（原来 12px）')
   assert.match(page, /--chip-pad:\s*12px/, '胶囊内边距 12px')
   const search = decls(phone, '.vq-toolbar-search')
   assert.match(search, /height:\s*44px/, '搜索框 44px 高（原来 32px）')
   assert.match(search, /min-width:\s*0/, '搜索框要能缩：输入框默认 20 字符宽，不缩就顶出 320 的正文区')
   assert.match(search, /padding:\s*0 16px/, '搜索框内边距 16px')
-  assert.match(decls(phone, '.vq-toolbar-search input'), /font-size:\s*15px/, '搜索框正文 15px')
+  assert.match(decls(phone, '.vq-toolbar-search input'), /font-size:\s*16px/, '搜索框正文 15px')
   const clear = decls(phone, '.vq-toolbar-search-clear')
   assert.match(clear, /width:\s*32px/, '清除按钮 32px')
   assert.match(clear, /height:\s*32px/, '清除按钮 32px 高')
   const chip = decls(phone, '.vq-project-page .vq-filter-chip')
   assert.match(chip, /height:\s*40px/, '筛选胶囊 40px 高（原来 30px）')
-  assert.match(chip, /font-size:\s*14px/, '筛选胶囊文字 14px（原来 12.5px）')
+  assert.match(chip, /font-size:\s*15px/, '筛选胶囊文字 14px（原来 12.5px）')
   assert.match(chip, /padding:\s*0 12px/, '筛选胶囊内边距 12px（三枚胶囊要与「共 N 条」同一行）')
-  assert.match(decls(phone, '.vq-project-page .vq-toolbar-count'), /font-size:\s*13px/, '「共 N 条」13px')
+  assert.match(decls(phone, '.vq-project-page .vq-toolbar-count'), /font-size:\s*14px/, '「共 N 条」13px')
 })
 
 test('口径没动：780 以下仍单列 3 × 2，桌面仍六格、560 那段只改间距不改列数', () => {

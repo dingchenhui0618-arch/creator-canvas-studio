@@ -91,31 +91,31 @@ test('设置页根元素带 vq-page--settings，样式在 credits.css 之后加�
   assert.ok(phone, 'settings.css 缺少 ≤560 的规则')
 })
 
-test('1080 以下：按钮两个档位 40px，胶囊与标签 13px', () => {
+test('1080 以下：按钮两个档位 40px，胶囊与标签 14px', () => {
   const root = decls(band, '.vq-page--settings')
   assert.match(root, /--btn-h:\s*40px/)
   assert.match(root, /--btn-h-sm:\s*40px/)
-  assert.match(root, /--chip-font:\s*13px/)
-  assert.match(decls(band, '.vq-page--settings .vq-mono'), /font-size:\s*13px/)
-  assert.match(decls(band, '.vq-page--settings .vq-tag'), /font-size:\s*13px/)
-  assert.match(decls(band, '.vq-page--settings .vq-pill'), /font-size:\s*13px/)
+  assert.match(root, /--chip-font:\s*14px/)
+  assert.match(decls(band, '.vq-page--settings .vq-mono'), /font-size:\s*14px/)
+  assert.match(decls(band, '.vq-page--settings .vq-tag'), /font-size:\s*14px/)
+  assert.match(decls(band, '.vq-page--settings .vq-pill'), /font-size:\s*14px/)
 })
 
-test('1080 以下：表单与说明性小字都到 13px', () => {
-  assert.match(decls(band, '.vq-page--settings .vq-field > span'), /font-size:\s*13px/)
+test('1080 以下：表单与说明性小字都到 14px', () => {
+  assert.match(decls(band, '.vq-page--settings .vq-field > span'), /font-size:\s*14px/)
   const input = decls(band, '.vq-page--settings .vq-input')
   assert.match(input, /height:\s*40px/)
-  assert.match(input, /font-size:\s*14px/)
-  assert.match(decls(band, '.vq-page--settings .vq-password-note'), /font-size:\s*13px/)
-  assert.match(decls(band, '.vq-page--settings .vq-2fa-note'), /font-size:\s*13px/)
-  assert.match(decls(band, '.vq-page--settings .vq-session-note'), /font-size:\s*13px/)
-  assert.match(decls(band, '.vq-page--settings .vq-session-main small'), /font-size:\s*13px/)
-  assert.match(decls(band, '.vq-page--settings .vq-session-ip'), /font-size:\s*13px/)
-  assert.match(decls(band, '.vq-page--settings .vq-session-expire'), /font-size:\s*13px/)
-  assert.match(decls(band, '.vq-page--settings .vq-ledger th'), /font-size:\s*13px/)
-  assert.match(decls(band, '.vq-page--settings .vq-price-item span'), /font-size:\s*13px/)
-  assert.match(decls(band, '.vq-page--settings .vq-feedback-row-time'), /font-size:\s*13px/)
-  assert.match(decls(band, '.vq-page--settings .vq-health-row strong'), /font-size:\s*13px/)
+  assert.match(input, /font-size:\s*15px/)
+  assert.match(decls(band, '.vq-page--settings .vq-password-note'), /font-size:\s*14px/)
+  assert.match(decls(band, '.vq-page--settings .vq-2fa-note'), /font-size:\s*14px/)
+  assert.match(decls(band, '.vq-page--settings .vq-session-note'), /font-size:\s*14px/)
+  assert.match(decls(band, '.vq-page--settings .vq-session-main small'), /font-size:\s*14px/)
+  assert.match(decls(band, '.vq-page--settings .vq-session-ip'), /font-size:\s*14px/)
+  assert.match(decls(band, '.vq-page--settings .vq-session-expire'), /font-size:\s*14px/)
+  assert.match(decls(band, '.vq-page--settings .vq-ledger th'), /font-size:\s*14px/)
+  assert.match(decls(band, '.vq-page--settings .vq-price-item span'), /font-size:\s*14px/)
+  assert.match(decls(band, '.vq-page--settings .vq-feedback-row-time'), /font-size:\s*14px/)
+  assert.match(decls(band, '.vq-page--settings .vq-health-row strong'), /font-size:\s*14px/)
 })
 
 test('1080 以下：帮助链接撑到 40px 点按区', () => {
@@ -134,7 +134,7 @@ test('手机（560 以下）：按钮与输入框 44px', () => {
   assert.match(decls(phone, '.vq-page--settings .vq-help-link'), /min-height:\s*44px/)
 })
 
-test('新写的两段里没有比 13px 还小的字号', () => {
+test('新写的两段里没有比 14px 还小的字号', () => {
   for (const [label, block] of [['≤1080', band], ['≤560', phone]]) {
     for (const rule of rulesOf(block)) {
       const match = rule.body.match(/font-size:\s*([\d.]+)px/)
@@ -154,5 +154,5 @@ test('桌面（1081 起）基样式一个像素没动', () => {
   assert.match(firstRule(shellCss, '.vq-button'), /height:\s*var\(--btn-h\)/)
   assert.match(firstRule(shellCss, '.vq-help-link'), /padding:\s*4px 12px/)
   assert.match(firstRule(tokensCss, ':root'), /--btn-h:\s*32px/)
-  assert.match(firstRule(tokensCss, ':root'), /--chip-font:\s*13px/)
+  assert.match(firstRule(tokensCss, ':root'), /--chip-font:\s*14px/)
 })

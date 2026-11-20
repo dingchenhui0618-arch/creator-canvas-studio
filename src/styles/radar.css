@@ -8,7 +8,7 @@
   opacity:.55;
 }
 .radar-cover-empty { position:relative; color:var(--faint); }
-.radar-cover-empty .vq-mono { font-size:13px; letter-spacing:.14em; }
+.radar-cover-empty .vq-mono { font-size: 14px; letter-spacing:.14em; }
 .radar-cover .radar-badge, .radar-cover .radar-duration, .radar-cover .radar-hover { z-index:1; }
 /* 检索卡片：这条已经在库里（v0.9.38）。放在封面左下角，与右下角的时长同一层，
    回答「我是不是已经收过它」，而不是把「加入模板库」按成一次重复落库。 */
@@ -34,9 +34,9 @@
 @media (max-width:640px) { .radar-owned { left:8px; bottom:8px; } }
 /* ---------- 2026-11-10：检索改手动触发，卡片信息密度与字号对齐 tokens ---------- */
 .radar-card { background:var(--surface-raised); border-color:var(--line); }
-.radar-title { font-size:15px; font-weight:600; letter-spacing:0; line-height:1.5; }
+.radar-title { font-size: 16px; font-weight:600; letter-spacing:0; line-height:1.5; }
 .radar-author { font-size: var(--text-2xs); color:var(--muted); }
-.radar-stats { flex-wrap:wrap; gap:8px 12px; font-size:13px; color:var(--muted); }
+.radar-stats { flex-wrap:wrap; gap:8px 12px; font-size: 14px; color:var(--muted); }
 .radar-stats svg { color:var(--faint); }
 .radar-stats .radar-rate {
   padding:1px 8px;
@@ -48,7 +48,7 @@
   font-style:normal;
   letter-spacing:.02em;
 }
-.radar-summary strong { font-family:var(--font-mono); font-size:15px; }
+.radar-summary strong { font-family:var(--font-mono); font-size: 16px; }
 
 /* 未检索状态：说明为什么进页面不自动查，并给几个可直接点的关键词 */
 .radar-idle {
@@ -63,7 +63,7 @@
   text-align:center;
 }
 .radar-idle svg { color:var(--faint); }
-.radar-idle strong { color:var(--ink); font-size:16px; font-weight:600; }
+.radar-idle strong { color:var(--ink); font-size: 17px; font-weight:600; }
 .radar-idle span { max-width:440px; font-size: var(--text-2xs); line-height:1.7; }
 .radar-idle-tags { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin-top:12px; }
 .radar-idle-tag {
@@ -72,7 +72,7 @@
   background:var(--surface-raised);
   border:1px solid var(--line);
   border-radius:999px;
-  font-size:13px;
+  font-size: 14px;
   transition:border-color .15s ease,color .15s ease;
 }
 .radar-idle-tag:hover { color:var(--ink); border-color:var(--line-strong); }
@@ -98,7 +98,7 @@
    改编版一多，光看「这条模板名下的作品」会以为它们是两条不相干的来源。 */
 .drawer-origin { margin-top:12px; padding:12px; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface); }
 .drawer-origin-count { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 8px; margin:0; color:var(--muted); font-size: var(--text-2xs); }
-.drawer-origin-count b { color:var(--ink); font-family:var(--font-mono); font-size:14px; font-weight:500; }
+.drawer-origin-count b { color:var(--ink); font-family:var(--font-mono); font-size: 15px; font-weight:500; }
 .drawer-origin-count em { font-style:normal; color:var(--line-strong); }
 .drawer-origin-siblings { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:8px; }
 .drawer-origin-sibling {
@@ -111,30 +111,30 @@
   background:var(--surface-raised);
   border:1px solid var(--line);
   border-radius:var(--radius-pill);
-  font-size:13px;
+  font-size: 14px;
   transition:border-color var(--dur-2) var(--ease-out);
 }
 .drawer-origin-sibling span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:220px; }
 .drawer-origin-sibling em { font-style:normal; color:var(--muted); font-size: var(--text-2xs); }
 .drawer-origin-sibling:hover { border-color:var(--line-strong); }
 .drawer-origin-more { color:var(--muted); font-size: var(--text-2xs); }
-.drawer-origin-note { margin:8px 0 0; color:var(--muted); font-size:13px; line-height:1.7; }
+.drawer-origin-note { margin:8px 0 0; color:var(--muted); font-size: 14px; line-height:1.7; }
 @media (max-width:640px) { .template-facet { align-items:flex-start; flex-direction:column; gap:8px; } .template-facet__label { width:auto; } }
 .template-card { background:var(--surface-raised); border-color:var(--line); }
-.template-copy > strong { font-size:15px; font-weight:600; line-height:1.5; }
-.template-hook { color:var(--muted); font-size:13px; }
+.template-copy > strong { font-size: 16px; font-weight:600; line-height:1.5; }
+.template-hook { color:var(--muted); font-size: 14px; }
 .template-stats { display:flex; flex-wrap:wrap; gap:4px 12px; margin-top:2px; color:var(--muted); font-family:var(--font-mono); font-size: var(--text-2xs); }
 .template-stats span { display:inline-flex; align-items:center; gap:4px; }
 .template-type.is-pending { color:var(--warn); background:var(--warn-soft); }
 /* 公共模板（运营种子内容）标记：不抢标题，只在来源行前面点一下身份；样子走全站 .vq-tag--ink（v0.9.46）。 */
-.drawer-stats { display:flex; flex-wrap:wrap; gap:8px 16px; color:var(--muted); font-size:13px; }
+.drawer-stats { display:flex; flex-wrap:wrap; gap:8px 16px; color:var(--muted); font-size: 14px; }
 .drawer-list--flow { padding-left:0; list-style:none; }
 .drawer-list--flow li { display:flex; align-items:baseline; gap:12px; padding:8px 0; border-bottom:1px solid var(--line-faint); }
 .drawer-list--flow li .vq-mono { color:var(--faint); font-size: var(--text-2xs); }
 .drawer-list--flow li em { margin-left:auto; font-style:normal; font-family:var(--font-mono); font-size: var(--text-2xs); letter-spacing:.04em; color:var(--faint); text-transform:uppercase; }
-.drawer-stats b { color:var(--ink); font-family:var(--font-mono); font-size:14px; font-weight:500; }
+.drawer-stats b { color:var(--ink); font-family:var(--font-mono); font-size: 15px; font-weight:500; }
 .drawer-section--pending .drawer-pending-copy { margin:0 0 8px; color:var(--muted); font-size: var(--text-2xs); line-height:1.75; }
-.drawer-section--pending .drawer-pending-hint { margin:0; color:var(--ink-soft); font-size:13px; line-height:1.7; }
+.drawer-section--pending .drawer-pending-hint { margin:0; color:var(--ink-soft); font-size: 14px; line-height:1.7; }
 .drawer-section--pending .vq-button { height: var(--btn-h); }
 @media (max-width:900px) { .template-summary { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 /* 卡片底部三个操作等宽一行，避免「一键复刻」被挤到卡片外面 */
@@ -152,7 +152,7 @@
   padding-top:16px;
   border-top:1px solid var(--line);
 }
-.radar-more-note { color:var(--muted); font-size:13px; line-height:1.7; }
+.radar-more-note { color:var(--muted); font-size: 14px; line-height:1.7; }
 .radar-more .vq-button { height: var(--btn-h); gap: var(--btn-gap); }
 
 
@@ -160,11 +160,11 @@
    只存条件不存结果：点一下填回表单，不自动检索（每次检索 2 积分）。
    收藏的关键词排在前面，清空只清没收藏的。 */
 .radar-history { display:flex; align-items:center; flex-wrap:wrap; gap:8px 12px; margin:0 0 16px; padding:8px 12px; border:1px solid var(--line); border-radius:var(--radius-md); background:rgba(255,254,250,.62); }
-.radar-history-label { display:inline-flex; align-items:center; gap:8px; color:var(--ink-faint); font-size:13px; font-weight:700; }
+.radar-history-label { display:inline-flex; align-items:center; gap:8px; color:var(--ink-faint); font-size: 14px; font-weight:700; }
 .radar-history-list { display:flex; flex-wrap:wrap; gap:8px; flex:1; min-width:0; }
 .radar-history-chip { display:inline-flex; align-items:stretch; overflow:hidden; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface); }
 .radar-history-chip.is-favorite { border-color:#ddd0ae; background:#fdf8ec; }
-.radar-history-main { display:inline-flex; align-items:center; gap:8px; max-width:280px; padding:8px 8px; color:var(--ink-soft); background:transparent; border:0; font-size:13px; cursor:pointer; }
+.radar-history-main { display:inline-flex; align-items:center; gap:8px; max-width:280px; padding:8px 8px; color:var(--ink-soft); background:transparent; border:0; font-size: 14px; cursor:pointer; }
 .radar-history-main:hover { color:var(--ink); background:var(--surface-soft); }
 .radar-history-main em { flex:0 0 auto; font-style:normal; color:var(--ink-faint); font-size: var(--text-2xs); }
 .radar-history-main b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ink); font-weight:700; }
@@ -172,7 +172,7 @@
 .radar-history-star { display:grid; place-items:center; width:26px; color:var(--ink-faint); background:transparent; border:0; border-left:1px solid var(--line); cursor:pointer; }
 .radar-history-star:hover { color:var(--ink); }
 .radar-history-star.is-on { color:#a8802a; background:#fbf1dc; }
-.radar-history-clear { flex:0 0 auto; padding:4px 8px; color:var(--ink-faint); background:transparent; border:0; font-size:13px; cursor:pointer; }
+.radar-history-clear { flex:0 0 auto; padding:4px 8px; color:var(--ink-faint); background:transparent; border:0; font-size: 14px; cursor:pointer; }
 .radar-history-clear:hover { color:var(--ink); }
 @media (max-width:620px) {
   .radar-history { align-items:flex-start; flex-direction:column; }
@@ -185,19 +185,19 @@
 .trash-backdrop { position:fixed; inset:0; z-index:90; display:flex; align-items:center; justify-content:center; padding:24px; background:rgba(17,17,17,.34); backdrop-filter:blur(4px); }
 .trash-modal { width:min(640px,100%); max-height:calc(100vh - 80px); display:flex; flex-direction:column; overflow:hidden; background:var(--paper); border:1px solid var(--line); border-radius:var(--radius-lg); box-shadow:0 30px 80px rgba(30,26,20,.22); }
 .trash-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:24px 24px 8px; }
-.trash-head h2 { margin:8px 0 0; font-size:17px; letter-spacing:-.02em; }
-.trash-note { margin:0; padding:0 24px 12px; color:var(--ink-faint); font-size:13px; line-height:1.7; }
+.trash-head h2 { margin:8px 0 0; font-size: 18px; letter-spacing:-.02em; }
+.trash-note { margin:0; padding:0 24px 12px; color:var(--ink-faint); font-size: 14px; line-height:1.7; }
 .trash-list { flex:1; min-height:0; overflow:auto; padding:0 24px 12px; display:flex; flex-direction:column; gap:8px; }
 .trash-row { display:flex; align-items:center; gap:12px; padding:12px; border:1px solid var(--line); border-radius:var(--radius-md); background:var(--surface); }
 .trash-thumb { width:48px; height:48px; flex:0 0 48px; display:grid; place-items:center; overflow:hidden; border-radius:var(--radius-sm); background:#efeeea; color:var(--ink-faint); }
 .trash-thumb img { width:100%; height:100%; object-fit:cover; }
 .trash-copy { flex:1; min-width:0; display:flex; flex-direction:column; gap:4px; }
-.trash-copy strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:14px; }
-.trash-copy span { color:var(--ink-faint); font-size:13px; }
+.trash-copy strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size: 15px; }
+.trash-copy span { color:var(--ink-faint); font-size: 14px; }
 .trash-actions { display:flex; align-items:center; gap:8px; flex:0 0 auto; }
-.trash-confirm { color:var(--danger); font-size:13px; }
+.trash-confirm { color:var(--danger); font-size: 14px; }
 .trash-foot { display:flex; justify-content:flex-end; padding:12px 24px 16px; border-top:1px solid var(--line); }
-.trash-empty { display:grid; place-items:center; gap:8px; padding:48px 24px; color:var(--ink-faint); font-size:14px; text-align:center; }
+.trash-empty { display:grid; place-items:center; gap:8px; padding:48px 24px; color:var(--ink-faint); font-size: 15px; text-align:center; }
 @media (max-width:620px) {
   .trash-row { flex-wrap:wrap; }
   .trash-actions { width:100%; justify-content:flex-end; }
@@ -221,7 +221,7 @@
   background: var(--surface-raised);
   color: var(--ink);
   font: inherit;
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.6;
   resize: vertical;
   transition: border-color var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out);
@@ -238,7 +238,7 @@
 }
 
 .adapt-input--title {
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 500;
 }
 
@@ -359,7 +359,7 @@
 
 .drawer-work-main strong {
   overflow: hidden;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: var(--weight-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -410,7 +410,7 @@
 .drawer-works-more {
   margin: 0;
   color: var(--faint);
-  font-size: 13px;
+  font-size: 14px;
   line-height: var(--leading-meta, 1.6);
 }
 
@@ -442,7 +442,7 @@
 .radar-taken-head h2 {
   margin: 0;
   color: var(--ink);
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 600;
 }
 
@@ -527,7 +527,7 @@
 .radar-taken-copy strong {
   overflow: hidden;
   color: var(--ink);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -628,7 +628,7 @@
   background: var(--surface-soft);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .radar-restored > svg {
@@ -647,7 +647,7 @@
   color: var(--faint);
   background: transparent;
   border: 0;
-  font-size: 13px;
+  font-size: 14px;
   cursor: pointer;
 }
 
@@ -707,7 +707,7 @@
   .page--radar .radar-duration { display:none; }
   .page--radar .radar-owned { left:4px; bottom:4px; padding:2px 8px; font-size: var(--text-2xs); }
   .page--radar .radar-owned-count { display:none; }
-  .page--radar .radar-title { font-size:14px; line-height:1.5; }
+  .page--radar .radar-title { font-size: 15px; line-height:1.5; }
   .page--radar .radar-stats { flex-wrap:wrap; gap:4px 8px; font-size: var(--text-2xs); }
 }
 
@@ -743,32 +743,32 @@
   .page--templates {
     --btn-h: 40px;
     --btn-h-sm: 40px;
-    --text-mono: 13px;
-    --chip-font: 13px;
+    --text-mono: 14px;
+    --chip-font: 14px;
     --chip-tag-h: 24px;
   }
   .page--radar .radar-title,
-  .page--templates .template-copy > strong { font-size: 16px; }
+  .page--templates .template-copy > strong { font-size: 17px; }
   .page--radar .radar-author,
   .page--radar .radar-badge,
-  .page--radar .radar-owned { font-size: 13px; }
-  .page--radar .radar-stats { font-size: 13px; }
-  .page--radar .radar-stats .radar-rate { font-size: 13px; }
-  .page--radar .radar-idle span { font-size: 13px; }
+  .page--radar .radar-owned { font-size: 14px; }
+  .page--radar .radar-stats { font-size: 14px; }
+  .page--radar .radar-stats .radar-rate { font-size: 14px; }
+  .page--radar .radar-idle span { font-size: 14px; }
   .page--radar .radar-actions .vq-button { height: 40px; min-height: 40px; }
   .page--radar .radar-restored-clear { min-height: 40px; }
-  .page--radar .vq-mono { font-size: 13px; }
+  .page--radar .vq-mono { font-size: 14px; }
   .page--templates .template-facet__label,
   .page--templates .template-filter-note,
   .page--templates .template-stats,
-  .page--templates .template-adapt { font-size: 13px; }
-  .page--templates .template-hook { font-size: 14px; }
+  .page--templates .template-adapt { font-size: 14px; }
+  .page--templates .template-hook { font-size: 15px; }
   .page--templates .template-adapt { height: 40px; }
   .page--radar .inline-search,
   .page--templates .inline-search { height: 44px; }
   .page--radar .inline-search input,
   .page--templates .inline-search input { height: 100%; }
-  .page--templates .vq-mono { font-size: 13px; }
+  .page--templates .vq-mono { font-size: 14px; }
 }
 
 @media (max-width: 560px) {

@@ -31,59 +31,59 @@
 }
 @media (prefers-reduced-motion: reduce) { .runs-dot.is-live { animation:none; } }
 .runs-row-main { display:flex; flex-direction:column; gap:4px; min-width:0; }
-.runs-row-main strong { font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.runs-row-main small { color:var(--faint); font-size:13px; }
-.runs-row-main .runs-row-where { color:var(--muted); font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.runs-row-main strong { font-size: 14px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.runs-row-main small { color:var(--faint); font-size: 14px; }
+.runs-row-main .runs-row-where { color:var(--muted); font-size: 14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .runs-row-main .runs-row-where.is-orphan { color:var(--faint); }
-.runs-row-meta { display:flex; flex-direction:column; align-items:flex-end; gap:2px; color:var(--faint); font-size:13px; }
+.runs-row-meta { display:flex; flex-direction:column; align-items:flex-end; gap:2px; color:var(--faint); font-size: 14px; }
 .runs-detail { display:flex; flex-direction:column; gap:12px; padding:16px; border:1px solid var(--line); border-radius:var(--radius-md); background:var(--surface); }
 .runs-detail-head { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding-bottom:12px; border-bottom:1px solid var(--line); color:var(--muted); }
 .runs-detail-actions { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-left:auto; }
-.runs-detail-where { margin:0; color:var(--muted); font-size:13px; }
+.runs-detail-where { margin:0; color:var(--muted); font-size: 14px; }
 .runs-detail-where.is-orphan { color:var(--faint); }
-.runs-detail-head strong { color:var(--ink); font-size:13px; }
+.runs-detail-head strong { color:var(--ink); font-size: 14px; }
 .runs-nodes { display:flex; flex-direction:column; gap:12px; margin:0; padding:0; list-style:none; }
 .runs-node { display:flex; flex-direction:column; gap:8px; padding-left:12px; border-left:2px solid var(--line-strong); }
 .runs-node.is-success { border-left-color:rgba(23,107,67,.5); }
 .runs-node.is-error { border-left-color:rgba(163,56,56,.6); }
 .runs-node-head { display:flex; align-items:center; gap:8px; }
-.runs-node-head strong { font-size:13px; font-weight:600; }
-.runs-node-head .vq-mono:first-child { color:var(--faint); font-size:13px; text-transform:uppercase; }
-.runs-node-head .vq-mono:last-child { margin-left:auto; color:var(--faint); font-size:13px; }
-.runs-node-error { margin:0; color:var(--fail); font-size:13px; }
+.runs-node-head strong { font-size: 14px; font-weight:600; }
+.runs-node-head .vq-mono:first-child { color:var(--faint); font-size: 14px; text-transform:uppercase; }
+.runs-node-head .vq-mono:last-child { margin-left:auto; color:var(--faint); font-size: 14px; }
+.runs-node-error { margin:0; color:var(--fail); font-size: 14px; }
 .runs-output-list { display: grid; gap: 0; margin: 8px 0 0; border: 1px solid var(--line-faint); border-radius: var(--radius-sm); background: var(--surface-raised); }
 .runs-output-list > div { display: grid; grid-template-columns: minmax(88px, 140px) minmax(0, 1fr); gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--line-faint); }
 .runs-output-list > div:last-child { border-bottom: 0; }
 .runs-output-list dt { color: var(--faint); font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: 0.04em; overflow-wrap: anywhere; }
-.runs-output-list dd { margin: 0; color: var(--ink); font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
-.runs-output-raw { margin-top: 8px; font-size: 13px; color: var(--muted); }
+.runs-output-list dd { margin: 0; color: var(--ink); font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.runs-output-raw { margin-top: 8px; font-size: 14px; color: var(--muted); }
 .runs-output-raw summary { cursor: pointer; padding: 4px 0; color: var(--faint); }
 .runs-output-raw summary:hover { color: var(--ink); }
 .runs-node-output { margin:0; max-height:160px; overflow:auto; padding:8px 12px; border:1px solid var(--line-faint); border-radius:var(--radius-sm); background:var(--surface-raised); font-family:var(--font-mono); font-size: var(--text-2xs); line-height:1.6; color:var(--muted); white-space:pre-wrap; }
-.runs-note { margin:0; color:var(--faint); font-size:13px; }
+.runs-note { margin:0; color:var(--faint); font-size: 14px; }
 .runs-note.is-error { color:var(--fail); }
 .runs-empty { display:flex; flex-direction:column; gap:8px; padding:32px; border:1px dashed var(--line-strong); border-radius:var(--radius-md); color:var(--faint); }
-.runs-empty strong { color:var(--ink); font-size:15px; }
-.runs-empty span { font-size:13px; }
+.runs-empty strong { color:var(--ink); font-size: 16px; }
+.runs-empty span { font-size: 14px; }
 .runs-filters { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
 .runs-search { display:flex; align-items:center; gap:8px; flex:1 1 280px; min-width:220px; padding:0 12px; height:34px; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface); color:var(--faint); }
 .runs-search:focus-within { border-color:var(--ink); color:var(--ink); }
-.runs-search input { flex:1; min-width:0; height:100%; border:0; background:transparent; color:var(--ink); font-family:inherit; font-size:13px; }
+.runs-search input { flex:1; min-width:0; height:100%; border:0; background:transparent; color:var(--ink); font-family:inherit; font-size: 14px; }
 .runs-search input:focus { outline:none; }
 .runs-select { display:flex; align-items:center; gap:8px; }
 .runs-select span { font-family:var(--font-mono); font-size: var(--text-2xs); letter-spacing:.05em; color:var(--faint); }
-.runs-select select { height:34px; padding:0 24px 0 8px; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface); color:var(--ink); font-family:inherit; font-size:13px; }
+.runs-select select { height:34px; padding:0 24px 0 8px; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface); color:var(--ink); font-family:inherit; font-size: 14px; }
 .runs-pager { display:flex; align-items:center; justify-content:flex-end; gap:8px; padding-top:8px; border-top:1px solid var(--line); }
-.runs-pager .vq-mono { margin-right:8px; color:var(--faint); font-size:13px; }
+.runs-pager .vq-mono { margin-right:8px; color:var(--faint); font-size: 14px; }
 .runs-pager button:disabled { opacity:.45; cursor:not-allowed; }
 /* 归到作品（v0.9.29）：没挂在作品上的运行就地能收进一条作品。
    面板两行「标签 + 控件」：一行挂到已有作品，一行照这块画布新建；间距只走 4/8pt。 */
 .runs-adopt { display:flex; flex-direction:column; gap:8px; padding:12px; border:1px solid var(--line); border-radius:var(--radius-md); background:var(--surface-raised); }
 .runs-adopt-row { display:flex; align-items:center; flex-wrap:wrap; gap:8px 12px; }
 .runs-adopt-label { min-width:72px; color:var(--faint); font-family:var(--font-mono); font-size: var(--text-2xs); letter-spacing:.05em; }
-.runs-adopt-hint { flex:1 1 240px; min-width:0; color:var(--muted); font-size:13px; }
-.runs-adopt-error { margin:0; color:var(--fail); font-size:13px; }
-.runs-adopt-done { margin:0; color:var(--muted); font-size:13px; }
+.runs-adopt-hint { flex:1 1 240px; min-width:0; color:var(--muted); font-size: 14px; }
+.runs-adopt-error { margin:0; color:var(--fail); font-size: 14px; }
+.runs-adopt-done { margin:0; color:var(--muted); font-size: 14px; }
 /* 续跑预检（v0.9.105）：记录里存的是收尾时的判断，画布改过就会过期。
    这一条在点按钮之前把当前画布重算的结果摊开：复用几个、还差几个、补多少。
    能续用通过色，不能续用待确认色——只借语义色说明状态，不做装饰。 */
@@ -93,8 +93,8 @@
 .runs-plan-label { color:var(--faint); font-family:var(--font-mono); font-size: var(--text-2xs); letter-spacing:.05em; white-space:nowrap; }
 .runs-plan.is-ready .runs-plan-label { color:var(--pass); }
 .runs-plan.is-blocked .runs-plan-label { color:var(--warn); }
-.runs-plan-main { display:flex; align-items:center; gap:8px; min-width:0; color:var(--ink); font-size:13px; font-weight:600; }
-.runs-plan-copy { grid-column:2; margin:0; color:var(--muted); font-size:13px; line-height:1.6; overflow-wrap:anywhere; }
+.runs-plan-main { display:flex; align-items:center; gap:8px; min-width:0; color:var(--ink); font-size: 14px; font-weight:600; }
+.runs-plan-copy { grid-column:2; margin:0; color:var(--muted); font-size: 14px; line-height:1.6; overflow-wrap:anywhere; }
 .runs-plan-retry { grid-column:2; justify-self:start; }
 @media (max-width: 700px) {
   .runs-plan { grid-template-columns:minmax(0,1fr); }
@@ -128,23 +128,23 @@
   .runs-page {
     --btn-h: 40px;
     --btn-h-sm: 40px;
-    --chip-font: 13px;
+    --chip-font: 14px;
     --chip-pill-h: 24px;
     --chip-tag-h: 24px;
-    --text-mono: 13px;
+    --text-mono: 14px;
   }
   /* tokens.css 的 .vq-mono 写死 12px、不读 --text-mono，这里单点抬一档 */
-  .runs-page .vq-mono { font-size: 13px; }
+  .runs-page .vq-mono { font-size: 14px; }
   .runs-page .runs-stats span,
   .runs-page .runs-select > span,
   .runs-page .runs-adopt-label,
   .runs-page .runs-plan-label,
   .runs-page .runs-output-list dt,
   .runs-page .runs-output-raw,
-  .runs-page .runs-node-output { font-size: 13px; }
+  .runs-page .runs-node-output { font-size: 14px; }
   /* 筛选下拉的选中值是下拉自己的 span，却被 `.runs-select span` 的 12px 一起打中了
      （0.1.1 压过 .vq-select__value 的 0.1.0）。这里点名它，别让标签的字号漏进下拉。 */
-  .runs-page .runs-select .vq-select__value { font-size: 13px; }
+  .runs-page .runs-select .vq-select__value { font-size: 14px; }
   .runs-page .runs-search { height: 40px; }
   /* 40px 的框带 1px 边，input 按 100% 只剩 38px：直接给 40，让输入框自己的点按区够高
      （透明背景 + 居中，画出来和贴着边框一样，不会把框撑高） */

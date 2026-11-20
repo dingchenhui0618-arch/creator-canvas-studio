@@ -65,19 +65,20 @@
   --space-12: 48px;
   --space-16: 64px;
 
-  /* ---------- 字阶（2026-11-19 r257 抬一档）：最小档 13（原来是 11/11.5/12/12.5 混着写），
-     正文 15；元数据比最小档再高半档 13.5 便于在 1x 屏上一眼看清。 ---------- */
-  --text-2xs: 13px;
-  --text-mono: 13px;
-  --text-xs: 13.5px;
-  --text-sm: 15px;
-  --text-body: 15px;
-  --text-md: 16px;
-  --text-lg: 17px;
+  /* ---------- 字阶：2026-11-19 r257 先抬过一档（11/11.5/12/12.5 混着写 → 最小 13、正文 15）；
+     2026-11-20 r290 再整体抬 1px（最小 14、正文 16）——1x 屏上 13px 的中文正文偏小，
+     用户原话「至少让我看得清楚字是啥」。层级不拆，只把每一档 +1，全站共用这一套。 ---------- */
+  --text-2xs: 14px;
+  --text-mono: 14px;
+  --text-xs: 14.5px;
+  --text-sm: 16px;
+  --text-body: 16px;
+  --text-md: 17px;
+  --text-lg: 18px;
   /* 阅读面（脚本、评审结论、分享页）单独一套：字号比工作台大一档，行高按中文放宽 */
-  --text-copy: 15px;
+  --text-copy: 16px;
   --leading-copy: 1.7;
-  --text-meta: 14px;
+  --text-meta: 15px;
   --leading-meta: 1.6;
   --text-xl: 21px;
   --text-2xl: 29px;
@@ -105,19 +106,19 @@
   --chip-tag-h: 20px;
   --chip-pad: 8px;
   --chip-pad-tight: 6px;
-  --chip-font: 13px;
-  --chip-font-lg: 13px;
+  --chip-font: 14px;
+  --chip-font-lg: 14px;
 
   /* ---------- 按钮（v0.9.47 归一）：全站只三档 ----------
      小 28px（列表行 / 密集工具条）· 默认 32px · 表单 40px；圆角一律 --radius-sm，
-     字号只两档 13 / 12。页面不再自己写 height / padding / font-size。 ---------- */
+     字号只两档 14 / 15（r290 与正文一起 +1）。页面不再自己写 height / padding / font-size。 ---------- */
   --btn-h-sm: 28px;
   --btn-h: 32px;
   --btn-h-lg: 40px;
   --btn-pad-sm: 12px;
   --btn-pad: 16px;
-  --btn-font: 14px;
-  --btn-font-sm: 13px;
+  --btn-font: 15px;
+  --btn-font-sm: 14px;
   --btn-gap: 8px;
   --btn-gap-sm: 4px;
 
@@ -140,7 +141,7 @@
   --head-title-weight: 500;
   --head-title-tracking: -0.01em;
   --head-title-leading: 1.25;
-  --head-kicker-size: 13px;
+  --head-kicker-size: 14px;
   --head-kicker-weight: 500;
   --head-kicker-tracking: 0.06em;
   --head-desc-size: 14px;

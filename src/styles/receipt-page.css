@@ -30,7 +30,7 @@
 .rpage-brand-dot { width: 8px; height: 8px; border-radius: var(--radius-xs); background: var(--ink); flex: none; }
 .rpage-brand-name {
   font-family: var(--font-mono);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: var(--weight-medium);
   letter-spacing: .08em;
   text-transform: uppercase;

@@ -119,7 +119,7 @@
   margin: 0;
   padding: 16px 8px;
   color: var(--faint);
-  font-size: 13px;
+  font-size: 14px;
   text-align: center;
 }
 .agx-history-item {
@@ -138,7 +138,7 @@
 .agx-history-item strong {
   display: block;
   overflow: hidden;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -246,7 +246,7 @@
 .agx-run-msg {
   overflow: hidden;
   color: var(--ink);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.5;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -263,7 +263,7 @@
   gap: 8px;
   padding: 0 8px 8px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 .agx-run-detail p {
   margin: 0;
@@ -282,7 +282,7 @@
   border: 1px solid var(--line-faint);
   border-radius: var(--radius-sm);
   font-family: var(--font-ui);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
   white-space: pre-wrap;
 }
@@ -564,7 +564,7 @@
   background: var(--surface-raised);
   border: 1px solid var(--line);
   border-radius: var(--radius-md) var(--radius-md) var(--radius-md) var(--radius-xs);
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.75;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
@@ -607,7 +607,7 @@
   align-items: center;
   gap: 8px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 .agx-running-dot {
   width: 6px;
@@ -657,12 +657,12 @@
 }
 .agx-failure strong {
   color: var(--fail);
-  font-size: 13px;
+  font-size: 14px;
 }
 .agx-failure p {
   margin: 0;
   color: #5d2b2b;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.7;
 }
 .agx-failure-suggestion {
@@ -919,7 +919,7 @@
 }
 .agx-library-head h2 {
   margin: 0;
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 500;
   letter-spacing: -0.025em;
 }
@@ -943,7 +943,7 @@
   color: var(--faint);
   background: none;
   border: 0;
-  font-size: 13px;
+  font-size: 14px;
   transition: color 0.15s ease;
 }
 .agx-tabs button:hover {
@@ -1006,7 +1006,7 @@
   gap: 8px;
 }
 .agx-card-name {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
@@ -1017,7 +1017,7 @@
   margin: 8px 0 16px;
   overflow: hidden;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -1032,7 +1032,7 @@
   justify-content: space-between;
   gap: 12px;
   color: var(--faint);
-  font-size: 13px;
+  font-size: 14px;
 }
 .agx-card-meta .agx-mono {
   display: inline-flex;
@@ -1087,14 +1087,14 @@
   text-align: center;
 }
 .agx-empty strong {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
 }
 .agx-empty p {
   max-width: 380px;
   margin: 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.7;
 }
 .agx-empty-icon {
@@ -1126,7 +1126,7 @@
   background: var(--fail-soft);
   border: 1px solid rgba(163, 56, 56, 0.24);
   border-radius: var(--radius-sm);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
 }
 .agx-alert span {
@@ -1152,12 +1152,12 @@
   background: var(--warn-soft);
   border: 1px solid rgba(138, 91, 8, 0.22);
   border-radius: var(--radius-sm);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
 }
 .agx-store-warn svg { flex: none; margin-top: 2px; }
 .agx-store-warn-text { display: grid; gap: 4px; min-width: 0; }
-.agx-store-warn-text small { color: var(--ink-soft); font-size: 13px; overflow-wrap: anywhere; }
+.agx-store-warn-text small { color: var(--ink-soft); font-size: 14px; overflow-wrap: anywhere; }
 /* 备份也失败时是真不能写了：换失败色，别让「只是提示」的观感盖过后果。 */
 .agx-store-warn.is-blocked {
   color: var(--fail);
@@ -1197,7 +1197,7 @@
 }
 .agx-form-section h2 {
   margin: 0;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 500;
   letter-spacing: -0.01em;
 }
@@ -1250,7 +1250,7 @@
 }
 .agx-field small {
   color: var(--faint);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
 }
 .agx-field-grid {
@@ -1326,14 +1326,14 @@
 }
 .agx-tool strong {
   display: block;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
 }
 .agx-tool span span {
   display: block;
   margin-top: 2px;
   color: var(--faint);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.5;
 }
 .agx-editor-foot {
@@ -1372,7 +1372,7 @@
   color: var(--faint);
 }
 .agx-side-head .agx-mono {
-  font-size: 13px;
+  font-size: 14px;
 }
 .agx-preview {
   padding: 12px;
@@ -1389,7 +1389,7 @@
   gap: 8px;
   align-items: flex-start;
   color: var(--faint);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.5;
 }
 .agx-check-row.is-pass {
@@ -1413,7 +1413,7 @@
 .agx-side-copy {
   margin: 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.7;
 }
 .agx-side-copy code {
@@ -1428,7 +1428,7 @@
 .agx-side-note {
   display: block;
   color: var(--faint);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.7;
 }
 .agx-side-panel .vq-button {
@@ -1489,7 +1489,7 @@
   white-space: normal;
 }
 .agx-md {
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.75;
 }
 .agx-md p {
@@ -1505,7 +1505,7 @@
 .agx-md-heading {
   margin: 16px 0 8px;
   color: var(--ink);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
@@ -1527,7 +1527,7 @@
   border: 1px solid var(--line-faint);
   border-radius: var(--radius-sm);
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
 }
 .agx-md code {
@@ -1536,7 +1536,7 @@
   border: 1px solid var(--line-faint);
   border-radius: var(--radius-xs);
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 14px;
 }
 .agx-md-code code {
   padding: 0;
@@ -1552,7 +1552,7 @@
 .agx-md-table table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
 }
 .agx-md-table th {
@@ -1626,7 +1626,7 @@
   min-width: 0;
 }
 .agx-model-note-text span {
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
 }
 .agx-model-note-text small {
@@ -1667,7 +1667,7 @@
 }
 .agx-draft-head strong {
   color: var(--ink);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
@@ -1704,7 +1704,7 @@
   flex-wrap: wrap;
   gap: 4px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
 }
 .agx-draft-done svg {
@@ -1717,7 +1717,7 @@
   background: none;
   border: 0;
   font-family: var(--font-ui);
-  font-size: 13px;
+  font-size: 14px;
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -1727,12 +1727,12 @@
 .agx-draft-error {
   margin: 0;
   color: var(--fail);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
 }
 .agx-draft-note {
   color: var(--faint);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
 }
 .agx-draft-fact {
@@ -1773,7 +1773,7 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   font-family: var(--font-ui);
-  font-size: 13px;
+  font-size: 14px;
 }
 .agx-draft-select:disabled {
   color: var(--faint);
@@ -1781,7 +1781,7 @@
 .agx-draft-pick-note {
   margin: 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
 }
 .agx-draft-pick-actions {
@@ -1816,7 +1816,7 @@
 }
 .agx-project strong {
   color: var(--ink);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
@@ -2000,13 +2000,13 @@
 .agx-media-intro strong {
   display: block;
   color: var(--ink);
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 500;
 }
 .agx-media-intro p {
   margin: 8px 0 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.65;
 }
 .agx-media-out:empty {
@@ -2909,14 +2909,14 @@
   border-radius: var(--radius-sm);
   background: var(--surface-raised);
   color: var(--ink);
-  font-size: 13px;
+  font-size: 14px;
   cursor: pointer;
 }
 
 .qc-new:hover { border-color: var(--line-strong); }
 
 .qc-count {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
@@ -2935,7 +2935,7 @@
   border-radius: var(--radius-sm);
   background: var(--surface-raised);
   color: var(--ink);
-  font-size: 13px;
+  font-size: 14px;
   cursor: pointer;
 }
 
@@ -2962,7 +2962,7 @@
 .qc-side-empty {
   margin: 0;
   padding: 8px;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
   color: var(--muted);
 }
@@ -2992,7 +2992,7 @@
 }
 
 .qc-conv-title {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3000,7 +3000,7 @@
 }
 
 .qc-conv-meta {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
@@ -3024,7 +3024,7 @@
   margin: 0;
   padding: 8px;
   border-top: 1px solid var(--line-faint);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
   color: var(--faint);
 }
@@ -3057,7 +3057,7 @@
   border-radius: var(--radius-sm);
   background: var(--surface-soft);
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
   overflow-wrap: anywhere;
 }
@@ -3069,11 +3069,11 @@
   flex-direction: column;
   gap: 8px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.7;
 }
 
-.qc-empty strong { color: var(--ink); font-size: 16px; font-weight: 500; }
+.qc-empty strong { color: var(--ink); font-size: 17px; font-weight: 500; }
 .qc-empty p { margin: 0; }
 .qc-empty ul { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 4px; }
 
@@ -3087,7 +3087,7 @@
   border: 1px solid var(--line);
   background: var(--surface-raised);
   color: var(--ink);
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.75;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -3099,7 +3099,7 @@
    气泡本身是 pre-wrap（为了流式时保住模型自己的换行），块级排版要改回 normal，
    段内换行由 <br> 补，所以不会丢行。用户自己发的话仍然按纯文本显示，不解析。 */
 .qc-bubble.qc-md {
-  font-size: 15px;
+  font-size: 16px;
   white-space: normal;
   padding: 12px 16px;
 }
@@ -3145,7 +3145,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--faint);
   font-variant-numeric: tabular-nums;
 }
@@ -3167,7 +3167,7 @@
   background: transparent;
   color: var(--faint);
   font-family: inherit;
-  font-size: 13px;
+  font-size: 14px;
   white-space: nowrap;
   cursor: pointer;
 }
@@ -3181,7 +3181,7 @@
   border-radius: var(--radius-sm);
   background: var(--fail-soft);
   color: var(--fail);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
 }
 
@@ -3207,7 +3207,7 @@
   border-radius: var(--radius-pill);
   background: var(--surface);
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   cursor: pointer;
 }
 
@@ -3218,7 +3218,7 @@
 .qc-tool-short { display: none; }
 .qc-tool:disabled { opacity: 0.6; cursor: default; }
 
-.qc-credit { margin-left: auto; font-size: 13px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.qc-credit { margin-left: auto; font-size: 14px; color: var(--faint); font-variant-numeric: tabular-nums; }
 
 .qc-input-row { display: flex; align-items: flex-end; gap: 8px; }
 
@@ -3232,7 +3232,7 @@
   border: 0;
   background: transparent;
   color: var(--ink);
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.7;
   font-family: inherit;
 }
@@ -3255,7 +3255,7 @@
 
 .qc-send:disabled { opacity: 0.4; cursor: default; }
 
-.qc-hint { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--faint); }
+.qc-hint { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; color: var(--faint); }
 
 /* 附件（r218）：一个附件一枚小胶囊；名字长了只截名字，不把整行撑开 */
 .qc-file-input { display: none; }
@@ -3283,7 +3283,7 @@
   border: 0;
   background: transparent;
   color: var(--ink);
-  font-size: 13px;
+  font-size: 14px;
   cursor: pointer;
 }
 
@@ -3318,7 +3318,7 @@
   border-radius: var(--radius-pill);
   background: var(--surface);
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   cursor: pointer;
 }
 
@@ -3339,7 +3339,7 @@
   border-radius: var(--radius-pill);
   background: var(--surface);
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .qc-link-name { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
@@ -3347,7 +3347,7 @@
 .qc-link.is-failed { border-style: dashed; color: var(--warn); }
 .qc-link.is-failed .qc-link-name { color: var(--warn); }
 
-.qc-error--inline { padding: 4px 8px; font-size: 13px; }
+.qc-error--inline { padding: 4px 8px; font-size: 14px; }
 
 .qc-preview { border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-soft); }
 
@@ -3358,7 +3358,7 @@
   gap: 8px;
   padding: 4px 4px 4px 8px;
   border-bottom: 1px solid var(--line-faint);
-  font-size: 13px;
+  font-size: 14px;
   color: var(--muted);
 }
 
@@ -3371,7 +3371,7 @@
   overflow: auto;
   color: var(--ink);
   font-family: inherit;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -3398,7 +3398,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--muted);
 }
 
@@ -3408,13 +3408,13 @@
   border-radius: var(--radius-pill);
   background: var(--surface-raised);
   color: var(--ink);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 24px;
 }
 
 .qc-media-spec { min-width: 0; overflow-wrap: anywhere; }
 
-.qc-media-run { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.qc-media-run { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
 .qc-media-run-note { color: var(--faint); }
 
 .qc-media-thumb {
@@ -3452,13 +3452,13 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
   color: var(--ink);
-  font-size: 13px;
+  font-size: 14px;
   text-decoration: none;
 }
 
 .qc-media-dl:hover { border-color: var(--line-strong); background: var(--surface-raised); }
 
-.qc-media-note { margin: 0; color: var(--faint); font-size: 13px; line-height: 1.6; }
+.qc-media-note { margin: 0; color: var(--faint); font-size: 14px; line-height: 1.6; }
 
 .qc-media-error {
   display: flex;
@@ -3469,7 +3469,7 @@
   border-radius: var(--radius-sm);
   background: var(--fail-soft);
   color: var(--fail);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .qc-media-error p { margin: 0 0 4px; line-height: 1.6; }
@@ -3484,7 +3484,7 @@
      ③ 触摸目标反而从 28 抬到 32，字从 12 抬到 13——收高度不能靠抠小的。 */
   .qc-tool-full { display: none; }
   .qc-tool-short { display: inline; }
-  .qc-tool { height: 32px; padding: 0 8px; font-size: 13px; }
+  .qc-tool { height: 32px; padding: 0 8px; font-size: 14px; }
   /* 余额与元信息跟着桌面一起抬到 13px（r247）：手机上字小比桌面更难受 */
   /* 复制按钮在手机上要能点中：24px 的胶囊在 390 宽只有拇指一半大 */
   .qc-copy { height: 32px; padding: 0 12px; white-space: nowrap; }
@@ -3497,7 +3497,7 @@
   .qc-bubble.qc-md .agx-md-table th { white-space: normal; }
   /* 窄屏按容器宽度均分列：中文本身可以逐字断行，固定布局比「按内容撑开再横向拖」好读 */
   /* nav.css 给对话预设的表格压了 480px 下限，这里必须显式收回，否则窄屏仍在容器里横滚 */
-  .qc-bubble.qc-md .agx-md-table table { width: 100%; min-width: 0; table-layout: fixed; font-size: 13px; }
+  .qc-bubble.qc-md .agx-md-table table { width: 100%; min-width: 0; table-layout: fixed; font-size: 14px; }
   .qc-bubble.qc-md .agx-md-table td { overflow-wrap: anywhere; }
 }
 
@@ -3516,7 +3516,7 @@
     width: 100%;
     min-width: 0;
     border-collapse: separate;
-    font-size: 13px;
+    font-size: 14px;
   }
   .vq-content .agx-md-table.agx-md-table thead { display: none; }
   .vq-content .agx-md-table.agx-md-table tbody { display: block; }
@@ -3533,7 +3533,7 @@
     display: block;
     padding: 4px 0;
     border: 0;
-    font-size: 13px;
+    font-size: 14px;
     line-height: 1.55;
     overflow-wrap: anywhere;
   }
@@ -3621,7 +3621,7 @@
   .agx-library-bar-text {
     min-width: 0;
     color: var(--muted);
-    font-size: 13px;
+    font-size: 14px;
   }
 }
 
@@ -3682,10 +3682,10 @@
   .agx-page {
     --btn-h: 40px;
     --btn-h-sm: 40px;
-    --chip-font: 13px;
+    --chip-font: 14px;
     --chip-tag-h: 24px;
     --chip-pill-h: 24px;
-    --text-mono: 13px;
+    --text-mono: 14px;
   }
 
   /* .agx-mono 的 12px 是写死的，不吃 --text-mono，必须逐个点名 */
@@ -3734,7 +3734,7 @@
   .agx-page .qc-error--inline,
   .agx-page .qc-preview-head,
   .agx-page .qc-preview-body,
-  .agx-page .qc-hint { font-size: 13px; }
+  .agx-page .qc-hint { font-size: 14px; }
 
   /* 参数胶囊：标签 11.5、值 12.5、整颗 30px */
   /* 胶囊自己带 1px 边框，里面那枚按钮实际只有 height−2：写 40 的话点按区只有 38px。
@@ -3742,14 +3742,14 @@
   .agx-page .agx-capsule { height: 42px; }
   /* 短值（比例 1:1、时长 4s）的触发器只有 34px 宽：整颗胶囊看着能点，实际只有这一小段可点 */
   .agx-page .agx-capsule-trigger { min-width: 40px; }
-  .agx-page .agx-capsule > span { font-size: 13px; }
-  .agx-page .agx-capsule-trigger em { font-size: 13px; }
-  .agx-page .agx-capsule-menu button { min-height: 40px; font-size: 13px; }
+  .agx-page .agx-capsule > span { font-size: 14px; }
+  .agx-page .agx-capsule-trigger em { font-size: 14px; }
+  .agx-page .agx-capsule-menu button { min-height: 40px; font-size: 14px; }
 
   /* 创作方式（对话 / 图片 / 视频）28px → 40px；对话方式（平台对话 / 对话预设）12px 28px → 13px 40px */
   .agx-page .agx-mode-tabs button { min-height: 40px; }
-  .agx-page .agx-surface-switch button { min-height: 40px; font-size: 13px; }
-  .agx-page .agx-surface-note { font-size: 13px; }
+  .agx-page .agx-surface-switch button { min-height: 40px; font-size: 14px; }
+  .agx-page .agx-surface-note { font-size: 14px; }
 
   /* 预设分类页签：原来 31px（字号 13 + 下内边距 12），点上去只有半行高 */
   .agx-page .agx-tabs button {
@@ -3760,7 +3760,7 @@
   }
 
   .agx-page .agx-send { width: 40px; height: 40px; }
-  .agx-page .agx-popover-tabs button { height: 40px; font-size: 13px; }
+  .agx-page .agx-popover-tabs button { height: 40px; font-size: 14px; }
 
   /* 历史弹层（r241）：绝对定位挂在「历史」按钮右边（right: 0、宽 352），桌面按钮在页头右侧
      所以没问题；窄屏页头左对齐，弹层有一半跑到屏幕外——390 实测左边缘 −187px，只看得见
@@ -3857,7 +3857,7 @@
 /* 联网搜索（r246）：用户那句下面列出「搜了什么、搜到哪几条」，来源能点开核对；
    搜失败就直说没搜成与原因，不用一个空列表装作搜过。 */
 .qc-search { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; max-width: 100%; }
-.qc-search-head { display: inline-flex; align-items: center; gap: 4px; color: var(--faint); font-size: 13px; }
+.qc-search-head { display: inline-flex; align-items: center; gap: 4px; color: var(--faint); font-size: 14px; }
 .qc-search.is-failed .qc-search-head { color: var(--warn); }
 .qc-search-list { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 .qc-search-item {
@@ -3871,12 +3871,12 @@
   border-radius: var(--radius-pill);
   background: var(--surface);
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   text-decoration: none;
 }
 .qc-search-item:hover { border-color: var(--ink); color: var(--ink); }
 .qc-search-title { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
-.qc-search-site { color: var(--faint); font-size: 13px; }
+.qc-search-site { color: var(--faint); font-size: 14px; }
 
 @media (max-width: 560px) {
   .qc-search-item { min-height: 40px; }

@@ -19,7 +19,7 @@
 }
 .vq-credit-balance span {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 
@@ -68,7 +68,7 @@
 }
 .vq-spend-head strong {
   color: var(--ink);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 500;
 }
 .vq-spend-head span {
@@ -98,7 +98,7 @@
 .vq-spend-chip b {
   color: var(--ink);
   font-family: var(--font-mono);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 500;
 }
 .vq-spend-chip i {
@@ -136,7 +136,7 @@
   display: block;
   margin-top: 4px;
   font-family: var(--font-mono);
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
@@ -145,7 +145,7 @@
   width: 100%;
   margin-top: 16px;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 14px;
 }
 .vq-ledger th {
   padding: 8px 12px 8px 0;
@@ -230,7 +230,7 @@
 .vq-ledger-empty {
   padding: 16px 0;
   color: var(--faint);
-  font-size: 13px;
+  font-size: 14px;
 }
 /* 流水超过一页时才出现：左边说明已显示多少，右边按页再取一页，不做前端假分页 */
 .vq-ledger-more {
@@ -270,7 +270,7 @@
 }
 .vq-plan-name {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   letter-spacing: 0.02em;
 }
 .vq-plan-price {
@@ -285,12 +285,12 @@
 .vq-plan-price span {
   color: var(--faint);
   font-family: inherit;
-  font-size: 13px;
+  font-size: 14px;
   letter-spacing: 0;
 }
 .vq-plan-meta {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   font-variant-numeric: tabular-nums;
 }
 .vq-plan-note {
@@ -319,7 +319,7 @@
   gap: 12px;
   padding: 8px 0;
   border-bottom: 1px solid var(--line-faint);
-  font-size: 13px;
+  font-size: 14px;
 }
 .vq-receipt-main {
   display: flex;
@@ -364,7 +364,7 @@
 }
 .vq-health-row .detail {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -389,7 +389,7 @@
   border-radius: 999px;
   color: var(--muted);
   background: var(--surface-raised);
-  font-size: 13px;
+  font-size: 14px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -410,7 +410,7 @@
   display: block;
   margin-top: 8px;
   color: var(--faint);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.7;
 }
 /* 表单：管理台发放积分用，样式跟 vq-button 一族对齐 */
@@ -435,7 +435,7 @@
 .vq-password-ok {
   margin: 8px 0 0;
   color: var(--pass);
-  font-size: 13px;
+  font-size: 14px;
 }
 .vq-password-note {
   margin: 8px 0 0;
