@@ -892,15 +892,85 @@ test('积分不够：一个字节都不发给上游，说清楚要多少、还�
   assert.equal(imageAttempts, attempts, '余额不够就不该打上游')
 })
 
-test('带着附件下生成指令：明确拒绝并引导到页签，一分钱不扣', async () => {
+// r289：对话里带一张图就能「按这张重画 / 拿这张当首帧」——不再拦着让人先去「图片」页签入素材库。
+// 图不进素材库：字节只在内存里传给生成管线，任务元数据里只留参考素材的形状（卡片据此写「参考 1 张」）。
+test('对话框里带一张参考图 /生图：真的走参考图出图，只扣 5 积分，附件留在会话里', async () => {
   resetMediaGenRateLimit()
-  const user = newUser('chatref')
+  const user = newUser('chatrep')
+  const cookie = cookieOf(user)
   const { saveChatFile } = await import('../server/chat-files.mjs')
   const file = saveChatFile({ userId: user.id, buffer: tinyPng, name: '参考.png' })
   const before = credits.balanceOf(user.id)
-  await assert.rejects(() => sendChatMessage(user, { content: '/生图 照这张改', files: [file.id] }), (error) => {
-    assert.equal(error.code, 'MEDIA_CHAT_REF')
-    assert.match(error.message, /图片.*视频.*页签/)
+  lastEditBody = ''
+
+  const result = await sendChatMessage(user, { content: '/生图 照这张画成海报', files: [file.id] })
+  assert.equal(result.cost, 0, '带图的生成也不扣对话那 1 积分')
+  assert.equal(result.media.status, 'processing')
+  assert.equal(result.media.kind, 'image')
+  assert.equal(result.media.mode, 'reference', '带图就必须是 reference，而不是文生图')
+  assert.equal(result.media.assets.length, 1)
+  assert.equal(result.media.assets[0].name, '参考.png')
+  assert.match(result.reply.content, /参考 1 张/, '回话里要写清用了参考图')
+  assert.equal(credits.balanceOf(user.id), before - 5)
+
+  // 上游收到的必须是 multipart 的 edits，文件真的是我们那张
+  await waitTask(result.media.id, cookie)
+  assert.match(lastEditBody, /照这张画成海报/)
+  assert.match(lastEditBody, /filename="reference\.png"/)
+  assert.ok(fs.existsSync(path.join(dir, 'media', user.id, result.media.id + '.png')))
+
+  const stored = getConversation(user.id, result.conversation.id)
+  assert.equal(stored.messages[0].files.length, 1, '那条消息上要能点开自己传的图')
+  assert.equal(stored.messages[1].meta.media.assets.length, 1)
+})
+
+test('对话框里带一张图 /生视频：拿它当首帧，上游收到 image2video 与参考素材', async () => {
+  resetMediaGenRateLimit()
+  const user = newUser('chatvidref')
+  const { saveChatFile } = await import('../server/chat-files.mjs')
+  const file = saveChatFile({ userId: user.id, buffer: tinyPng, name: '首帧.png' })
+  const before = credits.balanceOf(user.id)
+  videoPolls = 0
+  refUploads.length = 0
+
+  const result = await sendChatMessage(user, { content: '/生视频 16:9 4秒 480p 让这张动起来', files: [file.id] })
+  assert.equal(result.media.kind, 'video')
+  assert.equal(result.media.mode, 'first')
+  assert.equal(result.media.assets.length, 1)
+  assert.equal(credits.balanceOf(user.id), before - 15)
+  assert.equal(lastVideoBody.mode, 'image2video', '只带图就是图生视频')
+  assert.equal(lastVideoBody.aspect_ratio, '16:9')
+  assert.deepEqual(lastVideoBody.reference_image_urls, ['asset://image'])
+  assert.equal(refUploads.length, 1)
+  assert.equal(refUploads[0].kind, 'image')
+})
+
+test('对话框里一次带两张图：说明只能带一张，一分钱不扣、也不打上游', async () => {
+  resetMediaGenRateLimit()
+  const user = newUser('chatrefmany')
+  const { saveChatFile } = await import('../server/chat-files.mjs')
+  const one = saveChatFile({ userId: user.id, buffer: tinyPng, name: '一.png' })
+  const two = saveChatFile({ userId: user.id, buffer: tinyPng, name: '二.png' })
+  const before = credits.balanceOf(user.id)
+  const attempts = imageAttempts
+  await assert.rejects(() => sendChatMessage(user, { content: '/生图 照这两张画', files: [one.id, two.id] }), (error) => {
+    assert.equal(error.code, 'MEDIA_CHAT_REF_MANY')
+    assert.match(error.message, /最多带 1 张参考图/)
+    return true
+  })
+  assert.equal(credits.balanceOf(user.id), before)
+  assert.equal(imageAttempts, attempts)
+})
+
+test('对话框里带文档下生成指令：说清文档没算进去，一分钱不扣', async () => {
+  resetMediaGenRateLimit()
+  const user = newUser('chatrefdoc')
+  const { saveChatFile } = await import('../server/chat-files.mjs')
+  const doc = saveChatFile({ userId: user.id, buffer: Buffer.from('第一场：咖啡店门口。', 'utf8'), name: '脚本.txt' })
+  const before = credits.balanceOf(user.id)
+  await assert.rejects(() => sendChatMessage(user, { content: '/生图 按脚本画一张', files: [doc.id] }), (error) => {
+    assert.equal(error.code, 'MEDIA_CHAT_REF_DOC')
+    assert.match(error.message, /脚本\.txt/)
     return true
   })
   assert.equal(credits.balanceOf(user.id), before)

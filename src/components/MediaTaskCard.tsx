@@ -67,10 +67,16 @@ export default function MediaTaskCard({ media }: { media: ChatMediaInfo }) {
   // 后面的失败退款只在任务元数据上，不跟着改聊天记录（不跟着查就会自相矛盾：
   // 上面写着「积分已全额退回」，下面还在叫人带着任务号去找管理员）。
   const refunded = current ? current.credits.refunded : media.credits.refunded
-  const spec =
+  // 带图生成要写在规格里：不然用户看不出「这张是照我传的图画的」，还会以为是纯文字那条路
+  const refs = media.assets?.length ?? 0
+  const spec = (
     media.kind === 'image'
-      ? [media.model, media.ratio, media.size].filter(Boolean).join(' · ')
-      : [media.model, media.ratio, media.duration ? media.duration + ' 秒' : '', media.resolution].filter(Boolean).join(' · ')
+      ? [media.model, media.ratio, media.size]
+      : [media.model, media.ratio, media.duration ? media.duration + ' 秒' : '', media.resolution]
+  )
+    .concat(refs ? ['参考 ' + refs + ' 张'] : [])
+    .filter(Boolean)
+    .join(' · ')
 
   return (
     <div className={'qc-media' + (state === 'failed' ? ' is-failed' : '') + (state === 'succeeded' ? ' is-done' : '')}>

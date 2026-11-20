@@ -231,19 +231,74 @@ async function beginChat(user, input = {}) {
   }
 }
 
+// 参考图的扩展名：给上游 multipart 用，按服务端认出来的 mime 定，不信客户端文件名
+const REF_EXT = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' }
+
+/**
+ * 生成指令带的那张参考图（r289）：对话附件里的图本来就是读给模型看的，
+ * 这里把它读出来直接当生成管线的参考素材——不再要求先去「图片」页签入素材库。
+ * 只收 1 张：生图只有「参考图」一种带图方式（1 张），生视频是「首帧」（也是 1 张）。
+ * 文档附件不静默丢掉：生成指令只认图，让用户知道那份文档没被算进去。
+ */
+function mediaReferences(user, input, plan) {
+  const raw = Array.isArray(input?.files) ? input.files.map(String).filter(Boolean) : []
+  if (!raw.length) return { files: [], refs: [] }
+  const resolved = resolveChatFiles(user.id, raw)
+  const docs = resolved.files.filter((file) => file.kind !== 'image')
+  if (docs.length) {
+    throw fail(
+      400,
+      'MEDIA_CHAT_REF_DOC',
+      '生成指令只认参考图片：' + docs.map((file) => file.name).join('、') + ' 这份文档没算进去，请单独用对话问，或者去掉附件再生成',
+    )
+  }
+  if (resolved.files.length > 1) {
+    throw fail(
+      400,
+      'MEDIA_CHAT_REF_MANY',
+      '对话框里一次最多带 1 张参考图：' + (plan.kind === 'image' ? '要按哪张重画' : '要拿哪张当首帧') + '，就留哪一张',
+    )
+  }
+  const refs = []
+  for (const file of resolved.files) {
+    const rawFile = readChatFileBytes(user.id, file.id)
+    if (!rawFile) continue
+    const mime = rawFile.mime || file.mime || 'image/png'
+    refs.push({
+      // id 用附件 id：这一轮不落素材库，只在内存里把字节传给生成管线
+      id: file.id,
+      kind: 'image',
+      name: file.name || '参考图',
+      mime,
+      ext: REF_EXT[mime] || 'png',
+      bytes: rawFile.buffer.length,
+      width: null,
+      height: null,
+      duration: null,
+      buffer: rawFile.buffer,
+    })
+  }
+  if (!refs.length) throw fail(422, 'CHAT_IMAGE_UNREADABLE', '这张图的原图读不到了：重新传一次再发')
+  return { files: resolved.files, refs }
+}
+
 /**
  * 生成指令这一轮：不扣对话积分、不调文本模型，只把用户那句话落库，交给 finishMediaChat 去开任务。
- * 附件在这里就拒掉：带参考图要先把图入成媒体素材，那是「图片 / 视频」页签的活，对话只做文生图 / 文生视频。
+ * 带图（r289）：一张图就按它出图 / 当视频首帧；对话附件不进素材库，字节只活到任务建出来为止。
  */
 function beginMediaChat(user, conv, content, plan, input) {
   if (plan.error) throw fail(400, plan.code || 'MEDIA_PROMPT', plan.error)
-  if (Array.isArray(input?.files) && input.files.length) {
-    throw fail(400, 'MEDIA_CHAT_REF', '对话框里直接生成暂时只按文字来：要带参考图 / 参考视频，请用上面的「图片」「视频」页签')
-  }
+  const { files, refs } = mediaReferences(user, input, plan)
   if (!conv.messages.some((item) => item.role === 'user')) conv.title = titleFrom(content)
-  conv.messages.push({ id: messageId('u'), role: 'user', content, at: Date.now() })
+  conv.messages.push({
+    id: messageId('u'),
+    role: 'user',
+    content,
+    at: Date.now(),
+    ...(files.length ? { files } : {}),
+  })
   const saved = saveConversation(user.id, conv)
-  return { conv: saved || conv, media: plan, evicted: Number(saved?.trimmedNow) || 0 }
+  return { conv: saved || conv, media: { ...plan, refs }, evicted: Number(saved?.trimmedNow) || 0 }
 }
 
 /** 存进回答里的那条生成记录：界面拿 id 去轮询 /api/media/tasks/:id，别再存一份会过期的进度。 */
@@ -265,6 +320,11 @@ function mediaMeta(task) {
     // 下载地址按任务号推出来：刚建出来时还没有文件（downloadUrl 为空），但卡片等成功后再拿它当链接，
     // 这样刷新页面也能直接下载，不用额外一次请求。
     downloadUrl: '/api/media/tasks/' + task.id + '/file',
+    // 参考素材只回形状：卡片上要能说出「这条是按图生成的」，但不必把图再存进聊天记录
+    assets: (Array.isArray(task.assets) ? task.assets : []).map((asset) => ({
+      kind: asset.kind,
+      name: asset.name || '',
+    })),
     credits: {
       cost: Number(credits.cost) || 0,
       balance: typeof credits.balance === 'number' ? credits.balance : null,
@@ -276,12 +336,14 @@ function mediaMeta(task) {
 /** 这一轮的平台回话：说清模型、规格、扣了多少、去哪儿看结果；参数被改过的先照实写。 */
 function mediaReply(task, plan) {
   const credits = task.credits || {}
+  const refs = Array.isArray(task.assets) ? task.assets.length : 0
   const spec = [
     task.model,
     task.ratio,
     task.kind === 'image' ? task.size : '',
     task.kind === 'video' ? task.duration + ' 秒' : '',
     task.resolution,
+    refs ? '参考 ' + refs + ' 张' : '',
   ]
     .filter(Boolean)
     .join(' · ')
@@ -309,7 +371,7 @@ function mediaReply(task, plan) {
 /** 生成指令的收尾：开任务、落一条平台回答、回给界面（这一轮不计对话费）。 */
 async function finishMediaChat(user, ctx) {
   const startedAt = Date.now()
-  const task = await startChatMedia(user, ctx.media)
+  const task = await startChatMedia(user, ctx.media, ctx.media.refs || [])
   ctx.conv.messages.push({
     id: messageId('a'),
     role: 'assistant',

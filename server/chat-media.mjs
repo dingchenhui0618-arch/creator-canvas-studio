@@ -18,7 +18,12 @@ function failure(status, code, message) {
   return error
 }
 
-export async function startChatMedia(user, plan) {
+/**
+ * 带不带参考图是两种生成方式（r289）：生图带 1 张 → reference（走 /images/edits）、
+ * 生视频带 1 张 → first（拿它当首帧）；不带就还是原来的文生图 / 文生视频。
+ * 参考图由调用方（server/chat.mjs）从对话附件里读好传进来，这里不再碰磁盘。
+ */
+export async function startChatMedia(user, plan, references = []) {
   const limit = mediaRateLimit(user.id)
   if (limit) {
     const error = failure(429, 'MEDIA_RATE_LIMITED', '生成太频繁了，请 ' + limit.retryAfterSec + ' 秒后再试')
@@ -26,15 +31,17 @@ export async function startChatMedia(user, plan) {
     throw error
   }
 
+  const refs = Array.isArray(references) ? references : []
   const selection = resolveSelection({
     kind: plan.kind,
     model: plan.model,
     ratio: plan.ratio,
     duration: plan.duration,
     resolution: plan.resolution,
-    mode: 'text',
+    mode: refs.length ? (plan.kind === 'image' ? 'reference' : 'first') : 'text',
+    assets: refs,
   })
-  const input = { ...selection, prompt: plan.prompt, assets: [] }
+  const input = { ...selection, prompt: plan.prompt, assets: refs }
   const result = plan.kind === 'image' ? await runImage(user, input) : await runVideo(user, input)
   if (result.paymentFailed) {
     const paid = result.paymentFailed

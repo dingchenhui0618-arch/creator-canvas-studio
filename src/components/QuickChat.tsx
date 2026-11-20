@@ -435,7 +435,7 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
               <ul>
                 <li>
                   直接生成：以「/生图」「/生视频」开头，后面写清要什么（如 /生图 9:16 咖啡店门口的雨夜海报），
-                  按图片 / 视频的积分价扣费，失败全额退回
+                  按图片 / 视频的积分价扣费，失败全额退回；带一张图就按它出图 / 当视频首帧
                 </li>
                 <li>边生成边显示，首段一两秒就到；中途可以停，停止与失败都不计费</li>
                 <li>
@@ -703,7 +703,9 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
               {sending
                 ? '生成中点方块可停止，停止不计费'
                 : genCommand
-                  ? '以 / 开头：这条直接生成，按图片 / 视频的积分价扣费'
+                  ? attached.length
+                    ? '以 / 开头：会带上这 ' + attached.length + ' 个附件；生成一次最多用 1 张参考图'
+                    : '以 / 开头：这条直接生成，按图片 / 视频的积分价扣费'
                   : !tools.readUrl && /https?:\/\//i.test(draft)
                     ? '消息里有链接：打开「读链接」，我才会先把页面读下来'
                     : 'Enter 发送 · Shift + Enter 换行'}

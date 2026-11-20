@@ -29,6 +29,8 @@ export type ChatMediaInfo = {
   duration: number | null
   resolution: string
   prompt: string
+  // 参考素材（r289）：带图生成时这里有一条，卡片上写「参考 1 张」；不带图时空数组
+  assets?: { kind: string; name: string }[]
   // 失败时说清是哪一步没成：卡片在「已失败」状态下不轮询，原因只能从这里带出来
   error?: string
   downloadUrl: string
