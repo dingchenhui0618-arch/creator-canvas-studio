@@ -7,6 +7,7 @@
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { config } from './config.mjs'
+import { writeFileAtomic } from './atomic-write.mjs'
 
 export const smsFile = () => path.join(config.dataDir, 'sms.json')
 
@@ -76,9 +77,7 @@ export async function readSms() {
 async function persist(saved) {
   const target = smsFile()
   await fsp.mkdir(path.dirname(target), { recursive: true })
-  const tmp = target + '.' + process.pid + '.tmp'
-  await fsp.writeFile(tmp, JSON.stringify(saved, null, 2), { encoding: 'utf8', mode: 0o600 })
-  await fsp.rename(tmp, target)
+  await writeFileAtomic(target, JSON.stringify(saved, null, 2))
   await fsp.chmod(target, 0o600).catch(() => {})
 }
 

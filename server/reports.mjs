@@ -3,6 +3,7 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { config } from './config.mjs'
 import { readStoreArray } from './json-store.mjs'
+import { writeFileAtomic } from './atomic-write.mjs'
 
 // 侵权 / 不当内容举报：分享页与公共模板都能报，不要求登录（被侵权的人不一定有账号）。
 // 落 data/reports.json，最多 500 条；同一 IP 对同一条模板 10 分钟内只算一次，
@@ -50,9 +51,7 @@ async function persist(list) {
   return enqueueWrite(async () => {
     await fsp.mkdir(config.dataDir, { recursive: true })
     const file = path.join(config.dataDir, 'reports.json')
-    const tmp = file + '.' + process.pid + '.' + Math.random().toString(36).slice(2) + '.tmp'
-    await fsp.writeFile(tmp, JSON.stringify(list, null, 2), 'utf8')
-    await fsp.rename(tmp, file)
+    await writeFileAtomic(file, JSON.stringify(list, null, 2), { mode: 0o666 })
   })
 }
 

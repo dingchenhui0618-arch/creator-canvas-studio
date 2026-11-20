@@ -12,6 +12,7 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { config } from './config.mjs'
+import { writeFileAtomicSync } from './atomic-write.mjs'
 
 const MAX_CONVERSATIONS = 30
 const MAX_MESSAGES = 200
@@ -88,9 +89,7 @@ function safeSearch(value) {
 function atomicWrite(file, data) {
   const dir = path.dirname(file)
   fs.mkdirSync(dir, { recursive: true })
-  const tmp = file + '.' + crypto.randomBytes(6).toString('hex') + '.tmp'
-  fs.writeFileSync(tmp, JSON.stringify(data, null, 2), { mode: 0o600 })
-  fs.renameSync(tmp, file)
+  writeFileAtomicSync(file, JSON.stringify(data, null, 2))
   try { fs.chmodSync(file, 0o600) } catch { /* Windows 不生效，不影响正确性 */ }
 }
 

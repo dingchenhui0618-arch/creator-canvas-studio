@@ -8,6 +8,7 @@
 //
 // 所以补一层重试：只重试「暂时性」的错误码（EPERM / EBUSY / EACCES / EAGAIN），
 // 每次多等一会儿，最多 6 次；别的错误（路径不存在、盘满）立刻抛出去，不装成成功。
+import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 
 /** 这几个错误码是「现在不行，过一会儿可能就行」，值得重试。 */
@@ -57,6 +58,51 @@ export async function writeFileAtomic(target, data, options = {}) {
     return { ok: true, attempts: result.attempts, bytes: Buffer.byteLength(String(data)) }
   } catch (error) {
     await fsp.rm(tmp, { force: true }).catch(() => {})
+    throw error
+  }
+}
+
+/**
+ * 带重试的 renameSync（给同步写盘用，比如被同步函数调用的那些 store）。
+ * 同步代码里没有 await，所以等待只能用 Atomics.wait —— Node 主线程允许（浏览器不允许），
+ * 每次等 min(delayMs * (attempt+1), 200) 毫秒。
+ */
+function sleepSync(ms) {
+  if (!(ms > 0)) return
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.min(ms, 200))
+}
+
+export function renameSyncWithRetry(from, to, options = {}) {
+  const attempts = Math.max(1, Number(options.attempts) || 6)
+  const delayMs = Math.max(0, Number(options.delayMs ?? 25))
+  const rename = options.rename || fs.renameSync
+  let lastError = null
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      rename(from, to)
+      return { ok: true, attempts: attempt + 1 }
+    } catch (error) {
+      lastError = error
+      if (!isTransientRenameError(error)) break
+      if (attempt < attempts - 1 && delayMs > 0) sleepSync(delayMs * (attempt + 1))
+    }
+  }
+  const failure = lastError instanceof Error ? lastError : new Error('重命名失败')
+  failure.renameFrom = from
+  failure.renameTo = to
+  throw failure
+}
+
+/** writeFileAtomic 的同步版，语义完全一致：失败删临时文件、只重试暂时性错误。 */
+export function writeFileAtomicSync(target, data, options = {}) {
+  const mode = options.mode ?? 0o600
+  const tmp = target + '.' + process.pid + '.' + Math.random().toString(36).slice(2, 8) + '.tmp'
+  fs.writeFileSync(tmp, data, { mode })
+  try {
+    const result = renameSyncWithRetry(tmp, target, options)
+    return { ok: true, attempts: result.attempts, bytes: Buffer.byteLength(String(data)) }
+  } catch (error) {
+    try { fs.rmSync(tmp, { force: true }) } catch { /* 删不掉也不影响原始错误 */ }
     throw error
   }
 }

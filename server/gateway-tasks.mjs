@@ -7,6 +7,7 @@
 import { config } from './config.mjs'
 import fs from 'node:fs'
 import path from 'node:path'
+import { writeFileAtomicSync } from './atomic-write.mjs'
 
 const RUNNING_TTL_MS = 2 * 60 * 60 * 1000
 const KEEP_TTL_MS = 24 * 60 * 60 * 1000
@@ -21,9 +22,7 @@ function persist() {
   try {
     fs.mkdirSync(config.dataDir, { recursive: true })
     const rows = [...tasks.values()].sort((a, b) => b.createdAt - a.createdAt).slice(0, KEEP_LIMIT)
-    const tmp = tasksFile() + '.' + process.pid + '.tmp'
-    fs.writeFileSync(tmp, JSON.stringify({ version: 1, tasks: rows }, null, 2), { mode: 0o600 })
-    fs.renameSync(tmp, tasksFile())
+    writeFileAtomicSync(tasksFile(), JSON.stringify({ version: 1, tasks: rows }, null, 2))
   } catch (error) {
     console.error('[gateway] 任务台账写入失败：' + String(error?.message || error))
   }

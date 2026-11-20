@@ -28,6 +28,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { LEASE_LOCK_MISS, pidAlive, withDirLock } from './heavy-lease.mjs'
 import { createCoverCache, createSemaphore, createWindowLimiter } from './cover-cache.mjs'
+import { writeFileAtomicSync } from './atomic-write.mjs'
 
 const MAGIC = 'VQCOVER1 '
 const IMG_EXT = '.img'
@@ -142,7 +143,6 @@ export function createSharedCoverCache({
 } = {}) {
   const base = path.resolve(dir)
   const counters = { hits: 0, misses: 0, evictions: 0, pruned: 0, writes: 0, lockMiss: 0, lastError: '' }
-  let seq = 0
   const fileFor = (key, ext) => path.join(base, hashKey(key) + ext)
 
   function readNegative(key) {
@@ -254,13 +254,10 @@ export function createSharedCoverCache({
     const meta = { type: String(type || 'application/octet-stream'), expiresAt: now() + ttlMs }
     const header = Buffer.from(MAGIC + JSON.stringify(meta) + '\n', 'utf8')
     const file = fileFor(key, IMG_EXT)
-    const tmp = path.join(base, '.' + hashKey(key) + '-' + process.pid + '-' + (++seq).toString(36) + '.tmp')
     try {
-      fs.writeFileSync(tmp, Buffer.concat([header, buffer]), { mode: 0o666 })
-      fs.renameSync(tmp, file)
+      writeFileAtomicSync(file, Buffer.concat([header, buffer]), { mode: 0o666 })
       counters.writes += 1
     } catch (error) {
-      removeQuiet(tmp)
       counters.lastError = '封面缓存写入失败：' + String((error && (error.code || error.message)) || error)
       return false
     }
@@ -272,12 +269,10 @@ export function createSharedCoverCache({
   /** 抓不到也记一笔：同一个坏地址在 negativeTtlMs 内不再去上游。 */
   function putMiss(key) {
     const file = fileFor(key, NEG_EXT)
-    const tmp = path.join(base, '.' + hashKey(key) + '-' + process.pid + '-' + (++seq).toString(36) + '.tmp2')
     try {
-      fs.writeFileSync(tmp, JSON.stringify({ expiresAt: now() + negativeTtlMs }), { mode: 0o666 })
-      fs.renameSync(tmp, file)
+      writeFileAtomicSync(file, JSON.stringify({ expiresAt: now() + negativeTtlMs }), { mode: 0o666 })
     } catch {
-      removeQuiet(tmp)
+      // 负缓存写不进去就算了：下次再抓一次而已
     }
     // 同一条目原来缓存成功过：现在抓不到了，旧的图不能再回给用户
     removeQuiet(fileFor(key, IMG_EXT))
@@ -465,12 +460,10 @@ export function createSharedWindowLimiter({ dir, max = 60, windowMs = 60 * 1000,
   }
 
   function writeBucket(file, bucket) {
-    const tmp = path.join(base, '.' + path.basename(file) + '-' + process.pid + '-' + Date.now().toString(36) + '.tmp')
     try {
-      fs.writeFileSync(tmp, JSON.stringify(bucket), { mode: 0o666 })
-      fs.renameSync(tmp, file)
+      writeFileAtomicSync(file, JSON.stringify(bucket), { mode: 0o666 })
     } catch {
-      removeQuiet(tmp)
+      // 计数窗写不进去只影响限流统计，不影响抓取结果
     }
   }
 

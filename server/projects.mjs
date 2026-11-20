@@ -19,6 +19,7 @@ import { restoreReviews, reviewSummaryByVersion, takeReviewsForProject } from '.
 import { restoreAcks, takeAcksForProject } from './review-acks.mjs'
 import { restoreDecisions, takeDecisionsForProject } from './review-decisions.mjs'
 import { reviewsForVersion } from './project-status.mjs'
+import { writeFileAtomic } from './atomic-write.mjs'
 // 交付包封存（v0.9.125）：标记交付时落一份 zip，之后改模板 / 开新版都不动它
 import {
   dropDeliveryPackage,
@@ -95,25 +96,11 @@ async function persist(list) {
   cache = list
   return enqueueWrite(async () => {
     await fsp.mkdir(config.dataDir, { recursive: true })
-    const tmp = projectsFile + '.' + process.pid + '.' + Math.random().toString(36).slice(2) + '.tmp'
-    await fsp.writeFile(tmp, JSON.stringify(list, null, 2), 'utf8')
     // Windows 上 rename 撞上别人正好在读这份文件时是 EPERM / EBUSY（2026-11-15 本地实测：
     // 验收脚本读盘的时机压在改写那一刻，一次改名就 500 了）。这不是文件坏了，隔一会儿再来一次就过去；
-    // 产业上的 Linux 不会出这种事，但桌面端就在 Windows 上跑，所以这里按「占用」重试，不按「失败」退出。
-    // 三次都不行才抛：不能把一次瞬时占用当成写成功。
-    let lastError = null
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      try {
-        await fsp.rename(tmp, projectsFile)
-        return
-      } catch (error) {
-        lastError = error
-        if (!['EPERM', 'EBUSY', 'EACCES'].includes(String(error?.code || ''))) break
-        await new Promise((resolve) => setTimeout(resolve, 40))
-      }
-    }
-    await fsp.rm(tmp, { force: true }).catch(() => {})
-    throw lastError
+    // 这套重试 r285 起收进 writeFileAtomic（server/atomic-write.mjs），全站 JSON 存档共用同一份实现，
+    // 免得每个文件各写一遍、还各自漏掉几个错误码。
+    await writeFileAtomic(projectsFile, JSON.stringify(list, null, 2), { mode: 0o666 })
   })
 }
 
@@ -145,9 +132,7 @@ async function persistTrash(list) {
   trashCache = list
   return enqueueTrashWrite(async () => {
     await fsp.mkdir(config.dataDir, { recursive: true })
-    const tmp = trashFile + '.' + process.pid + '.' + Math.random().toString(36).slice(2) + '.tmp'
-    await fsp.writeFile(tmp, JSON.stringify(list, null, 2), 'utf8')
-    await fsp.rename(tmp, trashFile)
+    await writeFileAtomic(trashFile, JSON.stringify(list, null, 2), { mode: 0o666 })
   })
 }
 

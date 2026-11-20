@@ -13,6 +13,7 @@ import { config } from './config.mjs'
 import { readStoreArray, storeUnreadable } from './json-store.mjs'
 import { resolveChannel, signBody } from './alert-channel.mjs'
 import { buildPayload, detectProvider, providerLabel, readVerdict } from './alert-format.mjs'
+import { writeFileAtomic } from './atomic-write.mjs'
 
 const COOLDOWN_MS = 30 * 60 * 1000
 const MAX_ALERTS = 200
@@ -56,9 +57,7 @@ function persist(list) {
   writeChain = writeChain
     .then(async () => {
       await fsp.mkdir(config.dataDir, { recursive: true })
-      const tmp = target + '.' + process.pid + '.' + Math.random().toString(36).slice(2) + '.tmp'
-      await fsp.writeFile(tmp, JSON.stringify(list, null, 2), 'utf8')
-      await fsp.rename(tmp, target)
+      await writeFileAtomic(target, JSON.stringify(list, null, 2), { mode: 0o666 })
     })
     .catch(() => {})
   return writeChain
@@ -103,9 +102,7 @@ function persistOutbox(next) {
   outboxChain = outboxChain
     .then(async () => {
       await fsp.mkdir(config.dataDir, { recursive: true })
-      const tmp = target + '.' + process.pid + '.' + Math.random().toString(36).slice(2) + '.tmp'
-      await fsp.writeFile(tmp, JSON.stringify(next, null, 2), 'utf8')
-      await fsp.rename(tmp, target)
+      await writeFileAtomic(target, JSON.stringify(next, null, 2), { mode: 0o666 })
     })
     .catch(() => {})
   return outboxChain

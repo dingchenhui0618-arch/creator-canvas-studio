@@ -12,6 +12,7 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import { config } from './config.mjs'
 import { openDb } from './auth.mjs'
+import { writeFileAtomicSync } from './atomic-write.mjs'
 
 // 能力口径固定成这几个词：页面按它分组，不随调用方措辞变化
 export const USAGE_KINDS = ['text', 'vision', 'judge', 'image', 'video', 'search', 'replicate', 'run']
@@ -168,9 +169,7 @@ export function saveUsagePrices(patch = {}, { by = '' } = {}) {
   const payload = { prices: next, currency: 'CNY', updatedAt: nowIso(), updatedBy: String(by || '').slice(0, 80) }
   try {
     fs.mkdirSync(path.dirname(pricesFile()), { recursive: true })
-    const tmp = pricesFile() + '.tmp'
-    fs.writeFileSync(tmp, JSON.stringify(payload, null, 2), { mode: 0o600 })
-    fs.renameSync(tmp, pricesFile())
+    writeFileAtomicSync(pricesFile(), JSON.stringify(payload, null, 2))
   } catch (error) {
     return { ok: false, error: '保存失败：' + String(error && error.message ? error.message : error) }
   }

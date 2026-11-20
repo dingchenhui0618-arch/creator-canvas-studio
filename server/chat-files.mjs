@@ -21,6 +21,7 @@ import zlib from 'node:zlib'
 import { config } from './config.mjs'
 import { sniffMedia } from './media-assets.mjs'
 import { refusal } from './public-error.mjs'
+import { writeFileAtomicSync } from './atomic-write.mjs'
 
 const MB = 1024 * 1024
 
@@ -379,9 +380,7 @@ function binaryFor(userId, id, ext) {
 
 function atomicWrite(file, data) {
   fs.mkdirSync(path.dirname(file), { recursive: true })
-  const tmp = file + '.' + crypto.randomBytes(6).toString('hex') + '.tmp'
-  fs.writeFileSync(tmp, JSON.stringify(data, null, 2), { mode: 0o600 })
-  fs.renameSync(tmp, file)
+  writeFileAtomicSync(file, JSON.stringify(data, null, 2))
   try { fs.chmodSync(file, 0o600) } catch { /* Windows 不生效，不影响正确性 */ }
 }
 

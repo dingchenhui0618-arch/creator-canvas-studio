@@ -10,6 +10,7 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
 import { config } from './config.mjs'
+import { writeFileAtomic } from './atomic-write.mjs'
 
 // 同一条链接多少毫秒内的再次打开不重复计数
 export const OPEN_DEDUPE_MS = 60_000
@@ -88,9 +89,7 @@ export function createVisitLog({ file, maxEntries = 200 } = {}) {
     cache = data
     return enqueueWrite(async () => {
       await fsp.mkdir(config.dataDir, { recursive: true })
-      const tmp = visitsFile + '.' + process.pid + '.' + Math.random().toString(36).slice(2) + '.tmp'
-      await fsp.writeFile(tmp, JSON.stringify(data, null, 2), 'utf8')
-      await fsp.rename(tmp, visitsFile)
+      await writeFileAtomic(visitsFile, JSON.stringify(data, null, 2), { mode: 0o666 })
     })
   }
 

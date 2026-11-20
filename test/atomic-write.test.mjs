@@ -7,7 +7,13 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { isTransientRenameError, renameWithRetry, writeFileAtomic } from '../server/atomic-write.mjs'
+import {
+  isTransientRenameError,
+  renameSyncWithRetry,
+  renameWithRetry,
+  writeFileAtomic,
+  writeFileAtomicSync,
+} from '../server/atomic-write.mjs'
 
 const eperm = () => Object.assign(new Error('EPERM: operation not permitted, rename'), { code: 'EPERM' })
 
@@ -100,4 +106,71 @@ test('接线：写任务元数据走带重试的原子写，不再自己 rename'
   assert.match(route, /import \{ writeFileAtomic \} from '..\/atomic-write.mjs'/)
   assert.match(route, /await writeFileAtomic\(taskMetaFile\(task.id\), JSON\.stringify\(task, null, 2\)\)/)
   assert.match(route, /async function writeTask\(task\) \{[\s\S]{0,320}?writeFileAtomic/)
+})
+
+// ---------- 同步版（r285）：偏好 / 配额 / 价格 / 画布归属这些 store 是同步写的，用不了 await ----------
+
+function tempDirSync() {
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'vq-atomic-sync-'))
+}
+
+test('同步版：写进去的是原文，临时文件不留', () => {
+  const dir = tempDirSync()
+  try {
+    const target = path.join(dir, 'prefs.json')
+    const result = writeFileAtomicSync(target, '{"theme":"dark"}')
+    assert.equal(result.ok, true)
+    assert.equal(fs.readFileSync(target, 'utf8'), '{"theme":"dark"}')
+    assert.deepEqual(fs.readdirSync(dir), ['prefs.json'])
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('同步版：前两次 EPERM、第三次成功，次数说得出来', () => {
+  const dir = tempDirSync()
+  try {
+    let calls = 0
+    const flaky = (from, to) => {
+      calls += 1
+      if (calls < 3) throw eperm()
+      fs.renameSync(from, to)
+    }
+    const target = path.join(dir, 'quota.json')
+    const result = writeFileAtomicSync(target, 'ok', { rename: flaky, delayMs: 1 })
+    assert.equal(result.attempts, 3)
+    assert.equal(fs.readFileSync(target, 'utf8'), 'ok')
+    assert.deepEqual(fs.readdirSync(dir), ['quota.json'])
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('同步版：一直 EPERM 就抛，临时文件删掉', () => {
+  const dir = tempDirSync()
+  try {
+    const target = path.join(dir, 'prices.json')
+    assert.throws(
+      () => writeFileAtomicSync(target, 'x', { attempts: 3, delayMs: 1, rename: () => { throw eperm() } }),
+      (error) => error.code === 'EPERM' && error.renameTo === target,
+    )
+    assert.deepEqual(fs.readdirSync(dir), [])
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('同步版：不在白名单的错误码一次都不重试', () => {
+  const dir = tempDirSync()
+  try {
+    let calls = 0
+    const broken = () => {
+      calls += 1
+      throw Object.assign(new Error('ENOSPC: no space left'), { code: 'ENOSPC' })
+    }
+    assert.throws(() => renameSyncWithRetry('a', 'b', { rename: broken, delayMs: 1 }))
+    assert.equal(calls, 1)
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
 })

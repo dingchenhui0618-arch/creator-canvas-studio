@@ -15,6 +15,7 @@ import path from 'node:path'
 import { config } from './config.mjs'
 import { openDeliveryPackage } from './delivery-packages.mjs'
 import { MAX_PACKAGE_BYTES, readZipDirectoryAt, verifyZipAt } from './zip-read.mjs'
+import { writeFileAtomic } from './atomic-write.mjs'
 
 /** 报告文件名：和 projects.json 放一起，备份脚本按目录打包时会一起带走。 */
 export const AUDIT_REPORT_FILE = 'package-audits.json'
@@ -43,9 +44,7 @@ export async function readAuditReport() {
 export async function writeAuditReport(report) {
   await fsp.mkdir(config.dataDir, { recursive: true })
   const file = auditReportPath()
-  const tmp = file + '.' + process.pid + '.' + Math.random().toString(36).slice(2) + '.tmp'
-  await fsp.writeFile(tmp, JSON.stringify(report, null, 2), 'utf8')
-  await fsp.rename(tmp, file)
+  await writeFileAtomic(file, JSON.stringify(report, null, 2), { mode: 0o666 })
 }
 
 /** 这一件交付在报告里长什么样：包还在不在、目录读不读得出来、每条的 CRC32 对不对。 */

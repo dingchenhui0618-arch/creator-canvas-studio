@@ -2818,3 +2818,18 @@ media-gen 从 20/21 连红三次变成 21/21。其余约 40 处同样的写法�
 
 门禁：1906/1906 测试、lint 0 error / 24 warning（658 文件）、`tsc -b` 干净、入口 `index-D8U1B3ph.js`（783,236 B）、
 密钥扫描 1053 文件无命中。详见 `docs/r284-works-degraded-2026-11-20.md`。
+
+## 三百三十七、写不进去不许当没发生：全站 47 处原子写收到一处（r285 / v0.9.267）
+
+r284 抓到的那次 `EPERM rename` 不是 media-gen 一家的事。全站 **40 个文件 / 47 处**「写 .tmp 再 rename」都是同一个坑，而且深浅不一：27 个文件直接 rename 完事（撞上「目标文件正被人读」就抛，这一次修改没了）；只有 `projects.mjs` 在 r267 手工补了 3 次重试（还漏了 `EAGAIN`）；13 个文件是同步写（偏好、配额、价格、Key、画布归属、计费订单、对话存档…），连 catch 都没有——`keyvault.mjs` 存 Key 状态，撞上就是「这把 Key 的启用/停用没生效」，刷新后又变回去，用户会以为是自己点错了。
+
+这一轮全部收到 `server/atomic-write.mjs`：
+
+- 补同步形态 `renameSyncWithRetry` / `writeFileAtomicSync`。同步代码没有 await，等待用 `Atomics.wait`（Node 主线程允许），每次 `min(delayMs*(attempt+1), 200)` 毫秒，**故意封顶**，不能因为一次写重试把请求线程按住好几秒；
+- 47 处逐处对齐文件权限：原来默认 0644 的显式传 `{ mode: 0o666 }`，原来 0600 的照传，原来 rename 后补 `chmod` 的（邮件、短信、站点、余额、搜索、上游 Key）保持不动；
+- `agents.mjs` 的「把坏文件挪去 .broken-<时间戳>」也走 `renameWithRetry`：挪不走才降级成「不许写」；
+- 新增守卫 `test/atomic-write-guard.test.mjs`：`server/` 递归扫，除 `atomic-write.mjs` 外出现 `renameSync(` 或 `.rename(` 即失败；确需自己 rename 的写 `// atomic-write-exempt: 原因` 显式放行。反向验证过：临时在 `preferences.mjs` 加回一行 `fs.renameSync`，守卫立刻点名 `preferences.mjs:71`。
+
+语义没变：只重试 EPERM / EBUSY / EACCES / EAGAIN，最多 6 次、间隔逐次加长；盘满、路径没了立刻抛，抛之前删掉自己的 .tmp，不装成写成功。读的一方要么看到旧的、要么看到新的，永远读不到半份 JSON。
+
+门禁 **1913/1913**（+7）、lint 0 error / 24 warning（658 文件）、`tsc -b` 干净、入口 `index-CQ-R63kV.js`（783,236 B）；本轮 0 次真实上游调用、0 费用。详见 `docs/r285-atomic-write-all-2026-11-20.md`。

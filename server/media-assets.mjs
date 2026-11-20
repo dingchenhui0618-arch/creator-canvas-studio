@@ -16,6 +16,7 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { config } from './config.mjs'
 import { refusal } from './public-error.mjs'
+import { writeFileAtomic } from './atomic-write.mjs'
 
 const MB = 1024 * 1024
 
@@ -107,9 +108,7 @@ export function publicAsset(meta) {
 
 async function writeMeta(dir, meta) {
   const target = path.join(dir, meta.id + '.json')
-  const tmp = target + '.' + process.pid + '.tmp'
-  await fsp.writeFile(tmp, JSON.stringify(meta, null, 2), { mode: 0o600 })
-  await fsp.rename(tmp, target)
+  await writeFileAtomic(target, JSON.stringify(meta, null, 2))
 }
 
 async function readMeta(dir, id) {

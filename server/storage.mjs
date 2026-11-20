@@ -14,6 +14,7 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { config } from './config.mjs'
 import { findUserById, listUsers } from './auth.mjs'
+import { writeFileAtomicSync } from './atomic-write.mjs'
 
 const file = path.join(config.dataDir, 'storage-limits.json')
 // 上限单位是 MB，1 TB 封顶：再大就不是「限制」而是打错了一个数。
@@ -35,9 +36,7 @@ function load() {
 
 function persist(data) {
   fs.mkdirSync(path.dirname(file), { recursive: true })
-  const tmp = file + '.' + process.pid + '.' + Math.random().toString(36).slice(2) + '.tmp'
-  fs.writeFileSync(tmp, JSON.stringify(data, null, 2), { mode: 0o600 })
-  fs.renameSync(tmp, file)
+  writeFileAtomicSync(file, JSON.stringify(data, null, 2))
   cache = data
 }
 

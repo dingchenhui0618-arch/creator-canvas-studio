@@ -6,6 +6,7 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { config } from './config.mjs'
 import { readStoreArray } from './json-store.mjs'
+import { writeFileAtomic } from './atomic-write.mjs'
 
 const runsFile = path.join(config.dataDir, 'agent-runs.json')
 const MAX_TOTAL = 300
@@ -42,9 +43,7 @@ async function persist(list) {
   if (readError) throw readError
   cache = list
   await fsp.mkdir(config.dataDir, { recursive: true })
-  const tmp = runsFile + '.' + process.pid + '.' + Math.random().toString(36).slice(2) + '.tmp'
-  await fsp.writeFile(tmp, JSON.stringify(list, null, 2), 'utf8')
-  await fsp.rename(tmp, runsFile)
+  await writeFileAtomic(runsFile, JSON.stringify(list, null, 2), { mode: 0o666 })
 }
 
 const clip = (value, max) => String(value ?? '').slice(0, max)

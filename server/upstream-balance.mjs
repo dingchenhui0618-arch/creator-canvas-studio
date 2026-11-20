@@ -13,6 +13,7 @@
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { config } from './config.mjs'
+import { writeFileAtomic } from './atomic-write.mjs'
 
 export const balanceFile = () => path.join(config.dataDir, 'upstream-balance.json')
 
@@ -135,9 +136,7 @@ export async function readBalanceFile() {
 async function persist(file) {
   const target = balanceFile()
   await fsp.mkdir(path.dirname(target), { recursive: true })
-  const tmp = target + '.' + process.pid + '.tmp'
-  await fsp.writeFile(tmp, JSON.stringify(file, null, 2), { encoding: 'utf8', mode: 0o600 })
-  await fsp.rename(tmp, target)
+  await writeFileAtomic(target, JSON.stringify(file, null, 2))
   await fsp.chmod(target, 0o600).catch(() => {})
 }
 

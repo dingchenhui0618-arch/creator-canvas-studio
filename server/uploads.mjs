@@ -15,6 +15,7 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { config } from './config.mjs'
 import { refusal } from './public-error.mjs'
+import { writeFileAtomic } from './atomic-write.mjs'
 
 const MB = 1024 * 1024
 
@@ -162,9 +163,7 @@ export async function saveUpload({ userId, buffer }) {
   const room = await makeRoom(dir, { keepFiles: UPLOAD_LIMITS.maxFiles - 1, keepBytes: Math.max(0, UPLOAD_LIMITS.maxTotalBytes - size) })
   const name = Date.now() + '-' + crypto.randomBytes(6).toString('hex') + '.' + type.ext
   const target = path.join(dir, name)
-  const tmp = target + '.tmp'
-  await fsp.writeFile(tmp, buffer, { mode: 0o600 })
-  await fsp.rename(tmp, target)
+  await writeFileAtomic(target, buffer)
   const media = 'uploads/' + id + '/' + name
   return {
     media,

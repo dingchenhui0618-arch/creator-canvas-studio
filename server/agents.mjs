@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { config } from './config.mjs'
 import { canAccess } from './owner.mjs'
 import { storeUnreadable } from './json-store.mjs'
+import { renameWithRetry, writeFileAtomic } from './atomic-write.mjs'
 
 // 智能体存储：data/agents.json，原子写与 templates.mjs 同一套范式。
 export const AGENT_CATEGORIES = [
@@ -186,7 +187,9 @@ async function quarantineBroken(error) {
   const backup = agentsFile + '.broken-' + Date.now()
   let backupName = ''
   try {
-    await fsp.rename(agentsFile, backup)
+    // 被占用（防病毒扫描、别人正在读）时 rename 也是 EPERM：这里同样走重试，
+    // 挪不走才降级成「不许写」，别把一个瞬时占用当成「原件动了」。
+    await renameWithRetry(agentsFile, backup)
     backupName = path.basename(backup)
     console.error('[agents] agents.json 解析失败，已备份到 ' + backup)
   } catch (renameError) {
@@ -235,9 +238,7 @@ function persist(list) {
   const snapshot = JSON.stringify(list, null, 2)
   const task = writeChain.then(async () => {
     await fsp.mkdir(config.dataDir, { recursive: true })
-    const tmp = agentsFile + '.tmp'
-    await fsp.writeFile(tmp, snapshot, 'utf8')
-    await fsp.rename(tmp, agentsFile)
+    await writeFileAtomic(agentsFile, snapshot, { mode: 0o666 })
   })
   writeChain = task.catch(() => {})
   return task

@@ -17,6 +17,7 @@ import { config } from './config.mjs'
 import { refusal } from './public-error.mjs'
 import { sniffImage, UPLOAD_MIME } from './uploads.mjs'
 import { SHOT_MEDIA_STORE } from './project-shots.mjs'
+import { writeFileAtomic } from './atomic-write.mjs'
 
 const MB = 1024 * 1024
 
@@ -326,9 +327,7 @@ export async function saveShotFrame({ userId, projectId, buffer }) {
   }
   const name = Date.now() + '-' + crypto.randomBytes(6).toString('hex') + '.' + type.ext
   const target = path.join(dir, name)
-  const tmp = target + '.tmp'
-  await fsp.writeFile(tmp, buffer, { mode: 0o600 })
-  await fsp.rename(tmp, target)
+  await writeFileAtomic(target, buffer)
   return {
     media: 'shotframes/' + uid + '/' + pid + '/' + name,
     imageUrl: '/media/shotframes/' + uid + '/' + pid + '/' + name,

@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto'
 import { config } from './config.mjs'
 import { canAccess } from './owner.mjs'
 import { readStoreArray } from './json-store.mjs'
+import { writeFileAtomic } from './atomic-write.mjs'
 
 const reviewsFile = path.join(config.dataDir, 'reviews.json')
 const MAX_REVIEWS = 200
@@ -38,9 +39,7 @@ async function persist(list) {
   if (readError) throw readError
   cache = list
   await fsp.mkdir(config.dataDir, { recursive: true })
-  const tmp = reviewsFile + '.' + process.pid + '.' + Math.random().toString(36).slice(2) + '.tmp'
-  await fsp.writeFile(tmp, JSON.stringify(list, null, 2), 'utf8')
-  await fsp.rename(tmp, reviewsFile)
+  await writeFileAtomic(reviewsFile, JSON.stringify(list, null, 2), { mode: 0o666 })
 }
 
 function clip(value, max) {

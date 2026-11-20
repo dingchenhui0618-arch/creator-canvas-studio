@@ -2,6 +2,7 @@ import fsp from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { config } from './config.mjs'
 import { readStoreArray } from './json-store.mjs'
+import { writeFileAtomic } from './atomic-write.mjs'
 
 // 前端异常上报：浏览器里炸了的东西（脚本错误、未处理的 Promise、React 渲染抛错）
 // 在服务端留一份，后台「系统」页能直接看到，不用等用户截图、也不用翻 journal。
@@ -44,9 +45,7 @@ async function persist(list) {
   cache = list
   return enqueueWrite(async () => {
     await fsp.mkdir(config.dataDir, { recursive: true })
-    const tmp = config.clientErrorsFile + '.' + process.pid + '.' + Math.random().toString(36).slice(2) + '.tmp'
-    await fsp.writeFile(tmp, JSON.stringify(list, null, 2), 'utf8')
-    await fsp.rename(tmp, config.clientErrorsFile)
+    await writeFileAtomic(config.clientErrorsFile, JSON.stringify(list, null, 2), { mode: 0o666 })
   })
 }
 

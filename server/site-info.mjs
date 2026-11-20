@@ -8,6 +8,7 @@
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { config } from './config.mjs'
+import { writeFileAtomic } from './atomic-write.mjs'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 // 「统一社会信用代码」是 18 位大写字母与数字，不含 I / O / Z / S / V（国标排除易混字符），
@@ -83,9 +84,7 @@ export async function readSiteInfo() {
 async function persist(saved) {
   const target = siteFile()
   await fsp.mkdir(path.dirname(target), { recursive: true })
-  const tmp = target + '.' + process.pid + '.tmp'
-  await fsp.writeFile(tmp, JSON.stringify(saved, null, 2), { encoding: 'utf8', mode: 0o600 })
-  await fsp.rename(tmp, target)
+  await writeFileAtomic(target, JSON.stringify(saved, null, 2))
   await fsp.chmod(target, 0o600).catch(() => {})
 }
 

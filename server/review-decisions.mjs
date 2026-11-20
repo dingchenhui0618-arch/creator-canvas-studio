@@ -13,6 +13,7 @@ import { randomUUID } from 'node:crypto'
 import { config } from './config.mjs'
 import { canAccess } from './owner.mjs'
 import { readStoreArray } from './json-store.mjs'
+import { writeFileAtomic } from './atomic-write.mjs'
 
 const decisionsFile = path.join(config.dataDir, 'review-decisions.json')
 // 一个账号最多留 200 条：一条拍板对应一次评审，攒不到那么多还留着
@@ -46,9 +47,7 @@ async function persist(list) {
   if (readError) throw readError
   cache = list
   await fsp.mkdir(config.dataDir, { recursive: true })
-  const tmp = decisionsFile + '.' + process.pid + '.' + Math.random().toString(36).slice(2) + '.tmp'
-  await fsp.writeFile(tmp, JSON.stringify(list, null, 2), 'utf8')
-  await fsp.rename(tmp, decisionsFile)
+  await writeFileAtomic(decisionsFile, JSON.stringify(list, null, 2), { mode: 0o666 })
 }
 
 const clip = (value, max) => String(value ?? '').slice(0, max)

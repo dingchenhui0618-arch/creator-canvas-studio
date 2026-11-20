@@ -6,6 +6,7 @@ import crypto from 'node:crypto'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { config } from './config.mjs'
+import { writeFileAtomic } from './atomic-write.mjs'
 
 const ALIYUN_ENDPOINT = 'https://dysmsapi.aliyuncs.com/'
 const ALIYUN_VERSION = '2017-05-25'
@@ -138,9 +139,7 @@ async function sendViaFake(_sms, { phone, code }) {
   // 只留最近 50 条：这是调试用的假收件箱，不是审计日志
   list = list.slice(-50)
   await fsp.mkdir(path.dirname(file), { recursive: true })
-  const tmp = file + '.' + process.pid + '.tmp'
-  await fsp.writeFile(tmp, JSON.stringify(list, null, 2), { encoding: 'utf8', mode: 0o600 })
-  await fsp.rename(tmp, file)
+  await writeFileAtomic(file, JSON.stringify(list, null, 2))
   return { ok: true, requestId: 'fake-' + crypto.randomBytes(4).toString('hex'), ms: Date.now() - started }
 }
 

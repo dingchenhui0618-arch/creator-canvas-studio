@@ -5,10 +5,10 @@
 // 只有三种写入：VisionQA 新建画布、从 #/board/<id> 打开它、后台管理员显式认领；
 // 认领是一次性的（先到先得），后来的人不能把别人的画布抢走。
 // 没有任何记录的老画布只有管理员看得到：宁可少给，也不默认共享。
-import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { config } from './config.mjs'
+import { writeFileAtomicSync } from './atomic-write.mjs'
 
 const MAX_OWNERS = 2000
 const ID_RE = /^[A-Za-z0-9_-]{1,80}$/
@@ -41,9 +41,7 @@ function writeAll(owners) {
   const entries = Object.entries(owners)
     .sort((a, b) => b[1].at - a[1].at)
     .slice(0, MAX_OWNERS)
-  const tmp = file + '.' + crypto.randomBytes(6).toString('hex') + '.tmp'
-  fs.writeFileSync(tmp, JSON.stringify({ version: 1, owners: Object.fromEntries(entries) }, null, 2), { mode: 0o600 })
-  fs.renameSync(tmp, file)
+  writeFileAtomicSync(file, JSON.stringify({ version: 1, owners: Object.fromEntries(entries) }, null, 2))
   try { fs.chmodSync(file, 0o600) } catch { /* Windows 上不生效，不影响正确性 */ }
 }
 

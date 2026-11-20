@@ -11,6 +11,7 @@ import { randomUUID } from 'node:crypto'
 import { config } from './config.mjs'
 import { canAccess } from './owner.mjs'
 import { readStoreArray } from './json-store.mjs'
+import { writeFileAtomic } from './atomic-write.mjs'
 
 const acksFile = path.join(config.dataDir, 'review-acks.json')
 // 一个账号最多记 200 条：这是待办上的便利贴，不是账本
@@ -44,9 +45,7 @@ async function persist(list) {
   if (readError) throw readError
   cache = list
   await fsp.mkdir(config.dataDir, { recursive: true })
-  const tmp = acksFile + '.' + process.pid + '.' + Math.random().toString(36).slice(2) + '.tmp'
-  await fsp.writeFile(tmp, JSON.stringify(list, null, 2), 'utf8')
-  await fsp.rename(tmp, acksFile)
+  await writeFileAtomic(acksFile, JSON.stringify(list, null, 2), { mode: 0o666 })
 }
 
 function clip(value, max) {

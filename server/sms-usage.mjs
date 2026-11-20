@@ -6,6 +6,7 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { config } from './config.mjs'
 import { maskPhone } from './sms-config.mjs'
+import { writeFileAtomic } from './atomic-write.mjs'
 
 /** 只留最近 50 条：这是给人看的「最近怎么样」，不是审计流水。 */
 export const SMS_USAGE_CAP = 50
@@ -69,9 +70,7 @@ export async function recordSmsUsage({ phone, ok, error = '', errorCode = '', ms
     const kept = list.slice(-SMS_USAGE_CAP)
     const file = smsUsageFile()
     await fsp.mkdir(path.dirname(file), { recursive: true })
-    const tmp = file + '.' + process.pid + '.tmp'
-    await fsp.writeFile(tmp, JSON.stringify(kept, null, 2), { encoding: 'utf8', mode: 0o600 })
-    await fsp.rename(tmp, file)
+    await writeFileAtomic(file, JSON.stringify(kept, null, 2))
     return entry
   } catch {
     return null

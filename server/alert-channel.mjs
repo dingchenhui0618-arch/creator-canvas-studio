@@ -9,6 +9,7 @@ import crypto from 'node:crypto'
 import path from 'node:path'
 import { config } from './config.mjs'
 import { detectProvider, providerLabel } from './alert-format.mjs'
+import { writeFileAtomic } from './atomic-write.mjs'
 
 const MAX_URL_LENGTH = 500
 
@@ -78,9 +79,7 @@ export async function readChannel() {
 async function persistChannel(channel) {
   const target = channelFile()
   await fsp.mkdir(path.dirname(target), { recursive: true })
-  const tmp = target + '.' + process.pid + '.tmp'
-  await fsp.writeFile(tmp, JSON.stringify(channel, null, 2), { encoding: 'utf8', mode: 0o600 })
-  await fsp.rename(tmp, target)
+  await writeFileAtomic(target, JSON.stringify(channel, null, 2))
   // rename 会保留旧文件权限，显式收紧一次：地址与密钥不能让同机其他账号读到。
   await fsp.chmod(target, 0o600).catch(() => {})
 }

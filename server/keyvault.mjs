@@ -11,6 +11,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { config } from './config.mjs'
 import { setVaultCounts, vaultCounts } from './vault-state.mjs'
+import { writeFileAtomicSync } from './atomic-write.mjs'
 
 export const CAPABILITIES = ['text', 'vision', 'image', 'video', 'judge']
 const CAPABILITY_ALIASES = {
@@ -156,9 +157,7 @@ function refreshCounts() {
 
 function persist() {
   fs.mkdirSync(config.dataDir, { recursive: true })
-  const tmp = keysFile() + '.' + process.pid + '.tmp'
-  fs.writeFileSync(tmp, JSON.stringify(state, null, 2), { mode: 0o600 })
-  fs.renameSync(tmp, keysFile())
+  writeFileAtomicSync(keysFile(), JSON.stringify(state, null, 2))
   refreshCounts()
 }
 
@@ -526,9 +525,7 @@ function loadRoutes() {
 function persistRoutes() {
   try {
     fs.mkdirSync(config.dataDir, { recursive: true })
-    const tmp = routesFile() + '.' + process.pid + '.tmp'
-    fs.writeFileSync(tmp, JSON.stringify({ version: 1, items: routes }, null, 2), { mode: 0o600 })
-    fs.renameSync(tmp, routesFile())
+    writeFileAtomicSync(routesFile(), JSON.stringify({ version: 1, items: routes }, null, 2))
   } catch (error) {
     console.error('[keys] 路由日志写入失败：' + String(error?.message || error))
   }

@@ -2,6 +2,7 @@ import fsp from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { config } from './config.mjs'
 import { readStoreArray } from './json-store.mjs'
+import { writeFileAtomic } from './atomic-write.mjs'
 
 // 检索历史：谁搜过什么，按账号存，收藏的关键词不被裁剪。
 // 只把关键词与筛选条件记下来，不存检索结果本身——结果会过期，重搜要重新花钱。
@@ -38,9 +39,7 @@ async function persist(list) {
   cache = list
   return enqueueWrite(async () => {
     await fsp.mkdir(config.dataDir, { recursive: true })
-    const tmp = config.searchHistoryFile + '.' + process.pid + '.' + Math.random().toString(36).slice(2) + '.tmp'
-    await fsp.writeFile(tmp, JSON.stringify(list, null, 2), 'utf8')
-    await fsp.rename(tmp, config.searchHistoryFile)
+    await writeFileAtomic(config.searchHistoryFile, JSON.stringify(list, null, 2), { mode: 0o666 })
   })
 }
 

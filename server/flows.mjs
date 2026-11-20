@@ -15,6 +15,7 @@ import { currentInstanceId, liveInstanceIds } from './instances.mjs'
 import { FLOW_IMAGE_DEFAULT_RATIO, FLOW_IMAGE_RATIOS, runImageGeneration } from './flow-image.mjs'
 import { FLOW_VIDEO_DEFAULT_DURATION, FLOW_VIDEO_DEFAULT_RATIO, FLOW_VIDEO_DEFAULT_RESOLUTION, runVideoGeneration } from './flow-video.mjs'
 import { VIDEO_DURATIONS, VIDEO_RATIOS, VIDEO_RESOLUTIONS } from './media-models.mjs'
+import { writeFileAtomic } from './atomic-write.mjs'
 
 // 工作流流程：存储（data/flows.json）+ 运行记录（data/runs.json）+ 拓扑执行引擎。
 // 原子写范式与 server/templates.mjs 一致：先写 .tmp，再 rename 覆盖。
@@ -232,9 +233,7 @@ async function persistFlows(list) {
   if (flowsReadError) throw flowsReadError
   flowCache = list
   await fsp.mkdir(config.dataDir, { recursive: true })
-  const tmp = flowsFile + '.tmp'
-  await fsp.writeFile(tmp, JSON.stringify(list, null, 2), 'utf8')
-  await fsp.rename(tmp, flowsFile)
+  await writeFileAtomic(flowsFile, JSON.stringify(list, null, 2), { mode: 0o666 })
 }
 
 let runsReadError = null
@@ -255,9 +254,7 @@ async function persistRuns(list) {
   if (runsReadError) throw runsReadError
   runCache = list
   await fsp.mkdir(config.dataDir, { recursive: true })
-  const tmp = runsFile + '.tmp'
-  await fsp.writeFile(tmp, JSON.stringify(list, null, 2), 'utf8')
-  await fsp.rename(tmp, runsFile)
+  await writeFileAtomic(runsFile, JSON.stringify(list, null, 2), { mode: 0o666 })
 }
 
 // ---------- 运行工作流快照 ----------
@@ -290,9 +287,7 @@ export async function saveRunGraph(runId, flow) {
   const snapshot = runGraphSnapshot(flow)
   await fsp.mkdir(runGraphsDir, { recursive: true })
   const file = runGraphFile(id)
-  const tmp = file + '.tmp'
-  await fsp.writeFile(tmp, JSON.stringify(snapshot), 'utf8')
-  await fsp.rename(tmp, file)
+  await writeFileAtomic(file, JSON.stringify(snapshot), { mode: 0o666 })
   return snapshot
 }
 

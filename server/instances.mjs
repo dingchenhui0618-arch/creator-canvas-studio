@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
 import { config } from './config.mjs'
+import { writeFileAtomic } from './atomic-write.mjs'
 
 // 两个生产实例（8799 / 8800）共用一份 DATA_DIR：重启其中一个时，启动恢复会把另一个
 // 还在跑的运行当成「上次进程没跑完」——标中断、退积分，那条运行跑完又写回成功，
@@ -97,9 +98,7 @@ async function beat() {
     await fsp.chmod(dir, 0o777).catch(() => {})
     const entry = { ...current, beatAt: new Date().toISOString() }
     const file = instanceFilePath(entry.id)
-    const tmp = file + '.' + process.pid + '.tmp'
-    await fsp.writeFile(tmp, JSON.stringify(entry), { mode: 0o666 })
-    await fsp.rename(tmp, file)
+    await writeFileAtomic(file, JSON.stringify(entry), { mode: 0o666 })
     lastError = ''
     current = entry
     return entry

@@ -5,6 +5,7 @@ import { config } from './config.mjs'
 import { canAccess } from './owner.mjs'
 import { readStoreArray } from './json-store.mjs'
 import { draftTiming } from './agent-draft.mjs'
+import { writeFileAtomic } from './atomic-write.mjs'
 
 let cache = null
 // 读不出来时记住这次失败：后面的写操作必须停手（见 persist），不能拿一条新数据覆盖整份内容
@@ -37,9 +38,7 @@ async function persist(list) {
   cache = list
   return enqueueWrite(async () => {
     await fsp.mkdir(config.dataDir, { recursive: true })
-    const tmp = config.templatesFile + '.' + process.pid + '.' + Math.random().toString(36).slice(2) + '.tmp'
-    await fsp.writeFile(tmp, JSON.stringify(list, null, 2), 'utf8')
-    await fsp.rename(tmp, config.templatesFile)
+    await writeFileAtomic(config.templatesFile, JSON.stringify(list, null, 2), { mode: 0o666 })
   })
 }
 

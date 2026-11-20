@@ -11,6 +11,7 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { config } from './config.mjs'
 import { readStoreArray } from './json-store.mjs'
+import { writeFileAtomic } from './atomic-write.mjs'
 
 const CAP = 1000
 const DEDUPE_MS = 10 * 60 * 1000
@@ -60,9 +61,7 @@ async function persist(list) {
   return enqueueWrite(async () => {
     await fsp.mkdir(config.dataDir, { recursive: true })
     const file = path.join(config.dataDir, 'feedback.json')
-    const tmp = file + '.' + process.pid + '.' + Math.random().toString(36).slice(2) + '.tmp'
-    await fsp.writeFile(tmp, JSON.stringify(list, null, 2), 'utf8')
-    await fsp.rename(tmp, file)
+    await writeFileAtomic(file, JSON.stringify(list, null, 2), { mode: 0o666 })
   })
 }
 

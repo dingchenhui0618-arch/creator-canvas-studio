@@ -14,6 +14,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { config } from './config.mjs'
 import { findUserById, listUsers, openDb } from './auth.mjs'
+import { writeFileAtomicSync } from './atomic-write.mjs'
 
 const file = path.join(config.dataDir, 'quota.json')
 const MAX_LIMIT = 1_000_000
@@ -33,9 +34,7 @@ function load() {
 
 function persist(data) {
   fs.mkdirSync(path.dirname(file), { recursive: true })
-  const tmp = file + '.tmp'
-  fs.writeFileSync(tmp, JSON.stringify(data, null, 2), { mode: 0o600 })
-  fs.renameSync(tmp, file)
+  writeFileAtomicSync(file, JSON.stringify(data, null, 2))
   cache = data
 }
 
