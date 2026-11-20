@@ -249,9 +249,15 @@
 /* 换掉的旧地址（v0.9.148）：不是出错，是地址挪了——用警示色而不是错红色，
    因为包没动、发件人也没收回，只是他手里的那一条不再通。 */
 .rpage-state.is-retired svg { color: var(--warn); }
+/* 这一次没读到（v0.9.257）：不是链接没了，是没打开——同样用警示色，不用错红色。
+   链接本身一直是好的，把它标成红色等于告诉收包人「这条废了」。 */
+.rpage-state.is-unreadable svg { color: var(--warn); }
+.rpage-state-detail { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--faint); }
 
 @media (max-width: 560px) {
   .rpage { padding: var(--space-6) var(--space-4) var(--space-12); }
+  /* 窄屏手指点：「再试一次」这类按钮按 44px 给，36px 在手机上偏小（r275） */
+  .rpage-button { height: 44px; }
   .rpage-doc { padding: var(--space-6); gap: var(--space-4); }
   .rpage-head { padding-bottom: var(--space-4); gap: var(--space-2); }
   .rpage-head h1 { font-size: var(--text-xl); }
