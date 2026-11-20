@@ -21,6 +21,8 @@ export function createWorksRouter() {
           kind: url.searchParams.get('kind') || 'all',
           limit: url.searchParams.get('limit') || undefined,
           before: url.searchParams.get('before') || '',
+          // 搜作品（r281）：只在这批扫进内存的条目里过滤，不打上游、不扣积分
+          q: url.searchParams.get('q') || '',
         })
         if (result.error === 'WORKS_KIND') {
           sendJson(res, 400, { ok: false, code: 'WORKS_KIND', error: '不认识的筛选条件' })

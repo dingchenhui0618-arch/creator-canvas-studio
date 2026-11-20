@@ -146,3 +146,89 @@ test('翻页时 counts 仍是全量，不跟着这一页变', () => {
   assert.equal(first.items.length, 2)
   assert.equal(first.counts.all, 4)
 })
+
+// ---------- r281：作品流能搜 ----------
+
+const withModel = (id, at, model, title = id) => ({ id: 'media:' + id, kind: 'image', at, title, model, source: '快捷创作' })
+
+test('搜作品：命中标题，大小写与首尾空白都不敏感', () => {
+  const page = mergeWorks({ media: [withModel('a', 100, 'GPT Image 2', '窗边的咖啡杯'), withModel('b', 90, 'GPT Image 2', '橘猫')], q: '  咖啡  ' })
+  assert.deepEqual(page.items.map((item) => item.id), ['media:a'])
+  assert.equal(page.total, 1)
+  assert.equal(page.q, '咖啡')
+  assert.equal(page.scanned, 2)
+})
+
+test('搜作品：能按模型名搜——搜 seedance 只留视频那条', () => {
+  const page = mergeWorks({
+    media: [withModel('a', 100, 'GPT Image 2', '一张图'), withModel('b', 90, 'Seedance 2.0', '一条视频')],
+    q: 'SEEDANCE',
+  })
+  assert.deepEqual(page.items.map((item) => item.id), ['media:b'])
+})
+
+test('搜作品：能按来源搜——「画布」命中画布卡与画布里的产物，「工作流」命中运行', () => {
+  const canvasNode = { id: 'canvas-node:c1:n1', kind: 'image', at: 300, title: '画布里的猫', source: '无限画布' }
+  const byCanvas = mergeWorks({ media: [media('a', 100)], runs: [run('r', 200)], canvases: [canvas('c', 50), canvasNode], q: '画布' })
+  assert.deepEqual(byCanvas.items.map((item) => item.id), ['canvas-node:c1:n1', 'canvas:c'])
+  const byRun = mergeWorks({ media: [media('a', 100)], runs: [run('r', 200)], q: '工作流' })
+  assert.deepEqual(byRun.items.map((item) => item.id), ['run:r'])
+})
+
+test('搜作品：栏目名也能搜——搜「视频」等于把视频那栏捞出来', () => {
+  const none = mergeWorks({ media: [withModel('a', 100, 'GPT Image 2', '一张图')], runs: [run('r', 90)], q: '视频' })
+  assert.deepEqual(none.items.map((item) => item.id), [])
+  const video = { id: 'media:v', kind: 'video', at: 80, title: '竖屏成片', source: '快捷创作' }
+  assert.deepEqual(mergeWorks({ media: [video], q: '视频' }).items.map((item) => item.id), ['media:v'])
+})
+
+test('搜作品：counts 按关键词算，先数匹配再切栏目', () => {
+  const page = mergeWorks({
+    media: [withModel('a', 100, 'GPT Image 2', '猫'), withModel('b', 90, 'GPT Image 2', '狗')],
+    runs: [run('r', 80)],
+    kind: 'video',
+    q: '猫',
+  })
+  assert.equal(page.items.length, 0)
+  assert.deepEqual(page.counts, { all: 1, image: 1, video: 0, run: 0, canvas: 0 })
+})
+
+test('搜作品：一条都不匹配时 items 空、total 0，scanned 仍是看了多少条', () => {
+  const page = mergeWorks({ media: [media('a', 100), media('b', 90)], runs: [run('r', 80)], q: '不存在的词' })
+  assert.deepEqual(page.items, [])
+  assert.equal(page.total, 0)
+  assert.equal(page.cursor, null)
+  assert.equal(page.scanned, 3)
+})
+
+test('搜作品：翻页在匹配集里走，游标不重不漏', () => {
+  const rows = [
+    withModel('a', 100, 'GPT Image 2', '猫一'),
+    withModel('b', 90, 'GPT Image 2', '狗'),
+    withModel('c', 80, 'GPT Image 2', '猫二'),
+    withModel('d', 70, 'GPT Image 2', '猫三'),
+  ]
+  const first = mergeWorks({ media: rows, q: '猫', limit: 2 })
+  assert.deepEqual(first.items.map((item) => item.id), ['media:a', 'media:c'])
+  const second = mergeWorks({ media: rows, q: '猫', limit: 2, before: first.cursor })
+  assert.deepEqual(second.items.map((item) => item.id), ['media:d'])
+  assert.equal(second.cursor, null)
+})
+
+test('搜作品：关键词截到 40 字，空词与纯空白等于没搜', () => {
+  const page = mergeWorks({ media: [media('a', 100)], q: '猫'.repeat(80) })
+  assert.equal(page.q.length, 40)
+  assert.equal(page.items.length, 0)
+  const plain = mergeWorks({ media: [media('a', 100)], q: '   ' })
+  assert.equal(plain.q, '')
+  assert.equal(plain.total, 1)
+})
+
+// 路由 / 前端这两处是把 q 接起来的线：漏一处，界面上的搜索框就是个摆设。
+test('搜作品：路由把 q 转给 listWorks，前端把 q 放进查询串', async () => {
+  const fs = await import('node:fs')
+  const route = fs.readFileSync(new URL('../server/routes/works.mjs', import.meta.url), 'utf8')
+  assert.match(route, /q: url\.searchParams\.get\('q'\)/)
+  const client = fs.readFileSync(new URL('../src/api/works.ts', import.meta.url), 'utf8')
+  assert.match(client, /query\.set\('q'/)
+})

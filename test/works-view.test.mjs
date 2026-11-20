@@ -2,7 +2,7 @@
 // 两件事都在 src/domain/works-view.ts：存坏的值不能污染界面，不认识的状态不能被猜成「已停止」。
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readWorksFilter, runStatusLabel, workDetailLabel, writeWorksFilter } from '../src/domain/works-view.ts'
+import { readWorksFilter, readWorksQuery, runStatusLabel, workDetailLabel, WORKS_QUERY_MAX, writeWorksFilter, writeWorksQuery } from '../src/domain/works-view.ts'
 
 function memoryStorage(initial = {}) {
   const map = new Map(Object.entries(initial))
@@ -50,6 +50,39 @@ test('浏览器不给用 sessionStorage 时读出「全部」，写入不抛错'
   assert.doesNotThrow(() => writeWorksFilter(broken, 'video'))
   assert.equal(readWorksFilter(null), 'all')
   assert.doesNotThrow(() => writeWorksFilter(null, 'video'))
+})
+
+test('搜作品的关键词跟着会话走：存了能取回，首尾空白去掉', () => {
+  const storage = memoryStorage()
+  writeWorksQuery(storage, '  咖啡  ')
+  assert.equal(readWorksQuery(storage), '咖啡')
+})
+
+test('关键词清空时把键删掉，不在会话里留一个空字符串', () => {
+  const storage = memoryStorage()
+  writeWorksQuery(storage, '猫')
+  writeWorksQuery(storage, '   ')
+  assert.equal(storage.size(), 0)
+  assert.equal(readWorksQuery(storage), '')
+})
+
+test('关键词存太长时截到上限；读回手改的脏值也不超过上限', () => {
+  const storage = memoryStorage()
+  writeWorksQuery(storage, '猫'.repeat(WORKS_QUERY_MAX + 20))
+  assert.equal(readWorksQuery(storage).length, WORKS_QUERY_MAX)
+  assert.equal(readWorksQuery(memoryStorage({ 'vq.works.query.v1': '狗'.repeat(200) })).length, WORKS_QUERY_MAX)
+})
+
+test('浏览器不给用 sessionStorage 时关键词读成空，写入不抛错', () => {
+  const broken = {
+    getItem: () => { throw new Error('denied') },
+    setItem: () => { throw new Error('denied') },
+    removeItem: () => { throw new Error('denied') },
+  }
+  assert.equal(readWorksQuery(broken), '')
+  assert.doesNotThrow(() => writeWorksQuery(broken, '猫'))
+  assert.equal(readWorksQuery(null), '')
+  assert.doesNotThrow(() => writeWorksQuery(null, '猫'))
 })
 
 test('运行状态说人话：四种终态各有说法，不认识的不猜', () => {

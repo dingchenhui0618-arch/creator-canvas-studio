@@ -28,14 +28,28 @@ export type WorkItem = {
 /** 每一类各有多少条（r272）：先数全部再按筛选切，所以筛到某一类时也知道其他类有没有东西。 */
 export type WorksCounts = { all: number; image: number; video: number; run: number; canvas: number }
 
-export type WorksPage = { ok: true; items: WorkItem[]; total: number; cursor: string | null; counts?: WorksCounts }
+export type WorksPage = {
+  ok: true
+  items: WorkItem[]
+  total: number
+  cursor: string | null
+  counts?: WorksCounts
+  /** 这次一共看了多少条（三个来源各有扫描上限）：搜不到时要能说「只在最近 N 条里找过」 */
+  scanned?: number
+  /** 服务端认的那个关键词（截断 / 小写之后），用来确认这一页答的是不是当前这个问题 */
+  q?: string
+}
 
-/** 一页作品。kind=all 时三种来源一起按时间排；before 是上一页返回的 cursor。 */
-export function listWorks(params: { kind?: string; before?: string; limit?: number } = {}): Promise<WorksPage> {
+/**
+ * 一页作品。kind=all 时三种来源一起按时间排；before 是上一页返回的 cursor。
+ * q 是搜作品（r281）：在服务端已经扫进内存的那批里按关键词过滤，不打上游、不扣积分。
+ */
+export function listWorks(params: { kind?: string; before?: string; limit?: number; q?: string } = {}): Promise<WorksPage> {
   const query = new URLSearchParams()
   if (params.kind && params.kind !== 'all') query.set('kind', params.kind)
   if (params.before) query.set('before', params.before)
   if (params.limit) query.set('limit', String(params.limit))
+  if (params.q && params.q.trim()) query.set('q', params.q.trim())
   const suffix = query.toString()
   return request<WorksPage>('/api/works' + (suffix ? '?' + suffix : ''))
 }

@@ -17,6 +17,13 @@
 .works-chip.is-active.is-zero .works-chip-count { color:var(--ink-soft); }
 .works-count { margin-left:auto; font-size:13px; color:var(--faint); font-family:var(--font-mono); }
 .works-error { margin:0; color:var(--warn); font-size:14px; }
+/* 搜作品的结果说明（r281）：作品流里有 5 枚胶囊 + 一个搜索框，说明单独一行、压到最淡，
+   不和卡片抢注意力；-8 是为了让它在 16px 的列间距里离搜索框近一点（8px）。 */
+.works-search-note { margin:-8px 0 0; color:var(--faint); font-size:13px; line-height:1.6; }
+@media (max-width:560px) {
+  /* 手机上说明会折成两三行，就别再往上挤了 */
+  .works-search-note { margin:0; }
+}
 .works-empty {
   padding:32px 24px; border:1px dashed var(--line); border-radius:var(--radius-md);
   background:var(--surface); text-align:center;

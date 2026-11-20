@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Clapperboard, Download, Image as ImageIcon, Loader2, Play, Workflow } from 'lucide-react'
+import { Clapperboard, Download, Image as ImageIcon, Loader2, Play, Search, Workflow, X } from 'lucide-react'
 import MediaLightbox from './MediaLightbox'
 import { listWorks, type WorkItem, type WorksCounts } from '../api/works'
 import { safeFetch } from '../api/client'
@@ -9,7 +9,7 @@ import { probeMediaFile } from '../domain/media-file'
 import { writeRefHandoff } from '../domain/media-handoff'
 import { refFileName } from '../domain/media-refs'
 import type { RefKind } from '../domain/media-refs'
-import { readWorksFilter, runStatusLabel, workDetailLabel, writeWorksFilter, type WorksFilter } from '../domain/works-view'
+import { readWorksFilter, readWorksQuery, runStatusLabel, workDetailLabel, WORKS_QUERY_MAX, writeWorksFilter, writeWorksQuery, type WorksFilter } from '../domain/works-view'
 import '../styles/works.css'
 
 const FILTERS: Array<{ value: WorksFilter; label: string }> = [
@@ -80,6 +80,10 @@ function canReuse(item: WorkItem): boolean {
 export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: string) => void }) {
   // 筛选跟着会话走：点开一次运行再回来，刚才筛的「工作流」还在（r266）
   const [kind, setKind] = useState<WorksFilter>(() => readWorksFilter(window.sessionStorage))
+  // 搜作品（r281）：关键词也记在会话里，回来还在；空词就是没搜
+  const [query, setQuery] = useState(() => readWorksQuery(window.sessionStorage))
+  // 这一页一共看了多少条（三个来源各有扫描上限）：搜不到时说清「只找了最近这些」
+  const [scanned, setScanned] = useState(0)
   const [items, setItems] = useState<WorkItem[]>([])
   const [cursor, setCursor] = useState<string | null>(null)
   const [total, setTotal] = useState(0)
@@ -98,15 +102,16 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
 
   const showCounts = counts.all > 0 || !loading
 
-  const load = useCallback(async (nextKind: WorksFilter, before = '', append = false) => {
+  const load = useCallback(async (nextKind: WorksFilter, before = '', append = false, nextQuery = '') => {
     if (append) setMore(true)
     else setLoading(true)
     setError('')
     try {
-      const page = await listWorks({ kind: nextKind, before })
+      const page = await listWorks({ kind: nextKind, before, q: nextQuery })
       setItems((current) => (append ? [...current, ...page.items.filter((item) => !current.some((row) => row.id === item.id))] : page.items))
       setCursor(page.cursor)
       setTotal(page.total)
+      setScanned(Number(page.scanned) || 0)
       // 老服务端没有 counts：退回「只知道当前这一类」，空状态就不多说一句别的
       if (page.counts) setCounts(page.counts)
     } catch (caught) {
@@ -117,9 +122,14 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
     }
   }, [])
 
-  useEffect(() => { void load(kind) }, [kind, load])
+  // 打字时等一下再问（220ms）；切栏目、清空关键词是点击，立刻问（与作品项目页同一套手感）
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void load(kind, '', false, query) }, query.trim() ? 220 : 0)
+    return () => window.clearTimeout(timer)
+  }, [kind, query, load])
 
   useEffect(() => { writeWorksFilter(window.sessionStorage, kind) }, [kind])
+  useEffect(() => { writeWorksQuery(window.sessionStorage, query) }, [query])
 
   useEffect(() => {
     if (!preview) return
@@ -294,8 +304,49 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
             </button>
           )
         })}
-        <span className="works-count">{loading ? '正在读取…' : '共 ' + total + ' 条'}</span>
+        {/* 搜作品（r281）：作品流只进不出，图一多就找不回来。
+            搜的是卡片上已经写着的字（提示词标题 / 摘要 / 模型 / 来源）加四个栏目名，
+            打完字等 220ms 再问，不打上游、不扣积分。 */}
+        <label className="vq-toolbar-search">
+          <Search size={14} aria-hidden="true" />
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value.slice(0, WORKS_QUERY_MAX))}
+            onKeyDown={(event) => { if (event.key === 'Escape' && query) { event.stopPropagation(); setQuery('') } }}
+            placeholder="搜提示词、模型或来源"
+            aria-label="搜作品"
+            autoComplete="off"
+            spellCheck={false}
+          />
+          {query ? (
+            <button
+              type="button"
+              className="vq-toolbar-search-clear"
+              aria-label="清掉搜索"
+              title="清掉搜索（Esc）"
+              onClick={() => setQuery('')}
+            >
+              <X size={12} />
+            </button>
+          ) : null}
+        </label>
+        <span className="works-count">
+          {loading ? '正在读取…' : (query.trim() ? '匹配 ' + total + ' 条' : '共 ' + total + ' 条')}
+        </span>
       </div>
+
+      {/* 搜索词是我打的，结果是我要认得出来的：先说清在多少条里找的，再说找到几条。
+          「只在最近 N 条里找过」不能省——作品流不是全库检索，写清楚才不会被当成「我明明做过」。 */}
+      {query.trim() && !error && (loading || total > 0) ? (
+        <p className="works-search-note">
+          {loading
+            ? '正在找「' + query.trim() + '」…'
+            : total
+              ? '只在最近 ' + scanned + ' 条里找：图片看最近 400 份、运行看最近 50 次、画布看前 12 块，不是全库检索。'
+              : '最近 ' + scanned + ' 条里没有匹配「' + query.trim() + '」的作品。'}
+        </p>
+      ) : null}
 
       {error ? <p className="works-error">{error}</p> : null}
       {note ? <p className={'works-note' + (noteError ? ' is-error' : '')}>{note}</p> : null}
@@ -304,11 +355,24 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
           「视频这一栏没有」被写成「还没有作品」，等于告诉一个做了 200 张图的人「你什么都没做过」，
           还顺手把人指去重新生成。现在这一栏有别的类，就给一句话 + 一条回「全部」的路。 */}
       {!loading && !items.length && !error ? (
-        kind !== 'all' && counts.all > 0 ? (
+        query.trim() && counts.all === 0 ? (
           <div className="works-empty">
-            <strong>{FILTER_NOUN[kind]}这一类还没有作品</strong>
+            <strong>没有匹配「{query.trim()}」的作品</strong>
             <p>
-              {FILTER_HINT[kind]}账号下现在有 {counts.all} 条别的作品，切回「全部」就能看到。
+              只在最近 {scanned} 条里找过（图片看最近 400 份、运行看最近 50 次、画布看前 12 块）；搜的是提示词、摘要、模型名、来源和栏目名。换个词，或者清掉搜索看全部。
+            </p>
+            <button type="button" className="vq-button vq-button--ghost works-empty-action" onClick={() => setQuery('')}>
+              清掉搜索
+            </button>
+          </div>
+        ) : kind !== 'all' && counts.all > 0 ? (
+          <div className="works-empty">
+            <strong>
+              {query.trim() ? '「' + query.trim() + '」在' + FILTER_NOUN[kind] + '里没有' : FILTER_NOUN[kind] + '这一类还没有作品'}
+            </strong>
+            <p>
+              {query.trim() ? '' : FILTER_HINT[kind]}
+              {query.trim() ? '另外 ' : '账号下现在有 '}{counts.all} 条{query.trim() ? '匹配的' : '别的'}作品在别的栏目里，切回「全部」就能看到。
             </p>
             <button type="button" className="vq-button vq-button--ghost works-empty-action" onClick={() => setKind('all')}>
               看全部 {counts.all} 条
@@ -371,7 +435,7 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
       {loading ? (
         <p className="works-more"><Loader2 size={14} className="vq-spin" /> 正在读取…</p>
       ) : cursor ? (
-        <button type="button" className="works-more is-button" disabled={more} onClick={() => void load(kind, cursor, true)}>
+        <button type="button" className="works-more is-button" disabled={more} onClick={() => void load(kind, cursor, true, query)}>
           {more ? '正在读取…' : '看更早的'}
         </button>
       ) : items.length ? (

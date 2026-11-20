@@ -30,6 +30,32 @@ export function writeWorksFilter(storage: Pick<Storage, 'setItem' | 'removeItem'
   }
 }
 
+// 搜作品的关键词也跟着会话走（r281）：点开一条作品再回来，刚才搜的词还在，
+// 否则每次回来都要重打一遍。存的是**关键词**，不存结果——结果是服务端随时会变的口径。
+const QUERY_KEY = 'vq.works.query.v1'
+export const WORKS_QUERY_MAX = 40
+
+/** 读回来的关键词只做最小校验：去掉首尾空白、截断到上限；其余一律当没搜。 */
+export function readWorksQuery(storage: Pick<Storage, 'getItem'> | null | undefined): string {
+  try {
+    const raw = String(storage?.getItem(QUERY_KEY) || '').trim().slice(0, WORKS_QUERY_MAX)
+    return raw
+  } catch {
+    return ''
+  }
+}
+
+/** 存下来；空词就删键（别在会话里留一个空字符串）。 */
+export function writeWorksQuery(storage: Pick<Storage, 'setItem' | 'removeItem'> | null | undefined, query: string): void {
+  try {
+    const value = String(query || '').trim().slice(0, WORKS_QUERY_MAX)
+    if (value) storage?.setItem(QUERY_KEY, value)
+    else storage?.removeItem(QUERY_KEY)
+  } catch {
+    // 存不下就算了，界面照常用
+  }
+}
+
 /**
  * 一次运行的状态说人话。
  * 服务端只有 running / queued / success / error / interrupted 五种（r265 核过 server/flows.mjs）；

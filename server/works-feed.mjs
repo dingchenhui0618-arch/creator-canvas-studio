@@ -252,11 +252,32 @@ async function canvasItems(user) {
  * 以前只回一个按筛选后算的 total，「视频这一栏是空的」与「账号下一条作品都没有」在界面上
  * 长成一模一样的一句话——空状态只好猜，猜成「还没有作品」，把人指去重新生成。
  */
-export function mergeWorks({ media = [], runs = [], canvases = [], kind = 'all', limit = DEFAULT_LIMIT, before = '' } = {}) {
+// 搜作品（r281）：作品流是一个只进不出的池子——生成的图越多，「上周那张咖啡图」越找不回来。
+// 只做一件事：在**已经扫进内存的那批**里按关键词过滤，不另开索引、不打上游、不扣积分。
+// 能搜到的字段就是卡片上写着的那些（提示词标题 / 摘要 / 模型 / 来源）加上四个栏目名，
+// 所以「搜 seedance」「搜 画布」「搜 视频」都能命中——用户是照着界面上的词去搜的。
+export const WORKS_QUERY_MAX = 40
+
+const KIND_WORDS = { image: '图片', video: '视频', run: '工作流', canvas: '无限画布' }
+
+/** 一条作品能被搜到的全部文字，小写后用 includes 比。 */
+function haystack(item) {
+  return [item.title, item.summary, item.model, item.source, KIND_WORDS[item.kind]]
+    .filter((value) => value !== undefined && value !== null && value !== '')
+    .join(' ')
+    .toLowerCase()
+}
+
+export function mergeWorks({ media = [], runs = [], canvases = [], kind = 'all', limit = DEFAULT_LIMIT, before = '', q = '' } = {}) {
   const wanted = String(kind || 'all')
   if (!WORKS_KINDS.includes(wanted)) return { error: 'WORKS_KIND' }
   const size = Math.min(MAX_LIMIT, Math.max(1, Number(limit) || DEFAULT_LIMIT))
-  const merged = [...media, ...runs, ...canvases]
+  // scanned：这一眼看了多少条（三个来源各自有扫描上限）。搜不到时要能诚实说「只在最近 N 条里找了」
+  const scanned = media.length + runs.length + canvases.length
+  const needle = String(q || '').trim().toLowerCase().slice(0, WORKS_QUERY_MAX)
+  let merged = [...media, ...runs, ...canvases]
+  if (needle) merged = merged.filter((item) => item && haystack(item).includes(needle))
+  // counts 在关键词之后、栏目之前数：搜「seedance」时四个栏目各自还剩几条，点进去之前就知道
   const counts = { all: merged.length, image: 0, video: 0, run: 0, canvas: 0 }
   for (const item of merged) {
     if (item && Object.prototype.hasOwnProperty.call(counts, item.kind) && item.kind !== 'all') counts[item.kind] += 1
@@ -273,7 +294,7 @@ export function mergeWorks({ media = [], runs = [], canvases = [], kind = 'all',
   }
   const page = items.slice(start, start + size)
   const cursor = start + size < items.length && page.length ? page[page.length - 1].at + ':' + page[page.length - 1].id : null
-  return { items: page, total: items.length, cursor, counts }
+  return { items: page, total: items.length, cursor, counts, scanned, q: needle }
 }
 
 export async function listWorks(user, options = {}) {
