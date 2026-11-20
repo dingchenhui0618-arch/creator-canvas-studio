@@ -538,6 +538,31 @@ async function listTasks(userId, { kind = '', limit = LIST_DEFAULT, before = '' 
   return { tasks: found.slice(start, start + limit).map(publicTask), hasMore: found.length > start + limit, capped }
 }
 
+/**
+ * 删掉一条生成记录：元数据与结果文件一起删，删完这条就不在「最近生成」和作品流里了。
+ *
+ * 三条规矩（都是「宁可拒」）：
+ *  1) 还在跑的不删：上游可能已经接单，删了元数据就再也没人对得上这笔账（等它收敛再删）；
+ *  2) 只删自己那条：归属判断与读任务走同一套（userId 不一致直接 403，不猜）；
+ *  3) 不退款、也不算回额度：删除不是「这单不算」，它只是把记录与文件清掉，积分已经花掉了。
+ *
+ * 返回值里的 freedBytes 是真实释放的字节数（文件本来就不在就是 0，不编数字）。
+ */
+async function removeTask(task) {
+  let freed = 0
+  if (task.file && task.file.ext) {
+    const target = path.join(userMediaDir(task.userId), task.id + '.' + task.file.ext)
+    try {
+      freed = (await fsp.stat(target)).size
+    } catch {
+      freed = 0
+    }
+    await fsp.rm(target, { force: true })
+  }
+  await fsp.rm(taskMetaFile(task.id), { force: true })
+  return { freed }
+}
+
 async function handleGenerate(req, res, user) {
   const limit = rateLimited(user.id)
   if (limit) {
@@ -840,9 +865,10 @@ export function createMediaGenRouter() {
 
       const match = pathname.match(TASK_PATH)
       if (match) {
-        if (req.method !== 'GET' && req.method !== 'HEAD') {
-          res.setHeader('Allow', 'GET, HEAD')
-          sendJson(res, 405, { error: '只支持 GET' })
+        const method = String(req.method || '').toUpperCase()
+        if (method !== 'GET' && method !== 'HEAD' && method !== 'DELETE') {
+          res.setHeader('Allow', 'GET, HEAD, DELETE')
+          sendJson(res, 405, { error: '只支持 GET / DELETE' })
           return true
         }
         const user = currentUser(req)
@@ -857,6 +883,25 @@ export function createMediaGenRouter() {
         }
         if (task.userId !== user.id) {
           sendJson(res, 403, { error: '这个任务不属于当前账号', code: 'MEDIA_TASK_FORBIDDEN' })
+          return true
+        }
+        if (method === 'DELETE') {
+          // 只删整条记录：/file 是下载地址，DELETE 它没有意义，也不该被当成「删文件」
+          if (match[2]) {
+            res.setHeader('Allow', 'GET, HEAD')
+            sendJson(res, 405, { error: '下载地址不能删：要删就删这条任务' })
+            return true
+          }
+          if (task.status === 'processing') {
+            sendJson(res, 409, {
+              error: '这条还在生成：等它跑完（或失败退款）再删，删了就对不上这笔账了',
+              code: 'MEDIA_TASK_RUNNING',
+            })
+            return true
+          }
+          const { freed } = await removeTask(task)
+          logEvent('media.task.delete', { by: user.email, id: task.id, kind: task.kind, freedBytes: freed })
+          sendJson(res, 200, { ok: true, id: task.id, freedBytes: freed })
           return true
         }
         if (match[2]) {

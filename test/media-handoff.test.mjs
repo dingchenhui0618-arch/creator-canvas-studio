@@ -109,7 +109,8 @@ test('作品卡：成品能「用作参考」和「下载」，两处入口（�
   // 这样点缩略图不再是整页跳走，跳转只有人点了写明去哪儿的按钮才发生
   assert.ok(wall.includes('actions(item, { detail: Boolean(item.previewUrl) })'))
   // 浮层那一次：同一套动作交给共用的看大图浮层，并且总是带上「去出处」
-  assert.ok(wall.includes('actions={actions(preview, { detail: true })}'), '看大图浮层里没有「用作参考 / 下载 / 去出处」')
+  // r282：浮层里多一枚「删掉这条」（卡片上不给——删是唯一不可逆的动作，放在看清之后那一屏）
+  assert.ok(wall.includes('actions={actions(preview, { detail: true, remove: true })}'), '看大图浮层里没有「用作参考 / 下载 / 去出处 / 删掉这条」')
 })
 
 test('作品卡：三种来源都能取回文件，而且只走自己的接口', () => {

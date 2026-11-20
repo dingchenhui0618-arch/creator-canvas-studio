@@ -3,7 +3,7 @@ import { Clapperboard, Download, Image as ImageIcon, Loader2, Play, Search, Work
 import MediaLightbox from './MediaLightbox'
 import { listWorks, type WorkItem, type WorksCounts } from '../api/works'
 import { safeFetch } from '../api/client'
-import { listMediaAssets, uploadMediaAsset } from '../api/media-gen'
+import { deleteMediaTask, listMediaAssets, uploadMediaAsset } from '../api/media-gen'
 import type { MediaAsset } from '../api/media-gen'
 import { probeMediaFile } from '../domain/media-file'
 import { writeRefHandoff } from '../domain/media-handoff'
@@ -44,6 +44,12 @@ const FILTER_HINT: Record<WorksFilter, string> = {
 
 const REF_ROUTE = '#/agents'
 
+/** 删完之后说一句「释放了多少」：单位跟服务端字节数一致，不四舍五入成 0 MB。 */
+function mbText(bytes: number): string {
+  if (bytes < 1024 * 1024) return Math.max(1, Math.round(bytes / 1024)) + ' KB'
+  return (Math.round((bytes / (1024 * 1024)) * 10) / 10) + ' MB'
+}
+
 function stamp(at: number): string {
   if (!at) return ''
   const date = new Date(at)
@@ -67,6 +73,16 @@ function mediaUrl(item: WorkItem): string {
 function workKind(item: WorkItem): RefKind {
   if (item.kind === 'video' || item.mediaKind === 'video') return 'video'
   return 'image'
+}
+
+/**
+ * 能从这里删掉的：只有快捷创作生成的图与视频（作品号是 media:<任务号>）。
+ *
+ * 为什么不给运行卡与画布卡一个「删」：那些记录属于工作流与无限画布，删它们要动那边的
+ * 运行记录 / 画布内容，是各自应用里的事。作品流这边只删自己真正拥有的那份东西。
+ */
+function canDelete(item: WorkItem): boolean {
+  return item.id.startsWith('media:')
 }
 
 /** 能当参考素材的：有文件，而且确实是图或视频（画布那张「一块画布」的卡片没有文件）。 */
@@ -99,6 +115,10 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
   const [noteError, setNoteError] = useState(false)
   // 自己传过的素材：用来认「这一条已经加过了」，同一条作品不重复占配额
   const libraryRef = useRef<MediaAsset[] | null>(null)
+  // 删掉一条作品（r282）：作品流只进不出，失败与不要的成品堆到翻都翻不动。
+  // 跟「最近生成」一样要点两下；删的是那条任务的记录与文件，不退积分。
+  const [armedDelete, setArmedDelete] = useState('')
+  const [deleting, setDeleting] = useState('')
 
   const showCounts = counts.all > 0 || !loading
 
@@ -242,12 +262,43 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
     }
   }
 
+  // 删掉一条成品：删的是快捷创作那条生成任务（记录 + 文件），所以它同时从「最近生成」里消失。
+  // 删完整页重取一次：被删的那条很可能正是翻页游标，留着旧位置会让「看更早的」落到一个空页上。
+  const deleteWork = async (item: WorkItem) => {
+    if (busy || deleting) return
+    const taskId = item.id.slice('media:'.length)
+    if (!taskId) return
+    if (armedDelete !== item.id) {
+      setArmedDelete(item.id)
+      return
+    }
+    setArmedDelete('')
+    setDeleting(item.id)
+    setNote('')
+    setNoteError(false)
+    try {
+      const result = await deleteMediaTask(taskId)
+      setPreview(null)
+      const freed = Math.max(0, Number(result?.freedBytes) || 0)
+      setNote(freed ? '已删掉这条作品，释放 ' + mbText(freed) : '已删掉这条作品')
+      void load(kind, '', false, query)
+    } catch (caught) {
+      setNote(caught instanceof Error ? caught.message : '删掉这条作品失败')
+      setNoteError(true)
+    } finally {
+      setDeleting('')
+    }
+  }
+
   // 卡片上是「接着用这条成品」（用作参考 / 下载），浮层里再加一条「去出处」——
   // 有封面的运行卡以前点缩略图就整页跳走，现在跳转是个写着去哪儿的按钮（r266）。
-  const actions = (item: WorkItem, options: { detail?: boolean } = {}) => {
+  const actions = (item: WorkItem, options: { detail?: boolean; remove?: boolean } = {}) => {
     const reuse = canReuse(item)
     const detail = options.detail ? workDetailLabel(item) : ''
-    if (!reuse && !detail) return null
+    // 删只在看大图的浮层里给：卡片上三个按钮已经够挤，删除又是唯一不可逆的动作，
+    // 放在「先看清这张、再说删不删」的那一屏最合适。
+    const remove = Boolean(options.remove) && canDelete(item)
+    if (!reuse && !detail && !remove) return null
     const busyRef = busy?.id === item.id && busy.what === 'ref'
     const busySave = busy?.id === item.id && busy.what === 'save'
     return (
@@ -278,6 +329,18 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
         {detail ? (
           <button type="button" className="works-action" onClick={() => goDetail(item)} title="离开作品流，去那一次运行 / 那块画布">
             {detail}
+          </button>
+        ) : null}
+        {remove ? (
+          <button
+            type="button"
+            className={'works-action' + (armedDelete === item.id ? ' is-danger is-armed' : ' is-danger')}
+            onClick={() => void deleteWork(item)}
+            disabled={Boolean(deleting) || Boolean(busy)}
+            title="删掉这条记录与文件（积分不退，删了找不回来）"
+            aria-label={armedDelete === item.id ? '再次点击确认删掉' : '删掉这条作品：' + item.title}
+          >
+            {deleting === item.id ? '删除中…' : armedDelete === item.id ? '确认删掉' : '删掉这条'}
           </button>
         ) : null}
       </div>
@@ -452,7 +515,7 @@ export default function WorksWall({ onOpenDetail }: { onOpenDetail?: (url: strin
           head={preview.source + ' · ' + stamp(preview.at)}
           note={preview.model || null}
           caption={preview.summary ? preview.title + ' · ' + preview.summary : preview.title}
-          actions={actions(preview, { detail: true })}
+          actions={actions(preview, { detail: true, remove: true })}
           onClose={() => setPreview(null)}
         />
       ) : null}

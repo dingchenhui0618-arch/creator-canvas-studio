@@ -79,6 +79,10 @@
 }
 .works-action:hover { color:var(--ink); border-bottom-color:var(--line-strong); }
 .works-action:disabled { color:var(--faint); border-bottom-color:transparent; cursor:default; }
+/* 删掉这条（r282）：不可逆的动作不该一开始就很凶——平时比别的动作更淡，上膛之后才是危险色 */
+.works-action.is-danger { color:var(--faint); border-bottom-color:transparent; }
+.works-action.is-danger:hover { color:var(--danger); border-bottom-color:var(--danger); }
+.works-action.is-danger.is-armed { color:var(--danger); border-bottom-color:var(--danger); }
 .works-note { margin:0; color:var(--muted); font-size:13px; }
 .works-note.is-error { color:var(--warn); }
 

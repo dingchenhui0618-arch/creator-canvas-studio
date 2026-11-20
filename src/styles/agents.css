@@ -2459,6 +2459,49 @@
   font-family: var(--font-mono);
   font-size: var(--text-mono);
 }
+/* 删掉这条（r282）：平时跟「用作参考」同样轻，上膛之后才变成危险色——
+   删除是这一行里唯一不可逆的动作，不能跟其它按钮长得一样。
+   24px 高是仓库里「准」尺寸的触摸目标，和 r203 补过的那批一致。 */
+.agx-media-recent-del {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  min-height: 24px;
+  margin-left: auto;
+  padding: 0 var(--space-1);
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: var(--text-mono);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+}
+.agx-media-recent-del:hover:not(:disabled) {
+  color: var(--ink-soft);
+  border-color: var(--line-faint);
+}
+.agx-media-recent-del.is-armed {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.agx-media-recent-del:disabled {
+  color: var(--faint);
+  cursor: default;
+  opacity: 0.6;
+}
+/* ≤560 这一排小动作是手指点的：24px 太薄（r282 补），跟 r203 那批统一到 32px
+   ——「用作参考」「下载」「删掉」三枚一起抬，别只抬新来的那个。 */
+@media (max-width: 560px) {
+  .agx-media-recent-ref,
+  .agx-media-recent-download,
+  .agx-media-recent-del {
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+    padding: 0 var(--space-2);
+  }
+}
 
 /* 往回翻：一页 6 条，翻到底就不给按钮，扫描窗口外的那部分要如实说「不在清单里」 */
 .agx-media-recent-more {

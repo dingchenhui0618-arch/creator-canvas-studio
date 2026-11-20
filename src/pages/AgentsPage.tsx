@@ -46,6 +46,7 @@ import {
 } from '../api/agents'
 import type { AgentArtifact, AgentDraft, AgentRecord, AgentRunRecord, AgentsList, AgentToolsResult, OutputType } from '../api/agents'
 import {
+  deleteMediaTask,
   generateMediaImage,
   generateMediaVideo,
   getMediaTask,
@@ -630,6 +631,10 @@ function MediaComposer({
   // 不是「结果区开没开」——否则点最近生成会顺手把结果区那条也换掉。
   const [zoomTask, setZoomTask] = useState<MediaTask | null>(null)
   const lightboxCloseRef = useRef<HTMLButtonElement | null>(null)
+  // 删掉一条生成记录（r282）：「最近生成」只往里加、没有出口，失败的那几条与不要的成品会一直堆着。
+  // 第一下只上膛，第二下才真删——删掉的是记录与文件，删了找不回来，也不退积分。
+  const [armedTaskDelete, setArmedTaskDelete] = useState('')
+  const [deletingId, setDeletingId] = useState('')
 
   // 选中的东西都做「按当前模型规格兜底」：换模型后旧比例 / 旧时长不合法，渲染时自动落到新模型的默认值，
   // 不用在 effect 里回头改 state（那样容易写出渲染与状态打架的循环）。
@@ -716,6 +721,37 @@ function MediaComposer({
       setRecentError(caught instanceof Error ? caught.message : '读取更早的任务失败')
     } finally {
       setRecentLoading(false)
+    }
+  }
+
+  // 删一条：删掉的是这条任务的元数据 + 结果文件（服务端一起删），删完它就不在「最近生成」与作品流里了。
+  // 不退款、也不释放额度账目——积分是那次生成花的，删记录不等于「这单不算」。
+  // 还在跑的删不得：服务端会 409，界面这里先按状态把按钮锁住，省得点了才知道。
+  const removeTask = async (item: MediaTask) => {
+    if (deletingId || item.status === 'processing') return
+    if (armedTaskDelete !== item.id) {
+      setArmedTaskDelete(item.id)
+      return
+    }
+    setArmedTaskDelete('')
+    setDeletingId(item.id)
+    setRecentError('')
+    try {
+      const result = await deleteMediaTask(item.id)
+      setRecent((items) => items.filter((entry) => entry.id !== item.id))
+      // 正在看的就是这条：一起收掉，别让右栏继续挂着一张已经删掉的图
+      if (task?.id === item.id) {
+        setTask(null)
+        setError('')
+        setPollError('')
+      }
+      if (zoomTask?.id === item.id) setZoomTask(null)
+      const freed = Math.max(0, Number(result?.freedBytes) || 0)
+      onToast?.(freed ? '已删掉这条生成记录，释放 ' + formatBytes(freed) : '已删掉这条生成记录')
+    } catch (caught) {
+      setRecentError(caught instanceof Error ? caught.message : '删掉这条失败')
+    } finally {
+      setDeletingId('')
     }
   }
 
@@ -1060,6 +1096,22 @@ function MediaComposer({
                               {item.status === 'failed' ? '失败 · 已退 ' + item.credits.cost + ' 积分' : '进行中'}
                             </span>
                           )}
+                          {/* 删掉这条（r282）：失败的那几条与不要的成品总得有个出口。
+                              还在跑的锁住；删之前要点两下，删的是记录与文件，不退积分。 */}
+                          <button
+                            type="button"
+                            className={'agx-media-recent-del' + (armedTaskDelete === item.id ? ' is-armed' : '')}
+                            onClick={() => void removeTask(item)}
+                            disabled={item.status === 'processing' || deletingId === item.id}
+                            title={
+                              item.status === 'processing'
+                                ? '还在生成：等它跑完再删'
+                                : '删掉这条记录与文件（积分不退，删了找不回来）'
+                            }
+                            aria-label={armedTaskDelete === item.id ? '再次点击确认删掉' : '删掉：' + item.prompt}
+                          >
+                            {deletingId === item.id ? '删除中…' : armedTaskDelete === item.id ? '确认删掉' : '删掉'}
+                          </button>
                           {item.status === 'failed' && item.error ? (
                             <p className="agx-media-recent-why" title={item.error}>
                               {item.error}

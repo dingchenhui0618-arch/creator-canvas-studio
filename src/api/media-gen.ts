@@ -147,6 +147,11 @@ export const listMediaTasks = (kind: MediaKind, limit = 6, before = '') =>
 export const getMediaTask = (id: string) =>
   request<MediaTaskResponse>('/api/media/tasks/' + encodeURIComponent(id))
 
+// 删掉一条生成记录（元数据 + 结果文件一起删）：删完它就不在「最近生成」与作品流里了。
+// 这不等于退款：积分已经花掉，删只是把记录与文件清掉；还在跑的任务服务端会 409 拒掉。
+export const deleteMediaTask = (id: string) =>
+  request<{ ok: boolean; id: string; freedBytes: number }>('/api/media/tasks/' + encodeURIComponent(id), { method: 'DELETE' })
+
 // 生成模型与规格：界面的模型 / 方式 / 比例 / 时长 / 清晰度全照这张表画
 export const listMediaModels = () => request<MediaModelList>('/api/media/models')
 

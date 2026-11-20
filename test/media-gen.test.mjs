@@ -721,3 +721,84 @@ test('参考素材的规矩：文生模式不收素材、参考必须带图、�
   assert.equal(gone.status, 404)
 })
 
+// ---------- 删掉一条生成记录（r282） ----------
+
+test('删掉一条生成记录：记录与文件一起消失、清单里不再有它，但不退积分', async () => {
+  resetMediaGenRateLimit()
+  const user = newUser('delete')
+  const cookie = cookieOf(user)
+  const before = credits.balanceOf(user.id)
+  const gen = await call({ cookie, body: { kind: 'image', prompt: '要删掉的一只猫', ratio: '1:1' } })
+  const id = gen.payload.task.id
+  const settled = await waitTask(id, cookie)
+  assert.equal(settled.payload.task.status, 'succeeded')
+  const filePath = path.join(dir, 'media', user.id, id + '.png')
+  assert.ok(fs.existsSync(filePath))
+
+  const listed = await call({ method: 'GET', target: '/api/media/tasks?kind=image', cookie })
+  assert.ok(listed.payload.tasks.some((task) => task.id === id))
+
+  const removed = await call({ method: 'DELETE', target: '/api/media/tasks/' + id, cookie })
+  assert.equal(removed.status, 200, JSON.stringify(removed.payload))
+  assert.equal(removed.payload.id, id)
+  assert.equal(removed.payload.freedBytes, tinyPng.length, '释放的字节数要如实回')
+  assert.equal(fs.existsSync(filePath), false, '结果文件必须一起删掉')
+  assert.equal(fs.existsSync(path.join(dir, 'media', 'tasks', id + '.json')), false, '元数据也要删')
+
+  const gone = await call({ method: 'GET', target: '/api/media/tasks/' + id, cookie })
+  assert.equal(gone.status, 404)
+  assert.equal(gone.payload.code, 'MEDIA_TASK_NOT_FOUND')
+
+  const again = await call({ method: 'DELETE', target: '/api/media/tasks/' + id, cookie })
+  assert.equal(again.status, 404, '删过的再删是 404，不是 200')
+
+  const after = await call({ method: 'GET', target: '/api/media/tasks?kind=image', cookie })
+  assert.equal(after.payload.tasks.some((task) => task.id === id), false)
+
+  assert.equal(credits.balanceOf(user.id), before - 5, '删除不是退款：那次生成花的积分还在')
+})
+
+test('删别人的、没登录的、删下载地址、删还在跑的：四种都拒，且一个文件都不动', async () => {
+  resetMediaGenRateLimit()
+  const user = newUser('delmine')
+  const stranger = newUser('delstranger')
+  const cookie = cookieOf(user)
+  const gen = await call({ cookie, body: { kind: 'image', prompt: '别人的图', ratio: '1:1' } })
+  const id = gen.payload.task.id
+  await waitTask(id, cookie)
+  const filePath = path.join(dir, 'media', user.id, id + '.png')
+
+  const foreign = await call({ method: 'DELETE', target: '/api/media/tasks/' + id, cookie: cookieOf(stranger) })
+  assert.equal(foreign.status, 403)
+  assert.equal(foreign.payload.code, 'MEDIA_TASK_FORBIDDEN')
+  const anonymous = await call({ method: 'DELETE', target: '/api/media/tasks/' + id })
+  assert.equal(anonymous.status, 401)
+  const fileUrl = await call({ method: 'DELETE', target: '/api/media/tasks/' + id + '/file', cookie })
+  assert.equal(fileUrl.status, 405, '下载地址不能单独删')
+  assert.ok(fs.existsSync(filePath), '上面这几次都不能把文件删掉')
+
+  // 还在跑的不让删：删了元数据就再也没人对得上这笔账
+  const running = await call({ cookie, body: { kind: 'image', prompt: '慢一点再回', ratio: '1:1' } })
+  const runningId = running.payload.task.id
+  const refused = await call({ method: 'DELETE', target: '/api/media/tasks/' + runningId, cookie })
+  assert.equal(refused.status, 409)
+  assert.equal(refused.payload.code, 'MEDIA_TASK_RUNNING')
+  const settled = await waitTask(runningId, cookie)
+  assert.equal(settled.payload.task.status, 'succeeded')
+  const ok = await call({ method: 'DELETE', target: '/api/media/tasks/' + runningId, cookie })
+  assert.equal(ok.status, 200, '跑完之后就能删')
+})
+
+test('两个界面都接上了删除：最近生成与作品流浮层走同一个接口，还在跑的自己先锁住', () => {
+  const agents = fs.readFileSync(path.join(process.cwd(), 'src', 'pages', 'AgentsPage.tsx'), 'utf8')
+  assert.match(agents, /deleteMediaTask\(item\.id\)/)
+  assert.match(agents, /agx-media-recent-del/)
+  assert.match(agents, /item\.status === 'processing' \|\| deletingId === item\.id/, '还在跑的那条按钮要锁住')
+  const works = fs.readFileSync(path.join(process.cwd(), 'src', 'components', 'WorksWall.tsx'), 'utf8')
+  assert.match(works, /deleteMediaTask\(taskId\)/)
+  assert.match(works, /function canDelete/, '只有快捷创作的图与视频能删')
+  const api = fs.readFileSync(path.join(process.cwd(), 'src', 'api', 'media-gen.ts'), 'utf8')
+  assert.match(api, /deleteMediaTask = \(id: string\)/)
+})
+
+
