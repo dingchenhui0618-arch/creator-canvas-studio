@@ -111,7 +111,8 @@ export function allShotPrompts(shots: ShotLike[] | null | undefined, beats: Beat
   if (!list.length) return ''
   const title = clean(options.title)
   const head = '分镜提示词 · ' + (title || '这条作品') + '（' + list.length + ' 镜）'
-  const note = '生成时按顺序贴进无限画布的生图框；出图会花你自己的额度。'
+  // r277：出图这件事已经收进作品页（点「出这一镜」就画），复制走只是另一个出口
+  const note = '每镜可以点「出这一镜」就地画一张（花你自己的积分），也可以复制走去别处出图。'
   const rows = list.map((shot, index) => {
     const no = Math.max(1, Math.round(Number(shot?.shotNo) || index + 1))
     const name = '第 ' + String(no).padStart(2, '0') + ' 镜 · ' + timeLabel(shot)

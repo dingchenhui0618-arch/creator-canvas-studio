@@ -84,7 +84,7 @@ test('复制全部：抬头说清是哪条作品几镜，每镜一段、编号�
   const text = allShotPrompts([shot, { shotNo: 3, startSec: 2, endSec: 3, visual: '画面切成方格', camera: '近景固定' }], beats, { platform: 'douyin', title: '毛衣折叠收纳法' })
   const parts = text.split('\n')
   assert.equal(parts[0], '分镜提示词 · 毛衣折叠收纳法（2 镜）')
-  assert.match(parts[1], /出图会花你自己的额度/)
+  assert.match(parts[1], /点「出这一镜」就地画一张（花你自己的积分）/)
   assert.equal(parts[2], '')
   assert.equal(parts[3], '第 02 镜 · 1–2 秒')
   assert.match(parts[4], /^竖屏 9:16，中景固定/)
@@ -108,5 +108,42 @@ test('面板那句说明：脚本从哪来就怎么说，永远说清没有模�
     // r276：出图这一步已经收进作品页，说明里要给出「就地画」与「复制走」两个出口
     assert.match(shotPromptHint(source), /点「出这一镜」/)
     assert.match(shotPromptHint(source), /花你自己的积分/)
+  }
+})
+
+// r277：服务端有一份逐条镜像（server/shot-prompt.mjs），因为 node 端不能 import .ts。
+// 开工作流时给每一镜建的出图节点，用的必须与作品页「出这一镜」是同一条提示词——
+// 这里把所有分支都跑一遍逐字比，谁改了一边忘了另一边，这条会直接红。
+test('服务端镜像与前端逐字一致：开工作流的出图节点不会拼出另一条提示词', async () => {
+  const server = await import('../server/shot-prompt.mjs')
+  const platforms = ['douyin', 'xiaohongshu', 'xhs', 'bilibili', 'youtube', 'direct', '', undefined]
+  const sources = ['own', 'template', undefined]
+  const shots = [
+    shot,
+    { shotNo: 3, startSec: 2, endSec: 3, visual: '画面切成方格', camera: '近景固定' },
+    { shotNo: 4, startSec: 0.5, visual: '只有画面没有机位' },
+    { shotNo: 5, startSec: 1.5 },
+    { shotNo: 6, startSec: 9, endSec: 10, camera: '推近' },
+    { shotNo: 7, startSec: 0, visual: '句号已经在结尾。', camera: '' },
+  ]
+  const beatCases = [beats, [], null, [{ beat: '无时长', voiceover: '只有一句话' }]]
+
+  for (const platform of platforms) {
+    assert.equal(server.shotAspect(platform), shotAspect(platform), '画幅判断一致：' + String(platform))
+    for (const list of beatCases) {
+      for (const item of shots) {
+        const mine = beatForShot(item, list)
+        const theirs = server.beatForShot(item, list)
+        assert.equal(theirs?.beat, mine?.beat, '这一镜对到哪一段一致')
+        for (const source of sources) {
+          const options = { platform, scriptSource: source }
+          assert.equal(
+            server.shotPrompt(item, theirs, options),
+            shotPrompt(item, mine, options),
+            '提示词一致：第 ' + item.shotNo + ' 镜 · ' + String(platform) + ' · ' + String(source),
+          )
+        }
+      }
+    }
   }
 })

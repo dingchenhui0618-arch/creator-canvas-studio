@@ -1,9 +1,18 @@
 // 复刻工作流草稿：把「这条作品现在的脚本」变成一张能跑的工作流（2026-11-12，P1）。
 //
-// 工作流只有两个节点：原始素材（输入）+ 复刻脚本（LLM 提示词）。
+// 两个骨架节点：原始素材（输入）+ 复刻脚本（LLM 提示词）。r277 起再加一组出图节点：
+// 分镜里有几镜就建几个（上限 12），每镜的提示词与作品页「出这一镜」用的是同一条
+// （server/shot-prompt.mjs 与 src/domain/shot-prompt.ts 逐字一致，见 test/shot-prompt.test.mjs）。
+// 这样「跑一次工作流」不再只得到一段文字，而是复刻脚本 + 每一镜的一张画面。
+// 节点本身不花钱：钱在运行时的出图节点上，运行前顶栏会按张数算出总价。
 // 作品页开工作流、模板库套用模板都走这里；作品页改脚本时也用它重写提示词，
 // 保证「作品页改的脚本」和「工作流跑的东西」是同一份，不再各说各话。
+import { beatForShot, shotAspect, shotPrompt } from './shot-prompt.mjs'
+
 export const AUTO_PROMPT_PREFIX = '按模板结构复写一条同类型脚本'
+// 一张工作流的出图节点上限：分镜最多能解析出 60 镜，全建出来画布会变成一片卡片。
+// 12 与脚本段落上限同口径，超出的在描述里说清「还有几镜没建」。
+export const MAX_SHOT_NODES = 12
 
 const clip = (value, max) => String(value ?? '').trim().slice(0, max)
 
@@ -51,16 +60,59 @@ export function buildReplicatePrompt({ template = {}, script = null } = {}) {
     '输出可以直接进入工作流继续改。'
 }
 
-export function buildReplicateDraft({ template = {}, script = null, name = '', description = '' } = {}) {
+/** 这一镜该画成什么比例：认得出横屏平台就 16:9，认不出按竖屏 9:16（短视频默认）。 */
+function shotRatio(platform) {
+  return shotAspect(platform) === '横屏 16:9' ? '16:9' : '9:16'
+}
+
+/**
+ * 每镜一个出图节点：提示词与作品页「出这一镜」同源，比例跟平台走，接在复刻脚本下游。
+ * 六镜一行、往下排第二列——横着铺开会把画布拉成一条比屏幕宽几倍的线。
+ */
+function shotNodesOf(shots, { tpl, structure, scriptSource }) {
+  const list = (Array.isArray(shots) ? shots : []).filter((shot) => shot && typeof shot === 'object').slice(0, MAX_SHOT_NODES)
+  const ratio = shotRatio(tpl.platform)
+  const nodes = []
+  const edges = []
+  list.forEach((shot, index) => {
+    const no = Math.max(1, Math.round(Number(shot.shotNo) || index + 1))
+    const pad = String(no).padStart(2, '0')
+    const id = 'n_shot_' + String(index + 1).padStart(2, '0')
+    const look = [clip(shot.camera, 40), clip(shot.visual, 80)].filter(Boolean).join(' · ')
+    nodes.push({
+      id,
+      type: 'image',
+      position: { x: 780 + Math.floor(index / 6) * 300, y: 40 + (index % 6) * 210 },
+      data: {
+        kind: 'image',
+        title: '第 ' + pad + ' 镜 · 出图',
+        description: clip(look ? '这一镜：' + look : '按这一镜的口播画一张', 240),
+        config: { model: '', ratio, prompt: shotPrompt(shot, beatForShot(shot, structure), { platform: tpl.platform, scriptSource }) },
+      },
+    })
+    edges.push({ id: 'e_llm_shot_' + String(index + 1).padStart(2, '0'), source: 'n_llm', target: id })
+  })
+  return { nodes, edges, total: Array.isArray(shots) ? shots.filter((shot) => shot && typeof shot === 'object').length : 0 }
+}
+
+export function buildReplicateDraft({ template = {}, script = null, shots = null, name = '', description = '' } = {}) {
   const tpl = asTemplate(template)
   const structure = beatsOf(tpl, script)
   const inputText = clip(script?.hook || tpl.hook || tpl.title, 500)
+  // 分镜跟着模板走（作品自己的脚本只改口播，不改分镜），没有传就用模板那份
+  const shotsInput = Array.isArray(shots) ? shots : Array.isArray(tpl.storyboard) ? tpl.storyboard : []
+  // 口播是作品自己改过的，提示词里要写「这条作品自己的脚本」；还在跟模板就写「原片这一段口播」
+  const scriptSource = script?.source === 'project' ? 'own' : script?.source === 'template' ? 'template' : undefined
+  const shotPart = shotNodesOf(shotsInput, { tpl, structure, scriptSource })
+  const baseDescription =
+    description || ('来自模板 · ' + (tpl.contentType || '脚本') + ' · 脚本 ' + structure.length + ' 段')
+  const shotNote = shotPart.nodes.length
+    ? ' · ' + shotPart.nodes.length + ' 个出图节点' +
+      (shotPart.total > shotPart.nodes.length ? '（还有 ' + (shotPart.total - shotPart.nodes.length) + ' 镜没建，一张工作流最多 ' + MAX_SHOT_NODES + ' 个）' : '')
+    : ''
   return {
     name: clip(name || tpl.title || '复刻脚本', 60),
-    description: clip(
-      description || ('来自模板 · ' + (tpl.contentType || '脚本') + ' · 脚本 ' + structure.length + ' 段'),
-      240,
-    ),
+    description: clip(baseDescription + shotNote, 240),
     nodes: [
       {
         id: 'n_input',
@@ -74,8 +126,9 @@ export function buildReplicateDraft({ template = {}, script = null, name = '', d
         position: { x: 420, y: 140 },
         data: { kind: 'llm', title: '复刻脚本', config: { systemPrompt: buildReplicatePrompt({ template: tpl, script }) } },
       },
+      ...shotPart.nodes,
     ],
-    edges: [{ id: 'e_input_llm', source: 'n_input', target: 'n_llm' }],
+    edges: [{ id: 'e_input_llm', source: 'n_input', target: 'n_llm' }, ...shotPart.edges],
   }
 }
 

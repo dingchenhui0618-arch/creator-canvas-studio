@@ -1505,6 +1505,8 @@ export type ProjectTemplateDetail = ProjectTemplateBrief & {
   hook: string
   hookType: string
   platformLabel: string
+  /** 平台代号（douyin / xiaohongshu …）：分镜提示词按它写竖屏还是横屏；老数据可能没有 */
+  platform?: string
   structure: ScriptBeat[]
   storyboard: StoryboardShot[]
   timing: TemplateTiming | null
@@ -1778,7 +1780,8 @@ export function projectStep(
       key: 'canvas',
       label: '下一步 · 开工作流',
       title: '先开一条工作流',
-      hint: '用这条作品现在的脚本生成工作流草稿：输入节点带钩子、复刻节点带完整提示词',
+      // r277：开出来的不只是两个节点了——分镜有几镜就多几个出图节点，跑一次才扣钱
+      hint: '用这条作品现在的脚本开工作流：复刻脚本 + 每镜一个出图节点；节点本身不扣积分，跑一次每张画扣积分',
       cta: '用这条脚本开工作流',
     }
   }

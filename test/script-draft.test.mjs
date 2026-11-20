@@ -90,3 +90,97 @@ test('改脚本写回画布：只认自动生成的复刻节点，手改过的�
   assert.equal(keptInput.promptUpdated, true)
   assert.equal(keptInput.nodes.find((node) => node.id === 'n_input').data.config.text, '我自己写的素材')
 })
+
+// r277：作品页「开工作流」不再只生成一段复刻文本——分镜里有几镜就建几个出图节点，
+// 跑一次工作流得到的是「复刻脚本 + 每一镜的一张画面」。这一组盯四件事：
+//   1) 节点数、标题、比例、连线都对；
+//   2) 出图提示词与作品页「出这一镜」是同一条（拼在服务端，必须与前端逐字一致）；
+//   3) 节点本身不花钱：模型留空跟平台统一路由，价格只在运行时按张扣；
+//   4) 分镜太多时有上限，且在描述里如实说「还有几镜没建」。
+const shotPromptDomain = await import('../src/domain/shot-prompt.ts')
+
+const storyboard = [
+  { shotNo: 1, startSec: 0, endSec: 3, visual: '咖啡机特写，蒸汽升起', camera: '近景固定' },
+  { shotNo: 2, startSec: 3, endSec: 8, visual: '咖啡倒进玻璃杯', camera: '中景跟手' },
+  { shotNo: 3, startSec: 8, endSec: 12, visual: '', camera: '' },
+]
+
+const ownScript = {
+  hook: '我改过的钩子',
+  structure: [
+    { beat: '开场', startSec: 0, endSec: 3, voiceover: '我改过的第一句', expectedSec: 1.6 },
+    { beat: '收尾', startSec: 3, endSec: 8, voiceover: '新的收尾', expectedSec: 2.4 },
+  ],
+  source: 'project',
+}
+
+test('分镜有几镜就建几个出图节点：接在复刻脚本下游、比例跟平台、模型留空跟统一路由', () => {
+  const built = draft.buildReplicateDraft({ template: { ...template, platform: 'douyin', storyboard }, script: ownScript, name: '咖啡 3 分钟' })
+  const images = built.nodes.filter((node) => node.type === 'image')
+  assert.equal(images.length, 3)
+  assert.equal(built.nodes.length, 5, '输入 + 复刻 + 3 镜出图')
+  assert.deepEqual(images.map((node) => node.id), ['n_shot_01', 'n_shot_02', 'n_shot_03'])
+  assert.equal(images[0].data.title, '第 01 镜 · 出图')
+  assert.equal(images[0].data.kind, 'image')
+  assert.equal(images[0].data.config.ratio, '9:16', '竖屏平台按 9:16')
+  assert.equal(images[0].data.config.model, '', '模型留空 = 跟随平台统一路由，不把模型 id 写死')
+  assert.match(images[0].data.description, /近景固定 · 咖啡机特写/)
+  // 每镜都从复刻脚本接出去：复刻失败时这些图跟着跳过，不会拿半截结果去画
+  const fanout = built.edges.filter((edge) => edge.source === 'n_llm').map((edge) => edge.target)
+  assert.deepEqual(fanout, ['n_shot_01', 'n_shot_02', 'n_shot_03'])
+  assert.equal(new Set(built.edges.map((edge) => edge.id)).size, built.edges.length, '连线 id 不重复')
+  assert.equal(new Set(built.nodes.map((node) => node.id)).size, built.nodes.length, '节点 id 不重复')
+  assert.match(built.description, /3 个出图节点/)
+})
+
+test('出图提示词与作品页「出这一镜」是同一条：服务端拼的，逐字比', () => {
+  const built = draft.buildReplicateDraft({ template: { ...template, platform: 'douyin', storyboard }, script: ownScript })
+  const images = built.nodes.filter((node) => node.type === 'image')
+  storyboard.forEach((shot, index) => {
+    const beat = shotPromptDomain.beatForShot(shot, ownScript.structure)
+    const expected = shotPromptDomain.shotPrompt(shot, beat, { platform: 'douyin', scriptSource: 'own' })
+    assert.equal(images[index].data.config.prompt, expected, '第 ' + shot.shotNo + ' 镜提示词一致')
+  })
+  // 口播是作品自己的那份：句子要说「这条作品自己的脚本」，不能冒充原片口播
+  assert.match(images[0].data.config.prompt, /画面按这条作品自己的脚本：我改过的第一句/)
+  assert.doesNotMatch(images[0].data.config.prompt, /第 ?0?1 ?镜/, '提示词正文里不出现镜头号')
+})
+
+test('还在跟模板的脚本：提示词写「原片这一段口播」；横屏平台按 16:9', () => {
+  const tmpl = { ...template, platform: 'bilibili', storyboard }
+  const built = draft.buildReplicateDraft({ template: tmpl, script: { ...ownScript, source: 'template' } })
+  const images = built.nodes.filter((node) => node.type === 'image')
+  assert.equal(images[0].data.config.ratio, '16:9')
+  assert.match(images[0].data.config.prompt, /横屏 16:9/)
+  assert.match(images[0].data.config.prompt, /画面按原片这一段口播：我改过的第一句/)
+  const noSource = draft.buildReplicateDraft({ template: tmpl, script: { hook: '钩子', structure: ownScript.structure } })
+  assert.match(noSource.nodes.find((node) => node.type === 'image').data.config.prompt, /画面按这段口播：/)
+})
+
+test('分镜超过上限：只建 12 个出图节点，描述里如实说还有几镜没建', () => {
+  const many = Array.from({ length: 20 }, (_, index) => ({ shotNo: index + 1, startSec: index, endSec: index + 1, visual: '第 ' + (index + 1) + ' 个画面' }))
+  const built = draft.buildReplicateDraft({ template: { ...template, storyboard: many }, script: ownScript })
+  const images = built.nodes.filter((node) => node.type === 'image')
+  assert.equal(images.length, draft.MAX_SHOT_NODES)
+  assert.equal(images.length, 12)
+  assert.match(built.description, /12 个出图节点（还有 8 镜没建/)
+  // 12 个卡片不能叠在一起：位置必须两两不同
+  assert.equal(new Set(images.map((node) => node.position.x + ',' + node.position.y)).size, 12)
+})
+
+test('没有分镜就还是两个节点：老作品开工作流行为不变', () => {
+  const built = draft.buildReplicateDraft({ template, script: ownScript })
+  assert.equal(built.nodes.length, 2)
+  assert.equal(built.edges.length, 1)
+  assert.doesNotMatch(built.description, /出图节点/)
+})
+test('作品页「开工作流」真的把分镜交给草稿，界面按服务端节点数说画几张', async () => {
+  const fs = await import('node:fs')
+  const route = fs.readFileSync(new URL('../server/routes/projects.mjs', import.meta.url), 'utf8')
+  assert.match(route, /buildReplicateDraft\(\{ template: template \|\| \{\}, script, name: project\.title \}\)/, '开工作流这条路把模板（含分镜）交给草稿')
+  const page = fs.readFileSync(new URL('../src/pages/ProjectPage.tsx', import.meta.url), 'utf8')
+  // 说「会画几张」要用服务端建出来的节点数，不是自己按镜数乘：分镜超过上限时服务端只建 12 个
+  assert.match(page, /Math\.max\(0, \(result\.flow\.nodes \|\| 0\) - 2\)/)
+  assert.match(page, /跑一次会画 ' \+ shotNodes \+ ' 张，每张 ' \+ eachPrice \+ ' 积分/)
+  assert.match(page, /节点本身不扣积分，跑一次每张画扣 /)
+})

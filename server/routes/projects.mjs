@@ -192,6 +192,9 @@ function templateDetail(template) {
     hook: template.hook || '',
     hookType: template.hookType || '',
     platformLabel: template.platformLabel || '',
+    // 平台代号（douyin / xiaohongshu …）：分镜提示词靠它决定写「竖屏 9:16」还是「横屏 16:9」，
+    // 与开工作流时服务端拼出图节点用的是同一个字段（r277）。
+    platform: String(template.platform || '').trim(),
     structure: template.structure || [],
     storyboard: template.storyboard || [],
     timing: template.timing || null,

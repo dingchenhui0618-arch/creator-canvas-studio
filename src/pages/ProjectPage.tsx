@@ -132,7 +132,7 @@ const SCRIPT_UNSAVED_OWNER = 'project-script'
 
 const SCRIPT_CANVAS_NOTE: Record<string, string> = {
   synced: '工作流里的复刻提示词也换成新脚本了',
-  'no-canvas': '还没开工作流，开工作流时会用这条脚本生成提示词',
+  'no-canvas': '还没开工作流，开工作流时会用这条脚本生成复刻提示词，并按分镜给每一镜建出图节点',
   'canvas-missing': '这条作品绑的工作流不在了，脚本已经存下',
   'hand-edited': '工作流里的提示词是手改过的，没有覆盖',
   'save-failed': '工作流提示词这次没写进去，稍后再存一次脚本',
@@ -556,7 +556,8 @@ export default function ProjectPage({
   }, [compareOpen])
 
   // 作品第一次开工作流就是这里：服务端用这条作品**现在的脚本**生成输入 + 复刻两个节点，
-  // 建完立刻绑上作品（v1），再打开工作流。脚本改过也不怕：工作流拿到的就是新词。
+  // 再按分镜给每一镜建一个出图节点（r277），建完立刻绑上作品（v1），再打开工作流。
+  // 脚本改过也不怕：工作流拿到的就是新词。开工作流本身不扣积分——钱在运行时的出图节点上。
   const openCanvas = useCallback(async () => {
     if (!data) return
     if (data.project.flowId) {
@@ -566,14 +567,25 @@ export default function ProjectPage({
     setBusy('canvas')
     try {
       const result = await openProjectCanvas(data.project.id)
-      onToast((result.created ? '已按这条脚本生成工作流：' : '工作流已就绪：') + result.flow.name)
+      // 节点数是服务端的事实：减掉输入与复刻两个骨架节点，剩下的就是每镜一个的出图节点。
+      // 分镜超过上限时服务端只建前 12 个，这里读到的也就是 12，不按镜数自己算。
+      const shotNodes = result.created ? Math.max(0, (result.flow.nodes || 0) - 2) : 0
+      const eachPrice = imageModel?.price ?? 0
+      onToast(
+        result.created
+          ? '已开好工作流：复刻脚本' +
+            (shotNodes ? ' + ' + shotNodes + ' 镜出图' : '') +
+            (shotNodes && eachPrice ? '（跑一次会画 ' + shotNodes + ' 张，每张 ' + eachPrice + ' 积分）' : '') +
+            ' · ' + result.flow.name
+          : '工作流已就绪：' + result.flow.name,
+      )
       onOpenFlow(result.flow.id)
     } catch (caught) {
       onToast(caught instanceof Error ? caught.message : '开工作流失败')
     } finally {
       setBusy('')
     }
-  }, [data, onOpenFlow, onToast])
+  }, [data, imageModel, onOpenFlow, onToast])
 
   // 只读分享：开 / 停 / 复制。链接是这条作品的地址，不是账号的，所以停止只影响这一条。
   const shareLink = data?.share ? window.location.origin + '/#/share/project/' + data.share.token : ''
@@ -905,7 +917,7 @@ export default function ProjectPage({
     if (!shot) return
     const beats = data?.script?.structure?.length ? data.script.structure : board.structure
     const prompt = shotPrompt(shot, beatForShot(shot, beats), {
-      platform: board.origin?.platform || '',
+      platform: board.platform || board.origin?.platform || '',
       scriptSource: data?.script?.source === 'project' ? 'own' : 'template',
     })
     const mark = (next: ShotGenRow) => setShotGen((rows) => ({ ...rows, [shotNo]: next }))
@@ -983,7 +995,7 @@ export default function ProjectPage({
     const board = data?.template
     if (!board?.storyboard?.length) return
     const beats = data?.script?.structure?.length ? data.script.structure : board.structure
-    const options = { platform: board.origin?.platform || '', title: data?.project.title, scriptSource: (data?.script?.source === 'project' ? 'own' : 'template') as 'own' | 'template' }
+    const options = { platform: board.platform || board.origin?.platform || '', title: data?.project.title, scriptSource: (data?.script?.source === 'project' ? 'own' : 'template') as 'own' | 'template' }
     let text = ''
     if (all) {
       text = allShotPrompts(board.storyboard, beats, options)
@@ -1624,7 +1636,13 @@ export default function ProjectPage({
   // 脚本优先用这条作品自己的那份（改过脚本的复刻，画面要跟着新词走），没有才退回模板脚本。
   const promptBeats = script?.structure?.length ? script.structure : template?.structure || []
   const promptScriptSource: ShotPromptScriptSource = script?.source === 'project' ? 'own' : promptBeats.length ? 'template' : 'none'
-  const promptPlatform = template?.origin?.platform || ''
+  // 平台代号与开工作流时服务端用的是同一个字段（r277）：模板自己的 platform 优先，
+  // 老数据没有时退回来源里的平台。认不出平台就不写比例，不替用户决定竖屏还是横屏。
+  const promptPlatform = template?.platform || template?.origin?.platform || ''
+  // 开工作流会建几个出图节点、每张多少积分（r277）：点之前先摆出来，
+  // 别等跑完一次才发现「原来这次不是只出一段文字」。节点本身不扣钱，钱在运行时。
+  const storyboardShots = template?.storyboard?.length || 0
+  const shotEachPrice = imageModel?.price ?? 0
   // 状态与「下一步」只看当前这一版评过没有：新版刚开出来时不能因为上一版评过就跳过评审
   const currentReviews = reviewsForVersion(data.versionCounts, project.version)
   // 「这一版比上一版好在哪」：只在前后两版都评过、且都记了严重度时才算得出来（v0.9.84）
@@ -3621,7 +3639,11 @@ export default function ProjectPage({
                 <strong>还没开工作流</strong>
                 <span>
                   {data.script
-                    ? '用这条作品现在的脚本生成一条工作流草稿：输入节点带钩子，复刻节点带完整提示词。'
+                    ? '用这条作品现在的脚本开一条工作流：复刻脚本' +
+                      (storyboardShots ? ' + ' + storyboardShots + ' 镜出图节点' : '（输入带钩子、复刻带完整提示词）') +
+                      (storyboardShots
+                        ? '。节点本身不扣积分，跑一次每张画扣 ' + (shotEachPrice || 5) + ' 积分，画失败会退回。'
+                        : '。')
                     : '先在左边写一条脚本（或从模板库套一条），再来开工作流。'}
                 </span>
                 <button
