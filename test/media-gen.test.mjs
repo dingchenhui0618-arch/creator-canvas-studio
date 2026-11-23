@@ -135,7 +135,7 @@ const imageKey = createKey({
   provider: 'geteapi',
   baseUrl: base + '/v1',
   apiKey: 'sk-test-media-image-1234567890',
-  models: ['gpt-image-2'],
+  models: ['gpt-image-2', 'gpt-image-2.5', 'gpt-image-2.6'],
   capabilities: ['image'],
   priority: 10,
   weight: 100,
@@ -145,7 +145,7 @@ createKey({
   provider: 'cgcm',
   baseUrl: base + '/seeapi',
   apiKey: 'sk-test-media-video-1234567890',
-  models: ['seedance-2.0'],
+  models: ['seedance-2.0', 'seedance-2.0-fast'],
   capabilities: ['video'],
   priority: 10,
   weight: 100,
@@ -227,15 +227,16 @@ test('新增价格默认 image_gen=5、video_gen=15，且会出现在积分汇�
   assert.equal(typeof summary.prices.video_gen, 'number')
 })
 
-test('生图成功：先回任务号、后台跑完再落盘，扣 5 积分、只有自己能读', async () => {
+test('生图成功：先回任务号、后台跑完再落盘，扣 3 积分（最便宜的 2.6）、只有自己能读', async () => {
   const before = credits.balanceOf(owner.id)
   const result = await call({ cookie: cookieOf(owner), body: { kind: 'image', prompt: '一只橘猫', ratio: '9:16' } })
   assert.equal(result.status, 200)
   assert.equal(result.payload.task.status, 'processing', 'POST 不再挂着等上游，先回一条 processing')
-  assert.equal(result.payload.task.model, 'gpt-image-2')
+  assert.equal(result.payload.task.model, 'visionqa-image')
+  assert.equal(result.payload.task.modelLabel, 'VisionQA通用图片模型')
   assert.equal(result.payload.task.size, '1024x1536')
-  assert.equal(result.payload.task.credits.cost, 5)
-  assert.equal(credits.balanceOf(owner.id), before - 5)
+  assert.equal(result.payload.task.credits.cost, 3)
+  assert.equal(credits.balanceOf(owner.id), before - 3)
 
   const id = result.payload.task.id
   const settled = await waitTask(id, cookieOf(owner))
@@ -279,14 +280,14 @@ test('生图失败：失败原因可见、积分全额退回，重复读不会�
   assert.equal(credits.balanceOf(failUser.id), before, '重复读任务不能重复退款')
 })
 
-test('生视频：建任务后轮询，成功落 mp4、扣 15 积分；失败任务全额退', async () => {
+test('生视频：建任务后轮询，成功落 mp4、扣 28 积分（4 秒 720p 按上游成本）；失败任务全额退', async () => {
   videoPolls = 0
   const before = credits.balanceOf(videoUser.id)
   const created = await call({ cookie: cookieOf(videoUser), body: { kind: 'video', prompt: '海边日落', duration: 4, resolution: '720p' } })
   assert.equal(created.status, 200)
   assert.equal(created.payload.task.status, 'processing')
-  assert.equal(created.payload.task.credits.cost, 15)
-  assert.equal(credits.balanceOf(videoUser.id), before - 15)
+  assert.equal(created.payload.task.credits.cost, 28)
+  assert.equal(credits.balanceOf(videoUser.id), before - 28)
   assert.equal(lastVideoBody.aspect_ratio, '9:16', '界面没给比例控件，默认竖屏；缺这个字段上游直接 400')
   const id = created.payload.task.id
 
@@ -572,20 +573,26 @@ test('模型清单：图片一组、视频一组，未真调的照实标出来�
   const result = await call({ method: 'GET', target: '/api/media/models', cookie: cookieOf(user) })
   assert.equal(result.status, 200)
   const models = result.payload
-  assert.deepEqual(models.image.map((item) => item.id), ['gpt-image-2'])
-  assert.deepEqual(models.video.map((item) => item.id), ['seedance-2.0', 'seedance-2.0-fast'])
-  assert.equal(models.defaults.image, 'gpt-image-2')
-  assert.equal(models.defaults.video, 'seedance-2.0')
-  const seedance = models.video.find((item) => item.id === 'seedance-2.0')
-  assert.equal(seedance.verified, true, 'seedance-2.0 是真调过的，别跟着标未验')
-  assert.equal(seedance.referenceVerified, false, '参考生视频这轮没真调过，必须照实说')
-  assert.deepEqual(seedance.durations, [4, 8])
-  assert.deepEqual(seedance.resolutions, ['720p', '480p'], '默认 720p：顺序就是界面默认值')
-  assert.equal(seedance.credits, 15)
-  assert.equal(models.video.find((item) => item.id === 'seedance-2.0-fast').verified, false)
+  // r298：界面只露一个显示模型，底下几条通道自动兜底，价钱按上游成本算
+  assert.deepEqual(models.image.map((item) => item.id), ['visionqa-image'])
+  assert.deepEqual(models.video.map((item) => item.id), ['visionqa-video'])
+  assert.equal(models.defaults.image, 'visionqa-image')
+  assert.equal(models.defaults.video, 'visionqa-video')
+  const imageModel = models.image[0]
+  assert.equal(imageModel.label, 'VisionQA通用图片模型')
+  assert.equal(imageModel.channelCount, 3, '图片底下三条通道（2.6 / 2.5 / 2）')
+  assert.equal(imageModel.credits, 3, '2.6 一张 $0.028 ≈ ¥0.20，加价 10% 取整 = 3 积分')
+  const videoModel = models.video[0]
+  assert.equal(videoModel.label, 'VisionQA通用视频模型')
+  assert.equal(videoModel.verified, false, '默认走 fast，fast 没真调过，不能标已验')
+  assert.equal(videoModel.referenceVerified, false, '参考生视频这轮没真调过，必须照实说')
+  assert.equal(videoModel.channelCount, 2, '视频底下两条通道（fast / seedance-2.0）')
+  assert.deepEqual(videoModel.durations, [4, 8])
+  assert.deepEqual(videoModel.resolutions, ['720p', '480p'], '默认 720p：顺序就是界面默认值')
+  assert.deepEqual(videoModel.priceTable, { '4|720p': 28, '4|480p': 13, '8|720p': 55, '8|480p': 26 })
   const reference = models.image[0].modes.find((item) => item.id === 'reference')
   assert.equal(reference.imageRefs, 1)
-  const mixed = seedance.modes.find((item) => item.id === 'mixed')
+  const mixed = videoModel.modes.find((item) => item.id === 'mixed')
   assert.equal(mixed.imageRefs, 9)
   assert.equal(mixed.videoRefs, 3)
   const anonymous = await call({ method: 'GET', target: '/api/media/models' })
@@ -624,13 +631,13 @@ test('参考图：上传素材 → 参考图出图真的走 /images/edits，素�
   assert.equal(gen.payload.task.mode, 'reference')
   assert.equal(gen.payload.task.assets.length, 1)
   assert.equal(gen.payload.task.assets[0].kind, 'image')
-  assert.equal(credits.balanceOf(user.id), before - 5, '参考图出图还是 5 积分')
+  assert.equal(credits.balanceOf(user.id), before - 3, '参考图出图也是 3 积分：走的是最便宜的 2.6')
 
   const settled = await waitTask(gen.payload.task.id, cookie)
   assert.equal(settled.payload.task.status, 'succeeded', settled.payload.task.error)
   assert.equal(settled.payload.task.credits.refunded, false)
   // 上游收到的必须是 multipart 的 edits：模型、提示词、尺寸、文件一个都不能少
-  assert.match(lastEditBody, /name="model"\r\n\r\ngpt-image-2/)
+  assert.match(lastEditBody, /name="model"\r\n\r\ngpt-image-2\.6/)
   assert.match(lastEditBody, /name="size"\r\n\r\n1024x1536/)
   assert.match(lastEditBody, /name="prompt"\r\n\r\n照着参考图重画一张/)
   assert.match(lastEditBody, /name="image"; filename="reference\.png"/)
@@ -758,7 +765,7 @@ test('删掉一条生成记录：记录与文件一起消失、清单里不再�
   const after = await call({ method: 'GET', target: '/api/media/tasks?kind=image', cookie })
   assert.equal(after.payload.tasks.some((task) => task.id === id), false)
 
-  assert.equal(credits.balanceOf(user.id), before - 5, '删除不是退款：那次生成花的积分还在')
+  assert.equal(credits.balanceOf(user.id), before - 3, '删除不是退款：那次生成花的积分还在')
 })
 
 test('删别人的、没登录的、删下载地址、删还在跑的：四种都拒，且一个文件都不动', async () => {
@@ -820,14 +827,14 @@ test('对话框里 /生图：不走文本模型、不扣对话费，直接建出
   const result = await streamChatMessage(user, { content: '/生图 9:16 咖啡店门口的雨夜海报' }, {})
   assert.equal(result.cost, 0, '这一轮没走对话模型：对话那 1 积分不该扣')
   assert.equal(result.media.kind, 'image')
-  assert.equal(result.media.model, 'gpt-image-2')
+  assert.equal(result.media.model, 'visionqa-image')
   assert.equal(result.media.ratio, '9:16')
   assert.equal(result.media.size, '1024x1536')
-  assert.equal(result.media.credits.cost, 5)
-  assert.equal(result.balance, before - 5, '只扣生成的 5 积分')
-  assert.equal(credits.balanceOf(user.id), before - 5)
+  assert.equal(result.media.credits.cost, 3)
+  assert.equal(result.balance, before - 3, '只扣生成的 3 积分')
+  assert.equal(credits.balanceOf(user.id), before - 3)
   assert.match(result.reply.content, /已开始生成图片/)
-  assert.match(result.reply.content, /gpt-image-2 · 9:16 · 1024x1536/)
+  assert.match(result.reply.content, /VisionQA通用图片模型 · 9:16 · 1024x1536/)
   assert.match(result.reply.content, /最近生成/)
 
   // 会话里要留得住这两条：关掉页面回来还能看到那张卡片（卡片按 meta.media.id 轮询）
@@ -854,7 +861,7 @@ test('对话框里 /生视频：比例、时长、清晰度按用户说的发给
   assert.equal(result.media.kind, 'video')
   assert.equal(result.media.duration, 8)
   assert.equal(result.media.resolution, '480p')
-  assert.equal(credits.balanceOf(user.id), before - 15)
+  assert.equal(credits.balanceOf(user.id), before - 26, '8 秒 480p：¥0.28614 × 8 × 1.1 × 10 = 26 积分')
   assert.equal(lastVideoBody.aspect_ratio, '16:9', '对话框里的比例也必须真的发给上游')
   assert.equal(Number(lastVideoBody.duration), 8)
   assert.equal(String(lastVideoBody.resolution), '480p')
@@ -914,7 +921,7 @@ test('对话框里带一张参考图 /生图：真的走参考图出图，只扣
   assert.equal(result.media.assets.length, 1)
   assert.equal(result.media.assets[0].name, '参考.png')
   assert.match(result.reply.content, /参考 1 张/, '回话里要写清用了参考图')
-  assert.equal(credits.balanceOf(user.id), before - 5)
+  assert.equal(credits.balanceOf(user.id), before - 3)
 
   // 上游收到的必须是 multipart 的 edits，文件真的是我们那张
   await waitTask(result.media.id, cookie)
@@ -940,7 +947,7 @@ test('对话框里带一张图 /生视频：拿它当首帧，上游收到 image
   assert.equal(result.media.kind, 'video')
   assert.equal(result.media.mode, 'first')
   assert.equal(result.media.assets.length, 1)
-  assert.equal(credits.balanceOf(user.id), before - 15)
+  assert.equal(credits.balanceOf(user.id), before - 13, '4 秒 480p：¥0.28614 × 4 × 1.1 × 10 = 13 积分')
   assert.equal(lastVideoBody.mode, 'image2video', '只带图就是图生视频')
   assert.equal(lastVideoBody.aspect_ratio, '16:9')
   assert.deepEqual(lastVideoBody.reference_image_urls, ['asset://image'])
@@ -1002,7 +1009,7 @@ test('对话框里说「帮我出个视频，…」：口语也直接开任务�
   assert.equal(result.cost, 0)
   assert.equal(result.media.kind, 'video')
   assert.equal(result.media.duration, 4)
-  assert.equal(credits.balanceOf(user.id), before - 15)
+  assert.equal(credits.balanceOf(user.id), before - 28)
   assert.equal(lastVideoBody.aspect_ratio, '9:16')
 })
 
@@ -1010,13 +1017,15 @@ test('对话框里说「帮我出个视频，…」：口语也直接开任务�
 test('对话框里写死 1080p 12 秒：原样发给上游，并在回话里说明是照写死提交的', async () => {
   resetMediaGenRateLimit()
   const user = newUser('chatlocked')
+  // 12 秒 1080p 按上游成本算要 168 积分（¥15.26 × 1.1），余额得够才验得到「原样提交」
+  credits.grant(user.id, 300, { note: 'chatlocked 1080p' })
   const before = credits.balanceOf(user.id)
   videoPolls = 0
 
   const result = await sendChatMessage(user, { content: '/生视频 1080p 12秒 海边日落' })
   assert.equal(Number(lastVideoBody.duration), 12, '12 秒必须原样交给上游')
   assert.equal(String(lastVideoBody.resolution), '1080p', '1080p 必须原样交给上游')
-  assert.equal(credits.balanceOf(user.id), before - 15)
+  assert.equal(credits.balanceOf(user.id), before - 168)
   assert.match(result.reply.content, /写死/)
   assert.match(result.reply.content, /1080p/)
 })
@@ -1029,7 +1038,7 @@ test('对话框里写死 2048x2048：生图请求里就是 2048x2048，不是 10
 
   const result = await sendChatMessage(user, { content: '/生图 2048x2048 白底产品图' })
   assert.equal(result.media.size, '2048x2048')
-  assert.equal(credits.balanceOf(user.id), before - 5)
+  assert.equal(credits.balanceOf(user.id), before - 3)
   await waitTask(result.media.id, cookieOf(user))
   assert.equal(lastImageBody.size, '2048x2048', '尺寸必须真的发出去，不能只在元数据里写写')
 })

@@ -78,7 +78,7 @@ export function planTaskRetry(task: MediaTask, catalog: MediaModel[]): MediaRetr
 // 按当前模型表的价格算，不按这条任务当初的花费：现在再跑一次，扣的就是现在的价。
 export function retryCredits(task: MediaTask, catalog: MediaModel[], fallback: number): number {
   const model = catalog.find((item) => item.id === task.model)
-  if (model) return model.credits
+  if (model) return model.priceTable?.[Number(task.duration) + '|' + task.resolution] ?? model.credits
   const paid = Number(task.credits?.cost)
   return Number.isFinite(paid) && paid > 0 ? paid : fallback
 }

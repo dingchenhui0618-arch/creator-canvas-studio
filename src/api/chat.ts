@@ -23,6 +23,8 @@ export type ChatMediaInfo = {
   kind: 'image' | 'video'
   status: 'processing' | 'succeeded' | 'failed'
   model: string
+  // 用户认的显示名（VisionQA通用图片模型 / 通用视频模型）；老记录没有这一项时退回 model
+  modelLabel?: string
   mode?: string
   ratio: string
   size: string

@@ -1022,7 +1022,7 @@ function MediaComposer({
         resolution,
         assetIds: maxRefs > 0 ? assets.map((asset) => asset.id) : [],
       },
-      model.credits,
+      model.priceTable?.[duration + '|' + resolution] ?? model.credits,
     )
   }
 
@@ -1054,7 +1054,7 @@ function MediaComposer({
     setRefError('')
     setRecentError('')
     setZoomTask(null)
-    await runGeneration(plan.input, retryCredits(item, catalog, image ? 5 : 15))
+    await runGeneration(plan.input, retryCredits(item, catalog, image ? 3 : 28))
   }
 
   const title = image ? '生图' : '生视频'
@@ -1071,7 +1071,10 @@ function MediaComposer({
       : assets.length < minRefs
         ? '「' + (mode?.label ?? '') + '」需要先加参考素材'
         : ''
-  const price = model?.credits ?? (image ? 5 : 15)
+  // 视频按「秒 × 清晰度」查服务端算好的价；图片一口价。价钱只从接口来，界面不写死
+  const price = model
+    ? (model.priceTable?.[duration + '|' + resolution] ?? model.credits)
+    : image ? 3 : 28
   const canSubmit =
     Boolean(prompt.trim()) && !active && Boolean(model) && Boolean(mode) && assets.length >= minRefs && !uploading
 

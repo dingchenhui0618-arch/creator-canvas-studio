@@ -226,6 +226,11 @@ export const config = {
   // off  = 回到旧行为：只能提交申请、由管理员发放。
   billing: {
     mode: (process.env.VQ_BILLING_MODE || '').trim().toLowerCase() === 'off' ? 'off' : 'auto',
+    // 计费口径（2026-11-23 用户定）：扣费 = 上游真实成本 × (1 + 加价) × 每元积分。
+    //   例：上游一次花 5 元 → 5 × 1.1 = 5.5 元 → 5.5 × 10 = 55 积分。
+    // 快捷创作与无限画布共用这一处，界面与计费代码都不许再写死单价。
+    markup: numEnv(process.env.VQ_BILLING_MARKUP, 0.1),
+    usdCny: numEnv(process.env.VQ_USD_CNY, 7.2),
   },
   // 界面口径：生产环境只讲产品语言（不出现模型标识、上游地址、环境变量）；
   // 内部测试环境显式设 VQ_UI_MODE=internal 后，后台保留完整技术详情用于排障。

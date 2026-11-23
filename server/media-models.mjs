@@ -1,4 +1,4 @@
-// 快捷创作能用哪些生成模型、每个模型支持什么：这张表是界面下拉与接口校验的唯一真源。
+// 快捷创作 / 工作流能用哪些生成模型、每个模型支持什么：这张表是界面下拉与接口校验的唯一真源。
 //
 // 为什么要有这张表（而不是前端写死几个选项）：
 //  1) 界面能选什么，必须等于「服务端真的能发出去什么」——前端多摆一个选项，用户就白花一次积分；
@@ -6,14 +6,18 @@
 //     校验只能放在服务端，界面照这张表画控件才不会自相矛盾；
 //  3) 后台换了 Key、换了大模型，改这里一处就够，不用两头对。
 //
+// r298（2026-11-23 用户定）：界面只露「一个显示模型」，底下几条上游通道自动兜底。
+//  - 快捷创作图片只有 VisionQA通用图片模型 → 默认最便宜的 GeteAPI gpt-image-2.6，
+//    失败换 2.5、再换 2（同一个显示模型，不给用户第二种名字）；
+//  - 快捷创作视频只有 VisionQA通用视频模型 → 默认 SeeAPI seedance-2.0-fast，失败换 seedance-2.0；
+//  - 价钱不写死：按上游成本 × 1.1 算（server/media-pricing.mjs）。
+//
 // 诚实口径：
-//  - 只列「池里真有 Key 声明」的模型（2026-11-18 生产 model-keys.json：图片 gpt-image-2 系、
-//    视频 seedance-2.0 / -fast / -mini / 2.5 / minimax / wan / hurry-horse），别的模型不摆进来凑数；
-//  - verified=false 表示这条链路**没有真调过**（生产只真调过 gpt-image-2 文生图与
-//    seedance-2.0 的 4s/8s、480p/720p），界面上要照实标「未真调」，不能装作验过；
-//  - 价格沿用现在的积分价（图片 5 / 视频 15，config.credits.prices），这轮不悄悄改价。
-import { config } from './config.mjs'
+//  - verified=false 表示这条通道**没有真调过**（生产真调过 gpt-image-2 文生图、
+//    seedance-2.0 的 4s/8s、480p/720p），界面上要照实标，不能装作验过；
+//  - 老记录里存的是上游 id（gpt-image-2 / seedance-2.0），findModel 照样认，不用迁数据。
 import { primaryRouteFor } from './model-routes.mjs'
+import { imageCredits, videoCredits, videoPriceTable } from './media-pricing.mjs'
 
 // 图片比例对应到上游的 size：与 v0.9.165 起真调过的三个尺寸一致，不凭空加尺寸。
 export const IMAGE_SIZES = {
@@ -91,67 +95,98 @@ const IMAGE_MODES = [
   { id: 'reference', label: '参考图', minRefs: 1, maxRefs: 1, imageRefs: 1, videoRefs: 0, hint: '带一张参考图，按它的主体与风格重画' },
 ]
 
-export const MEDIA_MODEL_SPECS = [
-  {
-    id: 'gpt-image-2',
-    kind: 'image',
-    label: 'GPT Image 2',
-    platform: '平台图像通道',
-    // 文生图 2026-11-17 / 11-18 真调过（含 9:16、16:9）；参考图走 /images/edits，这轮没真调过
-    verified: true,
-    referenceVerified: false,
-    modes: IMAGE_MODES,
-    ratios: Object.keys(IMAGE_SIZES),
-    durations: [],
-    resolutions: [],
-    credits: () => Number(config.credits.prices.image_gen) || 5,
-  },
-  {
-    id: 'seedance-2.0',
-    kind: 'video',
-    label: 'Seedance 2.0',
-    platform: '平台视频通道',
-    verified: true,
-    referenceVerified: false,
-    modes: VIDEO_MODES,
-    ratios: VIDEO_RATIOS,
-    durations: VIDEO_DURATIONS,
-    resolutions: VIDEO_RESOLUTIONS,
-    credits: () => Number(config.credits.prices.video_gen) || 15,
-  },
-  {
-    id: 'seedance-2.0-fast',
-    kind: 'video',
-    label: 'Seedance 2.0 · 极速',
-    platform: '平台视频通道',
-    verified: false,
-    referenceVerified: false,
-    modes: VIDEO_MODES,
-    ratios: VIDEO_RATIOS,
-    durations: VIDEO_DURATIONS,
-    resolutions: VIDEO_RESOLUTIONS,
-    credits: () => Number(config.credits.prices.video_gen) || 15,
-  },
-]
+// ── 显示模型 ↔ 通道 ───────────────────────────────────────────────────────
+// 用户在界面上看到的是「一个模型」，底下可能有好几条上游通道（不同平台 / 不同 Key /
+// 不同上游模型名，价钱也不一样）。这里只写「哪个显示模型由哪几条通道兜底」，不写 Key：
+// Key 与 baseUrl 都在后台的 Key 池里，换通道不用改代码。
+export const IMAGE_CHAIN = ['gpt-image-2.6', 'gpt-image-2.5', 'gpt-image-2']
+export const VIDEO_CHAIN = ['seedance-2.0-fast', 'seedance-2.0']
+export const DISPLAY_LABELS = {
+  'visionqa-image': 'VisionQA通用图片模型',
+  'visionqa-video': 'VisionQA通用视频模型',
+}
+export const DISPLAY_IDS = { image: 'visionqa-image', video: 'visionqa-video' }
 
-/** 某个能力下的默认模型：优先取统一路由定下的主模型，没定就用表里第一个。 */
-export function defaultModelFor(kind) {
-  const primary = primaryRouteFor(kind === 'image' ? 'image' : 'video')
-  const specs = MEDIA_MODEL_SPECS.filter((item) => item.kind === kind)
-  const matched = primary && specs.find((item) => item.id.toLowerCase() === String(primary.model).toLowerCase())
-  return (matched || specs[0] || {}).id || ''
+const CHANNEL_LABELS = {
+  'gpt-image-2.6': 'GeteAPI · gpt-image-2.6',
+  'gpt-image-2.5': 'GeteAPI · gpt-image-2.5（备用）',
+  'gpt-image-2': 'GeteAPI · gpt-image-2（备用）',
+  'seedance-2.0-fast': 'SeeAPI · seedance-2.0-fast',
+  'seedance-2.0': 'SeeAPI · seedance-2.0（备用）',
 }
 
+function makeSpec({ id, kind, display, verified, referenceVerified }) {
+  const durations = kind === 'video' ? VIDEO_DURATIONS.slice() : []
+  const resolutions = kind === 'video' ? VIDEO_RESOLUTIONS.slice() : []
+  return {
+    id,
+    kind,
+    display,
+    label: DISPLAY_LABELS[display],
+    platform: kind === 'image' ? '平台图像通道' : '平台视频通道',
+    upstreamLabel: CHANNEL_LABELS[id] || id,
+    verified: Boolean(verified),
+    referenceVerified: Boolean(referenceVerified),
+    modes: kind === 'image' ? IMAGE_MODES : VIDEO_MODES,
+    ratios: kind === 'image' ? Object.keys(IMAGE_SIZES) : VIDEO_RATIOS.slice(),
+    durations,
+    resolutions,
+    // 价钱一律按这条通道的上游成本算：图片按张，视频按「秒 × 清晰度」
+    credits: (selection = {}) =>
+      kind === 'image'
+        ? imageCredits(id)
+        : videoCredits(id, Number(selection.duration) || durations[0], selection.resolution || resolutions[0]),
+  }
+}
+
+export const MEDIA_MODEL_SPECS = [
+  // 图片：2.6 最便宜（$0.028），2.5 / 2 同价（$0.048）作备用
+  makeSpec({ id: 'gpt-image-2.6', kind: 'image', display: 'visionqa-image', verified: false, referenceVerified: false }),
+  makeSpec({ id: 'gpt-image-2.5', kind: 'image', display: 'visionqa-image', verified: false, referenceVerified: false }),
+  makeSpec({ id: 'gpt-image-2', kind: 'image', display: 'visionqa-image', verified: true, referenceVerified: false }),
+  // 视频：fast 最便宜，seedance-2.0 作备用（2026-11-18 真调过 4s/8s、480p/720p）
+  makeSpec({ id: 'seedance-2.0-fast', kind: 'video', display: 'visionqa-video', verified: false, referenceVerified: false }),
+  makeSpec({ id: 'seedance-2.0', kind: 'video', display: 'visionqa-video', verified: true, referenceVerified: false }),
+]
+
+/**
+ * 一个显示模型底下按价钱从便宜到贵排好的通道。
+ * 传上游 id（老记录里的 gpt-image-2）也能找回同一个显示模型，不迁数据。
+ */
+export function chainFor(kind) {
+  const specs = MEDIA_MODEL_SPECS.filter((item) => item.kind === kind)
+  const order = kind === 'image' ? IMAGE_CHAIN : VIDEO_CHAIN
+  const byId = new Map(specs.map((item) => [item.id.toLowerCase(), item]))
+  return order.map((id) => byId.get(id.toLowerCase())).filter(Boolean)
+}
+
+/** 某项能力的显示模型 id：快捷创作的下拉里只有这一个。 */
+export function defaultModelFor(kind) {
+  const display = DISPLAY_IDS[kind === 'image' ? 'image' : 'video']
+  const primary = primaryRouteFor(kind === 'image' ? 'image' : 'video')
+  // 统一路由还指着某条老上游 id 时也认：这类记录一旦出现，仍归到同一个显示模型
+  return primary && primary.model && String(primary.model).startsWith('visionqa-') ? String(primary.model) : display
+}
+
+/** 显示模型 id 或任一上游 id → 主通道（最便宜那条）。 */
 export function findModel(kind, modelId) {
-  const id = String(modelId || '').trim()
+  const id = String(modelId || '').trim().toLowerCase()
   if (!id) return null
-  return MEDIA_MODEL_SPECS.find((item) => item.kind === kind && item.id.toLowerCase() === id.toLowerCase()) || null
+  const specs = MEDIA_MODEL_SPECS.filter((item) => item.kind === kind)
+  const matched = specs.find((item) => item.display === id) || specs.find((item) => item.id.toLowerCase() === id)
+  if (matched) return chainFor(kind)[0] || matched
+  return null
 }
 
 /** 给界面的形状：不带函数，也不带任何上游地址与 Key 信息。 */
 export function publicModel(spec) {
+  const chain = chainFor(spec.kind, spec.display)
+  const priceTable = spec.kind === 'video' ? videoPriceTable(spec.id, spec.durations, spec.resolutions) : {}
+  const base = spec.kind === 'image'
+    ? imageCredits(spec.id)
+    : videoCredits(spec.id, spec.durations[0], spec.resolutions[0])
   return {
-    id: spec.id,
+    id: spec.display,
     kind: spec.kind,
     label: spec.label,
     platform: spec.platform,
@@ -169,18 +204,22 @@ export function publicModel(spec) {
     ratios: spec.ratios.slice(),
     durations: spec.durations.slice(),
     resolutions: spec.resolutions.slice(),
-    credits: spec.credits(),
+    credits: base,
+    // 视频按秒算钱：每个「时长 × 清晰度」的价一次给全（key 形如 "8|720p"），界面不用自己乘
+    priceTable,
+    // 后台用：这个显示模型底下有几条通道兜底（不暴露通道名与 Key）
+    channelCount: chain.length,
   }
 }
 
-/** 界面要画的下拉内容：按能力分组，图片一组、视频一组。 */
+/** 界面要画的下拉内容：按能力分组，图片一组、视频一组，各只有一个显示模型。 */
 export function listMediaModels() {
-  const image = MEDIA_MODEL_SPECS.filter((item) => item.kind === 'image').map(publicModel)
-  const video = MEDIA_MODEL_SPECS.filter((item) => item.kind === 'video').map(publicModel)
+  const image = chainFor('image').slice(0, 1).map(publicModel)
+  const video = chainFor('video').slice(0, 1).map(publicModel)
   return {
     image,
     video,
-    defaults: { image: defaultModelFor('image'), video: defaultModelFor('video') },
+    defaults: { image: DISPLAY_IDS.image, video: DISPLAY_IDS.video },
     limits: { imageRefs: SEEDANCE_IMAGE_REFS, videoRefs: SEEDANCE_VIDEO_REFS },
   }
 }
@@ -248,7 +287,10 @@ export function resolveSelection(input = {}) {
     return {
       kind,
       spec,
-      model: spec.id,
+      model: spec.display,
+      modelLabel: spec.label,
+      upstream: spec.id,
+      chain: chainFor(kind).map((item) => item.id),
       mode: mode.id,
       modeSpec: mode,
       ratio,
@@ -287,14 +329,16 @@ export function resolveSelection(input = {}) {
   return {
     kind,
     spec,
-    model: spec.id,
+    model: spec.display,
+    upstream: spec.id,
+    chain: chainFor(kind).map((item) => item.id),
     mode: mode.id,
     modeSpec: mode,
     ratio,
     size: '',
     duration,
     resolution,
-    credits: spec.credits(),
+    credits: spec.credits({ duration, resolution }),
     assetIds,
     locked: lockedOut,
   }

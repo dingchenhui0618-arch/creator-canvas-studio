@@ -1,6 +1,6 @@
 // 工作流「出视频」节点（v0.9.200）：不调真实上游，用本地假上游把
 //   扣费 → 建任务 → 轮询 → 出片 → 下载落盘 → 节点输出 → 进度事件 → 失败 / 超时退款 → 产物鉴权
-// 整条链跑一遍。真实出视频会花上游额度（一条约 15 积分 / ¥1.4），这里一次都不调。
+// 整条链跑一遍。真实出视频会花上游额度（8 秒 720p 约 55 积分 / ¥4.9），这里一次都不调。
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import http from 'node:http'
@@ -124,21 +124,21 @@ function videoFlow(ownerId, prompt, nodeId = 'video-1') {
   )
 }
 
-test('出视频节点：真出一段、扣 15 积分、产物落在这次运行目录里、进度有推给页面', async () => {
+test('出视频节点：真出一段、扣 55 积分（8 秒 720p 按上游成本）、产物落在这次运行目录里、进度有推给页面', async () => {
   const before = credits.balanceOf(owner.id)
   const events = []
   const run = await flows.runFlow(videoFlow(owner.id, '一只橘猫在木桌上打盹'), { onEvent: (event) => events.push(event) })
   assert.equal(run.status, 'success')
   const videoNode = run.nodes.find((item) => item.kind === 'video')
   assert.equal(videoNode.status, 'success')
-  assert.equal(videoNode.output.credits, 15)
+  assert.equal(videoNode.output.credits, 55)
   assert.equal(videoNode.output.ratio, '9:16')
   assert.equal(videoNode.output.duration, 8)
   assert.equal(videoNode.output.resolution, '720p')
-  assert.equal(videoNode.output.modelLabel, 'Seedance 2.0')
+  assert.equal(videoNode.output.modelLabel, 'VisionQA通用视频模型')
   assert.match(videoNode.output.videoUrl, /^\/api\/runs\/[\w-]+\/assets\/video-1\.mp4$/)
   // 扣费是真的扣，不是只写在输出里
-  assert.equal(credits.balanceOf(owner.id), before - 15)
+  assert.equal(credits.balanceOf(owner.id), before - 55)
   // 落盘：DATA_DIR/runs/<runId>/video-1.mp4，内容就是上游给的那段
   const file = path.join(dir, 'runs', run.id, 'video-1.mp4')
   assert.equal(fs.readFileSync(file).equals(tinyMp4), true)
@@ -148,9 +148,9 @@ test('出视频节点：真出一段、扣 15 积分、产物落在这次运行�
   assert.equal(progress[0].nodeId, 'video-1')
   assert.equal(typeof progress[progress.length - 1].waitedMs, 'number')
   // 运行记录：视频积分单独一项，并算进总花费
-  assert.equal(run.videoCredits, 15)
+  assert.equal(run.videoCredits, 55)
   assert.equal(run.imageCredits, 0)
-  assert.equal(run.spentTotal, (run.credits?.refunded ? 0 : Number(run.credits?.cost) || 0) + 15)
+  assert.equal(run.spentTotal, (run.credits?.refunded ? 0 : Number(run.credits?.cost) || 0) + 55)
   // 最终输出里要能看见这段视频，不然用户拿到的只是一段话
   assert.match(run.output, /\/api\/runs\/.+\/assets\/video-1\.mp4/)
   const outputNode = run.nodes.find((item) => item.kind === 'output')
@@ -192,6 +192,8 @@ test('出视频超时：按失败全额退，错误里写清等了多少秒', as
 })
 
 test('节点 id 带斜杠 / 上跳也只落在 runs/<runId>/ 里，写不出运行目录', async () => {
+  // 8 秒 720p 现在按上游成本要 55 积分，前面的用例把余额花得差不多了，先补足
+  credits.grant(owner.id, 500, { note: 'flow-video 越界写入用例' })
   const run = await flows.runFlow(videoFlow(owner.id, '越界写入检查', '../evil'))
   const videoNode = run.nodes.find((item) => item.kind === 'video')
   assert.equal(videoNode.status, 'success')
@@ -203,16 +205,17 @@ test('节点 id 带斜杠 / 上跳也只落在 runs/<runId>/ 里，写不出运�
 
 test('运行前估价：出视频节点按模型单价，比例 / 时长 / 清晰度来自唯一真源', () => {
   const options = video.videoNodeOptions()
-  assert.equal(options.defaultModel, 'seedance-2.0')
+  assert.equal(options.defaultModel, 'visionqa-video')
   assert.equal(options.defaultRatio, '9:16')
   assert.equal(options.defaultDuration, 4)
   assert.equal(options.defaultResolution, '720p')
-  assert.ok(options.models.some((item) => item.id === 'seedance-2.0' && item.credits === 15))
+  assert.ok(options.models.some((item) => item.id === 'visionqa-video' && item.credits === 28))
   assert.ok(options.durations.some((item) => item.seconds === 8))
   assert.ok(options.resolutions.some((item) => item.value === '480p'))
   assert.ok(options.ratios.some((item) => item.ratio === '16:9'))
-  assert.equal(video.videoNodesCost([{ type: 'video' }, { type: 'video' }, { type: 'image' }], ''), 30)
-  assert.equal(video.videoNodeCredits('seedance-2.0'), 15)
+  // 两个视频节点各 28（4 秒 720p），一个图片节点 3
+  assert.equal(video.videoNodesCost([{ type: 'video' }, { type: 'video' }, { type: 'image' }], ''), 56)
+  assert.equal(video.videoNodeCredits('visionqa-video'), 28)
 })
 
 // ---------- 产物接口：鉴权 + 视频要支持 Range ----------
@@ -252,6 +255,7 @@ async function callAsset(target, cookie, headers) {
 }
 
 test('运行产物视频：主人能读、支持 Range、别人 404、未登录 401', async () => {
+  credits.grant(owner.id, 500, { note: 'flow-video 产物接口用例' })
   const run = await flows.runFlow(videoFlow(owner.id, '归属检查的橘猫视频'))
   const videoNode = run.nodes.find((item) => item.kind === 'video')
   const target = videoNode.output.videoUrl

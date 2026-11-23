@@ -311,6 +311,7 @@ function mediaMeta(task) {
     kind: task.kind,
     status: task.status,
     model: task.model,
+    modelLabel: task.modelLabel || '',
     mode: task.mode || '',
     ratio: task.ratio || '',
     size: task.size || '',
@@ -346,7 +347,7 @@ function mediaReply(task, plan) {
   if (plan.locked?.resolution) lockedLabels.push('清晰度 ' + (task.resolution || plan.resolution))
   const refs = Array.isArray(task.assets) ? task.assets.length : 0
   const spec = [
-    task.model,
+    task.modelLabel || task.model,
     task.ratio,
     task.kind === 'image' ? task.size : '',
     task.kind === 'video' ? task.duration + ' 秒' : '',

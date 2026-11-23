@@ -71,8 +71,8 @@ export default function MediaTaskCard({ media }: { media: ChatMediaInfo }) {
   const refs = media.assets?.length ?? 0
   const spec = (
     media.kind === 'image'
-      ? [media.model, media.ratio, media.size]
-      : [media.model, media.ratio, media.duration ? media.duration + ' 秒' : '', media.resolution]
+      ? [media.modelLabel || media.model, media.ratio, media.size]
+      : [media.modelLabel || media.model, media.ratio, media.duration ? media.duration + ' 秒' : '', media.resolution]
   )
     .concat(refs ? ['参考 ' + refs + ' 张'] : [])
     .filter(Boolean)

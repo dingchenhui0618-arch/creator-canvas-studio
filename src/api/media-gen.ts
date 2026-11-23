@@ -47,6 +47,10 @@ export type MediaModel = {
   durations: number[]
   resolutions: string[]
   credits: number
+  // 视频按「秒 × 清晰度」算钱：服务端把每个档位的积分价算好了（key 形如 "8|720p"），界面直接查
+  priceTable: Record<string, number>
+  // 这个显示模型底下有几条通道兜底（出图 3 条、出视频 2 条），只给界面说清「一个模型、几条路」
+  channelCount: number
 }
 
 export type MediaModelList = {
@@ -78,6 +82,7 @@ export type MediaTask = {
   status: MediaTaskStatus
   prompt: string
   model: string
+  modelLabel: string
   mode: string
   ratio: string
   size: string

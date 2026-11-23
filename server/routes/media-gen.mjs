@@ -12,10 +12,11 @@ import path from 'node:path'
 import { config } from '../config.mjs'
 import { currentUser } from '../auth.mjs'
 import { charge, outstandingCharge, refund } from '../credits.mjs'
-import { createVideoTask, generateImage, generateImageEdit, pollVideoTask } from '../gateway.mjs'
+import { pollVideoTask } from '../gateway.mjs'
+import { createVideoChain, runImageChain } from '../media-route.mjs'
 import { logEvent } from '../log.mjs'
 import { ASSET_LIMITS, assetUsage, listMediaAssets, locateMediaAsset, readMediaAsset, removeMediaAsset, saveMediaAsset } from '../media-assets.mjs'
-import { listMediaModels, resolveSelection } from '../media-models.mjs'
+import { chainFor, listMediaModels, resolveSelection } from '../media-models.mjs'
 import { DOWNLOAD_TIMEOUT_MS, downloadAsset, extensionFor, extractVideoUrl, progressOf } from '../media-fetch.mjs'
 import { readBinaryBody } from '../body-reader.mjs'
 import { writeFileAtomic } from '../atomic-write.mjs'
@@ -97,6 +98,7 @@ export function publicTask(task) {
     status: task.status,
     prompt: task.prompt,
     model: task.model,
+    modelLabel: task.modelLabel || '',
     mode: task.mode || '',
     ratio: task.ratio || '',
     size: task.size || '',
@@ -171,6 +173,10 @@ function newTask(userId, kind, input) {
       height: asset.height || null,
       duration: asset.duration || null,
     })),
+    // 显示模型（用户认的名字）与实际走通的那条上游通道分开记：界面显示前者，排障看后者
+    modelLabel: input.modelLabel || '',
+    upstream: input.upstream || '',
+    chain: Array.isArray(input.chain) ? input.chain.slice() : [],
     progress: null,
     upstreamTaskId: '',
     file: null,
@@ -257,7 +263,7 @@ function upstreamVideoMode(input) {
   const images = input.assets.filter((asset) => asset.kind === 'image').length
   const videos = input.assets.filter((asset) => asset.kind === 'video').length
   if (!images && !videos) return ''
-  if (String(input.model).startsWith('seedance-2.0') && images && !videos) return 'image2video'
+  if (String(input.upstream || input.model).startsWith('seedance-2.0') && images && !videos) return 'image2video'
   return 'mixed2video'
 }
 
@@ -321,21 +327,13 @@ async function finishImageTask(user, task) {
   try {
     // 有参考图就走 /images/edits（multipart），没有就走原来的 /images/generations
     const reference = imageRefs.get(task.id)
-    const result = reference
-      ? await generateImageEdit({
-          model: task.model,
-          prompt: task.prompt,
-          size: task.size,
-          image: reference.buffer,
-          mime: reference.mime,
-          filename: reference.filename,
-        })
-      : await generateImage({
-          model: task.model,
-          prompt: task.prompt,
-          size: task.size,
-          n: 1,
-        })
+    // 最便宜的通道先试，被上游拒了才换下一条（超时/结果不明不换，见 media-route.mjs）
+    const { result, model: usedModel } = await runImageChain({
+      chain: task.chain && task.chain.length ? task.chain : chainFor('image').map((item) => item.id),
+      payload: { prompt: task.prompt, size: task.size, n: 1 },
+      edit: reference ? { image: reference.buffer, mime: reference.mime, filename: reference.filename } : null,
+    })
+    task.upstream = usedModel
     const url = Array.isArray(result?.urls) ? result.urls[0] : ''
     const asset = await downloadAsset(url, 'image')
     task.file = await saveResult(task, asset)
@@ -403,8 +401,9 @@ export async function runVideo(user, input) {
   const mode = upstreamVideoMode(input)
   try {
     await writeTask(task)
-    const created = await createVideoTask({
-      model: input.model,
+    const { created, model: usedModel } = await createVideoChain({
+      chain: input.chain && input.chain.length ? input.chain : chainFor('video').map((item) => item.id),
+      payload: {
       prompt: input.prompt,
       duration: input.duration,
       resolution: input.resolution,
@@ -418,7 +417,9 @@ export async function runVideo(user, input) {
         bytes: asset.buffer,
       })),
       ...(mode ? { mode } : {}),
+      },
     })
+    task.upstream = usedModel
     task.upstreamTaskId = String(created?.id || '')
     if (!task.upstreamTaskId) throw new Error('上游没有返回视频任务 id')
     task.updatedAt = nowIso()

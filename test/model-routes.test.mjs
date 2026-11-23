@@ -15,20 +15,22 @@ test('四条能力各有一条主路由，型号与线上一致', () => {
     routes.map((route) => route.capability),
     ['text', 'vision', 'image', 'video'],
   )
-  assert.equal(primaryRouteFor('image').model, 'gpt-image-2')
-  assert.equal(primaryRouteFor('video').model, 'seedance-2.0')
+  // r298：主路由指向真正在用的最便宜通道（备用通道由 media-route 兜底，不进主路由）
+  assert.equal(primaryRouteFor('image').model, 'gpt-image-2.6')
+  assert.equal(primaryRouteFor('video').model, 'seedance-2.0-fast')
   // 文本与视觉来自环境变量，至少要有个值，不能是空串
   assert.ok(primaryRouteFor('text').model.length > 0)
   assert.ok(primaryRouteFor('vision').model.length > 0)
 })
 
 test('同能力下的其它模型都是仅参考', () => {
-  assert.equal(routeRoleFor('image', 'gpt-image-2'), 'primary')
-  assert.equal(routeRoleFor('image', 'GPT-Image-2'), 'primary')
+  assert.equal(routeRoleFor('image', 'gpt-image-2.6'), 'primary')
+  assert.equal(routeRoleFor('image', 'GPT-Image-2.6'), 'primary', '型号比较不区分大小写')
   assert.equal(routeRoleFor('image', 'gpt-image-2.5'), 'reference')
+  assert.equal(routeRoleFor('image', 'gpt-image-2'), 'reference')
   assert.equal(routeRoleFor('image', 'nano-banana-2'), 'reference')
-  assert.equal(routeRoleFor('video', 'seedance-2.0'), 'primary')
-  assert.equal(routeRoleFor('video', 'seedance-2.0-fast'), 'reference')
+  assert.equal(routeRoleFor('video', 'seedance-2.0-fast'), 'primary')
+  assert.equal(routeRoleFor('video', 'seedance-2.0'), 'reference')
   assert.equal(routeRoleFor('video', 'minimax-h3'), 'reference')
   // 能力对不上（拿文本模型问图片）不能算主路由，也不能算同能力参考
   assert.equal(routeRoleFor('image', 'deepseek-flash'), 'reference')
@@ -37,18 +39,20 @@ test('同能力下的其它模型都是仅参考', () => {
 
 test('汇总按目录现算：主路由 4 条，仅参考数量随目录变化', () => {
   const rows = [
-    { model: 'gpt-image-2', capability: 'image', offers: [{ platform: 'geteapi', price: { text: '$0.048 / 次' } }] },
+    { model: 'gpt-image-2.6', capability: 'image', offers: [{ platform: 'geteapi', price: { text: '$0.028 / 次' } }] },
     { model: 'gpt-image-2.5', capability: 'image', offers: [] },
     { model: 'seedance-2.0', capability: 'video', offers: [{ platform: 'seeapi', price: { text: '¥1.4 / 次' } }] },
     { model: 'minimax-h3', capability: 'video', offers: [] },
     { model: 'some-text', capability: 'text', offers: [] },
   ]
   const summary = routeSummary(rows)
-  assert.equal(summary.referenceCount, 3)
-  assert.equal(summary.primaryCount, 2)
+  // 图片主路由换成 2.6 之后，目录里的 gpt-image-2.5 与 seedance-2.0 都成了仅参考
+  assert.equal(summary.referenceCount, 4)
+  // 这批样例里视频主路由是 seedance-2.0-fast，而样例只给了 seedance-2.0，所以只对上图片这一条
+  assert.equal(summary.primaryCount, 1)
   const image = summary.routes.find((route) => route.capability === 'image')
   assert.equal(image.inCatalog, true)
-  assert.equal(image.price.text, '$0.048 / 次')
+  assert.equal(image.price.text, '$0.028 / 次')
   assert.equal(image.referenceCount, 1)
 
   const empty = routeSummary([])

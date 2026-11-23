@@ -11,8 +11,10 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { config } from './config.mjs'
 import { charge, outstandingCharge, refund } from './credits.mjs'
-import { createVideoTask, pollVideoTask } from './gateway.mjs'
+import { pollVideoTask } from './gateway.mjs'
+import { createVideoChain } from './media-route.mjs'
 import {
+  chainFor,
   VIDEO_DURATIONS,
   VIDEO_RATIOS,
   VIDEO_RESOLUTIONS,
@@ -97,7 +99,8 @@ export async function runVideoGeneration({
   const seconds = VIDEO_DURATIONS.includes(Number(duration)) ? Number(duration) : FLOW_VIDEO_DEFAULT_DURATION
   const quality = VIDEO_RESOLUTIONS.includes(String(resolution)) ? String(resolution) : FLOW_VIDEO_DEFAULT_RESOLUTION
   const aspect = VIDEO_RATIOS.includes(String(ratio)) ? String(ratio) : FLOW_VIDEO_DEFAULT_RATIO
-  const credits = Number(spec.credits()) || 0
+  // 视频按「秒 × 清晰度」算钱：8 秒 720p 比 4 秒 480p 贵，不能一口价
+  const credits = Number(spec.credits({ duration: seconds, resolution: quality })) || 0
   const ref = ('run:' + runId + ':' + nodeId).slice(0, 190)
   // 目录先算出来：runId 不合法要在扣费之前失败，不然钱扣了却存不下结果
   const dir = runDirOf(runId)
@@ -117,13 +120,16 @@ export async function runVideoGeneration({
   const stepMs = Math.max(20, Number(pollMs) || Number(config.flow.videoPollMs) || 4000)
   let taskId = ''
   try {
-    const created = await createVideoTask({
-      model: spec.id,
+    // 最便宜的通道先试，被上游拒了才换下一条（任务一旦建起来就不再重提，见 media-route.mjs）
+    const { created, model: usedModel } = await createVideoChain({
+      chain: chainFor('video').map((item) => item.id),
+      payload: {
       prompt: text,
       duration: seconds,
       resolution: quality,
       // 上游强制要这个字段（缺了就是 400 validation_error），不传等于每次都失败
       aspect_ratio: aspect,
+      },
     })
     taskId = String(created?.id || created?.taskId || '')
     if (!taskId) throw new Error('上游没有返回视频任务编号')
@@ -162,8 +168,9 @@ export async function runVideoGeneration({
             ' · 用时 ' + elapsed + ' 秒 · 本次 ' + credits + ' 积分\n提示词：' + text,
           videoPath: 'runs/' + runId + '/' + fileName,
           videoUrl: '/api/runs/' + runId + '/assets/' + fileName,
-          model: spec.id,
+          model: spec.display,
           modelLabel: spec.label,
+          upstream: usedModel,
           ratio: aspect,
           duration: seconds,
           resolution: quality,

@@ -103,19 +103,19 @@ function imageFlow(ownerId, prompt) {
   )
 }
 
-test('出图节点：真的画一张、扣 5 积分、产物落在这次运行目录里', async () => {
+test('出图节点：真的画一张、扣 3 积分（最便宜的 2.6）、产物落在这次运行目录里', async () => {
   const before = credits.balanceOf(owner.id)
   const run = await flows.runFlow(imageFlow(owner.id, '一只橘猫坐在木桌上'))
   assert.equal(run.status, 'success')
   const imageNode = run.nodes.find((item) => item.kind === 'image')
   assert.equal(imageNode.status, 'success')
-  assert.equal(imageNode.output.credits, 5)
+  assert.equal(imageNode.output.credits, 3)
   assert.equal(imageNode.output.ratio, '9:16')
   assert.equal(imageNode.output.size, '1024x1536')
-  assert.equal(imageNode.output.modelLabel, 'GPT Image 2')
+  assert.equal(imageNode.output.modelLabel, 'VisionQA通用图片模型')
   assert.match(imageNode.output.imageUrl, /^\/api\/runs\/[\w-]+\/assets\/image-1\.png$/)
   // 扣费是真的扣，不是只写在输出里
-  assert.equal(credits.balanceOf(owner.id), before - 5)
+  assert.equal(credits.balanceOf(owner.id), before - 3)
   // 落盘：DATA_DIR/runs/<runId>/image-1.png，内容是上游给的那张
   const file = path.join(dir, 'runs', run.id, 'image-1.png')
   assert.equal(fs.readFileSync(file).equals(tinyPng), true)

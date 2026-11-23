@@ -290,14 +290,14 @@ export function parseMediaIntent(raw) {
   }
 
   const notes = []
-  // 模型：只认表里真的有的那几档，说错了不猜，按默认模型走（提示里说明）
-  let model = spec.id
+  // 模型：记录里写显示模型 id（用户认的名字），上游型号只在服务端通道里出现
+  let model = spec.display
   if (kind === 'video') {
     const fast = body.match(/seedance[\s-]*2\.0[\s-]*(?:fast|极速)/i)
     if (fast) {
       const fastSpec = findModel('video', 'seedance-2.0-fast')
       if (fastSpec) {
-        model = fastSpec.id
+        model = fastSpec.display
         body = body.replace(fast[0], ' ')
       }
     }

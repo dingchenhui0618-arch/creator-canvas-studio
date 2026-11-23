@@ -13,14 +13,14 @@ const { parseMediaIntent } = await import('../server/media-intent.mjs')
 test('斜杠指令：比例、时长、清晰度都认出来，参数词从提示词里拿掉', () => {
   const image = parseMediaIntent('/生图 9:16 咖啡店门口的雨夜海报')
   assert.equal(image.kind, 'image')
-  assert.equal(image.model, 'gpt-image-2')
+  assert.equal(image.model, 'visionqa-image')
   assert.equal(image.ratio, '9:16')
   assert.equal(image.prompt, '咖啡店门口的雨夜海报', '比例不该留在提示词里')
   assert.equal(image.duration, null)
 
   const video = parseMediaIntent('/生视频 16:9 8秒 480p 雨夜街头的橘猫')
   assert.equal(video.kind, 'video')
-  assert.equal(video.model, 'seedance-2.0')
+  assert.equal(video.model, 'visionqa-video')
   assert.equal(video.ratio, '16:9')
   assert.equal(video.duration, 8)
   assert.equal(video.resolution, '480p')
@@ -89,7 +89,7 @@ test('写死的比例 / 秒数 / 清晰度：原样保留并标记 locked，不�
 
 test('极速模型认得出；提示词过长截到 1200 字并说明', () => {
   const fast = parseMediaIntent('/生视频 seedance 2.0 fast 海边日落')
-  assert.equal(fast.model, 'seedance-2.0-fast')
+  assert.equal(fast.model, 'visionqa-video')
   assert.equal(fast.prompt, '海边日落')
 
   const long = parseMediaIntent('/生图 ' + '晚霞'.repeat(800))

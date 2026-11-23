@@ -12,8 +12,8 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { config } from './config.mjs'
 import { charge, outstandingCharge, refund } from './credits.mjs'
-import { generateImage } from './gateway.mjs'
-import { IMAGE_SIZES, defaultModelFor, findModel, listMediaModels } from './media-models.mjs'
+import { chainFor, IMAGE_SIZES, defaultModelFor, findModel, listMediaModels } from './media-models.mjs'
+import { runImageChain } from './media-route.mjs'
 import { downloadAsset, extensionFor } from './media-fetch.mjs'
 
 export const FLOW_IMAGE_RATIOS = Object.keys(IMAGE_SIZES)
@@ -104,7 +104,11 @@ export async function runImageGeneration({ ownerId, runId, nodeId, prompt, ratio
     throw new Error('积分不足：这次出图需要 ' + credits + ' 积分，当前余额 ' + (paid.balance ?? 0) + ' 积分')
   }
   try {
-    const result = await generateImage({ model: spec.id, prompt: text, size, n: 1 })
+    // 最便宜的通道先试，被上游拒了才换下一条（超时/结果不明不换，见 media-route.mjs）
+    const { result, model: usedModel } = await runImageChain({
+      chain: chainFor('image').map((item) => item.id),
+      payload: { prompt: text, size, n: 1 },
+    })
     const url = Array.isArray(result?.urls) ? result.urls[0] : ''
     if (!url) throw new Error('出图上游没有返回图片地址')
     const asset = await downloadAsset(url, 'image')
@@ -118,8 +122,9 @@ export async function runImageGeneration({ ownerId, runId, nodeId, prompt, ratio
       text: '出图完成：' + spec.label + ' · ' + ratioLabel + '（' + size + '）· 本次 ' + credits + ' 积分\n提示词：' + text,
       imagePath: 'runs/' + runId + '/' + fileName,
       imageUrl: '/api/runs/' + runId + '/assets/' + fileName,
-      model: spec.id,
+      model: spec.display,
       modelLabel: spec.label,
+      upstream: usedModel,
       ratio,
       size,
       bytes: asset.buffer.length,
