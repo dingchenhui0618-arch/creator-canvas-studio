@@ -22,6 +22,43 @@ export const IMAGE_SIZES = {
   '16:9': '1536x1024',
 }
 
+/**
+ * 用户自己写死的比例 → 上游的 size（r293）。
+ *
+ * 为什么要有这条：表里那三档是「真调过」的，但用户会在提示词里直接写死尺寸
+ * （「4:5」「2048x2048」）。既然他明确写了，就不该被悄悄改成 1:1 —— 按他写的提交，
+ * 上游不认就失败全额退回，并在卡片上说清上游到底收哪几档。
+ */
+export function sizeFromRatio(ratio, longSide = 1536) {
+  const matched = /^(\d{1,2}):(\d{1,2})$/.exec(String(ratio || '').trim())
+  if (!matched) return ''
+  const a = Number(matched[1])
+  const b = Number(matched[2])
+  if (!a || !b || a > 64 || b > 64) return ''
+  const long = Math.max(a, b)
+  const round8 = (value) => Math.min(4096, Math.max(64, Math.round(value / 8) * 8))
+  return round8((a / long) * longSide) + 'x' + round8((b / long) * longSide)
+}
+
+/** 「2048x2048」「2048×2048」「2048 * 2048」都认；不是这种形状就回空，交给比例那条路。 */
+export function normalizeSize(value) {
+  const matched = /^(\d{2,4})\s*[x×*]\s*(\d{2,4})$/i.exec(String(value || '').trim())
+  if (!matched) return ''
+  const w = Number(matched[1])
+  const h = Number(matched[2])
+  if (!w || !h || w < 64 || h < 64 || w > 4096 || h > 4096) return ''
+  return w + 'x' + h
+}
+
+export function normalizeRatio(value) {
+  const matched = /^(\d{1,2})\s*:\s*(\d{1,2})$/.exec(String(value || '').trim())
+  if (!matched) return ''
+  const a = Number(matched[1])
+  const b = Number(matched[2])
+  if (!a || !b || a > 64 || b > 64) return ''
+  return a + ':' + b
+}
+
 export const VIDEO_RATIOS = ['9:16', '16:9', '1:1']
 export const VIDEO_DURATIONS = [4, 8]
 // 顺序就是界面上的默认值：720p 在前（与这轮之前的默认一致），480p 留给想省额度的场景
@@ -186,9 +223,28 @@ export function resolveSelection(input = {}) {
   }
   if (mode.maxRefs === 0 && assetIds.length) throw invalid('「' + mode.label + '」不接受参考素材', 'MEDIA_ASSETS_UNEXPECTED')
 
+  // r293：locked = 用户在提示词里明确写死的参数（比例 / 尺寸 / 秒数 / 清晰度）。
+  // 写死的一律按原样提交，不再被默认档位顶掉——上游不认就失败全额退回，由界面说清上游收哪几档。
+  const locked = input.locked && typeof input.locked === 'object' ? input.locked : {}
+  const lockedOut = {}
+
   if (kind === 'image') {
-    const ratio = String(input.ratio || '1:1')
-    if (!spec.ratios.includes(ratio)) throw invalid('比例只能是 ' + spec.ratios.join('、'), 'MEDIA_RATIO')
+    // 只有 locked 的值才越过白名单：界面下拉传的就是表里的档位，走到白名单外说明是拼错了。
+    const wantSize = locked.size ? normalizeSize(input.size) || normalizeSize(locked.size) : ''
+    const wantRatio = normalizeRatio(input.ratio) || normalizeRatio(locked.ratio)
+    const ratio = wantRatio || '1:1'
+    let size = ''
+    if (wantSize) {
+      size = wantSize
+      lockedOut.size = true
+    } else if (spec.ratios.includes(ratio)) {
+      size = IMAGE_SIZES[ratio]
+    } else if (locked.ratio && wantRatio) {
+      // 表里没有这档比例，但用户写死了：按比例算一个尺寸交上去（长边与 1024x1536 同档）
+      size = sizeFromRatio(ratio)
+      lockedOut.ratio = true
+    }
+    if (!size) throw invalid('比例只能是 ' + spec.ratios.join('、'), 'MEDIA_RATIO')
     return {
       kind,
       spec,
@@ -196,22 +252,38 @@ export function resolveSelection(input = {}) {
       mode: mode.id,
       modeSpec: mode,
       ratio,
-      size: IMAGE_SIZES[ratio],
+      size,
       duration: null,
       resolution: '',
       credits: spec.credits(),
       assetIds,
+      locked: lockedOut,
     }
   }
 
-  const duration = Number(input.duration === undefined ? 4 : input.duration)
-  if (!spec.durations.includes(duration)) {
-    throw invalid('视频时长只能是 ' + spec.durations.map((item) => item + ' 秒').join('、'), 'MEDIA_DURATION')
+  const wantDuration = input.duration === undefined || input.duration === null || input.duration === '' ? null : Number(input.duration)
+  let duration = wantDuration === null ? spec.durations[0] : wantDuration
+  if (!Number.isInteger(duration) || duration < 1 || duration > 60) {
+    throw invalid('视频时长只能是 ' + spec.durations.map((item) => item + ' 秒').join('、') + '（写死的秒数要在 1–60 之间）', 'MEDIA_DURATION')
   }
-  const resolution = String(input.resolution || '720p')
-  if (!spec.resolutions.includes(resolution)) throw invalid('分辨率只能是 ' + spec.resolutions.join('、'), 'MEDIA_RESOLUTION')
-  const ratio = String(input.ratio || '9:16')
-  if (!spec.ratios.includes(ratio)) throw invalid('视频比例只能是 ' + spec.ratios.join('、'), 'MEDIA_RATIO')
+  if (!spec.durations.includes(duration)) {
+    if (!locked.duration) throw invalid('视频时长只能是 ' + spec.durations.map((item) => item + ' 秒').join('、'), 'MEDIA_DURATION')
+    lockedOut.duration = true
+  }
+  const wantResolution = String(input.resolution || '').trim().toLowerCase()
+  const resolution = wantResolution || spec.resolutions[0]
+  if (!/^\d{3,4}p$/.test(resolution)) throw invalid('分辨率只能是 ' + spec.resolutions.join('、'), 'MEDIA_RESOLUTION')
+  if (!spec.resolutions.includes(resolution)) {
+    // 界面下拉传的就是表里的值，走到这里说明是用户写死的：认下来，原样提交
+    if (!locked.resolution) throw invalid('分辨率只能是 ' + spec.resolutions.join('、'), 'MEDIA_RESOLUTION')
+    lockedOut.resolution = true
+  }
+  const wantRatio = normalizeRatio(input.ratio) || normalizeRatio(locked.ratio)
+  const ratio = wantRatio || spec.ratios[0]
+  if (!spec.ratios.includes(ratio)) {
+    if (!locked.ratio) throw invalid('视频比例只能是 ' + spec.ratios.join('、'), 'MEDIA_RATIO')
+    lockedOut.ratio = true
+  }
   return {
     kind,
     spec,
@@ -224,5 +296,6 @@ export function resolveSelection(input = {}) {
     resolution,
     credits: spec.credits(),
     assetIds,
+    locked: lockedOut,
   }
 }

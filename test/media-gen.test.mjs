@@ -31,6 +31,8 @@ let lastEditBody = ''
 const refUploads = []
 // 记一次真实打上游的次数：冷却中应当一次都不打，光看错误文案证明不了这一点。
 let imageAttempts = 0
+// r293：用户写死的尺寸要原样发给上游，所以要把生图请求正文留住
+let lastImageBody = null
 // 「永不回包」的上游连接：测试收尾要主动毁掉，否则 server.close() 会一直等着它
 const held = []
 const upstream = http.createServer((req, res) => {
@@ -57,6 +59,7 @@ const upstream = http.createServer((req, res) => {
     if (req.method === 'POST' && req.url === '/v1/images/generations') {
       imageAttempts += 1
       const body = JSON.parse(bodyText || '{}')
+      lastImageBody = body
       const prompt = String(body.prompt || '')
       // 永不回包：专门测「我们等不住、把请求掐断」那条路，掐断后不能再被说成「连不上上游」
       if (prompt.includes('图超时')) {
@@ -986,4 +989,68 @@ test('只说「怎么生成图」：照旧走对话模型，不扣生成积分',
     return true
   })
   assert.notEqual(credits.balanceOf(user.id), before - 5, '不该扣生成积分')
+})
+
+// r293：口语也直接出片，不必先教用户「要以 / 开头」
+test('对话框里说「帮我出个视频，…」：口语也直接开任务，比例进上游', async () => {
+  resetMediaGenRateLimit()
+  const user = newUser('chatspoken')
+  const before = credits.balanceOf(user.id)
+  videoPolls = 0
+
+  const result = await sendChatMessage(user, { content: '帮我出个视频，咖啡店门口的雨夜' })
+  assert.equal(result.cost, 0)
+  assert.equal(result.media.kind, 'video')
+  assert.equal(result.media.duration, 4)
+  assert.equal(credits.balanceOf(user.id), before - 15)
+  assert.equal(lastVideoBody.aspect_ratio, '9:16')
+})
+
+// r293：写死的秒数 / 清晰度不再被默认档位顶掉，原样发给上游；上游不认就失败退款
+test('对话框里写死 1080p 12 秒：原样发给上游，并在回话里说明是照写死提交的', async () => {
+  resetMediaGenRateLimit()
+  const user = newUser('chatlocked')
+  const before = credits.balanceOf(user.id)
+  videoPolls = 0
+
+  const result = await sendChatMessage(user, { content: '/生视频 1080p 12秒 海边日落' })
+  assert.equal(Number(lastVideoBody.duration), 12, '12 秒必须原样交给上游')
+  assert.equal(String(lastVideoBody.resolution), '1080p', '1080p 必须原样交给上游')
+  assert.equal(credits.balanceOf(user.id), before - 15)
+  assert.match(result.reply.content, /写死/)
+  assert.match(result.reply.content, /1080p/)
+})
+
+test('对话框里写死 2048x2048：生图请求里就是 2048x2048，不是 1024x1024', async () => {
+  resetMediaGenRateLimit()
+  const user = newUser('chatimgsize')
+  const before = credits.balanceOf(user.id)
+  lastImageBody = null
+
+  const result = await sendChatMessage(user, { content: '/生图 2048x2048 白底产品图' })
+  assert.equal(result.media.size, '2048x2048')
+  assert.equal(credits.balanceOf(user.id), before - 5)
+  await waitTask(result.media.id, cookieOf(user))
+  assert.equal(lastImageBody.size, '2048x2048', '尺寸必须真的发出去，不能只在元数据里写写')
+})
+
+// 只说了要视频、没说画面：本机没配文本通道就回一句人话，绝不拿空提示词去扣 15 积分
+test('只写「帮我出个视频」且本机没有文本通道：不扣积分、不打上游，回一句补画面', async () => {
+  resetMediaGenRateLimit()
+  const user = newUser('chatnoprompt')
+  const before = credits.balanceOf(user.id)
+  const attempts = imageAttempts
+  const beforeVideoBody = lastVideoBody
+
+  await assert.rejects(
+    () => sendChatMessage(user, { content: '帮我出个视频' }),
+    (error) => {
+      assert.equal(error.status, 400)
+      assert.match(error.message, /补一句画面|后面写清要拍什么/)
+      return true
+    },
+  )
+  assert.equal(credits.balanceOf(user.id), before, '没开任务就不能扣钱')
+  assert.equal(imageAttempts, attempts)
+  assert.equal(lastVideoBody, beforeVideoBody, '一个字都不该发给视频上游')
 })

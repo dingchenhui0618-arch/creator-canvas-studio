@@ -36,8 +36,11 @@ export async function startChatMedia(user, plan, references = []) {
     kind: plan.kind,
     model: plan.model,
     ratio: plan.ratio,
+    // r293：用户在提示词里写死的尺寸 / 秒数 / 清晰度原样带上，参数不在白名单里也照样提交
+    size: plan.size || '',
     duration: plan.duration,
     resolution: plan.resolution,
+    locked: plan.locked || {},
     mode: refs.length ? (plan.kind === 'image' ? 'reference' : 'first') : 'text',
     assets: refs,
   })

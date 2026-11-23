@@ -51,6 +51,18 @@ function isImageFile(file: ChatFile) {
   return file.kind === 'image'
 }
 
+/**
+ * 这一句看起来像生成指令吗（r288 / r293）——**只用来提前说清要扣费**，不参与判定。
+ * 真判定在 server/media-intent.mjs；这里漏判最多是少一句提示，误判也不会让服务端多扣钱。
+ */
+function looksLikeGenCommand(draft: string) {
+  const text = draft.replace(/^\s+/, '')
+  if (/^\/(生图|生视频|图|视频|画图)(\s|$)/.test(text)) return true
+  const polite = /^(请|帮我|帮忙|麻烦|给我|我想|我要|能不能|可以)+/.exec(text)
+  const rest = polite ? text.slice(polite[0].length) : text
+  return /^(出|做|来|拍|整|生成|搞|画)(一|两|个|条|段|支|张|幅|期){0,2}\s*(短视频|视频|图片|图|海报|封面)/.test(rest)
+}
+
 /** 图片没有「多少字」，只能报体积；四舍五入到 KB，小图别显示成 0 KB。 */
 function bytesLabel(bytes: number) {
   if (!bytes) return '图片'
@@ -361,9 +373,10 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
   }, [])
 
   const toolCount = useMemo(() => TOOL_ITEMS.filter((item) => tools[item.id]).length, [tools])
-  // 这一条会不会被当成生成指令（r288）：与服务端同一组前缀，只用来提前说清「要扣生成积分」。
-  // 真正的判定在 server/media-intent.mjs，这里重复的只是那句提示，不参与扣费。
-  const genCommand = /^\s*\/(生图|生视频|图|视频|画图)(\s|$)/.test(draft)
+  // 这一条会不会被当成生成指令（r288 / r293）：与服务端同一组前缀，只用来提前说清「要扣生成积分」。
+  // 真正的判定在 server/media-intent.mjs，这里重复的只是那句提示，不参与扣费；
+  // r293 起口语也算指令（「帮我出个视频」「做个卖毛衣的短视频」），这句提示要跟着亮。
+  const genCommand = looksLikeGenCommand(draft)
 
   return (
     <div className="qc-root">
@@ -434,8 +447,9 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
                   AgentsPage 的对话方式那一行），空状态不该比对话本身还重。 */}
               <ul>
                 <li>
-                  直接生成：以「/生图」「/生视频」开头，后面写清要什么（如 /生图 9:16 咖啡店门口的雨夜海报），
-                  按图片 / 视频的积分价扣费，失败全额退回；带一张图就按它出图 / 当视频首帧
+                  直接生成：说「/生视频 咖啡店门口的雨夜」或者干脆「帮我出个视频 咖啡店门口的雨夜」都行；
+                  没说画面的我按上下文把提示词补出来；比例 / 尺寸 / 秒数写死了就照原样提交（4:5、1080p 12 秒），
+                  上游不接受时全额退回并说明它收哪几档。按积分价扣费，带一张图就按它出图 / 当视频首帧
                 </li>
                 <li>边生成边显示，首段一两秒就到；中途可以停，停止与失败都不计费</li>
                 <li>

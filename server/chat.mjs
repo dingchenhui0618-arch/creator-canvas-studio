@@ -34,6 +34,7 @@ import { findLinks, readLinks } from './link-read.mjs'
 import { publicSearch, searchAndRead } from './web-search.mjs'
 import { publicError } from './public-error.mjs'
 import { parseMediaIntent } from './media-intent.mjs'
+import { enhanceMediaPrompt } from './media-prompt.mjs'
 import { startChatMedia } from './chat-media.mjs'
 
 const MAX_INPUT = 8000
@@ -287,6 +288,7 @@ function mediaReferences(user, input, plan) {
  * 带图（r289）：一张图就按它出图 / 当视频首帧；对话附件不进素材库，字节只活到任务建出来为止。
  */
 function beginMediaChat(user, conv, content, plan, input) {
+  // r293：只写了「帮我出个视频」不再直接报错——这一轮照常落库，提示词交给 finishMediaChat 去写
   if (plan.error) throw fail(400, plan.code || 'MEDIA_PROMPT', plan.error)
   const { files, refs } = mediaReferences(user, input, plan)
   if (!conv.messages.some((item) => item.role === 'user')) conv.title = titleFrom(content)
@@ -336,6 +338,12 @@ function mediaMeta(task) {
 /** 这一轮的平台回话：说清模型、规格、扣了多少、去哪儿看结果；参数被改过的先照实写。 */
 function mediaReply(task, plan) {
   const credits = task.credits || {}
+  // r293：用户写死的参数不解释一句，容易被当成「被系统改了」
+  const lockedLabels = []
+  if (plan.locked?.ratio) lockedLabels.push('比例 ' + (task.ratio || plan.ratio))
+  if (plan.locked?.size) lockedLabels.push('尺寸 ' + (task.size || plan.size))
+  if (plan.locked?.duration) lockedLabels.push('时长 ' + (task.duration || plan.duration) + ' 秒')
+  if (plan.locked?.resolution) lockedLabels.push('清晰度 ' + (task.resolution || plan.resolution))
   const refs = Array.isArray(task.assets) ? task.assets.length : 0
   const spec = [
     task.model,
@@ -349,6 +357,9 @@ function mediaReply(task, plan) {
     .join(' · ')
   const lines = []
   if (plan.notes?.length) lines.push(...plan.notes.map((note) => note + '。'))
+  if (lockedLabels.length) {
+    lines.push('这几个参数是你写死的，我按原样提交：' + lockedLabels.join(' · ') + '；上游要是不接受，这次生成的积分全额退回。')
+  }
   if (task.status === 'failed') {
     lines.push('这次没有生成出来：' + (task.error || '上游没有返回结果') + '。')
     lines.push(
@@ -356,6 +367,9 @@ function mediaReply(task, plan) {
         ? '这 ' + credits.cost + ' 积分已全额退回。'
         : '积分还没确认退回，带着任务号 ' + task.id + ' 找管理员。',
     )
+    if (lockedLabels.length) {
+      lines.push('你写死的参数上游可能不接受，换回默认档再试一次就行；想让我按默认值重发，直接说「按默认再来一条」。')
+    }
     return lines.join('\n')
   }
   const balance = typeof credits.balance === 'number' ? '，余额 ' + credits.balance + ' 积分' : ''
@@ -371,7 +385,23 @@ function mediaReply(task, plan) {
 /** 生成指令的收尾：开任务、落一条平台回答、回给界面（这一轮不计对话费）。 */
 async function finishMediaChat(user, ctx) {
   const startedAt = Date.now()
-  const task = await startChatMedia(user, ctx.media, ctx.media.refs || [])
+  const plan = { ...ctx.media }
+  // r293：只写了「帮我出个视频」——先把这句意愿写成提示词。写不出来就不开任务、不扣生成积分，
+  // 回一句「补一句画面再发一次」（绝不拿空提示词去扣 15 积分）。
+  if (plan.needsPrompt) {
+    const earlier = (ctx.conv.messages || []).slice(0, -1).map((item) => item.role === 'user' ? item.content : '');
+    const enhanced = await enhanceMediaPrompt({
+      kind: plan.kind,
+      text: '',
+      locked: plan.locked || {},
+      context: earlier,
+    })
+    if (!enhanced.prompt) throw fail(400, 'MEDIA_PROMPT', enhanced.note || plan.usage || '补一句画面再发一次')
+    plan.prompt = enhanced.prompt
+    plan.rewritten = true
+    plan.notes = [...(plan.notes || []), '提示词是按你说的补出来的：「' + enhanced.prompt + '」。想改直接说「改成…」']
+  }
+  const task = await startChatMedia(user, plan, plan.refs || [])
   ctx.conv.messages.push({
     id: messageId('a'),
     role: 'assistant',
