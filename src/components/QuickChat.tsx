@@ -404,7 +404,13 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
           {!loadingList && items.length === 0 && <p className="qc-side-empty">还没有对话。写下第一句就开始。</p>}
           {items.map((item) => (
             <div className={'qc-conv' + (current?.id === item.id ? ' is-active' : '')} key={item.id}>
-              <button type="button" className="qc-conv-main" onClick={() => void openConversation(item.id)} disabled={Boolean(opening)}>
+              <button
+                type="button"
+                className="qc-conv-main"
+                onClick={() => void openConversation(item.id)}
+                disabled={Boolean(opening)}
+                title={item.title}
+              >
                 <span className="qc-conv-title">{item.title}</span>
                 <span className="qc-conv-meta">
                   {item.messageCount} 条 · {when(item.updatedAt)}
@@ -422,7 +428,13 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
             </div>
           ))}
         </div>
-        <p className="qc-side-note">会话存在服务端，换设备回来还在；最多 30 条、每条留 200 条消息，超出时从最早的挪掉并告诉你。</p>
+        {/* r294：这句原来三到四行常驻左栏底部，把清单压掉一截。现在只留一行，全文在 title 里。 */}
+        <p
+          className="qc-side-note"
+          title="会话存在服务端，换设备回来还在；最多 30 条、每条留 200 条消息，超出时从最早的挪掉并告诉你"
+        >
+          服务端保存 · 最多 30 个
+        </p>
       </aside>
 
       <div className="qc-main">
@@ -447,9 +459,8 @@ export default function QuickChat({ onToast }: { onToast?: (text: string) => voi
                   AgentsPage 的对话方式那一行），空状态不该比对话本身还重。 */}
               <ul>
                 <li>
-                  直接生成：说「/生视频 咖啡店门口的雨夜」或者干脆「帮我出个视频 咖啡店门口的雨夜」都行；
-                  没说画面的我按上下文把提示词补出来；比例 / 尺寸 / 秒数写死了就照原样提交（4:5、1080p 12 秒），
-                  上游不接受时全额退回并说明它收哪几档。按积分价扣费，带一张图就按它出图 / 当视频首帧
+                  直接生成：「/生视频 咖啡店门口的雨夜」或「帮我出个视频 …」都行，没说画面我替你补；
+                  比例 / 尺寸 / 秒数写死就照原样提交（4:5、1080p 12 秒），上游不收就全额退回
                 </li>
                 <li>边生成边显示，首段一两秒就到；中途可以停，停止与失败都不计费</li>
                 <li>

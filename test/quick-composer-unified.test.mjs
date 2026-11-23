@@ -1,5 +1,6 @@
 // 快捷创作几个去向要像同一个产品（r256/r257）。这些是「靠近」的具体数字，不是感觉：
-// 左边一条 240px 列表、右边一块工作面、输入卡 8px 内边距 / 中圆角——和「平台对话」一致。
+// 左边一条列表、右边一块工作面、输入卡 8px 内边距 / 中圆角——和「平台对话」一致。
+// r294：那条列表从 240 收到 208（对话里用户嫌它太大），两条路径仍然同一个数。
 // 谁再把图片 / 视频做回「独立面板 + 自己的标题头 + 16px 内边距」，这里会先拦下来。
 import assert from 'node:assert/strict'
 import test from 'node:test'
@@ -25,11 +26,11 @@ function rule(source, selector) {
   return source.slice(match.index, end)
 }
 
-test('图片 / 视频与对话同一个骨架：左 240px 列表 + 右边工作面', () => {
+test('图片 / 视频与对话同一个骨架：左 208px 列表 + 右边工作面', () => {
   const shell = rule(css, '.agx-media-shell')
-  assert.match(shell, /grid-template-columns: 240px minmax\(0, 1fr\)/)
-  // 与 .qc-root 的 240px 一致：切页签时左边那条列表的位置不跳
-  assert.match(rule(css, '.qc-root'), /grid-template-columns: 240px minmax\(0, 1fr\)/)
+  assert.match(shell, /grid-template-columns: 208px minmax\(0, 1fr\)/)
+  // 与 .qc-root 的 208px 一致：切页签时左边那条列表的位置不跳
+  assert.match(rule(css, '.qc-root'), /grid-template-columns: 208px minmax\(0, 1fr\)/)
 })
 
 test('输入卡密度与「平台对话」一致：8px 内边距、中圆角（r259 起是默认值）', () => {

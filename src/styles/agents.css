@@ -22,7 +22,9 @@
   --pass-soft: #eef4f0;
   max-width: 1200px;
   min-height: 100%;
-  padding: 32px 32px 64px;
+  /* r294：四周留白收一档（32/32/64 → 24）。这一页是一屏就干活的页，
+     底部 64px 会让「对话窗口」白丢一截高度。 */
+  padding: 24px;
   color: var(--ink);
   font-family: var(--font-ui);
   letter-spacing: -0.005em;
@@ -334,7 +336,8 @@
 
 /* ---------- 对话框 ---------- */
 .agx-stage {
-  padding: 24px 0 8px;
+  /* 上留白也给对话让路：24 → 16，底边 0（下面那块输入卡自己有间距） */
+  padding: 16px 0 0;
 }
 .agx-composer-wrap {
   width: min(900px, 100%);
@@ -376,6 +379,8 @@
     flex: 1 1 auto;
     flex-direction: column;
     min-height: 0;
+    /* r294：900 的上限在 1440 上左右各空出 118px，对话窗口被夹在中间。铺满。 */
+    width: 100%;
   }
   .agx-page--platform .agx-mode-row,
   .agx-page--platform .agx-surface-switch {
@@ -410,6 +415,14 @@
     max-height: none;
   }
 }
+/* 矮屏（1024×768 这类笔记本）：空状态那三条说明先让位。
+   r294 实测：线程只有 171px，整张空状态卡比窗口还高，会被切成上不见标题、下不见尾。
+   标题 + 一句话留着，说明挪进输入框上方那排开关自己会说话。 */
+@media (min-width: 901px) and (max-height: 820px) {
+  .agx-page--platform .qc-empty ul {
+    display: none;
+  }
+}
 /* 图片 / 视频页签也收进一屏（r259）：原来这块是「内容多高就多高」，出一次图以后结果卡、
    输入卡、下面那排「已自建对话预设」一起把页面撑成两屏——生成时视线要来回滚。
    现在跟平台对话用一个骨架：左边「最近生成」拉满、右边「这次的结果」自己滚、
@@ -440,6 +453,8 @@
     flex: 1 1 auto;
     flex-direction: column;
     min-height: 0;
+    /* 与对话页签同宽，切页签时左右边界不跳 */
+    width: 100%;
   }
   .agx-page--media .agx-mode-row {
     flex: none;
@@ -1938,8 +1953,9 @@
    下面是同一个输入卡——切页签时视线的落点不变。 */
 .agx-media-shell {
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
-  gap: 16px;
+  /* r294：跟着对话那条列表一起收（240 → 208、缝 16 → 12），切页签时左边界不跳 */
+  grid-template-columns: 208px minmax(0, 1fr);
+  gap: 12px;
   align-items: start;
   min-width: 0;
 }
@@ -2004,6 +2020,8 @@
   font-weight: 500;
 }
 .agx-media-intro p {
+  /* r294：这一列铺满之后一行会到 140 多个字，按 72ch 断行 */
+  max-width: 72ch;
   margin: 8px 0 0;
   color: var(--muted);
   font-size: 14px;
@@ -2872,10 +2890,12 @@
 /* ---------- 快捷创作 · 平台对话（r214） ----------
    一页 DeepSeek：左边会话列表、右边长上下文对话。样式沿用快捷创作那套灰阶与发丝线，
    不另起一套配色；间距只走 4/8 栅格，圆角只用 tokens 里的 6/10/14/20/24/999。 */
+/* 左栏 240 → 208、缝 16 → 12（r294）：240 的会话栏在 1440 上吃掉了三成宽度，
+   右栏只剩 644，对话一进来就是「挤」。标题本来就按省略号截断，208 够用。 */
 .qc-root {
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
-  gap: 16px;
+  grid-template-columns: 208px minmax(0, 1fr);
+  gap: 12px;
   align-items: start;
 }
 
@@ -2953,6 +2973,7 @@
 
 .qc-list {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 4px;
   overflow-y: auto;
@@ -2983,7 +3004,8 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 8px;
+  /* 行高从 60 收到 52：一屏多露出一条，列表不再像一堵墙 */
+  padding: 4px 8px;
   border: 0;
   background: transparent;
   text-align: left;
@@ -2993,6 +3015,7 @@
 
 .qc-conv-title {
   font-size: 14px;
+  line-height: 1.4;
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3001,6 +3024,7 @@
 
 .qc-conv-meta {
   font-size: 14px;
+  line-height: 1.4;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
@@ -3020,13 +3044,20 @@
 
 .qc-conv-del:hover { color: var(--fail); background: var(--fail-soft); }
 
+/* 底注收成一行（r294）：原来三到四行常驻在左栏底部，占掉 107px 的清单高度，
+   而它说的是「存在哪、上限多少」——完整那句留在 title 里，要看再悬停。 */
 .qc-side-note {
+  /* 不许被清单挤扁：它现在只有一行，overflow:hidden 会让它在 flex 里被压成 15px */
+  flex: none;
   margin: 0;
-  padding: 8px;
+  padding: 8px 0 0;
   border-top: 1px solid var(--line-faint);
   font-size: 14px;
   line-height: 1.6;
   color: var(--faint);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .qc-main {
