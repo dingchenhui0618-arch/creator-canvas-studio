@@ -3079,3 +3079,20 @@ save/delete 别人的 403/404、新建写归属、认不出人就不回清单；
 边界：画布里的素材/成片（assets/outputs/downloads）仍是共享目录；VisionQA 管理员在画布企业侧是 `user`
 角色，所以画布应用里只看自己的，和 VisionQA 列表的「管理员看全部」口径不完全一致；无主老画布只有管理员看得到；
 cookie 是 httpOnly 但没设 Secure。细节见 `docs/r296-canvas-isolation-2026-11-23.md`。
+
+## 三百四十八、画布素材与成片按账号隔离：文件服务认人（r297 / v0.9.278 不变）
+
+r296 留的那条边界（画布里的素材与成片仍是共享目录）这轮补上。实测：不带任何凭据请求
+`/api/workspace/file/canvases/<目录>/videos/xxx.mp4` 回 **200**——画布清单和 JSON 隔离了，
+文件出口没有。修法：`serve_workspace_file` 先认人（cookie `bd_canvas_session` 或 VisionQA 服务端的
+`X-VQ-Canvas` HMAC），再按目录定归属——`canvases/<目录>` 读 `.canvas_id` 指向的画布 `_owner`，
+新上传按账号分 `uploads/<账号>/` 并写 `.owner`，其余共享目录登录即可看；越权 403 `FILE_FOREIGN`，
+画布目录认不出归属只给管理员。验收（生产）：无凭据 401 / 管理员 200 / mark 403（5312 与 6677 代理
+两个口子都测），共享区文件 mark 200；`/api/bdc/canvases` 仍 5 块 200，服务身份没被误拦；`bdc-api`
+重启后 active、`/api/health` 200。只改画布 `server_v2.py`（+55 / −2），VisionQA 版本仍是 0.9.278，
+无测试/构建变化（后端单点改动，既有 1959/1959 不变）。画布提交 `af63c9f`（`prod-rebrand-20261118`，
+本地未推），回滚 `/var/backups/bdcanvas/server_v2.py.pre-r297b-*.py`。
+边界：`assets/saved`（素材库）、`projects/`、`autosave/`、老 `uploads/` 根下仍共享；
+`canvas-files` / `resolve-files` 这类列目录接口没按归属过滤（只能列出名字，文件本身已被拦）。
+细节见 `docs/r297-canvas-assets-2026-11-23.md`。
+
