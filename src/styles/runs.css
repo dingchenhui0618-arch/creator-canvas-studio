@@ -33,7 +33,9 @@
 .runs-row-main { display:flex; flex-direction:column; gap:4px; min-width:0; }
 .runs-row-main strong { font-size: 14px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .runs-row-main small { color:var(--faint); font-size: 14px; }
-.runs-row-main .runs-row-where { color:var(--muted); font-size: 14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* 归属说明最多两行（r292）：原来一行截断，「作品 · 毛衣折叠收纳法 · 第 1 版（…）」被切在括号里，
+   读的人分不清是第几版。行高只多一行，不挤占右侧的状态与时间。 */
+.runs-row-main .runs-row-where { color:var(--muted); font-size: 14px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; white-space:normal; overflow:hidden; }
 .runs-row-main .runs-row-where.is-orphan { color:var(--faint); }
 .runs-row-meta { display:flex; flex-direction:column; align-items:flex-end; gap:2px; color:var(--faint); font-size: 14px; }
 .runs-detail { display:flex; flex-direction:column; gap:12px; padding:16px; border:1px solid var(--line); border-radius:var(--radius-md); background:var(--surface); }
