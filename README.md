@@ -3024,3 +3024,25 @@ lint 0 error / 24 warning（671 文件）、`tsc -b` 干净、入口 `index-BMQS
 截图 `docs/r294-before-chat-1440.png` / `docs/r294-after-chat-1440.png` / `docs/r294-after-chat-1024.png` /
 `docs/r294-after-chat-390.png` / `docs/r294-after-media-1440.png`。细节见 `docs/r294-quickchat-layout-2026-11-23.md`。
 
+
+## 三百四十七、输入卡只剩一层框：textarea 不再自己描边（r295 / v0.9.277）
+
+用户圈着「对话 → 平台对话」的输入框说「我不想要这个框 和图片视频那边一样调整一下」。
+那圈 1px 直角黑框不是卡片边框，是 `.agx-page textarea:focus-visible` 的 outline（点进去就亮，
+Chrome 对文本输入框总是判 `:focus-visible`），再加上 `.qc-input { resize: vertical }` 的右下角缩放柄；
+图片 / 视频那张 `.agx-textarea` 两样都没有。r259 给 `.agx-composer` 让过位，对话这张卡（另一个组件）没跟上。
+
+改法只动 CSS：把 `.qc-composer .qc-input` 的 `:focus` 与 `:focus-visible` 一起按掉、`resize` 收成 `none`，
+焦点提示改由整张卡给（`:focus-within` 边框转墨 + 柔光，和 `.agx-composer` 同档，描边升到 `--line-strong`、
+补上 `--shadow-card`）。无障碍不丢：点进去时整张卡变，而不是没有反馈。
+新增一条测试「输入卡只有一层框」钉住 6 条断言（自己描边 / 缩放柄 / 焦点环在哪一层 / 两张卡同一档）。
+
+实测 1424×805：聚焦时对话 textarea 的 outline 从 `1px solid rgb(17,17,17)`（offset 2px）变成 **none / 0px**、
+`resize` 从 vertical 变 **none**，卡片从「浅描边无 ring」变成「墨色描边 + 4px 柔光」，与媒体侧一致；
+390×844 `innerWidth == scrollWidth == 390`，仍然只有一层框。1956/1956 测试、lint 0 error / 24 warning（671 文件）、
+`tsc -b` 干净、密钥扫描 1079 文件无命中、入口 `index-CSIp7JJa.js`。
+截图 `docs/r295-before-chat-focus-1440.png`（改前，注入旧规则复现）对照 `docs/r295-after-chat-focus-1440.png`，
+另有整页 `docs/r295-after-chat-1440.png`、图片页签参照 `docs/r295-after-media-1440.png`、
+窄屏 `docs/r295-after-chat-390.png`。细节见 `docs/r295-composer-frame-2026-11-23.md`。
+边界：发送键形状没动（对话是圆角方块、图片/视频是圆形，和 r256 那句「同一个圆形发送键」对不上，等用户决定）；
+390 的输入卡仍是 sticky 贴底，空状态长时会被压住一截（r294 起如此）。

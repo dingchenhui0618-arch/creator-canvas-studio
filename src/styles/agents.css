@@ -3217,13 +3217,21 @@
 }
 
 .qc-composer {
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--surface-raised);
-  padding: 8px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card);
+  transition: border-color var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out);
+}
+/* r295：焦点提示由整张输入卡给（边框转墨 + 柔光），里头的 textarea 不再自己画第二道框。
+   和 .agx-composer:focus-within 同一套，切页签时两张卡看起来是一个控件。 */
+.qc-composer:focus-within {
+  border-color: var(--ink);
+  box-shadow: var(--ring-soft), var(--shadow-card);
 }
 
 .qc-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
@@ -3256,7 +3264,9 @@
 .qc-input {
   flex: 1;
   min-width: 0;
-  resize: vertical;
+  /* r295：textarea 自己不画框，也不带右下角的缩放柄——整张输入卡就是一个控件，
+     和图片 / 视频那张 .agx-textarea 一致（那边一直是 resize: none） */
+  resize: none;
   min-height: 72px;
   max-height: 240px;
   padding: 8px;
@@ -3268,7 +3278,10 @@
   font-family: inherit;
 }
 
-.qc-input:focus { outline: none; }
+/* 焦点环交给 .qc-composer:focus-within；这里连 :focus-visible 一起按下去，
+   否则 .agx-page textarea:focus-visible 会再画一道 1px 直角框（外圆内方的第二层） */
+.qc-composer .qc-input:focus,
+.qc-composer .qc-input:focus-visible { outline: 0; }
 
 .qc-send {
   flex: none;

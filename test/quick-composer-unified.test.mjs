@@ -49,6 +49,28 @@ test('输入卡密度与「平台对话」一致：8px 内边距、中圆角（r
   )
 })
 
+// r295：对话那张输入卡里的 textarea 自己画过一道 1px 直角黑框
+// （.agx-page textarea:focus-visible 的 outline，点进去就出现），右下角还带缩放柄；
+// 图片 / 视频那张 .agx-textarea 一直没有这两样。现在两张卡都只剩「整张卡片」一层框。
+test('输入卡只有一层框：textarea 自己不描边、不带缩放柄（r295）', () => {
+  const input = rule(css, '.qc-input')
+  assert.match(input, /border:\s*0/, '对话的 textarea 又给自己描边了')
+  assert.match(input, /resize:\s*none/, '对话的 textarea 又长出了右下角缩放柄')
+  assert.match(
+    css,
+    /\.qc-composer \.qc-input:focus,\s*\n\.qc-composer \.qc-input:focus-visible \{ outline: 0; \}/,
+    '对话的 textarea 又自己画焦点框了（整张卡片那层框之外的第二层）',
+  )
+  // 焦点提示不能跟着一起消失：整张卡片转墨 + 柔光，和 .agx-composer 同一套
+  const focused = rule(css, '.qc-composer:focus-within')
+  assert.match(focused, /border-color: var\(--ink\)/)
+  assert.match(focused, /box-shadow: var\(--ring-soft\)/)
+  // 描边与阴影也要同一档，否则切页签时一张卡深一张卡浅
+  assert.match(rule(css, '.qc-composer'), /border: 1px solid var\(--line-strong\)/)
+  assert.match(rule(css, '.qc-composer'), /box-shadow: var\(--shadow-card\)/)
+  assert.match(rule(css, '.agx-composer'), /border: 1px solid var\(--line-strong\)/)
+})
+
 test('媒体面板不再自带标题头：只留一层负责挂载的壳', () => {
   // 这层壳不是「独立面板」（没有标题头、没有自己的边框与内边距），
   // 它的作用只是让图片 / 视频两个面板都挂着、只隐藏不卸载（切回来提示词还在）。
