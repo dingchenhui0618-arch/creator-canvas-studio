@@ -3052,3 +3052,30 @@ Chrome 对文本输入框总是判 `:focus-visible`），再加上 `.qc-input { 
 1440×900 聚焦时 textarea `outline: none 0px`、`resize: none`、卡片描边转墨，390 无横向溢出。
 发布标签 `20261123-025541-20261123-1059-r295frame`，回滚 `ops/rollback.sh --to 1` 回 0.9.276；
 生产截图 `docs/r295-prod-chat-focus-1440.png` / `docs/r295-prod-chat-390.png`。本轮 0 次上游调用、0 费用。
+
+## 三百四十七、画布数据按账号隔离：接口认人、文件记归属（r296 / v0.9.278）
+
+用户报「不同账号之间画布数据并没有隔离」。查下来是**画布 JSON 接口本身不认人**：`GET /api/canvas/list`
+不带任何凭据就返回全部 5 块画布（名字、节点数、版本），`load/save/DELETE` 同理；画布文件都在同一个
+workspace 目录里、没有任何归属字段。VisionQA 侧虽然有归属表（`canvas-owners.json`）和 `visibleCanvases`，
+但它只作用于我们自己的 `/api/bdc/canvases`；嵌进去的画布应用直接调 5312，那边的 `@jwt_required`
+只是「有 token 就解析」，没有 token 也放行，解析出来也没人用。另外 `/api/bdc/canvases/note` 只凭一个
+canvasId 就能往别人画布里写。
+
+修法四层：①企业登录/换票时种 httpOnly cookie `bd_canvas_session`，画布 API 用它认人（SPA 是裸 fetch，
+只有 cookie 会自动带上）；②画布 JSON 加 `_owner`，list 只回自己的（管理员角色看全部）、load 别人的回 404、
+save/delete 别人的 403/404、新建写归属、认不出人就不回清单；③VisionQA 服务端调画布带
+`X-VQ-Canvas: <body>.<hmac>`（与票据同一把密钥、60 秒、只在环回发），没配密钥就不发；④落笔记按归属拦。
+画布前端再补一处：换票前就拉了 `?loadCanvas=` 会落成 `Load failed` 标签，换票成功后每个标签页刷一次。
+
+迁移：`vq-mwrean75` → `usr_FREfD8DfpBE1`，其余 4 块（含默认画布）归 VisionQA 管理员。
+验收（生产）：无凭据 list 空 + `auth_required`；管理员 5 块、mark 0 块；mark 打开/保存/删除管理员画布
+分别 404 / 403 / 404；mark 新建的画布带 `_owner = vq:usr_7s55Vz2pejJ_`；`/api/bdc/canvases` 5 / 0；
+落笔记 mark 403、管理员 200。截图 `docs/r296-board-admin-1440.png` / `docs/r296-board-mark-1440.png`。
+1959/1959 测试（新增 `test/canvas-isolation-r296.test.mjs` 3 条）、lint 0 error / 24 warning（672 文件）、
+`tsc -b` 干净、密钥扫描 1080 文件无命中、入口 `index-R33d5rdj.js`；生产 0.9.278，发布标签
+`20261123-040252-20261123-1205-r296canvas`，回滚 `--to 1` 回 0.9.277；画布侧回滚快照
+`/var/backups/bdcanvas/bdcanvas-pre-r296-owner-*.tgz` + `canvases-pre-owner-*.tgz`。
+边界：画布里的素材/成片（assets/outputs/downloads）仍是共享目录；VisionQA 管理员在画布企业侧是 `user`
+角色，所以画布应用里只看自己的，和 VisionQA 列表的「管理员看全部」口径不完全一致；无主老画布只有管理员看得到；
+cookie 是 httpOnly 但没设 Secure。细节见 `docs/r296-canvas-isolation-2026-11-23.md`。

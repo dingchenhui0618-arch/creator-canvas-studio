@@ -1,3 +1,4 @@
+import crypto from 'node:crypto'
 import { config, internalMode } from './config.mjs'
 
 // BD Canvas 探活：BD Canvas 是 Source-Available 项目，源码不随本仓库分发，
@@ -47,8 +48,26 @@ export async function bdcStatus() {
 const CANVAS_API = API_URL + '/api/canvas'
 const CANVAS_TIMEOUT = 8000
 
+// 画布数据按账号隔离（r296）之后，5312 的 /api/canvas/* 不再接受匿名请求。
+// 工作台是服务端调用（作品流要读画布节点、评审要往画布落笔记），带一张 HMAC 证明自己的身份：
+// 密钥与信任票据同一把，只在本机环回上发，浏览器端拿不到。
+export function canvasServiceHeaders(secret = config.canvas.sharedSecret) {
+  if (!secret) return {}
+  const body = Buffer.from(
+    JSON.stringify({
+      iss: config.canvas.issuer,
+      aud: config.canvas.audience,
+      sub: 'service:visionqa',
+      exp: Math.floor(Date.now() / 1000) + 60,
+    }),
+  ).toString('base64url')
+  const mac = crypto.createHmac('sha256', secret).update(body).digest('base64url')
+  return { 'X-VQ-Canvas': body + '.' + mac }
+}
+
 async function canvasFetch(url, init = {}) {
-  const response = await fetch(url, { ...init, signal: AbortSignal.timeout(CANVAS_TIMEOUT) })
+  const headers = { ...(init.headers || {}), ...canvasServiceHeaders() }
+  const response = await fetch(url, { ...init, headers, signal: AbortSignal.timeout(CANVAS_TIMEOUT) })
   const text = await response.text()
   let json = null
   try { json = JSON.parse(text) } catch { json = null }

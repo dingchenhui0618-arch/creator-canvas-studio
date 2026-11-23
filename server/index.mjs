@@ -99,7 +99,7 @@ import { inheritedListenFd, listenMode } from './listen.mjs'
 import { checkNodeVersion, MIN_NODE } from './node-version.mjs'
 import { clearModelBlock, modelServiceState } from './service-state.mjs'
 import { bdcStatus, canvasErrorMessage, listCanvases, createCanvas, appendCanvasNote } from './bdc.mjs'
-import { canvasOwnerId, claimCanvas, visibleCanvases } from './canvas-owner.mjs'
+import { canvasOwnerId, claimCanvas, isCanvasAdmin, visibleCanvases } from './canvas-owner.mjs'
 import { modelCatalog } from './models.mjs'
 import { distFileFor } from './static-path.mjs'
 import { createCoverProxy } from './cover-proxy.mjs'
@@ -456,8 +456,13 @@ const server = http.createServer(async (req, res) => {
 
     if (pathname === '/api/bdc/canvases/note' && req.method === 'POST') {
       const body = await readBody(req)
+      // 写入也按归属收口（r296）：只凭一个画布 id 就能往别人画布里落节点，等于绕过读隔离
+      const noteCanvasId = String(body.canvasId || '')
+      if (!isCanvasAdmin(user) && canvasOwnerId(noteCanvasId) !== String(user.id)) {
+        return sendJson(res, 403, { ok: false, code: 'CANVAS_FOREIGN', error: '这块画布不是当前账号的' })
+      }
       try {
-        return sendJson(res, 200, await appendCanvasNote(body.canvasId, body.text, body.title))
+        return sendJson(res, 200, await appendCanvasNote(noteCanvasId, body.text, body.title))
       } catch (error) {
         return sendJson(res, 502, { ok: false, error: canvasErrorMessage(error), detail: String(error?.message || error).slice(0, 160) })
       }
