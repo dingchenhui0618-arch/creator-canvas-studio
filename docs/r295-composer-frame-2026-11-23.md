@@ -56,3 +56,21 @@ r259 给 `.agx-composer .agx-textarea:focus-visible` 让过一次位（那段注
   但这和 r256 那句「同一个圆形发送键」对不上，要不要统一等用户点头。
 - 390 的输入卡仍 `position: sticky; bottom: 8px`，空状态较长时会被压住一截（r294 起就是这样，本轮没动）。
 - 本轮 0 次真实上游调用、0 费用；截图来自本机临时实例（临时 DATA_DIR + 临时账号 + 同一份 dist），跑完已删。
+
+## 生产只读复核（2026-11-23，0.9.277 上线后）
+
+用临时管理员会话（user-agent `r295-readonly`，拍完已从 `sessions` 撤销：matched 1 / revoked 1 / remaining 0，库里回到 24 条）
+在真实生产页量了一遍 1440×900：
+
+- 输入卡 **932×174.5**（x 482），输入区 **866×92.5**——与改前同尺寸（这一轮不动布局）。
+- 未聚焦：textarea `outline: none` / `border: 0` / `resize: none`，卡片描边 `rgba(17,17,17,.2)`。
+- **聚焦：textarea `outline: none 0px`、`border: 0`、`resize: none`**，卡片描边 `rgb(17,17,17)` + 4px 柔光。
+  也就是说那圈第二层黑框在生产上确实没了，焦点提示落在整张卡上。
+- 390×844：`innerWidth == scrollWidth == 390`，输入卡 290 宽、输入区 64 高，仍只有一层框。
+
+生产 `/api/version` 0.9.277，`/api/health` ok templates 26，`visionqa` active；
+`dist/assets/agents-tsFxnGEd.css` 里 `qc-composer:focus-within` 1 处、`qc-input:focus-visible{outline:0}` 1 处、`resize:none` 3 处。
+发布标签 `20261123-025541-20261123-1059-r295frame.tar.gz`，入口 `index-CSIp7JJa.js`；
+回滚 `ops/rollback.sh --to 1` 回 0.9.276（r294 那档）。
+
+截图：`docs/r295-prod-chat-focus-1440.png`（生产真实账号、聚焦状态）、`docs/r295-prod-chat-390.png`。

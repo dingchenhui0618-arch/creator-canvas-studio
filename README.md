@@ -3046,3 +3046,9 @@ Chrome 对文本输入框总是判 `:focus-visible`），再加上 `.qc-input { 
 窄屏 `docs/r295-after-chat-390.png`。细节见 `docs/r295-composer-frame-2026-11-23.md`。
 边界：发送键形状没动（对话是圆角方块、图片/视频是圆形，和 r256 那句「同一个圆形发送键」对不上，等用户决定）；
 390 的输入卡仍是 sticky 贴底，空状态长时会被压住一截（r294 起如此）。
+
+生产复核（只读，临时管理员会话用完即撤销）：0.9.277 已上线，入口 `index-CSIp7JJa.js`，health ok templates 26，
+`agents-tsFxnGEd.css` 里 `qc-composer:focus-within` / `qc-input:focus-visible{outline:0}` / `resize:none` 都在；
+1440×900 聚焦时 textarea `outline: none 0px`、`resize: none`、卡片描边转墨，390 无横向溢出。
+发布标签 `20261123-025541-20261123-1059-r295frame`，回滚 `ops/rollback.sh --to 1` 回 0.9.276；
+生产截图 `docs/r295-prod-chat-focus-1440.png` / `docs/r295-prod-chat-390.png`。本轮 0 次上游调用、0 费用。
