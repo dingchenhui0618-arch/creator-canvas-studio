@@ -23,8 +23,10 @@
   --radius-lg: 20px;
   --radius-xl: 24px;
   --radius-pill: 999px;
-  --font-ui: 'Geist', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  --font-mono: 'Geist Mono', 'SFMono-Regular', ui-monospace, monospace;
+  /* 2026-11-24：中文统一到阿里巴巴普惠体 3.0（45 Light / 65 Medium，见 fonts/puhuiti）。
+     这里原来另写了一套 'Noto Sans SC' 栈，会盖掉 :root 的值，换字体必须两处一起改。 */
+  --font-ui: 'Figtree', 'Geist', 'Alibaba PuHuiTi 3.0', 'PingFang SC', 'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-mono: 'Geist Mono', 'Cascadia Mono', 'Consolas', 'Alibaba PuHuiTi 3.0', ui-monospace, monospace;
   --shadow-raise: 0 1px 2px rgba(17, 17, 17, 0.04), 0 10px 24px rgba(17, 17, 17, 0.05);
 
   /* 兼容旧页面仍在读取的变量名（App.css 会覆盖 :root，这里在 shell 内纠正回品牌值） */

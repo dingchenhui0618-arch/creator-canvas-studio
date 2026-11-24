@@ -3136,3 +3136,22 @@ r296 留的那条边界（画布里的素材与成片仍是共享目录）这轮
   真实渲染截图：`docs/quick-create-topbar-1440.png`、`-preset-1440`、`-image-1440`、`-390`、`-preset-390`；
   细节见 `docs/quick-create-topbar-2026-11-24.md`。本轮 0 次真实上游调用。
 
+
+## 三百五十一、中文统一到阿里巴巴普惠体 3.0：45 Light 正文、65 Medium 强调（r308 / v0.9.281）
+
+用户 2026-11-24：「调整下生产端全部的字体类型 Alibaba PuHuiTi 3.0 45 Light 用这个字体 整体统一替换掉现在的中文字体」。
+
+- 中文从系统黑体（微软雅黑 / 苹方 / Noto Sans SC）换成自托管「阿里巴巴普惠体 3.0」：45 Light 正文、65 Medium 强调；
+  拉丁仍是 Figtree / Geist Mono（只带拉丁子集），等宽栈里也接上普惠体，等宽元素里的中文不再掉回系统字体。
+- 为什么不是只有 Light 一档：界面上 500/600/700 很多，只挂 Light 会触发浏览器伪粗（Light 描边加厚，中文糊成一团）。
+  45 Light 声明 `100 400`、65 Medium 声明 `500 900`：正文 400 落 Light、600/700 落 Medium，全程无伪粗。
+- 字体用 cn-font-split 切成按 unicode-range 的 woff2 分片（333 片、单片 ≤70KB、共 10.7MB），样式表
+  `public/fonts/puhuiti/puhuiti.css` 由 `index.html` 单独 link。实测首访每页 32–34 片、约 1.0MB，命中缓存后不再请求。
+- 踩坑：`shell.css` 的 `.vq-scope` 另写了一套 `--font-ui`（Noto Sans SC），工作台整片都在这个作用域里——
+  只改 `tokens.css` 的 `:root` 时登录页变了、工作台一个字没变。新增测试同时钉住两处。
+- 320–1440 五档 × 七个页面扫过：无横向溢出、无文字被裁；唯一溢出是设置页账号卡长邮箱在 320 出 26px，
+  A/B 量过换字体前 347 / 换后 346，与本轮无关。
+- 门禁：1971/1971 测试（新增 `test/fonts-puhuiti.test.mjs` 5 条）、`tsc --noEmit` 干净、oxlint 0 error、build 通过、密钥扫描 1088 文件无命中。
+- 上线 v0.9.281，入口 `index-CmeWEqbo.js`，health ok templates 26，回滚点 `20261124-055546-v0.9.281-fonts`。
+  截图 `docs/font-puhuiti-compare.png`（改前 / 改后同框）、`-1440`、`-overview-1440`、`-390`、`-prod`；细节见 `docs/font-puhuiti-2026-11-24.md`。
+- 遗留：`/fonts/` 还没加 immutable 长缓存（每次访问多 30 多个 304）；交付包 / 邮件 / A4 稿仍是系统字体。
