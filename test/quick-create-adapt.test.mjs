@@ -42,10 +42,10 @@ test('图片 / 视频的模型单独一行，参数另起一行（r309）', () =
   assert.ok(!paramsBlock.includes('label="模型"'), '模型胶囊又跑回参数行里了')
   assert.match(paramsBlock, /label="方式"/)
   assert.match(paramsBlock, /label="比例"/)
-  // 样式：模型行独占一行，胶囊不再吃 190px 的上限
+  // 样式：模型行独占一行；宽度上限写在胶囊的基础规则里（r310 起不再按场景各写一份）
   const bar = rule(css, '.agx-media-modelbar')
   assert.match(bar, /display: flex/)
-  assert.match(rule(css, '.agx-media-modelbar .agx-capsule-trigger'), /max-width: 100%/)
+  assert.match(rule(css, '.agx-media-modelbar .agx-capsule'), /flex: 0 1 auto/)
   // 分隔线只画一条：模型行画在输入框下面，参数行不再画第二条
   assert.match(bar, /border-top: 1px solid var\(--line-faint\)/)
   assert.match(rule(css, '.agx-composer--media .agx-composer-bar'), /border-top: 0/)

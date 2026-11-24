@@ -4,8 +4,9 @@
   gap: 24px;
   /* 页面内边距必须与工作台/对话预设一致：不写 padding 时内容会贴到侧栏和窗口边缘 */
   width: 100%;
-  max-width: 1280px;
-  margin: 0 auto;
+  /* r310：上限与左边距与工作台、快捷创作统一（1520 + 左边对齐），宽屏上内容跟着侧栏长 */
+  max-width: 1520px;
+  margin-inline: 0 auto;
   padding: 32px 32px 48px;
 }
 .runs-page > .vq-head { margin-bottom: 0; }

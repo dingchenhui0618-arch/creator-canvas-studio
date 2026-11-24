@@ -801,11 +801,17 @@
   gap: 8px;
   min-width: 0;
 }
+/* r310：胶囊的宽度由值决定，不再有一个 190px 的硬上限。
+   以前触发按钮写死 max-width: 190px，值稍长就收成「VisionQA通用图片模型 ·…」——
+   「对话」页签的模型、对话预设名同样被截。现在胶囊最宽不超过所在那一行（100%），
+   值真的比整行还长时才收起尾字（em 的省略号是最后一道兜底），窄屏靠 flex-wrap 换行。 */
 .agx-capsule {
   position: relative;
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  max-width: 100%;
+  min-width: 0;
   height: 30px;
   padding: 0 8px 0 12px;
   color: var(--muted);
@@ -822,6 +828,9 @@
   border-color: var(--ink);
 }
 .agx-capsule > span {
+  /* r310：整行放不下时只收值、不收标签——「对话 预设」被挤成两行比省略号更难读 */
+  flex: none;
+  white-space: nowrap;
   color: var(--faint);
   font-family: var(--font-ui);
   font-size: var(--text-2xs);
@@ -832,7 +841,8 @@
   align-self: stretch;
   align-items: center;
   gap: 8px;
-  max-width: 190px;
+  max-width: 100%;
+  min-width: 0;
   padding: 0;
   color: var(--ink);
   background: transparent;
@@ -841,6 +851,7 @@
   cursor: pointer;
 }
 .agx-capsule-trigger em {
+  min-width: 0;
   overflow: hidden;
   font-size: var(--text-2xs);
   font-style: normal;
@@ -908,22 +919,10 @@
   padding-top: 8px;
   border-top: 1px solid var(--line-faint);
 }
+/* 这一行只有模型一颗，让它按内容排；宽度上限与省略号在 .agx-capsule / .agx-capsule-trigger
+   的基础规则里已经写好（r310 起不再按场景各写一份） */
 .agx-media-modelbar .agx-capsule {
   flex: 0 1 auto;
-  min-width: 0;
-  max-width: 100%;
-}
-.agx-media-modelbar .agx-capsule-trigger {
-  min-width: 0;
-  max-width: 100%;
-}
-.agx-media-modelbar .agx-capsule-trigger em {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.agx-media-modelbar .agx-capsule-trigger svg {
-  flex: none;
 }
 /* 模型那行已经把分隔线画在输入框下面了：参数行不要再画第二条 */
 .agx-composer--media .agx-composer-bar {

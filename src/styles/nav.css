@@ -7,8 +7,9 @@
   display: grid;
   gap: 24px;
   width: 100%;
-  max-width: 1280px;
-  margin: 0 auto;
+  /* r310：骨架与真实页同宽同位——以前 1280 居中，加载完换成 1520 左对齐的页面时会横向跳一下 */
+  max-width: 1520px;
+  margin-inline: 0 auto;
   padding: 32px 32px 48px;
 }
 
