@@ -71,7 +71,6 @@ import type { ProjectSummary } from '../domain/project'
 import { getPreferences } from '../api/preferences'
 import { useUiMode } from '../api/app'
 import MediaLightbox from '../components/MediaLightbox'
-import PageHead from '../components/PageHead'
 import QuickChat from '../components/QuickChat'
 import { listFlows, type ApiFlow } from '../api/flows'
 import { useModelOptions } from '../components/ModelSwitch'
@@ -2380,12 +2379,70 @@ export function AgentsPage({
         + (composerMode === 'image' || composerMode === 'video' ? ' agx-page--media' : '')
       }
     >
-      <PageHead
-        kicker="快捷创作 / 对话"
-        title="快捷创作"
-        desc="写文案、出图片、出视频都在这一页：选好方式，说清要什么。工作流从右上角一步进去。"
-        actions={composerMode === 'chat' && chatSurface === 'platform' ? null : (
-          <div className="agx-head-actions">
+      {/* r307：页头不再占一整块。标题与那句说明撤掉（面包屑已经写着「快捷创作」），
+          创作方式就是这一页的身份；三条页签、对话方式、工作流入口和右侧动作合并成一条 40px 的工具条。
+          实测桌面（1440×900）对话卡因此上移约 170px，手机也没有多出一行。 */}
+      <header className="agx-topbar">
+        <h1 className="agx-sr-only">快捷创作</h1>
+        <div className="agx-mode-tabs" role="tablist" aria-label="创作方式">
+          {COMPOSER_MODES.map((mode) => (
+            <button
+              key={mode.id}
+              role="tab"
+              aria-selected={composerMode === mode.id}
+              className={composerMode === mode.id ? 'is-active' : ''}
+              onClick={() => {
+                setComposerMode(mode.id)
+                // 从图片 / 视频切回对话：平台对话面板第一次出现时要挂上（之后一直常驻）
+                if (mode.id === 'chat') setChatMounted(true)
+              }}
+            >
+              {mode.id === 'image' ? (
+                <ImageIcon size={14} />
+              ) : mode.id === 'video' ? (
+                <Clapperboard size={14} />
+              ) : (
+                <Bot size={14} />
+              )}
+              {mode.label}
+            </button>
+          ))}
+        </div>
+        {composerMode === 'chat' ? (
+          <div className="agx-surface-switch" role="tablist" aria-label="对话方式">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={chatSurface === 'platform'}
+              className={chatSurface === 'platform' ? 'is-active' : ''}
+              onClick={() => setChatSurface('platform')}
+            >
+              平台对话
+            </button>
+            {/* r307：以前这枚页签旁边挂一句说明（存模板 / 送工作流 / 写进作品），
+                在头顶上是第三行字；现在收进 title，鼠标停一下就能看到。 */}
+            <button
+              type="button"
+              role="tab"
+              aria-selected={chatSurface === 'preset'}
+              className={chatSurface === 'preset' ? 'is-active' : ''}
+              title="带输出类型与草稿出口：存模板 / 送工作流 / 写进作品"
+              onClick={() => setChatSurface('preset')}
+            >
+              对话预设
+            </button>
+          </div>
+        ) : null}
+        {/* 入口联动（r257）：不是把工作流摊成清单，只给一条去路——几条、在帮谁，点一下进画布。
+            r307 起它是工具条自己的一项（不再包一层），这样手机上它能和「对话方式」并进同一行。 */}
+        <button type="button" className="agx-flow-link" onClick={() => onOpenCanvas(flowEntry.id)} title={flowEntry.title}>
+          <Workflow size={14} />
+          {flowEntry.label}
+          <ArrowUpRight size={13} aria-hidden />
+        </button>
+        {/* 历史 / 新建对话预设是「对话」的账：图片、视频页签上没有它们的位置，也不该在那一页抢一个主按钮。 */}
+        {composerMode === 'chat' && chatSurface !== 'platform' ? (
+            <div className="agx-head-actions">
           <div className="agx-history-wrap">
             <button className="vq-button vq-button--ghost" onClick={() => setHistoryOpen((open) => !open)} aria-expanded={historyOpen}>
               <History size={15} />
@@ -2515,9 +2572,9 @@ export function AgentsPage({
               <Plus size={15} />
               新建对话预设
             </button>
-          </div>
-        )}
-      />
+            </div>
+          ) : null}
+      </header>
 
       <section className="agx-stage" ref={stageRef}>
         {/* 智能体文件坏了（r268）：不说清楚的话，用户看到的是几份「看起来正常」的默认预设，
@@ -2558,65 +2615,6 @@ export function AgentsPage({
           </div>
         ) : null}
         <div className="agx-composer-wrap">
-          <div className="agx-mode-row">
-            <div className="agx-mode-tabs agx-mode-tabs--top" role="tablist" aria-label="创作方式">
-              {COMPOSER_MODES.map((mode) => (
-                <button
-                  key={mode.id}
-                  role="tab"
-                  aria-selected={composerMode === mode.id}
-                  className={composerMode === mode.id ? 'is-active' : ''}
-                  onClick={() => {
-                    setComposerMode(mode.id)
-                    // 从图片 / 视频切回对话：平台对话面板第一次出现时要挂上（之后一直常驻）
-                    if (mode.id === 'chat') setChatMounted(true)
-                  }}
-                >
-                  {mode.id === 'image' ? (
-                    <ImageIcon size={14} />
-                  ) : mode.id === 'video' ? (
-                    <Clapperboard size={14} />
-                  ) : (
-                    <Bot size={14} />
-                  )}
-                  {mode.label}
-                </button>
-              ))}
-            </div>
-            {/* 入口联动（r257）：不是把工作流摊成清单，只给一条去路——几条、在帮谁，点一下进画布 */}
-            <button type="button" className="agx-flow-link" onClick={() => onOpenCanvas(flowEntry.id)} title={flowEntry.title}>
-              <Workflow size={14} />
-              {flowEntry.label}
-              <ArrowUpRight size={13} aria-hidden />
-            </button>
-          </div>
-          {composerMode === 'chat' ? (
-            <div className="agx-surface-switch" role="tablist" aria-label="对话方式">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={chatSurface === 'platform'}
-                className={chatSurface === 'platform' ? 'is-active' : ''}
-                onClick={() => setChatSurface('platform')}
-              >
-                平台对话
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={chatSurface === 'preset'}
-                className={chatSurface === 'preset' ? 'is-active' : ''}
-                onClick={() => setChatSurface('preset')}
-              >
-                对话预设
-              </button>
-              {/* r287：平台对话下面那排开关就是「联网检索 / 读链接 / 思考模式」，
-                  这里再列一遍等于同一屏说两次，拥挤感主要来自这行；预设那一侧没有开关，才需要说明。 */}
-              {chatSurface === 'preset' ? (
-                <span className="agx-surface-note">带输出类型与草稿出口：存模板 / 送工作流 / 写进作品</span>
-              ) : null}
-            </div>
-          ) : null}
           {/* 平台对话面板常驻：切到「对话预设」或图片 / 视频时只隐藏、不卸载（r225）。
               .qc-root 是 display:grid，hidden 属性在它身上不生效，所以外面套一层容器。 */}
           {chatMounted ? (

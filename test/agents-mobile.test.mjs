@@ -112,7 +112,6 @@ test('1080 以下：小字统一 14px（mono / 标签 / 计数 / 胶囊）', () 
   }
   assert.match(decls(band, '.agx-page .agx-capsule > span'), /font-size:\s*14px/)
   assert.match(decls(band, '.agx-page .agx-capsule-trigger em'), /font-size:\s*14px/)
-  assert.match(decls(band, '.agx-page .agx-surface-note'), /font-size:\s*14px/)
   assert.match(decls(band, '.agx-page .agx-surface-switch button'), /font-size:\s*14px/)
 })
 
@@ -198,7 +197,6 @@ test('桌面基线没被改：12 / 11.5px 与 28 / 30 / 32px 仍是原值', () =
   assert.match(firstRule(agentsCss, '.agx-capsule-trigger em'), /font-size:\s*(?:12\.5px|var\(--text-2xs\))/)
   assert.match(firstRule(agentsCss, '.agx-mode-tabs button'), /min-height:\s*28px/)
   assert.match(firstRule(agentsCss, '.agx-surface-switch button'), /font-size:\s*(?:12px|var\(--text-2xs\))/)
-  assert.match(firstRule(agentsCss, '.agx-surface-note'), /font-size:\s*(?:11px|var\(--text-2xs\))/)
   assert.match(firstRule(agentsCss, '.agx-tabs button'), /padding:\s*0 0 12px/)
   assert.match(firstRule(agentsCss, '.agx-popover-tabs button'), /height:\s*24px/)
   assert.match(firstRule(agentsCss, '.qc-new'), /min-height:\s*32px/)
