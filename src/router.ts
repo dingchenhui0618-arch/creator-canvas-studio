@@ -76,6 +76,7 @@ const USER_PAGES: readonly ShellPage[] = [
   'review',
   'canvas',
   'board',
+  'assets',
   'settings',
   'recharge',
   'local',

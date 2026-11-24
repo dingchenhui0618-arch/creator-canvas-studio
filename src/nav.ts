@@ -10,6 +10,7 @@
 import {
   Activity,
   Bot,
+  Boxes,
   Clapperboard,
   Compass,
   Grid2X2,
@@ -42,6 +43,7 @@ export const PRIMARY_NAV: readonly NavEntry[] = [
 
 /** 工具区：不再是目的地，而是从作品某一步带进来的能力。 */
 export const TOOL_NAV: readonly NavEntry[] = [
+  { id: 'assets', label: '我的资产', hint: '自己的商品图与数字人，生成时直接调用', icon: Boxes, keywords: 'assets 资产 商品 数字人 人像 模特' },
   { id: 'agents', label: '快捷创作', hint: '对话、生图与生视频', icon: Bot, keywords: 'agent 助手 对话 生图 生视频 图片 视频' },
   { id: 'canvas', label: '工作流', hint: '节点连成一条线，一次跑出这一版', icon: Workflow, keywords: 'flow workflow 流程 节点 编排 画布' },
   { id: 'board', label: '无限画布', hint: '自由摆放素材，在画布上出图出视频', icon: InfinityIcon, keywords: 'board infinite 无限画布 画布 白板 外部画布' },

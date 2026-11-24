@@ -29,7 +29,8 @@ test('引导的每一步都落在一级导航里：画布 / 评审 / 智能体 /
   const tools = navIds(nav, 'TOOL_NAV')
 
   assert.deepEqual(primary, ['overview', 'projects', 'radar', 'templates'], '一级导航变了：引导与侧栏是同一套去处')
-  assert.deepEqual(tools, ['agents', 'canvas', 'board', 'review', 'runs'], '工具区变了：引导不能再指向已经不当工具的那一页')
+  // r311 起工具区第一项是「我的资产」：它是能力，不是主线的一步，引导同样不许指向它
+  assert.deepEqual(tools, ['assets', 'agents', 'canvas', 'board', 'review', 'runs'], '工具区变了：引导不能再指向已经不当工具的那一页')
 
   const pages = [...guide.matchAll(/page:\s*'([a-z-]+)'/g)].map((match) => match[1])
   assert.ok(pages.length >= 4, '引导至少要有四步的去处，现在只有 ' + pages.length + ' 处')

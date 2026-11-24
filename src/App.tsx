@@ -27,6 +27,7 @@ import type { PaletteCommand } from './domain/commands'
 import { DESKTOP_NAV, PRIMARY_NAV, SETTINGS_NAV, TOOL_NAV, isNavActive, isToolPage, type NavEntry } from './nav'
 import { getDesktop } from './desktop/bridge'
 import { WelcomeGuide } from './components/WelcomeGuide'
+import { OnboardingGate } from './components/OnboardingGate'
 import { ModelSwitch } from './components/ModelSwitch'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { PageSkeleton } from './components/PageSkeleton'
@@ -42,6 +43,7 @@ import LocalWorkspacePage from './pages/LocalWorkspacePage'
 import { RequireSession } from './auth/RequireSession'
 import { useSession } from './auth/useSession'
 import { useUiMode } from './api/app'
+import { request } from './api/client'
 import { initialsFor, sessionKindLabel, type RegisterInput, type Session, type SessionUser, type SignInInput } from './auth/session'
 import { accountIdentifier } from './domain/account-label'
 import { listAgents, setPendingAgentProject } from './api/agents'
@@ -105,6 +107,8 @@ const HelpPage = lazy(() => import('./pages/HelpPage').then((module) => ({ defau
 // 素材来源与下架通道（v0.9.82）：公开可读的一屏，和帮助中心一样不进工作台外壳
 const SourcesPage = lazy(() => import('./pages/SourcesPage').then((module) => ({ default: module.SourcesPage })))
 const AgentEditorPage = lazy(() => import('./pages/AgentEditorPage'))
+// 自有资产（r311）：注册后的引导与资产库之后，模板、工作流都从这里取参考图
+const AssetsPage = lazy(() => import('./pages/AssetsPage'))
 
 function sectionLabel(section: string): string {
   const found = EDITION_BY_ID.admin.nav.find((item) => item.section === section)
@@ -259,6 +263,28 @@ function Workbench({
   // 该不该回、哪几种不算换页，判断只在 src/domain/scroll.ts 一处；这里只负责把 scrollTop 归零。
   const contentRef = useRef<HTMLDivElement | null>(null)
   const previousRoute = useRef<Route | null>(null)
+
+  // 注册后的身份引导（r311）会不会出现：只有普通账号且还没做完引导才有。
+  // 这一段是给「上手引导」让路用的——两个弹窗叠在一起，新人第一眼看到的是两层遮罩。
+  const [onboardingOpen, setOnboardingOpen] = useState<boolean | null>(null)
+  useEffect(() => {
+    if (session.user.kind !== 'account') {
+      setOnboardingOpen(false)
+      return
+    }
+    let alive = true
+    request<{ done?: boolean }>('/api/onboarding')
+      .then((data) => {
+        if (alive) setOnboardingOpen(data.done !== true)
+      })
+      .catch(() => {
+        // 读不到就当引导不出现：宁可少弹一层，也不要挡住工作台
+        if (alive) setOnboardingOpen(false)
+      })
+    return () => {
+      alive = false
+    }
+  }, [session.user.id, session.user.kind])
 
   // 上手引导：第一次进工作台就弹出来（按账号记一次），关闭即记住；之后从账号菜单还能再看。
   const seenKey = welcomeSeenKey(session.user.id)
@@ -728,6 +754,9 @@ function Workbench({
             onToast={notify}
           />
         )
+      case 'assets':
+        // 自己的商品图与数字人：生成 / 补生成都在这一页，关页不丢任务
+        return <AssetsPage onToast={notify} />
       case 'runs':
         return (
           <RunsPage
@@ -1180,8 +1209,13 @@ function Workbench({
         </div>
       )}
 
-      {guideOpen && <WelcomeGuide onClose={closeGuide} onGo={go} />}
+      {/* 身份引导没做完时先不叠「上手引导」：两个弹窗同时出现，第一屏就废了 */}
+      {guideOpen && onboardingOpen === false && <WelcomeGuide onClose={closeGuide} onGo={go} />}
 
+      {/* 注册后的身份引导：组件自己判断「账号 + done === false」才出现，管理员/演示/访客都不弹 */}
+      {session.user.kind === 'account' && (
+        <OnboardingGate session={session} onToast={notify} onOpenAssets={() => go('assets')} />
+      )}
     </div>
   )
 }

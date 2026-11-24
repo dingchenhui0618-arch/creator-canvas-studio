@@ -2,7 +2,7 @@
 //   · VisionQA 自己的节点编排叫「工作流」，地址仍是 #/canvas；
 //   · 外部那张自由画布叫「无限画布」，地址是 #/board（#/board/<画布ID> 点名一块）。
 // 这一层钉住四件事（都读源码，不需要起服务）：
-//   1. 工具区五项，工作流与无限画布各占一项，名字不再共用「画布」；
+//   1. 工具区里工作流与无限画布各占一项，名字不再共用「画布」；
 //   2. 路由里两条地址各写各的，旧地址 #/canvas/project/<id> 改写成 #/board/<id>；
 //   3. 外壳把 #/board 交给 BoardPage，工作流页不再收画布项目；
 //   4. 外部画布的 iframe / 票据 / 画布项目只剩在 BoardPage 里——工作流页一份都不许留。
@@ -23,10 +23,11 @@ function toolBlock() {
   return source.slice(start, rest < 0 ? undefined : rest)
 }
 
-test('工具区五项：智能体 / 工作流 / 无限画布 / 视觉评审 / 运行记录', () => {
+// r311 起工具区多了「我的资产」：它是复刻的地基，所以排在最前，逻辑仍是一件工具占一项。
+test('工具区：我的资产 / 智能体 / 工作流 / 无限画布 / 视觉评审 / 运行记录', () => {
   const block = toolBlock()
   const ids = [...block.matchAll(/\{\s*id:\s*'([a-z-]+)'/g)].map((m) => m[1])
-  assert.deepEqual(ids, ['agents', 'canvas', 'board', 'review', 'runs'], '工具区变了：工作流与无限画布要各占一项')
+  assert.deepEqual(ids, ['assets', 'agents', 'canvas', 'board', 'review', 'runs'], '工具区变了：工作流与无限画布要各占一项')
   const canvas = block.slice(block.indexOf("id: 'canvas'"), block.indexOf("id: 'board'"))
   const board = block.slice(block.indexOf("id: 'board'"), block.indexOf("id: 'review'"))
   assert.match(canvas, /label: '工作流'/, '节点编排那一项叫「工作流」')

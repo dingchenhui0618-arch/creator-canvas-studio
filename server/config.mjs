@@ -160,7 +160,8 @@ export const config = {
   credits: {
     unit: process.env.VQ_CREDIT_UNIT || '积分',
     // 新账号初始额度：够试一轮检索 + 复刻，不至于一注册就卡住
-    welcome: Number(process.env.VQ_CREDIT_WELCOME ?? 100),
+    // 新账号初始额度：用户定的 50 积分（r311）。以前是 100，那会儿没有「建资产」这一步要送。
+    welcome: Number(process.env.VQ_CREDIT_WELCOME ?? 50),
     // 积分换算口径（v0.9.162）：界面上一律按积分标价，1 元 = N 积分。
     // 这是唯一真源：无限画布的成本预估、充值页的「1 元 = N 积分」、默认档位都读它；
     // 调价只改 VQ_POINTS_PER_CNY 一处，不写死在界面或画布里。

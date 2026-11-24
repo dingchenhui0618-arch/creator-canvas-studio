@@ -53,6 +53,7 @@ import { originFootprint, libraryMarks } from './source-footprint.mjs'
 import { listProjects } from './projects.mjs'
 import { adoptUnowned as adoptUnownedAgents } from './agents.mjs'
 import { adoptUnownedFlows, createFlow, getFlow, recoverInterruptedRuns, interruptRunningRuns } from './flows.mjs'
+import { recoverInterruptedAssets } from './assets.mjs'
 import { instanceHeartbeatError, startInstanceHeartbeat, stopInstanceHeartbeat } from './instances.mjs'
 import { adoptUnowned as adoptUnownedReviews } from './reviews.mjs'
 import { readJsonBody as readBody } from './body-reader.mjs'
@@ -65,6 +66,8 @@ import { createAuthRouter } from './routes/auth.mjs'
 import { createCreditsRouter } from './routes/credits.mjs'
 import { createAdminRouter } from './routes/admin.mjs'
 import { createPreferencesRouter } from './routes/preferences.mjs'
+// 自有资产与注册后引导（r311）：产品资产 / 数字人资产，是复刻链路的地基
+import { createAssetsRouter } from './routes/assets.mjs'
 import { createFeedbackRouter } from './routes/feedback.mjs'
 import { createCanvasRouter } from './routes/canvas.mjs'
 import { createProjectsRouter } from './routes/projects.mjs'
@@ -129,6 +132,7 @@ const featureRoutes = [
   createStorageRouter(),
   createAdminRouter(),
   createPreferencesRouter(),
+  createAssetsRouter(),
   createCanvasRouter(),
   createProjectsRouter(),
   createSharesRouter(),
@@ -1171,6 +1175,15 @@ try {
   logRequestError('', error, { scope: 'recover-runs' })
 }
 if (recoveredRuns.recovered || recoveredRuns.dropped || recoveredRuns.skipped) logEvent('runs.recovered', recoveredRuns)
+// 资产图生成也活在内存里：重启后把卡在 generating 的资产标成中断，并按账本退回没出的那几张。
+// 不收拾的话界面会永远显示「生成中」，而积分已经扣掉了。
+let recoveredAssets = 0
+try {
+  recoveredAssets = await recoverInterruptedAssets()
+} catch (error) {
+  logRequestError('', error, { scope: 'recover-assets' })
+}
+if (recoveredAssets) logEvent('assets.recovered', { assets: recoveredAssets })
 // 启动先清一次过期日志（停机久了不会把过期文件一直留着），之后每小时最多再清一次
 const prunedLogs = await startLogRetention()
 if (prunedLogs.removed.length) logEvent('logs.prune', { removed: prunedLogs.removed.length, bytesFreed: prunedLogs.bytesFreed })

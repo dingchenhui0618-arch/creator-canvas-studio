@@ -12,6 +12,7 @@ export type Page =
   | 'settings'
   | 'radar'
   | 'templates'
+  | 'assets'
   | 'review'
   | 'recharge'
   | 'local'
@@ -29,6 +30,7 @@ export const pageLabels: Record<Page, string> = {
   settings: '设置',
   radar: '爆款雷达',
   templates: '模板库',
+  assets: '我的资产',
   review: '视觉评审',
   recharge: '充值',
   local: '本地工作区',

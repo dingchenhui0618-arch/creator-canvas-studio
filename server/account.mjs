@@ -11,6 +11,8 @@ import { deleteDecisionsByOwner, listDecisions } from './review-decisions.mjs'
 import { preferenceOf, removePreference } from './preferences.mjs'
 import { balanceOf, ledgerOf } from './credits.mjs'
 import { countAdmins, deleteUser, findUserById } from './auth.mjs'
+import { deleteAssetsByOwner, listAssets } from './assets.mjs'
+import { onboardingOf, removeOnboarding } from './onboarding.mjs'
 
 // 账号自助：把自己的数据打包带走（导出 JSON），或者注销账号（可选择连内容一起删）。
 //
@@ -64,6 +66,9 @@ export async function exportAccount(user) {
     reviews,
     projects,
     reviewDecisions: decisions,
+    // 自有资产（r311）：商品图与数字人定妆照也是他的数据，导出要带名字与来源，不带图片本体
+    assets: await listAssets(user.id),
+    onboarding: onboardingOf(user.id),
   }
 }
 
@@ -83,7 +88,7 @@ export async function deleteOwnAccount(user, { deleteContent = true } = {}) {
   // 最后一个管理员注销会把后台锁死：必须先加一个管理员，或者让管理员来删
   if (row.kind === 'admin' && countAdmins() <= 1) return { ok: false, code: 'LAST_ADMIN' }
 
-  const removed = { templates: 0, flows: 0, agents: 0, reviews: 0, projects: 0 }
+  const removed = { templates: 0, flows: 0, agents: 0, reviews: 0, projects: 0, assets: 0 }
   if (deleteContent) {
     removed.templates = await deleteTemplatesByOwner(user.id)
     for (const flow of (await listFlows(user)).filter((item) => (item.ownerId || '') === user.id)) {
@@ -100,8 +105,11 @@ export async function deleteOwnAccount(user, { deleteContent = true } = {}) {
     removed.reviews = await deleteReviewsByOwner(user.id)
     removed.reviewAcks = await deleteAcksByOwner(user.id)
     removed.reviewDecisions = await deleteDecisionsByOwner(user.id)
+    // 资产目录（图 + 元数据）整个删掉；引导记录也一起清
+    removed.assets = await deleteAssetsByOwner(user.id)
   }
   removePreference(user.id)
+  removeOnboarding(user.id)
   const deleted = deleteUser(user.id)
   if (!deleted) return { ok: false, code: 'NOT_FOUND' }
   return { ok: true, removed, deleteContent }
