@@ -3179,6 +3179,7 @@ r296 留的那条边界（画布里的素材与成片仍是共享目录）这轮
 - 门禁：1976/1976 测试（新增 `test/quick-create-adapt.test.mjs` 5 条）、`tsc -b` 干净、oxlint 0 error / 25 warning、
   `npm run build` 通过。上线 v0.9.282，入口 `index-BQd9N-7B.js`，health ok templates 26，回滚点 `20261124-065451-v0.9.282-r309`。
 - 截图：`docs/quick-create-adapt-wide.png`（1920 改前 / 改后同框）、`docs/quick-create-params-1440.png`、
-  `docs/quick-create-params-390.png`；细节见 `docs/quick-create-adapt-2026-11-24.md`。
+  `docs/quick-create-params-390.png`、`docs/quick-create-adapt-prod.png`（生产实拍，631px 窄窗：模型全称、最近生成两行元信息）；
+  细节见 `docs/quick-create-adapt-2026-11-24.md`。
 - 边界：只动了快捷创作页——作品流 / 视觉评审 / 总览仍是 1280 居中，宽屏上它们与顶栏之间还是有一段空档（下一轮统一）；
   「对话」页签输入卡里那颗模型同样有 190px 的截断；超宽屏（>2092）才居中。本轮 0 次真实上游调用、¥0。
