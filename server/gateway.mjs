@@ -475,6 +475,39 @@ function idempotencyHeaders(key, value) {
   return keyProtocol(key) === 'cgcm' ? { 'Idempotency-Key': value } : {}
 }
 
+/**
+ * 出视频建任务只该转发上游认识的字段（2026-11-24 实测：把客户端的
+ * content / provider / channel_model / media_backup_ids / has_input_video 等原样透传，
+ * SeeAPI 直接 400 validation_error「unsupported fields」）。
+ * 无限画布的 generation_seedance.py 直连时就是这套十个字段，这里照着收口。
+ */
+const VIDEO_CREATE_FIELDS = [
+  'model',
+  'prompt',
+  'duration',
+  'aspect_ratio',
+  'resolution',
+  'count',
+  'mode',
+  'generate_audio',
+  'search_enabled',
+  'reference_image_urls',
+  'reference_video_urls',
+  'seed',
+  'fps',
+]
+
+function videoCreateBody(payload = {}) {
+  const body = {}
+  for (const field of VIDEO_CREATE_FIELDS) {
+    const value = payload[field]
+    if (value === undefined || value === null) continue
+    body[field] = value
+  }
+  if (body.aspect_ratio === undefined && payload.ratio !== undefined) body.aspect_ratio = payload.ratio
+  return body
+}
+
 /** 出图张数：请求里明确要几张就记几张，没写按 1 张（无限画布默认一次一张）。 */
 function imageUnits(payload = {}) {
   const count = Math.round(Number(payload.n) || 1)
@@ -677,6 +710,29 @@ async function uploadReferenceAssets(key, assets) {
   return collected
 }
 
+/**
+ * 参考素材上传（POST /api/gateway/v1/assets/references/upload）。
+ *
+ * 无限画布挪到网关后面以后手里只有平台服务令牌，没有 SeeAPI 的 Key：它原本直连 SeeAPI 时
+ * 那一步「先把素材换成 asset://」就没人接得住，网关只认建任务与轮询，直接 404，带参考视频的
+ * 视频一条都发不出去（2026-11-24 实测：POST /api/gateway/v1/assets/references/upload 404）。
+ * 素材挂在「接下来建任务的那把 Key」账号下才找得到，所以这里按 video 能力从同一池里挑第一把，
+ * 与 createVideoTask 的候选顺序一致。
+ */
+export async function uploadReferenceAsset(asset = {}) {
+  const kind = asset.kind === 'video' ? 'video' : 'image'
+  const model = String(asset.model || '')
+  const candidates = resolveKeyCandidates({ capability: 'video', model, acceptModels: acceptedModels(model), limit: 1 })
+  if (!candidates.length) throw missingKeyError('video', model)
+  const key = candidates[0]
+  const collected = await uploadReferenceAssets(key, [
+    { kind, bytes: asset.bytes, mime: asset.mime, ext: asset.ext },
+  ])
+  const uri = collected[kind][0]
+  if (!uri) throw gatewayError(502, 'REFERENCE_UPLOAD_EMPTY', '参考素材上传后上游没有返回 asset_uri')
+  return { asset_uri: uri, kind, key: { id: key.id, name: key.name } }
+}
+
 // 任务台账的清理由 gateway-tasks.mjs 负责（跑着的 2 小时、终态留 24 小时）。
 function pruneJobs() {
   pruneTasks()
@@ -698,7 +754,10 @@ async function attemptTask(key, upstreamKind, requestBody, started, capability, 
   }
   if (!upstream.response.ok) {
     const message = friendlyUpstream(upstream.response.status, upstream.text)
-    reportKey(key.id, false, 'HTTP ' + upstream.response.status + ' ' + upstream.text.slice(0, 160))
+    // 400 / 422 是这次请求本身写错（参考素材不属于这个账号、字段不对…），不是 Key 坏了；
+    // 记成 Key 失败会把一把好 Key 晾进冷却，别人跟着一起被挡（2026-11-24 实测踩过）。
+    const keyFault = [401, 402, 403, 429].includes(upstream.response.status) || upstream.response.status >= 500
+    if (keyFault) reportKey(key.id, false, 'HTTP ' + upstream.response.status + ' ' + upstream.text.slice(0, 160))
     recordRoute({ capability, model, keyId: key.id, keyName: key.name, source: 'pool', reason: key.reason, attempt: key.attempt, ms: Date.now() - started, ok: false, error: 'HTTP ' + upstream.response.status + ' ' + upstream.text.slice(0, 160) })
     throw gatewayError(502, 'UPSTREAM_REJECTED', message, { upstreamStatus: upstream.response.status, upstreamCode: upstreamErrorCode(upstream.text), detail: upstream.text.slice(0, 300) })
   }
@@ -719,7 +778,7 @@ async function attemptTask(key, upstreamKind, requestBody, started, capability, 
  * 与出图一样支持换把重试；建成功后把「任务 id → 这把 Key」记下来，
  * 轮询必须回到同一把 Key —— 任务在上游是挂在某把 Key 的账号下的。
  */
-export async function createVideoTask(payload = {}) {
+export async function createVideoTask(payload = {}, options = {}) {
   pruneJobs()
   const started = Date.now()
   const model = String(payload.model || '')
@@ -732,9 +791,15 @@ export async function createVideoTask(payload = {}) {
   // 参考素材不直接进 JSON：先按这把 Key 传到上游换 asset://，再放进 reference_image_urls /
   // reference_video_urls（SeeAPI 的规矩，来自无限画布 generation_seedance.py 的实现）。
   const { referenceAssets, ...payloadRest } = payload
+  // SeeAPI 的建任务同样强制幂等键（2026-11-24 实测：不带就回 "A stable idempotency key is required"）。
+  // 口径与出图一致：正文里的 idempotency_key → 请求头 → 平台兜一个；重试要复用同一个键。
+  // 键要「稳定」：调用方正文里的 idempotency_key → 调用方请求头（无限画布按这次提交算一个固定值，
+  // 重试会复用）→ 平台兜底。SeeAPI 对同一内容换了键重发会直接回
+  // "A stable idempotency key is required"（2026-11-24 实测）。
+  const idempotencyKey = idempotencyKeyFor(payload, options.idempotencyKey)
   let lastError = null
   for (const key of candidates) {
-    const requestBody = { ...payloadRest, model: payloadRest.model || key.model }
+    const requestBody = { ...videoCreateBody(payloadRest), model: payloadRest.model || key.model }
     if (Array.isArray(referenceAssets) && referenceAssets.length) {
       let references
       try {
@@ -748,7 +813,7 @@ export async function createVideoTask(payload = {}) {
     }
     let created
     try {
-      created = await attemptTask(key, 'videoCreate', requestBody, started, 'video', model, '出视频')
+      created = await attemptTask(key, 'videoCreate', requestBody, started, 'video', model, '出视频', idempotencyHeaders(key, idempotencyKey))
     } catch (error) {
       lastError = error
       continue

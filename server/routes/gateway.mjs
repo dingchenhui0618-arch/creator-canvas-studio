@@ -8,8 +8,9 @@
 //   3. SeeAPI / CGCM 写法：/v1/images/generations[/async]、/v1/video/generations、/v1/tasks/<id>
 // 这样按任一种协议写死的客户端（无限画布的出图节点按方舟、出视频的 CGCM 渠道按 SeeAPI）
 // 只改 base URL 就能接过来，不用改它的业务代码。
+import { Readable } from 'node:stream'
 import { readBody, sendJson } from './_shared.mjs'
-import { authorizeGateway, createImageTask, createVideoTask, generateImage, listPoolModels, pollVideoTask } from '../gateway.mjs'
+import { authorizeGateway, createImageTask, createVideoTask, generateImage, listPoolModels, pollVideoTask, uploadReferenceAsset } from '../gateway.mjs'
 import { config } from '../config.mjs'
 import { admitWaiting, canvasQueueView, coverKeyReport, coverReport } from '../waterline.mjs'
 import { coverKeyHash } from '../cover-store.mjs'
@@ -149,6 +150,34 @@ export function createGatewayRouter() {
         return true
       }
 
+      // 参考素材上传（2026-11-24）：无限画布挪到网关后面以后手里只有平台令牌，
+      // 原先直连 SeeAPI 的 /v1/assets/references/upload 没人接，带参考视频的生成全被 404 挡住。
+      // 入站是 multipart（file + kind），只取这两项，转给上游换成 asset:// 再回给画布；
+      // 用的是「接下来建任务那把 Key」的同一候选池，素材才挂在同一个账号下。
+      if (pathname === '/api/gateway/v1/assets/references/upload' && req.method === 'POST') {
+        try {
+          const contentType = String(req.headers['content-type'] || '')
+          const form = await new Response(Readable.toWeb(req), { headers: { 'content-type': contentType } }).formData()
+          const file = form.get('file')
+          if (!file || typeof file === 'string') {
+            sendJson(res, 400, { ok: false, error: '参考素材上传缺少 file', code: 'REFERENCE_FILE_REQUIRED' })
+            return true
+          }
+          const bytes = Buffer.from(await file.arrayBuffer())
+          if (!bytes.length) {
+            sendJson(res, 400, { ok: false, error: '参考素材是空文件', code: 'REFERENCE_FILE_EMPTY' })
+            return true
+          }
+          const kind = String(form.get('kind') || '') === 'video' ? 'video' : 'image'
+          const ext = (String(file.name || '').match(/\.([A-Za-z0-9]+)$/) || [])[1] || ''
+          const model = String(form.get('model') || '')
+          sendJson(res, 200, { ok: true, ...(await uploadReferenceAsset({ bytes, mime: file.type, ext, kind, model })) })
+        } catch (error) {
+          fail(res, error)
+        }
+        return true
+      }
+
       if (IMAGE_CREATE.has(pathname) && req.method === 'POST') {
         await withHeavy(req, res, async () => {
           try {
@@ -174,7 +203,7 @@ export function createGatewayRouter() {
       if (VIDEO_CREATE.has(pathname) && req.method === 'POST') {
         await withHeavy(req, res, async () => {
           try {
-            sendJson(res, 200, await createVideoTask(await readBody(req)))
+            sendJson(res, 200, await createVideoTask(await readBody(req), { idempotencyKey: callerIdempotency }))
           } catch (error) {
             fail(res, error)
           }
