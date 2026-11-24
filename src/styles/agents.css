@@ -20,7 +20,11 @@
   --fail: #a33838;
   --fail-soft: #f6eeee;
   --pass-soft: #eef4f0;
-  max-width: 1200px;
+  /* r309：宽屏不再把自己居中成一座 1200 的小岛（1920 上左侧栏到内容之间空出 242px，
+     和顶栏那条贴着侧栏的面包屑对不上）。现在左边缘跟着顶栏走——任何分辨率下
+     「侧栏 → 内容」这道缝都停在这个位置，多出来的宽度全部交给内容，上限与 .page 一致。 */
+  max-width: 1520px;
+  margin-inline: 0 auto;
   min-height: 100%;
   /* r294：四周留白收一档（32/32/64 → 24）。这一页是一屏就干活的页，
      底部 64px 会让「对话窗口」白丢一截高度。 */
@@ -893,6 +897,40 @@
 .agx-capsule-menu button:hover {
   background: var(--surface-soft);
 }
+/* r309：图片 / 视频的模型胶囊单独占一行。以前它在 .agx-params 里和四颗参数一起排，
+   触发按钮被 190px 的上限截成「VisionQA通用图片模型 ·…」——1920 上也是省略号。
+   现在这一行只放模型：左标签、右值、最右边箭头，值再长也只是收起尾字，不给整页留省略号。 */
+.agx-media-modelbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-faint);
+}
+.agx-media-modelbar .agx-capsule {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+.agx-media-modelbar .agx-capsule-trigger {
+  min-width: 0;
+  max-width: 100%;
+}
+.agx-media-modelbar .agx-capsule-trigger em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.agx-media-modelbar .agx-capsule-trigger svg {
+  flex: none;
+}
+/* 模型那行已经把分隔线画在输入框下面了：参数行不要再画第二条 */
+.agx-composer--media .agx-composer-bar {
+  padding-top: 0;
+  border-top: 0;
+}
+
 .agx-capsule-menu button.is-active {
   color: var(--ink);
   background: var(--surface-soft);
@@ -2471,10 +2509,20 @@
   -webkit-line-clamp: 2;
   line-clamp: 2;
 }
+/* r309：时间一行、参数一行。参数那一行不许断在数字与单位之间（数字与单位之间已经是不
+   断行空格），再长就整段省略——不让它断成「· 1:1 ·」这种只剩分隔符的行。 */
 .agx-media-recent-meta {
+  display: grid;
+  gap: var(--space-1);
   color: var(--faint);
   font-family: var(--font-mono);
   font-size: var(--text-mono);
+  line-height: 1.5;
+}
+.agx-media-recent-facts {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .agx-media-recent-download {
   flex: 0 0 auto;
@@ -2629,6 +2677,39 @@
 
 
 /* 窄屏与「对话」一致：一条竖着排，输入卡在前，最近生成收到后面（r256） */
+/* r309：390 上四颗参数胶囊原本是「能挤几颗算几颗」——方式 + 比例一行、时长 + 清晰度一行，
+   右边缘参差不齐，底部动作行再单独占一行（输入卡 219px 高）。现在排成两列等宽，
+   模型那行也拉满一列宽，上下两条边对齐；手机上点按区仍是 44px。 */
+@media (max-width: 560px) {
+  .agx-composer--media .agx-media-modelbar .agx-capsule {
+    flex: 1 1 auto;
+  }
+  .agx-composer--media .agx-params {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+  .agx-composer--media .agx-params .agx-capsule {
+    /* 两列等宽之后每列只有 132px：胶囊里的左右内边距各收一档、标签与值之间的缝 8 → 4，
+       否则「方式 文生视频」正好卡在 132 的边界上，标签会被挤成竖排的「方 / 式」 */
+    gap: 4px;
+    padding: 0 8px;
+    justify-content: space-between;
+  }
+  .agx-composer--media .agx-params .agx-capsule > span {
+    white-space: nowrap;
+  }
+  .agx-composer--media .agx-params .agx-capsule-trigger {
+    min-width: 0;
+    gap: 4px;
+  }
+  .agx-composer--media .agx-params .agx-capsule-trigger em {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
 @media (max-width: 900px) {
   .agx-media-shell {
     grid-template-columns: minmax(0, 1fr);

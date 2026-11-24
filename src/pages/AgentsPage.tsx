@@ -477,11 +477,14 @@ function DraftCard({
   )
 }
 
+// r309：数字与单位之间用不断行空格。最近生成那一列只有 208px，普通空格会让「224 B」断成
+// 「224」+「B」两行（实测 1920 上就这么断的）——这些短标签内部永远不该断。
 function formatBytes(bytes: number) {
-  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
-  if (bytes < 1024) return bytes + ' B'
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
-  return (bytes / 1024 / 1024).toFixed(1) + ' MB'
+  const gap = '\u00A0'
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0' + gap + 'B'
+  if (bytes < 1024) return bytes + gap + 'B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + gap + 'KB'
+  return (bytes / 1024 / 1024).toFixed(1) + gap + 'MB'
 }
 
 // 最近生成那一行要能用一句话说清「多大、什么比例、几秒」，否则清单只是堆任务号
@@ -502,7 +505,8 @@ function shortTimeOf(iso: string) {
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return ''
   const pad = (value: number) => String(value).padStart(2, '0')
-  return pad(date.getMonth() + 1) + '-' + pad(date.getDate()) + ' ' + pad(date.getHours()) + ':' + pad(date.getMinutes())
+  // 日期与时间之间同样用不断行空格：断在那里会变成「11-24」+「13:04」两行，读起来像两条任务
+  return pad(date.getMonth() + 1) + '-' + pad(date.getDate()) + '\u00A0' + pad(date.getHours()) + ':' + pad(date.getMinutes())
 }
 
 // 「最近生成」每行左边这一小块（r261）：以前只有文字，想找一张图得挨条读提示词。
@@ -535,11 +539,6 @@ function RecentThumb({ task }: { task: MediaTask }) {
       </span>
     </>
   )
-}
-
-// 一行里要说清「什么时候、多大、什么比例」
-function recentMetaOf(task: MediaTask) {
-  return [shortTimeOf(task.createdAt), describeTask(task)].filter(Boolean).join(' · ')
 }
 
 function clockOf(ms: number) {
@@ -1084,7 +1083,7 @@ function MediaComposer({
                   <div className="agx-media-recent">
                     <div className="agx-media-recent-head">
                       <span>最近生成</span>
-                      <span>只列你自己的任务 · 已列 {recent.length} 条</span>
+                      <span>已列 {recent.length} 条</span>
                     </div>
                     <ul>
                       {recent.map((item) => (
@@ -1118,7 +1117,12 @@ function MediaComposer({
                               title="打开这一条"
                             >
                               <span className="agx-media-recent-prompt">{item.prompt}</span>
-                              <span className="agx-media-recent-meta">{recentMetaOf(item)}</span>
+                              {/* r309：时间与参数分开两行。以前是一整句「11-24 13:04 · 1:1 · 224 B」，
+                                  208 宽的列里会在每个「 · 」处折行，断出「· 1:1 ·」这种只剩分隔符的一行。 */}
+                              <span className="agx-media-recent-meta">
+                                <span className="agx-media-recent-time">{shortTimeOf(item.createdAt)}</span>
+                                <span className="agx-media-recent-facts">{describeTask(item)}</span>
+                              </span>
                             </button>
                           </div>
                           {item.status === 'succeeded' ? (
@@ -1534,8 +1538,10 @@ function MediaComposer({
             disabled={active}
         />
 
-        <div className="agx-composer-bar">
-          <div className="agx-params" role="group" aria-label="生成参数">
+        {/* r309：模型单独占一行。以前它和四颗参数胶囊挤在同一行里，胶囊被 190px 的上限截断，
+            「VisionQA通用图片模型 · 未真调」在 1920 上也是省略号——模型名是这一页最该看清的一项；
+            参数胶囊另起一行，四颗之间有整行的宽度可用，窄屏也不会只剩一颗掉在第三行。 */}
+        <div className="agx-media-modelbar">
           <Capsule
             label="模型"
             value={model?.id ?? ''}
@@ -1548,6 +1554,9 @@ function MediaComposer({
             disabled={active || catalog.length === 0}
             title="换模型会按新模型的规格重画比例、时长与清晰度"
           />
+        </div>
+        <div className="agx-composer-bar">
+          <div className="agx-params" role="group" aria-label="生成参数">
           <Capsule
             label="方式"
             value={mode?.id ?? ''}
