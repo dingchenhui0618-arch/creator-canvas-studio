@@ -15,6 +15,7 @@ import { currentInstanceId, liveInstanceIds } from './instances.mjs'
 import { FLOW_IMAGE_DEFAULT_RATIO, FLOW_IMAGE_RATIOS, runImageGeneration } from './flow-image.mjs'
 import { FLOW_VIDEO_DEFAULT_DURATION, FLOW_VIDEO_DEFAULT_RATIO, FLOW_VIDEO_DEFAULT_RESOLUTION, runVideoGeneration } from './flow-video.mjs'
 import { VIDEO_DURATIONS, VIDEO_RATIOS, VIDEO_RESOLUTIONS } from './media-models.mjs'
+import { normalizeAssetRef, readAssetReference } from './asset-ref.mjs'
 import { writeFileAtomic } from './atomic-write.mjs'
 
 // 工作流流程：存储（data/flows.json）+ 运行记录（data/runs.json）+ 拓扑执行引擎。
@@ -78,10 +79,11 @@ function defaultConfig(kind) {
       return { format: 'markdown' }
     case 'image':
       // 模型留空 = 跟随平台统一路由（出图主路由），不把模型 id 写死进流程数据
-      return { model: '', ratio: FLOW_IMAGE_DEFAULT_RATIO, prompt: '' }
+      // assetRef 空 = 纯文生图；填了 asst_x:hero 就拿「我的商品图 / 我的脸」当参考
+      return { model: '', ratio: FLOW_IMAGE_DEFAULT_RATIO, prompt: '', assetRef: '' }
     case 'video':
       // 与出图同一套口径：模型留空 = 跟随平台统一路由，不把模型 id 写死进流程数据
-      return { model: '', ratio: FLOW_VIDEO_DEFAULT_RATIO, duration: FLOW_VIDEO_DEFAULT_DURATION, resolution: FLOW_VIDEO_DEFAULT_RESOLUTION, prompt: '' }
+      return { model: '', ratio: FLOW_VIDEO_DEFAULT_RATIO, duration: FLOW_VIDEO_DEFAULT_DURATION, resolution: FLOW_VIDEO_DEFAULT_RESOLUTION, prompt: '', assetRef: '' }
     case 'review':
       return { profile: 'brand', image: '' }
     default:
@@ -149,6 +151,9 @@ function normalizeConfig(kind, raw) {
         model: trimText(source.model, 80),
         ratio: FLOW_IMAGE_RATIOS.includes(source.ratio) ? source.ratio : FLOW_IMAGE_DEFAULT_RATIO,
         prompt: clip(source.prompt ?? '', 4000),
+        // 非法引用存空串（当没选），保存时不拒绝：引用失效是运行时的事，
+        // 不该让用户连流程都存不下来 —— 但运行时不会静默退回纯文生图。
+        assetRef: normalizeAssetRef(source.assetRef),
       }
     case 'video':
       return {
@@ -157,6 +162,7 @@ function normalizeConfig(kind, raw) {
         duration: VIDEO_DURATIONS.includes(Number(source.duration)) ? Number(source.duration) : FLOW_VIDEO_DEFAULT_DURATION,
         resolution: VIDEO_RESOLUTIONS.includes(source.resolution) ? source.resolution : FLOW_VIDEO_DEFAULT_RESOLUTION,
         prompt: clip(source.prompt ?? '', 4000),
+        assetRef: normalizeAssetRef(source.assetRef),
       }
     case 'review':
       return {
@@ -956,6 +962,9 @@ async function runImage(node, ctx = {}) {
   const prompt = trimText(cfg.prompt, 4000) || trimText(ctx.prompt, 2000) || trimText(ctx.text, 2000)
   if (!prompt) throw new Error('出图节点没有提示词：在检查器里填写，或把上游文本接到它上面')
   if (!ctx.ownerId) throw new Error('出图需要登录账号：这次运行没有归属账号，不能扣费也不产出')
+  // 先读参考资产、再进 runImageGeneration（扣费在它里面）：资产被删 / 这张还没生成出来，
+  // 必须在花钱之前失败。读不到就抛 ASSET_REF_MISSING，不许悄悄退回纯文生图。
+  const reference = cfg.assetRef ? await readAssetReference(ctx.ownerId, cfg.assetRef) : null
   return runImageGeneration({
     ownerId: ctx.ownerId,
     runId: ctx.runId,
@@ -963,6 +972,7 @@ async function runImage(node, ctx = {}) {
     prompt,
     ratio: cfg.ratio,
     model: cfg.model,
+    reference,
   })
 }
 
@@ -976,6 +986,8 @@ async function runVideo(node, ctx = {}) {
   const prompt = trimText(cfg.prompt, 4000) || trimText(ctx.prompt, 2000) || trimText(ctx.text, 2000)
   if (!prompt) throw new Error('出视频节点没有提示词：在检查器里填写，或把上游文本接到它上面')
   if (!ctx.ownerId) throw new Error('出视频需要登录账号：这次运行没有归属账号，不能扣费也不产出')
+  // 与出图同一条规矩：资产先在扣费之前读出来，读不到就失败，不静默改走纯文生视频
+  const reference = cfg.assetRef ? await readAssetReference(ctx.ownerId, cfg.assetRef) : null
   return runVideoGeneration({
     ownerId: ctx.ownerId,
     runId: ctx.runId,
@@ -985,6 +997,7 @@ async function runVideo(node, ctx = {}) {
     duration: cfg.duration,
     resolution: cfg.resolution,
     model: cfg.model,
+    reference,
     signal: ctx.signal || null,
     onProgress: ctx.onProgress || null,
   })

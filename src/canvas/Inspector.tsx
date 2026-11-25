@@ -13,6 +13,7 @@ import {
   VIDEO_RESOLUTION_OPTIONS,
 } from './catalog'
 import { useModelOptions } from '../components/ModelSwitch'
+import AssetRefSelect from '../components/AssetRefSelect'
 import { useUiMode } from '../api/app'
 import type { FlowNodeData, NodeConfig } from './types'
 
@@ -26,9 +27,9 @@ type InspectorProps = {
   readOnly?: boolean
   /** 这次运行留下了画布快照：参数取当时那一版，不是当前画布（v0.9.107） */
   runSnapshot?: boolean
-  /** 出图每张多少积分（来自 /api/credits 的平台价）；拿不到时不写数字，不编一个价 */
+  /** 出图每张多少积分（来自 /api/media/models 的模型卡）；拿不到时不写数字，不编一个价 */
   imageCredits?: number
-  /** 出视频每条多少积分：与出图同一口径，拿不到时不编价 */
+  /** 当前选中视频节点自己那条价（按它的 duration|resolution 查模型价表）；拿不到时不编价 */
   videoCredits?: number
 }
 
@@ -217,6 +218,12 @@ export function Inspector({ node, onPatch, onConfig, onDuplicate, onDelete, read
                   onChange={(event) => onConfig({ prompt: event.target.value }, 'prompt')}
                 />
               </Field>
+              <Field label="参考资产" hint="选了就按这套图当参考出图，商品与人物换镜头也不走样；留空仍从零画。">
+                <AssetRefSelect
+                  value={config.assetRef ?? ''}
+                  onChange={(next) => onConfig({ assetRef: next }, 'assetRef')}
+                />
+              </Field>
               <Field label="比例" hint="决定出图尺寸；评审与作品流都按这个比例排版。">
                 <select
                   className="cv-select"
@@ -244,6 +251,12 @@ export function Inspector({ node, onPatch, onConfig, onDuplicate, onDelete, read
                   value={config.prompt ?? ''}
                   placeholder="例如：奶油白陶瓷杯放在晨光里的木桌上，镜头缓慢推近，热气升起"
                   onChange={(event) => onConfig({ prompt: event.target.value }, 'prompt')}
+                />
+              </Field>
+              <Field label="参考资产" hint="选了就拿这套图的第一帧当参考，人物与商品在镜头里更稳定；留空仍从零生成。">
+                <AssetRefSelect
+                  value={config.assetRef ?? ''}
+                  onChange={(next) => onConfig({ assetRef: next }, 'assetRef')}
                 />
               </Field>
               <Field label="比例" hint="竖版适合短视频；作品流按这个比例排版。">

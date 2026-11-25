@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowRight, ArrowUpRight, Download, Eye, History, LayoutTemplate, Plus, RefreshCw, RotateCcw, Search, Send, Share2, Workflow, X } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, Download, Eye, History, LayoutTemplate, Package, Plus, RefreshCw, RotateCcw, Search, Send, Share2, Workflow, X } from 'lucide-react'
 import type { Page } from '../domain/types'
 import PageHead from '../components/PageHead'
 import { Pill, Tag } from '../components/ui'
 import { request } from '../api/client'
+import { getOnboarding } from '../api/assets'
 import { listBdcCanvases, type BdcCanvas } from '../api/bdc'
 import type { RunProjectRef } from '../api/flows'
 import {
@@ -373,6 +374,8 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
   const [projects, setProjects] = useState<ProjectSummary[]>([])
   const [runs, setRuns] = useState<RunRow[]>([])
   const [templates, setTemplates] = useState<TemplateRow[]>([])
+  // 自有资产套数（r312）：产品 / 数字人任一边为 0 就常驻一条建资产提示；两边都建好才收起
+  const [assetCounts, setAssetCounts] = useState<{ product: number; avatar: number } | null>(null)
   // 工作台的分享汇总：一条作品一行，累计各轮打开情况（v0.9.12）
   const [shares, setShares] = useState<ShareSummaryRow[]>([])
   const [shareTotals, setShareTotals] = useState({ total: 0, opens: 0 })
@@ -440,13 +443,14 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
     setLoading(true)
     const problems: string[] = []
     // 队列不在这里取：它跟着筛选项走，由下面那个 effect 单独刷新（首屏也走那一处）
-    const [canvasResult, runResult, templateResult, projectResult, shareResult, deliveryResult] = await Promise.allSettled([
+    const [canvasResult, runResult, templateResult, projectResult, shareResult, deliveryResult, onboardingResult] = await Promise.allSettled([
       listBdcCanvases(),
       request<{ items: RunRow[] }>('/api/runs'),
       request<{ items: TemplateRow[] }>('/api/templates'),
       listProjects(),
       listShares(),
       listDeliveries(),
+      getOnboarding(),
     ])
     if (canvasResult.status === 'fulfilled' && canvasResult.value.ok) {
       setCanvases(canvasResult.value.canvases ?? [])
@@ -479,6 +483,16 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
       setShares([])
       setShareTotals({ total: 0, opens: 0 })
       problems.push('分享记录：' + String((shareResult.reason as Error)?.message || shareResult.reason))
+    }
+
+    // 资产提示读不到就先不摆这张卡：它不是主任务，不因此把整页判成读失败
+    if (onboardingResult.status === 'fulfilled') {
+      setAssetCounts({
+        product: Number(onboardingResult.value.counts?.product) || 0,
+        avatar: Number(onboardingResult.value.counts?.avatar) || 0,
+      })
+    } else {
+      setAssetCounts(null)
     }
 
     if (deliveryResult.status === 'fulfilled') {
@@ -1126,6 +1140,26 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
           </div>
         </dl>
       </section>
+
+      {/* 常驻建资产提示（r312）：产品与数字人任一边为 0 就摆着，两边都建好才消失。
+          不设关闭入口；入口只有一个「去我的资产」，不抢上面主卡的下一步。 */}
+      {assetCounts && (assetCounts.product === 0 || assetCounts.avatar === 0) ? (
+        <section className="vq-asset-nudge" aria-labelledby="vq-asset-nudge-title">
+          <span className="vq-asset-nudge-icon" aria-hidden="true">
+            <Package size={16} strokeWidth={1.75} />
+          </span>
+          <div className="vq-asset-nudge-copy">
+            <h2 id="vq-asset-nudge-title">先把资产建起来，画布和作品才用得上</h2>
+            <p>
+              产品资产 {assetCounts.product} 套 · 数字人资产 {assetCounts.avatar} 套。两边都建好后，这条提示会自己消失。
+            </p>
+          </div>
+          <button type="button" className="vq-button vq-button--ghost" onClick={() => onNavigate('assets')}>
+            去我的资产
+            <ArrowRight size={13} />
+          </button>
+        </section>
+      ) : null}
 
       {/* 空账号第一屏（v0.9.42）：评审 / 交付 / 运行 / 分享都挂在作品上，手上没有作品时必然是空的。
           与其铺四块「还没有」加三张空心开始卡，不如把「它们什么时候出现」讲清楚，主卡说下一步。 */}

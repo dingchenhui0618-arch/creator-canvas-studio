@@ -3070,6 +3070,66 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
   line-height: var(--leading-meta);
 }
 
+
+/* 作品级出图参考资产（r312）：分镜面板里的一行设置，选完即保存。
+   没选时那句提示带「去我的资产」入口，不拦着出图。 */
+.vq-shot-asset {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.vq-shot-asset-field {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.vq-shot-asset-label {
+  flex: none;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+}
+
+.vq-shot-asset .vq-assetref {
+  flex: 1 1 auto;
+  max-width: 360px;
+}
+
+.vq-shot-asset-hint {
+  margin: 0;
+  color: var(--faint);
+  font-size: var(--text-xs);
+  line-height: var(--leading-meta);
+}
+
+.vq-shot-asset-hint.is-set {
+  color: var(--muted);
+}
+
+.vq-shot-asset-hint a {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+@media (max-width: 720px) {
+  .vq-shot-asset-field {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .vq-shot-asset .vq-assetref {
+    max-width: none;
+  }
+}
+
 /* 运行画完的图贴回分镜（r278）：一句提示 + 就地一个入口。
    提示排在分镜列表上面一行，按钮跟着句子走；窄屏时按钮换行也不会撑破面板。 */
 .vq-shot-backfeed {

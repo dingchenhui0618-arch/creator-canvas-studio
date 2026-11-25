@@ -168,6 +168,44 @@ test('分镜超过上限：只建 12 个出图节点，描述里如实说还有�
   assert.equal(new Set(images.map((node) => node.position.x + ',' + node.position.y)).size, 12)
 })
 
+
+test('作品挂了参考资产：分镜出图节点继承它；改脚本时只同步 n_shot_NN，不碰用户自己拉的节点', () => {
+  const token = 'asst_mtest01_abcd12:hero'
+  const built = draft.buildReplicateDraft({ template: { ...template, platform: 'douyin', storyboard }, script: ownScript, assetRef: token })
+  const images = built.nodes.filter((node) => node.type === 'image')
+  assert.equal(images.length, 3)
+  assert.ok(images.every((node) => node.data.config.assetRef === token), '每一镜都带同一条引用')
+
+  // 非法引用归一成空串：保存不拒绝，但运行时也不会拿它当参考
+  const invalid = draft.buildReplicateDraft({ template: { ...template, platform: 'douyin', storyboard }, script: ownScript, assetRef: 'not-a-ref' })
+  assert.equal(invalid.nodes.find((node) => node.type === 'image').data.config.assetRef, '')
+
+  // 没有分镜时老行为不变：草稿里没有出图节点，也没有别的字段被塞进去
+  const plain = draft.buildReplicateDraft({ template, script: ownScript })
+  assert.equal(plain.nodes.length, 2)
+  assert.equal(plain.nodes.some((node) => node.type === 'image'), false)
+
+  // 同步脚本：n_shot_NN 跟着作品的引用换；用户自己拉的 image 节点保持原样
+  const custom = {
+    id: 'image-custom-1',
+    type: 'image',
+    position: { x: 0, y: 900 },
+    data: { kind: 'image', title: '我自己加的', config: { model: '', ratio: '1:1', prompt: '自己写的', assetRef: 'asst_other999_aa11bb:scene' } },
+  }
+  const baseNodes = draft.buildReplicateDraft({ template: { ...template, platform: 'douyin', storyboard }, script: ownScript })
+  const patched = draft.patchCanvasScript([...baseNodes.nodes, custom], { template, script: ownScript, prevHook: '模板的钩子', assetRef: token })
+  assert.equal(patched.changed, true)
+  const shots = patched.nodes.filter((node) => /^n_shot_\d{2}$/.test(node.id))
+  assert.equal(shots.length, 3)
+  assert.ok(shots.every((node) => node.data.config.assetRef === token))
+  assert.equal(patched.nodes.find((node) => node.id === 'image-custom-1').data.config.assetRef, 'asst_other999_aa11bb:scene', '用户自己拉的节点不许被改')
+
+  // 作品清掉引用时，这批分镜节点也跟着清空
+  const cleared = draft.patchCanvasScript(patched.nodes, { template, script: ownScript, prevHook: '模板的钩子', assetRef: '' })
+  assert.equal(cleared.changed, true)
+  assert.ok(cleared.nodes.filter((node) => /^n_shot_\d{2}$/.test(node.id)).every((node) => node.data.config.assetRef === ''))
+  assert.equal(cleared.nodes.find((node) => node.id === 'image-custom-1').data.config.assetRef, 'asst_other999_aa11bb:scene')
+})
 test('没有分镜就还是两个节点：老作品开工作流行为不变', () => {
   const built = draft.buildReplicateDraft({ template, script: ownScript })
   assert.equal(built.nodes.length, 2)
@@ -177,7 +215,11 @@ test('没有分镜就还是两个节点：老作品开工作流行为不变', ()
 test('作品页「开工作流」真的把分镜交给草稿，界面按服务端节点数说画几张', async () => {
   const fs = await import('node:fs')
   const route = fs.readFileSync(new URL('../server/routes/projects.mjs', import.meta.url), 'utf8')
-  assert.match(route, /buildReplicateDraft\(\{ template: template \|\| \{\}, script, name: project\.title \}\)/, '开工作流这条路把模板（含分镜）交给草稿')
+  assert.match(
+    route,
+    /buildReplicateDraft\(\{\s*template: template \|\| \{\}, script, name: project\.title, assetRef: project\.assetRef\s*\}\)/,
+    '开工作流这条路把模板（含分镜）与作品的参考资产一起交给草稿',
+  )
   const page = fs.readFileSync(new URL('../src/pages/ProjectPage.tsx', import.meta.url), 'utf8')
   // 说「会画几张」要用服务端建出来的节点数，不是自己按镜数乘：分镜超过上限时服务端只建 12 个
   assert.match(page, /Math\.max\(0, \(result\.flow\.nodes \|\| 0\) - 2\)/)

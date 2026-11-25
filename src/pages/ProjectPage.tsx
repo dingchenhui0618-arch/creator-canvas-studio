@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle, ArrowLeft, ArrowRight, BookmarkPlus, Bot, Check, ChevronDown, Clapperboard, ClipboardCheck, Copy, CopyPlus, Download, ExternalLink, FileCheck2, FileText, GitCompare, ImageDown, Link2, Package, Pencil, Plus, Printer, RefreshCw, RotateCcw, ScanEye, Share2, Sparkles, Trash2, Upload, Workflow, X } from 'lucide-react'
 import PageHead from '../components/PageHead'
+import AssetRefSelect from '../components/AssetRefSelect'
 import ProjectStatusPill from '../components/ProjectStatus'
 import { VersionScriptModal } from '../components/VersionScriptModal'
 import { VersionCompareModal } from '../components/VersionCompareModal'
@@ -226,6 +227,8 @@ export default function ProjectPage({
   const [frameAttach, setFrameAttach] = useState('')
   // 逐镜出图（r276）：哪几镜在画、画到哪；只有点「出这一镜」才动它，进页面不出图
   const [shotGen, setShotGen] = useState<Record<number, ShotGenRow>>({})
+  // 作品级出图参考资产（r312）：换一项就 PATCH 一次，逐镜出图立刻按新引用走
+  const [assetRefBusy, setAssetRefBusy] = useState(false)
   // 出图模型与单价：与「快捷创作 → 图片」读同一份 /api/media/models，界面不自己写死模型名与价格
   const [imageModel, setImageModel] = useState<{ id: string; label: string; price: number | null; ratios: string[] } | null>(null)
   const [imageModelNote, setImageModelNote] = useState('')
@@ -803,6 +806,25 @@ export default function ProjectPage({
     }
   }
 
+  /**
+   * 作品级「出图参考资产」（r312）：选择即保存，逐镜出图与工作流复刻节点都读这一项。
+   * 传空串 = 清掉，回到纯按提示词画；价格不变，界面也不在这里写另一套价格。
+   */
+  const changeAssetRef = async (next: string) => {
+    if (!data) return
+    setAssetRefBusy(true)
+    try {
+      const result = await updateProject(data.project.id, { assetRef: next })
+      // 以服务端回的 project 为准：r312 已把 assetRef 写进存储层与 PATCH 白名单，刷新后详情照旧带着。
+      setData((prev) => (prev ? { ...prev, project: result.project } : prev))
+      onToast(next ? '分镜出图会带上这套参考资产' : '分镜出图改回纯按提示词画')
+    } catch (caught) {
+      onToast(caught instanceof Error ? caught.message : '参考资产没保存成功')
+    } finally {
+      setAssetRefBusy(false)
+    }
+  }
+
   // 交付档案（v0.9.126）：复制的是完整 SHA-256，不是界面上截断的那 12 位。
   // 收件人拿到 zip 后可以自己算一遍哈希，对上才说明还是当初封存的那一份。
   const copyPackageSha = async (sha: string) => {
@@ -938,6 +960,9 @@ export default function ProjectPage({
   const generateShotFrame = useCallback(async (shotNo: number) => {
     const board = data?.template
     if (!board?.storyboard?.length || !imageModel) return
+    // 作品选了参考资产就带图出（mode reference + assets），没选保持原来的纯文生图，
+    // 价格与默认行为都不变；资产读不到时服务端会明确失败，不静默退回纯提示词。
+    const assetRef = String(data?.project.assetRef || '').trim()
     const current = shotGen[shotNo]
     if (current?.state === 'running' || current?.state === 'attach') return
     const shot = board.storyboard.find((item, index) => Math.max(1, Math.round(Number(item.shotNo) || index + 1)) === shotNo)
@@ -956,7 +981,8 @@ export default function ProjectPage({
       const started = await generateMediaImage({
         prompt,
         model: imageModel.id,
-        mode: 'text2image',
+        mode: assetRef ? 'reference' : 'text2image',
+        assets: assetRef ? [assetRef] : undefined,
         ratio: shotGenRatio(imageModel.ratios),
       })
       task = started.task
@@ -1006,7 +1032,7 @@ export default function ProjectPage({
           return next
         })
         getCredits(1).then((result) => setBalance(typeof result.balance === 'number' ? result.balance : null)).catch(() => undefined)
-        onToast('第 ' + shotNo + ' 镜的画面出好了 · 这张图也在「快捷创作 → 图片 → 最近生成」里')
+        onToast('第 ' + shotNo + ' 镜的画面出好了' + (assetRef ? ' · 带参考资产' : '') + ' · 这张图也在「快捷创作 → 图片 → 最近生成」里')
       } catch {
         fail({ state: 'failed', message: SHOT_GEN_ATTACH_FAILED, refunded: false, cost: 0, topUp: false })
       }
@@ -3520,6 +3546,29 @@ export default function ProjectPage({
                 ) : null}
               </div>
             </div>
+            {/* 作品级参考资产（r312）：选择即 PATCH 保存；逐镜出图有它就带图，没有就还是纯提示词 */}
+            {template && template.storyboard.length ? (
+              <div className="vq-shot-asset">
+                <div className="vq-shot-asset-field">
+                  <span className="vq-shot-asset-label">出图参考资产</span>
+                  <AssetRefSelect
+                    value={data.project.assetRef ?? ''}
+                    onChange={(next) => void changeAssetRef(next)}
+                    disabled={assetRefBusy}
+                  />
+                </div>
+                <p className={'vq-shot-asset-hint' + (data.project.assetRef ? ' is-set' : '')}>
+                  {data.project.assetRef ? (
+                    '这一版逐镜出图都会带这套资产。'
+                  ) : (
+                    <>
+                      这条作品还没选参考资产，每一镜现在纯按提示词画。
+                      <a href="#/assets">去我的资产建一套</a>
+                    </>
+                  )}
+                </p>
+              </div>
+            ) : null}
             {/* 写进作品（v0.9.30）只写脚本：这一版的脚本是自己的、分镜仍是模板那几镜时要说清楚，
                 不让人以为「换了脚本」连镜头也换了 */}
             {template && template.storyboard.length && script?.source === 'project' ? (

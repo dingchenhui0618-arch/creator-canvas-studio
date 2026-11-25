@@ -438,6 +438,74 @@
   line-height: 1.1;
 }
 
+
+/* ---------- 常驻建资产提示（r312）
+   产品 / 数字人任一边为 0 就摆着，两边都建好才消失；没有关闭按钮。
+   与「下一步」主卡分开：这里是轻提示，不能抢主 CTA。 ---------- */
+
+.vq-asset-nudge {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin: 0 0 var(--space-6);
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+
+.vq-asset-nudge-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.vq-asset-nudge-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.vq-asset-nudge-copy h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+  letter-spacing: -0.01em;
+  line-height: 1.4;
+}
+
+.vq-asset-nudge-copy p {
+  margin: var(--space-1) 0 0;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--leading-meta);
+}
+
+.vq-asset-nudge > .vq-button {
+  flex: none;
+}
+
+@media (max-width: 760px) {
+  .vq-asset-nudge {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: var(--space-2) var(--space-3);
+  }
+
+  .vq-asset-nudge > .vq-button {
+    grid-column: 1 / -1;
+    width: 100%;
+    justify-content: center;
+  }
+}
+
 /* ---------- 三个场景化入口：取代原来那个「对话预设 / 资产画布」二选一弹窗 ---------- */
 
 .vq-start {

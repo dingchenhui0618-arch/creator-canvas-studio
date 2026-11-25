@@ -7,6 +7,7 @@
 // 节点本身不花钱：钱在运行时的出图节点上，运行前顶栏会按张数算出总价。
 // 作品页开工作流、模板库套用模板都走这里；作品页改脚本时也用它重写提示词，
 // 保证「作品页改的脚本」和「工作流跑的东西」是同一份，不再各说各话。
+import { normalizeAssetRef } from './asset-ref.mjs'
 import { beatForShot, shotAspect, shotPrompt } from './shot-prompt.mjs'
 
 export const AUTO_PROMPT_PREFIX = '按模板结构复写一条同类型脚本'
@@ -69,7 +70,7 @@ function shotRatio(platform) {
  * 每镜一个出图节点：提示词与作品页「出这一镜」同源，比例跟平台走，接在复刻脚本下游。
  * 六镜一行、往下排第二列——横着铺开会把画布拉成一条比屏幕宽几倍的线。
  */
-function shotNodesOf(shots, { tpl, structure, scriptSource }) {
+function shotNodesOf(shots, { tpl, structure, scriptSource, assetRef }) {
   const list = (Array.isArray(shots) ? shots : []).filter((shot) => shot && typeof shot === 'object').slice(0, MAX_SHOT_NODES)
   const ratio = shotRatio(tpl.platform)
   const nodes = []
@@ -87,7 +88,14 @@ function shotNodesOf(shots, { tpl, structure, scriptSource }) {
         kind: 'image',
         title: '第 ' + pad + ' 镜 · 出图',
         description: clip(look ? '这一镜：' + look : '按这一镜的口播画一张', 240),
-        config: { model: '', ratio, prompt: shotPrompt(shot, beatForShot(shot, structure), { platform: tpl.platform, scriptSource }) },
+        config: {
+          model: '',
+          ratio,
+          prompt: shotPrompt(shot, beatForShot(shot, structure), { platform: tpl.platform, scriptSource }),
+          // 作品上挂了「我的商品图 / 我的脸」时，每一镜的出图节点都继承这条引用；
+          // 空串表示纯文生图，和以前完全一样（不改默认行为，也不改价格）。
+          assetRef,
+        },
       },
     })
     edges.push({ id: 'e_llm_shot_' + String(index + 1).padStart(2, '0'), source: 'n_llm', target: id })
@@ -95,7 +103,7 @@ function shotNodesOf(shots, { tpl, structure, scriptSource }) {
   return { nodes, edges, total: Array.isArray(shots) ? shots.filter((shot) => shot && typeof shot === 'object').length : 0 }
 }
 
-export function buildReplicateDraft({ template = {}, script = null, shots = null, name = '', description = '' } = {}) {
+export function buildReplicateDraft({ template = {}, script = null, shots = null, name = '', description = '', assetRef = '' } = {}) {
   const tpl = asTemplate(template)
   const structure = beatsOf(tpl, script)
   const inputText = clip(script?.hook || tpl.hook || tpl.title, 500)
@@ -103,7 +111,7 @@ export function buildReplicateDraft({ template = {}, script = null, shots = null
   const shotsInput = Array.isArray(shots) ? shots : Array.isArray(tpl.storyboard) ? tpl.storyboard : []
   // 口播是作品自己改过的，提示词里要写「这条作品自己的脚本」；还在跟模板就写「原片这一段口播」
   const scriptSource = script?.source === 'project' ? 'own' : script?.source === 'template' ? 'template' : undefined
-  const shotPart = shotNodesOf(shotsInput, { tpl, structure, scriptSource })
+  const shotPart = shotNodesOf(shotsInput, { tpl, structure, scriptSource, assetRef: normalizeAssetRef(assetRef) })
   const baseDescription =
     description || ('来自模板 · ' + (tpl.contentType || '脚本') + ' · 脚本 ' + structure.length + ' 段')
   const shotNote = shotPart.nodes.length
@@ -137,9 +145,12 @@ export function buildReplicateDraft({ template = {}, script = null, shots = null
  * 用户手改过提示词（开头不是自动生成的那句）就整块跳过，不覆盖别人的字；
  * 输入节点也只在里面还是旧钩子/模板名时才跟着换，用户自己填的素材不动。
  */
-export function patchCanvasScript(nodes, { template = {}, script = null, prevHook = '' } = {}) {
+export function patchCanvasScript(nodes, { template = {}, script = null, prevHook = '', assetRef = '' } = {}) {
   if (!Array.isArray(nodes) || !nodes.length) return { nodes, changed: false, promptUpdated: false }
   const tpl = asTemplate(template)
+  // 作品换了参考资产时，只把 n_shot_NN 这批「我们按分镜建的」出图节点跟着换；
+  // 用户自己从面板拉的出图节点 id 不是这个形状，不能被我们改配置。
+  const nextRef = normalizeAssetRef(assetRef)
   const prompt = buildReplicatePrompt({ template: tpl, script })
   const hook = clip(script?.hook || tpl.hook || tpl.title, 500)
   const templateTitle = clip(tpl.title, 500)
@@ -165,6 +176,11 @@ export function patchCanvasScript(nodes, { template = {}, script = null, prevHoo
       if (current === hook) return node
       changed = true
       return { ...node, data: { ...data, config: { ...config, text: hook } } }
+    }
+    if (data.kind === 'image' && /^n_shot_\d{2}$/.test(String(node?.id || ''))) {
+      if (String(config.assetRef || '') === nextRef) return node
+      changed = true
+      return { ...node, data: { ...data, config: { ...config, assetRef: nextRef } } }
     }
     return node
   })

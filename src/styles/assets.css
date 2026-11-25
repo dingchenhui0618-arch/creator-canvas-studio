@@ -68,6 +68,71 @@
   line-height: var(--leading-meta);
 }
 
+/* ---------- 参考资产选择器（r312）----------
+   画布节点与作品分镜共用一个下拉；横向内边距与现有表单一致，不引入新字体。 */
+
+.vq-assetref {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.vq-assetref-select {
+  width: 100%;
+  height: var(--btn-h);
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  outline: 0;
+  transition: border-color var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out);
+}
+
+.vq-assetref-select:focus {
+  border-color: var(--ink);
+  box-shadow: var(--ring-soft);
+}
+
+.vq-assetref-select:disabled {
+  color: var(--faint);
+  cursor: default;
+}
+
+.vq-assetref-state {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  color: var(--faint);
+  font-size: var(--text-xs);
+  line-height: var(--leading-meta);
+}
+
+.vq-assetref-state.is-error {
+  color: var(--fail);
+}
+
+.vq-assetref-state a {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.vq-assetref-retry {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+
 .vq-assets-loading {
   display: flex;
   align-items: center;

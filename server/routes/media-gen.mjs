@@ -20,6 +20,7 @@ import { chainFor, listMediaModels, resolveSelection } from '../media-models.mjs
 import { DOWNLOAD_TIMEOUT_MS, downloadAsset, extensionFor, extractVideoUrl, progressOf } from '../media-fetch.mjs'
 import { readBinaryBody } from '../body-reader.mjs'
 import { writeFileAtomic } from '../atomic-write.mjs'
+import { normalizeAssetRef, readAssetReference } from '../asset-ref.mjs'
 import { readBody, sendJson } from './_shared.mjs'
 
 // 出图 / 出视频能选哪些模型、每个模型什么规格，全在 server/media-models.mjs：
@@ -193,6 +194,25 @@ function validationError(message, code = 'MEDIA_PARAMS') {
   return Object.assign(new Error(message), { status: 400, code })
 }
 
+/**
+ * 参考素材数组里可能混着「资产引用」（asst_xxx:hero，也认 asset:asst_xxx:hero 这种带前缀的写法）。
+ * 为什么在这里认：快捷创作把「参考素材 id」和「我的商品图 / 我的脸」塞进同一个 assets 数组，
+ * 服务端不认这一种，用户选了资产也会被当成普通素材 id 去找，最后报「素材不在了」。
+ */
+function assetRefTokenOf(value) {
+  const raw = String(value || '').trim()
+  const prefixed = raw.startsWith('asset:')
+  // 不是资产形状的（m_xxx / ast_xxx）交回原来的素材读取路径
+  if (!prefixed && !raw.startsWith('asst_')) return ''
+  const token = normalizeAssetRef(prefixed ? raw.slice('asset:'.length) : raw)
+  // 长得像资产引用但解析不出来：说「这套资产图不在了」，不要退回成「参考素材不在了」，
+  // 两种 id 的修复动作不一样（前者去资产库重选，后者去重新上传）
+  if (!token) {
+    throw validationError('这套资产图不在了（可能被删了，或这一张还没生成出来）：重新选一张再生成', 'ASSET_REF_MISSING')
+  }
+  return token
+}
+
 // 参考素材给上游时要用扩展名：按服务端认出来的 mime 定，不用客户端给的文件名。
 const MIME_EXT = {
   'image/png': 'png',
@@ -221,6 +241,30 @@ async function prepareInput(user, body) {
   const selection = resolveSelection({ ...body, prompt })
   const assets = []
   for (const id of selection.assetIds) {
+    const token = assetRefTokenOf(id)
+    if (token) {
+      if (assets.some((asset) => asset.id === 'asset:' + token)) {
+        throw validationError('同一个参考素材不要重复添加', 'MEDIA_ASSETS')
+      }
+      // 资产引用：归属校验与「这一张到底生成出来没有」都在 readAssetReference 里，
+      // 读不到抛 400 ASSET_REF_MISSING，与「参考素材不在了」同一档。
+      // 这一步必须在扣费之前：runImage / runVideo 的 charge 在这之后才发生。
+      const ref = await readAssetReference(user.id, token)
+      assets.push({
+        // 记成 asset:<token>：任务元数据里一眼能分出「这是资产图」还是上传素材（m_xxx）
+        id: 'asset:' + ref.token,
+        kind: 'image',
+        name: ref.label,
+        mime: ref.mime,
+        ext: MIME_EXT[ref.mime] || 'jpg',
+        bytes: ref.buffer.length,
+        width: null,
+        height: null,
+        duration: null,
+        buffer: ref.buffer,
+      })
+      continue
+    }
     const found = await readMediaAsset(user.id, id)
     if (!found) {
       throw validationError('这个参考素材不在了（或不属于当前账号），请重新上传一次', 'MEDIA_ASSET_MISSING')

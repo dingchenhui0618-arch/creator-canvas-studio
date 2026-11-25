@@ -10,7 +10,9 @@ export async function syncCanvasScript(project, template, script, prevHook, user
   if (!project?.flowId) return { synced: false, flowId: '', reason: 'no-canvas' }
   const flow = await getFlow(project.flowId, user)
   if (!flow) return { synced: false, flowId: project.flowId, reason: 'canvas-missing' }
-  const patched = patchCanvasScript(flow.nodes, { template, script, prevHook })
+  // 作品挂了参考资产时，同步脚本顺手把 n_shot_NN 出图节点的 assetRef 一起对齐；
+  // 用户自己拉进画布的节点不在这批里，不会被改配置。
+  const patched = patchCanvasScript(flow.nodes, { template, script, prevHook, assetRef: project.assetRef })
   // 工作流里的提示词本来就是这份脚本：不是「手改过」，也不是「没同步」。
   // （以前这里一律报 hand-edited，同一份脚本存两次会得到「你手改过，没动」这种假话。）
   if (!patched.changed) {

@@ -752,6 +752,8 @@ export type Project = {
    */
   /** 每一镜贴的画面（v0.9.161）；from 是这批图由哪次运行画的（r278），手工贴的没有这一项 */
   shots?: Record<string, { media: string; at: string; from?: string }>
+  /** 作品级「出图参考资产」（r312）：asst_x:hero；空串 = 纯按提示词画 */
+  assetRef?: string
   createdAt: string
   updatedAt: string
 }

@@ -87,6 +87,7 @@ export async function runVideoGeneration({
   duration = FLOW_VIDEO_DEFAULT_DURATION,
   resolution = FLOW_VIDEO_DEFAULT_RESOLUTION,
   model = '',
+  reference = null,
   signal = null,
   onProgress = null,
   timeoutMs = 0,
@@ -124,11 +125,24 @@ export async function runVideoGeneration({
     const { created, model: usedModel } = await createVideoChain({
       chain: chainFor('video').map((item) => item.id),
       payload: {
-      prompt: text,
-      duration: seconds,
-      resolution: quality,
-      // 上游强制要这个字段（缺了就是 400 validation_error），不传等于每次都失败
-      aspect_ratio: aspect,
+        prompt: text,
+        duration: seconds,
+        resolution: quality,
+        // 上游强制要这个字段（缺了就是 400 validation_error），不传等于每次都失败
+        aspect_ratio: aspect,
+        // 带参考资产 = 图生视频：首帧就是「我的商品图 / 我的脸」。
+        // 不传这个数组就是纯文生视频，两条路的价格一样，不因为带了资产另算。
+        ...(reference
+          ? {
+              referenceAssets: [{
+                kind: 'image',
+                mime: reference.mime,
+                ext: reference.filename.split('.').pop() || 'jpg',
+                bytes: reference.buffer,
+              }],
+              mode: 'image2video',
+            }
+          : {}),
       },
     })
     taskId = String(created?.id || created?.taskId || '')
@@ -165,7 +179,10 @@ export async function runVideoGeneration({
         return {
           text:
             '出视频完成：' + spec.label + ' · ' + (RATIO_LABEL[aspect] || aspect) + ' · ' + seconds + ' 秒 · ' + quality +
-            ' · 用时 ' + elapsed + ' 秒 · 本次 ' + credits + ' 积分\n提示词：' + text,
+            ' · 用时 ' + elapsed + ' 秒 · 本次 ' + credits + ' 积分' +
+            (reference ? '\n参考资产：' + reference.label : '') +
+            '\n提示词：' + text,
+          ...(reference ? { reference: { token: reference.token, label: reference.label } } : {}),
           videoPath: 'runs/' + runId + '/' + fileName,
           videoUrl: '/api/runs/' + runId + '/assets/' + fileName,
           model: spec.display,

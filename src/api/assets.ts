@@ -55,6 +55,25 @@ export type AssetLimits = {
 
 export type AssetListResponse = { ok: boolean; items: Asset[]; limits: AssetLimits }
 
+/**
+ * 一槽可引用的资产（r312）：id 就是生成接口 assets 数组里放的 token（asst_x:hero）。
+ * 只列已经有图的槽位；full 是给人看的一句「产品「…」· 白底主图」。
+ */
+export type AssetRefOption = {
+  id: string
+  assetId: string
+  kind: AssetKind
+  name: string
+  slot: string
+  label: string
+  full: string
+  url: string
+  width: number | null
+  height: number | null
+}
+
+export type AssetRefListResponse = { ok: boolean; refs: AssetRefOption[] }
+
 export type AssetResponse = { ok: boolean; asset: Asset }
 
 export type OnboardingIdentityId = 'creator' | 'commerce' | 'agency'
@@ -190,6 +209,10 @@ export const listAssets = (kind: AssetKind | 'all' = 'all') =>
   request<AssetListResponse>('/api/assets?kind=' + encodeURIComponent(kind))
 
 export const getAsset = (id: string) => request<AssetResponse>('/api/assets/' + encodeURIComponent(id))
+
+/** 可引用的资产清单：不传 kind 就是产品 + 数字人一起回（r312）。 */
+export const listAssetRefs = (kind?: AssetKind) =>
+  request<AssetRefListResponse>('/api/assets/refs' + (kind ? '?kind=' + encodeURIComponent(kind) : ''))
 
 export const createAsset = (input: { kind: AssetKind; name: string; category?: string; sourceAssetIds: string[] }) =>
   request<AssetResponse>('/api/assets', { method: 'POST', body: JSON.stringify(input) })

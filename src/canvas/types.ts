@@ -27,6 +27,8 @@ export type NodeConfig = {
   image?: string
   /** 评审节点：评审角度（brand / composition / copy / a11y） */
   profile?: string
+  /** 出图 / 出视频节点：参考资产 token（asst_x:hero）；空串 = 不带资产（r312） */
+  assetRef?: string
 }
 
 export type FlowNodeData = {

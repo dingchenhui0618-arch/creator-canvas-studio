@@ -189,7 +189,7 @@ export const adoptProjectCanvas = (id: string, flowId: string) =>
     runs: { count: number }
   }>('/api/projects/' + id + '/canvas', { method: 'PUT', body: JSON.stringify({ flowId }) })
 
-export const updateProject = (id: string, payload: { title?: string; flowId?: string; status?: 'active' | 'done' }) => {
+export const updateProject = (id: string, payload: { title?: string; flowId?: string; status?: 'active' | 'done'; assetRef?: string }) => {
   // 标记交付时服务端会顺手封存交付包，包里的时间按导出人所在的时区写；标题 / 工作流不需要这一项
   const body = payload.status ? { ...payload, tz: -new Date().getTimezoneOffset() } : payload
   return request<{ ok: boolean; project: Project }>('/api/projects/' + id, { method: 'PATCH', body: JSON.stringify(body) })

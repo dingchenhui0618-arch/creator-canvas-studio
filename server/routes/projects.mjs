@@ -23,6 +23,7 @@ import { normalizeProjectScript, scriptPace, scriptView } from '../project-scrip
 import { versionBaseChangesOf, versionChangesOf } from '../version-diff.mjs'
 import { versionCompareView } from '../project-compare.mjs'
 import { buildReplicateDraft } from '../script-draft.mjs'
+import { normalizeAssetRef } from '../asset-ref.mjs'
 import { syncCanvasScript } from '../project-canvas-sync.mjs'
 import {
   listReviews,
@@ -850,7 +851,12 @@ export function createProjectsRouter() {
           })
           return true
         }
-        const flow = await createFlow(buildReplicateDraft({ template: template || {}, script, name: project.title }), user)
+        // 分镜出图节点继承作品挂的参考资产：带上「我的商品图 / 我的脸」，
+        // 跑一次工作流画出来的每一镜才是我的东西，而不是凭空重画一张。
+        const flow = await createFlow(
+          buildReplicateDraft({ template: template || {}, script, name: project.title, assetRef: project.assetRef }),
+          user,
+        )
         const bound = await bindProjectFlow(project.id, flow.id, user)
         if (!bound) {
           sendJson(res, 409, { error: '工作流建好了但没绑上作品：检查这条作品是否还在', code: 'BIND_FAILED' })
@@ -2264,6 +2270,8 @@ export function createProjectsRouter() {
         }
         if ('status' in body) patch.status = String(body.status || '')
         if ('flowId' in body) patch.flowId = String(body.flowId || '')
+        // 出图参考资产：传引用就写，传空串就清掉；非法值由存储层归一成空串（等于没选）
+        if ('assetRef' in body) patch.assetRef = normalizeAssetRef(body.assetRef)
         // 标记交付 = 同时封存这一版的整套交付包（v0.9.125）：以后改模板、清帧图、开新版，
         // 「当初交出去的是什么」都还能原样取回。封存失败不挡交付，记录照落。
         let deliveryId = ''

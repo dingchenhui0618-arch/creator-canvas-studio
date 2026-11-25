@@ -8,6 +8,7 @@ import { currentUser } from '../auth.mjs'
 import { refusalResponse } from '../public-error.mjs'
 import { logEvent } from '../log.mjs'
 import { markComplete, onboardingView, saveIdentity } from '../onboarding.mjs'
+import { listAssetRefOptions } from '../asset-ref.mjs'
 import {
   ASSET_LIMITS,
   assetImageCredits,
@@ -129,6 +130,16 @@ export function createAssetsRouter() {
           if (sendRefusal(res, error)) return true
           throw error
         }
+      }
+
+      // 资产引用清单（r312）：模板出图、工作流节点、出视频的选择器都照这张表画。
+      // 只列「已经有图」的槽位，没生成的槽位不出现——选了才知道没图是让用户白点一次。
+      if (pathname === '/api/assets/refs' && req.method === 'GET') {
+        const kind = String(url.searchParams.get('kind') || '')
+        const wanted = kind === 'product' || kind === 'avatar' ? kind : ''
+        const rows = await listAssetRefOptions(user.id)
+        sendJson(res, 200, { ok: true, refs: wanted ? rows.filter((row) => row.kind === wanted) : rows })
+        return true
       }
 
       const match = pathname.match(ASSET_PATH)

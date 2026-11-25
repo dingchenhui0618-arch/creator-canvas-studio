@@ -13,6 +13,7 @@ import { MAX_SHOT_FRAMES, normalizeShotFrames, parseShotMedia, shotFramesView } 
 import { removeProjectShotFrames, removeUserShotFrames } from './shot-frame-store.mjs'
 import { normalizeStoredScript } from './project-script.mjs'
 import { visitKey } from './share-visits.mjs'
+import { normalizeAssetRef } from './asset-ref.mjs'
 // 交付那一刻的评审结论要从评审库现读；只读、不写评审（v0.9.85）
 // 回收站（v0.9.253）要用到摘/放：删作品时把评审、已看过、拍板一起收走，恢复时原样放回
 import { restoreReviews, reviewSummaryByVersion, takeReviewsForProject } from './reviews.mjs'
@@ -674,6 +675,8 @@ function normalize(item) {
     deliveries: normalizeDeliveries(item.deliveries),
     // 这一版每一镜的画面（v0.9.161）：只存自己账号下的上传图，格式不认识就丢掉
     shots: normalizeShotFrames(item.shots),
+    // 出图用的参考资产（r312）：作品页「出这一镜」与开工作流都读它；空串 = 纯文生图
+    assetRef: normalizeAssetRef(item.assetRef),
     createdAt: item.createdAt || new Date().toISOString(),
     updatedAt: item.updatedAt || item.createdAt || new Date().toISOString(),
   }
@@ -731,6 +734,8 @@ export async function createProject({ title = '', templateId = '', flowId = '' }
     // 先不复制模板脚本：复制发生在第一次保存脚本时（copy-on-write）
     script: null,
     status: 'active',
+    // 这条作品出图要用的参考资产（我的商品图 / 我的脸）；空 = 纯文生图，与以前完全一样
+    assetRef: '',
     createdAt: now,
     updatedAt: now,
   }
@@ -738,7 +743,7 @@ export async function createProject({ title = '', templateId = '', flowId = '' }
   return normalize(project)
 }
 
-const PATCHABLE = ['title', 'flowId', 'status']
+const PATCHABLE = ['title', 'flowId', 'status', 'assetRef']
 
 /**
  * 只允许改标题、绑定的工作流、状态；模板绑定建好就不改（换模板等于换一条内容）。
@@ -762,7 +767,10 @@ export async function updateProject(
       ? (STATUSES.includes(patch.status) ? patch.status : found.status)
       : key === 'title'
         ? clip(patch.title, 80)
-        : String(patch[key] || '')
+        : key === 'assetRef'
+          // 非法引用按「没有」处理（空串 = 清掉），不让一条坏引用把作品写成永远读不到的状态
+          ? normalizeAssetRef(patch.assetRef)
+          : String(patch[key] || '')
     if (value === found[key]) continue
     found[key] = value
     changed = true

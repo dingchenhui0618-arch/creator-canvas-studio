@@ -85,7 +85,7 @@ export function runAssetPath(runId, fileName) {
  * 真跑一次出图：扣费 → 调平台出图通道 → 下载落盘 → 返回可访问地址。
  * 任何一步失败都把这笔扣费退回去（按账本净额，重复调用不会多退），然后抛错给运行引擎记失败。
  */
-export async function runImageGeneration({ ownerId, runId, nodeId, prompt, ratio = FLOW_IMAGE_DEFAULT_RATIO, model = '' } = {}) {
+export async function runImageGeneration({ ownerId, runId, nodeId, prompt, ratio = FLOW_IMAGE_DEFAULT_RATIO, model = '', reference = null } = {}) {
   const text = String(prompt ?? '').trim().slice(0, MAX_PROMPT)
   if (!text) throw new Error('出图节点没有提示词：在检查器里填写提示词，或把上游文本接到它上面')
   const spec = findModel('image', model) || findModel('image', defaultModelFor('image'))
@@ -108,6 +108,9 @@ export async function runImageGeneration({ ownerId, runId, nodeId, prompt, ratio
     const { result, model: usedModel } = await runImageChain({
       chain: chainFor('image').map((item) => item.id),
       payload: { prompt: text, size, n: 1 },
+      // 带参考资产就走 /images/edits（multipart）：这条通道与资产库生成同一套，
+      // 上游才能拿「我的商品图 / 我的脸」当底图，而不是只按文字重画一张。
+      edit: reference ? { image: reference.buffer, mime: reference.mime, filename: reference.filename } : null,
     })
     const url = Array.isArray(result?.urls) ? result.urls[0] : ''
     if (!url) throw new Error('出图上游没有返回图片地址')
@@ -118,8 +121,13 @@ export async function runImageGeneration({ ownerId, runId, nodeId, prompt, ratio
     await fsp.writeFile(path.join(dir, fileName), asset.buffer, { mode: 0o600 })
     const ratioLabel = RATIO_LABEL[ratio] || ratio
     return {
-      // 节点输出的一段人话：作品流与运行记录都会显示它
-      text: '出图完成：' + spec.label + ' · ' + ratioLabel + '（' + size + '）· 本次 ' + credits + ' 积分\n提示词：' + text,
+      // 节点输出的一段人话：作品流与运行记录都会显示它。
+      // 带参考资产时要把「用了哪套」写出来，否则用户从结果里看不出这张跟自己的商品有关系。
+      text:
+        '出图完成：' + spec.label + ' · ' + ratioLabel + '（' + size + '）· 本次 ' + credits + ' 积分' +
+        (reference ? '\n参考资产：' + reference.label : '') +
+        '\n提示词：' + text,
+      ...(reference ? { reference: { token: reference.token, label: reference.label } } : {}),
       imagePath: 'runs/' + runId + '/' + fileName,
       imageUrl: '/api/runs/' + runId + '/assets/' + fileName,
       model: spec.display,

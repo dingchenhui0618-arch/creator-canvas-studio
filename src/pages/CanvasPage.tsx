@@ -36,6 +36,7 @@ import {
   type RunResumePlan,
 } from '../api/flows'
 import { getCredits } from '../api/credits'
+import { listMediaModels } from '../api/media-gen'
 import { listProjects, openProjectCanvas } from '../api/projects'
 import { applyTemplate, listTemplates } from '../api/radar'
 import { runCreditsText, runResumeInfo, runSpentText, runStatusMeta } from '../domain/run'
@@ -132,6 +133,38 @@ const MIN_READ_ZOOM = 0.75
 const FIT_PADDING = 0.12
 // 卡片宽度写死在 canvas.css 的 .cv-node 上（240px）；算「画布装不装得下」时要用同一个数
 const NODE_CARD_WIDTH = 240
+
+// 运行前报价（r312）：出图 / 出视频以 /api/media/models 的模型卡为唯一真源，
+// 也就是服务端真正扣费时读的那份价；/api/credits 的 image_gen / video_gen 只是旧常量，
+// 只在模型表读不到时兜底，避免界面报一个和实际扣费不一致的数。
+type RunCreditInfo = {
+  /** 工作流按次扣的价（仍来自 /api/credits.flow_run） */
+  price: number
+  /** 出图每张多少积分 */
+  imagePrice: number
+  /** 视频查不到规格时，退回这个模型自己的起步价 */
+  videoPrice: number
+  /** 视频「时长|清晰度」价表，key 形如 "4|720p" */
+  videoPrices: Record<string, number>
+  /** 出图单价是否来自模型卡；false 表示用了 /api/credits 的旧常量兜底 */
+  imageFromModels: boolean
+  /** 视频价是否来自模型卡 */
+  videoFromModels: boolean
+  balance: number | null
+}
+
+function positivePrice(value: unknown): number | null {
+  const price = Number(value)
+  return Number.isFinite(price) && price > 0 ? price : null
+}
+
+/** 视频节点自己的价：先按它的 duration|resolution 查模型价表，查不到才退该模型起步价。 */
+function videoCreditFor(config: NodeConfig, credit: RunCreditInfo | null): number {
+  if (!credit) return 0
+  const duration = Number(config.duration ?? 4) || 4
+  const resolution = config.resolution || '720p'
+  return positivePrice(credit.videoPrices[duration + '|' + resolution]) ?? credit.videoPrice
+}
 
 function formatRunTime(iso: string): string {
   const date = new Date(iso)
@@ -250,10 +283,9 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
   const [fitClamped, setFitClamped] = useState(false)
   const [historyCount, setHistoryCount] = useState(0)
   const [futureCount, setFutureCount] = useState(0)
-  // 工作流运行按次扣积分：运行前就把单价和余额摆出来，402 时不用去猜
-  // imagePrice / videoPrice = 出图每张、出视频每条多少积分：
-  // 有生成节点时运行前要把它加上去，不能只报 flow_run 的价（用户会以为花 2、实际被扣 22）
-  const [runCredit, setRunCredit] = useState<{ price: number; imagePrice: number; videoPrice: number; balance: number | null } | null>(null)
+  // 工作流运行按次扣积分：运行前就把单价和余额摆出来，402 时不用去猜。
+  // 生成单价读 /api/media/models（服务端真正扣费用的那份模型卡），读不到才退回 /api/credits。
+  const [runCredit, setRunCredit] = useState<RunCreditInfo | null>(null)
   // 运行的排队位（v0.9.96）：名额满时这一单先进整机的队，等的时候顶栏显示「第几位 · 已等几秒」。
   // 票号是这次运行的凭据：页面自己生成，服务端按它查名次；排到之后 waitedMs 记下来给运行结论用。
   const [runQueue, setRunQueue] = useState<{ position: number; waitedMs: number; waiting: number; waitMs: number } | null>(null)
@@ -309,14 +341,36 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
   }, [flowDeleted, missingSnapshot, runRecord])
 
   const refreshRunCredit = useCallback(() => {
-    void getCredits(1)
-      .then((data) => setRunCredit({
-        price: Number(data.prices.flow_run) || 0,
-        imagePrice: Number(data.prices.image_gen) || 0,
-        videoPrice: Number(data.prices.video_gen) || 0,
-        balance: data.balance,
-      }))
-      .catch(() => setRunCredit(null))
+    void Promise.allSettled([getCredits(1), listMediaModels()])
+      .then(([creditResult, modelResult]) => {
+        const credit = creditResult.status === 'fulfilled' ? creditResult.value : null
+        const models = modelResult.status === 'fulfilled' ? modelResult.value : null
+        // 两边都没读到：和以前一样不报价，不编一个 0 出来
+        if (!credit && !models) {
+          setRunCredit(null)
+          return
+        }
+        const imageModel = models
+          ? models.image.find((item) => item.id === models.defaults.image) ?? models.image[0]
+          : undefined
+        const videoModel = models
+          ? models.video.find((item) => item.id === models.defaults.video) ?? models.video[0]
+          : undefined
+        const imageModelPrice = positivePrice(imageModel?.credits)
+        const videoModelPrice = positivePrice(videoModel?.credits)
+        const videoPrices = videoModel?.priceTable ?? {}
+        const hasVideoTable = Object.values(videoPrices).some((price) => positivePrice(price) !== null)
+        setRunCredit({
+          price: Number(credit?.prices.flow_run) || 0,
+          // 模型表读不到时退回旧常量；即使为 0 也不额外造一个假价
+          imagePrice: imageModelPrice ?? (Number(credit?.prices.image_gen) || 0),
+          videoPrice: videoModelPrice ?? (Number(credit?.prices.video_gen) || 0),
+          videoPrices,
+          imageFromModels: imageModelPrice !== null,
+          videoFromModels: videoModelPrice !== null || hasVideoTable,
+          balance: credit?.balance ?? null,
+        })
+      })
   }, [])
 
   useEffect(() => {
@@ -363,11 +417,15 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
   }, [fitCanvas, flowId, nodesInitialized])
 
   // 运行前把钱说全：工作流本身按次扣一次，出图每张、出视频每条再各扣一次。
-  // 只报 flow_run 的价，用户会以为自己花 2 积分、实际被扣 22——这个提示必须现在就给。
-  const imageNodeCount = nodes.filter((node) => node.data.kind === 'image').length
-  const videoNodeCount = nodes.filter((node) => node.data.kind === 'video').length
+  // 出图按模型卡单价 × 张数；出视频逐节点按它自己的 duration|resolution 查表相加，
+  // 因为同一个流程里 4 秒和 8 秒的镜头本来就不是一个价。
+  const imageNodes = nodes.filter((node) => node.data.kind === 'image')
+  const videoNodes = nodes.filter((node) => node.data.kind === 'video')
+  const imageNodeCount = imageNodes.length
+  const videoNodeCount = videoNodes.length
   const imageRunCost = imageNodeCount * (runCredit?.imagePrice ?? 0)
-  const videoRunCost = videoNodeCount * (runCredit?.videoPrice ?? 0)
+  const videoNodePrices = videoNodes.map((node) => videoCreditFor(node.data.config, runCredit))
+  const videoRunCost = videoNodePrices.reduce((sum, price) => sum + price, 0)
   const runTotalCost = (runCredit?.price ?? 0) + imageRunCost + videoRunCost
   const runBalanceShort = runCredit?.balance != null && runCredit.balance < runTotalCost
   // 顶栏那一行：有什么节点就写什么，没有的不要占字
@@ -378,8 +436,16 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
   ]
   const runCostTitle = [
     '工作流按次扣 ' + (runCredit?.price ?? 0) + ' 积分',
-    ...(imageNodeCount > 0 ? ['出图每张扣 ' + (runCredit?.imagePrice ?? 0) + ' 积分（失败的那张会退回）'] : []),
-    ...(videoNodeCount > 0 ? ['出视频每条扣 ' + (runCredit?.videoPrice ?? 0) + ' 积分（失败或超时会退回）'] : []),
+    ...(imageNodeCount > 0
+      ? [runCredit?.imageFromModels
+        ? '出图每张扣 ' + (runCredit?.imagePrice ?? 0) + ' 积分（失败的那张会退回）'
+        : '出图按平台常量每张约 ' + (runCredit?.imagePrice ?? 0) + ' 积分（模型价未读到，以实际扣费为准）']
+      : []),
+    ...(videoNodeCount > 0
+      ? [runCredit?.videoFromModels
+        ? '出视频按每个节点所选的时长与清晰度分别计价（失败或超时会退回）'
+        : '出视频按平台常量每条约 ' + (runCredit?.videoPrice ?? 0) + ' 积分（模型价未读到，以实际扣费为准）']
+      : []),
   ].join('；')
 
   const graphSignature = useMemo(
@@ -1877,7 +1943,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
             readOnly={readOnly}
             runSnapshot={hasRunSnapshot}
             imageCredits={runCredit?.imagePrice ?? 0}
-            videoCredits={runCredit?.videoPrice ?? 0}
+            videoCredits={selectedNode?.data.kind === 'video' ? videoCreditFor(selectedNode.data.config, runCredit) : 0}
           />
         </div>
       )}
