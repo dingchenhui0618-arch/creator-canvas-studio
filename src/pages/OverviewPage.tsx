@@ -44,6 +44,7 @@ import {
   type ShareSummaryRow,
 } from '../domain/project'
 import { isFirstRun } from '../domain/first-run'
+import { SHOWCASE } from '../domain/showcase'
 import {
   deliveryChannelText,
   deliveryLateText,
@@ -1172,8 +1173,8 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
           loading
             ? '正在读取你账号下的模板、作品与评审队列。'
             : internal
-              ? '首屏依次是能力入口、真实作品墙与下一步主卡；模板与作品分别来自 /api/templates 与 /api/projects，没有数据的区块不放示例图。'
-              : '内容生产工作台：找选题、拆结构、建资产、出片与评审。这一屏先说明平台能做什么，再放你自己账号里的真实效果。'
+              ? '首屏依次是能力入口、效果示例（平台真实作品）、我的作品与下一步主卡；我的作品只取 /api/templates 与 /api/projects，没有数据时不占一屏。'
+              : '内容生产工作台：找选题、拆结构、建资产、出片与评审。这一屏先说明平台能做什么、放几条真做出来的效果，再回答你现在该点哪里。'
         }
         actions={
           <>
@@ -1285,7 +1286,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
             </h3>
             <p>用预设把脚本出成画面，再按构图、文案与平台规范评一遍。</p>
             <div className="ov-cap-foot">
-              <span className="ov-cap-note">{queueTotal ? queueTotal + ' 条等你看' : '出片后送评'}</span>
+              {queueTotal ? <span className="ov-cap-note">{queueTotal} 条等你看</span> : null}
               <span className="ov-cap-actions">
                 <button type="button" className="ov-cap-action" onClick={() => onNavigate('agents')}>
                   快捷创作
@@ -1301,72 +1302,107 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
         </div>
       </section>
 
-      {/* 作品墙（r313）：只放账号内真实模板封面与作品首帧，外链封面和没有图的条目都不上墙。
-          没有真实画面时给一条诚实空状态，不摆占位图。 */}
-      <section className="ov-wall" aria-labelledby="ov-wall-title">
+      {/* 效果示例（r314）：先让人看见「能做出什么」——五条都是这套流程里真做出来的作品，
+          不是账号数据：图片是作品原图，视频取的是成片关键帧。 */}
+      <section className="ov-showcase" aria-labelledby="ov-showcase-title">
         <div className="ov-section-lead">
           <div className="ov-section-copy">
-            <span className="ov-eyebrow">YOUR WORK</span>
-            <h2 id="ov-wall-title">作品墙</h2>
-            <p className="ov-section-sub">模板封面与作品首帧，全部来自这个账号；点开去对应的模板或作品。</p>
+            <span className="ov-eyebrow">WHAT IT MAKES</span>
+            <h2 id="ov-showcase-title">做出来是什么样</h2>
+            <p className="ov-section-sub">
+              五条都是这套流程真做出来的作品：图片是成图原图，视频取的是成片关键帧，没有合成拼贴。
+            </p>
           </div>
-          {projects.length ? (
-            <button type="button" className="vq-link" onClick={() => onNavigate('projects')}>
-              全部作品
-              <ArrowUpRight size={13} />
-            </button>
-          ) : null}
+          <button type="button" className="vq-link" onClick={() => onNavigate('agents')}>
+            用同样的方法做一条
+            <ArrowUpRight size={13} />
+          </button>
         </div>
+        <div className="ov-showcase-grid">
+          {SHOWCASE.map((item) => (
+            <figure className="ov-showcase-card" key={item.key} title={item.note}>
+              <span className="ov-showcase-media">
+                <img src={item.src} alt={item.alt} loading="lazy" width={720} height={1280} />
+                <span className="ov-showcase-kind">{item.kind}</span>
+              </span>
+              <figcaption className="ov-showcase-caption">
+                <strong>{item.title}</strong>
+                <span>{item.meta}</span>
+              </figcaption>
+            </figure>
+          ))}
+        </div>
+        <p className="ov-showcase-note">以上是平台已产出的示例作品，不是这个账号的数据。</p>
+      </section>
 
-        {loading ? (
-          <p className="ov-wall-loading">正在读取模板封面与作品首帧…</p>
-        ) : wallItems.length ? (
-          <div className="ov-wall-grid">
-            {wallItems.map((item) => (
+      {/* 我的作品墙（r313/r314）：只放账号内真实模板封面与作品首帧，外链封面和没有图的条目都不上墙。
+          一条能上墙的都没有时不占一屏——上面的示例已经说清「会长出什么」；读失败仍要露出来。 */}
+      {wallItems.length || sectionFailed('模板库') || sectionFailed('作品') ? (
+        <section className="ov-wall" aria-labelledby="ov-wall-title">
+          <div className="ov-section-lead">
+            <div className="ov-section-copy">
+              <span className="ov-eyebrow">YOUR WORK</span>
+              <h2 id="ov-wall-title">我的作品</h2>
+              <p className="ov-section-sub">模板封面与作品首帧，全部来自这个账号；点开去对应的模板或作品。</p>
+            </div>
+            {projects.length ? (
+              <button type="button" className="vq-link" onClick={() => onNavigate('projects')}>
+                全部作品
+                <ArrowUpRight size={13} />
+              </button>
+            ) : null}
+          </div>
+
+          {loading ? (
+            <p className="ov-wall-loading">正在读取模板封面与作品首帧…</p>
+          ) : wallItems.length ? (
+            <div className="ov-wall-grid">
+              {wallItems.map((item) => (
+                <button
+                  type="button"
+                  className="ov-wall-card"
+                  key={item.key}
+                  onClick={() => (item.projectId ? onOpenProject(item.projectId) : onNavigate('templates'))}
+                >
+                  <span className="ov-wall-media">
+                    <img src={item.image} alt={item.alt} loading="lazy" />
+                    <span className="ov-wall-kind">{item.kind}</span>
+                  </span>
+                  <span className="ov-wall-caption">
+                    <strong>{item.title}</strong>
+                    <span>{item.meta}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="ov-wall-empty">
+              <span className="ov-wall-empty-icon" aria-hidden="true">
+                <ImageIcon size={18} strokeWidth={1.75} />
+              </span>
+              <div className="ov-wall-empty-copy">
+                <strong>{sectionFailed('模板库') || sectionFailed('作品') ? '作品墙这次没取全' : '还没有可展示的真实画面'}</strong>
+                <p>
+                  {sectionFailed('模板库') || sectionFailed('作品')
+                    ? '模板或作品这次没读到，原因写在页面顶部；点刷新再取一次，不用示例图代替。'
+                    : '模板库拆出抽帧、作品里贴上第一帧之后，这里会按最近更新排出来；不用示例图占位。'}
+                </p>
+              </div>
               <button
                 type="button"
-                className="ov-wall-card"
-                key={item.key}
-                onClick={() => (item.projectId ? onOpenProject(item.projectId) : onNavigate('templates'))}
+                className="vq-button vq-button--ghost"
+                onClick={() => {
+                  if (sectionFailed('模板库') || sectionFailed('作品')) void load()
+                  else onNavigate('templates')
+                }}
               >
-                <span className="ov-wall-media">
-                  <img src={item.image} alt={item.alt} loading="lazy" />
-                  <span className="ov-wall-kind">{item.kind}</span>
-                </span>
-                <span className="ov-wall-caption">
-                  <strong>{item.title}</strong>
-                  <span>{item.meta}</span>
-                </span>
+                {sectionFailed('模板库') || sectionFailed('作品') ? '刷新' : '去模板库'}
+                <ArrowRight size={13} />
               </button>
-            ))}
-          </div>
-        ) : (
-          <div className="ov-wall-empty">
-            <span className="ov-wall-empty-icon" aria-hidden="true">
-              <ImageIcon size={18} strokeWidth={1.75} />
-            </span>
-            <div className="ov-wall-empty-copy">
-              <strong>{sectionFailed('模板库') || sectionFailed('作品') ? '作品墙这次没取全' : '还没有可展示的真实画面'}</strong>
-              <p>
-                {sectionFailed('模板库') || sectionFailed('作品')
-                  ? '模板或作品这次没读到，原因写在页面顶部；点刷新再取一次，不用示例图代替。'
-                  : '模板库拆出抽帧、作品里贴上第一帧之后，这里会按最近更新排出来；不用示例图占位。'}
-              </p>
             </div>
-            <button
-              type="button"
-              className="vq-button vq-button--ghost"
-              onClick={() => {
-                if (sectionFailed('模板库') || sectionFailed('作品')) void load()
-                else onNavigate('templates')
-              }}
-            >
-              {sectionFailed('模板库') || sectionFailed('作品') ? '刷新' : '去模板库'}
-              <ArrowRight size={13} />
-            </button>
-          </div>
-        )}
-      </section>
+          )}
+        </section>
+      ) : null}
 
       {/* 「下一步」主卡与 r312 常驻建资产提示放在作品墙之后：
           先讲平台能做什么、展示真实效果，再回答「我现在该点哪里」，不抢第一条 CTA。 */}

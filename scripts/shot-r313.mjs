@@ -39,11 +39,9 @@ const ADMIN_EMAIL = 'shot313-admin' + AT + 'shot.test'
 const USER_EMAIL = 'shot313-user' + AT + 'shot.test'
 const PASSWORD = 'shot-pass-123'
 
-// 1×1 PNG：作品墙只认地址与文件存在，截图里主要是版式
-const TINY_PNG = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
-  'base64',
-)
+// 模板帧直接用「效果示例」里的真图（public/works）：我的作品那一格要能看出是真的画面，
+// 不能是一块纯色（1×1 PNG 铺满会变成一张纯粉色的卡，看着像坏了）。
+const FRAME_JPEG = fs.readFileSync(path.join('public', 'works', 'burger-film.jpg'))
 
 const TEMPLATE_ID = 'tpl_r313_demo'
 const DEMO_TEMPLATE = {
@@ -55,8 +53,8 @@ const DEMO_TEMPLATE = {
   hook: '别再用错水温了：92 度是这条的关键',
   durationSec: 24,
   tags: ['咖啡', '手冲', '教程'],
-  cover: '/media/frames/' + TEMPLATE_ID + '/frame-01.png',
-  frames: [{ index: 1, url: '/media/frames/' + TEMPLATE_ID + '/frame-01.png' }],
+  cover: '/media/frames/' + TEMPLATE_ID + '/frame-01.jpg',
+  frames: [{ index: 1, url: '/media/frames/' + TEMPLATE_ID + '/frame-01.jpg' }],
   structure: [
     { beat: '开场', startSec: 0, endSec: 6, voiceover: '水温错了，再好的豆子也白搭。', expectedSec: 4.2 },
     { beat: '做法', startSec: 6, endSec: 16, voiceover: '先磨豆，中细研磨，粉水比一比十五。', expectedSec: 6.4 },
@@ -85,7 +83,7 @@ fs.writeFileSync(
   JSON.stringify([{ ...DEMO_TEMPLATE, ownerId: user.id }], null, 2),
 )
 fs.mkdirSync(path.join(dataDir, 'frames', TEMPLATE_ID), { recursive: true })
-fs.writeFileSync(path.join(dataDir, 'frames', TEMPLATE_ID, 'frame-01.png'), TINY_PNG)
+fs.writeFileSync(path.join(dataDir, 'frames', TEMPLATE_ID, 'frame-01.jpg'), FRAME_JPEG)
 
 // 积分账本：真实写进 credit_ledger（与产品同一条路径，不是界面假数据）
 const credits = await import('../server/credits.mjs')
@@ -250,6 +248,8 @@ async function shoot({ route, out, width, height, token = userToken, userId = us
   await cdp.send('Page.navigate', { url: BASE + '/?as=' + encodeURIComponent(userId) + '&shot=' + Date.now() + '#/' + route })
   await sleep(2800)
   await cdp.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: injected.identifier })
+  // 页面自己弹的提示条（「还没有自己的资产…」）会盖住要拍的内容：截图前摘掉，别把临时提示拍成界面
+  await evaluate("(() => { document.querySelectorAll('.vq-toast').forEach((el) => el.remove()) })()")
   if (after) await after()
   const shot = await cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false })
   fs.writeFileSync(out, Buffer.from(shot.data, 'base64'))
@@ -287,9 +287,40 @@ try {
   const projectId = JSON.parse(created.body).project.id
   console.log('作品 ' + projectId)
 
-  // 1) 工作台：四项能力 + 作品墙 + 下一步主卡
-  await shoot({ route: 'overview', out: path.join('docs', 'r313-overview-1440.png'), width: 1440, height: 980 })
-  await shoot({ route: 'overview', out: path.join('docs', 'r313-overview-390.png'), width: 390, height: 900 })
+  // 1) 工作台：四项能力 + 效果示例 + 我的作品 + 下一步主卡（r314）
+  //    断言实拍：5 张示例卡都渲染出来、图都真的加载完了（naturalWidth > 0），不是空框
+  await shoot({
+    route: 'overview',
+    out: path.join('docs', 'r314-overview-1440.png'),
+    width: 1440,
+    height: 1080,
+    after: async () => {
+      const state = await evaluate("(() => { const cards = [...document.querySelectorAll('.ov-showcase-card')]; return { cards: cards.length, loaded: cards.filter((card) => { const img = card.querySelector('img'); return Boolean(img && img.complete && img.naturalWidth > 0) }).length } })()")
+      if (!state || state.cards !== 5) throw new Error('效果示例不是 5 张：' + JSON.stringify(state))
+      if (state.loaded !== 5) throw new Error('效果示例有图没加载出来：' + state.loaded + '/5')
+    },
+  })
+  await shoot({ route: 'overview', out: path.join('docs', 'r314-overview-390.png'), width: 390, height: 1000 })
+  await shoot({
+    route: 'overview',
+    out: path.join('docs', 'r314-showcase-1440.png'),
+    width: 1440,
+    height: 900,
+    after: async () => {
+      await evaluate("(() => { const el = document.querySelector('.ov-showcase'); if (el) el.scrollIntoView({ block: 'start' }) })()")
+      await sleep(600)
+    },
+  })
+  await shoot({
+    route: 'overview',
+    out: path.join('docs', 'r314-showcase-390.png'),
+    width: 390,
+    height: 860,
+    after: async () => {
+      await evaluate("(() => { const el = document.querySelector('.ov-showcase'); if (el) el.scrollIntoView({ block: 'start' }) })()")
+      await sleep(600)
+    },
+  })
 
   // 2) 右上角账户菜单（余额 + 充值 + 帮助）
   await shoot({

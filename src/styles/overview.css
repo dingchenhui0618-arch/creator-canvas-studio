@@ -445,6 +445,7 @@
 
 .ov-cap-foot {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-end;
   justify-content: space-between;
   gap: var(--space-3);
@@ -653,6 +654,104 @@
   flex: none;
 }
 
+/* ---------- 效果示例（r314）
+   五条真实作品画面：IP 设定图、电商主视觉、三条 15 秒片的关键帧。
+   竖版 9:16 固定一排放完，不随断点换行出现半行空格；窄屏改成可横滑的一条。 ---------- */
+
+.ov-showcase {
+  margin-top: var(--space-12);
+}
+
+.ov-showcase .vq-link {
+  flex: none;
+  white-space: nowrap;
+}
+
+.ov-showcase-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.ov-showcase-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin: 0;
+}
+
+.ov-showcase-media {
+  position: relative;
+  display: block;
+  aspect-ratio: 9 / 16;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+
+.ov-showcase-media img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 40%;
+  transition: transform var(--dur-3) var(--ease-out);
+}
+
+.ov-showcase-card:hover .ov-showcase-media img {
+  transform: scale(1.03);
+}
+
+.ov-showcase-kind {
+  position: absolute;
+  top: var(--space-2);
+  left: var(--space-2);
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  background: rgba(12, 12, 14, 0.62);
+  color: #fff;
+  font-size: var(--text-2xs);
+  letter-spacing: 0.02em;
+  line-height: 20px;
+}
+
+.ov-showcase-caption {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-3) 0 0;
+}
+
+.ov-showcase-caption strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: var(--weight-medium);
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ov-showcase-caption span {
+  overflow: hidden;
+  color: var(--faint);
+  font-size: var(--text-2xs);
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ov-showcase-note {
+  margin: var(--space-4) 0 0;
+  color: var(--faint);
+  font-size: var(--text-2xs);
+  line-height: 1.6;
+}
+
 .ov-next-block {
   margin-top: var(--space-12);
 }
@@ -670,6 +769,20 @@
 @media (max-width: 820px) {
   .ov-wall-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ov-showcase-grid {
+    grid-auto-flow: column;
+    grid-auto-columns: 62%;
+    grid-template-columns: none;
+    gap: var(--space-2);
+    overflow-x: auto;
+    padding-bottom: var(--space-2);
+    scroll-snap-type: x mandatory;
+  }
+
+  .ov-showcase-card {
+    scroll-snap-align: start;
   }
 }
 
