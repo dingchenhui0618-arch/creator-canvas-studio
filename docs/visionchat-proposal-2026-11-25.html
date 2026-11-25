@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>visionchat-proposal-2026-11-25</title>
+<style>
+  :root {
+    --ink: #16181d;
+    --muted: #4b5160;
+    --faint: #7c8290;
+    --line: #e3e5ea;
+    --surface: #f7f8fa;
+    --accent: #1a56db;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 48px 24px 96px;
+    background: #fff;
+    color: var(--ink);
+    font: 15px/1.75 "Alibaba PuHuiTi 3.0", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 860px; margin: 0 auto; }
+  h1, h2, h3, h4 { font-weight: 600; letter-spacing: -0.01em; line-height: 1.35; }
+  h1 { margin: 0 0 24px; font-size: 30px; }
+  h2 { margin: 40px 0 16px; padding-top: 24px; border-top: 1px solid var(--line); font-size: 22px; }
+  h3 { margin: 28px 0 12px; font-size: 17px; }
+  h4 { margin: 24px 0 8px; font-size: 15px; color: var(--muted); }
+  p { margin: 12px 0; }
+  a { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(26, 86, 219, 0.3); }
+  code { padding: 1px 5px; border-radius: 4px; background: var(--surface); font-family: "JetBrains Mono", Consolas, monospace; font-size: 13px; }
+  pre { overflow-x: auto; padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+  pre code { padding: 0; background: none; }
+  blockquote { margin: 16px 0; padding: 12px 16px; border-left: 3px solid var(--line); background: var(--surface); color: var(--muted); }
+  blockquote p { margin: 0; }
+  table { width: 100%; margin: 16px 0; border-collapse: collapse; font-size: 14px; }
+  th, td { padding: 8px 12px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+  th { background: var(--surface); font-weight: 600; }
+  hr { margin: 32px 0; border: 0; border-top: 1px solid var(--line); }
+  ul, ol { margin: 12px 0; padding-left: 22px; }
+  li { margin: 6px 0; }
+  strong { font-weight: 600; }
+  @media (max-width: 720px) {
+    body { padding: 24px 16px 64px; }
+    h1 { font-size: 24px; }
+    table { display: block; overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+<main>
+<h1>VisionChat（Beta）方案</h1>
+<blockquote>日期：2026-11-25 · 基线：v0.9.285（master，未提交工作区）· 状态：<strong>方案待拍板，未动代码</strong><br>参考：用户仓库 dsh-chatroom（https://github.com/dingchenhui0618-arch/dsh-chatroom）、Pachat 公开文档（https://pachat.ai）<br>纪律：本文只写方案。没有改 <code>src/</code>、<code>server/</code>、<code>package.json</code>；没有调用任何真实上游；所有关于现有能力的描述都能在仓库里指出文件。</blockquote>
+<h2>结论先行</h2>
+<ol>
+<li><strong>VisionChat 做「房间」，不做第二个 Pachat。</strong> 平台侧是登录后的多智能体聊天室：一个房间里有 1 个人 + N 个智能体（后续可加人），智能体是成员而不是工具。Pachat 解决的是跨平台 agent 之间的异步通信（每只 agent 自己的 token、收件箱、长轮询唤醒），那套东西我们<strong>不抄</strong>，只借它「群聊 + 提及 + 幂等键」的产品直觉。</li>
+<li><strong>入口放在「模板库」下面</strong>，作为一级导航第 5 项，沿用 <code>src/nav.ts</code> 已有的 <code>chip: 'Beta'</code> 机制（工作流就是这么标的），不改工具区。</li>
+<li><strong>智能体「操控 CLI」在平台侧先落成「白名单工具」</strong>，不是服务器 shell。真正的本机命令执行已经存在（Electron 本地工作区：读目录/读文件免批准，写文件/改文件/执行命令逐次批准、命令 60 秒、路径锁在工作区内），平台版复用它验证过的<strong>审批 + 副作用分级</strong>模型，但不把 shell 搬到公网服务器上。</li>
+<li><strong>连接方式选 SSE + 事件序号 + 服务端回合</strong>，不用 WebSocket。放弃的是「广播级实时」和「在线状态」，换来的是与现有 <code>/api/chat/.../messages/stream</code>（已带 <code>X-Accel-Buffering: no</code>）、nginx 300 秒超时、2 核 1.8G 单进程部署相安无事。</li>
+<li><strong>计费按「对话回合 1 次 + 每次工具调用各 1 次」</strong>，全部走已有 <code>charge/refund</code>，先扣后调、失败全退、<code>ref</code> 可对账；权限先只读、写操作逐次审批，默认不给「完全授权」。</li>
+</ol>
+<hr>
+<h2>1. 定位与边界</h2>
+<p><strong>是什么</strong></p>
+<table><thead><tr><th>项</th><th>定义</th></tr></thead><tbody>
+<tr><td>产品形态</td><td>平台内的多智能体聊天室（房间制），Beta</td></tr>
+<tr><td>成员</td><td>人（当前账号）+ 从 <code>agents.json</code> 拉进来的智能体；一期不开多人，二期开同工作区成员</td></tr>
+<tr><td>消息</td><td>房间内按 <code>seq</code> 单调递增，支持提及、引用回复、分页翻历史</td></tr>
+<tr><td>智能体</td><td>有名字与职责（进每次提示词）、各自独立会话、可被点名或按规则轮次发言</td></tr>
+<tr><td>工具</td><td>平台白名单能力（读模板库 / 读工作流 / 网页读取 / 生图 / 生视频 / 视觉评审），带审批与计费</td></tr>
+</tbody></table>
+<p><strong>不是什么</strong></p>
+<table><thead><tr><th>不做</th><th>原因</th></tr></thead><tbody>
+<tr><td>不做 Pachat 式「agent 自带 token 从平台外接入」</td><td>Pachat 的模型是平台外的 agent 用自己的 <code>pachat_</code> token 收发消息；我们是登录后的单一平台，账号体系已经存在（<code>vq_session</code> + <code>sessions</code> 表），再叠一层 agent 身份只会带来两套权限真源</td></tr>
+<tr><td>不在服务器执行任意命令（shell）</td><td>公网服务器 + 多租户 = 一个提示词注入就能拿到宿主；本机 CLI 留在桌面端</td></tr>
+<tr><td>不做公网房间码/匿名加入</td><td>与「必须登录 + 积分」冲突；一期只做登录态房间，邀请走链接 token（三期）</td></tr>
+<tr><td>不做语音/视频通话、附件（一期）</td><td>与当前聊天室的最小闭环无关</td></tr>
+</tbody></table>
+<p><strong>和「快捷创作」里的对话有什么区别</strong>（这一条最容易讲混，必须讲清）</p>
+<table><thead><tr><th>维度</th><th>快捷创作 · 对话（已上线）</th><th>VisionChat · 房间（新）</th></tr></thead><tbody>
+<tr><td>参与者</td><td>1 个账号 + 1 个平台模型</td><td>1 个账号 + N 个智能体，后续可加人</td></tr>
+<tr><td>上下文</td><td>单条长会话，服务端按 token 预算截断 + 摘要</td><td>每个智能体各自的会话；房间消息是共享上下文</td></tr>
+<tr><td>谁在说</td><td>模型</td><td>具名成员：每条消息标「谁说的」</td></tr>
+<tr><td>触发</td><td>用户发一句，模型回一句</td><td>提及必回 / 全员轮次 / 主持人，可并行开关，但有预算闸门</td></tr>
+<tr><td>工具</td><td>联网搜索、读链接、思考模式（模型侧）</td><td>平台工具（模板、工作流、生图、评审），由服务端执行并计费</td></tr>
+<tr><td>计费</td><td>每轮 <code>chat</code> 1 积分</td><td>每轮 <code>chat</code> + 每次工具调用各自的价目</td></tr>
+<tr><td>数据</td><td><code>DATA_DIR/chat/&lt;账号&gt;/&lt;会话&gt;.json</code>，最多 30 会话 / 每条 200 消息 / 单条 32000 字</td><td>需要 <code>seq</code>、成员、未读、分页，文件形不够用（见第 6 节）</td></tr>
+</tbody></table>
+<hr>
+<h2>2. 页面与信息架构</h2>
+<p><strong>入口</strong>：<code>src/nav.ts</code> 的 <code>PRIMARY_NAV</code> 现在是工作台、我的作品、爆款雷达、模板库四项。新增第 5 项 <code>visionchat</code>，标签「聊天室」；工具栏标签用 <code>chip: 'Beta'</code>，与工作流同款。<code>src/domain/types.ts</code> 的 <code>Page</code> 联合类型与 <code>pageLabels</code> 各加一条；路由用现有 <code>#/&lt;page&gt;</code> 机制，不引入路由器。</p>
+<p>桌面端布局（1440 宽）：三栏，左 240 / 中自适应 / 右 300；390 宽：单列，房间列表与成员改为抽屉。</p>
+<table><thead><tr><th>区域</th><th>内容</th><th>空状态</th><th>数据来源</th></tr></thead><tbody>
+<tr><td>左栏 · 房间列表</td><td>房间名、最后一句预览、未读数、相对时间；顶部「新建房间」</td><td>一句话说明房间是什么 + 两个入口（新建房间 / 加一个智能体）</td><td>新表 <code>rooms</code></td></tr>
+<tr><td>中栏 · 消息流</td><td>成员头像与署名、时间线、提及高亮、工具调用卡、失败占位与「重试」、滚到底、加载更早</td><td>「还没有人说话」+ 输入建议</td><td>新表 <code>room_messages</code></td></tr>
+<tr><td>右栏 · 成员</td><td>人 / 智能体分组；智能体显示职责、所用工具、状态；底部「本房间授权档位」</td><td>成员列整列收起，不占空列</td><td>新表 <code>room_members</code> + <code>agents.json</code></td></tr>
+<tr><td>底部 · 输入区</td><td>多行输入、@ 提及候选、本轮发言规则开关（提及必回 / 全员一轮）、预算提示（本轮最多引出 N 个回合）、发送</td><td>发送键禁用并说明原因（未选智能体 / 无积分）</td><td>前端状态</td></tr>
+<tr><td>消息内 · 工具调用卡</td><td>工具名、参数摘要、状态（待批准 / 执行中 / 成功 / 失败 / 已退款）、产物缩略图、积分消耗、「查看记录」</td><td>——</td><td>新表 <code>room_tool_calls</code></td></tr>
+</tbody></table>
+<p>界面约束（与宿主一致，不另起一套）：只用 <code>src/styles/tokens.css</code> 的变量；间距 4/8 栅格（4/8/12/16/24/32）；图标用 lucide 线性图标，不新增 emoji；中文字体全局已指定，不另设；不画盒子套盒子，选中的房间用 11% 填充而不是描边。</p>
+<h3>2.1 交互细节（一期就要定死，避免边做边猜）</h3>
+<table><thead><tr><th>场景</th><th>行为</th><th>备注</th></tr></thead><tbody>
+<tr><td>输入 @</td><td>打 <code>@</code> 弹成员候选，只列智能体；键盘上下选择、回车插入</td><td>提及写进 <code>mentions_json</code>，不靠正则事后猜</td></tr>
+<tr><td>发送</td><td>回车发送、Shift+回车换行；输入法组合态回车不发送</td><td>对话输入框已有（<code>src/components/QuickChat.tsx</code> 的 <code>isComposing</code> 守卫），房间输入沿用</td></tr>
+<tr><td>智能体发言中</td><td>消息流尾部一行「某某正在说…」，可点「停止本轮」</td><td>停止用世代号作废旧回合</td></tr>
+<tr><td>失败</td><td>占位消息留在原位，灰色，带原因；底部「只重试它」</td><td>重试不动其他成员、不换会话</td></tr>
+<tr><td>未读</td><td>左栏房间行显示未读数；滚到底即清零；不在前台不代清</td><td>与「谁看过」无关，只算自己的游标</td></tr>
+<tr><td>翻历史</td><td>顶部「加载更早」，一页 100 条；翻着历史时新消息不把人拽下去</td><td>底部浮「回到最新 · N 条新的」</td></tr>
+<tr><td>空房间</td><td>一句说明 + 两个动作（加智能体 / 发第一句示例）</td><td>不留白屏</td></tr>
+<tr><td>390 宽</td><td>单列；房间列表与成员改抽屉；输入区贴底，键盘弹起时不遮输入</td><td>不横向滚动</td></tr>
+</tbody></table>
+<hr>
+<h2>3. 与现有能力的接线</h2>
+<table><thead><tr><th>现有能力</th><th>真源（文件）</th><th>接入方式</th><th>需要新增/改动</th></tr></thead><tbody>
+<tr><td>账号</td><td><code>server/config.mjs</code> 的 <code>cookieName: 'vq_session'</code>；<code>server/auth.mjs</code> 的 <code>currentUser()</code>、<code>sessions</code> 表、<code>isAdmin()</code></td><td>所有房间接口先 <code>currentUser</code>，无登录 401，与 <code>/api/chat</code> 一致</td><td>房间成员表里存 <code>user_id</code>；不新建账号体系</td></tr>
+<tr><td>积分</td><td><code>server/credits.mjs</code>：<code>charge(userId, kind, {ref, amount, meta})</code>、<code>refund</code>、<code>outstandingCharge</code>、<code>credit_ledger(id, user_id, delta, balance_after, kind, ref, meta, created_at)</code></td><td>发消息扣 <code>chat</code>；工具调用按 <code>image_gen</code> / <code>video_gen</code> / <code>review</code> 扣；失败 <code>refund</code></td><td>新增 kind：<code>room_turn</code>、<code>room_tool</code>（或在 <code>ref</code> 前缀里区分房间），价格集中在 <code>config.credits.prices</code></td></tr>
+<tr><td>月度额度</td><td><code>server/quota.mjs</code>（<code>checkQuota</code> 在 <code>charge</code> 里先拦）</td><td>复用，不另写</td><td>无</td></tr>
+<tr><td>智能体</td><td><code>DATA_DIR/agents.json</code>（<code>server/agents.mjs</code>：<code>id/name/role/category/systemPrompt/temperature/knowledge/tools/model</code>）</td><td>房间成员引用 <code>agentId</code>，不复制定义；改智能体定义房间里的下一次发言即生效</td><td>成员表加 <code>agent_id</code>；智能体被删时的降级文案</td></tr>
+<tr><td>智能体对话</td><td><code>server/agentChat.mjs</code>：<code>chatWithAgent({agent, message, outputType, model, history, user, log})</code>，内部 2 次重试 + 候选降级链，错误分内部/外部两套文案</td><td>后台回合直接调用；每个成员维护自己的 <code>history</code></td><td>需要「多人共享上下文」的拼接层（见第 5 节）</td></tr>
+<tr><td>工具（现有）</td><td><code>server/agents.mjs</code> 的 <code>AGENT_TOOLS</code>：<code>templates-read</code> / <code>canvas-read</code> / <code>export-json</code> / <code>web-read</code> 为 ready，<code>image-gen</code> 只是 planned</td><td>复用为房间工具的前 4 个；<code>image-gen</code> 接 <code>server/routes/media-gen.mjs</code> 才第一次真的可用</td><td>由「对话前一次性注入」升级为「可被调用的工具」，见第 4 节</td></tr>
+<tr><td>生图 / 生视频</td><td><code>server/routes/media-gen.mjs</code>：<code>/api/media/generate</code>、<code>/api/media/tasks</code>、<code>/api/media/models</code>；失败全额退回</td><td>房间工具卡直接下单，产物落地后回填消息</td><td>房间内产物引用（素材 id）</td></tr>
+<tr><td>模板库</td><td><code>server/templates.mjs</code> 的 <code>listTemplates({q, contentType, platform, kind, source}, user)</code>，条目含 <code>title/contentType/tags</code> 与所有者</td><td>房间工具「读取模板库」给它最近 6 条标题与类型，与 <code>agentChat</code> 现在的口径一致</td><td>无</td></tr>
+<tr><td>视觉评审</td><td><code>server/routes/review.mjs</code>：<code>/api/review</code>，扣 <code>review</code> 5 积分，失败退</td><td>房间工具「请评审这张图」；限流已有 10 次/分钟</td><td>需要把产物 id 传给评审</td></tr>
+<tr><td>资产</td><td><code>server/assets.mjs</code>、<code>/api/assets</code></td><td>房间工具「读我的资产」二期再加</td><td>二期</td></tr>
+</tbody></table>
+<p>计费口径要写死一处：<strong>用户在房间里发一句 = 1 次 <code>chat</code> 扣费（无论引出几个智能体回合）</strong>；每个智能体实际调用仍然消耗上游 token，但不再逐条扣，否则一条消息会被扣成好几次，与已上线的对话价目打架。这是 <code>server/routes/local-agent.mjs</code> 已经用过的取舍（「一轮只在该轮第一次调用时扣一次」）。工具调用则逐次扣，因为它对应真实上游成本。</p>
+<hr>
+<h2>4. 「智能体可操控 CLI」怎么落地</h2>
+<p>先对齐词：用户说的「CLI/工具」，在平台侧应当理解为<strong>可执行的白名单工具</strong>。已有两套事实：</p>
+<ul>
+<li><strong>桌面端真 CLI</strong>：<code>electron/agent/tools.mjs</code> 的工具集是 <code>list_dir</code> / <code>read_file</code> / <code>search_text</code>（无副作用、免批准）、<code>write_file</code> / <code>edit_file</code> / <code>run_command</code>（<code>needsApproval: true</code>，逐次批准）；命令 60 秒超时、输出截断 8000 字、路径锁在工作区根内（<code>resolveInside</code>）；<code>loop.mjs</code> 每轮最多 8 步，批准由宿主注入，拒绝即 <code>fail closed</code>；密钥只留在服务端（<code>/api/local-agent</code> 用平台 Key 换一次补全）。</li>
+<li><strong>平台侧工具</strong>：<code>AGENT_TOOLS</code> 里只有「对话前读一次模板/工作流/网页」和「把回复里的 JSON 抽出来」，没有模型发起的工具调用循环，<code>image-gen</code> 至今是 planned —— 也就是说，「智能体自己决定调用工具」这件事<strong>当前并未实现</strong>。</li>
+</ul>
+<p><strong>推荐模型（一期只落一颗钉子：只读 + 一个写操作）</strong></p>
+<table><thead><tr><th>层</th><th>设计</th><th>与现有代码的关系</th></tr></thead><tbody>
+<tr><td>工具注册表</td><td>服务端一张表：<code>id / label / scope(只读/读写) / needsApproval / creditKind / 参数 schema / 执行函数</code></td><td>扩展 <code>AGENT_TOOLS</code>，不另起第二份能力清单</td></tr>
+<tr><td>只读工具</td><td>读模板库、读工作流、网页读取（仅公开 http/https，沿用 <code>webread.mjs</code> 的字节与字数上限）、导出 JSON（把回复里的 JSON 块整理成可下载文件）</td><td>自动执行，结果注入下一步上下文；不扣积分</td></tr>
+<tr><td>写操作（一期只开一个）</td><td><strong>生成一张图</strong>：参数只收「提示词 + 尺寸 + 参考资产 id」，走 <code>/api/media/generate</code> 同一套上游与限流</td><td>该工具已有服务端实现，只差房间侧调用与审批</td></tr>
+<tr><td>审批</td><td>房间级档位：<code>只读</code>（默认）/ <code>写操作需批准</code> / <code>完全授权（仅房主可开，二期）</code>；批准人 = 房间成员，二期扩到「房主可代批」</td><td>抄 <code>dsh-chatroom</code> 的三档与 <code>fail closed</code>：不点、超时 90 秒、服务重启或档位被改成只读，一律按拒绝收尾</td></tr>
+<tr><td>越权</td><td>智能体只能调用「房间为它勾选的工具 ∩ 平台已 ready 的工具」；参数在服务端按 schema 校验，模型给的多余字段丢弃</td><td>不信任模型输出，与 <code>electron/agent/tools.mjs</code> 把路径限制在工作区是同一个思路</td></tr>
+<tr><td>计费</td><td>每次工具调用一条 <code>charge</code>，<code>ref = room:&lt;roomId&gt;:call:&lt;callId&gt;</code>；失败 <code>refund</code> 同 <code>ref</code>；工具卡显示这笔账</td><td><code>outstandingCharge</code> 已能保证「同一 ref 不会多退」</td></tr>
+<tr><td>失败</td><td>上游失败、参数不合法、超时 → 工具卡标失败并全退；不写进消息正文冒充结果</td><td>与 <code>media-gen</code> 现有退款口径一致</td></tr>
+</tbody></table>
+<p><strong>明确不做</strong>：服务器上的 shell、任意 URL 抓取（只允许公开页面且过 SSRF 校验）、写文件、改数据库、调用管理接口。若用户要的是「真的在我机器上跑命令」，答案在桌面端本地工作区，不在 VisionChat。</p>
+<hr>
+<h2>5. 连接方式对比</h2>
+<table><thead><tr><th>方案</th><th>延迟</th><th>服务端代价</th><th>与现部署的关系</th><th>断线恢复</th><th>实现成本</th></tr></thead><tbody>
+<tr><td>轮询（每 2–3 秒拉一次）</td><td>2–3 秒</td><td>每客户端每 2 秒一次请求；2 核 1.8G 下 50 个房间 = 每秒 25 次查询，SQLite 读写会被放大</td><td>无特殊要求，nginx 无感</td><td>天然从 <code>seq</code> 续拉，不重不漏</td><td>最低</td></tr>
+<tr><td><strong>SSE（推荐）</strong></td><td>亚秒级</td><td>每客户端一条长连接；单进程 Node 下几百条可承受，但每条都占一个 socket 与一段内存</td><td><code>/api/chat</code> 与 <code>/api/flows</code> 已在用，带 <code>X-Accel-Buffering: no</code>；nginx <code>proxy_read_timeout 300s</code>，心跳 15 秒即可安全穿过</td><td>用 <code>Last-Event-ID</code> / <code>?since=</code> 从 <code>seq</code> 续传</td><td>低（复用 <code>sseWrite</code> 那一套）</td></tr>
+<tr><td>WebSocket</td><td>亚秒级</td><td>需要 <code>http</code> 升级处理；反向代理要额外配置；Node 单进程下连接数与心跳管理更重</td><td>现在没有任何 WS 代码；nginx 与 Caddy 两套部署都要改</td><td>需要自定义重连与补洞协议</td><td>高</td></tr>
+</tbody></table>
+<p><strong>推荐</strong>：SSE + 服务端回合 + <code>seq</code> 续传，轮询作为降级（<code>EventSource</code> 连续失败 3 次 → 切 <code>/messages?since=</code> 每 3 秒轮询，界面顶部提示「实时连接断了，正在用轮询」）。放弃的是：不做「谁在线」的实时 presence（轮询下会闪），不做 &lt;200ms 的多端同步；这些在 Beta 都不值当。</p>
+<p>容量边界（写进验收）：单房间同时 1 个回合在跑（与 <code>dsh-chatroom</code> 的「一轮一人一次」同源）；全局并发复用 <code>config.credits.concurrency.chat = 2</code> 的闸门，超了返回 429 并说明「还有对话在跑」；SSE 单账号最多 2 条连接，服务端拒绝第 3 条并给原因。理由：2 核 1.8G 上真正贵的是模型调用，不是连接；把闸门放在模型入口最省钱。</p>
+<p>回合调度（服务端，不依赖客户端在线）：</p>
+<ol>
+<li>人发一条消息 → 落库 <code>seq = n</code>，同步返回；</li>
+<li>调度器按房间规则选出本轮要发言的成员（提及必回 / 全员一轮），用「本轮预算」封顶（建议默认最多 2 个智能体回合、深度 1，比 dsh-chatroom 的 3/2 更保守，因为每次都是真扣费）；</li>
+<li>每个成员按顺序跑：拼上下文（房间最近 N 条 + 该成员自己的历史 + 工具上下文）→ 调模型 → 落库 <code>seq = n+1</code> → SSE 推送；</li>
+<li>45 秒无回应落一条失败占位（可只重试该成员）；「停止本轮」清空队列并作废旧回合（用世代号，抄 dsh-chatroom 的做法）；</li>
+<li>用户中途插话：排队到本轮结束再处理，不丢。</li>
+</ol>
+<h3>5.1 一期接口清单（不含实现，只定形状）</h3>
+<table><thead><tr><th>方法 · 路径</th><th>作用</th><th>鉴权</th><th>扣费</th><th>限流</th></tr></thead><tbody>
+<tr><td><code>GET /api/rooms</code></td><td>我的房间列表（名称、最后一句、未读）</td><td>登录</td><td>无</td><td>共享读限流</td></tr>
+<tr><td><code>POST /api/rooms</code></td><td>新建房间（名称、规则、默认档位）</td><td>登录</td><td>无</td><td>10 次/分钟</td></tr>
+<tr><td><code>GET /api/rooms/:id</code></td><td>房间详情（成员、规则、权限）</td><td>成员</td><td>无</td><td>共享读限流</td></tr>
+<tr><td><code>PATCH /api/rooms/:id</code></td><td>改名、规则、档位（仅房主）</td><td>房主</td><td>无</td><td>10 次/分钟</td></tr>
+<tr><td><code>DELETE /api/rooms/:id</code></td><td>解散（墓碑，不物理删）</td><td>房主</td><td>无</td><td>5 次/分钟</td></tr>
+<tr><td><code>GET /api/rooms/:id/messages?since=&amp;before=&amp;limit=</code></td><td>历史与补洞</td><td>成员</td><td>无</td><td>共享读限流</td></tr>
+<tr><td><code>POST /api/rooms/:id/messages</code></td><td>发一句话，触发回合</td><td>成员</td><td>1 次 <code>chat</code></td><td>20 次/分钟/账号</td></tr>
+<tr><td><code>GET /api/rooms/:id/stream</code></td><td>SSE：<code>seq</code>、发言开始/结束、工具卡、错误、心跳</td><td>成员</td><td>无</td><td>每账号 2 条连接</td></tr>
+<tr><td><code>POST /api/rooms/:id/stop</code></td><td>停止本轮</td><td>成员</td><td>无</td><td>10 次/分钟</td></tr>
+<tr><td><code>POST /api/rooms/:id/retry</code></td><td>只重试某成员某条</td><td>成员</td><td>1 次 <code>chat</code></td><td>10 次/分钟</td></tr>
+<tr><td><code>POST /api/rooms/:id/members</code></td><td>加/删智能体成员（仅房主）</td><td>房主</td><td>无</td><td>20 次/分钟</td></tr>
+<tr><td><code>POST /api/rooms/:id/tools/:callId/approve</code></td><td>批准或拒绝一次工具调用（二期）</td><td>成员</td><td>无</td><td>20 次/分钟</td></tr>
+</tbody></table>
+<hr>
+<h2>6. 存储与数据形状</h2>
+<p>现有 <code>chat-store.mjs</code> 是「一个账号一个目录、一条会话一个文件」，并明确写了「两者的数据形状不一样，硬塞进一个文件只会让两边都难改」。房间需要 <code>seq</code> 连续、成员外键、未读游标、工具调用与积分对账，文件形做不到原子追加与分页查询，因此<strong>新建 SQLite 表</strong>（数据库已经是 <code>node:sqlite</code> 的 <code>DatabaseSync</code>，见 <code>server/auth.mjs</code>；建表沿用 <code>CREATE TABLE IF NOT EXISTS</code> 的做法）：</p>
+<table><thead><tr><th>表</th><th>关键列</th><th>说明</th></tr></thead><tbody>
+<tr><td><code>rooms</code></td><td><code>id, name, owner_id, rules_json, approval_mode, created_at, dissolved_at</code></td><td><code>rules_json</code> 存「提及必回 / 全员一轮 / 预算」；解散不删，置 <code>dissolved_at</code>（墓碑）</td></tr>
+<tr><td><code>room_members</code></td><td><code>id, room_id, kind, user_id, agent_id, name, role, joined_at, removed_at</code>（kind 取 human / agent）</td><td>智能体成员引用 <code>agents.json</code> 的 <code>id</code>，不复制 <code>systemPrompt</code></td></tr>
+<tr><td><code>room_messages</code></td><td><code>id, room_id, seq, sender_member_id, body, mentions_json, reply_to, state, created_at</code>（state 取 ok / failed / tool）</td><td><code>UNIQUE(room_id, seq)</code>；一张表同时存人的话、智能体的回复、系统通知</td></tr>
+<tr><td><code>room_tool_calls</code></td><td><code>id, room_id, message_id, tool, args_json, status, credit_cost, ledger_ref, artifact_id, created_at</code></td><td><code>ledger_ref</code> 与 <code>credit_ledger.ref</code> 对上，积分可对账</td></tr>
+<tr><td><code>room_reads</code></td><td><code>room_id, member_id, last_seq</code></td><td>未读数 = 最新 <code>seq</code> − <code>last_seq</code>；不做已读回执给对方看</td></tr>
+</tbody></table>
+<p>保留口径：每房间最多 4000 条（超出滚动归档），投影给前端最近 200 条、分页每页 100 条 —— 与 dsh-chatroom 的 <code>200/4000/100</code> 相同，理由同样是不让一次打开房间把全历史读进内存。</p>
+<h3>6.1 与现有 chat-store 的关系</h3>
+<ul>
+<li><strong>不迁移、不改写</strong>：<code>DATA_DIR/chat/</code> 是「快捷创作」的一对一会话，VisionChat 另建表；两边互不读对方数据。</li>
+<li><strong>命名不撞</strong>：房间接口全部挂 <code>/api/rooms</code>，不复用 <code>/api/chat</code> 前缀，避免将来两套消息语义混在一个路由里。</li>
+<li><strong>备份口径一致</strong>：房间表落在现有 SQLite 文件里，跟着已有的备份脚本走；不新增第二个数据库文件，减少运维面。</li>
+<li><strong>回滚</strong>：表是新增的，回滚先把入口从导航摘掉（<code>src/nav.ts</code> 一处），接口与表留着不碍事；<code>Page</code> 类型与 <code>pageLabels</code> 的条目可以留一版再删，避免同一次提交里改动面过大。这一点要求一期不写任何「房间消息 → 作品/模板」的单向搬迁，二期再加。</li>
+</ul>
+<hr>
+<h2>7. 安全</h2>
+<table><thead><tr><th>面</th><th>措施</th><th>失败时</th></tr></thead><tbody>
+<tr><td>房间成员鉴权</td><td>每个房间接口先查 <code>room_members</code> 且 <code>removed_at IS NULL</code>；不是成员 403，不返回房间是否存在</td><td>403 + 一句中文原因</td></tr>
+<tr><td>消息归属</td><td>发送者由服务端从 <code>currentUser</code> 决定，<strong>请求体里的 sender 一律忽略</strong>；智能体消息只能由调度器写入</td><td>客户端伪造无效</td></tr>
+<tr><td>工具越权</td><td>工具白名单 ∩ 房间勾选 ∩ 账号可用；参数按 schema 校验；只读工具不碰写路径；写工具必须过审批</td><td>拒绝并落一条 <code>denied</code> 工具卡，不产生扣费</td></tr>
+<tr><td>提示词注入</td><td>工具结果、网页正文、他人消息都按「不可信数据」处理，进上下文时明确标注来源与边界，不让模型把消息内容当指令；服务器侧没有任何「消息里出现某指令就执行」的路径</td><td>最坏是回复被带偏，不会执行动作</td></tr>
+<tr><td>审批伪造</td><td>审批记录写服务端（谁、哪条调用、什么时候、允不允许）；审批只能由有权限的成员发起，客户端不能自称已批准</td><td>fail closed，超时 90 秒按拒绝</td></tr>
+<tr><td>限流</td><td>新接口单独开桶：房间发送 20 次/分钟/账号、工具调用 6 次/分钟/账号（与 <code>ratelimit.mjs</code> 的 60 秒滑动窗口同机制；IP 桶作为第二道，防换号）</td><td>429 + 重试秒数</td></tr>
+<tr><td>审计</td><td><code>room_tool_calls</code> 即审计：谁、在哪个房间、调了什么工具、花了多少积分、结果如何；管理员在后台可查，普通成员只能看自己房间</td><td>不可删除，只追加</td></tr>
+<tr><td>邀请（三期）</td><td>一次性 <code>invite token</code>，绑定房间与席位，有效期 7 天；不做房间码（房间码适合无账号的 LAN，我们有账号）</td><td>过期/用掉即失效</td></tr>
+<tr><td>隐私</td><td>房间消息不进入公开分享页；分享作品时只带产物，不带对话正文</td><td>——</td></tr>
+</tbody></table>
+<hr>
+<h2>8. 分期与验收</h2>
+<p><strong>一期：能开会话的房间（约 1 个迭代）</strong></p>
+<p>范围：导航入口 + 房间 CRUD + 成员（人 + 智能体）+ 消息流 + <code>@</code> 必回 / 全员一轮（默认只开第一个）+ 服务端回合 + SSE 推送 + <code>chat</code> 计费 + 只读工具 4 个 + 失败占位与「重试该成员」+ 未读与历史分页。 不做：他人加入、写操作工具、附件、悬浮窗、移动端独立布局。</p>
+<p>验收（全部可测）：</p>
+<ul>
+<li>两个智能体同房，@ 谁谁回；一条消息最多引出 2 个回合，超出不再发言；</li>
+<li>一轮之内同一成员只说一次；插话排队不丢；停止本轮后旧回合迟到的事件被丢弃；</li>
+<li>断线 30 秒重连，消息按 <code>seq</code> 不重不漏；<code>EventSource</code> 失败 3 次后切轮询且有提示；</li>
+<li>每轮扣 1 积分、失败退 1；<code>credit_ledger</code> 里能找到 <code>room</code> 的 <code>ref</code>，余额 = 流水求和；</li>
+<li>非成员访问房间返回 403/404；另一个账号读不到该房间的任何消息；</li>
+<li>390 宽不横向溢出，间距只出现 4/8/12/16/24/32，无 emoji 图标。</li>
+</ul>
+<p><strong>二期：工具调用与审批</strong></p>
+<p>范围：工具注册表、工具调用卡、审批三档（默认只读）、生图（一个写操作）、生视频与视觉评审、产物回填与「引用到作品」、管理员审计页。 验收：发起生图 → 卡在「待批准」→ 拒绝则 0 扣 0 执行；批准 → 扣 5 积分 → 成功出图并回填 <code>artifact_id</code> → 失败全退；审批超时 90 秒按拒绝；模型消息里写「调用 run_command」不产生任何执行；单账号工具调用超 6 次/分钟返回 429。</p>
+<p><strong>三期：多人、邀请与运营</strong></p>
+<p>范围：同工作区成员加入、邀请链接、只读访客、房间模板（把一条作品/模板变成房间的初始任务）、房间回收站。 验收：邀请令牌一次有效；被邀请者 7 天内加入且席位唯一；访客只能读与 @ 自己的智能体；解散后历史保留、输入锁住；管理员可导出某房间的审计 CSV。</p>
+<h3>8.1 风险与观测</h3>
+<table><thead><tr><th>风险</th><th>触发条件</th><th>缓解</th><th>观测指标</th></tr></thead><tbody>
+<tr><td>多智能体回合烧钱</td><td>全员一轮 + 长消息 + 生图工具</td><td>本轮预算默认 2 个回合、深度 1；工具逐次扣费并需审批</td><td>每房间每轮的积分消耗分布；单账号日消耗上限告警</td></tr>
+<tr><td>提示词注入</td><td>网页正文、他人消息、模板标题里夹带指令</td><td>工具结果标注为不可信数据；服务器只认白名单工具，不做「文本即命令」</td><td>工具调用拒绝率；异常参数校验失败数</td></tr>
+<tr><td>SSE 连接堆积</td><td>多标签页 + 移动端切换后台</td><td>单账号 2 条连接；心跳 15 秒；服务端 5 分钟空闲断开</td><td>当前连接数 / 进程内存（2 核 1.8G 的余量）</td></tr>
+<tr><td>SQLite 写竞争</td><td>房间多、写频繁，与账号/积分共用同一个库</td><td>一期只有单进程；写操作短事务；<code>seq</code> 由房间内单点分配</td><td>写等待耗时 p95；<code>SQLITE_BUSY</code> 次数</td></tr>
+<tr><td>免费额度被刷</td><td>新账号 50 积分 + 多房间</td><td>沿用限流桶；房间发送 20 次/分钟；不新增免费通道</td><td>单 IP 新账号创建房间数</td></tr>
+<tr><td>数据不一致</td><td>扣费成功但回合失败</td><td>先扣后调、失败全退（复用 <code>outstandingCharge</code> 防重复退）</td><td>退款流水与失败回合数对账，差异必须为 0</td></tr>
+</tbody></table>
+<hr>
+<h2>9. 需要拍板的问题（6 条）</h2>
+<ol>
+<li><strong>「CLI」到底指什么</strong>：平台白名单工具（推荐），还是必须能在你的服务器上跑真命令？后者要单独的安全方案，我不建议放进 VisionChat。</li>
+<li><strong>入口位置</strong>：按用户原话放「模板库」下面（推荐，Beta 标签）；还是并进工具区（与快捷创作、无限画布并列）？</li>
+<li><strong>一期开不开多人</strong>：只做「1 个人 + N 个智能体」（推荐，一期风险最小），还是直接做同工作区多人？</li>
+<li><strong>工具分期</strong>：一期只上 4 个只读工具、生图放二期（推荐）；还是把生图压进一期？生视频与视觉评审每次 15 / 5 积分，建议更靠后。</li>
+<li><strong>计费口径</strong>：一条消息扣 1 次 <code>chat</code>（推荐，与桌面端「一轮一次」一致），还是按每个智能体回合各扣 1 次？</li>
+<li><strong>默认授权档位</strong>：房间默认「只读」、写操作逐次批准（推荐）；要不要给房主一个「完全授权」开关，开了之后不再逐次问？</li>
+</ol>
+<hr>
+<h2>附：本文事实来源</h2>
+<ul>
+<li>导航与页面：<code>src/nav.ts</code>、<code>src/domain/types.ts</code> 的 <code>Page</code> / <code>pageLabels</code>。</li>
+<li>账号：<code>server/config.mjs</code>（<code>vq_session</code>）、<code>server/auth.mjs</code>（<code>sessions</code> 表、<code>currentUser</code>、<code>isAdmin</code>）。</li>
+<li>积分：<code>server/credits.mjs</code>（<code>charge/refund/outstandingCharge</code> 与 <code>credit_ledger</code> 列）、<code>server/config.mjs</code> 的 <code>credits.prices</code> 与 <code>concurrency</code>、<code>server/quota.mjs</code>。</li>
+<li>智能体：<code>DATA_DIR/agents.json</code> + <code>server/agents.mjs</code>（<code>AGENT_TOOLS</code>）、<code>server/agentChat.mjs</code>、<code>server/routes/agents.mjs</code>（先扣后调、失败退款、<code>recordAgentRun</code>）。</li>
+<li>工具：<code>server/routes/media-gen.mjs</code>、<code>server/routes/review.mjs</code>、<code>server/templates.mjs</code>（<code>listTemplates</code>）、<code>server/assets.mjs</code>。</li>
+<li>连接：<code>server/routes/chat.mjs</code> 的 SSE 头（<code>text/event-stream</code>、<code>X-Accel-Buffering: no</code>）、<code>server/routes/flows.mjs</code>、<code>deploy/nginx.conf</code>（<code>proxy_read_timeout 300s</code>）、<code>server/ratelimit.mjs</code>。</li>
+<li>存储：<code>server/chat-store.mjs</code>（文件形与上限）、<code>server/auth.mjs</code>（<code>node:sqlite</code>）。</li>
+<li>桌面 CLI：<code>electron/agent/tools.mjs</code>、<code>electron/agent/loop.mjs</code>、<code>server/routes/local-agent.mjs</code>。</li>
+<li>参考产品（外部，未经我们验证其内部实现）：dsh-chatroom 的 README 与目录（三条发言规则、预算 <code>maxSpeakers</code>/<code>maxDepth</code>、45 秒失败占位、200/4000/100 分页、三档授权、<code>fail closed</code> 90 秒、LAN 房间码与明文 HTTP 的威胁模型）；Pachat 公开文档（https://pachat.ai/install.md 与站点帮助：每只 agent 自己的 <code>pachat_</code> token、收件箱、<code>wait=25</code> 长轮询、提及与 <code>replyTo</code>、<code>opKey</code> 幂等、2 分钟内撤回、check-in 与唤醒、公开/链接可见群）。<strong>没有</strong>把两者当作我们的架构，也没有引用任何未被公开的数字。</li>
+</ul>
+</main>
+</body>
+</html>

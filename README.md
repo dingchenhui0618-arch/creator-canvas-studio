@@ -3341,3 +3341,8 @@ Kimi WebBridge 打开页面 → `Network.getCookies` 拿 feishu 域 Cookie → c
   回滚点 `20261125-1630-r314showca`（`--to 1` 回 v0.9.286、`--to 2` 回 v0.9.285）；
   两次部署各跑一次可用性探针：138/138 与 130/130 全 200，最长无响应 1.44s / 1.14s；记录见
   `docs/deploy-r313-r314-2026-11-25.md`。
+
+- 生产实拍（用户浏览器、真登录态、非管理员账号）：`docs/r314-production-1440.png` —— 侧栏没有「工作流」、
+  工具区是 快捷创作 / 无限画布 / 视觉评审 / 积分记录，右上角余额，示例区五张卡都在；`/api/version` = 0.9.287。
+- 方案稿除了 `.md`，另渲染了一页可读 HTML：`docs/visionchat-proposal-2026-11-25.html`
+  （`node scripts/render-doc.mjs docs/<文档>.md` 可重新生成，表格与代码块都还原）。
