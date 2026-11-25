@@ -14,6 +14,7 @@ export type Page =
   | 'templates'
   | 'assets'
   | 'review'
+  | 'rooms'
   | 'recharge'
   | 'local'
 
@@ -32,6 +33,7 @@ export const pageLabels: Record<Page, string> = {
   templates: '模板库',
   assets: '我的资产',
   review: '视觉评审',
+  rooms: '聊天室',
   recharge: '充值',
   local: '本地工作区',
 }

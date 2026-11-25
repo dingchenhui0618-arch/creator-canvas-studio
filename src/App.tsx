@@ -40,6 +40,7 @@ import { OverviewPage } from './pages/OverviewPage'
 import ProjectsPage from './pages/ProjectsPage'
 import ProjectPage from './pages/ProjectPage'
 import { RunsPage } from './pages/RunsPage'
+import RoomsPage from './pages/RoomsPage'
 import { SettingsPage } from './pages/SettingsPage'
 import RechargePage from './pages/RechargePage'
 import { RadarPage } from './pages/RadarPage'
@@ -844,6 +845,9 @@ function Workbench({
             onOpenProject={(projectId) => navigate({ kind: 'page', page: 'projects', projectId })}
           />
         )
+      case 'rooms':
+        // 房间（r315）：一期只有人的消息；智能体接入在 1b，页面里不假装它们会回话
+        return <RoomsPage onToast={notify} />
       case 'local':
         return <LocalWorkspacePage />
       case 'review':
@@ -916,6 +920,8 @@ function Workbench({
                     <NavItem
                       icon={entry.icon}
                       label={entry.label}
+                      // r315：一级导航也能带 Beta 标（聊天室），不再只有工作流那一处硬编码
+                      chip={entry.chip}
                       active={isNavActive(entry, activePage)}
                       compact={!sidebarOpen}
                       badge={entry.id === 'overview' ? queueBadge : undefined}

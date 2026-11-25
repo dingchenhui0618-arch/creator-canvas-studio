@@ -28,7 +28,8 @@ test('引导的每一步都落在一级导航里：画布 / 评审 / 智能体 /
   const primary = navIds(nav, 'PRIMARY_NAV')
   const tools = navIds(nav, 'TOOL_NAV')
 
-  assert.deepEqual(primary, ['overview', 'projects', 'radar', 'templates'], '一级导航变了：引导与侧栏是同一套去处')
+  // r315：一级导航多了「聊天室」，引导仍然只指向 找 / 拆 / 做 / 交 这四个去处
+  assert.deepEqual(primary, ['overview', 'projects', 'radar', 'templates', 'rooms'], '一级导航变了：引导与侧栏是同一套去处')
   // r313：工具区只剩四项能力；我的资产挂到工作台之下、工作流收成管理员 beta（都不在工具区里）
   assert.deepEqual(tools, ['agents', 'board', 'review', 'runs'], '工具区变了：引导不能再指向已经不当工具的那一页')
 

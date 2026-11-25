@@ -83,6 +83,8 @@ import { createMediaGenRouter } from './routes/media-gen.mjs'
 import { createFramesRouter } from './routes/frames.mjs'
 import { createWorksRouter } from './routes/works.mjs'
 import { createChatRouter } from './routes/chat.mjs'
+// VisionChat 房间（r315）：房间、消息、未读与 SSE，一期只做人的消息
+import { createRoomsRouter } from './routes/rooms.mjs'
 import { currentUser, listUsers, clientIp, isAdmin } from './auth.mjs'
 import { recordClientError } from './client-errors.mjs'
 import { createReport } from './reports.mjs'
@@ -126,6 +128,8 @@ const featureRoutes = [
   createWorksRouter(),
   // 快捷创作对话（r213）：长上下文会话、联网搜索、文件解析
   createChatRouter(),
+  // 房间（r315）：登录后的多智能体聊天室，成员校验与 SSE 都在自己模块里
+  createRoomsRouter(),
   createBillingRouter(),
   createCreditsRouter(),
   // 素材占用：设置页要看「自己的帧图占了多少盘」（v0.9.68）

@@ -3377,3 +3377,31 @@ Kimi WebBridge 打开页面 → `Network.getCookies` 拿 feishu 域 Cookie → c
 **多加一刀「令牌是说话权，不是付费权」**：令牌只能收发房间消息、只能「申请」一次扣费工具；必须房间成员在界面上点允许，才由服务端**以那个账号的身份**执行并扣费。理由：Pachat 的工具只有收发消息，我们能花钱、能读创作资产，一个放在用户电脑上、可能被提示词注入的令牌，不能等价于「可以一直花这个账号的积分」。
 
 本轮只写文档：没有改 `src/`、`server/`、`package.json`，没有真实上游调用（¥0）。
+
+## 三百五十九、聊天室 1a：房间骨架先跑起来——房间、消息、未读、SSE（r315，未上线）
+
+按 v2.1 方案开工的第一段。**这一版只有人在说话**：智能体的令牌、MCP 与工具是 1b/1c 的事，所以界面里没有任何「它会回答」的假装——右栏底部直接写「智能体接进来之后才会在这里发言」。
+
+**服务端**（`server/rooms.mjs` + `server/routes/rooms.mjs`）
+
+- 四张表落在已有的 `auth.db` 里（不新增数据库文件）：`rooms` / `room_members` / `room_messages` / `room_reads`，`UNIQUE(room_id, seq)` 与「同一 clientId 只落一条」的部分唯一索引。
+- 接口：房间 CRUD、消息（`since` 补洞 / `before` 上翻）、`read` 游标、成员增删、SSE `/stream`。
+- 鉴权口径与 `/api/chat` 同一条：不是成员一律 403，房间不在 404，未登录 401；`@` 只认房间里还在的成员。
+- `seq` 在房间内单点分配（`BEGIN IMMEDIATE` 里取 max+1），断线补洞全靠它连续。
+- SSE：`X-Accel-Buffering: no`、`retry: 3000`、15 秒心跳（`.unref()`，不钉进程）、`ready` 事件带真实 `lastSeq`；每账号最多 2 条连接。
+- 限流进 `ratelimit.mjs`：发消息 20 次/分钟、建房 10 次/分钟。
+- 解散是墓碑（`dissolved_at`），历史不物理删。
+
+**界面**（`src/pages/RoomsPage.tsx` + `src/styles/rooms.css` + `src/api/rooms.ts`）
+
+- 一级导航第 5 项「聊天室」，紧跟模板库，带 `Beta` 标。为此把 `NavItem` 的 `chip` 从「只有工作流硬编码」改成一级导航也透传。
+- 三栏 264 / 自适应 / 288：房间列表（未读、预览、相对时间）、消息流（署名、时间、贴底跟随）、成员（人 + 智能体，可加可移）。
+- ≤900 收成一列：房间列表变成可横滑的一排，输入区贴底；390 无横向溢出（`scrollWidth - clientWidth = 0`）。
+- 空状态、改名（行内输入）、解散（行内确认，不弹窗）、加智能体（面板只列自己还不在房间里的）。
+- 顺带修：建房时「人」这个成员的名字以前取的是房间名，现在取账号显示名。
+
+**门禁**：2039/2039 测试（新增 `test/rooms.test.mjs` 8 条：建房、403/404、seq 连续与幂等、长度上限与 @ 过滤、成员上限、只在房主、SSE 头与活事件）、`tsc -b` 干净、oxlint 0 error、`npm run build` 通过、密钥扫描 1135 文件无命中。
+
+**截图**（临时实例 + 真账号 + 真消息，不花钱）：[docs/r315-rooms-1440.png](docs/r315-rooms-1440.png)、[docs/r315-rooms-390.png](docs/r315-rooms-390.png)、[docs/r315-rooms-picker-1440.png](docs/r315-rooms-picker-1440.png)、[docs/r315-rooms-sent-1440.png](docs/r315-rooms-sent-1440.png)。脚本 `scripts/shot-r315.mjs`。
+
+**没做**：生产未上线（仍是 v0.9.287，也没 bump 版本）；房间还没有「智能体发言」「工具审批」「令牌/MCP」——那是 1b / 1c / 1d。真实上游调用 0 次、¥0。

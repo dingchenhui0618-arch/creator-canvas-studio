@@ -11,6 +11,9 @@ const RULES = [
   { method: 'POST', match: (p) => p === '/api/replicate', bucket: 'replicate', limit: 6 },
   { method: 'POST', match: (p) => p === '/api/review', bucket: 'review', limit: 10 },
   { method: 'POST', match: (p) => p === '/api/agents', bucket: 'agents', limit: 30 },
+  // 房间（r315）：一条消息会把整个房间的回合拉起来，所以发送单独一个桶；建房是低频动作
+  { method: 'POST', match: (p) => /^\/api\/rooms\/[A-Za-z0-9_]{6,40}\/messages$/.test(p), bucket: 'room_message', limit: 20 },
+  { method: 'POST', match: (p) => /^\/api\/rooms\/?$/.test(p), bucket: 'room_create', limit: 10 },
   { method: 'POST', match: (p) => /^\/api\/flows\/[\w-]+\/run$/.test(p), bucket: 'flow_run', limit: 6 },
   { method: 'POST', match: (p) => p === '/api/credits/request', bucket: 'credit_request', limit: 3 },
   // 传图（v0.9.87）：一次评审只需要一张，一分钟 12 次对拖拽重试够用；

@@ -16,6 +16,7 @@ import {
   Grid2X2,
   Infinity as InfinityIcon,
   LayoutTemplate,
+  MessagesSquare,
   Monitor,
   ScanEye,
   Settings2,
@@ -35,12 +36,14 @@ export type NavEntry = {
   chip?: string
 }
 
-/** 一级导航：四个去处，顺序就是用户每天的路径。 */
+/** 一级导航：五个去处，顺序就是用户每天的路径（r315 加了房间）。 */
 export const PRIMARY_NAV: readonly NavEntry[] = [
   { id: 'overview', label: '工作台', hint: '平台能做什么、下一步点哪里', icon: Grid2X2, keywords: 'home 首页 下一步' },
   { id: 'projects', label: '我的作品', hint: '一条内容从脚本到评审走到哪了', icon: Clapperboard, keywords: 'project 作品 项目 进度' },
   { id: 'radar', label: '爆款雷达', hint: '检索抖音与小红书的爆款，拆出结构', icon: Compass, keywords: 'radar 爆款雷达 选题 搜索' },
   { id: 'templates', label: '模板库', hint: '可复用的脚本与分镜结构', icon: LayoutTemplate, keywords: 'template 模板 结构' },
+  // 房间（r315）：一个房间里放你 + 几个智能体。Beta：接入还在接，先放出来看结构。
+  { id: 'rooms', label: '聊天室', hint: '把几个智能体放进同一个房间', icon: MessagesSquare, keywords: 'chat room 聊天室 房间 群聊 智能体', chip: 'Beta' },
 ]
 
 /** 工作台之下的一项：自己的商品图与数字人。渲染在一级导航里、紧跟工作台，视觉上缩一级。 */

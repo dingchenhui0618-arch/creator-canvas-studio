@@ -1,5 +1,5 @@
 // 地址栏路由：页面的唯一真源是 location.hash。
-// 约定：#/overview #/projects #/radar #/templates #/agents #/runs #/review #/canvas #/board #/settings #/recharge
+// 约定：#/overview #/projects #/radar #/templates #/rooms #/agents #/runs #/review #/canvas #/board #/settings #/recharge
 //      两张画布是两条地址（v0.9.163）：#/canvas 是 VisionQA 自己的工作流，#/board 是外部的无限画布
 //      作品：#/projects/<作品 id>；评审带作品：#/review/project/<作品 id>
 //      某一条交付：#/projects/<作品 id>/delivery/<交付记录 id>（工作台点一行直接落在那一版的档案上，v0.9.140）
@@ -71,6 +71,8 @@ const USER_PAGES: readonly ShellPage[] = [
   'projects',
   'radar',
   'templates',
+  // r315：房间（聊天室）——一级导航第 5 项
+  'rooms',
   'agents',
   'runs',
   'review',
