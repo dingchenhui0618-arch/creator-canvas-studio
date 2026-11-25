@@ -1,6 +1,6 @@
-// 帮助中心（v0.9.61）。这一轮钉住四件事：
-//   1. 三篇内容都在、字段齐全，标题与摘要不是占位文案
-//   2. slug 白名单与路由同源：认不出的 slug 落回目录，坏链接不挡人
+// 帮助中心（r313）。这一轮钉住四件事：
+//   1. 四篇内容（上手 / 功能 / 积分 / 协议）都在、字段齐全，标题与摘要不是占位文案
+//   2. slug 白名单与路由同源：新 slug 能进，旧链接映射到新文章，认不出的落回目录
 //   3. 相关文章都能解析成真文章，没有指向自己的死链
 //   4. 入口真的接上了：登录页、条款页、设置页、复刻失败与运行失败都能到帮助
 import assert from 'node:assert/strict'
@@ -18,9 +18,9 @@ import {
 const ROOT = path.resolve(import.meta.dirname, '..')
 const read = (...parts) => fs.readFileSync(path.join(ROOT, ...parts), 'utf8')
 
-test('三篇都在，标题、摘要与更新时间都不是占位', () => {
-  assert.equal(HELP_ARTICLES.length, 3)
-  assert.deepEqual([...HELP_SLUGS], ['credits', 'replicate-failed', 'copyright'])
+test('四篇都在，标题、摘要与更新时间都不是占位', () => {
+  assert.equal(HELP_ARTICLES.length, 4)
+  assert.deepEqual([...HELP_SLUGS], ['quick-start', 'features', 'credits', 'compliance'])
   for (const article of HELP_ARTICLES) {
     assert.ok(article.title.length >= 6, article.slug + ' 的标题太短')
     assert.ok(article.summary.length >= 16, article.slug + ' 的摘要太短')
@@ -52,15 +52,20 @@ test('每一节都有标题和内容，标题不重复', () => {
   }
 })
 
-test('slug 白名单：认得出三篇，认不出的落回目录', () => {
+test('slug 白名单：认得出四篇，旧地址映射到新文章，认不出的落回目录', () => {
+  assert.equal(isHelpSlug('quick-start'), true)
+  assert.equal(isHelpSlug('features'), true)
   assert.equal(isHelpSlug('credits'), true)
+  assert.equal(isHelpSlug('compliance'), true)
+  // 旧按钮与历史书签还在用这些地址：不能变成死链
   assert.equal(isHelpSlug('replicate-failed'), true)
   assert.equal(isHelpSlug('copyright'), true)
   assert.equal(isHelpSlug('nope'), false)
   assert.equal(isHelpSlug(''), false)
   assert.equal(isHelpSlug(null), false)
   assert.equal(isHelpSlug(undefined), false)
-  assert.equal(findHelpArticle('copyright')?.slug, 'copyright')
+  assert.equal(findHelpArticle('copyright')?.slug, 'compliance')
+  assert.equal(findHelpArticle('replicate-failed')?.slug, 'features')
   assert.equal(findHelpArticle('nope'), null)
   assert.equal(findHelpArticle(null), null)
 })
@@ -75,17 +80,22 @@ test('相关文章都能解析成真文章，且不指向自己', () => {
   }
 })
 
-test('内容对得上产品行为：退回、直链兜底、原始视频不保存', () => {
+test('内容对得上产品行为：六步上手、核心入口、退回与流水、原始视频不保存', () => {
   const byText = (slug) => {
     const article = findHelpArticle(slug)
     return JSON.stringify(article)
   }
+  assert.match(byText('quick-start'), /我的资产/)
+  assert.match(byText('quick-start'), /模板库/)
+  assert.match(byText('features'), /爆款雷达/)
+  assert.match(byText('features'), /视觉评审/)
   assert.match(byText('credits'), /退回/)
   assert.match(byText('credits'), /流水/)
-  assert.match(byText('replicate-failed'), /直链/)
-  assert.match(byText('replicate-failed'), /上游/)
-  assert.match(byText('copyright'), /不保存来源平台的原始视频文件|不保存/)
-  assert.match(byText('copyright'), /删除模板时帧图一并删除|帧图/)
+  assert.match(byText('credits'), /50 积分/)
+  assert.match(byText('compliance'), /不保存来源平台的原始视频文件|不保存/)
+  assert.match(byText('compliance'), /删除模板时帧图一并删除|帧图/)
+  // 工作流已收成管理员 beta，用户帮助里不该再把它写成常规入口
+  assert.equal(/工作流/.test(JSON.stringify(HELP_ARTICLES)), false)
 })
 
 test('路由与页面接线：公开可读，单篇有地址', () => {

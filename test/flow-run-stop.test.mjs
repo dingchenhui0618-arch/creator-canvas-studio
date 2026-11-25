@@ -13,6 +13,8 @@ import { Readable } from 'node:stream'
 import { isolateLeaseDir } from './lease-isolation.mjs'
 
 process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'vq-run-stop-'))
+// 工作流 beta（r313）只对管理员开放：这一组测的是工作流本身，显式对全部账号打开，不改变测试意图
+process.env.VQ_WORKFLOW_BETA = 'all'
 process.env.VQ_KEY_SECRET = 'test-secret-run-stop'
 process.env.VISION_API_KEY = ''
 process.env.VQ_WATER_GUARD = '0'

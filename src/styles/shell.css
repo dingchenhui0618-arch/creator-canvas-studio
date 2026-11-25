@@ -3433,3 +3433,310 @@ select:focus-visible {
   .vq-topbar .vq-search { flex: 0 0 auto; }
   .vq-topbar .vq-topbar-right { flex: 0 0 auto; }
 }
+
+/* ---------- r313：右上角账号区（头像 + 名字 + 余额 + 菜单） ----------
+   用户要求照 Codex 的样子：余额一眼看到，点开是账号菜单，充值也从这里进。
+   走 4/8 栅格：按钮 32 高、头像 26、胶囊内边距 4/8，和顶栏其他控件同一条中线。 */
+.vq-topbar-account {
+  position: relative;
+  flex: none;
+}
+
+.vq-topbar-account-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 32px;
+  max-width: 320px;
+  padding: 0 4px 0 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.vq-topbar-account-trigger:hover {
+  background: rgba(17, 17, 17, 0.04);
+}
+
+.vq-topbar-account-trigger:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.vq-topbar-account-name {
+  max-width: 96px;
+  overflow: hidden;
+  font-size: var(--text-2xs);
+  color: var(--ink);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.vq-credit-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 var(--space-2);
+  border-radius: 6px;
+  background: rgba(17, 17, 17, 0.05);
+  color: var(--ink);
+  font-family: 'Geist Mono', 'Figtree', monospace;
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.vq-credit-chip.is-empty {
+  color: var(--fail);
+  background: var(--fail-soft);
+}
+
+.vq-topbar-account-caret {
+  flex: none;
+  color: var(--muted);
+}
+
+.vq-topbar-account-menu {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  right: 0;
+  z-index: 60;
+  width: 268px;
+  padding: var(--space-2);
+}
+
+.vq-topbar-account-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-2) var(--space-3);
+}
+
+.vq-topbar-account-head-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.vq-topbar-account-head-copy strong {
+  overflow: hidden;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.vq-topbar-account-head-copy span {
+  font-size: var(--text-2xs);
+  color: var(--muted);
+}
+
+.vq-topbar-account-credits {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: 0 var(--space-2) var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.vq-topbar-account-credits-label {
+  display: block;
+  font-size: var(--text-2xs);
+  color: var(--muted);
+}
+
+.vq-topbar-account-credits strong {
+  display: block;
+  margin-top: 2px;
+  font-family: 'Geist Mono', 'Figtree', monospace;
+  font-size: var(--text-xl);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.vq-topbar-account-id {
+  margin: var(--space-2) var(--space-2) var(--space-1);
+  overflow: hidden;
+  font-size: var(--text-2xs);
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 左下角账号菜单里的余额行（第二入口：从哪儿点开都能看到） */
+.vq-sidebar-account-credits {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 var(--space-2) var(--space-1);
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--line-faint);
+}
+
+.vq-sidebar-account-credits span {
+  font-size: var(--text-2xs);
+  color: var(--muted);
+}
+
+.vq-sidebar-account-credits strong {
+  margin-left: auto;
+  font-family: 'Geist Mono', 'Figtree', monospace;
+  font-size: var(--text-md);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 头像：圆图与首字母两态同尺寸，切换不跳版 */
+.vq-avatar {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(17, 17, 17, 0.06);
+  color: var(--ink);
+  font-family: 'Geist', 'Figtree', sans-serif;
+  font-weight: 500;
+  object-fit: cover;
+  user-select: none;
+}
+
+/* 工作流 Beta 落地页：一张居中的说明卡，不假装是错误页 */
+.vq-workflow-beta {
+  display: flex;
+  justify-content: center;
+  padding-top: var(--space-12);
+}
+
+.vq-workflow-beta-card {
+  width: 100%;
+  max-width: 560px;
+  padding: var(--space-8);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+
+.vq-workflow-beta-kicker {
+  display: inline-block;
+  margin-bottom: var(--space-3);
+  font-family: 'Geist Mono', 'Figtree', monospace;
+  font-size: var(--text-2xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.vq-workflow-beta-card h1 {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-2xl);
+  font-weight: 500;
+}
+
+.vq-workflow-beta-card p {
+  margin: 0 0 var(--space-6);
+  font-size: var(--text-copy);
+  line-height: var(--leading-copy);
+  color: var(--muted);
+}
+
+.vq-workflow-beta-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.vq-workflow-beta-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-6) 0 0;
+  font-size: var(--text-2xs);
+  color: var(--faint);
+}
+
+.vq-workflow-beta-foot svg {
+  flex: none;
+}
+
+@media (max-width: 1180px) {
+  .vq-topbar-account-name {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .vq-topbar-account-trigger {
+    padding-right: 4px;
+  }
+
+  .vq-credit-chip {
+    padding: 0 var(--space-1);
+  }
+
+  .vq-topbar-account-menu {
+    width: 260px;
+  }
+
+  .vq-workflow-beta {
+    padding-top: var(--space-6);
+  }
+
+  .vq-workflow-beta-card {
+    padding: var(--space-6) var(--space-4);
+  }
+}
+
+/* ---------- r313：我的资产挂在工作台之下 ----------
+   不另起一段分组（它和作品是同一类「我的东西」），但要比一级项看起来轻一级：
+   左内边距多 8px（12 → 32，和图标列对齐后缩一格），字号跟着正文走、不额外放大。 */
+.vq-nav-item--nested {
+  padding-left: 32px;
+  color: var(--faint);
+}
+
+.vq-nav-item--nested span {
+  font-size: var(--text-2xs);
+}
+
+.vq-nav-item--nested.is-active {
+  color: var(--ink);
+}
+
+.vq-nav-item--nested.is-active::before {
+  top: 10px;
+  bottom: 10px;
+}
+
+.vq-sidebar--collapsed .vq-nav-item--nested {
+  padding-left: 0;
+}
+
+/* Beta 小标签：只有 beta 能力才有，不拿它当装饰 */
+.vq-nav-chip {
+  flex: none;
+  padding: 0 4px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-xs);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.vq-sidebar--collapsed .vq-nav-chip {
+  display: none;
+}

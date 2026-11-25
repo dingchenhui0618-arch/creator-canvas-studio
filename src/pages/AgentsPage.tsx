@@ -58,6 +58,7 @@ import {
 import { RECENT_PAGE_SIZE, mergeRecentTasks } from '../domain/media-recent'
 import { probeMediaFile } from '../domain/media-file'
 import { peekRefHandoff, takeRefHandoff } from '../domain/media-handoff'
+import { useWorkflowEnabled } from '../domain/features'
 import type { RefHandoff } from '../domain/media-handoff'
 import { planRefAttach, refAttachNote, refFileName } from '../domain/media-refs'
 import { planTaskRetry, retryCredits } from '../domain/media-retry'
@@ -119,6 +120,9 @@ type DraftAction = {
   }
 }
 
+// 版次文案不再借「开没开工作流」表达：工作流只对管理员开放，没有版本就是没有版本。
+const versionLabel = (version: number) => (version > 0 ? '第 ' + version + ' 版' : '还没有版本')
+
 // 作品页「让 AI 起草」带过来的上下文：标题、版次与这一版现在的脚本（标题与段数）。
 // 只用来写一句「在帮哪条作品」和预填输入框，不往对话里塞任何作品内部数据。
 type AgentProjectContext = {
@@ -129,8 +133,6 @@ type AgentProjectContext = {
   source: '' | 'project' | 'template'
   hook: string
 }
-
-const versionLabel = (version: number) => (version > 0 ? '第 ' + version + ' 版' : '还没开工作流')
 
 function projectPrompt(context: AgentProjectContext) {
   const lines = ['帮我改《' + context.title + '》这一版（' + versionLabel(context.version) + '）的脚本。']
@@ -332,6 +334,8 @@ function DraftCard({
   onCancelPicker: () => void
   onOpenProject: (projectId: string) => void
 }) {
+  // r313：工作流只对管理员开放 —— 非管理员这条草稿只留「存为模板」「写进作品」两个出口
+  const workflow = useWorkflowEnabled()
   const busy = action.busy !== ''
   // 先取出再判空：闭包里用 action.flow.id 会把「已经判过」的窄化丢掉
   const savedTemplate = action.template
@@ -394,26 +398,28 @@ function DraftCard({
             {action.busy === 'template' ? '保存中' : '存为模板'}
           </button>
         )}
-        {savedFlow ? (
-          <span className="agx-draft-done">
-            <Check size={12} />
-            已送到工作流 · {savedFlow.name}
-            <button type="button" onClick={() => onOpenCanvas(savedFlow.id)}>
-              打开工作流
+        {workflow ? (
+          savedFlow ? (
+            <span className="agx-draft-done">
+              <Check size={12} />
+              已送到工作流 · {savedFlow.name}
+              <button type="button" onClick={() => onOpenCanvas(savedFlow.id)}>
+                打开工作流
+              </button>
+            </span>
+          ) : (
+            <button
+              type="button"
+              className="vq-button vq-button--ghost"
+              onClick={onSendCanvas}
+              disabled={busy}
+              title="开一张新工作流：脚本进了复刻提示词，可以接着改、接着跑"
+            >
+              <Layers size={13} />
+              {action.busy === 'canvas' ? '创建中' : '送到工作流'}
             </button>
-          </span>
-        ) : (
-          <button
-            type="button"
-            className="vq-button vq-button--ghost"
-            onClick={onSendCanvas}
-            disabled={busy}
-            title="开一张新工作流：脚本进了复刻提示词，可以接着改、接着跑"
-          >
-            <Layers size={13} />
-            {action.busy === 'canvas' ? '创建中' : '送到工作流'}
-          </button>
-        )}
+          )
+        ) : null}
         {savedProject ? (
           <span className="agx-draft-done">
             <Check size={12} />
@@ -421,9 +427,9 @@ function DraftCard({
             <button type="button" onClick={() => onOpenProject(savedProject.id)}>
               打开作品
             </button>
-            {savedProject.canvas.synced ? (
+            {workflow && savedProject.canvas.synced ? (
               <em className="agx-draft-fact">工作流里的复刻提示词就是这份脚本</em>
-            ) : savedProject.canvas.reason === 'hand-edited' ? (
+            ) : workflow && savedProject.canvas.reason === 'hand-edited' ? (
               <em className="agx-draft-fact">工作流提示词你手改过，没动</em>
             ) : null}
           </span>
@@ -439,7 +445,11 @@ function DraftCard({
             {action.busy === 'project' ? '写入中' : '写进作品'}
           </button>
         ) : (
-          <span className="agx-draft-note">只有分镜的草稿写不进作品：作品脚本只认段落，要镜头就送到工作流</span>
+          <span className="agx-draft-note">
+            {workflow
+              ? '只有分镜的草稿写不进作品：作品脚本只认段落，要镜头就送到工作流'
+              : '只有分镜的草稿写不进作品：作品脚本只认段落，先补上口播再写进去'}
+          </span>
         )}
       </div>
       {picker?.open && !savedProject ? (
@@ -1671,6 +1681,8 @@ export function AgentsPage({
   onOpenProject: (projectId: string) => void
   onToast?: (message: string) => void
 }) {
+  // r313：工作流只对管理员开放。非管理员这一页不显示工作流入口、不发 listFlows
+  const workflow = useWorkflowEnabled()
   const [data, setData] = useState<AgentsList | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
@@ -1722,7 +1734,8 @@ export function AgentsPage({
   // 可用的生成模型与规格：服务端 media-models 是唯一真源，界面不自己写死模型名
   const [mediaModels, setMediaModels] = useState<MediaModelList | null>(null)
   // 工作流入口上的数：手上有几条、是不是挂着这条作品。只读元数据，打开不扣积分（r257）
-  const [flows, setFlows] = useState<ApiFlow[] | null>(null)
+  // 工作流收起时直接是空数组：入口不渲染，也不去问一个用不上的接口
+  const [flows, setFlows] = useState<ApiFlow[] | null>(workflow ? null : [])
   // 模型服务状态：额度 / 凭证这类账号级故障要在输入前就说清楚，而不是让人白点一次
   const [modelState, setModelState] = useState<ModelServiceState | null>(null)
   const [rechecking, setRechecking] = useState(false)
@@ -1742,12 +1755,13 @@ export function AgentsPage({
   const preferredModelRef = useRef('')
 
   useEffect(() => {
+    if (!workflow) return
     let alive = true
     listFlows()
       .then((list) => { if (alive) setFlows(list) })
       .catch(() => { if (alive) setFlows([]) })
     return () => { alive = false }
-  }, [])
+  }, [workflow])
 
   const draftRef = useRef<HTMLTextAreaElement>(null)
   const stageRef = useRef<HTMLElement>(null)
@@ -2435,7 +2449,7 @@ export function AgentsPage({
               role="tab"
               aria-selected={chatSurface === 'preset'}
               className={chatSurface === 'preset' ? 'is-active' : ''}
-              title="带输出类型与草稿出口：存模板 / 送工作流 / 写进作品"
+              title={workflow ? '带输出类型与草稿出口：存模板 / 送工作流 / 写进作品' : '带输出类型与草稿出口：存模板 / 写进作品'}
               onClick={() => setChatSurface('preset')}
             >
               对话预设
@@ -2444,14 +2458,18 @@ export function AgentsPage({
         ) : null}
         {/* 入口联动（r257）：不是把工作流摊成清单，只给一条去路——几条、在帮谁，点一下进画布。
             r307 起它是工具条自己的一项（不再包一层），这样手机上它能和「对话方式」并进同一行。 */}
-        <button type="button" className="agx-flow-link" onClick={() => onOpenCanvas(flowEntry.id)} title={flowEntry.title}>
-          <Workflow size={14} />
-          {flowEntry.label}
-          <ArrowUpRight size={13} aria-hidden />
-        </button>
+        {workflow ? (
+          <button type="button" className="agx-flow-link" onClick={() => onOpenCanvas(flowEntry.id)} title={flowEntry.title}>
+            <Workflow size={14} />
+            {flowEntry.label}
+            <ArrowUpRight size={13} aria-hidden />
+          </button>
+        ) : null}
         {/* 历史 / 新建对话预设是「对话」的账：图片、视频页签上没有它们的位置，也不该在那一页抢一个主按钮。 */}
         {composerMode === 'chat' && chatSurface !== 'platform' ? (
-            <div className="agx-head-actions">
+            // 工作流去路原本靠 margin-left:auto 把这组按钮顶到右边；它收起后由这里接手，
+            // 否则「历史 / 新建」会贴住页签左对齐，工具条右边空一截。
+            <div className="agx-head-actions" style={workflow ? undefined : { marginLeft: 'auto' }}>
           <div className="agx-history-wrap">
             <button className="vq-button vq-button--ghost" onClick={() => setHistoryOpen((open) => !open)} aria-expanded={historyOpen}>
               <History size={15} />
@@ -2616,7 +2634,7 @@ export function AgentsPage({
                 type="button"
                 className="vq-button vq-button--ghost"
                 onClick={() => setProjectContext(null)}
-                title="不帮这条作品了：草稿照样能存为模板、送到工作流，或写进别的作品"
+                title={workflow ? '不帮这条作品了：草稿照样能存为模板、送到工作流，或写进别的作品' : '不帮这条作品了：草稿照样能存为模板，或写进别的作品'}
               >
                 不帮了
               </button>

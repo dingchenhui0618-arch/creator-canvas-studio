@@ -1,5 +1,6 @@
-// 帮助中心（v0.9.61）：不登录也能看的自助说明。
-// 三篇内容在 src/domain/help.ts，这里只管排版：左目录、右正文，窄屏时目录折成一排。
+// 帮助中心（r313）：不登录也能看的自助说明。
+// 四篇内容（快速上手 / 核心功能 / 积分与额度 / 协议与合规）在 src/domain/help.ts；
+// 这里只管排版：左目录、右正文，窄屏时目录折成一排。
 // 页面底部与侧栏都给「提交反馈」：这里读不到答案的人，下一步应该是找到人，而不是关掉页面。
 import { useEffect, useState } from 'react'
 import { ArrowLeft, ArrowRight, BookOpen, MessageSquare } from 'lucide-react'
@@ -91,10 +92,10 @@ function HelpIndex({ onFeedback }: { onFeedback: () => void }) {
   return (
     <>
       <span className="vq-help-kicker vq-mono">自助 / Self-serve</span>
-      <h1>先在这里找答案</h1>
-      <p className="vq-help-meta">三篇说明，覆盖被问得最多的三类问题</p>
+      <h1>从第一条内容开始</h1>
+      <p className="vq-help-meta">四篇说明：快速上手、核心功能、积分与额度、协议与合规</p>
       <p className="vq-help-lead">
-        没有客服邮箱之前，这三篇是回答「积分怎么算、为什么失败、素材能不能用」的地方。读完仍然卡住，就写一条反馈：管理员在后台能看到，处理状态与回复会回到「设置 → 帮助与反馈」。
+        第一次用，先看「快速上手」按六步走；想知道每个入口做什么，看「核心功能」；被扣积分或失败退款，看「积分与额度」；对外发布前，看「协议与合规」。读完仍然卡住，就写一条反馈：管理员在后台能看到，处理状态与回复会回到「设置 → 帮助与反馈」。
       </p>
       <ul className="vq-help-index">
         {HELP_ARTICLES.map((item) => (
@@ -148,6 +149,21 @@ function ArticleBody({ article, onFeedback }: { article: HelpArticle; onFeedback
           {section.paragraphs?.map((text) => (
             <p key={text}>{text}</p>
           ))}
+          {section.links?.length ? (
+            <div className="vq-help-links">
+              <span className="vq-help-links-label">入口</span>
+              {section.links.map((link) => (
+                <a
+                  key={link.label + link.href}
+                  className="vq-help-link"
+                  href={link.href}
+                  title={link.text || link.label}
+                >
+                  {link.label}
+                </a>
+              ))}
+            </div>
+          ) : null}
           {section.steps?.length ? (
             <ol className="vq-help-steps">
               {section.steps.map((step, index) => (

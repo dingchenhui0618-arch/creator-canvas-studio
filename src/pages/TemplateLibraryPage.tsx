@@ -20,6 +20,7 @@ import {
 import { downloadTemplateMarkdown } from '../lib/templateExport'
 import { describeTiming, paceLabel, templateReviewText } from '../domain/radar'
 import { readTemplatesView, writeTemplatesView, type TemplatesView } from '../domain/list-view'
+import { useWorkflowEnabled } from '../domain/features'
 import type { MediaItem, ReplicaTemplate, ScriptBeat, StoryboardShot, TemplateSourceCount, TemplateSourceKey } from '../domain/radar'
 import { requestReview } from '../state/review'
 import { createProject } from '../api/projects'
@@ -106,6 +107,8 @@ export function TemplateLibraryPage({
   /** 关掉抽屉：把地址换回列表（replace，后退回到进来之前那一页） */
   onCloseTemplate?: () => void
 }) {
+  // r313：工作流只对管理员开放。非管理员这一页不再出现工作流模板与相关按钮
+  const workflow = useWorkflowEnabled()
   const [items, setItems] = useState<ReplicaTemplate[]>([])
   const [byType, setByType] = useState<Record<string, number>>({})
   const [parsed, setParsed] = useState(0)
@@ -169,11 +172,22 @@ export function TemplateLibraryPage({
     purge: async (id) => { await purgeTemplate(id) },
   }), [])
 
-  const typeOptions = useMemo(() => pickTypes(byType, pending), [byType, pending])
+  // 工作流模板的 contentType 也叫「工作流」：整类收起时这个类型标签也一起收掉，避免点进去是空的
+  const typeOptions = useMemo(
+    () => pickTypes(
+      workflow ? byType : Object.fromEntries(Object.entries(byType).filter(([name]) => name !== '工作流')),
+      pending,
+    ),
+    [byType, pending, workflow],
+  )
   // 分类被后台改名后，旧分类已经不在标签里：渲染时直接落回「全部」，不用再开一个 setState 副作用
   const activeType = type === '全部' || typeOptions.includes(type) ? type : '全部'
   // 来源也一样：删光某个来源的最后一条后，它的胶囊会消失，这时也落回「全部」
-  const sourceOptions = useMemo(() => sources.filter((entry) => entry.count > 0), [sources])
+  // 来源胶囊也是入口：非管理员不再出现「工作流」这一格（它的模板已经整类收起）
+  const sourceOptions = useMemo(
+    () => sources.filter((entry) => entry.count > 0 && (workflow || entry.key !== 'canvas')),
+    [sources, workflow],
+  )
   const activeSource = sourceOptions.some((entry) => entry.key === source) ? source : ''
   const sourceLabel = useCallback(
     (key?: string) => sources.find((entry) => entry.key === key)?.label || '',
@@ -200,11 +214,13 @@ export function TemplateLibraryPage({
     setError('')
     try {
       const result = await listTemplates({ q: keyword.trim(), type: activeType === '全部' ? '' : activeType, source: activeSource })
-      setItems(result.items)
+      // 工作流模板（kind: 'flow'）对非管理员整类收起：它们只能套用回一张新工作流，收掉后不留点不动的卡片
+      // 计数也按同一口径减掉（服务端 total / flows 是全库的数）：否则「模板总数」会比列表多出几条
+      setItems(workflow ? result.items : result.items.filter((item) => item.kind !== 'flow'))
       setByType(result.byType || {})
       setParsed(result.parsed || 0)
       setPending(result.pending ?? result.saved ?? 0)
-      setTotal(result.total || 0)
+      setTotal(workflow ? result.total || 0 : Math.max(0, (result.total || 0) - (result.flows || 0)))
       setSources(result.sources || [])
       setProjectTotal(result.projectTotal || 0)
       setOrphanTotal(result.orphanTotal || 0)
@@ -214,7 +230,7 @@ export function TemplateLibraryPage({
     } finally {
       setLoading(false)
     }
-  }, [keyword, activeType, activeSource])
+  }, [keyword, activeType, activeSource, workflow])
 
   // 数据来自本地 API，挂载与筛选变化时由外部系统触发一次重新拉取
   // eslint-disable-next-line react/set-state-in-effect
@@ -271,6 +287,14 @@ export function TemplateLibraryPage({
     try {
       const next = await getTemplate(id)
       if (lastRequested.current !== id) return
+      // 直链（#/templates/<id>）也挡：非管理员手上留着旧的工作流模板时，打开只会是一张套不了的抽屉
+      if (!workflow && next.kind === 'flow') {
+        lastRequested.current = ''
+        setDetailLoading(false)
+        onToast('这条模板属于旧版功能，现在不能套用了')
+        onCloseTemplate?.()
+        return
+      }
       setDetail(next)
       // 卡片上的「用这条改编」：详情一到位就直接进改编模式，不用再点一次
       if (options?.adapt && next.structure?.length) enterAdapt(next)
@@ -634,7 +658,9 @@ export function TemplateLibraryPage({
                           ? '来自对话预设' + (detail.agentName ? ' ' + detail.agentName : '') + ' · ' + detail.structure.length + ' 段 · ' + detail.storyboard.length + ' 镜'
                           : detail.kind === 'adapted' && detail.origin === 'project'
                             ? '来自作品《' + (detail.projectTitle || '已删的作品') + '》' +
-                              (detail.projectVersion ? ' · 第 ' + detail.projectVersion + ' 版' : ' · 还没开工作流') +
+                              (detail.projectVersion
+                                ? ' · 第 ' + detail.projectVersion + ' 版'
+                                : workflow ? ' · 还没开工作流' : '') +
                               (templateReviewText(detail.review) ? ' · ' + templateReviewText(detail.review) : '') +
                               ' · ' + detail.structure.length + ' 段 · ' + detail.storyboard.length + ' 镜'
                             : (detail.author || '未知作者') + ' · ' + formatDuration(detail.durationSec)}
@@ -702,7 +728,9 @@ export function TemplateLibraryPage({
                         aria-label="开头钩子"
                         onChange={(event) => setAdapt({ ...adapt, hook: event.target.value })}
                       />
-                      <p className="adapt-note">改编只改这一份的脚本与分镜，原模板不动；存下来的是你自己的新模板，之后可以再改、再套到工作流。</p>
+                      <p className="adapt-note">
+                        改编只改这一份的脚本与分镜，原模板不动；存下来的是你自己的新模板，之后可以再改{workflow ? '、再套到工作流' : '、再从它开一条作品'}。
+                      </p>
                     </section>
                   ) : null}
 
@@ -914,7 +942,7 @@ export function TemplateLibraryPage({
                         <>
                           <span>
                             来自作品《{detail.projectTitle || '已删的作品'}》
-                            {detail.projectVersion ? ' · 第 ' + detail.projectVersion + ' 版' : ' · 还没开工作流'}
+                            {detail.projectVersion ? ' · 第 ' + detail.projectVersion + ' 版' : workflow ? ' · 还没开工作流' : ''}
                             {templateReviewText(detail.review) ? ' · ' + templateReviewText(detail.review) : ''}
                             {' · 这一版的分镜不是原片，作者与互动数据不复制'}
                           </span>
@@ -1163,7 +1191,7 @@ export function TemplateLibraryPage({
                       >
                         <Sparkles size={14} />去解析这条
                       </button>
-                    ) : (
+                    ) : workflow ? (
                     <button
                       className={'vq-button ' + (detail.kind !== 'flow' && isParsed(detail) ? 'vq-button--ghost' : 'vq-button--primary')}
                       disabled={detail.kind !== 'flow' && !isParsed(detail)}
@@ -1179,7 +1207,7 @@ export function TemplateLibraryPage({
                     >
                       <Layers size={14} />{detail.kind === 'flow' ? '在工作流打开' : '套用到工作流'}
                     </button>
-                    )}
+                    ) : null}
                     <button className="vq-button vq-button--danger vq-button--sm" onClick={() => { void deleteTemplate(detail.id).then(() => { closeDetail(); onToast('已移到回收站，30 天内可以恢复'); void load() }) }}>
                       <Trash2 size={13} />删除
                     </button>

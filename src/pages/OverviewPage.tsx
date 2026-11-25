@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowRight, ArrowUpRight, Download, Eye, History, LayoutTemplate, Package, Plus, RefreshCw, RotateCcw, Search, Send, Share2, Workflow, X } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, Download, Eye, History, Image as ImageIcon, LayoutTemplate, Package, Plus, RefreshCw, RotateCcw, Search, Send, Share2, Sparkles, X } from 'lucide-react'
 import type { Page } from '../domain/types'
 import PageHead from '../components/PageHead'
 import { Pill, Tag } from '../components/ui'
 import { request } from '../api/client'
+import { useWorkflowEnabled } from '../domain/features'
 import { getOnboarding } from '../api/assets'
 import { listBdcCanvases, type BdcCanvas } from '../api/bdc'
 import type { RunProjectRef } from '../api/flows'
@@ -133,9 +134,48 @@ type RunRow = {
 type TemplateRow = {
   id: string
   title: string
+  kind?: string
   contentType?: string
   createdAt?: string
   durationSec?: number
+  cover?: string
+  thumb?: string
+  frames?: { url?: string }[]
+}
+
+/** 作品墙的一张：模板封面或作品首帧，全部来自当前账号，不用外链与示例图。 */
+type WallItem = {
+  key: string
+  kind: '模板' | '作品'
+  title: string
+  meta: string
+  image: string
+  alt: string
+  at: string
+  projectId?: string
+}
+
+/** 只认站内素材地址：模板封面可能是平台外链，作品墙不放外链图。 */
+function localMediaUrl(value?: string): string {
+  const src = String(value || '').trim()
+  return /^\/(?:media|api)\//.test(src) ? src : ''
+}
+
+/** 作品的第一帧：镜头号最小的那张自己贴的画面，拼成登录态下的 /media 地址。 */
+function projectFrameUrl(shots?: ProjectSummary['shots']): string {
+  const first = Object.entries(shots || {})
+    .map(([shotNo, frame]) => ({ shotNo: Number(shotNo), media: String(frame?.media || '') }))
+    .filter(
+      (row) =>
+        Number.isFinite(row.shotNo) &&
+        row.shotNo > 0 &&
+        row.media &&
+        !row.media.startsWith('/') &&
+        !row.media.includes('://') &&
+        !row.media.includes('..'),
+    )
+    .sort((a, b) => a.shotNo - b.shotNo)[0]
+  return first ? '/media/' + first.media : ''
 }
 
 type Props = {
@@ -174,7 +214,7 @@ const pad2 = (value: number) => String(value).padStart(2, '0')
 const FIRST_RUN_BLOCKS = [
   { key: 'review', icon: Eye, title: '评审等你看的', when: '评过一版画面、结论是「需人工确认」或「不通过」的作品排在这里；点一行进作品改一版。' },
   { key: 'delivery', icon: Send, title: '交出去的', when: '在作品页点「交付这一版」；每一版按时间留在这儿，交付稿随时能打开。' },
-  { key: 'runs', icon: History, title: '最近运行', when: '工作流跑一次运行，这里列出节点耗时与返回，并标出它挂在哪条作品上。' },
+  { key: 'runs', icon: History, title: '最近运行', when: '跑一次生成，这里列出节点耗时与返回，并标出它挂在哪条作品上。' },
   { key: 'shares', icon: Share2, title: '分享出去的链接', when: '发给甲方的只读链接，这里汇总每条被打开过几次，停用之后也留着。' },
 ] as const
 
@@ -372,6 +412,8 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
   const [now] = useState(() => new Date())
   const [canvases, setCanvases] = useState<BdcCanvas[]>([])
   const [projects, setProjects] = useState<ProjectSummary[]>([])
+  // 工作流是管理员 beta（r313）：普通账号不取 /api/runs，也不摆「最近运行」那一块
+  const workflow = useWorkflowEnabled()
   const [runs, setRuns] = useState<RunRow[]>([])
   const [templates, setTemplates] = useState<TemplateRow[]>([])
   // 自有资产套数（r312）：产品 / 数字人任一边为 0 就常驻一条建资产提示；两边都建好才收起
@@ -445,7 +487,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
     // 队列不在这里取：它跟着筛选项走，由下面那个 effect 单独刷新（首屏也走那一处）
     const [canvasResult, runResult, templateResult, projectResult, shareResult, deliveryResult, onboardingResult] = await Promise.allSettled([
       listBdcCanvases(),
-      request<{ items: RunRow[] }>('/api/runs'),
+      workflow ? request<{ items: RunRow[] }>('/api/runs') : Promise.resolve({ items: [] as RunRow[] }),
       request<{ items: TemplateRow[] }>('/api/templates'),
       listProjects(),
       listShares(),
@@ -462,7 +504,8 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
       setRuns(runResult.value.items ?? [])
     } else {
       setRuns([])
-      problems.push('运行记录：' + String((runResult.reason as Error)?.message || runResult.reason))
+      // 工作流 beta 的 403 不是「取不到」：普通账号本来就没有运行记录，别把它写进页面顶部红字
+      if (workflow) problems.push('运行记录：' + String((runResult.reason as Error)?.message || runResult.reason))
     }
     if (templateResult.status === 'fulfilled') {
       setTemplates(templateResult.value.items ?? [])
@@ -521,7 +564,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
 
     setErrors(problems)
     setLoading(false)
-  }, [])
+  }, [workflow])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -990,6 +1033,52 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
   const recentRuns = runs.slice(0, 6)
   const recentTemplates = templates.slice(0, 4)
 
+  // 作品墙（r313）：模板只用站内抽帧，作品只用自己贴过的第一帧；没有图就不拿示例图顶上。
+  // 混排按最近时间，最多 8 张——桌面两整行、手机四整行，不出现半行空格。
+  const wallItems = useMemo<WallItem[]>(() => {
+    const fromTemplates = templates.flatMap((template) => {
+      const image =
+        localMediaUrl(template.thumb) ||
+        localMediaUrl(template.cover) ||
+        localMediaUrl(template.frames?.[0]?.url)
+      if (!image) return []
+      const type = template.contentType || (template.kind === 'saved' ? '待解析' : '模板')
+      const secs = Number(template.durationSec) > 0 ? Math.round(Number(template.durationSec)) + 's' : ''
+      return [
+        {
+          key: 'template:' + template.id,
+          kind: '模板' as const,
+          title: template.title,
+          meta: [type, secs].filter(Boolean).join(' · '),
+          image,
+          alt: '模板封面：' + template.title,
+          at: String(template.createdAt || ''),
+        },
+      ]
+    })
+    const fromProjects = projects.flatMap((project) => {
+      const image = projectFrameUrl(project.shots)
+      if (!image) return []
+      const reviews = Number(project.reviews?.count) || 0
+      const version = Math.max(1, Number(project.version) || 1)
+      return [
+        {
+          key: 'project:' + project.id,
+          kind: '作品' as const,
+          title: project.title,
+          meta: 'v' + version + ' · ' + (reviews ? '评过 ' + reviews + ' 次' : '未评审'),
+          image,
+          alt: '作品首帧：' + project.title,
+          at: String(project.updatedAt || ''),
+          projectId: project.id,
+        },
+      ]
+    })
+    return [...fromTemplates, ...fromProjects]
+      .sort((a, b) => (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0))
+      .slice(0, 8)
+  }, [projects, templates])
+
   // 「下一步」= 手上还没交付的那条作品；没有作品再看最近改动的无限画布；都没有就从一条爆款开始。
   // 作品优先是这次产品结构收敛的核心：作品才是那条内容，工作流与无限画布都是它的一步。
   const latestCanvas = useMemo(() => {
@@ -1073,20 +1162,18 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
       <PageHead
         kicker={
           <>
-            <span>工作台</span>
+            <span>个人工作区</span>
             <span className="vq-head-sep" aria-hidden="true">·</span>
             <time dateTime={now.toISOString().slice(0, 10)}>{todayLabel(now)}</time>
           </>
         }
-        title={loading ? '正在读取…' : firstRun ? '还没有作品' : '欢迎回来，' + userName}
+        title={(userName ? userName + '，' : '') + '欢迎回来'}
         desc={
           loading
-            ? '正在读取你账号下的无限画布、运行与模板。'
-            : firstRun
-              ? '一条内容从「爆款雷达」进来：检索一条 → 在模板库拆成脚本与分镜 → 开成作品改到能拍 → 交付这一版。今天先挑一条值得抄的，做完第一条，下面那些区块会自己出现。'
-              : internal
-                ? '首屏主卡读的是无限画布服务的最近改动；运行与模板分别来自 /api/runs 与 /api/templates。没有数据的区块写空状态，不放示例数据。'
-                : '先看「下一步」，或者从下面三种方式开始一条新内容。'
+            ? '正在读取你账号下的模板、作品与评审队列。'
+            : internal
+              ? '首屏依次是能力入口、真实作品墙与下一步主卡；模板与作品分别来自 /api/templates 与 /api/projects，没有数据的区块不放示例图。'
+              : '内容生产工作台：找选题、拆结构、建资产、出片与评审。这一屏先说明平台能做什么，再放你自己账号里的真实效果。'
         }
         actions={
           <>
@@ -1115,51 +1202,219 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
         </p>
       ) : null}
 
-      <section className="vq-next" aria-labelledby="vq-next-title">
-        <div className="vq-next-main">
-          <span className="vq-next-label">{hero.label}</span>
-          <h2 id="vq-next-title">{hero.title}</h2>
-          <p className="vq-next-meta">{hero.meta}</p>
-          <button type="button" className="vq-next-cta" onClick={hero.go}>
-            {hero.cta}
-            <ArrowRight size={15} />
-          </button>
+      {/* 能力介绍（r313）：先回答「这个平台能做什么」，四张卡各接一个真实入口。
+          能力名与侧栏保持一致；指向已收成管理员 beta 的工作流入口不在这里出现。 */}
+      <section className="ov-capabilities" aria-labelledby="ov-capabilities-title">
+        <div className="ov-section-lead">
+          <div className="ov-section-copy">
+            <span className="ov-eyebrow">CAPABILITIES</span>
+            <h2 id="ov-capabilities-title">平台能做什么</h2>
+            <p className="ov-section-sub">四步串起一条内容：找爆款、拆结构、建资产、出片与评审。</p>
+          </div>
         </div>
-        <dl className="vq-next-stats">
-          <div>
-            <dt>作品</dt>
-            <dd>{projects.length}</dd>
-          </div>
-          <div>
-            <dt>无限画布</dt>
-            <dd>{canvases.length}</dd>
-          </div>
-          <div>
-            <dt>模板</dt>
-            <dd>{templates.length}</dd>
-          </div>
-        </dl>
+        <div className="ov-cap-grid">
+          <article className="ov-cap">
+            <div className="ov-cap-top">
+              <span className="ov-cap-index">01</span>
+              <span className="ov-cap-icon" aria-hidden="true">
+                <Search size={18} strokeWidth={1.75} />
+              </span>
+            </div>
+            <span className="ov-cap-kicker">找爆款</span>
+            <h3>爆款雷达</h3>
+            <p>检索抖音、小红书的真实互动数据，按关键词挑一条值得拆的原片。</p>
+            <div className="ov-cap-foot">
+              <span className="ov-cap-note">抖音 / 小红书</span>
+              <button type="button" className="ov-cap-action" onClick={() => onNavigate('radar')}>
+                去检索
+                <ArrowUpRight size={14} />
+              </button>
+            </div>
+          </article>
+
+          <article className="ov-cap">
+            <div className="ov-cap-top">
+              <span className="ov-cap-index">02</span>
+              <span className="ov-cap-icon" aria-hidden="true">
+                <LayoutTemplate size={18} strokeWidth={1.75} />
+              </span>
+            </div>
+            <span className="ov-cap-kicker">拆结构</span>
+            <h3>模板库</h3>
+            <p>把原片拆成钩子、口播脚本与分镜，套一条改成自己的版本。</p>
+            <div className="ov-cap-foot">
+              <span className="ov-cap-note">{templates.length ? templates.length + ' 条' : '先拆第一条'}</span>
+              <button type="button" className="ov-cap-action" onClick={() => onNavigate('templates')}>
+                去模板库
+                <ArrowUpRight size={14} />
+              </button>
+            </div>
+          </article>
+
+          <article className="ov-cap">
+            <div className="ov-cap-top">
+              <span className="ov-cap-index">03</span>
+              <span className="ov-cap-icon" aria-hidden="true">
+                <Package size={18} strokeWidth={1.75} />
+              </span>
+            </div>
+            <span className="ov-cap-kicker">建自己的资产</span>
+            <h3>我的资产</h3>
+            <p>商品图与数字人一次建好，出片和作品里都能直接引用。</p>
+            <div className="ov-cap-foot">
+              <span className="ov-cap-note">
+                {assetCounts ? assetCounts.product + assetCounts.avatar + ' 套' : '商品图 / 数字人'}
+              </span>
+              <button type="button" className="ov-cap-action" onClick={() => onNavigate('assets')}>
+                去我的资产
+                <ArrowUpRight size={14} />
+              </button>
+            </div>
+          </article>
+
+          <article className="ov-cap">
+            <div className="ov-cap-top">
+              <span className="ov-cap-index">04</span>
+              <span className="ov-cap-icon" aria-hidden="true">
+                <Sparkles size={18} strokeWidth={1.75} />
+              </span>
+            </div>
+            <span className="ov-cap-kicker">出片与评审</span>
+            <h3>
+              快捷创作<span className="ov-cap-plus">+</span>视觉评审
+            </h3>
+            <p>用预设把脚本出成画面，再按构图、文案与平台规范评一遍。</p>
+            <div className="ov-cap-foot">
+              <span className="ov-cap-note">{queueTotal ? queueTotal + ' 条等你看' : '出片后送评'}</span>
+              <span className="ov-cap-actions">
+                <button type="button" className="ov-cap-action" onClick={() => onNavigate('agents')}>
+                  快捷创作
+                  <ArrowUpRight size={14} />
+                </button>
+                <button type="button" className="ov-cap-action" onClick={() => onNavigate('review')}>
+                  视觉评审
+                  <ArrowUpRight size={14} />
+                </button>
+              </span>
+            </div>
+          </article>
+        </div>
       </section>
 
-      {/* 常驻建资产提示（r312）：产品与数字人任一边为 0 就摆着，两边都建好才消失。
-          不设关闭入口；入口只有一个「去我的资产」，不抢上面主卡的下一步。 */}
-      {assetCounts && (assetCounts.product === 0 || assetCounts.avatar === 0) ? (
-        <section className="vq-asset-nudge" aria-labelledby="vq-asset-nudge-title">
-          <span className="vq-asset-nudge-icon" aria-hidden="true">
-            <Package size={16} strokeWidth={1.75} />
-          </span>
-          <div className="vq-asset-nudge-copy">
-            <h2 id="vq-asset-nudge-title">先把资产建起来，画布和作品才用得上</h2>
-            <p>
-              产品资产 {assetCounts.product} 套 · 数字人资产 {assetCounts.avatar} 套。两边都建好后，这条提示会自己消失。
-            </p>
+      {/* 作品墙（r313）：只放账号内真实模板封面与作品首帧，外链封面和没有图的条目都不上墙。
+          没有真实画面时给一条诚实空状态，不摆占位图。 */}
+      <section className="ov-wall" aria-labelledby="ov-wall-title">
+        <div className="ov-section-lead">
+          <div className="ov-section-copy">
+            <span className="ov-eyebrow">YOUR WORK</span>
+            <h2 id="ov-wall-title">作品墙</h2>
+            <p className="ov-section-sub">模板封面与作品首帧，全部来自这个账号；点开去对应的模板或作品。</p>
           </div>
-          <button type="button" className="vq-button vq-button--ghost" onClick={() => onNavigate('assets')}>
-            去我的资产
-            <ArrowRight size={13} />
-          </button>
+          {projects.length ? (
+            <button type="button" className="vq-link" onClick={() => onNavigate('projects')}>
+              全部作品
+              <ArrowUpRight size={13} />
+            </button>
+          ) : null}
+        </div>
+
+        {loading ? (
+          <p className="ov-wall-loading">正在读取模板封面与作品首帧…</p>
+        ) : wallItems.length ? (
+          <div className="ov-wall-grid">
+            {wallItems.map((item) => (
+              <button
+                type="button"
+                className="ov-wall-card"
+                key={item.key}
+                onClick={() => (item.projectId ? onOpenProject(item.projectId) : onNavigate('templates'))}
+              >
+                <span className="ov-wall-media">
+                  <img src={item.image} alt={item.alt} loading="lazy" />
+                  <span className="ov-wall-kind">{item.kind}</span>
+                </span>
+                <span className="ov-wall-caption">
+                  <strong>{item.title}</strong>
+                  <span>{item.meta}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="ov-wall-empty">
+            <span className="ov-wall-empty-icon" aria-hidden="true">
+              <ImageIcon size={18} strokeWidth={1.75} />
+            </span>
+            <div className="ov-wall-empty-copy">
+              <strong>{sectionFailed('模板库') || sectionFailed('作品') ? '作品墙这次没取全' : '还没有可展示的真实画面'}</strong>
+              <p>
+                {sectionFailed('模板库') || sectionFailed('作品')
+                  ? '模板或作品这次没读到，原因写在页面顶部；点刷新再取一次，不用示例图代替。'
+                  : '模板库拆出抽帧、作品里贴上第一帧之后，这里会按最近更新排出来；不用示例图占位。'}
+              </p>
+            </div>
+            <button
+              type="button"
+              className="vq-button vq-button--ghost"
+              onClick={() => {
+                if (sectionFailed('模板库') || sectionFailed('作品')) void load()
+                else onNavigate('templates')
+              }}
+            >
+              {sectionFailed('模板库') || sectionFailed('作品') ? '刷新' : '去模板库'}
+              <ArrowRight size={13} />
+            </button>
+          </div>
+        )}
+      </section>
+
+      {/* 「下一步」主卡与 r312 常驻建资产提示放在作品墙之后：
+          先讲平台能做什么、展示真实效果，再回答「我现在该点哪里」，不抢第一条 CTA。 */}
+      <div className="ov-next-block">
+        <section className="vq-next" aria-labelledby="vq-next-title">
+          <div className="vq-next-main">
+            <span className="vq-next-label">{hero.label}</span>
+            <h2 id="vq-next-title">{hero.title}</h2>
+            <p className="vq-next-meta">{hero.meta}</p>
+            <button type="button" className="vq-next-cta" onClick={hero.go}>
+              {hero.cta}
+              <ArrowRight size={15} />
+            </button>
+          </div>
+          <dl className="vq-next-stats">
+            <div>
+              <dt>作品</dt>
+              <dd>{projects.length}</dd>
+            </div>
+            <div>
+              <dt>无限画布</dt>
+              <dd>{canvases.length}</dd>
+            </div>
+            <div>
+              <dt>模板</dt>
+              <dd>{templates.length}</dd>
+            </div>
+          </dl>
         </section>
-      ) : null}
+
+        {assetCounts && (assetCounts.product === 0 || assetCounts.avatar === 0) ? (
+          <section className="vq-asset-nudge" aria-labelledby="vq-asset-nudge-title">
+            <span className="vq-asset-nudge-icon" aria-hidden="true">
+              <Package size={16} strokeWidth={1.75} />
+            </span>
+            <div className="vq-asset-nudge-copy">
+              <h2 id="vq-asset-nudge-title">先把资产建起来，画布和作品才用得上</h2>
+              <p>
+                产品资产 {assetCounts.product} 套 · 数字人资产 {assetCounts.avatar} 套。两边都建好后，这条提示会自己消失。
+              </p>
+            </div>
+            <button type="button" className="vq-button vq-button--ghost" onClick={() => onNavigate('assets')}>
+              去我的资产
+              <ArrowRight size={13} />
+            </button>
+          </section>
+        ) : null}
+      </div>
 
       {/* 空账号第一屏（v0.9.42）：评审 / 交付 / 运行 / 分享都挂在作品上，手上没有作品时必然是空的。
           与其铺四块「还没有」加三张空心开始卡，不如把「它们什么时候出现」讲清楚，主卡说下一步。 */}
@@ -1178,7 +1433,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
             </button>
           </div>
           <div className="vq-first-run-list">
-            {FIRST_RUN_BLOCKS.map((entry) => {
+            {FIRST_RUN_BLOCKS.filter((entry) => workflow || entry.key !== 'runs').map((entry) => {
               const Icon = entry.icon
               return (
                 <div className="vq-first-run-row" key={entry.key}>
@@ -1192,8 +1447,8 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
             })}
           </div>
           <p className="vq-first-run-note">
-            这一屏现在能做的只有一件事：从上面那张主卡进「爆款雷达」，按关键词检索一条值得抄的。
-            检索与解析按次扣积分；开工作流、导出与分享不扣积分。
+            这一屏现在能做的只有一件事：从上面的「爆款雷达」按关键词检索一条值得抄的。
+            检索与解析按次扣积分；导出与分享不扣积分。
           </p>
         </section>
       ) : (
@@ -1925,36 +2180,8 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
         )}
       </section>
 
-      <div className="vq-start">
-        <button type="button" className="vq-start-card" onClick={() => onNavigate('radar')}>
-          <span className="vq-start-icon"><Search size={16} strokeWidth={1.75} /></span>
-          <span className="vq-start-copy">
-            <strong>从爆款开始</strong>
-            <span>按关键词检索，挑一条加进模板库</span>
-          </span>
-          <ArrowRight size={15} />
-        </button>
-        <button type="button" className="vq-start-card" onClick={() => onNavigate('templates')}>
-          <span className="vq-start-icon"><LayoutTemplate size={16} strokeWidth={1.75} /></span>
-          <span className="vq-start-copy">
-            <strong>从模板开始</strong>
-            <span>
-              {templates.length ? templates.length + ' 条已解析结构，套一条改写' : '模板库还是空的，先从爆款拆一条'}
-            </span>
-          </span>
-          <ArrowRight size={15} />
-        </button>
-        <button type="button" className="vq-start-card" onClick={onCreateCanvas}>
-          <span className="vq-start-icon"><Workflow size={16} strokeWidth={1.75} /></span>
-          <span className="vq-start-copy">
-            <strong>空白工作流</strong>
-            <span>从零搭节点，跑一次看每个节点返回什么</span>
-          </span>
-          <ArrowRight size={15} />
-        </button>
-      </div>
-
       <div className="vq-overview-grid">
+        {workflow ? (
         <section className="vq-section">
           <div className="vq-section-head">
             <div>
@@ -1969,7 +2196,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
           {recentRuns.length ? (
             <div className="vq-table" role="table" aria-label="最近运行">
               <div className="vq-table-head" role="row">
-                <span role="columnheader">工作流 / 作品</span>
+                <span role="columnheader">运行 / 作品</span>
                 <span role="columnheader">状态</span>
                 <span role="columnheader">耗时</span>
                 <span role="columnheader">开始</span>
@@ -2004,10 +2231,11 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
           ) : (
             <div className="vq-empty vq-empty--inline">
               <strong>还没有运行记录</strong>
-              <span>去工作流点一次运行，这里会按节点列出耗时与返回。</span>
+              <span>在作品里跑一次生成，这里会按节点列出耗时与返回。</span>
             </div>
           )}
         </section>
+        ) : null}
 
         <section className="vq-section">
           <div className="vq-section-head">

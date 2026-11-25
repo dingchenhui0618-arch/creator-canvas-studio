@@ -10,6 +10,7 @@ import { reviewsForVersion, type ProjectBucket, type ProjectListFacets, type Pro
 import { readProjectsView, writeProjectsView, type ProjectsView } from '../domain/list-view'
 import WorksWall from '../components/WorksWall'
 import { CLIENT_LABEL, stampTime } from '../domain/share'
+import { useWorkflowEnabled } from '../domain/features'
 import '../styles/projects.css'
 
 const pad2 = (value: number) => String(value).padStart(2, '0')
@@ -38,7 +39,7 @@ function shareHint(share: ProjectShareBrief): string {
 // 三种筛法只回答「交没交出去」：评审结论、人工拍板仍然写在胶囊里，不重复切成筛选项。
 const BUCKETS: Array<{ value: ProjectBucket; label: string; hint: string }> = [
   { value: 'all', label: '全部', hint: '账号下所有作品' },
-  { value: 'active', label: '在做', hint: '当前这一版还没交出去：待开工作流、评过没交、交过旧版又开了新版都算' },
+  { value: 'active', label: '在做', hint: '当前这一版还没交出去：评过没交、交过旧版又开了新版都算' },
   { value: 'delivered', label: '已交付', hint: '当前这一版交出去了；交付过旧版、又开了新版的不算' },
 ]
 
@@ -64,6 +65,8 @@ export default function ProjectsPage({
   // 模板库也是空的时，这一屏的下一步是「去爆款雷达检索一条」，不是把人送进一个空库（v0.9.42）
   onDiscover: () => void
 }) {
+  // r313：工作流只对管理员开放。这一页有三处文案在讲它，关了就不再提（不留点了没反应的入口）
+  const workflow = useWorkflowEnabled()
   const [items, setItems] = useState<ProjectSummary[]>([])
   const [facets, setFacets] = useState<ProjectListFacets>(EMPTY_FACETS)
   const [total, setTotal] = useState(0)
@@ -183,8 +186,12 @@ export default function ProjectsPage({
       <div className="page vq-page vq-project-page">
         <PageHead
           kicker="作品 / WORKS"
-          title="作品"
-          desc="快捷创作生成的图片与视频、跑过的工作流、无限画布里的画布，都收在这一条流里。按作品自己的比例排版，9:16 竖版优先。"
+          title="我的作品"
+          desc={
+            workflow
+              ? '快捷创作生成的图片与视频、跑过的工作流、无限画布里的画布，都收在这一条流里。按作品自己的比例排版，9:16 竖版优先。'
+              : '快捷创作生成的图片与视频、无限画布里的画布，都收在这一条流里。按作品自己的比例排版，9:16 竖版优先。'
+          }
           actions={
             <>
               {/* 回收站放在两个视图的页头（v0.9.253）：删完作品会回到「创作成果」，那里也得能找回来 */}
@@ -219,8 +226,12 @@ export default function ProjectsPage({
     <div className="page vq-page vq-project-page" aria-busy={loading}>
       <PageHead
         kicker="作品 / PROJECTS"
-        title={headLoading ? '正在读取…' : '作品'}
-        desc="一条内容一条记录：用的哪条模板、开过几块工作流、评审与交付都挂在这里。搜标题或模板名找一条，按「在做 / 已交付」看还剩哪些。"
+        title={headLoading ? '正在读取…' : '我的作品'}
+        desc={
+          workflow
+            ? '一条内容一条记录：用的哪条模板、开过几块工作流、评审与交付都挂在这里。搜标题或模板名找一条，按「在做 / 已交付」看还剩哪些。'
+            : '一条内容一条记录：用的哪条模板、评审与交付都挂在这里。搜标题或模板名找一条，按「在做 / 已交付」看还剩哪些。'
+        }
         actions={
           <>
             <button type="button" className="vq-button vq-button--ghost" onClick={() => setView('works')}>
@@ -291,7 +302,11 @@ export default function ProjectsPage({
                 type="button"
                 className={'vq-filter-chip' + (bucket === entry.value ? ' is-active' : '')}
                 aria-pressed={bucket === entry.value}
-                title={entry.hint}
+                title={
+                  entry.value === 'active' && workflow
+                    ? '当前这一版还没交出去：还没出画面、评过没交、交过旧版又开了新版都算'
+                    : entry.hint
+                }
                 onClick={() => setBucket(entry.value)}
               >
                 {entry.label}
@@ -416,7 +431,13 @@ export default function ProjectsPage({
                   <em>运行</em>
                   <b>{item.runs?.count ? item.runs.count + ' 次' : '—'}</b>
                 </span>
-                <span title={item.spend ? '评审 ' + item.spend.reviews.credits + ' · 工作流 ' + item.spend.runs.credits : undefined}>
+                <span
+                  title={
+                    item.spend
+                      ? '评审 ' + item.spend.reviews.credits + (workflow ? ' · 工作流 ' + item.spend.runs.credits : '')
+                      : undefined
+                  }
+                >
                   <em>花费</em>
                   <b>{item.spend?.total ? item.spend.total.toLocaleString('zh-CN') + ' 积分' : '—'}</b>
                 </span>

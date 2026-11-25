@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Activity, CreditCard, KeyRound, LogOut, MessageSquare, RefreshCw } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Activity, CreditCard, KeyRound, LogOut, MessageSquare, RefreshCw, Trash2, Upload } from 'lucide-react'
 import { Pill, Tag } from '../components/ui'
 import { TwoFactorCard } from '../components/TwoFactorCard'
 import { SessionsCard } from '../components/SessionsCard'
 import { AccountDataCard } from '../components/AccountDataCard'
+import { UserAvatar } from '../components/UserAvatar'
 import PageHead from '../components/PageHead'
+import { request, safeFetch } from '../api/client'
 import { getBillingOverview, type BillingOverview } from '../api/billing'
 import {
   clearShotFrameProject,
@@ -23,7 +25,7 @@ import { navigate } from '../router'
 import { listMyFeedback, type FeedbackItem } from '../api/feedback'
 import { FeedbackModal } from '../components/FeedbackModal'
 import { HELP_ARTICLES } from '../domain/help'
-import { initialsFor, sessionKindLabel, type Session } from '../auth/session'
+import { sessionKindLabel, updateSessionUser, type Session } from '../auth/session'
 import { accountIdentifier } from '../domain/account-label'
 import '../styles/shell.css'
 import '../styles/credits.css'
@@ -40,6 +42,81 @@ const FEEDBACK_STATUS_LABEL: Record<string, string> = { new: '待处理', readin
 const FEEDBACK_KIND_LABEL: Record<string, string> = { problem: '功能问题', idea: '改进建议', other: '其他' }
 // 开通单据的三种状态：待确认（已提交）/ 已开通（管理员发放了积分）/ 已取消（管理员忽略）
 const RECEIPT_STATUS: Record<string, string> = { pending: '待确认', granted: '已开通', ignored: '已取消' }
+
+// 头像在浏览器里裁好再发：服务端只收 ≤2 MB 的小图，不替用户缩图。
+const AVATAR_SIZE = 256
+const AVATAR_SOURCE_MAX = 20 * 1024 * 1024
+const AVATAR_ACCEPT = 'image/png,image/jpeg,image/webp'
+
+type AvatarView = { has: boolean; url: string; version: string }
+type AvatarResponse = { ok: boolean; avatar: AvatarView }
+
+function canvasJpeg(canvas: HTMLCanvasElement): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (blob) resolve(blob)
+        else reject(new Error('图片处理失败：换一张试试'))
+      },
+      'image/jpeg',
+      0.85,
+    )
+  })
+}
+
+/** 居中裁成 256×256 方图再压成 JPEG（0.85）；不把原图整张发给服务端。 */
+async function cropAvatar(file: File): Promise<Blob> {
+  if (!file.type.startsWith('image/')) {
+    throw new Error('请选择图片文件（PNG / JPEG / WebP）')
+  }
+  if (file.size > AVATAR_SOURCE_MAX) {
+    throw new Error('这张图超过 20 MB：先换一张小一点的')
+  }
+  let bitmap: ImageBitmap
+  try {
+    bitmap = await createImageBitmap(file)
+  } catch {
+    throw new Error('读不出这张图片：换一张 PNG / JPEG / WebP 试试')
+  }
+  try {
+    const side = Math.min(bitmap.width, bitmap.height)
+    if (!side) throw new Error('这张图片没有有效尺寸：换一张试试')
+    const canvas = document.createElement('canvas')
+    canvas.width = AVATAR_SIZE
+    canvas.height = AVATAR_SIZE
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('当前浏览器不支持图片裁剪：换一个浏览器试试')
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
+    const sx = Math.floor((bitmap.width - side) / 2)
+    const sy = Math.floor((bitmap.height - side) / 2)
+    ctx.drawImage(bitmap, sx, sy, side, side, 0, 0, AVATAR_SIZE, AVATAR_SIZE)
+    return await canvasJpeg(canvas)
+  } finally {
+    bitmap.close()
+  }
+}
+
+async function uploadAvatarImage(blob: Blob): Promise<AvatarResponse> {
+  const form = new FormData()
+  form.append('avatar', blob, 'avatar.jpg')
+  const response = await safeFetch('/api/account/avatar', {
+    method: 'POST',
+    body: form,
+    credentials: 'same-origin',
+  })
+  const text = await response.text()
+  let body: unknown = null
+  try {
+    body = text ? JSON.parse(text) : null
+  } catch {
+    body = { error: text.slice(0, 200) }
+  }
+  if (!response.ok) {
+    throw new Error((body as { error?: string } | null)?.error || '头像没有上传成功，请稍后再试')
+  }
+  return body as AvatarResponse
+}
 
 function formatStamp(value?: string | null) {
   if (!value) return '—'
@@ -101,6 +178,12 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
   const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [feedback, setFeedback] = useState<FeedbackItem[]>([])
   const [feedbackError, setFeedbackError] = useState('')
+  // 头像只在这里改：成功后写回会话缓存，顶栏与侧栏跟着变，不整页刷新
+  const [avatarUrl, setAvatarUrl] = useState(session.user.avatarUrl || '')
+  const [avatarBusy, setAvatarBusy] = useState(false)
+  const [avatarError, setAvatarError] = useState('')
+  const [avatarMessage, setAvatarMessage] = useState('')
+  const avatarInputRef = useRef<HTMLInputElement | null>(null)
 
   const loadFeedback = useCallback(() => {
     listMyFeedback(6)
@@ -293,6 +376,42 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
     }
   }
 
+  const handleAvatarFile = async (file: File) => {
+    if (avatarBusy) return
+    setAvatarBusy(true)
+    setAvatarError('')
+    setAvatarMessage('')
+    try {
+      const blob = await cropAvatar(file)
+      const result = await uploadAvatarImage(blob)
+      setAvatarUrl(result.avatar.url)
+      updateSessionUser({ avatarUrl: result.avatar.url })
+      setAvatarMessage('头像已更新。')
+    } catch (caught) {
+      setAvatarError(caught instanceof Error ? caught.message : '头像没有上传成功，请稍后再试')
+    } finally {
+      setAvatarBusy(false)
+      if (avatarInputRef.current) avatarInputRef.current.value = ''
+    }
+  }
+
+  const removeAvatar = async () => {
+    if (avatarBusy) return
+    setAvatarBusy(true)
+    setAvatarError('')
+    setAvatarMessage('')
+    try {
+      await request<AvatarResponse>('/api/account/avatar', { method: 'DELETE' })
+      setAvatarUrl('')
+      updateSessionUser({ avatarUrl: '' })
+      setAvatarMessage('头像已移除，现在显示名字首字母。')
+    } catch (caught) {
+      setAvatarError(caught instanceof Error ? caught.message : '头像没有移除成功，请稍后再试')
+    } finally {
+      setAvatarBusy(false)
+    }
+  }
+
   const signedInAt = new Intl.DateTimeFormat('zh-CN', {
     dateStyle: 'medium',
     timeStyle: 'short',
@@ -330,7 +449,11 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
             <Tag>{sessionKindLabel(session.user)}</Tag>
           </div>
           <div className="vq-account">
-            <span className="vq-account-avatar">{initialsFor(session.user.name)}</span>
+            <UserAvatar
+              user={{ id: session.user.id, name: session.user.name, avatarUrl }}
+              size={38}
+              className="vq-account-avatar"
+            />
             <div className="vq-account-meta">
               <strong>{session.user.name}</strong>
               <span>{accountIdentifier(session.user)}</span>
@@ -374,6 +497,64 @@ export function SettingsPage({ session, onSignOut, onSwitchAccount }: Props) {
                 <span>{internal ? '单工作区部署；多工作区切换还没有后端' : '这个账号所属的工作区'}</span>
               </div>
               <span className="vq-row-value">{session.user.workspace}</span>
+            </div>
+          </div>
+        </section>
+
+        <section className="vq-card vq-card--wide" id="account-avatar">
+          <div className="vq-card-head">
+            <div>
+              <span className="vq-mono">头像 / Avatar</span>
+              <h2>头像</h2>
+              <p>换一张自己的图，顶栏、侧栏与设置页会一起更新；没有头像时显示名字首字母。</p>
+            </div>
+            <Tag>账号形象</Tag>
+          </div>
+          <div className="vq-avatar-editor">
+            <UserAvatar
+              user={{ id: session.user.id, name: session.user.name, avatarUrl }}
+              size={72}
+              className="vq-avatar-editor-preview"
+            />
+            <div className="vq-avatar-editor-main">
+              <div className="vq-avatar-editor-copy">
+                <strong>{avatarUrl ? '当前头像' : '还没有头像'}</strong>
+                <span>选择图片后先在浏览器里居中裁成 256×256 方图，再压成 JPEG 上传。支持 PNG / JPEG / WebP，原图最大 20 MB。</span>
+              </div>
+              <div className="vq-avatar-editor-actions">
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept={AVATAR_ACCEPT}
+                  style={{ display: 'none' }}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0]
+                    if (file) void handleAvatarFile(file)
+                  }}
+                />
+                <button
+                  type="button"
+                  className="vq-button vq-button--primary"
+                  onClick={() => avatarInputRef.current?.click()}
+                  disabled={avatarBusy}
+                >
+                  <Upload size={14} />
+                  {avatarBusy ? '处理中…' : '上传头像'}
+                </button>
+                {avatarUrl ? (
+                  <button
+                    type="button"
+                    className="vq-button vq-button--danger"
+                    onClick={() => void removeAvatar()}
+                    disabled={avatarBusy}
+                  >
+                    <Trash2 size={14} />
+                    移除头像
+                  </button>
+                ) : null}
+              </div>
+              {avatarError ? <p className="vq-avatar-note is-danger" role="alert">{avatarError}</p> : null}
+              {avatarMessage ? <p className="vq-avatar-note" role="status" aria-live="polite">{avatarMessage}</p> : null}
             </div>
           </div>
         </section>

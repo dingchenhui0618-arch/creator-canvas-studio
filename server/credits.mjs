@@ -5,6 +5,8 @@
 //   - 没有登录态（本地演示）不扣费也不记账，避免离线开发被积分挡住
 //   - 单价来自环境变量（VQ_CREDIT_*），改价不用改代码；金额/档位/支付通道仍然没有接，充值只留占位
 import crypto from 'node:crypto'
+import fs from 'node:fs'
+import path from 'node:path'
 import { config } from './config.mjs'
 import { openDb as getDb } from './auth.mjs'
 import { checkQuota, monthWindow, quotaOf } from './quota.mjs'
@@ -189,32 +191,9 @@ export function ledgerCountOf(userId) {
   return Number(row?.n || 0)
 }
 
-export function ledgerOf(userId, limit = 20, offset = 0) {
-  if (!userId) return []
-  const rows = getDb()
-    .prepare('SELECT id, delta, balance_after, kind, ref, meta, created_at FROM credit_ledger WHERE user_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ? OFFSET ?')
-    .all(String(userId), Math.max(1, Math.min(200, Number(limit) || 20)), Math.max(0, Math.round(Number(offset) || 0)))
-  return rows.map((row) => {
-    let label = ''
-    try {
-      label = String(JSON.parse(row.meta || '{}')?.label || '')
-    } catch {
-      label = ''
-    }
-    return {
-      id: row.id,
-      delta: Number(row.delta),
-      balance: Number(row.balance_after),
-      kind: row.kind,
-      ref: row.ref || '',
-      // 说明列给用户看的是「这条复刻的标题」，ref 里的 jobId 只给排查用
-      label,
-      createdAt: row.created_at,
-    }
-  })
-}
-
 // 账本里的动作名：与 config.credits.prices 的键一一对应，新增动作时这里补一行。
+// 充值 / 赠送 / 后台发放 / 后台扣减也走这张表：积分记录页与「本月消耗」对同一笔钱
+// 必须叫同一个名字，别在前端另抄一份。
 export const SPEND_KIND_LABEL = {
   search: '检索',
   replicate: '一键复刻',
@@ -223,6 +202,121 @@ export const SPEND_KIND_LABEL = {
   flow_run: '工作流运行',
   image_gen: '图片生成',
   video_gen: '视频生成',
+  recharge: '充值',
+  welcome: '新手赠送',
+  grant: '管理员发放',
+  deduct: '管理员扣减',
+  invite: '邀请码赠送',
+}
+
+// 工作流节点的扣费 ref 形如 run:<runId>:<nodeId>（flow-image / flow-video 写账本时就是这样记的）。
+// 拆出来给积分记录页展示「扣在哪个节点」，解析不出就是空串，不拿运行 id 猜节点。
+const RUN_REF = /^run:([^:]+):([\s\S]+)$/
+
+function ledgerKindLabel(kind, ref = '') {
+  const name = String(kind || '')
+  const refund = name.endsWith('-refund')
+  const base = refund ? name.slice(0, -'-refund'.length) : name
+  const runBound = String(ref || '').startsWith('run:')
+  const baseLabel = SPEND_KIND_LABEL[base] || base
+  if (!refund) {
+    // 同一笔 image_gen 可能来自快捷创作，也可能来自工作流节点：只有 ref 带 run: 时才叫「工作流出图」，
+    // 不然会把快捷创作的账也说成工作流，充值页与记录页对不上。
+    if (runBound && base === 'image_gen') return '工作流出图'
+    if (runBound && base === 'video_gen') return '工作流出视频'
+    return baseLabel
+  }
+  if (runBound && base === 'image_gen') return '出图失败退款'
+  if (runBound && base === 'video_gen') return '出视频失败退款'
+  return baseLabel + '退款'
+}
+
+function parseLedgerMeta(raw) {
+  try {
+    const parsed = JSON.parse(raw || '{}')
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+// 运行记录在数据目录的 runs.json（flows.mjs 写、这里只读）。账本要回答「扣在哪个节点」，
+// 节点标题与流程名只在运行记录里；按文件 mtime + 大小缓存，翻页不必反复解析整份运行库。
+let runIndexCache = { key: '', index: new Map() }
+
+function runIndex() {
+  const file = path.join(config.dataDir, 'runs.json')
+  let stat
+  try {
+    stat = fs.statSync(file)
+  } catch {
+    return new Map()
+  }
+  const key = String(stat.mtimeMs) + ':' + String(stat.size)
+  if (runIndexCache.key === key) return runIndexCache.index
+  try {
+    const rows = JSON.parse(fs.readFileSync(file, 'utf8'))
+    const index = new Map()
+    for (const run of Array.isArray(rows) ? rows : []) {
+      if (run && run.id) index.set(String(run.id), run)
+    }
+    runIndexCache = { key, index }
+    return index
+  } catch {
+    // 运行库损坏 / 正在被替换时不让积分记录整页失败：节点信息留空，流水照常显示。
+    return new Map()
+  }
+}
+
+export function ledgerOf(userId, limit = 20, offset = 0) {
+  if (!userId) return []
+  const rows = getDb()
+    .prepare('SELECT id, delta, balance_after, kind, ref, meta, created_at FROM credit_ledger WHERE user_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ? OFFSET ?')
+    .all(String(userId), Math.max(1, Math.min(200, Number(limit) || 20)), Math.max(0, Math.round(Number(offset) || 0)))
+  // 只有带运行痕迹的行才去读运行库：普通检索 / 充值不碰它，也不因为运行库很大而变慢。
+  const needsRuns = rows.some((row) => {
+    const ref = String(row.ref || '')
+    return ref.startsWith('run:') || ref.startsWith('run_')
+  })
+  const index = needsRuns ? runIndex() : null
+  return rows.map((row) => {
+    const kind = row.kind
+    const ref = String(row.ref || '')
+    const meta = parseLedgerMeta(row.meta)
+    const match = RUN_REF.exec(ref)
+    let runId = match ? match[1] : ''
+    let nodeId = match ? match[2] : ''
+    let run = runId && index ? index.get(runId) || null : null
+    // 整一次工作流运行的扣费，ref 直接就是运行 id（routes/flows.mjs 的 charge）：
+    // 不硬套 run:<runId>:<nodeId> 格式，但能查到运行时照样补出流程名，后台点进去能对上。
+    if (!match && index && ref && index.has(ref)) {
+      runId = ref
+      nodeId = ''
+      run = index.get(ref)
+    }
+    const node = run && nodeId && Array.isArray(run.nodes)
+      ? run.nodes.find((item) => String(item?.id || '') === nodeId)
+      : null
+    const label = String(meta?.label || '')
+    return {
+      id: row.id,
+      delta: Number(row.delta),
+      balance: Number(row.balance_after),
+      kind,
+      ref,
+      // 说明列给用户看的是「这条复刻的标题」，ref 里的 jobId 只给排查用；
+      // meta 原样解析出来，别的键（prompt / conversationId / failed）不再被丢掉。
+      label,
+      meta,
+      runId,
+      nodeId,
+      nodeLabel: String(node?.title || ''),
+      flowId: String(run?.flowId || ''),
+      flowName: String(run?.flowName || ''),
+      kindLabel: ledgerKindLabel(kind, ref),
+      createdAt: row.created_at,
+    }
+  })
 }
 
 /**

@@ -3,6 +3,7 @@ import {
   clearStoredSession,
   persistSession,
   readSession,
+  SESSION_UPDATED_EVENT,
   register as requestRegister,
   signIn as requestSignIn,
   signInWithSms as requestSignInWithSms,
@@ -56,11 +57,12 @@ export function useSession(): SessionController {
 
     const verify = async () => {
       try {
-        const user = await fetchMe(controller.signal)
+        const result = await fetchMe(controller.signal)
         if (!active || epoch.current !== startedAt) return
+        const user = result.user
         // 没有本地缓存时，cookie 会话照样能被 /api/auth/me 认出来，直接补一条缓存
         const base: Session = cached || { version: 1, user, remember: true, signedInAt: new Date().toISOString() }
-        const next: Session = { ...base, user }
+        const next: Session = { ...base, user, features: { ...base.features, ...result.features } }
         persistSession(next)
         setState({ session: next, loading: false })
       } catch (error) {
@@ -81,6 +83,18 @@ export function useSession(): SessionController {
       active = false
       controller.abort()
     }
+  }, [])
+
+  // 设置页换了头像之后会更新缓存里的用户档案并派发事件：这里同步内存里的会话，
+  // 顶栏、侧栏和设置页拿到的 avatarUrl 立刻一致，不用整页刷新。
+  useEffect(() => {
+    const onSessionUpdated = (event: Event) => {
+      const next = (event as CustomEvent<Session>).detail
+      if (!next || !next.user?.id) return
+      setState({ session: next, loading: false })
+    }
+    window.addEventListener(SESSION_UPDATED_EVENT, onSessionUpdated)
+    return () => window.removeEventListener(SESSION_UPDATED_EVENT, onSessionUpdated)
   }, [])
 
   // 其它页面调用受保护接口收到 401 { loginRequired: true } 时，由 src/api/client.ts 派发这个事件；

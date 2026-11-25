@@ -13,6 +13,8 @@ import path from 'node:path'
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vq-canvas-adopt-'))
 process.env.DATA_DIR = dir
+// 工作流 beta（r313）只对管理员开放：这一组测的是工作流本身，显式对全部账号打开，不改变测试意图
+process.env.VQ_WORKFLOW_BETA = 'all'
 
 const at = (day, hour) => '2026-11-' + String(day).padStart(2, '0') + 'T' + String(hour).padStart(2, '0') + ':00:00.000Z'
 

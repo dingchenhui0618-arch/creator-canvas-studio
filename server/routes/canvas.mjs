@@ -15,6 +15,8 @@ export function createCanvasRouter() {
         sendJson(res, 401, { error: '未登录', loginRequired: true })
         return true
       }
+      // 这里不判工作流 beta（r313）：本接口是无限画布（#/board）的账号票据与排队位，
+      // 与工作流（#/canvas）是两件东西，普通账号照常要能拿到互通票据与排队位。
 
       if (pathname === '/api/canvas/session-token' && req.method === 'GET') {
         if (!canvasTrustEnabled()) {

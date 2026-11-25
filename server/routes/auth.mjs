@@ -38,6 +38,7 @@ import {
 } from '../auth.mjs'
 import { generateBackupCodes, generateSecret, matchBackupCode, otpauthUrl, verifyTotp } from '../totp.mjs'
 import { logEvent } from '../log.mjs'
+import { workflowBetaAllowed } from '../workflow-beta.mjs'
 import { grant } from '../credits.mjs'
 import { mailConfigured, smtpForSending } from '../mail-config.mjs'
 import { isValidPhone, maskPhone, normalizePhone, smsForSending, smsView } from '../sms-config.mjs'
@@ -179,7 +180,10 @@ export function createAuthRouter() {
       if (pathname === '/api/auth/me') {
         const row = currentUser(req)
         if (!row) return (sendJson(res, 401, { error: '未登录' }), true)
-        sendJson(res, 200, { user: publicUser(row) })
+        // 能力开关跟身份一起下发（r313）：工作流收成 beta，前端要靠这一项决定入口露不露。
+        // 判定与路由的 403 走同一个函数，界面与接口不会给出两个答案；
+        // 登录 / 注册 / 两步验证那几条路返回的 user 结构不动，只有这里多带一层 features。
+        sendJson(res, 200, { user: publicUser(row), features: { workflow: workflowBetaAllowed(row) } })
         return true
       }
 

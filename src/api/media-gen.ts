@@ -121,16 +121,29 @@ export type MediaGenerateInput = {
   resolution?: string
 }
 
+// 生成一次就动了一次余额：让外壳顶栏的余额重新读一遍（r313）。
+// 用事件而不是回调：发起生成的地方有五六个（快捷创作、作品逐镜、资产补图…），
+// 逐个接回调会漏；顶栏只认这一个事件。
+function pingCredits() {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('vq:credits'))
+}
+
 export const generateMediaImage = (input: MediaGenerateInput) =>
   request<MediaTaskResponse>('/api/media/generate', {
     method: 'POST',
     body: JSON.stringify({ kind: 'image', ...input }),
+  }).then((result) => {
+    pingCredits()
+    return result
   })
 
 export const generateMediaVideo = (input: MediaGenerateInput) =>
   request<MediaTaskResponse>('/api/media/generate', {
     method: 'POST',
     body: JSON.stringify({ kind: 'video', ...input }),
+  }).then((result) => {
+    pingCredits()
+    return result
   })
 
 export type MediaTaskListResponse = {

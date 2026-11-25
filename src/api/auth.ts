@@ -4,6 +4,14 @@ import { request as apiRequest } from './client'
 
 export type AuthUserKind = 'account' | 'demo' | 'guest' | 'admin'
 
+/** 服务端下发的界面能力开关；目前只有工作流 beta。 */
+export type SessionFeatures = { workflow?: boolean }
+
+export type AuthMe = {
+  user: AuthUser
+  features: SessionFeatures
+}
+
 export type AuthUser = {
   id: string
   email: string
@@ -12,6 +20,8 @@ export type AuthUser = {
   name: string
   workspace: string
   kind: AuthUserKind
+  /** 头像地址；没有头像时为空串 */
+  avatarUrl?: string
   /** 是否开启了两步验证：只给状态，secret 与备用码永远不下发 */
   twoFactor?: boolean
 }
@@ -234,9 +244,9 @@ export async function logout(): Promise<void> {
 }
 
 /** 服务端校验当前 cookie 会话；401 时 client 会抛带 status 的 Error。 */
-export async function me(signal?: AbortSignal): Promise<AuthUser> {
-  const body = await request<{ user: AuthUser }>('/api/auth/me', { signal })
-  return body.user
+export async function me(signal?: AbortSignal): Promise<AuthMe> {
+  const body = await request<{ user: AuthUser; features?: SessionFeatures }>('/api/auth/me', { signal })
+  return { user: body.user, features: body.features ?? {} }
 }
 
 /**

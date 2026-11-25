@@ -638,7 +638,9 @@ function archiveShare(found, closedAt) {
 
 function normalize(item) {
   const versions = (Array.isArray(item.versions) ? item.versions : [])
-    .filter((entry) => entry && entry.flowId)
+    // 版本行本来必须指着一块工作流（归档 = 一块旧工作流的指针）。r313 起普通账号开新版
+    // 不再复制工作流：从来没有工作流的作品也要能留住「这一版说了什么」，所以带脚本快照的行同样保留。
+    .filter((entry) => entry && (entry.flowId || entry.script))
     .map((entry, index) => normalizeVersion(entry, index + 1))
     .slice(-MAX_VERSIONS)
   // 版本号是作品自己的计数：没存过就按「归档几版 + 当前一版」推出来，老数据不会显示成 v0
@@ -1401,27 +1403,33 @@ export async function bindProjectFlow(id, flowId, user = null) {
 /**
  * 开新版本：当前工作流存成归档（只存 flowId 与名字，不复制节点），作品改指向新工作流。
  * 复制工作流本身由路由做——存储层只认指针，不碰流程服务。
+ *
+ * keepFlow（r313 普通账号）：不复制工作流，作品原来指着的那块原样留着、一个字节都不动。
+ * 这时也能给从来没有工作流的作品开版（v0 → v1）：没有「上一块工作流」可归档，只进版次。
  */
-export async function archiveProjectVersion(id, { flowId = '', prevName = '', script = null, nextScript = undefined, basedOn = 0 } = {}, user = null) {
+export async function archiveProjectVersion(id, { flowId = '', prevName = '', script = null, nextScript = undefined, basedOn = 0, keepFlow = false } = {}, user = null) {
   const list = await loadAll()
   const found = list.find((item) => item.id === id && canAccess(item, user))
   if (!found) return null
   const current = normalize(found)
-  if (!current.flowId) return null
+  if (!current.flowId && !keepFlow) return null
   const now = new Date().toISOString()
-  found.versions = [
-    ...current.versions,
-    {
-      n: current.version,
-      flowId: current.flowId,
-      name: clip(prevName || '上一版工作流', 60),
-      archivedAt: now,
-      // 归档时把这一版的脚本一起存下来：之后改脚本也只影响新版本
-      script: normalizeVersionScript(script) || undefined,
-      // 来源跟着这一版一起归档：v4 是从 v1 回来的，归档之后仍然查得到
-      basedOn: current.basedOn,
-    },
-  ].slice(-MAX_VERSIONS)
+  // v0 还没有「上一版」：直接进 v1，不写一行 n=0 的假归档
+  if (current.version >= 1) {
+    found.versions = [
+      ...current.versions,
+      {
+        n: current.version,
+        flowId: current.flowId,
+        name: clip(prevName || '上一版工作流', 60),
+        archivedAt: now,
+        // 归档时把这一版的脚本一起存下来：之后改脚本也只影响新版本
+        script: normalizeVersionScript(script) || undefined,
+        // 来源跟着这一版一起归档：v4 是从 v1 回来的，归档之后仍然查得到
+        basedOn: current.basedOn,
+      },
+    ].slice(-MAX_VERSIONS)
+  }
   // 开新版等于上一版收尾：标着交付的那一版先补一条交付记录（老记录没有时间就写空串），
   // 作品再放回「在做」——新版还没交，胶囊不能继续写着已交付。
   if (found.status === 'done') {
@@ -1434,8 +1442,9 @@ export async function archiveProjectVersion(id, { flowId = '', prevName = '', sc
     found.deliveries = deliveries.slice(-MAX_DELIVERIES)
     found.status = 'active'
   }
-  found.flowId = String(flowId || '')
-  found.version = current.version + 1
+  // keepFlow 时作品的工作流指针不动：普通账号只是开了一版，没有新工作流
+  if (!keepFlow) found.flowId = String(flowId || '')
+  found.version = Math.max(1, current.version + 1)
   // 新一版的来源：不传 basedOn 就是接上一版改（0）；以旧版为底时写那一版的版次。
   // 只认更早且存在的版次——越界不写，避免页面显示一个查不到的底座。
   found.basedOn = normalizeBasedOn(basedOn, found.version)

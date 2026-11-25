@@ -256,3 +256,73 @@
     justify-content: space-between;
   }
 }
+
+/* 头像（r313）：左预览、右说明与操作；窄屏改成上下两段，按钮整行可点。
+   间距只走 4/8pt 栅格。 */
+.vq-avatar-editor {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 16px;
+}
+
+.vq-avatar-editor-preview {
+  flex: none;
+}
+
+.vq-avatar-editor-main {
+  display: grid;
+  flex: 1;
+  gap: 12px;
+  min-width: 0;
+}
+
+.vq-avatar-editor-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.vq-avatar-editor-copy strong {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.vq-avatar-editor-copy span {
+  max-width: 60ch;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.vq-avatar-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.vq-avatar-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.vq-avatar-note.is-danger {
+  color: var(--fail);
+}
+
+@media (max-width: 560px) {
+  .vq-avatar-editor {
+    align-items: flex-start;
+    gap: 16px;
+    padding: 12px;
+  }
+
+  .vq-avatar-editor-actions {
+    width: 100%;
+  }
+
+  .vq-avatar-editor-actions .vq-button {
+    flex: 1 1 auto;
+  }
+}

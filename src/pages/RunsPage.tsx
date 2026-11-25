@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Activity, ArrowRight, ChevronLeft, ChevronRight, Eye, GitCompareArrows, Link2, Loader2, Play, RefreshCw, Search, Workflow } from 'lucide-react'
+import { Activity, ArrowRight, ChevronLeft, ChevronRight, Coins, Eye, GitCompareArrows, Link2, Loader2, Play, RefreshCw, Search, Workflow } from 'lucide-react'
 import PageHead from '../components/PageHead'
 import { Select } from '../components/Select'
 import { RunCompareModal } from '../components/RunCompareModal'
@@ -8,9 +8,19 @@ import type { ProjectSummary } from '../domain/project'
 import { getRunResumePlan, listFlows, listRuns, type ApiFlow, type RunRecord, type RunResumePlan } from '../api/flows'
 import { runCreditsText, runResumeInfo, runResumePlanView, runSpentText, runStatusMeta, runVersionLabel, runWorkLine } from '../domain/run'
 import { readRunsView, resolveFlowFilter, writeRunsView, type RunsView } from '../domain/list-view'
+import { creditKindLabel, getCredits, listCredits, type CreditEntry, type CreditsResponse } from '../api/credits'
+import { readSession } from '../auth/session'
 import '../styles/runs.css'
 
 const PAGE_SIZE = 12
+const LEDGER_PAGE = 20
+const LEDGER_FILTERS = [
+  { id: 'all', label: '全部' },
+  { id: 'spend', label: '消耗' },
+  { id: 'recharge', label: '充值' },
+  { id: 'refund', label: '退款' },
+] as const
+type LedgerFilter = (typeof LEDGER_FILTERS)[number]['id']
 
 // 续跑预检（v0.9.105）：记录里存的 resumable 是上次收尾时的判断；
 // 工作流改过之后要按当前内容重算，页面才知道「还能复用几个、补多少」。
@@ -24,6 +34,46 @@ type ResumePlanState = {
 const fmtTime = (iso: string) => {
   const date = new Date(iso)
   return date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
+const fmtFullTime = (iso: string) => {
+  const date = new Date(iso)
+  return Number.isNaN(date.getTime()) ? '' : date.toLocaleString('zh-CN')
+}
+
+const fmtNumber = (value: number | null | undefined) =>
+  typeof value === 'number' && Number.isFinite(value) ? value.toLocaleString('zh-CN') : '—'
+
+// 一页流水按动作分四类：退款优先认（它也是正数），充值 / 赠送 / 发放都算进账，
+// 管理员扣减虽然也是负数，但用户看到的是「钱从哪走的」，跟消耗放一起更好对账。
+function ledgerBucket(entry: CreditEntry): LedgerFilter | 'other' {
+  if (entry.kind.endsWith('-refund')) return 'refund'
+  if (entry.delta > 0) return 'recharge'
+  if (entry.delta < 0) return 'spend'
+  return 'other'
+}
+
+// 动作名以服务端 kindLabel 为准（同一种扣费在不同入口叫法不同，例如快捷创作出图 vs 工作流出图）；
+// 非管理员不看服务端按运行节点算出来的「工作流出图」，退回本地动作名，不露任何流程痕迹。
+function ledgerAction(entry: CreditEntry, isAdmin: boolean): string {
+  if (!isAdmin) return creditKindLabel(entry.kind)
+  return entry.kindLabel || creditKindLabel(entry.kind)
+}
+
+// 说明列：管理员看账本原始说明与节点名；非管理员只留用户自己写的提示词 / 标题，
+// 流程名、运行 ID、节点名与运行链接一律不出现。
+function ledgerDescription(entry: CreditEntry, isAdmin: boolean): string {
+  const label = String(entry.label || '').trim()
+  if (isAdmin) {
+    if (label) return label
+    return entry.nodeLabel ? '工作流 · ' + entry.nodeLabel : ledgerAction(entry, true)
+  }
+  if (entry.kind === 'flow_run' || entry.kind === 'flow_run-refund') return ledgerAction(entry, false)
+  if (entry.runId) {
+    const tail = label.split(' · ').slice(1).join(' · ').trim()
+    return tail && !tail.includes('退款') ? tail : ledgerAction(entry, false)
+  }
+  return label || ledgerAction(entry, false)
 }
 
 // 运行记录页：筛选与分页都在服务端做（GET /api/runs?flowId=&status=&q=&limit=&offset=），
@@ -81,7 +131,7 @@ function NodeOutput({ output }: { output: unknown }) {
 }
 
 // onOpenProject：一条运行挂在作品上时，「回作品」直接进那条作品（脚本、分镜、评审都在那儿）。
-export function RunsPage({
+function WorkflowRunsPanel({
   onOpenFlow,
   onResumeRun,
   onViewRun,
@@ -324,18 +374,7 @@ export function RunsPage({
   }
 
   return (
-    <div className="runs-page">
-      <PageHead
-        kicker="Runs · 工作流执行记录"
-        title="运行记录"
-        desc="每次工作流执行都以真实模型调用为单位记录：哪个节点、多久、返回了什么、在哪一步失败；每条都写着属于哪条作品的第几版。"
-        actions={
-          <button type="button" className="vq-button vq-button--ghost vq-button--sm" onClick={() => void refresh()}>
-            <RefreshCw size={13} />刷新
-          </button>
-        }
-      />
-
+    <>
       {/* 读失败时这四个数不能写 0：0 条运行和「没读到」是两件事（r269）。 */}
       <div className="runs-stats">
         <div><strong>{error ? '—' : total}</strong><span>{filtered ? '筛选结果' : '总运行'}</span></div>
@@ -388,6 +427,9 @@ export function RunsPage({
             清空筛选
           </button>
         ) : null}
+        <button type="button" className="vq-button vq-button--ghost vq-button--sm" onClick={() => void refresh()}>
+          <RefreshCw size={13} />刷新
+        </button>
       </div>
 
       {error ? <p className="runs-note is-error">{error}</p> : null}
@@ -653,6 +695,316 @@ export function RunsPage({
           </button>
         </div>
       ) : null}
+    </>
+  )
+}
+
+// 积分记录（r313）：用户要能看见每一笔扣了多少、扣在哪个动作上，以及充值 / 赠送的增减。
+// 管理员另有「工作流运行」页签；普通账号只看这一本积分账，页面上不出现工作流入口。
+export function RunsPage({
+  onOpenFlow,
+  onResumeRun,
+  onViewRun,
+  onOpenProject,
+  onRecharge,
+  onQuickCreate,
+}: {
+  onOpenFlow?: (flowId: string) => void
+  onResumeRun?: (flowId: string, runId: string) => void
+  onViewRun?: (flowId: string, runId: string) => void
+  onOpenProject?: (projectId: string) => void
+  onRecharge?: () => void
+  onQuickCreate?: () => void
+}) {
+  // App 已经用服务端会话渲染这一页；这里读同一份缓存只为决定「有没有工作流运行页签」，
+  // 真正的权限仍由服务端接口与 App 的门禁负责。
+  const [isAdmin] = useState(() => {
+    try {
+      return readSession()?.user.kind === 'admin'
+    } catch {
+      return false
+    }
+  })
+  const [tab, setTab] = useState<'credits' | 'runs'>('credits')
+  const creditsView = tab === 'credits' || !isAdmin
+  const goRecharge = onRecharge || (() => { window.location.hash = '#/recharge' })
+  const goCreate = onQuickCreate || (() => { window.location.hash = '#/agents' })
+
+  return (
+    <div className="runs-page">
+      <PageHead
+        kicker={creditsView ? 'Credits · 积分账本' : 'Runs · 工作流执行记录'}
+        title={creditsView ? '积分记录' : '工作流运行'}
+        desc={creditsView
+          ? '每一次扣费与充值都在这里：扣了多少、扣在哪个动作上、结余多少。'
+          : '每次工作流执行都以真实模型调用为单位记录：哪个节点、多久、返回了什么、在哪一步失败；每条都写着属于哪条作品的第几版。'}
+      />
+
+      {isAdmin ? (
+        <div className="runs-tabs" role="tablist" aria-label="记录类型">
+          <button
+            type="button"
+            id="runs-tab-credits"
+            role="tab"
+            aria-selected={creditsView}
+            aria-controls="runs-panel-credits"
+            className={'runs-tab' + (creditsView ? ' is-active' : '')}
+            onClick={() => setTab('credits')}
+          >
+            积分明细
+          </button>
+          <button
+            type="button"
+            id="runs-tab-workflows"
+            role="tab"
+            aria-selected={!creditsView}
+            aria-controls="runs-panel-workflows"
+            className={'runs-tab' + (!creditsView ? ' is-active' : '')}
+            onClick={() => setTab('runs')}
+          >
+            工作流运行
+          </button>
+        </div>
+      ) : null}
+
+      <div
+        role={isAdmin ? 'tabpanel' : undefined}
+        id={creditsView ? 'runs-panel-credits' : 'runs-panel-workflows'}
+        aria-labelledby={isAdmin ? (creditsView ? 'runs-tab-credits' : 'runs-tab-workflows') : undefined}
+      >
+        {creditsView ? (
+          <CreditLedger
+            isAdmin={isAdmin}
+            onViewRun={onViewRun}
+            onRecharge={goRecharge}
+            onQuickCreate={goCreate}
+          />
+        ) : (
+          <WorkflowRunsPanel
+            onOpenFlow={onOpenFlow}
+            onResumeRun={onResumeRun}
+            onViewRun={onViewRun}
+            onOpenProject={onOpenProject}
+          />
+        )}
+      </div>
     </div>
+  )
+}
+
+function CreditLedger({
+  isAdmin,
+  onViewRun,
+  onRecharge,
+  onQuickCreate,
+}: {
+  isAdmin: boolean
+  onViewRun?: (flowId: string, runId: string) => void
+  onRecharge: () => void
+  onQuickCreate: () => void
+}) {
+  const [summary, setSummary] = useState<CreditsResponse | null>(null)
+  const [entries, setEntries] = useState<CreditEntry[]>([])
+  const [total, setTotal] = useState(0)
+  const [filter, setFilter] = useState<LedgerFilter>('all')
+  const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [error, setError] = useState('')
+
+  const loadFirst = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const result = await getCredits(LEDGER_PAGE, 0)
+      const rows = Array.isArray(result.ledger) ? result.ledger : []
+      setSummary(result)
+      setEntries(rows)
+      setTotal(Number(result.ledgerTotal ?? rows.length))
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '积分记录读取失败，稍后再试一次')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  // 与运行记录页同一种写法：effect 里同步 setState 会多一轮渲染，推到下一个宏任务再读。
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void loadFirst() }, 0)
+    return () => window.clearTimeout(timer)
+  }, [loadFirst])
+
+  // 加载更多按 offset 追加，并按 id 去重：账本在两次请求之间多了新行时，
+  // 下一页可能带回已经显示过的那一条，不能让同一笔钱出现两次。
+  const loadMore = async () => {
+    if (loadingMore || entries.length >= total) return
+    setLoadingMore(true)
+    setError('')
+    try {
+      const result = await listCredits(entries.length, LEDGER_PAGE)
+      const rows = Array.isArray(result.ledger) ? result.ledger : []
+      setEntries((prev) => {
+        const seen = new Set(prev.map((entry) => entry.id))
+        return [...prev, ...rows.filter((entry) => !seen.has(entry.id))]
+      })
+      setTotal(Number(result.ledgerTotal ?? Math.max(total, entries.length + rows.length)))
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '积分记录读取失败，稍后再试一次')
+    } finally {
+      setLoadingMore(false)
+    }
+  }
+
+  const visible = filter === 'all' ? entries : entries.filter((entry) => ledgerBucket(entry) === filter)
+  const hasMore = entries.length < total
+
+  return (
+    <>
+      <section className="runs-credit-summary" aria-label="积分概览">
+        <div className="runs-credit-block">
+          <span className="runs-credit-label">当前余额</span>
+          <span className="runs-credit-number">
+            <strong>{fmtNumber(summary?.balance)}</strong>
+            <em>{summary?.unit || '积分'}</em>
+          </span>
+        </div>
+        <div className="runs-credit-block is-spend">
+          <span className="runs-credit-label">本月消耗</span>
+          <span className="runs-credit-number">
+            <strong>{fmtNumber(summary?.spend?.total)}</strong>
+            <em>{summary?.spend?.month ? summary.spend.month + ' 月' : '积分'}</em>
+          </span>
+        </div>
+        <div className="runs-credit-actions">
+          <button type="button" className="vq-button vq-button--primary vq-button--sm" onClick={onRecharge}>
+            去充值
+            <ArrowRight size={13} />
+          </button>
+        </div>
+      </section>
+
+      <div className="runs-ledger-filters" role="group" aria-label="按流水类型筛选">
+        {LEDGER_FILTERS.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            aria-pressed={filter === item.id}
+            className={'runs-ledger-filter' + (filter === item.id ? ' is-active' : '')}
+            onClick={() => setFilter(item.id)}
+          >
+            {item.label}
+          </button>
+        ))}
+        <button
+          type="button"
+          className="vq-button vq-button--ghost vq-button--sm runs-ledger-refresh"
+          onClick={() => void loadFirst()}
+          disabled={loading}
+        >
+          <RefreshCw size={13} />
+          刷新
+        </button>
+      </div>
+
+      {loading ? <p className="runs-note">读取积分记录…</p> : null}
+      {error ? <p className="runs-note is-error">{error}</p> : null}
+
+      {!loading && !error && !entries.length ? (
+        <div className="runs-empty">
+          <Coins size={18} strokeWidth={1.5} />
+          <strong>还没有积分记录</strong>
+          <span>生成一次就会有记录：出图、出视频、检索或运行工作流，扣了多少都会写在这里。</span>
+          <button type="button" className="vq-button vq-button--ghost vq-button--sm" onClick={onQuickCreate}>
+            去快捷创作
+            <ArrowRight size={13} />
+          </button>
+        </div>
+      ) : null}
+
+      {!loading && entries.length && !visible.length ? (
+        <div className="runs-empty">
+          <strong>这个筛选下暂时没有记录</strong>
+          <span>加载更多只会接着往后读；先看全部，或者换一个类型。</span>
+          <button type="button" className="vq-button vq-button--ghost vq-button--sm" onClick={() => setFilter('all')}>
+            看全部流水
+          </button>
+        </div>
+      ) : null}
+
+      {visible.length ? (
+        <>
+          <div className="runs-ledger-head" aria-hidden="true">
+            <span>时间</span>
+            <span>动作与说明</span>
+            <span>增减</span>
+            <span>结余</span>
+          </div>
+          <ol className="runs-ledger">
+            {visible.map((entry) => {
+              const plus = entry.delta > 0
+              const linkable = Boolean(isAdmin && entry.runId && entry.flowId && onViewRun)
+              return (
+                <li className="runs-ledger-item" key={entry.id}>
+                  <time
+                    className="runs-ledger-time"
+                    dateTime={entry.createdAt}
+                    title={fmtFullTime(entry.createdAt)}
+                  >
+                    {fmtTime(entry.createdAt)}
+                  </time>
+                  <div className="runs-ledger-main">
+                    <span className="runs-ledger-action">{ledgerAction(entry, isAdmin)}</span>
+                    {ledgerDescription(entry, isAdmin) !== ledgerAction(entry, isAdmin) ? (
+                      <span className="runs-ledger-desc">{ledgerDescription(entry, isAdmin)}</span>
+                    ) : null}
+                    {isAdmin && (entry.nodeLabel || entry.flowName) ? (
+                      <span className="runs-ledger-where">
+                        {entry.nodeLabel ? <span>节点 · {entry.nodeLabel}</span> : null}
+                        {entry.flowName ? <span>流程 · {entry.flowName}</span> : null}
+                      </span>
+                    ) : null}
+                    {linkable ? (
+                      <button
+                        type="button"
+                        className="runs-ledger-link"
+                        onClick={() => onViewRun?.(entry.flowId || '', entry.runId || '')}
+                      >
+                        查看这次运行
+                        <ArrowRight size={12} />
+                      </button>
+                    ) : null}
+                  </div>
+                  <span className={'runs-ledger-delta' + (plus ? ' is-plus' : '')}>
+                    {plus ? '+' : ''}{entry.delta.toLocaleString('zh-CN')}
+                  </span>
+                  <span className="runs-ledger-balance">
+                    <i>结余</i>
+                    {fmtNumber(entry.balance)}
+                  </span>
+                </li>
+              )
+            })}
+          </ol>
+        </>
+      ) : null}
+
+      {entries.length ? (
+        <div className="runs-ledger-more">
+          <span>共 {fmtNumber(total)} 条，已显示 {entries.length} 条</span>
+          {hasMore ? (
+            <button
+              type="button"
+              className="vq-button vq-button--ghost vq-button--sm"
+              onClick={() => void loadMore()}
+              disabled={loadingMore}
+            >
+              {loadingMore ? <Loader2 size={13} className="vq-spin" /> : null}
+              {loadingMore ? '加载中…' : '加载更多'}
+            </button>
+          ) : (
+            <span className="runs-ledger-end">没有更多了</span>
+          )}
+        </div>
+      ) : null}
+    </>
   )
 }

@@ -23,20 +23,34 @@ function toolBlock() {
   return source.slice(start, rest < 0 ? undefined : rest)
 }
 
-// r311 起工具区多了「我的资产」：它是复刻的地基，所以排在最前，逻辑仍是一件工具占一项。
-test('工具区：我的资产 / 智能体 / 工作流 / 无限画布 / 视觉评审 / 运行记录', () => {
+// r313：工具区只剩四项能力；「我的资产」提到工作台之下，「工作流」收成管理员 beta 单独一项。
+// 名字仍然互不共用：工作流是工作流，无限画布是无限画布。
+test('工具区：快捷创作 / 无限画布 / 视觉评审 / 积分记录；资产挂工作台，工作流单独一项', () => {
   const block = toolBlock()
   const ids = [...block.matchAll(/\{\s*id:\s*'([a-z-]+)'/g)].map((m) => m[1])
-  assert.deepEqual(ids, ['assets', 'agents', 'canvas', 'board', 'review', 'runs'], '工具区变了：工作流与无限画布要各占一项')
-  const canvas = block.slice(block.indexOf("id: 'canvas'"), block.indexOf("id: 'board'"))
+  assert.deepEqual(ids, ['agents', 'board', 'review', 'runs'], '工具区变了：工作流与无限画布要各占一项')
   const board = block.slice(block.indexOf("id: 'board'"), block.indexOf("id: 'review'"))
-  assert.match(canvas, /label: '工作流'/, '节点编排那一项叫「工作流」')
-  assert.doesNotMatch(canvas, /label: '画布'/, '「画布」这个名字不许再留给工作流')
   assert.match(board, /label: '无限画布'/, '外部那张画布叫「无限画布」')
+
+  const source = read('src', 'nav.ts')
+  // 我的资产挂在工作台之下（r313 用户要求）：不再占工具区的一项
+  assert.match(source, /export const ASSET_NAV: NavEntry = \{/, 'nav.ts 里缺少 ASSET_NAV')
+  const asset = source.slice(source.indexOf('export const ASSET_NAV'), source.indexOf('/** 工具区'))
+  assert.match(asset, /id: 'assets'/, 'ASSET_NAV 要指向 my assets 页')
+  assert.match(asset, /label: '我的资产'/)
+  // 工作流是管理员 beta：单独一项，带 Beta 标，服务端闸门在 server/workflow-beta.mjs
+  const workflow = source.slice(source.indexOf('export const WORKFLOW_NAV'), source.indexOf('/** 底部固定项'))
+  assert.match(workflow, /id: 'canvas'/, '工作流仍然占一个 page id')
+  assert.match(workflow, /label: '工作流'/)
+  assert.match(workflow, /chip: 'Beta'/, '工作流要带 Beta 标')
+  assert.doesNotMatch(workflow, /label: '画布'/, '「画布」这个名字不许再留给工作流')
+
   // 页面名与导航是同一套说法：面包屑、命令面板都读 pageLabels
   const labels = read('src', 'domain', 'types.ts')
   assert.match(labels, /canvas: '工作流'/, 'pageLabels 里工作流要叫工作流')
   assert.match(labels, /board: '无限画布'/, 'pageLabels 里无限画布要叫无限画布')
+  assert.match(labels, /runs: '积分记录'/, '运行记录已改成积分记录（r313）')
+  assert.match(labels, /projects: '我的作品'/, '作品已改叫我的作品（r313）')
 })
 
 test('路由：两条地址各写各的，旧画布项目地址改写成无限画布', () => {

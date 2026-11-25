@@ -8,6 +8,7 @@ import path from 'node:path'
 import { sendJson, readBody } from './_shared.mjs'
 import { flowBrief, projectBrief } from '../project-briefs.mjs'
 import { currentUser, isAdmin } from '../auth.mjs'
+import { denyWorkflowBeta, workflowBetaAllowed } from '../workflow-beta.mjs'
 import { normalizeShotNo, planRunAttach, runShotImages, shotFrameBlock } from '../project-shots.mjs'
 import { config } from '../config.mjs'
 import { createTemplateFromProject, getTemplate, listTemplates, reuseTemplate } from '../templates.mjs'
@@ -178,6 +179,41 @@ const COMPARE_PRINT = /^\/print\/projects\/([\w-]+)\/versions\/compare$/
 // 详情 / 列表里的 project 只有一份形状（server/project-briefs.mjs）：
 // 不带原始脚本、不带分享 token。工作流归作品那条路（v0.9.29）回执也用同一份。
 
+// 工作流 beta（r313）：工作流是从作品里长出来的能力，先把作品侧收住。
+// 读：当这条作品从来没挂过工作流——flowBrief 置空、版本行上的工作流指针抹掉，库里的历史值不删；
+// 写：拒绝替普通账号新建或绑定工作流。作品自己的脚本、分镜、评审与交付都不依赖工作流，照旧可用。
+const workflowHidden = (user) => !workflowBetaAllowed(user)
+
+/** 作品简报去掉工作流指针：flowId 与版本行上的 flowId 置空（历史值仍在库里，只是不再下发）。 */
+function briefWithoutWorkflow(brief) {
+  const versions = Array.isArray(brief?.versions) ? brief.versions : []
+  return {
+    ...brief,
+    flowId: '',
+    versions: versions.map((entry) => ({ ...entry, flowId: '' })),
+  }
+}
+
+/**
+ * 详情里的一行版本：工作流相关的指针、可用状态、节点数与工作流名一并抹掉；脚本快照照旧保留。
+ * 名字换成中性的「第 N 版」——归档名就是当时那块工作流的名字，不能从这里漏出去。
+ */
+function versionWithoutWorkflow(entry) {
+  const { nodeList: _nodeList, ...rest } = entry || {}
+  return { ...rest, flowId: '', name: '第 ' + Number(entry?.n || 0) + ' 版', available: false, nodes: 0 }
+}
+
+/** 运行摘要去掉工作流指针与节点输出：普通账号只看得到「跑过几次、成没成、花了多少」。 */
+function runWithoutWorkflow(run) {
+  const { flowId: _flowId, flowName: _flowName, nodes: _nodes, output: _output, ...rest } = run || {}
+  return rest
+}
+
+/** 脚本保存的回执里会带「同步到了哪块工作流」：普通账号只留同步结论，不给 flowId。 */
+function canvasWithoutWorkflow(canvas) {
+  return canvas ? { ...canvas, flowId: '' } : canvas
+}
+
 // 列表只给卡片要用的那几项：模板标题、流程名、评审计数
 function templateBrief(template) {
   if (!template) return null
@@ -218,10 +254,14 @@ function templateDetail(template) {
  * 运行归集要跨版本：当前版 + 归档版的工作流一起查，开新版之后旧版的运行记录仍在作品里。
  */
 async function projectDetailView(project, user, { snapshots = false } = {}) {
+  // 工作流 beta（r313）：普通账号的详情里没有工作流——flowBrief 给 null、版本行的指针与节点数抹掉。
+  // 运行归集仍按库里真实的 flowId 算（花费与次数是作品自己的账），只是工作流本身不再露出来。
+  const hideFlow = workflowHidden(user)
   const projectFlows = [project.flowId, ...project.versions.map((entry) => entry.flowId)].filter(Boolean)
   const [template, flow, reviews, reviewCost, versionCounts, runData, acks] = await Promise.all([
     project.templateId ? getTemplate(project.templateId, user) : null,
-    project.flowId ? getFlow(project.flowId, user) : null,
+    // 普通账号连工作流都不读：读侧抹字段是最后一道，这里先不取，少一条可能漏出去的路
+    !hideFlow && project.flowId ? getFlow(project.flowId, user) : null,
     listReviews({ projectId: project.id, limit: 20 }, user),
     // 花费要算全部评审，不能只按上面那 20 条摘要：翻过页的老评审也是花过的钱
     reviewSpend(project.id, user),
@@ -233,7 +273,7 @@ async function projectDetailView(project, user, { snapshots = false } = {}) {
   // 页面只要「这一版几段脚本」；交付稿要跟上一版对比，才把快照与节点一起带上（snapshots）。
   // 「省了几版」那一层始终留在服务端：节点数组只用来算版本行的一句话，不塞进响应。
   const versionRecords = await Promise.all(project.versions.map(async (entry) => {
-    const archived = entry.flowId ? await getFlow(entry.flowId, user) : null
+    const archived = !hideFlow && entry.flowId ? await getFlow(entry.flowId, user) : null
     const snapshot = entry.script || null
     return {
       n: entry.n,
@@ -264,8 +304,14 @@ async function projectDetailView(project, user, { snapshots = false } = {}) {
   const currentScript = scriptView(project, template)
   const versionRowsForDiff = [
     ...versionRecords.map((item) => ({ n: item.n, nodes: item.nodes, script: item.script, base: item.basedOn })),
-    ...(project.flowId && project.version > 0
-      ? [{ n: project.version, nodes: flow?.nodes || null, script: currentScript, base: project.basedOn || 0 }]
+    // 普通账号只比脚本：节点给 null，一句话里就不会拼出「工作流多 1 个」这种字眼（口径仍是同一份实现）
+    ...(project.version > 0 && (hideFlow || project.flowId)
+      ? [{
+          n: project.version,
+          nodes: hideFlow ? null : (flow?.nodes || null),
+          script: currentScript,
+          base: project.basedOn || 0,
+        }]
       : []),
   ]
   const versionChanges = versionChangesOf(versionRowsForDiff)
@@ -282,12 +328,14 @@ async function projectDetailView(project, user, { snapshots = false } = {}) {
   // 工作流被删掉的运行：只要当时留下过快照，就还能只读回看。
   // 这里只 stat 文件、不把快照塞进列表；available 仍表示「现在能不能打开工作流」。
   const runs = await Promise.all(runData.items.map(async (run) => {
-    const available = liveFlows.has(run.flowId)
+    const available = !hideFlow && liveFlows.has(run.flowId)
     return {
-      ...run,
+      // 普通账号：历史运行只留「跑过几次、成没成、花了多少」，工作流指针与节点输出一概不给
+      ...(hideFlow ? runWithoutWorkflow(run) : run),
       version: versionOfFlow.get(run.flowId) || 0,
       available,
-      hasSnapshot: available ? false : await hasRunGraph(run.id),
+      // 快照里是当时的节点与输出：看不到工作流的人也不该被指过去
+      hasSnapshot: !hideFlow && !available ? await hasRunGraph(run.id) : false,
     }
   }))
   const runCounts = {}
@@ -306,7 +354,7 @@ async function projectDetailView(project, user, { snapshots = false } = {}) {
     runs: { count: Number(runData.total) || 0, credits: runCredits },
     lastAt: [reviewCost.lastAt, runs[0]?.startedAt].filter(Boolean).sort().pop() || '',
   }
-  const flowView = flowBrief(flow)
+  const flowView = hideFlow ? null : flowBrief(flow)
   // 人工复核：这条作品名下的拍板记录，加上「管当前这一版最近一次评审」的那条。
   // 状态胶囊、下一步、交付稿与两张纸都读同一处判断——人拍过板就不再拿模型的「需人工确认」当结论。
   const decisions = (await listDecisions(user))
@@ -351,8 +399,9 @@ async function projectDetailView(project, user, { snapshots = false } = {}) {
         : delivery,
     ),
   )
+  const projectBody = { ...projectView, deliveries: projectDeliveries }
   return {
-    project: { ...projectView, deliveries: projectDeliveries },
+    project: hideFlow ? briefWithoutWorkflow(projectBody) : projectBody,
     // 作品页的分享面板读这里：列表接口不返回 token
     share,
     // 沉淀出去的模板：作品页写「已存成模板 N 条」，刷新还在
@@ -370,7 +419,7 @@ async function projectDetailView(project, user, { snapshots = false } = {}) {
     decision,
     // 当前这一版看过了没有：对不上就是 null（评出新结论或开了新版自动作废）
     ack,
-    versions,
+    versions: hideFlow ? versions.map(versionWithoutWorkflow) : versions,
     versionCounts,
     // 版本行的一句话（v0.9.114）：键是版次，值写「比上一版改了什么」；比不了就没有这一项
     versionChanges,
@@ -463,7 +512,7 @@ async function buildProjectDeliveryArchive(project, user, tzOffsetMinutes) {
   let compareSheetPair = null
   if (project.version >= 2) {
     const baseNo = project.version - 1
-    const built = await versionCompareView(project, user, baseNo, project.version)
+    const built = await versionCompareView(project, user, baseNo, project.version, { hideWorkflow: workflowHidden(user) })
     if (built.ok) {
       compareSheet = compareSheetHtml({
         project,
@@ -688,7 +737,7 @@ export function createProjectsRouter() {
           })
           return true
         }
-        const built = await versionCompareView(printable, user, baseNo, targetNo)
+        const built = await versionCompareView(printable, user, baseNo, targetNo, { hideWorkflow: workflowHidden(user) })
         if (!built.ok) {
           sendPrintNotice(res, 404, {
             title: '有一版没有归档记录',
@@ -776,7 +825,9 @@ export function createProjectsRouter() {
           q: url.searchParams.get('q') || '',
           state: url.searchParams.get('state') || 'all',
         })
-        sendJson(res, 200, { ok: true, ...listed })
+        // 工作流 beta（r313）：列表里同样没有工作流指针（flowId 与版本行），作品自己的字段一个不少。
+        const okItems = workflowHidden(user) ? listed.items.map(briefWithoutWorkflow) : listed.items
+        sendJson(res, 200, { ok: true, ...listed, items: okItems })
         return true
       }
 
@@ -785,6 +836,9 @@ export function createProjectsRouter() {
         // 从工作流建作品（v0.9.29）：空白工作流跑出来的东西也该能变成一条作品。
         // 这条路没有模板，脚本在作品页现写，工作流已经在了所以一出生就是 v1。
         if (String(body.flowId || '')) {
+          // 工作流 beta（r313）：从工作流建作品的前提是「手里有一块工作流」，普通账号没有这条路。
+          // 判断排在建作品 / 读工作流之前，不留下建了一半的记录。
+          if (workflowHidden(user)) return denyWorkflowBeta(res)
           const result = await createProjectFromCanvas({
             flowId: String(body.flowId),
             title: String(body.title || ''),
@@ -823,6 +877,8 @@ export function createProjectsRouter() {
       // 工作流归作品（v0.9.29）：把一块已经跑过的工作流接到这条作品上。
       // 一接上，这块工作流以前的运行与之后的评审就都落进这条作品——运行记录那边也能「归到作品」。
       if (canvasPath && req.method === 'PUT') {
+        // 工作流 beta（r313）：绑定 Project.flowId 等于「用工作流」，非管理员一律拒，且排在读作品之前。
+        if (workflowHidden(user)) return denyWorkflowBeta(res)
         const body = await readBody(req)
         const result = await adoptCanvasForProject({ projectId: canvasPath[1], flowId: String(body.flowId || ''), user })
         sendJson(res, result.status, result.body)
@@ -831,6 +887,8 @@ export function createProjectsRouter() {
 
       // 作品页开工作流：第一张工作流用这条作品现在的脚本生成，不再绕到模板库的 apply
       if (canvasPath && req.method === 'POST') {
+        // 工作流 beta（r313）：这条入口会替作品建一块新工作流，非管理员不许再新建（排在读作品 / 写盘之前）。
+        if (workflowHidden(user)) return denyWorkflowBeta(res)
         const project = await getProject(canvasPath[1], user)
         if (!project) {
           sendJson(res, 404, { error: '作品不存在或已被删除' })
@@ -893,7 +951,14 @@ export function createProjectsRouter() {
           return true
         }
         const canvas = await syncCanvasScript(saved, template, script, prevHook, user)
-        sendJson(res, 200, { ok: true, project: projectBrief(saved), script: scriptView(saved, template), canvas })
+        // 工作流 beta（r313）：同步照旧做（脚本是核心功能），但回执里不带 flowId。
+        const hideFlow = workflowHidden(user)
+        sendJson(res, 200, {
+          ok: true,
+          project: hideFlow ? briefWithoutWorkflow(projectBrief(saved)) : projectBrief(saved),
+          script: scriptView(saved, template),
+          canvas: hideFlow ? canvasWithoutWorkflow(canvas) : canvas,
+        })
         return true
       }
 
@@ -915,7 +980,13 @@ export function createProjectsRouter() {
         const canvas = view
           ? await syncCanvasScript(cleared, template, view, prevHook, user)
           : { synced: false, flowId: cleared.flowId || '', reason: 'no-script' }
-        sendJson(res, 200, { ok: true, project: projectBrief(cleared), script: view, canvas })
+        const hideFlow = workflowHidden(user)
+        sendJson(res, 200, {
+          ok: true,
+          project: hideFlow ? briefWithoutWorkflow(projectBrief(cleared)) : projectBrief(cleared),
+          script: view,
+          canvas: hideFlow ? canvasWithoutWorkflow(canvas) : canvas,
+        })
         return true
       }
 
@@ -1035,12 +1106,17 @@ export function createProjectsRouter() {
       // 开一版新的：复制当前工作流（节点与连线都在），旧工作流归档成 vN，作品指向新工作流
       const versionPath = pathname.match(VERSIONS)
       if (versionPath && req.method === 'POST') {
+        // 工作流 beta（r313）：开新版是作品的核心动作，普通账号照常允许——只是不再顺带复制工作流
+        // （hideFlow 分支：作品原来指着的那块原样留在库里、不再下发，新一版没有工作流指针）。
+        // 判权在这一行定死，下面读盘、建工作流之前都用同一个口径。
+        const hideFlow = workflowHidden(user)
         const project = await getProject(versionPath[1], user)
         if (!project) {
           sendJson(res, 404, { error: '作品不存在或已被删除' })
           return true
         }
-        if (!project.flowId) {
+        // 没有工作流也能开版（普通账号）：只进版次；管理员那条路仍要求先有工作流可复制
+        if (!hideFlow && !project.flowId) {
           sendJson(res, 409, { error: '这条作品还没有工作流：先把第一版工作流开出来，再往上开新版本', code: 'NO_CANVAS' })
           return true
         }
@@ -1051,8 +1127,9 @@ export function createProjectsRouter() {
           })
           return true
         }
-        const current = await getFlow(project.flowId, user)
-        if (!current) {
+        // 普通账号不读工作流：判权之后就不再碰它，节点一个都不取
+        const current = hideFlow ? null : await getFlow(project.flowId, user)
+        if (!hideFlow && !current) {
           sendJson(res, 409, { error: '这条作品绑定的工作流不见了；先重新开一张工作流，再版本化', code: 'FLOW_MISSING' })
           return true
         }
@@ -1081,20 +1158,47 @@ export function createProjectsRouter() {
           }
           if (!source.script) {
             sendJson(res, 409, {
-              error: 'v' + from + ' 开版时没有存脚本快照：没法整版回到当时，只能打开那一版工作流手动改',
+              error: hideFlow
+                ? 'v' + from + ' 开版时没有存脚本快照：没法整版回到当时，只能在那一版上重写'
+                : 'v' + from + ' 开版时没有存脚本快照：没法整版回到当时，只能打开那一版工作流手动改',
               code: 'VERSION_SCRIPT_MISSING',
             })
             return true
           }
-          sourceFlow = await getFlow(source.flowId, user)
-          if (!sourceFlow) {
-            sendJson(res, 409, {
-              error: 'v' + from + ' 的工作流已经被删除：没法以它为底再开一版',
-              code: 'VERSION_FLOW_MISSING',
-            })
-            return true
+          if (!hideFlow) {
+            sourceFlow = await getFlow(source.flowId, user)
+            if (!sourceFlow) {
+              sendJson(res, 409, {
+                error: 'v' + from + ' 的工作流已经被删除：没法以它为底再开一版',
+                code: 'VERSION_FLOW_MISSING',
+              })
+              return true
+            }
           }
           nextScript = source.script
+        }
+        // 归档这一版的脚本：脚本只有一份（作品级），开版时存一份快照，历史版本当时说了什么还能查
+        const template = project.templateId ? await getTemplate(project.templateId, user) : null
+        if (hideFlow) {
+          // 普通账号：只归档脚本快照、版次 +1，一块新工作流都不建，库里旧数据一个字节不动。
+          // 版本行的名字也不写工作流名：普通账号那边看不到工作流，别从版本行漏出去。
+          const updated = await archiveProjectVersion(project.id, {
+            prevName: '第 ' + project.version + ' 版',
+            script: scriptView(project, template),
+            ...(nextScript ? { nextScript } : {}),
+            basedOn: from,
+            keepFlow: true,
+          }, user)
+          if (!updated) {
+            sendJson(res, 409, { error: '开新版本没有成功：这一版没有归档，作品仍然停在原来的版本', code: 'VERSION_FAILED' })
+            return true
+          }
+          sendJson(res, 201, {
+            ok: true,
+            project: briefWithoutWorkflow(projectBrief(updated)),
+            ...(from ? { basedOn: from } : {}),
+          })
+          return true
         }
         const copy = await createFlow(sourceFlow ? {
           name: ((project.title || sourceFlow.name).slice(0, 40) + ' v' + nextNo + ' · 以 v' + from + ' 为底').slice(0, 60),
@@ -1107,8 +1211,6 @@ export function createProjectsRouter() {
           nodes: current.nodes,
           edges: current.edges,
         }, user)
-        // 归档这一版的脚本：脚本只有一份（作品级），开版时存一份快照，历史版本当时说了什么还能查
-        const template = project.templateId ? await getTemplate(project.templateId, user) : null
         const updated = await archiveProjectVersion(project.id, {
           flowId: copy.id,
           prevName: current.name,
@@ -1148,7 +1250,7 @@ export function createProjectsRouter() {
           sendJson(res, 400, { error: '两版对照要选两个不同的版本', code: 'VERSION_COMPARE_SAME' })
           return true
         }
-        const built = await versionCompareView(project, user, baseNo, targetNo)
+        const built = await versionCompareView(project, user, baseNo, targetNo, { hideWorkflow: workflowHidden(user) })
         if (!built.ok) {
           sendJson(res, 404, { error: '这条作品没有 v' + built.missing + ' 的归档记录', code: 'VERSION_COMPARE_MISSING' })
           return true
@@ -1194,7 +1296,7 @@ export function createProjectsRouter() {
           ok: true,
           n,
           current: false,
-          name: archived.name,
+          name: workflowHidden(user) ? '第 ' + n + ' 版' : archived.name,
           archivedAt: archived.archivedAt,
           script: archived.script || null,
           reason: archived.script ? '' : '这一版开版时还没有脚本快照：当时的口播找不回来了',
@@ -2220,7 +2322,11 @@ export function createProjectsRouter() {
           sendJson(res, 409, { error: message, code: result.code || 'RESTORE_CONFLICT' })
           return true
         }
-        sendJson(res, 200, { ok: true, project: result.project, restored: result.restored })
+        sendJson(res, 200, {
+          ok: true,
+          project: workflowHidden(user) ? briefWithoutWorkflow(result.project) : result.project,
+          restored: result.restored,
+        })
         return true
       }
 
@@ -2252,6 +2358,9 @@ export function createProjectsRouter() {
 
       if (item && req.method === 'PATCH') {
         const body = await readBody(req)
+        // 工作流 beta（r313）：绑定 project.flowId 等于把作品挂到一块工作流上，普通账号一律拒；
+        // 标题 / 状态 / 参考资产这些日常字段照旧，不误伤作品的常规操作。
+        if ('flowId' in body && workflowHidden(user)) return denyWorkflowBeta(res)
         if ('flowId' in body && body.flowId) {
           const flow = await getFlow(String(body.flowId), user)
           if (!flow) {
@@ -2298,7 +2407,7 @@ export function createProjectsRouter() {
           sendJson(res, 404, { error: '作品不存在或已被删除' })
           return true
         }
-        sendJson(res, 200, { ok: true, project })
+        sendJson(res, 200, { ok: true, project: workflowHidden(user) ? briefWithoutWorkflow(project) : project })
         return true
       }
 

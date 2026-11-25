@@ -13,6 +13,9 @@ import path from 'node:path'
 import { Readable } from 'node:stream'
 
 process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'vq-version-compare-'))
+// 工作流 beta（r313）只对管理员开放。这一组测的是**工作流级别**的版本行为（节点级对照、以旧版为底复制工作流），
+// 属于管理员那条路，所以显式对全部账号打开；普通账号「开新版不复制工作流」另在 test/workflow-beta.test.mjs 里测。
+process.env.VQ_WORKFLOW_BETA = 'all'
 process.env.VQ_KEY_SECRET = 'test-secret-version-compare'
 
 const projects = await import('../server/projects.mjs')

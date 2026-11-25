@@ -319,6 +319,429 @@
 }
 
 
+/* ---------- 能力介绍 + 作品墙（r313）
+   入口先说「平台能做什么」，作品墙只放账号里的真实封面与首帧；
+   下一步主卡后移，先介绍再给动作，避免首屏只剩一张待办卡。 ---------- */
+
+.ov-capabilities {
+  margin-top: var(--space-2);
+}
+
+.ov-section-lead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-6);
+  margin-bottom: var(--space-4);
+}
+
+.ov-section-copy {
+  min-width: 0;
+  max-width: 72ch;
+}
+
+.ov-eyebrow {
+  display: block;
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  letter-spacing: 0.08em;
+  line-height: 1.5;
+}
+
+.ov-section-copy h2 {
+  margin: var(--space-1) 0 0;
+  color: var(--ink);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-medium);
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+
+.ov-section-sub {
+  max-width: 68ch;
+  margin: var(--space-2) 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.ov-cap-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.ov-cap {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 264px;
+  padding: var(--space-6);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  transition: border-color var(--dur-1) var(--ease-out), box-shadow var(--dur-2) var(--ease-out);
+}
+
+.ov-cap:hover {
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-card);
+}
+
+.ov-cap-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+
+.ov-cap-index {
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  letter-spacing: 0.08em;
+}
+
+.ov-cap-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.ov-cap-kicker {
+  color: var(--faint);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.ov-cap h3 {
+  margin: var(--space-1) 0 0;
+  color: var(--ink);
+  font-size: 20px;
+  font-weight: var(--weight-medium);
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+}
+
+.ov-cap-plus {
+  margin: 0 var(--space-1);
+  color: var(--faint);
+  font-weight: var(--weight-normal);
+}
+
+.ov-cap p {
+  margin: var(--space-2) 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.ov-cap-foot {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: auto;
+  padding-top: var(--space-6);
+}
+
+.ov-cap-note {
+  min-width: 0;
+  color: var(--faint);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.ov-cap-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-1) var(--space-3);
+}
+
+.ov-cap-action {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ov-cap-action:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.ov-cap-action:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+.ov-wall {
+  margin-top: var(--space-12);
+}
+
+.ov-wall .vq-link {
+  flex: none;
+  white-space: nowrap;
+}
+
+.ov-wall-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.ov-wall-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease-out), box-shadow var(--dur-2) var(--ease-out);
+}
+
+.ov-wall-card:hover {
+  border-color: var(--ink);
+  box-shadow: var(--shadow-card);
+}
+
+.ov-wall-card:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.ov-wall-media {
+  position: relative;
+  display: block;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  background: var(--line-faint);
+}
+
+.ov-wall-media img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 35%;
+  transition: transform var(--dur-3) var(--ease-out);
+}
+
+.ov-wall-card:hover .ov-wall-media img {
+  transform: scale(1.02);
+}
+
+.ov-wall-kind {
+  position: absolute;
+  top: var(--space-3);
+  left: var(--space-3);
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.ov-wall-caption {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-3) var(--space-4) var(--space-4);
+}
+
+.ov-wall-caption strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: var(--weight-medium);
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ov-wall-caption span {
+  overflow: hidden;
+  color: var(--faint);
+  font-size: 14px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ov-wall-loading {
+  margin: 0;
+  padding: var(--space-6);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--faint);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.ov-wall-empty {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.ov-wall-empty-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--ink);
+}
+
+.ov-wall-empty-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ov-wall-empty-copy strong {
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: var(--weight-medium);
+  line-height: 1.5;
+}
+
+.ov-wall-empty-copy p {
+  max-width: 68ch;
+  margin: var(--space-1) 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.ov-wall-empty > .vq-button {
+  flex: none;
+}
+
+.ov-next-block {
+  margin-top: var(--space-12);
+}
+
+@media (max-width: 1180px) {
+  .ov-cap-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ov-wall-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 820px) {
+  .ov-wall-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .ov-section-lead {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
+
+  .ov-cap-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ov-cap {
+    min-height: 0;
+    padding: var(--space-4);
+  }
+
+  .ov-cap-top {
+    margin-bottom: var(--space-4);
+  }
+
+  .ov-cap-foot {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding-top: var(--space-4);
+  }
+
+  .ov-cap-actions {
+    justify-content: flex-start;
+  }
+
+  .ov-wall {
+    margin-top: var(--space-8);
+  }
+
+  .ov-wall-grid {
+    gap: var(--space-2);
+  }
+
+  .ov-wall-kind {
+    top: var(--space-2);
+    left: var(--space-2);
+  }
+
+  .ov-wall-caption {
+    padding: var(--space-2) var(--space-3) var(--space-3);
+  }
+
+  .ov-wall-caption strong {
+    font-size: 15px;
+  }
+
+  .ov-wall-empty {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: var(--space-2) var(--space-3);
+  }
+
+  .ov-wall-empty > .vq-button {
+    grid-column: 1 / -1;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .ov-next-block {
+    margin-top: var(--space-8);
+  }
+}
+
 /* ---------- 工作台「下一步」主卡（2026-11-12）
    整页只有一个主 CTA：继续最近改动的那块画布；没有画布就从一条爆款开始。
    统计不再是三张数字卡，压进主卡右侧当背景信息。 ---------- */
@@ -1661,9 +2084,11 @@
   .vq-page--overview .vq-next-label { font-size: 14px; }
   .vq-page--overview .vq-next-stats dt { font-size: 14px; }
   .vq-page--overview .vq-next-cta { height: 40px; }
+  .vq-page--overview .ov-cap-action { min-height: 40px; }
 }
 
 @media (max-width: 560px) {
   .vq-page--overview { --btn-h: 44px; --btn-h-sm: 44px; }
   .vq-page--overview .vq-next-cta { height: 44px; }
+  .vq-page--overview .ov-cap-action { min-height: 44px; }
 }

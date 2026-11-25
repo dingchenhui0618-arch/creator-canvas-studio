@@ -20,6 +20,16 @@ export type CreditEntry = {
   ref: string
   // 说明列：服务端从 meta 里取的用户可读说明（例如这条复刻的标题）
   label?: string
+  /** 账本 meta 原样解析：label 之外还可能带 prompt / conversationId / failed 等排查信息 */
+  meta?: Record<string, unknown> | null
+  /** run:<runId>:<nodeId> 解析出来的运行与节点；解析不到就是空串，不是猜的 */
+  runId?: string
+  nodeId?: string
+  nodeLabel?: string
+  flowId?: string
+  flowName?: string
+  /** 服务端给的动作中文名（扣费 / 退款 / 充值 / 赠送 / 后台扣减），界面不另抄一份 */
+  kindLabel?: string
   createdAt: string
 }
 
@@ -107,6 +117,9 @@ export type ModelServiceState = {
 
 export const getCredits = (limit = 20, offset = 0) =>
   request<CreditsResponse>('/api/credits?limit=' + limit + '&offset=' + offset)
+
+/** 积分记录页只关心一页流水：参数顺序按页面走（先翻到哪、再取几条）。 */
+export const listCredits = (offset = 0, limit = 20) => getCredits(limit, offset)
 
 export const getModelService = () => request<{ ok: boolean; model: ModelServiceState }>('/api/system/service')
 
@@ -257,6 +270,10 @@ export const CREDIT_KIND_LABEL: Record<string, string> = {
   'chat-refund': '对话退款',
   flow_run: '工作流运行',
   'flow_run-refund': '工作流运行退款',
+  image_gen: '图片生成',
+  'image_gen-refund': '出图失败退款',
+  video_gen: '视频生成',
+  'video_gen-refund': '出视频失败退款',
   recharge: '充值',
   grant: '管理员发放',
   deduct: '管理员扣减',

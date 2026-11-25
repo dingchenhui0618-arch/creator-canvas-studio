@@ -16,6 +16,7 @@ import {
   reviewVersionLabel,
 } from '../domain/review'
 import { reviewNextActionLabel, reviewNextPlan, type ReviewNextAction, type ReviewNextScope } from '../domain/review-next'
+import { useWorkflowEnabled } from '../domain/features'
 import { pickedReadiness, readNotice, reviewReadiness, statusReadOf, templateShelf, templatesReadOf, type ReviewStatusRead, type ReviewTemplatesRead } from '../domain/review-ready'
 import { anchorNumber, evidenceAreaLabel, reviewAnchorBadges, reviewAnchorMarks } from '../domain/review-anchors'
 import type { ReplicaTemplate } from '../domain/radar'
@@ -145,6 +146,8 @@ export default function ReviewPage({
   onOpenTemplate?: (templateId: string) => void
 } = {}) {
   const { internal } = useUiMode()
+  // r313：工作流只对管理员开放 —— 出口里不再给「打开工作流」，文案改说先在作品里改
+  const workflow = useWorkflowEnabled()
   // 从作品页进来时，这次评审的结论会挂在那条作品下；标题只为把话说清楚（读不到就不显示名字）
   const [projectTitle, setProjectTitle] = useState('')
   // 这一版是第几版、有没有接工作流（r251）：底栏要说清「回哪一版」「能不能回工作流改」
@@ -593,7 +596,7 @@ export default function ReviewPage({
 
   // 评完之后往哪走：出口与文案都在 domain/review-next.ts，这里只把真实数字递进去。
   // 「能不能存成模板」那个 true/false 来自服务端（有脚本、有分镜），前端不自己猜。
-  const reviewNext = useMemo(
+  const reviewNextRaw = useMemo(
     () => (result
       ? reviewNextPlan({
           verdict: result.verdict,
@@ -606,6 +609,17 @@ export default function ReviewPage({
       : null),
     [openedId, result, reviewScope],
   )
+
+  // 工作流收起时：出口里去掉「打开工作流」，说明里的「打开工作流重跑」改成在作品里改
+  const reviewNext = useMemo(() => {
+    if (!reviewNextRaw) return null
+    if (workflow) return reviewNextRaw
+    return {
+      ...reviewNextRaw,
+      actions: reviewNextRaw.actions.filter((action) => action !== 'openFlow'),
+      copy: reviewNextRaw.copy.replace('结构要改就打开工作流重跑，', '结构要改就先在作品里改脚本与分镜，'),
+    }
+  }, [reviewNextRaw, workflow])
 
   // 换了一条结论（重评 / 打开另一条记录）：「存成模板」那一下的结果不能跟着带到下一条上
   const reviewKey = result?.reviewId || ''
@@ -773,7 +787,7 @@ export default function ReviewPage({
               className="vq-button vq-button--ghost vq-button--sm"
               onClick={() => uploadInputRef.current?.click()}
               disabled={uploadBusy}
-              title="从电脑里选一张图：只评这一张，不动作品里的工作流"
+              title={workflow ? '从电脑里选一张图：只评这一张，不动作品里的工作流' : '从电脑里选一张图：只评这一张，不动作品里的脚本与分镜'}
             >
               {uploadBusy ? <Loader2 size={13} className="vq-spin" /> : <ImagePlus size={13} />}
               {uploadBusy ? '上传中' : '选图'}
@@ -1063,7 +1077,13 @@ export default function ReviewPage({
                               {row.status.text}
                             </Pill>
                             <span className="review-candidate-go">
-                              {row.hasCanvas ? '评这一版' : row.delivered ? '打开作品' : '先开工作流'}
+                              {row.hasCanvas
+                                ? '评这一版'
+                                : row.delivered
+                                  ? '打开作品'
+                                  : workflow
+                                    ? '先开工作流'
+                                    : '先在作品里出这一版'}
                               <ArrowRight size={13} />
                             </span>
                           </button>
@@ -1092,7 +1112,9 @@ export default function ReviewPage({
                     <p>
                       {projectId
                         ? '把这一版要发的截图贴进来最准；没有截图时模板首帧也能评（那是原片那一帧）。画幅越接近投放尺寸，结论越可靠。'
-                        : '评的是作品的某一版；还没开工作流的作品先开工作流，先有这一版才谈得上能不能发。'}
+                        : workflow
+                          ? '评的是作品的某一版；还没开工作流的作品先开工作流，先有这一版才谈得上能不能发。'
+                          : '评的是作品的某一版；还没出这一版的，先在作品里把这一版的画面做出来，送过来再评。'}
                     </p>
                   </div>
                 </li>

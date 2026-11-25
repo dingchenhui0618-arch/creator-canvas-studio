@@ -17,6 +17,8 @@ import { isolateLeaseDir } from './lease-isolation.mjs'
 
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vq-canvas-queue-visible-'))
 process.env.DATA_DIR = dataDir
+// 工作流 beta（r313）只对管理员开放：这一组测的是工作流本身，显式对全部账号打开，不改变测试意图
+process.env.VQ_WORKFLOW_BETA = 'all'
 process.env.VQ_KEY_SECRET = 'test-secret-canvas-queue-visible'
 process.env.VQ_GATEWAY_TOKEN = 'test-gateway-token'
 process.env.VQ_GATEWAY_OPEN = '1'

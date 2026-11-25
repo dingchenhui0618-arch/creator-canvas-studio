@@ -35,6 +35,8 @@ export function openDb() {
       kind TEXT NOT NULL DEFAULT 'account',
       is_active INTEGER NOT NULL DEFAULT 1,
       credits INTEGER NOT NULL DEFAULT 0,
+      -- 头像版本：换图时改它，/api/auth/me 的 avatarUrl 带 ?v=，浏览器不会拿旧图
+      avatar_version TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL,
       last_login_at TEXT
     );
@@ -86,6 +88,8 @@ export function openDb() {
   ensureColumn(db, 'replicate_jobs', 'label', 'TEXT')
   ensureColumn(db, 'users', 'credits', 'INTEGER NOT NULL DEFAULT 0')
   ensureColumn(db, 'users', 'kind', "TEXT NOT NULL DEFAULT 'account'")
+  // 头像（r313）：没有头像时版本为空串；文件本身存 DATA_DIR/avatars/<userId>.<ext>
+  ensureColumn(db, 'users', 'avatar_version', "TEXT NOT NULL DEFAULT ''")
   // 用户名登录（v0.9.166）：有的账号没有邮箱，用手机号当用户名。login_name 只做登录标识，
   // 不替代 email（email 仍是唯一主键，历史数据与找回密码都还认它）。
   ensureColumn(db, 'users', 'login_name', 'TEXT')
@@ -144,6 +148,14 @@ function effectiveKind(row) {
   return config.auth.adminEmails.includes(email) ? 'admin' : row.kind
 }
 
+/** 头像地址：没有头像时是空串；有头像时带版本号，换图后浏览器不会继续用旧图。 */
+export function avatarUrlFor(userId, version) {
+  const id = String(userId || '')
+  const v = String(version || '')
+  if (!id || !v) return ''
+  return '/api/account/avatar/' + encodeURIComponent(id) + '?v=' + encodeURIComponent(v)
+}
+
 function publicUser(row) {
   if (!row) return null
   return {
@@ -156,7 +168,15 @@ function publicUser(row) {
     credits: Number(row.credits || 0),
     // 只给「有没有开」：secret、备用码永远不出接口
     twoFactor: Boolean(row.totp_enabled_at),
+    avatarUrl: avatarUrlFor(row.id, row.avatar_version),
   }
+}
+
+/** 换头像 / 删除头像后改版本号；空串表示现在没有头像。 */
+export function setAvatarVersion(id, version) {
+  const next = String(version || '').slice(0, 64)
+  const result = openDb().prepare('UPDATE users SET avatar_version = ? WHERE id = ?').run(next, String(id))
+  return Number(result?.changes || 0) > 0
 }
 
 function nowIso() {

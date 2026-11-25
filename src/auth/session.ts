@@ -22,6 +22,8 @@ export type SessionUser = {
   username?: string
   workspace: string
   kind: SessionKind
+  /** 头像地址（/api/auth/me 下发；没有头像时为空串） */
+  avatarUrl?: string
 }
 
 export type Session = {
@@ -29,6 +31,8 @@ export type Session = {
   user: SessionUser
   remember: boolean
   signedInAt: string
+  /** 服务端能力开关（目前是工作流 beta）；登录接口不带时沿用同一账号的缓存 */
+  features?: { workflow?: boolean }
 }
 
 export type SignInInput = {
@@ -80,6 +84,8 @@ export class AuthError extends Error {
 }
 
 export const SESSION_KEY = 'visionqa.session.v1'
+/** 页面里改了用户档案（头像等）时派发；useSession 收到后会同步内存里的会话。 */
+export const SESSION_UPDATED_EVENT = 'vq:session-updated'
 
 // 输入框占位用的示例地址；不是任何真实账号。
 const AT = String.fromCharCode(64)
@@ -152,6 +158,21 @@ export function clearResidue(): string[] {
   } catch {
     return []
   }
+}
+
+/**
+ * 页面里更新当前用户档案（目前用于头像）：写回缓存并广播，
+ * 侧栏、顶栏与设置页共用一份会话，不需要整页刷新。
+ */
+export function updateSessionUser(patch: Partial<Pick<SessionUser, 'name' | 'avatarUrl'>>): Session | null {
+  const current = readSession()
+  if (!current) return null
+  const next: Session = { ...current, user: { ...current.user, ...patch } }
+  persistSession(next)
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent<Session>(SESSION_UPDATED_EVENT, { detail: next }))
+  }
+  return next
 }
 
 /**
@@ -240,11 +261,16 @@ function toAuthError(caught: unknown, fallback: string): AuthError {
 }
 
 function createSession(user: SessionUser, remember: boolean): Session {
+  // 登录 / 注册 / 两步验证的响应不带 features（只有 /me 带）。同一账号重新登录时
+  // 沿用缓存里的那份，别因为登录接口少一层就把能力开关清空；换了账号则不继承。
+  const cached = readSession()
+  const features = cached && cached.user.id === user.id ? cached.features : undefined
   return {
     version: 1,
     user,
     remember,
     signedInAt: new Date().toISOString(),
+    ...(features ? { features } : {}),
   }
 }
 

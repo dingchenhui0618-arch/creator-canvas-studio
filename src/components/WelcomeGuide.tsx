@@ -9,6 +9,7 @@ import { getCredits, type CreditsResponse } from '../api/credits'
 import { listDeliveries, listProjects } from '../api/projects'
 import { listTemplates } from '../api/radar'
 import type { Page } from '../domain/types'
+import { useWorkflowEnabled } from '../domain/features'
 
 type Props = {
   onClose: () => void
@@ -46,7 +47,7 @@ const STEPS: Step[] = [
     key: 'project',
     page: 'projects',
     icon: Clapperboard,
-    kicker: '03 · 做 · 作品',
+    kicker: '03 · 做 · 我的作品',
     title: '开成作品，一条做到尾',
     body: '改脚本、跑工作流出画面、送去评审，都在同一条作品里；工作流、无限画布与评审是它的工具，不是另一条线。开工作流不扣积分，跑一次才扣：出图按张算。',
   },
@@ -71,6 +72,8 @@ type Counts = {
 }
 
 export function WelcomeGuide({ onClose, onGo }: Props) {
+  // r313：工作流只对管理员开放；引导里这一步的文案与计价都不再提它
+  const workflow = useWorkflowEnabled()
   const site = useSiteInfo()
   const [credits, setCredits] = useState<CreditsResponse | null>(null)
   const [counts, setCounts] = useState<Counts | null>(null)
@@ -132,8 +135,12 @@ export function WelcomeGuide({ onClose, onGo }: Props) {
   const costOf = (key: Step['key']): string => {
     // 工作流这一步有两笔钱：跑一次工作流、评一次画面；开工作流本身不计费（这句写在卡面文案里）
     if (key === 'project') {
-      const run = prices?.flow_run
       const review = prices?.review
+      if (!workflow) {
+        if (typeof review === 'number') return '评审每次 ' + review + ' 积分'
+        return '评审按次计'
+      }
+      const run = prices?.flow_run
       if (typeof run === 'number' && typeof review === 'number') return '跑一次 ' + run + ' 积分 · 评审 ' + review + ' 积分'
       return '跑工作流与评审按次计'
     }
@@ -166,7 +173,7 @@ export function WelcomeGuide({ onClose, onGo }: Props) {
   const next = (() => {
     if (stage === 'find') return { label: '去爆款雷达挑一条', page: 'radar' as Page }
     if (stage === 'adapt') return { label: '去模板库挑一条', page: 'templates' as Page }
-    if (stage === 'make' || stage === 'ship') return { label: '去作品接着做', page: 'projects' as Page }
+    if (stage === 'make' || stage === 'ship') return { label: '去我的作品接着做', page: 'projects' as Page }
     return { label: '开始使用', page: null as Page | null }
   })()
 
@@ -201,7 +208,9 @@ export function WelcomeGuide({ onClose, onGo }: Props) {
             <h2 id="vq-guide-title">欢迎使用 VisionQA</h2>
             <p>
               一级只有四个地方：工作台、作品、爆款雷达、模板库。一条内容从「爆款雷达」里进来，在「作品」里做完，交付与分享也在那一条上；
-              工作流、无限画布、视觉评审、运行记录在工具区，它们是这条作品里的步骤。
+              {workflow
+                ? '工作流、无限画布、视觉评审、运行记录在工具区，它们是这条作品里的步骤。'
+                : '无限画布与视觉评审在工具区，它们是这条作品里的步骤。'}
             </p>
           </div>
           <button ref={closeRef} type="button" className="vq-button vq-button--icon" aria-label="关闭引导" onClick={onClose}>
@@ -217,7 +226,11 @@ export function WelcomeGuide({ onClose, onGo }: Props) {
                 <span className="vq-mono">{step.kicker}</span>
               </span>
               <strong>{step.title}</strong>
-              <span className="vq-guide-step-body">{step.body}</span>
+              <span className="vq-guide-step-body">
+                {step.key === 'project' && !workflow
+                  ? '改脚本、出画面、送去评审，都在同一条作品里；无限画布与评审是它的工具，不是另一条线。出图按张计费。'
+                  : step.body}
+              </span>
               <span className="vq-guide-step-foot">
                 <span>{costOf(step.key)}</span>
                 <span className="vq-guide-step-go">

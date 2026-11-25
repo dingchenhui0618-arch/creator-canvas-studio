@@ -29,8 +29,8 @@ test('引导的每一步都落在一级导航里：画布 / 评审 / 智能体 /
   const tools = navIds(nav, 'TOOL_NAV')
 
   assert.deepEqual(primary, ['overview', 'projects', 'radar', 'templates'], '一级导航变了：引导与侧栏是同一套去处')
-  // r311 起工具区第一项是「我的资产」：它是能力，不是主线的一步，引导同样不许指向它
-  assert.deepEqual(tools, ['assets', 'agents', 'canvas', 'board', 'review', 'runs'], '工具区变了：引导不能再指向已经不当工具的那一页')
+  // r313：工具区只剩四项能力；我的资产挂到工作台之下、工作流收成管理员 beta（都不在工具区里）
+  assert.deepEqual(tools, ['agents', 'board', 'review', 'runs'], '工具区变了：引导不能再指向已经不当工具的那一页')
 
   const pages = [...guide.matchAll(/page:\s*'([a-z-]+)'/g)].map((match) => match[1])
   assert.ok(pages.length >= 4, '引导至少要有四步的去处，现在只有 ' + pages.length + ' 处')
@@ -47,7 +47,7 @@ test('主线四步的顺序是 找 → 拆 → 做 → 交，各自落在发现 
   assert.deepEqual(parts.map((piece) => piece.length), [3, 3, 3, 3], '每步应当写成「01 · 找 · 发现」三段：' + kickers.join(' / '))
   assert.deepEqual(parts.map((piece) => piece[0]), ['01', '02', '03', '04'])
   assert.deepEqual(parts.map((piece) => piece[1]), ['找', '拆', '做', '交'])
-  assert.deepEqual(parts.map((piece) => piece[2]), ['爆款雷达', '模板库', '作品', '交付'])
+  assert.deepEqual(parts.map((piece) => piece[2]), ['爆款雷达', '模板库', '我的作品', '交付'])
 })
 
 test('引导上的价钱对得上服务端计费表：只有检索 / 解析 / 评审 / 跑画布按次扣', () => {

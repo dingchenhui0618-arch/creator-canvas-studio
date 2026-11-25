@@ -13,6 +13,8 @@ import { isolateLeaseDir } from './lease-isolation.mjs'
 //   3) 扣费单据 ref = 运行 id（不是画布名），账本、运行记录、退款三处对得上；
 //   4) 同一次运行无论被收尾多少次，退款只发生一次。
 process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'vq-run-recovery-'))
+// 工作流 beta（r313）只对管理员开放：这一组测的是工作流本身，显式对全部账号打开，不改变测试意图
+process.env.VQ_WORKFLOW_BETA = 'all'
 process.env.VQ_KEY_SECRET = 'test-secret-run-recovery'
 // 跨进程租约（v0.9.78）：测试文件并行跑，名额必须各算各的
 isolateLeaseDir('vq-lease-run-recovery-')

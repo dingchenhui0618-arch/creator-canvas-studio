@@ -13,6 +13,8 @@ import { isolateLeaseDir } from './lease-isolation.mjs'
 import { holdInChild, stopChild } from './lease-child.mjs'
 
 process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'vq-global-heavy-'))
+// 工作流 beta（r313）只对管理员开放：这一组测的是工作流本身，显式对全部账号打开，不改变测试意图
+process.env.VQ_WORKFLOW_BETA = 'all'
 process.env.VQ_KEY_SECRET = 'test-secret-global-heavy'
 // 跨进程租约（v0.9.78）：测试文件并行跑，名额必须各算各的
 isolateLeaseDir('vq-lease-global-heavy-')

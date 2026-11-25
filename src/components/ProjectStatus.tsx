@@ -2,6 +2,7 @@ import { deliveryOf, projectStatus, type Project, type ProjectDecision, type Pro
 import { Pill } from './ui'
 import { REVIEW_VERDICT_LABEL, reviewTimeLabel } from '../domain/review'
 import { stampTime } from '../domain/share'
+import { useWorkflowEnabled } from '../domain/features'
 
 /**
  * 作品状态胶囊：待开工作流 / 在做 / 评审 · 通过 / 评审 · 需人工确认 / 评审 · 不通过 / 评审 · 人工通过 / 评审 · 人工不通过 / 已交付。
@@ -19,6 +20,11 @@ export default function ProjectStatusPill({
   decision?: ProjectDecision | null
 }) {
   const status = projectStatus(project, reviews, decision)
+  // 工作流是管理员 beta（r313）：普通账号的作品没有「待开工作流」这个状态，落回「在做」。
+  // 判在这里而不是 domain/project.ts：那个函数被列表、作品页、工作台、分享页共用，
+  // 它没有会话上下文；胶囊是所有地方共同的出口。
+  const workflow = useWorkflowEnabled()
+  const text = !workflow && status.text === '待开工作流' ? '在做' : status.text
   // 已交付时补一句交付记录：卡片上只写「已交付」，悬停才知道交的是哪一版、什么时候
   const delivery = status.tone === 'done' ? deliveryOf(project) : null
   const note =
@@ -34,7 +40,7 @@ export default function ProjectStatusPill({
         : undefined
   return (
     <Pill tone={status.tone} title={note}>
-      {status.text}
+      {text}
     </Pill>
   )
 }

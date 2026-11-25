@@ -21,11 +21,13 @@ import { reviewChangeOf, reviewSideOf, versionCompareOf } from './version-diff.m
  * 返回 { ok: true, view } 或 { ok: false, missing: n }（该版没有归档记录）。
  * 版次是否合法、是否同一版由调用方先校验。
  */
-export async function versionCompareView(project, user, baseNo, targetNo) {
+export async function versionCompareView(project, user, baseNo, targetNo, { hideWorkflow = false } = {}) {
+  // 工作流 beta（r313）：普通账号的对照只比脚本。节点一个都不读，名字也不带出工作流名，
+  // 所以下面每一处都先看 hideWorkflow，再决定要不要碰工作流。
   const resolveSide = async (n) => {
     if (n === project.version) {
       const [flow, template] = await Promise.all([
-        project.flowId ? getFlow(project.flowId, user) : null,
+        !hideWorkflow && project.flowId ? getFlow(project.flowId, user) : null,
         project.templateId ? getTemplate(project.templateId, user) : null,
       ])
       const script = scriptView(project, template)
@@ -42,10 +44,11 @@ export async function versionCompareView(project, user, baseNo, targetNo) {
     }
     const entry = project.versions.find((item) => item.n === n)
     if (!entry) return null
-    const flow = entry.flowId ? await getFlow(entry.flowId, user) : null
+    const flow = !hideWorkflow && entry.flowId ? await getFlow(entry.flowId, user) : null
     return {
       n,
-      name: entry.name,
+      // 归档名就是当时那块工作流的名字：普通账号读到的版本名一律写中性的「第 N 版」
+      name: hideWorkflow ? '第 ' + n + ' 版' : entry.name,
       current: false,
       nodes: flow && Array.isArray(flow.nodes) ? flow.nodes : null,
       canvasAvailable: Boolean(flow && Array.isArray(flow.nodes)),
@@ -67,10 +70,16 @@ export async function versionCompareView(project, user, baseNo, targetNo) {
   })
 
   const notes = []
-  if (!baseSide.canvasAvailable || !targetSide.canvasAvailable) notes.push('有一版的工作流已被删除：工作流这一侧不比，脚本仍按快照比。')
-  if (!baseSide.scriptAvailable || !targetSide.scriptAvailable) notes.push('有一版没存脚本快照：脚本这一侧不比，工作流仍按节点比。')
+  if (!hideWorkflow && (!baseSide.canvasAvailable || !targetSide.canvasAvailable)) notes.push('有一版的工作流已被删除：工作流这一侧不比，脚本仍按快照比。')
+  if (!baseSide.scriptAvailable || !targetSide.scriptAvailable) {
+    notes.push(hideWorkflow
+      ? '有一版没存脚本快照：脚本这一侧不比。'
+      : '有一版没存脚本快照：脚本这一侧不比，工作流仍按节点比。')
+  }
   if (!diff.script && baseSide.scriptAvailable && targetSide.scriptAvailable) notes.push('有一版的脚本没有分段：脚本这一侧没有可比的口播。')
-  if (!diff.summary) notes.push('这两版没有可比的数据：工作流与脚本都读不到。')
+  if (!diff.summary) {
+    notes.push(hideWorkflow ? '这两版没有可比的数据：脚本读不到。' : '这两版没有可比的数据：工作流与脚本都读不到。')
+  }
 
   // 评审与交付（v0.9.119）：两版各自读这一版最近一评，交付只认这一版的记录。
   // 评审按版次统计，版本划分前的老评审折进 v1（与作品页同一套 reviewsForVersion）。
@@ -93,9 +102,10 @@ export async function versionCompareView(project, user, baseNo, targetNo) {
     n: side.n,
     name: side.name,
     current: side.current,
-    nodes: Array.isArray(side.nodes) ? side.nodes.length : 0,
+    // 普通账号：节点数不报，也不说「工作流还能打开」——那一侧对他不存在
+    nodes: hideWorkflow ? 0 : (Array.isArray(side.nodes) ? side.nodes.length : 0),
     beats: side.beats,
-    canvasAvailable: side.canvasAvailable,
+    canvasAvailable: hideWorkflow ? false : side.canvasAvailable,
     scriptAvailable: side.scriptAvailable,
     review: reviewSideOf(reviewsForVersion(versionCounts, side.n)),
     delivery: deliveryOfVersion(side.n),

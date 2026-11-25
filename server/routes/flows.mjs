@@ -35,6 +35,7 @@ import { buildRunCompare, buildRunOutputDiff, compareSideOf } from '../run-compa
 import { imageNodeOptions, runAssetPath } from '../flow-image.mjs'
 import { videoNodeOptions } from '../flow-video.mjs'
 import { sendAuthMedia } from '../image-response.mjs'
+import { denyWorkflowBeta, workflowBetaAllowed } from '../workflow-beta.mjs'
 
 // /api/flows 与 /api/runs 共用一个 router：
 // index.mjs 会按 prefix + extraPrefixes 分发，因此两个前缀都进到这里。
@@ -159,6 +160,10 @@ export function createFlowsRouter() {
     async handle(req, res, url, pathname) {
       if (!isOwnPath(pathname)) return false
       const user = currentUser(req)
+      // 工作流 beta（r313）：非管理员一律 403，且必须排在所有分支之前——
+      // 元信息、列表、运行记录都会漏出工作流信息，运行那条还会先排队、先扣积分。
+      // 闸门放在这里，既读不到盘也花不掉钱；管理员与 VQ_WORKFLOW_BETA=all 的实例照旧。
+      if (!workflowBetaAllowed(user)) return denyWorkflowBeta(res)
 
       // 节点类型与工具的元信息，前端 inspector 用它渲染下拉框
       if (pathname === '/api/flows/meta' && req.method === 'GET') {

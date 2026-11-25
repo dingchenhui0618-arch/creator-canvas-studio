@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeftRight,
   BookOpen,
@@ -15,6 +15,7 @@ import {
   RefreshCw,
   Search,
   Settings2,
+  Wallet,
   X,
 } from 'lucide-react'
 import { pageLabels, type Page } from './domain/types'
@@ -24,11 +25,14 @@ import './styles/overview.css'
 import { NavItem } from './components/ui'
 import { CommandPalette } from './components/CommandPalette'
 import type { PaletteCommand } from './domain/commands'
-import { DESKTOP_NAV, PRIMARY_NAV, SETTINGS_NAV, TOOL_NAV, isNavActive, isToolPage, type NavEntry } from './nav'
+import { ASSET_NAV, DESKTOP_NAV, PRIMARY_NAV, SETTINGS_NAV, TOOL_NAV, WORKFLOW_NAV, isNavActive, isToolPage, type NavEntry } from './nav'
 import { getDesktop } from './desktop/bridge'
 import { WelcomeGuide } from './components/WelcomeGuide'
 import { OnboardingGate } from './components/OnboardingGate'
 import { ModelSwitch } from './components/ModelSwitch'
+import { AccountMenu } from './components/AccountMenu'
+import { UserAvatar } from './components/UserAvatar'
+import { setWorkflowEnabled } from './domain/features'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { PageSkeleton } from './components/PageSkeleton'
 import ReviewPage from './pages/ReviewPage'
@@ -44,7 +48,7 @@ import { RequireSession } from './auth/RequireSession'
 import { useSession } from './auth/useSession'
 import { useUiMode } from './api/app'
 import { request } from './api/client'
-import { initialsFor, sessionKindLabel, type RegisterInput, type Session, type SessionUser, type SignInInput } from './auth/session'
+import { sessionKindLabel, type RegisterInput, type Session, type SessionUser, type SignInInput } from './auth/session'
 import { accountIdentifier } from './domain/account-label'
 import { listAgents, setPendingAgentProject } from './api/agents'
 import { createBdcCanvas } from './api/bdc'
@@ -109,6 +113,8 @@ const SourcesPage = lazy(() => import('./pages/SourcesPage').then((module) => ({
 const AgentEditorPage = lazy(() => import('./pages/AgentEditorPage'))
 // 自有资产（r311）：注册后的引导与资产库之后，模板、工作流都从这里取参考图
 const AssetsPage = lazy(() => import('./pages/AssetsPage'))
+// 工作流 Beta 的落地页（r313）：非管理员直连 #/canvas 时落在这里，不进画布
+const WorkflowBetaPage = lazy(() => import('./pages/WorkflowBetaPage'))
 
 function sectionLabel(section: string): string {
   const found = EDITION_BY_ID.admin.nav.find((item) => item.section === section)
@@ -317,8 +323,53 @@ function Workbench({
   const activePage = routeToPage(route)
   // 路由的稳定标识：换页时用它触发角标对一次数，不必把整个 route 对象塞进依赖
   const routeId = routeKey(route)
+
   // 还没保存就走（r270）：页面登记、路由挂起、这里出弹窗——三处共用同一个真源
   const leaveRequest = useLeaveRequest()
+
+  // 工作流是 beta，只对管理员开放（r313）：判定只活在 domain/features 一处，
+  // 侧栏、命令面板、各页面、#/canvas 落地页都读它，免得这里放行了、那里还藏着入口。
+  // 服务端 /api/auth/me 的 features.workflow 是权威判定（VQ_WORKFLOW_BETA=all 时普通账号也放行）；
+  // 读不到 features 的旧缓存就退回身份判定，不至于把管理员的入口也藏了。
+  const workflowEnabled = session.features?.workflow === true || session.user.kind === 'admin'
+  useEffect(() => {
+    setWorkflowEnabled(workflowEnabled)
+  }, [workflowEnabled])
+
+  // 右上角的余额（r313）：外壳自己读一次，页面里花了钱就派发 vq:credits 让这里重读。
+  // 读不到就显示「—」，不用 0 冒充「已用完」。
+  const [topCredits, setTopCredits] = useState<{ balance: number | null; unit: string; loading: boolean }>({
+    balance: null,
+    unit: '积分',
+    loading: true,
+  })
+  const refreshCredits = useCallback(() => {
+    let alive = true
+    request<{ balance: number | null; unit: string }>('/api/credits?limit=1')
+      .then((data) => {
+        if (alive) setTopCredits({ balance: data.balance, unit: data.unit || '积分', loading: false })
+      })
+      .catch(() => {
+        if (alive) setTopCredits((prev) => ({ ...prev, loading: false }))
+      })
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  // 换页时顺手对一次余额（便宜的一次读，不扣积分）；页面里生成完会派发 vq:credits。
+  useEffect(() => {
+    if (route.kind === 'admin') return
+    return refreshCredits()
+  }, [refreshCredits, routeId, route.kind])
+
+  useEffect(() => {
+    const onCredits = () => {
+      refreshCredits()
+    }
+    window.addEventListener('vq:credits', onCredits)
+    return () => window.removeEventListener('vq:credits', onCredits)
+  }, [refreshCredits])
 
   // 错误边界按「页」隔离，而不是按整条地址（v0.9.43）：
   // 同一页里发生的地址变化——打开单条模板的抽屉、打开一条历史评审、作品参数变化——
@@ -507,6 +558,8 @@ function Workbench({
       // 本机这一项只在桌面端存在，网页版不列出（列了也点不进真实能力）
       ...(desktopBridge ? [navCommand(DESKTOP_NAV, '本机')] : []),
       ...TOOL_NAV.map((entry) => navCommand(entry, '工具')),
+      // 工作流是管理员 beta：普通账号的命令面板里不出现，免得搜得到、点进去是 403
+      ...(workflowEnabled ? [navCommand(WORKFLOW_NAV, '工具')] : []),
       navCommand(SETTINGS_NAV, '设置'),
       {
         id: 'action-new-canvas',
@@ -527,6 +580,15 @@ function Workbench({
         run: () => setGuideOpen(true),
       },
       {
+        id: 'action-recharge',
+        label: '充值',
+        hint: '积分不够时在这里充',
+        group: '动作',
+        icon: Wallet,
+        keywords: 'recharge 充值 积分 余额 付款',
+        run: () => go('recharge'),
+      },
+      {
         id: 'action-help',
         label: '帮助中心',
         hint: '积分、失败排查、素材边界',
@@ -545,7 +607,7 @@ function Workbench({
         run: () => setSidebarOpen((value) => !value),
       },
     ]
-  }, [createCanvasProject, desktopBridge, navTo, sidebarOpen])
+  }, [createCanvasProject, desktopBridge, go, navTo, sidebarOpen, workflowEnabled])
 
   // Ctrl / ⌘ + K 打开快速跳转。正在输入的地方不抢键：编辑器里的同名快捷键仍然属于编辑器。
   useEffect(() => {
@@ -577,6 +639,17 @@ function Workbench({
         navigate({ kind: 'agent-editor', agentRef: name })
       })
   }, [])
+
+  // 帮助与协议是公开页（#/help），从侧栏底部与右上角菜单都能到；它不进工作台外壳。
+  const openHelp = useCallback(() => {
+    setAccountMenuOpen(false)
+    navigate({ kind: 'help', slug: null })
+  }, [])
+
+  const openRecharge = useCallback(() => {
+    setAccountMenuOpen(false)
+    go('recharge')
+  }, [go])
 
   const leaveAdmin = useCallback(() => {
     try {
@@ -649,6 +722,11 @@ function Workbench({
     }
     switch (route.page) {
       case 'canvas':
+        // 工作流是 beta，只对管理员开放（r313）：收藏、旧链接、命令面板进来都落在 Beta 页，
+        // 不挂画布组件、也不发 /api/flows 请求（那只会拿到 403 再显示一个错误弹层）。
+        if (!workflowEnabled) {
+          return <WorkflowBetaPage onGo={go} />
+        }
         // flowId 故意不进 key：页面加载完会把它补进地址栏，进 key 就等于自己把自己重挂一次——
         // 表现出来就是进工作流闪一下、/api/flows 连打两遍。
         return (
@@ -792,8 +870,6 @@ function Workbench({
     }
   }
 
-  const initials = initialsFor(session.user.name)
-
   return (
     <div className={'vq-scope vq-shell' + (focusOn ? ' is-focus' : '')}>
       <aside className={`vq-sidebar${sidebarOpen ? '' : ' vq-sidebar--collapsed'}`}>
@@ -805,7 +881,7 @@ function Workbench({
 
           {sidebarOpen && (
             <div className="vq-workspace">
-              <span className="vq-workspace-avatar">{initials}</span>
+              <UserAvatar user={session.user} size={28} className="vq-workspace-avatar" />
               <span className="vq-workspace-meta">
                 <strong>{session.user.workspace}</strong>
                 <span>{session.user.kind === 'guest' ? '访客会话' : internal ? '服务端会话' : '已登录'}</span>
@@ -836,16 +912,28 @@ function Workbench({
             <>
               <nav className="vq-nav" aria-label="主导航">
                 {PRIMARY_NAV.map((entry) => (
-                  <NavItem
-                    key={entry.id}
-                    icon={entry.icon}
-                    label={entry.label}
-                    active={isNavActive(entry, activePage)}
-                    compact={!sidebarOpen}
-                    badge={entry.id === 'overview' ? queueBadge : undefined}
-                    badgeLabel={entry.id === 'overview' && queueBadge ? queueBadge + ' 条评审等你看' : undefined}
-                    onClick={() => navTo(entry)}
-                  />
+                  <Fragment key={entry.id}>
+                    <NavItem
+                      icon={entry.icon}
+                      label={entry.label}
+                      active={isNavActive(entry, activePage)}
+                      compact={!sidebarOpen}
+                      badge={entry.id === 'overview' ? queueBadge : undefined}
+                      badgeLabel={entry.id === 'overview' && queueBadge ? queueBadge + ' 条评审等你看' : undefined}
+                      onClick={() => navTo(entry)}
+                    />
+                    {/* 我的资产挂在工作台之下（r313）：它是「我的东西」，不是一项工具能力 */}
+                    {entry.id === 'overview' ? (
+                      <NavItem
+                        icon={ASSET_NAV.icon}
+                        label={ASSET_NAV.label}
+                        nested
+                        active={activePage === 'assets'}
+                        compact={!sidebarOpen}
+                        onClick={() => navTo(ASSET_NAV)}
+                      />
+                    ) : null}
+                  </Fragment>
                 ))}
               </nav>
               {desktopBridge ? (
@@ -868,7 +956,28 @@ function Workbench({
                 <div className="vq-nav-label" aria-hidden="true">
                   工具
                 </div>
-                {TOOL_NAV.map((entry) => (
+                {TOOL_NAV.slice(0, 2).map((entry) => (
+                  <NavItem
+                    key={entry.id}
+                    icon={entry.icon}
+                    label={entry.label}
+                    active={isNavActive(entry, activePage)}
+                    compact={!sidebarOpen}
+                    onClick={() => navTo(entry)}
+                  />
+                ))}
+                {/* 工作流：仅管理员（Beta）。普通账号这一行不渲染，直连 #/canvas 落 Beta 页 */}
+                {workflowEnabled ? (
+                  <NavItem
+                    icon={WORKFLOW_NAV.icon}
+                    label={WORKFLOW_NAV.label}
+                    chip={WORKFLOW_NAV.chip}
+                    active={isNavActive(WORKFLOW_NAV, activePage)}
+                    compact={!sidebarOpen}
+                    onClick={() => navTo(WORKFLOW_NAV)}
+                  />
+                ) : null}
+                {TOOL_NAV.slice(2).map((entry) => (
                   <NavItem
                     key={entry.id}
                     icon={entry.icon}
@@ -921,6 +1030,14 @@ function Workbench({
               )}
               <NavItem
                 utility
+                icon={BookOpen}
+                label="帮助与协议"
+                active={false}
+                compact={!sidebarOpen}
+                onClick={openHelp}
+              />
+              <NavItem
+                utility
                 icon={SETTINGS_NAV.icon}
                 label={SETTINGS_NAV.label}
                 active={activePage === 'settings'}
@@ -941,7 +1058,7 @@ function Workbench({
                   onClick={() => setAccountMenuOpen((value) => !value)}
                   title={sidebarOpen ? undefined : `${session.user.name} · ${accountIdentifier(session.user)}`}
                 >
-                  <span className="vq-sidebar-account-avatar">{initials}</span>
+                  <UserAvatar user={session.user} size={28} className="vq-sidebar-account-avatar" />
                   <span className="vq-sidebar-account-copy">
                     <strong>{session.user.name}</strong>
                     <small title={accountIdentifier(session.user)}>{accountIdentifier(session.user)}</small>
@@ -954,6 +1071,21 @@ function Workbench({
                     <div className="vq-sidebar-account-menu-meta">
                       <span className="vq-mono">{sessionKindLabel(session.user)}</span>
                       <span className="vq-mono">{internal ? '服务端会话' : '已登录'}</span>
+                    </div>
+                    {/* 余额也从这里能点开（r313）：右上角是第一入口，左下角这一处不藏起来 */}
+                    <div className="vq-sidebar-account-credits">
+                      <span>剩余积分</span>
+                      <strong>{topCredits.balance === null ? '—' : topCredits.balance}</strong>
+                      <button
+                        type="button"
+                        className="vq-button vq-button--sm"
+                        onClick={() => {
+                          setAccountMenuOpen(false)
+                          go('recharge')
+                        }}
+                      >
+                        充值
+                      </button>
                     </div>
                     <button
                       type="button"
@@ -969,6 +1101,10 @@ function Workbench({
                     <button type="button" role="menuitem" onClick={() => go('settings')}>
                       <Settings2 size={15} />
                       账号设置
+                    </button>
+                    <button type="button" role="menuitem" onClick={openHelp}>
+                      <BookOpen size={15} />
+                      帮助与协议
                     </button>
                     <button
                       type="button"
@@ -1071,6 +1207,18 @@ function Workbench({
               </span>
             ) : null}
             <ModelSwitch />
+            {route.kind !== 'admin' ? (
+              <AccountMenu
+                session={session}
+                credits={topCredits}
+                onOpenRecharge={openRecharge}
+                onOpenSettings={() => go('settings')}
+                onOpenHelp={openHelp}
+                onOpenGuide={() => setGuideOpen(true)}
+                onSwitchAccount={onSwitchAccount}
+                onSignOut={onSignOut}
+              />
+            ) : null}
           </div>
         </header>
 
@@ -1078,7 +1226,7 @@ function Workbench({
           {mobileNoteOpen ? (
             <div className="vq-mobile-note" role="note">
               <span className="vq-mobile-note-text">
-                手机也能检索、挑素材、跑工作流；画布连线与逐帧评审建议在电脑上做。
+                手机也能检索、挑素材、送评审；画布连线与逐帧评审建议在电脑上做。
               </span>
               <button
                 type="button"
