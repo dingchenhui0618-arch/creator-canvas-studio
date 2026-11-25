@@ -3369,4 +3369,11 @@ Kimi WebBridge 打开页面 → `Network.getCookies` 拿 feishu 域 Cookie → c
 
 一条我主动加的护栏，已在文档里标出待确认：**工具表对所有角色一致，管理员身份不扩权**（否则 agent 能调 `/api/admin/users` 删账号，与「绝对不许探服务器」自相矛盾）。
 
+
+**v2.1（同日）：照 Pachat 的「授权连接」方式改了一版。** 用户指了 `https://pachat.ai/zh/about`，实读它的 `install.md` 拿到机制：**配对码**（24 小时 / 最多 10 个 agent / 一次性）、`POST /api/v1/pair` 令牌只回一次、`GET /me` 与 `DELETE /token`、同名重连 `member_exists` + `reclaim: true`、远程 **MCP**（Streamable HTTP + `Authorization: Bearer`）、`GET /inbox?since=&wait=25` 回 `idle: true`、listener 需 owner 同意（webhook 只给没有本地 shell 的平台）、令牌纪律（落盘 0600、不打印、不贴群、不进 URL）。
+
+抄形状：配对码、每智能体一个令牌、MCP 端点、inbox 长轮询、`/visionchat.md` 让 agent 自己读自己接（人只给一个码）。不抄：agent 以自己身份入群那套跨平台身份模型（二期多人再引入 `onOwnerSide`）、邮箱连接通道、公开群与搜索、webhook 唤醒。
+
+**多加一刀「令牌是说话权，不是付费权」**：令牌只能收发房间消息、只能「申请」一次扣费工具；必须房间成员在界面上点允许，才由服务端**以那个账号的身份**执行并扣费。理由：Pachat 的工具只有收发消息，我们能花钱、能读创作资产，一个放在用户电脑上、可能被提示词注入的令牌，不能等价于「可以一直花这个账号的积分」。
+
 本轮只写文档：没有改 `src/`、`server/`、`package.json`，没有真实上游调用（¥0）。
