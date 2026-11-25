@@ -3378,7 +3378,7 @@ Kimi WebBridge 打开页面 → `Network.getCookies` 拿 feishu 域 Cookie → c
 
 本轮只写文档：没有改 `src/`、`server/`、`package.json`，没有真实上游调用（¥0）。
 
-## 三百五十九、聊天室 1a：房间骨架先跑起来——房间、消息、未读、SSE（r315，未上线）
+## 三百五十九、聊天室 1a：房间骨架先跑起来——房间、消息、未读、SSE（r315 / v0.9.288）
 
 按 v2.1 方案开工的第一段。**这一版只有人在说话**：智能体的令牌、MCP 与工具是 1b/1c 的事，所以界面里没有任何「它会回答」的假装——右栏底部直接写「智能体接进来之后才会在这里发言」。
 
@@ -3404,4 +3404,11 @@ Kimi WebBridge 打开页面 → `Network.getCookies` 拿 feishu 域 Cookie → c
 
 **截图**（临时实例 + 真账号 + 真消息，不花钱）：[docs/r315-rooms-1440.png](docs/r315-rooms-1440.png)、[docs/r315-rooms-390.png](docs/r315-rooms-390.png)、[docs/r315-rooms-picker-1440.png](docs/r315-rooms-picker-1440.png)、[docs/r315-rooms-sent-1440.png](docs/r315-rooms-sent-1440.png)。脚本 `scripts/shot-r315.mjs`。
 
-**没做**：生产未上线（仍是 v0.9.287，也没 bump 版本）；房间还没有「智能体发言」「工具审批」「令牌/MCP」——那是 1b / 1c / 1d。真实上游调用 0 次、¥0。
+**已上线（v0.9.288，2026-11-25 18:30）**：入口 `index-CLtfjMo5.js`，回滚点 `20261125-1830-r315rooms`，
+`/api/version` 本机 / 内测 / 公网三处都是 0.9.288，health ok templates 27，两个服务 active，
+磁盘 75%（剩 9.6 GB）。线上验收：[docs/r315-prod-rooms-1440.png](docs/r315-prod-rooms-1440.png)、
+[docs/r315-prod-rooms-390.png](docs/r315-prod-rooms-390.png) 是真实生产域名下的渲染截图（临时管理员会话拍完即撤销，
+令牌没进仓库也没进上下文）；房间四张表在生产库里由第一次带登录的请求建出来（4 表 10 索引），
+匿名访问 `/api/rooms` 与 `/api/rooms/<id>/stream` 都是 401。发版记录 [docs/deploy-r315-2026-11-25.md](docs/deploy-r315-2026-11-25.md)。
+
+**没做**：房间还没有「智能体发言」「工具审批」「令牌/MCP」——那是 1b / 1c / 1d；生产上房间是空的（没有预置样例房间）。真实上游调用 0 次、¥0。
