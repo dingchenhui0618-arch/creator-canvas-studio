@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>visionchat-proposal-v2-2026-11-25</title>
+<style>
+  :root {
+    --ink: #16181d;
+    --muted: #4b5160;
+    --faint: #7c8290;
+    --line: #e3e5ea;
+    --surface: #f7f8fa;
+    --accent: #1a56db;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 48px 24px 96px;
+    background: #fff;
+    color: var(--ink);
+    font: 15px/1.75 "Alibaba PuHuiTi 3.0", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 860px; margin: 0 auto; }
+  h1, h2, h3, h4 { font-weight: 600; letter-spacing: -0.01em; line-height: 1.35; }
+  h1 { margin: 0 0 24px; font-size: 30px; }
+  h2 { margin: 40px 0 16px; padding-top: 24px; border-top: 1px solid var(--line); font-size: 22px; }
+  h3 { margin: 28px 0 12px; font-size: 17px; }
+  h4 { margin: 24px 0 8px; font-size: 15px; color: var(--muted); }
+  p { margin: 12px 0; }
+  a { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(26, 86, 219, 0.3); }
+  code { padding: 1px 5px; border-radius: 4px; background: var(--surface); font-family: "JetBrains Mono", Consolas, monospace; font-size: 13px; }
+  pre { overflow-x: auto; padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+  pre code { padding: 0; background: none; }
+  blockquote { margin: 16px 0; padding: 12px 16px; border-left: 3px solid var(--line); background: var(--surface); color: var(--muted); }
+  blockquote p { margin: 0; }
+  table { width: 100%; margin: 16px 0; border-collapse: collapse; font-size: 14px; }
+  th, td { padding: 8px 12px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+  th { background: var(--surface); font-weight: 600; }
+  hr { margin: 32px 0; border: 0; border-top: 1px solid var(--line); }
+  ul, ol { margin: 12px 0; padding-left: 22px; }
+  li { margin: 6px 0; }
+  strong { font-weight: 600; }
+  @media (max-width: 720px) {
+    body { padding: 24px 16px 64px; }
+    h1 { font-size: 24px; }
+    table { display: block; overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+<main>
+<h1>VisionChat（Beta）方案 v2 · 六项已定</h1>
+<blockquote>日期：2026-11-25 · 基线：v0.9.287（生产）· 状态：<strong>六项拍板，进入一期实施准备，仍未动代码</strong><br>上一版：<a href="#" target="_blank" rel="noreferrer">visionchat-proposal-2026-11-25.md</a>（v1，六问待答）<br>纪律：本文只写方案与契约。没有改 <code>src/</code>、<code>server/</code>、<code>package.json</code>；没有调用任何真实上游；每条关于现有代码的描述都能指出文件。</blockquote>
+<h2>0. 你定的六条，落成这六件事</h2>
+<table><thead><tr><th>#</th><th>你的原话</th><th>落成什么</th><th>影响</th></tr></thead><tbody>
+<tr><td>1</td><td>「CLI 指的是平台白名单工具……绝对不允许探到服务器……人能点什么权限 它就有什么权限 人能看到什么 它能看到什么」</td><td><strong>agent 是「你的代理」，不是特权主体</strong>：工具表 = 你这个账号在界面上能点的按钮所对应的接口；白名单之外一律不认，服务器文件/环境/内部端口/后台接口全部在墙外</td><td>工具层不新写一套 API，而是<strong>复用同一个 <code>currentUser()</code> + <code>canAccess()</code> 的路由处理器</strong> → 第 2 节</td></tr>
+<tr><td>2</td><td>「按用户原话放『模板库』下面（推荐，Beta 标签）」</td><td><code>PRIMARY_NAV</code> 第 5 项「聊天室」+ <code>chip: 'Beta'</code>（工作流同款机制），不动工具区</td><td>第 6 节</td></tr>
+<tr><td>3</td><td>「一期 1 人 + N 个智能体；二期多人 + 多智能体；三期社交，形态还没想好」</td><td>分期照此锁定；三期先给三个候选形态挂起，不承诺</td><td>第 7 节</td></tr>
+<tr><td>4</td><td>「工具一期全上」</td><td>7 个工具一期全上，但仍然分「自动执行」与「逐次批准」两类，不因为一次上齐就放开审批</td><td>第 5 节</td></tr>
+<tr><td>5</td><td>「扣费是按他们自己带来的智能体来的吧？我需要他们接入自己的智能体，例如 workbuddy、codex、Claude、豆包」</td><td><strong>方向大改：BYOA（自带智能体）</strong>。对话不再由平台按次收费；平台只对<strong>自己出资源</strong>的部分扣分（生图/生视频/评审）。接入分「直连」与「本地连接器」两条路</td><td>第 3、4 节 —— 本文最重要的一节</td></tr>
+<tr><td>6</td><td>「同意默认授权档位」</td><td>只读自动、写与花钱逐次批准、90 秒不批按拒绝、<strong>一期不给「完全授权」开关</strong></td><td>第 2.4、5 节</td></tr>
+</tbody></table>
+<hr>
+<h2>1. 第 5 条把产品改成了什么</h2>
+<p>v1 的前提是「房间里跑平台的智能体，用我们的 Key，按轮扣积分」。你说的是反过来的：<strong>用户把自己已有的智能体接进来</strong>。这个改动不是换个计费口径，它把三个地方都改了：</p>
+<table><thead><tr><th></th><th>v1（平台智能体）</th><th>v2（自带智能体）</th></tr></thead><tbody>
+<tr><td>模型与额度</td><td>我们的 Key 池，扣我们积分</td><td>用户自己的订阅或 Key，我们<strong>不收对话费</strong></td></tr>
+<tr><td>平台的成本</td><td>每次发言都有真金白银</td><td>只有消息存储、转发与工具（生图/生视频/评审）</td></tr>
+<tr><td>冷启动</td><td>新用户 50 积分就能聊</td><td>新用户得先有一个智能体；所以<strong>默认给 1 个平台智能体</strong>兜底，开箱能聊</td></tr>
+<tr><td>差异化</td><td>「又一个 AI 聊天」</td><td>「把你手上那几个智能体拉进同一个房间，一起做一条内容」</td></tr>
+</tbody></table>
+<p>一句话定位：<strong>VisionChat 不是再卖一个模型，是把用户已经在用的智能体请进平台，让它们能碰到平台里的东西（模板、作品、资产、生图、评审）。</strong></p>
+<p>新用户 50 积分仍然有用：开箱聊（平台智能体 1 积分/轮）、生图（5）、评审（5）。</p>
+<hr>
+<h2>2. 权限模型：agent 是你的代理，不是特权主体</h2>
+<h3>2.1 一句话定义</h3>
+<p><strong>工具表 = 这个账号在界面上能点的东西，一一对应，多一个都不给。</strong> 判断标准不是「这个 API 安不安全」，而是「人在浏览器里点得到吗」——点得到才进表，点不到就不进。</p>
+<h3>2.2 对照表（这张表就是验收标准）</h3>
+<table><thead><tr><th>人在界面能做</th><th>agent 对应工具</th><th>服务端复用的东西</th><th>花钱</th></tr></thead><tbody>
+<tr><td>模板库看 26 条模板</td><td><code>templates.list</code></td><td><code>server/templates.mjs</code> 的 <code>listTemplates({...}, user)</code></td><td>0</td></tr>
+<tr><td>我的作品看自己那几条</td><td><code>projects.list</code> / <code>projects.get</code></td><td>同一 <code>canAccess</code>（<code>server/owner.mjs</code>）</td><td>0</td></tr>
+<tr><td>素材库挑商品图/人像</td><td><code>assets.list</code></td><td><code>server/assets.mjs</code>，同一归属过滤</td><td>0</td></tr>
+<tr><td>粘贴一条链接让平台读</td><td><code>web.read</code></td><td><code>server/webread.mjs</code> 的字节/字数上限与超时</td><td>0</td></tr>
+<tr><td>点「生成图片」</td><td><code>media.image</code></td><td><code>POST /api/media/generate</code>（kind=image）</td><td>5（需批准）</td></tr>
+<tr><td>点「生成视频」</td><td><code>media.video</code></td><td>同一路由（kind=video）</td><td>15（需批准）</td></tr>
+<tr><td>点「视觉评审」</td><td><code>review.run</code></td><td><code>POST /api/review</code></td><td>5（需批准）</td></tr>
+<tr><td>打开别人的作品 / 后台某页</td><td><strong>没有这个工具</strong></td><td>——</td><td>——</td></tr>
+</tbody></table>
+<h3>2.3 墙外（写死，任何提示词都改不了）</h3>
+<table><thead><tr><th>不认</th><th>原因</th></tr></thead><tbody>
+<tr><td>服务器文件系统、<code>.env</code>、<code>model-keys.json</code>、<code>auth.db</code>、<code>/opt/visionqa</code></td><td>你的原话：绝对不允许探到服务器</td></tr>
+<tr><td>内部端口（5312 画布 API、6677 画布前端、3210 演示站）</td><td>那些不是这个账号的界面</td></tr>
+<tr><td><code>/api/admin/*</code> 全部</td><td>后台运维数据不是「人能点的功能」</td></tr>
+<tr><td>跨账号读数据、任意 shell、任意路径写</td><td>与「人只能看自己的」同一条线</td></tr>
+</tbody></table>
+<p>实现上不靠自觉：工具注册表里每个条目必须写明 <code>route</code>（方法 + 路径）与 <code>ui</code>（界面上哪个按钮），缺一个就不许进表；再加一条单测扫全表——路径不许以 <code>/api/admin</code> 开头，且必须在 <code>server/routes/</code> 里找得到同方法同路径的处理器。谁想偷偷加一个「只有 agent 能做」的工具，测试先红。</p>
+<h3>2.4 一条我主动加的护栏（请你确认）</h3>
+<p>你是管理员，后台那些按钮你点得到。但如果照字面「你能点它就能点」，agent 就能调 <code>/api/admin/users</code> 删账号、读所有人的会话——这跟第 1 条的后半句「绝对不允许探到服务器等所有服务内容」直接打架。</p>
+<p><strong>我的处理：工具表对所有角色一致，只含用户侧功能；管理员身份不扩权。</strong> 管理员要查运维数据，用后台，不用 agent。这条比你说的更严一档，理由是可逆性：删账号不可逆，聊天里一句被带偏的提示词就可能点下去。</p>
+<h3>2.5 审批：默认只读，写与花钱逐次点</h3>
+<table><thead><tr><th>档位</th><th>谁批</th><th>行为</th></tr></thead><tbody>
+<tr><td>只读（默认）</td><td>不用批</td><td>4 个读工具直接执行，结果标「来自模板库/你的作品…」注入上下文</td></tr>
+<tr><td>写与花钱</td><td>房间成员逐次点「允许/拒绝」</td><td>工具卡停在「待批准」，90 秒无人处理按<strong>拒绝</strong>；服务重启、房间被改成只读，也按拒绝</td></tr>
+<tr><td>完全授权</td><td>——</td><td><strong>一期不给这个开关</strong>（你同意的默认档位只有前两档）</td></tr>
+</tbody></table>
+<p>拒绝不花钱、不执行、留一张灰卡说明原因；批准才扣费、才调上游。</p>
+<hr>
+<h2>3. 智能体怎么接进来（本期核心）</h2>
+<h3>3.1 你举的四个，现实差别很大</h3>
+<table><thead><tr><th>智能体</th><th>有没有可编程入口</th><th>能不能拿到 API Key</th><th>一期接法</th></tr></thead><tbody>
+<tr><td>豆包（火山方舟）</td><td>OpenAI 兼容 <code>/chat/completions</code></td><td>能（Ark API Key）</td><td>直连</td></tr>
+<tr><td>Claude</td><td>Anthropic Messages API；或 Claude Code 命令行</td><td>两者都常见（订阅没有 Key）</td><td>直连（有 Key）／连接器（只有订阅）</td></tr>
+<tr><td>codex</td><td>Codex CLI；也有 API</td><td>订阅登录最常用</td><td>连接器（<code>codex exec</code>）；有 Key 时也可直连</td></tr>
+<tr><td>workbuddy</td><td>本机客户端，模型配置在 <code>/~/.workbuddy/models.json</code></td><td>要实测，默认按「只能在你的机器上跑」对待</td><td>连接器</td></tr>
+</tbody></table>
+<p>结论：<strong>只做直连会漏掉一半人</strong>（订阅制没有 Key），<strong>只做连接器会让豆包这种纯 API 用户多装一个东西</strong>。所以两条都做。</p>
+<h3>3.2 方式 A · 直连（BYOK）</h3>
+<p>用户在「我的智能体」里填三样：<code>baseUrl</code> + <code>apiKey</code> + <code>model</code>（OpenAI 兼容或 Anthropic 兼容二选一），可加一句「职责」。</p>
+<ul>
+<li><strong>存哪</strong>：新文件 <code>DATA_DIR/user-agents.json</code>，key 用 AES-256-GCM 加密，密钥沿用 <code>server/keyvault.mjs</code> 那套（<code>VQ_KEY_SECRET</code> 或 <code>.model-keys.secret</code>，0600），但<strong>与平台 Key 池物理分开</strong>，接口只回 <code>sk-••••1234</code>。</li>
+<li><strong>谁去调</strong>：服务端代调（浏览器直连会被 CORS 挡，且 Key 不能下发前端）。这一层只做转发，<strong>不扣积分</strong>，但要记一条 <code>user_agent_calls</code>（谁、哪个智能体、多少 token、耗时）。</li>
+<li><strong>出口白名单</strong>（防 SSRF，必须有）：只允许 <code>https://</code>；域名解析后再校验 IP，拒环回/私有网段/链路本地（<code>169.254.169.254</code>）；不跟随跳转到内网；连不上 10 秒、整体 120 秒超时。</li>
+<li><strong>失败文案</strong>：401 = Key 无效（不重试）、429 = 对方限流（退避一次）、超时 = 「你的智能体没在 120 秒内回话」。都不扣积分。</li>
+</ul>
+<h3>3.3 方式 B · 本地连接器（Connector）</h3>
+<p>给「只有订阅、没有 Key」的人：在<strong>自己电脑</strong>上跑一个小程序，它连平台、收消息、交给本地 CLI 执行、把结果回传。</p>
+<pre><code>你电脑                                     我们服务器
+┌───────────────┐   长轮询取消息(25s)     ┌──────────────┐
+│ visionchat-   │ ──────────────────────▶ │  /api/rooms  │
+│ connect       │ ◀────────────────────── │   :id/...    │
+│  ├ codex exec │   回传文本/工具请求      └──────────────┘
+│  ├ claude -p  │
+│  └ workbuddy  │   ▲ 只带房间令牌，不是登录态
+└───────────────┘</code></pre>
+<ul>
+<li><strong>令牌</strong>：<code>vqc_</code> 前缀，绑定「账号 + 房间 + 该智能体成员」，只存 sha256（照 <code>server/sms-login.mjs</code> 存验证码的做法），设置页可随时撤销；权限 = 收发这一个房间的消息 + 转交工具请求，<strong>不是 session cookie</strong>，拿不到别的东西。</li>
+<li><strong>谁执行</strong>：连接器在自己机器上决定跑什么命令，平台只发消息、只收结果。所以<strong>平台永远不会把 shell 下到用户机器</strong>，用户机器也不会被平台探到——和你第 1 条的边界同向。</li>
+<li><strong>工具请求怎么走</strong>：房间要生图时，平台自己执行（那是我们的资源）；「读我电脑里的文件」这种工具<strong>一期没有</strong>（人的界面上也没有这个按钮）。</li>
+<li><strong>形态</strong>：一个零依赖的 <code>scripts/visionchat-connect.mjs</code>（<code>node</code> 直接跑），设置页给一行可复制的启动命令 + 令牌。</li>
+<li><strong>并发</strong>：一个令牌同时只处理 1 条消息；同一房间同一时刻 1 个回合（与平台智能体同一条闸门）。</li>
+</ul>
+<h3>3.4 房间成员变成三类</h3>
+<table><thead><tr><th>类型</th><th>来源</th><th>对话扣费</th><th>能不能被 @</th></tr></thead><tbody>
+<tr><td><code>platform</code></td><td><code>DATA_DIR/agents.json</code>（现有智能体）</td><td>1 积分/轮</td><td>能</td></tr>
+<tr><td><code>byok</code></td><td>用户填的 <code>baseUrl/key/model</code></td><td><strong>0</strong></td><td>能</td></tr>
+<tr><td><code>connector</code></td><td>一条连接器接入记录</td><td><strong>0</strong></td><td>能</td></tr>
+</tbody></table>
+<p><code>room_members</code> 加 <code>provider</code> 列区分；<code>agents.json</code> 的既有定义一行不迁、不改。</p>
+<hr>
+<h2>4. 计费：自带智能体免费聊，平台出资源才扣分</h2>
+<table><thead><tr><th>动作</th><th>扣多少</th><th>为什么</th></tr></thead><tbody>
+<tr><td>自己的智能体（直连/连接器）说一句话</td><td><strong>0</strong></td><td>模型与额度是你的，我们不收过路费</td></tr>
+<tr><td>平台智能体（<code>agents.json</code>）说一句话</td><td>1（<code>chat</code>）</td><td>用的是平台 Key，有真成本</td></tr>
+<tr><td>发一条消息本身（存储、转发）</td><td>0</td><td>不值当，也容易让人觉得被收两遍</td></tr>
+<tr><td>生成图片</td><td>5（<code>image_gen</code>）</td><td>平台上游成本，失败全退</td></tr>
+<tr><td>生成视频</td><td>15（<code>video_gen</code>）</td><td>同上</td></tr>
+<tr><td>视觉评审</td><td>5（<code>review</code>）</td><td>同上</td></tr>
+<tr><td>4 个读工具</td><td>0</td><td>不碰上游</td></tr>
+</tbody></table>
+<p>口径写死一处：<code>server/config.mjs</code> 的 <code>credits.prices</code>，不新增价目表；房间相关 <code>ref</code> 用 <code>room:&lt;id&gt;:call:&lt;callId&gt;</code> 前缀，失败 <code>refund</code> 同 <code>ref</code>（<code>outstandingCharge</code> 已能防重复退）。</p>
+<p>被刷怎么办：对话免费不等于没有闸门——每账号 20 条/分钟、每房间同时 1 个回合、连接器令牌每 10 秒最多取 1 次；真正贵的三个工具仍然逐次扣费 + 逐次批准。</p>
+<hr>
+<h2>5. 工具：一期全上（7 个）</h2>
+<table><thead><tr><th>工具</th><th>类</th><th>批准</th><th>扣费</th><th>对应界面</th></tr></thead><tbody>
+<tr><td><code>templates.list</code></td><td>读</td><td>自动</td><td>0</td><td>模板库列表</td></tr>
+<tr><td><code>projects.list</code> / <code>projects.get</code></td><td>读</td><td>自动</td><td>0</td><td>我的作品 / 作品详情</td></tr>
+<tr><td><code>assets.list</code></td><td>读</td><td>自动</td><td>0</td><td>我的资产</td></tr>
+<tr><td><code>web.read</code></td><td>读</td><td>自动</td><td>0</td><td>快捷创作里「读链接」</td></tr>
+<tr><td><code>media.image</code></td><td>写·花钱</td><td>逐次</td><td>5</td><td>快捷创作·图片</td></tr>
+<tr><td><code>media.video</code></td><td>写·花钱</td><td>逐次</td><td>15</td><td>快捷创作·视频</td></tr>
+<tr><td><code>review.run</code></td><td>写·花钱</td><td>逐次</td><td>5</td><td>视觉评审</td></tr>
+</tbody></table>
+<p><strong>去掉 v1 里的 <code>export-json</code></strong>：它会往服务器写文件，属于「产出物」而不是「人能点的操作」，且与第 1 条撞车。要下载 JSON，房间消息里直接复制即可。</p>
+<p>一期全上的代价与收口：每个工具都是薄包装（一个函数、一张参数 schema、一条单测），<strong>出问题按单个工具下线</strong>（注册表里 <code>enabled: false</code>），不回滚整个功能。上线前 7 个工具各跑一次假上游端到端，不做真实上游调用。</p>
+<hr>
+<h2>6. 页面与入口</h2>
+<ul>
+<li><code>src/nav.ts</code>：<code>PRIMARY_NAV</code> 第 5 项 <code>{ id: 'visionchat', label: '聊天室', chip: 'Beta' }</code>，放在「模板库」之后；<code>src/domain/types.ts</code> 的 <code>Page</code> 与 <code>pageLabels</code> 各加一条；路由复用 <code>#/&lt;page&gt;</code>。</li>
+<li>1440：三栏（房间 240 / 消息流自适应 / 成员 300）；390：单列，房间与成员改抽屉。</li>
+<li>不新增设计语言：只用 <code>src/styles/tokens.css</code> 的变量、4/8 栅格、lucide 线性图标、中文统一阿里巴巴普惠体 3.0 45 Light（全局已指定）。</li>
+<li>入口旁边一句定位：「把你手上的智能体拉进同一个房间」。</li>
+</ul>
+<hr>
+<h2>7. 三期路线</h2>
+<table><thead><tr><th>期</th><th>范围</th><th>一句话验收</th></tr></thead><tbody>
+<tr><td>一期</td><td>1 人 + N 个智能体（平台/直连/连接器混合）、7 个工具、审批、SSE</td><td>同房间 3 个智能体（一个豆包直连、一个 codex 连接器、一个平台智能体），@ 谁谁回，生图走审批并扣 5 分</td></tr>
+<tr><td>二期</td><td>多人 + 多智能体：同工作区成员、邀请链接、席位、房主代批</td><td>邀请令牌一次有效；被邀请者只能读自己能看的；房主可代批工具调用</td></tr>
+<tr><td>三期</td><td>社交属性（形态待定）</td><td>——</td></tr>
+</tbody></table>
+<p>三期的三个候选，等你想清楚了再选，现在不写死：</p>
+<ol>
+<li><strong>房间可被订阅</strong>：别人的房间只读可见，能「复制成一个新房间」来用（模板 + 智能体配置一起复制）。</li>
+<li><strong>作品流里的房间卡</strong>：房间产出的成品进公共作品流，点进去看它怎么被做出来的（只有过程摘要，不是聊天全文）。</li>
+<li><strong>智能体可以被别人借用</strong>：你配置好的智能体以「只读模板」形式公开，别人一键加入自己的房间（凭据永不出你的账号）。</li>
+</ol>
+<p>三个都涉及公开内容与权限外溢，等一期跑起来有真数据了再定。</p>
+<hr>
+<h2>8. 一期拆解与验收</h2>
+<table><thead><tr><th>工作面</th><th>内容</th><th>验收（可测）</th></tr></thead><tbody>
+<tr><td>1a 房间骨架</td><td><code>rooms</code> / <code>room_members</code> / <code>room_messages</code> / <code>room_reads</code> 建表、房间 CRUD、消息 <code>seq</code>、历史分页、未读、SSE + 断线续传</td><td>断线 30 秒重连不重不漏；非成员 403；390 不横向溢出</td></tr>
+<tr><td>1b 接入</td><td>直连（加密存 Key、出口白名单、失败文案）+ 连接器（令牌、长轮询、<code>codex exec</code> 示例）</td><td>直连用一个假 OpenAI 兼容上游跑通；连接器在本机用 <code>echo</code> 跑通；令牌撤销后立刻 401</td></tr>
+<tr><td>1c 工具</td><td>注册表 + 7 个工具 + 角色裁剪 + 单测扫表</td><td>7 个工具在假上游下全部成功；<code>/api/admin</code> 零命中；跨账号读作品 403</td></tr>
+<tr><td>1d 计费与审批</td><td>平台智能体 1 分/轮、工具逐次、审批卡与 90 秒超时</td><td>余额 = 流水求和；拒绝 0 扣 0 执行；超时按拒绝；失败全退</td></tr>
+</tbody></table>
+<p>顺序：1a → 1b → 1c → 1d；1b 的直连比连接器先落（用户最多）。每一步都先假上游、后真调；真实上游调用<strong>等你点头</strong>。</p>
+<hr>
+<h2>9. 风险</h2>
+<table><thead><tr><th>风险</th><th>缓解</th></tr></thead><tbody>
+<tr><td>提示词注入让 agent 把用户自己的 Key 说出去</td><td>Key 只在服务端解密、永不下发前端；消息里出现 <code>sk-</code> 形状的串做打码；输出前扫一遍</td></tr>
+<tr><td>连接器令牌泄露</td><td>只绑定一个房间、可撤销、只存 sha256；撤销即 401；不写进任何日志</td></tr>
+<tr><td>转发放大（拿我们的服务器打别人的接口）</td><td>出口白名单 + 每账号每分钟 20 条 + 每房间同时 1 回合 + 单次 120 秒超时</td></tr>
+<tr><td>「工具全上」面太大</td><td>7 个薄包装、单个可下线、假上游端到端、逐次批准</td></tr>
+<tr><td>双真源</td><td>智能体定义仍只 <code>agents.json</code>；接入信息只 <code>user-agents.json</code>；房间只引用 id</td></tr>
+</tbody></table>
+<hr>
+<h2>附：本文事实来源</h2>
+<ul>
+<li>导航：<code>src/nav.ts</code>（<code>PRIMARY_NAV</code> 四项、<code>WORKFLOW_NAV.chip = 'Beta'</code>）；<code>src/domain/types.ts</code> 的 <code>Page</code> / <code>pageLabels</code>。</li>
+<li>账号与归属：<code>server/config.mjs</code>（<code>vq_session</code>）、<code>server/auth.mjs</code>（<code>sessions</code>、<code>currentUser</code>、<code>isAdmin</code>）、<code>server/owner.mjs</code>（<code>canAccess</code>）。</li>
+<li>积分：<code>server/credits.mjs</code>（<code>charge</code> / <code>refund</code> / <code>outstandingCharge</code>）、<code>server/config.mjs</code> 的 <code>credits.prices</code>（chat 1 / image_gen 5 / video_gen 15 / review 5）、<code>pointsPerCny = 10</code>、<code>welcome = 50</code>、<code>concurrency.chat = 2</code>。</li>
+<li>智能体：<code>DATA_DIR/agents.json</code> + <code>server/agents.mjs</code>（<code>AGENT_TOOLS</code> 5 项，其中 <code>image-gen</code> 仍为 <code>planned</code>）、<code>server/agentChat.mjs</code>、<code>server/routes/local-agent.mjs</code>（一轮只扣一次 <code>chat</code>，<code>turnCharges</code>）。</li>
+<li>工具与资源：<code>server/routes/media-gen.mjs</code>、<code>server/routes/review.mjs</code>、<code>server/templates.mjs</code>、<code>server/assets.mjs</code>、<code>server/webread.mjs</code>。</li>
+<li>加密：<code>server/keyvault.mjs</code>（AES-256-GCM，密钥来自 <code>VQ_KEY_SECRET</code> 或 <code>DATA_DIR/.model-keys.secret</code>，0600）。</li>
+<li>桌面端审批模型：<code>electron/agent/tools.mjs</code>（只读免批、写与命令逐次批、60 秒超时、<code>resolveInside</code>）、<code>electron/agent/loop.mjs</code>。</li>
+<li>连接：<code>server/routes/chat.mjs</code>（<code>text/event-stream</code> + <code>X-Accel-Buffering: no</code>）、<code>deploy/nginx.conf</code>（<code>proxy_read_timeout 300s</code>）、<code>server/ratelimit.mjs</code>。</li>
+<li>令牌摘要口径：<code>server/sms-login.mjs</code>（验证码只存 sha256）。</li>
+<li>外部参考：Pachat 公开文档（每只 agent 自带 <code>pachat_</code> token、收件箱、长轮询唤醒）——<strong>只借「令牌 + 长轮询」的形状，不抄它的跨平台身份模型</strong>；dsh-chatroom 的预算/审批 <code>fail closed</code> 直觉。未引用任何未公开数字。</li>
+</ul>
+</main>
+</body>
+</html>
