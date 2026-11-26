@@ -39,7 +39,7 @@ const GUARDS = [
   { needle: 'function borderVisible(state) {', why: '边框可见性判定' },
   { needle: "if (prop !== 'border-color') return false", why: '只对 border-color 做这条推导判定' },
   { needle: 'return !borderVisible(before) && !borderVisible(after)', why: '两边都没有边框才算推导值' },
-  { needle: 'function propDiffs(before, after) {', why: '变化清单要能带 derived 标记（先出全量，再分两份）' },
+  { needle: 'function propDiffs(before, after, table) {', why: '变化清单要能带 derived 标记（先出全量，再分两份）；r337 起还要能换一张属性表（划过扩到非按钮表面时多了下划线两条）' },
   { needle: 'function derivedDiffs(before, after) {', why: '推导值要单独一份，如实记录' },
   { needle: 'out.hoverDerived = derivedDiffs(rest, hover).map((row) => row.prop)', why: 'hover 那一拍的推导值进产物' },
   { needle: 'out.derivedOnPress = derivedDiffs(hover, pressed).map((row) => row.prop)', why: '按下那一拍的推导值进产物' },
@@ -66,6 +66,25 @@ const GUARDS = [
   { needle: 'focusOutlineAppearances: focusPages.reduce(', why: '平台环出现的站数进 summary' },
   { needle: "focusRing: 'r336：--focus 单独一层。", why: 'probe 元数据里要写清这一层怎么量的' },
   { needle: "console.log('---- 键盘焦点：Tab 到但看不出焦点在哪（' + holeRows.length + ' 个）----')", why: '黑洞清单要打印出来' },
+  // r337：第五层——非按钮的可点表面（行 / 卡片 / 链接），只划过、绝不按下
+  { needle: "const LINK_MODE = process.argv.indexOf('--links') > 0", why: '要有一个只跑「非按钮表面」那一层的开关' },
+  { needle: 'function collectHoverSurfaces(scopeSel, limit) {', why: '要能收集「非按钮的可点表面」（cursor 是 pointer / 语义上可点的）' },
+  { needle: "if (!semantic && cs.cursor !== 'pointer') continue", why: '表面判定：语义可点的（链接/页签/开关…）不看 cursor，其余要 cursor: pointer' },
+  { needle: 'if (el.closest(\'button, [role="button"]\')) continue', why: '按钮里/按钮本身的那些已经由按下那三层量过，这一层不重复' },
+  { needle: 'for (const parent of outer) { if (parent.el.contains(item.el)) { nested = true; break } }', why: 'cursor 是继承属性：嵌套的只留最外层，划过一张卡片时手感落在卡片这张面上' },
+  { needle: 'function readHoverState(selector) {', why: '划过那一拍要读元素自己 + 子孙（反馈常常画在里面的箭头/缩略图上）' },
+  { needle: 'if (snapshots.length >= 13) { truncated = inner.length - i; break }', why: '子孙要有个上限，超了如实记 truncated（量不到 ≠ 没问题）' },
+  { needle: 'const HOVER_PROPS = PROPS.concat([', why: '划过这一层自己的属性表（多了下划线三条），不并进 PROPS' },
+  { needle: 'function hoverDerivedDecor(before, after, rows) {', why: 'text-decoration-color 是 currentColor 的另一种写法：没画线 / 与 color 同步变，都不算反馈' },
+  { needle: 'if (colorRow && colorRow.from === row.from && colorRow.to === row.to)', why: '与 color 同一步就是 currentColor（值对值，不靠猜）' },
+  { needle: 'function isDiscreteHoverProp(prop, before, after) {', why: '离散属性（下划线出现、auto ↔ 长度）算反馈但不进硬切' },
+  { needle: 'async function hoverWalk(pageId, pageLabel, scope) {', why: '一趟 = 一屏的非按钮表面逐个划过去' },
+  { needle: "if (!before || before.tag !== after.tag || before.cls !== after.cls) { surface.shifts.push(where); continue }", why: '子孙按位置对齐，挪位了算读不到（不硬凑）' },
+  { needle: "surface.verdict = surface.changed.length ? 'hover-feedback' : 'hover-no-change'", why: '两档判定：划过有看得见的变化 / 一点变化都没有' },
+  { needle: 'hoverNoChange: hoverPages.reduce(', why: '「划过看不出任何变化」的张数要进 summary' },
+  { needle: "hoverSurface: 'r337：--links 单独一层。", why: 'probe 元数据里要写清这一层怎么量的' },
+  { needle: "console.log('---- 非按钮表面：划过看不出任何变化（' + blankRows.length + ' 张）----')", why: '划过没反应的清单要打印出来' },
+  { needle: "console.log('---- 非按钮表面：划过有变化但还是硬切（' + cutRows.length + ' 张）----')", why: '这一层的硬切清单也要打印出来' },
 ]
 
 const missingFrom = (source) => GUARDS.filter((guard) => !source.includes(guard.needle)).map((guard) => guard.needle)
@@ -91,8 +110,8 @@ test('r334 · 量具：判据不是恒假的（把 duration 那一半删掉要�
 // r335：hover 那一层的反证。守卫只钉「代码还在不在」，这里钉「判据有没有被架空」——
 // 把变了的属性这一边换成空数组、或者换去查另一份状态，报告都会打印「划过硬切 0」，而页面没变好。
 test('r335 · 量具：边框宽度为 0 的连带变化不能算成反馈（filter 那一行要能看出来）', () => {
-  const from = 'return propDiffs(before, after).filter((row) => !row.derived)'
-  const broken = SRC.replace(from, 'return propDiffs(before, after)')
+  const from = 'return propDiffs(before, after, table).filter((row) => !row.derived)'
+  const broken = SRC.replace(from, 'return propDiffs(before, after, table)')
   assert.notEqual(broken, SRC, '改坏用的锚点没匹配到')
   assert.ok(!broken.includes(from), '把 derived 过滤删掉之后守卫没发现（26 条误报会回来）')
 })
@@ -120,6 +139,30 @@ test('r336 · 量具：焦点那一层的属性表与按下/划过那张分开�
   assert.ok(pressBlock.length > 0, '找不到 PROPS 那张表')
   assert.ok(!/outline/.test(pressBlock), '按下的属性表里出现了 outline —— 那会把 r331–r335 已经发布的读数改掉，三层不可比')
   assert.ok(SRC.indexOf('const FOCUS_PROPS = [') > 0, '焦点那一层自己的属性表不见了')
+})
+
+// r337：第五层（非按钮表面）的三处判据，逐条配反证
+test('r337 · 量具：划过没变化不是恒假的（判定那一行改坏要能看出来）', () => {
+  const from = "surface.verdict = surface.changed.length ? 'hover-feedback' : 'hover-no-change'"
+  const broken = SRC.replace(from, "surface.verdict = 'hover-feedback'")
+  assert.notEqual(broken, SRC, '改坏用的锚点没匹配到')
+  assert.ok(!broken.includes(from), '把「看不出变化」这一档改成恒真之后守卫没发现（模板抽屉那条裸链接会被记成有反馈）')
+})
+
+test('r337 · 量具：currentColor 那条推导不能删（下划线颜色跟着字色变不是一次反馈）', () => {
+  const from = "if (decor[diff.prop]) { surface.derived.push(where + ' ' + diff.prop + '（' + decor[diff.prop] + '）'); continue }"
+  const broken = SRC.replace(from, '')
+  assert.notEqual(broken, SRC, '改坏用的锚点没匹配到')
+  assert.ok(!broken.includes(from), '删掉推导判定之后守卫没发现（.vq-link 三张面会各多一条 text-decoration-color 假硬切）')
+  const lockstep = SRC.replace("if (colorRow && colorRow.from === row.from && colorRow.to === row.to) found[row.prop] = '与 color 同一步（currentColor）'", '')
+  assert.ok(!lockstep.includes('与 color 同一步（currentColor）'), '只认「没画线」不认「同步变」时守卫没发现')
+})
+
+test('r337 · 量具：离散属性不能算硬切（下划线出现那一下不补间）', () => {
+  const from = "if (prop === 'text-decoration-line') return true"
+  const broken = SRC.replace(from, 'if (prop === \'text-decoration-line\') return false')
+  assert.notEqual(broken, SRC, '改坏用的锚点没匹配到')
+  assert.ok(!broken.includes(from), '把下划线判成可过渡之后守卫没发现（.vq-link 三张面会被记成硬切）')
 })
 
 test('r335 · 量具：hover 的硬切不是恒假的（把输入换成空、或换查另一拍都要能看出来）', () => {

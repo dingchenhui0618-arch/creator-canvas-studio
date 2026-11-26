@@ -39,11 +39,23 @@
 //      同样沿用 r335 的推导规则：outline-style 是 none / 宽度 0 时 computed outline-color 等于
 //      currentColor，color 一变它必然跟着变，那不是焦点环。
 //
+//  10) r337 起：加第五层——**非按钮的可点表面**（行 / 卡片 / 链接），加 --links 只跑这一层。
+//      按下那一层必须真按，而链接一按就跳页，所以链接、可点行、整卡这些从来没被量过。
+//      这一层只划过、绝不按下（不合成 click、不发写请求）。表面 = computed cursor 是 pointer、可见、
+//      面积 >= 8x8、不是 button/[role=button]、也不在按钮里；cursor 是继承属性，所以嵌套的只留最外层。
+//      读元素自己 + 最多 12 个可见子孙：卡片划过时动的是里面的箭头/缩略图
+//      （.vq-project-card:hover .go svg { transform }），只读元素自己会把这一类记成「划过没变化」。
+//      属性表用 HOVER_PROPS = PROPS + 下划线两条；text-decoration-line 是离散属性，算反馈但不进硬切。
+//      按钮那三层的读数一个字都不动（仍走 PROPS / AFTER_PROPS）。
+//
 // 用法（同一份脚本跑两份产物）：
 //   node scripts/audit-press.mjs --dist .shots330/dist-after --out .shots331/press
 //   node scripts/audit-press.mjs --dist .shots331/dist-after --out .shots331/press-after
 //   node scripts/audit-press.mjs --only overview,admin-promos
 //   node scripts/audit-press.mjs --only shell --shots all   # 每一颗按下都截图（before/after 对比图）
+//   node scripts/audit-press.mjs --focus                   # 只跑键盘焦点那一层（Tab 走查）
+//   node scripts/audit-press.mjs --links                   # 只跑非按钮表面那一层（划过，不按下）
+//   node scripts/audit-press.mjs --only templates-drawer --links --shots all   # 划过那一拍也留一张局部图
 //
 // 产物：<out>/press.json + <out>/<page>-<n>-press.png（只给「按下无反馈候选」）
 import { spawn } from 'node:child_process'
@@ -69,6 +81,10 @@ const SHOT_SIZE = Number(argOf('shotsize', '120')) || 120
 // r336：--focus 只跑「键盘焦点」那一层。Tab 走查每个 pass 最多按这么多下（防跑飞）。
 const FOCUS_MODE = process.argv.indexOf('--focus') > 0
 const FOCUS_CAP = Number(argOf('focuscap', '40')) || 40
+// r337：--links 只跑「划过非按钮的可点表面」那一层（行 / 卡片 / 链接）。只划过，绝不按下：
+// 链接按下去会跳页，这一层里不许出现 click。
+const LINK_MODE = process.argv.indexOf('--links') > 0
+const HOVER_CAP = Number(argOf('hovercap', '20')) || 20
 const WIDTH = 1440
 const HEIGHT = 1000
 if (!fs.existsSync(path.join(DIST_DIR, 'index.html'))) throw new Error('dist 里没有 index.html：' + DIST_DIR)
@@ -711,6 +727,170 @@ function collectTargets(scopeSel, limit) {
   return { missingScope: false, total: visible.length, items: items }
 }
 
+// ---- r337：「划过」这一层从按钮扩到**非按钮的可点表面**（行 / 卡片 / 链接）----
+// 为什么单开一层：按下那一层必须真按，链接一按就跳页，所以链接、可点行、整卡这些从来没被量过。
+// 这一层只划过、绝不按下（不合成 click、不发写请求），与前面三层同一个口径：
+// 看得见的变化才叫反馈；变了但不在 computed transition 表里就是硬切。
+// 两个新东西：
+//   1) 反馈可能画在**子孙**身上（.vq-project-card:hover .go svg { transform }）——只读元素自己会把它
+//      记成「划过没变化」。所以读元素自己 + 最多 12 个可见子孙，按位置对齐逐个比，挪位了就当读不到。
+//   2) 下划线是链接最经典的反馈，而 text-decoration-line 是离散属性：算反馈，不进硬切（见 DISCRETE_HOVER_PROPS）。
+// 页面函数必须自足（.toString() 注进页面里跑），所以选择器那三个小工具在这里再写一遍——与 collectTargets 同一份实现。
+function readHoverState(selector) {
+  const el = document.querySelector(selector)
+  if (!el) return { missing: true }
+  function snapshot(node) {
+    const cs = getComputedStyle(node)
+    const ps = getComputedStyle(node, '::after')
+    return {
+      tag: node.tagName,
+      cls: String(node.getAttribute('class') || '').split(/\s+/).filter(Boolean).slice(0, 2).join('.'),
+      backgroundColor: cs.backgroundColor,
+      borderColor: cs.borderColor,
+      color: cs.color,
+      boxShadow: cs.boxShadow,
+      transform: cs.transform,
+      opacity: cs.opacity,
+      textDecorationLine: cs.textDecorationLine,
+      textDecorationColor: cs.textDecorationColor,
+      textUnderlineOffset: cs.textUnderlineOffset,
+      borderWidths: [cs.borderTopWidth, cs.borderRightWidth, cs.borderBottomWidth, cs.borderLeftWidth],
+      transitionProperty: cs.transitionProperty,
+      transitionDuration: cs.transitionDuration,
+      cursor: cs.cursor,
+      after: {
+        content: ps.content,
+        backgroundColor: ps.backgroundColor,
+        boxShadow: ps.boxShadow,
+        transform: ps.transform,
+        opacity: ps.opacity,
+        transitionProperty: ps.transitionProperty,
+        transitionDuration: ps.transitionDuration,
+      },
+    }
+  }
+  const snapshots = [Object.assign({ where: 'self' }, snapshot(el))]
+  const inner = el.querySelectorAll('*')
+  let truncated = 0
+  for (let i = 0; i < inner.length; i += 1) {
+    if (snapshots.length >= 13) { truncated = inner.length - i; break }
+    const node = inner[i]
+    const r = node.getBoundingClientRect()
+    if (r.width < 2 || r.height < 2) continue
+    const cs = getComputedStyle(node)
+    if (cs.display === 'none' || cs.visibility === 'hidden') continue
+    snapshots.push(Object.assign({ where: 'd' + i }, snapshot(node)))
+  }
+  const box = el.getBoundingClientRect()
+  const x = Math.round(box.left + box.width / 2)
+  const y = Math.round(box.top + box.height / 2)
+  const hit = document.elementFromPoint(x, y)
+  return {
+    missing: false,
+    snapshots: snapshots,
+    truncated: truncated,
+    hitInside: Boolean(hit && (hit === el || el.contains(hit))),
+    hit: hit ? { tag: hit.tagName, cls: String(hit.getAttribute('class') || '').split(/\s+/).filter(Boolean).slice(0, 2).join('.') } : null,
+    rect: { l: Math.round(box.left), t: Math.round(box.top), w: Math.round(box.width), h: Math.round(box.height) },
+  }
+}
+
+function collectHoverSurfaces(scopeSel, limit) {
+  // 「非按钮的可点表面」：computed cursor 是 pointer、可见、面积够看，且不是 button / [role=button]、
+  // 也不在某个按钮里面。cursor 是继承属性，卡片里每个后代都跟着是 pointer——所以嵌套的只留最外层：
+  // 划过一张卡片时，手感落在卡片这张「面」上（.vq-project-card 里那颗箭头不是另一张面）。
+  function escapeIdent(value) { return window.CSS.escape(String(value)) }
+  function stableClasses(node) {
+    return Array.prototype.slice.call(node.classList).filter(function (c) { return c.indexOf('is-') !== 0 && c.length < 40 }).slice(0, 2)
+  }
+  function selectorFor(el) {
+    const cls = stableClasses(el)
+    const simple = el.tagName.toLowerCase() + (cls.length ? '.' + cls.map(escapeIdent).join('.') : '')
+    try { if (document.querySelectorAll(simple).length === 1) return simple } catch { /* 选择器不合法就往下走 */ }
+    const all = Array.prototype.slice.call(el.classList)
+    if (all.length) {
+      const full = el.tagName.toLowerCase() + '.' + all.map(escapeIdent).join('.')
+      try { if (document.querySelectorAll(full).length === 1) return full } catch { /* 同上 */ }
+    }
+    const parts = []
+    let node = el
+    for (let depth = 0; node && node.nodeType === 1 && depth < 8; depth += 1) {
+      let part = node.tagName.toLowerCase()
+      const c = stableClasses(node)
+      if (c.length) part += '.' + c.map(escapeIdent).join('.')
+      const parent = node.parentElement
+      if (parent) {
+        const same = Array.prototype.filter.call(parent.children, function (child) { return child.tagName === node.tagName })
+        part += ':nth-of-type(' + (same.indexOf(node) + 1) + ')'
+      }
+      parts.unshift(part)
+      const sel = parts.join(' > ')
+      try { if (document.querySelectorAll(sel).length === 1) return sel } catch { /* 同上 */ }
+      node = parent
+    }
+    return parts.join(' > ')
+  }
+  const roots = scopeSel ? Array.prototype.slice.call(document.querySelectorAll(scopeSel)) : [document]
+  if (!roots.length) return { missingScope: true, total: 0, items: [] }
+  const nodes = []
+  const seen = new Set()
+  for (const root of roots) {
+    // 两类都算「非按钮的可点表面」：
+    //   ① 语义上就是可点的（链接 / 页签 / 选项 / 菜单项 / 开关 / 详情展开 / label）——不看 cursor，
+    //      因为一条 <a href> 在很多设计里没被显式写成 cursor: pointer；
+    //   ② computed cursor 是 pointer 的（全站绝大多数可点元素靠这条，卡片、行都在这类里）。
+    // label 不收：它是控件的说明文字，点它是「把焦点送到那一格」，划过给反馈反而是噪音
+    //（第一版把 label[for] 收进来，admin-promos 一屏 20 张面全是 <label>，真信号被埋了）。
+    const found = Array.prototype.slice.call(root.querySelectorAll('a[href], [role="link"], [role="tab"], [role="option"], [role="menuitem"], [role="switch"], [role="checkbox"], [role="radio"], summary, *'))
+    for (const el of found) {
+      if (seen.has(el)) continue
+      const tag = el.tagName
+      if (tag === 'BUTTON' || tag === 'HTML' || tag === 'BODY' || tag === 'SCRIPT' || tag === 'STYLE' || tag === 'SVG' || tag === 'PATH' || tag === 'CIRCLE' || tag === 'RECT' || tag === 'LINE') continue
+      if (el.getAttribute('role') === 'button') continue
+      if (el.closest('button, [role="button"]')) continue
+      const r = el.getBoundingClientRect()
+      if (r.width < 8 || r.height < 8) continue
+      const cs = getComputedStyle(el)
+      if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) === 0) continue
+      const role = String(el.getAttribute('role') || '')
+      const semantic = tag === 'SUMMARY' || ['link', 'tab', 'option', 'menuitem', 'switch', 'checkbox', 'radio'].indexOf(role) >= 0
+      if (!semantic && cs.cursor !== 'pointer') continue
+      seen.add(el)
+      nodes.push({ el: el, why: semantic ? 'semantic:' + tag.toLowerCase() + (role ? '[' + role + ']' : '') : 'cursor:pointer' })
+    }
+  }
+  // 嵌套的只留最外层（文档顺序里祖先先出现）
+  const outer = []
+  for (const item of nodes) {
+    let nested = false
+    for (const parent of outer) { if (parent.el.contains(item.el)) { nested = true; break } }
+    if (!nested) outer.push(item)
+  }
+  const items = outer.slice(0, limit).map(function (entry, index) {
+    const el = entry.el
+    const r = el.getBoundingClientRect()
+    const cs = getComputedStyle(el)
+    const selector = selectorFor(el)
+    let resolved = -1
+    try { resolved = document.querySelectorAll(selector).length } catch { resolved = -1 }
+    return {
+      n: index + 1,
+      selector: selector,
+      selectorMatches: resolved,
+      tag: el.tagName,
+      text: String(el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 30),
+      cls: String(el.getAttribute('class') || ''),
+      role: el.getAttribute('role'),
+      href: el.getAttribute('href'),
+      cursor: cs.cursor,
+      why: entry.why,
+      descCount: el.querySelectorAll('*').length,
+      rect: { l: Math.round(r.left), t: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) },
+    }
+  })
+  return { missingScope: false, total: outer.length, items: items }
+}
+
 function installPromoAnimProbe() {
   // 听 .vq-promo-undo 上的 animationstart/animationend（1.2 秒窗口），并在同一个窗口里
   // 每 50ms 采一次它的 computed transform —— 「进场动画有没有留下 transform」要看得见过程，不只看结果。
@@ -1000,10 +1180,10 @@ function isDerivedProp(before, after, prop) {
   if (prop !== 'border-color') return false
   return !borderVisible(before) && !borderVisible(after)
 }
-function propDiffs(before, after) {
+function propDiffs(before, after, table) {
   const rows = []
   if (!before || !after || before.missing || after.missing) return rows
-  for (const pair of PROPS) {
+  for (const pair of (table || PROPS)) {
     if (String(before[pair[0]]) !== String(after[pair[0]])) {
       rows.push({ prop: pair[1], from: String(before[pair[0]]), to: String(after[pair[0]]), derived: isDerivedProp(before, after, pair[1]) })
     }
@@ -1020,12 +1200,44 @@ function propDiffs(before, after) {
   return rows
 }
 // 看得见的变化（判反馈、判硬切都用这一份）
-function diffProps(before, after) {
-  return propDiffs(before, after).filter((row) => !row.derived)
+function diffProps(before, after, table) {
+  return propDiffs(before, after, table).filter((row) => !row.derived)
 }
 // 推导出来的变化（border-color 跟随 color、边框宽度 0）：单列出来如实记录，不混进上面那一份
 function derivedDiffs(before, after) {
   return propDiffs(before, after).filter((row) => row.derived)
+}
+// ---- r337：「划过」扩到非按钮的可点表面（行 / 卡片 / 链接）时多用两条属性 ----
+// 下划线是链接最经典的划过反馈，可它不在按下那一层的 PROPS 里（按钮不靠下划线说话）。
+// 单开一张表、不改 PROPS：r331–r335 的按钮读数因此一个字都不动。
+const HOVER_PROPS = PROPS.concat([
+  ['textDecorationLine', 'text-decoration-line'],
+  ['textDecorationColor', 'text-decoration-color'],
+  ['textUnderlineOffset', 'text-underline-offset'],
+])
+function hoverPropDiffs(before, after) { return propDiffs(before, after, HOVER_PROPS) }
+// 离散属性：算「有反馈」，但不进硬切——它们本来就不补间（跟 r336 的 outline-style 同一条规范规则）。
+//   text-decoration-line：none ↔ underline 是离散的，下划线本来就会啪一下出来；
+//   text-underline-offset：只有两边都是长度才插值，auto ↔ 长度也是离散的。
+function isDiscreteHoverProp(prop, before, after) {
+  if (prop === 'text-decoration-line') return true
+  if (prop === 'text-underline-offset') return String(before.textUnderlineOffset) === 'auto' || String(after.textUnderlineOffset) === 'auto'
+  return false
+}
+// text-decoration-color 是 border-color 那条规则的另一半：没显式给下划线颜色时，computed 的
+// text-decoration-color 就是 currentColor。两种情形都算「推导出来的值」，不是一次反馈：
+//   a) 这一张面压根没画线（text-decoration-line: none）—— 没有线可上色；
+//   b) 它的 from→to 与 color 的 from→to 一模一样 —— 它只是跟着字色走。
+// 这一条只用在 r337 这一层：r331–r335 的读数已经发布，不改它们（同 r335 的宽度 0 规则只加在 presses 那一层）。
+function hoverDerivedDecor(before, after, rows) {
+  const found = {}
+  const colorRow = rows.filter((row) => row.prop === 'color')[0]
+  for (const row of rows) {
+    if (row.prop !== 'text-decoration-color') continue
+    if (String(before.textDecorationLine) === 'none' && String(after.textDecorationLine) === 'none') { found[row.prop] = 'text-decoration-line 是 none（没有线可上色）'; continue }
+    if (colorRow && colorRow.from === row.from && colorRow.to === row.to) found[row.prop] = '与 color 同一步（currentColor）'
+  }
+  return found
 }
 // ---- r334：这一次变化「走不走过渡」----
 // 判据只有一条：computed 的 transition-property 里有没有这条属性、声明出来的 duration 是不是 0。
@@ -1244,6 +1456,89 @@ async function focusWalk(pageId, pageLabel) {
   return row
 }
 
+async function hoverWalk(pageId, pageLabel, scope) {
+  const row = {
+    id: pageId, label: pageLabel, scope: scope || null, cap: HOVER_CAP, total: null, listed: 0,
+    capReached: false, aborted: null, surfaces: [],
+    feedback: 0, noChange: 0, discreteOnly: 0, hardCutSurfaces: 0, readFailed: 0,
+  }
+  const collected = await evaluate('(' + collectHoverSurfaces.toString() + ')(' + JSON.stringify(scope || null) + ',' + HOVER_CAP + ')')
+  if (!collected || collected.missingScope) {
+    row.aborted = 'scope 在收集划过表面时已经不见了：' + scope
+    hoverPages.push(row)
+    console.log('HOVER ' + pageId + ' :: ABORT ' + row.aborted)
+    return row
+  }
+  row.total = collected.total
+  row.listed = collected.items.length
+  row.capReached = collected.total > collected.items.length
+  if (row.capReached) note(pageId + '：非按钮的可点表面 ' + collected.total + ' 个，按文档顺序只量前 ' + HOVER_CAP + ' 个', { skipped: collected.total - collected.items.length })
+  for (const item of collected.items) {
+    const surface = {
+      n: item.n, selector: item.selector, selectorMatches: item.selectorMatches, tag: item.tag, text: item.text,
+      cls: item.cls.slice(0, 90), role: item.role, href: item.href, cursor: item.cursor, why: item.why, descCount: item.descCount,
+      rect: item.rect, verdict: null, error: null, changed: [], derived: [], discrete: [], hardCuts: [], shifts: [],
+      hitInside: null, truncated: 0, descRead: 0,
+    }
+    try {
+      const view = await evaluate('(' + bringIntoView.toString() + ')(' + JSON.stringify(item.selector) + ')')
+      if (!view || view.missing) { surface.error = '划过前元素已经不在页面上'; surface.verdict = 'read-failed'; row.readFailed += 1; row.surfaces.push(surface); continue }
+      surface.rect = { l: view.l, t: view.t, w: view.w, h: view.h }
+      if (!view.inViewport) { surface.error = '滚到眼前之后仍不在视口里（t=' + view.t + ', h=' + view.h + '），这一张量不了'; surface.verdict = 'read-failed'; row.readFailed += 1; row.surfaces.push(surface); continue }
+      // ① 鼠标离开这一张面：rest 基线
+      await parkMouseNeutral()
+      await sleep(70)
+      const rest = await evaluate('(' + readHoverState.toString() + ')(' + JSON.stringify(item.selector) + ')')
+      if (!rest || rest.missing) { surface.error = 'rest 读不到这张面'; surface.verdict = 'read-failed'; row.readFailed += 1; row.surfaces.push(surface); continue }
+      // ② 移到中心：划过去那一拍
+      await mouseTo(view.cx, view.cy)
+      await sleep(160)
+      const hover = await evaluate('(' + readHoverState.toString() + ')(' + JSON.stringify(item.selector) + ')')
+      if (!hover || hover.missing) { surface.error = '划过那一拍读不到这张面'; surface.verdict = 'read-failed'; row.readFailed += 1; row.surfaces.push(surface); continue }
+      surface.hitInside = hover.hitInside
+      surface.truncated = hover.truncated
+      surface.descRead = hover.snapshots.length - 1
+      if (!hover.hitInside) note('落点被盖住：' + item.selector, { hit: hover.hit, where: pageId + '#' + item.n })
+      for (let i = 0; i < hover.snapshots.length; i += 1) {
+        const after = hover.snapshots[i]
+        const before = rest.snapshots[i]
+        const where = i === 0 ? 'self' : 'self>' + (after.where || 'd' + i)
+        if (!before || before.tag !== after.tag || before.cls !== after.cls) { surface.shifts.push(where); continue }
+        const rows = hoverPropDiffs(before, after)
+        if (!rows.length) continue
+        const decor = hoverDerivedDecor(before, after, rows)
+        for (const diff of rows) {
+          if (diff.derived) { surface.derived.push(where + ' ' + diff.prop); continue }
+          if (decor[diff.prop]) { surface.derived.push(where + ' ' + diff.prop + '（' + decor[diff.prop] + '）'); continue }
+          surface.changed.push(where + ' ' + diff.prop)
+          if (isDiscreteHoverProp(diff.prop, before, after)) { surface.discrete.push(where + ' ' + diff.prop + ': ' + diff.from + ' → ' + diff.to); continue }
+          const found = transitionOf(after, false, diff.prop)
+          if (!found.declared || found.ms <= 0) surface.hardCuts.push({ where: where, prop: diff.prop, declared: found.declared, duration: found.duration, from: diff.from, to: diff.to })
+        }
+      }
+      surface.verdict = surface.changed.length ? 'hover-feedback' : 'hover-no-change'
+      // 证据图：只给「划过有反馈」的面留一张（还划着的时候截），给的是这一张面的局部
+      if (SHOTS === 'all' && surface.verdict === 'hover-feedback') {
+        surface.screenshot = await shotClip(pageId + '-' + item.n + '-hover.png', item.selector, SHOT_SIZE, 8)
+      }
+    } catch (error) {
+      surface.error = String((error && error.message) || error).slice(0, 300)
+      surface.verdict = 'read-failed'
+      row.readFailed += 1
+      try { await parkMouseNeutral() } catch { /* 鼠标收不回来也要往下走 */ }
+    }
+    if (surface.verdict === 'hover-feedback') row.feedback += 1
+    if (surface.verdict === 'hover-no-change') row.noChange += 1
+    if (surface.hardCuts.length) row.hardCutSurfaces += 1
+    if (surface.discrete.length && !surface.hardCuts.length) row.discreteOnly += 1
+    row.surfaces.push(surface)
+    console.log('HOVER ' + pageId + '#' + item.n + ' ' + (surface.verdict || '?') + ' :: ' + String(item.text).slice(0, 22) + ' :: ' + item.tag + (item.cls ? '.' + item.cls.split(' ')[0] : '') + ' changed=[' + surface.changed.join(',') + ']' + (surface.hardCuts.length ? ' HARD-CUT=' + surface.hardCuts.map((c) => c.where + ':' + c.prop).join(',') : '') + (surface.error ? ' ERROR=' + surface.error : ''))
+  }
+  hoverPages.push(row)
+  console.log('HOVER-SUMMARY ' + row.id + ' · 非按钮表面 ' + row.listed + '/' + row.total + ' · 有反馈 ' + row.feedback + ' · 看不出变化 ' + row.noChange + ' · 有反馈但硬切 ' + row.hardCutSurfaces + ' · 只靠下划线 ' + row.discreteOnly + ' · 读不到 ' + row.readFailed + (row.capReached ? ' · 到上限 ' + HOVER_CAP : ''))
+  return row
+}
+
 async function pressOne(pageId, pageLabel, item) {
   const out = {
     page: pageId, pageLabel: pageLabel, n: item.n,
@@ -1381,7 +1676,7 @@ const PASSES = [
   // r336：只跑键盘焦点那一层（不加进按下巡检：那样 136 颗的基线会变，三层读数就不可比了）。
   // 这一屏是静态门禁抓到的唯一一处真黑洞（.lw-composer textarea 把 UA 焦点框按掉又没补），
   // 加进来就是为了在真页面上量它一眼。
-  { id: 'local-workspace', label: '本地工作区 · 输入框', route: '/local', who: 'user', scope: '.lw-composer', focusOnly: true, ready: '.lw-composer', note: '静态门禁抓到的焦点黑洞所在屏' },
+  { id: 'local-workspace', label: '本地工作区 · 输入框', route: '/local', who: 'user', scope: '.lw-composer', focusOnly: true, ready: '.vq-content', note: '静态门禁抓到的焦点黑洞所在屏（空状态里没有 .lw-composer，ready 用 .vq-content，不然这一趟连页都进不去）' },
 ]
 
 async function preparePass(pass) {
@@ -1411,6 +1706,8 @@ const buttons = []
 const passes = []
 // r336：焦点那一层按「屏」记账（每屏一条 Tab 走查）
 const focusPages = []
+// r337：划过那一层按「屏」记账（每屏一趟非按钮表面）
+const hoverPages = []
 let totalPressCount = 0
 
 async function runPass(pass) {
@@ -1645,6 +1942,17 @@ try {
       if (pass.prepare) await sleep(600)
       await focusWalk(pass.id, pass.label)
     }
+  } else if (LINK_MODE) {
+    // r337：同一批屏，量非按钮的可点表面（行 / 卡片 / 链接）。只划过：不点、不写。
+    for (const pass of active) {
+      console.log('---- 趟（划过·非按钮表面）：' + pass.id + ' · ' + pass.label)
+      await goto(pass.route, pass.ready || '.vq-content', pass.who || 'user')
+      await dismissOverlays()
+      const prepared = await preparePass(pass)
+      if (!prepared) { console.log('HOVER-ABORT ' + pass.id + ' :: 这一趟的入口没能打开（见 notes）'); continue }
+      if (pass.prepare) await sleep(600)
+      await hoverWalk(pass.id, pass.label, pass.scope)
+    }
   } else {
     for (const pass of active.filter((item) => !item.focusOnly)) {
       console.log('---- 趟：' + pass.id + ' · ' + pass.label)
@@ -1694,12 +2002,15 @@ const out = {
     hoverHardCut: 'r335：同一套判据用在 hover 上。rest（鼠标在中性点）→ hover（鼠标移到元素中心）之间变了的属性，同样去查过渡表；产物 hoverChangedVsRest / hoverHardCuts。按下那一层的数字与 r331–r334 完全可比（这一层只多读两行，不改按下口径）',
     focusRing: 'r336：--focus 单独一层。CDP 真发 Tab（rawKeyDown/keyUp，Tab 必须由浏览器自己处理这次按键才动焦点），每站读元素自己 + 最多三层祖先的 FOCUS_PROPS（outline 四件套 + box-shadow + border-color + background + color + transform + opacity + ::after），走完整条链再 blur 回「没有焦点」读同一批选择器当 rest 基线。判定：自己变了 = ring，只有祖先变 = delegated-ring（输入框把 UA 环按掉、由 :focus-within 的容器给提示），都没有 = no-visible-change（键盘焦点黑洞）。outline-style 是 none / 宽度 0 / 颜色全透明时，computed outline-color 等于 currentColor —— 与 r335 的 border-color 是同一条规则的另一半，单列 derived 不进判定。',
     focusTable: 'r336：焦点这一层读的是 FOCUS_PROPS，与按下/划过那三层的 PROPS 分开 —— 焦点会改 outline，并进 PROPS 会把 r331–r335 的读数改掉，层与层之间就不可比了',
+    hoverSurface: 'r337：--links 单独一层。只划过、绝不按下（链接一按就跳页）。表面 = computed cursor 是 pointer、可见、面积 >= 8x8、不是 button/[role=button]/也不在按钮里；cursor 是继承属性，所以嵌套的只留最外层（划过一张卡片时手感落在卡片这张面上）。读的是元素自己 + 最多 12 个可见子孙（反馈常常画在子孙身上，如 .vq-project-card:hover .go svg），按位置对齐逐个比，挪位了算读不到。',
+    hoverSurfaceTable: 'r337：这一层用 HOVER_PROPS = PROPS + text-decoration-line/-color。下划线是链接最经典的反馈，而 text-decoration-line 是离散属性（none ↔ underline 不补间）：算反馈，不进硬切。按钮读数一个字都不动（r331–r335 仍走 PROPS / AFTER_PROPS）。',
   },
   seeds: seeded,
   overlays: overlayLog,
   passes: passes,
   buttons: buttons,
   focus: { mode: FOCUS_MODE, cap: FOCUS_CAP, pages: focusPages },
+  hoverSurfaces: { mode: LINK_MODE, cap: HOVER_CAP, pages: hoverPages },
   candidates: candidates.map((row) => ({ page: row.page, pageLabel: row.pageLabel, n: row.n, text: row.text, selector: row.selector, tag: row.tag, disabled: row.disabled, pressActive: row.pressActive, changed: [], screenshot: row.screenshot ? row.screenshot.file : null })),
   promo: promo,
   writeRequests: { total: allWrites.length, counts: writeCounts },
@@ -1742,6 +2053,15 @@ const out = {
     focusDerivedOutline: focusPages.reduce((sum, row) => sum + row.stops.reduce((n, item) => n + (item.derived || []).length, 0), 0),
     // 环「从无到有」（outline none ↔ auto）的那一下：平台行为，不进硬切，单列出来报数
     focusOutlineAppearances: focusPages.reduce((sum, row) => sum + row.outlineAppearances, 0),
+    // r337：划过那一层扩到非按钮的可点表面（--links 才跑）
+    hoverSurfacePages: hoverPages.length,
+    hoverSurfaces: hoverPages.reduce((sum, row) => sum + row.surfaces.length, 0),
+    hoverFeedback: hoverPages.reduce((sum, row) => sum + row.feedback, 0),
+    hoverNoChange: hoverPages.reduce((sum, row) => sum + row.noChange, 0),
+    // 名字带 Surface：按钮那一层的 hoverHardCuts 就在上面 20 行，重名会把那一层的数字悄悄盖掉（oxlint 抓到的）
+    hoverSurfaceHardCuts: hoverPages.reduce((sum, row) => sum + row.hardCutSurfaces, 0),
+    hoverDiscreteOnly: hoverPages.reduce((sum, row) => sum + row.discreteOnly, 0),
+    hoverReadFailed: hoverPages.reduce((sum, row) => sum + row.readFailed, 0),
     writeRequests: allWrites.length,
     upstreamCalls: upstream.length,
     anomalies: anomalies.length,
@@ -1805,6 +2125,25 @@ if (FOCUS_MODE) {
   console.log('---- per 屏焦点走查 ----')
   for (const row of focusPages) console.log(pad(row.id, 18) + pad('Tab 到 ' + row.stops.length, 12) + pad('自己有环 ' + row.rings, 14) + pad('环在祖先 ' + row.delegated, 14) + pad('看不出焦点 ' + row.holes, 16) + pad('硬切 ' + row.hardCutStops, 10) + pad('读不到 ' + row.readFailedStops, 12) + (row.capReached ? '到上限 ' + row.cap : '') + (row.endedAtBody ? ' 第 ' + row.endedAtBody + ' 下回到 body' : '') + (row.cycled ? ' 第 ' + row.cycled + ' 下回到开头' : ''))
 }
+if (LINK_MODE) {
+  const surfaces = hoverPages.reduce((list, row) => list.concat(row.surfaces.map((item) => Object.assign({ page: row.id }, item))), [])
+  const blankRows = surfaces.filter((item) => item.verdict === 'hover-no-change')
+  const cutRows = surfaces.filter((item) => (item.hardCuts || []).length > 0)
+  const discreteRows = surfaces.filter((item) => (item.discrete || []).length > 0 && !(item.hardCuts || []).length)
+  console.log('')
+  console.log('---- 非按钮表面：划过看不出任何变化（' + blankRows.length + ' 张）----')
+  for (const item of blankRows) console.log(pad(item.page, 16) + pad(String(item.text).slice(0, 18), 20) + pad(item.tag, 8) + pad(String(item.cls).slice(0, 34), 36) + item.selector)
+  console.log('')
+  console.log('---- 非按钮表面：划过有变化但还是硬切（' + cutRows.length + ' 张）----')
+  for (const item of cutRows) console.log(pad(item.page, 16) + pad(String(item.text).slice(0, 16), 18) + pad(item.hardCuts.map((cut) => cut.where + ':' + cut.prop + '@' + (cut.declared ? cut.duration : '不在过渡表里')).join(' '), 62) + item.selector)
+  console.log('')
+  console.log('---- 非按钮表面：只有下划线（离散属性，不算硬切，' + discreteRows.length + ' 张）----')
+  for (const item of discreteRows) console.log(pad(item.page, 16) + pad(String(item.text).slice(0, 18), 20) + pad(item.discrete.join(' '), 40) + item.selector)
+  console.log('')
+  console.log('---- per 屏划过走查 ----')
+  for (const row of hoverPages) console.log(pad(row.id, 16) + pad('表面 ' + row.listed + '/' + row.total, 16) + pad('有反馈 ' + row.feedback, 12) + pad('看不出变化 ' + row.noChange, 16) + pad('硬切 ' + row.hardCutSurfaces, 10) + pad('只靠下划线 ' + row.discreteOnly, 16) + pad('读不到 ' + row.readFailed, 12) + (row.capReached ? '到上限 ' + row.cap : '') + (row.aborted || ''))
+  console.log('')
+}
 console.log('---- 趟汇总 ----')
 for (const row of passes) {
   console.log(pad(row.id, 18) + pad('可见可点 ' + row.total, 14) + pad('量了 ' + row.measured, 10) + pad('有反馈 ' + row.feedback, 12) + pad('候选 ' + row.noFeedback, 10) + pad('active没匹配 ' + row.activeNotMatched, 18) + pad('禁用 ' + row.disabled, 10) + pad('读不到 ' + row.readFailed, 12) + pad('写请求 ' + row.writeRequests, 12) + (row.aborted || ''))
@@ -1815,6 +2154,9 @@ if (FOCUS_MODE) {
   console.log('---- 焦点巡检 · ' + out.summary.focusPages + ' 屏 / Tab 到 ' + out.summary.focusStops + ' 站 · 自己有环 ' + out.summary.focusRings + ' · 环在祖先 ' + out.summary.focusDelegated + ' · 看不出焦点 ' + out.summary.focusNoVisibleChange + ' · 焦点硬切 ' + out.summary.focusHardCuts + ' · derived（outline 没画出来时的 outline-color）' + out.summary.focusDerivedOutline + ' · 环从无到有（不算硬切）' + out.summary.focusOutlineAppearances + ' · :focus-visible 没匹配 ' + out.summary.focusVisibleNotMatched + ' · 读不到 ' + out.summary.focusReadFailed + ' · 写请求 ' + allWrites.length + ' · 上游 ' + upstream.length + ' · 证据 ' + path.join(path.relative(ROOT, OUT_DIR), 'press.json') + ' ----')
 }
 
+if (LINK_MODE) {
+  console.log('---- 划过巡检（非按钮表面）· ' + out.summary.hoverSurfacePages + ' 屏 / 量了 ' + out.summary.hoverSurfaces + ' 张 · 有反馈 ' + out.summary.hoverFeedback + ' · 看不出变化 ' + out.summary.hoverNoChange + ' · 有反馈但硬切 ' + out.summary.hoverSurfaceHardCuts + ' · 只靠下划线 ' + out.summary.hoverDiscreteOnly + ' · 读不到 ' + out.summary.hoverReadFailed + ' · 写请求 ' + allWrites.length + ' · 上游 ' + upstream.length + ' · 证据 ' + path.join(path.relative(ROOT, OUT_DIR), 'press.json') + ' ----')
+}
 try { chrome.kill() } catch { /* 已经退出 */ }
 try { server.kill() } catch { /* 已经退出 */ }
 await sleep(400)

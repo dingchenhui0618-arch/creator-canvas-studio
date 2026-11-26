@@ -763,3 +763,112 @@ test('r334 · 反证：删掉 .vq-search 的 box-shadow 过渡，焦点环检查
   const problems = focusRingProblems(css.replace(from, ';'))
   assert.ok(problems.includes('shell.css :: .vq-search:focus-within :: box-shadow'), '删掉之后没量到 box-shadow：' + JSON.stringify(problems))
 })
+
+// ---------- r337：非按钮的可点表面（裸链接 / 行 / 卡片）----------
+// 这一层是 r337 的第五层量具（scripts/audit-press.mjs --links）量出来的：内容里有 9 处没挂类的裸 <a>，
+// 它们有 cursor: pointer（a[href] 的 UA 默认），却一条 :hover 规则都没有——划过一点反应都没有
+// （真机在模板抽屉那张面里量到「打开原视频」）。这里既不逐个挂类，也不再写 9 条容器规则，
+// 而是给「没挂类的链接」一条底线：划过有下划线、按一下压层底，四条属性都能走过渡。
+// :not([class]) 是关键：.vq-link 与从 <a> 渲染的 .vq-button 都挂着类，不受影响。
+const BARE_LINK = 'a:not([class])'
+const bareNormal = (selector) => selector.replace(/\s+/g, '')
+
+/** 裸链接那条底线齐不齐：返回问题清单，空数组才算过。 */
+export function bareLinkProblems(css) {
+  const rules = parseRules(css).filter((rule) => !rule.media)
+  const pick = (suffix) => rules.filter((rule) => splitTop(rule.selector).some((one) => bareNormal(one) === BARE_LINK + suffix))
+  const problems = []
+  const base = pick('')
+  const hover = pick(':hover')
+  const active = pick(':active')
+  if (!base.length) problems.push('缺 ' + BARE_LINK + ' 基础规则（过渡挂在这一条上）')
+  else {
+    const props = new Set()
+    for (const rule of base) for (const prop of transitionSetOf(rule.body)) props.add(prop)
+    for (const need of ['color', 'background-color', 'text-decoration-color', 'text-underline-offset']) {
+      if (!coversProp(props, need)) problems.push(BARE_LINK + ' 的过渡没覆盖 ' + need)
+    }
+  }
+  if (!hover.length) problems.push('缺 ' + BARE_LINK + ':hover —— 划过还是没反应')
+  else if (!declsOf(hover[0].body).some((item) => item.prop === 'text-decoration' && /underline/.test(item.value))) problems.push(BARE_LINK + ':hover 里没有下划线（划过就还是看不出可点）')
+  if (!active.length) problems.push('缺 ' + BARE_LINK + ':active（只划过有反馈、按下去没反应，手感是半截的）')
+  return problems
+}
+
+/** 两处「打开原视频」的外链图标：划过顶一下（2px），而且是走过渡的、减弱动效时停。 */
+export function linkIconNudgeProblems(css) {
+  const rules = parseRules(css)
+  const problems = []
+  for (const host of ['.drawer-source', '.share-source']) {
+    const nudge = rules.filter((rule) => !rule.media && rule.selector.indexOf(host) >= 0 && /a:hover svg/.test(rule.selector))
+    const motion = rules.filter((rule) => !rule.media && rule.selector.indexOf(host) >= 0 && /a svg/.test(rule.selector) && !/:hover/.test(rule.selector))
+    const reduce = rules.filter((rule) => rule.media && /prefers-reduced-motion/.test(rule.media) && rule.selector.indexOf(host) >= 0 && /a:hover svg/.test(rule.selector))
+    if (!nudge.some((rule) => declsOf(rule.body).some((item) => item.prop === 'transform' && /translate\(/.test(item.value)))) problems.push(host + ' 的外链图标划过没有位移')
+    if (!motion.some((rule) => coversProp(transitionSetOf(rule.body), 'transform'))) problems.push(host + ' 的图标位移没有过渡（会是硬切）')
+    if (!reduce.some((rule) => declsOf(rule.body).some((item) => item.prop === 'transform' && item.value === 'none'))) problems.push(host + ' 的图标位移在「减弱动态效果」里没停')
+  }
+  return problems
+}
+
+/** 内容里没挂类的裸 <a>（<a href> 且没写 className）：数量变了就说明有人新加了一条没想清楚划过反馈的链接。 */
+export function bareAnchors(list) {
+  const out = []
+  for (const item of list) {
+    for (const found of String(item.text).matchAll(/<a\b[^>]*>/gs)) {
+      const tag = found[0]
+      if (!/href/.test(tag)) continue
+      if (/className=/.test(tag)) continue
+      out.push({ file: item.file, snippet: tag.replace(/\s+/g, ' ').slice(0, 70) })
+    }
+  }
+  return out
+}
+
+function readTsx() {
+  const out = []
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name)
+      if (entry.isDirectory()) walk(full)
+      else if (entry.name.endsWith('.tsx')) out.push({ file: path.relative(ROOT, full).split(path.sep).join('/'), text: read(path.relative(ROOT, full)) })
+    }
+  }
+  walk(path.join(ROOT, 'src'))
+  return out
+}
+
+test('r337 · 裸链接的底线在：划过有下划线、按下压层底，而且四条属性都走过渡', () => {
+  const problems = bareLinkProblems(readStyles()['shell.css'])
+  assert.deepEqual(problems, [], '裸链接的底线不齐：\n' + problems.map((item) => '  ' + item).join('\n'))
+})
+
+test('r337 · 外链图标划过顶一下（走过渡、减弱动效时停）', () => {
+  const problems = linkIconNudgeProblems(readStyles()['shell.css'])
+  assert.deepEqual(problems, [], '外链图标那颗位移不齐：\n' + problems.map((item) => '  ' + item).join('\n'))
+})
+
+test('r337 · 反证：拿掉裸链接的划过规则，检查要变红', () => {
+  const css = readStyles()['shell.css']
+  const from = 'a:not([class]):hover {\n  text-decoration: underline;\n  text-underline-offset: 3px;\n}'
+  assert.equal(css.split(from).length - 1, 1, '锚点漂了，这条反证等于没跑')
+  const problems = bareLinkProblems(css.replace(from, ''))
+  assert.ok(problems.some((item) => item.indexOf('划过还是没反应') >= 0), '删掉之后没量到「划过还是没反应」：' + JSON.stringify(problems))
+})
+
+test('r337 · 反证：拿掉裸链接的过渡，检查要变红', () => {
+  const css = readStyles()['shell.css']
+  const from = '    text-decoration-color var(--dur-1) var(--ease-out), text-underline-offset var(--dur-1) var(--ease-out);'
+  assert.equal(css.split(from).length - 1, 1, '锚点漂了，这条反证等于没跑')
+  const problems = bareLinkProblems(css.replace(from, ';'))
+  assert.ok(problems.some((item) => item.indexOf('text-decoration-color') >= 0), '删掉之后没量到没覆盖的过渡：' + JSON.stringify(problems))
+})
+
+test('r337 · 裸 <a> 的清单：9 条，都靠上面那条底线给划过反馈', () => {
+  const found = bareAnchors(readTsx())
+  assert.equal(found.length, 9, '裸 <a> 的数量变了。新增一条之前先想清楚它靠什么给划过反馈：'
+    + '要么它落在 shell.css 的 a:not([class]) 底线里（内容里的文字链接，可以），'
+    + '要么它其实是按钮/图标型链接，该自己挂 .vq-link 或 .vq-button。当前的：\n'
+    + found.map((item) => '  ' + item.file + ' :: ' + item.snippet).join('\n'))
+  assert.equal(new Set(found.map((item) => item.file)).size, 9, '同一个文件里多了一条裸 <a>：' + JSON.stringify(found.map((item) => item.file)))
+})
+

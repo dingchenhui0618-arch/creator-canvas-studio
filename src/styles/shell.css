@@ -200,6 +200,39 @@
   text-underline-offset: 3px;
 }
 
+/* ---------- r337 · 裸链接（内容里没挂类的 <a>）的底线 ----------
+   抽屉、分享页、复刻弹窗里的「打开原视频」，帮助/后台几处来源链接，都是没挂类的裸 <a>：
+   有 cursor: pointer（a[href] 的 UA 默认），却一条 :hover 规则都没有 —— 划过一点反应都没有。
+   r337 的第五层量具（--links）就是在模板抽屉里量到它的。这里补的是「划过的反馈」这一件事，
+   rest 的颜色仍由所在容器说了算（.drawer-source a / .share-source a / .replicate-foot-note a 各自一档）。
+   :not([class]) 是关键：.vq-link 与从 <a> 渲染出来的 .vq-button 都挂着类，不受这条影响。 */
+a:not([class]) {
+  transition: color var(--dur-1) var(--ease-out), background-color var(--dur-1) var(--ease-out),
+    text-decoration-color var(--dur-1) var(--ease-out), text-underline-offset var(--dur-1) var(--ease-out);
+}
+
+a:not([class]):hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+a:not([class]):active {
+  background: var(--line-faint);
+  color: var(--ink);
+}
+
+/* 外链图标划过往外顶一下（右上 2px / 120ms），跟作品流卡片那颗箭头同一套手感。
+   这两处「打开原视频」的图标一左一右，位移方向一样：它俩指向的都是站外那一条。 */
+.drawer-source a svg,
+.share-source a svg {
+  transition: transform var(--dur-1) var(--ease-out);
+}
+
+.drawer-source a:hover svg,
+.share-source a:hover svg {
+  transform: translate(2px, -2px);
+}
+
 /* ---------- 状态胶囊与中性标签（v0.9.46 归队） ----------
    全站只有三档：状态胶囊 22px、结论胶囊 26px、中性标签 20px，圆角一律 999。
    以前有 13 个长得像胶囊的东西：高度散在 16 / 20 / 22 / 23 / 24 / 26 / 28，圆角散在 6 与 999，
@@ -985,6 +1018,16 @@ select:focus-visible {
   .vq-version-trigger:not(:disabled):active,
   .vq-model-trigger:not(:disabled):active,
   .vq-topbar-account-trigger:not(:disabled):active {
+    transform: none;
+  }
+}
+
+/* r337：外链图标那颗 2px 位移也停。
+   单独一段是有意的：上面那段是 r331 那五个家族的，press-shell.test.mjs 的反证锚在它的结尾，
+   往里面塞新规则会把那条反证改成永远不触发（锚点漂了 = 反证等于没跑）。 */
+@media (prefers-reduced-motion: reduce) {
+  .drawer-source a:hover svg,
+  .share-source a:hover svg {
     transform: none;
   }
 }
