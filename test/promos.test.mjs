@@ -19,12 +19,15 @@ const {
   PROMO_MAX_PER_PLACEMENT,
   PROMO_PAGES,
   PROMO_PLACEMENTS,
+  PROMO_UNDO_MS,
   activePromos,
   parsePromoCache,
+  promoUndoLabel,
   promoVisible,
   promosDirty,
   readDismissedPromos,
   todayKey,
+  withoutDismissed,
 } = await import('../src/domain/promos.ts')
 const {
   DEFAULT_PROMOS,
@@ -94,6 +97,31 @@ test('本地那份关掉的记录：坏数据一律当没关过，不抛错', ()
   assert.deepEqual(readDismissedPromos('{"a":1}'), [])
   assert.deepEqual(readDismissedPromos('["rooms-beta",3,null,"","x"]'), ['rooms-beta', 'x'])
   assert.equal(PROMO_DISMISS_KEY, 'vq_promos_dismissed')
+})
+
+// r326：关掉之后能撤销。这两件都是纯函数，不碰 DOM（条子出不出现、点 ✕ 之后是什么样，
+// 交给 scripts/shot-r326.mjs 在真页面上点）。
+test('撤销条：一条写出标题，多条写条数，空的不出条子', () => {
+  assert.equal(promoUndoLabel([]), '')
+  assert.equal(promoUndoLabel([{ title: '把几个智能体放进同一个房间' }]), '已关掉「把几个智能体放进同一个房间」')
+  // 一条一条关的时候，用户要确认的正是「刚才手滑关掉的是不是这条」，所以一条要写标题
+  assert.equal(promoUndoLabel([{ title: 'A' }, { title: 'B' }]), '已关掉 2 条动态')
+})
+
+test('撤销：只从「关掉过」里拿掉这几条，其余与顺序不动，也不改传入的数组', () => {
+  const before = ['a', 'b', 'c', 'd']
+  const next = withoutDismissed(before, ['b', 'd'])
+  assert.deepEqual(next, ['a', 'c'])
+  assert.deepEqual(before, ['a', 'b', 'c', 'd'], '不能改调用方传进来的那份')
+  assert.deepEqual(withoutDismissed(before, ['zzz']), before, '没关过的忽略掉')
+  assert.deepEqual(withoutDismissed(before, []), before, '空操作等于原样')
+  assert.deepEqual(withoutDismissed(['a', 'a'], ['a']), [], '重复的也一起拿掉')
+})
+
+test('撤销窗口：8 秒——够看清关掉的是哪一条，又不至于变成一条赖着不走的条子', () => {
+  assert.equal(PROMO_UNDO_MS, 8000)
+  assert.ok(PROMO_UNDO_MS >= 5000, '比 5 秒还短，手还没伸回去就没了')
+  assert.ok(PROMO_UNDO_MS <= 15000, '超过 15 秒，这条占位的条子就太久了')
 })
 
 test('本地缓存的那份内容：形状不对的单条丢掉，整份不崩', () => {

@@ -1,7 +1,8 @@
 /* 运营位（r319）。
    竞品用彩色大横幅；我们按品牌走：近白卡片、一条发丝线、左侧一个方形图标，
    颜色只在图标与按钮上，整块不加渐变。窄屏时文案占整行、按钮落到下一行。
-   r322：关掉一条时先塌下去再移除（见文件末尾），进场用 motion.css 的 .vq-stagger。 */
+   r322：关掉一条时先塌下去再移除（见文件末尾），进场用 motion.css 的 .vq-stagger。
+   r326：整卡可点（按钮的 ::after 铺一层热区），以及关掉之后能撤销（见文件末尾）。 */
 .vq-promos {
   display: grid;
   margin-bottom: var(--space-6);
@@ -66,12 +67,45 @@
   color: var(--muted);
 }
 
+/* 注意：这颗按钮**不能**设 position: relative —— 下面的 ::after 以「最近的定位祖先」为参照，
+   按钮自己一定位，热区就只剩按钮那么大。参照物必须留给 .vq-promo（它本来就是 relative）。 */
 .vq-promo-cta { flex: none; }
+
+/* 整卡可点（r326）。卡片悬停会抬起（motion.css 的 .vq-lift），却只有这颗按钮能点，
+   看着就是「提起来了却按不动」——实测在真页面上点标题、点正文都是没反应。
+   做法是给按钮铺一层透明热区盖住整张卡（stretched link）：不用给 article 挂 onClick，
+   也不用把按钮套进按钮（嵌套交互元素），键盘这条路照样走按钮自己——Tab 一格、回车触发。
+   代价只有一条：卡片上的文字点选不了了（热区在上面）。这张卡片本来就是一句话，不值当为它留选择区。 */
+.vq-promo-cta::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-md);
+}
+
+/* 按下时**不能**位移（r326 实测出来的，不是防患于未然）。
+   tokens.css 给全站按钮的按下反馈是 transform: translateY(1px)（:where(...) 的一档，权重 0-2-0），
+   而带 transform 的元素会成为**绝对定位后代的包含块**：按下的一瞬间，上面那层 ::after 的参照
+   从整张卡片变成按钮自己，热区当场塌成按钮那么大。结果是——
+     mousedown → BUTTON（热区还在）
+     mouseup   → H3.vq-promo-title（热区没了，落回标题）
+     click     → ARTICLE（按下与抬起的共同祖先，那张卡片）
+   点了正文什么也不会发生，而且编译、样式、单测全都看不出问题。
+   这里把位移换成不会产生包含块的按下反馈（底色变深一档），热区在整个按下期间都还在。
+   选择器写两遍 .vq-promo-cta 是为了压过 tokens.css 那条 0-2-0 的规则：样式表按需加载，顺序不保证。 */
+.vq-promo-cta.vq-promo-cta:active {
+  transform: none;
+  background: var(--line-faint);
+}
 
 .vq-promo-close {
   display: grid;
   place-items: center;
   flex: none;
+  /* 必须盖在 CTA 那层热区之上（两者都在 .vq-promo 这个定位上下文里）：
+     否则点 ✕ 会先被热区吃掉，变成「关不掉，还跑去别的页」 */
+  position: relative;
+  z-index: 1;
   width: 28px;
   height: 28px;
   margin-left: var(--space-1);
@@ -99,7 +133,10 @@
       看着「变淡」其实只是 max-height 把文字裁掉了。这里给 opacity: 0。 */
 /* 这里写两遍 .is-leaving：.vq-lift.vq-lift（motion.css，在入口样式表里）也是两个类，
    等权重时谁在后面谁赢；样式表的先后按需加载时不保证，塌下去必须由这一层说了算。 */
-.vq-promo.is-leaving.is-leaving {
+/* r326：撤销条退场也走这一条（它顶上那条卡片的间距挂在它自己身上，见下面的 :has 规则，
+   所以「间距」也一起收掉了——条子被移除的瞬间下面不会跳一下）。 */
+.vq-promo.is-leaving.is-leaving,
+.vq-promo-undo.is-leaving.is-leaving {
   overflow: hidden;
   pointer-events: none;
   opacity: 0;
@@ -107,12 +144,40 @@
   padding-bottom: 0;
   border-top-width: 0;
   border-bottom-width: 0;
+  margin-top: 0;
   margin-bottom: 0;
   transition: max-height var(--dur-3) var(--ease-out), opacity var(--dur-2) var(--ease-out),
     padding-top var(--dur-3) var(--ease-out), padding-bottom var(--dur-3) var(--ease-out),
     border-top-width var(--dur-3) var(--ease-out), border-bottom-width var(--dur-3) var(--ease-out),
-    margin-bottom var(--dur-3) var(--ease-out);
+    margin-top var(--dur-3) var(--ease-out), margin-bottom var(--dur-3) var(--ease-out);
 }
+
+/* ---------- 关掉之后能撤销（r326） ----------
+   放在卡片原来的位置上。虚线、不着色：它是「这里刚才有条东西」的占位，不是又一条内容
+   （实线卡片会被当成还没关掉）。槽里还有别的运营位时它 8 秒后退场；
+   槽被关空了就一直留着——那时候它是唯一的入口（关掉只写进本地存储，刷新不会自己回来）。 */
+.vq-promo-undo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  /* 与上一条卡片的间距挂在条子自己身上（下面那条 :has 规则把卡片的下边距让出来），
+     这样条子退场时能把这段间距一起收掉。 */
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  font-size: var(--text-body);
+  line-height: 1.5;
+}
+
+/* 条子顶上那条卡片不再是自己收尾：间距归条子管 */
+.vq-promo:has(+ .vq-promo-undo) { margin-bottom: 0; }
+
+.vq-promo-undo-text { min-width: 0; }
+
+.vq-promo-undo .vq-promo-undo-button { flex: none; margin-left: auto; }
 
 @media (max-width: 760px) {
   .vq-promo {

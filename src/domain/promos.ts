@@ -51,6 +51,13 @@ export const PROMO_CACHE_KEY = 'vq_promos_cache'
 /** 同一个位置最多显示几条（组件默认值；页面可以用 max 覆盖）。 */
 export const PROMO_MAX_PER_PLACEMENT = 2
 
+/**
+ * 关掉一条之后还能撤销的窗口（毫秒）。
+ * 8 秒：够看清关掉的是哪一条、手也来得及伸回去；再长就成了一条赖着不走的条子。
+ * 槽里还有别的运营位时到点退场；槽被关空了就不退（见 PromoSlot：那时候没有别的入口了）。
+ */
+export const PROMO_UNDO_MS = 8000
+
 /** 今天的日历日（YYYY-MM-DD，本地时区）——运营位的起止日期按本地日算。 */
 export function todayKey(date: Date = new Date()): string {
   const pad = (n: number) => (n < 10 ? '0' + n : String(n))
@@ -145,6 +152,27 @@ export function readDismissedPromos(raw: string | null | undefined): string[] {
   } catch {
     return []
   }
+}
+
+/**
+ * 撤销条上那句话（r326）。一条写出标题，多条写条数——比「已关掉 1 条动态」有用，
+ * 用户要确认的正是「刚才手滑关掉的是不是这条」。
+ */
+export function promoUndoLabel(closing: readonly { title: string }[]): string {
+  if (!closing.length) return ''
+  if (closing.length === 1) return '已关掉「' + closing[0].title + '」'
+  return '已关掉 ' + closing.length + ' 条动态'
+}
+
+/**
+ * 从「关掉过」的名单里去掉几个（撤销用）。没关过的忽略、重复的去掉，但顺序保持原样：
+ * 这份名单会原样写回浏览器，顺序变了没有意义但会让「上一次写进去的」和「这一次的」对不上，
+ * 排查时白费功夫。不改传入的数组。
+ */
+export function withoutDismissed(dismissed: readonly string[], ids: readonly string[]): string[] {
+  if (!ids.length) return [...dismissed]
+  const drop = new Set(ids)
+  return dismissed.filter((id) => !drop.has(id))
 }
 
 /** 一条运营位至少要有这些字段才敢拿去渲染；page / placement 还必须在白名单里。 */

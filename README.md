@@ -867,6 +867,62 @@ r324 把停留时间拉长到「读得完」，副作用是把一个将就放着
 新写的失败提示要自己带 `'fail'`；语气不影响停留时长（仍是字数 × 60ms + 2.4s）；仍然是全局一条提示、后一条顶掉前一条。
 完整记录见 [docs/r325-toast-tone-2026-11-26.md](docs/r325-toast-tone-2026-11-26.md)。
 
+## 三百七十二、运营位：点哪儿都能进，关错了能撤（r326 / v0.9.298）
+
+这一轮只动「广告模块」（运营位）这一块，两件事都是站在真页面上看出来的：卡片悬停会抬起却只有右下那颗按钮能点；
+点错 ✕ 关掉一条就再也回不来了。真源 [src/components/PromoSlot.tsx](src/components/PromoSlot.tsx) 与
+[src/styles/promos.css](src/styles/promos.css)，纯函数在 [src/domain/promos.ts](src/domain/promos.ts)
+（`PROMO_UNDO_MS` / `promoUndoLabel` / `withoutDismissed`）。
+
+**整卡可点**用 CTA 按钮的 `::after` 铺一层透明热区盖住整张卡（stretched link）：不给 `<article>` 挂 `onClick`、
+也不把按钮套进按钮，键盘这条路不变（Tab 一格落在按钮上、回车触发）。✕ 用 `position: relative; z-index: 1`
+压在热区之上，否则点关闭会变成「跑去了那一页」。
+
+**这一轮真正抓到的坑，只在手里才会出现**：第一版做完，DOM 里量什么都是对的（`::after` 是 `absolute` + `inset: 0`、
+宽度 1138px、正文正中的 `elementFromPoint` 返回的就是那颗按钮），可一真点就是没反应。给页面挂上 click 捕获监听才看见：
+
+```
+mousedown → BUTTON.vq-promo-cta     热区还在
+mouseup   → H3.vq-promo-title       热区没了
+click     → ARTICLE.vq-promo        按下与抬起的共同祖先——那张卡片
+```
+
+根因是全站按钮的按下反馈 `:active { transform: translateY(1px) }`：**带 transform 的元素会成为绝对定位后代的
+包含块**，按下的一瞬间 `::after` 的参照从整张卡片变成按钮自己，热区当场缩成 115×32。修法是这一颗按钮的按下反馈
+换成不产生包含块的那种（`transform: none` + 底色深一档），选择器写两遍类压过 tokens.css 那条 0-2-0 的规则。
+
+**关掉能撤**：卡片塌下去的位置上留一条虚线条子「已关掉「标题」· 撤销」（虚线是为了不被当成还没关掉）。
+槽里还有别的运营位时 8 秒自己退场（光标停在条上、或键盘停在「撤销」上时不抽走）；槽被关空了就一直留着——
+那时候它是唯一的入口。连关几条写条数（「已关掉 3 条动态」）。间距挂在条子自己身上、上面那张卡片的
+下边距用 `:has(+ .vq-promo-undo)` 让出来，条子被移除的瞬间下面不跳。
+
+独立取证 [scripts/shot-r326.mjs](scripts/shot-r326.mjs) **23/23**（0 次上游调用，临时实例 + 真账号 + 真点）：
+悬停 `matrix(1, 0, 0, 1, 0, -2)`；正文正中命中热区；**按住不放时热区仍在、CTA `transform: none`**；
+松开后地址 `#/overview` → `#/rooms` 且 click 的 target 是按钮；点 ✕ 不跳走、后面那条补位；
+条子「已关掉「把几个智能体放进同一个房间」」/ `role=status`；撤销后第 1 条回来、本地记录清空；
+关到空后等 9500ms 条子还在；390 无横向溢出；光标停 8500ms 不退场、移开后 **8225ms** 自己退场且关掉的仍记在本地。
+
+![整卡可点：光标停在正文上，卡片照样抬起 2px](docs/r326-promo-hover-1440.png)
+
+![关掉一条：虚线条子「已关掉「…」· 撤销」，后面那条补上来](docs/r326-promo-undo-1440.png)
+
+生产真渲染 [scripts/shot-r326-prod.mjs](scripts/shot-r326-prod.mjs)（临时管理员会话，拍完 `before 1 / removed 1 / after 0`）：
+线上 `v0.9.298` / `index-DWJzJJ7H.js`，按住不放热区仍在、松开后 `#/rooms`；条子文案与 `status` 播报都对；
+交互期间**写请求 0 个**；图里身份行遮掉 1 处手机号，且**只截运营位那一块**（首屏其余区域是生产上别人的数据）。
+
+![生产：关掉一条之后那条可撤销的条子](docs/r326-prod-promo-undo-1440.png)
+
+新增 [test/promo-undo.test.mjs](test/promo-undo.test.mjs)：真源码扫描 + 反证——热区的参照物、✕ 的层级、
+**按下时不许有 transform**、槽空时撤销条必须还在渲染条件里、撤销要真的落盘，每一条都配一个「改坏它，
+检查必须变红」。`npm test` **2132 / 2132**（+6）、`tsc -b` 干净、`oxlint` 0 error / 30 warning（755 文件）、
+密钥扫描 1204 个文件无命中、入口 `index-DWJzJJ7H.js`（870,920 B）；发布标签 `20261126-2043-r326promo`，
+快照 `/opt/visionqa/releases/20261126-124309-20261126-2043-r326promo.tar.gz`，`ops/rollback.sh --to 1` 回 0.9.297。
+
+边界：热区让卡片上的文字点选不了（这张卡片只有一句话）；CTA 仍是 `<button>`，中键/⌘+点击开新标签页没做；
+撤销窗口只有 8 秒，退场之后那条就真的不再出现（清站点数据才会回来）；条子只在这一次浏览里有效。
+完整记录见 [docs/r326-promo-undo-2026-11-26.md](docs/r326-promo-undo-2026-11-26.md)。
+
+
 
 
 

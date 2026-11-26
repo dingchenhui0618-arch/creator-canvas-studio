@@ -8,7 +8,14 @@
 // 不弹错：运营位是装饰，不值得为它把首屏弄红；下一次打开还会再试。
 import { useEffect, useSyncExternalStore } from 'react'
 import { request } from './client'
-import { PROMO_CACHE_KEY, PROMO_DISMISS_KEY, parsePromoCache, readDismissedPromos, type Promo } from '../domain/promos'
+import {
+  PROMO_CACHE_KEY,
+  PROMO_DISMISS_KEY,
+  parsePromoCache,
+  readDismissedPromos,
+  withoutDismissed,
+  type Promo,
+} from '../domain/promos'
 
 type PromoState = {
   items: Promo[]
@@ -59,6 +66,18 @@ export function dismissPromo(id: string) {
   const dismissed = [...state.dismissed, id]
   setState({ dismissed })
   writeLocal(PROMO_DISMISS_KEY, JSON.stringify(dismissed))
+}
+
+/**
+ * 撤销关掉（r326）：把这几条从「关掉过」里拿掉，运营位立刻回来。
+ * 与 dismissPromo 对称：改内存状态 + 写回本地存储，同一屏其它位置的同一条也一起回来。
+ * 不在这里判断撤销窗口——那是界面上的事（条子退场了就没有按钮可点），存储层只管这份名单。
+ */
+export function restorePromos(ids: readonly string[]) {
+  const next = withoutDismissed(state.dismissed, ids)
+  if (next.length === state.dismissed.length) return
+  setState({ dismissed: next })
+  writeLocal(PROMO_DISMISS_KEY, JSON.stringify(next))
 }
 
 async function refreshPromos() {
