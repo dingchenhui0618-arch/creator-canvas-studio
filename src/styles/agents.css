@@ -1065,6 +1065,7 @@
   transform: translateY(-1px);
 }
 .agx-card-main {
+  transition: background-color var(--dur-1) var(--ease-out);
   display: block;
   width: 100%;
   flex: 1;
@@ -1074,6 +1075,11 @@
   border: 0;
   border-radius: var(--radius-md) var(--radius-md) 0 0;
   text-align: left;
+}
+/* r330：这张卡按下时一个属性都不变（悬停有整卡抬起，按下没有）——同一屏里别的可点卡片
+   按下去都会压暗一档，只有它像块石头。整块按钮自己就是热区，直接给它一层按下底色。 */
+.agx-card-main:active {
+  background: var(--line-faint);
 }
 .agx-card-top {
   display: flex;

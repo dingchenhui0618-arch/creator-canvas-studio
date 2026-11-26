@@ -99,22 +99,33 @@ test('尺度本身不许被改小：tokens.css 仍然是那四档圆角和八档
   }
 })
 
-/** 取某个 @media 块（按花括号配对），用来断言小屏专用规则还在。 */
+/** 取某个 @media 的**所有**块（按花括号配对）拼起来，用来断言小屏专用规则还在。
+    以前只取第一块：同一个断点在文件里出现两次时，新加的那一块会把这组断言挤到别处去
+    （r330 在 shell.css 里加了一段 640 断点，两条守卫当场变红，而规则本身一个没少）。 */
 function mediaBlock(file, query) {
   const text = fs.readFileSync(path.join(ROOT, file), 'utf8')
-  const start = text.indexOf('@media ' + query)
-  assert.ok(start >= 0, file + ' 里没有 ' + query + ' 这段')
-  let depth = 0
-  let index = text.indexOf('{', start)
-  const from = index
-  for (; index < text.length; index += 1) {
-    if (text[index] === '{') depth += 1
-    if (text[index] === '}') {
-      depth -= 1
-      if (depth === 0) return text.slice(from, index + 1)
+  const needle = '@media ' + query
+  const blocks = []
+  let from = 0
+  for (;;) {
+    const start = text.indexOf(needle, from)
+    if (start < 0) break
+    let depth = 0
+    let index = text.indexOf('{', start)
+    const open = index
+    for (; index < text.length; index += 1) {
+      if (text[index] === '{') depth += 1
+      if (text[index] === '}') {
+        depth -= 1
+        if (depth === 0) break
+      }
     }
+    if (depth !== 0) throw new Error('花括号没配对：' + file + ' ' + query)
+    blocks.push(text.slice(open, index + 1))
+    from = index + 1
   }
-  throw new Error('花括号没配对：' + file + ' ' + query)
+  assert.ok(blocks.length > 0, file + ' 里没有 ' + query + ' 这段')
+  return blocks.join('\n')
 }
 
 test('页头在窄屏不许把标题区撑成 384px 高（flex-basis 变成高度的那次事故）', () => {

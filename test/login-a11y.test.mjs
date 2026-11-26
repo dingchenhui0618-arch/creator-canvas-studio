@@ -67,9 +67,10 @@ test('深色品牌栏的次要文字至少 4.5:1', () => {
 })
 
 test('390 宽时表单排在品牌栏前面：登录框要在首屏里', () => {
-  const phone = CSS.match(/@media \(max-width: 640px\) \{([\s\S]*?)\n\}/)
-  assert.ok(phone, '找不到 640 断点')
-  const body = phone[1]
+  // 640 断点在 shell.css 里不止一段（r330 又加了一段给提示条），按段全取再一起找
+  const blocks = [...CSS.matchAll(/@media \(max-width: 640px\) \{([\s\S]*?)\n\}/g)].map((m) => m[1])
+  assert.ok(blocks.length > 0, '找不到 640 断点')
+  const body = blocks.join('\n')
   const panel = body.match(/\.vq-login-panel \{[^}]*order:\s*(\d+)/)
   const brand = body.match(/\.vq-login-brand \{[^}]*order:\s*(\d+)/)
   assert.ok(panel && brand, '640 断点里要把表单与品牌栏排序写清楚')

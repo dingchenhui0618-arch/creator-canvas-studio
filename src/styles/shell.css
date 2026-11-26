@@ -94,6 +94,14 @@
     color var(--dur-1) var(--ease-out), transform var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out);
 }
 
+/* 默认档（不带语气 = 透明底、深色字）以前压根没有 :hover —— 后台「保存运营位」这类
+   按钮看起来像一块静止的字，鼠标放上去一动不动。这里补上和 --quiet 同一条悬停底色。
+   四个语气各自的 :hover 在本文件里排在后面，同权重按源码顺序盖住它；
+   其中 ghost 的底色是实色，必须显式写回自己那条，否则会变成半透明。 */
+.vq-button:hover:not(:disabled) {
+  background: var(--line-faint);
+}
+
 /* 小档：列表行、密集工具条、弹窗里的次要动作 */
 .vq-button--sm {
   height: var(--btn-h-sm);
@@ -131,6 +139,7 @@
   color: var(--ink);
 }
 .vq-button--ghost:hover:not(:disabled) {
+  background: var(--surface-raised);
   border-color: var(--ink);
 }
 .vq-button--quiet {
@@ -1483,10 +1492,34 @@ select:focus-visible {
   color: #ffffff;
   font-size: 14px;
   box-shadow: var(--shadow-raise);
+  /* r330：提示条不吃点击。它是纯通知，而右下角正好压着抽屉底部那排操作按钮——
+     以前「用它做作品」被提示条盖住的 3 秒里，点它就是点提示条，什么都没发生。
+     pointer-events:none 让它永远不是 hit target；里面真有按钮/链接时再单独放行（见下）。 */
+  pointer-events: none;
   /* r324：长文案别拉成一条横贯屏幕的横幅；窄屏按视口收，左右各留 24px 才不贴边 */
   max-width: min(560px, calc(100vw - 48px));
   /* 进场是 motion.css 里的 vq-toast-in，收尾是下面这条与 .is-leaving */
   transition: opacity var(--dur-2) var(--ease-out), transform var(--dur-2) var(--ease-out);
+}
+
+/* 提示条里放进去的按钮/链接照旧能点（整条不吃点击，但里面的交互元素自己放行）。
+   现在还没有这种提示条，先把规矩立在这：以后加「撤销」这类动作不用再想起这件事。 */
+.vq-toast :is(a, button, [role='button'], [tabindex]) {
+  pointer-events: auto;
+}
+
+/* 抽屉打开时把提示条抬到操作栏之上（r330）：右侧抽屉是满高的，底栏（.drawer-foot）
+   永远落在屏幕最下沿，提示条落在 bottom:24px 就正好盖住那排按钮。
+   65px = 桌面底栏（16 + 32 + 16 + 1px 描边），窄屏 133px = 两行 48px 按钮
+   （12 + 48 + 8 + 48 + 16 + 1）；各留一点余量，落到 8pt 栅格上。
+   数值有真机断言兜着（scripts/shot-r330.mjs 的 toast.no-overlap-footer，1440 与 390 各一条）。 */
+body:has(.drawer-backdrop) .vq-toast {
+  bottom: 88px;
+}
+@media (max-width: 640px) {
+  body:has(.drawer-backdrop) .vq-toast {
+    bottom: 144px;
+  }
 }
 
 /* 语气（r325）：图标只有 14px，形状先分清（✓ / ✕ / i），颜色再补一层。
