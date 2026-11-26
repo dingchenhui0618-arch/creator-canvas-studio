@@ -7,6 +7,9 @@ import './styles/legacy-fix.css'
 import App from './App.tsx'
 // 放在 App 之后：保证外壳补充规则晚于 App.css / shell.css / overview.css 生效。
 import './styles/nav.css'
+// 动效细则层（r319）：列表逐条进场、卡片抬起、提示条滑入，以及 reduce-motion 总闸。
+// 放在最后：它只补动效，不改布局；前面的样式表仍然是布局的真源。
+import './styles/motion.css'
 import { readInitialEdition } from './editions'
 import { readSession } from './auth/session'
 import { initializeRoute } from './router'

@@ -1,0 +1,64 @@
+/* VisionQA 动效细则层（r319，2026-11-26）
+   基线在 tokens.css：三档时长（--dur-1/2/3）+ 一条缓动（--ease-out）+ 切页面淡入 + 按钮按下 1px。
+   这一层补的是「小的细枝末节」：列表逐条进场、卡片抬起、提示条滑入，
+   以及一条真正管得住的 reduce-motion 总闸——以前只关了页面淡入和按钮位移，
+   别处的无限动画（打字点、转圈）在系统开了「减弱动态效果」时照转。
+   约定：只用 tokens 里的时长与缓动；位移一档 4px，不做弹跳、不做整屏渐变。 */
+
+@keyframes vq-rise {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes vq-toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ---------- 列表逐条进场 ----------
+   容器加 .vq-stagger，行按第几个依次晚 24ms 出现；第 8 个之后一起进
+   （长列表一直往后推会让人等，也显得卡）。
+   只给「一次渲染出来、行 key 稳定」的列表用：重挂会重新播一次。 */
+/* fill-mode 用 backwards 不用 both：both 会在动画结束后一直持有最后一帧的
+   transform: none，把 :hover 的抬起压死（动画值的优先级高于普通声明，连 hover 也顶不过）。
+   backwards 只在延迟期用起始帧，动画一结束就交还给普通样式。 */
+.vq-stagger > * { animation: vq-rise var(--dur-3) var(--ease-out) backwards; }
+.vq-stagger > :nth-child(1) { animation-delay: 0ms; }
+.vq-stagger > :nth-child(2) { animation-delay: 24ms; }
+.vq-stagger > :nth-child(3) { animation-delay: 48ms; }
+.vq-stagger > :nth-child(4) { animation-delay: 72ms; }
+.vq-stagger > :nth-child(5) { animation-delay: 96ms; }
+.vq-stagger > :nth-child(6) { animation-delay: 120ms; }
+.vq-stagger > :nth-child(7) { animation-delay: 144ms; }
+.vq-stagger > *:nth-child(n + 8) { animation-delay: 168ms; }
+
+/* ---------- 卡片抬起 ----------
+   光标停在卡片上时抬 2px 并加一层极浅的投影；配合原有的描边加深，
+   鼠标扫过一排卡片时能看出「这一张是活的」。 */
+/* 这里写两遍 .vq-lift：卡片自己的 transition 简写可能在按需加载的样式表里、
+   排在 motion.css 之后，等权重时会把 transform 从过渡列表里挤掉——那样抬起来是「跳」不是「抬起」。 */
+.vq-lift.vq-lift {
+  transition: border-color var(--dur-1) var(--ease-out), box-shadow var(--dur-2) var(--ease-out),
+    transform var(--dur-2) var(--ease-out);
+}
+.vq-lift:hover { transform: translateY(-2px); }
+
+/* ---------- 提示条滑入 ----------
+   .vq-toast 是挂上就有、2.4 秒后卸掉的，所以只需要进场。 */
+.vq-toast { animation: vq-toast-in var(--dur-2) var(--ease-out) backwards; }
+
+/* ---------- 系统开了「减弱动态效果」时全停 ----------
+   位移、缩放、无限动画一起停；内容立即可见（delay 也归零），
+   否则带 animation-fill-mode: both 的行会先透明一下再出现。 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+  .vq-lift:hover { transform: none; }
+}

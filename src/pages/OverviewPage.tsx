@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowRight, ArrowUpRight, Download, Eye, History, Image as ImageIcon, LayoutTemplate, Package, Plus, RefreshCw, RotateCcw, Search, Send, Share2, Sparkles, X } from 'lucide-react'
 import type { Page } from '../domain/types'
 import PageHead from '../components/PageHead'
+import PromoSlot from '../components/PromoSlot'
 import { Pill, Tag } from '../components/ui'
 import { request } from '../api/client'
 import { useWorkflowEnabled } from '../domain/features'
@@ -1203,6 +1204,10 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
         </p>
       ) : null}
 
+      {/* 运营位（r319）：能力卡之前先说一句「最近能去哪里」。
+          内容与起止在 domain/promos.ts；关掉记在浏览器本地，同一台机器不再出现。 */}
+      <PromoSlot placement="overview" onNavigate={onNavigate} internal={internal} />
+
       {/* 能力介绍（r313）：先回答「这个平台能做什么」，四张卡各接一个真实入口。
           能力名与侧栏保持一致；指向已收成管理员 beta 的工作流入口不在这里出现。 */}
       <section className="ov-capabilities" aria-labelledby="ov-capabilities-title">
@@ -1213,8 +1218,8 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
             <p className="ov-section-sub">四步串起一条内容：找爆款、拆结构、建资产、出片与评审。</p>
           </div>
         </div>
-        <div className="ov-cap-grid">
-          <article className="ov-cap">
+        <div className="ov-cap-grid vq-stagger">
+          <article className="ov-cap vq-lift">
             <div className="ov-cap-top">
               <span className="ov-cap-index">01</span>
               <span className="ov-cap-icon" aria-hidden="true">
@@ -1233,7 +1238,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
             </div>
           </article>
 
-          <article className="ov-cap">
+          <article className="ov-cap vq-lift">
             <div className="ov-cap-top">
               <span className="ov-cap-index">02</span>
               <span className="ov-cap-icon" aria-hidden="true">
@@ -1252,7 +1257,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
             </div>
           </article>
 
-          <article className="ov-cap">
+          <article className="ov-cap vq-lift">
             <div className="ov-cap-top">
               <span className="ov-cap-index">03</span>
               <span className="ov-cap-icon" aria-hidden="true">
@@ -1273,7 +1278,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
             </div>
           </article>
 
-          <article className="ov-cap">
+          <article className="ov-cap vq-lift">
             <div className="ov-cap-top">
               <span className="ov-cap-index">04</span>
               <span className="ov-cap-icon" aria-hidden="true">
