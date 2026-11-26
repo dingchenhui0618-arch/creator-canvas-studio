@@ -1322,7 +1322,7 @@ cursor 不可过渡直接不算），另有一条专盯按下会拿焦点的焦�
 入口 `index-BgRdMhjN.js`（873,536 B，产物里含 `0.9.306`）。发布标签 `20261127-0056-r334motion`；
 回滚点 `/opt/visionqa/releases/20261126-165616-20261127-0056-r334motion.tar.gz`（元数据 `entry: index-C44oKfL-.js`）；
 公网 `/api/version` **0.9.306**、health ok templates 27、新入口 200、上一版入口 404，
-`visionqa` / `visionqa-internal` / `visionqa-demo` 三个服务 active。
+`visionqa` / `visionqa-internal` / `visionqa-demo` 三个服务 active。提交 `dd7b6c5`，CI **45863442115 success**。
 完整记录见 [docs/r334-press-motion-2026-11-27.md](docs/r334-press-motion-2026-11-27.md)。
 
 边界：只判「变化有没有走过渡」，**不判「该不该有」**；只量 1440×1000 的十趟，视觉评审那一屏靠静态门禁；

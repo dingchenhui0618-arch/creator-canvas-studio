@@ -130,6 +130,7 @@ crop 逐像素比了 6 组：亮度差最大 **0.104/255**、最小 **0.0**—�
   `/opt/visionqa/releases/20261126-165616-20261127-0056-r334motion.tar.gz`（元数据记 `entry: index-C44oKfL-.js`，即 0.9.305）
 - 公网 `/api/version` **0.9.306**、`/api/health` ok（redfox / vision / llm 三项 true，templates 27）、新入口 200、
   上一版入口 `index-C44oKfL-.js` **404**、`visionqa` / `visionqa-internal` / `visionqa-demo` 三个服务 active
+- 提交 `dd7b6c5`（12 文件，+679 / −9）；CI run **45863442115 success**
 
 ## 六、边界
 
