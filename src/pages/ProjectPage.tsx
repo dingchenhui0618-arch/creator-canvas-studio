@@ -129,6 +129,7 @@ import {
 import { stampTime as stamp, visitLine } from '../domain/share'
 import { useWorkflowEnabled } from '../domain/features'
 import '../styles/projects.css'
+import type { ToastFn } from '../domain/toast'
 
 // 保存脚本之后工作流那边发生了什么：直接说人话，不把 reason 漏到界面上
 // 脚本草稿的登记名（r270）：离开拦截只认这一条，别的页面登记的不动
@@ -216,7 +217,7 @@ export default function ProjectPage({
   onBrowseTemplates: () => void
   /** 打开这条作品用的那条模板：来源面板里点模板名就走这里（地址是 #/templates/<模板 id>） */
   onOpenTemplate?: (templateId: string) => void
-  onToast: (message: string) => void
+  onToast: ToastFn
 }) {
   // r313：工作流只对管理员开放。普通账号这一屏不露开工作流入口，下一步改走「写脚本 → 逐镜出图 → 送评审 → 交付」
   const workflow = useWorkflowEnabled()
@@ -591,7 +592,7 @@ export default function ProjectPage({
       )
       onOpenFlow(result.flow.id)
     } catch (caught) {
-      onToast(caught instanceof Error ? caught.message : '开工作流失败')
+      onToast(caught instanceof Error ? caught.message : '开工作流失败', 'fail')
     } finally {
       setBusy('')
     }
@@ -642,7 +643,7 @@ export default function ProjectPage({
       setData({ ...data, share: result.share })
       onToast('分享链接已生成：拿到链接的人不用登录就能看脚本、分镜和评审对照')
     } catch (caught) {
-      onToast(caught instanceof Error ? caught.message : '分享链接没生成成功')
+      onToast(caught instanceof Error ? caught.message : '分享链接没生成成功', 'fail')
     } finally {
       setShareBusy('')
     }
@@ -661,7 +662,7 @@ export default function ProjectPage({
         .then((next) => setData((prev) => (prev ? { ...prev, share: null, shareHistory: next.shareHistory } : next)))
         .catch(() => {})
     } catch (caught) {
-      onToast(caught instanceof Error ? caught.message : '停止分享失败，刷新再试')
+      onToast(caught instanceof Error ? caught.message : '停止分享失败，刷新再试', 'fail')
     } finally {
       setShareBusy('')
     }
@@ -675,7 +676,7 @@ export default function ProjectPage({
       setShareCopied(true)
       onToast('分享链接已复制')
     } catch {
-      onToast('浏览器没给剪贴板权限：手动选中链接复制')
+      onToast('浏览器没给剪贴板权限：手动选中链接复制', 'fail')
     } finally {
       setShareBusy('')
     }
@@ -691,7 +692,7 @@ export default function ProjectPage({
       setData((prev) => (prev ? { ...prev, share: result.share } : prev))
       onToast(next ? '分享页已带上两版对照：拿到链接的人也能打印这张纸' : '已关闭分享页的两版对照，链接本身不变')
     } catch (caught) {
-      onToast(caught instanceof Error ? caught.message : '分享对照没切换成功，刷新再试')
+      onToast(caught instanceof Error ? caught.message : '分享对照没切换成功，刷新再试', 'fail')
     } finally {
       setShareBusy('')
     }
@@ -708,7 +709,7 @@ export default function ProjectPage({
       setDecisionNote(null)
       onToast(kind === 'pass' ? '已拍板：这一版通过' : '已拍板：这一版不通过')
     } catch (caught) {
-      onToast(caught instanceof Error ? caught.message : '拍板没记上，刷新再试')
+      onToast(caught instanceof Error ? caught.message : '拍板没记上，刷新再试', 'fail')
     } finally {
       setDecideBusy('')
     }
@@ -725,9 +726,9 @@ export default function ProjectPage({
       setDecisionNote(null)
       setClearLogArmed(false)
       // removed=0 说明这条在别处已经被撤了（另一个标签页 / 另一个人）：别报「已撤销」
-      onToast(result.removed ? '已撤销这一版的拍板，这一条回到待办' : '这条拍板已经不在记录里了，刷新看看')
+      onToast(result.removed ? '已撤销这一版的拍板，这一条回到待办' : '这条拍板已经不在记录里了，刷新看看', result.removed ? 'ok' : 'info')
     } catch (caught) {
-      onToast(caught instanceof Error ? caught.message : '撤销没成功，刷新再试')
+      onToast(caught instanceof Error ? caught.message : '撤销没成功，刷新再试', 'fail')
     } finally {
       setDecideBusy('')
     }
@@ -746,9 +747,9 @@ export default function ProjectPage({
       const result = await clearReviewDecision(data.project.id)
       await load()
       setDecisionNote(null)
-      onToast(result.removed ? '已清空 ' + result.removed + ' 条拍板记录' : '没有可清空的拍板记录')
+      onToast(result.removed ? '已清空 ' + result.removed + ' 条拍板记录' : '没有可清空的拍板记录', result.removed ? 'ok' : 'info')
     } catch (caught) {
-      onToast(caught instanceof Error ? caught.message : '清空没成功，刷新再试')
+      onToast(caught instanceof Error ? caught.message : '清空没成功，刷新再试', 'fail')
     } finally {
       setDecideBusy('')
     }
@@ -764,7 +765,7 @@ export default function ProjectPage({
       await load()
       onToast('已看过：这一版先不改，工作台不再催它')
     } catch (caught) {
-      onToast(caught instanceof Error ? caught.message : '「已看过」没记上，稍后再试')
+      onToast(caught instanceof Error ? caught.message : '「已看过」没记上，稍后再试', 'fail')
     } finally {
       setAckBusy('')
     }
@@ -778,7 +779,7 @@ export default function ProjectPage({
       await load()
       onToast('已撤销：这条回到工作台的待办')
     } catch (caught) {
-      onToast(caught instanceof Error ? caught.message : '撤销没成功，稍后再试')
+      onToast(caught instanceof Error ? caught.message : '撤销没成功，稍后再试', 'fail')
     } finally {
       setAckBusy('')
     }
@@ -803,7 +804,7 @@ export default function ProjectPage({
           : '已重新打开：这一版的交付记录也撤掉了',
       )
     } catch (caught) {
-      onToast(caught instanceof Error ? caught.message : '状态没保存成功')
+      onToast(caught instanceof Error ? caught.message : '状态没保存成功', 'fail')
     } finally {
       setBusy('')
     }
@@ -822,7 +823,7 @@ export default function ProjectPage({
       setData((prev) => (prev ? { ...prev, project: result.project } : prev))
       onToast(next ? '分镜出图会带上这套参考资产' : '分镜出图改回纯按提示词画')
     } catch (caught) {
-      onToast(caught instanceof Error ? caught.message : '参考资产没保存成功')
+      onToast(caught instanceof Error ? caught.message : '参考资产没保存成功', 'fail')
     } finally {
       setAssetRefBusy(false)
     }
@@ -835,7 +836,7 @@ export default function ProjectPage({
       await navigator.clipboard.writeText(sha)
       onToast('已复制 SHA-256，可发给收件人核对包有没有被改过')
     } catch {
-      onToast('复制失败：浏览器没给剪贴板权限')
+      onToast('复制失败：浏览器没给剪贴板权限', 'fail')
     }
   }
 
@@ -905,7 +906,7 @@ export default function ProjectPage({
     if (!file) return
     const rejection = uploadRejection(file)
     if (rejection) {
-      onToast(rejection)
+      onToast(rejection, 'fail')
       return
     }
     setShotBusy(shotNo)
@@ -915,7 +916,7 @@ export default function ProjectPage({
       await load()
       onToast('第 ' + shotNo + ' 镜的画面换成了你贴的这张 · 模板那几镜一个字没动')
     } catch (reason) {
-      onToast(String((reason as Error)?.message || reason))
+      onToast(String((reason as Error)?.message || reason), 'fail')
     } finally {
       setShotBusy(0)
     }
@@ -928,7 +929,7 @@ export default function ProjectPage({
       await load()
       onToast('第 ' + shotNo + ' 镜回到原片帧')
     } catch (reason) {
-      onToast(String((reason as Error)?.message || reason))
+      onToast(String((reason as Error)?.message || reason), 'fail')
     } finally {
       setShotBusy(0)
     }
@@ -951,7 +952,7 @@ export default function ProjectPage({
       if (result.refused.length) lines.push(result.refused.length + ' 镜没记上（画面已经到上限）')
       onToast(lines.join(' · '))
     } catch (reason) {
-      onToast(String((reason as Error)?.message || reason))
+      onToast(String((reason as Error)?.message || reason), 'fail')
     } finally {
       setFrameAttach('')
     }
@@ -1066,7 +1067,7 @@ export default function ProjectPage({
         ? '已复制 ' + board.storyboard.length + ' 镜的提示词 · 也可以直接点每一镜的「出这一镜」'
         : '已复制第 ' + shotNo + ' 镜的提示词 · 要现成画面就点「出这一镜」')
     } catch {
-      onToast('浏览器没给剪贴板权限：展开提示词后手动选中复制')
+      onToast('浏览器没给剪贴板权限：展开提示词后手动选中复制', 'fail')
     }
   }
 
@@ -1092,7 +1093,7 @@ export default function ProjectPage({
   const auditPackage = async (version: number, deliveryId: string) => {
     if (!data) return
     if (!deliveryId) {
-      onToast('这一版没有封存包，体检不了')
+      onToast('这一版没有封存包，体检不了', 'info')
       return
     }
     setAudit({ version, state: 'busy', result: null, error: '' })
@@ -1214,7 +1215,7 @@ export default function ProjectPage({
         delete next[deliveryId]
         return next
       })
-      if (!result.changed) onToast('没变：这一条本来就写着这个称呼')
+      if (!result.changed) onToast('没变：这一条本来就写着这个称呼', 'info')
       else onToast(result.recipient ? recipientSavedText(result.recipient) : recipientClearedText())
     } catch (caught) {
       setReceiptError(caught instanceof Error ? caught.message : '收件人没记上')
@@ -1285,7 +1286,7 @@ export default function ProjectPage({
         delete next[deliveryId]
         return next
       })
-      if (!result.changed) onToast('没变：这一条本来就记着这段话')
+      if (!result.changed) onToast('没变：这一条本来就记着这段话', 'info')
       else onToast(result.reply ? replySavedText() : replyClearedText())
     } catch (caught) {
       setReceiptError(caught instanceof Error ? caught.message : '回复没记上')
@@ -1299,7 +1300,7 @@ export default function ProjectPage({
       await navigator.clipboard.writeText(receiptLinkUrl(token))
       onToast('已复制回执链接：发给收包人，他打开就能把收据贴回来')
     } catch {
-      onToast('复制失败：浏览器没给剪贴板权限')
+      onToast('复制失败：浏览器没给剪贴板权限', 'fail')
     }
   }
 
@@ -1309,7 +1310,7 @@ export default function ProjectPage({
       await navigator.clipboard.writeText(text)
       onToast('已复制：发给收包人，让他照着重验一次')
     } catch {
-      onToast('复制失败：浏览器没给剪贴板权限')
+      onToast('复制失败：浏览器没给剪贴板权限', 'fail')
     }
   }
 
@@ -1391,7 +1392,7 @@ export default function ProjectPage({
       const result = await downloadProjectDeliverable(data.project.id)
       onToast('交付稿已导出：' + result.name)
     } catch (caught) {
-      onToast(caught instanceof Error ? caught.message : '交付稿没导出成功')
+      onToast(caught instanceof Error ? caught.message : '交付稿没导出成功', 'fail')
     } finally {
       setBusy('')
     }
@@ -1405,7 +1406,7 @@ export default function ProjectPage({
       const result = await downloadProjectDeliverableZip(data.project.id)
       onToast('交付包已导出：' + result.name)
     } catch (caught) {
-      onToast(caught instanceof Error ? caught.message : '交付包没导出成功')
+      onToast(caught instanceof Error ? caught.message : '交付包没导出成功', 'fail')
     } finally {
       setBusy('')
     }
@@ -1416,7 +1417,7 @@ export default function ProjectPage({
   const openPaper = (url: string, blocked: string) => {
     const opened = window.open(url, '_blank')
     if (!opened) {
-      onToast(blocked)
+      onToast(blocked, 'fail')
       return
     }
     // 打印页不需要反过来操作作品页
@@ -1453,7 +1454,7 @@ export default function ProjectPage({
       onToast('已移到回收站，' + days + ' 天内在「作品 → 回收站」可以恢复')
       onBack()
     } catch (caught) {
-      onToast(caught instanceof Error ? caught.message : '删除失败')
+      onToast(caught instanceof Error ? caught.message : '删除失败', 'fail')
       setBusy('')
     }
   }
@@ -1468,7 +1469,7 @@ export default function ProjectPage({
     if (!data) return
     const title = draftTitle.trim()
     if (!title) {
-      onToast('作品名不能是空的')
+      onToast('作品名不能是空的', 'fail')
       return
     }
     if (title === data.project.title) {
@@ -1482,7 +1483,7 @@ export default function ProjectPage({
       setRenaming(false)
       onToast('作品名已改成「' + result.project.title + '」')
     } catch (caught) {
-      onToast(caught instanceof Error ? caught.message : '改名没保存成功')
+      onToast(caught instanceof Error ? caught.message : '改名没保存成功', 'fail')
     } finally {
       setBusy('')
     }
@@ -1500,7 +1501,7 @@ export default function ProjectPage({
           (workflow ? '：工作流从上一版复制过来，接着改这一版' : '：脚本已存一份快照，接着改这一版'),
       )
     } catch (caught) {
-      onToast(caught instanceof Error ? caught.message : '开新版本失败')
+      onToast(caught instanceof Error ? caught.message : '开新版本失败', 'fail')
     } finally {
       setBusy('')
     }
@@ -1533,7 +1534,7 @@ export default function ProjectPage({
         'v' + (result.project.version - 1) + ' 已归档，记录都还在',
       )
     } catch (caught) {
-      onToast(caught instanceof Error ? caught.message : '以旧版为底开新版失败')
+      onToast(caught instanceof Error ? caught.message : '以旧版为底开新版失败', 'fail')
     } finally {
       setBusy('')
     }
@@ -1609,7 +1610,7 @@ export default function ProjectPage({
       .map((beat) => ({ ...beat, beat: beat.beat.trim(), voiceover: beat.voiceover.trim(), onScreen: beat.onScreen.trim() }))
       .filter((beat) => beat.beat || beat.voiceover || beat.onScreen)
     if (!structure.length) {
-      onToast('脚本至少要留一段：段落名、口播或屏幕字写一个')
+      onToast('脚本至少要留一段：段落名、口播或屏幕字写一个', 'fail')
       return
     }
     setBusy('script')
@@ -1625,7 +1626,7 @@ export default function ProjectPage({
       const note = workflow ? SCRIPT_CANVAS_NOTE[result.canvas?.reason || ''] || '' : ''
       onToast('脚本已保存' + (note ? '：' + note : ''))
     } catch (caught) {
-      onToast(caught instanceof Error ? caught.message : '脚本没保存成功')
+      onToast(caught instanceof Error ? caught.message : '脚本没保存成功', 'fail')
     } finally {
       setBusy('')
     }
@@ -1644,7 +1645,7 @@ export default function ProjectPage({
           : '已清掉作品自己的脚本',
       )
     } catch (caught) {
-      onToast(caught instanceof Error ? caught.message : '恢复失败')
+      onToast(caught instanceof Error ? caught.message : '恢复失败', 'fail')
     } finally {
       setBusy('')
     }

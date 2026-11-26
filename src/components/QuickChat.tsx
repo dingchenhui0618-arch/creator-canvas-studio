@@ -16,6 +16,7 @@ import { safeFetch } from '../api/client'
 import { renderMarkdown } from '../lib/markdown'
 import { markdownPlainText } from '../lib/markdown-parse'
 import MediaTaskCard from './MediaTaskCard'
+import type { ToastFn } from '../domain/toast'
 
 // 快捷创作的「对话」（r214）：一页 DeepSeek —— 长上下文、联网搜索、读链接、思考模式。
 // 为什么单独一个组件：原来那块是「对话预设」的短轮问答（带输出类型与结构化草稿），
@@ -95,7 +96,7 @@ function when(at: number) {
   return hh + ':' + mm
 }
 
-export default function QuickChat({ onToast }: { onToast?: (text: string) => void }) {
+export default function QuickChat({ onToast }: { onToast?: ToastFn }) {
   const [items, setItems] = useState<ChatSummary[]>([])
   const [current, setCurrent] = useState<ChatConversation | null>(null)
   const [loadingList, setLoadingList] = useState(true)

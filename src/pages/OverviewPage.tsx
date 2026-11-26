@@ -96,6 +96,7 @@ import { runLiveText, runStatusMeta, runWorkLine } from '../domain/run'
 import { stampTime, visitLine } from '../domain/share'
 import { useSiteInfo, useUiMode } from '../api/app'
 import '../styles/overview.css'
+import type { ToastFn } from '../domain/toast'
 
 /** 服务端一页 8 条（v0.9.32）：整块重取时按这个数往前铺页，不把翻到的行弄丢。 */
 const LEDGER_PAGE_SIZE = 8
@@ -193,7 +194,7 @@ type Props = {
   // 引导是弹窗：页脚「上手指引」重新打开它，不再跳一个 #/welcome 页面
   onOpenGuide: () => void
   // 复制提醒之后说一声（v0.9.144）：复制成功 / 失败都得让人知道，不然不知道剪贴板里有没有东西
-  onToast: (message: string) => void
+  onToast: ToastFn
 }
 
 // 队列的三个时间范围（v0.9.25）：按那次评审的时间算，不是作品最近被点开的时间——

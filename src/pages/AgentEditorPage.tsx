@@ -19,6 +19,7 @@ import { useUiMode } from '../api/app'
 import { getPreferences } from '../api/preferences'
 import { clearUnsaved, setUnsaved } from '../domain/unsaved-guard'
 import '../styles/agents.css'
+import type { ToastFn } from '../domain/toast'
 
 // 这份表单的登记名（r270）：离开拦截只认这一条
 const AGENT_UNSAVED_OWNER = 'agent-editor'
@@ -26,7 +27,7 @@ const AGENT_UNSAVED_OWNER = 'agent-editor'
 type AgentEditorPageProps = {
   onBack: () => void
   onNavigate: (page: Page) => void
-  onToast: (message: string) => void
+  onToast: ToastFn
   agent?: { name: string; description: string }
 }
 

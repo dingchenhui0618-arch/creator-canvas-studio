@@ -15,6 +15,34 @@ export const TOAST_MAX_MS = 6000
 /** 收尾动效的时长：与 CSS 里的 --dur-2（180ms）同一档，改一处要改两处。 */
 export const TOAST_EXIT_MS = 180
 
+/**
+ * 提示条的语气（r325）。原来只有一种样子：前面挂一个对勾。
+ * 问题是全站有五十多处「动作没做成」，它们也挂着那个对勾——
+ * 「复制失败：浏览器没给剪贴板权限」前面一个 ✓，等于当场说反话。
+ *
+ * ok   动作做成了（默认值：老代码不传 tone 一律按做成了算，升级不会把成功改坏）
+ * fail 动作没做成：出错、被拒、名字为空、没有权限
+ * info 没发生动作，但也没出错：撤销栈本来就是空的、这一条本来就写着这个称呼
+ */
+export type ToastTone = 'ok' | 'fail' | 'info'
+
+/** 全站提示函数的签名：只有一处真源，页面不再各写一遍 (message: string) => void。 */
+export type ToastFn = (message: string, tone?: ToastTone) => void
+
+/** 认不出来的语气当 ok：宁可少标一次失败，也不要把成功画成失败。 */
+export function normalizeToastTone(tone: unknown): ToastTone {
+  return tone === 'fail' || tone === 'info' ? tone : 'ok'
+}
+
+/**
+ * 这条提示该用哪种播报方式。
+ * 失败用 alert（读屏会打断当前内容），其余用 status（等它读完再说）。
+ * 分档不能只看颜色：色觉不同的人也得能一眼分出这三条。
+ */
+export function toastRole(tone: unknown): 'status' | 'alert' {
+  return normalizeToastTone(tone) === 'fail' ? 'alert' : 'status'
+}
+
 /** 这条提示该停留多久（毫秒）。空文案按打底时长——不能因为 0 字就变成 0 秒。 */
 export function toastDuration(message: string): number {
   const text = typeof message === 'string' ? message.trim() : ''

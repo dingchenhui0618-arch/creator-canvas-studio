@@ -6,6 +6,7 @@ import {
   ChevronRight,
   Compass,
   Gauge,
+  Info,
   Loader2,
   LogOut,
   MoreHorizontal,
@@ -69,7 +70,7 @@ import {
   type Route,
 } from './router'
 import { setUnsaved, unsavedNote } from './domain/unsaved-guard'
-import { toastDuration, toastExitDelay } from './domain/toast'
+import { normalizeToastTone, toastDuration, toastExitDelay, toastRole, type ToastFn, type ToastTone } from './domain/toast'
 import { planScroll } from './domain/scroll'
 import { welcomeSeenKey } from './onboarding'
 import { browserFlagStore, dismissMobileNote, mobileNoteVisible } from './domain/mobile-note'
@@ -179,7 +180,7 @@ function AgentEditorRoute({
   agentRef: string | null
   onBack: () => void
   onNavigate: (page: Page) => void
-  onToast: (message: string) => void
+  onToast: ToastFn
 }) {
   const [seed, setSeed] = useState<AgentSeed | null>(null)
   const [status, setStatus] = useState<'loading' | 'ready' | 'missing'>(agentRef ? 'loading' : 'ready')
@@ -262,7 +263,8 @@ function Workbench({
   const [feedbackPending, setFeedbackPending] = useState(0)
 
   // 全局提示条（r324）：带序号——连按同一个动作时动画要重放一次，否则第二次什么都没发生
-  const [toast, setToast] = useState<{ seq: number; message: string } | null>(null)
+  // （r325）：带语气——「没做成」不该挂着对勾，图标与播报方式都跟着 tone 走
+  const [toast, setToast] = useState<{ seq: number; message: string; tone: ToastTone } | null>(null)
   const [toastLeaving, setToastLeaving] = useState(false)
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const [updateOpen, setUpdateOpen] = useState(false)
@@ -410,9 +412,11 @@ function Workbench({
   // 面包屑跟着导航层级走：工具页多一段「工具」，否则用户看不出自己已经离开了主线
   const inTools = isToolPage(activePage) || activePage === 'agent-editor'
 
-  const notify = useCallback((message: string) => {
+  const notify = useCallback((message: string, tone?: ToastTone) => {
+    // 语气必须在进状态之前归一：页面传了没见过的值，也只当成功，不会画出第三种图标
+    const safeTone = normalizeToastTone(tone)
     toastSeq.current += 1
-    setToast({ seq: toastSeq.current, message })
+    setToast({ seq: toastSeq.current, message, tone: safeTone })
     setToastLeaving(false)
     window.clearTimeout(toastTimer.current)
     window.clearTimeout(toastExitTimer.current)
@@ -1387,8 +1391,16 @@ function Workbench({
       )}
 
       {toast && (
-        <div className={'vq-toast' + (toastLeaving ? ' is-leaving' : '')} role="status" key={toast.seq}>
-          <Check size={14} />
+        <div
+          className={'vq-toast' + (toastLeaving ? ' is-leaving' : '')}
+          role={toastRole(toast.tone)}
+          data-tone={toast.tone}
+          key={toast.seq}
+        >
+          {/* 图标只给看得见的人：读屏听到的是文案本身（「复制失败：…」），不用再念一遍符号 */}
+          <span className="vq-toast-mark" aria-hidden="true">
+            {toast.tone === 'fail' ? <X size={14} /> : toast.tone === 'info' ? <Info size={14} /> : <Check size={14} />}
+          </span>
           {toast.message}
         </div>
       )}

@@ -5,6 +5,9 @@
 // 拍完必须立刻跑 revoke 脚本把这条会话删掉——签发与撤销是一对，不许只做一半。
 //
 // 用法（生产机）：node scripts/prod-shot-session-once.mjs /root/.vq-shot-token r320-prod-shot
+// 撤销必须 `cd /opt/visionqa` 再跑：在别的目录下 DATA_DIR 会落到 cwd 下的空库，
+// 打印出来的 before 0 / removed 0 看着像「本来就干净」，其实那条会话还在（r325 实测）。
+
 import fs from 'node:fs'
 import { createSession, listUsers } from '../server/auth.mjs'
 

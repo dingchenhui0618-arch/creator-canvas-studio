@@ -14,6 +14,7 @@ import {
 import { navigate, pageToRoute } from '../router'
 import '../styles/credits.css'
 import '../styles/recharge.css'
+import type { ToastFn } from '../domain/toast'
 
 const stamp = (value: string) => {
   const date = new Date(value)
@@ -35,7 +36,7 @@ const number = (value: number) => value.toLocaleString('zh-CN')
  * 页面不自己写死倍数；档位由后台维护，这里只如实渲染。
  * 支付通道还没接入，所以这一屏必须把「内测直充」说清楚，不能让人以为付了款。
  */
-export default function RechargePage({ onToast }: { onToast?: (message: string) => void }) {
+export default function RechargePage({ onToast }: { onToast?: ToastFn }) {
   const [overview, setOverview] = useState<BillingOverview | null>(null)
   const [credits, setCredits] = useState<CreditsResponse | null>(null)
   const [orders, setOrders] = useState<BillingOrder[]>([])

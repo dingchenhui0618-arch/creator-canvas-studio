@@ -36,6 +36,7 @@ import { CoverImage } from '../components/CoverImage'
 import PageHead from '../components/PageHead'
 import { Tag } from '../components/ui'
 import '../styles/radar.css'
+import type { ToastFn } from '../domain/toast'
 
 // 类型标签按库里真实的内容类型生成：写死一份清单，一旦运营改了分类就会出现「点了没结果」的空标签
 const pickTypes = (byType: Record<string, number>, saved: number) => {
@@ -107,7 +108,7 @@ export function TemplateLibraryPage({
   onOpenTemplate,
   onCloseTemplate,
 }: {
-  onToast: (message: string) => void
+  onToast: ToastFn
   onBack: () => void
   onOpenCanvas: (flowId?: string) => void
   /** 运营位的按钮要能跳到任意页面；没传就不显示运营位（不给出点了没反应的按钮）。 */
@@ -265,7 +266,7 @@ export function TemplateLibraryPage({
       setDetail({ ...template, shareToken: result.token, shareCreatedAt: result.createdAt })
       onToast('已生成只读链接，拿到链接的人不用登录就能看')
     } catch (caught) {
-      onToast(caught instanceof Error ? caught.message : '生成分享链接失败')
+      onToast(caught instanceof Error ? caught.message : '生成分享链接失败', 'fail')
     } finally {
       setShareBusy(false)
     }
@@ -278,7 +279,7 @@ export function TemplateLibraryPage({
       setDetail({ ...template, shareToken: undefined, shareCreatedAt: undefined })
       onToast('已停止分享，旧链接立即失效')
     } catch (caught) {
-      onToast(caught instanceof Error ? caught.message : '停止分享失败')
+      onToast(caught instanceof Error ? caught.message : '停止分享失败', 'fail')
     } finally {
       setShareBusy(false)
     }
@@ -289,7 +290,7 @@ export function TemplateLibraryPage({
       await navigator.clipboard.writeText(shareUrl(token))
       onToast('链接已复制，可以直接发给剪辑或客户')
     } catch {
-      onToast('复制失败，请手动选中链接复制')
+      onToast('复制失败，请手动选中链接复制', 'fail')
     }
   }
 
@@ -304,7 +305,7 @@ export function TemplateLibraryPage({
       if (!workflow && next.kind === 'flow') {
         lastRequested.current = ''
         setDetailLoading(false)
-        onToast('这条模板属于旧版功能，现在不能套用了')
+        onToast('这条模板属于旧版功能，现在不能套用了', 'info')
         onCloseTemplate?.()
         return
       }
@@ -313,7 +314,7 @@ export function TemplateLibraryPage({
       if (options?.adapt && next.structure?.length) enterAdapt(next)
     } catch (caught) {
       if (lastRequested.current !== id) return
-      onToast(caught instanceof Error ? caught.message : String(caught))
+      onToast(caught instanceof Error ? caught.message : String(caught), 'fail')
       // 地址里那条打不开（删了、或不在这个账号下）：把地址换回列表，别让地址栏说一条不存在的模板
       lastRequested.current = ''
       onCloseTemplate?.()
@@ -383,7 +384,7 @@ export function TemplateLibraryPage({
       onToast('已存为你的模板：' + result.template.title)
       void load()
     } catch (caught) {
-      onToast(caught instanceof Error ? caught.message : '保存改编失败')
+      onToast(caught instanceof Error ? caught.message : '保存改编失败', 'fail')
     } finally {
       setAdaptSaving(false)
     }
@@ -400,7 +401,7 @@ export function TemplateLibraryPage({
       onToast('已建作品：' + result.project.title)
       onOpenProject(result.project.id)
     } catch (caught) {
-      onToast(caught instanceof Error ? caught.message : '建作品失败')
+      onToast(caught instanceof Error ? caught.message : '建作品失败', 'fail')
     } finally {
       setProjectSaving(false)
     }
@@ -1113,7 +1114,7 @@ export function TemplateLibraryPage({
                             disabled={!isParsed(detail)}
                             onClick={() => {
                               const list = [detail.hook, ...detail.structure.map((beat) => beat.beat + '：' + beat.voiceover), 'CTA：' + (detail.structure.at(-1)?.purpose || '')].join('\n')
-                              void navigator.clipboard?.writeText(list).then(() => onToast('脚本已复制到剪贴板')).catch(() => onToast('复制失败'))
+                              void navigator.clipboard?.writeText(list).then(() => onToast('脚本已复制到剪贴板')).catch(() => onToast('复制失败', 'fail'))
                             }}>
                             <Copy size={14} />复制脚本
                           </button>
@@ -1230,7 +1231,7 @@ export function TemplateLibraryPage({
                             onToast(detail.kind === 'flow' ? '已打开工作流：' + result.flow.name : '已生成工作流草稿：' + result.flow.name)
                             onOpenCanvas(result.flow.id)
                           })
-                          .catch((caught) => onToast(caught instanceof Error ? caught.message : '套用模板失败'))
+                          .catch((caught) => onToast(caught instanceof Error ? caught.message : '套用模板失败', 'fail'))
                       }}
                     >
                       <Layers size={14} />{detail.kind === 'flow' ? '在工作流打开' : '套用到工作流'}

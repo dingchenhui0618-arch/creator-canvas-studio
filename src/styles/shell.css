@@ -1489,6 +1489,19 @@ select:focus-visible {
   transition: opacity var(--dur-2) var(--ease-out), transform var(--dur-2) var(--ease-out);
 }
 
+/* 语气（r325）：图标只有 14px，形状先分清（✓ / ✕ / i），颜色再补一层。
+   三种语气都不换背景：提示条的位置在右下角，一改底色就像弹了个新东西出来。 */
+.vq-toast-mark {
+  display: inline-flex;
+  flex: none;
+}
+.vq-toast[data-tone='fail'] .vq-toast-mark {
+  color: var(--on-ink-fail);
+}
+.vq-toast[data-tone='info'] .vq-toast-mark {
+  color: var(--on-ink-muted);
+}
+
 /* 收尾：淡出 + 下沉 8px（与进场同一条轨道），走完才由 App 卸载（r324）。
    原来是时间一到直接摘掉，一条读不完的长句看着就是「闪没了」。 */
 .vq-toast.is-leaving {

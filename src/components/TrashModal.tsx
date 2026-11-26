@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ArchiveRestore, RefreshCw, Trash2, X } from 'lucide-react'
+import type { ToastFn } from '../domain/toast'
 
 // 回收站（r271 起通用）：删掉的东西先来这里，留 N 天再真清。
 // 编导误删一条解析了很久的模板，不该只能再花 10 积分重新拆一遍；
@@ -38,7 +39,7 @@ export function TrashModal({
 }: {
   source: TrashSource
   onClose: () => void
-  onToast: (message: string) => void
+  onToast: ToastFn
   onRestored: () => void
 }) {
   const [items, setItems] = useState<TrashEntry[]>([])
@@ -78,7 +79,7 @@ export function TrashModal({
         onToast(source.restoredToast(item.title))
         onRestored()
       })
-      .catch((caught) => onToast(caught instanceof Error ? caught.message : '恢复失败'))
+      .catch((caught) => onToast(caught instanceof Error ? caught.message : '恢复失败', 'fail'))
       .finally(() => setBusyId(''))
   }
 
@@ -91,7 +92,7 @@ export function TrashModal({
         setConfirmId('')
         onToast(source.purgedToast(item.title))
       })
-      .catch((caught) => onToast(caught instanceof Error ? caught.message : '删除失败'))
+      .catch((caught) => onToast(caught instanceof Error ? caught.message : '删除失败', 'fail'))
       .finally(() => setBusyId(''))
   }
 

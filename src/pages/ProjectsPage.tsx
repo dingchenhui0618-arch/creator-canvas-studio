@@ -12,6 +12,7 @@ import WorksWall from '../components/WorksWall'
 import { CLIENT_LABEL, stampTime } from '../domain/share'
 import { useWorkflowEnabled } from '../domain/features'
 import '../styles/projects.css'
+import type { ToastFn } from '../domain/toast'
 
 const pad2 = (value: number) => String(value).padStart(2, '0')
 
@@ -60,7 +61,7 @@ export default function ProjectsPage({
   onToast,
 }: {
   onOpenProject: (id: string) => void
-  onToast: (message: string) => void
+  onToast: ToastFn
   onBrowseTemplates: () => void
   // 模板库也是空的时，这一屏的下一步是「去爆款雷达检索一条」，不是把人送进一个空库（v0.9.42）
   onDiscover: () => void

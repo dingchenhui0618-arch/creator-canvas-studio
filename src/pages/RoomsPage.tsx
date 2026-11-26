@@ -27,6 +27,7 @@ import {
   type RoomSummary,
 } from '../api/rooms'
 import '../styles/rooms.css'
+import type { ToastFn } from '../domain/toast'
 
 // VisionChat 房间（r315，一期 1a）。
 //
@@ -37,7 +38,7 @@ const PAGE_SIZE = 100
 
 const initials = (name: string) => (name || '?').trim().slice(0, 1).toUpperCase()
 
-export default function RoomsPage({ onToast }: { onToast?: (text: string) => void }) {
+export default function RoomsPage({ onToast }: { onToast?: ToastFn }) {
   const [rooms, setRooms] = useState<RoomSummary[]>([])
   const [activeId, setActiveId] = useState('')
   const [room, setRoom] = useState<RoomDetail | null>(null)

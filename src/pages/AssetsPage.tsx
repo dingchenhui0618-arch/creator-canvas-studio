@@ -31,6 +31,7 @@ import {
   type AssetLimits,
 } from '../api/assets'
 import '../styles/assets.css'
+import type { ToastFn } from '../domain/toast'
 
 const FILTERS = [
   { id: 'all', label: '全部' },
@@ -76,7 +77,7 @@ function missingSlots(asset: Asset) {
  * 这一页回答两件事：我手上有什么可被复用的东西、这套图生成到哪一步了。
  * 生成是后台任务，关页不丢：重新打开这一页会接着轮询还在 generating 的那几条。
  */
-export default function AssetsPage({ onToast }: { onToast: (message: string) => void }) {
+export default function AssetsPage({ onToast }: { onToast: ToastFn }) {
   const [items, setItems] = useState<Asset[]>([])
   const [limits, setLimits] = useState<AssetLimits>(DEFAULT_ASSET_LIMITS)
   const [loading, setLoading] = useState(true)
@@ -159,7 +160,7 @@ export default function AssetsPage({ onToast }: { onToast: (message: string) => 
     } catch (caught) {
       const info = assetErrorInfo(caught)
       setError(info.message)
-      onToast(info.message)
+      onToast(info.message, 'fail')
     } finally {
       setBusyId('')
     }
@@ -169,7 +170,7 @@ export default function AssetsPage({ onToast }: { onToast: (message: string) => 
     if (!renaming) return
     const name = renameValue.trim()
     if (!name) {
-      onToast('名字不能为空')
+      onToast('名字不能为空', 'fail')
       return
     }
     try {
@@ -178,7 +179,7 @@ export default function AssetsPage({ onToast }: { onToast: (message: string) => 
       setRenaming(null)
       onToast('名字已改')
     } catch (caught) {
-      onToast(assetErrorInfo(caught).message)
+      onToast(assetErrorInfo(caught).message, 'fail')
     }
   }
 
@@ -190,7 +191,7 @@ export default function AssetsPage({ onToast }: { onToast: (message: string) => 
       setDeleting(null)
       onToast('已删除这一套资产')
     } catch (caught) {
-      onToast(assetErrorInfo(caught).message)
+      onToast(assetErrorInfo(caught).message, 'fail')
     }
   }
 

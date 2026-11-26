@@ -38,6 +38,7 @@ import {
   type OnboardingState,
 } from '../api/assets'
 import '../styles/assets.css'
+import type { ToastFn } from '../domain/toast'
 
 const IDENTITY_ICON: Record<OnboardingIdentityId, IconComponent> = {
   creator: UserRound,
@@ -88,7 +89,7 @@ export function AssetBuilder({
   initialName?: string
   onAssetChange?: (asset: Asset | null) => void
   onSettled?: (asset: Asset) => void
-  onToast?: (message: string) => void
+  onToast?: ToastFn
 }) {
   const meta = ASSET_KIND_META[kind]
   const slots = slotsFor(kind)
@@ -459,7 +460,7 @@ export function OnboardingGate({
   session: Session
   onDone?: () => void
   onOpenAssets?: () => void
-  onToast?: (message: string) => void
+  onToast?: ToastFn
 }) {
   const [visible, setVisible] = useState(false)
   const [state, setState] = useState<OnboardingState | null>(null)

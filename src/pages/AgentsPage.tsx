@@ -78,6 +78,7 @@ import { useModelOptions } from '../components/ModelSwitch'
 import { Tag } from '../components/ui'
 import { renderMarkdown } from '../lib/markdown'
 import '../styles/agents.css'
+import type { ToastFn } from '../domain/toast'
 
 // 创作方式：一个输入框，三种去向。对话交给对话预设，图片 / 视频走服务端生成通道。
 // 工作流不当第四个页签（r257）：它是要摆节点、要跑起来才有意义的画布，摊成一张清单只是把另一页
@@ -600,7 +601,7 @@ function MediaComposer({
   catalog: MediaModel[]
   defaultModel: string
   onCreditsChanged: () => void
-  onToast?: (message: string) => void
+  onToast?: ToastFn
   /** 从作品流带过来的素材号：素材清单回来后挂进托架（r229） */
   handoff?: RefHandoff | null
   onHandoffDone?: () => void
@@ -1679,7 +1680,7 @@ export function AgentsPage({
   onOpenTemplates: () => void
   onOpenCanvas: (flowId: string) => void
   onOpenProject: (projectId: string) => void
-  onToast?: (message: string) => void
+  onToast?: ToastFn
 }) {
   // r313：工作流只对管理员开放。非管理员这一页不显示工作流入口、不发 listFlows
   const workflow = useWorkflowEnabled()

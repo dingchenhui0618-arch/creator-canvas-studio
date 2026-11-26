@@ -32,6 +32,7 @@ import { getCredits, type CreditsResponse } from '../api/credits'
 import { Pill } from '../components/ui'
 import '../styles/radar.css'
 import '../styles/credits.css'
+import type { ToastFn } from '../domain/toast'
 
 const PLATFORMS = [
   { value: 'all', label: '全部平台' },
@@ -116,7 +117,7 @@ function writeLastSearch(value: LastSearch | null) {
 }
 
 export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProject }: {
-  onToast: (message: string) => void
+  onToast: ToastFn
   onOpenTemplates: () => void
   onOpenTemplate?: (templateId: string) => void
   onOpenProject?: (projectId: string) => void
@@ -191,16 +192,16 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
   const favoriteHistory = useCallback((entry: SearchHistoryEntry) => {
     toggleSearchFavorite(entry.id)
       .then(() => loadHistory())
-      .catch((caught) => onToast(caught instanceof Error ? caught.message : '收藏失败'))
+      .catch((caught) => onToast(caught instanceof Error ? caught.message : '收藏失败', 'fail'))
   }, [loadHistory, onToast])
 
   const removeHistory = useCallback(() => {
     clearSearchHistory()
       .then((result) => {
         loadHistory()
-        onToast(result.removed ? '已清空 ' + result.removed + ' 条历史，收藏的还留着' : '没有可清空的记录，收藏的还留着')
+        onToast(result.removed ? '已清空 ' + result.removed + ' 条历史，收藏的还留着' : '没有可清空的记录，收藏的还留着', result.removed ? 'ok' : 'info')
       })
-      .catch((caught) => onToast(caught instanceof Error ? caught.message : '清空失败'))
+      .catch((caught) => onToast(caught instanceof Error ? caught.message : '清空失败', 'fail'))
   }, [loadHistory, onToast])
 
   // 清掉这一屏（不动服务端的检索历史：历史存的是条件，不存结果）
@@ -378,7 +379,7 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
         loadTaken()
         if (onOpenProject) onOpenProject(result.project.id)
       } catch (caught) {
-        onToast(caught instanceof Error ? caught.message : '开成作品没有成功，稍后再试一次')
+        onToast(caught instanceof Error ? caught.message : '开成作品没有成功，稍后再试一次', 'fail')
       } finally {
         setWorkSaving('')
       }
@@ -408,9 +409,9 @@ export function RadarPage({ onToast, onOpenTemplates, onOpenTemplate, onOpenProj
         // 再问一次服务端：这一条的下一步（还没解析 / 开成作品）由同一个口径给出，界面不自己编
         refreshMark(item)
         loadTaken()
-        onToast(result.created ? '已加入模板库：只存了原链接与互动数据' : '这条已经在模板库里了')
+        onToast(result.created ? '已加入模板库：只存了原链接与互动数据' : '这条已经在模板库里了', result.created ? 'ok' : 'info')
       } catch (caught) {
-        onToast(caught instanceof Error ? caught.message : '加入模板库失败')
+        onToast(caught instanceof Error ? caught.message : '加入模板库失败', 'fail')
       } finally {
         setSavingId('')
       }

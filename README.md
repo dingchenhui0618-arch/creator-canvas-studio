@@ -824,6 +824,49 @@ DOM 里确实没有它（反证），撤销后回到 3 行且 10 个字段 diff 
 （全站 119 处提示 / 18 处类型声明），留到下一轮，不半改。完整记录见
 [docs/r324-toast-2026-11-26.md](docs/r324-toast-2026-11-26.md)。
 
+## 三百七十一、提示条分档：失败不再挂对勾（r325 / v0.9.297）
+
+r324 把停留时间拉长到「读得完」，副作用是把一个将就放着的问题照了出来：「复制失败：浏览器没给剪贴板权限」
+前面挂着一个 ✓，等于当场说反话。这一轮把全站提示扫了一遍，给提示条加了三档语气（真源
+[src/domain/toast.ts](src/domain/toast.ts) 的 `ToastTone` / `ToastFn` / `normalizeToastTone` / `toastRole`）：
+`ok` ✓ 白（默认）、`fail` ✕ 浅红 + `role="alert"`、`info` ⓘ 半透明（撤销栈本来就是空的、这一条本来就写着这个称呼）。
+三种语气是三个不同的 SVG path——形状先分清，颜色只补一层；图标对读屏隐藏，读屏听到的是文案本身。
+深色底单开两个语义色 `--on-ink-fail #ff9b9b` / `--on-ink-muted`：原来的 `--fail #a33838` 压在提示条的 `#111` 上
+对比度只有 1.9:1，等于没画，新值 **9.36:1**。全站 162 处提示里 **86 处自己带了语气**（69 失败 / 11 什么也没发生 / 6 明确成功），
+其余走默认 ok。工作流页与无限画布各有一层自己的 `toast()` 包装，也要一起透传——只改 `onToast` 的话，语气到那一层就被吃掉了。
+
+独立取证 [scripts/shot-r325.mjs](scripts/shot-r325.mjs) **14/14**（0 次上游调用，临时实例 + 真账号 + 真点）：
+改名成功那条 `ok` / `M20 6 9 17l-5-5` / `rgb(255,255,255)` / `status`；名字清空那条 `fail` / `M18 6 6 18` /
+`rgb(255,155,155)` / `alert`；工作流页 Ctrl+Z 那条 `info` / `M12 16v-4` / `rgba(255,255,255,0.72)` / `status`；
+三条 path 与三个颜色互不相同，390 宽那条 29 字长提示仍是 342px / 2 行 / 全在视口内 / 页面无横向溢出。
+
+![成功：✓ 白，status](docs/r325-toast-ok-1440.png)
+
+![失败：✕ 浅红，alert](docs/r325-toast-fail-1440.png)
+
+![什么也没发生：ⓘ 半透明，status](docs/r325-toast-info-1440.png)
+
+新增 [test/toast-tone.test.mjs](test/toast-tone.test.mjs)：真源码扫描 + 反证——落在 `catch {}` 或 `.catch(回调)` 里的提示
+必须带语气，类型上也不许再写第二份 `(message: string) => void` 签名。第一遍门禁当场抓出 **BoardPage 两处**漏传
+（「新建画布失败」「写入画布失败」，它们走的是那一层自己的 `toast()`，按 `onToast` 扫根本扫不到），
+补完又抓出工作流页 catch 里两条在 catch 里却不是失败的（「已退出排队」「已停止等待这次运行」→ 改成 `info`）。
+
+生产真渲染 [scripts/shot-r325-prod.mjs](scripts/shot-r325-prod.mjs)（临时管理员会话、只发 GET、拍完撤销
+`before 1 / removed 1 / after 0`）：进工作流页只按一次 Ctrl+Z，线上入口 `index-DjO_CFA0.js`、侧栏 `v0.9.297`，
+那条提示 `tone=info` / `role=status` / 图标 `M12 16v-4` / `rgba(255,255,255,0.72)` / 图标对读屏隐藏，
+停留 **2888ms**（公式 2880）、收尾 **186ms**（4 帧半透明）、1440 溢出 0、exception 0；图里侧栏手机号已遮成 `138••••••••`。
+
+![生产：工作流页右下角那条 info 提示](docs/r325-prod-toast-1440.png)
+
+门禁：`npm test` **2126 / 2126**（新增 12 条：3 条语气纯函数 + 9 条声明与挂载绑定）、`tsc -b` 干净、
+`oxlint` 0 error / 30 warning（753 文件）、密钥扫描 1200 个文件无命中、入口 `index-DjO_CFA0.js`（869202 B）；
+发布标签 `20261126-2014-r325tone`，快照 `/opt/visionqa/releases/20261126-121425-20261126-2014-r325tone.tar.gz`，
+`ops/rollback.sh --to 1` 回 0.9.296。
+
+边界：只有三档没有 warn（运行「有节点失败」按 fail 算）；不传语气一律按 ok——门禁只兜得住 catch 里的，
+新写的失败提示要自己带 `'fail'`；语气不影响停留时长（仍是字数 × 60ms + 2.4s）；仍然是全局一条提示、后一条顶掉前一条。
+完整记录见 [docs/r325-toast-tone-2026-11-26.md](docs/r325-toast-tone-2026-11-26.md)。
+
 
 
 

@@ -22,6 +22,7 @@ import {
   type CanvasListRead,
 } from '../domain/board-canvas'
 import '../styles/board.css'
+import type { ToastFn, ToastTone } from '../domain/toast'
 
 // 无限画布（v0.9.163，用户 2026-11-16 明确要求）：
 //
@@ -46,7 +47,7 @@ function hostOf(value: string): string {
 }
 
 type BoardPageProps = {
-  onToast?: (message: string) => void
+  onToast?: ToastFn
   /** 地址里点名的画布：#/board/<画布ID>；不填就沿用上次打开的那块 */
   boardId?: string
   /** 专注模式：收起侧栏与顶栏，只留画布自己的工具条 */
@@ -56,7 +57,8 @@ type BoardPageProps = {
 
 export default function BoardPage({ onToast, boardId, focus, onToggleFocus }: BoardPageProps) {
   const { internal } = useUiMode()
-  const toast = useCallback((message: string) => onToast?.(message), [onToast])
+  // 语气要一路传到底（r325）：无限画布这层包装少传一次，下面所有提示就只剩一种语气
+  const toast = useCallback((message: string, tone?: ToastTone) => onToast?.(message, tone), [onToast])
 
   const [bdc, setBdc] = useState<BdcStatus | null>(null)
   const [checked, setChecked] = useState(false)
@@ -276,7 +278,7 @@ export default function BoardPage({ onToast, boardId, focus, onToggleFocus }: Bo
         retryList()
       }
     } catch (error) {
-      toast(error instanceof Error ? error.message : '新建画布失败')
+      toast(error instanceof Error ? error.message : '新建画布失败', 'fail')
     }
   }, [retryList, toast])
 
@@ -284,7 +286,7 @@ export default function BoardPage({ onToast, boardId, focus, onToggleFocus }: Bo
     const text = noteText.trim()
     if (!text) return
     if (!canvasId) {
-      toast('先选一块画布，再写笔记')
+      toast('先选一块画布，再写笔记', 'fail')
       return
     }
     setNoteBusy(true)
@@ -297,7 +299,7 @@ export default function BoardPage({ onToast, boardId, focus, onToggleFocus }: Bo
       setFrameKey((key) => key + 1)
       toast('已写进画布，画布正在重载')
     } catch (error) {
-      toast(error instanceof Error ? error.message : '写入画布失败')
+      toast(error instanceof Error ? error.message : '写入画布失败', 'fail')
     } finally {
       setNoteBusy(false)
     }

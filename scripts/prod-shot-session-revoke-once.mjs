@@ -4,6 +4,9 @@
 // 打印删掉了几条、还剩几条同样的行，方便把「0 条」写进发版记录。
 //
 // 用法（生产机）：node scripts/prod-shot-session-revoke-once.mjs r320-prod-shot
+// 撤销必须 `cd /opt/visionqa` 再跑：在别的目录下 DATA_DIR 会落到 cwd 下的空库，
+// 打印出来的 before 0 / removed 0 看着像「本来就干净」，其实那条会话还在（r325 实测）。
+
 import fs from 'node:fs'
 import { openDb } from '../server/auth.mjs'
 

@@ -62,6 +62,7 @@ import PageHead from '../components/PageHead'
 import CanvasStart from '../components/CanvasStart'
 import { Pill } from '../components/ui'
 import '../styles/canvas.css'
+import type { ToastFn, ToastTone } from '../domain/toast'
 
 /** 步骤清单上那一行小字：只写这个节点真正会变的东西（模型显示名、比例、时长、分辨率）。
  *  模型名一律走 /api/models 下发的标签（GPT Image 2 / Seedance 2.0），界面上不出现任何上游厂牌。 */
@@ -110,7 +111,7 @@ const nodeTypes = {
 //   resumeRunId  #/canvas/<flowId>/resume/<runId>     特定一次运行：打开时把记录放回抽屉（v0.9.104）
 // 自由摆放素材的那张外部工作流不在这里：它是 #/board（无限工作流，v0.9.163）。
 type CanvasPageProps = {
-  onToast?: (message: string) => void
+  onToast?: ToastFn
   flowId?: string
   resumeRunId?: string
   viewRunId?: string
@@ -318,7 +319,8 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
   const savedSignature = useRef('')
   const stageRef = useRef<HTMLDivElement>(null)
 
-  const toast = useCallback((message: string) => onToast?.(message), [onToast])
+  // 语气要一路传到底（r325）：这里是工作流页的第二层包装，少传一次就等于把语气丢了
+  const toast = useCallback((message: string, tone?: ToastTone) => onToast?.(message, tone), [onToast])
 
   // 退出只读查看：地址回到普通工作流，App 按模式重挂一次工作流，原来的运行态不会挂到编辑态上。
   // 工作流已经删除时不能回到一张不存在的工作流：优先回作品页，没有作品就回运行记录。
@@ -509,7 +511,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
   const undo = useCallback(() => {
     const previous = history.current[history.current.length - 1]
     if (!previous) {
-      toast('没有可撤销的操作')
+      toast('没有可撤销的操作', 'info')
       return
     }
     future.current = [...future.current, snapshot()]
@@ -523,7 +525,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
   const redo = useCallback(() => {
     const next = future.current[future.current.length - 1]
     if (!next) {
-      toast('没有可重做的操作')
+      toast('没有可重做的操作', 'info')
       return
     }
     history.current = [...history.current, snapshot()]
@@ -733,7 +735,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
         .then((run) => {
           if (!alive) return
           if (run.flowId !== flowIdRef.current) {
-            toast('这条运行不属于当前工作流')
+            toast('这条运行不属于当前工作流', 'fail')
             navigate({ kind: 'page', page: 'canvas', flowId: flowIdRef.current }, { replace: true })
             return
           }
@@ -781,7 +783,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
         })
         .catch((error) => {
           if (!alive) return
-          toast('这条运行打不开：' + (error instanceof Error ? error.message : String(error)))
+          toast('这条运行打不开：' + (error instanceof Error ? error.message : String(error)), 'fail')
           navigate({ kind: 'page', page: 'canvas', flowId: flowIdRef.current }, { replace: true })
         })
     }, 120)
@@ -931,7 +933,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
     if (readOnly) return
     const error = validateConnection(edgesRef.current, connection)
     if (error) {
-      toast(error)
+      toast(error, 'fail')
       return
     }
     const source = nodesRef.current.find((node) => node.id === connection.source)
@@ -952,7 +954,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
     if (readOnly) return
     const id = selectedIdRef.current
     if (!id) {
-      toast('先选中一个节点')
+      toast('先选中一个节点', 'fail')
       return
     }
     pushHistory()
@@ -1015,7 +1017,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
   const switchFlow = useCallback(async (nextId: string) => {
     if (nextId === flowIdRef.current) return
     if (running) {
-      toast('运行中不能切换流程')
+      toast('运行中不能切换流程', 'fail')
       return
     }
     await saveNow()
@@ -1034,7 +1036,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
       applyFlow(created)
       toast('已新建流程')
     } catch (error) {
-      toast('新建失败：' + (error instanceof Error ? error.message : String(error)))
+      toast('新建失败：' + (error instanceof Error ? error.message : String(error)), 'fail')
     }
   }, [applyFlow, running, saveNow, toast])
 
@@ -1100,7 +1102,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
       window.setTimeout(() => fitCanvas(), 80)
       toast(note)
     } catch (error) {
-      toast('没建成：' + (error instanceof Error ? error.message : String(error)))
+      toast('没建成：' + (error instanceof Error ? error.message : String(error)), 'fail')
     } finally {
       setStartBusy('')
     }
@@ -1112,7 +1114,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
     const id = flowIdRef.current
     if (!id) return
     if (!nodesRef.current.length) {
-      toast('工作流还是空的，先拖入节点再存为模板')
+      toast('工作流还是空的，先拖入节点再存为模板', 'fail')
       return
     }
     await saveNow()
@@ -1120,7 +1122,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
       const result = await saveFlowAsTemplate(id, nameRef.current)
       toast('已存为模板：' + result.template.title + '（可在模板库套用回工作流）')
     } catch (error) {
-      toast('另存失败：' + (error instanceof Error ? error.message : String(error)))
+      toast('另存失败：' + (error instanceof Error ? error.message : String(error)), 'fail')
     }
   }, [running, saveNow, toast])
 
@@ -1131,7 +1133,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
     try {
       const result = await deleteFlow(id)
       if (!result.ok) {
-        toast('删除失败：流程不存在')
+        toast('删除失败：流程不存在', 'fail')
         return
       }
       const rest = flowsRef.current.filter((flow) => flow.id !== id)
@@ -1145,7 +1147,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
       }
       toast('流程已删除')
     } catch (error) {
-      toast('删除失败：' + (error instanceof Error ? error.message : String(error)))
+      toast('删除失败：' + (error instanceof Error ? error.message : String(error)), 'fail')
     }
   }, [applyFlow, running, toast])
 
@@ -1205,22 +1207,22 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
 
   const handleRun = useCallback(async (resumeFrom: RunRecord | null = null) => {
     if (readOnly) {
-      toast('只读查看中，不能运行；退出查看后再运行')
+      toast('只读查看中，不能运行；退出查看后再运行', 'fail')
       return
     }
     if (running) return
     if (!nodesRef.current.length) {
-      toast('工作流还没有节点，先从左侧拖入一个')
+      toast('工作流还没有节点，先从左侧拖入一个', 'fail')
       return
     }
     const resume = runResumeInfo(resumeFrom)
     if (resumeFrom && (!resume.resumable || resume.left <= 0)) {
-      toast('这条运行没有可复用的已跑节点，直接重新运行即可')
+      toast('这条运行没有可复用的已跑节点，直接重新运行即可', 'info')
       return
     }
     const saved = await saveNow()
     if (!saved) {
-      toast('保存失败，未发起运行：' + saveError)
+      toast('保存失败，未发起运行：' + saveError, 'fail')
       return
     }
     // 续跑失败在 run-start 之前时，把上一次的结论原样放回抽屉，别让页面空掉
@@ -1326,11 +1328,14 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
         toast('运行完成 · ' + (record.durationMs / 1000).toFixed(1) + 's')
       } else if (record.status === 'interrupted') {
         const back = Number(record.credits?.refundedAmount ?? 0) || 0
-        toast(record.canceled
-          ? '已停止' + (back > 0 ? ' · 退回 ' + back + ' 积分' : ' · 已跑部分不退')
-          : '运行被中断 · 已退回积分')
+        toast(
+          record.canceled
+            ? '已停止' + (back > 0 ? ' · 退回 ' + back + ' 积分' : ' · 已跑部分不退')
+            : '运行被中断 · 已退回积分',
+          record.canceled ? 'info' : 'fail',
+        )
       } else {
-        toast('运行结束，有节点失败 · ' + (record.durationMs / 1000).toFixed(1) + 's')
+        toast('运行结束，有节点失败 · ' + (record.durationMs / 1000).toFixed(1) + 's', 'fail')
       }
     } catch (error) {
       // 自己点的「取消」：abort 不是失败。节点退回「还没跑」，不当成一条错误留在工作流上。
@@ -1346,10 +1351,10 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
         if (stillQueued) {
           // 名次条还在 = 这一单还没排到：钱一分没动，流程也没跑
           setRunCancelled(true)
-          toast('已退出排队 · 没有扣积分')
+          toast('已退出排队 · 没有扣积分', 'info')
         } else {
           setRunCancelled(false)
-          toast('已停止等待这次运行 · 已开跑的按运行记录结算')
+          toast('已停止等待这次运行 · 已开跑的按运行记录结算', 'info')
         }
         if (previous && !started) {
           setRunRecord(previous)
@@ -1369,7 +1374,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
           ? { ...node, data: { ...node.data, status: 'error', error: message } }
           : node
       )))
-      toast('运行失败：' + message)
+      toast('运行失败：' + message, 'fail')
     } finally {
       setRunning(false)
       setStopping(false)
@@ -1400,7 +1405,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
       await stopRunRequest(id)
       toast('正在停止 · 跑完的节点按比例计费')
     } catch (error) {
-      toast('停止失败：' + (error instanceof Error ? error.message : String(error)))
+      toast('停止失败：' + (error instanceof Error ? error.message : String(error)), 'fail')
       setStopping(false)
     }
   }, [stopping, toast])
@@ -1439,10 +1444,10 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
       if (modifier && key === 's') {
         event.preventDefault()
         if (readOnly) {
-          toast('只读查看中，工作流没有改动')
+          toast('只读查看中，工作流没有改动', 'info')
           return
         }
-        void saveNow().then((ok) => toast(ok ? '已保存' : '保存失败：' + saveError))
+        void saveNow().then((ok) => toast(ok ? '已保存' : '保存失败：' + saveError, ok ? 'ok' : 'fail'))
         return
       }
       if (event.key === 'Escape') {
@@ -1553,7 +1558,7 @@ function CanvasWorkspace({ onToast, flowId: initialFlowId, resumeRunId: initialR
           <button className="vq-button vq-button--ghost" type="button" onClick={() => { void saveAsTemplate() }} disabled={running} title="把当前工作流另存为一个新流程">
             <Copy size={14} />另存为模板
           </button>
-          <button className="vq-button vq-button--ghost" type="button" onClick={() => { void saveNow().then((ok) => toast(ok ? (internal ? '已保存到 data/flows.json' : '已保存') : '保存失败：' + saveError)) }} disabled={running || saveState === 'saving'} title="Ctrl+S">
+          <button className="vq-button vq-button--ghost" type="button" onClick={() => { void saveNow().then((ok) => toast(ok ? (internal ? '已保存到 data/flows.json' : '已保存') : '保存失败：' + saveError, ok ? 'ok' : 'fail')) }} disabled={running || saveState === 'saving'} title="Ctrl+S">
             <Save size={14} />保存
           </button>
           {runCredit && runTotalCost > 0 ? (
