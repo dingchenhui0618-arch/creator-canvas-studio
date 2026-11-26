@@ -2349,6 +2349,20 @@
   grid-column: span 2;
 }
 
+/* 权重是算出来的，不是填进去的（r331）：保存时按行序重排，所以这里只读。
+   形状与旁边的输入框同高同圆角，一眼看出它在同一行字段里、但不接受输入。 */
+.admin-promo-weight {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 var(--space-2);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: var(--text-2xs);
+}
+
 .admin-promo-check {
   display: inline-flex;
   align-items: center;

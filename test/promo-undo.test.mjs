@@ -155,3 +155,122 @@ test('反证：槽被关空时把整块藏起来、撤销不恢复、撤销不�
   assert.notEqual(storeNoWrite, STORE)
   assert.ok(storeProblems(storeNoWrite).some((item) => item.includes('没写回本地存储')))
 })
+// ---------- r331：运营位的三处手感 ----------
+// 1) ✕ 按下要有反应：全站那条按下反馈只覆盖 .vq-button / .cv-bdc-action / .cv-palette-item，
+//    这颗 ✕ 不沾其中任何一个，它自己只有 :hover。少了这条，按下去和停着看一模一样。
+// 2) 窄屏触控区：✕ 原来是 28×28，是这一块里最小的目标，偏偏它就是「关掉这条」。
+// 3) 撤销条进场：这一块里唯一「说出现就出现」的东西，现在跟卡片同一套 vq-rise。
+// 外加一条后台的「形式与事实不符」：权重是保存时按行序算出来的，写成能填的输入框就是在骗人。
+const ADMIN_CARD = read('src/pages/admin/PromosCard.tsx')
+const CONSOLE = read('src/styles/console.css')
+
+/** 取某个断点的**所有**块（r330 的教训：只取第一个，新加一个同断点的块就能让守卫失效）。 */
+function mediaBlocks(css, query) {
+  const blocks = []
+  const needle = '@media (' + query + ') {'
+  let from = 0
+  for (;;) {
+    const at = css.indexOf(needle, from)
+    if (at < 0) break
+    const open = css.indexOf('{', at)
+    let depth = 0
+    let index = open
+    for (; index < css.length; index++) {
+      if (css[index] === '{') depth += 1
+      else if (css[index] === '}') {
+        depth -= 1
+        if (depth === 0) break
+      }
+    }
+    blocks.push(css.slice(open + 1, index))
+    from = index + 1
+  }
+  return blocks
+}
+
+function touchProblems(src) {
+  const problems = []
+  const flat = mediaBlocks(src, 'max-width: 760px')
+  const phone = mediaBlocks(src, 'max-width: 560px')
+  if (!flat.length) problems.push('找不到 760 那一段')
+  if (!phone.length) problems.push('找不到 560 那一段（手机段要把 ✕ 抬到 44）')
+  const sizes = (blocks) => blocks.map((block) => ruleBody(block, '.vq-promo-close')).filter(Boolean)
+  const flatRule = sizes(flat).join('\n')
+  const phoneRule = sizes(phone).join('\n')
+  if (!/width:\s*40px/.test(flatRule) || !/height:\s*40px/.test(flatRule)) {
+    problems.push('平板段的 ✕ 没有 40×40 的触控区')
+  }
+  if (!/width:\s*44px/.test(phoneRule) || !/height:\s*44px/.test(phoneRule)) {
+    problems.push('手机段的 ✕ 没有 44×44 的触控区')
+  }
+  return problems
+}
+
+function pressProblems(src) {
+  const problems = []
+  const active = ruleBody(src, '.vq-promo-close:active')
+  if (!active) problems.push('✕ 没有 :active 规则（全站那条按下反馈不覆盖它）')
+  else if (!/background:\s*var\(--line-faint\)/.test(active)) {
+    problems.push('✕ 按下时没有底色反馈，与同一张卡上的 CTA 不是一套口径')
+  }
+  // 撤销条的进场动画由父容器 .vq-stagger 提供（r331 实测：before 那版 dist 里它的 animationstart
+  // 就是 vq-rise）。在这里再写一条是重复声明，等权重时还会和容器规则抢——所以盯住「别再加回来」。
+  const undo = ruleBody(src, '.vq-promo-undo')
+  if (/(^|\n)\s*animation:/.test(undo)) {
+    problems.push('撤销条自己又写了一条 animation：它的进场是父容器 .vq-stagger 管的，重复声明没意义')
+  }
+  if (!src.includes('.vq-promo-undo .vq-promo-undo-button')) {
+    problems.push('撤销条上的按钮定位规则丢了')
+  }
+  return problems
+}
+
+function weightProblems(card, console_) {
+  const problems = []
+  if (/type="number"/.test(card)) problems.push('后台运营位里又有能填数字的输入框（权重是算出来的）')
+  if (!card.includes('admin-promo-weight')) problems.push('权重没有渲染成只读展示')
+  if (!card.includes('{row.weight}')) problems.push('只读展示里没有真的把权重的值显示出来')
+  if (!card.includes('保存时按行序重排权重')) problems.push('「按行序重排」那句提示没了，只读展示就无从解释')
+  if (!ruleBody(console_, '.admin-promo-weight').includes('min-height: 32px')) {
+    problems.push('只读权重的形状没有跟旁边的输入框对齐（32px）')
+  }
+  return problems
+}
+
+test('r331 源码：✕ 按下有反馈、窄屏 40/44 触控区（撤销条的进场是容器给的，别再重复声明）', () => {
+  assert.deepEqual(pressProblems(CSS), [])
+  assert.deepEqual(touchProblems(CSS), [])
+})
+
+test('r331 源码：后台权重是只读展示，不是能填的输入框', () => {
+  assert.deepEqual(weightProblems(ADMIN_CARD, CONSOLE), [])
+})
+
+test('r331 反证：这四个检查都能真的变红', () => {
+  const noActive = CSS.replace('.vq-promo-close:active {', '.vq-promo-close:active-none {')
+  assert.notEqual(noActive, CSS, '反证的替换本身要真的改到源码')
+  assert.ok(pressProblems(noActive).some((item) => item.includes(':active')))
+
+  const smallFlat = CSS.replace('.vq-promo-close { order: 2; margin-left: auto; width: 40px; height: 40px; }', '.vq-promo-close { order: 2; margin-left: auto; }')
+  assert.notEqual(smallFlat, CSS)
+  assert.ok(touchProblems(smallFlat).some((item) => item.includes('40×40')))
+
+  const noPhone = CSS.replace('.vq-promo-close { width: 44px; height: 44px; }', '.vq-promo-close { width: 28px; height: 28px; }')
+  assert.notEqual(noPhone, CSS)
+  assert.ok(touchProblems(noPhone).some((item) => item.includes('44×44')))
+
+  const duplicateAnim = CSS.replace('.vq-promo-undo {\n  display: flex;', '.vq-promo-undo {\n  animation: vq-rise var(--dur-2) var(--ease-out) backwards;\n  display: flex;')
+  assert.notEqual(duplicateAnim, CSS)
+  assert.ok(pressProblems(duplicateAnim).some((item) => item.includes('重复声明')))
+
+  const editable = ADMIN_CARD.replace('className="admin-promo-weight admin-mono"', 'type="number" className="admin-promo-weight admin-mono"')
+  assert.notEqual(editable, ADMIN_CARD)
+  assert.ok(weightProblems(editable, CONSOLE).some((item) => item.includes('能填数字')))
+
+  const flatShape = CONSOLE.replace(
+    '.admin-promo-weight {\n  display: flex;\n  align-items: center;\n  min-height: 32px;',
+    '.admin-promo-weight {\n  display: flex;\n  align-items: center;\n  min-height: 28px;',
+  )
+  assert.notEqual(flatShape, CONSOLE)
+  assert.ok(weightProblems(ADMIN_CARD, flatShape).some((item) => item.includes('32px')))
+})

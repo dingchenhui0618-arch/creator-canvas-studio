@@ -2,7 +2,8 @@
    竞品用彩色大横幅；我们按品牌走：近白卡片、一条发丝线、左侧一个方形图标，
    颜色只在图标与按钮上，整块不加渐变。窄屏时文案占整行、按钮落到下一行。
    r322：关掉一条时先塌下去再移除（见文件末尾），进场用 motion.css 的 .vq-stagger。
-   r326：整卡可点（按钮的 ::after 铺一层热区），以及关掉之后能撤销（见文件末尾）。 */
+   r326：整卡可点（按钮的 ::after 铺一层热区），以及关掉之后能撤销（见文件末尾）。
+   r331：✕ 补上按下反馈、窄屏触控区抬到 40/44（撤销条的进场动画本来就有，父容器的 .vq-stagger 管着它）。 */
 .vq-promos {
   display: grid;
   margin-bottom: var(--space-6);
@@ -115,6 +116,15 @@
 }
 .vq-promo-close:hover { color: var(--ink); border-color: var(--line); background: var(--surface); }
 .vq-promo-close:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(17, 17, 17, 0.16); }
+/* 按下要有反应（r331）：这是运营位里唯一「按下去和停着看一模一样」的按钮。
+   全站按钮的按下反馈只写在 tokens.css 的 :where(.vq-button, .cv-bdc-action, .cv-palette-item) 上，
+   这颗 ✕ 一个都不沾，自己只有 :hover 变了色。反馈用底色深一档，与同一张卡上的 CTA 同一口径；
+   不跟全站那条 1px 位移——位移会给绝对定位后代造出包含块（r326 的 CTA 热区就是这么塌掉的）。 */
+.vq-promo-close:active {
+  color: var(--ink);
+  border-color: var(--line-strong);
+  background: var(--line-faint);
+}
 
 /* ---------- 关掉一条：先塌下去，再移除（r322） ----------
    卡片高度写在组件里（先钉住当时的 offsetHeight，下一帧收到 0），这里负责过渡、裁剪与淡出；
@@ -152,6 +162,10 @@
    放在卡片原来的位置上。虚线、不着色：它是「这里刚才有条东西」的占位，不是又一条内容
    （实线卡片会被当成还没关掉）。槽里还有别的运营位时它 8 秒后退场；
    槽被关空了就一直留着——那时候它是唯一的入口（关掉只写进本地存储，刷新不会自己回来）。 */
+/* r331 查出来的：这条条子的进场动画**本来就有**——它是 .vq-promos.vq-stagger 的孩子，
+   父容器那条 .vq-stagger > * 已经给它挂了 vq-rise（实测 before 那版 dist 里它的 animationstart
+   就是 vq-rise，500ms 起、748ms 止）。原先以为「只有它硬弹出来」，是看漏了容器规则；
+   在这里再写一条是重复声明，已撤掉，别再加回来。 */
 .vq-promo-undo {
   display: flex;
   flex-wrap: wrap;
@@ -183,7 +197,13 @@
   }
 
   .vq-promo-icon { order: 1; }
-  .vq-promo-close { order: 2; margin-left: auto; }
+  /* ✕ 原来的 28×28 是这一块里最小的目标，偏偏它还是「关掉这条」这个动作。
+     与别处同一条口径：平板段 40、手机段再抬到 44（见下面那个断点）。 */
+  .vq-promo-close { order: 2; margin-left: auto; width: 40px; height: 40px; }
   .vq-promo-copy { order: 3; flex: 1 1 100%; }
   .vq-promo-cta { order: 4; width: 100%; justify-content: center; }
+}
+
+@media (max-width: 560px) {
+  .vq-promo-close { width: 44px; height: 44px; }
 }

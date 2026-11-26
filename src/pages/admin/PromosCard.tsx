@@ -392,16 +392,18 @@ export default function PromosCard() {
                           ))}
                         </select>
                       </label>
-                      <label className="vq-field admin-promo-field">
-                        <span>权重</span>
-                        <input
-                          className="vq-input"
-                          type="number"
-                          step={10}
-                          value={row.weight}
-                          onChange={(event) => updateRow(index, { weight: Number(event.target.value) || 0 })}
-                        />
-                      </label>
+                      {/* 权重不是能填的东西（r331）：保存时整份列表按行序重排（withOrderWeights），
+                          这里手写的数字一律被覆盖——「改完、保存、又自己变回去」的输入框比看不见它更费解。
+                          改成只读展示：数字照旧看得见，顺序交给上面的上移 / 下移。 */}
+                      <div className="vq-field admin-promo-field">
+                        <span>权重（按行序自动）</span>
+                        <span
+                          className="admin-promo-weight admin-mono"
+                          title="保存时按行序重排：第 1 行最高，依次 -10。要调顺序请用上面的上移 / 下移。"
+                        >
+                          {row.weight}
+                        </span>
+                      </div>
                       <label className="vq-field admin-promo-field">
                         <span>小标签</span>
                         <input
