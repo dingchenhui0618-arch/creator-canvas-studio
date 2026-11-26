@@ -23,7 +23,7 @@ export const ROOM_LIMITS = {
   connections: 2,
 }
 
-const DEFAULT_RULES = { mentionReply: true, allSpeakers: false, maxSpeakers: 2, maxDepth: 1 }
+const DEFAULT_RULES = { mentionReply: true, allSpeakers: false, maxSpeakers: 2, maxDepth: 1, platformReply: true }
 
 let ready = false
 
@@ -123,7 +123,15 @@ function normalizeRules(input) {
     // 一轮最多引出几个智能体回合：默认 2，区间 1–4，因为每个回合都是真扣费
     maxSpeakers: Math.min(4, Math.max(1, Number(rules.maxSpeakers) || DEFAULT_RULES.maxSpeakers)),
     maxDepth: Math.min(2, Math.max(1, Number(rules.maxDepth) || DEFAULT_RULES.maxDepth)),
+    // 平台智能体要不要自动接话（r317）：关掉之后只有被 @ 的才回。
+    // 一个房间只有一个平台智能体时默认它接每一句；多个时默认只接被 @ 的，免得一句话引出两个回合两笔积分。
+    platformReply: rules.platformReply !== false,
   }
+}
+
+/** 房间规则：表里存 JSON，读的时候统一折成默认值，调用方不用各自兜底。 */
+export function roomRules(room) {
+  return normalizeRules(parseJson(room?.rules_json, {}))
 }
 
 const APPROVAL_MODES = ['readonly', 'approve']
@@ -433,7 +441,7 @@ function broadcast(roomId, event) {
 
 // 人和智能体走同一个插入路径：seq 单点分配、clientId 幂等、@ 只认活成员、
 // 写进房间就广播给 SSE 订阅者。senderKind 只影响署名与「自己发的不回灌收件箱」。
-function insertMessage({ roomId, room, sender, senderKind, body, mentions = [], replyTo = '', clientId = '' }) {
+function insertMessage({ roomId, room, sender, senderKind, body, mentions = [], replyTo = '', clientId = '', state = 'ok' }) {
   const handle = db()
   const text = clipped(body, ROOM_LIMITS.message)
   if (!text) throw httpError(400, 'ROOM_EMPTY', '说点什么再发')
@@ -457,7 +465,7 @@ function insertMessage({ roomId, room, sender, senderKind, body, mentions = [], 
     seq = Number(handle.prepare('SELECT COALESCE(MAX(seq), 0) AS m FROM room_messages WHERE room_id = ?').get(String(roomId)).m) + 1
     handle
       .prepare('INSERT INTO room_messages (id, room_id, seq, sender_member_id, sender_kind, sender_name, body, mentions_json, reply_to, state, client_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(messageId, String(roomId), seq, sender.id, senderKind, sender.name, text, JSON.stringify(allowed), clipped(replyTo, 40), 'ok', cleanClient || null, at)
+      .run(messageId, String(roomId), seq, sender.id, senderKind, sender.name, text, JSON.stringify(allowed), clipped(replyTo, 40), clipped(state, 16) || 'ok', cleanClient || null, at)
     handle
       .prepare('INSERT INTO room_reads (room_id, member_id, last_seq) VALUES (?, ?, ?) ON CONFLICT(room_id, member_id) DO UPDATE SET last_seq = excluded.last_seq')
       .run(String(roomId), sender.id, seq)
@@ -479,8 +487,41 @@ export function appendMessage({ roomId, userId, body, mentions = [], replyTo = '
 }
 
 /** 智能体发消息：身份来自 vqc_ 令牌，守卫在 agent-access.authenticate 里已经验过。 */
-export function appendMessageAs({ roomId, room, member, senderKind = 'agent', body, mentions = [], replyTo = '', clientId = '' }) {
-  return insertMessage({ roomId, room, sender: member, senderKind, body, mentions, replyTo, clientId })
+export function appendMessageAs({ roomId, room, member, senderKind = 'agent', body, mentions = [], replyTo = '', clientId = '', state = 'ok' }) {
+  return insertMessage({ roomId, room, sender: member, senderKind, body, mentions, replyTo, clientId, state })
+}
+
+/** 平台智能体自己发一条（r317）：身份是房间成员行，不走令牌。 */
+export function getMember(roomId, memberId) {
+  const handle = db()
+  return handle.prepare('SELECT * FROM room_members WHERE room_id = ? AND id = ? AND removed_at IS NULL').get(String(roomId), String(memberId)) || null
+}
+
+/** 房间里活着的智能体成员（含平台智能体与接进来的连接器）。 */
+export function agentMembers(roomId) {
+  const handle = db()
+  return handle
+    .prepare("SELECT * FROM room_members WHERE room_id = ? AND kind = 'agent' AND removed_at IS NULL ORDER BY joined_at ASC")
+    .all(String(roomId))
+}
+
+/** 给平台智能体用的「最近几条」：不分页、不看未读，只要上下文。 */
+export function recentMessages(roomId, limit = 20) {
+  const handle = db()
+  const size = Math.min(60, Math.max(1, Number(limit) || 20))
+  return handle
+    .prepare('SELECT * FROM room_messages WHERE room_id = ? ORDER BY seq DESC LIMIT ?')
+    .all(String(roomId), size)
+    .reverse()
+    .map(publicMessage)
+}
+
+/**
+ * 「正在看并写回复」的提示（r317）：只走 SSE，不落库。
+ * 前端拿到 typing 就显示一行点，关掉窗口也不会留下一条假消息。
+ */
+export function broadcastRoomTyping(roomId, payload) {
+  broadcast(roomId, { type: 'typing', ...payload })
 }
 
 export function markReadAs({ roomId, memberId, seq }) {

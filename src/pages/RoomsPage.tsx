@@ -19,6 +19,7 @@ import {
   roomTimeLabel,
   sendRoomMessage,
   updateRoom,
+  type AgentTool,
   type RoomDetail,
   type RoomMember,
   type RoomMessage,
@@ -60,6 +61,9 @@ export default function RoomsPage({ onToast }: { onToast?: (text: string) => voi
   const [pairCode, setPairCode] = useState<RoomPairCode | null>(null)
   const [pairBusy, setPairBusy] = useState(false)
   const [pairCopied, setPairCopied] = useState(false)
+  // 平台智能体回话（r317 1c）：工具清单来自服务端，typing 来自 SSE（不落库）
+  const [tools, setTools] = useState<AgentTool[]>([])
+  const [typing, setTyping] = useState<Record<string, string>>({})
 
   const threadRef = useRef<HTMLDivElement | null>(null)
   const bottomRef = useRef<HTMLDivElement | null>(null)
@@ -102,6 +106,7 @@ export default function RoomsPage({ onToast }: { onToast?: (text: string) => voi
         const [detail, page] = await Promise.all([getRoom(activeId), listRoomMessages(activeId, { limit: PAGE_SIZE })])
         if (!alive) return
         setRoom(detail.room)
+        setTools(detail.tools || [])
         setMessages(page.items || [])
         setRoomState('ready')
         bootSeqRef.current = page.items?.length ? page.items[page.items.length - 1].seq : 0
@@ -135,9 +140,43 @@ export default function RoomsPage({ onToast }: { onToast?: (text: string) => voi
         const parsed = JSON.parse((event as MessageEvent).data) as RoomMessage
         if (!parsed?.id) return
         appendMessage(parsed)
+        // 它说话了就说明不在打字了：把「正在看」那行收掉（typing 事件丢了也不会一直挂着）
+        setTyping((map) => {
+          const key = activeId + ':' + parsed.senderMemberId
+          if (!map[key]) return map
+          const next = { ...map }
+          delete next[key]
+          return next
+        })
+        // 房间列表那一行也跟着变：否则左栏一直显示你刚才那句，右栏已经多了回复
+        setRooms((list) =>
+          list.map((item) =>
+            item.id === activeId
+              ? { ...item, preview: String(parsed.body || '').slice(0, 120), previewFrom: parsed.senderName, lastAt: parsed.createdAt, lastSeq: parsed.seq }
+              : item,
+          ),
+        )
         if (parsed.senderKind !== 'human') void markRoomRead(activeId, parsed.seq).catch(() => {})
       } catch {
         /* 半条 JSON 不算消息：下一帧会被完整事件补上 */
+      }
+    })
+    // 平台智能体开始/结束写回复（r317）：只活在这条连接上，刷新就没了，不留假消息
+    source.addEventListener('typing', (event) => {
+      try {
+        const parsed = JSON.parse((event as MessageEvent).data) as { memberId?: string; name?: string; on?: boolean }
+        const memberId = String(parsed.memberId || '')
+        if (!memberId) return
+        // 键里带房间号：换了房间之后旧房间的残留自然不会再显示，不用在 effect 里清状态
+        const key = activeId + ':' + memberId
+        setTyping((map) => {
+          const next = { ...map }
+          if (parsed.on === false) delete next[key]
+          else next[key] = String(parsed.name || '智能体')
+          return next
+        })
+      } catch {
+        /* 半条 JSON 不算提示 */
       }
     })
     source.addEventListener('error', () => setStreamState('down'))
@@ -146,6 +185,16 @@ export default function RoomsPage({ onToast }: { onToast?: (text: string) => voi
       setStreamState('idle')
     }
   }, [activeId, roomState, appendMessage])
+
+  // 打开房间就落在最新一条（r317）：平台智能体刚回的那句话不该要用户自己往上翻。
+  // 只在「房间刚打开完」这一下贴底；之后交给下面的贴底逻辑，往上翻历史时不会被拽回来。
+  useEffect(() => {
+    if (roomState !== 'ready') return
+    const node = threadRef.current
+    if (!node) return
+    node.scrollTop = node.scrollHeight
+    stickRef.current = true
+  }, [roomState, activeId])
 
   // 贴底：只有本来就贴着底的时候才跟着新消息走，往上翻历史时不被拽下来。
   useEffect(() => {
@@ -330,7 +379,25 @@ export default function RoomsPage({ onToast }: { onToast?: (text: string) => voi
     }
   }
 
+  // 自动接话开关（r317）：只改 rules.platformReply，其它规则原样带回去，不顺手重置
+  const toggleAutoReply = async () => {
+    if (!room) return
+    const next = room.rules.platformReply === false
+    try {
+      const result = await updateRoom(room.id, { rules: { ...room.rules, platformReply: next } })
+      setRoom(result.room)
+      onToast?.(next ? '平台智能体会接着你说的话回' : '自动接话已关，@ 它才回')
+    } catch (reason) {
+      onToast?.(String((reason as Error)?.message || reason))
+    }
+  }
+
   const freeAgents = myAgents.filter((agent) => !room?.agents.some((member) => member.agentId === agent.id))
+  const platformAgents = (room?.agents || []).filter((member) => !member.provider || member.provider === 'platform')
+  const autoReply = room?.rules.platformReply !== false
+  const typingNames = Object.entries(typing)
+    .filter(([key]) => key.startsWith(activeId + ':'))
+    .map(([, name]) => name)
 
   return (
     <div className="rooms-page">
@@ -471,14 +538,17 @@ export default function RoomsPage({ onToast }: { onToast?: (text: string) => voi
                       <h3>房间里还没有人说话</h3>
                       <p>
                         {room.agents.length
-                          ? '智能体已经在房间里了。它们在这里发言要等接入这一步接上——现在先把要做的事说清楚，接上之后它们从这句话接着做。'
+                          ? '平台智能体会接着你说的话往下做；接进来的 codex / Claude 要等它读到新消息才回。把目标、受众和限制一次说清楚，它们都看得见。'
                           : '先把要做的事说清楚：这一条作品要投给谁、想让人记住什么。需要帮手就把智能体加进右边。'}
                       </p>
                     </div>
                   ) : null}
 
                   {messages.map((message) => (
-                    <article key={message.id} className={'rooms-msg' + (message.senderKind === 'human' ? ' is-human' : '')}>
+                    <article
+                      key={message.id}
+                      className={'rooms-msg' + (message.senderKind === 'human' ? ' is-human' : '') + (message.state === 'error' ? ' is-error' : '')}
+                    >
                       <div className="rooms-msg-face" aria-hidden="true">{initials(message.senderName)}</div>
                       <div className="rooms-msg-body">
                         <div className="rooms-msg-meta">
@@ -489,6 +559,12 @@ export default function RoomsPage({ onToast }: { onToast?: (text: string) => voi
                       </div>
                     </article>
                   ))}
+                  {typingNames.length ? (
+                    <div className="rooms-typing" aria-live="polite">
+                      <span className="rooms-typing-dots" aria-hidden="true"><i /><i /><i /></span>
+                      {typingNames.join('、')} 正在看并写回复
+                    </div>
+                  ) : null}
                   <div ref={bottomRef} />
                 </div>
 
@@ -506,7 +582,7 @@ export default function RoomsPage({ onToast }: { onToast?: (text: string) => voi
                     }}
                   />
                   <div className="rooms-compose-foot">
-                    <span>{draft.length ? draft.length + ' / 8000' : '房间里只有你在说话时也会记下来'}</span>
+                    <span>{draft.length ? draft.length + ' / 8000' : composeHint(room, platformAgents)}</span>
                     <button type="button" onClick={() => void send()} disabled={!draft.trim() || sending}>
                       {sending ? <Loader2 size={14} className="rooms-spin" aria-hidden="true" /> : <Send size={14} aria-hidden="true" />}
                       发送
@@ -612,14 +688,42 @@ export default function RoomsPage({ onToast }: { onToast?: (text: string) => voi
                 </div>
               ) : null}
             </div>
-            <p className="rooms-members-foot">
-              接进来的智能体就在这个房间里说话；没接的只有你在说。令牌只给说话权——生图、生视频、评审仍然要在界面里由你点。
-            </p>
+            {platformAgents.length ? (
+              <p className="rooms-members-foot">
+                平台智能体每轮 1 积分，答不上来全额退回。
+                {room?.isOwner ? (
+                  <button type="button" className="rooms-auto" onClick={() => void toggleAutoReply()} aria-pressed={autoReply}>
+                    {autoReply ? '自动接话：开' : '自动接话：关'}
+                  </button>
+                ) : null}
+              </p>
+            ) : (
+              <p className="rooms-members-foot">
+                接进来的智能体就在这个房间里说话；没接的只有你在说。令牌只给说话权——生图、生视频、评审仍然要在界面里由你点。
+              </p>
+            )}
+            {tools.length ? (
+              <p className="rooms-members-foot is-tools">
+                平台智能体现在能用：{tools.filter((tool) => tool.enabled).map((tool) => tool.label).join('、') || '暂无'}
+                {tools.some((tool) => !tool.enabled) ? ' · 另外 ' + tools.filter((tool) => !tool.enabled).length + ' 个还没开' : ''}
+              </p>
+            ) : null}
           </aside>
         </div>
       ) : null}
     </div>
   )
+}
+
+// 输入框下面那行提示（r317）：房间里有平台智能体时，把「它会回、回一轮多少钱」讲清楚，
+// 别让人发完才在积分账本里发现扣了分。
+function composeHint(room: RoomDetail | null, platform: RoomMember[]): string {
+  if (!room) return ''
+  if (!platform.length) return '房间里只有你在说话时也会记下来'
+  if (room.rules.platformReply === false) return '自动接话已关：@ 平台智能体才回 · 每轮 1 积分'
+  return platform.length === 1
+    ? '平台智能体会接话 · 每轮 1 积分，失败自动退回'
+    : '多个平台智能体时只接 @ 的那一个 · 每轮 1 积分'
 }
 
 // 成员行下面那行小字：接进来的说「多久前在线」，没接的说明它是平台智能体还是已经断开

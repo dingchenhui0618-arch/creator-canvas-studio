@@ -150,6 +150,14 @@ export const config = {
   },
   // 智能体「网页读取」：只抓用户贴出来的公开网页，限制超时、体积与正文长度，
   // 避免一个超长页面把上下文顶爆或把请求挂住。
+  // 聊天室里的平台智能体（r317，一期 1c）：一轮 1 积分（与对话同价），失败全额退回。
+  // 模型额度出问题时用 VQ_ROOM_AGENT=0 临时止血，不用改代码、不用发版。
+  roomAgent: {
+    enabled: process.env.VQ_ROOM_AGENT !== '0',
+    timeoutMs: numEnv(process.env.VQ_ROOM_AGENT_TIMEOUT_MS, 90000),
+    // 一次回话最多调几轮工具（1 表示「调一次工具就必须开始回答」）
+    maxToolRounds: numEnv(process.env.VQ_ROOM_AGENT_TOOL_ROUNDS, 2),
+  },
   webread: {
     timeoutMs: Number(process.env.WEB_READ_TIMEOUT_MS || 8000),
     maxBytes: Number(process.env.WEB_READ_MAX_BYTES || 400 * 1024),

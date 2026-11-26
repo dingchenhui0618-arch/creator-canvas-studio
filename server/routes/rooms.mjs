@@ -5,6 +5,8 @@
 import { readBody, sendJson } from './_shared.mjs'
 import { currentUser, clientIp } from '../auth.mjs'
 import { listAgents } from '../agents.mjs'
+import { toolCatalog } from '../agent-tools.mjs'
+import { scheduleRoomReplies } from '../room-agent.mjs'
 import { PAIR, currentPairCode, createPairCode, revokePairCode } from '../agent-access.mjs'
 import {
   ROOM_LIMITS,
@@ -130,6 +132,16 @@ export function createRoomsRouter() {
                 clientId: body?.clientId,
               })
               sendJson(res, result.duplicated ? 200 : 201, { ok: true, ...result })
+              // 平台智能体在这一条之后接话（r317）：不 await——
+              // 回话失败不能让「消息已经发出去了」变成一次失败的请求。
+              if (!result.duplicated) {
+                try {
+                  const { room } = requireRoom(roomId, user.id)
+                  scheduleRoomReplies({ room, message: result.message })
+                } catch (error) {
+                  console.error('[rooms] 安排回话失败：' + (error?.message || error))
+                }
+              }
               return true
             }
             sendJson(res, 405, { ok: false, code: 'ROOM_METHOD', error: '这个接口不支持 ' + req.method })
@@ -187,7 +199,8 @@ export function createRoomsRouter() {
         if (one) {
           const roomId = one[1]
           if (req.method === 'GET') {
-            sendJson(res, 200, { ok: true, room: getRoom(roomId, user.id) })
+            // tools：平台智能体现在能用哪几个（1c 只开一个），界面照实显示，不写死在前端
+            sendJson(res, 200, { ok: true, room: getRoom(roomId, user.id), tools: toolCatalog() })
             return true
           }
           if (req.method === 'PATCH') {
@@ -249,6 +262,8 @@ function openStream({ req, res, url, user, roomId }) {
 
   const unsubscribe = subscribeRoom(roomId, (event) => {
     if (event.type === 'message') write(res, 'message', event.message)
+    // 平台智能体「正在写回复」只走这条连接，不落库（r317）
+    else if (event.type === 'typing') write(res, 'typing', event)
   })
   const heartbeat = setInterval(() => {
     try {

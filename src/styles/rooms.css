@@ -506,3 +506,47 @@
   .rooms-compose-foot { flex-wrap: wrap; }
   .rooms-compose-foot span { order: 2; width: 100%; white-space: normal; }
 }
+
+/* 平台智能体回话（r317 1c）：正在写回复的一行、答不上来的那一轮、自动接话开关 */
+.rooms-typing {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-left: calc(28px + var(--space-3));
+  font-size: var(--text-2xs);
+  color: var(--faint);
+}
+.rooms-typing-dots { display: inline-flex; gap: 2px; }
+.rooms-typing-dots i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--muted);
+  animation: rooms-dot 1.2s ease-in-out infinite;
+}
+.rooms-typing-dots i:nth-child(2) { animation-delay: .15s; }
+.rooms-typing-dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes rooms-dot {
+  0%, 100% { opacity: .25; transform: translateY(0); }
+  50% { opacity: .9; transform: translateY(-2px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rooms-typing-dots i { animation: none; opacity: .6; }
+}
+/* 没答上来的那一轮：灰一档、虚线头像，别让「失败」看起来像一句正常回复 */
+.rooms-msg.is-error .rooms-msg-body p { color: var(--muted); font-size: var(--text-xs); }
+.rooms-msg.is-error .rooms-msg-face { border-style: dashed; color: var(--faint); }
+.rooms-auto {
+  height: var(--btn-h-sm);
+  margin-left: var(--space-2);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--text-2xs);
+  cursor: pointer;
+}
+.rooms-auto:hover { border-color: var(--ink); color: var(--ink); }
+.rooms-members-foot .rooms-auto { vertical-align: middle; }
+.rooms-members-foot.is-tools { border-top: 0; padding-top: 0; }

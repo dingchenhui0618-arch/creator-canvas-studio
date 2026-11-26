@@ -9,6 +9,19 @@ export type RoomRules = {
   allSpeakers: boolean
   maxSpeakers: number
   maxDepth: number
+  /** 平台智能体要不要自动接话（r317）：关掉之后只有被 @ 的才回。 */
+  platformReply: boolean
+}
+
+/** 平台智能体能用的工具：1c 只开 templates.list，其余登记但关着（见 server/agent-tools.mjs）。 */
+export type AgentTool = {
+  id: string
+  label: string
+  mode: 'read' | 'write'
+  params: string
+  hint: string
+  enabled: boolean
+  reason: string
 }
 
 export type ApprovalMode = 'readonly' | 'approve'
@@ -75,6 +88,8 @@ export type RoomDetail = {
   messageCount: number
   agents: RoomMember[]
   members: RoomMember[]
+  /** GET /api/rooms/:id 单独带出来，不在 room 里面 */
+  tools?: AgentTool[]
 }
 
 export type RoomMessage = {
@@ -86,7 +101,8 @@ export type RoomMessage = {
   body: string
   mentions: string[]
   replyTo: string
-  state: 'ok' | 'failed' | 'tool'
+  /** error：这一轮没答上来（平台智能体会把原因写在正文里，积分已退回） */
+  state: 'ok' | 'failed' | 'tool' | 'error'
   createdAt: number
 }
 
@@ -106,7 +122,7 @@ export const listRooms = () => request<{ ok: boolean; items: RoomSummary[]; limi
 export const createRoom = (input: { name: string; topic?: string }) =>
   request<{ ok: boolean; room: RoomDetail }>('/api/rooms', { method: 'POST', body: JSON.stringify(input) })
 
-export const getRoom = (id: string) => request<{ ok: boolean; room: RoomDetail }>('/api/rooms/' + id)
+export const getRoom = (id: string) => request<{ ok: boolean; room: RoomDetail; tools: AgentTool[] }>('/api/rooms/' + id)
 
 export const updateRoom = (id: string, patch: { name?: string; topic?: string; approvalMode?: ApprovalMode; rules?: Partial<RoomRules> }) =>
   request<{ ok: boolean; room: RoomDetail }>('/api/rooms/' + id, { method: 'PATCH', body: JSON.stringify(patch) })
