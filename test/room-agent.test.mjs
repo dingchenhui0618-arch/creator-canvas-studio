@@ -235,6 +235,22 @@ test('失败：没积分就不调模型，也不留一条「答上来了」的�
   }
 })
 
+test('没有模型凭证时，注入的模型照样能跑完一轮（CI 上没有凭证，这条曾把 5 条用例判成失败）', async () => {
+  const saved = config.vision.apiKey
+  config.vision.apiKey = ''
+  try {
+    const room = makeRoom('无凭证房')
+    rooms.appendMessage({ roomId: room.id, userId: alice.id, body: '没有凭证也要能回' })
+    const member = rooms.agentMembers(room.id)[0]
+    const callModel = fake(['凭证检查不该挡住注入的模型。'])
+    const result = await engine.runRoomTurn({ room, member, agent: agentDefinition, callModel })
+    assert.equal(result.ok, true)
+    assert.equal(result.message.body, '凭证检查不该挡住注入的模型。')
+  } finally {
+    config.vision.apiKey = saved
+  }
+})
+
 // ── 安排回话（路由那一段的入口）────────────────────────────────────────
 
 test('安排：自动回话关着时什么都不做（止血开关）', async () => {

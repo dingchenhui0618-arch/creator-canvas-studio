@@ -132,7 +132,9 @@ export async function runRoomTurn({ room, member, agent = null, callModel = call
     await postFailure({ room, member, reason: '（这个智能体已经被删掉了，把我移出房间，或者重新加一个。）' })
     return { ok: false, code: 'AGENT_GONE' }
   }
-  if (!llmEnabled()) {
+  // 只有真去打模型时才看「平台有没有可用模型」：单测与自检会注入假模型，
+  // 它们不该被凭证检查挡住（CI 上没有模型凭证，这里曾把 5 条用例判成失败）。
+  if (callModel === callTextModel && !llmEnabled()) {
     await postFailure({ room, member, reason: '（这一轮没答上来：平台现在没有可用的对话模型。等管理员开通后再叫我。）' })
     return { ok: false, code: 'NO_MODEL' }
   }
