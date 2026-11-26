@@ -106,6 +106,7 @@ headless 里 `requestAnimationFrame` 只在「真有帧被产出」时才走（�
 - `ops/rollback.sh --to 1` 回 0.9.298
 - 公网 `/api/version` = 0.9.299、`/api/health` ok templates 27、新入口 200、旧入口 `index-DiDduOYK.js` 404
 - 线上样式表里确实有 `.vq-gate-body.is-step-in`、`vq-rise`、`vq-fade`、`.vq-gate-card:focus`
+- 提交 `be057c5` 已推，CI 45825286642 success
 
 ## 八、边界
 

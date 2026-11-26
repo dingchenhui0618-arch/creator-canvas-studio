@@ -957,7 +957,7 @@ click     → ARTICLE.vq-promo        按下与抬起的共同祖先——那张
 密钥扫描 1208 个文件无命中、入口 `index-CX7A3WQT.js`（871,689 B）；发布标签 `20261126-2101-r327gate`，
 快照 `/opt/visionqa/releases/20261126-130115-20261126-2101-r327gate.tar.gz`，`ops/rollback.sh --to 1` 回 0.9.298；
 公网 0.9.299、health ok templates 27、旧入口 `index-DiDduOYK.js` 404、
-线上样式表 `index-CiUEHUA3.css` 里确有 `.vq-gate-body.is-step-in` 与 `vq-fade`。
+线上样式表 `index-CiUEHUA3.css` 里确有 `.vq-gate-body.is-step-in` 与 `vq-fade`；提交 `be057c5`，CI 45825286642 success。
 
 边界：只修了身份引导这一个弹窗（全站唯一阻塞且关不掉的），其余弹窗仍可用 Tab 走到背景上；
 截图来自本机临时实例，跑的是与生产同一份 dist（生产上没有「引导还没做完的普通账号」）；
