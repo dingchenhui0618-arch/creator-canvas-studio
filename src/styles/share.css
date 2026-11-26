@@ -55,7 +55,7 @@
   font-size: var(--text-xs);
   line-height: 1;
   cursor: pointer;
-  transition: border-color .15s ease, color .15s ease;
+  transition: border-color .15s ease, color .15s ease, background-color .15s ease;
 }
 .share-button:hover { border-color: var(--ink); }
 .share-button:focus-visible { outline: none; box-shadow: var(--focus); }

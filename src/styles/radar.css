@@ -527,7 +527,7 @@
   flex: none;
   color: var(--faint);
   opacity: 0;
-  transition: opacity .18s var(--ease-out);
+  transition: opacity .18s var(--ease-out), color var(--dur-1) var(--ease-out);
 }
 
 .radar-taken-main:hover .radar-taken-copy strong {
@@ -950,3 +950,18 @@
   .beat-gap { display: block; margin: 8px 0 0; justify-self: start; }
 }
 
+/* r335 · 悬停反馈的过渡：划过要变的属性必须自己有过渡，不然是「啪」一下就到位。
+   时长/缓动与按下那一层同一套（--dur-1 / --ease-out），手感一致。
+   带 -- 修饰类的目标不在这里：它们和基类是同一条元素，过渡并进基类那条（自己再写一条会把 transform / box-shadow 挤掉）。 */
+.radar-history-main,
+.radar-history-star,
+.radar-history-clear,
+.drawer-work > svg,
+.radar-taken-work,
+.radar-taken-work--start,
+.radar-taken-work--parse,
+.radar-restored-clear {
+  transition: color var(--dur-1) var(--ease-out),
+    background-color var(--dur-1) var(--ease-out),
+    border-color var(--dur-1) var(--ease-out);
+}

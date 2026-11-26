@@ -970,7 +970,8 @@ select:focus-visible {
 /* r334：行内链接按下压一层底（r332 定的口径），但 .vq-link 自己没有 transition ——
    压下去是「啪」一下出现、松手也「啪」一下消失。要变的两条属性补进过渡表。 */
 .vq-link {
-  transition: background-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
+  transition: background-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out),
+    text-underline-offset var(--dur-1) var(--ease-out);
 }
 
 .vq-link:not(:disabled):active {
@@ -1346,7 +1347,7 @@ select:focus-visible {
    焦点环、描边、底色一起走 tokens 那一档。 */
 .vq-search {
   transition: background-color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out),
-    box-shadow var(--dur-1) var(--ease-out);
+    box-shadow var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
 }
 
 .vq-search:focus-within {
@@ -3867,4 +3868,32 @@ body:has(.drawer-backdrop) .vq-toast {
 
 .vq-sidebar--collapsed .vq-nav-chip {
   display: none;
+}
+
+/* r335 · 悬停反馈的过渡：划过要变的属性必须自己有过渡，不然是「啪」一下就到位。
+   时长/缓动与按下那一层同一套（--dur-1 / --ease-out），手感一致。
+   带 -- 修饰类的目标不在这里：它们和基类是同一条元素，过渡并进基类那条（自己再写一条会把 transform / box-shadow 挤掉）。 */
+.vq-toolbar-reset,
+.vq-workspace,
+.vq-sidebar-account-row--guest .vq-sidebar-account-action,
+.vq-user-trigger,
+.vq-menu button,
+.vq-menu button.is-danger,
+.vq-input-action,
+.vq-edition-compact,
+.vq-model-item,
+.vq-model-reset,
+.vq-legal-back,
+.vq-mobile-note-close,
+.vq-feedback-kind,
+.vq-help-back,
+.vq-help-nav-item,
+.vq-help-side-cta,
+.vq-help-index-item,
+.vq-help-related a,
+.vq-help-link,
+.vq-src-back {
+  transition: color var(--dur-1) var(--ease-out),
+    background-color var(--dur-1) var(--ease-out),
+    border-color var(--dur-1) var(--ease-out);
 }

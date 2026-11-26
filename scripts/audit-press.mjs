@@ -21,6 +21,14 @@
 //      不看两帧的读数等不等于终值（那是 settledRescued 的事，方向相反）。
 //      名字匹配认全名也认简写：transition-property 记的是作者写的那个名字，写 `background` 时
 //      Chrome 照样动画 background-color（见 SHORTHAND_COVERS）。
+//   7) r335 起：hover 也按同一套判据量。按下之前本来就要把鼠标移到元素中心（② 那一拍就是 hover
+//      基线），所以「划过有没有变化」（rest → hover）与「变化走不走过渡」两笔账落在同一趟里，
+//      不用另开一趟鼠标移动。产物 hoverChangedVsRest + hoverHardCuts；与按下那一层的差别
+//      只在「这一拍没有 :active」。桌面端鼠标划过是最常发生的一次状态变化，硬切同样看得出来。
+//   8) r335 起：读写都带上**边框宽度**。没有可见边框（四边宽度全 0）时，computed 的 border-color
+//      就是 currentColor —— color 一变它必然跟着变，元素写 border: 0 也一样。这条不是反馈，是一条
+//      推导出来的值，以前被算成「变了、但没过渡 = 硬切」（0.9.306 上量出的 26 条里有 25 条是它）。
+//      现在分开记：hoverDerived / derivedOnPress，不进 changed、不进硬切，只在汇总里报条数。
 //
 // 用法（同一份脚本跑两份产物）：
 //   node scripts/audit-press.mjs --dist .shots330/dist-after --out .shots331/press
@@ -460,6 +468,9 @@ function readState(selector) {
     boxShadow: cs.boxShadow,
     transform: cs.transform,
     opacity: cs.opacity,
+    // r335：边框宽度也要读。没有可见边框时，computed 的 border-color 就是 currentColor——
+    // color 一变它就跟着变（元素写 border: 0 也一样）。那不是一次反馈，是一条推导出来的值。
+    borderWidths: [cs.borderTopWidth, cs.borderRightWidth, cs.borderBottomWidth, cs.borderLeftWidth],
     // r334：这一次变化「走不走过渡」也要量。computed 的 transition-property / -duration 是权威答案——
     // 声明了过渡的按钮，按下去是「顺滑加深」；没声明的就是啪一下到位（硬切）。
     transitionProperty: cs.transitionProperty,
@@ -868,12 +879,22 @@ const AFTER_PROPS = [
   ['transform', '::after transform'],
   ['opacity', '::after opacity'],
 ]
-function diffProps(before, after) {
-  const changed = []
-  if (!before || !after || before.missing || after.missing) return changed
+// r335：border-color 在「没有可见边框」时等于 currentColor，color 一变它必然跟着变（border: 0 也一样）。
+// 四边宽度全是 0 就没有边框可画，这条变化看不见，不能算成一次「反馈」——它只是 color 的另一种写法。
+function borderVisible(state) {
+  const widths = (state && state.borderWidths) || []
+  return widths.some((value) => parseFloat(String(value)) > 0)
+}
+function isDerivedProp(before, after, prop) {
+  if (prop !== 'border-color') return false
+  return !borderVisible(before) && !borderVisible(after)
+}
+function propDiffs(before, after) {
+  const rows = []
+  if (!before || !after || before.missing || after.missing) return rows
   for (const pair of PROPS) {
     if (String(before[pair[0]]) !== String(after[pair[0]])) {
-      changed.push({ prop: pair[1], from: String(before[pair[0]]), to: String(after[pair[0]]) })
+      rows.push({ prop: pair[1], from: String(before[pair[0]]), to: String(after[pair[0]]), derived: isDerivedProp(before, after, pair[1]) })
     }
   }
   const bothAfter = before.after && after.after
@@ -881,11 +902,19 @@ function diffProps(before, after) {
   if (hasAfter) {
     for (const pair of AFTER_PROPS) {
       if (String(before.after[pair[0]]) !== String(after.after[pair[0]])) {
-        changed.push({ prop: pair[1], from: String(before.after[pair[0]]), to: String(after.after[pair[0]]) })
+        rows.push({ prop: pair[1], from: String(before.after[pair[0]]), to: String(after.after[pair[0]]), derived: false })
       }
     }
   }
-  return changed
+  return rows
+}
+// 看得见的变化（判反馈、判硬切都用这一份）
+function diffProps(before, after) {
+  return propDiffs(before, after).filter((row) => !row.derived)
+}
+// 推导出来的变化（border-color 跟随 color、边框宽度 0）：单列出来如实记录，不混进上面那一份
+function derivedDiffs(before, after) {
+  return propDiffs(before, after).filter((row) => row.derived)
 }
 // ---- r334：这一次变化「走不走过渡」----
 // 判据只有一条：computed 的 transition-property 里有没有这条属性、声明出来的 duration 是不是 0。
@@ -983,10 +1012,15 @@ async function pressOne(pageId, pageLabel, item) {
       active: hover.active, disabled: hover.disabled,
       backgroundColor: hover.backgroundColor, borderColor: hover.borderColor, color: hover.color,
       boxShadow: hover.boxShadow, transform: hover.transform, opacity: hover.opacity,
+      transitionProperty: hover.transitionProperty, transitionDuration: hover.transitionDuration,
       cursor: hover.cursor, hitIsSelf: hover.hitIsSelf, hit: hover.hit,
       after: hover.after,
     }
     out.hoverChangedVsRest = diffProps(rest, hover)
+    out.hoverDerived = derivedDiffs(rest, hover).map((row) => row.prop)
+    // r335：同一套硬切判据用在 hover 上。过渡表读的是「划过之后」那一拍的 computed 值——
+    // 规范里过渡取的是 after-change style（:hover 生效后的那份），所以这一拍才是权威的那一份。
+    out.hoverHardCuts = hardCutProps(out.hoverChangedVsRest, hover)
     if (!hover.hitIsSelf) note('落点被盖住：' + item.selector, { hit: hover.hit, where: pageId + '#' + item.n })
 
     // ③ 真按下：mousePressed 之后两帧 rAF 读同一批属性 + matches(:active)
@@ -1003,6 +1037,7 @@ async function pressOne(pageId, pageLabel, item) {
     }
     out.pressActive = Boolean(pressed.active)
     out.changed = diffProps(hover, pressed)
+    out.derivedOnPress = derivedDiffs(hover, pressed).map((row) => row.prop)
     if (out.disabled) out.verdict = 'disabled'
     else if (out.changed.length) out.verdict = 'has-feedback'
     else if (out.pressActive) out.verdict = 'pressed-no-feedback'
@@ -1361,6 +1396,8 @@ const out = {
     candidate: 'pressActive=true 且 changed 为空 = 按下无反馈候选',
     settled: '判定按上面两帧那一拍（与 r331 的数字可比）；还按着再等 200ms 读一次叫 pressedSettled / changedSettledVsHover，用来区分「真的没反应」和「过渡还没走到」（后者算采样抖动）',
     hardCut: '变了、但这条属性不在 computed transition-property 里（或 duration 0）= 硬切。读元素与 ::after 各一份过渡表，属性名按 PROPS / AFTER_PROPS 对齐；简写（background / border）也算覆盖',
+    derivedBorder: 'r335：边框宽度全 0 时 computed border-color = currentColor，color 一变它必然跟着变，不是反馈。单列成 hoverDerived / derivedOnPress，不进 changed、不进硬切',
+    hoverHardCut: 'r335：同一套判据用在 hover 上。rest（鼠标在中性点）→ hover（鼠标移到元素中心）之间变了的属性，同样去查过渡表；产物 hoverChangedVsRest / hoverHardCuts。按下那一层的数字与 r331–r334 完全可比（这一层只多读两行，不改按下口径）',
   },
   seeds: seeded,
   overlays: overlayLog,
@@ -1390,6 +1427,12 @@ const out = {
     settledRescued: candidates.filter((row) => (row.changedSettledVsHover || []).length > 0).length,
     // 有反馈、但变化的那条属性没有过渡（或 duration 0）：按下去是硬切（r334）
     hardCuts: buttons.filter((row) => (row.hardCuts || []).length > 0).length,
+    // r335：同一套账用在鼠标划过上（rest → hover）
+    hoverWithFeedback: buttons.filter((row) => (row.hoverChangedVsRest || []).length > 0).length,
+    hoverHardCuts: buttons.filter((row) => (row.hoverHardCuts || []).length > 0).length,
+    hoverHardCutProps: buttons.reduce((sum, row) => sum + (row.hoverHardCuts || []).length, 0),
+    // r335：边框宽度为 0 时 border-color 跟随 color 的连带变化（两条腿各算一次，纯记录，不进判定）
+    derivedBorderChanges: buttons.reduce((sum, row) => sum + (row.hoverDerived || []).length + (row.derivedOnPress || []).length, 0),
     writeRequests: allWrites.length,
     upstreamCalls: upstream.length,
     anomalies: anomalies.length,
@@ -1425,12 +1468,18 @@ for (const row of hardCutRows) {
   console.log(pad(row.page, 18) + pad(String(row.text).slice(0, 18), 22) + pad(row.hardCuts.map((c) => c.prop + '@' + (c.declared ? c.duration : '不在过渡表里')).join(' '), 56) + row.selector)
 }
 console.log('')
+const hoverHardCutRows = buttons.filter((row) => (row.hoverHardCuts || []).length > 0)
+console.log('---- 划过有变化但还是硬切（' + hoverHardCutRows.length + ' 个）----')
+for (const row of hoverHardCutRows) {
+  console.log(pad(row.page, 18) + pad(String(row.text).slice(0, 18), 22) + pad(row.hoverHardCuts.map((c) => c.prop + '@' + (c.declared ? c.duration : '不在过渡表里')).join(' '), 56) + row.selector)
+}
+console.log('')
 console.log('---- 趟汇总 ----')
 for (const row of passes) {
   console.log(pad(row.id, 18) + pad('可见可点 ' + row.total, 14) + pad('量了 ' + row.measured, 10) + pad('有反馈 ' + row.feedback, 12) + pad('候选 ' + row.noFeedback, 10) + pad('active没匹配 ' + row.activeNotMatched, 18) + pad('禁用 ' + row.disabled, 10) + pad('读不到 ' + row.readFailed, 12) + pad('写请求 ' + row.writeRequests, 12) + (row.aborted || ''))
 }
 console.log('')
-console.log('---- 按下巡检 · ' + out.summary.buttonsMeasured + ' 个按钮 / ' + passes.length + ' 趟 · 无反馈候选 ' + candidates.length + ' · 硬切 ' + hardCutRows.length + ' · 写请求 ' + allWrites.length + ' · 上游 ' + upstream.length + ' · 证据 ' + path.join(path.relative(ROOT, OUT_DIR), 'press.json') + ' ----')
+console.log('---- 按下巡检 · ' + out.summary.buttonsMeasured + ' 个按钮 / ' + passes.length + ' 趟 · 无反馈候选 ' + candidates.length + ' · 按下硬切 ' + hardCutRows.length + ' · 划过硬切 ' + hoverHardCutRows.length + ' · 连带变化（边框宽 0 的 border-color）' + out.summary.derivedBorderChanges + ' · 写请求 ' + allWrites.length + ' · 上游 ' + upstream.length + ' · 证据 ' + path.join(path.relative(ROOT, OUT_DIR), 'press.json') + ' ----')
 
 try { chrome.kill() } catch { /* 已经退出 */ }
 try { server.kill() } catch { /* 已经退出 */ }

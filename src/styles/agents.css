@@ -4111,3 +4111,38 @@
   color: var(--ink);
   background: var(--line-faint);
 }
+
+/* r335 · 悬停反馈的过渡：划过要变的属性必须自己有过渡，不然是「啪」一下就到位。
+   时长/缓动与按下那一层同一套（--dur-1 / --ease-out），手感一致。
+   带 -- 修饰类的目标不在这里：它们和基类是同一条元素，过渡并进基类那条（自己再写一条会把 transform / box-shadow 挤掉）。 */
+.agx-head-back,
+.agx-history-item,
+.agx-run-head,
+.agx-runs-more,
+.agx-msg-tools button,
+.agx-msg-meta button,
+.agx-capsule-menu button,
+.agx-draft-done button,
+.agx-media-seg button,
+.agx-media-zoom .agx-media-image,
+.agx-media-recent-thumb,
+.agx-media-recent-download,
+.agx-media-recent-ref,
+.agx-media-recent-retry,
+.agx-media-recent-del,
+.agx-media-recent-more,
+.agx-qc-ref-remove,
+.agx-qc-library li > button,
+.qc-side-toggle,
+.qc-conv,
+.qc-conv-del,
+.qc-bubble.qc-md a,
+.qc-copy,
+.qc-chip-x,
+.qc-media-dl,
+.qc-search-item {
+  transition: color var(--dur-1) var(--ease-out),
+    background-color var(--dur-1) var(--ease-out),
+    border-color var(--dur-1) var(--ease-out),
+    filter var(--dur-1) var(--ease-out);
+}

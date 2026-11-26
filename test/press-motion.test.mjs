@@ -210,6 +210,127 @@ export function focusRingProblems(css) {
   return problems
 }
 
+// ---------- r335：悬停（hover）那一半 ----------
+// 划过是最常发生的一次状态变化。判据与按下那一层一样（变了的那条属性必须能在这份 CSS 里找到过渡），
+// 但有两处不同，都是这一轮量出来的：
+//   1) 过渡池是**全局**的。CSS 不分文件，同一个类在哪份文件里写了 transition 都算数
+//      （按下那一层按文件算，是因为那几条修复都落在同一个文件里；这里换个更准的口径）。
+//   2) 没有可见边框时，computed 的 border-color 就是 currentColor —— color 一变它必然跟着变，
+//      这不是一次反馈。四边宽度全 0 的 border-color 直接不看（浏览器那一层同步修了：见 audit-press.mjs
+//      的 hoverDerived / derivedOnPress）。
+export const NOT_ANIMATABLE = ['cursor', 'text-decoration', 'border-style', 'background-image', 'display']
+
+/** 这些声明里有没有画出一条真的能看见的边框（透明也算：hover 常常就是把它变成不透明）。 */
+/** 选择器里「真正会变的那颗元素」的类名（最后一段复合选择器；:not(...) 里的不算）。 */
+export function lastCompoundClasses(selector) {
+  const text = selector.replace(/\([^()]*\)/g, '')
+  const parts = text.split(/[\s>+~]+/).filter(Boolean)
+  const last = parts[parts.length - 1] || ''
+  return [...new Set((last.match(/\.[A-Za-z0-9_-]+/g) || []).map((item) => item.slice(1)))]
+}
+
+/**
+ * 一个复合选择器（没有后代 / 子代 / 兄弟组合符）才能和另一条谈「作用在同一颗元素上」。
+ * .agx-media-zoom .agx-media-image 这种两段式的，BEM 那套推不出来，一律不猜。
+ */
+export function isSimpleSelector(selector) {
+  return !/[\s>+~]/.test(selector.replace(/\([^()]*\)/g, ''))
+}
+
+/** BEM 修饰类：.a--b 的元素上通常同时挂着 .a（JSX 里就是这么写的，实测 see .vq-nav-item--utility）。 */
+export function bemBases(name) {
+  const at = name.indexOf('--')
+  return at > 0 ? [name.slice(0, at)] : []
+}
+
+/**
+ * 同一颗元素上的「基类过渡」也算覆盖：.vq-nav-item--utility 的过渡来自 .vq-nav-item。
+ * 只对单段选择器生效，而且要求 required 的每一个类都能在过渡那条里找到（自己或它的 BEM 基类）——
+ * 否则 .vq-sidebar-account-row--guest .vq-sidebar-account-action 会被祖先那条误当成覆盖。
+ */
+export function coversFamily(transitionKey, requiredKey) {
+  if (transitionKey.pe !== requiredKey.pe) return false
+  if (transitionKey.tag !== '' && transitionKey.tag !== requiredKey.tag) return false
+  if (!transitionKey.classes.length || !requiredKey.classes.length) return false
+  return requiredKey.classes.every((name) => transitionKey.classes.includes(name) || bemBases(name).some((base) => transitionKey.classes.includes(base)))
+}
+
+export function declaresVisibleBorder(bodies) {
+  for (const body of bodies) {
+    for (const item of declsOf(body)) {
+      if (item.prop === 'border') {
+        const width = item.value.match(/^([0-9.]+)px\s+([a-z-]+)/)
+        if (width && Number(width[1]) > 0 && width[2] !== 'none' && width[2] !== 'hidden') return true
+      }
+      if (/^border(-(top|right|bottom|left))?-width$/.test(item.prop) && parseFloat(item.value) > 0) return true
+    }
+  }
+  return false
+}
+
+/** 全量体检：返回 [{ file, selector, prop, id }]，空数组才算过。 */
+export function hoverCoverageProblems(files) {
+  const pool = []
+  const borderRules = []
+  for (const [file, css] of Object.entries(files)) {
+    for (const rule of parseRules(css)) {
+      if (rule.media && /prefers-reduced-motion/.test(rule.media)) continue
+      for (const one of splitTop(rule.selector)) {
+        for (const selector of expand(one)) {
+          const decls = declsOf(rule.body)
+          if (decls.some((item) => item.prop === 'transition' || item.prop === 'transition-property')) {
+            pool.push({ file: file, key: keyOf(selector), props: transitionSetOf(rule.body), simple: isSimpleSelector(selector) })
+          }
+          if (decls.some((item) => /^border(-(top|right|bottom|left))?(-width|$)/.test(item.prop))) {
+            borderRules.push({ key: keyOf(selector), body: rule.body })
+          }
+        }
+      }
+    }
+  }
+  const problems = []
+  for (const [file, css] of Object.entries(files)) {
+    for (const rule of parseRules(css)) {
+      if (rule.media && /prefers-reduced-motion/.test(rule.media)) continue
+      for (const one of splitTop(rule.selector)) {
+        for (const selector of expand(one)) {
+          if (!/:hover\b/.test(selector)) continue
+          const required = keyOf(selector)
+          const requiredSimple = isSimpleSelector(selector)
+          const available = new Set()
+          for (const entry of pool) {
+            const same = covers(entry.key, required) || (entry.simple && requiredSimple && coversFamily(entry.key, required))
+            if (!same) continue
+            for (const prop of entry.props) available.add(prop)
+          }
+          const borderVisible = declaresVisibleBorder(borderRules.filter((entry) => covers(entry.key, required)).map((entry) => entry.body))
+          for (const item of declsOf(rule.body)) {
+            if (item.prop.startsWith('transition') || item.prop.startsWith('animation')) continue
+            if (NOT_ANIMATABLE.includes(item.prop)) continue
+            if (item.prop === 'border-color' && !borderVisible) continue
+            if (coversProp(available, item.prop)) continue
+            problems.push({ file: file, selector: selector, prop: item.prop, id: file + ' :: ' + selector + ' :: ' + item.prop })
+          }
+        }
+      }
+    }
+  }
+  return problems
+}
+
+/**
+ * 悬停这一层的白名单。和按下那一层同一条理由：静态看不出来，但运行时确实有过渡。
+ * 这几条不能自己再写一条短过渡 —— 那条（类选择器）权重压过 tokens.css 的 :where(...)，
+ * 会把 transform / box-shadow 一起挤掉，按下的 1px 位移、卡片压暗就变成硬切（按下那一层会红）。
+ */
+export const ALLOW_HOVER = [
+  // 现在是空的：.vq-button--* 那五条原来在这里，改成 coversFamily 之后它们被
+  // tokens.css 的 :where(.vq-button, …) 认出来了（元素上确实同时挂着 .vq-button），
+  // 留着会变成「已经不需要的例外」。按下那一层的 ALLOW 不共享这条：那两条是**跨类**，
+  // 不是 BEM 家族，静态推不出来，仍然要人写明。
+]
+const idOfHover = (item) => item.file + ' :: ' + item.selector + ' :: ' + item.prop
+
 /**
  * 白名单：静态看不出来、但真机上确实有过渡的几条。
  * 每条都写清「为什么可以例外」，并且下面有用例检查它仍然成立——
@@ -249,6 +370,125 @@ test('r334 · 按下拿到的焦点环也走过渡（顶栏搜索那一格）', 
   assert.deepEqual(problems, [], '这一格按下会拿到焦点，焦点环上的属性同样是硬切：\n' + problems.join('\n'))
 })
 
+// ---------- r335 的用例 ----------
+test('r335 · 所有 :hover 声明要变的属性都有过渡（白名单之外的 0 条）', () => {
+  const problems = hoverCoverageProblems(readStyles())
+  const allow = new Set(ALLOW_HOVER.map(idOfHover))
+  const left = problems.filter((item) => !allow.has(item.id))
+  assert.deepEqual(left.map((item) => item.id), [], '这些划过还是硬切（没有 transition 覆盖）：\n' + left.map((item) => '  ' + item.id).join('\n'))
+})
+
+test('r335 · 悬停白名单没有烂掉：每条例外今天仍然量得到', () => {
+  const ids = new Set(hoverCoverageProblems(readStyles()).map((item) => item.id))
+  const stale = ALLOW_HOVER.filter((item) => !ids.has(idOfHover(item)))
+  assert.deepEqual(stale.map((item) => idOfHover(item) + '（' + item.why + '）'), [], '这些例外已经不需要了，删掉对应条目')
+})
+
+test('r335 · 没有可见边框时不要求 border-color 的过渡（那是 currentColor 的另一种写法）', () => {
+  assert.equal(declaresVisibleBorder(['border: 0; color: var(--muted)']), false)
+  assert.equal(declaresVisibleBorder(['border: 1px solid transparent']), true)
+  assert.equal(declaresVisibleBorder(['border-width: 1px; border-style: none']), true) // width 写了就算（style 由别的规则兜底）
+  assert.equal(declaresVisibleBorder(['border-radius: 8px']), false)
+  // 26 条误报的形状：.vq-nav-item 写的是 border: 0，hover 只改 background / color
+  const css = { 'x.css': '.a { border: 0; color: #111 }\n.a:hover { color: #000 }\n' }
+  assert.deepEqual(hoverCoverageProblems(css).map((item) => item.id), ['x.css :: .a:hover :: color'])
+  // 真画了边框的，border-color 才要过渡
+  const css2 = { 'x.css': '.a { border: 1px solid transparent }\n.a:hover { border-color: #111 }\n' }
+  assert.deepEqual(hoverCoverageProblems(css2).map((item) => item.id), ['x.css :: .a:hover :: border-color'])
+})
+
+// ---- r335 的反证：删掉这一层补的过渡，检查必须变红 ----
+// 这一层是「一整段追加」的形式（每个文件末尾一段），所以锚点是那段的头一行；
+// 先确认段在（不然反证等于没跑），再删掉整段，看检查有没有报出对应的那几条。
+const HOVER_SECTION = '/* r335 · 悬停反馈的过渡'
+const HOVER_SECTIONS = [
+  { file: 'agents.css', expect: ['agents.css :: .agx-history-item:hover :: background', 'agents.css :: .qc-copy:hover :: color', 'agents.css :: .qc-search-item:hover :: border-color'] },
+  { file: 'shell.css', expect: ['shell.css :: .vq-toolbar-reset:hover :: color', 'shell.css :: .vq-help-link:hover :: border-color'] },
+  { file: 'rooms.css', expect: ['rooms.css :: .rooms-row:hover :: background', 'rooms.css :: .rooms-auto:hover :: color'] },
+  { file: 'projects.css', expect: ['projects.css :: .vq-project-source-link:hover :: text-decoration-thickness'] },
+  { file: 'legacy-fix.css', expect: ['legacy-fix.css :: .template-card:hover :: box-shadow'] },
+]
+const HOVER_MERGES = [
+  { file: 'overview.css', from: ', border-radius var(--dur-1) var(--ease-out),\n    text-underline-offset var(--dur-1) var(--ease-out)', to: ', border-radius var(--dur-1) var(--ease-out)', expect: 'overview.css :: .ov-cap-action:hover :: text-underline-offset' },
+  { file: 'radar.css', from: 'opacity .18s var(--ease-out), color var(--dur-1) var(--ease-out)', to: 'opacity .18s var(--ease-out)', expect: 'radar.css :: .radar-taken-main:hover > svg :: color' },
+  { file: 'shell.css', from: ', color var(--dur-1) var(--ease-out),\n    text-underline-offset var(--dur-1) var(--ease-out);', to: ', color var(--dur-1) var(--ease-out);', expect: 'shell.css :: .vq-link:hover :: text-underline-offset' },
+  // BEM 家族那两条：修饰类自己不在追加段里，缺的属性并进基类那一条
+  { file: 'shell.css', from: 'box-shadow var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);', to: 'box-shadow var(--dur-1) var(--ease-out);', expect: 'shell.css :: .vq-search--trigger:hover :: color' },
+  { file: 'share.css', from: ', color .15s ease, background-color .15s ease;', to: ', color .15s ease;', expect: 'share.css :: .share-button--primary:hover :: background' },
+]
+
+// r335 踩过的那一脚：.vq-nav-item--utility 自己写一条 transition，把 .vq-nav-item 那条（含 transform，
+// 按下 1px 位移）整条盖掉 —— 按下巡检当时是 0 硬切，改完变 3。所以钉一条：追加段里的目标，
+// 不能是「基类上已经有过渡」的 BEM 修饰类。修法是并进基类那条，不是自己再写一条。
+test('r335 · 追加段里不能出现「基类已有过渡」的 BEM 修饰类（会盖掉基类那条）', () => {
+  const files = readStyles()
+  const base = {}
+  for (const [file, css] of Object.entries(files)) {
+    const at = css.indexOf(HOVER_SECTION)
+    base[file] = at >= 0 ? css.slice(0, at) : css
+  }
+  const transitions = []
+  for (const css of Object.values(base)) {
+    for (const rule of parseRules(css)) {
+      for (const one of splitTop(rule.selector)) {
+        for (const selector of expand(one)) {
+          const decls = declsOf(rule.body)
+          if (decls.some((item) => item.prop === 'transition' || item.prop === 'transition-property')) {
+            transitions.push({ selector: selector, key: keyOf(selector), simple: isSimpleSelector(selector) })
+          }
+        }
+      }
+    }
+  }
+  const risks = []
+  for (const [file, css] of Object.entries(files)) {
+    const at = css.indexOf(HOVER_SECTION)
+    if (at < 0) continue
+    const seg = css.slice(at)
+    const block = seg.slice(seg.indexOf('*/') + 2, seg.indexOf('{'))
+    for (const one of splitTop(block)) {
+      for (const selector of expand(one.trim())) {
+        for (const name of lastCompoundClasses(selector)) {
+          for (const baseClass of bemBases(name)) {
+            const hit = transitions.find((entry) => entry.simple && entry.key.classes.includes(baseClass))
+            if (hit) risks.push(file + ' :: ' + selector + '（基类 .' + baseClass + ' 上已有过渡：' + hit.selector + '）')
+          }
+        }
+      }
+    }
+  }
+  assert.deepEqual(risks, [], '这些目标自己再写一条会把基类那条整条盖掉（transform / box-shadow 会退回硬切）：\n' + risks.join('\n'))
+})
+
+test('r335 · 反证：删掉这一层追加的过渡段，检查都要变红', () => {
+  for (const fix of HOVER_SECTIONS) {
+    const files = readStyles()
+    const at = files[fix.file].indexOf(HOVER_SECTION)
+    assert.ok(at > 0, fix.file + ' 里找不到 r335 那一段（锚点漂了，这条反证等于没跑）')
+    files[fix.file] = files[fix.file].slice(0, at)
+    const ids = new Set(hoverCoverageProblems(files).map((item) => item.id))
+    for (const expected of fix.expect) assert.ok(ids.has(expected), fix.file + '：删掉之后没有量到 ' + expected + '（门禁是恒真的）')
+  }
+})
+
+test('r335 · 反证：把并进原声明的那几条再拿掉，检查要变红', () => {
+  for (const fix of HOVER_MERGES) {
+    const files = readStyles()
+    const count = files[fix.file].split(fix.from).length - 1
+    assert.equal(count, 1, fix.file + '：改坏用的锚点出现了 ' + count + ' 次（锚点漂了，这条反证等于没跑）')
+    files[fix.file] = files[fix.file].replace(fix.from, fix.to)
+    const ids = new Set(hoverCoverageProblems(files).map((item) => item.id))
+    assert.ok(ids.has(fix.expect), fix.file + '：拿掉之后没有量到 ' + fix.expect + '（门禁是恒真的）')
+  }
+})
+
+test('r335 · 非动画属性不要求过渡（列在这里、不在别处）', () => {
+  assert.deepEqual(NOT_ANIMATABLE, ['cursor', 'text-decoration', 'border-style', 'background-image', 'display'])
+  const css = { 'x.css': '.a:hover { text-decoration: underline; text-underline-offset: 3px }\n' }
+  assert.deepEqual(hoverCoverageProblems(css).map((item) => item.id), ['x.css :: .a:hover :: text-underline-offset'])
+})
+
+
 // ---- 反证：把这一轮补的过渡删掉，检查必须变红 ----
 const FIXES = [
   {
@@ -268,7 +508,7 @@ const FIXES = [
   {
     name: 'shell.css · 行内链接按下压底',
     file: 'shell.css',
-    from: '.vq-link {\n  transition: background-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);\n}\n\n',
+    from: '.vq-link {\n  transition: background-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out),\n    text-underline-offset var(--dur-1) var(--ease-out);\n}\n\n',
     to: '',
     expect: ['shell.css :: .vq-link:not(:disabled):active :: background', 'shell.css :: .vq-link:not(:disabled):active :: color'],
   },
@@ -316,7 +556,7 @@ test('r334 · 反证：删掉这一轮补的每一条过渡，检查都要变红
 
 test('r334 · 反证：删掉 .vq-search 的 box-shadow 过渡，焦点环检查要变红', () => {
   const css = readStyles()['shell.css']
-  const from = ',\n    box-shadow var(--dur-1) var(--ease-out);'
+  const from = ',\n    box-shadow var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);'
   assert.equal(css.split(from).length - 1, 1, '锚点漂了，这条反证等于没跑')
   const problems = focusRingProblems(css.replace(from, ';'))
   assert.ok(problems.includes('shell.css :: .vq-search:focus-within :: box-shadow'), '删掉之后没量到 box-shadow：' + JSON.stringify(problems))
