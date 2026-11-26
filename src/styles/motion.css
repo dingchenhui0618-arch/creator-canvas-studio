@@ -46,7 +46,9 @@
 .vq-lift.vq-lift:hover { transform: translateY(-2px); }
 
 /* ---------- 提示条滑入 ----------
-   .vq-toast 是挂上就有、2.4 秒后卸掉的，所以只需要进场。 */
+   .vq-toast 挂上就有；停留时间跟文案长短走（r324，见 src/domain/toast.ts）。
+   这里只管进场——每次 notify 都换一次 key，连按同一个动作时这条动画会再放一遍；
+   收尾那一段（淡出下沉 180ms）在 shell.css 的 .vq-toast.is-leaving 里。 */
 .vq-toast { animation: vq-toast-in var(--dur-2) var(--ease-out) backwards; }
 
 /* ---------- 系统开了「减弱动态效果」时全停 ----------

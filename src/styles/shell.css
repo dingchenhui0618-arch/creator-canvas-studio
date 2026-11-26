@@ -1483,6 +1483,17 @@ select:focus-visible {
   color: #ffffff;
   font-size: 14px;
   box-shadow: var(--shadow-raise);
+  /* r324：长文案别拉成一条横贯屏幕的横幅；窄屏按视口收，左右各留 24px 才不贴边 */
+  max-width: min(560px, calc(100vw - 48px));
+  /* 进场是 motion.css 里的 vq-toast-in，收尾是下面这条与 .is-leaving */
+  transition: opacity var(--dur-2) var(--ease-out), transform var(--dur-2) var(--ease-out);
+}
+
+/* 收尾：淡出 + 下沉 8px（与进场同一条轨道），走完才由 App 卸载（r324）。
+   原来是时间一到直接摘掉，一条读不完的长句看着就是「闪没了」。 */
+.vq-toast.is-leaving {
+  opacity: 0;
+  transform: translateY(8px);
 }
 
 /* ---------- 登录页 ---------- */

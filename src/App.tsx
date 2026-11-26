@@ -69,6 +69,7 @@ import {
   type Route,
 } from './router'
 import { setUnsaved, unsavedNote } from './domain/unsaved-guard'
+import { toastDuration, toastExitDelay } from './domain/toast'
 import { planScroll } from './domain/scroll'
 import { welcomeSeenKey } from './onboarding'
 import { browserFlagStore, dismissMobileNote, mobileNoteVisible } from './domain/mobile-note'
@@ -260,12 +261,16 @@ function Workbench({
   // 后台「反馈」的待处理角标：只在管理后台里取，进后台就对一次数
   const [feedbackPending, setFeedbackPending] = useState(0)
 
-  const [toast, setToast] = useState('')
+  // 全局提示条（r324）：带序号——连按同一个动作时动画要重放一次，否则第二次什么都没发生
+  const [toast, setToast] = useState<{ seq: number; message: string } | null>(null)
+  const [toastLeaving, setToastLeaving] = useState(false)
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const [updateOpen, setUpdateOpen] = useState(false)
   const [updateChecking, setUpdateChecking] = useState(false)
   const [updateMessage, setUpdateMessage] = useState('')
   const toastTimer = useRef<number | undefined>(undefined)
+  const toastExitTimer = useRef<number | undefined>(undefined)
+  const toastSeq = useRef(0)
   const accountRef = useRef<HTMLDivElement>(null)
   // 换页的落地位置：真的换了页面就回到页头（v0.9.43）。
   // 该不该回、哪几种不算换页，判断只在 src/domain/scroll.ts 一处；这里只负责把 scrollTop 归零。
@@ -406,10 +411,32 @@ function Workbench({
   const inTools = isToolPage(activePage) || activePage === 'agent-editor'
 
   const notify = useCallback((message: string) => {
-    setToast(message)
+    toastSeq.current += 1
+    setToast({ seq: toastSeq.current, message })
+    setToastLeaving(false)
     window.clearTimeout(toastTimer.current)
-    toastTimer.current = window.setTimeout(() => setToast(''), 2400)
+    window.clearTimeout(toastExitTimer.current)
+    // 停留时间跟着字数走（r324）：报错往往比「已保存」长得多，固定 2.4 秒读不完
+    toastTimer.current = window.setTimeout(() => {
+      // 收尾：先淡出下沉，走完再卸载。直接摘掉是硬切，一条长句最明显
+      setToastLeaving(true)
+      const exitMs = toastExitDelay(window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+      if (exitMs <= 0) {
+        setToast(null)
+        return
+      }
+      toastExitTimer.current = window.setTimeout(() => setToast(null), exitMs)
+    }, toastDuration(message))
   }, [])
+
+  // 卸载时把两个计时器都收掉：登录页/后台切换时外壳会重挂，别让旧计时器去写已经卸掉的状态
+  useEffect(
+    () => () => {
+      window.clearTimeout(toastTimer.current)
+      window.clearTimeout(toastExitTimer.current)
+    },
+    [],
+  )
 
   // 关标签页 / 刷新时浏览器只让我们拦一下，不让写自己的话（r270）。
   // 应用内的跳转由路由出弹窗（说清丢了什么），这一层只兜住「页面正在被关掉」。
@@ -1360,9 +1387,9 @@ function Workbench({
       )}
 
       {toast && (
-        <div className="vq-toast" role="status">
+        <div className={'vq-toast' + (toastLeaving ? ' is-leaving' : '')} role="status" key={toast.seq}>
           <Check size={14} />
-          {toast}
+          {toast.message}
         </div>
       )}
 
