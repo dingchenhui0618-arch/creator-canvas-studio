@@ -798,6 +798,8 @@ function Workbench({
           <TemplateLibraryPage
             onToast={notify}
             onBack={() => go('radar')}
+            // 运营位的按钮要能跳到任意页面（后台可以把按钮指向雷达、评审、聊天室）
+            onNavigate={go}
             onOpenCanvas={(flowId) => navigate({ kind: 'page', page: 'canvas', flowId })}
             onOpenProject={(projectId) => navigate({ kind: 'page', page: 'projects', projectId })}
             // 单条模板有地址：刷新、后退、从作品页的「来源」点进来都落在同一条上。

@@ -41,7 +41,9 @@
   transition: border-color var(--dur-1) var(--ease-out), box-shadow var(--dur-2) var(--ease-out),
     transform var(--dur-2) var(--ease-out);
 }
-.vq-lift:hover { transform: translateY(-2px); }
+/* 这里也写两遍 .vq-lift：作品流、模板库的卡片自己的 :hover 就在各自的样式表里，
+   同权重时谁在后面谁赢；页面样式表是按需加载的，顺序不保证。抬多高必须由这一层说了算。 */
+.vq-lift.vq-lift:hover { transform: translateY(-2px); }
 
 /* ---------- 提示条滑入 ----------
    .vq-toast 是挂上就有、2.4 秒后卸掉的，所以只需要进场。 */
@@ -60,5 +62,5 @@
     transition-duration: 1ms !important;
     scroll-behavior: auto !important;
   }
-  .vq-lift:hover { transform: none; }
+  .vq-lift.vq-lift:hover { transform: none; }
 }

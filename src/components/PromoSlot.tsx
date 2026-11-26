@@ -1,52 +1,39 @@
-// 运营位（r319）。一屏一个 <PromoSlot placement="…" />，内容与开关都在 domain/promos.ts。
-// 关掉记在浏览器本地（同一台机器不再出现）；换设备/清缓存会重新出现——这是有意的，
-// 现在还没有账号级的运营位状态，等服务端配置那一步一起搬过去。
-import { useCallback, useMemo, useState } from 'react'
+// 运营位（r320）。一屏一个 <PromoSlot placement="…" />，内容来自服务端（后台「运营位」卡可改），
+// 关掉哪几条记在这台机器的浏览器里（同一台不再出现；换设备/清缓存会重新出现）。
+// 取数与「关掉」的共享状态在 src/api/promos.ts：同一屏多个位置共用一份，关一条全都消失。
+import { useCallback, useMemo } from 'react'
 import { ArrowRight, Sparkles, X } from 'lucide-react'
 import type { Page } from '../domain/types'
-import {
-  PROMOS,
-  PROMO_DISMISS_KEY,
-  activePromos,
-  readDismissedPromos,
-  todayKey,
-  type PromoPlacement,
-} from '../domain/promos'
+import { activePromos, todayKey, type PromoPlacement } from '../domain/promos'
+import { dismissPromo, usePromoStore } from '../api/promos'
+import { useUiMode } from '../api/app'
 import '../styles/promos.css'
 
 export default function PromoSlot({
   placement,
   onNavigate,
-  internal = false,
+  internal,
   max,
 }: {
   placement: PromoPlacement
   onNavigate: (page: Page) => void
-  /** 内部口径（管理员）多看一条内部专用的运营位。 */
+  /** 内部口径（管理员）多看一条内部专用的运营位；不传就按界面当前口径（管理员=internal）。 */
   internal?: boolean
   /** 这个位置最多几条；不写按 domain 里的默认（2 条）。 */
   max?: number
 }) {
-  const [dismissed, setDismissed] = useState<string[]>(() =>
-    readDismissedPromos(window.localStorage.getItem(PROMO_DISMISS_KEY)),
-  )
+  const { items, dismissed } = usePromoStore()
+  const { internal: uiInternal } = useUiMode()
+  // 不传 internal 就跟着界面口径走：模板库这种页面不必为此多接一个 prop
+  const showInternal = internal ?? uiInternal
+  // 日期只算一次：运营位的起止按「今天」判，渲染中途跨零点不是个要处理的问题
   const on = useMemo(() => todayKey(), [])
   const list = useMemo(
-    () => activePromos(PROMOS, { placement, on, internal, dismissed, max }),
-    [placement, on, internal, dismissed, max],
+    () => activePromos(items, { placement, on, internal: showInternal, dismissed, max }),
+    [items, placement, on, showInternal, dismissed, max],
   )
 
-  const dismiss = useCallback((id: string) => {
-    setDismissed((prev) => {
-      const next = prev.includes(id) ? prev : [...prev, id]
-      try {
-        window.localStorage.setItem(PROMO_DISMISS_KEY, JSON.stringify(next))
-      } catch {
-        // 隐私模式写不进去：这一次仍然关掉，刷新后会回来，不打扰用户
-      }
-      return next
-    })
-  }, [])
+  const dismiss = useCallback((id: string) => dismissPromo(id), [])
 
   if (!list.length) return null
 

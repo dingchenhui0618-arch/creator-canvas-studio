@@ -3,6 +3,7 @@ import { request } from '../../api/client'
 import { useUiMode } from '../../api/app'
 import { formatDateTime, formatDuration, useApi, type BdcPort, type BdcStatus, type VersionInfo } from './data'
 import SiteInfoCard from './SiteInfoCard'
+import PromosCard from './PromosCard'
 import StorageGuard from './StorageGuard'
 import WaterlineCard from './WaterlineCard'
 import { AdminHead, Badge, ErrorBanner, LoadingLine, RefreshButton, SourceTag } from './ui'
@@ -1101,6 +1102,8 @@ export default function SystemSection() {
       <SmsChannelCard />
 
       <SiteInfoCard />
+
+      <PromosCard />
 
       <section className="admin-card admin-block">
         <div className="admin-block-head">

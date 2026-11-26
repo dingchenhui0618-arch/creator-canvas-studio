@@ -43,6 +43,7 @@ import { clearQuotaOverride, quotaOverview, saveQuota, setQuotaOverride } from '
 import { saveUsagePrices, usagePrices, usageSummary } from '../usage-meter.mjs'
 import { pricingEstimate } from '../pricing.mjs'
 import { clearSiteInfo, resolveSiteInfo, saveSiteInfo, SITE_FIELDS } from '../site-info.mjs'
+import { clearPromos, PROMO_LIMITS, PROMO_PAGES, PROMO_PLACEMENT_LABELS, PROMO_PLACEMENTS, resolvePromos, savePromos } from '../promos.mjs'
 import { launchReadiness } from '../readiness.mjs'
 import { cleanOrphanFrames, clearStorageOverride, saveStorageLimit, setStorageOverride, storageOverview } from '../storage.mjs'
 import { admissionCheck, HEAVY_KINDS, waterlineReport } from '../waterline.mjs'
@@ -1479,6 +1480,53 @@ export function createAdminRouter() {
         await clearSiteInfo()
         recordAudit({ req, actor: user, action: 'site.clear', targetType: 'site', targetId: 'public', targetLabel: '站点公示' })
         sendJson(res, 200, { ok: true, site: await resolveSiteInfo() })
+        return true
+      }
+
+      // 运营位（r320）：工作台 / 模板库顶部的动态条。r319 写在前端文件里，改一句话要发一版；
+      // 现在内容存在数据目录，这里给后台看全部（含只给管理员看的 internal 条），公开接口按身份过滤。
+      if (pathname === '/api/admin/promos' && req.method === 'GET') {
+        const view = await resolvePromos()
+        sendJson(res, 200, {
+          ok: true,
+          promos: view.items,
+          source: view.source,
+          error: view.error,
+          updatedAt: view.updatedAt,
+          updatedBy: view.updatedBy,
+          limits: PROMO_LIMITS,
+          placements: PROMO_PLACEMENTS.map((value) => ({ value, label: PROMO_PLACEMENT_LABELS[value] })),
+          pages: PROMO_PAGES,
+        })
+        return true
+      }
+
+      if (pathname === '/api/admin/promos' && req.method === 'PUT') {
+        const body = await readBody(req)
+        const saved = await savePromos(body.promos, { by: user.email, force: body.force === true })
+        if (!saved.ok) {
+          // 配置读不出来时先不覆盖：让管理员看见「现在是坏的」，再决定要不要盖掉
+          sendJson(res, saved.conflict ? 409 : 400, { ok: false, error: saved.error, conflict: saved.conflict === true })
+          return true
+        }
+        recordAudit({
+          req,
+          actor: user,
+          action: 'promo.save',
+          targetType: 'promos',
+          targetId: 'public',
+          targetLabel: '运营位',
+          detail: { items: saved.items.length, placements: [...new Set(saved.items.map((item) => item.placement))] },
+        })
+        sendJson(res, 200, { ok: true, promos: saved.items, source: 'admin', updatedAt: saved.updatedAt, updatedBy: saved.updatedBy })
+        return true
+      }
+
+      if (pathname === '/api/admin/promos' && req.method === 'DELETE') {
+        await clearPromos()
+        recordAudit({ req, actor: user, action: 'promo.clear', targetType: 'promos', targetId: 'public', targetLabel: '运营位' })
+        const view = await resolvePromos()
+        sendJson(res, 200, { ok: true, promos: view.items, source: view.source, updatedAt: view.updatedAt, updatedBy: view.updatedBy })
         return true
       }
 

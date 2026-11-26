@@ -236,10 +236,13 @@
   line-height: 1.5;
 }
 
+/* r320：等宽串多是路径 / id，没有空格可断；默认 overflow-wrap 会把 390 下的整页顶出横向滚动条
+   （数据备份卡的「备份目录」就是一条长路径，实测 +10px）。anywhere 只在真要断的时候才断。 */
 .admin-mono {
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 14px;
   letter-spacing: 0.01em;
+  overflow-wrap: anywhere;
 }
 
 .admin-table-wrap {
@@ -878,6 +881,13 @@
   color: var(--ink, #111111);
   font-family: var(--font-mono, ui-monospace, monospace);
   font-weight: 500;
+}
+
+/* r320：事实行里有异地副本目录、口令指纹这类长串，flex 子项默认不收缩（min-width:auto），
+   390 下会把整页顶出一条 10px 的横向滚动条（数据备份卡最明显）。收缩 + 允许断行即可。 */
+.admin-alert-facts > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 
@@ -2216,3 +2226,157 @@
 
 /* 搜索服务卡的两个按钮（保存 / 清掉）在 390 宽并排放不下（244 > 222）：让它换行，不挤出去。 */
 .admin-mail-form .admin-doc-actions { flex-wrap: wrap; }
+
+/* 运营位编辑（r320）：一条运营位有 10 个字段，桌面四列、窄屏两列 / 一列。
+   fieldset 只用来在保存时统一禁用输入，不画框；行与预览都允许任意换行，390 宽不横向滚。 */
+.admin-promo-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.admin-promo-toolbar .vq-button {
+  flex: none;
+}
+
+.admin-promo-fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.admin-promo-list {
+  gap: var(--space-3);
+}
+
+.admin-promo-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle, #f8f7f4);
+}
+
+.admin-promo-row-head,
+.admin-promo-row-title,
+.admin-promo-row-actions,
+.admin-promo-row-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.admin-promo-row-head,
+.admin-promo-row-foot {
+  justify-content: space-between;
+}
+
+.admin-promo-row-title strong {
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+}
+
+.admin-promo-row-actions {
+  margin-left: auto;
+}
+
+.admin-promo-row-actions .vq-button {
+  min-width: 32px;
+  padding: 0 var(--space-2);
+}
+
+.admin-promo-fields {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3) var(--space-4);
+  min-width: 0;
+}
+
+.admin-promo-field {
+  min-width: 0;
+}
+
+.admin-promo-field .vq-input {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.admin-promo-field--title,
+.admin-promo-field--body {
+  grid-column: span 2;
+}
+
+.admin-promo-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--text-meta);
+  line-height: var(--leading-meta);
+}
+
+.admin-promo-check input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--ink);
+}
+
+.admin-promo-actions {
+  flex-wrap: wrap;
+}
+
+.admin-promo-preview {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.admin-promo-preview .vq-promo {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.admin-promo-preview .vq-promo-title,
+.admin-promo-preview .vq-promo-body {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1080px) {
+  .admin-promo-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .admin-promo-row {
+    padding: var(--space-3);
+  }
+
+  .admin-promo-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-promo-field--title,
+  .admin-promo-field--body {
+    grid-column: span 1;
+  }
+
+  .admin-promo-preview {
+    padding: var(--space-3);
+  }
+}

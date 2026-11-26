@@ -100,6 +100,7 @@ import { rateLimit } from './ratelimit.mjs'
 import { startAlertWatch } from './alerts.mjs'
 import { deepHealth } from './health.mjs'
 import { sitePublicView } from './site-info.mjs'
+import { publicPromos, resolvePromos } from './promos.mjs'
 import { storageRoom } from './storage.mjs'
 import { admit, capacityFor, registerCoverStats } from './waterline.mjs'
 import { inheritedListenFd, listenMode } from './listen.mjs'
@@ -418,6 +419,13 @@ const server = http.createServer(async (req, res) => {
         // 注册页要展示「同意的是哪一版」，条款改版只改服务端配置
         terms: { version: config.site.termsVersion, updatedAt: config.site.termsUpdatedAt },
       })
+    }
+
+    // 运营位（工作台 / 模板库顶部的动态条，r320）：内容在后台可改，改完刷新就生效。
+    // internal 的那几条按请求者身份在这里就滤掉——不把「给不给看」交给前端。
+    if (pathname === '/api/promos') {
+      const view = await resolvePromos()
+      return sendJson(res, 200, { ok: true, promos: publicPromos(view.items, isAdmin(user)) })
     }
 
     if (pathname === '/api/bdc/status') {

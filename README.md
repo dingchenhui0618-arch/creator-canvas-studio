@@ -536,4 +536,74 @@ scp 回本机文件 → 脚本从文件读、不打印 → 拍完 `destroySessio
 reduce-motion 总闸只有代码与单测层面的证据，没在真开了「减弱动态效果」的浏览器里跑过；
 390 下运营位正文折成三行（可读、未裁切，但还不够紧凑）。
 
+## 第三百六十六、运营位搬到服务端 + 后台能改 + 动效铺开（r320）
+
+r319 把运营位和动效先摆到工作台上；这一版补齐三件事——**内容由服务端给（不发版就能改）、后台有地方改、
+动效铺到模板库与作品流**，顺手修掉后台 390 上一条 10px 的横向滚动条。
+
+1. **服务端是真源**（`server/promos.mjs`）：位置枚举（工作台 / 模板库 / 充值）、字段与长度上限、
+   默认内容、`resolvePromos`（`admin` 有存档 / `default` 没配过 / `error` 文件读不出来）、
+   `savePromos` / `clearPromos`、`publicPromos`（`internal` 那条只给管理员）。
+   存档是 `DATA_DIR/promos.json`，0600、原子替换；**读不出来不等于空**，这时保存会被拒。
+2. **两个接口**：`GET /api/promos` 要登录（匿名 401），普通账号拿不到 `internal` 那条；
+   `GET / PUT / DELETE /api/admin/promos` 只给管理员，PUT 是整份覆盖——顺序、权重、条数一起生效，
+   逐条保存会出现「旧的删了、新的还没进」的中间态。校验失败回 400 并点名「第 N 条：…」（**不悄悄截断超长文案**）；
+   存档坏掉时回 409 `conflict`，要覆盖得显式带 `force`；保存/恢复默认都记审计 `promo.save` / `promo.clear`。
+3. **前端换成读接口**（`src/api/promos.ts`）：模块级 store + `useSyncExternalStore`，先出浏览器缓存
+   （`vq_promos_cache`）再拉接口，拉不到保留缓存、不弹错；关掉的记 `vq_promos_dismissed`，
+   **关一条下一条补位**的规则没变，组件 `PromoSlot` 对页面依旧是原来那个用法。
+4. **后台「系统 → 运营位」**（`src/pages/admin/PromosCard.tsx`）：整份草稿编辑，上移下移、删除、新增、
+   实时预览（直接用前台那套 `.vq-promo` 样式，所见即所得）；保存时按行序重算权重——第 1 行最高、依次 -10，
+   同权重按数组顺序；存档坏掉时多一个「覆盖坏文件」，另有「恢复默认」。
+5. **动效铺开**：模板库的网格与作品流都换成 `vq-stagger`（24ms 步进）+ `vq-lift`（悬停抬 2px），
+   与工作台同一套细则；`fill-mode` 用 `backwards` 而不是 `both`——理由在 §365 记过。
+6. **顺手修的一处细节**：后台 390 下整页会多出一条 10px 的横向滚动条，定位到「数据备份」卡里
+   「备份目录」那行长路径：`.admin-mono` 没有断行规则，长串把卡片顶宽。加 `overflow-wrap: anywhere`
+   （只在真要断的时候才断），修后 390 溢出 0。这条**跟 r320 的功能无关**，是量截图时顺手量出来的。
+
+两个坑：
+
+- **接口字段名读错**：`GET /api/promos` 回 `{ ok, promos }`，生产脚本第一版读 `api.items`，误报「生产没下发运营位」——
+  页面其实一直是好的（前端读的就是 `promos`）。先分清「产品错了」和「断言错了」。
+- **徽标的类名不是 `vq-badge`**：后台 `Badge` 走 `components/ui.tsx` 的 `Pill`，DOM 上是 `.vq-pill`；
+  按想当然的类名取到空串，又误报「后台没标来源」。写选择器前先读组件。
+
+证据（本地：临时实例 + 真账号 + 真 SQLite，0 次上游调用、0 积分）：[docs/r320-workbench-served-1440.png](docs/r320-workbench-served-1440.png)、
+[docs/r320-templates-promo-1440.png](docs/r320-templates-promo-1440.png)、[docs/r320-projects-stagger-1440.png](docs/r320-projects-stagger-1440.png)、
+[docs/r320-admin-promos-1440.png](docs/r320-admin-promos-1440.png)、[docs/r320-templates-promo-390.png](docs/r320-templates-promo-390.png)、
+[docs/r320-admin-promos-390.png](docs/r320-admin-promos-390.png)。脚本 `scripts/shot-r320.mjs`（20 余条断言：
+管理员 PUT 5 条含一条 `internal` → 普通账号看到 2 条 → 关一条补位且刷新不回来 → 网格与卡片动效 →
+悬停算出 `matrix(1, 0, 0, 1, 0, -2)` → 后台 5 行、徽标「后台编辑」→ 两个宽度都溢出 0）。
+
+| 门禁 | 结果 |
+| --- | --- |
+| `npm test` | 2090 / 2090 通过（含 `test/promos.test.mjs` 10 条、`test/promos-admin.test.mjs` 9 条） |
+| `npx tsc -b` | 干净 |
+| `npx oxlint src server test scripts` | 0 error / 30 warning（运营位相关文件 0 条） |
+| `npm run scan:secrets` | 1175 个文件，没命中 |
+| `npm run build` | 入口 `index-CfGIkiRr.js` |
+
+**已上生产（一次成功）**，标签 `20261126-1730-r320promo`：
+
+| 项 | 值 |
+| --- | --- |
+| 当前生产 | `0.9.292` · 入口 `index-CfGIkiRr.js` 866,435 B |
+| 回滚点 | `/opt/visionqa/releases/20261126-091556-20261126-1730-r320promo.tar.gz`（`--to 1` 回 0.9.291 / r319） |
+| 健康 | `/api/health` ok，templates 27，`uptimeSec: 2`；两个服务 active |
+| 公网 | `/api/version` 200 `0.9.292`；新入口 200；上一版入口 404；匿名 `/api/promos` 401 |
+
+生产上真渲染（`scripts/shot-r320-prod.mjs`：生产侧临时签一个管理员会话 → 令牌只写文件 0600 并 scp 回本机 →
+脚本从文件读、不打印 → 拍完撤销；签发与撤销用成对的 `scripts/prod-shot-session-once.mjs` /
+`prod-shot-session-revoke-once.mjs`，这次两个一起传）：[docs/r320-prod-workbench-1440.png](docs/r320-prod-workbench-1440.png)
+（工作台两条运营位的标题与 `GET /api/promos` 回的逐条一致、侧栏 v0.9.292、溢出 0）、
+[docs/r320-prod-templates-1440.png](docs/r320-prod-templates-1440.png)（模板库运营位 + `vq-stagger`）、
+[docs/r320-prod-admin-1440.png](docs/r320-prod-admin-1440.png)（后台「运营位」卡：4 条、徽标「默认内容」、预览=第 1 条）、
+[docs/r320-prod-workbench-390.png](docs/r320-prod-workbench-390.png)（390 溢出 0）。页面报错 none；
+收尾 `user_agent LIKE '%r320-prod-shot%'` 的会话 before 2 / removed 2 / after 0，令牌文件已删。
+完整发版记录见 [docs/deploy-r320-2026-11-26.md](docs/deploy-r320-2026-11-26.md)。
+
+边界：生产运营位**还是默认内容**（`source=default`），「管理员保存 → 用户刷新就变」这条只有本地真渲染与单测证据，
+没在生产后台真存过；`recharge` 位置进了枚举和后台下拉，但充值页还没挂 `PromoSlot`；
+本轮 0 次真实上游调用、0 积分。
+
 

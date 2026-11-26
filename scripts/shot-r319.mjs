@@ -109,13 +109,15 @@ async function evaluate(expression) {
 async function open({ width, height }) {
   await cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: width < 600 })
   await cdp.send('Network.setCookie', { name: cfg.auth.cookieName, value: token, domain: '127.0.0.1', path: '/', httpOnly: true })
+  // 提示条用样式藏起来，绝不手工移除节点：那些节点 React 还在管，
+  // 手工 remove 之后 React 下一次更新会抛 NotFoundError removeChild，整棵树会当场卸掉（r320 实测白屏）。
   const injected = await cdp.send('Page.addScriptToEvaluateOnNewDocument', {
-    source: "try{localStorage.setItem('vq_welcome_seen:" + user.id + "','1');localStorage.setItem('vq_mobile_note_seen','1')}catch(e){}",
+    source: "try{localStorage.setItem('vq_welcome_seen:" + user.id + "','1');localStorage.setItem('vq_mobile_note_seen','1')}catch(e){}"
+      + "try{document.addEventListener('DOMContentLoaded',function(){var s=document.createElement('style');s.textContent='.vq-toast{display:none !important}';document.head.appendChild(s)})}catch(e){}",
   })
   await cdp.send('Page.navigate', { url: BASE + '/?as=' + encodeURIComponent(user.id) + '&shot=' + Date.now() + '#/overview' })
   await sleep(2600)
   await cdp.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: injected.identifier })
-  await evaluate("(() => { document.querySelectorAll('.vq-toast').forEach((el) => el.remove()) })()")
 }
 
 async function shoot(out) {
@@ -204,6 +206,7 @@ try {
   await shoot(path.join('docs', 'r319-workbench-promo-390.png'))
 
   console.log('页面报错：' + (cdp.errors.length ? JSON.stringify(cdp.errors.slice(0, 3)) : 'none'))
+  if (cdp.errors.length) throw new Error('页面抛异常了，截图不算数：' + cdp.errors[0].split('\n')[0])
   const bad = serverLog.split('\n').filter((line) => line.includes('失败') && !line.includes('/api/bdc'))
   console.log('服务端失败行：' + (bad.length ? bad.slice(0, 3).join(' | ') : 'none'))
 } finally {

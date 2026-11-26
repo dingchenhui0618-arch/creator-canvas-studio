@@ -1,16 +1,26 @@
-// 运营位（用户说的「广告模块」）的真源（r319，2026-11-26）
+// 运营位（用户说的「广告模块」）在前端这边的真源：类型 + 筛选规则 + 本地那份记录。
 //
-// 竞品（即梦 / LibTV / RunningHub / Picset）的首页与工作台都挂着运营位：
-// 新功能说一句、会员/点数推一下。我们以前一处都没有——用户进来只看到能力卡，
-// 不知道最近出了什么、也不知道该往哪走。
-//
-// 这一步先做最小可用：内容写在这一个文件里，位置由 placement 决定，
-// 能不能看见由 from / until / internal / 关掉的记录一起决定；关掉记在浏览器本地。
-// 下一步（r320）把这份数组变成服务端默认值 + 后台可编辑，位置与组件不用动。
+// r319 内容也写在这个文件里；r320 搬到服务端（server/promos.mjs + 后台「运营位」卡）：
+// 运营位天生要随时改（新功能说一句、活动推一下、过期就撤），写在前端文件里改一句话就得发一版。
+// 现在这里只剩三件事：结构长什么样、这一条现在该不该显示、关掉过哪几条。
 import type { Page } from './types'
 
-/** 运营位挂在哪一屏。加位置要同时在页面里放一个 <PromoSlot placement="…">。 */
-export type PromoPlacement = 'overview' | 'templates' | 'recharge'
+/** 运营位挂在哪一屏。加位置要同时在页面里放一个 <PromoSlot placement="…">。
+ *  这份名单必须与 server/promos.mjs 的 PROMO_PLACEMENTS 一致（test/promos.test.mjs 会对着比）。 */
+export const PROMO_PLACEMENTS = ['overview', 'templates', 'recharge'] as const
+
+export type PromoPlacement = (typeof PROMO_PLACEMENTS)[number]
+
+/**
+ * 运营位按钮能跳到哪些页面。这份名单与 src/domain/types.ts 的 Page、server/promos.mjs 的 PROMO_PAGES
+ * 是同一个东西的三份副本——这里不直接 import types.ts，是因为 test/promos.test.mjs 要用 node 直接跑
+ * 这个模块（node 的 ESM 认不出没有扩展名的 './types' 运行时导入）；test/promos.test.mjs
+ * 会把这三份逐个比对，少一个就红。
+ */
+export const PROMO_PAGES: readonly Page[] = [
+  'login', 'overview', 'projects', 'agents', 'agent-editor', 'canvas', 'board', 'runs',
+  'settings', 'radar', 'templates', 'assets', 'review', 'rooms', 'recharge', 'local',
+]
 
 export type Promo = {
   id: string
@@ -32,59 +42,14 @@ export type Promo = {
   internal?: boolean
 }
 
+/** 关掉了哪几条：记在这台机器的浏览器里，换个设备会重新出现。 */
 export const PROMO_DISMISS_KEY = 'vq_promos_dismissed'
+
+/** 上一次从服务端拿到的内容：为了让第二次打开时运营位立刻在位，不用等请求回来才插入。 */
+export const PROMO_CACHE_KEY = 'vq_promos_cache'
 
 /** 同一个位置最多显示几条（组件默认值；页面可以用 max 覆盖）。 */
 export const PROMO_MAX_PER_PLACEMENT = 2
-
-/**
- * 运营位内容。写文案的三条规矩：
- *   1. 只说我们已经真跑通过的能力，不把「计划做」写成「已经能」；
- *   2. 涉及扣费就写明扣多少、失败怎么办（房间那条写的是每轮 1 积分、失败全额退回）；
- *   3. 一句话说清「点进去能拿到什么」，不写「赋能 / 一站式 / 全新升级」这类空话。
- */
-export const PROMOS: readonly Promo[] = [
-  {
-    id: 'rooms-beta',
-    placement: 'overview',
-    weight: 20,
-    kicker: 'Beta · 聊天室',
-    title: '把几个智能体放进同一个房间',
-    body: '房间里你说一句，平台智能体接一句：起草、拆结构、找选题。每轮 1 积分，答不上来全额退回。',
-    cta: '去聊天室',
-    page: 'rooms',
-  },
-  {
-    id: 'radar-to-template',
-    placement: 'overview',
-    weight: 10,
-    kicker: '复刻主线',
-    title: '从一条爆款到一份可复用模板',
-    body: '爆款雷达搜抖音与小红书，拆出钩子、结构与分镜；落进模板库就能直接拿去改编。',
-    cta: '去爆款雷达',
-    page: 'radar',
-  },
-  {
-    id: 'review-evidence',
-    placement: 'overview',
-    weight: 0,
-    kicker: '视觉评审',
-    title: '按帧给结论，每条带证据',
-    body: '抽帧逐条标出问题与像素锚点，评审结论可以回写到作品，作为封版依据。',
-    cta: '去视觉评审',
-    page: 'review',
-  },
-  {
-    id: 'template-source-footprint',
-    placement: 'templates',
-    weight: 10,
-    kicker: '模板库',
-    title: '每条模板都记着它从哪来',
-    body: '模板会写下解析来源与用了几次；改编出的作品也回指这条模板，方便回头找同款结构。',
-    cta: '去爆款雷达',
-    page: 'radar',
-  },
-]
 
 /** 今天的日历日（YYYY-MM-DD，本地时区）——运营位的起止日期按本地日算。 */
 export function todayKey(date: Date = new Date()): string {
@@ -132,6 +97,32 @@ export function readDismissedPromos(raw: string | null | undefined): string[] {
     const parsed = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
     return parsed.filter((item): item is string => typeof item === 'string' && item.length > 0)
+  } catch {
+    return []
+  }
+}
+
+/** 一条运营位至少要有这些字段才敢拿去渲染；page / placement 还必须在白名单里。 */
+function isPromo(value: unknown): value is Promo {
+  if (!value || typeof value !== 'object') return false
+  const item = value as Record<string, unknown>
+  const text = (key: string) => typeof item[key] === 'string' && (item[key] as string).length > 0
+  if (!text('id') || !text('kicker') || !text('title') || !text('body') || !text('cta') || !text('page')) return false
+  if (!PROMO_PLACEMENTS.includes(item.placement as PromoPlacement)) return false
+  // 页面也要在白名单里：后台把按钮指到一个不存在的页面时，这条就当不存在（不给一个点了没反应的按钮）
+  return PROMO_PAGES.includes(item.page as Page)
+}
+
+/**
+ * 读本地缓存的那份内容。本地存储是用户能改的（也是旧版本写的），
+ * 不校验就等于把渲染交给外部输入：形状不对的整条丢掉，不是整份丢掉。
+ */
+export function parsePromoCache(raw: string | null | undefined): Promo[] {
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(isPromo)
   } catch {
     return []
   }

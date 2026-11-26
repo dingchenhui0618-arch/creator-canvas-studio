@@ -127,10 +127,11 @@
     transform var(--dur-1) var(--ease-out);
 }
 
+/* 抬起交给了动效层（src/styles/motion.css 的 .vq-lift）：全站卡片同一条手感（2px）。
+   以前这里自己写 -1px，工作台/模板库改成 -2px 之后，作品流会显得「抬不动」。 */
 .vq-project-card:hover {
   border-color: var(--line-strong);
   box-shadow: var(--shadow-raise);
-  transform: translateY(-1px);
 }
 
 .vq-project-card:focus-visible {

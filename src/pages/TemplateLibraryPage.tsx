@@ -27,6 +27,8 @@ import { createProject } from '../api/projects'
 import { ReplicateModal } from '../components/ReplicateModal'
 import { manualMediaItem } from '../domain/video-link'
 import { TrashModal, type TrashSource } from '../components/TrashModal'
+import PromoSlot from '../components/PromoSlot'
+import type { Page } from '../domain/types'
 import { deletedLabel, leftDays } from '../domain/trash'
 import { ReportModal } from '../components/ReportModal'
 import type { ReportTarget } from '../api/reports'
@@ -91,6 +93,7 @@ export function TemplateLibraryPage({
   onToast,
   onBack,
   onOpenCanvas,
+  onNavigate,
   onOpenProject,
   templateId,
   onOpenTemplate,
@@ -99,6 +102,8 @@ export function TemplateLibraryPage({
   onToast: (message: string) => void
   onBack: () => void
   onOpenCanvas: (flowId?: string) => void
+  /** 运营位的按钮要能跳到任意页面；没传就不显示运营位（不给出点了没反应的按钮）。 */
+  onNavigate?: (page: Page) => void
   onOpenProject: (projectId: string) => void
   /** 地址里的单条模板（#/templates/<id>）：刷新、后退、从作品页点进来都落在这条上 */
   templateId?: string
@@ -412,6 +417,9 @@ export function TemplateLibraryPage({
         }
       />
 
+      {/* 运营位（r320）：内容在服务端，后台「运营位」卡可改；这个位置的默认内容讲模板的来源足迹 */}
+      {onNavigate ? <PromoSlot placement="templates" onNavigate={onNavigate} /> : null}
+
       {/* 一条都没读回来又报着错时，不能把 0 当成「库是空的」摆出来（r265）：
           那样用户会以为模板全没了，而真正的原因在下面那句报错里。 */}
       {error && !items.length ? null : (
@@ -541,9 +549,9 @@ export function TemplateLibraryPage({
           </div>
         )
       ) : (
-        <div className="template-grid">
+        <div className="template-grid vq-stagger">
           {items.map((item) => (
-            <article className="template-card" key={item.id} onClick={() => openTemplate(item.id)}>
+            <article className="template-card vq-lift" key={item.id} onClick={() => openTemplate(item.id)}>
               <div className="template-cover">
                 <CoverImage
                   src={coverFor(item)}

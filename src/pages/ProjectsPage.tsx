@@ -391,9 +391,9 @@ export default function ProjectsPage({
       ) : null}
 
       {items.length ? (
-        <div className="vq-projects-grid">
+        <div className="vq-projects-grid vq-stagger">
           {items.map((item) => (
-            <button type="button" className="vq-project-card" key={item.id} onClick={() => onOpenProject(item.id)}>
+            <button type="button" className="vq-project-card vq-lift" key={item.id} onClick={() => onOpenProject(item.id)}>
               <span className="vq-project-card-head">
                 <span className="vq-project-card-tags">
                   <ProjectStatusPill project={item} reviews={reviewsForVersion(item.versionCounts || {}, item.version)} decision={item.decision ?? null} />
