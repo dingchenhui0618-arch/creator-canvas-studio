@@ -917,12 +917,50 @@ select:focus-visible {
   color: var(--muted);
   font-size: 14px;
   text-align: left;
-  transition: background 0.14s ease, color 0.14s ease;
+  transition: background 0.14s ease, color 0.14s ease, transform 0.14s ease;
 }
 
 .vq-nav-item:hover {
   background: var(--line-faint);
   color: var(--ink);
+}
+
+/* r332 · 按下反馈（第二批）：外壳这一层 + 全站文字链接。
+   r331 的 scripts/audit-press.mjs 在 136 个按钮里量出 73 个「按下去和悬停一模一样」，
+   外壳这一簇是其中最常点的：12 个侧栏导航项、账号行、版本号、模型、顶栏账号。
+   它们都不是 .vq-button，tokens.css 那条全站按下规则够不到，所以在自己的文件里补齐；
+   口径与 .vq-button 完全一致：按下去统一 1px（悬停的底色还在，不额外换色）。
+   权重取 :not(:disabled):active（0,3,0），压过 .vq-nav-item.is-active（0,2,0），
+   所以「当前这一项」按下去也有反应。文字链接是行内元素、位移看着像抖了一下，只压一层底。
+   四家的 transition 以前只写了两三个属性，把 transform 补进去，和 .vq-button 一样 120–140ms 回落。 */
+.vq-sidebar-account-row,
+.vq-version-trigger,
+.vq-model-trigger,
+.vq-topbar-account-trigger {
+  transition: background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease, transform 0.14s ease;
+}
+
+.vq-nav-item:not(:disabled):active,
+.vq-sidebar-account-row:not(:disabled):active,
+.vq-version-trigger:not(:disabled):active,
+.vq-model-trigger:not(:disabled):active,
+.vq-topbar-account-trigger:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+.vq-link:not(:disabled):active {
+  background: var(--line-faint);
+  color: var(--ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vq-nav-item:not(:disabled):active,
+  .vq-sidebar-account-row:not(:disabled):active,
+  .vq-version-trigger:not(:disabled):active,
+  .vq-model-trigger:not(:disabled):active,
+  .vq-topbar-account-trigger:not(:disabled):active {
+    transform: none;
+  }
 }
 
 .vq-nav-item.is-active {

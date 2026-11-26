@@ -9,11 +9,15 @@
 //      按下之后**不在原地松开**——先挪到视口里的中性点再松，所以这一轮不会合成 click，
 //      不给后台写请求、不跳页。后台写请求总数写在报告里。
 //   3) 量不到就写「量不到」，绝不把「没量到」写成「无反馈」。
+//   4) r332 起：判定仍按「按下两帧」那一拍（与 r331 的数字可比），但还按着再等 200ms 读一次终值
+//      （pressedSettled / changedSettledVsHover）。过渡没走完的采样会被单列成 settledRescued，
+//      不混进「真的没反应」——promo 卡上那几颗就是这么回事（r331 也记过一次）。
 //
 // 用法（同一份脚本跑两份产物）：
 //   node scripts/audit-press.mjs --dist .shots330/dist-after --out .shots331/press
 //   node scripts/audit-press.mjs --dist .shots331/dist-after --out .shots331/press-after
 //   node scripts/audit-press.mjs --only overview,admin-promos
+//   node scripts/audit-press.mjs --only shell --shots all   # 每一颗按下都截图（before/after 对比图）
 //
 // 产物：<out>/press.json + <out>/<page>-<n>-press.png（只给「按下无反馈候选」）
 import { spawn } from 'node:child_process'
@@ -32,6 +36,10 @@ function argOf(name, fallback) {
 const ONLY = String(argOf('only', '')).split(',').map((item) => item.trim()).filter(Boolean)
 const DIST_DIR = path.resolve(ROOT, String(argOf('dist', '.shots330/dist-after')))
 const OUT_DIR = path.resolve(ROOT, String(argOf('out', '.shots331/press')))
+// r332：--shots candidates（默认，只给「按下无反馈候选」截图）| all（每一颗按下都截一张，
+// 用来做同一颗的 before/after 对比图）+ --shotsize N（方形窗口边长，默认 120）。
+const SHOTS = String(argOf('shots', 'candidates'))
+const SHOT_SIZE = Number(argOf('shotsize', '120')) || 120
 const WIDTH = 1440
 const HEIGHT = 1000
 if (!fs.existsSync(path.join(DIST_DIR, 'index.html'))) throw new Error('dist 里没有 index.html：' + DIST_DIR)
@@ -784,15 +792,26 @@ async function goto(route, anchor, who = 'user') {
 }
 
 const shots = []
-async function shotClip(name, selector, size = 120) {
+async function shotClip(name, selector, size = 120, pad = null) {
   const box = await evaluate('(function () { var el = document.querySelector(' + JSON.stringify(selector) + '); if (!el) return null; var r = el.getBoundingClientRect(); return { x: r.left + window.scrollX, y: r.top + window.scrollY, w: r.width, h: r.height } })()')
   if (!box) return null
-  const half = size / 2
-  const x = Math.max(0, box.x + box.w / 2 - half)
-  const y = Math.max(0, box.y + box.h / 2 - half)
+  // size = 以元素中心开的方形窗口；pad = 贴着元素外扩几像素（行式控件用它才看得全整行）
+  let x, y, width, height
+  if (pad === null) {
+    const half = size / 2
+    x = Math.max(0, box.x + box.w / 2 - half)
+    y = Math.max(0, box.y + box.h / 2 - half)
+    width = size
+    height = size
+  } else {
+    x = Math.max(0, box.x - pad)
+    y = Math.max(0, box.y - pad)
+    width = box.w + pad * 2
+    height = box.h + pad * 2
+  }
   let captured
   try {
-    captured = await cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true, clip: { x: x, y: y, width: size, height: size, scale: 1 } })
+    captured = await cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true, clip: { x: x, y: y, width: width, height: height, scale: 1 } })
   } catch (error) {
     return { file: null, error: String((error && error.message) || error) }
   }
@@ -800,7 +819,7 @@ async function shotClip(name, selector, size = 120) {
   const file = path.join(OUT_DIR, name)
   fs.writeFileSync(file, buffer)
   const dim = pngSize(buffer)
-  const row = { file: name, bytes: buffer.length, pixel: dim, clip: { x: Math.round(x), y: Math.round(y), size: size } }
+  const row = { file: name, bytes: buffer.length, pixel: dim, clip: pad === null ? { x: Math.round(x), y: Math.round(y), size: size } : { x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height), pad: pad } }
   shots.push(row)
   console.log('SHOT ' + name + ' · ' + row.bytes + ' B · ' + (dim ? dim.width + 'x' + dim.height : '尺寸读不到'))
   return row
@@ -899,8 +918,28 @@ async function pressOne(pageId, pageLabel, item) {
     else out.verdict = 'active-not-matched'
 
     // ④ 按下那一刻的截图（还在按着）——只给「无反馈候选」
-    if (out.verdict === 'pressed-no-feedback') {
-      out.screenshot = await shotClip(pageId + '-' + item.n + '-press.png', item.selector)
+    if (SHOTS === 'all') {
+      out.screenshot = await shotClip(pageId + '-' + item.n + '-press.png', item.selector, SHOT_SIZE, 8)
+    } else if (out.verdict === 'pressed-no-feedback') {
+      out.screenshot = await shotClip(pageId + '-' + item.n + '-press.png', item.selector, SHOT_SIZE)
+    }
+
+    // ④b 还按着，等过渡走完再看一眼终值。两帧只能看到 120ms ease 的中间值（实测 0.44px），
+    //     「规则里声明了 1px、实际被谁盖掉 / 过渡永远走不完」只有稳态这一拍看得出来。
+    //     判定仍按 ③ 的两帧口径（和 r331 的数字可比），这一拍作为附加证据进产物。
+    await sleep(200)
+    const settled = await evaluate('(' + readState.toString() + ')(' + JSON.stringify(item.selector) + ')')
+    if (settled && !settled.missing) {
+      out.pressedSettled = {
+        active: settled.active,
+        backgroundColor: settled.backgroundColor,
+        borderColor: settled.borderColor,
+        color: settled.color,
+        boxShadow: settled.boxShadow,
+        transform: settled.transform,
+        opacity: settled.opacity,
+      }
+      out.changedSettledVsHover = diffProps(hover, settled).map((pair) => pair.prop)
     }
 
     // ⑤ 不在原地松开：挪到中性点再松（不合成 click）
@@ -1223,6 +1262,7 @@ const out = {
     props: PROPS.map((pair) => pair[1]),
     release: '不在原地 mouseReleased —— 先挪到视口里的中性点再松，不合成 click',
     candidate: 'pressActive=true 且 changed 为空 = 按下无反馈候选',
+    settled: '判定按上面两帧那一拍（与 r331 的数字可比）；还按着再等 200ms 读一次叫 pressedSettled / changedSettledVsHover，用来区分「真的没反应」和「过渡还没走到」（后者算采样抖动）',
   },
   seeds: seeded,
   overlays: overlayLog,
@@ -1248,6 +1288,8 @@ const out = {
     activeNotMatched: buttons.filter((row) => row.verdict === 'active-not-matched').length,
     disabled: buttons.filter((row) => row.verdict === 'disabled').length,
     readFailed: buttons.filter((row) => row.verdict === 'read-failed').length,
+    // 两帧那一拍是空的、但还按着等过渡走完后确实变了：说明反馈在，只是采样早了（别把它算成回归）
+    settledRescued: candidates.filter((row) => (row.changedSettledVsHover || []).length > 0).length,
     writeRequests: allWrites.length,
     upstreamCalls: upstream.length,
     anomalies: anomalies.length,
@@ -1282,7 +1324,7 @@ for (const row of passes) {
   console.log(pad(row.id, 18) + pad('可见可点 ' + row.total, 14) + pad('量了 ' + row.measured, 10) + pad('有反馈 ' + row.feedback, 12) + pad('候选 ' + row.noFeedback, 10) + pad('active没匹配 ' + row.activeNotMatched, 18) + pad('禁用 ' + row.disabled, 10) + pad('读不到 ' + row.readFailed, 12) + pad('写请求 ' + row.writeRequests, 12) + (row.aborted || ''))
 }
 console.log('')
-console.log('---- r331 巡检 · ' + out.summary.buttonsMeasured + ' 个按钮 / ' + passes.length + ' 趟 · 无反馈候选 ' + candidates.length + ' · 写请求 ' + allWrites.length + ' · 上游 ' + upstream.length + ' · 证据 ' + path.join(path.relative(ROOT, OUT_DIR), 'press.json') + ' ----')
+console.log('---- 按下巡检 · ' + out.summary.buttonsMeasured + ' 个按钮 / ' + passes.length + ' 趟 · 无反馈候选 ' + candidates.length + ' · 写请求 ' + allWrites.length + ' · 上游 ' + upstream.length + ' · 证据 ' + path.join(path.relative(ROOT, OUT_DIR), 'press.json') + ' ----')
 
 try { chrome.kill() } catch { /* 已经退出 */ }
 try { server.kill() } catch { /* 已经退出 */ }

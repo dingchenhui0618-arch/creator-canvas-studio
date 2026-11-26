@@ -1183,3 +1183,49 @@ has-feedback，记为**测量抖动**，不当成回归。）
 
 边界：抽屉只在 1440×1000 与 390×844 两个视口重量；触控区是 computed 值（四个宽度），没有逐机型截图；
 巡检判的是「按下时有没有属性变化」，不判「该不该有」；后台排序这一轮仍然只有「上移 / 下移」一条路。
+
+## 三百七十八、按下反馈第二批：外壳 16 条、文字链接 6 条、agents 22 条（r332 / v0.9.304）
+
+还是「小的细枝末节」。§377 把 136 个按钮里 **73 条「按下去和悬停一模一样」**列成了清单，
+这一轮从**整站最常点的控件**开始清，清掉 **44 条**。
+
+**先更正上一轮一句话**：§377 结尾写的「侧栏 18 个导航项一个都没有按下反馈」不准确——实际是
+**12 个导航项 + 4 个触发器 = 16 条**。18 是外壳那一趟的按钮总数，其中 2 颗（侧栏收起、搜索触发器）本来就有。
+
+**① 外壳 16 条**（[src/styles/shell.css](src/styles/shell.css)）：12 个 `.vq-nav-item` 与账号行、版本号、模型、顶栏账号，
+按下前 `transform: none`（和悬停一模一样），现在统一 `translateY(1px)`——与 `.vq-button` 同一套口径，
+**只位移、不换色**（悬停的底色还在）。权重写 `.vq-nav-item:not(:disabled):active`（0,3,0）压过
+`.vq-nav-item.is-active`（0,2,0），所以**当前这一项按下去也有反应**；四家的 `transition` 里补上 `transform`，
+按下与松开的 1px 有 140ms 过渡而不是瞬跳；`prefers-reduced-motion` 里关掉位移。
+
+**② 6 个文字链接**（overview 上的「全部评审 / 全部作品 / 全部模板 / 上手指引…」）：
+它是 `display: inline-flex` 的**行内元素**，位移会让整段字看起来抖一下，所以只压一层 `--line-faint` 的底
+（与 `.vq-button` 悬停底色同一档）。after 实测 `background-color` 从透明变 `rgba(17,17,17,.06)`。
+
+**③ agents 22 条**（队友 agents-chat 并行做，[src/styles/agents.css](src/styles/agents.css)）：快捷创作的
+对话 / 图片 / 视频、平台对话 / 对话预设、读链接 / 思考模式 / 附件、新对话，以及对话预设页的模型胶囊与 5 个分类页签。
+只改 background / border-color / color（**不用 transform**），六组选择器的权重都压过各自的 `.is-active`，
+窄屏那条 `.vq-content .agx-page …` 的 4 类权重也算了进去。他另交 [test/press-agx.test.mjs](test/press-agx.test.mjs)（6 条 + 5 组反证）。
+
+**证据是同一份巡检、同一批屏、两份产物**：before（0.9.303 / `index-D9Wtr6mf.js`）**54 有反馈 / 73 候选 / 9 禁用**
+→ after（0.9.304 / `index-CDUNYuqb.js`，**就是这次发布上去的那份**）**98 / 29 / 9**。逐簇清空：
+**外壳 16 → 0**、**6 个链接 → 0**、**agents 9 → 0**、**agents-presets 13 → 0**。
+
+![按下反馈 before / after：文字链接与分类页签真的多了一层底；侧栏导航是 1px 位移，按元素矩形裁图看不出位移本身，只看数字](docs/r332-press-before-after.png)
+
+顺手把巡检的两条口径补上：**还按着、等过渡走完再读一次终值**（`pressedSettled` / `changedSettledVsHover` /
+`summary.settledRescued`）——运营位那 4 颗反馈带 transition，两帧有时落在过渡开始之前，读到的就是悬停值；
+r331 已经记过一次这种现象，现在把它们单列成**采样抖动**（同一份产物两次跑：候选 31 / 29，抖动 3 / 1），
+判定仍按两帧那一拍，与 r331 的 73 可比。截图新增 `--shots all` 与贴元素 8px 的裁法（这张对比图就是它出的）。
+
+门禁：`npm test` **2156 / 2156**（+8，两边都带反证）、`tsc -b` 干净、`oxlint` 0 error / 30 warning（770 文件）、
+密钥扫描 1225 个文件无命中。入口 `index-CDUNYuqb.js`（873,536 B）。发布标签 `20261127-0002-r332press`，
+快照 `/opt/visionqa/releases/20261126-160323-20261127-0002-r332press.tar.gz`；公网 `/api/version` **0.9.304**、
+health ok templates 27、新入口 200、上一版入口 `index-D9Wtr6mf.js` 404、两服务 active。
+完整记录见 [docs/r332-press-details-2026-11-27.md](docs/r332-press-details-2026-11-27.md)。
+
+边界：只量 1440×1000；判的是「按下那一刻有没有属性变化」，不判「该不该有」。剩下的 **28 条**在
+`.ov-cap-action`（11）、模板筛选项（6）、作品流（10）、模板抽屉（1）；其中带 `.vq-card-open` 的那几颗
+**不能照这轮补位移**——r326 量过，位移会让整卡热区在按下瞬间塌成按钮那么大，它们要照
+`.vq-card-open:active::after` 的路子做，下一轮专门处理。
+

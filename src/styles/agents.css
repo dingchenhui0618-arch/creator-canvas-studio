@@ -4057,3 +4057,42 @@
   .qc-search-item { min-height: 40px; }
   .qc-search-title { max-width: 150px; }
 }
+
+/* r332：按下反馈（agents 页那一簇）。
+   r331 真按了 136 个按钮，这一簇 22 颗「按下去与悬停一模一样」：快捷创作的
+   对话 / 图片 / 视频、平台对话 / 对话预设、读链接 / 思考模式 / 附件、新对话，
+   以及对话预设页的模型胶囊与分类页签。
+   只加 :active：权重压过各自的 .is-active（含窄屏那条 .vq-content … 的 4 类权重），
+   当前选中的那颗按下去也有反应；只改 background / border-color / color，不用 transform。 */
+.agx-mode-tabs button:not(:disabled):active {
+  color: var(--ink);
+  background: var(--line-faint);
+}
+
+.agx-surface-switch button:not(:disabled):active {
+  border-color: var(--ink);
+  color: var(--ink);
+  background: var(--line-faint);
+}
+
+.agx-page .agx-capsule-trigger:not(:disabled):active {
+  color: var(--ink);
+  background: var(--line-faint);
+}
+
+.qc-new:not(:disabled):active {
+  border-color: var(--ink);
+  color: var(--ink);
+  background: var(--line-faint);
+}
+
+.qc-tool:not(:disabled):active {
+  border-color: var(--ink);
+  color: var(--ink);
+  background: var(--line-faint);
+}
+
+.vq-content .agx-page .agx-tabs button:not(:disabled):active {
+  color: var(--ink);
+  background: var(--line-faint);
+}
