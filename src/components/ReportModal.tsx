@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { AlertTriangle, Check, Loader2, X } from 'lucide-react'
 import { submitReport, type ReportCategory, type ReportTarget } from '../api/reports'
 import { Select } from './Select'
+import { useModalFocus } from './useModalFocus'
 import '../styles/shell.css'
 
 // 举报侵权 / 不当内容：不要求登录。只填「类型 + 具体情况」就能提交；
@@ -29,6 +30,9 @@ export function ReportModal({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [done, setDone] = useState<{ id: string; duplicate: boolean } | null>(null)
+  // r328：焦点收进来、Tab 关在里面、背景不跟着滚、关掉之后回到那颗按钮；Esc 也顺手补上
+  const dialogRef = useRef<HTMLDivElement | null>(null)
+  useModalFocus(dialogRef, true, { initial: 'first', lockScroll: true, onEscape: onClose })
 
   const submit = async () => {
     if (detail.trim().length < 5) {
@@ -50,7 +54,14 @@ export function ReportModal({
 
   return (
     <div className="vq-modal-backdrop" onMouseDown={onClose}>
-      <div className="vq-update-modal vq-report-modal" role="dialog" aria-modal="true" aria-labelledby="vq-report-title" onMouseDown={(event) => event.stopPropagation()}>
+      <div
+        ref={dialogRef}
+        className="vq-update-modal vq-report-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="vq-report-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
         <div className="vq-update-head">
           <div>
             <span className="vq-mono">Report / 举报</span>

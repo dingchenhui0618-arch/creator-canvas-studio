@@ -4,6 +4,7 @@
 // 数字全部来自真实接口（模板、作品、交付、积分单价与余额）：哪一步还没有就把人送去哪一步，不写死。
 import { ArrowRight, Clapperboard, Compass, Package, ScanSearch, Scissors, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useModalFocus } from './useModalFocus'
 import { useSiteInfo } from '../api/app'
 import { getCredits, type CreditsResponse } from '../api/credits'
 import { listDeliveries, listProjects } from '../api/projects'
@@ -102,22 +103,17 @@ export function WelcomeGuide({ onClose, onGo }: Props) {
     }
   }, [])
 
-  // 打开时把焦点放进弹窗，Esc 关闭；滚动锁在 body 上，避免背景跟着滚。
+  // r328：焦点、Tab 兜底、背景锁滚与「关掉之后回到那颗按钮」统一交给 useModalFocus。
+  // Esc 自己留着：这个浮层要 stopPropagation，不能让底下的页面顺手也处理一次。
+  useModalFocus(dialogRef, true, { initial: 'first', lockScroll: true })
   useEffect(() => {
-    closeRef.current?.focus()
-    const previous = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.stopPropagation()
-        onClose()
-      }
+      if (event.key !== 'Escape') return
+      event.stopPropagation()
+      onClose()
     }
     document.addEventListener('keydown', onKey)
-    return () => {
-      document.body.style.overflow = previous
-      document.removeEventListener('keydown', onKey)
-    }
+    return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
 
   const go = useCallback(

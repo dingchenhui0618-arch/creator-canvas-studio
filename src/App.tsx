@@ -25,6 +25,7 @@ import './styles/shell.css'
 import './styles/overview.css'
 import { NavItem } from './components/ui'
 import { CommandPalette } from './components/CommandPalette'
+import { useModalFocus } from './components/useModalFocus'
 import type { PaletteCommand } from './domain/commands'
 import { ASSET_NAV, DESKTOP_NAV, PRIMARY_NAV, SETTINGS_NAV, TOOL_NAV, WORKFLOW_NAV, isNavActive, isToolPage, type NavEntry } from './nav'
 import { getDesktop } from './desktop/bridge'
@@ -335,6 +336,12 @@ function Workbench({
 
   // 还没保存就走（r270）：页面登记、路由挂起、这里出弹窗——三处共用同一个真源
   const leaveRequest = useLeaveRequest()
+  // r328：两个整屏浮层的键盘边界。离开拦截是 alertdialog，autoFocus 已经指定了两颗按钮里安全的那颗
+  // （「留在这页」），所以这一层的初始焦点不抢；版本信息是普通 dialog，焦点落在右上角关闭。
+  const leaveRef = useRef<HTMLDivElement | null>(null)
+  const updateRef = useRef<HTMLDivElement | null>(null)
+  useModalFocus(leaveRef, Boolean(leaveRequest), { initial: 'none', lockScroll: true })
+  useModalFocus(updateRef, updateOpen, { initial: 'first', lockScroll: true })
 
   // 工作流是 beta，只对管理员开放（r313）：判定只活在 domain/features 一处，
   // 侧栏、命令面板、各页面、#/canvas 落地页都读它，免得这里放行了、那里还藏着入口。
@@ -1290,6 +1297,7 @@ function Workbench({
       {leaveRequest && (
         <div className="vq-modal-backdrop" onMouseDown={cancelLeave}>
           <div
+            ref={leaveRef}
             className="vq-leave-modal"
             role="alertdialog"
             aria-modal="true"
@@ -1317,6 +1325,7 @@ function Workbench({
       {updateOpen && (
         <div className="vq-modal-backdrop" onMouseDown={() => setUpdateOpen(false)}>
           <div
+            ref={updateRef}
             className="vq-update-modal"
             role="dialog"
             aria-modal="true"

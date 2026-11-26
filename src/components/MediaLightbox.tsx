@@ -1,5 +1,6 @@
-import type { ReactNode, RefObject } from 'react'
+import { useRef, type ReactNode, type RefObject } from 'react'
 import { X } from 'lucide-react'
+import { useModalFocus } from './useModalFocus'
 import '../styles/media-lightbox.css'
 
 /**
@@ -37,8 +38,13 @@ export default function MediaLightbox({
   /** 视频点开就播（静音自动播，浏览器才不拦）；用户要声音自己按喇叭 */
   videoAutoPlay?: boolean
 }) {
+  const boxRef = useRef<HTMLDivElement | null>(null)
+  // r328：看大图也是模态的——焦点收进来（右上角关闭），Tab 关在里面，背景不跟着滚。
+  // Esc 从这里统一处理：焦点可能停在底部的「上一张」上，不再是「按在空白处」。
+  useModalFocus(boxRef, true, { initial: 'first', lockScroll: true, onEscape: onClose })
   return (
     <div
+      ref={boxRef}
       className="vq-lightbox"
       role="dialog"
       aria-modal="true"

@@ -1,5 +1,7 @@
+import { useRef } from 'react'
 import { ArrowRight, X } from 'lucide-react'
 import type { ProjectVersionScriptSnapshot } from '../domain/project'
+import { useModalFocus } from './useModalFocus'
 
 // 某一版开新版时存下的脚本（v0.9.114）。
 // 只读：这里展示的是快照原文，不在弹窗里改脚本；要改去当前版改。
@@ -15,11 +17,16 @@ export type VersionScriptState = {
 }
 
 export function VersionScriptModal({ state, onClose }: { state: VersionScriptState; onClose: () => void }) {
+  const dialogRef = useRef<HTMLDivElement | null>(null)
+  // r328：焦点收进来（右上角关闭）、Tab 关在里面、关掉之后回到那颗「看脚本」的按钮。
+  // 背景锁滚留给作品页那一层（它自己会锁）：两层都锁的话，先关的那层会把后关的恢复覆盖掉。
+  useModalFocus(dialogRef, state.open, { initial: 'first' })
   if (!state.open) return null
   const script = state.script
   return (
     <div className="vq-modal-backdrop" onMouseDown={onClose}>
       <div
+        ref={dialogRef}
         className="vq-verscript-modal"
         role="dialog"
         aria-modal="true"

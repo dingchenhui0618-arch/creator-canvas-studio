@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArchiveRestore, RefreshCw, Trash2, X } from 'lucide-react'
 import type { ToastFn } from '../domain/toast'
+import { useModalFocus } from './useModalFocus'
 
 // 回收站（r271 起通用）：删掉的东西先来这里，留 N 天再真清。
 // 编导误删一条解析了很久的模板，不该只能再花 10 积分重新拆一遍；
@@ -64,11 +65,9 @@ export function TrashModal({
 
   useEffect(() => { load() }, [load])
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  // r328：焦点收进来（右上角关闭）、Tab 关在里面、背景不跟着滚、关掉之后回到那颗按钮。
+  const dialogRef = useRef<HTMLDivElement | null>(null)
+  useModalFocus(dialogRef, true, { initial: 'first', lockScroll: true, onEscape: onClose })
 
   const restore = (item: TrashEntry) => {
     setBusyId(item.id)
@@ -98,7 +97,14 @@ export function TrashModal({
 
   return (
     <div className="trash-backdrop" onMouseDown={onClose}>
-      <div className="trash-modal" role="dialog" aria-modal="true" aria-label={source.ariaLabel} onMouseDown={(event) => event.stopPropagation()}>
+      <div
+        ref={dialogRef}
+        className="trash-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={source.ariaLabel}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
         <header className="trash-head">
           <div>
             <span className="section-kicker">{source.kicker}</span>

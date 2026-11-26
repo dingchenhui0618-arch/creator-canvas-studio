@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ArrowLeftRight, Printer, X } from 'lucide-react'
 import { compareProjectVersions, compareSheetUrl } from '../api/projects'
 import { REVIEW_VERDICT_LABEL, deliveryDrift, deliveryDriftText, deliveryReviewText, issueGap, issueLine } from '../domain/review'
+import { useModalFocus } from './useModalFocus'
 import type {
   ProjectVersionCompare,
   ProjectVersionCompareField,
@@ -202,6 +203,11 @@ export function VersionCompareModal({
   /** 打印纸在新标签打开；由作品页接管弹窗拦截提示，不在弹窗里各写一套 */
   onPrint?: (url: string, blocked: string) => void
 }) {
+  // r328：焦点收进来（右上角关闭）、Tab 关在里面、关掉之后回到「两版对照」那颗按钮。
+  // 背景锁滚在作品页那一层（它自己会锁），这里不重复锁，免得两层互相把对方的恢复覆盖掉。
+  const dialogRef = useRef<HTMLDivElement | null>(null)
+  useModalFocus(dialogRef, true, { initial: 'first' })
+
   const has = (n: number) => versions.some((item) => item.n === n)
   const fallback = versions.find((item) => item.n < initialTarget)?.n || versions[0]?.n || 1
   const [base, setBase] = useState(has(initialBase) && initialBase !== initialTarget ? initialBase : fallback)
@@ -264,6 +270,7 @@ export function VersionCompareModal({
   return (
     <div className="vq-modal-backdrop" onMouseDown={onClose}>
       <div
+        ref={dialogRef}
         className="vq-vcompare-modal"
         role="dialog"
         aria-modal="true"

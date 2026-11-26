@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { AlertTriangle, Check, Loader2, X } from 'lucide-react'
 import { submitFeedback, type FeedbackKind } from '../api/feedback'
+import { useModalFocus } from './useModalFocus'
 import '../styles/shell.css'
 
 // 应用内反馈：登录页与设置页共用。登录进不来的人也能交（匿名必须留联系方式），
@@ -31,6 +32,9 @@ export function FeedbackModal({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [done, setDone] = useState<{ id: string; duplicate: boolean } | null>(null)
+  // r328：焦点收进来、Tab 关在里面、背景不跟着滚、关掉之后回到那颗按钮；Esc 也顺手补上
+  const dialogRef = useRef<HTMLDivElement | null>(null)
+  useModalFocus(dialogRef, true, { initial: 'first', lockScroll: true, onEscape: onClose })
 
   const location = page || (typeof window !== 'undefined' ? window.location.hash.replace(/^#/, '') : '')
 
@@ -57,7 +61,14 @@ export function FeedbackModal({
 
   return (
     <div className="vq-modal-backdrop" onMouseDown={onClose}>
-      <div className="vq-update-modal vq-feedback-modal" role="dialog" aria-modal="true" aria-labelledby="vq-feedback-title" onMouseDown={(event) => event.stopPropagation()}>
+      <div
+        ref={dialogRef}
+        className="vq-update-modal vq-feedback-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="vq-feedback-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
         <div className="vq-update-head">
           <div>
             <span className="vq-mono">Support / 反馈</span>

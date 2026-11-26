@@ -3,6 +3,7 @@ import { Loader2, X } from 'lucide-react'
 import { listReviews, type ReviewFacets, type ReviewSummary } from '../api/review'
 import { ReviewHistoryRow } from './ReviewHistoryRow'
 import { Select } from './Select'
+import { useModalFocus } from './useModalFocus'
 
 // 「查看全部」：评审历史存最多 200 条，左侧那 6 条只够看最近发生过什么。
 // 这里做三件事：按结论 / 按作品筛，一页 20 条往下翻，点一条回到那次评审的证据页。
@@ -46,6 +47,7 @@ export default function ReviewHistoryModal({
   // 换筛选时上一页的请求可能还在路上：只认最新那一次的响应
   const seqRef = useRef(0)
   const closeRef = useRef<HTMLButtonElement | null>(null)
+  const dialogRef = useRef<HTMLDivElement | null>(null)
   // 作品 id → 标题：某一结论下这条作品一条都没有时，下拉里仍然要显示「正在筛哪条作品」
   const [titles, setTitles] = useState<Record<string, string>>({})
 
@@ -94,14 +96,9 @@ export default function ReviewHistoryModal({
     return () => window.clearTimeout(timer)
   }, [loadFirst])
 
-  useEffect(() => {
-    closeRef.current?.focus()
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  // r328：焦点（右上角关闭）、Tab 兜底、背景锁滚与「关掉之后还焦」交给 useModalFocus；
+  // Esc 跟着一起搬过去，从 window 冒泡改成捕获阶段——焦点在哪一格都算数。
+  useModalFocus(dialogRef, true, { initial: 'first', lockScroll: true, onEscape: onClose })
 
   const loadMore = () => {
     const seq = seqRef.current
@@ -142,6 +139,7 @@ export default function ReviewHistoryModal({
   return (
     <div className="review-history-backdrop" onMouseDown={onClose}>
       <div
+        ref={dialogRef}
         className="review-history-modal"
         role="dialog"
         aria-modal="true"

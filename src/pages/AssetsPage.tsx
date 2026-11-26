@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Expand,
   Images,
@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import PageHead from '../components/PageHead'
 import MediaLightbox from '../components/MediaLightbox'
+import { useModalFocus } from '../components/useModalFocus'
 import { AssetBuilder } from '../components/OnboardingGate'
 import { Pill } from '../components/ui'
 import {
@@ -88,6 +89,14 @@ export default function AssetsPage({ onToast }: { onToast: ToastFn }) {
   const [renameValue, setRenameValue] = useState('')
   const [deleting, setDeleting] = useState<Asset | null>(null)
   const [lightbox, setLightbox] = useState<{ asset: Asset; index: number } | null>(null)
+  // r328：这一页三个浮层的键盘边界（焦点进来、Tab 关在里面、背景不跟着滚、关掉之后还焦）。
+  // 改名的输入框自己带了 autoFocus，那一层不抢焦点。
+  const builderRef = useRef<HTMLDivElement | null>(null)
+  const renameRef = useRef<HTMLDivElement | null>(null)
+  const deleteRef = useRef<HTMLDivElement | null>(null)
+  useModalFocus(builderRef, Boolean(builderKind), { initial: 'first', lockScroll: true })
+  useModalFocus(renameRef, Boolean(renaming), { initial: 'none', lockScroll: true })
+  useModalFocus(deleteRef, Boolean(deleting), { initial: 'first', lockScroll: true })
   const [busyId, setBusyId] = useState('')
 
   const load = useCallback(async () => {
@@ -482,6 +491,7 @@ export default function AssetsPage({ onToast }: { onToast: ToastFn }) {
       {builderKind && (
         <div className="vq-modal-backdrop" onMouseDown={() => setBuilderKind(null)}>
           <div
+            ref={builderRef}
             className="vq-assets-modal"
             role="dialog"
             aria-modal="true"
@@ -529,6 +539,7 @@ export default function AssetsPage({ onToast }: { onToast: ToastFn }) {
       {renaming && (
         <div className="vq-modal-backdrop" onMouseDown={() => setRenaming(null)}>
           <div
+            ref={renameRef}
             className="vq-assets-dialog"
             role="dialog"
             aria-modal="true"
@@ -559,6 +570,7 @@ export default function AssetsPage({ onToast }: { onToast: ToastFn }) {
       {deleting && (
         <div className="vq-modal-backdrop" onMouseDown={() => setDeleting(null)}>
           <div
+            ref={deleteRef}
             className="vq-assets-dialog"
             role="alertdialog"
             aria-modal="true"

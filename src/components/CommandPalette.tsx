@@ -4,6 +4,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CornerDownLeft, Search } from 'lucide-react'
 import { matchCommands, type PaletteCommand } from '../domain/commands'
+import { useModalFocus } from './useModalFocus'
 import '../styles/command-palette.css'
 
 export function CommandPalette({ commands, onClose }: { commands: PaletteCommand[]; onClose: () => void }) {
@@ -11,7 +12,7 @@ export function CommandPalette({ commands, onClose }: { commands: PaletteCommand
   const [cursor, setCursor] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
-  const restoreRef = useRef<Element | null>(null)
+  const panelRef = useRef<HTMLDivElement | null>(null)
 
   const results = useMemo(() => matchCommands(commands, query), [commands, query])
 
@@ -25,16 +26,12 @@ export function CommandPalette({ commands, onClose }: { commands: PaletteCommand
     [results],
   )
 
-  // 打开时把焦点收进输入框、锁住背景滚动；关闭时把焦点还给打开它的控件。
+  // r328：Tab 兜底、背景锁滚与「关掉之后回到原来那颗」交给 useModalFocus；
+  // 这里只留「打开就落在输入框上」。Esc 也跟着搬过去——Tab 兜住之后焦点会停在
+  // 列表项上，原来挂在输入框上的那段 keydown 那时按不动。
+  useModalFocus(panelRef, true, { initial: 'none', lockScroll: true, onEscape: onClose })
   useEffect(() => {
-    restoreRef.current = document.activeElement
     inputRef.current?.focus()
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = previousOverflow
-      if (restoreRef.current instanceof HTMLElement && restoreRef.current.isConnected) restoreRef.current.focus()
-    }
   }, [])
 
   // 键盘选到看不见的项时，列表自己滚到那一行。
@@ -68,15 +65,12 @@ export function CommandPalette({ commands, onClose }: { commands: PaletteCommand
       runAt(cursor)
       return
     }
-    if (event.key === 'Escape') {
-      event.preventDefault()
-      onClose()
-    }
   }
 
   return (
     <div className="cp-backdrop" role="presentation" onMouseDown={onClose}>
       <div
+        ref={panelRef}
         className="cp-panel"
         role="dialog"
         aria-modal="true"

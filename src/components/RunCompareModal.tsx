@@ -14,6 +14,7 @@ import { NODE_META } from '../canvas/catalog'
 import { runSpentText, runStatusMeta } from '../domain/run'
 import { Pill } from './ui'
 import { Select } from './Select'
+import { useModalFocus } from './useModalFocus'
 import '../styles/run-compare.css'
 
 // 运行对照（v0.9.110）：只读弹窗。两条运行摆在一起，
@@ -230,11 +231,9 @@ export function RunCompareModal({ runId, onClose }: { runId: string; onClose: ()
     return () => { alive = false }
   }, [runId, withId, attempt])
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  // r328：焦点收进来（右上角关闭）、Tab 关在里面、背景不跟着滚、关掉之后回到那颗按钮。
+  const dialogRef = useRef<HTMLDivElement | null>(null)
+  useModalFocus(dialogRef, true, { initial: 'first', lockScroll: true, onEscape: onClose })
 
   const loadDiff = (nodeId: string) => {
     if (!data || !data.comparable) return
@@ -267,7 +266,14 @@ export function RunCompareModal({ runId, onClose }: { runId: string; onClose: ()
 
   return (
     <div className="vq-modal-backdrop rc-backdrop" onMouseDown={onClose}>
-      <div className={'rc-modal' + (data && !data.comparable ? ' is-alone' : '')} role="dialog" aria-modal="true" aria-labelledby="rc-title" onMouseDown={(event) => event.stopPropagation()}>
+      <div
+        ref={dialogRef}
+        className={'rc-modal' + (data && !data.comparable ? ' is-alone' : '')}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="rc-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
         <header className="rc-head">
           <div>
             <span className="vq-mono">Run compare / 运行对照</span>

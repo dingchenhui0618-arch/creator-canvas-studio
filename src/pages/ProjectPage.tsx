@@ -5,6 +5,7 @@ import AssetRefSelect from '../components/AssetRefSelect'
 import ProjectStatusPill from '../components/ProjectStatus'
 import { VersionScriptModal } from '../components/VersionScriptModal'
 import { VersionCompareModal } from '../components/VersionCompareModal'
+import { useModalFocus } from '../components/useModalFocus'
 import {
   checkDeliveryPackage,
   checkDeliveryReceipt,
@@ -519,7 +520,6 @@ export default function ProjectPage({
     }
   }, [deliverOpen])
 
-  // 分享弹窗：Esc 关闭（和版本弹窗同一套习惯）；打开时不再往下滚页面
   useEffect(() => {
     if (!shareOpen) return
     const onKey = (event: KeyboardEvent) => {
@@ -528,6 +528,11 @@ export default function ProjectPage({
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [shareOpen])
+
+  // r328：分享弹窗的键盘边界交给 useModalFocus。原来这段的注释写着「打开时不再往下滚页面」，
+  // 但代码只处理了 Esc——弹窗后面的页面一直在滚，注释说得比实现好听。
+  const shareRef = useRef<HTMLDivElement | null>(null)
+  useModalFocus(shareRef, shareOpen, { initial: 'first', lockScroll: true })
 
   // 「以这一版为底」的第一下只保持 5 秒：等太久还挂着「再点一次」，容易误触
   useEffect(() => {
@@ -4348,6 +4353,7 @@ export default function ProjectPage({
       {shareOpen ? (
         <div className="vq-modal-backdrop" onMouseDown={() => setShareOpen(false)}>
           <div
+            ref={shareRef}
             className="vq-share-modal"
             role="dialog"
             aria-modal="true"
