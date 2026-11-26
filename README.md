@@ -1463,7 +1463,7 @@ oxlint 还抓到一个真 bug：我给 summary 新加的 `hoverHardCuts` 与按�
 发布标签 `20261127-0240-r337links`，回滚点
 `/opt/visionqa/releases/20261126-182217-20261127-0240-r337links.tar.gz`（元数据记着上一版入口 `index-MPkfnoba.js`）；
 公网 `/api/version` **0.9.310**、health ok templates 27、新入口 `index-B16INuE3.js` 200、上一版入口 404，
-三个服务 active。局部图 [docs/r337-bare-link-hover.png](docs/r337-bare-link-hover.png)（before 那一趟拍不出图——
+三个服务 active。提交 `2eb3ee2`，CI **45875611314 success**。局部图 [docs/r337-bare-link-hover.png](docs/r337-bare-link-hover.png)（before 那一趟拍不出图——
 量具只在有反馈时截图，而它划过真的什么都没变）；完整记录见
 [docs/r337-bare-link-2026-11-27.md](docs/r337-bare-link-2026-11-27.md)。
 
