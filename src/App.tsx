@@ -20,6 +20,7 @@ import {
   X,
 } from 'lucide-react'
 import { pageLabels, type Page } from './domain/types'
+import { prefersReducedMotion } from './domain/motion'
 import './App.css'
 import './styles/shell.css'
 import './styles/overview.css'
@@ -431,7 +432,7 @@ function Workbench({
     toastTimer.current = window.setTimeout(() => {
       // 收尾：先淡出下沉，走完再卸载。直接摘掉是硬切，一条长句最明显
       setToastLeaving(true)
-      const exitMs = toastExitDelay(window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+      const exitMs = toastExitDelay(prefersReducedMotion())
       if (exitMs <= 0) {
         setToast(null)
         return

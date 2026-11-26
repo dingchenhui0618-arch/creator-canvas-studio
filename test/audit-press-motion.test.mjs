@@ -104,6 +104,24 @@ const GUARDS = [
   { needle: 'firstTab: name(first),', why: '诊断要写清第一个可 Tab 的元素是谁' },
   { needle: "+ (row.droppedKeys && row.droppedKeys.length ? ' · 丢掉的按键 ' + row.droppedKeys.length : '')", why: '每一趟的汇总行都要报丢掉的按键数' },
   { needle: "focusR338: 'r338：焦点这一层的三处量具纠错。", why: 'probe 元数据里要写清这一层怎么量的' },
+  { needle: "const MOTION_MODE = process.argv.indexOf('--motion') > 0", why: '要有一个只跑进场动效那一层的开关' },
+  { needle: 'function installAnimProbe() {', why: '动画事件探针（start / end / cancel 都要收）' },
+  { needle: "document.addEventListener('animationcancel', function (event) { push('cancel', event) }, true)", why: 'cancel 也要收：动画被撤掉和跑完是两件事' },
+  { needle: "'(' + installAnimProbe.toString() + ')()'", why: '探针要在第一次导航之前就装好，否则第一屏的进场动画收不到' },
+  { needle: 'function animVerdictOf(entry, bucket, probe) {', why: '一条动画要有自己的判定（起没起 / 落没落地 / 落地后是什么样）' },
+  { needle: "if (starts === 0) return 'declared-never-started'", why: '声明了却一次没起 = 缺陷，不能静默' },
+  { needle: "if (Number(entry.opacity) < 0.99) return 'ended-transparent'", why: '跑完还是半透明 = 缺陷' },
+  { needle: "if (entry.transform !== 'none' && /forwards|both/.test(String(entry.fillMode))) return 'ended-holds-transform'", why: 'forwards/both 把 transform 定住 = 缺陷（包含块 + 抬起被压死）' },
+  { needle: 'function reduceMissesOf(entry) {', why: '减弱动态效果下的判据要独立成一条（duration / delay / 循环三件）' },
+  { needle: 'if (Number(entry.durationMs) > 1.5) misses.push(', why: '总闸压到 1ms；还超过就是没停' },
+  { needle: "if (entry.iterationCount === 'infinite') misses.push('还在无限循环')", why: '无限动画在减弱动态效果下也要停' },
+  { needle: 'if (reduce && collected.reduceMedia !== true) {', why: '减弱动态效果那一趟必须先证明 matchMedia 真的是 true，否则整趟作废' },
+  { needle: 'row.orphans = Object.keys(tally).filter((key) => !seenKeys[key]).map((key) => ({', why: '闪现型动画（骨架屏 / 转圈）单列出来，不静默丢掉' },
+  { needle: 'function scrollCheck() {', why: '页面上真滚一次，量 smooth 与 auto 各要多少帧' },
+  { needle: 'host.scrollTo({ top: 1600, behavior: behavior })', why: '滚的是自建容器，不碰宿主页面自己的滚动位置' },
+  { needle: "await cdp.send('Emulation.setEmulatedMedia', { media: '', features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })", why: '减弱动态效果这一趟要真的把系统切过去' },
+  { needle: "motion: 'r339：--motion 单独一层", why: 'probe 元数据里要写清这一层怎么量的' },
+  { needle: "const key = String(event.target).split('.')[1] || String(event.target)", why: '错峰要按宿主元素分组（一屏两个容器混在一起看间隔没有意义）' },
 ]
 
 const missingFrom = (source) => GUARDS.filter((guard) => !source.includes(guard.needle)).map((guard) => guard.needle)
@@ -217,4 +235,27 @@ test('r338 · 量具：绕回不能按选择器字符串判（换回 selector �
   assert.notEqual(broken, SRC, '改坏用的锚点没匹配到')
   assert.ok(!broken.includes(from), '把唯一路径换回选择器之后守卫没发现（同名不同元素会被当成绕回，走查提前收工）')
 })
+
+// r339：进场动效那一层（--motion）的三条判据，逐条配反证
+test('r339 · 量具：声明了没起要算缺陷（把 starts === 0 那条改成恒假要能看出来）', () => {
+  const from = "if (starts === 0) return 'declared-never-started'"
+  const broken = SRC.replace(from, "if (false) return 'declared-never-started'")
+  assert.notEqual(broken, SRC, '改坏用的锚点没匹配到')
+  assert.ok(!broken.includes(from), '把「一次没起」改成恒假之后守卫没发现')
+})
+
+test('r339 · 量具：减弱动态效果的 1ms 门槛不是恒真的（放到 99999 要能看出来）', () => {
+  const from = 'if (Number(entry.durationMs) > 1.5) misses.push('
+  const broken = SRC.replace(from, 'if (Number(entry.durationMs) > 99999) misses.push(')
+  assert.notEqual(broken, SRC, '改坏用的锚点没匹配到')
+  assert.ok(!broken.includes(from), '把门槛放到 99999 之后守卫没发现（还超过 1ms 的会被记成 0 条）')
+})
+
+test('r339 · 量具：减弱动态效果那一趟的先决条件不能删（matchMedia 那道闸改成恒假要能看出来）', () => {
+  const from = 'if (reduce && collected.reduceMedia !== true) {'
+  const broken = SRC.replace(from, 'if (false) {')
+  assert.notEqual(broken, SRC, '改坏用的锚点没匹配到')
+  assert.ok(!broken.includes(from), '把 matchMedia 那道闸删掉之后守卫没发现（系统没切过去也会报「0 条 miss」）')
+})
+
 

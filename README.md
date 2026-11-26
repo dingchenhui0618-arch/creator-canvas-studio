@@ -1517,6 +1517,55 @@ inert / aria-hidden / offsetParent 全查过都不是原因。**原因没查清*
 本地工作区那一趟的划过层依旧 ABORT（`/local` 空状态没有 `.lw-composer`）；跳转站在线上只核到
 CSS 与入口，没有在真机上按过一次 Tab（本地走查里它是第 1 站，有环）。
 
+## 三百八十五、进场动效那一层：72 条动画全跑完、全落地，并修掉四处「减弱动态效果下还在平滑滚」（r339 / v0.9.312）
+
+前五层量的是**状态变化**（transition）。这一轮开第六层（`--motion`），量另一件事：**声明出来的
+keyframes 动画有没有真的跑、跑完有没有把样式还给元素**，以及系统开了「减弱动态效果」之后它们停不停。
+
+11 屏 × 两趟（正常 / 减弱动态效果）共 22 趟：**声明 72 条 → 读回来 72 条，跑完 72 条**；
+一次没起 0、起过没落地 0、落地后还半透明 0、落地后还把 transform 定住（forwards/both 那种）0。
+另有一批**闪现型**动画（事件里有、读的时候元素已被换掉）单列：**8 种 / 37 次** —— 骨架屏
+`vq-skeleton-pulse` 24 次、后台加载点 `admin-pulse` 10 次、刷新图标 `spin` 2 次、转圈 `vq-spin` 1 次；
+只按「页面上还在的元素」数会把这一整类漏掉。
+
+「减弱动态效果」那一趟先证明系统真的切过去了（页面里 `matchMedia('(prefers-reduced-motion: reduce)')`
+**11/11 为 true**，不是就整趟作废），再读：**还超过 1ms 的 0 条、delay 还不是 0 的 0 条、
+还在无限循环的 0 条、动画元素还半透明的 0 条**，`html` 的 `scroll-behavior` 11/11 是 `auto`。
+
+量具自己纠了两处：① **事件派发时刻 ≠ 起跑时刻** —— `animationstart` 每帧才冲刷一次，四条卡片的 24ms
+错峰按派发时刻读出来是 7/18/18ms，看着像被压扁；改读动画自己的 `startTime + delay`（视觉起跑时刻）
+之后是**干净的 24/24/24ms**（`ov-cap×4`），运营位那两张是 24ms（`vq-promo×2`）。
+② 只看 `startTime` 也是错的：同一容器里四条卡片的 `startTime` 完全相同（延迟记在动画内部）。
+
+**修的第一处：四处写死 `behavior: 'smooth'` 的滚动在「减弱动态效果」下照样平滑滚。**
+全局那条 `* { scroll-behavior: auto !important }` 管不住 JS 显式传的 behavior —— 页面上真滚一次量到：
+同一个容器 `smooth` 用满 **40 帧 / 711ms**，`auto` **4 帧 / 71ms**，reduce 开着完全一样。
+新增 [src/domain/motion.ts](src/domain/motion.ts)：`prefersReducedMotion()` 是全站唯一读系统设置的地方，
+`scrollToSoft()` 按它给 `'auto'` / `'smooth'`；六处滚动（作品页、评审页、运行记录页、后台运营位卡、
+智能体页两处）全部并过来，[src/App.tsx](src/App.tsx) 里提示条退场那句 `matchMedia` 也改调它。
+
+**修的第二处：模板卡封面白跑一趟代理，每次巡检稳定留下 4 条假的前端异常。**
+`coverSrc()` 以前把任何地址都包成 `/api/cover?url=…`，连 `data:` 与站内地址也包 —— 代理抓不到，
+页面上留下一条 `kind: resource · 资源加载失败（img）· page: #/templates · count: 4`。
+改成「只有需要代理的才代理」之后，同一趟巡检 **`POST /api/client-errors` 4 → 0、
+`client-errors.json` 不再生成**，模板卡封面反而正常显示（[截图](docs/r339-motion-template-cover.png)）。
+
+门禁：`npm test` **2212 / 2212**、`tsc -b` 干净、`oxlint` 0 error / 30 warning、密钥 1239 个文件无命中。
+新增 [test/reduced-motion-scroll.test.mjs](test/reduced-motion-scroll.test.mjs) 5 条（写死的 smooth 只允许出现在
+motion.ts + 两条反证 + helper 两种系统设置各一条 + 六处调用点），量具守卫
+[test/audit-press-motion.test.mjs](test/audit-press-motion.test.mjs) 14 → **17 条**（+18 条针 + 3 条反证）。
+
+边界：**app 层那一下滚动没有真按过** —— 要复现得真点一张预设卡（会改会话状态），这一层是只读的，
+量到的是机制与判据位置，不是那四处点击本身；「闪现型」只证明跑过、不证明跑了几帧好不好看；
+这一层只覆盖 keyframes 动画（`element.animate()` 看不见）；一屏只等 900ms，晚于这个点才挂上的动画
+会被记成闪现型或看不见；减弱动态效果那一趟是 Chrome 的媒体特性模拟，不是真改系统设置。
+
+发布标签 `20261127-0330-r339motion`，快照 `/opt/visionqa/releases/20261126-192106-20261127-0330-r339motion.tar.gz`
+（上一版是 r338 的 `20261126-185545-20261127-0300-r338skip.tar.gz`，也就是回滚点）；公网 `/api/version` **0.9.312**、
+health ok templates 27、新入口 `index-8xkM8tsT.js` 200、上一版入口 404、三个服务 active；
+CSS 与 r338 同哈希（这一轮一个字都没动样式表），live JS 里能读到 `prefers-reduced-motion: reduce` 与 `data:` 直通。
+完整记录见 [docs/r339-motion-layer-2026-11-27.md](docs/r339-motion-layer-2026-11-27.md)。
+
 
 
 

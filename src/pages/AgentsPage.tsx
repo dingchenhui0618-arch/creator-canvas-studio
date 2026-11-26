@@ -59,6 +59,7 @@ import { RECENT_PAGE_SIZE, mergeRecentTasks } from '../domain/media-recent'
 import { probeMediaFile } from '../domain/media-file'
 import { peekRefHandoff, takeRefHandoff } from '../domain/media-handoff'
 import { useWorkflowEnabled } from '../domain/features'
+import { scrollToSoft } from '../domain/motion'
 import type { RefHandoff } from '../domain/media-handoff'
 import { planRefAttach, refAttachNote, refFileName } from '../domain/media-refs'
 import { planTaskRetry, retryCredits } from '../domain/media-retry'
@@ -1960,7 +1961,7 @@ export function AgentsPage({
     (id: string) => {
       selectAgent(id)
       setPresetShelfOpen(false)
-      window.setTimeout(() => stageRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0)
+      window.setTimeout(() => scrollToSoft(stageRef.current, { block: 'start' }), 0)
     },
     [selectAgent],
   )
@@ -2325,7 +2326,7 @@ export function AgentsPage({
       setFailure(null)
       setHistoryOpen(false)
       if (agents.some((item) => item.id === entry.agentId)) setSelectedId(entry.agentId)
-      window.setTimeout(() => stageRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0)
+      window.setTimeout(() => scrollToSoft(stageRef.current, { block: 'start' }), 0)
     },
     [agents],
   )

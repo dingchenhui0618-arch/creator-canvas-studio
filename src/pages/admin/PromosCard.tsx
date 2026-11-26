@@ -8,6 +8,7 @@ import { ArrowDown, ArrowRight, ArrowUp, Plus, RotateCcw, Save, Sparkles, Trash2
 import { request } from '../../api/client'
 import { pageLabels, type Page } from '../../domain/types'
 import { promosDirty } from '../../domain/promos'
+import { scrollToSoft } from '../../domain/motion'
 import { useApi, formatDateTime } from './data'
 import { Badge, ErrorBanner, LoadingLine, SourceTag } from './ui'
 import '../../styles/promos.css'
@@ -248,8 +249,7 @@ export default function PromosCard() {
     if (pendingFocus === null) return
     const input = idRefs.current[pendingFocus]
     if (!input) return
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    input.scrollIntoView({ block: 'center', behavior: reduce ? 'auto' : 'smooth' })
+    scrollToSoft(input, { block: 'center' })
     input.focus({ preventScroll: true })
     setPendingFocus(null)
   }, [pendingFocus])

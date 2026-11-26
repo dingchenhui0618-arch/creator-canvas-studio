@@ -91,12 +91,9 @@ type AdaptDraft = {
   storyboard: StoryboardShot[]
 }
 
-// 解析过的模板用本地帧图；只存链接的用平台封面，必须走 /api/cover 代理（直连会 403 / mixed content）
-const coverFor = (template: ReplicaTemplate) => {
-  const url = template.thumb || template.cover || ''
-  if (!url) return ''
-  return url.startsWith('/media/') || url.startsWith('/api/') ? url : coverSrc(url)
-}
+// 解析过的模板用本地帧图；只存链接的用平台封面，必须走 /api/cover 代理（直连会 403 / mixed content）。
+// r339：这条判断搬进了 coverSrc 自己（站内地址与 data: 直接给，别的才代理），这里只负责挑用哪一张。
+const coverFor = (template: ReplicaTemplate) => coverSrc(template.thumb || template.cover || '')
 
 export function TemplateLibraryPage({
   onToast,

@@ -6,6 +6,7 @@ import ProjectStatusPill from '../components/ProjectStatus'
 import { VersionScriptModal } from '../components/VersionScriptModal'
 import { VersionCompareModal } from '../components/VersionCompareModal'
 import { useModalFocus } from '../components/useModalFocus'
+import { scrollToSoft } from '../domain/motion'
 import {
   checkDeliveryPackage,
   checkDeliveryReceipt,
@@ -464,7 +465,7 @@ export default function ProjectPage({
     if (archiveOpen !== landing.version) return
     const section = document.getElementById('vq-project-archive')
     if (!section || typeof section.scrollIntoView !== 'function') return
-    section.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    scrollToSoft(section, { block: 'start' })
   }, [landing, archiveOpen])
 
   // 花费明细：读一次就留着，切月份才重新取；点「收起」不清缓存，再点开还是同一份

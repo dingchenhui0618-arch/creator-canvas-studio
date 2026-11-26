@@ -61,6 +61,36 @@
 //         那几个列出来（unvisited：是什么、多大、在哪、是不是在 inert / aria-hidden 里），
 //         不把「对不上」静默掉。
 //
+//  12) r339 起：加第六层——**进场动效**（animation，不是 transition），加 --motion 只跑这一层。
+//      前面五层量的是「状态变化有没有画出来、走不走过渡」，这一层量的是另一件事：
+//      声明出来的 keyframes 动画**有没有真的跑**、跑完**有没有交还给普通样式**。
+//      页面上有 70 多条 animation 声明（逐条进场的 .vq-stagger、切页淡入、转圈、骨架呼吸、
+//      抽屉滑入、命令面板、菜单），其中任何一条「声明了但没起」「起过没落地」「落地后元素
+//      还是半透明」「落地后还把 transform 定住（forwards/both）」都只有这一层看得见：
+//        · 起没起 / 落没落地：在 document 起点装一个动画事件探针（start/end/cancel 都收，
+//          含伪元素动画），按「动画名 + 伪元素」计数；同一名字有多个元素时是合起来数的，
+//          每一条自己的终态另有 computed 读数（见下）。
+//        · 落地之后是什么样：读这条动画所在元素的 computed opacity / transform / fill-mode。
+//          终态 opacity < 1 = 元素还半透明；fill 是 forwards/both 且 transform != none =
+//          把 transform 定格了（绝对定位后代的包含块、周围 :hover 的抬起都会被它压住）。
+//        · 还在飞的（duration + delay 还没走完）单列成 still-running，不算「起过没落地」。
+//      同一屏再跑第二趟：Emulation.setEmulatedMedia 把系统切成「减弱动态效果」，重载后再读一遍
+//      —— motion.css 那条总闸声称「位移、缩放、无限动画一起停」，这一趟就是去真量它：
+//      每一条动画的 duration 该被压到 1ms、delay 归零、不循环；而且**内容不能因为动画被压掉
+//      而看不见**（所以还半透明的会单独列出来）。scroll-behavior 也顺手读一眼。
+//      还有三处是「只按页面上还在的元素数」会看漏或看错的，一起补上：
+//        · 闪现型的（骨架屏 / 转圈 / 后台脉冲）读的时候元素已经被换掉了 —— 事件里有、页面里没有，
+//          单列成 orphans（start/end/cancel 次数、跑完了才走还是没落地就走了），不静默丢掉。
+//        · startTime 是**时间轴起点**，延迟还没算进去：同一个容器里四条卡片的 startTime 完全相同，
+//          视觉上的错峰是 startTime + delay。只看 startTime 会得出「四条一起起跑」的错误结论，
+//          只看事件派发时刻又会被每帧一次的冲刷抹平（实测把 24ms 的间隔读成 7/18/18ms）。
+//        · 减弱动态效果那一趟**先证明系统真的切过去了**（页面里 matchMedia 必须是 true），
+//          否则那 0 条 miss 是假的 —— 那种「干净」比脏读数更危险，直接作废这一趟。
+//      另外在页面上真滚一次（自建的离屏容器，不碰宿主页面自己的滚动位置），量 behavior: smooth 与
+//      behavior: auto 各要多少帧：用来证明全局那条 * { scroll-behavior: auto !important } 管不住
+//      JS 显式传的 behavior（显式优先）—— 这是 r339 修那四处写死 smooth 的依据。
+//      这一层不按鼠标、不按键盘、不发写请求，只读样式与事件。
+//
 // 用法（同一份脚本跑两份产物）：
 //   node scripts/audit-press.mjs --dist .shots330/dist-after --out .shots331/press
 //   node scripts/audit-press.mjs --dist .shots331/dist-after --out .shots331/press-after
@@ -70,6 +100,8 @@
 //   node scripts/audit-press.mjs --links                   # 只跑非按钮表面那一层（划过，不按下）
 //   node scripts/audit-press.mjs --only templates-drawer --links --shots all   # 划过那一拍也留一张局部图
 //   node scripts/audit-press.mjs --focus --only admin-promos --focuscap 90     # 一屏很长时把 Tab 上限抬高
+//   node scripts/audit-press.mjs --motion                  # 只跑进场动效那一层（正常 + 减弱动态效果各一趟）
+//   node scripts/audit-press.mjs --motion --only overview,templates-drawer     # 只量这两屏的进场动效
 //
 // 产物：<out>/press.json + <out>/<page>-<n>-press.png（只给「按下无反馈候选」）
 import { spawn } from 'node:child_process'
@@ -99,6 +131,12 @@ const FOCUS_CAP = Number(argOf('focuscap', '40')) || 40
 // 链接按下去会跳页，这一层里不许出现 click。
 const LINK_MODE = process.argv.indexOf('--links') > 0
 const HOVER_CAP = Number(argOf('hovercap', '20')) || 20
+// r339：--motion 只跑「进场动效（keyframes 动画）」那一层。每屏两趟：正常一趟 + 减弱动态效果一趟。
+//   --animcap N  一屏最多展开多少条动画（默认 80，超出的只报条数，不静默丢掉）
+//   --nomreduce  只跑正常那一趟（查「动画有没有跑」时用，省一半时间）
+const MOTION_MODE = process.argv.indexOf('--motion') > 0
+const ANIM_CAP = Number(argOf('animcap', '80')) || 80
+const MOTION_REDUCE = !(process.argv.indexOf('--nomreduce') > 0)
 const WIDTH = 1440
 const HEIGHT = 1000
 if (!fs.existsSync(path.join(DIST_DIR, 'index.html'))) throw new Error('dist 里没有 index.html：' + DIST_DIR)
@@ -1240,6 +1278,19 @@ async function goto(route, anchor, who = 'user') {
 }
 
 const shots = []
+// r339：动效这一层的证据图（--shots all，只截正常那一趟）：整页一张，给 docs 与肉眼核对用
+async function shotFullPage(name) {
+  try {
+    const captured = await cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true })
+    const file = path.join(OUT_DIR, name)
+    fs.writeFileSync(file, Buffer.from(captured.data, 'base64'))
+    const row = { file: file, selector: '(整页)', bytes: fs.statSync(file).size }
+    shots.push(row)
+    return row
+  } catch (error) {
+    return { file: null, error: String((error && error.message) || error) }
+  }
+}
 async function shotClip(name, selector, size = 120, pad = null) {
   const box = await evaluate('(function () { var el = document.querySelector(' + JSON.stringify(selector) + '); if (!el) return null; var r = el.getBoundingClientRect(); return { x: r.left + window.scrollX, y: r.top + window.scrollY, w: r.width, h: r.height } })()')
   if (!box) return null
@@ -1758,6 +1809,365 @@ async function hoverWalk(pageId, pageLabel, scope) {
   return row
 }
 
+// ---------- r339：进场动效那一层 ----------
+// 一条声明出来的动画按「起没起、落没落地、落地之后是什么样」给判定。
+// 这里的 bucket 是动画事件的计数（按「动画名 + 伪元素」聚集，同一名字的多个元素合在一起数），
+// entry 是这条动画所在元素自己的 computed 读数（终态 opacity / transform / fill-mode）。
+function animKey(name, pseudo) {
+  return String(name) + '|' + String(pseudo || '')
+}
+function animVerdictOf(entry, bucket, probe) {
+  const starts = bucket ? bucket.start : 0
+  const ends = bucket ? bucket.end : 0
+  const cancels = bucket ? bucket.cancel : 0
+  // 无限动画本来就落不了地：只判「起没起」
+  if (entry.iterationCount === 'infinite') return starts > 0 ? 'infinite-running' : 'infinite-never-started'
+  if (starts === 0) return 'declared-never-started'
+  if (ends === 0 && cancels === 0) {
+    // 还在飞的不算「起过没落地」：拿「读到现在的耗时 - 第一次 start 的时刻」跟这条自己的
+    // delay + duration 比，还没走完的就是 still-running（页面长、动画长时最容易误判的一条）
+    const since = Number((probe && probe.sinceInstallMs) || 0)
+    const firstStart = bucket && bucket.firstStart !== null ? Number(bucket.firstStart) : 0
+    const elapsed = Math.max(0, since - firstStart)
+    const expect = Number(entry.delayMs || 0) + Number(entry.durationMs || 0)
+    return expect + 50 < elapsed ? 'started-no-end' : 'still-running'
+  }
+  if (Number(entry.opacity) < 0.99) return 'ended-transparent'
+  // 落地之后还定着 transform：fill 是 forwards/both 才会发生（backwards 一结束就把样式还回去了）
+  if (entry.transform !== 'none' && /forwards|both/.test(String(entry.fillMode))) return 'ended-holds-transform'
+  return 'ended'
+}
+// 减弱动态效果下这一条动画还该不该在跑：motion.css 的总闸声称「一起停」，这里就是判据。
+function reduceMissesOf(entry) {
+  const misses = []
+  if (Number(entry.durationMs) > 1.5) misses.push('duration 还是 ' + entry.durationMs + 'ms')
+  if (Number(entry.delayMs) > 0) misses.push('delay 还是 ' + entry.delayMs + 'ms')
+  if (entry.iterationCount === 'infinite') misses.push('还在无限循环')
+  return misses
+}
+
+// 页面上真滚一次：**显式** behavior 在系统开了「减弱动态效果」时会不会被 CSS 压住？
+// 这是 JS 侧的滚动（scrollIntoView / scrollTo 的 behavior 选项），跟 CSS 的 scroll-behavior 是两件事：
+// 显式传的那一个优先，所以全局那条「* { scroll-behavior: auto !important }」拦不住它。
+// 同一个自建容器滚两次（一次 smooth、一次 auto），数到停住为止的帧数——这一层就是拿它证明
+// 「JS 里写死 smooth 的滚动，在减弱动态效果下照样会动」。
+function scrollCheck() {
+  function frame() {
+    return new Promise(function (resolve) { requestAnimationFrame(function () { resolve(null) }) })
+  }
+  async function measure(host, behavior) {
+    host.scrollTop = 0
+    await frame()
+    await frame()
+    const start = performance.now()
+    host.scrollTo({ top: 1600, behavior: behavior })
+    let frames = 0
+    let last = -1
+    let stable = 0
+    while (performance.now() - start < 1500 && frames < 120) {
+      await frame()
+      frames += 1
+      if (host.scrollTop === last) { stable += 1; if (stable >= 3) break } else { stable = 0 }
+      last = host.scrollTop
+    }
+    return { frames: frames, ms: Math.round(performance.now() - start), top: Math.round(host.scrollTop) }
+  }
+  const host = document.createElement('div')
+  host.style.cssText = 'position:fixed;left:-9999px;top:0;width:180px;height:180px;overflow:auto'
+  const inner = document.createElement('div')
+  inner.style.cssText = 'height:4000px;width:8px'
+  host.appendChild(inner)
+  document.body.appendChild(host)
+  const cssScrollBehavior = getComputedStyle(host).scrollBehavior
+  return measure(host, 'smooth').then(function (smooth) {
+    return measure(host, 'auto').then(function (auto) {
+      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      host.remove()
+      return {
+        reduce: reduce,
+        cssScrollBehavior: cssScrollBehavior,
+        smooth: smooth,
+        auto: auto,
+        smoothAnimated: smooth.frames > 3,
+        autoAnimated: auto.frames > 3,
+      }
+    })
+  })
+}
+
+// 动画事件探针（在 document 起点装，所以连第一屏的进场动画都收得到）。
+// animationstart / animationend / animationcancel 都会冒泡，挂在 document 上按捕获收全部；
+// 伪元素上的动画事件 target 是宿主元素，pseudoElement 说明是哪一层。
+function installAnimProbe() {
+  const state = { at: performance.now(), events: [], at_path: location.pathname + location.hash }
+  window.__r339anim = state
+  function desc(el) {
+    if (!el || el.nodeType !== 1 || !el.tagName) return '?'
+    const cls = String(el.getAttribute('class') || '').trim().split(/\s+/).filter(Boolean).slice(0, 3).join('.')
+    return el.tagName.toLowerCase() + (cls ? '.' + cls : '')
+  }
+  function push(kind, event) {
+    // elapsed 是**事件派发的时刻**（每帧才冲刷一次，能差出一帧 16.7ms）。要判「错峰对不对」得看
+    // 动画自己的 startTime（文档时间轴上的排定时刻，不受派发抖动影响）：
+    // 同一个容器里第 1/2/3/4 条的 startTime 之差应该正好是 0/24/48/72ms。
+    let webStart = null
+    let effectDelayMs = null
+    let effectDurationMs = null
+    try {
+      const el = event.target
+      if (el && el.getAnimations) {
+        const list = el.getAnimations()
+        for (let i = 0; i < list.length; i += 1) {
+          let nm = ''
+          try { nm = String(list[i].animationName || '') } catch { nm = '' }
+          if (nm === String(event.animationName || '')) {
+            const value = list[i].startTime
+            webStart = value === null || value === undefined ? null : Math.round(Number(value) * 1000) / 1000
+            // 动画自己的 delay 也要读：startTime 是**时间轴起点**（延迟还没算进去），
+            // 「视觉上第几条开始动」= startTime + delay。只读 startTime 会看成「四条一起起跑」。
+            try {
+              const timing = list[i].effect.getTiming()
+              effectDelayMs = Math.round(Number(timing.delay || 0) * 1000) / 1000
+              effectDurationMs = Math.round(Number(timing.duration || 0) * 1000) / 1000
+            } catch { effectDelayMs = null }
+            break
+          }
+        }
+      }
+    } catch { webStart = null }
+    state.events.push({
+      kind: kind,
+      name: String(event.animationName || ''),
+      pseudo: String(event.pseudoElement || ''),
+      target: desc(event.target),
+      elapsed: Math.round(performance.now() - state.at),
+      animMs: Math.round(Number(event.elapsedTime || 0) * 1000),
+      webStartMs: webStart,
+      effectDelayMs: effectDelayMs,
+      effectDurationMs: effectDurationMs,
+    })
+    if (state.events.length > 4000) state.events.splice(0, 1000)
+  }
+  document.addEventListener('animationstart', function (event) { push('start', event) }, true)
+  document.addEventListener('animationend', function (event) { push('end', event) }, true)
+  document.addEventListener('animationcancel', function (event) { push('cancel', event) }, true)
+  return true
+}
+
+async function readAnimProbe() {
+  return evaluate('(function () { var s = window.__r339anim; if (!s) return { missing: true }; return { missing: false, sinceInstallMs: Math.round(performance.now() - s.at), atPath: s.at_path, total: s.events.length, events: s.events } })()')
+}
+
+// 页面里跑的收集器：把「声明了动画、而且在页面上占位置」的元素列出来，连同它自己的终态读数。
+// cap 只限**展开多少条**，超出的记 overflow（不静默丢）。
+function collectAnimations(cap) {
+  function ms(text) {
+    const first = String(text || '').split(',')[0].trim()
+    if (!first) return 0
+    if (first.slice(-2) === 'ms') return Math.round(Number(first.slice(0, -2)) * 100) / 100
+    if (first.slice(-1) === 's') return Math.round(Number(first.slice(0, -1)) * 1000 * 100) / 100
+    return Math.round(Number(first) * 100) / 100
+  }
+  function uniquePath(node) {
+    const parts = []
+    let cur = node
+    while (cur && cur.nodeType === 1 && cur !== document.body && parts.length < 12) {
+      const parent = cur.parentElement
+      let index = 1
+      if (parent) {
+        for (let i = 0; i < parent.children.length; i += 1) {
+          if (parent.children[i] === cur) { index = i + 1; break }
+        }
+      }
+      parts.unshift(cur.tagName.toLowerCase() + ':nth-child(' + index + ')')
+      cur = parent
+    }
+    return parts.join('>')
+  }
+  const out = { nodes: 0, scanned: 0, declared: 0, noBox: 0, overflow: 0, scrollBehavior: null, reduceMedia: null, items: [] }
+  try { out.scrollBehavior = getComputedStyle(document.documentElement).scrollBehavior } catch { out.scrollBehavior = null }
+  // 减弱动态效果这一趟到底有没有真的生效：matchMedia 说 false 的话，下面那 0 条 miss 全是假的
+  try { out.reduceMedia = window.matchMedia('(prefers-reduced-motion: reduce)').matches } catch { out.reduceMedia = null }
+  const list = document.querySelectorAll('*')
+  out.nodes = list.length
+  const limit = Math.min(list.length, 4000)
+  for (let n = 0; n < limit; n += 1) {
+    const el = list[n]
+    const host = getComputedStyle(el)
+    const sides = [['', host], ['::before', getComputedStyle(el, '::before')], ['::after', getComputedStyle(el, '::after')]]
+    for (let s = 0; s < sides.length; s += 1) {
+      const style = sides[s][1]
+      const raw = style.animationName
+      if (!raw || raw === 'none') continue
+      out.declared += 1
+      const rect = el.getBoundingClientRect()
+      // 没有盒子（display:none 之类）的动画不会跑，也不占地方：单列一条数，不当缺陷
+      if (!el.getClientRects().length || rect.width < 1 || rect.height < 1) { out.noBox += 1; continue }
+      if (out.items.length >= cap) { out.overflow += 1; continue }
+      const name = String(raw).split(',')[0].trim()
+      const live = el.getAnimations ? el.getAnimations().filter(function (a) {
+        return String(a.animationName || '') === name
+      }).map(function (a) { return a.playState }) : []
+      out.items.push({
+        pseudo: sides[s][0],
+        name: name,
+        nameList: String(raw),
+        durationMs: ms(style.animationDuration),
+        delayMs: ms(style.animationDelay),
+        iterationCount: style.animationIterationCount,
+        fillMode: style.animationFillMode,
+        direction: style.animationDirection,
+        playState: style.animationPlayState,
+        timing: style.animationTimingFunction,
+        tag: el.tagName.toLowerCase(),
+        cls: String(el.getAttribute('class') || '').split(/\s+/).filter(Boolean).slice(0, 3).join(' '),
+        path: uniquePath(el),
+        w: Math.round(rect.width),
+        h: Math.round(rect.height),
+        opacity: Number(style.opacity),
+        transform: style.transform,
+        visibility: host.visibility,
+        live: live,
+      })
+    }
+  }
+  out.scanned = limit
+  return out
+}
+
+// r339：进场动效这一层按「屏/趟」记账（每屏两趟：正常、减弱动态效果）
+const motionPages = []
+const MOTION_BAD_VERDICTS = ['declared-never-started', 'started-no-end', 'ended-transparent', 'ended-holds-transform', 'infinite-never-started']
+
+async function motionWalk(pageId, pageLabel, reduce) {
+  const row = {
+    id: pageId, label: pageLabel, reduce: Boolean(reduce), aborted: null,
+    declared: 0, noBox: 0, reported: 0, overflow: 0, truncated: false,
+    entries: [], tally: {}, probe: null, scrollBehavior: null,
+    reduceMisses: [], stuck: [],
+    counts: { infinite: 0, infiniteNeverStarted: 0, ended: 0, declaredNeverStarted: 0, startedNoEnd: 0, stillRunning: 0, endedTransparent: 0, endedHoldsTransform: 0, transient: 0 },
+    orphans: [], reduceMedia: null, scrollCheck: null,
+  }
+  try {
+    // 进场动画都在 500ms 内跑完（最长 260ms + 168ms 的错峰），页面本身还要等数据来；
+    // 900ms 之后再读：这时「该跑完的都跑完了」，落地后的终态才是读得准的那一刻。
+    await sleep(900)
+    const probe = await readAnimProbe()
+    row.probe = probe
+    if (!probe || probe.missing) {
+      row.aborted = '页面里没有动效探针（addScriptToEvaluateOnNewDocument 没装上）：这一趟量不到'
+      motionPages.push(row)
+      console.log('MOTION-ABORT ' + pageId + ' :: ' + row.aborted)
+      return row
+    }
+    const collected = await evaluate('(' + collectAnimations.toString() + ')(' + ANIM_CAP + ')')
+    if (!collected) {
+      row.aborted = '收集动画的那段代码没返回结果'
+      motionPages.push(row)
+      console.log('MOTION-ABORT ' + pageId + ' :: ' + row.aborted)
+      return row
+    }
+    row.declared = collected.declared
+    row.noBox = collected.noBox
+    row.overflow = collected.overflow
+    row.truncated = collected.overflow > 0
+    row.scrollBehavior = collected.scrollBehavior
+    row.reduceMedia = collected.reduceMedia
+    // 减弱动态效果这一趟必须先证明「系统真的切过去了」：matchMedia 还是 false 的话，
+    // 下面的 0 条 miss 全是假的——那种「干净」比脏读数更危险，所以直接作废这一趟。
+    if (reduce && collected.reduceMedia !== true) {
+      row.aborted = '减弱动态效果没生效（页面里 matchMedia(prefers-reduced-motion) 不是 true）：这一趟作废，不写成「0 条」'
+      motionPages.push(row)
+      console.log('MOTION-ABORT ' + pageId + ' :: ' + row.aborted)
+      return row
+    }
+    // 真的在页面上滚一次：显式 smooth 在减弱动态效果下到底会不会动（这一层用的是自建容器，不碰页面自己的滚动位置）
+    row.scrollCheck = await evaluate('(' + scrollCheck.toString() + ')()')
+    const tally = {}
+    for (const event of probe.events || []) {
+      const key = animKey(event.name, event.pseudo)
+      const bucket = tally[key] || (tally[key] = { start: 0, end: 0, cancel: 0, firstStart: null, lastEnd: null, targets: [] })
+      if (event.kind === 'start') {
+        bucket.start += 1
+        if (bucket.firstStart === null) bucket.firstStart = event.elapsed
+        if (bucket.targets.length < 6 && bucket.targets.indexOf(event.target) < 0) bucket.targets.push(event.target)
+      } else if (event.kind === 'end') {
+        bucket.end += 1
+        bucket.lastEnd = event.elapsed
+      } else {
+        bucket.cancel += 1
+      }
+    }
+    row.tally = tally
+    // 只在事件里出现、读的时候页面上已经没有的动画：骨架屏、转圈、后台脉冲这些「闪现型」的。
+    // 只按页面里还在的元素数动画会把它们整个漏掉——那正是最需要看一眼的一批（加载中的手感）。
+    const seenKeys = {}
+    for (const entry of collected.items) seenKeys[animKey(entry.name, entry.pseudo)] = true
+    row.orphans = Object.keys(tally).filter((key) => !seenKeys[key]).map((key) => ({
+      name: (key.split('|')[0]) || '(无名)',
+      pseudo: key.split('|')[1] || '',
+      start: tally[key].start,
+      end: tally[key].end,
+      cancel: tally[key].cancel,
+      firstStartMs: tally[key].firstStart,
+      settled: tally[key].start > tally[key].end + tally[key].cancel ? '读的时候还在跑或已经没了（骨架屏/转圈这一类）' : '跑完了才走的（加载完成）',
+      targets: tally[key].targets.slice(0, 4),
+    }))
+    for (const entry of collected.items) {
+      const bucket = tally[animKey(entry.name, entry.pseudo)] || null
+      const verdict = animVerdictOf(entry, bucket, probe)
+      const item = Object.assign({}, entry, {
+        verdict: verdict,
+        starts: bucket ? bucket.start : 0,
+        ends: bucket ? bucket.end : 0,
+        cancels: bucket ? bucket.cancel : 0,
+        firstStartMs: bucket ? bucket.firstStart : null,
+      })
+      if (verdict === 'infinite-running' || verdict === 'infinite-never-started') row.counts.infinite += 1
+      else if (verdict === 'ended') row.counts.ended += 1
+      else if (verdict === 'declared-never-started') row.counts.declaredNeverStarted += 1
+      else if (verdict === 'started-no-end') row.counts.startedNoEnd += 1
+      else if (verdict === 'still-running') row.counts.stillRunning += 1
+      else if (verdict === 'ended-transparent') row.counts.endedTransparent += 1
+      else if (verdict === 'ended-holds-transform') row.counts.endedHoldsTransform += 1
+      if (verdict === 'infinite-never-started') row.counts.infiniteNeverStarted += 1
+      if (reduce) {
+        const misses = reduceMissesOf(entry)
+        if (misses.length) row.reduceMisses.push({ name: entry.name, path: entry.path, misses: misses })
+        if (Number(entry.opacity) < 0.99) row.stuck.push({ name: entry.name, path: entry.path, opacity: entry.opacity, cls: entry.cls, w: entry.w, h: entry.h })
+      }
+      row.entries.push(item)
+    }
+    row.counts.transient = row.orphans.reduce((sum, item) => sum + item.start, 0)
+    row.reported = row.entries.length
+    // 证据图：只截正常那一趟（减弱动态效果那一趟的画面与正常那一趟的区别只是动画被压掉）。
+    // 整页一张给肉眼核对；另按元素各截一张收紧的（运营位 / 模板卡 / 能力卡）——docs 里用这些，
+    // 顺带避开侧栏底部的账号行（那上面是登录名）。
+    if (SHOTS === 'all' && !reduce) {
+      row.screenshot = await shotFullPage(pageId + '-motion.png')
+      for (const [selector, suffix] of [['.vq-promos', '-promos'], ['.template-card', '-template-card'], ['.ov-capabilities', '-capabilities'], ['.vq-page', '-page']]) {
+        const present = await evaluate('Boolean(document.querySelector(' + JSON.stringify(selector) + '))')
+        if (!present) continue
+        row.clips = row.clips || {}
+        row.clips[suffix] = await shotClip(pageId + suffix + '.png', selector, SHOT_SIZE, 12)
+      }
+    }
+    console.log('MOTION-SUMMARY ' + row.id + (reduce ? '（减弱动态效果）' : '') + ' · 声明 ' + row.declared + ' 条 · 读回来 ' + row.reported + ' · 闪现型（读的时候已经不在页面上）' + row.orphans.length + ' 种/' + row.counts.transient + ' 次 · 没有盒子 ' + row.noBox + ' · 无限 ' + row.counts.infinite + ' · 跑完 ' + row.counts.ended + ' · 一次没起 ' + row.counts.declaredNeverStarted + ' · 起过没落地 ' + row.counts.startedNoEnd + ' · 还在飞 ' + row.counts.stillRunning + ' · 落地后还半透明 ' + row.counts.endedTransparent + ' · 落地后还定着 transform ' + row.counts.endedHoldsTransform + (reduce ? ' · 减弱动态效果下还超过 1ms ' + row.reduceMisses.length + ' · 还半透明 ' + row.stuck.length : '') + (row.truncated ? ' · 只展开前 ' + ANIM_CAP + ' 条（还有 ' + row.overflow + ' 条没展开）' : ''))
+    for (const item of row.entries.filter((entry) => MOTION_BAD_VERDICTS.indexOf(entry.verdict) >= 0)) {
+      console.log('MOTION-BAD ' + row.id + (reduce ? '（减弱动态效果）' : '') + ' ' + item.verdict + ' :: ' + item.name + item.pseudo + ' @ ' + (item.cls || item.tag) + ' · ' + item.durationMs + 'ms delay ' + item.delayMs + ' fill ' + item.fillMode + ' opacity ' + item.opacity + ' transform ' + item.transform + ' · starts=' + item.starts + ' ends=' + item.ends + ' · ' + String(item.path).slice(-70))
+    }
+    if (reduce) {
+      for (const item of row.reduceMisses.slice(0, 20)) console.log('MOTION-REDUCE-MISS ' + row.id + ' :: ' + item.name + ' · ' + item.misses.join(' / ') + ' · ' + String(item.path).slice(-70))
+      for (const item of row.stuck.slice(0, 20)) console.log('MOTION-REDUCE-STUCK ' + row.id + ' :: ' + item.name + ' @ ' + (item.cls || '') + ' opacity ' + item.opacity + ' · ' + item.w + 'x' + item.h)
+    }
+  } catch (error) {
+    row.aborted = String((error && error.message) || error).slice(0, 300)
+    console.log('MOTION-ABORT ' + pageId + ' :: ' + row.aborted)
+  }
+  motionPages.push(row)
+  return row
+}
+
 async function pressOne(pageId, pageLabel, item) {
   const out = {
     page: pageId, pageLabel: pageLabel, n: item.n,
@@ -2034,9 +2444,16 @@ try {
   await cdp.send('Page.addScriptToEvaluateOnNewDocument', {
     source: "try{localStorage.setItem('vq_welcome_seen:" + account.id + "','1');localStorage.setItem('vq_mobile_note_seen','1');localStorage.setItem('vq.edition','user')}catch(e){}",
   })
+  // r339：动效探针必须在**第一次导航之前**装好，否则第一屏的进场动画收不到。
+  // 只在 --motion 这一层装：别的层不装，那五层的读数就一个字都不动。
+  if (MOTION_MODE) {
+    await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: '(' + installAnimProbe.toString() + ')()' })
+    note('动效探针：已经装进每一个新文档（animationstart / animationend / animationcancel 全收）')
+  }
 
   // r336：焦点那一层不碰鼠标，运营位这几段（尺寸 / 按下 / 撤销动画）只在按下巡检时跑。
-  if (!FOCUS_MODE) {
+  // r339：动效那一层也不碰鼠标（只读样式与事件），同一段一起跳过。
+  if (!FOCUS_MODE && !MOTION_MODE) {
   // ---- 运营位补量 ----
   await goto('/overview', '.vq-promos')
   await dismissOverlays()
@@ -2172,6 +2589,31 @@ try {
       if (pass.prepare) await sleep(600)
       await hoverWalk(pass.id, pass.label, pass.scope)
     }
+  } else if (MOTION_MODE) {
+    // r339：同一批屏，量「进场动效」这一层。两趟：正常一趟、系统开「减弱动态效果」再一趟。
+    // 只读样式与动画事件：不点、不按、不发写请求。
+    for (const pass of active) {
+      console.log('---- 趟（进场动效）：' + pass.id + ' · ' + pass.label)
+      await goto(pass.route, pass.ready || '.vq-content', pass.who || 'user')
+      await dismissOverlays()
+      const prepared = await preparePass(pass)
+      if (!prepared) { console.log('MOTION-ABORT ' + pass.id + ' :: 这一趟的入口没能打开（见 notes）'); continue }
+      if (pass.prepare) await sleep(600)
+      await motionWalk(pass.id, pass.label, false)
+    }
+    if (MOTION_REDUCE) {
+      await cdp.send('Emulation.setEmulatedMedia', { media: '', features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
+      note('减弱动态效果：已开 Emulation.setEmulatedMedia(prefers-reduced-motion: reduce)，下面每一屏重载一趟')
+      for (const pass of active) {
+        console.log('---- 趟（进场动效 · 减弱动态效果）：' + pass.id + ' · ' + pass.label)
+        await goto(pass.route, pass.ready || '.vq-content', pass.who || 'user')
+        await dismissOverlays()
+        const prepared = await preparePass(pass)
+        if (!prepared) { console.log('MOTION-ABORT(reduce) ' + pass.id + ' :: 这一趟的入口没能打开（见 notes）'); continue }
+        if (pass.prepare) await sleep(600)
+        await motionWalk(pass.id, pass.label, true)
+      }
+    }
   } else {
     for (const pass of active.filter((item) => !item.focusOnly)) {
       console.log('---- 趟：' + pass.id + ' · ' + pass.label)
@@ -2223,6 +2665,11 @@ const out = {
     focusRing: 'r336：--focus 单独一层。CDP 真发 Tab（rawKeyDown/keyUp，Tab 必须由浏览器自己处理这次按键才动焦点），每站读元素自己 + 最多三层祖先的 FOCUS_PROPS（outline 四件套 + box-shadow + border-color + background + color + transform + opacity + ::after），走完整条链再 blur 回「没有焦点」读同一批选择器当 rest 基线。判定：自己变了 = ring，只有祖先变 = delegated-ring（输入框把 UA 环按掉、由 :focus-within 的容器给提示），都没有 = no-visible-change（键盘焦点黑洞）。outline-style 是 none / 宽度 0 / 颜色全透明时，computed outline-color 等于 currentColor —— 与 r335 的 border-color 是同一条规则的另一半，单列 derived 不进判定。',
     focusTable: 'r336：焦点这一层读的是 FOCUS_PROPS，与按下/划过那三层的 PROPS 分开 —— 焦点会改 outline，并进 PROPS 会把 r331–r335 的读数改掉，层与层之间就不可比了',
     hoverSurface: 'r337：--links 单独一层。只划过、绝不按下（链接一按就跳页）。表面 = computed cursor 是 pointer、可见、面积 >= 8x8、不是 button/[role=button]/也不在按钮里；cursor 是继承属性，所以嵌套的只留最外层（划过一张卡片时手感落在卡片这张面上）。读的是元素自己 + 最多 12 个可见子孙（反馈常常画在子孙身上，如 .vq-project-card:hover .go svg），按位置对齐逐个比，挪位了算读不到。',
+    motion: 'r339：--motion 单独一层，量的是 keyframes 动画（不是 transition）：声明出来的动画有没有真的跑、跑完有没有把样式还给元素。事件靠一个装在 document 起点的探针收（animationstart / animationend / animationcancel，含伪元素），按「动画名 + 伪元素」计数；每一条自己的终态另有 computed 读数。四类缺陷：declared-never-started（声明了没起）、started-no-end（起过没落地，还在飞的算 still-running 不算缺陷）、ended-transparent（落地后元素还半透明）、ended-holds-transform（fill 是 forwards/both 且把 transform 定住了——绝对定位后代的包含块和 :hover 的抬起都会被它压住）。',
+    motionTransient: 'r339：只按「页面上还在的元素」数动画会漏掉一整个大类——骨架屏、转圈、后台脉冲这些闪现型的：它们在读的时候元素已经被换掉了。所以事件计数里凡是对不上任何一条还在的声明的，都单列成 orphans（名字、start/end/cancel 次数、跑完了才走还是没落地就走了、当时是哪些宿主），报告里逐条打印。',
+    motionScroll: 'r339：页面上真滚一次（自建一个离屏的 overflow:auto 容器，滚它，不碰宿主页面自己的滚动位置），分别量 behavior: smooth 与 behavior: auto 到停住为止的帧数。用来证明一件事：全局那条 * { scroll-behavior: auto !important }（motion.css 的减弱动态效果总闸）管不住 JS 显式传的 behavior —— 显式选项优先。所以「开了减弱动态效果还平滑滚」的滚动只能由调用方自己判（见 src/domain/motion.ts 的 scrollToSoft）。',
+    motionMedia: 'r339：减弱动态效果那一趟的先决条件：页面里 matchMedia(prefers-reduced-motion: reduce) 必须是 true。不是 true 就把这一趟作废——否则那 0 条 miss 是假的，比脏读数更危险。',
+    motionReduce: 'r339：同一屏再跑一趟，用 Emulation.setEmulatedMedia 把系统切成 prefers-reduced-motion: reduce 再重载。判据来自 motion.css 那条总闸（animation-duration 1ms / delay 0 / 不循环）：duration 还超过 1.5ms、delay 不为 0、还在无限循环这三种都记 miss；另外把「动画元素还半透明」单列出来——动画被压掉之后内容不能跟着看不见。scroll-behavior 也读一眼。',
     hoverSurfaceTable: 'r337：这一层用 HOVER_PROPS = PROPS + text-decoration-line/-color。下划线是链接最经典的反馈，而 text-decoration-line 是离散属性（none ↔ underline 不补间）：算反馈，不进硬切。按钮读数一个字都不动（r331–r335 仍走 PROPS / AFTER_PROPS）。',
   },
   seeds: seeded,
@@ -2231,6 +2678,8 @@ const out = {
   buttons: buttons,
   focus: { mode: FOCUS_MODE, cap: FOCUS_CAP, pages: focusPages },
   hoverSurfaces: { mode: LINK_MODE, cap: HOVER_CAP, pages: hoverPages },
+  // r339：进场动效那一层（--motion 才跑）。每一屏两条：reduce=false 正常、reduce=true 减弱动态效果。
+  motion: { mode: MOTION_MODE, cap: ANIM_CAP, reduce: MOTION_REDUCE, pages: motionPages },
   candidates: candidates.map((row) => ({ page: row.page, pageLabel: row.pageLabel, n: row.n, text: row.text, selector: row.selector, tag: row.tag, disabled: row.disabled, pressActive: row.pressActive, changed: [], screenshot: row.screenshot ? row.screenshot.file : null })),
   promo: promo,
   writeRequests: { total: allWrites.length, counts: writeCounts },
@@ -2282,6 +2731,23 @@ const out = {
     hoverSurfaceHardCuts: hoverPages.reduce((sum, row) => sum + row.hardCutSurfaces, 0),
     hoverDiscreteOnly: hoverPages.reduce((sum, row) => sum + row.discreteOnly, 0),
     hoverReadFailed: hoverPages.reduce((sum, row) => sum + row.readFailed, 0),
+    // r339：进场动效（--motion 才跑）
+    motionPages: motionPages.length,
+    motionDeclared: motionPages.reduce((sum, row) => sum + row.declared, 0),
+    motionNoBox: motionPages.reduce((sum, row) => sum + row.noBox, 0),
+    motionInfinite: motionPages.reduce((sum, row) => sum + row.counts.infinite, 0),
+    motionEnded: motionPages.reduce((sum, row) => sum + row.counts.ended, 0),
+    motionStillRunning: motionPages.reduce((sum, row) => sum + row.counts.stillRunning, 0),
+    motionNeverStarted: motionPages.reduce((sum, row) => sum + row.counts.declaredNeverStarted + row.counts.infiniteNeverStarted, 0),
+    motionStartedNoEnd: motionPages.reduce((sum, row) => sum + row.counts.startedNoEnd, 0),
+    motionEndedTransparent: motionPages.reduce((sum, row) => sum + row.counts.endedTransparent, 0),
+    motionEndedHoldsTransform: motionPages.reduce((sum, row) => sum + row.counts.endedHoldsTransform, 0),
+    motionTransientKinds: motionPages.filter((row) => !row.reduce).reduce((sum, row) => sum + row.orphans.length, 0),
+    motionTransientStarts: motionPages.filter((row) => !row.reduce).reduce((sum, row) => sum + row.counts.transient, 0),
+    reducePages: motionPages.filter((row) => row.reduce).length,
+    reduceMediaOk: motionPages.filter((row) => row.reduce && row.reduceMedia === true).length,
+    reduceMisses: motionPages.reduce((sum, row) => sum + row.reduceMisses.length, 0),
+    reduceStuck: motionPages.reduce((sum, row) => sum + row.stuck.length, 0),
     writeRequests: allWrites.length,
     upstreamCalls: upstream.length,
     anomalies: anomalies.length,
@@ -2364,6 +2830,69 @@ if (LINK_MODE) {
   for (const row of hoverPages) console.log(pad(row.id, 16) + pad('表面 ' + row.listed + '/' + row.total, 16) + pad('有反馈 ' + row.feedback, 12) + pad('看不出变化 ' + row.noChange, 16) + pad('硬切 ' + row.hardCutSurfaces, 10) + pad('只靠下划线 ' + row.discreteOnly, 16) + pad('读不到 ' + row.readFailed, 12) + (row.capReached ? '到上限 ' + row.cap : '') + (row.aborted || ''))
   console.log('')
 }
+if (MOTION_MODE) {
+  const normalPages = motionPages.filter((row) => !row.reduce)
+  const reducedPages = motionPages.filter((row) => row.reduce)
+  console.log('')
+  console.log('---- 进场动效 · 每屏（正常）----')
+  for (const row of normalPages) {
+    console.log(pad(row.id, 18) + pad('声明 ' + row.declared, 12) + pad('读回来 ' + row.reported, 12) + pad('闪现型 ' + row.orphans.length + '种/' + row.counts.transient + '次', 22) + pad('无限 ' + row.counts.infinite, 10) + pad('跑完 ' + row.counts.ended, 10) + pad('没起 ' + row.counts.declaredNeverStarted, 10) + pad('没落地 ' + row.counts.startedNoEnd, 12) + pad('还在飞 ' + row.counts.stillRunning, 12) + pad('还半透明 ' + row.counts.endedTransparent, 14) + pad('定着 transform ' + row.counts.endedHoldsTransform, 20) + (row.aborted || ''))
+  }
+  const badRows = normalPages.reduce((list, row) => list.concat(row.entries.filter((item) => MOTION_BAD_VERDICTS.indexOf(item.verdict) >= 0).map((item) => Object.assign({ page: row.id }, item))), [])
+  console.log('')
+  console.log('---- 进场动效 · 四类缺陷（' + badRows.length + ' 条）----')
+  for (const item of badRows.slice(0, 60)) {
+    console.log(pad(item.page, 18) + pad(item.verdict, 24) + pad(item.name + item.pseudo, 18) + pad(item.durationMs + 'ms/' + item.fillMode, 18) + pad('opacity ' + item.opacity, 14) + (item.cls || item.tag) + ' · ' + String(item.path).slice(-56))
+  }
+  console.log('')
+  console.log('---- 减弱动态效果 · 每屏 ----')
+  for (const row of reducedPages) {
+    console.log(pad(row.id, 18) + pad('动画 ' + row.reported, 12) + pad('还超过 1ms ' + row.reduceMisses.length, 16) + pad('还半透明 ' + row.stuck.length, 14) + 'scroll-behavior=' + row.scrollBehavior + (row.aborted || ''))
+  }
+  const missRows = reducedPages.reduce((list, row) => list.concat(row.reduceMisses.map((item) => Object.assign({ page: row.id }, item))), [])
+  console.log('')
+  console.log('---- 减弱动态效果下还在动 / 还看不见的（还超过 1ms ' + missRows.length + ' 条，还半透明 ' + reducedPages.reduce((sum, row) => sum + row.stuck.length, 0) + ' 条）----')
+  for (const item of missRows.slice(0, 40)) console.log(pad(item.page, 18) + pad(item.name, 20) + item.misses.join(' / ') + ' · ' + String(item.path).slice(-56))
+  for (const row of reducedPages) {
+    for (const item of row.stuck.slice(0, 10)) console.log(pad(row.id, 18) + pad(item.name, 20) + '动画元素还半透明 opacity=' + item.opacity + ' · ' + (item.cls || '') + ' · ' + String(item.path).slice(-56))
+  }
+  console.log('')
+  console.log('---- 闪现型动画（跑过、读的时候元素已经不在页面上了）----')
+  for (const row of normalPages) {
+    for (const item of row.orphans) {
+      console.log(pad(row.id, 18) + pad(item.name + item.pseudo, 22) + pad('start ' + item.start, 12) + pad('end ' + item.end, 10) + pad('cancel ' + item.cancel, 12) + item.settled + ' · ' + item.targets.slice(0, 2).join(', '))
+    }
+  }
+  console.log('')
+  console.log('---- 显式 smooth 在减弱动态效果下会不会被压住（页面上真滚一次）----')
+  for (const row of motionPages) {
+    const check = row.scrollCheck
+    if (!check) continue
+    console.log(pad(row.id + (row.reduce ? '（减弱动态效果）' : ''), 30) + pad('matchMedia ' + check.reduce, 18) + pad('CSS scroll-behavior ' + check.cssScrollBehavior, 30) + pad('smooth ' + check.smooth.frames + ' 帧/' + check.smooth.ms + 'ms', 24) + 'auto ' + check.auto.frames + ' 帧/' + check.auto.ms + 'ms')
+  }
+  console.log('')
+  console.log('---- 进场动效 · 逐条进场的实际起跑时刻（错峰对不对）----')
+  for (const row of normalPages) {
+    const starts = ((row.probe && row.probe.events) || []).filter((event) => event.kind === 'start' && event.name === 'vq-rise' && event.webStartMs !== null)
+    if (!starts.length) { console.log(pad(row.id, 18) + '这一屏没有 vq-rise'); continue }
+    // 按宿主元素分组：一屏常常有两个 .vq-stagger 容器（运营位、能力卡），各自错峰、各起各的，
+    // 混在一起排出来的「间隔」没有任何意义（会读出 18/6/18/6/24 这种数）。
+    const groups = {}
+    for (const event of starts) {
+      const key = String(event.target).split('.')[1] || String(event.target)
+      const bucket = groups[key] || (groups[key] = [])
+      bucket.push(Math.round((event.webStartMs + (event.effectDelayMs || 0)) * 1000) / 1000)
+    }
+    const parts = Object.keys(groups).map((key) => {
+      const list = groups[key].sort((a, b) => a - b)
+      const gaps = []
+      for (let i = 1; i < list.length; i += 1) gaps.push(Math.round((list[i] - list[i - 1]) * 1000) / 1000)
+      return key + '×' + list.length + ' 起跑 ' + list.join('/') + 'ms 间隔 ' + (gaps.join('/') || '-')
+    })
+    console.log(pad(row.id, 18) + 'vq-rise ' + starts.length + ' 条 · ' + parts.join(' | '))
+  }
+  console.log('')
+}
 console.log('---- 趟汇总 ----')
 for (const row of passes) {
   console.log(pad(row.id, 18) + pad('可见可点 ' + row.total, 14) + pad('量了 ' + row.measured, 10) + pad('有反馈 ' + row.feedback, 12) + pad('候选 ' + row.noFeedback, 10) + pad('active没匹配 ' + row.activeNotMatched, 18) + pad('禁用 ' + row.disabled, 10) + pad('读不到 ' + row.readFailed, 12) + pad('写请求 ' + row.writeRequests, 12) + (row.aborted || ''))
@@ -2376,6 +2905,9 @@ if (FOCUS_MODE) {
 
 if (LINK_MODE) {
   console.log('---- 划过巡检（非按钮表面）· ' + out.summary.hoverSurfacePages + ' 屏 / 量了 ' + out.summary.hoverSurfaces + ' 张 · 有反馈 ' + out.summary.hoverFeedback + ' · 看不出变化 ' + out.summary.hoverNoChange + ' · 有反馈但硬切 ' + out.summary.hoverSurfaceHardCuts + ' · 只靠下划线 ' + out.summary.hoverDiscreteOnly + ' · 读不到 ' + out.summary.hoverReadFailed + ' · 写请求 ' + allWrites.length + ' · 上游 ' + upstream.length + ' · 证据 ' + path.join(path.relative(ROOT, OUT_DIR), 'press.json') + ' ----')
+}
+if (MOTION_MODE) {
+  console.log('---- 动效巡检 · ' + out.summary.motionPages + ' 趟（含减弱动态效果 ' + out.summary.reducePages + ' 趟） · 声明 ' + out.summary.motionDeclared + ' 条（无盒子 ' + out.summary.motionNoBox + ' 条没跑） · 无限 ' + out.summary.motionInfinite + ' · 跑完 ' + out.summary.motionEnded + ' · 还在飞 ' + out.summary.motionStillRunning + ' · 闪现型 ' + out.summary.motionTransientKinds + ' 种/' + out.summary.motionTransientStarts + ' 次 · 一次没起 ' + out.summary.motionNeverStarted + ' · 起过没落地 ' + out.summary.motionStartedNoEnd + ' · 落地后还半透明 ' + out.summary.motionEndedTransparent + ' · 落地后还定着 transform ' + out.summary.motionEndedHoldsTransform + ' · 减弱动态效果下还超过 1ms ' + out.summary.reduceMisses + ' · 还半透明 ' + out.summary.reduceStuck + ' · 写请求 ' + allWrites.length + ' · 上游 ' + upstream.length + ' · 证据 ' + path.join(path.relative(ROOT, OUT_DIR), 'press.json') + ' ----')
 }
 try { chrome.kill() } catch { /* 已经退出 */ }
 try { server.kill() } catch { /* 已经退出 */ }

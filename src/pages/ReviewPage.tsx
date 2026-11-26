@@ -16,6 +16,7 @@ import {
   reviewVersionLabel,
 } from '../domain/review'
 import { reviewNextActionLabel, reviewNextPlan, type ReviewNextAction, type ReviewNextScope } from '../domain/review-next'
+import { scrollToSoft } from '../domain/motion'
 import { useWorkflowEnabled } from '../domain/features'
 import { pickedReadiness, readNotice, reviewReadiness, statusReadOf, templateShelf, templatesReadOf, type ReviewStatusRead, type ReviewTemplatesRead } from '../domain/review-ready'
 import { anchorNumber, evidenceAreaLabel, reviewAnchorBadges, reviewAnchorMarks } from '../domain/review-anchors'
@@ -560,7 +561,7 @@ export default function ReviewPage({
     setPinned((current) => (current === id ? null : id))
     setActive(id)
     window.setTimeout(() => {
-      canvasRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      scrollToSoft(canvasRef.current, { block: 'nearest' })
     }, 0)
   }, [])
 

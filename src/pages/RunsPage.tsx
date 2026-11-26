@@ -8,6 +8,7 @@ import type { ProjectSummary } from '../domain/project'
 import { getRunResumePlan, listFlows, listRuns, type ApiFlow, type RunRecord, type RunResumePlan } from '../api/flows'
 import { runCreditsText, runResumeInfo, runResumePlanView, runSpentText, runStatusMeta, runVersionLabel, runWorkLine } from '../domain/run'
 import { readRunsView, resolveFlowFilter, writeRunsView, type RunsView } from '../domain/list-view'
+import { scrollToSoft } from '../domain/motion'
 import { creditKindLabel, getCredits, listCredits, type CreditEntry, type CreditsResponse } from '../api/credits'
 import { readSession } from '../auth/session'
 import '../styles/runs.css'
@@ -204,8 +205,7 @@ function WorkflowRunsPanel({
     window.requestAnimationFrame(() => {
       const section = detailRef.current
       if (!section) return
-      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-      section.scrollIntoView({ block: 'start', behavior: reduce ? 'auto' : 'smooth' })
+      scrollToSoft(section, { block: 'start' })
     })
   }
 

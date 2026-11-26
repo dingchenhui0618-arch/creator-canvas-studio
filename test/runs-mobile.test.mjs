@@ -169,8 +169,13 @@ test('窄屏点一次运行要把详情滚到眼前（桌面两栏并排，不�
   assert.match(runsSource, /const detailRef = useRef<HTMLElement \| null>\(null\)/)
   const reveal = runsSource.slice(runsSource.indexOf('const revealDetail'), runsSource.indexOf('const revealDetail') + 700)
   assert.match(reveal, /matchMedia\('\(max-width: 1100px\)'\)\.matches/)
-  assert.match(reveal, /prefers-reduced-motion: reduce/)
-  assert.match(reveal, /scrollIntoView\(\{ block: 'start'/)
+  // r339：「平滑滚」与「开了减弱动态效果就直接到位」这一对判据收进了 src/domain/motion.ts 的
+  // scrollToSoft（四处写死 behavior: 'smooth' 的调用点一起并过来）。这里断言这一处用的是它，
+  // 判据本身在 motion.ts 里，由 test/reduced-motion-scroll.test.mjs 钉住。
+  assert.match(reveal, /scrollToSoft\(section, \{ block: 'start' \}\)/)
+  const motionSource = fs.readFileSync(path.join(ROOT, 'src', 'domain', 'motion.ts'), 'utf8')
+  assert.match(motionSource, /prefers-reduced-motion: reduce/)
+  assert.match(motionSource, /behavior: prefersReducedMotion\(\) \? 'auto' : 'smooth'/)
   assert.match(runsSource, /<section className="runs-detail" ref=\{detailRef\}>/)
   // 点行的那一处必须真的调它，否则 ref 与函数都白写
   const click = runsSource.slice(runsSource.indexOf('setOpen(item.id)'), runsSource.indexOf('setOpen(item.id)') + 200)

@@ -105,4 +105,12 @@ export function formatDuration(seconds: number | null | undefined) {
   return minutes ? minutes + ':' + String(rest).padStart(2, '0') : '0:' + String(rest).padStart(2, '0')
 }
 
-export const coverSrc = (url: string) => (url ? '/api/cover?url=' + encodeURIComponent(url) : '')
+// 封面地址（r339）：只有**需要代理**的才走 /api/cover。
+// 平台封面要代理是历史原因（直连 403 / mixed content），但站内地址（/media/、/api/）本来就是同源的，
+// 内嵌数据（data:）本身就是一张图 —— 这两种再包一层代理只是白跑一趟，代理抓不到还会在页面上
+// 留下一条「资源加载失败」的前端异常（巡检时能稳定复现 4 条）。
+export const coverSrc = (url: string) => {
+  if (!url) return ''
+  if (url.startsWith('data:') || url.startsWith('/')) return url
+  return '/api/cover?url=' + encodeURIComponent(url)
+}
