@@ -86,8 +86,10 @@ async function inboxWithWait({ auth, since, waitMs }) {
       if (unsubscribe) unsubscribe()
       resolve()
     }
+    // 这个定时器**不能 unref**：它就是「这一轮请求要等满 wait 秒」本身。
+    // unref 掉之后，当进程里没有别的引用（例如自检脚本里没有监听端口）时，
+    // 事件循环会先结束，等长轮询的 Promise 永远不 resolve（CI 上真实踩过）。
     timer = setTimeout(finish, waitMs)
-    timer.unref?.()
     unsubscribe = subscribeRoom(auth.room.id, (event) => {
       if (event.type !== 'message') return
       const message = event.message
