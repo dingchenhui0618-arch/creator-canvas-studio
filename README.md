@@ -445,3 +445,15 @@ DOMAIN=visionqa.wavisionai.cn bash deploy/production/enable-https.sh            
 截图里的模型是假的，真模型下的语气未验；390 下左侧导航栏有一列被裁掉的字（r316 就有，属既有问题）。
 
 另有一份独立审计：`docs/platform-gap-audit-2026-11-26.md`（平台还缺什么，按「最假先修」排序）。
+## 第三百六十三、发版：聊天室 1c 进生产（v0.9.290）
+
+1c（平台智能体在房间里回话、7 个工具只开 `templates.list`）已上生产：入口 `index-Cj1eOo-7.js`，
+health ok templates 27，两个服务 active，**一次发布成功**。回滚 `bash /opt/visionqa/ops/rollback.sh --to 1` 回 0.9.289。
+
+生产上真渲染验过（`scripts/shot-r317-prod.mjs`，临时管理员会话拍完撤销、临时房间拍完解散）：
+输入框提示「平台智能体会接话 · 每轮 1 积分，失败自动退回」、右栏「自动接话：开」与
+「平台智能体现在能用：读模板库 · 另外 6 个还没开」、1440 与 390 横向溢出 0、页面报错 none。
+[docs/r317-prod-room-1440.png](docs/r317-prod-room-1440.png)、[docs/r317-prod-room-390.png](docs/r317-prod-room-390.png)。
+
+边界：本轮 0 次真实上游调用、0 积分——**线上还没真跑过一轮平台回话**（真跑一轮要 1 积分并打真实模型，等在生产上发一句再验）；
+逐个房间的验收临时房间在 `rooms` 表里留了墓碑行（列表接口不返回）。细节见 [docs/deploy-r317-2026-11-26.md](docs/deploy-r317-2026-11-26.md)。
