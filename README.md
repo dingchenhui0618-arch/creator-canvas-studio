@@ -916,7 +916,8 @@ click     → ARTICLE.vq-promo        按下与抬起的共同祖先——那张
 **按下时不许有 transform**、槽空时撤销条必须还在渲染条件里、撤销要真的落盘，每一条都配一个「改坏它，
 检查必须变红」。`npm test` **2132 / 2132**（+6）、`tsc -b` 干净、`oxlint` 0 error / 30 warning（755 文件）、
 密钥扫描 1204 个文件无命中、入口 `index-DWJzJJ7H.js`（870,920 B）；发布标签 `20261126-2043-r326promo`，
-快照 `/opt/visionqa/releases/20261126-124309-20261126-2043-r326promo.tar.gz`，`ops/rollback.sh --to 1` 回 0.9.297。
+快照 `/opt/visionqa/releases/20261126-124309-20261126-2043-r326promo.tar.gz`，`ops/rollback.sh --to 1` 回 0.9.297；
+提交 `91b1a77`，CI 45822680837 success。
 
 边界：热区让卡片上的文字点选不了（这张卡片只有一句话）；CTA 仍是 `<button>`，中键/⌘+点击开新标签页没做；
 撤销窗口只有 8 秒，退场之后那条就真的不再出现（清站点数据才会回来）；条子只在这一次浏览里有效。
