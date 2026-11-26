@@ -380,6 +380,80 @@
   cursor: pointer;
 }
 .rooms-member-add:hover { border-color: var(--ink); color: var(--ink); }
+.rooms-member-text strong { display: flex; align-items: center; gap: var(--space-1); }
+.rooms-member-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--pass);
+}
+.rooms-member-state {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-2xs);
+  color: var(--faint);
+}
+.rooms-member-add.is-quiet { border-style: solid; border-color: var(--line); }
+/* 接入面板：一张码 + 两句话 + 换/作废，不弹窗、不开新页 */
+.rooms-pair {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+}
+.rooms-pair-code { display: flex; align-items: center; gap: var(--space-2); }
+.rooms-pair-code code {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-xs);
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--text-md);
+  letter-spacing: .12em;
+  text-align: center;
+  user-select: all;
+}
+.rooms-pair-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+}
+.rooms-pair-copy:hover { border-color: var(--ink); color: var(--ink); }
+.rooms-pair-note { margin: 0; font-size: var(--text-2xs); color: var(--faint); }
+.rooms-pair-hint { margin: 0; font-size: var(--text-2xs); line-height: var(--leading-meta); color: var(--muted); }
+.rooms-pair-hint a { color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
+.rooms-pair-actions { display: flex; gap: var(--space-2); }
+.rooms-pair-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--btn-gap-sm);
+  height: var(--btn-h-sm);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-xs);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: var(--text-2xs);
+  cursor: pointer;
+}
+.rooms-pair-actions button:hover { border-color: var(--ink); }
+.rooms-pair-actions button.is-quiet { border-color: var(--line); color: var(--muted); }
+.rooms-pair-actions button:disabled { opacity: .55; cursor: default; }
 .rooms-picker {
   display: flex;
   flex-direction: column;

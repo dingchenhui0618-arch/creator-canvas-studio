@@ -6,6 +6,9 @@
 // 进程与同一个备份口径，不新增第二个数据库文件。
 import crypto from 'node:crypto'
 import { openDb } from './auth.mjs'
+// 反向依赖：移出成员/解散房间要撤销令牌，成员列表要显示「谁接进来了」。
+// agent-access 只在调用期读 ROOM_LIMITS，加载期不读，所以这个环是安全的。
+import { revokeTokensForMember, revokeTokensForRoom, tokenStateForRoom } from './agent-access.mjs'
 
 // 写死的上限：房间名 40 字、一条消息 8000 字、一人最多 20 个房间、一个房间最多 12 个智能体成员。
 // 数字都取「正常用不到、脚本会先撞上」的位置，不另开配置项。
@@ -138,6 +141,18 @@ function publicMember(row) {
   }
 }
 
+// 成员 + 接入状态：connected / lastSeenAt / tokenPrefix（平台智能体没有令牌，全空）
+function withToken(row, tokens) {
+  const state = tokens.get(row.id) || null
+  return {
+    ...publicMember(row),
+    connected: Boolean(state && state.connected),
+    lastSeenAt: state ? Number(state.lastSeenAt || 0) : 0,
+    tokenPrefix: state ? state.prefix : '',
+    provider: row.provider || (state ? state.provider : '') || '',
+  }
+}
+
 function publicMessage(row) {
   return {
     id: row.id,
@@ -261,6 +276,8 @@ export function getRoom(roomId, userId) {
   const stats = handle
     .prepare('SELECT COUNT(*) AS n, COALESCE(MAX(seq), 0) AS last FROM room_messages WHERE room_id = ?')
     .get(String(roomId))
+  // 「接入状态」跟着令牌走：没有活令牌的成员是平台智能体或已被撤销的连接器
+  const tokens = tokenStateForRoom(roomId)
   return {
     id: room.id,
     name: room.name,
@@ -274,8 +291,8 @@ export function getRoom(roomId, userId) {
     lastReadSeq: Number(read?.last_seq || 0),
     lastSeq: Number(stats?.last || 0),
     messageCount: Number(stats?.n || 0),
-    agents: members.filter((row) => row.kind === 'agent').map(publicMember),
-    members: members.map(publicMember),
+    agents: members.filter((row) => row.kind === 'agent').map((row) => withToken(row, tokens)),
+    members: members.map((row) => (row.kind === 'agent' ? withToken(row, tokens) : publicMember(row))),
   }
 }
 
@@ -319,6 +336,8 @@ export function dissolveRoom({ roomId, userId }) {
   if (room.owner_id !== userId) throw httpError(403, 'ROOM_OWNER', '只有房主能解散房间')
   // 墓碑：不物理删，历史与审计都还在，列表不再返回
   handle.prepare('UPDATE rooms SET dissolved_at = ?, updated_at = ? WHERE id = ?').run(now(), now(), String(roomId))
+  // 解散就把这间房子的钥匙全部作废，不留「房间没了但令牌还能读」的缝
+  revokeTokensForRoom(roomId)
   return { ok: true }
 }
 
@@ -348,6 +367,8 @@ export function removeMember({ roomId, userId, memberId }) {
   if (!row || row.removed_at) throw httpError(404, 'ROOM_MEMBER', '这个成员不在房间里')
   if (row.kind === 'human' && row.user_id === room.owner_id) throw httpError(400, 'ROOM_MEMBER', '房主不能把自己移出房间')
   handle.prepare('UPDATE room_members SET removed_at = ? WHERE id = ?').run(now(), row.id)
+  // 移出成员 = 立刻断掉它的令牌：authenticate 也会看 removed_at，这里是第二道（也顺手清掉钥匙）
+  revokeTokensForMember(row.id)
   return { ok: true }
 }
 
@@ -408,9 +429,10 @@ function broadcast(roomId, event) {
   }
 }
 
-export function appendMessage({ roomId, userId, body, mentions = [], replyTo = '', clientId = '' }) {
+// 人和智能体走同一个插入路径：seq 单点分配、clientId 幂等、@ 只认活成员、
+// 写进房间就广播给 SSE 订阅者。senderKind 只影响署名与「自己发的不回灌收件箱」。
+function insertMessage({ roomId, room, sender, senderKind, body, mentions = [], replyTo = '', clientId = '' }) {
   const handle = db()
-  const { room, member } = requireRoom(roomId, userId)
   const text = clipped(body, ROOM_LIMITS.message)
   if (!text) throw httpError(400, 'ROOM_EMPTY', '说点什么再发')
   const cleanClient = clipped(clientId, 64)
@@ -433,10 +455,10 @@ export function appendMessage({ roomId, userId, body, mentions = [], replyTo = '
     seq = Number(handle.prepare('SELECT COALESCE(MAX(seq), 0) AS m FROM room_messages WHERE room_id = ?').get(String(roomId)).m) + 1
     handle
       .prepare('INSERT INTO room_messages (id, room_id, seq, sender_member_id, sender_kind, sender_name, body, mentions_json, reply_to, state, client_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(messageId, String(roomId), seq, member.id, 'human', member.name, text, JSON.stringify(allowed), clipped(replyTo, 40), 'ok', cleanClient || null, at)
+      .run(messageId, String(roomId), seq, sender.id, senderKind, sender.name, text, JSON.stringify(allowed), clipped(replyTo, 40), 'ok', cleanClient || null, at)
     handle
       .prepare('INSERT INTO room_reads (room_id, member_id, last_seq) VALUES (?, ?, ?) ON CONFLICT(room_id, member_id) DO UPDATE SET last_seq = excluded.last_seq')
-      .run(String(roomId), member.id, seq)
+      .run(String(roomId), sender.id, seq)
     handle.exec('COMMIT')
   } catch (error) {
     handle.exec('ROLLBACK')
@@ -448,12 +470,27 @@ export function appendMessage({ roomId, userId, body, mentions = [], replyTo = '
   return { message, duplicated: false }
 }
 
-export function markRead({ roomId, userId, seq }) {
+/** 人发消息：先验房间成员身份。 */
+export function appendMessage({ roomId, userId, body, mentions = [], replyTo = '', clientId = '' }) {
+  const { room, member } = requireRoom(roomId, userId)
+  return insertMessage({ roomId, room, sender: member, senderKind: 'human', body, mentions, replyTo, clientId })
+}
+
+/** 智能体发消息：身份来自 vqc_ 令牌，守卫在 agent-access.authenticate 里已经验过。 */
+export function appendMessageAs({ roomId, room, member, senderKind = 'agent', body, mentions = [], replyTo = '', clientId = '' }) {
+  return insertMessage({ roomId, room, sender: member, senderKind, body, mentions, replyTo, clientId })
+}
+
+export function markReadAs({ roomId, memberId, seq }) {
   const handle = db()
-  const { member } = requireRoom(roomId, userId)
   const target = Math.max(0, Number(seq) || 0)
   handle
     .prepare('INSERT INTO room_reads (room_id, member_id, last_seq) VALUES (?, ?, ?) ON CONFLICT(room_id, member_id) DO UPDATE SET last_seq = MAX(room_reads.last_seq, excluded.last_seq)')
-    .run(String(roomId), member.id, target)
+    .run(String(roomId), String(memberId), target)
   return { ok: true, lastSeq: target }
+}
+
+export function markRead({ roomId, userId, seq }) {
+  const { member } = requireRoom(roomId, userId)
+  return markReadAs({ roomId, memberId: member.id, seq })
 }

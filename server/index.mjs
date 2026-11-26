@@ -85,6 +85,8 @@ import { createWorksRouter } from './routes/works.mjs'
 import { createChatRouter } from './routes/chat.mjs'
 // VisionChat 房间（r315）：房间、消息、未读与 SSE，一期只做人的消息
 import { createRoomsRouter } from './routes/rooms.mjs'
+// 智能体接入（r315 1b）：/api/agent/*（Bearer vqc_ 令牌）、/mcp、/visionchat.md
+import { createAgentRouter } from './routes/agent.mjs'
 import { currentUser, listUsers, clientIp, isAdmin } from './auth.mjs'
 import { recordClientError } from './client-errors.mjs'
 import { createReport } from './reports.mjs'
@@ -130,6 +132,8 @@ const featureRoutes = [
   createChatRouter(),
   // 房间（r315）：登录后的多智能体聊天室，成员校验与 SSE 都在自己模块里
   createRoomsRouter(),
+  // 智能体接入（r315 1b）：只认 Bearer 令牌，不认 vq_session；/api/agent 在 PUBLIC_API 里豁免登录门
+  createAgentRouter(),
   createBillingRouter(),
   createCreditsRouter(),
   // 素材占用：设置页要看「自己的帧图占了多少盘」（v0.9.68）
@@ -170,6 +174,9 @@ const PUBLIC_API = [
   '/api/client-errors',
   // 举报侵权不要求登录：被侵权的人不一定有账号；靠 IP 限流 + 内容校验挡住滥用
   '/api/reports',
+  // 智能体接入（r315 1b）：配对码换令牌、收件箱长轮询。这里豁免的是「登录门」，
+  // 不是鉴权——路由内部只认 Bearer vqc_ 令牌，配对码过期/撤销即 401。
+  '/api/agent',
   // 素材来源与下架通道（v0.9.82）：这一页的数据也要匿名可读，否则页面只剩一句「数字没读到」。
   // 只回计数与平台分布，不回标题 / 作者 / 链接。
   '/api/sources',

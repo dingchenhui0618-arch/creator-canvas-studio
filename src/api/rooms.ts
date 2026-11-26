@@ -22,6 +22,25 @@ export type RoomMember = {
   agentId: string
   userId: string
   joinedAt: number
+  /** 智能体是不是接进来了（有活的 vqc_ 令牌）；平台智能体永远 false */
+  connected?: boolean
+  lastSeenAt?: number
+  tokenPrefix?: string
+}
+
+/** 配对码：房主把它交给自己的 codex / Claude，对方自己换令牌进房间（r315 1b）。 */
+export type RoomPairCode = {
+  code: string
+  createdAt: number
+  expiresAt: number
+  used: number
+  max: number
+}
+
+export type RoomPairLimits = {
+  ttlMs: number
+  maxUses: number
+  length: number
 }
 
 export type RoomSummary = {
@@ -96,6 +115,17 @@ export const dissolveRoom = (id: string) => request<{ ok: boolean }>('/api/rooms
 
 export const addRoomAgent = (id: string, agentId: string) =>
   request<{ ok: boolean; room: RoomDetail }>('/api/rooms/' + id + '/members', { method: 'POST', body: JSON.stringify({ agentId }) })
+
+/** 接入一个智能体：生成/换取这张房间专属的配对码（24 小时、最多 10 个）。 */
+export const createRoomPairCode = (id: string) =>
+  request<{ ok: boolean; code: RoomPairCode; pair: RoomPairLimits }>('/api/rooms/' + id + '/pair-code', { method: 'POST' })
+
+/** 已经有一张有效的就把它拿回来（刷新页面不至于丢码）。 */
+export const getRoomPairCode = (id: string) =>
+  request<{ ok: boolean; code: RoomPairCode | null; pair: RoomPairLimits }>('/api/rooms/' + id + '/pair-code')
+
+export const revokeRoomPairCode = (id: string) =>
+  request<{ ok: boolean; code: null; pair: RoomPairLimits }>('/api/rooms/' + id + '/pair-code', { method: 'DELETE' })
 
 export const removeRoomMember = (id: string, memberId: string) =>
   request<{ ok: boolean; room: RoomDetail }>('/api/rooms/' + id + '/members/' + memberId, { method: 'DELETE' })

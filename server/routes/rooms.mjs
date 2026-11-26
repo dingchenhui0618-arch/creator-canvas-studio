@@ -5,6 +5,7 @@
 import { readBody, sendJson } from './_shared.mjs'
 import { currentUser, clientIp } from '../auth.mjs'
 import { listAgents } from '../agents.mjs'
+import { PAIR, currentPairCode, createPairCode, revokePairCode } from '../agent-access.mjs'
 import {
   ROOM_LIMITS,
   addAgentMember,
@@ -25,6 +26,8 @@ const PREFIX = '/api/rooms'
 const ROOM_ONE = /^\/api\/rooms\/([A-Za-z0-9_]{6,40})$/
 const ROOM_SUB = /^\/api\/rooms\/([A-Za-z0-9_]{6,40})\/(messages|stream|read|members)$/
 const ROOM_MEMBER = /^\/api\/rooms\/([A-Za-z0-9_]{6,40})\/members\/([A-Za-z0-9_]{6,40})$/
+// 接入智能体的配对码（r315 1b）：只有房主能看/生成/作废
+const ROOM_PAIR = /^\/api\/rooms\/([A-Za-z0-9_]{6,40})\/pair-code$/
 
 // 一个账号最多 2 条 SSE：多标签页够用，再多只是拿内存换「不刷新」。
 const streams = new Map()
@@ -61,6 +64,29 @@ export function createRoomsRouter() {
             const body = await readBody(req)
             const room = createRoom({ userId: user.id, name: body?.name, topic: body?.topic || '', rules: body?.rules || null, memberName: user.name || user.email || '我' })
             sendJson(res, 201, { ok: true, room })
+            return true
+          }
+          sendJson(res, 405, { ok: false, code: 'ROOM_METHOD', error: '这个接口不支持 ' + req.method })
+          return true
+        }
+
+        // ── 配对码：把「接入一个智能体」的入口收在房间里 ──────────────────
+        const pairMatched = pathname.match(ROOM_PAIR)
+        if (pairMatched) {
+          const roomId = pairMatched[1]
+          if (req.method === 'GET') {
+            const code = currentPairCode({ roomId, userId: user.id })
+            sendJson(res, 200, { ok: true, code, pair: PAIR })
+            return true
+          }
+          if (req.method === 'POST') {
+            const code = createPairCode({ roomId, userId: user.id })
+            sendJson(res, 201, { ok: true, code, pair: PAIR })
+            return true
+          }
+          if (req.method === 'DELETE') {
+            revokePairCode({ roomId, userId: user.id })
+            sendJson(res, 200, { ok: true, code: null, pair: PAIR })
             return true
           }
           sendJson(res, 405, { ok: false, code: 'ROOM_METHOD', error: '这个接口不支持 ' + req.method })

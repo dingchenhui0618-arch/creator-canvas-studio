@@ -1,23 +1,28 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Check, Loader2, MessageSquarePlus, Pencil, Plus, Send, Trash2, Users, X } from 'lucide-react'
+import { Check, Copy, KeyRound, Loader2, MessageSquarePlus, Pencil, Plus, Send, Trash2, Users, X } from 'lucide-react'
 import PageHead from '../components/PageHead'
 import { listAgents, type AgentRecord } from '../api/agents'
 import {
   addRoomAgent,
   createRoom,
+  createRoomPairCode,
   dissolveRoom,
   getRoom,
+  getRoomPairCode,
   listRoomMessages,
   listRooms,
   markRoomRead,
   removeRoomMember,
+  revokeRoomPairCode,
   roomAgoLabel,
   roomStreamUrl,
   roomTimeLabel,
   sendRoomMessage,
   updateRoom,
   type RoomDetail,
+  type RoomMember,
   type RoomMessage,
+  type RoomPairCode,
   type RoomSummary,
 } from '../api/rooms'
 import '../styles/rooms.css'
@@ -50,6 +55,11 @@ export default function RoomsPage({ onToast }: { onToast?: (text: string) => voi
   const [confirming, setConfirming] = useState(false)
   const [picking, setPicking] = useState(false)
   const [myAgents, setMyAgents] = useState<AgentRecord[]>([])
+  // 接入智能体（r315 1b）：面板里显示一张房间专属的配对码
+  const [pairOpen, setPairOpen] = useState(false)
+  const [pairCode, setPairCode] = useState<RoomPairCode | null>(null)
+  const [pairBusy, setPairBusy] = useState(false)
+  const [pairCopied, setPairCopied] = useState(false)
 
   const threadRef = useRef<HTMLDivElement | null>(null)
   const bottomRef = useRef<HTMLDivElement | null>(null)
@@ -250,6 +260,73 @@ export default function RoomsPage({ onToast }: { onToast?: (text: string) => voi
       setRoom(result.room)
     } catch (reason) {
       onToast?.(String((reason as Error)?.message || reason))
+    }
+  }
+
+  // 接入：先看有没有现成的码（刷新页面不该丢），没有才生成
+  const togglePair = async () => {
+    if (!room) return
+    if (pairOpen) {
+      setPairOpen(false)
+      return
+    }
+    setPairOpen(true)
+    setPairBusy(true)
+    try {
+      if (pairCode) return
+      const existing = await getRoomPairCode(room.id)
+      if (existing.code) {
+        setPairCode(existing.code)
+        return
+      }
+      const created = await createRoomPairCode(room.id)
+      setPairCode(created.code)
+    } catch (reason) {
+      onToast?.(String((reason as Error)?.message || reason))
+    } finally {
+      setPairBusy(false)
+    }
+  }
+
+  const rotatePair = async () => {
+    if (!room) return
+    setPairBusy(true)
+    try {
+      const created = await createRoomPairCode(room.id)
+      setPairCode(created.code)
+      setPairCopied(false)
+      onToast?.('换了一张新码，旧码已失效')
+    } catch (reason) {
+      onToast?.(String((reason as Error)?.message || reason))
+    } finally {
+      setPairBusy(false)
+    }
+  }
+
+  const dropPair = async () => {
+    if (!room) return
+    setPairBusy(true)
+    try {
+      await revokeRoomPairCode(room.id)
+      setPairCode(null)
+      setPairCopied(false)
+      onToast?.('码已作废，已经接进来的智能体不受影响')
+    } catch (reason) {
+      onToast?.(String((reason as Error)?.message || reason))
+    } finally {
+      setPairBusy(false)
+    }
+  }
+
+  const copyPair = async () => {
+    if (!pairCode) return
+    try {
+      await navigator.clipboard.writeText(pairCode.code)
+      setPairCopied(true)
+      window.setTimeout(() => setPairCopied(false), 2000)
+      onToast?.('配对码已复制，去交给你的智能体')
+    } catch {
+      onToast?.('浏览器不让复制，手动选中这 8 位吧：' + pairCode.code)
     }
   }
 
@@ -464,8 +541,12 @@ export default function RoomsPage({ onToast }: { onToast?: (text: string) => voi
                 <div key={member.id} className="rooms-member">
                   <span className="rooms-msg-face is-small" aria-hidden="true">{initials(member.name)}</span>
                   <span className="rooms-member-text">
-                    <strong>{member.name}</strong>
+                    <strong>
+                      {member.name}
+                      {member.connected ? <span className="rooms-member-dot" aria-label="已接入" /> : null}
+                    </strong>
                     <em>{member.role || '智能体'}</em>
+                    <span className="rooms-member-state">{memberStateLabel(member)}</span>
                   </span>
                   {room.isOwner ? (
                     <button type="button" className="rooms-member-x" aria-label={'移出 ' + member.name} onClick={() => void kick(member.id)}>
@@ -480,6 +561,45 @@ export default function RoomsPage({ onToast }: { onToast?: (text: string) => voi
                   加智能体
                 </button>
               ) : null}
+              {room?.isOwner ? (
+                <button type="button" className="rooms-member-add is-quiet" onClick={() => void togglePair()} aria-expanded={pairOpen}>
+                  <KeyRound size={14} aria-hidden="true" />
+                  接入我的智能体
+                </button>
+              ) : null}
+              {pairOpen ? (
+                <div className="rooms-pair">
+                  {pairCode ? (
+                    <>
+                      <div className="rooms-pair-code">
+                        <code>{pairCode.code}</code>
+                        <button type="button" className="rooms-pair-copy" onClick={() => void copyPair()} aria-label="复制配对码">
+                          {pairCopied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+                        </button>
+                      </div>
+                      <p className="rooms-pair-note">
+                        24 小时内有效 · 已接 {pairCode.used}/{pairCode.max} 个 · 只对这个房间有效
+                      </p>
+                      <p className="rooms-pair-hint">
+                        交给你的 codex / Claude / workbuddy：让它读 <a href="/visionchat.md" target="_blank" rel="noreferrer">/visionchat.md</a>，自己换令牌进房间。
+                      </p>
+                      <div className="rooms-pair-actions">
+                        <button type="button" onClick={() => void rotatePair()} disabled={pairBusy}>
+                          {pairBusy ? <Loader2 size={13} className="rooms-spin" aria-hidden="true" /> : null}
+                          换一张码
+                        </button>
+                        <button type="button" className="is-quiet" onClick={() => void dropPair()} disabled={pairBusy}>
+                          作废
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="rooms-pair-note">
+                      {pairBusy ? '正在生成配对码…' : '这张码已经作废了，换一张就能继续接。'}
+                    </p>
+                  )}
+                </div>
+              ) : null}
               {picking ? (
                 <div className="rooms-picker">
                   {!freeAgents.length ? <p>没有可以再加的了，先去「快捷创作」建一个。</p> : null}
@@ -492,12 +612,21 @@ export default function RoomsPage({ onToast }: { onToast?: (text: string) => voi
                 </div>
               ) : null}
             </div>
-            <p className="rooms-members-foot">智能体接进来之后才会在这里发言；在那之前，房间只记你说的话。</p>
+            <p className="rooms-members-foot">
+              接进来的智能体就在这个房间里说话；没接的只有你在说。令牌只给说话权——生图、生视频、评审仍然要在界面里由你点。
+            </p>
           </aside>
         </div>
       ) : null}
     </div>
   )
+}
+
+// 成员行下面那行小字：接进来的说「多久前在线」，没接的说明它是平台智能体还是已经断开
+function memberStateLabel(member: RoomMember): string {
+  if (member.connected) return member.lastSeenAt ? '已接入 · ' + roomAgoLabel(member.lastSeenAt) + '在线' : '已接入 · 还没说过话'
+  if (member.provider === 'platform' || !member.provider) return '平台智能体'
+  return '已断开 · 重新接一个'
 }
 
 // 建房返回的是 RoomDetail，列表用的是 RoomSummary：只差几个统计字段，补齐即可。

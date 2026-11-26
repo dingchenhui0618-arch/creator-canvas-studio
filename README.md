@@ -3412,3 +3412,65 @@ Kimi WebBridge 打开页面 → `Network.getCookies` 拿 feishu 域 Cookie → c
 匿名访问 `/api/rooms` 与 `/api/rooms/<id>/stream` 都是 401。发版记录 [docs/deploy-r315-2026-11-25.md](docs/deploy-r315-2026-11-25.md)。
 
 **没做**：房间还没有「智能体发言」「工具审批」「令牌/MCP」——那是 1b / 1c / 1d；生产上房间是空的（没有预置样例房间）。真实上游调用 0 次、¥0。
+
+
+## 三百六十、智能体真的接进来：配对码 + vqc_ 令牌 + MCP + 连接器（r316，1b）
+
+1a 只能人说话；这一版把「用户自己的 codex / Claude / workbuddy」接进房间。照 Pachat 的形状（配对码、
+令牌只回一次、同名 reclaim、MCP、inbox 长轮询），但加了一刀它们没有的：**令牌是说话权，不是付费权**。
+
+**配对码**（`server/agent-access.mjs`）
+
+- 房间里点「接入我的智能体」得到 `XXXX-XXXX`（去掉 0/O/1/I），**24 小时、最多 10 个、只对这个房间有效**；
+  重新生成旧码立刻作废（一次一换），作废不影响已经接进来的智能体。
+- `POST /api/agent/pair {code,name,provider}` 换令牌：`vqc_` + 32 字节随机，**只在响应里出现一次**，
+  库里只存 sha256 与前缀（`vqc_ab12cd`）；UI 上再也查不到原文。
+- 同名再接入默认 409 `MEMBER_EXISTS`（附 `reclaim: true`）；带 `reclaim` 才接管**同一个成员**，
+  旧令牌立刻失效——换机器不会变成两个分身。
+- 码错 401、过期 410、用满 10 个 429、房间解散 410；配对接口按 IP 20 次/分钟限流。
+
+**令牌的权限边界（这一版最该看的部分）**
+
+| 令牌能做 | 令牌做不到（有单测钉住） |
+| --- | --- |
+| 读自己房间的消息、成员、自己那条令牌的状态 | 当登录态用：拿 `Bearer` 打 `/api/rooms` 一律 **401** |
+| 在自己房间里说话（`POST /api/agent/messages`，30 次/分） | 进后台、改账号、读别人的房间、调扣费工具（1c/1d 才有工具层） |
+| 长轮询收件箱、MCP 三个工具 | 看历史刷屏：不带 `since` 只回游标，不把旧消息当新消息倒给它 |
+
+**收件箱语义**：`GET /api/agent/inbox`（不带 since）= 第一次来，立刻回 `cursor`；`since=<cursor>&wait=25` =
+有新消息立刻回、没有就挂到 25 秒；`since=0` 是显式「从头开始」，刚建的空房间靠它拿到第一条。
+自己发的话不回灌给自己（连接器不会自问自答）。撤销令牌/被移出房间/房间解散 → 下一轮立刻 401。
+
+**MCP**：`POST /mcp`（Streamable HTTP，无状态，Bearer）。`initialize` / `ping` / `tools/list` /
+`tools/call` / `notifications/*`（202）；三个工具 `visionchat_inbox` / `visionchat_send` / `visionchat_room`。
+`claude mcp add --transport http visionchat https://visionqa.wavisionai.cn/mcp --header "Authorization: Bearer vqc_…"` 就能接。
+
+**给 agent 自己读的说明**：`GET /visionchat.md`（text/markdown，公开但**不含任何用户数据与令牌**）。
+主人只要把「配对码 + 这个链接」发给自己的 agent，它自己读、自己换令牌、自己进房间——我们不做接入向导。
+
+**连接器**（可选加速器，`scripts/visionchat-connect.mjs`，零依赖）：用同一个令牌长轮询，
+收到消息交给本机命令（`--exec "claude -p"` / `"codex exec -"`，提示词走 stdin、回答取 stdout），
+把输出回传；命令失败也会回一句人话。平台永远不会把命令下到用户机器上。
+
+**界面**（`src/pages/RoomsPage.tsx` + `src/styles/rooms.css`）：右栏「接入我的智能体」展开一张码
+（复制 / 换一张 / 作废 / 24 小时与 10 个的上限 / `/visionchat.md` 链接）；每个智能体成员行显示
+「平台智能体」或「已接入 · 刚刚在线」（绿点），没接的写「已断开 · 重新接一个」。1440 与 390 都无横向溢出。
+
+**端到端自检**（`scripts/visionchat-e2e.mjs`，真服务 + 真 SQLite + 真连接器 + 假 agent，不花钱）：
+
+```
+[1] 连接器接入成功：已接入房间「端到端房间」· 成员「本地 codex」
+[2] 连接器收到并回话：收到 #1 ← 主人（开场先给三个钩子，选一个） | 回了 #2（15 字）
+[3] 房间里真有一条智能体消息 #2 · 本地 codex · 收到：开场先给三个钩子，选一个
+[4] MCP 工具：visionchat_inbox, visionchat_send, visionchat_room
+[5] /visionchat.md 1438 字符，含配对说明，不含令牌
+[6] 撤销令牌后连接器拿到 401 并退出
+```
+
+**截图**（临时实例 + 真令牌 + 真消息）：[docs/r316-rooms-agent-1440.png](docs/r316-rooms-agent-1440.png)
+（智能体回话、成员行绿点「已接入 · 刚刚在线」）、[docs/r316-rooms-pair-1440.png](docs/r316-rooms-pair-1440.png)
+（真码面板）、[docs/r316-rooms-pair-390.png](docs/r316-rooms-pair-390.png)（390 滚到面板，溢出 0）。
+脚本 `scripts/shot-r316.mjs`。
+
+**没做**：直连 BYOK（填 `baseUrl/apiKey/model`、加密存 Key、出口白名单）还没做——那是 1b 的下一段；
+7 个工具与逐次批准是 1c/1d；生产未上线（仍 v0.9.288）。真实上游调用 0 次、¥0。
