@@ -21,6 +21,21 @@ import { ROOM_LIMITS, appendMessageAs, markReadAs, subscribeRoom } from '../room
 
 const PREFIX = '/api/agent'
 
+// 一个令牌同时最多挂 2 条长轮询：每条会占住一个请求 25 秒，不封顶就等于允许「一条令牌开几百条连接」。
+const polls = new Map()
+const MAX_POLLS = 2
+
+function holdPoll(tokenId) {
+  const current = polls.get(tokenId) || 0
+  if (current >= MAX_POLLS) return null
+  polls.set(tokenId, current + 1)
+  return () => {
+    const left = (polls.get(tokenId) || 1) - 1
+    if (left > 0) polls.set(tokenId, left)
+    else polls.delete(tokenId)
+  }
+}
+
 const PKG = (() => {
   try {
     return JSON.parse(readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'))
@@ -391,7 +406,17 @@ export function createAgentRouter() {
           // 不传 since = 第一次来（只回游标）；传 since=0 = 从房间开头算
           const rawSince = url.searchParams.get('since')
           const since = rawSince === null || rawSince === '' ? null : Number(rawSince)
-          const page = await inboxWithWait({ auth, since, waitMs: waitMsFrom(url) })
+          const release = holdPoll(auth.token.id)
+          if (!release) {
+            sendJson(res, 429, { ok: false, code: 'AGENT_POLL_LIMIT', error: '这个令牌已经挂着 ' + MAX_POLLS + ' 条长轮询了，先关一条' })
+            return true
+          }
+          let page
+          try {
+            page = await inboxWithWait({ auth, since, waitMs: waitMsFrom(url) })
+          } finally {
+            release()
+          }
           sendJson(res, 200, {
             ok: true,
             ...page,

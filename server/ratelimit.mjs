@@ -17,6 +17,8 @@ const RULES = [
   // 智能体接入（r315 1b）：配对按 IP 挡「拿码穷举」，发消息与人的房间消息同一个量级
   { method: 'POST', match: (p) => p === '/api/agent/pair', bucket: 'agent_pair', limit: 20 },
   { method: 'POST', match: (p) => p === '/api/agent/messages', bucket: 'agent_message', limit: 30 },
+  // MCP 客户端会连续 tools/call：按 IP 给一个宽松上限，挡的是死循环而不是正常使用
+  { method: 'POST', match: (p) => p === '/mcp', bucket: 'mcp', limit: 120 },
   { method: 'POST', match: (p) => /^\/api\/flows\/[\w-]+\/run$/.test(p), bucket: 'flow_run', limit: 6 },
   { method: 'POST', match: (p) => p === '/api/credits/request', bucket: 'credit_request', limit: 3 },
   // 传图（v0.9.87）：一次评审只需要一张，一分钟 12 次对拖拽重试够用；

@@ -218,6 +218,20 @@ test('收件箱：since=0 只给游标，不回灌自己说的话，人说话才
   assert.equal(agentMessage.senderName, '我的 codex')
 })
 
+test('同一个令牌最多 2 条长轮询：第 3 条 429，不让人一条令牌开几百条连接', async () => {
+  const cursor = (await call({ target: '/api/agent/inbox', token: TOKEN })).json().cursor
+  const first = call({ target: '/api/agent/inbox?since=' + cursor + '&wait=1', token: TOKEN })
+  const second = call({ target: '/api/agent/inbox?since=' + cursor + '&wait=1', token: TOKEN })
+  await new Promise((resolve) => setTimeout(resolve, 150))
+  const third = await call({ target: '/api/agent/inbox?since=' + cursor + '&wait=1', token: TOKEN })
+  assert.equal(third.statusCode, 429)
+  assert.equal(third.json().code, 'AGENT_POLL_LIMIT')
+  await Promise.all([first, second])
+  // 释放之后又能挂
+  const again = await call({ target: '/api/agent/inbox?since=' + cursor + '&wait=0', token: TOKEN })
+  assert.equal(again.statusCode, 200)
+})
+
 test('同名重连：默认 409 并提示 reclaim，带 reclaim 接管后旧令牌立刻失效', async () => {
   const freshCode = (await call({ router: roomsRouter, method: 'POST', target: '/api/rooms/' + room.id + '/pair-code', cookie: aliceCookie })).json().code.code
   const again = await pair({ code: freshCode, name: '我的 codex' })
