@@ -1508,7 +1508,7 @@ r336 里 `/overview`、`/settings` 记的「第 N 下回到开头」其实都是
 `/opt/visionqa/releases/20261126-185545-20261127-0300-r338skip.tar.gz`（元数据记着上一版入口 `index-B16INuE3.js`）；
 公网 `/api/version` **0.9.311**、health ok templates 27、新入口 `index-C_AZkWrt.js` 200、上一版入口 404，
 三个服务 active；live CSS 里核到 `.vq-skip` / `.vq-skip:focus-visible` / `clip-path:inset(50%)`，
-r337 那三条 `a:not([class])` 仍在。完整记录见
+r337 那三条 `a:not([class])` 仍在。提交 `cbddfcb`，CI **45879936575 success**。完整记录见
 [docs/r338-skip-link-2026-11-27.md](docs/r338-skip-link-2026-11-27.md)。
 
 边界：后台那一屏按选择器数出 **85 个**可 Tab 元素、走查 **56 站**后停住——补焦点、重按两次、
