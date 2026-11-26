@@ -728,6 +728,8 @@ CI run `45800370507` success（Node 24）。提交 `605cdf7` + `0e98635` + `6c78
 | `npm run scan:secrets` | 1189 个文件，没命中 |
 | `npm run build` | 入口 `index-R7L-Ypxl.js` |
 
+CI run `45806852527` success（Node 24），提交 `2c887c9` 已推 `master`。
+
 已上生产，标签 `20261126-1920-r322promo`，回滚点 `/opt/visionqa/releases/20261126-105516-20261126-1920-r322promo.tar.gz`
 （`--to 1` 回 0.9.293 / r321）。完整记录见 [docs/r322-promo-recharge-2026-11-26.md](docs/r322-promo-recharge-2026-11-26.md)。
 

@@ -116,6 +116,7 @@
 | `npx oxlint src server test scripts` | 0 error / 30 warning（744 个文件） |
 | `npm run scan:secrets` | 1189 个文件，没命中 |
 | `npm run build` | 入口 `index-R7L-Ypxl.js`（867,380 B）、CSS `index-Dwks99VY.css` |
+| CI | run `45806852527` success（Node 24），提交 `2c887c9` 已推 `master` |
 
 产物里能搜到的：`placement:\`recharge\`` 1 处、`is-leaving` 1 处、`vq-stagger` 3 处；
 **默认运营位的文案在 JS 里搜不到**（「10 积分复刻一条片子」命中 0 处）——内容在服务端 `server/promos.mjs`，
