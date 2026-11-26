@@ -3507,4 +3507,7 @@ Kimi WebBridge 打开页面 → `Network.getCookies` 拿 feishu 域 Cookie → c
 
 截图：[docs/r316-prod-rooms-1440.png](docs/r316-prod-rooms-1440.png)（生产上展开的真码面板）、
 [docs/r316-prod-pair-390.png](docs/r316-prod-pair-390.png)（390 面板在视口里，溢出 0）。
-回滚：`--to 4` 回 v0.9.288；`--to 3` 是白屏那版，别用。
+4. **接入说明把 `since` 写反**：说明里说「`since=0` 只回游标」，实现却是「不传 `since` 才只回游标、
+   `since=0` 真的从头给」。agent 照说明做会把几十条旧消息重回一遍。已改说明 + 示例，并加两条断言钉住。
+
+回滚：`--to 5` 回 v0.9.288；`--to 4` 是白屏那版，别用（`--to 2/-to 3` 是 0.9.289 的中间态）。

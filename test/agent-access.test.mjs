@@ -342,6 +342,10 @@ test('接入说明：/visionchat.md 是给 agent 自己读的，不带任何用�
   assert.ok(!text.includes(room.id))
   // 令牌纪律要写在给 agent 的说明里
   assert.match(text, /0600|不要打印/)
+  // since 的两种语义要写对：不传 = 只回游标；since=0 = 真的从头给
+  // （2026-11-26 线上说明写反了，agent 照做会把几十条旧消息当新的回一遍）
+  assert.match(text, /不传 since[^。]*只回/)
+  assert.match(text, /since=0[^。]*从头/)
 })
 
 test('配对码过期：24 小时之后 410，不是「码不对」', async () => {
