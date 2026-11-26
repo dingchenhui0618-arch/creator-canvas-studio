@@ -840,8 +840,14 @@
   position: absolute;
   inset: 0;
   background: rgba(17, 17, 17, 0.34);
+  animation: vq-fade var(--dur-2) var(--ease-out);
 }
 
+/* 进场（r327）：这是注册之后看到的第一屏，别的弹窗都有进场（.create-modal 的 modal-in、
+   命令面板、看大图），它反而是「啪」一下出现——第一印象最不该省这一下。
+   用动效层那一套：位移只走 4px（motion.css 的 vq-rise），时长取 --dur-2（180ms，与 .create-modal
+   的 200ms 一档）。fill-mode 不写 forwards：动画结束后 transform 归回 none，
+   卡片不会一直带着一层 transform 去当包含块。 */
 .vq-gate-card {
   position: relative;
   display: flex;
@@ -853,7 +859,11 @@
   border-radius: var(--radius-lg);
   background: var(--surface-raised);
   box-shadow: var(--shadow-pop);
+  animation: vq-rise var(--dur-2) var(--ease-out);
 }
+
+/* 打开时焦点是脚本放到卡片自己身上的（读屏会念出标题），它是容器不是控件，不给它画焦点圈 */
+.vq-gate-card:focus { outline: none; }
 
 .vq-gate-head {
   display: grid;
@@ -940,6 +950,10 @@
   padding: 24px 32px;
   overflow: auto;
 }
+
+/* 换步：内容淡上来，而不是硬切（r327）。打开时的第一步不带这个类——
+   卡片自己已经在进场，两层一起上浮会显得晃。类只加不撤（撤掉会把动画当场掐断）。 */
+.vq-gate-body.is-step-in { animation: vq-rise var(--dur-2) var(--ease-out); }
 
 .vq-gate-choices {
   display: grid;

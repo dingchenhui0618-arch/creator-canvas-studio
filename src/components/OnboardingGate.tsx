@@ -49,6 +49,13 @@ const IDENTITY_ICON: Record<OnboardingIdentityId, IconComponent> = {
 /** 已经提示过「还没建资产」的账号：同一次页面生命周期只提示一次，不跟着每次重渲染刷屏。 */
 const nudgedUsers = new Set<string>()
 
+/**
+ * 弹窗里能接住焦点的元素（r327）。用 getClientRects 而不是 offsetParent 判可见性：
+ * 这个弹窗自己是 position: fixed，offsetParent 在这种祖先下一律是 null，会把所有元素都判成隐藏。
+ */
+const GATE_FOCUSABLE =
+  'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+
 function upsertAsset(items: Asset[], asset: Asset): Asset[] {
   const next = items.filter((item) => item.id !== asset.id)
   return [asset, ...next]
@@ -474,6 +481,9 @@ export function OnboardingGate({
   const [saving, setSaving] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  /** 换过几次步：0 = 还在打开时那一步（那时卡片自己在进场，内容不用再动） */
+  const [stepSeq, setStepSeq] = useState(0)
+  const cardRef = useRef<HTMLDivElement | null>(null)
 
   const userId = session.user.id
   const isAccount = session.user.kind === 'account'
@@ -513,20 +523,71 @@ export function OnboardingGate({
     }
   }, [isAccount, onToast, userId])
 
-  // 弹窗期间锁住背景滚动，并把 Esc 拦下来：这个引导不是可以顺手关掉的浮层。
+  // 弹窗期间锁住背景滚动、拦掉 Esc，并把键盘关在弹窗里。
+  //
+  // r327：这一步以前只拦了 Esc——焦点既没被收进来（打开后还留在 body 上），Tab 也能一路
+  // 走到遮罩后面的侧栏上。实测连按十次 Tab，十次全落在 .vq-nav-item 上；而那时背景是点不动的
+  // （整屏遮罩 + body 锁滚），用户看到的是「按了半天，眼前什么都没变」。
+  // 这个弹窗是阻塞的（第一步没有关闭入口、Esc 也不放行），所以焦点必须自己兜住首尾：
+  // 打开时收到卡片上（读屏据此念出标题），Tab / Shift+Tab 在首尾之间循环。
   useEffect(() => {
     if (!visible) return
     const previous = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') event.preventDefault()
+    const card = cardRef.current
+    if (card) card.focus({ preventScroll: true })
+    const focusables = () => {
+      if (!card) return [] as HTMLElement[]
+      return Array.prototype.filter.call(
+        card.querySelectorAll(GATE_FOCUSABLE),
+        (el: HTMLElement) => !el.hasAttribute('disabled') && el.getClientRects().length > 0,
+      ) as HTMLElement[]
     }
-    document.addEventListener('keydown', onKey)
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        return
+      }
+      if (event.key !== 'Tab' || !card) return
+      const list = focusables()
+      if (!list.length) {
+        event.preventDefault()
+        card.focus({ preventScroll: true })
+        return
+      }
+      const first = list[0]
+      const last = list[list.length - 1]
+      const active = document.activeElement
+      // 焦点不在弹窗里（刚打开、或者被别的东西抢走了）一律拉回来，不往背景里走
+      if (!active || active === card || !card.contains(active)) {
+        event.preventDefault()
+        ;(event.shiftKey ? last : first).focus()
+        return
+      }
+      if (event.shiftKey && active === first) {
+        event.preventDefault()
+        last.focus()
+        return
+      }
+      if (!event.shiftKey && active === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener('keydown', onKey, true)
     return () => {
       document.body.style.overflow = previous
-      document.removeEventListener('keydown', onKey)
+      document.removeEventListener('keydown', onKey, true)
     }
   }, [visible])
+
+  // 换步之后把焦点收回卡片（r327）：点「继续」的那颗按钮属于刚被换掉的那一步，
+  // 它一卸载焦点就掉回 body，读屏用户会失去位置。收回卡片等于「把新一步念一遍」，
+  // 下一格 Tab 从这一步的头部开始。
+  useEffect(() => {
+    if (!visible || stepSeq === 0) return
+    cardRef.current?.focus({ preventScroll: true })
+  }, [visible, stepSeq])
 
   const saveIdentity = async (targetStep: 1 | 2 | 3) => {
     if (!identity || saving) return
@@ -538,6 +599,8 @@ export function OnboardingGate({
         ...(targetStep === 3 ? { category, direction } : {}),
       })
       setState(next)
+      // 换步才让内容进场：与 setStep 同一个提交，key 和类一起变，动画从挂载那一刻开始放
+      setStepSeq((count) => count + 1)
       setStep(targetStep)
     } catch (caught) {
       setError(assetErrorInfo(caught).message)
@@ -585,6 +648,9 @@ export function OnboardingGate({
       <div className="vq-gate-backdrop" aria-hidden="true" />
       <div
         className="vq-gate-card"
+        ref={cardRef}
+        // -1：容器自己可以被脚本聚焦（读屏念标题），但 Tab 不会停在它上面
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="vq-gate-title"
@@ -624,7 +690,7 @@ export function OnboardingGate({
           </ol>
         </header>
 
-        <div className="vq-gate-body">
+        <div className={'vq-gate-body' + (stepSeq > 0 ? ' is-step-in' : '')} key={step}>
           {step === 1 && (
             <div className="vq-gate-choices" role="radiogroup" aria-label="选择身份">
               {identities.map((item) => {
@@ -755,7 +821,14 @@ export function OnboardingGate({
 
           {step === 2 && (
             <>
-              <button type="button" className="vq-button vq-button--quiet" onClick={() => setStep(1)}>
+              <button
+                type="button"
+                className="vq-button vq-button--quiet"
+                onClick={() => {
+                  setStepSeq((count) => count + 1)
+                  setStep(1)
+                }}
+              >
                 <ArrowLeft size={15} />
                 上一步
               </button>
