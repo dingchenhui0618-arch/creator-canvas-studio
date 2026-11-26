@@ -176,8 +176,19 @@ export function currentPairCode({ roomId, userId }) {
 export function revokePairCode({ roomId, userId }) {
   const handle = db()
   requireOwner(handle, roomId, userId)
-  handle.prepare('UPDATE pair_codes SET revoked_at = ? WHERE room_id = ? AND revoked_at IS NULL').run(now(), String(roomId))
+  revokePairCodesForRoom(roomId, handle)
   return { ok: true }
+}
+
+/**
+ * 把某间房所有还在生效的配对码一并作废（不判归属，给房间解散这类内部流程用）。
+ *
+ * 为什么要单独有这个：解散只做了「房间打墓碑 + 令牌作废」，码还挂着「未撤销」——
+ * 库读起来像一张还能用的码。虽然配对时会先查房间是否已解散（410 ROOM_NOT_FOUND），
+ * 但「房间没了、码还活着」本身就不该存在（2026-11-26 生产上解散临时房间时发现）。
+ */
+export function revokePairCodesForRoom(roomId, handle = db()) {
+  handle.prepare('UPDATE pair_codes SET revoked_at = ? WHERE room_id = ? AND revoked_at IS NULL').run(now(), String(roomId))
 }
 
 // ── 令牌 ──────────────────────────────────────────────────────────────────

@@ -8,7 +8,7 @@ import crypto from 'node:crypto'
 import { openDb } from './auth.mjs'
 // 反向依赖：移出成员/解散房间要撤销令牌，成员列表要显示「谁接进来了」。
 // agent-access 只在调用期读 ROOM_LIMITS，加载期不读，所以这个环是安全的。
-import { revokeTokensForMember, revokeTokensForRoom, tokenStateForRoom } from './agent-access.mjs'
+import { revokePairCodesForRoom, revokeTokensForMember, revokeTokensForRoom, tokenStateForRoom } from './agent-access.mjs'
 
 // 写死的上限：房间名 40 字、一条消息 8000 字、一人最多 20 个房间、一个房间最多 12 个智能体成员。
 // 数字都取「正常用不到、脚本会先撞上」的位置，不另开配置项。
@@ -338,6 +338,8 @@ export function dissolveRoom({ roomId, userId }) {
   handle.prepare('UPDATE rooms SET dissolved_at = ?, updated_at = ? WHERE id = ?').run(now(), now(), String(roomId))
   // 解散就把这间房子的钥匙全部作废，不留「房间没了但令牌还能读」的缝
   revokeTokensForRoom(roomId)
+  // 配对码同理：房间都没了，那张码不该还显示「未撤销」
+  revokePairCodesForRoom(roomId)
   return { ok: true }
 }
 

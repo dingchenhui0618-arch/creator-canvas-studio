@@ -3475,4 +3475,36 @@ Kimi WebBridge 打开页面 → `Network.getCookies` 拿 feishu 域 Cookie → c
 脚本 `scripts/shot-r316.mjs`。
 
 **没做**：直连 BYOK（填 `baseUrl/apiKey/model`、加密存 Key、出口白名单）还没做——那是 1b 的下一段；
-7 个工具与逐次批准是 1c/1d；生产未上线（仍 v0.9.288）。真实上游调用 0 次、¥0。
+7 个工具与逐次批准是 1c/1d。**已上线（v0.9.289，2026-11-26）**：入口 `index-BCW14BZ-.js`，
+`/visionchat.md` 与 `/mcp` 已在公网打通，生产端到端跑通「人说话 → 连接器 → 房间回话 → 撤销即停」，
+详见 [第三百六十一节](#三百六十一发版-v09289白屏与两个真坑r3162026-11-26) 与
+[docs/deploy-r316-2026-11-26.md](docs/deploy-r316-2026-11-26.md)。真实上游调用 0 次、¥0。
+
+## 三百六十一、发版 v0.9.289：白屏与两个真坑（r316，2026-11-26）
+
+1b 上线这一趟发了三次，每次都是**生产上真看见问题**才补的：
+
+1. **首屏白屏**：改版本号时 PowerShell `Set-Content -Encoding utf8` 写了 UTF-8 BOM，
+   `import pkg from '../package.json?raw'` 把带 BOM 的原文塞进 bundle，模块顶层 `JSON.parse` 抛错 →
+   整页空白。服务端 `/api/version` 却一切正常，所以只 curl 接口发现不了。
+   修法：`package.json` 去 BOM + 新增 `src/lib/package-version.ts`（抹 BOM、解析失败返回空串）+
+   `test/package-version.test.mjs` 3 条。教训写进验收：**前端产物要在浏览器里真开一次**。
+2. **nginx 没代理 `/visionchat.md` 与 `/mcp`**：两条路径落进 `try_files … /index.html`，
+   公网返回 200 的 HTML（`/visionchat.md` 875 B text/html）——「把说明地址发给 agent」这条主线其实是断的。
+   修法：模板加两条 location（MCP 那条不缓冲、300s 读超时），`scripts/check-nginx.mjs` 加两条断言；
+   线上外科手术式补丁 + `nginx -t` + `reload`，没整份覆盖。顺带记下模板与线上两处既有漂移（下一轮再对齐）。
+3. **解散房间不作废配对码**：`dissolveRoom` 只打墓碑、作废令牌，`pair_codes` 里那张码还是「未撤销」。
+   修法：`revokePairCodesForRoom`，解散时一并作废；新增一条测试（解散后码全撤销、再配 401）。
+
+生产端到端（真实域名、0 次上游调用）：
+
+```
+[1] 建房 201 · [2] 配对码 201 SKRX-4V47 · [3] 换令牌 201 vqc_MHw-…
+[4] 人发消息 #1 → [5] 智能体回话 #2（连接器在房间里回了一句）
+[6] 撤销令牌 200 · [7] 旧令牌再用 401 TOKEN_INVALID
+[8] 解散后用同一张码再配 401 PAIR_CODE · [9] 剩余房间 []
+```
+
+截图：[docs/r316-prod-rooms-1440.png](docs/r316-prod-rooms-1440.png)（生产上展开的真码面板）、
+[docs/r316-prod-pair-390.png](docs/r316-prod-pair-390.png)（390 面板在视口里，溢出 0）。
+回滚：`--to 4` 回 v0.9.288；`--to 3` 是白屏那版，别用。

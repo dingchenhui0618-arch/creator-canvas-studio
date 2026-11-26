@@ -44,6 +44,8 @@ const REQUIRED_LOCATIONS = [
   ['/media/', '帧图缩略图没有长缓存'],
   ['^~ /print/', '打印页会被 try_files 兜成 SPA 的 index.html'],
   ['^~ /download/', '分享离线包会被 try_files 兜成 SPA 的 index.html（下载拿到 200 的 HTML）'],
+  ['= /visionchat.md', '接入说明会被 try_files 兜成 SPA 的 index.html（agent 读到 200 的 HTML）'],
+  ['= /mcp', 'MCP 端点会被 try_files 兜成 SPA 的 index.html（客户端 POST 回来解析不了 JSON）'],
   ['/', '没有静态产物 fallback'],
 ]
 

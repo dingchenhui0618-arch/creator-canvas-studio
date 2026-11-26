@@ -47,7 +47,16 @@ class Cdp {
     this.ws.addEventListener('message', (event) => {
       const message = JSON.parse(event.data)
       if (message.method === 'Runtime.exceptionThrown') {
-        this.errors.push(message.params?.exceptionDetails?.text || 'exception')
+        const detail = message.params?.exceptionDetails
+        const described = detail?.exception?.description || detail?.exception?.value || detail?.text || 'exception'
+        this.errors.push(String(described).slice(0, 300))
+      }
+      if (message.method === 'Network.responseReceived') {
+        const status = message.params?.response?.status || 0
+        if (status >= 400) this.errors.push('HTTP ' + status + ' ' + message.params.response.url.slice(0, 140))
+      }
+      if (message.method === 'Network.loadingFailed') {
+        this.errors.push('LOAD FAIL ' + (message.params?.errorText || '') + ' ' + String(message.params?.requestId || ''))
       }
       if (message.method === 'Runtime.consoleAPICalled' && message.params?.type === 'error') {
         this.errors.push((message.params.args || []).map((a) => a.value || a.description || '').join(' ').slice(0, 200))
@@ -118,6 +127,24 @@ try {
   await sleep(600)
   await evaluate("document.querySelectorAll('.vq-toast').forEach((el) => el.remove()); true")
 
+  // 先看一眼页面到底停在哪（登录页 / 空状态 / 房间外壳），后面每一步都用得上
+  const landing = await evaluate(`(() => ({
+    hash: location.hash,
+    hasNewInput: Boolean(document.getElementById('rooms-new-name')),
+    hasShellInput: Boolean(document.querySelector('.rooms-list-new input')),
+    hasBlank: Boolean(document.querySelector('.rooms-blank')),
+    hasShell: Boolean(document.querySelector('.rooms-shell')),
+    login: Boolean(document.querySelector('.auth-page, .login-page, form input[type=password]')),
+    text: document.body.innerText.replace(/\\s+/g, ' ').slice(0, 220),
+  }))()`)
+  console.log('落地状态：' + JSON.stringify(landing))
+  if (!landing.hasNewInput && !landing.hasShellInput && !landing.hasBlank && !landing.hasShell) {
+    const html = await evaluate("document.documentElement.outerHTML.replace(/\\s+/g, ' ').slice(0, 400)")
+    console.log('页面 HTML：' + html)
+    console.log('报错：' + JSON.stringify(cdp.errors.slice(0, 5)))
+    throw new Error('聊天室页面没渲染出来')
+  }
+
   // 1) 建一个临时房间（React 受控输入要用原生 setter + input 事件）
   const created = await evaluate(`(() => {
     const el = document.getElementById('rooms-new-name') || document.querySelector('.rooms-list-new input');
@@ -151,7 +178,8 @@ try {
   if (!panel.note.includes('24 小时内有效')) throw new Error('面板文案不对：' + panel.note)
 
   // 记下房间 id，最后解散用
-  const listed = await evaluate("fetch('/api/rooms', { credentials: 'include' }).then((r) => r.json()).then((d) => JSON.stringify((d.rooms || []).map((r) => ({ id: r.id, name: r.name }))))")
+  // 列表接口回的字段是 items（不是 rooms）——写错会让「拍完解散临时房间」静默失效
+  const listed = await evaluate("fetch('/api/rooms', { credentials: 'include' }).then((r) => r.json()).then((d) => JSON.stringify((d.items || d.rooms || []).map((r) => ({ id: r.id, name: r.name }))))")
   const rooms = JSON.parse(listed || '[]')
   const mine = rooms.find((r) => r.name === ROOM_NAME) || rooms[0]
   roomId = mine?.id || null
@@ -164,7 +192,8 @@ try {
   for (const item of shots) {
     await cdp.send('Emulation.setDeviceMetricsOverride', { width: item.width, height: item.height, deviceScaleFactor: 1, mobile: item.width < 600 })
     if (item.scroll) {
-      await evaluate("(() => { const el = document.querySelector('.rooms-pair'); if (el) el.scrollIntoView({ block: 'center' }); return true })()")
+      // inline:'nearest' + 复位 scrollLeft：只滚纵向，不然整页会被横向推走（390 截图会截到半条侧栏）
+      await evaluate("(() => { const el = document.querySelector('.rooms-pair'); if (el) el.scrollIntoView({ block: 'center', inline: 'nearest' }); document.documentElement.scrollLeft = 0; document.body.scrollLeft = 0; return true })()")
       await sleep(700)
     } else {
       await evaluate("(() => { const el = document.querySelector('.rooms-pair'); if (el) el.scrollIntoView({ block: 'nearest' }); window.scrollTo(0, 0); return true })()")
@@ -174,12 +203,14 @@ try {
       hash: location.hash,
       width: window.innerWidth,
       overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      scrollLeft: Math.round(window.scrollX || 0),
       pairTop: Math.round((document.querySelector('.rooms-pair') || { getBoundingClientRect: () => ({ top: -1 }) }).getBoundingClientRect().top),
       code: (document.querySelector('.rooms-pair-code code') || {}).textContent || '',
       text: document.body.innerText.replace(/\\s+/g, ' ').slice(0, 260),
     }))()`)
     console.log('[' + item.width + '] ' + JSON.stringify(state).slice(0, 520))
     if (state.overflow > 1) throw new Error(item.width + ' 横向溢出：' + state.overflow)
+    if (state.scrollLeft !== 0) throw new Error(item.width + ' 页面被横向推走了：scrollX=' + state.scrollLeft)
     if (!state.code) throw new Error(item.width + ' 截图里没有配对码')
     if (item.scroll && (state.pairTop < -8 || state.pairTop > 860)) throw new Error('390 面板不在视口里：top=' + state.pairTop)
     const shot = await cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false })

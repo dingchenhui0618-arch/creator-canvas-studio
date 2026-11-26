@@ -5,13 +5,14 @@
 //   2. 上报失败一律吞掉：上报本身不能变成新的异常源；
 //   3. 只送 message / stack / 当前 hash / 版本 / UA，不送 cookie、表单内容或任何用户输入。
 import packageJsonRaw from '../../package.json?raw'
+import { readPackageVersion } from './package-version'
 
 export type ClientErrorKind = 'error' | 'unhandledrejection' | 'react' | 'resource'
 
 const ENDPOINT = '/api/client-errors'
 const MAX_PER_PAGE = 8
 const DEDUPE_MS = 30_000
-const VERSION = (JSON.parse(packageJsonRaw) as { version?: string }).version ?? ''
+const VERSION = readPackageVersion(packageJsonRaw)
 
 let sent = 0
 const seen = new Map<string, number>()

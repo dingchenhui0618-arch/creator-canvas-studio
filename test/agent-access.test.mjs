@@ -353,3 +353,27 @@ test('配对码过期：24 小时之后 410，不是「码不对」', async () =
   assert.equal(expired.statusCode, 410)
   assert.equal(expired.json().code, 'PAIR_EXPIRED')
 })
+
+test('解散房间：配对码一起作废，码再也换不到令牌', async () => {
+  // 单独开一间房：别把前面用例依赖的房间解散掉
+  const doomed = await call({ router: roomsRouter, method: 'POST', target: '/api/rooms', cookie: aliceCookie, body: { name: '要解散的房' } })
+  const doomedRoom = doomed.json().room
+  const issued = await call({ router: roomsRouter, method: 'POST', target: '/api/rooms/' + doomedRoom.id + '/pair-code', cookie: aliceCookie })
+  const staleCode = issued.json().code.code
+
+  const dropped = await call({ router: roomsRouter, method: 'DELETE', target: '/api/rooms/' + doomedRoom.id, cookie: aliceCookie })
+  assert.equal(dropped.statusCode, 200, dropped.body())
+
+  // 库里那张码必须是「已撤销」——不是只靠配对时再查房间是否解散兜着
+  const rows = auth.openDb().prepare('SELECT * FROM pair_codes WHERE room_id = ?').all(doomedRoom.id)
+  assert.ok(rows.length >= 1, '这条用例要有码可查')
+  assert.ok(rows.every((row) => row.revoked_at), '房间解散了，码不该还写着未撤销')
+
+  const late = await pair({ code: staleCode, name: '姗姗来迟' })
+  assert.equal(late.statusCode, 401)
+  assert.equal(late.json().code, 'PAIR_CODE')
+  // 房间本身也接不进来了（解散是墓碑，接口回 404）
+  const pairAgain = await call({ router: roomsRouter, method: 'POST', target: '/api/rooms/' + doomedRoom.id + '/pair-code', cookie: aliceCookie })
+  assert.equal(pairAgain.statusCode, 404)
+})
+

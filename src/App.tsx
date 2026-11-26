@@ -73,6 +73,7 @@ import { planScroll } from './domain/scroll'
 import { welcomeSeenKey } from './onboarding'
 import { browserFlagStore, dismissMobileNote, mobileNoteVisible } from './domain/mobile-note'
 import packageJsonRaw from '../package.json?raw'
+import { readPackageVersion } from './lib/package-version'
 import {
   DEFAULT_ADMIN_SECTION,
   EDITION_BY_ID,
@@ -85,7 +86,7 @@ import {
   type AdminSection,
 } from './editions'
 
-const APP_VERSION = (JSON.parse(packageJsonRaw) as { version?: string }).version ?? '0.0.0'
+const APP_VERSION = readPackageVersion(packageJsonRaw) || '0.0.0'
 
 // 快速跳转的快捷键提示按平台显示；功能本身两个修饰键都收。
 const IS_MAC = typeof navigator !== 'undefined' && /mac|iphone|ipad/i.test(navigator.platform || navigator.userAgent)
