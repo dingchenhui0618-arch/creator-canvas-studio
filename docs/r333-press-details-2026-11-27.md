@@ -113,7 +113,7 @@ r331 那份「按下去和悬停一模一样」的清单，这一轮**清零**�
 * 公网 `visionqa.wavisionai.cn`：`/api/version` **0.9.305**、`/api/health` ok templates 27、
   新入口 200（873,536 B）、上一版入口 `index-CDUNYuqb.js` 404；`visionqa` / `visionqa-internal` /
   `visionqa-demo` 三个服务 active。
-* 提交与 CI 结果见回执（本文件随提交一起进仓）。
+* 提交 `e222618`（本文件与对比图随这次提交进仓），CI **45859238468 success**。
 
 ## 五、边界与还没做的
 

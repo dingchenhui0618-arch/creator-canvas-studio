@@ -1274,7 +1274,8 @@ opacity 又不像 transform 那样给它里面的绝对定位标签另立包含�
 入口 `index-C44oKfL-.js`（873,536 B，产物里含 `0.9.305`）。发布标签 `20261127-0027-r333press`，
 回滚点 `/opt/visionqa/releases/20261126-162738-20261127-0027-r333press.tar.gz`（元数据记着
 `entry: index-CDUNYuqb.js`）；公网 `/api/version` **0.9.305**、health ok templates 27、新入口 200、
-上一版入口 404，`visionqa` / `visionqa-internal` / `visionqa-demo` 三个服务 active。
+上一版入口 404，`visionqa` / `visionqa-internal` / `visionqa-demo` 三个服务 active；提交 `e222618`，
+CI **45859238468 success**。
 完整记录见 [docs/r333-press-details-2026-11-27.md](docs/r333-press-details-2026-11-27.md)。
 
 边界：只量 1440×1000，只判「按下那一刻有没有属性变化」，**不判「该不该有」**；1px 位移在贴元素裁的对比图里
