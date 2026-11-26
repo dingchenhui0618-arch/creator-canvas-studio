@@ -22,6 +22,7 @@ const {
   activePromos,
   parsePromoCache,
   promoVisible,
+  promosDirty,
   readDismissedPromos,
   todayKey,
 } = await import('../src/domain/promos.ts')
@@ -153,6 +154,36 @@ test('每个声明的位置都真的挂在页面上、都有默认内容（配�
       placement + ' 位置没有默认内容：后台没存过时这个槽是空的，等于没做',
     )
   }
+})
+
+// r323：后台「运营位」编辑卡用它标「有未保存的改动」。这份判断错了有两种表现，
+// 都比不标更烦：改回原样还一直喊「没保存」，或者明明动了却说没有、刷新一下改动没了。
+test('草稿与已保存内容比：改回原样不算改，挪位置/改一个字段/少一条都算改', () => {
+  const saved = [
+    {
+      id: 'a', placement: 'overview', weight: 20, kicker: '新功能', title: '标题',
+      body: '说明', cta: '去看看', page: 'rooms', from: '', until: '', internal: false,
+    },
+    {
+      id: 'b', placement: 'recharge', weight: 10, kicker: 'Beta', title: '标题二',
+      body: '说明二', cta: '去充值', page: 'recharge', from: '2026-11-01', until: '', internal: true,
+    },
+  ]
+  // 一模一样（含同一个数组引用）就是没改
+  assert.equal(promosDirty(saved, saved), false)
+  // 保存时会把文本 trim 掉；只多打了空格不算改，不然点了保存还一直喊「有未保存的改动」
+  assert.equal(promosDirty([{ ...saved[0], title: ' 标题 ' }, saved[1]], saved), false)
+  // 没填的日期：空串与 undefined 等价（接口回空串、新建行给空串）
+  assert.equal(promosDirty([{ ...saved[0], from: undefined }, { ...saved[1], until: '' }], saved), false)
+  // 顺序就是权重：两条内容都没动，只换个位置也算改
+  assert.equal(promosDirty([...saved].reverse(), saved), true)
+  // 单个字段：正文、内部口径、权重
+  assert.equal(promosDirty([{ ...saved[0], body: '改了说明' }, saved[1]], saved), true)
+  assert.equal(promosDirty([{ ...saved[0], internal: true }, saved[1]], saved), true)
+  assert.equal(promosDirty([{ ...saved[0], weight: undefined }, saved[1]], saved), true)
+  // 删一条 / 加一条
+  assert.equal(promosDirty([saved[0]], saved), true)
+  assert.equal(promosDirty([...saved, { ...saved[0], id: 'c' }], saved), true)
 })
 
 test('前后端两份白名单必须一致：位置与页面（加一个页面忘了同步会在这里红）', () => {

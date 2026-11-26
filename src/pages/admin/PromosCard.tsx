@@ -3,10 +3,11 @@
 // 为什么是「整份覆盖」而不是逐条接口：运营位的顺序、权重、条数上限是一起生效的，
 // 逐条保存会出现中间状态（删了旧的、新的还没进）。草稿留在页面里，点保存才一次性提交。
 // 保存时按行序重算 weight：第 1 行最高，下一行依次 -10；同权重时服务端按数组顺序稳定排序。
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ArrowDown, ArrowRight, ArrowUp, Plus, RotateCcw, Save, Sparkles, Trash2, X } from 'lucide-react'
 import { request } from '../../api/client'
 import { pageLabels, type Page } from '../../domain/types'
+import { promosDirty } from '../../domain/promos'
 import { useApi, formatDateTime } from './data'
 import { Badge, ErrorBanner, LoadingLine, SourceTag } from './ui'
 import '../../styles/promos.css'
@@ -117,13 +118,24 @@ export default function PromosCard() {
   const [busy, setBusy] = useState('')
   const [note, setNote] = useState('')
   const [conflict, setConflict] = useState(false)
+  // r323 的四处小体验：预览跟着「正在改的那条」、没保存的改动要看得见、
+  // 新增的那条滚到眼前并把光标放进 ID、删错了能撤回一条（还没保存，撤回只是把草稿改回来）。
+  const [previewIndex, setPreviewIndex] = useState(0)
+  const [pendingFocus, setPendingFocus] = useState<number | null>(null)
+  const [removed, setRemoved] = useState<{ index: number; row: Promo } | null>(null)
+  const idRefs = useRef<(HTMLInputElement | null)[]>([])
 
   const stored = data?.promos ?? []
   const list = draft ?? [...stored].sort((a, b) => (Number(b.weight) || 0) - (Number(a.weight) || 0))
   const limits = data?.limits
   const placements = data?.placements ?? []
   const pages = data?.pages ?? []
-  const preview = list[0] || null
+  // 预览指到第几条：列表变短要收回来，不然删掉最后一条之后预览会指到不存在的位置
+  const previewAt = list.length ? Math.min(previewIndex, list.length - 1) : 0
+  const preview = list[previewAt] || null
+  const placementLabel = (value: string) => placements.find((item) => item.value === value)?.label || value
+  // 「有没有没保存的改动」按内容比、不按「动过没有」：改回原样就不该再喊
+  const dirty = draft !== null && promosDirty(list, stored)
   const source = data?.source ? SOURCE_LABEL[data.source] : null
   const canReset = data?.source === 'admin'
 
@@ -142,7 +154,20 @@ export default function PromosCard() {
   }
 
   const removeRow = (index: number) => {
+    const row = list[index]
     setDraft(withOrderWeights(list.filter((_, rowIndex) => rowIndex !== index)))
+    // 只留最近删掉的一条：再删一条时上一条被顶掉（要退两次得先退最近这次，符合直觉）
+    setRemoved(row ? { index, row } : null)
+    setNote('')
+  }
+
+  const undoRemove = () => {
+    if (!removed) return
+    const next = [...list]
+    next.splice(Math.min(removed.index, next.length), 0, removed.row)
+    setDraft(withOrderWeights(next))
+    setPreviewIndex(Math.min(removed.index, next.length - 1))
+    setRemoved(null)
     setNote('')
   }
 
@@ -160,7 +185,11 @@ export default function PromosCard() {
       until: '',
       internal: false,
     }
+    const at = list.length
     setDraft(withOrderWeights([...list, next]))
+    setPreviewIndex(at)
+    setPendingFocus(at)
+    setRemoved(null)
     setNote('')
   }
 
@@ -181,6 +210,8 @@ export default function PromosCard() {
       })
       setDraft(null)
       setConflict(false)
+      setPreviewIndex(0)
+      setRemoved(null)
       setNote('已保存 ' + rows.length + ' 条运营位；用户刷新页面后生效。')
       reload()
     } catch (cause) {
@@ -200,6 +231,8 @@ export default function PromosCard() {
       await request<PromosResponse>('/api/admin/promos', { method: 'DELETE' })
       setDraft(null)
       setConflict(false)
+      setPreviewIndex(0)
+      setRemoved(null)
       setNote('已恢复默认内容；用户刷新页面后生效。')
       reload()
     } catch (cause) {
@@ -208,6 +241,18 @@ export default function PromosCard() {
       setBusy('')
     }
   }
+
+  // 新增的一条落在列表最下面，长列表里等于「点了没反应」：滚到它眼前、把光标放进 ID 输入框。
+  // 会动的是滚动，系统开了「减弱动态效果」就直接跳过去（和别处的动效同一条口径）。
+  useEffect(() => {
+    if (pendingFocus === null) return
+    const input = idRefs.current[pendingFocus]
+    if (!input) return
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    input.scrollIntoView({ block: 'center', behavior: reduce ? 'auto' : 'smooth' })
+    input.focus({ preventScroll: true })
+    setPendingFocus(null)
+  }, [pendingFocus])
 
   return (
     <section className="admin-card admin-block">
@@ -264,10 +309,16 @@ export default function PromosCard() {
             {list.length ? (
               <ul className="admin-alert-list admin-promo-list">
                 {list.map((row, index) => (
-                  <li className="admin-promo-row" key={'promo-' + index}>
+                  <li
+                    className="admin-promo-row"
+                    key={'promo-' + index}
+                    // 焦点进了这一行（点字段、点行上的按钮都会）就把预览切过来
+                    onFocus={() => setPreviewIndex(index)}
+                  >
                     <div className="admin-promo-row-head">
                       <div className="admin-promo-row-title">
                         <strong>第 {index + 1} 条</strong>
+                        {list.length > 1 && index === previewAt ? <Badge tone="neutral">预览中</Badge> : null}
                         <span className="admin-cell-sub admin-mono">{row.id || '新草稿'}</span>
                       </div>
                       <div className="admin-promo-row-actions">
@@ -308,6 +359,9 @@ export default function PromosCard() {
                         <span>ID</span>
                         <input
                           className="vq-input admin-mono"
+                          ref={(element) => {
+                            idRefs.current[index] = element
+                          }}
                           value={row.id}
                           maxLength={limits?.id}
                           placeholder="例如 rooms-beta"
@@ -429,7 +483,22 @@ export default function PromosCard() {
 
           {note ? <p className="admin-hint" role="status">{note}</p> : null}
 
+          {removed ? (
+            <div className="admin-promo-undo">
+              <span className="admin-cell-sub" role="status">
+                已删掉第 {removed.index + 1} 条
+                {removed.row.title ? '「' + removed.row.title + '」' : removed.row.id ? '（' + removed.row.id + '）' : ''}
+                ，还没保存。
+              </span>
+              <button type="button" className="vq-button vq-button--ghost" onClick={undoRemove} disabled={Boolean(busy)}>
+                <RotateCcw size={14} aria-hidden="true" />
+                撤销删除
+              </button>
+            </div>
+          ) : null}
+
           <div className="admin-doc-actions admin-promo-actions">
+            {dirty ? <Badge tone="warn">有未保存的改动</Badge> : null}
             <button type="button" className="vq-button" onClick={() => void save()} disabled={Boolean(busy)}>
               <Save size={14} />
               {busy === 'save' ? '保存中…' : '保存运营位'}
@@ -452,7 +521,13 @@ export default function PromosCard() {
           </div>
 
           <div className="admin-promo-preview">
-            <span className="admin-cell-sub">实时预览 · 第 1 条</span>
+            <div className="admin-promo-preview-head">
+              <span className="admin-cell-sub">
+                实时预览 · 第 {previewAt + 1} 条{preview ? ' · ' + placementLabel(preview.placement) : ''}
+                {preview?.internal ? ' · 只给管理员看' : ''}
+              </span>
+              {list.length > 1 ? <span className="admin-cell-sub">改哪条就预览哪条</span> : null}
+            </div>
             {preview ? (
               <article className="vq-promo vq-lift">
                 <span className="vq-promo-icon" aria-hidden="true">

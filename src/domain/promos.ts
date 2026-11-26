@@ -88,6 +88,51 @@ export function activePromos(
 }
 
 /**
+ * 后台草稿与已保存的内容是不是不一样（r323）：编辑卡用它标「有未保存的改动」。
+ *
+ * 比的是「整列 + 顺序」而不是逐条找：列表顺序就是权重（保存时按行序重排 weight），
+ * 把第 3 条挪到第 1 条是实打实的改动，不能被当成「内容没变」。
+ * 文本按 trim 后比（保存时也会 trim），weight 归一成数字、internal 归一成布尔、
+ * 没填的日期与空串等价——否则后台一打开就会显示「有未保存的改动」。
+ */
+/** 比对只看这些字段，不关心 placement / page 是不是白名单里的：
+ *  后台草稿行里可能正打着一个还没选完的位置，那种行同样要能比「和已保存的一样不一样」。 */
+type PromoComparable = {
+  id: string
+  placement: string
+  page: string
+  kicker: string
+  title: string
+  body: string
+  cta: string
+  from?: string
+  until?: string
+  weight?: number
+  internal?: boolean
+}
+
+export function promosDirty(next: readonly PromoComparable[], saved: readonly PromoComparable[]): boolean {
+  if (next.length !== saved.length) return true
+  const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '')
+  return next.some((row, index) => {
+    const before = saved[index]
+    return (
+      text(row.id) !== text(before.id) ||
+      text(row.placement) !== text(before.placement) ||
+      text(row.page) !== text(before.page) ||
+      text(row.kicker) !== text(before.kicker) ||
+      text(row.title) !== text(before.title) ||
+      text(row.body) !== text(before.body) ||
+      text(row.cta) !== text(before.cta) ||
+      text(row.from) !== text(before.from) ||
+      text(row.until) !== text(before.until) ||
+      Boolean(row.internal) !== Boolean(before.internal) ||
+      (Number(row.weight) || 0) !== (Number(before.weight) || 0)
+    )
+  })
+}
+
+/**
  * 读本地那份「关掉了哪些」。坏 JSON、不是数组、混进非字符串一律当没关过，
  * 不抛错：运营位读不出来不该把整屏带崩。
  */
