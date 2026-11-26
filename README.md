@@ -1412,7 +1412,10 @@ tag 选择器权重 (0,0,1) 压过 `:where(.vq-button, …)` (0,0,0)，会把全
 密钥扫描 1235 个文件无命中。静态门禁 [test/press-motion.test.mjs](test/press-motion.test.mjs) 13 → 20 条
 （杀掉 outline 必须有补偿 / 环必须有过渡 / 允许清单不烂掉 / `:focus-within` 不被切成 `-within` /
 原生控件那条不许带 button，外加 3 个反证），量具守卫 [test/audit-press-motion.test.mjs](test/audit-press-motion.test.mjs)
-5 → 8 条。入口 `index-MPkfnoba.js`（873,530 B）。完整记录见 [docs/r336-focus-ring-2026-11-27.md](docs/r336-focus-ring-2026-11-27.md)。
+5 → 8 条。入口 `index-MPkfnoba.js`（873,530 B）。发布标签 `20261127-0158-r336focus`，回滚点
+`/opt/visionqa/releases/20261126-175841-20261127-0158-r336focus.tar.gz`（元数据记着上一版入口 `index-B2DSgDYY.js`）；
+公网 `/api/version` **0.9.309**、health ok templates 27、新入口 200、上一版入口 404，三个服务 active。
+提交 `60e504a`，CI **45872269261 success**。完整记录见 [docs/r336-focus-ring-2026-11-27.md](docs/r336-focus-ring-2026-11-27.md)。
 
 边界：后台「系统」那一屏 Tab 走不起来（两版都量到 84 个可 Tab 的元素、0 个站，第一下 Tab 没落到页面上）——
 新增探针把它报成异常而不是「没问题」，原因未查，结论里不含这一屏；`.lw-composer` 那处修复只有静态门禁兜底
