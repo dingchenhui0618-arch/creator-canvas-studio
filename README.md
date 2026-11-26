@@ -1005,7 +1005,7 @@ after 四个弹窗都是**一次真 Esc 就关**；关掉之后焦点回到当�
 `npm test` **2138 / 2138**（+3）、`tsc -b` 干净、`oxlint` 0 error / 30 warning（762 文件）、密钥扫描 1211 个文件无命中、
 入口 `index-ByDh_Wgb.js`（873,492 B）；发布标签 `20261126-2140-r328modal`，
 快照 `/opt/visionqa/releases/20261126-132139-20261126-2140-r328modal.tar.gz`，`ops/rollback.sh --to 1` 回 0.9.299；
-公网 0.9.300、health ok templates 27、新入口 200、上一版入口 `index-CX7A3WQT.js` 404。
+公网 0.9.300、health ok templates 27、新入口 200、上一版入口 `index-CX7A3WQT.js` 404；提交 `ff20db0`，CI 45828579686 success。
 
 边界：**身份引导没搬过来**（r327 刚验过 21/21，重写不值得冒险，两套实现并存是这轮唯一的结构性欠账）；
 页面内画的 `role="dialog"`（后台删除/改身份展开条、聊天历史、画布便签、局部工作区记忆）没有遮罩、跟页面同流，圈焦点反而是错的；
