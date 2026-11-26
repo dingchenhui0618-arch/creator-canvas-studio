@@ -64,6 +64,14 @@ function asMedia(template: ReplicaTemplate): MediaItem {
 
 const isParsed = (template: ReplicaTemplate) => template.kind !== 'saved'
 
+// 口播来源：服务端只给三个枚举，界面翻成中文；没有这个字段就不显示（老模板与智能体草稿）。
+function voiceoverSourceLabel(source?: ScriptBeat['voiceoverSource']): string {
+  if (source === 'asr') return '语音识别'
+  if (source === 'on-screen') return '字幕实录'
+  if (source === 'inferred') return '画面推断'
+  return ''
+}
+
 // 卡片脚注上的来源标签：只有不是「爆款雷达」的才贴（爆款雷达是库里最大的一类，贴了等于每张卡都多一个词）。
 // 文案与抽屉、来源胶囊同一套口径，服务端 templateSource 决定 key。
 const SOURCE_TAG: Record<string, string> = {
@@ -829,7 +837,13 @@ export function TemplateLibraryPage({
                                 </span>
                                 <div>
                                   <strong>{beat.beat}</strong>
-                                  <p>{beat.voiceover}</p>
+                                  <p>
+                                    {voiceoverSourceLabel(beat.voiceoverSource) ? (
+                                      <em className="beat-source">{voiceoverSourceLabel(beat.voiceoverSource)}</em>
+                                    ) : null}
+                                    {beat.voiceover}
+                                    {beat.audioGap === true ? <span className="beat-gap">原片此段无声</span> : null}
+                                  </p>
                                   {beat.onScreen && (
                                     <span className="beat-onscreen">
                                       屏幕字：{beat.onScreen.replace(/^(建议)?(屏幕字|字幕)s*[：:]s*/, '')}
@@ -844,6 +858,12 @@ export function TemplateLibraryPage({
 
                       <section className="drawer-section">
                         <div className="drawer-section-head"><h3>分镜表</h3><span>{detail.storyboard.length} 个镜头</span></div>
+                        {detail.audio ? (
+                          <p className="audio-note">
+                            <strong>原片声音</strong>
+                            <span>{detail.audio.note}</span>
+                          </p>
+                        ) : null}
                         {!adapt && detail.timing && detail.timing.estimatedSec > 0 ? (
                           <p className={`timing-note timing-note--${detail.timing.fit}`}>
                             <strong>台词约需 {detail.timing.estimatedSec}s</strong>

@@ -92,6 +92,26 @@ export type SearchResult = {
 /** 时长与台词对账：fit 由语速估算（约 4.5 字/秒）与原片时长比较得出。 */
 export type SpeechFit = 'ok' | 'tight' | 'loose' | 'untimed'
 
+/**
+ * 原片音轨事实（r321，服务端用 ffmpeg 真测停顿与响度得出）：
+ * 用来告诉用户「口播是不是真有声音」，而不是只凭画面推断。
+ * 字段名与 server 冻结的形状一致，界面只读不改。
+ */
+export type TemplateAudio = {
+  hasTrack: boolean
+  durationSec: number
+  soundSec: number
+  silenceSec: number
+  pauses: number
+  segments: { start: number; end: number }[]
+  meanDb: number | null
+  peakDb: number | null
+  rangeDb: number | null
+  bed: 'silent' | 'paused' | 'continuous' | 'unknown'
+  /** 服务端写好的中文一句话，例如「音轨 12 秒 · 1 处停顿共 3 秒」 */
+  note: string
+}
+
 export type ScriptBeat = {
   beat: string
   startSec: number
@@ -102,6 +122,10 @@ export type ScriptBeat = {
   /** 这段口播念完大约要几秒 */
   expectedSec?: number
   fit?: SpeechFit
+  /** 口播从哪来：asr（语音识别）/ on-screen（字幕实录）/ inferred（画面推断）；老模板没有这一项 */
+  voiceoverSource?: 'asr' | 'on-screen' | 'inferred'
+  /** 这一段原片本来就无声：口播是补出来的，界面要标出来 */
+  audioGap?: boolean
 }
 
 export type StoryboardShot = {
@@ -118,6 +142,8 @@ export type StoryboardShot = {
   /** 这句字幕念完大约要几秒 */
   expectedSec?: number
   fit?: SpeechFit
+  /** 这一镜原片本来就无声（与 ScriptBeat.audioGap 同一件事） */
+  audioGap?: boolean
 }
 
 export type TemplateTiming = {
@@ -188,6 +214,8 @@ export type ReplicaTemplate = {
   storyboard: StoryboardShot[]
   /** 整条模板的时长对账结果（saved 状态、纯画布工作流没有这一项） */
   timing?: TemplateTiming | null
+  /** 原片音轨事实：服务端测出来才有；老模板 / 没有音轨的模板是 null 或没有这一项 */
+  audio?: TemplateAudio | null
   /** 改编版没有原片分析，可能是 null */
   analysis: TemplateAnalysis | null
   frames: { index: number; t: number; url: string }[]

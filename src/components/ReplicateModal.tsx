@@ -10,7 +10,9 @@ const STEPS = [
   { key: 'resolve', label: '获取视频与抽帧', hint: '远端算力服务，或本地 FFmpeg' },
   { key: 'probe', label: '读取视频信息', hint: '时长 / 分辨率 / 切镜点' },
   { key: 'frames', label: '抽帧', hint: '按时间轴均匀 + 切镜补帧' },
-  { key: 'vision', label: '逐帧分析脚本与分镜', hint: '视觉模型输出结构化 JSON' },
+  // 音轨这一步过去根本不存在：抽帧命令带 -an，口播全靠视觉模型看画面编
+  { key: 'audio', label: '读取原片音轨', hint: '实测停顿与响度，用来校对口播' },
+  { key: 'vision', label: '逐帧分析脚本与分镜', hint: '视觉模型输出结构化 JSON，音轨实测一并喂给它' },
   { key: 'save', label: '写入模板库', hint: '脚本结构 + 分镜 + 原链接' },
 ]
 
@@ -18,7 +20,7 @@ const STEPS = [
 const stepIndex = (step: string) => {
   if (step === 'remote') return 0
   if (step === 'scene') return 1
-  if (step === 'done') return 5
+  if (step === 'done') return 6
   return STEPS.findIndex((item) => item.key === step)
 }
 

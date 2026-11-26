@@ -847,3 +847,72 @@
   .page--templates .template-cover { width: 80px; }
   .page--templates .template-meta > span { white-space: normal; }
 }
+
+/* ---------- r321 原片声音事实 + 口播来源（模板详情） ----------
+   服务端这一轮用 ffmpeg 真测了音轨（停顿、响度），这里只负责把事实说清：
+   「原片声音」与「台词约需」同一族、但更中性；口播来源是贴在那句话前面的小灰签，
+   「原片此段无声」是虚线事实标记。三样都是辅助信息，不抢正文与数字。
+   字号 ≥ 14px，间距只走 4/8 栅格，圆角只用 token。 */
+.audio-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 254, 250, .7);
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.audio-note strong {
+  flex: none;
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: 500;
+  letter-spacing: .04em;
+}
+.audio-note span { color: var(--muted); overflow-wrap: anywhere; }
+
+.beat-source {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 2px 8px;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-xs);
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 500;
+  line-height: 1.5;
+  vertical-align: 1px;
+  white-space: nowrap;
+}
+
+.beat-gap {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-xs);
+  color: var(--faint);
+  font-size: 14px;
+  line-height: 1.5;
+  vertical-align: 1px;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .audio-note { font-size: 15px; }
+  .audio-note strong { font-size: 14px; }
+  /* 390 上一枚小签不该把 16px 的口播正文顶得忽高忽低：保持小一号、紧贴首行。 */
+  .beat-source,
+  .beat-gap { margin-right: 0; margin-left: 0; }
+  .beat-source { margin-right: 8px; }
+  .beat-gap { display: block; margin: 8px 0 0; justify-self: start; }
+}
+

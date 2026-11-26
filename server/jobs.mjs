@@ -12,6 +12,7 @@ import { randomUUID } from 'node:crypto'
 import { config } from './config.mjs'
 import { acquireVideo } from './media.mjs'
 import { probeVideo, detectSceneCuts, planTimestamps, extractFrames } from './frames.mjs'
+import { analyzeAudio, emptyAudio } from './audio.mjs'
 import { replicateRemote } from './remote.mjs'
 import { analyzeFrames } from './vision.mjs'
 import { createTemplate } from './templates.mjs'
@@ -265,11 +266,31 @@ export async function startReplicate(item, overrideUrl, { jobId = '', ownerId = 
   return job
 }
 
+/**
+ * 读原片声音 → 逐帧分析。顺序不能反：音轨实测（停顿在哪、响度多高）要作为事实喂进视觉模型，
+ * 它才知道「我听不到声音、这几段是留白」，而不是自己编一段口播。
+ * file 为空（远端算力模式，源视频不在本机）时按「没读到音轨」处理，不假装读过。
+ */
+export async function analyzeSource(job, { file = '', frames, meta, sceneCuts, meter = null }) {
+  const log = (text) => job.logs.push({ at: nowIso(), text })
+  let audio = emptyAudio('源视频不在本机（远端算力模式），没读到音轨')
+  if (file) {
+    step(job, 'audio', 69, '读取原片音轨')
+    audio = await analyzeAudio(file, { durationSec: meta.duration })
+    log('音轨：' + audio.note)
+  }
+  step(job, 'vision', 70, '逐帧分析脚本与分镜')
+  const analysis = await analyzeFrames({ frames, meta, sceneCuts, audio, log, meter })
+  return { audio, analysis }
+}
+
 async function runPipeline(job, jobDir, item, targets) {
   const log = (text) => job.logs.push({ at: nowIso(), text })
   let meta = null
   let sceneCuts = []
   let frames = []
+  // 本地源视频：音轨要靠它才读得到；远端算力模式下这里是空的
+  let sourceFile = ''
 
   if (config.remote.enabled) {
     // 远端算力：解析 + 下载 + 探测 + 抽帧都在对方机器上完成，本地只收帧
@@ -326,13 +347,15 @@ async function runPipeline(job, jobDir, item, targets) {
       job.progress = 48 + ratio * 20
     })
     log('抽取 ' + frames.length + ' 帧：' + frames.map((f) => f.t.toFixed(1) + 's').join(', '))
+    // 抽帧命令带 -an（帧是图片，不需要声音），音轨另外单独读一次：
+    // 这一步过去根本不存在，所以「口播」全是视觉模型看画面编的。
+    sourceFile = acquired.file
   }
 
   if (!meta?.duration) throw new Error('视频时长读取失败，可能不是有效的视频文件')
   log('来源：' + (config.remote.enabled ? ('远端算力 ' + config.remote.label) : '本机 ffmpeg') + ' · ' + frames.length + ' 帧 · ' + meta.width + 'x' + meta.height)
 
-  step(job, 'vision', 70, '逐帧分析脚本与分镜')
-  const analysis = await analyzeFrames({ frames, meta, sceneCuts, log })
+  const { analysis } = await analyzeSource(job, { file: sourceFile, frames, meta, sceneCuts })
 
   // 停机收尾时已经按中断处理（状态落库、积分退回）：这时再建模板等于白送一份
   if (job.aborted) throw new Error('任务被中断：服务停止，已扣积分已退回')

@@ -271,6 +271,9 @@ export async function createTemplate({ item, meta, analysis, frames, jobId, user
     storyboard: analysis.storyboard.map((shot) => ({ ...shot, frameUrl: '/media/frames/' + id + '/frame-' + String(shot.frameIndex).padStart(2, '0') + '.jpg' })),
     // 时长与台词对账结果：模板详情和「复用此模板」都靠它判断这条片子照不照得下来
     timing: analysis.timing || null,
+    // 原片音轨的实测事实：过去这一层完全没有，口播只能靠视觉模型看着画面编；
+    // 现在至少能说清「原片有没有声音、停顿在哪」，复刻时知道哪里该留白。
+    audio: analysis.audio || null,
     analysis: analysis.analysis,
     frames: frames.map((frame) => ({ index: frame.index, t: frame.t, url: '/media/frames/' + id + '/' + frame.name })),
     cover: frames[0] ? '/media/frames/' + id + '/' + frames[0].name : '',
