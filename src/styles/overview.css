@@ -513,7 +513,8 @@
    :not(.vq-card-open) 必须有：另外三张卡上的同款按钮是「整卡可点」，它们那一拍按下的反馈
    画在自己的 ::after 上（motion.css，见 r326），再给自己压一层底就成了双重反馈。 */
 .ov-cap-action {
-  transition: background-color var(--dur-1) var(--ease-out);
+  /* r334：按下除了压底色，还会从直角变成 --radius-xs 的圆角；不同步的话底色还没深、四个角先跳出来。 */
+  transition: background-color var(--dur-1) var(--ease-out), border-radius var(--dur-1) var(--ease-out);
 }
 
 .ov-cap-action:not(.vq-card-open):not(:disabled):active {

@@ -65,6 +65,10 @@
   position: absolute;
   inset: 0;
   border-radius: var(--radius-md);
+  /* r334：这一层底色也要走过渡。伪元素**不继承**元素的 transition（元素那一条在 tokens.css 里），
+     所以必须写在伪元素自己身上——不写，别的按钮按下是顺滑加深，这几张整卡可点的卡是「啪」一下压暗。
+     加 transition 不会给 ::after 造出包含块（那是 transform 的毛病，见下面那条注释），热区不受影响。 */
+  transition: background-color var(--dur-1) var(--ease-out);
 }
 
 /* 按下时**不能**位移（r326 在运营位上实测出来的，不是防患于未然）：

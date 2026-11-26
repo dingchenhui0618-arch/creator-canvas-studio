@@ -390,7 +390,7 @@
   color:var(--ink);
   text-align:left;
   cursor:pointer;
-  transition:border-color .15s ease, background .15s ease;
+  transition:border-color .15s ease, background .15s ease, transform .15s ease;
 }
 .review-candidate:hover { border-color:var(--ink); background:var(--surface-raised); }
 .review-candidate:active { transform:translateY(1px); }

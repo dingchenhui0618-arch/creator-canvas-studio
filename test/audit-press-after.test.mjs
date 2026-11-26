@@ -26,11 +26,15 @@ function probeGuardProblems(src) {
   if (!src.includes("getComputedStyle(el, '::after')")) {
     problems.push('readState 没有读伪元素（getComputedStyle(el, \'::after\')）——整卡热区那一类的反馈又回到盲区')
   }
-  if (!/AFTER_PROPS\s*=\s*\[[\s\S]*?\]/.test(src)) {
+  // r334：名字只在 AFTER_PROPS 那个数组块里找，不再在整份源码里找 ——
+  // r334 的注释里也写着 '::after background-color' 这几个字，整份源码 contains 会把它当成
+  // 「AFTER_PROPS 还在」，下面那条反证于是就变不红了（守卫看着还在，其实已经失灵）。
+  const block = src.match(/AFTER_PROPS\s*=\s*\[([\s\S]*?)\n\]/)
+  if (!block) {
     problems.push('没有 AFTER_PROPS 这一组')
   } else {
     for (const name of AFTER_PROP_NAMES) {
-      if (!src.includes("'" + name + "'")) problems.push('AFTER_PROPS 里缺了 ' + name)
+      if (!block[1].includes("'" + name + "'")) problems.push('AFTER_PROPS 里缺了 ' + name)
     }
   }
   if (!/content\)\s*!==\s*'none'/.test(src)) {

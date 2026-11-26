@@ -15,6 +15,12 @@
 //   5) r333 起：除了元素自身的六个属性，还读它的 ::after（背景/阴影/位移/透明度，见 AFTER_PROPS）。
 //      r326/r329 给「整卡可点」的按钮定的按下反馈就画在 ::after 上，量具以前看不见这一类，
 //      把它们一律记成「无反馈」——那是量具的盲区，不是页面的问题。
+//   6) r334 起：还读这一颗自己的 transition-property / -duration（元素与 ::after 各一份）。
+//      「有反馈」只说按下会变，「变得走不走过渡」是另一件事：没声明过渡的就是啪一下到位（硬切）。
+//      硬切清单写在产物 hardCuts 与汇总的「有反馈但还是硬切」一节里；判定只认 computed 声明，
+//      不看两帧的读数等不等于终值（那是 settledRescued 的事，方向相反）。
+//      名字匹配认全名也认简写：transition-property 记的是作者写的那个名字，写 `background` 时
+//      Chrome 照样动画 background-color（见 SHORTHAND_COVERS）。
 //
 // 用法（同一份脚本跑两份产物）：
 //   node scripts/audit-press.mjs --dist .shots330/dist-after --out .shots331/press
@@ -454,7 +460,10 @@ function readState(selector) {
     boxShadow: cs.boxShadow,
     transform: cs.transform,
     opacity: cs.opacity,
-    outline: cs.outlineStyle + ' ' + cs.outlineWidth + ' ' + cs.outlineColor,
+    // r334：这一次变化「走不走过渡」也要量。computed 的 transition-property / -duration 是权威答案——
+    // 声明了过渡的按钮，按下去是「顺滑加深」；没声明的就是啪一下到位（硬切）。
+    transitionProperty: cs.transitionProperty,
+    transitionDuration: cs.transitionDuration,
     cursor: cs.cursor,
     rect: { l: Math.round(r.left), t: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) },
     hitIsSelf: Boolean(hit && (hit === el || el.contains(hit))),
@@ -469,6 +478,8 @@ function readState(selector) {
         boxShadow: ps.boxShadow,
         transform: ps.transform,
         opacity: ps.opacity,
+        transitionProperty: ps.transitionProperty,
+        transitionDuration: ps.transitionDuration,
       }
     })(),
   }
@@ -876,6 +887,51 @@ function diffProps(before, after) {
   }
   return changed
 }
+// ---- r334：这一次变化「走不走过渡」----
+// 判据只有一条：computed 的 transition-property 里有没有这条属性、声明出来的 duration 是不是 0。
+// 不拿「按下两帧就读到终值」当判据——那只说明「过渡很短」，说明不了「有没有过渡」；也不拿 settledRescued
+// 反过来用（过渡没走完 ≠ 硬切），这一层与采样抖动无关。
+// 属性名与 PROPS / AFTER_PROPS 的第二种写法一一对应：'background-color' 查元素，
+// '::after background-color' 查伪元素自己的那张表（伪元素不继承元素的 transition）。
+function cssDurationMs(text) {
+  const value = String(text || '').trim().toLowerCase()
+  const n = parseFloat(value)
+  if (!isFinite(n)) return 0
+  if (value.endsWith('ms')) return n
+  if (value.endsWith('s')) return n * 1000
+  return 0
+}
+// 简写也算覆盖（r334 实测出来的，不是防患于未然）：transition-property 里存的是**作者写下的名字**，
+// Chrome 允许写简写（radar.css 的 .drawer-work 写的就是 `background`），并且会照简写展开后的长属性做动画。
+// 只认全名的话，一条真在动的过渡会被报成硬切——与 r333 那次的 ::after 盲区是同一类错（量具的锅，不是页面的）。
+const SHORTHAND_COVERS = {
+  background: ['background-color'],
+  border: ['border-color', 'border-top-color', 'border-right-color', 'border-bottom-color', 'border-left-color'],
+  'border-color': ['border-top-color', 'border-right-color', 'border-bottom-color', 'border-left-color'],
+  'border-bottom': ['border-bottom-color'],
+  'border-top': ['border-top-color'],
+}
+function transitionOf(state, after, prop) {
+  const src = after ? (state.after || {}) : state
+  const props = String(src.transitionProperty || 'none').split(',').map((item) => item.trim().toLowerCase()).filter(Boolean)
+  const durs = String(src.transitionDuration || '0s').split(',').map((item) => item.trim().toLowerCase()).filter(Boolean)
+  let at = props.indexOf(prop)
+  if (at < 0) at = props.indexOf('all')
+  if (at < 0) at = props.findIndex((name) => (SHORTHAND_COVERS[name] || []).indexOf(prop) >= 0)
+  if (at < 0) return { declared: false, duration: '0s', ms: 0 }
+  const duration = durs.length === props.length ? durs[at] : (durs.length === 1 ? durs[0] : durs[Math.min(at, durs.length - 1)])
+  return { declared: true, duration: duration, ms: cssDurationMs(duration) }
+}
+function hardCutProps(changed, state) {
+  const rows = []
+  for (const item of changed) {
+    const isAfter = item.prop.indexOf('::after ') === 0
+    const prop = isAfter ? item.prop.slice(8) : item.prop
+    const found = transitionOf(state, isAfter, prop)
+    if (!found.declared || found.ms <= 0) rows.push({ prop: item.prop, declared: found.declared, duration: found.duration, from: item.from, to: item.to })
+  }
+  return rows
+}
 const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 function pathOf(url) {
   try { return new URL(url).pathname } catch { return String(url) }
@@ -941,6 +997,7 @@ async function pressOne(pageId, pageLabel, item) {
       active: pressed.active, disabled: pressed.disabled,
       backgroundColor: pressed.backgroundColor, borderColor: pressed.borderColor, color: pressed.color,
       boxShadow: pressed.boxShadow, transform: pressed.transform, opacity: pressed.opacity,
+      transitionProperty: pressed.transitionProperty, transitionDuration: pressed.transitionDuration,
       cursor: pressed.cursor, hitIsSelf: pressed.hitIsSelf, hit: pressed.hit,
       after: pressed.after,
     }
@@ -976,6 +1033,11 @@ async function pressOne(pageId, pageLabel, item) {
       }
       out.changedSettledVsHover = diffProps(hover, settled).map((pair) => pair.prop)
     }
+    // r334：有反馈 ≠ 反馈走过渡。按下的每一项变化去查它对应的过渡表，查不到（或 duration 为 0）就是硬切。
+    // 只对「两帧就看到了变化」的那些项算——disabled / 真的没反应的按钮不该出现在这一节里。
+    if (out.changed.length) {
+      out.hardCuts = hardCutProps(out.changed, out.pressed)
+    }
 
     // ⑤ 不在原地松开：挪到中性点再松（不合成 click）
     if (neutral) await mouseTo(neutral.x, neutral.y)
@@ -991,7 +1053,7 @@ async function pressOne(pageId, pageLabel, item) {
       if (neutral) { await mouseTo(neutral.x, neutral.y); await mouseUp(neutral.x, neutral.y) }
     } catch { /* 鼠标状态收不回来也要往下走 */ }
   }
-  console.log('PRESS ' + pageId + '#' + item.n + ' ' + (out.verdict || '?') + ' :: ' + String(item.text).slice(0, 24) + ' :: active=' + out.pressActive + ' changed=' + out.changed.map((c) => c.prop).join(',') + (out.error ? ' ERROR=' + out.error : ''))
+  console.log('PRESS ' + pageId + '#' + item.n + ' ' + (out.verdict || '?') + ' :: ' + String(item.text).slice(0, 24) + ' :: active=' + out.pressActive + ' changed=' + out.changed.map((c) => c.prop).join(',') + ((out.hardCuts || []).length ? ' HARD-CUT=' + out.hardCuts.map((c) => c.prop).join(',') : '') + (out.error ? ' ERROR=' + out.error : ''))
   return out
 }
 
@@ -1298,6 +1360,7 @@ const out = {
     release: '不在原地 mouseReleased —— 先挪到视口里的中性点再松，不合成 click',
     candidate: 'pressActive=true 且 changed 为空 = 按下无反馈候选',
     settled: '判定按上面两帧那一拍（与 r331 的数字可比）；还按着再等 200ms 读一次叫 pressedSettled / changedSettledVsHover，用来区分「真的没反应」和「过渡还没走到」（后者算采样抖动）',
+    hardCut: '变了、但这条属性不在 computed transition-property 里（或 duration 0）= 硬切。读元素与 ::after 各一份过渡表，属性名按 PROPS / AFTER_PROPS 对齐；简写（background / border）也算覆盖',
   },
   seeds: seeded,
   overlays: overlayLog,
@@ -1325,6 +1388,8 @@ const out = {
     readFailed: buttons.filter((row) => row.verdict === 'read-failed').length,
     // 两帧那一拍是空的、但还按着等过渡走完后确实变了：说明反馈在，只是采样早了（别把它算成回归）
     settledRescued: candidates.filter((row) => (row.changedSettledVsHover || []).length > 0).length,
+    // 有反馈、但变化的那条属性没有过渡（或 duration 0）：按下去是硬切（r334）
+    hardCuts: buttons.filter((row) => (row.hardCuts || []).length > 0).length,
     writeRequests: allWrites.length,
     upstreamCalls: upstream.length,
     anomalies: anomalies.length,
@@ -1354,12 +1419,18 @@ for (const row of candidates) {
   console.log(pad(row.page, 18) + pad(String(row.text).slice(0, 20), 22) + pad(row.selector, 60) + 'active=' + row.pressActive + ' changed=[]' + (row.screenshot ? ' 截图=' + row.screenshot.file : ''))
 }
 console.log('')
+const hardCutRows = buttons.filter((row) => (row.hardCuts || []).length > 0)
+console.log('---- 有反馈但还是硬切（' + hardCutRows.length + ' 个）----')
+for (const row of hardCutRows) {
+  console.log(pad(row.page, 18) + pad(String(row.text).slice(0, 18), 22) + pad(row.hardCuts.map((c) => c.prop + '@' + (c.declared ? c.duration : '不在过渡表里')).join(' '), 56) + row.selector)
+}
+console.log('')
 console.log('---- 趟汇总 ----')
 for (const row of passes) {
   console.log(pad(row.id, 18) + pad('可见可点 ' + row.total, 14) + pad('量了 ' + row.measured, 10) + pad('有反馈 ' + row.feedback, 12) + pad('候选 ' + row.noFeedback, 10) + pad('active没匹配 ' + row.activeNotMatched, 18) + pad('禁用 ' + row.disabled, 10) + pad('读不到 ' + row.readFailed, 12) + pad('写请求 ' + row.writeRequests, 12) + (row.aborted || ''))
 }
 console.log('')
-console.log('---- 按下巡检 · ' + out.summary.buttonsMeasured + ' 个按钮 / ' + passes.length + ' 趟 · 无反馈候选 ' + candidates.length + ' · 写请求 ' + allWrites.length + ' · 上游 ' + upstream.length + ' · 证据 ' + path.join(path.relative(ROOT, OUT_DIR), 'press.json') + ' ----')
+console.log('---- 按下巡检 · ' + out.summary.buttonsMeasured + ' 个按钮 / ' + passes.length + ' 趟 · 无反馈候选 ' + candidates.length + ' · 硬切 ' + hardCutRows.length + ' · 写请求 ' + allWrites.length + ' · 上游 ' + upstream.length + ' · 证据 ' + path.join(path.relative(ROOT, OUT_DIR), 'press.json') + ' ----')
 
 try { chrome.kill() } catch { /* 已经退出 */ }
 try { server.kill() } catch { /* 已经退出 */ }

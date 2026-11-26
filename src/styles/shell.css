@@ -967,6 +967,12 @@ select:focus-visible {
   transform: translateY(1px);
 }
 
+/* r334：行内链接按下压一层底（r332 定的口径），但 .vq-link 自己没有 transition ——
+   压下去是「啪」一下出现、松手也「啪」一下消失。要变的两条属性补进过渡表。 */
+.vq-link {
+  transition: background-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
+}
+
 .vq-link:not(:disabled):active {
   background: var(--line-faint);
   color: var(--ink);
@@ -1333,6 +1339,14 @@ select:focus-visible {
   border-radius: var(--radius-sm);
   background: rgba(17, 17, 17, 0.045);
   color: var(--faint);
+}
+
+/* r334：按下这一格会先拿到焦点，下面那条 :focus-within 的 2px 焦点环就是「按下的反馈」——
+   但它写在一个没有 transition 的基类上（computed 的默认值是 all / 0s，等于没有），环是「啪」一下出现的。
+   焦点环、描边、底色一起走 tokens 那一档。 */
+.vq-search {
+  transition: background-color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out),
+    box-shadow var(--dur-1) var(--ease-out);
 }
 
 .vq-search:focus-within {

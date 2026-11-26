@@ -1281,3 +1281,49 @@ CI **45859238468 success**。
 边界：只量 1440×1000，只判「按下那一刻有没有属性变化」，**不判「该不该有」**；1px 位移在贴元素裁的对比图里
 看不见（裁框跟着元素走），那 11 条只有数字；`.vq-card-open` 的 `::after` 按下仍是硬切（motion.css 那条没有
 transition，补上会让那 7 行的两帧采样落进过渡中间值），本轮不动、记在边界里。
+
+## 三百八十、按下反馈的「过渡」那一半：还在硬切的 32 处补上 transition（r334 / v0.9.306）
+
+r333 把「按下去有没有反应」清零之后，还剩一半没量过：**有变化不等于变化走过渡**。浏览器给的默认值是
+`transition-property: all` / `duration: 0s`（等于没有），所以只给 `:active` 写目标值，按下去就是「啪」一下到位。
+量具这一轮多读一行（元素与 `::after` 各一份过渡表，简写也算覆盖），在线上 0.9.304 原件上量到
+**32 颗按钮「有反馈、但硬切」**；同一份脚本、同样 10 趟再量 0.9.306：**硬切 0**。
+
+| | 产物 | 有反馈 | 无反馈候选 | **硬切** |
+| --- | --- | --- | --- | --- |
+| before | 0.9.304 / `index-CDUNYuqb.js`（**从 /opt/visionqa/dist 取回的线上原件**） | 105 | 22 | **32** |
+| after | 0.9.306 / `index-BgRdMhjN.js` | 123 | 4 | **0** |
+
+那 32 行落在六处，这一轮补了七处：[motion.css](src/styles/motion.css) 给 `.vq-card-open::after` 自己补 transition
+（**伪元素不继承元素的 transition**，9 行，运营位 CTA / 三张能力卡 / 模板卡）；[shell.css](src/styles/shell.css) 的
+`.vq-link`（6 行）与 `.vq-search`（**它没有自己的 `:active`**——按下先拿到焦点，2px 焦点环就是它的「按下反馈」，1 行）；
+[agents.css](src/styles/agents.css) 四颗只有目标值的按钮合成一条（agx-surface-switch / agx-capsule-trigger / qc-new /
+qc-tool，11 行）与 `.agx-tabs button` 的底色补在它自己的基类上（color 的 0.15s 保持不动，5 行）；
+[overview.css](src/styles/overview.css) 的 `.ov-cap-action` 补 `border-radius`（按下从直角变圆角，以前是同一拍里「跳」出来的）；
+[review.css](src/styles/review.css) 的 `.review-candidate` 补 `transform`（视觉评审那一屏不在那 10 趟里，由静态门禁兜底）。
+
+**证据按读数给，不按图给。** 43 条硬切属性在 after 里 **39 条量到「两帧 ≠ 终值」**（在动：卡上那层压暗两帧
+`rgba(17,17,17,0.03)`、200ms 后 `0.06`；搜索格焦点环两帧 `1.10px`、终值 `2px`），**0 条仍然是「两帧 = 终值」**；
+同一批属性在 before 里 43 条**全部**「两帧 = 终值」。静态截图看不见 120ms：把 6 组同一元素的 before / after crop
+逐像素比过，亮度差最大 **0.104/255** —— 截图自己就要几十毫秒，等它到位过渡已经走完，所以这一轮没有对比图。
+
+**4 颗「候选」是采样抖动，不是回归**：过渡加进来之后，两帧那一拍有时会落在**过渡的起点**（读到的值与悬停一样），
+r333 记的是反面（落在中间值）。这 4 颗的终值那一拍全都有变化（`settledRescued` = 4），判定口径没动，照旧单列成抖动。
+
+**两条自查**：① 静态门禁 [test/press-motion.test.mjs](test/press-motion.test.mjs)（5 条 + 6 个反证）把 `src/styles`
+每条 `:active` 过一遍，属性要能被某条 transition 覆盖（**类更少**的同一条选择器也算，跨类的那 2 条进白名单并写明原因，
+cursor 不可过渡直接不算），另有一条专盯按下会拿焦点的焦点环；② 量具守卫 [test/audit-press-motion.test.mjs](test/audit-press-motion.test.mjs)（3 条）。
+**顺带修好 r333 一条失灵的反证**：它用整份源码 `includes('::after background-color')` 认 AFTER_PROPS，而 r334 的注释里
+正好也有这几个字，删掉数组那一项守卫照样绿 —— 现在只在那个数组块里找。**量具自己也犯了一次同类错**：
+`.drawer-work` 的声明写的是简写 `background`（Chrome 照样动画 background-color），第一版只认全名，把它报成了硬切；
+现在两个方向都认简写，并留了单测与反证。
+
+门禁：`npm test` **2170 / 2170**（+9）、`tsc -b` 干净、`oxlint` 0 error / 30 warning（774 文件）、密钥扫描 1231 个文件无命中。
+入口 `index-BgRdMhjN.js`（873,536 B，产物里含 `0.9.306`）。发布标签 `20261127-0056-r334motion`；
+回滚点 `/opt/visionqa/releases/20261126-165616-20261127-0056-r334motion.tar.gz`（元数据 `entry: index-C44oKfL-.js`）；
+公网 `/api/version` **0.9.306**、health ok templates 27、新入口 200、上一版入口 404，
+`visionqa` / `visionqa-internal` / `visionqa-demo` 三个服务 active。
+完整记录见 [docs/r334-press-motion-2026-11-27.md](docs/r334-press-motion-2026-11-27.md)。
+
+边界：只判「变化有没有走过渡」，**不判「该不该有」**；只量 1440×1000 的十趟，视觉评审那一屏靠静态门禁；
+静态截图分不出「硬切」与「120ms 的过渡」（这一轮量过了，所以证据是读数）。

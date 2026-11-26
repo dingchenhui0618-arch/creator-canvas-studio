@@ -1020,7 +1020,9 @@
   background: none;
   border: 0;
   font-size: 14px;
-  transition: color 0.15s ease;
+  /* r334：r332 补的按下反馈会压一层底（--line-faint），底色以前不在这张过渡表里——
+     按下是「啪」一下出现。color 仍按原来的 0.15s，底色跟 tokens 那一档。 */
+  transition: color 0.15s ease, background-color var(--dur-1) var(--ease-out);
 }
 .agx-tabs button:hover {
   color: var(--ink);
@@ -4064,6 +4066,19 @@
    以及对话预设页的模型胶囊与分类页签。
    只加 :active：权重压过各自的 .is-active（含窄屏那条 .vq-content … 的 4 类权重），
    当前选中的那颗按下去也有反应；只改 background / border-color / color，不用 transform。 */
+/* r334：下面这几颗的按下反馈（r332 定的）都只写了目标值，各自的基类都没有 transition ——
+   在真机上按下去是「啪」一下到位，与全站按钮（tokens.css 给 .vq-button 的那条）不是一套手感。
+   把会变的属性补进过渡表就够了。选择器与下面每条 :active 一一对应，少一条会在 test/press-motion.test.mjs 里红。 */
+.agx-surface-switch button,
+.agx-page .agx-capsule-trigger,
+.qc-new,
+.qc-tool {
+  transition: background-color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out),
+    color var(--dur-1) var(--ease-out);
+}
+/* 对话预设页的 .vq-content .agx-page .agx-tabs button 不列在这儿：它的基类
+   （本文件上面那条 .agx-tabs button）本来就写了 color 的过渡，只差一条底色，补在那里更靠得住。 */
+
 .agx-mode-tabs button:not(:disabled):active {
   color: var(--ink);
   background: var(--line-faint);
