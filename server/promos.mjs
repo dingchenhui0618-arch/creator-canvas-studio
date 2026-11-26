@@ -88,6 +88,19 @@ export const DEFAULT_PROMOS = [
     cta: '去视觉评审',
     page: 'review',
   },
+  // r322 补上充值页：位置白名单里一直有 recharge，但没有任何页面挂载点，
+  // 后台配了也看不见；补挂载点的同时得给一条默认内容，否则生产（后台没存过）那个槽是空的。
+  // 数字都按真实单价写（复刻 10 / 出图 5 / 4 秒视频 15），失败全额退回。
+  {
+    id: 'recharge-what-credits-buy',
+    placement: 'recharge',
+    weight: 10,
+    kicker: '积分能换什么',
+    title: '10 积分复刻一条片子',
+    body: '复刻扣 10 积分，失败原路退回；出一张图 5 积分，4 秒视频 15 积分。',
+    cta: '去复刻',
+    page: 'radar',
+  },
   {
     id: 'template-source-footprint',
     placement: 'templates',

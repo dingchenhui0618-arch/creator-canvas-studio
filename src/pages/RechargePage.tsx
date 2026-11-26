@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, CreditCard, Wallet } from 'lucide-react'
 import PageHead from '../components/PageHead'
+import PromoSlot from '../components/PromoSlot'
 import { Pill, Tag } from '../components/ui'
 import { getCredits, type CreditsResponse } from '../api/credits'
 import {
@@ -10,7 +11,7 @@ import {
   type BillingOrder,
   type BillingOverview,
 } from '../api/billing'
-import { navigate } from '../router'
+import { navigate, pageToRoute } from '../router'
 import '../styles/credits.css'
 import '../styles/recharge.css'
 
@@ -102,6 +103,11 @@ export default function RechargePage({ onToast }: { onToast?: (message: string) 
           </button>
         }
       />
+
+      {/* 运营位（r322）：位置白名单里一直有 recharge，但这一屏从来没有挂载点——
+          后台把一条运营位配到「充值 / 积分」上，它永远不会显示，也没有任何提示。
+          现在挂上（test/promos.test.mjs 会拦「声明了位置却没挂」这种漏）。 */}
+      <PromoSlot placement="recharge" onNavigate={(page) => navigate(pageToRoute(page))} />
 
       <section className="vq-card vq-card--wide rg-balance">
         <div className="rg-balance-main">

@@ -1,11 +1,17 @@
 /* 运营位（r319）。
    竞品用彩色大横幅；我们按品牌走：近白卡片、一条发丝线、左侧一个方形图标，
-   颜色只在图标与按钮上，整块不加渐变。窄屏时文案占整行、按钮落到下一行。 */
+   颜色只在图标与按钮上，整块不加渐变。窄屏时文案占整行、按钮落到下一行。
+   r322：关掉一条时先塌下去再移除（见文件末尾），进场用 motion.css 的 .vq-stagger。 */
 .vq-promos {
   display: grid;
-  gap: var(--space-2);
   margin-bottom: var(--space-6);
 }
+
+/* 间距不用 grid 的 gap，挂在「不是最后一条」的卡片下边距上。
+   gap 是容器给的，卡片收不掉：关掉的那条即使高度收到 0，容器还会留 8px 的空档，
+   等它被移除时下面那条再跳最后 8px。挂在卡片自己身上就能一起收到 0——移除前后下面那条不动。
+   （最后一条不带下边距，容器底部与用 gap 时一样。） */
+.vq-promo:not(:last-child) { margin-bottom: var(--space-2); }
 
 .vq-promo {
   position: relative;
@@ -79,6 +85,34 @@
 }
 .vq-promo-close:hover { color: var(--ink); border-color: var(--line); background: var(--surface); }
 .vq-promo-close:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(17, 17, 17, 0.16); }
+
+/* ---------- 关掉一条：先塌下去，再移除（r322） ----------
+   卡片高度写在组件里（先钉住当时的 offsetHeight，下一帧收到 0），这里负责过渡、裁剪与淡出；
+   直接移除会让下面那条「跳」上来一格。
+   淡出比塌下去快一档（180ms < 260ms）：字先淡掉，空壳再收完，看起来是「这一条走了」。
+
+   两处是实测出来的，不是想出来的（r322 里真渲染时量到）：
+   1) 只收 max-height 收不到 0：计算值已经到 0.03px，offsetHeight 仍卡在 34px = 上下内边距
+      16+16 + 描边 1+1。border-box 并没有把这层「地板」一起收掉，最后 34px 是一次性跳没的。
+      所以内边距与描边也要一起过渡到 0，塌陷才真的走到 0。
+   2) 光在 transition 里写 opacity 不会淡出——必须有规则给出目标值，否则 opacity 恒为 1，
+      看着「变淡」其实只是 max-height 把文字裁掉了。这里给 opacity: 0。 */
+/* 这里写两遍 .is-leaving：.vq-lift.vq-lift（motion.css，在入口样式表里）也是两个类，
+   等权重时谁在后面谁赢；样式表的先后按需加载时不保证，塌下去必须由这一层说了算。 */
+.vq-promo.is-leaving.is-leaving {
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-top-width: 0;
+  border-bottom-width: 0;
+  margin-bottom: 0;
+  transition: max-height var(--dur-3) var(--ease-out), opacity var(--dur-2) var(--ease-out),
+    padding-top var(--dur-3) var(--ease-out), padding-bottom var(--dur-3) var(--ease-out),
+    border-top-width var(--dur-3) var(--ease-out), border-bottom-width var(--dur-3) var(--ease-out),
+    margin-bottom var(--dur-3) var(--ease-out);
+}
 
 @media (max-width: 760px) {
   .vq-promo {

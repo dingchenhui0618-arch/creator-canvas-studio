@@ -128,6 +128,33 @@ test('每条默认运营位都指得出去：page 必填、文案不留空、字
   assert.equal(validatePromos(DEFAULT_PROMOS).ok, true)
 })
 
+test('每个声明的位置都真的挂在页面上、都有默认内容（配了却看不见就是这一行老出的事）', () => {
+  // recharge 这个位置从 r320 起就写在白名单里、后台下拉里也有，
+  // 但没有一个页面挂 <PromoSlot placement="recharge">——管理员配好保存、刷新，什么也不会出现，
+  // 而且看不出哪里错了。位置是「声明」，挂载点才是「能不能显示」；这条把两者绑在一起。
+  const files = []
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name)
+      if (entry.isDirectory()) walk(full)
+      else if (/\.tsx?$/.test(entry.name)) files.push(full)
+    }
+  }
+  walk(path.join(process.cwd(), 'src'))
+  const source = files.map((file) => fs.readFileSync(file, 'utf8')).join('\n')
+  for (const placement of PROMO_PLACEMENTS) {
+    assert.ok(
+      source.includes('<PromoSlot placement="' + placement + '"'),
+      placement + ' 位置只是写在白名单里，没有任何页面挂载：后台配到这一屏的运营位永远不会显示',
+    )
+    // 生产上后台没存过内容时走的就是默认这份；一个位置没有默认条目 = 那个槽上线就是空的
+    assert.ok(
+      DEFAULT_PROMOS.some((promo) => promo.placement === placement),
+      placement + ' 位置没有默认内容：后台没存过时这个槽是空的，等于没做',
+    )
+  }
+})
+
 test('前后端两份白名单必须一致：位置与页面（加一个页面忘了同步会在这里红）', () => {
   assert.deepEqual([...PROMO_PLACEMENTS], [...SERVER_PLACEMENTS])
   assert.deepEqual([...PROMO_PAGES].sort(), [...PROMO_PAGES_SERVER].sort())
