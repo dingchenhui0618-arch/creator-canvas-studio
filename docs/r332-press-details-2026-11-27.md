@@ -109,6 +109,7 @@ hover.backgroundColor:          rgb(251, 251, 251)
   两边都带反证，改坏源码必须变红）
 - `npx tsc -b` 干净；`npx oxlint src server test scripts` **0 error / 30 warnings（770 文件）**；
   `npm run scan:secrets` **1225 个文件无命中**
+- 提交 `aed43f4`，CI **45855358373 success**
 - 发布标签 `20261127-0002-r332press`，快照 `releases/20261126-160323-20261127-0002-r332press.tar.gz`
 - 公网 `https://visionqa.wavisionai.cn`：`/api/version` **0.9.304**、`/api/health` ok templates 27、
   新入口 `index-CDUNYuqb.js` **200（873,536 B）**、旧入口 `index-D9Wtr6mf.js` **404**、中途那个 `index-y5KMsStq.js` 也 404；

@@ -1221,7 +1221,8 @@ r331 已经记过一次这种现象，现在把它们单列成**采样抖动**�
 门禁：`npm test` **2156 / 2156**（+8，两边都带反证）、`tsc -b` 干净、`oxlint` 0 error / 30 warning（770 文件）、
 密钥扫描 1225 个文件无命中。入口 `index-CDUNYuqb.js`（873,536 B）。发布标签 `20261127-0002-r332press`，
 快照 `/opt/visionqa/releases/20261126-160323-20261127-0002-r332press.tar.gz`；公网 `/api/version` **0.9.304**、
-health ok templates 27、新入口 200、上一版入口 `index-D9Wtr6mf.js` 404、两服务 active。
+health ok templates 27、新入口 200、上一版入口 `index-D9Wtr6mf.js` 404、两服务 active；提交 `aed43f4`，
+CI **45855358373 success**。
 完整记录见 [docs/r332-press-details-2026-11-27.md](docs/r332-press-details-2026-11-27.md)。
 
 边界：只量 1440×1000；判的是「按下那一刻有没有属性变化」，不判「该不该有」。剩下的 **28 条**在
