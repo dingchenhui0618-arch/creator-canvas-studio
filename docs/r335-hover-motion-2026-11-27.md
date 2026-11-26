@@ -110,6 +110,7 @@
   回滚点 `/opt/visionqa/releases/20261126-172531-20261127-0135-r335hover.tar.gz`；
   公网 `/api/version` **0.9.308**、health ok（redfox / vision / llm 三项 true，templates 27）、
   新入口 200、上一版入口（`index-CyOHShxi.js`）404，`visionqa` / `visionqa-internal` / `visionqa-demo` 三个服务 active。
+- 提交 `9f53375`（22 文件，+738 / −16），CI **45868426957 success**（Node 24 / Node 22.12 / 安全扫描三格全绿）。
 - 中间那版 0.9.307 是同一轮的过渡产物（标签 `20261127-0115-r335hover`，回滚点
   `20261126-171622-20261127-0115-r335hover.tar.gz`，入口 `index-CyOHShxi.js`），20 分钟内被 0.9.308 取代。
 

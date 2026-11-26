@@ -1369,7 +1369,7 @@ cursor 不可过渡直接不算），另有一条专盯按下会拿焦点的焦�
 `oxlint` 0 error / 30 warning（774 文件）、密钥扫描 1234 个文件无命中。入口 `index-B2DSgDYY.js`（873,536 B，含 `0.9.308`）；
 发布标签 `20261127-0135-r335hover`，回滚点 `/opt/visionqa/releases/20261126-172531-20261127-0135-r335hover.tar.gz`；
 公网 `/api/version` **0.9.308**、health ok templates 27、新入口 200、上一版入口 404，三个服务 active。
-完整记录见 [docs/r335-hover-motion-2026-11-27.md](docs/r335-hover-motion-2026-11-27.md)。
+提交 `9f53375`，CI **45868426957 success**。完整记录见 [docs/r335-hover-motion-2026-11-27.md](docs/r335-hover-motion-2026-11-27.md)。
 
 边界：划过只有十趟里那 136 颗按钮的实时读数（行 / 卡片 / 链接只有静态门禁）；只判「变化走不走过渡」，
 不判「该不该有」；`--shots all` 那类局部截图含外壳上的登录手机号与邮箱，**不许进 docs/**。
