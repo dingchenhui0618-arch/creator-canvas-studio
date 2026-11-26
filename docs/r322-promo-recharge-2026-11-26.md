@@ -99,13 +99,18 @@
 | --- | --- |
 | `GET /api/promos` | 5 条，`placement=recharge` 恰好 1 条：`recharge-what-credits-buy`「10 积分复刻一条片子」/「去复刻」 |
 | 页面上的那条 | 标题、正文、按钮、小标签与响应逐字一致；`count=1`；`vq-stagger` 在；溢出 0 |
-| 侧栏版本 | `v0.9.294` |
+| 侧栏版本 | `v0.9.294`（图已在 r323 重拍为 0.9.295 + 身份行遮盖，见下） |
 | 关闭动效 | 见上一节（107→0、opacity→0、0.85px 跟随、最后一跳 40.00px） |
 | 页面报错 | none |
 
-[docs/r322-prod-recharge-default-1440.png](r322-prod-recharge-default-1440.png)（1440×1000，152,306 B）——
+[docs/r322-prod-recharge-default-1440.png](r322-prod-recharge-default-1440.png)（1440×1000）——
 **这是生产上用户现在看到的充值页**。收尾：`user_agent LIKE '%r322-prod-shot%'` 的会话 before 1 / removed 1 / after 0，
 令牌与用户文件都已删。
+
+> r323 里重拍过这张图：原图侧栏底部带着手机号（后台与用户页的侧栏都会显示登录名，而线上账号的登录名就是手机号），
+> 仓库是公开的，所以现在拍照前会把 DOM 里的 11 位手机号与邮箱换成占位符。重拍用的是 0.9.295：
+> 用户侧运营位代码在 0.9.294 → 0.9.295 之间一字未改（只动了后台编辑卡、`promosDirty`、console.css 与版本号），
+> 关闭动效重测 107px → 0px、`opacity` 最小 0、下面那张卡最大偏离 0.63px、移除那一刻 40.00px——与上面记录一致。
 
 ## 门禁
 

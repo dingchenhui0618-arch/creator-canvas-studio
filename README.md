@@ -715,10 +715,13 @@ CI run `45800370507` success（Node 24）。提交 `605cdf7` + `0e98635` + `6c78
 390 [docs/r322-recharge-promo-390.png](docs/r322-recharge-promo-390.png)（`390 === 390`，关闭按钮 28×28 右边缘 357）。
 
 **生产上也真渲染了**（临时签一个管理员会话、只发 GET、拍完撤销，见 `scripts/shot-r322-prod.mjs`）：
-`GET /api/promos` 回的 `placement=recharge` 那条与页面上那条逐字一致，侧栏 `v0.9.294`，生产关闭动效
+`GET /api/promos` 回的 `placement=recharge` 那条与页面上那条逐字一致，生产关闭动效
 107→0、`opacity`→0、下面那张卡收拢过程中最大偏离 0.85px：
 
 ![生产充值页：用户现在看到的就是这条运营位](docs/r322-prod-recharge-default-1440.png)
+
+（这张图在 r323 里重拍过一版：原图侧栏底部带手机号，仓库是公开的，现在拍照前会把它与邮箱换成占位符；
+重拍用的是 0.9.295，用户侧运营位代码在这两版之间一字未改，关闭动效重测 107px → 0px、最后一跳 40.00px。）
 
 | 门禁 | 结果 |
 | --- | --- |
@@ -764,8 +767,17 @@ DOM 里确实没有它（反证），撤销后回到 3 行且 10 个字段 diff 
 
 ![390 宽](docs/r323-promo-editor-390.png)
 
-门禁：`npm test` 2107 / 2107（新增 1 条 `promosDirty` 用例）、`tsc -b` 干净、`oxlint` 0 error / 30 warning、
-密钥扫描 1192 个文件无命中、入口 `index-3jw-5dtJ.js`（867,813 B）。
+生产上也真渲染了（`scripts/shot-r323-prod.mjs`，临时管理员会话、只发 GET、拍完即撤销）：
+线上入口 `index-3jw-5dtJ.js`、侧栏 `v0.9.295`、卡上 5 行（默认内容）、预览头 `实时预览 · 第 1 条 · 工作台`、
+预览标题 = 第 1 行标题 = `GET /api/promos` 里权重最高的那条 `把几个智能体放进同一个房间`、
+没动过所以没有「有未保存的改动」、1440 溢出 0、exception 0。顺带补了一个隐患：后台截图里侧栏底部的
+登录名就是手机号，而仓库是公开的——现在拍照前会在临时浏览器里把手机号与邮箱换成占位符（r322 那张生产图
+也按同一套重拍了一版，见 [docs/r322-prod-recharge-default-1440.png](docs/r322-prod-recharge-default-1440.png)）。
+
+![生产后台「系统 → 运营位」卡](docs/r323-prod-promo-editor-1440.png)
+
+门禁：`npm test` 2107 / 2107（新增 1 条 `promosDirty` 用例）、`tsc -b` 干净、`oxlint` 0 error / 30 warning（746 文件）、
+密钥扫描 1193 个文件无命中、入口 `index-3jw-5dtJ.js`（867,813 B）。
 
 边界：撤销只留最近一条；预览按**行号**记（把正在预览的那行上移之后，预览留在同一行号、内容会换，
 但行头徽标与预览头永远说的是同一行）；草稿仍然只在内存里，切后台分区 / 刷新 / 关标签页会丢——

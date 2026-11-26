@@ -78,6 +78,31 @@ class Cdp {
 }
 
 let cdp = null
+// 侧栏底部的账号行会把登录名显示出来（线上管理员的登录名就是手机号）：这是要进公开仓库的图，
+// 拍照前把临时浏览器 DOM 里的 11 位手机号与邮箱换成占位符——只改浏览器里的渲染，不碰生产数据。
+// 表达式写成多行模板字面量，并且断言返回值：先前用「一行行 + 拼」的写法时，continue 后面直接
+// 跟了 const（少了行末分号）——SyntaxError，而 Runtime.evaluate 只安安静静回一个 undefined，
+// 脚本照跑、截图照拍、手机号照在，日志里只有一句「身份行遮盖：undefined」。拿不到数字就抛。
+async function maskIdentity() {
+  const result = await evaluate(`(() => {
+    const phone = new RegExp('1[3-9][0-9]{9}', 'g')
+    const mail = new RegExp('[A-Za-z0-9._+-]+@[A-Za-z0-9-]+[.][A-Za-z0-9.]+', 'g')
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
+    let node = walker.nextNode()
+    let phones = 0
+    let mails = 0
+    while (node) {
+      const text = node.nodeValue || ''
+      const next = text.replace(phone, () => { phones += 1; return '138••••••••' }).replace(mail, () => { mails += 1; return 'masked@example.com' })
+      if (next !== text) node.nodeValue = next
+      node = walker.nextNode()
+    }
+    return { phones: phones, mails: mails }
+  })()`)
+  if (!result || typeof result.phones !== 'number') throw new Error('身份行遮盖没生效：' + JSON.stringify(result))
+  return result
+}
+
 async function evaluate(expression) {
   const result = await cdp.send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true })
   return result?.result?.value
@@ -92,6 +117,7 @@ async function open({ width, height, hash = '#/recharge' }) {
   if (guided) await sleep(500)
   // 提示条是 React 管的节点：只隐藏，别删（r319 删过一次，React 抛 removeChild 把整页卸成白屏）
   await evaluate("(() => { const style = document.createElement('style'); style.textContent = '.vq-toast{display:none !important}'; document.head.appendChild(style); window.scrollTo(0, 0); return true })()")
+  console.log('身份行遮盖：' + JSON.stringify(await maskIdentity()))
 }
 
 async function waitForCount(selector, n, label, tries = 40) {
