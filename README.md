@@ -1178,7 +1178,8 @@ has-feedback，记为**测量抖动**，不当成回归。）
 当前快照 `/opt/visionqa/releases/20261126-153219-20261126-2333-r331promo.tar.gz`（回滚演练前自动打的
 `20261126-153211-before-rollback.tar.gz` 也在），
 `ops/rollback.sh --to 1` 回 0.9.302 后再发布回来；公网 0.9.303、health ok templates 27、新入口 200、
-上一版入口 `index-BdLqYHxS.js` 404；两服务 active。
+上一版入口 `index-BdLqYHxS.js` 404；两服务 active；提交 `9f71fb3`，CI **45850793384 success**。
+完整记录见 [docs/r331-promo-details-2026-11-26.md](docs/r331-promo-details-2026-11-26.md)。
 
 边界：抽屉只在 1440×1000 与 390×844 两个视口重量；触控区是 computed 值（四个宽度），没有逐机型截图；
 巡检判的是「按下时有没有属性变化」，不判「该不该有」；后台排序这一轮仍然只有「上移 / 下移」一条路。
