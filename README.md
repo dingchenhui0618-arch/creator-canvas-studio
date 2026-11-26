@@ -655,7 +655,9 @@ r319 把运营位和动效先摆到工作台上；这一版补齐三件事——
 | `npm run scan:secrets` | 1184 个文件，没命中 |
 | `npm run build` | 入口 `index-C4p7ot7V.js`（866,556 B） |
 
-提交 `605cdf7`（`0fbb039..605cdf7` 已推 `master`）。
+CI run `45800370507` success（Node 24）。提交 `605cdf7` + `0e98635` + `6c78e01` 已推 `master`。
+第一次 CI 是红的：`ffmpeg-static` 的二进制在 CI 里没装上，两条「真跑 ffmpeg」的用例 ENOENT 失败；
+改成**二进制不存在就 skip**（跳过是诚实的，假装通过不是），本地仍 9/9 真跑。
 
 **已上生产（一次成功）**，标签 `20261126-1830-r321audio`：
 
