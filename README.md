@@ -1056,7 +1056,9 @@ after 命中 `BUTTON.ov-cap-action.vq-card-open`、`cursor: pointer`，分别跳
 [test/promo-undo.test.mjs](test/promo-undo.test.mjs) 随重构改成盯共用层，并加了一条「CTA 没挂 `.vq-card-open` 就红」。
 `npm test` **2142 / 2142**（+4；另有一轮全量并发下 `canvas-queue-visible` 偶发失败，
 单跑 8/8——r184 起的老毛病，不是这一轮引入的）、`tsc -b` 干净、`oxlint` 0 error / 30 warning（766 文件）、密钥扫描 1216 个文件无命中、
-入口 `index-DvhCcfhI.js`。完整记录见 [docs/r329-card-affordance-2026-11-26.md](docs/r329-card-affordance-2026-11-26.md)。
+入口 `index-DvhCcfhI.js`。发布标签 `20261126-2230-r329cards`，快照 `/opt/visionqa/releases/20261126-142041-20261126-2230-r329cards.tar.gz`，
+`ops/rollback.sh --to 1` 回 0.9.300；公网 0.9.301、health ok templates 27、新入口 200、上一版入口 `index-ByDh_Wgb.js` 404；
+提交 `28cc4b5`，CI 45840388610 success。完整记录见 [docs/r329-card-affordance-2026-11-26.md](docs/r329-card-affordance-2026-11-26.md)。
 
 边界：能力卡 04 与后台预览卡是**故意**不整卡可点的（不变量是「抬起 = 能点」，不是「所有卡都能点」）；
 只量了 1440×1000（窄屏下这批卡片是同一套 DOM，热区仍铺满整卡，但没有逐屏重量）；
