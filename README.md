@@ -1564,6 +1564,9 @@ motion.ts + 两条反证 + helper 两种系统设置各一条 + 六处调用点�
 （上一版是 r338 的 `20261126-185545-20261127-0300-r338skip.tar.gz`，也就是回滚点）；公网 `/api/version` **0.9.312**、
 health ok templates 27、新入口 `index-8xkM8tsT.js` 200、上一版入口 404、三个服务 active；
 CSS 与 r338 同哈希（这一轮一个字都没动样式表），live JS 里能读到 `prefers-reduced-motion: reduce` 与 `data:` 直通。
+提交 `cbca96b`，CI **45883097804 success**。
+划过那一层在 r339 产物上复跑核对（`coverSrc` 那处改动碰到的正是模板卡那张面）：
+**9 张面 / 9 有反馈 / 0 看不出变化 / 0 硬切 / 4 只靠下划线 / 0 读不到**，与 r337、r338 一致。
 完整记录见 [docs/r339-motion-layer-2026-11-27.md](docs/r339-motion-layer-2026-11-27.md)。
 
 
