@@ -508,6 +508,29 @@ health ok templates 27，两个服务 active，**一次发布成功**。回滚 `
 单测 `test/promos.test.mjs` 8 条（位置、排序、起止日、内部口径、坏数据、文案长度），
 `scripts/shot-r319.mjs` 里 9 条真渲染断言。
 
+**已上生产，两次（都一次发布成功）**：第一次 15:16 `20261126-1516-r319detail`（入口 `index-DKdEsJ3-.js`）——
+发完才发现在仓库里忘了 bump 版本号，生产侧栏还是 `v0.9.290`（与 r317 同一个版本号，光看侧栏分不清装的是哪一版），
+于是把 `package.json` 提到 **0.9.291** 重新构建，15:34 再发一次 `20261126-1534-r319promo`（入口 `index-qxoGzNF3.js`）。
+
+| 项 | 值 |
+| --- | --- |
+| 当前生产 | `0.9.291` · 入口 `index-qxoGzNF3.js` 866,229 B · CSS `index-BQfqtB31.css` 426,893 B |
+| 回滚点 | `/opt/visionqa/releases/20261126-071953-20261126-1534-r319promo.tar.gz`（`--to 1` 回 0.9.290 / r317） |
+| 健康 | `/api/health` ok，templates 27；visionqa / visionqa-internal 都 active |
+| 公网 | `/api/version` 200 `0.9.291`；新入口 200；上一版入口 404 |
+| 部署里的新样式 | 部署后的 CSS 里 `vq-promo` / `vq-stagger` / `vq-lift` 各命中 1 |
+
+生产上真渲染（`scripts/shot-r319-prod.mjs`：生产侧临时签一个管理员会话，令牌只写 `/root/.vq-shot-token` 0600 →
+scp 回本机文件 → 脚本从文件读、不打印 → 拍完 `destroySession`）：
+[docs/r319-prod-workbench-1440.png](docs/r319-prod-workbench-1440.png)（管理员真实工作台：两条运营位、`animationName=vq-rise`、
+`transitionProperty` 含 transform、侧栏 `v0.9.291`、49,595 积分、溢出 0、报错 none）、
+[docs/r319-prod-workbench-390.png](docs/r319-prod-workbench-390.png)（390 溢出 0）。
+
+收尾时出过一次岔子，写下来：第一次撤销会话我只把**签发** helper 传上了服务器，`revoke` 报 `MODULE_NOT_FOUND`，
+紧接着的清理脚本又把 `/root/.vq-shot-token` 删了——令牌没进过上下文（脚本从不打印），但那条会话记录还留着。
+补了一个一次性脚本按 `user_agent LIKE '%prod-shot%'` 删掉（命中 1 条、删后 0 条），再用 `listLoginSessions` 核管理员活会话（余 3 条是他自己的真实登录）。
+第二次签发与撤销两个 helper 一起传，撤销后复查 0 条。教训：**签发与撤销必须成对上传；清理脚本不要抢在撤销之前删令牌。**
+
 边界：运营位内容还写在前端文件里，**后台改不了**（下一步接服务端配置 + 后台编辑，组件与页面不用动）；
 动效这一批只上了工作台一处列表和一种卡片抬起，模板库/作品流还没铺；
 reduce-motion 总闸只有代码与单测层面的证据，没在真开了「减弱动态效果」的浏览器里跑过；
