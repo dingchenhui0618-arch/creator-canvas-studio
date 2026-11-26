@@ -18,6 +18,11 @@ const {
 
 const run = promisify(execFile)
 
+// ffmpeg-static 的二进制是 postinstall 下载的：CI 里跳过安装脚本（或下载被墙）时它不存在，
+// 这时「真跑 ffmpeg」那两条只能跳过——跳过是诚实的，假装通过不是。
+const FFMPEG_READY = Boolean(ffmpegPath) && fs.existsSync(ffmpegPath)
+const NO_FFMPEG = FFMPEG_READY ? false : 'ffmpeg-static 二进制没装上（CI 跳过安装脚本），这条本地跑'
+
 test('静音段：成对的 silence_start/end 各自成段', () => {
   const stderr = [
     '[silencedetect @ 0x1] silence_start: 3.02',
@@ -89,7 +94,7 @@ test('分镜落到静音里：过半数没声音才算留白', () => {
 })
 
 // 真跑 ffmpeg 的两个用例：解析逻辑对了不代表命令对了（滤镜顺序、-map 写法都会挂）
-test('真读一条有停顿的片子：拿到停顿的秒数，不是空壳', async () => {
+test('真读一条有停顿的片子：拿到停顿的秒数，不是空壳', { skip: NO_FFMPEG }, async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vq-audio-'))
   const file = path.join(dir, 'talking.mp4')
   await run(ffmpegPath, [
@@ -112,7 +117,7 @@ test('真读一条有停顿的片子：拿到停顿的秒数，不是空壳', as
   fs.rmSync(dir, { recursive: true, force: true })
 })
 
-test('真读一条没音轨的片子：说没有音轨，不是解码失败', async () => {
+test('真读一条没音轨的片子：说没有音轨，不是解码失败', { skip: NO_FFMPEG }, async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vq-audio-'))
   const file = path.join(dir, 'mute.mp4')
   await run(ffmpegPath, [
