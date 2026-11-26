@@ -775,6 +775,43 @@ select:focus-visible {
   background: var(--canvas);
 }
 
+/* ---------- 「跳到主要内容」（r338） ----------
+   键盘用户的第一站。这个站的外壳（侧栏 + 顶栏 + 页头）在正文之前有 45 个可 Tab 的目标，
+   不给入口就得每一页先按二十几下 Tab——--focus 走查每一屏都是这个数。
+   平时收成 1px：不占排版、也不进「划过」那一层的取景（那一层只收 8×8 以上的面）。
+   现身那一下的尺寸变化是离散的（不算硬切，见 r336 的口径），颜色与阴影仍走 120ms 那条过渡。 */
+.vq-skip {
+  position: fixed;
+  top: var(--space-2);
+  left: var(--space-2);
+  z-index: 80;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--ink);
+  font-size: var(--text-body);
+  line-height: 1.4;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color var(--dur-1) var(--ease-out), background-color var(--dur-1) var(--ease-out),
+    border-color var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out);
+}
+.vq-skip:focus-visible {
+  width: auto;
+  height: auto;
+  padding: var(--space-2) var(--space-3);
+  overflow: visible;
+  clip-path: none;
+  border-color: var(--line-strong);
+  box-shadow: 0 0 0 3px rgba(17, 17, 17, 0.16);
+  outline: none;
+}
+
 .vq-sidebar {
   display: flex;
   flex: 0 0 236px;

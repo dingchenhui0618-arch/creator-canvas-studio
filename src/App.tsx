@@ -917,6 +917,21 @@ function Workbench({
 
   return (
     <div className={'vq-scope vq-shell' + (focusOn ? ' is-focus' : '')}>
+      {/* r338：键盘用户的第一站。外壳（侧栏 + 顶栏 + 页头）在正文之前有 45 个可 Tab 的目标
+          ——走查里每一屏都是这样，不给入口就得先按二十几下 Tab 才到内容。
+          平时收成 1px、只有拿到焦点时现身（样式见 shell.css 的 .vq-skip）。
+          这里不直接用锚点默认行为：这个站的地址栏就是路由（#/overview 这种），
+          href 改成 #vq-main 会把路由换掉——所以拦住默认行为、只把焦点送到正文。 */}
+      <a
+        className="vq-skip"
+        href="#vq-main"
+        onClick={(event) => {
+          event.preventDefault()
+          document.getElementById('vq-main')?.focus()
+        }}
+      >
+        跳到主要内容
+      </a>
       <aside className={`vq-sidebar${sidebarOpen ? '' : ' vq-sidebar--collapsed'}`}>
         <div className="vq-sidebar-scroll">
           <div className="vq-brand">
@@ -1269,7 +1284,8 @@ function Workbench({
           </div>
         </header>
 
-        <div className="vq-content" ref={contentRef}>
+        {/* tabIndex=-1：能被「跳到主要内容」聚焦（读屏据此从正文开始念），但不占 Tab 的一站 */}
+        <div className="vq-content" id="vq-main" tabIndex={-1} ref={contentRef}>
           {mobileNoteOpen ? (
             <div className="vq-mobile-note" role="note">
               <span className="vq-mobile-note-text">

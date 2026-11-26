@@ -45,7 +45,8 @@ test('App 真的按这个判断归零：归零在浏览器绘制之前做，不�
   const app = read('src', 'App.tsx')
   assert.match(app, /import \{ planScroll \} from '\.\/domain\/scroll'/)
   assert.match(app, /const contentRef = useRef<HTMLDivElement \| null>\(null\)/)
-  assert.match(app, /<div className="vq-content" ref=\{contentRef\}>/)
+  // r338：这个容器同时是「跳到主要内容」的落点（id + tabIndex=-1），属性多了一个按置词的间隔
+  assert.match(app, /<div className="vq-content"[^>]*ref=\{contentRef\}>/, '正文容器还是那个滚动节点（ref 必须挂在它身上）')
   assert.match(app, /useLayoutEffect\(\(\) => \{/, '用 useLayoutEffect：绘制前归零，换页不会先闪一下旧位置')
   assert.match(app, /planScroll\(previous, route\) !== 'top'/)
   assert.match(app, /node\.scrollTop = 0/)

@@ -85,6 +85,25 @@ const GUARDS = [
   { needle: "hoverSurface: 'r337：--links 单独一层。", why: 'probe 元数据里要写清这一层怎么量的' },
   { needle: "console.log('---- 非按钮表面：划过看不出任何变化（' + blankRows.length + ' 张）----')", why: '划过没反应的清单要打印出来' },
   { needle: "console.log('---- 非按钮表面：划过有变化但还是硬切（' + cutRows.length + ' 张）----')", why: '这一层的硬切清单也要打印出来' },
+  // r338：焦点这一层的三处量具纠错
+  { needle: 'async function ensurePageFocus(tries = 6) {', why: '每一趟走查之前先把「这一页拿得到系统焦点」确认下来' },
+  { needle: "if (await evaluate('document.hasFocus()')) return { ok: true, tries: i + 1 }", why: '焦点模拟会被导航清掉：真读到 hasFocus 才算数' },
+  { needle: 'row.focusReady = await ensurePageFocus()', why: '一趟开始时先补焦点' },
+  { needle: "'补了几次也没能让这一页拿到系统焦点，这一趟的 Tab 走查作废（不是「没问题」）'", why: '拿不到焦点要如实作废，不写成「0 站」' },
+  { needle: 'function uniquePath(node) {', why: '绕回开头要按唯一路径判（选择器字符串会重名）' },
+  { needle: 'path: uniquePath(el),', why: '每一站都带上那条唯一路径' },
+  { needle: 'const repeat = at && !at.body ? walk.filter((item) => item.path === at.path)[0] : null', why: '同一站连着出现，先当成「这一下按键被丢了」处理' },
+  { needle: 'const moved = (state) => Boolean(state && !state.body && (!at || state.path !== at.path))', why: '「焦点往前走了」这一条判据' },
+  { needle: "let how = '再读一次就动了（按键生效、读数来早了）'", why: '页面长、滚动慢时按键生效了而读数来早了，先把这个情形摘出去' },
+  { needle: 'for (let attempt = 0; attempt < 2 && !moved(again); attempt += 1) {', why: '补焦点重按最多两次，两次都不动才是真结论' },
+  { needle: 'row.droppedKeys.push(Object.assign(stuck, { how: how }))', why: '丢掉的按键要进产物（不然「少了几站」查不出原因）' },
+  { needle: 'function focusUnvisited(visitedJson) {', why: '「可 Tab 元素」比站数多时，要能列出没走到的那些' },
+  { needle: 'row.unvisited = await evaluate(', why: '没走到的清单进产物' },
+  { needle: 'row.boundary = {', why: '边界自证：聚焦第一个没走到的元素再真按一下 Tab，分清「在 Tab 序里」和「真的到此为止」' },
+  { needle: 'function focusDiag() {', why: '第一下就回 body 时的诊断探针' },
+  { needle: 'firstTab: name(first),', why: '诊断要写清第一个可 Tab 的元素是谁' },
+  { needle: "+ (row.droppedKeys && row.droppedKeys.length ? ' · 丢掉的按键 ' + row.droppedKeys.length : '')", why: '每一趟的汇总行都要报丢掉的按键数' },
+  { needle: "focusR338: 'r338：焦点这一层的三处量具纠错。", why: 'probe 元数据里要写清这一层怎么量的' },
 ]
 
 const missingFrom = (source) => GUARDS.filter((guard) => !source.includes(guard.needle)).map((guard) => guard.needle)
@@ -176,3 +195,26 @@ test('r335 · 量具：hover 的硬切不是恒假的（把输入换成空、或
     assert.ok(missingFrom(broken).includes('out.hoverHardCuts = hardCutProps(out.hoverChangedVsRest, hover)'), item.why + '：守卫没发现')
   }
 })
+
+// r338：焦点那一层的三处纠错，逐条配反证
+test('r338 · 量具：页面没有系统焦点时不能写成「0 站」（把 hasFocus 那道闸改成恒真要能看出来）', () => {
+  const from = "if (await evaluate('document.hasFocus()')) return { ok: true, tries: i + 1 }"
+  const broken = SRC.replace(from, "if (true) return { ok: true, tries: i + 1 }")
+  assert.notEqual(broken, SRC, '改坏用的锚点没匹配到')
+  assert.ok(!broken.includes(from), '把 hasFocus 那道闸改成恒真之后守卫没发现（页面没焦点时仍会被写成「走查过了」）')
+})
+
+test('r338 · 量具：同一站连着出现要能救回来（把补按那一步删掉要能看出来）', () => {
+  const from = 'for (let attempt = 0; attempt < 2 && !moved(again); attempt += 1) {'
+  const broken = SRC.replace(from, 'for (let attempt = 0; attempt < 0; attempt += 1) {')
+  assert.notEqual(broken, SRC, '改坏用的锚点没匹配到')
+  assert.ok(!broken.includes(from), '把补按删掉之后守卫没发现（被丢掉的按键会被当成绕回 / 走到头）')
+})
+
+test('r338 · 量具：绕回不能按选择器字符串判（换回 selector 要能看出来）', () => {
+  const from = 'const seen = walk.filter((item) => item.path === at.path)[0]'
+  const broken = SRC.replace(from, 'const seen = walk.filter((item) => item.selector === at.selector)[0]')
+  assert.notEqual(broken, SRC, '改坏用的锚点没匹配到')
+  assert.ok(!broken.includes(from), '把唯一路径换回选择器之后守卫没发现（同名不同元素会被当成绕回，走查提前收工）')
+})
+

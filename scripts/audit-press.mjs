@@ -48,6 +48,19 @@
 //      属性表用 HOVER_PROPS = PROPS + 下划线两条；text-decoration-line 是离散属性，算反馈但不进硬切。
 //      按钮那三层的读数一个字都不动（仍走 PROPS / AFTER_PROPS）。
 //
+//  11) r338 起：焦点这一层的两处量具错误修掉（都是「读数看着像页面问题，其实是测量问题」）：
+//      ① 页面会**中途丢掉系统焦点**（Emulation 的焦点模拟被导航清掉）：没有焦点时 CDP 发出去的
+//         Tab 会被直接丢弃，document.activeElement 一直是 body。r336 那条「后台一屏 84 个可 Tab
+//         元素、0 站」就是它。现在每一趟走查之前都 ensurePageFocus（bringToFront + 重开焦点模拟 +
+//         真读 document.hasFocus），拿不到就记异常、如实作废这一趟，不写成「0 站」。
+//      ② 同一站连着出现、或者读回 body，以前一律当成「绕回开头 / 走到头了」。可它也可能是
+//         「这一下按键被丢掉了」——两种读数一模一样。现在先补一次焦点再按一下：焦点往前走了
+//         就接着走（记 droppedKeys），还在原地才是真结论。绕回也按**唯一路径**判，不再比选择器
+//         字符串（同一个 tag.class 在页面上有好几个时，两个不同元素会拿到同一个字符串）。
+//      ③ 走查结束后，如果这一屏按选择器数出的「可 Tab 元素」比实际走到的站数多，就把没走到的
+//         那几个列出来（unvisited：是什么、多大、在哪、是不是在 inert / aria-hidden 里），
+//         不把「对不上」静默掉。
+//
 // 用法（同一份脚本跑两份产物）：
 //   node scripts/audit-press.mjs --dist .shots330/dist-after --out .shots331/press
 //   node scripts/audit-press.mjs --dist .shots331/dist-after --out .shots331/press-after
@@ -56,6 +69,7 @@
 //   node scripts/audit-press.mjs --focus                   # 只跑键盘焦点那一层（Tab 走查）
 //   node scripts/audit-press.mjs --links                   # 只跑非按钮表面那一层（划过，不按下）
 //   node scripts/audit-press.mjs --only templates-drawer --links --shots all   # 划过那一拍也留一张局部图
+//   node scripts/audit-press.mjs --focus --only admin-promos --focuscap 90     # 一屏很长时把 Tab 上限抬高
 //
 // 产物：<out>/press.json + <out>/<page>-<n>-press.png（只给「按下无反馈候选」）
 import { spawn } from 'node:child_process'
@@ -561,10 +575,25 @@ function focusActive() {
     }
     return parts.join(' > ')
   }
+  // 唯一路径（r338）：从 body 一路数 nth-child 到它。选择器是写给人看的，可能重名——
+  // 同一个 tag.class 在页面上有好几个时，两处元素会拿到同一个字符串。判断「是不是绕回开头」
+  // 和「读哪一条元素」都必须用这条不会重名的路径，否则走查会提前收工、读数会读到另一个元素。
+  function uniquePath(node) {
+    const parts = []
+    let cur = node
+    while (cur && cur.nodeType === 1 && cur !== document.documentElement) {
+      const parent = cur.parentElement
+      if (!parent) break
+      parts.unshift(cur.tagName.toLowerCase() + ':nth-child(' + (Array.prototype.indexOf.call(parent.children, cur) + 1) + ')')
+      cur = parent
+    }
+    return parts.join('>')
+  }
   const el = document.activeElement
   if (!el || el === document.body || el === document.documentElement) return { body: true }
   return {
     body: false,
+    path: uniquePath(el),
     selector: selectorOf(el),
     tag: el.tagName,
     text: String(el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 40),
@@ -572,6 +601,97 @@ function focusActive() {
     type: el.getAttribute('type'),
     focusVisible: el.matches(':focus-visible'),
     focusWithin: el.matches(':focus-within'),
+  }
+}
+// r338：第一下 Tab 就落回 body、这一屏却明明有可 Tab 的元素时，光记一条异常说不清是哪一种情形：
+// 「这一屏真的没得 Tab」还是「这一下按键没落进页面」（页面刚导航完 / 页面没拿到系统焦点）。
+// 这个只读探针把话说清楚：页面有没有焦点、第一个可 Tab 的元素是谁、它在哪儿。
+// r338：可 Tab 元素数（这一屏有多少能接焦点的东西）与走查实际走到的站数不一致时，
+// 光报「对不上」没法查。这个只读探针把「Tab 没走到的那几个」列出来，最多 8 条：
+// 是哪几个、多大、在哪儿、是不是在 inert / aria-hidden 的子树里。
+function focusUnvisited(visitedJson) {
+  const visited = {}
+  for (const p of JSON.parse(visitedJson)) visited[p] = true
+  function uniquePath(node) {
+    const parts = []
+    let cur = node
+    while (cur && cur.nodeType === 1 && cur !== document.documentElement) {
+      const parent = cur.parentElement
+      if (!parent) break
+      parts.unshift(cur.tagName.toLowerCase() + ':nth-child(' + (Array.prototype.indexOf.call(parent.children, cur) + 1) + ')')
+      cur = parent
+    }
+    return parts.join('>')
+  }
+  const list = Array.prototype.slice.call(document.querySelectorAll('a[href], button, input, select, textarea, [tabindex]'))
+  const reach = list.filter(function (n) {
+    if (n.disabled) return false
+    if (n.tabIndex < 0) return false
+    const r = n.getBoundingClientRect()
+    // 1×1 也是一个 Tab 站（「跳到主要内容」平时就收成 1×1），门槛收到 1px 才数得准
+    if (r.width < 1 || r.height < 1) return false
+    const cs = getComputedStyle(n)
+    return cs.display !== 'none' && cs.visibility !== 'hidden'
+  })
+  const out = []
+  for (const el of reach) {
+    const p = uniquePath(el)
+    if (visited[p]) continue
+    const r = el.getBoundingClientRect()
+    let contentHidden = false
+    for (let cur = el; cur && cur.nodeType === 1; cur = cur.parentElement) {
+      if (getComputedStyle(cur).contentVisibility === 'hidden') { contentHidden = true; break }
+    }
+    out.push({
+      tag: el.tagName,
+      cls: String(el.getAttribute('class') || '').slice(0, 70),
+      text: String(el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 24),
+      path: p,
+      top: Math.round(r.top),
+      w: Math.round(r.width),
+      h: Math.round(r.height),
+      // r338：Chrome 真正跳过一个元素的原因就这几个——探针以前只看元素自己的 disabled。
+      disabledOwn: el.disabled === true,
+      fieldsetDisabled: Boolean(el.closest('fieldset:disabled')),
+      detailsClosed: Boolean(el.closest('details:not([open])')),
+      contentHidden: contentHidden,
+      offsetParentNull: el.offsetParent === null,
+      tabindexAttr: el.getAttribute('tabindex'),
+      inertUp: Boolean(el.closest('[inert]')),
+      ariaHiddenUp: Boolean(el.closest('[aria-hidden="true"]')),
+    })
+    if (out.length >= 40) break
+  }
+  return { reachable: reach.length, visited: Object.keys(visited).length, skipped: out.length ? reach.length - visited : 0, unvisited: out }
+}
+function focusDiag() {
+  const list = Array.prototype.slice.call(document.querySelectorAll('a[href], button, input, select, textarea, [tabindex]'))
+  const reach = list.filter(function (n) {
+    if (n.disabled) return false
+    if (n.tabIndex < 0) return false
+    const r = n.getBoundingClientRect()
+    // 1×1 也是一个 Tab 站（「跳到主要内容」平时就收成 1×1），门槛收到 1px 才数得准
+    if (r.width < 1 || r.height < 1) return false
+    const cs = getComputedStyle(n)
+    return cs.display !== 'none' && cs.visibility !== 'hidden'
+  })
+  const first = reach[0]
+  const active = document.activeElement
+  const name = function (el) {
+    if (!el) return null
+    const cls = String(el.getAttribute('class') || '')
+    return el.tagName + (cls ? '.' + cls.slice(0, 60) : '')
+  }
+  return {
+    hasFocus: document.hasFocus(),
+    active: name(active),
+    reachable: reach.length,
+    firstTab: name(first),
+    firstTop: first ? Math.round(first.getBoundingClientRect().top) : null,
+    firstVisible: first ? first.getBoundingClientRect().width > 0 : null,
+    scrollY: Math.round(window.scrollY),
+    hidden: document.hidden,
+    visibility: document.visibilityState,
   }
 }
 function readFocusState(selector) {
@@ -1361,6 +1481,18 @@ async function tabKey() {
   await cdp.send('Input.dispatchKeyEvent', Object.assign({ type: 'keyUp' }, base))
   await sleep(90)
 }
+async function ensurePageFocus(tries = 6) {
+  // r338：页面有没有「系统焦点」决定了 Tab 会不会被丢掉——没有焦点时 CDP 发出去的 Tab
+  // 直接没有下文，document.activeElement 一直是 body（r336 那屏「84 个可 Tab 的元素、0 站」就是它）。
+  // 焦点模拟是会被导航清掉的，所以每一趟走查之前都补一次，并且真的读到 hasFocus 才算数。
+  for (let i = 0; i < tries; i += 1) {
+    await cdp.send('Page.bringToFront').catch(function () {})
+    await cdp.send('Emulation.setFocusEmulationEnabled', { enabled: true }).catch(function () {})
+    if (await evaluate('document.hasFocus()')) return { ok: true, tries: i + 1 }
+    await sleep(150)
+  }
+  return { ok: false, tries: tries }
+}
 async function blurAll() {
   await evaluate('(function () { try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur() } catch (e) {} return true })()')
 }
@@ -1375,30 +1507,86 @@ async function focusWalk(pageId, pageLabel) {
     endedAtBody: null, cycled: null, restMissing: 0, chainShifted: [], rings: 0, delegated: 0, holes: 0, readFailedStops: 0,
     hardCutStops: 0, focusVisibleOffStops: 0,
   }
+  // r338：先确认这一页真的拿得到系统焦点，再谈站数——拿不到就如实记一条，不写成「0 站」。
+  row.focusReady = await ensurePageFocus()
   await blurAll()
   await evaluate('(function () { window.scrollTo(0, 0); return true })()')
   // r336：「一站都没走到」要先分清是「这一屏真的没有可 Tab 的东西」还是「走查没走起来」。
   // 先数一遍页面上看得见、tabIndex >= 0、没 disabled 的元素，走完对一遍再报异常（量不到 ≠ 没问题）。
-  row.page = await evaluate('(function () { var list = Array.prototype.slice.call(document.querySelectorAll("a[href], button, input, select, textarea, [tabindex]")); var reach = list.filter(function (n) { if (n.disabled) return false; if (n.tabIndex < 0) return false; var r = n.getBoundingClientRect(); if (r.width < 2 || r.height < 2) return false; var cs = getComputedStyle(n); return cs.display !== "none" && cs.visibility !== "hidden" }); return { hash: location.hash, reachable: reach.length, nodes: list.length } })()')
+  row.page = await evaluate('(function () { var list = Array.prototype.slice.call(document.querySelectorAll("a[href], button, input, select, textarea, [tabindex]")); var reach = list.filter(function (n) { if (n.disabled) return false; if (n.tabIndex < 0) return false; var r = n.getBoundingClientRect(); if (r.width < 1 || r.height < 1) return false; var cs = getComputedStyle(n); return cs.display !== "none" && cs.visibility !== "hidden" }); return { hash: location.hash, reachable: reach.length, nodes: list.length } })()')
   await parkMouseNeutral()
   await sleep(60)
   const walk = []
+  if (!row.focusReady.ok) {
+    anomaly(pageId, '补了几次也没能让这一页拿到系统焦点，这一趟的 Tab 走查作废（不是「没问题」）', row.focusReady)
+  }
   for (let i = 0; i < FOCUS_CAP; i += 1) {
     await tabKey()
-    const at = await evaluate('(' + focusActive.toString() + ')()')
+    let at = await evaluate('(' + focusActive.toString() + ')()')
+    // r338：第一下就落回 body、而这一屏明明有可 Tab 的元素——先把情形分清楚，再决定报什么。
+    // 顺手补一次「把这一页提到最前 + 焦点模拟」再按一下：CDP 里的页面刚导航完时，这一下按键会丢。
+    // 补完还在 body 才是真结论；补完进去了，也把「第一次掉了按键」如实记下来，不静默当没问题。
+    if ((!at || at.body) && i === 0 && row.page && row.page.reachable > 0) {
+      row.firstTabDiag = await evaluate('(' + focusDiag.toString() + ')()')
+      await ensurePageFocus()
+      await sleep(160)
+      await tabKey()
+      at = await evaluate('(' + focusActive.toString() + ')()')
+      row.retryAfterFront = at && !at.body ? '焦点进来了（第一次那下按键丢了）' : '再按一下还是 body'
+      if (!at || at.body) anomaly(pageId, '补了一次 bringToFront 再按 Tab，焦点还是没进来', row.firstTabDiag)
+      else note(pageId + '：第一下 Tab 的按键丢了（补一次 bringToFront + 焦点模拟才走起来）', row.firstTabDiag)
+    }
+    // r338：读出来是同一站、或者读回 body，先别急着下结论——这一屏会**中途丢掉系统焦点**
+    //（见 ensurePageFocus 的注释）。那一下 Tab 被丢掉，读数与「绕回开头」「走到头了」一模一样：
+    // 第一版就是这么把后台那一屏记成「0 站」，第二版（只把绕回改成比唯一路径）又把它记成
+    //「第 56 下回到第 55 站」。这里补一次焦点再按一下：焦点往前走了就接着走，并如实记下
+    //「这一下按键丢了」；还在原地才是真结论（真绕回 / 真的走到头）。
+    const repeat = at && !at.body ? walk.filter((item) => item.path === at.path)[0] : null
+    const looksEnd = !at || at.body
+    if (walk.length && (repeat || (looksEnd && row.page && row.page.reachable > walk.length))) {
+      const stuck = { n: i + 1, how: repeat ? '同一站连着出现' : '读回 body', tag: at ? at.tag : null, text: at ? at.text : null, cls: at ? at.cls : null }
+      const moved = (state) => Boolean(state && !state.body && (!at || state.path !== at.path))
+      // ① 先原地再读一次（等一拍）：这一屏很长、Tab 会把元素滚进视口，按键生效了而读数来早了，
+      //    看上去也和「没动」一样——先把这个情形摘出去，别把它记成「按键丢了」。
+      await sleep(160)
+      let again = await evaluate('(' + focusActive.toString() + ')()')
+      let how = '再读一次就动了（按键生效、读数来早了）'
+      // ② 还没动：补一次焦点再真按一下。这一屏会中途丢系统焦点（见 ensurePageFocus），
+      //    丢掉的那一下读出来与「没动」一模一样；一次不够就再补一次，两次都不动才是真结论。
+      for (let attempt = 0; attempt < 2 && !moved(again); attempt += 1) {
+        await ensurePageFocus()
+        await sleep(130)
+        await tabKey()
+        await sleep(90)
+        again = await evaluate('(' + focusActive.toString() + ')()')
+        how = '补焦点后重按（第 ' + (attempt + 1) + ' 次）'
+      }
+      if (moved(again)) {
+        row.droppedKeys = row.droppedKeys || []
+        row.droppedKeys.push(Object.assign(stuck, { how: how }))
+        at = again
+      }
+    }
     if (!at || at.body) { row.endedAtBody = i + 1; break }
-    if (walk.some((item) => item.selector === at.selector)) { row.cycled = i + 1; break }
+    // 绕回开头按唯一路径判（以前只比选择器字符串，同名不同元素会被当成绕回）。
+    const seen = walk.filter((item) => item.path === at.path)[0]
+    if (seen) {
+      row.cycled = i + 1
+      row.cycledOn = { n: i + 1, tag: at.tag, text: at.text, cls: at.cls, path: at.path, sameAs: seen.n, sameSelector: seen.selector }
+      break
+    }
     // 焦点这一拍。Tab 会把元素滚到视口中间，而鼠标停在角落——万一那一点正好压在它身上，
     // :hover 会混进这一拍（rest 那一趟是干净的，差出来就成了假反馈）。撞上了先把鼠标挪开再读一次。
-    let state = await evaluate('(' + readFocusState.toString() + ')(' + JSON.stringify(at.selector) + ')')
+    const atKey = at.path || at.selector
+    let state = await evaluate('(' + readFocusState.toString() + ')(' + JSON.stringify(atKey) + ')')
     let hoverOverlap = false
     if (state && !state.missing && state.chain[0].hover) {
       hoverOverlap = true
       await parkMouseNeutral()
       await sleep(40)
-      state = await evaluate('(' + readFocusState.toString() + ')(' + JSON.stringify(at.selector) + ')')
+      state = await evaluate('(' + readFocusState.toString() + ')(' + JSON.stringify(atKey) + ')')
     }
-    walk.push({ n: i + 1, selector: at.selector, tag: at.tag, text: at.text, cls: at.cls, type: at.type, focusVisible: at.focusVisible, focusWithin: at.focusWithin, hoverOverlap: hoverOverlap, focused: state })
+    walk.push({ n: i + 1, path: at.path, selector: at.selector, tag: at.tag, text: at.text, cls: at.cls, type: at.type, focusVisible: at.focusVisible, focusWithin: at.focusWithin, hoverOverlap: hoverOverlap, focused: state })
   }
   if (walk.length >= FOCUS_CAP) row.capReached = true
   // rest 基线：焦点还回去、鼠标重新停到中性点，再读同一批选择器
@@ -1407,9 +1595,9 @@ async function focusWalk(pageId, pageLabel) {
   await sleep(80)
   for (const stop of walk) {
     const focused = stop.focused
-    const rest = await evaluate('(' + readFocusState.toString() + ')(' + JSON.stringify(stop.selector) + ')')
+    const rest = await evaluate('(' + readFocusState.toString() + ')(' + JSON.stringify(stop.path || stop.selector) + ')')
     const item = {
-      n: stop.n, selector: stop.selector, tag: stop.tag, text: stop.text, cls: stop.cls, type: stop.type,
+      n: stop.n, path: stop.path, selector: stop.selector, tag: stop.tag, text: stop.text, cls: stop.cls, type: stop.type,
       focusVisible: stop.focusVisible, focusWithin: stop.focusWithin, hoverOverlap: stop.hoverOverlap,
       changed: [], derived: [], outlineDrawn: null, ringAppeared: null, outlineAppearProps: [], ancestorChanged: [], hardCuts: [], focusVisibleOff: [], verdict: null, error: null,
     }
@@ -1444,6 +1632,37 @@ async function focusWalk(pageId, pageLabel) {
     item.verdict = item.changed.length ? 'ring' : (item.ancestorChanged.length ? 'delegated-ring' : 'no-visible-change')
     row.stops.push(item)
   }
+  // r338：走到的站数与这一屏能接焦点的元素数对不上时，把没走到的那几个列出来（最多 8 条）。
+  if (row.page && row.page.reachable > row.stops.length) {
+    const visited = walk.map((item) => item.path).filter(Boolean)
+    row.unvisited = await evaluate('(' + focusUnvisited.toString() + ')(' + JSON.stringify(JSON.stringify(visited)) + ')').catch(() => null)
+    if (row.unvisited && row.unvisited.unvisited.length) {
+      note(pageId + '：这一屏有 ' + row.page.reachable + ' 个可 Tab 元素，走查只走到 ' + row.stops.length + ' 站，没走到的那几个见 unvisited', row.unvisited.unvisited)
+      // 边界自证：走查停住之后，直接聚焦「第一个没走到的元素」，等一拍再真按一下 Tab。
+      // 焦点往前走了 = 它在 Tab 序里（走查是被别的原因打断的，不能写成「到此为止」）；
+      // 按了还是不动 = 这一屏的 Tab 序真的到这里为止。两种结论差别很大，必须分开。
+      const probeTarget = row.unvisited.unvisited.filter((item) => item.path)[0]
+      if (probeTarget) {
+        const put = await evaluate('(function () { var el = document.querySelector(' + JSON.stringify(probeTarget.path) + '); if (!el) return { focused: false }; el.focus({ preventScroll: true }); return { focused: document.activeElement === el } })()')
+        if (put && put.focused) {
+          await sleep(200)
+          await tabKey()
+          await sleep(200)
+          const next = await evaluate('(' + focusActive.toString() + ')()')
+          row.boundary = {
+            target: probeTarget.tag + ' ' + String(probeTarget.text || ''),
+            focused: true,
+            advanced: Boolean(next && !next.body && next.path !== probeTarget.path),
+            nextTag: next && !next.body ? next.tag : null,
+            nextPathIsNew: Boolean(next && !next.body && walk.map((item) => item.path).indexOf(next.path) < 0),
+          }
+        } else {
+          row.boundary = { target: probeTarget.tag, focused: false }
+        }
+        note(pageId + '：边界自证（聚焦第一个没走到的元素再真按一下 Tab）', row.boundary)
+      }
+    }
+  }
   row.rings = row.stops.filter((item) => item.verdict === 'ring').length
   row.delegated = row.stops.filter((item) => item.verdict === 'delegated-ring').length
   row.holes = row.stops.filter((item) => item.verdict === 'no-visible-change').length
@@ -1452,7 +1671,7 @@ async function focusWalk(pageId, pageLabel) {
   row.outlineAppearances = row.stops.filter((item) => item.ringAppeared).length
   if (row.page && row.page.reachable > 0 && row.stops.length === 0) anomaly(pageId, '这一屏有可 Tab 到的元素，但焦点走查一站都没走到', row.page)
   focusPages.push(row)
-  console.log('FOCUS ' + row.id + ' · Tab 到 ' + row.stops.length + ' 站 · 自己有环 ' + row.rings + ' · 环在祖先 ' + row.delegated + ' · 看不出焦点 ' + row.holes + ' · 焦点硬切 ' + row.hardCutStops + ' · :focus-visible 没匹配 ' + row.focusVisibleOffStops + ' · 读不到 ' + row.readFailedStops + (row.capReached ? ' · 到上限 ' + FOCUS_CAP : '') + (row.endedAtBody ? ' · 第 ' + row.endedAtBody + ' 下回到 body' : '') + (row.cycled ? ' · 第 ' + row.cycled + ' 下回到开头' : ''))
+  console.log('FOCUS ' + row.id + ' · Tab 到 ' + row.stops.length + ' 站 · 自己有环 ' + row.rings + ' · 环在祖先 ' + row.delegated + ' · 看不出焦点 ' + row.holes + ' · 焦点硬切 ' + row.hardCutStops + ' · :focus-visible 没匹配 ' + row.focusVisibleOffStops + ' · 读不到 ' + row.readFailedStops + (row.capReached ? ' · 到上限 ' + FOCUS_CAP : '') + (row.endedAtBody ? ' · 第 ' + row.endedAtBody + ' 下回到 body' : '') + (row.droppedKeys && row.droppedKeys.length ? ' · 丢掉的按键 ' + row.droppedKeys.length : '') + (row.cycled ? ' · 第 ' + row.cycled + ' 下回到第 ' + (row.cycledOn ? row.cycledOn.sameAs : '?') + ' 站（' + (row.cycledOn ? row.cycledOn.tag + ' ' + String(row.cycledOn.text).slice(0, 16) : '') + '）' : ''))
   return row
 }
 
@@ -2000,6 +2219,7 @@ const out = {
     hardCut: '变了、但这条属性不在 computed transition-property 里（或 duration 0）= 硬切。读元素与 ::after 各一份过渡表，属性名按 PROPS / AFTER_PROPS 对齐；简写（background / border）也算覆盖',
     derivedBorder: 'r335：边框宽度全 0 时 computed border-color = currentColor，color 一变它必然跟着变，不是反馈。单列成 hoverDerived / derivedOnPress，不进 changed、不进硬切',
     hoverHardCut: 'r335：同一套判据用在 hover 上。rest（鼠标在中性点）→ hover（鼠标移到元素中心）之间变了的属性，同样去查过渡表；产物 hoverChangedVsRest / hoverHardCuts。按下那一层的数字与 r331–r334 完全可比（这一层只多读两行，不改按下口径）',
+    focusR338: 'r338：焦点这一层的三处量具纠错。① 每一趟走查之前 ensurePageFocus（Page.bringToFront + 重开 Emulation.setFocusEmulationEnabled + 真读 document.hasFocus）：页面没有系统焦点时 CDP 的 Tab 会被直接丢掉，activeElement 一直停在 body——r336 那条「84 个可 Tab 元素、0 站」就是这么来的。② 同一站连着出现 / 读回 body 时，先原地再读一次（页面长、滚动慢时按键生效了而读数来早了），再补焦点重按（最多两次），动起来就记进 droppedKeys；绕回按唯一路径（从 body 数 nth-child）判，不再比选择器字符串。③ 走查结束后按选择器数一遍「可 Tab 元素」，比站数多就把没走到的列进 unvisited，并做一次边界自证（聚焦第一个没走到的元素再真按一下 Tab），分清「它在 Tab 序里」和「真的到此为止」。',
     focusRing: 'r336：--focus 单独一层。CDP 真发 Tab（rawKeyDown/keyUp，Tab 必须由浏览器自己处理这次按键才动焦点），每站读元素自己 + 最多三层祖先的 FOCUS_PROPS（outline 四件套 + box-shadow + border-color + background + color + transform + opacity + ::after），走完整条链再 blur 回「没有焦点」读同一批选择器当 rest 基线。判定：自己变了 = ring，只有祖先变 = delegated-ring（输入框把 UA 环按掉、由 :focus-within 的容器给提示），都没有 = no-visible-change（键盘焦点黑洞）。outline-style 是 none / 宽度 0 / 颜色全透明时，computed outline-color 等于 currentColor —— 与 r335 的 border-color 是同一条规则的另一半，单列 derived 不进判定。',
     focusTable: 'r336：焦点这一层读的是 FOCUS_PROPS，与按下/划过那三层的 PROPS 分开 —— 焦点会改 outline，并进 PROPS 会把 r331–r335 的读数改掉，层与层之间就不可比了',
     hoverSurface: 'r337：--links 单独一层。只划过、绝不按下（链接一按就跳页）。表面 = computed cursor 是 pointer、可见、面积 >= 8x8、不是 button/[role=button]/也不在按钮里；cursor 是继承属性，所以嵌套的只留最外层（划过一张卡片时手感落在卡片这张面上）。读的是元素自己 + 最多 12 个可见子孙（反馈常常画在子孙身上，如 .vq-project-card:hover .go svg），按位置对齐逐个比，挪位了算读不到。',
