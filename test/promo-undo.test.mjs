@@ -20,6 +20,8 @@ const ROOT = process.cwd()
 const read = (relative) => fs.readFileSync(path.join(ROOT, relative), 'utf8')
 const SLOT = read('src/components/PromoSlot.tsx')
 const CSS = read('src/styles/promos.css')
+// r329：整卡热区与「按下不位移」搬进了共用层（运营位是它的第一处用户，不是唯一一处）
+const MOTION = read('src/styles/motion.css')
 const STORE = read('src/api/promos.ts')
 
 /** 取一个选择器的规则体（我们的规则都写成「选择器 {」）。取不到就是空串。 */
@@ -50,26 +52,39 @@ function slotProblems(src) {
   if (!src.includes('disabled={undoLeaving !== null}')) {
     problems.push('条子退场那 180ms 里按钮还能按，撤销会落空')
   }
+  // r329：整卡热区搬进共用层之后，运营位这边只剩「挂上类名」这一根线，断了热区就没了
+  if (!src.includes('vq-promo-cta vq-card-open')) {
+    problems.push('运营位的 CTA 没挂 .vq-card-open，整卡热区不会生效')
+  }
   return problems
 }
 
-function cssProblems(src) {
+function cssProblems(src, motion = MOTION) {
   const problems = []
-  const hotzone = ruleBody(src, '.vq-promo-cta::after')
+  // r329：热区本体在共用层（motion.css 的 .vq-card-open），运营位只是挂上那个类名的那一处
+  const hotzone = ruleBody(motion, '.vq-card-open::after')
   if (!hotzone.includes('position: absolute') || !hotzone.includes('inset: 0')) {
     problems.push('CTA 的热区没铺满卡片（::after 少了 position: absolute / inset: 0）')
+  }
+  // 按下时不能有 transform：带 transform 的元素会成为绝对定位后代的包含块，
+  // CTA 一被按下，热区就塌成按钮那么大（实测：mouseup 落回标题、click 落到卡片上，点了没反应）
+  const openActive = ruleBody(motion, '.vq-card-open.vq-card-open:active')
+  if (!openActive.includes('transform: none')) {
+    problems.push('CTA 按下时没有挡住 1px 位移：热区的包含块会变成按钮自己，按下期间热区塌掉')
   }
   const cta = ruleBody(src, '.vq-promo-cta')
   if (cta.includes('position')) {
     problems.push('CTA 自己定位了，::after 的参照变成按钮自己，热区只剩按钮那么大')
   }
+  const promo = ruleBody(src, '.vq-promo')
+  if (!promo.includes('position: relative')) {
+    problems.push('.vq-promo 不是 position: relative，::after 找不到参照物')
+  }
   const close = ruleBody(src, '.vq-promo-close')
   if (!close.includes('z-index: 1')) problems.push('关闭按钮没盖在热区之上，点 ✕ 会被热区吃掉')
-  // 按下时不能有 transform：带 transform 的元素会成为绝对定位后代的包含块，
-  // CTA 一被按下，热区就塌成按钮那么大（实测：mouseup 落回标题、click 落到卡片上，点了没反应）
   const ctaActive = ruleBody(src, '.vq-promo-cta.vq-promo-cta:active')
-  if (!ctaActive.includes('transform: none')) {
-    problems.push('CTA 按下时没有挡住 1px 位移：热区的包含块会变成按钮自己，按下期间热区塌掉')
+  if (!ctaActive.includes('background: var(--line-faint)')) {
+    problems.push('CTA 按下时没有底色反馈（位移交给共用层关掉了，配色还该留在这里）')
   }
   if (!src.includes('.vq-promo-undo.is-leaving.is-leaving')) {
     problems.push('撤销条退场没走塌陷那条规则（会「啪」地跳没）')
@@ -109,18 +124,22 @@ test('反证：热区被缩回按钮大小 / 关闭按钮没压住它 / 间距�
   assert.notEqual(eaten, CSS)
   assert.ok(cssProblems(eaten).some((item) => item.includes('关闭按钮')))
 
-  const noHotzone = CSS.replace('inset: 0;', 'inset: 4px;')
-  assert.notEqual(noHotzone, CSS)
-  assert.ok(cssProblems(noHotzone).some((item) => item.includes('热区没铺满')))
+  const noHotzone = cssProblems(CSS, MOTION.replace('inset: 0;', 'inset: 4px;'))
+  assert.ok(noHotzone.some((item) => item.includes('热区没铺满')))
+
+  // 反证：运营位的 CTA 没挂上共用热区类名（改了名字却没接线）
+  const unwired = slotProblems(SLOT.replace('vq-promo-cta vq-card-open', 'vq-promo-cta'))
+  assert.notEqual(unwired.length, 0)
+  assert.ok(unwired.some((item) => item.includes('没挂 .vq-card-open')))
 
   const noGap = CSS.replace('margin-top: var(--space-2);', 'margin-top: 0;')
   assert.notEqual(noGap, CSS)
   assert.ok(cssProblems(noGap).some((item) => item.includes('跳 8px')))
 
-  // 反证：把「按下不位移」那条删掉（回到全站统一的 1px 按下反馈），检查必须变红
-  const movedOnPress = CSS.replace('.vq-promo-cta.vq-promo-cta:active {\n  transform: none;\n  background: var(--line-faint);\n}', '')
-  assert.notEqual(movedOnPress, CSS, '反证的替换要真的删掉那条规则')
-  assert.ok(cssProblems(movedOnPress).some((item) => item.includes('按下期间热区塌掉')))
+  // 反证：共用层里把「按下不位移」改回全站统一的 1px 位移，检查必须变红
+  const movedOnPress = MOTION.replace('.vq-card-open.vq-card-open:active { transform: none; }', '.vq-card-open.vq-card-open:active { transform: translateY(1px); }')
+  assert.notEqual(movedOnPress, MOTION, '反证的替换要真的改到那条规则')
+  assert.ok(cssProblems(CSS, movedOnPress).some((item) => item.includes('按下期间热区塌掉')))
 })
 
 test('反证：槽被关空时把整块藏起来、撤销不恢复、撤销不落盘，检查必须变红', () => {

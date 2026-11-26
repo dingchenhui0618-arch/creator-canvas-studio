@@ -76,12 +76,8 @@
    做法是给按钮铺一层透明热区盖住整张卡（stretched link）：不用给 article 挂 onClick，
    也不用把按钮套进按钮（嵌套交互元素），键盘这条路照样走按钮自己——Tab 一格、回车触发。
    代价只有一条：卡片上的文字点选不了了（热区在上面）。这张卡片本来就是一句话，不值当为它留选择区。 */
-.vq-promo-cta::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: var(--radius-md);
-}
+/* 热区搬到了共用层（r329）：motion.css 的 .vq-card-open 负责 ::after 铺满整卡，
+   运营位、工作台能力卡、模板库卡片现在共用同一条规则，这个按钮只需挂上那个类名。 */
 
 /* 按下时**不能**位移（r326 实测出来的，不是防患于未然）。
    tokens.css 给全站按钮的按下反馈是 transform: translateY(1px)（:where(...) 的一档，权重 0-2-0），
@@ -92,9 +88,9 @@
      click     → ARTICLE（按下与抬起的共同祖先，那张卡片）
    点了正文什么也不会发生，而且编译、样式、单测全都看不出问题。
    这里把位移换成不会产生包含块的按下反馈（底色变深一档），热区在整个按下期间都还在。
-   选择器写两遍 .vq-promo-cta 是为了压过 tokens.css 那条 0-2-0 的规则：样式表按需加载，顺序不保证。 */
+   选择器写两遍 .vq-promo-cta 是为了压过 tokens.css 那条 0-2-0 的规则：样式表按需加载，顺序不保证。
+   r329：`transform: none` 那一半搬进了 motion.css 的 .vq-card-open（全站共用），这里只留按下配色。 */
 .vq-promo-cta.vq-promo-cta:active {
-  transform: none;
   background: var(--line-faint);
 }
 

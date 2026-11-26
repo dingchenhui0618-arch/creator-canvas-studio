@@ -372,7 +372,10 @@
   gap: var(--space-3);
 }
 
+/* position: relative 是给卡里那颗「去 XX」按钮的 ::after 热区当参照物的（r329，见 motion.css 的
+   .vq-card-open）：没有它，热区只会盖住那行小字，整卡可点就是一句空话。 */
 .ov-cap {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-width: 0;

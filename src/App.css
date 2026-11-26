@@ -394,7 +394,7 @@ button { cursor:pointer; }
 .tab-count { display:inline-flex; align-items:center; justify-content:center; margin-left:4px; min-width:14px; padding:0 4px; border-radius:var(--radius-lg); background:rgba(37,35,31,.08); font-size: 14px; line-height:1.5; }
 .filter-tabs button.is-active .tab-count { background:rgba(255,255,255,.22); }
 .template-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; }
-.template-card { display:flex; flex-direction:column; overflow:hidden; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-lg); cursor:pointer; transition:transform var(--dur-2) var(--ease-out),box-shadow var(--dur-2) var(--ease-out),border-color var(--dur-2) var(--ease-out); }
+.template-card { position:relative; display:flex; flex-direction:column; overflow:hidden; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-lg); cursor:pointer; transition:transform var(--dur-2) var(--ease-out),box-shadow var(--dur-2) var(--ease-out),border-color var(--dur-2) var(--ease-out); }
 .template-card:hover { transform:translateY(-2px); border-color:var(--line-strong); box-shadow:var(--shadow-raise); }
 .template-cover { position:relative; aspect-ratio:9/16; overflow:hidden; background:var(--surface-soft); }
 .template-cover img { width:100%; height:100%; object-fit:cover; display:block; }

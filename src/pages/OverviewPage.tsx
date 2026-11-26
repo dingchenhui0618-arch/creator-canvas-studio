@@ -1232,7 +1232,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
             <p>检索抖音、小红书的真实互动数据，按关键词挑一条值得拆的原片。</p>
             <div className="ov-cap-foot">
               <span className="ov-cap-note">抖音 / 小红书</span>
-              <button type="button" className="ov-cap-action" onClick={() => onNavigate('radar')}>
+              <button type="button" className="ov-cap-action vq-card-open" onClick={() => onNavigate('radar')}>
                 去检索
                 <ArrowUpRight size={14} />
               </button>
@@ -1251,7 +1251,7 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
             <p>把原片拆成钩子、口播脚本与分镜，套一条改成自己的版本。</p>
             <div className="ov-cap-foot">
               <span className="ov-cap-note">{templates.length ? templates.length + ' 条' : '先拆第一条'}</span>
-              <button type="button" className="ov-cap-action" onClick={() => onNavigate('templates')}>
+              <button type="button" className="ov-cap-action vq-card-open" onClick={() => onNavigate('templates')}>
                 去模板库
                 <ArrowUpRight size={14} />
               </button>
@@ -1272,14 +1272,16 @@ export function OverviewPage({ userName, onNavigate, onOpenCanvas, onOpenProject
               <span className="ov-cap-note">
                 {assetCounts ? assetCounts.product + assetCounts.avatar + ' 套' : '商品图 / 数字人'}
               </span>
-              <button type="button" className="ov-cap-action" onClick={() => onNavigate('assets')}>
+              <button type="button" className="ov-cap-action vq-card-open" onClick={() => onNavigate('assets')}>
                 去我的资产
                 <ArrowUpRight size={14} />
               </button>
             </div>
           </article>
 
-          <article className="ov-cap vq-lift">
+          {/* 这一张有两个去处（快捷创作 / 视觉评审），不能整卡可点，所以也不抬起：
+              抬起只给「点卡上任何地方都进得去」的卡片（r329 的不变量，见 motion.css 的 .vq-card-open）。 */}
+          <article className="ov-cap">
             <div className="ov-cap-top">
               <span className="ov-cap-index">04</span>
               <span className="ov-cap-icon" aria-hidden="true">

@@ -122,6 +122,10 @@
 @media (max-width:640px) { .template-facet { align-items:flex-start; flex-direction:column; gap:8px; } .template-facet__label { width:auto; } }
 .template-card { background:var(--surface-raised); border-color:var(--line); }
 .template-copy > strong { font-size: 16px; font-weight:600; line-height:1.5; }
+/* 标题上的那颗真按钮（r329）：整卡可点由它的 ::after 铺满整张卡（motion.css 的 .vq-card-open）。
+   这里只让它「长得跟标题一模一样」——按钮自己的底色、描边、内边距、字号全部让位给标题样式。 */
+.template-open { display:block; width:100%; padding:0; border:0; background:none; color:inherit; font:inherit; font-size:inherit; letter-spacing:inherit; line-height:inherit; text-align:left; }
+.template-open:focus-visible { outline:2px solid var(--ink); outline-offset:2px; border-radius:var(--radius-xs); }
 .template-hook { color:var(--muted); font-size: 14px; }
 .template-stats { display:flex; flex-wrap:wrap; gap:4px 12px; margin-top:2px; color:var(--muted); font-family:var(--font-mono); font-size: var(--text-2xs); }
 .template-stats span { display:inline-flex; align-items:center; gap:4px; }
@@ -312,6 +316,11 @@
   color: var(--faint);
   cursor: not-allowed;
 }
+
+/* 卡片里其它按钮（用这条改编 / 去解析）必须盖在整卡热区之上（r329）：否则点它们会先被热区吃掉，
+   变成「点了改编，跑去看详情」。与运营位那颗关闭按钮同一条口径（见 promos.css）。
+   注意要写在这条按钮自己的规则之后：这里的样式被首规则扫描（firstRule）盯着，不能抢在它前面。 */
+.template-card .template-adapt { position:relative; z-index:1; }
 
 /* ---------- 模板详情「用这条模板的作品」（v0.9.14） ----------
    一行一条作品：标题 + 第几版 / 在做或已交付，点一行直接进那条作品。

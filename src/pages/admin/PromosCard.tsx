@@ -529,7 +529,7 @@ export default function PromosCard() {
               {list.length > 1 ? <span className="admin-cell-sub">改哪条就预览哪条</span> : null}
             </div>
             {preview ? (
-              <article className="vq-promo vq-lift">
+              <article className="vq-promo">
                 <span className="vq-promo-icon" aria-hidden="true">
                   <Sparkles size={16} />
                 </span>

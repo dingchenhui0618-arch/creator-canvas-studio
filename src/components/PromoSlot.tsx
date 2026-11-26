@@ -183,10 +183,10 @@ export default function PromoSlot({
               <h3 className="vq-promo-title">{promo.title}</h3>
               <p className="vq-promo-body">{promo.body}</p>
             </div>
-            {/* 整卡可点靠这颗按钮的 ::after 热区（见 promos.css），onClick 仍是它自己 */}
+            {/* 整卡可点靠这颗按钮的 ::after 热区（.vq-card-open，共用规则在 motion.css） */}
             <button
               type="button"
-              className="vq-button vq-button--ghost vq-promo-cta"
+              className="vq-button vq-button--ghost vq-promo-cta vq-card-open"
               onClick={() => onNavigate(promo.page)}
             >
               {promo.cta}

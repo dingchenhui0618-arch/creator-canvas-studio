@@ -560,7 +560,10 @@ export function TemplateLibraryPage({
       ) : (
         <div className="template-grid vq-stagger">
           {items.map((item) => (
-            <article className="template-card vq-lift" key={item.id} onClick={() => openTemplate(item.id)}>
+            // 整卡可点但不给 article 挂 onClick（r329）：原来那一下鼠标点得动、键盘永远到不了。
+            // 现在卡片里那颗标题按钮是真正的入口，它的 ::after 铺满整张卡（motion.css 的 .vq-card-open），
+            // 鼠标点卡上任何地方都进得去，Tab 也只有这一格。
+            <article className="template-card vq-lift" key={item.id}>
               <div className="template-cover">
                 <CoverImage
                   src={coverFor(item)}
@@ -570,7 +573,11 @@ export function TemplateLibraryPage({
                 <span className="radar-duration"><Film size={11} />{item.kind === 'flow' ? (item.flowNodes?.length ?? 0) + ' 节点' : formatDuration(item.durationSec)}</span>
               </div>
               <div className="template-copy">
-                <strong>{item.title}</strong>
+                <strong className="template-title">
+                  <button type="button" className="template-open vq-card-open" onClick={() => openTemplate(item.id)}>
+                    {item.title}
+                  </button>
+                </strong>
                 <span className="template-hook">
                   {item.kind === 'flow'
                     ? '来自工作流 · 套用后原样开回一张新工作流'

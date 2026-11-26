@@ -52,6 +52,30 @@
    同权重时谁在后面谁赢；页面样式表是按需加载的，顺序不保证。抬多高必须由这一层说了算。 */
 .vq-lift.vq-lift:hover { transform: translateY(-2px); }
 
+/* ---------- 抬起 = 能点（r329） ----------
+   卡片悬停抬起，就是在说「这张卡能点」。但可点不等于可达：一整块 <article onClick> 鼠标能点、
+   键盘永远到不了，读屏也不知道它是个控件；而只有右下角一颗小按钮能点的卡片，抬起来了却「按不动」
+   （原位正文、点卡片空白处都没反应）——运营位 r326 修过一次，工作台首屏那四张能力卡还是原样。
+   统一做法（沿用 r326）：卡片里放一颗真按钮（去检索 / 打开这条模板），给它挂 .vq-card-open，
+   由这颗按钮的 ::after 铺一层透明热区盖住整张卡。鼠标在卡上任何地方都是指针、点卡任何地方都进得去、
+   Tab 只有一格、回车照常触发；不用给容器挂 onClick，也不把按钮套进按钮。
+   前提两条：卡片自己是 position: relative（给 ::after 当参照物），按钮自己**不能**定位。 */
+.vq-card-open::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-md);
+}
+
+/* 按下时**不能**位移（r326 在运营位上实测出来的，不是防患于未然）：
+   带 transform 的元素会成为绝对定位后代的包含块，按下的一瞬间 ::after 的参照从整张卡变成按钮自己，
+   mousedown 落在按钮上、mouseup 已经落回卡片、合成出来的 click 是卡片——点了正文什么也不会发生，
+   而编译、样式、单测全都看不出问题。这里换成不会产生包含块的反馈：
+   热区罩住的整张卡压暗一档，松手即恢复（比 1px 位移更像「按到了这张卡」）。
+   写两遍 .vq-card-open 是为了压过 tokens.css 里那条 0-2-0 的 :where(...):not(:disabled):active。 */
+.vq-card-open.vq-card-open:active { transform: none; }
+.vq-card-open.vq-card-open:active::after { background: var(--line-faint); }
+
 /* ---------- 提示条滑入 ----------
    .vq-toast 挂上就有；停留时间跟文案长短走（r324，见 src/domain/toast.ts）。
    这里只管进场——每次 notify 都换一次 key，连按同一个动作时这条动画会再放一遍；
