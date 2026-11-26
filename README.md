@@ -1109,7 +1109,8 @@ after：按下立刻 `rgba(17,17,17,0.05)` → 稳定 `rgba(17,17,17,0.06)`。
 `npm test` **2145 / 2145**、`tsc -b` 干净、`oxlint` 0 error / 30 warning（765 文件）、密钥扫描 1219 个文件无命中、
 入口 `index-BdLqYHxS.js`（873.53 kB）。发布标签 `20261126-2253-r330notice`，
 快照 `/opt/visionqa/releases/20261126-145324-20261126-2253-r330notice.tar.gz`，`ops/rollback.sh --to 1` 回 0.9.301；
-公网 0.9.302、health ok templates 27、新入口 200、上一版入口 `index-DvhCcfhI.js` 404；两服务 active。
+公网 0.9.302、health ok templates 27、新入口 200、上一版入口 `index-DvhCcfhI.js` 404；两服务 active；
+提交 `8a0b6ca`，CI **45843733864 success**。
 完整记录见 [docs/r330-notice-and-press-2026-11-26.md](docs/r330-notice-and-press-2026-11-26.md)。
 
 边界：提示条只抬到**抽屉底栏**之上（画布那条底部固定条早就单独处理过，弹窗主按钮在中间，都没有这个冲突）；
