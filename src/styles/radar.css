@@ -390,6 +390,31 @@
   color: var(--ink);
 }
 
+/* ---------- r333 · 按下反馈（第三批）----------
+   这一簇两个家族的轻重不一样：模板卡上那颗药丸小，按下位移 1px（与全站 .vq-button 同口径，
+   位移是另一条属性，不必跟悬停的深底抢权重）；抽屉里那一行作品是整行，按下只压一层底、不位移
+   （大块位移看着像布局抖）。.template-adapt 自己的 transition 以前只有三个颜色属性，
+   不把 transform 补进去，按下与松开都是瞬跳。 */
+.template-adapt {
+  transition: border-color var(--dur-1) var(--ease-out), background-color var(--dur-1) var(--ease-out),
+    color var(--dur-1) var(--ease-out), transform var(--dur-1) var(--ease-out);
+}
+
+.template-adapt:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+.drawer-work:not(:disabled):active {
+  background: var(--line-faint);
+  border-color: var(--line-strong);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .template-adapt:not(:disabled):active {
+    transform: none;
+  }
+}
+
 /* ---------- 卡片脚注的两段（v0.9.14） ----------
    平台与作者单行省略，「N 条作品在用」单独一格不被截断：
    否则加了这句之后长作者名会把脚注顶成两行，卡片比同排的高一截。 */

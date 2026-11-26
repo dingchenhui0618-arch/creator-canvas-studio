@@ -270,6 +270,17 @@
   border-color: var(--line-strong);
 }
 
+/* r333 · 按下反馈（第三批）：最近入库的脚本行。这是一整行（width:100%），
+   按下去压一层底 + 描边加深、不位移——大块位移看着像布局抖了一下，跟 r332 的文字链接同一档。 */
+.vq-template-row {
+  transition: background-color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out);
+}
+
+.vq-template-row:not(:disabled):active {
+  background: var(--line-faint);
+  border-color: var(--line-strong);
+}
+
 .vq-template-copy {
   display: grid;
   gap: 4px;
@@ -494,6 +505,19 @@
 .ov-cap-action:focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+/* r333 · 按下反馈（第三批）：快捷创作 / 视觉评审这两颗（纯文字按钮）只压一层底、不位移
+   ——行内元素位移看着像抖了一下（r332 的文字链接同口径）。
+   :not(.vq-card-open) 必须有：另外三张卡上的同款按钮是「整卡可点」，它们那一拍按下的反馈
+   画在自己的 ::after 上（motion.css，见 r326），再给自己压一层底就成了双重反馈。 */
+.ov-cap-action {
+  transition: background-color var(--dur-1) var(--ease-out);
+}
+
+.ov-cap-action:not(.vq-card-open):not(:disabled):active {
+  background: var(--line-faint);
   border-radius: var(--radius-xs);
 }
 

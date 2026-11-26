@@ -112,6 +112,60 @@
 .works-note { margin:0; color:var(--muted); font-size: 14px; }
 .works-note.is-error { color:var(--warn); }
 
+/* ---------- r333 · 按下反馈（第三批）----------
+   r331 的量具在 136 个按钮里量出 29 个「按下去和悬停一模一样」，作品流这一簇占 10 个。
+   轻重按目标大小分三档：
+     小胶囊 / 小描边按钮 —— 位移 1px（与全站 .vq-button 同口径；位移是另一条属性，
+       不必跟 .works-chip.is-active 抢配色权重，「当前这一栏」按下去也有反应）；
+     缩略图整块 —— 一档变淡：1px 在 271px 宽的图上等于没动，而 opacity 不像 transform
+       那样给绝对定位后代（.works-tag / .works-fallback）另立包含块；
+     纯文字按钮 —— 只压一层底、不位移（行内元素位移看着像抖，r332 的文字链接同此）。
+   下面这条 transition 只补各自缺的属性：少了它，按下是硬切、不是压下去。 */
+.works-chip,
+.works-gap-retry {
+  transition: background-color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out),
+    color var(--dur-1) var(--ease-out), transform var(--dur-1) var(--ease-out);
+}
+
+.works-thumb { transition: opacity var(--dur-1) var(--ease-out); }
+
+.works-open,
+.works-action {
+  transition: background-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out),
+    border-color var(--dur-1) var(--ease-out);
+}
+
+.works-chip:not(:disabled):active,
+.works-gap-retry:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+.works-thumb:not(:disabled):active { opacity: 0.9; }
+
+.works-open:not(:disabled):active {
+  background: var(--line-faint);
+  color: var(--ink);
+}
+
+.works-action:not(:disabled):active {
+  background: var(--line-faint);
+  color: var(--ink);
+  border-bottom-color: var(--line-strong);
+}
+
+/* 已经上膛的删除按下时仍是危险色：这一颗按下去是「真删」，变黑会让人以为上膛被取消了 */
+.works-action.is-danger.is-armed:not(:disabled):active {
+  color: var(--danger);
+  border-bottom-color: var(--danger);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .works-chip:not(:disabled):active,
+  .works-gap-retry:not(:disabled):active {
+    transform: none;
+  }
+}
+
 @media (max-width:1080px) { .works-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
 @media (max-width:768px) { .works-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media (max-width:480px) {

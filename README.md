@@ -1230,3 +1230,53 @@ CI **45855358373 success**。
 **不能照这轮补位移**——r326 量过，位移会让整卡热区在按下瞬间塌成按钮那么大，它们要照
 `.vq-card-open:active::after` 的路子做，下一轮专门处理。
 
+## 三百七十九、按下反馈清零：量具补上 ::after，剩下 21 条清空（r333 / v0.9.305）
+
+上一轮结尾那张「剩 28 条」的清单，这一轮**清零**。同一份巡检、同样 10 趟、136 个按钮：
+before（**从 `/opt/visionqa/dist` 取回来的线上原件** 0.9.304 / `index-CDUNYuqb.js`）
+**105 有反馈 / 22 候选 / 9 禁用** → after（0.9.305 / `index-C44oKfL-.js`）**127 / 0 / 9**。
+
+**先更正「剩 28 条」**：29 条候选里 1 条是采样抖动（运营位那颗 ✕，老面孔），**7 条是量具自己的盲区** ——
+r326/r329 给「整卡可点」的按钮定的按下反馈画在 `::after` 上（给它加 transform 会毁掉整卡热区，
+只能用底色），而巡检只读按钮自身的六个属性，于是 3 张能力卡的「去检索 / 去模板库 / 去我的资产」
+（两个趟各量一次 = 6 行）与模板卡那颗「打开这条」被记成了「无反馈」。**真没反应的是 21 行**（19 个元素）。
+这一轮 readState 连 `::after` 一起读（`content` 为 none 时跳过），盲区就补上了。
+
+**这一拍按目标大小分三档**（[shell.css](src/styles/shell.css) / [overview.css](src/styles/overview.css) /
+[works.css](src/styles/works.css) / [radar.css](src/styles/radar.css)）：
+
+① **有盒子的小按钮**（模板库 4 枚筛选胶囊、作品流 5 枚、重新读取、用这条改编，11 行）→ `translateY(1px)`，
+与 `.vq-button` 同口径；位移是另一条属性，不必跟 `.is-active` 抢配色权重，「当前这一项」按下去也有反应。
+② **整行与纯文字按钮**（脚本行、抽屉里一行作品、看大图、用作参考 / 下载、快捷创作 / 视觉评审，9 行）→
+压一层 `--line-faint` 的底，不位移（整行位移像布局抖，行内位移像抖了一下）。
+③ **大块图片按钮**（作品缩略图，1 行）→ `opacity: .9`（1px 在 271px 宽的图上等于没动；
+opacity 又不像 transform 那样给它里面的绝对定位标签另立包含块）。
+
+三家的 `transition` 各补上要变的属性，位移那两家补 `prefers-reduced-motion` 下的 `transform: none`。
+`.ov-cap-action` 的按下规则带 `:not(.vq-card-open)` —— 另外三张卡的同款按钮整卡可点、反馈画在 `::after` 上，
+不排除就会**双重反馈**。
+
+![按下不松手的 before / after：脚本行、缩略图、文字动作、抽屉行各一块；位移那一档按元素矩形裁图看不见，只看数字](docs/r333-press-before-after.png)
+
+**逐元素的按下读数**（hover 基线 → 还按着的终值）：`vq-filter-chip` / `works-chip` / `works-gap-retry` /
+`template-adapt` 的 `transform` 从 `none` 到 `matrix(1, 0, 0, 1, 0, 1)`（与声明的 1px 对上）；
+`works-thumb` 的 `opacity` 1 → 0.9；`vq-template-row` / `ov-cap-action` / `drawer-work` / `works-open` /
+`works-action` 的 `background-color` → `rgba(17,17,17,0.06)`。0 次上游调用、0 异常
+（2 个 POST 是页面自己的 client-errors 上报）。
+
+**两条自查**：① 量具只能加不能松 —— 新建 [test/audit-press-after.test.mjs](test/audit-press-after.test.mjs)
+（2 条 + 5 个反证）钉住「读伪元素 / 四个属性齐全 / content 为 none 时跳过 / 三拍都带上读数」。
+② **before 用的是线上原件**：本地按 r332 的提交（`81e7e25`）重编得到的入口是 `index-BHM2od3a.js`（873,756 B），
+与线上 `index-CDUNYuqb.js`（873,536 B）不一样 —— 所以 before 那趟是把线上产物取回来量的。
+
+门禁：`npm test` **2161 / 2161**（+5：[test/press-r333.test.mjs](test/press-r333.test.mjs) 3 条 / 10 个家族
++ 11 个反证）、`tsc -b` 干净、`oxlint` 0 error / 30 warning（772 文件）、密钥扫描 1228 个文件无命中。
+入口 `index-C44oKfL-.js`（873,536 B，产物里含 `0.9.305`）。发布标签 `20261127-0027-r333press`，
+回滚点 `/opt/visionqa/releases/20261126-162738-20261127-0027-r333press.tar.gz`（元数据记着
+`entry: index-CDUNYuqb.js`）；公网 `/api/version` **0.9.305**、health ok templates 27、新入口 200、
+上一版入口 404，`visionqa` / `visionqa-internal` / `visionqa-demo` 三个服务 active。
+完整记录见 [docs/r333-press-details-2026-11-27.md](docs/r333-press-details-2026-11-27.md)。
+
+边界：只量 1440×1000，只判「按下那一刻有没有属性变化」，**不判「该不该有」**；1px 位移在贴元素裁的对比图里
+看不见（裁框跟着元素走），那 11 条只有数字；`.vq-card-open` 的 `::after` 按下仍是硬切（motion.css 那条没有
+transition，补上会让那 7 行的两帧采样落进过渡中间值），本轮不动、记在边界里。

@@ -12,6 +12,9 @@
 //   4) r332 起：判定仍按「按下两帧」那一拍（与 r331 的数字可比），但还按着再等 200ms 读一次终值
 //      （pressedSettled / changedSettledVsHover）。过渡没走完的采样会被单列成 settledRescued，
 //      不混进「真的没反应」——promo 卡上那几颗就是这么回事（r331 也记过一次）。
+//   5) r333 起：除了元素自身的六个属性，还读它的 ::after（背景/阴影/位移/透明度，见 AFTER_PROPS）。
+//      r326/r329 给「整卡可点」的按钮定的按下反馈就画在 ::after 上，量具以前看不见这一类，
+//      把它们一律记成「无反馈」——那是量具的盲区，不是页面的问题。
 //
 // 用法（同一份脚本跑两份产物）：
 //   node scripts/audit-press.mjs --dist .shots330/dist-after --out .shots331/press
@@ -456,6 +459,18 @@ function readState(selector) {
     rect: { l: Math.round(r.left), t: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) },
     hitIsSelf: Boolean(hit && (hit === el || el.contains(hit))),
     hit: hit ? { tag: hit.tagName, cls: String(hit.getAttribute('class') || '').split(/\s+/).filter(Boolean).slice(0, 2).join('.'), cursor: getComputedStyle(hit).cursor } : null,
+    // 伪元素也要读（r333）：r326/r329 起，「整卡可点」的按钮把按下反馈画在自己的 ::after 上
+    // （给它加 transform 会毁掉 ::after 的包含块）——只看元素自身，这一类永远量成「无反馈」。
+    after: (function () {
+      const ps = getComputedStyle(el, '::after')
+      return {
+        content: ps.content,
+        backgroundColor: ps.backgroundColor,
+        boxShadow: ps.boxShadow,
+        transform: ps.transform,
+        opacity: ps.opacity,
+      }
+    })(),
   }
 }
 
@@ -834,12 +849,29 @@ const PROPS = [
   ['transform', 'transform'],
   ['opacity', 'opacity'],
 ]
+// r333：::after 上的反馈单独一组。两边都读不到伪元素（content: none）时跳过——
+// 不给页面上绝大多数没有 ::after 的按钮各添一条空 diff。
+const AFTER_PROPS = [
+  ['backgroundColor', '::after background-color'],
+  ['boxShadow', '::after box-shadow'],
+  ['transform', '::after transform'],
+  ['opacity', '::after opacity'],
+]
 function diffProps(before, after) {
   const changed = []
   if (!before || !after || before.missing || after.missing) return changed
   for (const pair of PROPS) {
     if (String(before[pair[0]]) !== String(after[pair[0]])) {
       changed.push({ prop: pair[1], from: String(before[pair[0]]), to: String(after[pair[0]]) })
+    }
+  }
+  const bothAfter = before.after && after.after
+  const hasAfter = Boolean(bothAfter) && (String(before.after.content) !== 'none' || String(after.after.content) !== 'none')
+  if (hasAfter) {
+    for (const pair of AFTER_PROPS) {
+      if (String(before.after[pair[0]]) !== String(after.after[pair[0]])) {
+        changed.push({ prop: pair[1], from: String(before.after[pair[0]]), to: String(after.after[pair[0]]) })
+      }
     }
   }
   return changed
@@ -896,6 +928,7 @@ async function pressOne(pageId, pageLabel, item) {
       backgroundColor: hover.backgroundColor, borderColor: hover.borderColor, color: hover.color,
       boxShadow: hover.boxShadow, transform: hover.transform, opacity: hover.opacity,
       cursor: hover.cursor, hitIsSelf: hover.hitIsSelf, hit: hover.hit,
+      after: hover.after,
     }
     out.hoverChangedVsRest = diffProps(rest, hover)
     if (!hover.hitIsSelf) note('落点被盖住：' + item.selector, { hit: hover.hit, where: pageId + '#' + item.n })
@@ -909,6 +942,7 @@ async function pressOne(pageId, pageLabel, item) {
       backgroundColor: pressed.backgroundColor, borderColor: pressed.borderColor, color: pressed.color,
       boxShadow: pressed.boxShadow, transform: pressed.transform, opacity: pressed.opacity,
       cursor: pressed.cursor, hitIsSelf: pressed.hitIsSelf, hit: pressed.hit,
+      after: pressed.after,
     }
     out.pressActive = Boolean(pressed.active)
     out.changed = diffProps(hover, pressed)
@@ -938,6 +972,7 @@ async function pressOne(pageId, pageLabel, item) {
         boxShadow: settled.boxShadow,
         transform: settled.transform,
         opacity: settled.opacity,
+        after: settled.after,
       }
       out.changedSettledVsHover = diffProps(hover, settled).map((pair) => pair.prop)
     }
@@ -1259,7 +1294,7 @@ const out = {
   probe: {
     baseline: 'idle/hover：鼠标先移到元素中心，读 computed style + el.matches(:active)',
     pressed: 'mousePressed 同一坐标，两帧 rAF 后读同一批属性 + matches(:active)',
-    props: PROPS.map((pair) => pair[1]),
+    props: PROPS.map((pair) => pair[1]).concat(AFTER_PROPS.map((pair) => pair[1])),
     release: '不在原地 mouseReleased —— 先挪到视口里的中性点再松，不合成 click',
     candidate: 'pressActive=true 且 changed 为空 = 按下无反馈候选',
     settled: '判定按上面两帧那一拍（与 r331 的数字可比）；还按着再等 200ms 读一次叫 pressedSettled / changedSettledVsHover，用来区分「真的没反应」和「过渡还没走到」（后者算采样抖动）',

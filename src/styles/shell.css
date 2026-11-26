@@ -535,6 +535,25 @@
   color: rgba(255, 255, 255, 0.62);
 }
 
+/* r333 · 按下反馈（第三批）：模板库与评审待办那几排筛选胶囊。
+   胶囊是「有盒子的按钮」，按下去统一位移 1px（与 .vq-button 同口径）——位移是另一条属性，
+   不必跟 .vq-filter-chip.is-active（深底白字）抢配色权重，所以「选中的那一枚」按下去也有反应；
+   这也正是这批不再为选中态另写一条规则的原因。transition 以前只写了三个颜色属性，把 transform 补进去。 */
+.vq-filter-chip {
+  transition: background-color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out),
+    color var(--dur-1) var(--ease-out), transform var(--dur-1) var(--ease-out);
+}
+
+.vq-filter-chip:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vq-filter-chip:not(:disabled):active {
+    transform: none;
+  }
+}
+
 /* ---------- 列表工具栏：搜索框 + 筛选胶囊 + 计数（v0.9.23 作品列表，v0.9.25 评审待办共用） ----------
    两处都用同一套：搜索框走胶囊圆角、32px 高，计数靠右走等宽数字。
    以前这套样式只在作品页，工作台的待办要筛就得再抄一份；现在一处定义，两页长相一样。 */
