@@ -541,7 +541,7 @@
    这也正是这批不再为选中态另写一条规则的原因。transition 以前只写了三个颜色属性，把 transform 补进去。 */
 .vq-filter-chip {
   transition: background-color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out),
-    color var(--dur-1) var(--ease-out), transform var(--dur-1) var(--ease-out);
+    color var(--dur-1) var(--ease-out), transform var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out);
 }
 
 .vq-filter-chip:not(:disabled):active {
@@ -642,7 +642,7 @@
   background: var(--surface-soft);
   color: var(--muted);
   cursor: pointer;
-  transition: background var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
+  transition: background var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out);
 }
 
 .vq-toolbar-search-clear:hover {
@@ -1898,7 +1898,7 @@ body:has(.drawer-backdrop) .vq-toast {
   border-radius: var(--radius-sm);
   background: var(--surface-raised);
   color: var(--faint);
-  transition: border-color 0.14s ease, box-shadow 0.14s ease;
+  transition: border-color 0.14s ease, box-shadow 0.14s ease, color var(--dur-1) var(--ease-out);
 }
 
 .vq-input:focus-within {
@@ -2102,7 +2102,7 @@ body:has(.drawer-backdrop) .vq-toast {
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease, box-shadow var(--dur-1) var(--ease-out);
 }
 
 .vq-login-mode:hover:not(:disabled) {
@@ -3895,5 +3895,5 @@ body:has(.drawer-backdrop) .vq-toast {
 .vq-src-back {
   transition: color var(--dur-1) var(--ease-out),
     background-color var(--dur-1) var(--ease-out),
-    border-color var(--dur-1) var(--ease-out);
+    border-color var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out);
 }

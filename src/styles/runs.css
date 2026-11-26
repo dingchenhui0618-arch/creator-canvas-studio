@@ -69,7 +69,9 @@
 .runs-empty strong { color:var(--ink); font-size: 16px; }
 .runs-empty span { font-size: 14px; }
 .runs-filters { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
-.runs-search { display:flex; align-items:center; gap:8px; flex:1 1 280px; min-width:220px; padding:0 12px; height:34px; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface); color:var(--faint); }
+.runs-search { display:flex; align-items:center; gap:8px; flex:1 1 280px; min-width:220px; padding:0 12px; height:34px; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface); color:var(--faint);
+  transition: border-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
+}
 .runs-search:focus-within { border-color:var(--ink); color:var(--ink); }
 .runs-search input { flex:1; min-width:0; height:100%; border:0; background:transparent; color:var(--ink); font-family:inherit; font-size: 14px; }
 .runs-search input:focus { outline:none; }

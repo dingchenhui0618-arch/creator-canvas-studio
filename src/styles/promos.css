@@ -111,8 +111,10 @@
   background: none;
   color: var(--faint);
   cursor: pointer;
+  /* r336：box-shadow 以前只写在 :focus-visible 里、基类那条过渡里没有——键盘焦点环是啪一下出来的。
+     并进基类，进出两个方向都是 120ms（运营位这颗 ✕ 是 r331 起就在量的那颗按钮）。 */
   transition: color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out),
-    background-color var(--dur-1) var(--ease-out);
+    background-color var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out);
 }
 .vq-promo-close:hover { color: var(--ink); border-color: var(--line); background: var(--surface); }
 .vq-promo-close:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(17, 17, 17, 0.16); }

@@ -1755,7 +1755,9 @@
 .admin-report-detail { margin: 0; font-size: 14px; line-height: 1.7; color: var(--ink-soft, #333); }
 .admin-report-url { overflow-wrap: anywhere; }
 .admin-report-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
-.admin-report-actions .admin-input { flex: 1 1 260px; min-width: 0; height: 36px; padding: 0 8px; border: 1px solid var(--line-strong, #e0dbd2); border-radius: var(--radius-xs); background: var(--surface, #fff); font-size: 14px; }
+.admin-report-actions .admin-input { flex: 1 1 260px; min-width: 0; height: 36px; padding: 0 8px; border: 1px solid var(--line-strong, #e0dbd2); border-radius: var(--radius-xs); background: var(--surface, #fff); font-size: 14px;
+  transition: box-shadow var(--dur-1) var(--ease-out);
+}
 .admin-report-actions .admin-input:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(17, 17, 17, .28); }
 
 /* ---------- 上线就绪 + 站点公示（v0.9.67） ----------
@@ -2295,6 +2297,7 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--surface-subtle, #f8f7f4);
+  transition: border-color var(--dur-1) var(--ease-out);
 }
 
 .admin-promo-row-head,

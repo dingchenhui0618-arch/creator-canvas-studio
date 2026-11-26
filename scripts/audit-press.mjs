@@ -29,6 +29,15 @@
 //      就是 currentColor —— color 一变它必然跟着变，元素写 border: 0 也一样。这条不是反馈，是一条
 //      推导出来的值，以前被算成「变了、但没过渡 = 硬切」（0.9.306 上量出的 26 条里有 25 条是它）。
 //      现在分开记：hoverDerived / derivedOnPress，不进 changed、不进硬切，只在汇总里报条数。
+//   9) r336 起：加第四层——**键盘焦点**。加 --focus 就只跑这一层（不按鼠标、不跑运营位那几段），
+//      用 CDP 真发 Tab（Input.dispatchKeyEvent），每按一次读 document.activeElement：
+//      它自己 + 最多三层有 class 的祖先各读一份「看得见的焦点属性」，走完整条 Tab 链之后再回到
+//      「没有焦点」的数一遍同一批选择器当 rest 基线，差出来就是「Tab 到这里看不看得出焦点在哪」。
+//      与鼠标三层同一个口径：看得见的变化才叫反馈；变化了但不在 computed transition 表里就是硬切。
+//      焦点这一层读的是**另一张属性表**（FOCUS_PROPS，多了 outline 四件套），不复用按下/划过那张：
+//      输入框一拿到焦点 UA 就会画 outline，把它塞进 PROPS 会把 r331–r335 三层的读数改掉，不可比。
+//      同样沿用 r335 的推导规则：outline-style 是 none / 宽度 0 时 computed outline-color 等于
+//      currentColor，color 一变它必然跟着变，那不是焦点环。
 //
 // 用法（同一份脚本跑两份产物）：
 //   node scripts/audit-press.mjs --dist .shots330/dist-after --out .shots331/press
@@ -57,6 +66,9 @@ const OUT_DIR = path.resolve(ROOT, String(argOf('out', '.shots331/press')))
 // 用来做同一颗的 before/after 对比图）+ --shotsize N（方形窗口边长，默认 120）。
 const SHOTS = String(argOf('shots', 'candidates'))
 const SHOT_SIZE = Number(argOf('shotsize', '120')) || 120
+// r336：--focus 只跑「键盘焦点」那一层。Tab 走查每个 pass 最多按这么多下（防跑飞）。
+const FOCUS_MODE = process.argv.indexOf('--focus') > 0
+const FOCUS_CAP = Number(argOf('focuscap', '40')) || 40
 const WIDTH = 1440
 const HEIGHT = 1000
 if (!fs.existsSync(path.join(DIST_DIR, 'index.html'))) throw new Error('dist 里没有 index.html：' + DIST_DIR)
@@ -494,6 +506,105 @@ function readState(selector) {
       }
     })(),
   }
+}
+
+// ---- r336：键盘焦点那一层（自足页面函数，注入到页面里跑）----
+function focusActive() {
+  // 只读：现在谁拿着焦点 + 它的稳定选择器。不点、不写、不滚。
+  function escapeIdent(value) {
+    if (window.CSS && CSS.escape) return CSS.escape(value)
+    return String(value).replace(/[^A-Za-z0-9_-]/g, function (ch) { return '\\' + ch })
+  }
+  function stableClasses(node) {
+    return Array.prototype.slice.call(node.classList).filter(function (c) { return c.indexOf('is-') !== 0 && c.length < 40 }).slice(0, 2)
+  }
+  function selectorOf(el) {
+    const cls = stableClasses(el)
+    const simple = el.tagName.toLowerCase() + (cls.length ? '.' + cls.map(escapeIdent).join('.') : '')
+    try { if (document.querySelectorAll(simple).length === 1) return simple } catch { /* 选择器不合法就往下走 */ }
+    const all = Array.prototype.slice.call(el.classList)
+    if (all.length) {
+      const full = el.tagName.toLowerCase() + '.' + all.map(escapeIdent).join('.')
+      try { if (document.querySelectorAll(full).length === 1) return full } catch { /* 同上 */ }
+    }
+    const parts = []
+    let node = el
+    for (let depth = 0; node && node.nodeType === 1 && depth < 8; depth += 1) {
+      let part = node.tagName.toLowerCase()
+      const c = stableClasses(node)
+      if (c.length) part += '.' + c.map(escapeIdent).join('.')
+      const parent = node.parentElement
+      if (parent) {
+        const same = Array.prototype.filter.call(parent.children, function (child) { return child.tagName === node.tagName })
+        part += ':nth-of-type(' + (same.indexOf(node) + 1) + ')'
+      }
+      parts.unshift(part)
+      const sel = parts.join(' > ')
+      try { if (document.querySelectorAll(sel).length === 1) return sel } catch { /* 同上 */ }
+      node = parent
+    }
+    return parts.join(' > ')
+  }
+  const el = document.activeElement
+  if (!el || el === document.body || el === document.documentElement) return { body: true }
+  return {
+    body: false,
+    selector: selectorOf(el),
+    tag: el.tagName,
+    text: String(el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 40),
+    cls: String(el.getAttribute('class') || ''),
+    type: el.getAttribute('type'),
+    focusVisible: el.matches(':focus-visible'),
+    focusWithin: el.matches(':focus-within'),
+  }
+}
+function readFocusState(selector) {
+  // 只读：焦点相关的可见属性。元素自己 + 最多三层带 class 的祖先各一份（祖先按位置对齐，只记 tag/class）。
+  function grab(node) {
+    const cs = getComputedStyle(node)
+    const ps = getComputedStyle(node, '::after')
+    return {
+      outlineStyle: cs.outlineStyle,
+      outlineWidth: cs.outlineWidth,
+      outlineColor: cs.outlineColor,
+      outlineOffset: cs.outlineOffset,
+      boxShadow: cs.boxShadow,
+      borderColor: cs.borderColor,
+      borderWidths: [cs.borderTopWidth, cs.borderRightWidth, cs.borderBottomWidth, cs.borderLeftWidth],
+      backgroundColor: cs.backgroundColor,
+      color: cs.color,
+      transform: cs.transform,
+      opacity: cs.opacity,
+      focus: node === document.activeElement,
+      focusVisible: node.matches(':focus-visible'),
+      hover: node.matches(':hover'),
+      transitionProperty: cs.transitionProperty,
+      transitionDuration: cs.transitionDuration,
+      after: {
+        content: ps.content,
+        backgroundColor: ps.backgroundColor,
+        boxShadow: ps.boxShadow,
+        transform: ps.transform,
+        opacity: ps.opacity,
+        transitionProperty: ps.transitionProperty,
+        transitionDuration: ps.transitionDuration,
+      },
+    }
+  }
+  const el = document.querySelector(selector)
+  if (!el) return { missing: true }
+  const chain = []
+  chain.push(Object.assign({ selector: 'self', tag: el.tagName, cls: String(el.getAttribute('class') || '') }, grab(el)))
+  let node = el.parentElement
+  let depth = 0
+  while (node && node !== document.body && depth < 3) {
+    if (node.classList && node.classList.length) {
+      chain.push(Object.assign({ selector: 'up' + depth, tag: node.tagName, cls: String(node.getAttribute('class') || '') }, grab(node)))
+      depth += 1
+    }
+    node = node.parentElement
+  }
+  return { missing: false, tag: el.tagName, chain: chain }
 }
 
 function neutralPoint() {
@@ -961,6 +1072,63 @@ function hardCutProps(changed, state) {
   }
   return rows
 }
+// ---- r336：键盘焦点那一层自己的属性表（与 PROPS / AFTER_PROPS 分开）----
+// 为什么不并进 PROPS：焦点会改 outline（输入框一拿到焦点 UA 就画一道），把它塞进按下/划过那张表
+// 会把 r331–r335 已经发布的读数改掉，那三层就不可比了。层与层之间宁可各读一张表。
+const FOCUS_PROPS = [
+  ['outlineWidth', 'outline-width'],
+  ['outlineStyle', 'outline-style'],
+  ['outlineColor', 'outline-color'],
+  ['outlineOffset', 'outline-offset'],
+  ['boxShadow', 'box-shadow'],
+  ['borderColor', 'border-color'],
+  ['backgroundColor', 'background-color'],
+  ['color', 'color'],
+  ['transform', 'transform'],
+  ['opacity', 'opacity'],
+]
+// 焦点环画出来没有：outline-style 不是 none、宽度 > 0、颜色不是全透明，三条都成立才算。
+// 「outline-color 变了」在没画出来的情况下就是 currentColor 的连带变化（r335 那条规则的另一半）。
+function outlineVisible(state) {
+  if (!state) return false
+  if (String(state.outlineStyle) === 'none') return false
+  if (!(parseFloat(String(state.outlineWidth)) > 0)) return false
+  const rgba = String(state.outlineColor || '').match(/rgba?\(([^)]+)\)/)
+  if (rgba) {
+    const parts = rgba[1].split(',').map((item) => item.trim())
+    if (parts.length === 4 && parseFloat(parts[3]) === 0) return false
+  }
+  return true
+}
+function focusIsDerived(before, after, prop) {
+  if (prop === 'border-color') return !borderVisible(before) && !borderVisible(after)
+  // 环没画出来（样式 none / 宽度 0 / 颜色全透明）时，outline 的四条都只是数字在变，屏幕上什么都没有：
+  // 与 r335 的 border-color 是同一条规则的另一半。0.9.309 第一版只写了 outline-color ——
+  // qc-input / agx-textarea 那两站就是这么被算成硬切的（width 3px→0、offset 0→2px，但环压根没画）。
+  if (prop.indexOf('outline-') === 0) return !outlineVisible(after)
+  return false
+}
+function focusPropDiffs(before, after) {
+  const rows = []
+  if (!before || !after || before.missing || after.missing) return rows
+  for (const pair of FOCUS_PROPS) {
+    if (String(before[pair[0]]) !== String(after[pair[0]])) {
+      rows.push({ prop: pair[1], from: String(before[pair[0]]), to: String(after[pair[0]]), derived: focusIsDerived(before, after, pair[1]) })
+    }
+  }
+  const bothAfter = before.after && after.after
+  const hasAfter = Boolean(bothAfter) && (String(before.after.content) !== 'none' || String(after.after.content) !== 'none')
+  if (hasAfter) {
+    for (const pair of AFTER_PROPS) {
+      if (String(before.after[pair[0]]) !== String(after.after[pair[0]])) {
+        rows.push({ prop: pair[1], from: String(before.after[pair[0]]), to: String(after.after[pair[0]]), derived: false })
+      }
+    }
+  }
+  return rows
+}
+function focusChanged(before, after) { return focusPropDiffs(before, after).filter((row) => !row.derived) }
+function focusDerivedDiffs(before, after) { return focusPropDiffs(before, after).filter((row) => row.derived) }
 const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 function pathOf(url) {
   try { return new URL(url).pathname } catch { return String(url) }
@@ -971,6 +1139,109 @@ function writeStatsFrom(mark) {
   const counts = {}
   for (const row of writes) counts[row.method + ' ' + row.path] = (counts[row.method + ' ' + row.path] || 0) + 1
   return { writes: writes.length, counts: counts, apiCalls: rows.filter((row) => row.path.indexOf('/api/') === 0).length }
+}
+
+// ---- r336：真 Tab（CDP 真键盘输入）+ 一趟键盘焦点走查 ----
+async function tabKey() {
+  // 真按一下 Tab：rawKeyDown + keyUp。合成不了焦点——焦点导航要浏览器自己处理这次按键。
+  const base = { windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9, key: 'Tab', code: 'Tab', modifiers: 0 }
+  await cdp.send('Input.dispatchKeyEvent', Object.assign({ type: 'rawKeyDown' }, base))
+  await cdp.send('Input.dispatchKeyEvent', Object.assign({ type: 'keyUp' }, base))
+  await sleep(90)
+}
+async function blurAll() {
+  await evaluate('(function () { try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur() } catch (e) {} return true })()')
+}
+async function parkMouseNeutral() {
+  const neutral = await evaluate('(' + neutralPoint.toString() + ')()')
+  if (neutral) await mouseTo(neutral.x, neutral.y)
+  return neutral
+}
+async function focusWalk(pageId, pageLabel) {
+  const row = {
+    id: pageId, label: pageLabel, cap: FOCUS_CAP, stops: [], capReached: false,
+    endedAtBody: null, cycled: null, restMissing: 0, chainShifted: [], rings: 0, delegated: 0, holes: 0, readFailedStops: 0,
+    hardCutStops: 0, focusVisibleOffStops: 0,
+  }
+  await blurAll()
+  await evaluate('(function () { window.scrollTo(0, 0); return true })()')
+  // r336：「一站都没走到」要先分清是「这一屏真的没有可 Tab 的东西」还是「走查没走起来」。
+  // 先数一遍页面上看得见、tabIndex >= 0、没 disabled 的元素，走完对一遍再报异常（量不到 ≠ 没问题）。
+  row.page = await evaluate('(function () { var list = Array.prototype.slice.call(document.querySelectorAll("a[href], button, input, select, textarea, [tabindex]")); var reach = list.filter(function (n) { if (n.disabled) return false; if (n.tabIndex < 0) return false; var r = n.getBoundingClientRect(); if (r.width < 2 || r.height < 2) return false; var cs = getComputedStyle(n); return cs.display !== "none" && cs.visibility !== "hidden" }); return { hash: location.hash, reachable: reach.length, nodes: list.length } })()')
+  await parkMouseNeutral()
+  await sleep(60)
+  const walk = []
+  for (let i = 0; i < FOCUS_CAP; i += 1) {
+    await tabKey()
+    const at = await evaluate('(' + focusActive.toString() + ')()')
+    if (!at || at.body) { row.endedAtBody = i + 1; break }
+    if (walk.some((item) => item.selector === at.selector)) { row.cycled = i + 1; break }
+    // 焦点这一拍。Tab 会把元素滚到视口中间，而鼠标停在角落——万一那一点正好压在它身上，
+    // :hover 会混进这一拍（rest 那一趟是干净的，差出来就成了假反馈）。撞上了先把鼠标挪开再读一次。
+    let state = await evaluate('(' + readFocusState.toString() + ')(' + JSON.stringify(at.selector) + ')')
+    let hoverOverlap = false
+    if (state && !state.missing && state.chain[0].hover) {
+      hoverOverlap = true
+      await parkMouseNeutral()
+      await sleep(40)
+      state = await evaluate('(' + readFocusState.toString() + ')(' + JSON.stringify(at.selector) + ')')
+    }
+    walk.push({ n: i + 1, selector: at.selector, tag: at.tag, text: at.text, cls: at.cls, type: at.type, focusVisible: at.focusVisible, focusWithin: at.focusWithin, hoverOverlap: hoverOverlap, focused: state })
+  }
+  if (walk.length >= FOCUS_CAP) row.capReached = true
+  // rest 基线：焦点还回去、鼠标重新停到中性点，再读同一批选择器
+  await blurAll()
+  await parkMouseNeutral()
+  await sleep(80)
+  for (const stop of walk) {
+    const focused = stop.focused
+    const rest = await evaluate('(' + readFocusState.toString() + ')(' + JSON.stringify(stop.selector) + ')')
+    const item = {
+      n: stop.n, selector: stop.selector, tag: stop.tag, text: stop.text, cls: stop.cls, type: stop.type,
+      focusVisible: stop.focusVisible, focusWithin: stop.focusWithin, hoverOverlap: stop.hoverOverlap,
+      changed: [], derived: [], outlineDrawn: null, ringAppeared: null, outlineAppearProps: [], ancestorChanged: [], hardCuts: [], focusVisibleOff: [], verdict: null, error: null,
+    }
+    if (!focused || focused.missing) { item.verdict = 'read-failed'; item.error = '焦点那一拍读不到元素'; row.readFailedStops += 1; row.stops.push(item); continue }
+    if (!rest || rest.missing) { item.verdict = 'read-failed'; item.error = 'rest 读不到元素（Tab 走完之后选择器对不上了）'; row.readFailedStops += 1; row.restMissing += 1; row.stops.push(item); continue }
+    if (!stop.focusVisible) item.focusVisibleOff.push('拿到焦点了，但 :focus-visible 没匹配')
+    const selfChanged = focusChanged(rest.chain[0], focused.chain[0])
+    item.changed = selfChanged.map((pair) => pair.prop)
+    item.derived = focusDerivedDiffs(rest.chain[0], focused.chain[0]).map((pair) => pair.prop)
+    item.outlineDrawn = outlineVisible(focused.chain[0])
+    // 焦点环「从无到有」这一下不算硬切：outline-style 是离散属性（none ↔ auto），规范里不做补间，
+    // 浏览器给键盘焦点的默认环就是啪一下出来的 —— 那是平台行为，不是这一页的设计选择。
+    // 只有「环本来就在、只是颜色或位置变了」才按硬切那套判（r335 的 currentColor 是同一种自我纠正：
+    // 先把「这条变化根本不是设计」的情形摘出去，再谈走不走过渡）。
+    const ringAppeared = outlineVisible(rest.chain[0]) !== outlineVisible(focused.chain[0])
+    item.ringAppeared = ringAppeared
+    item.outlineAppearProps = ringAppeared ? selfChanged.filter((pair) => pair.prop.indexOf('outline-') === 0).map((pair) => pair.prop) : []
+    const cutCandidates = ringAppeared ? selfChanged.filter((pair) => pair.prop.indexOf('outline-') !== 0) : selfChanged
+    item.hardCuts = cutCandidates.length ? hardCutProps(cutCandidates, focused.chain[0]) : []
+    // 祖先这一路（:focus-within）：输入框把 UA 焦点框按掉、由外层容器给焦点提示时，反馈在祖先身上。
+    // 按位置对齐并核对 tag/class，挪位了就当读不到，不硬凑。
+    for (let k = 1; k < focused.chain.length; k += 1) {
+      const up = focused.chain[k]
+      const restUp = rest.chain[k]
+      if (!restUp) continue
+      if (restUp.tag !== up.tag || restUp.cls !== up.cls) { row.chainShifted.push(stop.selector + ' :: up' + (k - 1)); continue }
+      const changed = focusChanged(restUp, up)
+      if (!changed.length) continue
+      item.ancestorChanged.push({ where: up.selector, tag: up.tag, cls: up.cls.slice(0, 80), changed: changed.map((pair) => pair.prop) })
+      for (const cut of hardCutProps(changed, up)) item.hardCuts.push({ prop: 'up' + (k - 1) + ' ' + cut.prop, declared: cut.declared, duration: cut.duration, from: cut.from, to: cut.to })
+    }
+    item.verdict = item.changed.length ? 'ring' : (item.ancestorChanged.length ? 'delegated-ring' : 'no-visible-change')
+    row.stops.push(item)
+  }
+  row.rings = row.stops.filter((item) => item.verdict === 'ring').length
+  row.delegated = row.stops.filter((item) => item.verdict === 'delegated-ring').length
+  row.holes = row.stops.filter((item) => item.verdict === 'no-visible-change').length
+  row.hardCutStops = row.stops.filter((item) => item.hardCuts.length > 0).length
+  row.focusVisibleOffStops = row.stops.filter((item) => item.focusVisibleOff.length > 0).length
+  row.outlineAppearances = row.stops.filter((item) => item.ringAppeared).length
+  if (row.page && row.page.reachable > 0 && row.stops.length === 0) anomaly(pageId, '这一屏有可 Tab 到的元素，但焦点走查一站都没走到', row.page)
+  focusPages.push(row)
+  console.log('FOCUS ' + row.id + ' · Tab 到 ' + row.stops.length + ' 站 · 自己有环 ' + row.rings + ' · 环在祖先 ' + row.delegated + ' · 看不出焦点 ' + row.holes + ' · 焦点硬切 ' + row.hardCutStops + ' · :focus-visible 没匹配 ' + row.focusVisibleOffStops + ' · 读不到 ' + row.readFailedStops + (row.capReached ? ' · 到上限 ' + FOCUS_CAP : '') + (row.endedAtBody ? ' · 第 ' + row.endedAtBody + ' 下回到 body' : '') + (row.cycled ? ' · 第 ' + row.cycled + ' 下回到开头' : ''))
+  return row
 }
 
 async function pressOne(pageId, pageLabel, item) {
@@ -1107,6 +1378,10 @@ const PASSES = [
   { id: 'projects', label: '作品流', route: '/projects', who: 'user', scope: '.vq-content', ready: '.vq-page' },
   { id: 'agents', label: '智能体', route: '/agents', who: 'user', scope: '.vq-content', ready: '.agx-surface-switch' },
   { id: 'agents-presets', label: '智能体 · 对话预设', route: '/agents', who: 'user', scope: '.vq-content', prepare: 'open-presets', ready: '.agx-surface-switch', note: '预设卡在「对话预设」页签里，先真点页签再量' },
+  // r336：只跑键盘焦点那一层（不加进按下巡检：那样 136 颗的基线会变，三层读数就不可比了）。
+  // 这一屏是静态门禁抓到的唯一一处真黑洞（.lw-composer textarea 把 UA 焦点框按掉又没补），
+  // 加进来就是为了在真页面上量它一眼。
+  { id: 'local-workspace', label: '本地工作区 · 输入框', route: '/local', who: 'user', scope: '.lw-composer', focusOnly: true, ready: '.lw-composer', note: '静态门禁抓到的焦点黑洞所在屏' },
 ]
 
 async function preparePass(pass) {
@@ -1134,6 +1409,8 @@ async function preparePass(pass) {
 
 const buttons = []
 const passes = []
+// r336：焦点那一层按「屏」记账（每屏一条 Tab 走查）
+const focusPages = []
 let totalPressCount = 0
 
 async function runPass(pass) {
@@ -1242,6 +1519,8 @@ try {
     source: "try{localStorage.setItem('vq_welcome_seen:" + account.id + "','1');localStorage.setItem('vq_mobile_note_seen','1');localStorage.setItem('vq.edition','user')}catch(e){}",
   })
 
+  // r336：焦点那一层不碰鼠标，运营位这几段（尺寸 / 按下 / 撤销动画）只在按下巡检时跑。
+  if (!FOCUS_MODE) {
   // ---- 运营位补量 ----
   await goto('/overview', '.vq-promos')
   await dismissOverlays()
@@ -1351,12 +1630,27 @@ try {
     }
   }
 
+  }
+
   // ---- 逐趟巡检 ----
   const active = PASSES.filter((pass) => !ONLY.length || ONLY.indexOf(pass.id) >= 0)
-  for (const pass of active) {
-    console.log('---- 趟：' + pass.id + ' · ' + pass.label)
-    const row = await runPass(pass)
-    if (pass.id === 'admin-promos' && row.extra) promo.adminWeights = row.extra
+  if (FOCUS_MODE) {
+    // r336：同一批屏，走键盘而不是鼠标。Tab 走查只读：不发写请求、不点任何东西。
+    for (const pass of active) {
+      console.log('---- 趟（焦点）：' + pass.id + ' · ' + pass.label)
+      await goto(pass.route, pass.ready || '.vq-content', pass.who || 'user')
+      await dismissOverlays()
+      const prepared = await preparePass(pass)
+      if (!prepared) { console.log('FOCUS-ABORT ' + pass.id + ' :: 这一趟的入口没能打开（见 notes）'); continue }
+      if (pass.prepare) await sleep(600)
+      await focusWalk(pass.id, pass.label)
+    }
+  } else {
+    for (const pass of active.filter((item) => !item.focusOnly)) {
+      console.log('---- 趟：' + pass.id + ' · ' + pass.label)
+      const row = await runPass(pass)
+      if (pass.id === 'admin-promos' && row.extra) promo.adminWeights = row.extra
+    }
   }
 
   // ---- 版本面 ----
@@ -1398,11 +1692,14 @@ const out = {
     hardCut: '变了、但这条属性不在 computed transition-property 里（或 duration 0）= 硬切。读元素与 ::after 各一份过渡表，属性名按 PROPS / AFTER_PROPS 对齐；简写（background / border）也算覆盖',
     derivedBorder: 'r335：边框宽度全 0 时 computed border-color = currentColor，color 一变它必然跟着变，不是反馈。单列成 hoverDerived / derivedOnPress，不进 changed、不进硬切',
     hoverHardCut: 'r335：同一套判据用在 hover 上。rest（鼠标在中性点）→ hover（鼠标移到元素中心）之间变了的属性，同样去查过渡表；产物 hoverChangedVsRest / hoverHardCuts。按下那一层的数字与 r331–r334 完全可比（这一层只多读两行，不改按下口径）',
+    focusRing: 'r336：--focus 单独一层。CDP 真发 Tab（rawKeyDown/keyUp，Tab 必须由浏览器自己处理这次按键才动焦点），每站读元素自己 + 最多三层祖先的 FOCUS_PROPS（outline 四件套 + box-shadow + border-color + background + color + transform + opacity + ::after），走完整条链再 blur 回「没有焦点」读同一批选择器当 rest 基线。判定：自己变了 = ring，只有祖先变 = delegated-ring（输入框把 UA 环按掉、由 :focus-within 的容器给提示），都没有 = no-visible-change（键盘焦点黑洞）。outline-style 是 none / 宽度 0 / 颜色全透明时，computed outline-color 等于 currentColor —— 与 r335 的 border-color 是同一条规则的另一半，单列 derived 不进判定。',
+    focusTable: 'r336：焦点这一层读的是 FOCUS_PROPS，与按下/划过那三层的 PROPS 分开 —— 焦点会改 outline，并进 PROPS 会把 r331–r335 的读数改掉，层与层之间就不可比了',
   },
   seeds: seeded,
   overlays: overlayLog,
   passes: passes,
   buttons: buttons,
+  focus: { mode: FOCUS_MODE, cap: FOCUS_CAP, pages: focusPages },
   candidates: candidates.map((row) => ({ page: row.page, pageLabel: row.pageLabel, n: row.n, text: row.text, selector: row.selector, tag: row.tag, disabled: row.disabled, pressActive: row.pressActive, changed: [], screenshot: row.screenshot ? row.screenshot.file : null })),
   promo: promo,
   writeRequests: { total: allWrites.length, counts: writeCounts },
@@ -1433,6 +1730,18 @@ const out = {
     hoverHardCutProps: buttons.reduce((sum, row) => sum + (row.hoverHardCuts || []).length, 0),
     // r335：边框宽度为 0 时 border-color 跟随 color 的连带变化（两条腿各算一次，纯记录，不进判定）
     derivedBorderChanges: buttons.reduce((sum, row) => sum + (row.hoverDerived || []).length + (row.derivedOnPress || []).length, 0),
+    // r336：焦点那一层（--focus 才跑）
+    focusPages: focusPages.length,
+    focusStops: focusPages.reduce((sum, row) => sum + row.stops.length, 0),
+    focusRings: focusPages.reduce((sum, row) => sum + row.rings, 0),
+    focusDelegated: focusPages.reduce((sum, row) => sum + row.delegated, 0),
+    focusNoVisibleChange: focusPages.reduce((sum, row) => sum + row.holes, 0),
+    focusHardCuts: focusPages.reduce((sum, row) => sum + row.hardCutStops, 0),
+    focusVisibleNotMatched: focusPages.reduce((sum, row) => sum + row.focusVisibleOffStops, 0),
+    focusReadFailed: focusPages.reduce((sum, row) => sum + row.readFailedStops, 0),
+    focusDerivedOutline: focusPages.reduce((sum, row) => sum + row.stops.reduce((n, item) => n + (item.derived || []).length, 0), 0),
+    // 环「从无到有」（outline none ↔ auto）的那一下：平台行为，不进硬切，单列出来报数
+    focusOutlineAppearances: focusPages.reduce((sum, row) => sum + row.outlineAppearances, 0),
     writeRequests: allWrites.length,
     upstreamCalls: upstream.length,
     anomalies: anomalies.length,
@@ -1474,12 +1783,37 @@ for (const row of hoverHardCutRows) {
   console.log(pad(row.page, 18) + pad(String(row.text).slice(0, 18), 22) + pad(row.hoverHardCuts.map((c) => c.prop + '@' + (c.declared ? c.duration : '不在过渡表里')).join(' '), 56) + row.selector)
 }
 console.log('')
+if (FOCUS_MODE) {
+  const focusStops = focusPages.reduce((list, row) => list.concat(row.stops.map((item) => Object.assign({ page: row.id }, item))), [])
+  const holeRows = focusStops.filter((item) => item.verdict === 'no-visible-change')
+  const delegatedRows = focusStops.filter((item) => item.verdict === 'delegated-ring')
+  const focusCutRows = focusStops.filter((item) => (item.hardCuts || []).length > 0)
+  const focusVisibleOff = focusStops.filter((item) => (item.focusVisibleOff || []).length > 0)
+  console.log('')
+  console.log('---- 键盘焦点：Tab 到但看不出焦点在哪（' + holeRows.length + ' 个）----')
+  for (const item of holeRows) console.log(pad(item.page, 18) + pad(String(item.text).slice(0, 16), 20) + pad(item.tag, 10) + pad(String(item.cls).slice(0, 40), 42) + item.selector)
+  console.log('')
+  console.log('---- 焦点环画在祖先身上（:focus-within 那一路，' + delegatedRows.length + ' 个）----')
+  for (const item of delegatedRows) console.log(pad(item.page, 18) + pad(String(item.text).slice(0, 16), 20) + pad(String(item.cls).slice(0, 30), 32) + item.selector + ' → ' + item.ancestorChanged.map((row) => row.cls.slice(0, 30) + '[' + row.changed.join(',') + ']').join(' '))
+  console.log('')
+  console.log('---- 焦点有变化但还是硬切（' + focusCutRows.length + ' 个）----')
+  for (const item of focusCutRows) console.log(pad(item.page, 18) + pad(String(item.text).slice(0, 16), 20) + pad(item.hardCuts.map((cut) => cut.prop + '@' + (cut.declared ? cut.duration : '不在过渡表里')).join(' '), 56) + item.selector)
+  console.log('')
+  console.log('---- 拿到焦点但 :focus-visible 没匹配（' + focusVisibleOff.length + ' 个）----')
+  for (const item of focusVisibleOff) console.log(pad(item.page, 18) + pad(String(item.text).slice(0, 16), 20) + item.selector)
+  console.log('')
+  console.log('---- per 屏焦点走查 ----')
+  for (const row of focusPages) console.log(pad(row.id, 18) + pad('Tab 到 ' + row.stops.length, 12) + pad('自己有环 ' + row.rings, 14) + pad('环在祖先 ' + row.delegated, 14) + pad('看不出焦点 ' + row.holes, 16) + pad('硬切 ' + row.hardCutStops, 10) + pad('读不到 ' + row.readFailedStops, 12) + (row.capReached ? '到上限 ' + row.cap : '') + (row.endedAtBody ? ' 第 ' + row.endedAtBody + ' 下回到 body' : '') + (row.cycled ? ' 第 ' + row.cycled + ' 下回到开头' : ''))
+}
 console.log('---- 趟汇总 ----')
 for (const row of passes) {
   console.log(pad(row.id, 18) + pad('可见可点 ' + row.total, 14) + pad('量了 ' + row.measured, 10) + pad('有反馈 ' + row.feedback, 12) + pad('候选 ' + row.noFeedback, 10) + pad('active没匹配 ' + row.activeNotMatched, 18) + pad('禁用 ' + row.disabled, 10) + pad('读不到 ' + row.readFailed, 12) + pad('写请求 ' + row.writeRequests, 12) + (row.aborted || ''))
 }
 console.log('')
 console.log('---- 按下巡检 · ' + out.summary.buttonsMeasured + ' 个按钮 / ' + passes.length + ' 趟 · 无反馈候选 ' + candidates.length + ' · 按下硬切 ' + hardCutRows.length + ' · 划过硬切 ' + hoverHardCutRows.length + ' · 连带变化（边框宽 0 的 border-color）' + out.summary.derivedBorderChanges + ' · 写请求 ' + allWrites.length + ' · 上游 ' + upstream.length + ' · 证据 ' + path.join(path.relative(ROOT, OUT_DIR), 'press.json') + ' ----')
+if (FOCUS_MODE) {
+  console.log('---- 焦点巡检 · ' + out.summary.focusPages + ' 屏 / Tab 到 ' + out.summary.focusStops + ' 站 · 自己有环 ' + out.summary.focusRings + ' · 环在祖先 ' + out.summary.focusDelegated + ' · 看不出焦点 ' + out.summary.focusNoVisibleChange + ' · 焦点硬切 ' + out.summary.focusHardCuts + ' · derived（outline 没画出来时的 outline-color）' + out.summary.focusDerivedOutline + ' · 环从无到有（不算硬切）' + out.summary.focusOutlineAppearances + ' · :focus-visible 没匹配 ' + out.summary.focusVisibleNotMatched + ' · 读不到 ' + out.summary.focusReadFailed + ' · 写请求 ' + allWrites.length + ' · 上游 ' + upstream.length + ' · 证据 ' + path.join(path.relative(ROOT, OUT_DIR), 'press.json') + ' ----')
+}
 
 try { chrome.kill() } catch { /* 已经退出 */ }
 try { server.kill() } catch { /* 已经退出 */ }

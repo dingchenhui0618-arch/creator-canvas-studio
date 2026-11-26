@@ -373,7 +373,11 @@
   line-height: 1.7;
   resize: none;
 }
+/* r336：这里以前只把 UA 的焦点框按掉、又没补一个自己的——键盘 Tab 进这个输入框完全看不出焦点在哪
+   （静态门禁抓到的唯一一处真黑洞）。它自己没有可见边框（border: 0），所以补一道不占位的外框：
+   2px 墨色 + 4px 间距，落在页脚的 12/16px 内边距里，不动任何布局。 */
 .lw-composer textarea:focus { outline: none; }
+.lw-composer textarea:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; border-radius: var(--radius-xs); }
 .lw-composer textarea::placeholder { color: var(--faint); }
 .lw-composer-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
 .lw-composer-hint { color: var(--faint); font-family: var(--font-mono); font-size: var(--text-mono); }

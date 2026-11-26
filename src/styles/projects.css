@@ -306,7 +306,7 @@
   color: var(--faint);
   cursor: pointer;
   transition: color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out),
-    background var(--dur-1) var(--ease-out);
+    background var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out);
 }
 
 .vq-title-edit-btn:hover {
@@ -340,6 +340,7 @@
   font-size: var(--text-xl);
   font-weight: var(--head-title-weight);
   letter-spacing: var(--head-title-tracking);
+  transition: border-color var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out);
 }
 
 .vq-rename .vq-button {
@@ -3225,7 +3226,7 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
   white-space: nowrap;
   cursor: pointer;
   transition: background-color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out),
-    color var(--dur-1) var(--ease-out);
+    color var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out);
 }
 
 .vq-spend-toggle:hover,
@@ -4809,6 +4810,7 @@ button.vq-decision-log-row:hover .vq-decision-log-go {
   color: var(--ink);
   font-family: var(--font-mono);
   font-size: var(--text-mono);
+  transition: border-color var(--dur-1) var(--ease-out);
 }
 
 .vq-share-input:focus-visible {

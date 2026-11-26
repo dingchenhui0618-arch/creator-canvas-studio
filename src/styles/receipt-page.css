@@ -170,7 +170,7 @@
   font-size: var(--text-sm);
   line-height: 1;
   cursor: pointer;
-  transition: border-color var(--dur-1) var(--ease-out), background-color var(--dur-1) var(--ease-out), opacity var(--dur-1) var(--ease-out);
+  transition: border-color var(--dur-1) var(--ease-out), background-color var(--dur-1) var(--ease-out), opacity var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out);
 }
 .rpage-button:hover:not(:disabled) { border-color: var(--ink); }
 .rpage-button:focus-visible { outline: none; box-shadow: var(--ring-soft); }

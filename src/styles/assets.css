@@ -480,6 +480,7 @@
   font-family: var(--font-ui);
   font-size: var(--text-sm);
   outline: 0;
+  transition: border-color var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out);
 }
 
 .vq-asset-input:focus {

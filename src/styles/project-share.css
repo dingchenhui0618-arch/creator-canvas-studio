@@ -59,7 +59,7 @@
   font-size: var(--text-meta);
   line-height: 1;
   cursor: pointer;
-  transition: border-color var(--dur-1) var(--ease-out), background-color var(--dur-1) var(--ease-out);
+  transition: border-color var(--dur-1) var(--ease-out), background-color var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out);
 }
 .pshare-button:hover { border-color: var(--ink); }
 .pshare-button:focus-visible { outline: none; box-shadow: var(--ring-soft); }
@@ -237,7 +237,7 @@
   background: var(--surface);
   color: var(--ink);
   text-decoration: none;
-  transition: border-color var(--dur-1) var(--ease-out), background-color var(--dur-1) var(--ease-out);
+  transition: border-color var(--dur-1) var(--ease-out), background-color var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out);
 }
 .pshare-paper:hover { border-color: var(--ink); background: var(--surface-raised); }
 .pshare-paper:focus-visible { outline: none; box-shadow: var(--ring-soft); }

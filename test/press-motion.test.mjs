@@ -97,7 +97,9 @@ export function expand(selector) {
 export function keyOf(selector) {
   const pe = (selector.match(/::[a-z-]+/g) || []).sort().join('')
   let rest = selector.replace(/::[a-z-]+/g, '').replace(/:not\([^()]*\)/g, '')
-  rest = rest.replace(/:(active|hover|focus-visible|focus|focus-within|disabled|visited)\b/g, '')
+  // 顺序有讲究：focus 写在 focus-within 前面时，:focus-within 会被切成 .a-within（r336 量出来的量具自身盲区；
+  // 悬停那一层没暴露它，是因为那里的目标选择器里没有 :focus-within）
+  rest = rest.replace(/:(focus-visible|focus-within|focus|hover|active|disabled|visited)\b/g, '')
   rest = rest.replace(/\[[^\]]*\]/g, '')
   const classes = [...new Set((rest.match(/\.[A-Za-z0-9_-]+/g) || []).map((item) => item.slice(1).toLowerCase()))].sort()
   const tag = ((rest.match(/(^|[\s>+~])([a-zA-Z][A-Za-z0-9-]*)/) || [])[2] || '').toLowerCase()
@@ -414,7 +416,9 @@ const HOVER_MERGES = [
   { file: 'shell.css', from: ', color var(--dur-1) var(--ease-out),\n    text-underline-offset var(--dur-1) var(--ease-out);', to: ', color var(--dur-1) var(--ease-out);', expect: 'shell.css :: .vq-link:hover :: text-underline-offset' },
   // BEM 家族那两条：修饰类自己不在追加段里，缺的属性并进基类那一条
   { file: 'shell.css', from: 'box-shadow var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);', to: 'box-shadow var(--dur-1) var(--ease-out);', expect: 'shell.css :: .vq-search--trigger:hover :: color' },
-  { file: 'share.css', from: ', color .15s ease, background-color .15s ease;', to: ', color .15s ease;', expect: 'share.css :: .share-button--primary:hover :: background' },
+  // r336：这条锚点漂过一次 —— 焦点那一轮往同一条过渡尾部并进了 box-shadow，锚点的尾巴（分号）对不上了。
+  // 锚点只取到 background-color 那一项为止，后面接什么都不会再让它失效。
+  { file: 'share.css', from: ', color .15s ease, background-color .15s ease,', to: ', color .15s ease,', expect: 'share.css :: .share-button--primary:hover :: background' },
 ]
 
 // r335 踩过的那一脚：.vq-nav-item--utility 自己写一条 transition，把 .vq-nav-item 那条（含 transform，
@@ -551,6 +555,204 @@ test('r334 · 反证：删掉这一轮补的每一条过渡，检查都要变红
     for (const expected of fix.expect) {
       assert.ok(ids.has(expected), fix.name + '：删掉之后没有量到 ' + expected + '（门禁是恒真的）')
     }
+  }
+})
+
+// ---------- r336：键盘焦点（focus）那一层 ----------
+// 与鼠标那三层同一个口径，但读的是**另一张属性表**（多了 outline 四件套），而且多了两条自我纠正：
+//   1) outline-style 是离散属性（none ↔ auto），规范里不做补间 —— 焦点环「从无到有」是平台行为，
+//      不是这一页的设计选择，所以「环出现」那一下不进硬切判定（运行时那一半同步这么做：见 audit-press.mjs 的 ringAppeared）；
+//   2) 环压根没画出来（style none / 宽度 0 / 颜色全透明）时，computed 的 outline-color / offset / width
+//      还在变，但屏幕上什么都没有 —— 与 r335 的 border-color 是同一种「不是反馈的变化」。
+// 静态这一层管两件事：
+//   A) 把 UA 焦点框按掉的规则，必须自己补一个看得见的东西，或者交给祖先的 :focus-within、
+//      同一颗元素的兄弟焦点规则（:focus 按掉、:focus-visible 补一道环）；
+//   B) 用 box-shadow / 边框画的焦点环，必须在元素自己的过渡表里有对应的一条 —— 否则环是啪一下出来的。
+export function readFocusStyles() {
+  // 焦点这一层要看 src/App.css：顶栏与模板库的搜索框（.search-box / .inline-search）写在那儿
+  const out = readStyles()
+  out['App.css'] = read('src/App.css')
+  return out
+}
+
+const OUTLINE_PROPS = /^outline(-(style|width|color))?$/
+const FOCUS_RING_PROPS = ['box-shadow', 'border-color', 'border-top-color', 'border-right-color', 'border-bottom-color', 'border-left-color', 'background-color', 'background', 'color', 'transform', 'opacity']
+
+/** 这条规则有没有把 UA 的焦点框按掉（outline: none / 0 / outline-style: none / outline-width: 0）。 */
+export function killsOutline(body) {
+  for (const item of declsOf(body)) {
+    if (!/^(outline|outline-style|outline-width)$/.test(item.prop)) continue
+    const value = item.value.trim().toLowerCase()
+    if (/^(none|0|0px)(\s|$)/.test(value)) return true
+  }
+  return false
+}
+
+/** 这条规则有没有给出一处看得见的变化（含自己画一道 outline）。 */
+export function compensates(body) {
+  for (const item of declsOf(body)) {
+    if (/^(transition|animation)/.test(item.prop)) continue
+    if (OUTLINE_PROPS.test(item.prop)) {
+      const value = item.value.trim().toLowerCase()
+      if (/^(none|0|0px)\b/.test(value) || value.indexOf('transparent') >= 0) continue
+      return true
+    }
+    if (!/^(box-shadow|border|border-color|border-width|background|background-color|color|transform|opacity|filter|text-decoration)/.test(item.prop)) continue
+    const value = item.value.trim().toLowerCase()
+    if (value === 'none' || value === 'transparent' || value === '0' || value === '0px') continue
+    return true
+  }
+  return false
+}
+
+/** :focus-within 的那条（祖先接走了焦点提示）能不能算这颗元素的补偿：祖先里要有同一个类。 */
+export function ancestorCarriesClass(withInSelector, targetSelector) {
+  const wanted = keyOf(withInSelector).classes
+  if (!wanted.length) return false
+  const text = targetSelector.replace(/\([^()]*\)/g, '')
+  const ancestors = text.split(/[\s>+~]+/).filter(Boolean).slice(0, -1)
+  for (const compound of ancestors) {
+    const names = (compound.match(/\.[A-Za-z0-9_-]+/g) || []).map((item) => item.slice(1).toLowerCase())
+    if (wanted.every((name) => names.includes(name))) return true
+  }
+  return false
+}
+
+/** A) 杀掉 outline 又没有补偿的焦点规则（白名单之外应当是空的）。 */
+export function focusCompensationProblems(files, allow = []) {
+  const rules = []
+  for (const [file, css] of Object.entries(files)) {
+    for (const rule of parseRules(css)) {
+      if (rule.media && /prefers-reduced-motion/.test(rule.media)) continue
+      for (const one of splitTop(rule.selector)) {
+        for (const selector of expand(one)) rules.push({ file: file, selector: selector, body: rule.body })
+      }
+    }
+  }
+  const focusRules = rules.filter((rule) => /:focus(-visible)?\b/.test(rule.selector))
+  const withIn = rules.filter((rule) => /:focus-within\b/.test(rule.selector))
+  const problems = []
+  for (const rule of focusRules) {
+    if (!killsOutline(rule.body) || compensates(rule.body)) continue
+    if (withIn.some((entry) => compensates(entry.body) && ancestorCarriesClass(entry.selector, rule.selector))) continue
+    if (focusRules.some((other) => other !== rule && covers(keyOf(other.selector), keyOf(rule.selector)) && compensates(other.body))) continue
+    if (allow.some((item) => item.file === rule.file && item.selector === rule.selector)) continue
+    problems.push({ file: rule.file, selector: rule.selector, prop: 'outline', id: rule.file + ' :: ' + rule.selector + ' :: outline' })
+  }
+  return problems
+}
+
+/** B) 画了焦点环、但元素自己的过渡表里没有这条属性的规则。 */
+export function focusRingMotionProblems(files) {
+  const pool = []
+  for (const [file, css] of Object.entries(files)) {
+    for (const rule of parseRules(css)) {
+      if (rule.media && /prefers-reduced-motion/.test(rule.media)) continue
+      for (const one of splitTop(rule.selector)) {
+        for (const selector of expand(one)) {
+          if (declsOf(rule.body).some((item) => item.prop === 'transition' || item.prop === 'transition-property')) {
+            pool.push({ file: file, key: keyOf(selector), props: transitionSetOf(rule.body), simple: isSimpleSelector(selector) })
+          }
+        }
+      }
+    }
+  }
+  const problems = []
+  for (const [file, css] of Object.entries(files)) {
+    for (const rule of parseRules(css)) {
+      if (rule.media && /prefers-reduced-motion/.test(rule.media)) continue
+      for (const one of splitTop(rule.selector)) {
+        for (const selector of expand(one)) {
+          if (!/:focus(-visible)?\b/.test(selector)) continue
+          const required = keyOf(selector)
+          const requiredSimple = isSimpleSelector(selector)
+          const available = new Set()
+          for (const entry of pool) {
+            if (covers(entry.key, required) || (entry.simple && requiredSimple && coversFamily(entry.key, required))) {
+              for (const prop of entry.props) available.add(prop)
+            }
+          }
+          for (const item of declsOf(rule.body)) {
+            // outline 那几条是平台画的那道环：离散属性，写过渡也没用（文件头第 1 条）
+            if (/^(transition|animation|outline)/.test(item.prop)) continue
+            if (!FOCUS_RING_PROPS.includes(item.prop)) continue
+            const value = item.value.trim().toLowerCase()
+            if (value === 'none' || value === 'transparent') continue
+            if (coversProp(available, item.prop)) continue
+            problems.push({ file: file, selector: selector, prop: item.prop, id: file + ' :: ' + selector + ' :: ' + item.prop })
+          }
+        }
+      }
+    }
+  }
+  return problems
+}
+
+/**
+ * 焦点这一层的白名单：唯一一条是「容器卡片，不是控件」——
+ * 打开时焦点是脚本放到卡片自己身上的（读屏会念出标题），给它画焦点圈反而像可点。
+ * 下面有用例检查它仍然成立：哪天这条规则不在了，用例会红，提醒删掉而不是烂在这儿。
+ */
+export const ALLOW_FOCUS = [
+  { file: 'assets.css', selector: '.vq-gate-card:focus', why: '给「先看三个方向」那张引导卡的容器：focus 是脚本给它做读屏锚点的，它不是控件，不画焦点圈（assets.css 里那行注释就是为此写的）' },
+]
+
+test('r336 · 杀掉 outline 的焦点规则必须有补偿（白名单之外 0 条）', () => {
+  const problems = focusCompensationProblems(readFocusStyles(), ALLOW_FOCUS)
+  assert.deepEqual(problems.map((item) => item.id), [], problems.map((item) => item.id).join('\n'))
+})
+
+test('r336 · 焦点白名单没有烂掉：每条例外今天仍然量得到', () => {
+  const files = readFocusStyles()
+  for (const item of ALLOW_FOCUS) {
+    const without = focusCompensationProblems(files, [])
+    assert.ok(without.some((row) => row.file === item.file && row.selector === item.selector), item.file + ' :: ' + item.selector + ' 今天已经不缺补偿了，把这条例外删掉（原因：' + item.why + '）')
+  }
+})
+
+test('r336 · 焦点环必须声明过渡（画了环却没过渡的 0 条）', () => {
+  const problems = focusRingMotionProblems(readFocusStyles())
+  assert.deepEqual(problems.map((item) => item.id), [], problems.map((item) => item.id).join('\n'))
+})
+
+test('r336 · :focus-within 不能被 keyOf 当成 -within 后缀的类名', () => {
+  assert.deepEqual(keyOf('.vq-search:focus-within').classes, ['vq-search'])
+  assert.deepEqual(keyOf('.runs-search input:focus-visible').classes, ['runs-search'])
+})
+
+test('r336 · 反证：拿掉 .lw-composer 补的那道焦点环，补偿检查要变红', () => {
+  const files = readFocusStyles()
+  const from = '\n.lw-composer textarea:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; border-radius: var(--radius-xs); }'
+  assert.equal(files['local-workspace.css'].split(from).length - 1, 1, '锚点漂了，这条反证等于没跑')
+  files['local-workspace.css'] = files['local-workspace.css'].replace(from, '')
+  const ids = new Set(focusCompensationProblems(files).map((item) => item.id))
+  assert.ok(ids.has('local-workspace.css :: .lw-composer textarea:focus :: outline'), '拿掉补的那道环之后没量到黑洞：' + JSON.stringify([...ids]))
+})
+
+test('r336 · 反证：删掉基类过渡里的 box-shadow，环过渡检查要变红', () => {
+  const files = readFocusStyles()
+  const from = 'background-color var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out);'
+  assert.equal(files['promos.css'].split(from).length - 1, 1, '锚点漂了，这条反证等于没跑')
+  files['promos.css'] = files['promos.css'].replace(from, 'background-color var(--dur-1) var(--ease-out);')
+  const ids = new Set(focusRingMotionProblems(files).map((item) => item.id))
+  assert.ok(ids.has('promos.css :: .vq-promo-close:focus-visible :: box-shadow'), '删掉之后没量到会硬切的那道环：' + JSON.stringify([...ids]))
+})
+
+test('r336 · 原生控件的过渡不许把 button 一起写进来（tag 权重压过 :where(.vq-button, …)）', () => {
+  const css = readStyles()['tokens.css']
+  for (const rule of parseRules(css)) {
+    for (const one of splitTop(rule.selector)) {
+      const selector = one.trim()
+      if (!/^(input|select|textarea)(\s*,|$)/.test(selector) && !/, *\b(input|select|textarea)\b/.test(selector)) continue
+      if (!declsOf(rule.body).some((item) => item.prop === 'transition' || item.prop === 'transition-property')) continue
+      assert.ok(!/(^|,)\s*button\s*(,|$)/.test(selector), '这条过渡里带了 button：' + selector + '（tag 选择器会盖掉 :where(.vq-button, …) 那条，按下位移变成硬切）')
+    }
+  }
+  // 全站按钮那条必须还是完整的五条（哪天被谁换掉，这里先红）
+  const buttonRule = parseRules(css).find((rule) => rule.selector.indexOf(':where(.vq-button, .cv-bdc-action, .cv-palette-item)') === 0)
+  const props = transitionSetOf(buttonRule.body)
+  for (const prop of ['background-color', 'border-color', 'color', 'transform', 'box-shadow']) {
+    assert.ok(props.has(prop), ':where(.vq-button, …) 的过渡少了 ' + prop)
   }
 })
 

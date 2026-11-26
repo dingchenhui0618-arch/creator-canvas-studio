@@ -171,6 +171,12 @@
 html, body { font-family: var(--font-ui); }
 body { -webkit-font-smoothing: antialiased; text-rendering: auto; }
 button, input, select, textarea { font-family: inherit; }
+/* r336：原生输入框的焦点环（边框转墨 + 柔光）跟着走 120ms，与全站按钮同一手感。
+   只写 input/select/textarea —— 不能把 button 一起写进来：tag 选择器的权重（0,0,1）压过
+   tokens 下面那条 :where(.vq-button, …)（0,0,0），会把按钮的 background-color / color / transform
+   那一整条 transition 换掉，按下的 1px 位移与配色过渡全部变硬切（r335 那个「后一条盖掉前一条」
+   的陷阱，这次是 tag 压 :where()）。 */
+input, select, textarea { transition: border-color var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out), background-color var(--dur-1) var(--ease-out); }
 
 /* ---------- 交互一致性（2026-11-12）----------
    以前每个模块自己写一遍 transition，按下去有的位移、有的没反应。
