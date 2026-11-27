@@ -304,6 +304,19 @@ const promoSeed = await savePromos([
     cta: '去视觉评审',
     page: 'review',
   },
+  // r340：运营位位置白名单里有三处（overview / templates / recharge），但这个夹具以前只铺了
+  // overview 那两条——充值页那处挂载点（r322 才挂上）在真页面上**一次都没被渲染过**。
+  // 巡检新增 recharge 趟之后，这条让第三处位置第一次有真机读数（按下/划过两层都量得到它）。
+  {
+    id: 'r340-recharge-rate',
+    placement: 'recharge',
+    weight: 10,
+    kicker: '积分口径',
+    title: '充值之前先看一眼：一张白底图要几积分',
+    body: '积分按次扣、失败原路退回；每一档换多少积分由后台的档位决定，充值页与画布读的是同一份口径。',
+    cta: '去看资产页',
+    page: 'assets',
+  },
 ], { by: 'r331-seed' })
 seeded.promos = promoSeed.ok ? promoSeed.items.length + ' 条' : '失败：' + promoSeed.error
 
@@ -2306,6 +2319,15 @@ const PASSES = [
   // 这一屏是静态门禁抓到的唯一一处真黑洞（.lw-composer textarea 把 UA 焦点框按掉又没补），
   // 加进来就是为了在真页面上量它一眼。
   { id: 'local-workspace', label: '本地工作区 · 输入框', route: '/local', who: 'user', scope: '.lw-composer', focusOnly: true, ready: '.vq-content', note: '静态门禁抓到的焦点黑洞所在屏（空状态里没有 .lw-composer，ready 用 .vq-content，不然这一趟连页都进不去）' },
+  // r340：主线上从来没上过巡检的三屏。此前 11 趟覆盖的是外壳 + 工作台 + 模板库 + 设置 + 作品流 +
+  // 智能体 + 后台运营位卡；复刻主线的「资产」与「评审」，以及全站唯一的钱路「充值」，一屏都没量过。
+  // 只加趟、不改前面任何一趟的 target / 顺序，r331–r339 的基线数字仍然可比。
+  { id: 'assets', label: '资产 · 商品图与数字人', route: '/assets', who: 'user', scope: '.vq-content', ready: '.vq-assets', note: '资产页：筛选页签、新建资产、每张图的生成/更多操作（复刻主线的产出端）' },
+  { id: 'review', label: '视觉评审', route: '/review', who: 'user', scope: '.vq-content', ready: '.review-page', note: '评审页空状态：选片、上传、候选（复刻主线的评审关）' },
+  // 评审页的「没选片」那一屏只有 3 颗可点元素，真正的界面在带作品的那条地址上（#/review/project/<id>）。
+  // 夹具里正好有一条作品，直接开那一屏，不然这一关等于只量了个空壳。
+  { id: 'review-project', label: '视觉评审 · 带作品', route: '/review/project/' + encodeURIComponent(project.id), who: 'user', scope: '.vq-content', ready: '.review-body', note: '带作品 id 的评审页：抽帧、问题清单、评审底栏、历史' },
+  { id: 'recharge', label: '充值', route: '/recharge', who: 'user', scope: '.vq-content', ready: '.rg-page', note: '充值页：返还设置、三档充值按钮，以及运营位的第三处挂载点（placement=recharge）' },
 ]
 
 async function preparePass(pass) {

@@ -49,6 +49,25 @@
   color: var(--ink);
 }
 
+/* 按下要有反应（r340）：这三颗筛选项划过会变底色，按下去却和划过一模一样 ——
+   r340 新加的「资产」趟在真页面上量出来的（两帧是空的，连 200ms 的稳态也一个属性没变）。
+   反馈用底色深一档：它们坐在 --line-faint 的浅底槽里，压到 --line 才看不出「和槽底一个颜色」
+   （压 --line-faint 会跟槽底同一个颜色）；不用 transform —— 那会给绝对定位后代另立包含块
+   （r326 的教训），这一簇也不需要它。过渡本来就写在基类里（background / color 各 --dur-1），不会硬切。 */
+/* 选中那颗（.is-active，白底）划过也要有反应（r340 同一趟量出来的）：它的底色 0-2-0 与
+   .vq-assets-filter:hover 同级、又在文件后面，于是「当前选中的这一项」划过毫无变化。
+   这里给它自己一条 0-3-0 的悬停态，rest（白）→ hover（--line-faint）→ 按下（--line）三级一路加深。 */
+.vq-assets-filter.is-active:hover {
+  background: var(--line-faint);
+}
+/* 按下那条要写两遍 .vq-assets-filter（0-4-0）：上面那条悬停态是 0-3-0，靠顺序赢不稳
+   （样式表按需加载，先后来不保证）——与 promos.css 里 .vq-promo-cta.vq-promo-cta:active 同一条做法。
+   压过 .is-active 的 0-2-0 也是靠它，「当前这一项」按下去才有反应（r332 在 agents 页踩过同一条）。 */
+.vq-assets-filter.vq-assets-filter:not(:disabled):active {
+  background: var(--line);
+  color: var(--ink);
+}
+
 .vq-assets-filter em {
   font-family: var(--font-mono);
   font-style: normal;
