@@ -13,7 +13,7 @@
 //  - 自然语言触发词后面必须有断点，「生成视频教程的文案」仍然按普通对话处理；
 //  - 参数（比例 / 尺寸 / 秒数 / 清晰度）从话里抠出来，抠出来的词不进提示词；
 //    写死的值放进 locked，交给 server/media-models.mjs 原样提交。
-import { IMAGE_QUALITIES, VIDEO_RESOLUTIONS, defaultModelFor, findModel, halfWidthDigits, normalizeRatio } from './media-models.mjs'
+import { IMAGE_QUALITIES, VIDEO_RESOLUTIONS, defaultModelFor, findModel, halfWidthDigits, normalizeRatio, normalizeSize } from './media-models.mjs'
 
 // 生成上限与 server/routes/media-gen.mjs 的 MAX_PROMPT_CHARS 一致：那边才是真拒绝的地方
 const MAX_PROMPT_CHARS = 1200
@@ -159,6 +159,12 @@ function matchLead(text) {
 function extractParams(kind, spec, body) {
   const notes = []
   const locked = {}
+  // r343：explicit 记的是「这一次用户到底明确说了哪些键」。
+  // 光看值分不出来：
+  //  - 比例 1:1 可能是默认档，也可能是用户真的写了「1:1」；
+  //  - 「没带任何参数时不许凭空塞值」要求我们把这两种情况分开，
+  //    所以抠到哪个键就在这里记一笔，最终写进会话的当前设置。
+  const explicit = {}
   let rest = body
   let ratio = kind === 'image' ? spec.ratios[0] : (spec.ratios.includes('9:16') ? '9:16' : spec.ratios[0])
   let size = ''
@@ -174,17 +180,16 @@ function extractParams(kind, spec, body) {
     rest = rest.replace(mRatio[0], ' ')
     if (wanted) {
       ratio = wanted
+      explicit.ratio = true
       if (!spec.ratios.includes(wanted)) locked.ratio = true
     }
   } else {
     for (const item of ORIENT) {
       if (!item.re.test(rest)) continue
       rest = rest.replace(item.re, ' ')
-      if (spec.ratios.includes(item.ratio)) ratio = item.ratio
-      else {
-        ratio = item.ratio
-        locked.ratio = true
-      }
+      ratio = item.ratio
+      explicit.ratio = true
+      if (!spec.ratios.includes(item.ratio)) locked.ratio = true
       break
     }
   }
@@ -199,19 +204,24 @@ function extractParams(kind, spec, body) {
       if (kind === 'image') {
         size = w + 'x' + h
         locked.size = true
+        explicit.size = true
         const wanted = reduceRatio(w, h)
         if (wanted) {
           ratio = wanted
+          // 比例是从用户写的尺寸推出来的，同样算「这次明确说了比例」（r343）
+          explicit.ratio = true
           if (!spec.ratios.includes(wanted)) locked.ratio = true
         }
       } else {
         const wantedRatio = reduceRatio(w, h)
         if (wantedRatio) {
           ratio = wantedRatio
+          explicit.ratio = true
           if (!spec.ratios.includes(wantedRatio)) locked.ratio = true
         }
         const wantedResolution = h >= 1080 || w >= 1080 ? '1080p' : h >= 720 || w >= 720 ? '720p' : '480p'
         resolution = wantedResolution
+        explicit.resolution = true
         if (!spec.resolutions.includes(wantedResolution)) locked.resolution = true
       }
     }
@@ -225,6 +235,7 @@ function extractParams(kind, spec, body) {
       const round8 = (value) => Math.min(4096, Math.max(64, Math.round(value / 8) * 8))
       size = round8((a / long) * longSide) + 'x' + round8((b / long) * longSide)
       locked.size = true
+      explicit.size = true
     }
   }
 
@@ -238,6 +249,7 @@ function extractParams(kind, spec, body) {
       quality = /高清|超清|高画质|精修/.test(word) ? 'high' : /标清|标准画质|普通画质/.test(word) ? 'medium' : 'low'
       // 用户自己写了画质：这份是「指定」的，回答里要说清，上游不收就失败全额退回
       locked.quality = true
+      explicit.quality = true
     }
   }
 
@@ -249,6 +261,7 @@ function extractParams(kind, spec, body) {
       rest = rest.replace(mDuration[0], ' ')
       if (Number.isInteger(wanted) && wanted >= 1 && wanted <= 60) {
         duration = wanted
+        explicit.duration = true
         if (!spec.durations.includes(wanted)) locked.duration = true
       } else {
         notes.push('秒数只能 1–60，这次按 ' + duration + ' 秒生成')
@@ -264,10 +277,11 @@ function extractParams(kind, spec, body) {
         resolution = wanted
         locked.resolution = true
       }
+      explicit.resolution = true
     }
   }
 
-  return { rest, ratio, size, duration, resolution, quality, notes, locked }
+  return { rest, ratio, size, duration, resolution, quality, notes, locked, explicit }
 }
 
 /**
@@ -283,6 +297,7 @@ function applyPicked(kind, spec, params, overrides = {}) {
   const ratio = normalizeRatio(picked.ratio)
   if (ratio) {
     params.ratio = ratio
+    params.explicit.ratio = true
     if (spec.ratios.includes(ratio)) delete params.locked.ratio
     else params.locked.ratio = true
   }
@@ -290,17 +305,20 @@ function applyPicked(kind, spec, params, overrides = {}) {
   if (IMAGE_QUALITIES.includes(quality)) {
     params.quality = quality
     params.locked.quality = true
+    params.explicit.quality = true
   }
   if (kind !== 'video') return
   const duration = picked.duration === undefined || picked.duration === null || picked.duration === '' ? null : Number(picked.duration)
   if (Number.isInteger(duration) && duration >= 1 && duration <= 60) {
     params.duration = duration
+    params.explicit.duration = true
     if (spec.durations.includes(duration)) delete params.locked.duration
     else params.locked.duration = true
   }
   const resolution = String(picked.resolution || '').trim().toLowerCase()
   if (/^[0-9]{3,4}p$/.test(resolution)) {
     params.resolution = resolution
+    params.explicit.resolution = true
     if (spec.resolutions.includes(resolution)) delete params.locked.resolution
     else params.locked.resolution = true
   }
@@ -393,9 +411,261 @@ export function parseMediaIntent(raw, overrides = {}) {
     resolution: params.resolution,
     notes,
     locked: params.locked,
+    // r343：这次明确说/选的键（值是 defaults 补的就不在其中）——写完生成后要回写到会话的当前设置
+    explicit: params.explicit,
     lead: lead.token,
   }
   // 只写了指令、没写画面：不报错也不空跑，交给对话层用文本模型把提示词写出来（r293）
   if (prompt.length < 2) return { ...plan, needsPrompt: true, usage: usageOf(lead) }
   return plan
 }
+// ── r343：会话级「当前生成设置」+「接着说一句改参数」 ─────────────────────────
+//
+// 用户在生产上的原话（2026-11-27）：出完一条之后再接着说「改成 8 秒」「换成 16:9」，
+// 现在这句话被当成普通聊天，什么都没改（docs/r342 的边界里也记着「多轮修改仍没做」）。
+// 这一版把它拆成两件事：
+//  1) 会话上的当前设置 mediaDefaults：改一次就长期算数（旧会话没有这个字段 = {}，不许报错）；
+//  2) 只改参数这一句：接得上上一版就按新参数重出一版，接不上就只记设置、一分钱不花。
+//
+// 判定与合并都写在这个文件里：与 r288 的 parseMediaIntent 同一个理由，路由与对话层只读一个真源。
+
+/** 会话当前设置能记的四个键。尺寸不进长期记忆——它本来就是按比例算出来的。 */
+export const MEDIA_PARAM_KEYS = ['ratio', 'quality', 'duration', 'resolution']
+
+/** 键对应的中文名：回答里说人话用（「没有时长这一档」），不把键名丢给用户。 */
+export const MEDIA_PARAM_LABELS = { ratio: '比例', quality: '画质', duration: '时长', resolution: '分辨率' }
+
+/**
+ * 会话当前设置只收形状对的值：坏值（超范围、乱写）直接丢掉，
+ * 不让一条脏数据把后面的生成全带成失败。旧会话没有 mediaDefaults 字段时回 {}。
+ */
+export function sanitizeMediaDefaults(value) {
+  const raw = value && typeof value === 'object' ? value : {}
+  const out = {}
+  const ratio = normalizeRatio(raw.ratio)
+  if (ratio) out.ratio = ratio
+  const quality = String(raw.quality || '').trim().toLowerCase()
+  if (IMAGE_QUALITIES.includes(quality)) out.quality = quality
+  const duration = raw.duration === undefined || raw.duration === null || raw.duration === '' ? null : Number(raw.duration)
+  if (Number.isInteger(duration) && duration >= 1 && duration <= 60) out.duration = duration
+  const resolution = String(raw.resolution || '').trim().toLowerCase()
+  if (/^[0-9]{3,4}p$/.test(resolution)) out.resolution = resolution
+  return out
+}
+
+/** 会话当前设置叠加：后写的盖前面的；两边都先过一遍 sanitize。 */
+export function mergeMediaDefaults(base, add) {
+  return { ...sanitizeMediaDefaults(base), ...sanitizeMediaDefaults(add) }
+}
+
+function valueInSpec(spec, key, value) {
+  if (!spec) return false
+  if (key === 'ratio') return spec.ratios.includes(String(value))
+  if (key === 'quality') return IMAGE_QUALITIES.includes(String(value))
+  if (key === 'duration') return spec.durations.includes(Number(value))
+  if (key === 'resolution') return spec.resolutions.includes(String(value))
+  return false
+}
+
+/**
+ * 把会话当前设置铺到一次生成下面（长期记忆 < 这次说 / 选的）。
+ *
+ * 返回三个东西：
+ *  - plan：直接交给生成管线的参数。这次没说的键用会话设置补上，越过白名单的照样标 locked
+ *    （原样提交、上游不收就失败全额退回）；
+ *  - explicitValues：这次明确说 / 选的键，调用方要写回会话；
+ *  - applied：这次是从会话设置补来的键（回答里可以说清「按上次的设置」）。
+ *
+ * 「没带任何参数时不许凭空塞值」就落在这里：explicit 里没有的键才可能被补，
+ * 会话设置里也没有的键一个都不加。
+ */
+export function applyMediaDefaults(kind, plan, defaults) {
+  const base = sanitizeMediaDefaults(defaults)
+  const explicit = plan && plan.explicit && typeof plan.explicit === 'object' ? plan.explicit : {}
+  const out = { ...plan, locked: { ...((plan && plan.locked) || {}) } }
+  const explicitValues = {}
+  const applied = []
+  const spec = findModel(kind, defaultModelFor(kind))
+  for (const key of MEDIA_PARAM_KEYS) {
+    if (explicit[key]) {
+      const value = out[key]
+      if (value !== undefined && value !== null && value !== '') explicitValues[key] = value
+      continue
+    }
+    if (base[key] === undefined) continue
+    // 画质只管图片、时长与分辨率只管视频：不把这些键塞进另一种生成的参数里
+    if (kind === 'image' && (key === 'duration' || key === 'resolution')) continue
+    if (kind === 'video' && key === 'quality') continue
+    out[key] = base[key]
+    applied.push(key)
+    if (!valueInSpec(spec, key, base[key])) out.locked[key] = true
+  }
+  return { plan: out, explicitValues, applied }
+}
+
+/**
+ * 「上一版的参数 + 这次改的」收敛成一次生成要用的参数，并按模型档位重新标 locked。
+ *
+ * 为什么是重新标、不沿用上一版的 locked：改了比例之后，上一版那个 locked.size
+ * 会把新比例顶掉（resolveSelection 里 locked.size 优先于 ratio），重出一版还是旧尺寸。
+ */
+export function planFromMediaParams(kind, params = {}) {
+  const spec = findModel(kind, defaultModelFor(kind))
+  const out = { ratio: '', size: '', quality: '', duration: null, resolution: '', locked: {} }
+  const ratio = normalizeRatio(params.ratio)
+  if (ratio) out.ratio = ratio
+  const size = normalizeSize(params.size)
+  if (size) {
+    out.size = size
+    out.locked.size = true
+  }
+  if (kind === 'image') {
+    const quality = String(params.quality || '').trim().toLowerCase()
+    if (IMAGE_QUALITIES.includes(quality)) {
+      out.quality = quality
+      // 与 r342 一致：画质是「选才传」，说了就按指定处理（上游不收就失败全额退回）
+      out.locked.quality = true
+    }
+  } else {
+    const duration = Number(params.duration)
+    if (Number.isInteger(duration) && duration >= 1 && duration <= 60) out.duration = duration
+    const resolution = String(params.resolution || '').trim().toLowerCase()
+    if (/^[0-9]{3,4}p$/.test(resolution)) out.resolution = resolution
+  }
+  if (out.ratio && !valueInSpec(spec, 'ratio', out.ratio)) out.locked.ratio = true
+  if (kind === 'video') {
+    if (out.duration !== null && !valueInSpec(spec, 'duration', out.duration)) out.locked.duration = true
+    if (out.resolution && !valueInSpec(spec, 'resolution', out.resolution)) out.locked.resolution = true
+  }
+  return out
+}
+
+// 「只说改参数」的动词，分两档：
+//  - 强：改成 / 换成 / 调成 / 设置为… 后面直接跟值，不必再说参数名（「改成 8 秒」）；
+//  - 弱：参数名 + 单字动词（「画质改高清」「比例用 16:9」）。
+// 为什么单字动词必须带参数名：不带参数名时「要 8 秒的背景音乐」这种普通句子也会命中，
+// 而误判的代价是白扣一次生成积分——这一轮的反证测试就盯着这条。
+const STRONG_CHANGE_TAIL = /(改成|改为|改到|改一下|改下|换成|换为|换到|换个|换一下|调成|调到|调为|调一下|调整为|调整成|设为|设成|设置成|设置为|变成|弄成|搞成)$/
+const WEAK_CHANGE_TAIL = /(比例|画幅|尺寸|时长|秒数|画质|质量|分辨率|清晰度)((?:改|换|调|用|来|要)+(?:成|为|到|一下|下)?)$/
+// 句首的「我要 / 用 / 来 / 要」也是改参数的说法（「我要 16:9」），但它必须**整句就说到这儿**：
+// 后面还跟着一个东西（「要 8 秒的背景音乐」）就说明这是普通句子，不是在改设置。
+const BARE_CHANGE_LEAD = /^(用|来|要|我要|我想要|需要)$/
+const BARE_CHANGE_TAIL_OK = /^[\s,，、。！!~～的了吧啊呀呗哈]*$/
+// 在征求意见、不是在下指令：「换成 16:9 会不会更好」不许重出
+const CHANGE_ADVICE = /(会不会|好不好|行不行|合不合适|值不值|有必要)/
+// 问句里带的参数通常是在问「这是什么意思」，不是在改
+const CHANGE_QUESTION = /(怎么|如何|为什么|为啥|什么|吗|呢|多少|多久|几秒|哪)/
+
+const CHANGE_ORIENT = [
+  { re: /(竖屏|竖版|竖着|竖屏版)/, ratio: '9:16' },
+  { re: /(横屏|横版|横着|横屏版)/, ratio: '16:9' },
+  { re: /(方形|正方形|方图)/, ratio: '1:1' },
+]
+
+function qualityWord(word) {
+  return /高清|超清|高画质|精修/.test(word) ? 'high' : /标清|标准画质|普通画质/.test(word) ? 'medium' : 'low'
+}
+
+// 值扫描表：每个键一条（或几条）正则，value 把命中转成最终值；转不出来（超范围）的不算改。
+const PARAM_SCAN = [
+  {
+    key: 'ratio',
+    re: '([0-9０-９]{1,2})\\s*[:：∶]\\s*([0-9０-９]{1,2})(?:\\s*(?:的)?\\s*(?:比例|画幅|构图))?',
+    value: (m) => normalizeRatio(halfWidthDigits(m[1]) + ':' + halfWidthDigits(m[2])),
+  },
+  {
+    key: 'ratio',
+    re: '([0-9０-９]{1,2})\\s*比\\s*([0-9０-９]{1,2})(?:\\s*(?:的)?\\s*(?:比例|画幅))?',
+    value: (m) => normalizeRatio(halfWidthDigits(m[1]) + ':' + halfWidthDigits(m[2])),
+  },
+  {
+    key: 'quality',
+    re: '(高清|超清|高画质|精修|标清|标准画质|普通画质|低清|快速出图)\\s*(?:的)?\\s*(?:画质|质量|清晰度)?',
+    value: (m) => qualityWord(m[1]),
+  },
+  {
+    key: 'duration',
+    re: '([0-9０-９]{1,3})\\s*(?:秒|s\\b|Ｓ)\\s*(?:的)?\\s*(?:时长|秒数)?',
+    value: (m) => {
+      const value = Number(halfWidthDigits(m[1]))
+      return Number.isInteger(value) && value >= 1 && value <= 60 ? value : ''
+    },
+  },
+  {
+    key: 'resolution',
+    re: '([0-9０-９]{3,4})\\s*[pPＰ]\\s*(?:的)?\\s*(?:分辨率|清晰度)?',
+    value: (m) => halfWidthDigits(m[1]) + 'p',
+  },
+]
+
+function orientationSpans(text) {
+  const found = []
+  for (const item of CHANGE_ORIENT) {
+    const re = new RegExp(item.re.source, 'g')
+    let matched
+    while ((matched = re.exec(text))) found.push({ key: 'ratio', value: item.ratio, index: matched.index, length: matched[0].length })
+  }
+  return found
+}
+
+/** 值前面那几个字里有没有「改参数」的说法；返回 strong / weak / 空。 */
+function changeLevelBefore(text, index) {
+  const tail = text.slice(0, index).replace(/[\s,，、。:：;；\-—]+$/, '')
+  const slice = tail.slice(-12)
+  if (STRONG_CHANGE_TAIL.test(slice)) return 'strong'
+  if (WEAK_CHANGE_TAIL.test(slice)) return 'weak'
+  return ''
+}
+
+/** 句首只有「我要 / 用 / 来 / 要」，且值后面没有别的东西：才算改参数。 */
+function bareChangeLevel(text, index, length) {
+  const tail = text.slice(0, index).replace(/[\s,，、。:：;；\-—]+$/, '')
+  if (!BARE_CHANGE_LEAD.test(tail.slice(-6))) return ''
+  return BARE_CHANGE_TAIL_OK.test(text.slice(index + length)) ? 'weak' : ''
+}
+
+/**
+ * 从一句「接着说」里认出改参数（r343）。
+ *
+ * @returns null（不是改参数）| { values, explicit, kindHint, text }
+ *   values 是这次要改成的值；kindHint 只用来把回答里的量词说顺（下一张 / 下一段），
+ *   不决定这次生成是图片还是视频——那由上一版决定。
+ */
+export function parseParamChange(raw) {
+  const text = String(raw || '').trim()
+  if (!text) return null
+  // 开头就是生成指令的（「生成一张图 改成 16:9」）走生成那条路，这一层不抢
+  if (parseMediaIntent(text)) return null
+
+  const spans = []
+  for (const item of PARAM_SCAN) {
+    const re = new RegExp(item.re, 'g')
+    let matched
+    while ((matched = re.exec(text))) {
+      const value = item.value(matched)
+      if (value === '' || value === undefined || value === null) continue
+      const level = changeLevelBefore(text, matched.index) || bareChangeLevel(text, matched.index, matched[0].length)
+      if (!level) continue
+      spans.push({ key: item.key, value, index: matched.index, level })
+    }
+  }
+  for (const item of orientationSpans(text)) {
+    const level = changeLevelBefore(text, item.index) || bareChangeLevel(text, item.index, item.length)
+    if (level) spans.push({ ...item, level })
+  }
+  if (!spans.length) return null
+  if (CHANGE_ADVICE.test(text)) return null
+  // 弱动词必须「不是问句」才认；强动词（改成 / 换成…）问句里也是在提要求（「能不能改成 8 秒」）
+  if (CHANGE_QUESTION.test(text) && !spans.some((span) => span.level === 'strong')) return null
+
+  spans.sort((a, b) => a.index - b.index)
+  const values = {}
+  const explicit = {}
+  for (const span of spans) {
+    values[span.key] = span.value
+    explicit[span.key] = true
+  }
+  const kindHint = /(视频|短片|片子|片段|短视频)/.test(text) ? 'video' : /(图片|图|海报|封面)/.test(text) ? 'image' : ''
+  return { values, explicit, kindHint, text }
+}
+

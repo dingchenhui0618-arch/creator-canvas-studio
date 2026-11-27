@@ -13,6 +13,9 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { config } from './config.mjs'
 import { writeFileAtomicSync } from './atomic-write.mjs'
+// r343：会话上的「当前生成设置」由 media-intent 一个真源负责校验（坏值丢掉），
+// 存储层只负责把形状抄下来，不再写一套自己的白名单——两套一定会漂移。
+import { sanitizeMediaDefaults } from './media-intent.mjs'
 
 const MAX_CONVERSATIONS = 30
 const MAX_MESSAGES = 200
@@ -86,6 +89,35 @@ function safeSearch(value) {
   }
 }
 
+/**
+ * 会话上「最近一次在对话里开出来的生成」（r343）：接着改参数时要能拿它重出一版。
+ * 只留重出真正要用的东西（同一个提示词、上一版的参数、参考附件 id），以及它挂在哪条消息上——
+ * 「最近 6 条里有没有可改的上一版」就是靠这个位置对出来的。
+ */
+function safeLastMediaTask(value) {
+  if (!value || typeof value !== 'object') return null
+  const id = safeText(value.id, 80)
+  const kind = value.kind === 'video' ? 'video' : value.kind === 'image' ? 'image' : ''
+  if (!id || !kind) return null
+  const params = value.params && typeof value.params === 'object' ? value.params : {}
+  const refIds = Array.isArray(value.refIds) ? value.refIds : []
+  return {
+    id,
+    kind,
+    prompt: safeText(value.prompt, MAX_TEXT),
+    params: {
+      ratio: safeText(params.ratio, 12),
+      quality: safeText(params.quality, 12),
+      duration: Number(params.duration) || null,
+      resolution: safeText(params.resolution, 12),
+      // 只有用户自己写死的尺寸才留着：比例算出来的那个尺寸跟着比例走，不能被它顶住
+      size: safeText(params.size, 12),
+    },
+    refIds: refIds.slice(0, 4).map((item) => safeText(item, 40)).filter(Boolean),
+    at: safeText(value.at, 40),
+  }
+}
+
 function atomicWrite(file, data) {
   const dir = path.dirname(file)
   fs.mkdirSync(dir, { recursive: true })
@@ -144,6 +176,9 @@ export function createConversation(userId, options = {}) {
     createdAt: now,
     updatedAt: now,
     messages: [],
+    // r343：这条对话的「当前生成设置」。旧会话文件里没有这个字段，读的时候按 {} 处理；
+    // 新建的会话直接给一个空对象，界面不用再判空。
+    mediaDefaults: {},
   }
   atomicWrite(convFile(userId, conv.id), conv)
   writeIndex(userId, [{ id: conv.id, title: conv.title, preview: '', messageCount: 0, createdAt: now, updatedAt: now }, ...rows])
@@ -163,6 +198,9 @@ export function getConversation(userId, conversationId) {
     updatedAt: Number(conv.updatedAt) || 0,
     // 累计被挤掉的条数：界面据此在会话顶部说明「再往前 N 条已经不在存档里」（r248）
     dropped: Number(conv.dropped) || 0,
+    // r343：旧会话没有这两个字段——mediaDefaults 回 {}，lastMediaTask 回 null，都不算错误
+    mediaDefaults: sanitizeMediaDefaults(conv.mediaDefaults),
+    lastMediaTask: safeLastMediaTask(conv.lastMediaTask),
     messages: conv.messages.slice(-MAX_MESSAGES).map((item) => ({
       id: String(item.id || ''),
       role: item.role === 'assistant' ? 'assistant' : 'user',
@@ -204,6 +242,10 @@ export function saveConversation(userId, conv) {
     createdAt: Number(conv.createdAt) || Date.now(),
     updatedAt: Date.now(),
     dropped: (Number(conv.dropped) || 0) + droppedNow,
+    // r343：这两个跟着会话一起存。mediaDefaults 是长期记忆，lastMediaTask 是「上一版」，
+    // 少了它用户一句「改成 8 秒」就只能记设置、没法重出。
+    mediaDefaults: sanitizeMediaDefaults(conv.mediaDefaults),
+    lastMediaTask: safeLastMediaTask(conv.lastMediaTask),
     messages,
   }
   atomicWrite(convFile(userId, next.id), next)
@@ -295,6 +337,22 @@ export function latestConversationImage(conv, within = 6) {
     if (image) return image
   }
   return null
+}
+
+/**
+ * 「最近几条消息里有没有可改的上一版」（r343）：会话上记着上一次在对话里真的开出来的生成，
+ * 但它必须是这次要改的那一版——半小前生成的一条，后面聊了十几句，不该还算「上一版」。
+ *
+ * 位置用「那条用户消息的 id」记，不用下标：会话超 200 条会从头裁，下标会整体位移。
+ * 找不到那条消息（已经被裁掉）就当没有上一版——宁可只记设置，也不要按一条看不见的旧任务扣费。
+ */
+export function recentMediaTask(conv, within = 6) {
+  const task = conv?.lastMediaTask
+  if (!task || !task.id || !task.at) return null
+  const messages = Array.isArray(conv?.messages) ? conv.messages : []
+  const index = messages.findIndex((item) => String(item?.id || '') === String(task.at))
+  if (index < 0) return null
+  return messages.length - index <= Math.max(2, Number(within) || 6) ? task : null
 }
 
 export function titleFrom(text) {

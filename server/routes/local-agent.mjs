@@ -9,7 +9,7 @@ import { currentUser } from '../auth.mjs'
 import { charge, refund } from '../credits.mjs'
 import { quotaRefusal } from '../quota.mjs'
 import { publicError } from '../public-error.mjs'
-import { modelCatalog } from '../models.mjs'
+import { modelCatalog, publicModelName } from '../models.mjs'
 
 const PREFIX = '/api/local-agent'
 const MAX_MESSAGES = 24
@@ -56,8 +56,9 @@ export function createLocalAgentRouter() {
         sendJson(res, 200, {
           ok: true,
           enabled: llmEnabled(),
+          // 桌面端看到的也只有产品 id（models.mjs 统一给），默认值兜底同样不许回内部名
           models: catalog.models.map((item) => item.id),
-          defaultModel: catalog.models[0]?.id || config.llm.model,
+          defaultModel: catalog.models[0]?.id || catalog.current || '',
           // 桌面端的循环参数也在这里给一份：界面上的「上限」不是写死的文案，是本机真正在用的值
           loop: { maxSteps: 8, maxToolOutput: 8000 },
         })
@@ -104,7 +105,7 @@ export function createLocalAgentRouter() {
           sendJson(res, 200, {
             ok: true,
             text: result.text,
-            model: result.model,
+            model: publicModelName(result.model),
             cost: paid.cost,
             balance: paid.balance,
             charged: Boolean(paid.cost > 0),

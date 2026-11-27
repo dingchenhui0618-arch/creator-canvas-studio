@@ -28,12 +28,22 @@
 // 还没做的：语音。
 import { callTextModel, callTextModelStream, visionChain } from './llm.mjs'
 import { charge, priceOf, refund } from './credits.mjs'
-import { contextMessages, createConversation, getConversation, latestConversationImage, saveConversation, titleFrom } from './chat-store.mjs'
+import { contextMessages, createConversation, getConversation, latestConversationImage, recentMediaTask, saveConversation, titleFrom } from './chat-store.mjs'
 import { CHAT_FILE_LIMITS, readChatFileBytes, resolveChatFiles } from './chat-files.mjs'
 import { findLinks, readLinks } from './link-read.mjs'
 import { publicSearch, searchAndRead } from './web-search.mjs'
 import { publicError } from './public-error.mjs'
-import { parseMediaIntent } from './media-intent.mjs'
+import {
+  MEDIA_PARAM_KEYS,
+  MEDIA_PARAM_LABELS,
+  applyMediaDefaults,
+  mergeMediaDefaults,
+  parseMediaIntent,
+  parseParamChange,
+  planFromMediaParams,
+  sanitizeMediaDefaults,
+} from './media-intent.mjs'
+import { defaultModelFor } from './media-models.mjs'
 import { enhanceMediaPrompt } from './media-prompt.mjs'
 import { startChatMedia } from './chat-media.mjs'
 
@@ -45,8 +55,12 @@ const IMAGE_DETAIL = 'high'
 // 画质的三档在用户面前只叫这三种说法（与图片面板的下拉一致）
 const QUALITY_LABEL = { low: '快速', medium: '标准', high: '高清' }
 
+// r343（用户明确要求）：模型只能自称「VisionQA 通用模型」。
+// 提示词里**不写**上游厂牌与型号的举例——那句话本身就会随上下文进模型，
+// 把例子写进去等于教它说这些名字；要防的名字放在这条注释里，不要进字符串。
 const SYSTEM_PROMPT = [
-  '你是平台里的创作助手，回答一律用简体中文。',
+  '你是 VisionQA 通用模型，回答一律用简体中文。',
+  '被问到「你是什么模型 / 是哪家的 / 什么版本」时，只回答「我是 VisionQA 通用模型」；不许提到任何上游厂牌或型号，也不许说「我底层是…」。',
   '你的用户在做短视频与图文内容：找选题、拆结构、写脚本、出分镜、写提示词、复盘数据。',
   '说话要具体、能直接照着做；不要寒暄，不要复述用户的问题，不要编造数据与来源。',
   '需要最新信息或具体链接时，先联网搜索或读取用户给的链接，再给结论；引用时把链接原样写出来。',
@@ -150,7 +164,27 @@ async function beginChat(user, input = {}) {
   // 认不出来就照常当对话回答——问「怎么生成图」不会被当成要花积分。
   // r342：下拉里选的比例 / 画质 / 时长 / 分辨率一起交给解析器，选了就以选的为准
   const media = parseMediaIntent(content, input.media)
-  if (media) return beginMediaChat(user, conv, content, media, input)
+  if (media) {
+    // r343：会话当前设置是「长期记忆」，这次说 / 选的覆盖它；这次明确说 / 选的再写回去。
+    // 两件事分开做：没说的键只借会话设置（不写回），说过的键才落到会话上（没参数就一个都不加）。
+    const merged = applyMediaDefaults(media.kind, media, conv.mediaDefaults)
+    conv.mediaDefaults = mergeMediaDefaults(conv.mediaDefaults, merged.explicitValues)
+    return beginMediaChat(user, conv, content, merged.plan, input)
+  }
+
+  // r343：没有生成动词，但这句话就是在改参数（「改成 8 秒」「换成 16:9」「画质改高清」）。
+  // 这一轮不扣对话积分：接得上上一版就按新参数重出一版（生成管线自己扣费 / 退款），
+  // 接不上就只把设置记在会话上，一分钱都不花。
+  const change = parseParamChange(content)
+  if (change) {
+    // 对话框里这次选的那几档也算「明确改参数」：选了就以选的为准（与 r342 的覆盖顺序一致）
+    const picked = sanitizeMediaDefaults(input.media)
+    for (const key of Object.keys(picked)) {
+      change.values[key] = picked[key]
+      change.explicit[key] = true
+    }
+    return beginParamChangeChat(user, conv, content, change, input)
+  }
 
   // 附件与链接都先读完再扣费：读不出来（扫描件、超过 5 个、链接打不开）时一分钱都不该扣
   const options = chatOptionsFrom(input)
@@ -310,17 +344,20 @@ function beginMediaChat(user, conv, content, plan, input) {
   if (plan.error) throw fail(400, plan.code || 'MEDIA_PROMPT', plan.error)
   const { files, refs, notes } = mediaReferences(user, input, plan, conv)
   if (!conv.messages.some((item) => item.role === 'user')) conv.title = titleFrom(content)
-  conv.messages.push({
+  const userMessage = {
     id: messageId('u'),
     role: 'user',
     content,
     at: Date.now(),
     ...(files.length ? { files } : {}),
-  })
+  }
+  conv.messages.push(userMessage)
   const saved = saveConversation(user.id, conv)
   return {
     conv: saved || conv,
     media: { ...plan, notes: [...(plan.notes || []), ...notes], refs },
+    // r343：这条消息的 id 要留给 lastMediaTask——「最近 6 条里有没有上一版」按它定位
+    userMessageId: userMessage.id,
     evicted: Number(saved?.trimmedNow) || 0,
   }
 }
@@ -413,6 +450,179 @@ function mediaReply(task, plan) {
   return lines.join('\n')
 }
 
+/**
+ * 记下「这条对话上一版是怎么生成的」（r343）：接着改参数时要照它重出一版。
+ *
+ * 参数一律取任务上真正生效的那份（task 是 resolveSelection 收敛过的），不是用户原话里那份：
+ * 用户写「3:4」，任务上就是 3:4，重出时不用再猜一遍。
+ * 只有用户自己写死的尺寸才带过去（plan.locked.size）——按比例算出来的尺寸要跟着新比例走，
+ * 否则「换成 9:16」之后还是 1:1 那个尺寸。
+ */
+function rememberMediaTask(conv, plan, task, at) {
+  if (!task || !task.id) return
+  conv.lastMediaTask = {
+    id: task.id,
+    kind: task.kind,
+    prompt: task.prompt || plan.prompt || '',
+    params: {
+      ratio: task.ratio || '',
+      quality: task.kind === 'image' ? task.quality || '' : '',
+      duration: task.kind === 'video' ? task.duration ?? null : null,
+      resolution: task.kind === 'video' ? task.resolution || '' : '',
+      size: plan.locked?.size ? task.size || '' : '',
+    },
+    refIds: (plan.refs || []).map((ref) => String(ref.id || '')).filter(Boolean),
+    at: String(at || ''),
+  }
+}
+
+// 回答里把参数说成人话：不把键名丢给用户，也不出现英文
+function paramValueText(key, value) {
+  if (key === 'quality') return QUALITY_LABEL[value] || String(value)
+  if (key === 'duration') return String(value) + ' 秒'
+  return String(value)
+}
+
+function paramListText(values, keys) {
+  return keys
+    .filter((key) => values[key] !== undefined && values[key] !== null && values[key] !== '')
+    .map((key) => paramValueText(key, values[key]))
+    .join('、')
+}
+
+function paramNameText(keys) {
+  return keys.map((key) => MEDIA_PARAM_LABELS[key] || key).join('、')
+}
+
+/** 「下一张 / 下一段」的量词：带时长或分辨率的按视频说，其余按图片说。 */
+function defaultsUnit(keys) {
+  return keys.some((key) => key === 'duration' || key === 'resolution') ? '段' : '张'
+}
+
+/**
+ * 「接着说一句改参数」这一轮（r343）：不扣对话积分、不调文本模型。
+ * 先把用户这句话落库；「上一版」在落库之前就认掉——判「最近 6 条」要用落库前的下标。
+ */
+function beginParamChangeChat(user, conv, content, change, input) {
+  const previous = recentMediaTask(conv)
+  if (!conv.messages.some((item) => item.role === 'user')) conv.title = titleFrom(content)
+  const userMessage = { id: messageId('u'), role: 'user', content, at: Date.now() }
+  conv.messages.push(userMessage)
+  const saved = saveConversation(user.id, conv)
+  return {
+    conv: saved || conv,
+    param: change,
+    previous,
+    input,
+    userMessageId: userMessage.id,
+    evicted: Number(saved?.trimmedNow) || 0,
+  }
+}
+
+/** 只记设置 / 只回一句的那一档：落回答、存盘，不建任务、不扣任何积分。 */
+function saveParamOnlyReply(user, ctx, reply, keys, startedAt) {
+  ctx.conv.messages.push({
+    id: messageId('a'),
+    role: 'assistant',
+    content: reply,
+    at: Date.now(),
+    ms: Date.now() - startedAt,
+    meta: { paramChange: { keys, reissued: false } },
+  })
+  const saved = saveConversation(user.id, ctx.conv)
+  const trimmedNow = (Number(ctx.evicted) || 0) + (Number(saved?.trimmedNow) || 0)
+  const conversation = trimmedNow > 0 && saved ? { ...saved, trimmedNow } : saved
+  return {
+    conversation,
+    reply: conversation.messages[conversation.messages.length - 1],
+    model: null,
+    // 这一轮既没走对话模型也没建任务：一分钱都不扣
+    cost: 0,
+    balance: null,
+  }
+}
+
+/** 只改参数这一轮的收尾：能接上一版就重出一版，接不上就只记设置（都不扣对话积分）。 */
+async function finishParamChangeChat(user, ctx) {
+  const startedAt = Date.now()
+  const change = ctx.param
+  const previous = ctx.previous
+  const keys = MEDIA_PARAM_KEYS.filter(
+    (key) => change.explicit[key] && change.values[key] !== undefined && change.values[key] !== '',
+  )
+  // 会话当前设置：改一次记一次。它与「上一版是什么类型」无关——它是这条对话的当前设置，
+  // 所以上一版是图片时说的「8 秒」也照样记下，下一段视频就用它。
+  ctx.conv.mediaDefaults = mergeMediaDefaults(ctx.conv.mediaDefaults, change.values)
+
+  // 上一版与这次改的参数类型不兼容（图片没有时长 / 分辨率这一档，视频没有画质这一档）：
+  // 不建任务——按上一版重出也表达不了这一档，只会白扣一次积分。
+  const incompatible = previous
+    ? keys.filter((key) => (previous.kind === 'image' ? key === 'duration' || key === 'resolution' : key === 'quality'))
+    : []
+  if (!previous || incompatible.length) {
+    const head = previous
+      ? '上一版是' + (previous.kind === 'image' ? '图片' : '视频') + '，没有' + paramNameText(incompatible) + '这一档。'
+      : ''
+    const list = paramListText(change.values, keys)
+    // 「按 8 秒出」「按 16:9 出」：以秒结束时不再多一个空格，读起来才是人话
+    const gap = /秒$/.test(list) ? '' : ' '
+    const reply = head + '已记下：下一' + defaultsUnit(keys) + '按 ' + list + gap + '出；这条对话里之后生成都按这个来。'
+    return saveParamOnlyReply(user, ctx, reply, keys, startedAt)
+  }
+
+  // 同一档再说一遍别重出：上一版本来就是 8 秒，再开一条只是白扣一次生成积分
+  const unchanged = keys.every(
+    (key) => String(previous.params?.[key] ?? '') === String(change.values[key] ?? ''),
+  )
+  if (unchanged) {
+    const list = paramListText(change.values, keys)
+    const reply = '上一版已经是 ' + list + '，没有重出；这条对话里之后生成都按这个来。'
+    return saveParamOnlyReply(user, ctx, reply, keys, startedAt)
+  }
+
+  // 重出一版：同一个提示词、新参数、同一个参考素材；扣费 / 退款走生成管线那一套
+  const next = { ...sanitizeMediaDefaults(previous.params) }
+  if (previous.params && previous.params.size) next.size = previous.params.size
+  for (const key of keys) next[key] = change.values[key]
+  const plan = {
+    kind: previous.kind,
+    prompt: previous.prompt,
+    model: defaultModelFor(previous.kind),
+    notes: [],
+    ...planFromMediaParams(previous.kind, next),
+  }
+  // 参考素材沿用上一版那张（这条消息自己带了附件就用新的）：不静默把「按图生成」降级成纯文生图
+  const refIds = Array.isArray(ctx.input?.files) && ctx.input.files.length ? ctx.input.files.map(String).filter(Boolean) : previous.refIds || []
+  const resolved = refIds.length ? mediaReferences(user, { files: refIds }, plan, ctx.conv) : { refs: [], notes: [] }
+  plan.notes = [...resolved.notes]
+  plan.refs = resolved.refs
+  const task = await startChatMedia(user, plan, plan.refs)
+  rememberMediaTask(ctx.conv, plan, task, ctx.userMessageId)
+  const list = paramListText(change.values, keys)
+  const gap = /秒$/.test(list) ? '' : ' '
+  const head = '按 ' + list + gap + '重出上一版，上一版还留在上面。'
+  ctx.conv.messages.push({
+    id: messageId('a'),
+    role: 'assistant',
+    content: head + '\n' + mediaReply(task, plan),
+    at: Date.now(),
+    model: task.model,
+    ms: Date.now() - startedAt,
+    meta: { media: mediaMeta(task), streamed: false },
+  })
+  const saved = saveConversation(user.id, ctx.conv)
+  const trimmedNow = (Number(ctx.evicted) || 0) + (Number(saved?.trimmedNow) || 0)
+  const conversation = trimmedNow > 0 && saved ? { ...saved, trimmedNow } : saved
+  return {
+    conversation,
+    reply: conversation.messages[conversation.messages.length - 1],
+    model: task.model,
+    cost: 0,
+    balance: typeof task.credits?.balance === 'number' ? task.credits.balance : null,
+    media: mediaMeta(task),
+  }
+}
+
 /** 生成指令的收尾：开任务、落一条平台回答、回给界面（这一轮不计对话费）。 */
 async function finishMediaChat(user, ctx) {
   const startedAt = Date.now()
@@ -433,6 +643,8 @@ async function finishMediaChat(user, ctx) {
     plan.notes = [...(plan.notes || []), '提示词是按你说的补出来的：「' + enhanced.prompt + '」。想改直接说「改成…」']
   }
   const task = await startChatMedia(user, plan, plan.refs || [])
+  // r343：这条任务就是「上一版」——下一句「改成 8 秒」要照它重出
+  rememberMediaTask(ctx.conv, plan, task, ctx.userMessageId)
   ctx.conv.messages.push({
     id: messageId('a'),
     role: 'assistant',
@@ -523,6 +735,8 @@ export async function sendChatMessage(user, input = {}) {
   const ctx = await beginChat(user, input)
   // r288：生成指令这一轮只开任务，不经过文本模型（也就不扣对话那 1 积分）
   if (ctx.media) return finishMediaChat(user, ctx)
+  // r343：只改参数这一轮要么重出一版（生成管线扣费），要么只记设置——都不走文本模型
+  if (ctx.param) return finishParamChangeChat(user, ctx)
   try {
     const result = await callTextModel(ctx.messages, {
       temperature: 0.6,
@@ -547,6 +761,8 @@ export async function streamChatMessage(user, input = {}, hooks = {}) {
   const ctx = await beginChat(user, input)
   // 生成指令没有逐字输出：开完任务一次性把结论交回去，界面照样是「发送 → 卡片出现」
   if (ctx.media) return finishMediaChat(user, ctx)
+  // 只改参数这一轮同理：没有逐字输出，一次性把结果（重出的卡片或「已记下」）交回去
+  if (ctx.param) return finishParamChangeChat(user, ctx)
   try {
     // 带图片的这一轮走一次性：多模态 + 流式在不同上游并不都成立，一条 400 就会让整次对话失败并退款。
     // 一次性拿到整段再一次性推给界面（前端本来就有「没有增量就一次性显示」的分支），行为可预期。
@@ -594,4 +810,6 @@ export async function streamChatMessage(user, input = {}, hooks = {}) {
   }
 }
 
-export { MAX_INPUT, CONTEXT_MESSAGES }
+// SYSTEM_PROMPT 导出只给测试用：断言「自称 VisionQA 通用模型」「文案里不出现上游厂牌」
+// 不该靠读源码字符串（r343）。
+export { MAX_INPUT, CONTEXT_MESSAGES, SYSTEM_PROMPT }

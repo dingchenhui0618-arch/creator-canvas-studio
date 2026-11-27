@@ -25,8 +25,17 @@ import { quotaRefusal } from '../quota.mjs'
 import { enter, leave } from '../gate.mjs'
 import { publicError } from '../public-error.mjs'
 import { preferenceModel } from '../preferences.mjs'
-import { modelCatalog } from '../models.mjs'
+import { internalModelName, modelCatalog, publicModelName } from '../models.mjs'
 import { modelServiceState, noteModelFailure, noteModelSuccess } from '../service-state.mjs'
+
+/**
+ * 智能体记录里存的是内部模型名（旧记录也一样），发给界面前一律换成产品 id（r343）。
+ * 只有一个出口函数，避免以后加接口时漏掉一处、又把上游型号带出去。
+ */
+function publicAgent(agent) {
+  if (!agent || typeof agent !== 'object') return agent
+  return { ...agent, model: publicModelName(agent.model), lastModel: publicModelName(agent.lastModel) }
+}
 
 const PREFIX = '/api/agents'
 
@@ -67,9 +76,10 @@ export function createAgentsRouter() {
             const category = url.searchParams.get('category') || ''
             const items = await listAgents({ q: url.searchParams.get('q') || '', category }, user)
             const stats = await agentStats(user)
-            const models = availableModels()
+            // 对外的模型清单只给产品 id：界面下拉、DevTools 的响应里都不出现上游厂牌与内部型号
+            const models = availableModels().map((name) => publicModelName(name))
             sendJson(res, 200, {
-              items,
+              items: (items || []).map(publicAgent),
               total: stats.total,
               runs: stats.runs,
               byCategory: stats.byCategory,
@@ -86,8 +96,10 @@ export function createAgentsRouter() {
           }
           if (req.method === 'POST') {
             const body = await readBody(req)
+            // 界面回传的是产品 id，落库前换回内部模型名；认不出来（旧内部名）就原样存
+            if (body && body.model !== undefined) body.model = internalModelName(body.model)
             const agent = await createAgent(body, user)
-            sendJson(res, 201, agent)
+            sendJson(res, 201, publicAgent(agent))
             return true
           }
           methodNotAllowed(res, 'GET / POST')
@@ -131,11 +143,11 @@ export function createAgentsRouter() {
           }
           // 请求显式指定 > 账号级首选模型（顶栏切换）> 智能体绑定的模型
           // 顶栏是工作区的全局默认；每次对话里的模型胶囊仍可单独覆盖
-          const requested = String(body.model || preferenceModel(user?.id) || agent.model || '').trim()
+          const requested = internalModelName(String(body.model || preferenceModel(user?.id) || agent.model || '').trim())
           // 顶栏清单里的模型都允许传：视觉专用模型不在文本链里时，llm.mjs 会按既有降级链继续，不会 400
-          const allowed = new Set([...availableModels(), agent.model, ...modelCatalog().models.map((item) => item.id)].filter(Boolean))
+          const allowed = new Set([...availableModels(), agent.model, ...modelCatalog().models.map((item) => internalModelName(item.id))].filter(Boolean))
           if (requested && !allowed.has(requested)) {
-            sendJson(res, 400, { error: '模型 ' + requested + ' 不在可用列表', models: [...allowed] })
+            sendJson(res, 400, { error: '模型 ' + publicModelName(requested) + ' 不在可用列表', models: [...allowed].map((name) => publicModelName(name)) })
             return true
           }
           // 已知模型服务不可用（额度不足 / 凭证失效）：直接说明，不先扣再退。
@@ -235,10 +247,11 @@ export function createAgentsRouter() {
           sendJson(res, 200, {
             credits: { cost: paid.cost, balance: paid.balance },
             reply: result.reply,
-            model: result.model,
+            // 这一轮的模型与试过的候选都是内部名：回给界面前换成产品 id
+            model: publicModelName(result.model),
             latencyMs: result.latencyMs,
             usage: result.usage || null,
-            attempted: result.attempted,
+            attempted: Array.isArray(result.attempted) ? result.attempted.map((name) => publicModelName(name)) : result.attempted,
             tools: result.tools || { used: [], artifacts: [], skipped: [] },
             // 结构化草稿：正文之外的机器可读版本，界面据此给出「存为模板 / 送到画布」两个出口
             draft: result.draft || null,
@@ -323,12 +336,14 @@ export function createAgentsRouter() {
             })
             sendJson(res, 200, {
               ...history,
+              // 历史里每条都存着当时用的模型：同样只给产品 id
+              items: (history.items || []).map((item) => ({ ...item, model: publicModelName(item.model) })),
               agent: {
                 id: agent.id,
                 name: agent.name,
                 runCount: agent.runCount || 0,
                 lastRunAt: agent.lastRunAt || null,
-                lastModel: agent.lastModel || '',
+                lastModel: publicModelName(agent.lastModel),
               },
             })
             return true
@@ -350,7 +365,7 @@ export function createAgentsRouter() {
               sendJson(res, 404, { error: '对话预设不存在：' + id })
               return true
             }
-            sendJson(res, 200, agent)
+            sendJson(res, 200, publicAgent(agent))
             return true
           }
           if (req.method === 'PATCH' || req.method === 'PUT') {
@@ -359,12 +374,13 @@ export function createAgentsRouter() {
               sendJson(res, 404, { error: '对话预设不存在：' + id })
               return true
             }
+            if (body && body.model !== undefined) body.model = internalModelName(body.model)
             const agent = await updateAgent(id, body)
             if (!agent) {
               sendJson(res, 404, { error: '对话预设不存在：' + id })
               return true
             }
-            sendJson(res, 200, agent)
+            sendJson(res, 200, publicAgent(agent))
             return true
           }
           if (req.method === 'DELETE') {
