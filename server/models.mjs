@@ -94,6 +94,20 @@ export function publicModelName(internal) {
   return row ? row.id : name
 }
 
+// 认不出来的名字也要挡一道：上游型号形态（xxx-flash / xxx-pro）与厂牌词一律不许出现在界面上。
+const VENDORISH = /deepseek|qwen|doubao|gpt-|claude|gemini|glm|kimi|moonshot|zhipu|minimax|grok|xai|seedream|kling|codex|workbuddy|[a-z0-9]-(flash|pro|turbo|luna|mini)\b/i
+
+/**
+ * 给界面显示用的模型名（r343）：清单里的换成产品 id，认不出的**也不能把厂牌漏出去**——
+ * 这种情况回一句「VisionQA 通用模型」，宁可少一个信息点，也不把上游型号写在消息卡片上。
+ */
+export function publicDisplayName(value) {
+  const name = publicModelName(value)
+  if (!name) return ''
+  if (/^visionqa-/.test(name)) return name
+  return VENDORISH.test(name) ? 'VisionQA 通用模型' : name
+}
+
 /**
  * 对外 id（或老数据里存的内部名）→ 内部模型名。
  * 认不出来就原样返回：旧偏好、旧智能体记录里可能存着内部名，不能因为改名就让它们失效。

@@ -152,6 +152,16 @@ test('同一类里多个模型：第一个不加序号，后面按 -2 / -3 递�
   }
 })
 
+test('消息卡片上的模型名：清单内换产品 id，认不出的名字也不许漏厂牌', async () => {
+  const { publicDisplayName } = await import('../server/models.mjs')
+  assert.match(publicDisplayName(config.llm.model), /^visionqa-(chat|vision|general)/, '清单内的换成产品 id')
+  // 认不出的上游型号（比如配置换了一个没进清单的模型）：宁可只说产品名，也不把型号写出来
+  assert.equal(publicDisplayName('some-vendor-flash'), 'VisionQA 通用模型')
+  assert.equal(publicDisplayName('gpt-image-9-preview'), 'VisionQA 通用模型')
+  assert.equal(publicDisplayName('visionqa-image-1'), 'visionqa-image-1')
+  assert.equal(publicDisplayName(''), '')
+})
+
 test('联网搜索的来源也只给产品口径：界面与响应体里没有厂牌名', async () => {
   const { publicSearch } = await import('../server/web-search.mjs')
   const view = publicSearch({

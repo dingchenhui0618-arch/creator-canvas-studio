@@ -16,6 +16,7 @@ import { writeFileAtomicSync } from './atomic-write.mjs'
 // r343：会话上的「当前生成设置」由 media-intent 一个真源负责校验（坏值丢掉），
 // 存储层只负责把形状抄下来，不再写一套自己的白名单——两套一定会漂移。
 import { sanitizeMediaDefaults } from './media-intent.mjs'
+import { publicDisplayName } from './models.mjs'
 
 const MAX_CONVERSATIONS = 30
 const MAX_MESSAGES = 200
@@ -206,7 +207,8 @@ export function getConversation(userId, conversationId) {
       role: item.role === 'assistant' ? 'assistant' : 'user',
       content: safeText(item.content),
       at: Number(item.at) || 0,
-      model: safeText(item.model, 80),
+      // 消息卡片上会显示这个字段（r343）：只给产品名，上游型号与厂牌不出接口，老记录也在读的时候换掉
+      model: publicDisplayName(safeText(item.model, 80)),
       ms: Number(item.ms) || 0,
       meta: item.meta && typeof item.meta === 'object' ? item.meta : null,
       files: safeFiles(item.files),
@@ -227,7 +229,8 @@ export function saveConversation(userId, conv) {
     role: item.role === 'assistant' ? 'assistant' : 'user',
     content: safeText(item.content),
     at: Number(item.at) || Date.now(),
-    model: safeText(item.model, 80),
+    // 落盘也存产品名：会话文件本身也不该躺着一个上游型号（读的时候还会再过一遍，兼容老记录）
+    model: publicDisplayName(safeText(item.model, 80)),
     ms: Number(item.ms) || 0,
     meta: item.meta && typeof item.meta === 'object' ? item.meta : null,
     files: safeFiles(item.files),

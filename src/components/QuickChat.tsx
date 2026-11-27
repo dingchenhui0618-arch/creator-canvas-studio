@@ -787,7 +787,8 @@ export default function QuickChat({ onToast }: { onToast?: ToastFn }) {
                 <div className="qc-msg-meta">
                   <span>{message.role === 'user' ? '你' : 'VisionQA 通用模型'}</span>
                   <span>{when(message.at)}</span>
-                  {message.model ? <span>{message.model}</span> : null}
+                  {/* r343：这里原来印的是模型 id（上线时就是上游型号），作者行已经写明「VisionQA 通用模型」，
+                      这一格对用户没有信息量，直接去掉；服务端也不再回内部型号 */}
                   {message.ms ? <span>{(message.ms / 1000).toFixed(1)}s</span> : null}
                   {message.role === 'assistant' ? (
                     <button
