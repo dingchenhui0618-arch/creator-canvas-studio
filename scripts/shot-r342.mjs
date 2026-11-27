@@ -306,12 +306,12 @@ try {
   )
 
   // ---- ② 发一条生成指令：余额必须当场变 ----
-  // 刚才点的是下拉里的按钮，焦点还在那颗按钮上：先把焦点还给输入框，否则 Enter 只会再点一次那颗按钮
-  await evaluate('document.querySelector(".qc-input").focus()')
-  await sleep(120)
+  // 这里不再替页面聚焦（r342 复核第 5 条）：选完胶囊焦点该在产品侧就还给输入框（onPicked），
+  // 脚本要是自己补一次，就把「点完胶囊按 Enter 发不出去」这个真 bug 盖住了。Enter 发不出去时
+  // 下面「设置行收起」会硬等超时并报错（不是 catch 掉），不会假绿。
   await pressEnter()
-  await waitFor(() => evaluate('Boolean(document.querySelector(".qc-gen")) === false'), '设置行收起（已发送）', 40).catch(() => null)
-  await waitFor(() => evaluate('Boolean(document.querySelector(".qc-media-spec"))'), '生成结果卡片', 90).catch(() => null)
+  await waitFor(() => evaluate('Boolean(document.querySelector(".qc-gen")) === false'), '设置行收起（已发送）', 60)
+  await waitFor(() => evaluate('Boolean(document.querySelector(".qc-media-spec"))'), '生成结果卡片', 90)
   const cardSpec = await evaluate('(function(){var el=document.querySelector(".qc-media-spec");return el?String(el.textContent||"").trim():null;})()')
   // 卡片上写的「N 积分」就是这一次的 cost：余额差值必须等于它，光「变了」不算数
   const costMatch = String(cardSpec || '').match(/(\d+)\s*积分/)

@@ -168,6 +168,7 @@ function GenSelect({
   value,
   options,
   onChange,
+  onPicked,
   disabled,
   title,
 }: {
@@ -175,6 +176,9 @@ function GenSelect({
   value: string
   options: GenChoice[]
   onChange: (value: string) => void
+  // 选完一档之后要做什么（r342 复核发现）：那颗下拉按钮随菜单一起卸载，焦点会落到 body，
+  // 用户点完「3:4」直接按 Enter 就什么也发不出去。这里把焦点还给输入框。
+  onPicked?: () => void
   disabled?: boolean
   title?: string
 }) {
@@ -227,6 +231,7 @@ function GenSelect({
               onClick={() => {
                 onChange(option.value)
                 setOpen(false)
+                onPicked?.()
               }}
             >
               {option.label}
@@ -305,6 +310,10 @@ export default function QuickChat({ onToast }: { onToast?: ToastFn }) {
   const fileRef = useRef<HTMLInputElement | null>(null)
   const bottomRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
+  // 生成设置选完一档就把焦点还给输入框（r342 复核）：不还的话 Enter 交给 body，一条都发不出去
+  const focusInput = useCallback(() => {
+    inputRef.current?.focus()
+  }, [])
   const abortRef = useRef<AbortController | null>(null)
   // 只有「本来就在底部」才跟着滚：长回答往上翻着看的时候，每来一段就把人拽回底部很难用
   const stickRef = useRef(true)
@@ -838,6 +847,7 @@ export default function QuickChat({ onToast }: { onToast?: ToastFn }) {
                   value={ratioValue}
                   options={genRatioOptions}
                   onChange={setMediaRatio}
+                  onPicked={focusInput}
                   disabled={sending}
                   title="这次的比例。选「跟随提示词」就由服务端从你这句里认，认不出按各自默认档"
                 />
@@ -848,6 +858,7 @@ export default function QuickChat({ onToast }: { onToast?: ToastFn }) {
                       value={durationValue}
                       options={GEN_DURATIONS}
                       onChange={setMediaDuration}
+                      onPicked={focusInput}
                       disabled={sending}
                       title="这次的秒数。选「跟随提示词」就由服务端从你这句里认"
                     />
@@ -856,6 +867,7 @@ export default function QuickChat({ onToast }: { onToast?: ToastFn }) {
                       value={resolutionValue}
                       options={GEN_RESOLUTIONS}
                       onChange={setMediaResolution}
+                      onPicked={focusInput}
                       disabled={sending}
                       title="这次的清晰度。选「跟随提示词」就由服务端从你这句里认，认不出用 720p"
                     />
@@ -866,6 +878,7 @@ export default function QuickChat({ onToast }: { onToast?: ToastFn }) {
                     value={qualityValue}
                     options={GEN_QUALITIES}
                     onChange={setMediaQuality}
+                    onPicked={focusInput}
                     disabled={sending}
                     title="这次出图的画质。默认跟上上游自己的默认档；选了就按这一档提交，上游不接受会失败并全额退回"
                   />
