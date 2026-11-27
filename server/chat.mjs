@@ -28,7 +28,7 @@
 // 还没做的：语音。
 import { callTextModel, callTextModelStream, visionChain } from './llm.mjs'
 import { charge, priceOf, refund } from './credits.mjs'
-import { contextMessages, createConversation, getConversation, saveConversation, titleFrom } from './chat-store.mjs'
+import { contextMessages, createConversation, getConversation, latestConversationImage, saveConversation, titleFrom } from './chat-store.mjs'
 import { CHAT_FILE_LIMITS, readChatFileBytes, resolveChatFiles } from './chat-files.mjs'
 import { findLinks, readLinks } from './link-read.mjs'
 import { publicSearch, searchAndRead } from './web-search.mjs'
@@ -42,6 +42,8 @@ const CONTEXT_MESSAGES = 30
 const MAX_OUTPUT_TOKENS = 4096
 // 截图要看字，用 high：low 会把 1024 宽的稿子压成 512，标题还行，小一号的正文就糊了。
 const IMAGE_DETAIL = 'high'
+// 画质的三档在用户面前只叫这三种说法（与图片面板的下拉一致）
+const QUALITY_LABEL = { low: '快速', medium: '标准', high: '高清' }
 
 const SYSTEM_PROMPT = [
   '你是平台里的创作助手，回答一律用简体中文。',
@@ -49,6 +51,10 @@ const SYSTEM_PROMPT = [
   '说话要具体、能直接照着做；不要寒暄，不要复述用户的问题，不要编造数据与来源。',
   '需要最新信息或具体链接时，先联网搜索或读取用户给的链接，再给结论；引用时把链接原样写出来。',
   '不确定就说不确定，并说明还需要什么信息。',
+  // r342：用户问「每次对话都会扣 1 积分吗」时，模型只能说「我不确定，也不该替平台乱答」——
+  // 平台自己的价与退回规则不该让模型去猜，这是实话，写进系统提示词。
+  '平台的口径（用户问起时照实说）：对话一轮 1 积分；出图 / 出视频按模型标价，先扣后调，失败、空回复或用户按停止都全额退回。',
+  '生成图片 / 视频的比例、画质、时长、分辨率由系统参数处理，不要把这些参数写进提示词里，也不要在回答里编造参数。',
 ].join('\n')
 
 function fail(status, code, message) {
@@ -142,7 +148,8 @@ async function beginChat(user, input = {}) {
 
   // r288：开头就是「/生图」「生成一段视频」这类指令时，不走对话模型，直接接到现成的生成管线。
   // 认不出来就照常当对话回答——问「怎么生成图」不会被当成要花积分。
-  const media = parseMediaIntent(content)
+  // r342：下拉里选的比例 / 画质 / 时长 / 分辨率一起交给解析器，选了就以选的为准
+  const media = parseMediaIntent(content, input.media)
   if (media) return beginMediaChat(user, conv, content, media, input)
 
   // 附件与链接都先读完再扣费：读不出来（扫描件、超过 5 个、链接打不开）时一分钱都不该扣
@@ -241,10 +248,20 @@ const REF_EXT = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp',
  * 只收 1 张：生图只有「参考图」一种带图方式（1 张），生视频是「首帧」（也是 1 张）。
  * 文档附件不静默丢掉：生成指令只认图，让用户知道那份文档没被算进去。
  */
-function mediaReferences(user, input, plan) {
+function mediaReferences(user, input, plan, conv) {
   const raw = Array.isArray(input?.files) ? input.files.map(String).filter(Boolean) : []
-  if (!raw.length) return { files: [], refs: [] }
-  const resolved = resolveChatFiles(user.id, raw)
+  const notes = []
+  let ids = raw
+  let reused = null
+  if (!ids.length) {
+    const latest = latestConversationImage(conv)
+    if (latest) {
+      ids = [String(latest.id)]
+      reused = latest
+    }
+  }
+  if (!ids.length) return { files: [], refs: [], notes }
+  const resolved = resolveChatFiles(user.id, ids)
   const docs = resolved.files.filter((file) => file.kind !== 'image')
   if (docs.length) {
     throw fail(
@@ -253,34 +270,35 @@ function mediaReferences(user, input, plan) {
       '生成指令只认参考图片：' + docs.map((file) => file.name).join('、') + ' 这份文档没算进去，请单独用对话问，或者去掉附件再生成',
     )
   }
-  if (resolved.files.length > 1) {
-    throw fail(
-      400,
-      'MEDIA_CHAT_REF_MANY',
-      '对话框里一次最多带 1 张参考图：' + (plan.kind === 'image' ? '要按哪张重画' : '要拿哪张当首帧') + '，就留哪一张',
+  const images = resolved.files.filter((file) => file.kind === 'image')
+  if (!images.length) throw fail(422, 'CHAT_IMAGE_UNREADABLE', '这张图的原图读不到了：重新传一次再发')
+  // 一次只按一张当参考（上游的参考图通道就是 1 张）：多带的不静默挑，回答里说明用的是哪张
+  const first = images[0]
+  if (images.length > 1) {
+    notes.push(
+      '这条带了 ' + images.length + ' 张图，这次按第 1 张「' + (first.name || '参考图') + '」当参考' +
+        (plan.kind === 'image' ? '；要换就把其余几张删掉再发' : '；要换首帧就把其余几张删掉再发'),
     )
   }
-  const refs = []
-  for (const file of resolved.files) {
-    const rawFile = readChatFileBytes(user.id, file.id)
-    if (!rawFile) continue
-    const mime = rawFile.mime || file.mime || 'image/png'
-    refs.push({
-      // id 用附件 id：这一轮不落素材库，只在内存里把字节传给生成管线
-      id: file.id,
-      kind: 'image',
-      name: file.name || '参考图',
-      mime,
-      ext: REF_EXT[mime] || 'png',
-      bytes: rawFile.buffer.length,
-      width: null,
-      height: null,
-      duration: null,
-      buffer: rawFile.buffer,
-    })
-  }
-  if (!refs.length) throw fail(422, 'CHAT_IMAGE_UNREADABLE', '这张图的原图读不到了：重新传一次再发')
-  return { files: resolved.files, refs }
+  if (reused) notes.push('按这条对话里你上一条带的那张图「' + (first.name || '参考图') + '」当参考（这条没带附件）')
+  const rawFile = readChatFileBytes(user.id, first.id)
+  if (!rawFile) throw fail(422, 'CHAT_IMAGE_UNREADABLE', '这张图的原图读不到了：重新传一次再发')
+  const mime = rawFile.mime || first.mime || 'image/png'
+  const refs = [{
+    // id 用附件 id：这一轮不落素材库，只在内存里把字节传给生成管线
+    id: first.id,
+    kind: 'image',
+    name: first.name || '参考图',
+    mime,
+    ext: REF_EXT[mime] || 'png',
+    bytes: rawFile.buffer.length,
+    width: null,
+    height: null,
+    duration: null,
+    buffer: rawFile.buffer,
+  }]
+  // 沿用的那张不挂回这条消息（它本来就没在这条里发过），只把说明写进回答
+  return { files: raw.length ? [first] : [], refs, notes }
 }
 
 /**
@@ -290,7 +308,7 @@ function mediaReferences(user, input, plan) {
 function beginMediaChat(user, conv, content, plan, input) {
   // r293：只写了「帮我出个视频」不再直接报错——这一轮照常落库，提示词交给 finishMediaChat 去写
   if (plan.error) throw fail(400, plan.code || 'MEDIA_PROMPT', plan.error)
-  const { files, refs } = mediaReferences(user, input, plan)
+  const { files, refs, notes } = mediaReferences(user, input, plan, conv)
   if (!conv.messages.some((item) => item.role === 'user')) conv.title = titleFrom(content)
   conv.messages.push({
     id: messageId('u'),
@@ -300,7 +318,11 @@ function beginMediaChat(user, conv, content, plan, input) {
     ...(files.length ? { files } : {}),
   })
   const saved = saveConversation(user.id, conv)
-  return { conv: saved || conv, media: { ...plan, refs }, evicted: Number(saved?.trimmedNow) || 0 }
+  return {
+    conv: saved || conv,
+    media: { ...plan, notes: [...(plan.notes || []), ...notes], refs },
+    evicted: Number(saved?.trimmedNow) || 0,
+  }
 }
 
 /** 存进回答里的那条生成记录：界面拿 id 去轮询 /api/media/tasks/:id，别再存一份会过期的进度。 */
@@ -317,6 +339,8 @@ function mediaMeta(task) {
     size: task.size || '',
     duration: task.duration || null,
     resolution: task.resolution || '',
+    // r342：卡片要说得出这次是什么画质；空串 = 没指定、走上游默认档
+    quality: task.quality || '',
     prompt: task.prompt,
     // 失败原因是任务自己的结论：卡片在「已失败」时不轮询，不带上它就只剩一句「没有返回结果」
     error: task.error || '',
@@ -345,11 +369,13 @@ function mediaReply(task, plan) {
   if (plan.locked?.size) lockedLabels.push('尺寸 ' + (task.size || plan.size))
   if (plan.locked?.duration) lockedLabels.push('时长 ' + (task.duration || plan.duration) + ' 秒')
   if (plan.locked?.resolution) lockedLabels.push('清晰度 ' + (task.resolution || plan.resolution))
+  if (plan.locked?.quality) lockedLabels.push('画质 ' + (QUALITY_LABEL[task.quality] || task.quality))
   const refs = Array.isArray(task.assets) ? task.assets.length : 0
   const spec = [
     task.modelLabel || task.model,
     task.ratio,
     task.kind === 'image' ? task.size : '',
+    task.quality ? '画质 ' + (QUALITY_LABEL[task.quality] || task.quality) : '',
     task.kind === 'video' ? task.duration + ' 秒' : '',
     task.resolution,
     refs ? '参考 ' + refs + ' 张' : '',
@@ -358,8 +384,12 @@ function mediaReply(task, plan) {
     .join(' · ')
   const lines = []
   if (plan.notes?.length) lines.push(...plan.notes.map((note) => note + '。'))
+  // 画质是「选才传」的那一档：上游到底收不收，我们没有真调过，所以先把话说在前面
+  if (task.quality && task.status !== 'failed') {
+    lines.push('画质「' + (QUALITY_LABEL[task.quality] || task.quality) + '」是这次选的；上游要是不接受这一档，这次会失败并全额退回。')
+  }
   if (lockedLabels.length) {
-    lines.push('这几个参数是你写死的，我按原样提交：' + lockedLabels.join(' · ') + '；上游要是不接受，这次生成的积分全额退回。')
+    lines.push('这几个参数是你指定的（写死在话里，或在对话框里选的），我按原样提交：' + lockedLabels.join(' · ') + '；上游要是不接受，这次生成的积分全额退回。')
   }
   if (task.status === 'failed') {
     lines.push('这次没有生成出来：' + (task.error || '上游没有返回结果') + '。')

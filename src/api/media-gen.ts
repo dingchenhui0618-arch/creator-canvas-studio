@@ -44,6 +44,8 @@ export type MediaModel = {
   referenceVerified: boolean
   modes: MediaMode[]
   ratios: string[]
+  // 画质档位（r342）：只有图片有，视频在这一项上是空数组（视频的清晰度在 resolutions 里）
+  qualities: string[]
   durations: number[]
   resolutions: string[]
   credits: number
@@ -86,6 +88,8 @@ export type MediaTask = {
   mode: string
   ratio: string
   size: string
+  // 图片画质（r342）：'' = 这次没指定、上游按自己的默认档出（老任务没有这个字段，也是空串）
+  quality: string
   duration: number | null
   resolution: string
   assets: MediaTaskAsset[]
@@ -119,6 +123,10 @@ export type MediaGenerateInput = {
   assets?: string[]
   duration?: number
   resolution?: string
+  // 图片画质（r342）：只认 low / medium / high，不给就不传、走上游默认档。
+  // 为什么不在前端做联合类型：与比例 / 清晰度一个口径——能选什么由服务端白名单定，
+  // 前端写死一套迟早和服务端对不上（服务端会以 MEDIA_QUALITY 拒掉表外的值）。
+  quality?: string
 }
 
 // 生成一次就动了一次余额：让外壳顶栏的余额重新读一遍（r313）。

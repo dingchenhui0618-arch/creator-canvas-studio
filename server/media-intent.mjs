@@ -13,7 +13,7 @@
 //  - 自然语言触发词后面必须有断点，「生成视频教程的文案」仍然按普通对话处理；
 //  - 参数（比例 / 尺寸 / 秒数 / 清晰度）从话里抠出来，抠出来的词不进提示词；
 //    写死的值放进 locked，交给 server/media-models.mjs 原样提交。
-import { VIDEO_RESOLUTIONS, defaultModelFor, findModel, normalizeRatio } from './media-models.mjs'
+import { IMAGE_QUALITIES, VIDEO_RESOLUTIONS, defaultModelFor, findModel, halfWidthDigits, normalizeRatio } from './media-models.mjs'
 
 // 生成上限与 server/routes/media-gen.mjs 的 MAX_PROMPT_CHARS 一致：那边才是真拒绝的地方
 const MAX_PROMPT_CHARS = 1200
@@ -148,7 +148,14 @@ function matchLead(text) {
   return null
 }
 
-/** 从话里抠参数：比例 / 尺寸 / 秒数 / 清晰度。抠出来的词要从提示词里删掉，别让上游当画面描述。 */
+/**
+ * 从话里抠参数：比例 / 尺寸 / 秒数 / 清晰度 / 画质。抠出来的词要从提示词里删掉，别让上游当画面描述。
+ *
+ * r342 两处补丁，都来自生产上的真事：
+ *  1) 全角冒号与全角数字：中文输入法打的是「3：4」，旧的半角正则不认——图按 1:1 出来了，
+ *     而「3 4的比例」还留在提示词里被当成画面描述（参数既没生效、又污染画面）。
+ *  2) 参数后面的连接词一起吃掉：「3：4的比例」整段都算参数，抠完不能只剩「…图 的比例」。
+ */
 function extractParams(kind, spec, body) {
   const notes = []
   const locked = {}
@@ -157,11 +164,13 @@ function extractParams(kind, spec, body) {
   let size = ''
   let duration = kind === 'video' ? spec.durations[0] : null
   let resolution = kind === 'video' ? spec.resolutions[0] : ''
+  let quality = ''
 
-  // 1) 比例：先认 n:m，再认「竖屏 / 横屏 / 方形」
-  const mRatio = /(\d{1,2})\s*:\s*(\d{1,2})/.exec(rest)
+  // 1) 比例：先认 n:m（半角 / 全角冒号 / 「比」），再认「竖屏 / 横屏 / 方形」
+  const mRatio = /([0-9０-９]{1,2})\s*[:：∶]\s*([0-9０-９]{1,2})\s*(?:的)?\s*(?:比例|画幅|构图)?/.exec(rest)
+    || /([0-9０-９]{1,2})\s*比\s*([0-9０-９]{1,2})\s*(?:的)?\s*(?:比例|画幅)?/.exec(rest)
   if (mRatio) {
-    const wanted = normalizeRatio(mRatio[1] + ':' + mRatio[2])
+    const wanted = normalizeRatio(halfWidthDigits(mRatio[1]) + ':' + halfWidthDigits(mRatio[2]))
     rest = rest.replace(mRatio[0], ' ')
     if (wanted) {
       ratio = wanted
@@ -181,10 +190,10 @@ function extractParams(kind, spec, body) {
   }
 
   // 2) 尺寸：图片认「2048x2048 / 2K / 4K」；视频也认「1920x1080」并换算成比例与清晰度
-  const mSize = /(\d{2,4})\s*[x×*]\s*(\d{2,4})/i.exec(rest)
+  const mSize = /([0-9０-９]{2,4})\s*[x×*＊]\s*([0-9０-９]{2,4})\s*(?:的)?\s*(?:尺寸|大小|分辨率)?/i.exec(rest)
   if (mSize) {
-    const w = Number(mSize[1])
-    const h = Number(mSize[2])
+    const w = Number(halfWidthDigits(mSize[1]))
+    const h = Number(halfWidthDigits(mSize[2]))
     rest = rest.replace(mSize[0], ' ')
     if (w >= 64 && h >= 64 && w <= 4096 && h <= 4096) {
       if (kind === 'image') {
@@ -219,11 +228,24 @@ function extractParams(kind, spec, body) {
     }
   }
 
+  if (kind === 'image') {
+    // 2.5) 画质（r342）：只认能确定是画质说法的那几个词。
+    //      不把光秃秃的「标准」「普通」当画质——「标准流程」「普通背景」是画面描述，不是参数。
+    const mQuality = /(高清|超清|高画质|精修|标清|标准画质|普通画质|低清|快速出图)\s*(?:的)?\s*(?:画质|质量|清晰度)?/.exec(rest)
+    if (mQuality) {
+      rest = rest.replace(mQuality[0], ' ')
+      const word = mQuality[1]
+      quality = /高清|超清|高画质|精修/.test(word) ? 'high' : /标清|标准画质|普通画质/.test(word) ? 'medium' : 'low'
+      // 用户自己写了画质：这份是「指定」的，回答里要说清，上游不收就失败全额退回
+      locked.quality = true
+    }
+  }
+
   if (kind === 'video') {
     // 3) 秒数：写死就认，超出 1–60 才退回默认并说明
-    const mDuration = /(\d{1,3})\s*(?:秒|s\b)/i.exec(rest)
+    const mDuration = /([0-9０-９]{1,3})\s*(?:秒|s\b|Ｓ)\s*(?:的)?\s*(?:时长|秒数)?/i.exec(rest)
     if (mDuration) {
-      const wanted = Number(mDuration[1])
+      const wanted = Number(halfWidthDigits(mDuration[1]))
       rest = rest.replace(mDuration[0], ' ')
       if (Number.isInteger(wanted) && wanted >= 1 && wanted <= 60) {
         duration = wanted
@@ -233,9 +255,9 @@ function extractParams(kind, spec, body) {
       }
     }
     // 4) 清晰度：写死就认
-    const mResolution = /(\d{3,4})\s*p\b/i.exec(rest)
+    const mResolution = /([0-9０-９]{3,4})\s*[pPＰ]\s*(?:的)?\s*(?:分辨率|清晰度)?/.exec(rest)
     if (mResolution) {
-      const wanted = mResolution[1] + 'p'
+      const wanted = halfWidthDigits(mResolution[1]) + 'p'
       rest = rest.replace(mResolution[0], ' ')
       if (VIDEO_RESOLUTIONS.includes(wanted) || spec.resolutions.includes(wanted)) resolution = wanted
       else {
@@ -245,7 +267,43 @@ function extractParams(kind, spec, body) {
     }
   }
 
-  return { rest, ratio, size, duration, resolution, notes, locked }
+  return { rest, ratio, size, duration, resolution, quality, notes, locked }
+}
+
+/**
+ * 下拉里选的那几个参数（r342）：选了就按选的走，没选就跟随提示词。
+ *
+ * 为什么不把选择拼进提示词：拼进去就是让上游把「9:16」当画面描述——生产上已经出现过一次
+ * （提示词里留着「3 4的比例」，出图跟着画歪）。所以选择只走参数通道；
+ * 文本里写的那份照样被抠掉，只是不再决定实际值。
+ * 选了表外的档（3:4 / 4:5）按「写死」处理：原样提交，上游不收就失败全额退回。
+ */
+function applyPicked(kind, spec, params, overrides = {}) {
+  const picked = overrides && typeof overrides === 'object' ? overrides : {}
+  const ratio = normalizeRatio(picked.ratio)
+  if (ratio) {
+    params.ratio = ratio
+    if (spec.ratios.includes(ratio)) delete params.locked.ratio
+    else params.locked.ratio = true
+  }
+  const quality = String(picked.quality || '').trim().toLowerCase()
+  if (IMAGE_QUALITIES.includes(quality)) {
+    params.quality = quality
+    params.locked.quality = true
+  }
+  if (kind !== 'video') return
+  const duration = picked.duration === undefined || picked.duration === null || picked.duration === '' ? null : Number(picked.duration)
+  if (Number.isInteger(duration) && duration >= 1 && duration <= 60) {
+    params.duration = duration
+    if (spec.durations.includes(duration)) delete params.locked.duration
+    else params.locked.duration = true
+  }
+  const resolution = String(picked.resolution || '').trim().toLowerCase()
+  if (/^[0-9]{3,4}p$/.test(resolution)) {
+    params.resolution = resolution
+    if (spec.resolutions.includes(resolution)) delete params.locked.resolution
+    else params.locked.resolution = true
+  }
 }
 
 /** 1920x1080 → 16:9；1024x1536 → 9:16。约不出来的（如 1000x999）就回空。 */
@@ -261,9 +319,11 @@ function reduceRatio(w, h) {
 /**
  * 从一句话里认出「要生成图片 / 视频」以及参数。
  *
- * @returns null（不是生成指令）| { kind, prompt, model, ratio, size, duration, resolution, notes, locked, needsPrompt, lead } | { kind, code, error }
+ * @param raw 用户这句话
+ * @param overrides 界面下拉里选的参数（r342）：{ ratio, quality, duration, resolution }，没选就不传
+ * @returns null（不是生成指令）| { kind, prompt, model, ratio, size, duration, resolution, quality, notes, locked, needsPrompt, lead } | { kind, code, error }
  */
-export function parseMediaIntent(raw) {
+export function parseMediaIntent(raw, overrides = {}) {
   const text = String(raw || '').trim()
   if (!text) return null
 
@@ -304,6 +364,8 @@ export function parseMediaIntent(raw) {
   }
 
   const params = extractParams(kind, spec, body)
+  // 下拉里选过的：盖过文本里的那份；文本里那份照样已经从提示词里抠掉了
+  applyPicked(kind, spec, params, overrides)
   notes.push(...params.notes)
   body = params.rest
 
@@ -326,6 +388,7 @@ export function parseMediaIntent(raw) {
     model,
     ratio: params.ratio,
     size: params.size,
+    quality: params.quality,
     duration: params.duration,
     resolution: params.resolution,
     notes,

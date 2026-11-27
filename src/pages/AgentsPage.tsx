@@ -499,7 +499,10 @@ function formatBytes(bytes: number) {
   return (bytes / 1024 / 1024).toFixed(1) + gap + 'MB'
 }
 
-// 最近生成那一行要能用一句话说清「多大、什么比例、几秒」，否则清单只是堆任务号
+// 画质的三档值来自服务端白名单（low / medium / high），界面只负责翻成中文（r342）。
+const QUALITY_LABEL: Record<string, string> = { low: '快速', medium: '标准', high: '高清' }
+
+// 最近生成那一行要能用一句话说清「多大、什么比例、几秒、什么画质」，否则清单只是堆任务号
 function describeTask(task: MediaTask) {
   const parts: string[] = []
   if (task.ratio) parts.push(task.ratio)
@@ -507,6 +510,8 @@ function describeTask(task: MediaTask) {
     if (task.duration) parts.push(task.duration + 's')
     if (task.resolution) parts.push(task.resolution)
   }
+  // 空串 = 这次没指定画质：不写「默认」，免得像是我们替他选了某一档
+  if (task.kind === 'image' && task.quality) parts.push('画质 ' + (QUALITY_LABEL[task.quality] || task.quality))
   if (task.assets?.length) parts.push('参考 ' + task.assets.length)
   if (task.status === 'succeeded' && task.file?.bytes) parts.push(formatBytes(task.file.bytes))
   return parts.join(' · ') || (task.kind === 'image' ? '图片' : '视频')
@@ -611,6 +616,19 @@ function MediaComposer({
 }) {
   const image = kind === 'image'
   const [selected, setSelected] = useState<MediaSelection>({ model: '', mode: '', ratio: '', duration: 0, resolution: '' })
+  // 画质（r342）：只有图片有这一档，默认空串 = 不传、走上游自己的默认档（与这条改动之前完全一致）。
+  // 为什么不并进 selected：selected 是「按模型规格兜底」的那一组，画质不在「再来一次」要搬的参数里，
+  // 混进去会让换模型那一下把它一起清掉。
+  //
+  // 为什么还要一个 ref：提交要读「这一次真正要用的那一档」。「再来一次」把这条任务的画质回填进来后
+  // 立刻提交，state 那份要等下一帧才生效（闭包里还是上一档，等于拿错画质又扣一次积分）；
+  // ref 在同一个事件里就生效。state 只负责显示。
+  const [quality, setQuality] = useState('')
+  const qualityRef = useRef('')
+  const pickQuality = (value: string) => {
+    qualityRef.current = value
+    setQuality(value)
+  }
   const [prompt, setPrompt] = useState('')
   const [assets, setAssets] = useState<MediaAsset[]>([])
   const [library, setLibrary] = useState<MediaAsset[]>([])
@@ -974,9 +992,19 @@ function MediaComposer({
     }
   }
 
+  // 「再来一次」要按这条任务原来的画质再交一次（r342）：不带上就等于悄悄换了一档，
+  // 用户看到的是「同样的参数再抽一张」，出来的却不是同一档。只认当前模型允许的档位——
+  // 模型换了 / 老记录没记画质就返回空串，不把上游不认的值发出去。
+  const qualityOfTask = (item: MediaTask) => {
+    if (!image || !item.quality) return ''
+    const taskModel = catalog.find((entry) => entry.id === item.model)
+    return taskModel?.qualities.includes(item.quality) ? item.quality : ''
+  }
+
   // 真正交一次生成（r283）：界面上的「生成」「再生成一次」「最近生成里的再来一次」都走这一段。
   // 参数由调用方给死，不读闭包里的 state——「把旧任务的参数填回输入框、紧接着提交」那种调用
   // 如果读 state，拿到的是还没生效的上一帧，等于用错参数又扣一次积分。
+  // 画质同一口径：走 qualityRef（调用方先回填再提交），不在这一帧读 state。
   const runGeneration = async (input: MediaRetryInput, priced: number) => {
     if (active) return
     setBusy(true)
@@ -984,6 +1012,10 @@ function MediaComposer({
     setPollError('')
     setTask(null)
     try {
+      // 画质只属于图片，而且只在这个模型允许的档位里才带：档位表外服务端会直接拒（MEDIA_QUALITY）；
+      // 「跟随默认」= 整键不传，走上游自己的默认档（服务端契约：未选不传该键）。
+      const wantedQuality = image ? qualityRef.current : ''
+      const modelQualities = catalog.find((item) => item.id === input.modelId)?.qualities ?? []
       const payload = {
         prompt: input.prompt,
         model: input.modelId,
@@ -991,6 +1023,7 @@ function MediaComposer({
         ratio: input.ratio,
         // 文生模式不收素材：素材留在托架里不丢，但这次不发给上游（服务端也会拒）
         assets: input.assetIds,
+        ...(wantedQuality && modelQualities.includes(wantedQuality) ? { quality: wantedQuality } : {}),
       }
       const response = image
         ? await generateMediaImage(payload)
@@ -998,6 +1031,7 @@ function MediaComposer({
       setTask(response.task)
       if (response.task.status !== 'processing') setRecentToken((value) => value + 1)
       if (response.task.status === 'failed') setError(response.task.error || '生成失败')
+      // 外壳顶栏的余额由 src/api/client.ts 对写请求统一派发 vq:credits（r342），这里只刷新本页的价格行
       onCreditsChanged()
     } catch (caught) {
       const failure = caught as Error & {
@@ -1061,6 +1095,9 @@ function MediaComposer({
       resolution: plan.input.resolution,
     })
     setAssets(plan.assets)
+    // 画质跟着这条任务回填（r342）：和比例 / 时长一样，让人看见跑的是哪一份；
+    // pickQuality 顺手把 ref 也改掉，紧接着的提交读到的就是刚回填的这一档。
+    pickQuality(qualityOfTask(item))
     setRefError('')
     setRecentError('')
     setZoomTask(null)
@@ -1584,6 +1621,23 @@ function MediaComposer({
             onChange={(value) => setSelected((current) => ({ ...current, ratio: value }))}
             disabled={active || !model}
           />
+          {/* 画质（r342）：只有图片有这一档。默认「跟随默认」= 不传，走上游自己的默认档；
+              选了就原样提交——这三档还没真调过上游，界面上不假装它一定被接受。 */}
+          {image ? (
+            <Capsule
+              label="画质"
+              value={quality}
+              options={[
+                { value: '', label: '跟随默认' },
+                { value: 'low', label: '快速' },
+                { value: 'medium', label: '标准' },
+                { value: 'high', label: '高清' },
+              ]}
+              onChange={pickQuality}
+              disabled={active}
+              title="选了就按这一档提交（上游不接受会失败并全额退回）；「跟随默认」= 不传，走上游默认档"
+            />
+          ) : null}
           {!image ? (
             <Capsule
               label="时长"

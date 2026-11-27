@@ -275,6 +275,28 @@ export function contextMessages(messages, maxCount = 30, maxChars = 60000) {
 }
 
 /** 给会话起个标题：第一句用户输入的前 24 个字，去掉换行。 */
+/**
+ * 这条对话里最近一张用户发过的图（r342）：生成指令自己没带附件时沿用它当参考。
+ *
+ * 生产实测（2026-11-27）：用户先在对话里传了商品图，随后那句「生成一张…」没有附件，
+ * 于是被当成纯文生图——出图跟参考图毫无关系，用户看到的就是「参考图没被遵循」。
+ * 只回看用户自己发过的消息（助手回答里不带文件）；文件名带回去，回答里要写明用的是哪张。
+ */
+export function latestConversationImage(conv, within = 6) {
+  const messages = Array.isArray(conv?.messages) ? conv.messages : []
+  // 只看最近几句（默认 6 条）：一上来传了张图，半小时后随口生成一张，不该还在照那张画。
+  // 「上一次带图」本来就是这个意思——越久越不像是这一次的参考。
+  const from = Math.max(0, messages.length - Math.max(2, Number(within) || 6))
+  for (let index = messages.length - 1; index >= from; index -= 1) {
+    const item = messages[index]
+    if (item?.role !== 'user') continue
+    const files = Array.isArray(item.files) ? item.files : []
+    const image = files.find((file) => file && file.kind === 'image' && file.id)
+    if (image) return image
+  }
+  return null
+}
+
 export function titleFrom(text) {
   const line = String(text || '').replace(/\s+/g, ' ').trim()
   return line.slice(0, 24) || '新对话'

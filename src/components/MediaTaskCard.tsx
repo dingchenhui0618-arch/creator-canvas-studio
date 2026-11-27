@@ -2,13 +2,16 @@
 //
 // 会话里只存任务号与规格：进度与结果按任务号轮询 /api/media/tasks/:id（只读元数据、不打上游、
 // 不扣积分），所以关掉页面回来、换设备打开，这张卡片照样能接着看到结果，而不是一直写着「生成中」。
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AlertCircle, Download, Loader2 } from 'lucide-react'
 import { getMediaTask } from '../api/media-gen'
 import type { MediaTask } from '../api/media-gen'
 import type { ChatMediaInfo } from '../api/chat'
 
 const POLL_MS = 2500
+
+// 画质的三档值来自服务端白名单（low / medium / high），界面只负责翻成中文。
+const QUALITY_LABEL: Record<string, string> = { low: '快速', medium: '标准', high: '高清' }
 
 function bytesLabel(bytes: number) {
   if (!bytes) return ''
@@ -26,6 +29,11 @@ export default function MediaTaskCard({ media }: { media: ChatMediaInfo }) {
   const [gone, setGone] = useState('')
   const [waited, setWaited] = useState(0)
   const status = task?.status ?? media.status
+  // 积分实时（r342）：生成任务收尾（成功 / 失败）与退款到账都会动余额，得让右上角重读一次。
+  // 两个 ref 记「这条提示过没有」——每 2.5 秒轮询都派发的话，顶栏会跟着一起重读一下午；
+  // 只有越过边界的那一次有新信息：processing → 成功 / 失败，refunded 由 false 变 true。
+  const settledRef = useRef(media.status !== 'processing')
+  const refundedRef = useRef(Boolean(media.credits.refunded))
 
   // 还在跑才轮询：成功 / 失败之后一次都不再打服务端
   useEffect(() => {
@@ -40,6 +48,12 @@ export default function MediaTaskCard({ media }: { media: ChatMediaInfo }) {
         if (cancelled) return
         setTask(result.task)
         setWaited(Date.now() - base)
+        // 越过边界才派发一次：vq:credits 是外壳顶栏「余额重读」的唯一信号（src/App.tsx）
+        const settledNow = !settledRef.current && result.task.status !== 'processing'
+        const refundedNow = !refundedRef.current && Boolean(result.task.credits?.refunded)
+        if (settledNow || refundedNow) window.dispatchEvent(new Event('vq:credits'))
+        settledRef.current = settledRef.current || result.task.status !== 'processing'
+        refundedRef.current = refundedRef.current || Boolean(result.task.credits?.refunded)
         if (result.task.status === 'processing') timer = window.setTimeout(() => void tick(), POLL_MS)
       } catch (caught) {
         if (cancelled) return
@@ -69,9 +83,16 @@ export default function MediaTaskCard({ media }: { media: ChatMediaInfo }) {
   const refunded = current ? current.credits.refunded : media.credits.refunded
   // 带图生成要写在规格里：不然用户看不出「这张是照我传的图画的」，还会以为是纯文字那条路
   const refs = media.assets?.length ?? 0
+  // 选了画质就写进规格：不写的话用户没法判断「这次的图跟上次差在哪、钱差在哪」
+  const qualityLabel = media.quality ? (QUALITY_LABEL[media.quality] || media.quality) : ''
   const spec = (
     media.kind === 'image'
-      ? [media.modelLabel || media.model, media.ratio, media.size]
+      ? [
+          media.modelLabel || media.model,
+          media.ratio,
+          media.size,
+          qualityLabel ? '画质 ' + qualityLabel : '',
+        ]
       : [media.modelLabel || media.model, media.ratio, media.duration ? media.duration + ' 秒' : '', media.resolution]
   )
     .concat(refs ? ['参考 ' + refs + ' 张'] : [])

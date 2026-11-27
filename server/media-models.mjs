@@ -46,22 +46,46 @@ export function sizeFromRatio(ratio, longSide = 1536) {
 
 /** 「2048x2048」「2048×2048」「2048 * 2048」都认；不是这种形状就回空，交给比例那条路。 */
 export function normalizeSize(value) {
-  const matched = /^(\d{2,4})\s*[x×*]\s*(\d{2,4})$/i.exec(String(value || '').trim())
+  const matched = /^([0-9０-９]{2,4})\s*[x×*＊]\s*([0-9０-９]{2,4})$/i.exec(String(value || '').trim())
   if (!matched) return ''
-  const w = Number(matched[1])
-  const h = Number(matched[2])
+  const w = Number(halfWidthDigits(matched[1]))
+  const h = Number(halfWidthDigits(matched[2]))
   if (!w || !h || w < 64 || h < 64 || w > 4096 || h > 4096) return ''
   return w + 'x' + h
 }
 
+/**
+ * 全角数字转半角（r342）：中文输入法打出来的「３：４」和「3:4」是一回事。
+ *
+ * 生产实测（2026-11-27）：用户在对话框里写「生成一张欧美女星带首饰的图 3：4的比例」，
+ * 只认半角冒号的旧正则没命中——图按 1:1 出了，而「3 4的比例」还留在提示词里被当成画面描述。
+ */
+export function halfWidthDigits(value) {
+  return String(value || '')
+    .replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0))
+    .replace(/[：∶]/g, ':')
+    .replace(/＊/g, '*')
+}
+
 export function normalizeRatio(value) {
-  const matched = /^(\d{1,2})\s*:\s*(\d{1,2})$/.exec(String(value || '').trim())
+  const matched = /^([0-9０-９]{1,2})\s*[:：∶]\s*([0-9０-９]{1,2})$/.exec(String(value || '').trim())
   if (!matched) return ''
-  const a = Number(matched[1])
-  const b = Number(matched[2])
+  const a = Number(halfWidthDigits(matched[1]))
+  const b = Number(halfWidthDigits(matched[2]))
   if (!a || !b || a > 64 || b > 64) return ''
   return a + ':' + b
 }
+
+/**
+ * 图片画质（r342）：上游 OpenAI 兼容通道的 quality 字段。
+ *
+ * 为什么默认「不传」：这三档还没真调过上游（和 verified=false 一个口径），
+ * 传了上游不认就是把一次生成做成失败——所以在界面上它是「选才传」，默认走上游自己的默认档，
+ * 选了的原样提交，上游不接受就失败全额退回。
+ * 注意价钱：现在三档同一个价（imageCredits 只看张数），上游按画质计价后的对账口径还没拿到，
+ * 这一条写在 docs/r342 的边界里，不假装已经按画质定价。
+ */
+export const IMAGE_QUALITIES = ['low', 'medium', 'high']
 
 export const VIDEO_RATIOS = ['9:16', '16:9', '1:1']
 export const VIDEO_DURATIONS = [4, 8]
@@ -202,6 +226,8 @@ export function publicModel(spec) {
       videoRefs: mode.videoRefs,
     })),
     ratios: spec.ratios.slice(),
+    // 图片才有画质（视频的清晰度在 resolutions 里）：没选 = 不传 = 上游默认
+    qualities: spec.kind === 'image' ? IMAGE_QUALITIES.slice() : [],
     durations: spec.durations.slice(),
     resolutions: spec.resolutions.slice(),
     credits: base,
@@ -284,6 +310,16 @@ export function resolveSelection(input = {}) {
       lockedOut.ratio = true
     }
     if (!size) throw invalid('比例只能是 ' + spec.ratios.join('、'), 'MEDIA_RATIO')
+    // 画质（r342）：空 = 不传，走上游默认档；白名单之外的只有「写死的」才放行并原样提交
+    const wantQuality = String(input.quality || '').trim().toLowerCase()
+    let quality = ''
+    if (wantQuality) {
+      if (IMAGE_QUALITIES.includes(wantQuality)) quality = wantQuality
+      else if (locked.quality) {
+        quality = wantQuality
+        lockedOut.quality = true
+      } else throw invalid('画质只能是 ' + IMAGE_QUALITIES.join('、'), 'MEDIA_QUALITY')
+    }
     return {
       kind,
       spec,
@@ -295,6 +331,7 @@ export function resolveSelection(input = {}) {
       modeSpec: mode,
       ratio,
       size,
+      quality,
       duration: null,
       resolution: '',
       credits: spec.credits(),
@@ -336,6 +373,8 @@ export function resolveSelection(input = {}) {
     modeSpec: mode,
     ratio,
     size: '',
+    // 画质只属于图片（视频的清晰度是 resolution），这里恒为空，形状统一
+    quality: '',
     duration,
     resolution,
     credits: spec.credits({ duration, resolution }),

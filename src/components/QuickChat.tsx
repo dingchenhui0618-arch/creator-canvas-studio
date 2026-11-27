@@ -10,7 +10,7 @@ import {
   streamChatMessage,
   uploadChatFile,
 } from '../api/chat'
-import type { ChatConversation, ChatFile, ChatSearchStatus, ChatSummary, ChatToolOptions } from '../api/chat'
+import type { ChatConversation, ChatFile, ChatMediaOptions, ChatSearchStatus, ChatSummary, ChatToolOptions } from '../api/chat'
 import { getCredits } from '../api/credits'
 import { safeFetch } from '../api/client'
 import { renderMarkdown } from '../lib/markdown'
@@ -62,6 +62,180 @@ function looksLikeGenCommand(draft: string) {
   const polite = /^(请|帮我|帮忙|麻烦|给我|我想|我要|能不能|可以)+/.exec(text)
   const rest = polite ? text.slice(polite[0].length) : text
   return /^(出|做|来|拍|整|生成|搞|画)(一|两|个|条|段|支|张|幅|期){0,2}\s*(短视频|视频|图片|图|海报|封面)/.test(rest)
+}
+
+// ── 生成设置（r342） ────────────────────────────────────────────────────────
+// 用户在对话框里选的比例 / 画质 / 时长 / 分辨率走请求体的 media 字段，不再写进提示词、也不被
+// 服务端的默认档顶掉。三件事在这里定死口径：
+//  ① 「跟随提示词 / 跟随默认」= 空值 = 这个键根本不发（服务端契约就是「未选不传」），
+//     所以默认状态下这一整块控件等于不存在，行为和这条改动之前完全一致；
+//  ② 档位只画控件、不做判定：哪一档有效、上游收不收在服务端（server/media-models.mjs 的
+//     IMAGE_QUALITIES / VIDEO_RATIOS / VIDEO_DURATIONS / VIDEO_RESOLUTIONS），前端写死一套迟早对不上；
+//  ③ 界面写中文、请求发服务端的值：用户认的是「高清」，不是 high。
+type GenChoice = { value: string; label: string; short: string }
+
+// 比例给的是「在对话框里能选」的那几个常用档，不是全部：要更冷门的比例仍然可以直接写在提示词里
+// （服务端认写死的参数并原样提交），两个入口都留着。
+const GEN_IMAGE_RATIOS: GenChoice[] = [
+  { value: '', label: '跟随提示词', short: '提示词' },
+  { value: '1:1', label: '1:1', short: '1:1' },
+  { value: '9:16', label: '9:16', short: '9:16' },
+  { value: '16:9', label: '16:9', short: '16:9' },
+  { value: '3:4', label: '3:4', short: '3:4' },
+  { value: '4:5', label: '4:5', short: '4:5' },
+]
+
+const GEN_VIDEO_RATIOS: GenChoice[] = [
+  { value: '', label: '跟随提示词', short: '提示词' },
+  { value: '9:16', label: '9:16', short: '9:16' },
+  { value: '16:9', label: '16:9', short: '16:9' },
+  { value: '1:1', label: '1:1', short: '1:1' },
+]
+
+// 画质三档的值与服务端白名单同名（low / medium / high）：界面上的中文只是显示名。
+const GEN_QUALITIES: GenChoice[] = [
+  { value: '', label: '跟随默认', short: '默认' },
+  { value: 'low', label: '快速', short: '快速' },
+  { value: 'medium', label: '标准', short: '标准' },
+  { value: 'high', label: '高清', short: '高清' },
+]
+
+const GEN_DURATIONS: GenChoice[] = [
+  { value: '', label: '跟随提示词', short: '提示词' },
+  { value: '4', label: '4 秒', short: '4 秒' },
+  { value: '8', label: '8 秒', short: '8 秒' },
+]
+
+const GEN_RESOLUTIONS: GenChoice[] = [
+  { value: '', label: '跟随提示词', short: '提示词' },
+  { value: '480p', label: '480p', short: '480p' },
+  { value: '720p', label: '720p', short: '720p' },
+]
+
+/**
+ * 这一句是出图还是出视频（r342）：只决定参数行画哪几个控件。
+ * 真判定仍在服务端（server/media-intent.mjs）——这里认错最多是多画 / 少画一个下拉，
+ * 不会让服务端按错的参数扣费，所以用一个够用的词序判断，不做第二套语法。
+ */
+function genCommandKind(draft: string): '' | 'image' | 'video' {
+  const text = draft.replace(/^\s+/, '')
+  if (!looksLikeGenCommand(text)) return ''
+  // 只看开头一小段：「参考这个视频的节奏，出一张图」不该因为后半句有「视频」就被当成出视频
+  const head = text.slice(0, 24)
+  const video = head.search(/视频|短片|影片/)
+  const image = head.search(/图片|图|海报|封面|插画|照片|头像|壁纸/)
+  if (video >= 0 && (image < 0 || video < image)) return 'video'
+  if (image >= 0) return 'image'
+  return /^\/生视频/.test(text) ? 'video' : 'image'
+}
+
+/**
+ * 这一轮要发给服务端的 media（r342）：只放真正选了的键，一个都没选就整块不带。
+ * 取值都先对一遍档位：切图片 / 视频时上一档可能不在新控件的档位里（3:4 没有视频档），
+ * 对不上的当没选——渲染出的当前值也是同一套口径，界面看到的和发出去的不会两样。
+ */
+function mediaChoiceOf(
+  draft: string,
+  picked: { ratio: string; quality: string; duration: string; resolution: string },
+): ChatMediaOptions | undefined {
+  const kind = genCommandKind(draft)
+  if (!kind) return undefined
+  const valid = (options: GenChoice[], value: string) =>
+    options.some((option) => option.value === value) ? value : ''
+  const choice: ChatMediaOptions = {}
+  const ratio = valid(kind === 'video' ? GEN_VIDEO_RATIOS : GEN_IMAGE_RATIOS, picked.ratio)
+  if (ratio) choice.ratio = ratio
+  if (kind === 'video') {
+    const duration = valid(GEN_DURATIONS, picked.duration)
+    if (duration) choice.duration = Number(duration)
+    const resolution = valid(GEN_RESOLUTIONS, picked.resolution)
+    if (resolution) choice.resolution = resolution
+  } else {
+    const quality = valid(GEN_QUALITIES, picked.quality)
+    // 档位表里只有这三档，对上了才发：服务端的白名单之外它会直接拒（MEDIA_QUALITY）
+    if (quality === 'low' || quality === 'medium' || quality === 'high') choice.quality = quality
+  }
+  return Object.keys(choice).length ? choice : undefined
+}
+
+/**
+ * 生成设置的一枚下拉胶囊（r342）：与输入卡里的能力按钮同一套 28px 胶囊语言。
+ * 为什么是下拉而不是把档位摊平：390 宽一行放不下「6 个比例 + 4 档画质」，
+ * 摊平会折成三四行、把输入框往上顶；下拉是同一条紧凑行，当前值照样一眼看得见。
+ */
+function GenSelect({
+  label,
+  value,
+  options,
+  onChange,
+  disabled,
+  title,
+}: {
+  label: string
+  value: string
+  options: GenChoice[]
+  onChange: (value: string) => void
+  disabled?: boolean
+  title?: string
+}) {
+  const [open, setOpen] = useState(false)
+  const boxRef = useRef<HTMLSpanElement | null>(null)
+  const current = options.find((option) => option.value === value) ?? options[0]
+
+  // 点空白处 / Esc 收起：和参数胶囊的菜单同一套关闭方式，键盘用户不至于卡在菜单里出不来
+  useEffect(() => {
+    if (!open) return
+    const onPointerDown = (event: MouseEvent) => {
+      if (!boxRef.current?.contains(event.target as Node)) setOpen(false)
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [open])
+
+  return (
+    <span className="qc-gen-select" ref={boxRef}>
+      <button
+        type="button"
+        className={'qc-gen-chip' + (value ? ' is-set' : '')}
+        onClick={() => setOpen((state) => !state)}
+        disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={label + '：' + current.label}
+        title={title}
+      >
+        <span className="qc-gen-chip-label">{label}</span>
+        <em>{current.short}</em>
+        <ChevronDown size={12} />
+      </button>
+      {open ? (
+        <span className="qc-gen-menu" role="listbox" aria-label={label}>
+          {options.map((option) => (
+            <button
+              type="button"
+              role="option"
+              aria-selected={option.value === value}
+              className={'qc-gen-opt' + (option.value === value ? ' is-active' : '')}
+              key={option.value || option.label}
+              onClick={() => {
+                onChange(option.value)
+                setOpen(false)
+              }}
+            >
+              {option.label}
+            </button>
+          ))}
+        </span>
+      ) : null}
+    </span>
+  )
 }
 
 /** 图片没有「多少字」，只能报体积；四舍五入到 KB，小图别显示成 0 KB。 */
@@ -119,6 +293,13 @@ export default function QuickChat({ onToast }: { onToast?: ToastFn }) {
   // 手机上一列排（≤900px）：会话列表默认收成一条窄条，点开才展开。
   // 桌面左栏不受影响——这个状态只决定窄屏那条列表展不展开（CSS 里只在窄屏生效）。
   const [listOpen, setListOpen] = useState(false)
+  // 生成设置（r342）：比例 / 画质 / 时长 / 分辨率。空串 = 跟随提示词（那个键不发给服务端）。
+  // 为什么是四个独立的 state 而不是按图片 / 视频各存一份：一张对话里这两个指令会交替出现，
+  // 各自记着上次选的档反而会在「上一条是视频」时把图片的比例顶成空——渲染时按当前控件档位兜底更省事。
+  const [mediaRatio, setMediaRatio] = useState('')
+  const [mediaQuality, setMediaQuality] = useState('')
+  const [mediaDuration, setMediaDuration] = useState('')
+  const [mediaResolution, setMediaResolution] = useState('')
   // 哪一段回答刚复制过：按钮上给 1.6 秒「已复制」，不然点完没有任何反馈
   const [copiedId, setCopiedId] = useState('')
   const fileRef = useRef<HTMLInputElement | null>(null)
@@ -291,6 +472,13 @@ export default function QuickChat({ onToast }: { onToast?: ToastFn }) {
     const content = draft.trim()
     if (!content || sending || attaching) return
     const files = attached
+    // 生成设置要在这一句还留在 draft 里的时候算：下面 setDraft('') 之后就算不出「这句是图还是视频」了
+    const media = mediaChoiceOf(content, {
+      ratio: mediaRatio,
+      quality: mediaQuality,
+      duration: mediaDuration,
+      resolution: mediaResolution,
+    })
     setSending(true)
     setSendingImages(files.some(isImageFile))
     setError('')
@@ -323,7 +511,7 @@ export default function QuickChat({ onToast }: { onToast?: ToastFn }) {
       conversationId = conversation.id
       const result = await streamChatMessage(
         conversation.id,
-        { content, tools, files: files.map((item) => item.id) },
+        { content, tools, files: files.map((item) => item.id), media },
         {
           signal: controller.signal,
           onDelta: (text) => setStreaming((value) => value + text),
@@ -366,8 +554,24 @@ export default function QuickChat({ onToast }: { onToast?: ToastFn }) {
       setSending(false)
       setSendingImages(false)
       abortRef.current = null
+      // 积分实时（r342）：这一轮扣了钱（生成指令还会再扣一笔生成积分），失败 / 停止那一轮也可能已经退回，
+      // 不管成败都让外壳重读一次余额——以前只有换路由才刷新，右上角会一直停在旧数字上（今天的投诉）。
+      window.dispatchEvent(new Event('vq:credits'))
     }
-  }, [attached, attaching, current, draft, onToast, refreshList, sending, tools])
+  }, [
+    attached,
+    attaching,
+    current,
+    draft,
+    mediaDuration,
+    mediaQuality,
+    mediaRatio,
+    mediaResolution,
+    onToast,
+    refreshList,
+    sending,
+    tools,
+  ])
 
   const stop = useCallback(() => {
     abortRef.current?.abort()
@@ -378,6 +582,35 @@ export default function QuickChat({ onToast }: { onToast?: ToastFn }) {
   // 真正的判定在 server/media-intent.mjs，这里重复的只是那句提示，不参与扣费；
   // r293 起口语也算指令（「帮我出个视频」「做个卖毛衣的短视频」），这句提示要跟着亮。
   const genCommand = looksLikeGenCommand(draft)
+  // r342：生成设置那一行只在「这句要生成」时出现；是图还是视频决定画哪几个控件。
+  const genKind = genCommandKind(draft)
+  const genRatioOptions = genKind === 'video' ? GEN_VIDEO_RATIOS : GEN_IMAGE_RATIOS
+  // 渲染时按当前档位兜底：切到视频后上一档的 3:4 不在视频档里，控件显示「跟随提示词」，
+  // 发出去的也是空（mediaChoiceOf 同一套口径），不会出现「界面写着 3:4、发出去却不是它」。
+  const ratioValue = genRatioOptions.some((option) => option.value === mediaRatio) ? mediaRatio : ''
+  const qualityValue = GEN_QUALITIES.some((option) => option.value === mediaQuality) ? mediaQuality : ''
+  const durationValue = GEN_DURATIONS.some((option) => option.value === mediaDuration) ? mediaDuration : ''
+  const resolutionValue = GEN_RESOLUTIONS.some((option) => option.value === mediaResolution) ? mediaResolution : ''
+  // 参考图会怎么用（r342）：带图生成只按第 1 张当参考；没带附件时服务端沿用这条对话里最近那张。
+  // 这句必须说出来——不说的话用户只会看到「出的图和参考图没关系」，以为是模型没照做。
+  const attachedImages = attached.filter(isImageFile)
+  const lastConversationImage = useMemo(() => {
+    const list = current?.messages ?? []
+    for (let index = list.length - 1; index >= 0; index -= 1) {
+      const message = list[index]
+      if (message.role !== 'user' || !message.files?.length) continue
+      const image = message.files.find(isImageFile)
+      if (image) return image
+    }
+    return null
+  }, [current])
+  const genRefNote = !genKind
+    ? ''
+    : attachedImages.length
+      ? '这次带 ' + attachedImages.length + ' 张图，生成按第 1 张当参考'
+      : lastConversationImage
+        ? '沿用这条对话里最近那张图当参考：' + lastConversationImage.name
+        : ''
 
   return (
     <div className="qc-root">
@@ -594,6 +827,53 @@ export default function QuickChat({ onToast }: { onToast?: ToastFn }) {
         {error && <div className="qc-error" role="alert">{error}</div>}
 
         <div className="qc-composer">
+          {/* 生成设置（r342）：只在这句会被当成生成指令时出现，放在能力行上方。
+              默认全是「跟随提示词 / 跟随默认」＝一个键都不发，行为与改动前一致；
+              选了就以这里为准，参数不再需要写进提示词（写进来的由服务端认并去掉）。 */}
+          {genKind ? (
+            <div className="qc-gen" role="group" aria-label="生成设置">
+              <div className="qc-gen-row">
+                <GenSelect
+                  label="比例"
+                  value={ratioValue}
+                  options={genRatioOptions}
+                  onChange={setMediaRatio}
+                  disabled={sending}
+                  title="这次的比例。选「跟随提示词」就由服务端从你这句里认，认不出按各自默认档"
+                />
+                {genKind === 'video' ? (
+                  <>
+                    <GenSelect
+                      label="时长"
+                      value={durationValue}
+                      options={GEN_DURATIONS}
+                      onChange={setMediaDuration}
+                      disabled={sending}
+                      title="这次的秒数。选「跟随提示词」就由服务端从你这句里认"
+                    />
+                    <GenSelect
+                      label="分辨率"
+                      value={resolutionValue}
+                      options={GEN_RESOLUTIONS}
+                      onChange={setMediaResolution}
+                      disabled={sending}
+                      title="这次的清晰度。选「跟随提示词」就由服务端从你这句里认，认不出用 720p"
+                    />
+                  </>
+                ) : (
+                  <GenSelect
+                    label="画质"
+                    value={qualityValue}
+                    options={GEN_QUALITIES}
+                    onChange={setMediaQuality}
+                    disabled={sending}
+                    title="这次出图的画质。默认跟上上游自己的默认档；选了就按这一档提交，上游不接受会失败并全额退回"
+                  />
+                )}
+              </div>
+              {genRefNote ? <p className="qc-gen-note">{genRefNote}</p> : null}
+            </div>
+          ) : null}
           <div className="qc-tools">
             {TOOL_ITEMS.map((item) => {
               const Icon = item.icon

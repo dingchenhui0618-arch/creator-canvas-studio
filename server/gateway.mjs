@@ -605,6 +605,8 @@ export async function generateImageEdit(payload = {}, options = {}) {
       size: String(payload.size || '1024x1024'),
       response_format: 'b64_json',
     }
+    // r342：画质只在用户明确选了才带上——没选就不替上游决定默认档
+    if (payload.quality) fields.quality = String(payload.quality)
     if (payload.idempotencyKey) fields.idempotency_key = payload.idempotencyKey
     let upstream
     try {

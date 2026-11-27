@@ -38,6 +38,8 @@ export async function startChatMedia(user, plan, references = []) {
     ratio: plan.ratio,
     // r293：用户在提示词里写死的尺寸 / 秒数 / 清晰度原样带上，参数不在白名单里也照样提交
     size: plan.size || '',
+    // r342：对话框里选的画质（图片才有），没选就是空 = 不传 = 上游默认档
+    quality: plan.quality || '',
     duration: plan.duration,
     resolution: plan.resolution,
     locked: plan.locked || {},

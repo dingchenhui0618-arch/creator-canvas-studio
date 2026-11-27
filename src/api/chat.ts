@@ -28,6 +28,8 @@ export type ChatMediaInfo = {
   mode?: string
   ratio: string
   size: string
+  // 图片画质（r342）：'' = 没指定、走上游默认档；卡片上要能说出这次是什么画质
+  quality?: string
   duration: number | null
   resolution: string
   prompt: string
@@ -101,7 +103,21 @@ export const getChatConversation = (id: string) =>
 export const deleteChatConversation = (id: string) =>
   request<{ ok: boolean }>('/api/chat/conversations/' + id, { method: 'DELETE' })
 
-export const sendChatMessage = (id: string, body: { content: string; tools?: Partial<ChatToolOptions>; files?: string[] }) =>
+// 生成设置（r342）：对话框里选的画面参数走这个字段，不写进提示词。
+// 为什么是「未选就不传」：「跟随提示词 / 跟随默认」必须等于这条改动之前的完全一样的行为，
+// 传空串会让服务端多一层「空值算不算写死」的歧义；所以没选就整键不出现。
+// quality 只认 low / medium / high：白名单在服务端（server/media-models.mjs 的 IMAGE_QUALITIES）。
+export type ChatMediaOptions = {
+  ratio?: string
+  quality?: 'low' | 'medium' | 'high'
+  duration?: number
+  resolution?: string
+}
+
+export const sendChatMessage = (
+  id: string,
+  body: { content: string; tools?: Partial<ChatToolOptions>; files?: string[]; media?: ChatMediaOptions },
+) =>
   request<{ ok: boolean; conversation: ChatConversation; reply: ChatMessage; model: string; cost: number; balance: number | null }>(
     '/api/chat/conversations/' + id + '/messages',
     { method: 'POST', body: JSON.stringify(body) },
@@ -144,7 +160,7 @@ function parseSseEvent(raw: string): { event: string; data: unknown } | null {
  */
 export async function streamChatMessage(
   id: string,
-  body: { content: string; tools?: Partial<ChatToolOptions>; files?: string[] },
+  body: { content: string; tools?: Partial<ChatToolOptions>; files?: string[]; media?: ChatMediaOptions },
   handlers: { onDelta?: (text: string) => void; signal?: AbortSignal } = {},
 ): Promise<ChatStreamResult> {
   const response = await safeFetch('/api/chat/conversations/' + id + '/messages/stream', {

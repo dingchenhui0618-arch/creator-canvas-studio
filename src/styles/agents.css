@@ -3375,6 +3375,85 @@
 .qc-tool-short { display: none; }
 .qc-tool:disabled { opacity: 0.6; cursor: default; }
 
+/* ---------- 生成设置（r342）：比例 / 画质 / 时长 / 分辨率 ----------
+   只在「这句会被当成生成指令」时出现在能力行上方，默认全是「跟随」——选之前一个键都不发。
+   为什么用下拉而不是把档位摊平：390 宽一行放不下 6 个比例 + 4 档画质，摊平会折成三四行、
+   把贴底的输入框往上顶；下拉是同一行、同一套 28px 胶囊，当前值照样一眼看得见。 */
+.qc-gen { display: flex; flex-direction: column; gap: 4px; }
+
+.qc-gen-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+
+/* 胶囊可缩、可换行：真到极窄处先截标签，不横向溢出（390 一行放得下三枚） */
+.qc-gen-select { position: relative; display: inline-flex; min-width: 0; }
+
+.qc-gen-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+/* 标签弱一档、值永远正文色：这一行的重点是「这次按什么出」，不是控件名 */
+.qc-gen-chip-label { flex: none; color: var(--faint); }
+.qc-gen-chip em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-style: normal;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.qc-gen-chip:hover { border-color: var(--line-strong); }
+.qc-gen-chip.is-set { border-color: var(--ink); background: var(--surface-raised); }
+.qc-gen-chip.is-set .qc-gen-chip-label { color: var(--muted); }
+.qc-gen-chip:disabled { opacity: 0.6; cursor: default; }
+
+/* 菜单往上开：这一行在输入卡顶部、贴着屏幕底部，往下开会被视口截掉 */
+.qc-gen-menu {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 4px);
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 112px;
+  padding: 4px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card);
+}
+
+.qc-gen-opt {
+  height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.qc-gen-opt:hover,
+.qc-gen-opt.is-active { background: var(--surface-soft); color: var(--ink); }
+
+/* 参考图会怎么用：一行说清，长文件名允许换行，不把输入卡撑宽 */
+.qc-gen-note { margin: 0; color: var(--faint); font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+
 .qc-credit { margin-left: auto; font-size: 14px; color: var(--faint); font-variant-numeric: tabular-nums; }
 
 .qc-input-row { display: flex; align-items: flex-end; gap: 8px; }
@@ -3943,6 +4022,9 @@
   .agx-page .qc-new,
   .agx-page .qc-side-toggle { min-height: 40px; }
   .agx-page .qc-tool { height: 40px; }
+  /* 生成设置（r342）：与能力按钮同高；下拉菜单的行也抬到 40（28px 的菜单行在拇指下太窄） */
+  .agx-page .qc-gen-chip { height: 40px; }
+  .agx-page .qc-gen-opt { height: 40px; }
 }
 
 @media (max-width: 560px) {
@@ -3982,6 +4064,8 @@
   .agx-page .qc-new,
   .agx-page .qc-side-toggle { min-height: 44px; }
   .agx-page .qc-tool { height: 44px; }
+  .agx-page .qc-gen-chip,
+  .agx-page .qc-gen-opt { height: 44px; }
 
   /* 分类条：5 个页签在 390 宽的内容列里需要 397px，而容器只有 290px。原来靠横向滚动
      （nav.css 的 nowrap + overflow-x），最后一个「投放素材」永远在屏幕外——页签变大之后
@@ -4107,6 +4191,15 @@
   background: var(--line-faint);
 }
 
+/* 生成设置的下拉胶囊与菜单行（r342）：与上面这一簇同一套按下反馈 */
+.qc-gen-chip:not(:disabled):active,
+.qc-gen-opt:not(:disabled):active {
+  color: var(--ink);
+  background: var(--line-faint);
+}
+
+.qc-gen-chip:not(:disabled):active { border-color: var(--ink); }
+
 .vq-content .agx-page .agx-tabs button:not(:disabled):active {
   color: var(--ink);
   background: var(--line-faint);
@@ -4140,7 +4233,9 @@
 .qc-copy,
 .qc-chip-x,
 .qc-media-dl,
-.qc-search-item {
+.qc-search-item,
+.qc-gen-chip,
+.qc-gen-opt {
   transition: color var(--dur-1) var(--ease-out),
     background-color var(--dur-1) var(--ease-out),
     border-color var(--dur-1) var(--ease-out),

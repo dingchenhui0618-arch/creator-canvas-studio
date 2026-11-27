@@ -23,6 +23,30 @@ export async function safeFetch(input: string, init?: RequestInit): Promise<Resp
   }
 }
 
+/**
+ * 这次响应里有没有「钱动了」的痕迹（r342）：扣费接口都会在正文里回 cost / balance，
+ * 任务接口回 task.credits.cost，退款回 refunded。右上角那块余额就靠它刷新。
+ *
+ * 为什么在这里统一派发、而不是每个调用点各写一遍：扣费接口十几处（评审 / 复刻 /
+ * 对话预设 / 工作流 / 素材 / 计费），漏一处就是一次「积分没扣」的错觉——
+ * 生产上用户就是这么报的（2026-11-27：右上角 169 一直不动，而对话里已经写着扣了 3 积分）。
+ */
+function carriesCredits(value: unknown, depth = 0): boolean {
+  if (!value || depth > 3) return false
+  if (Array.isArray(value)) return value.some((item) => carriesCredits(item, depth + 1))
+  if (typeof value !== 'object') return false
+  const record = value as Record<string, unknown>
+  if (typeof record.cost === 'number') return true
+  if (typeof record.balance === 'number') return true
+  if (record.refunded === true) return true
+  return Object.values(record).some((item) => carriesCredits(item, depth + 1))
+}
+
+/** 余额查询自己会带回 balance：在这里派发等于自己触发自己，转圈。 */
+function isCreditsQuery(input: string): boolean {
+  return /^\/api\/credits(\?|$)/.test(input) || /^\/api\/account(\?|$)/.test(input)
+}
+
 export async function request<T>(input: string, init?: RequestInit): Promise<T> {
   const response = await safeFetch(input, {
     ...init,
@@ -43,6 +67,13 @@ export async function request<T>(input: string, init?: RequestInit): Promise<T> 
       window.dispatchEvent(new Event('vq:auth-required'))
     }
     throw Object.assign(new Error(message), { status: response.status, body })
+  }
+  // 钱动过就让右上角重读一次。
+  // 只看写请求：查询也是 GET（任务轮询每 2.5 秒一次，正文里一直有 cost，按 GET 也派发就是每 2.5 秒白读一次余额）；
+  // 查询余额本身除外，见 isCreditsQuery。
+  const method = String(init?.method || 'GET').toUpperCase()
+  if (typeof window !== 'undefined' && method !== 'GET' && !isCreditsQuery(input) && carriesCredits(body)) {
+    window.dispatchEvent(new Event('vq:credits'))
   }
   return body as T
 }

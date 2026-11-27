@@ -105,6 +105,8 @@ export function publicTask(task) {
     size: task.size || '',
     duration: task.duration || null,
     resolution: task.resolution || '',
+    // 画质的空串要说清楚是「不传」还是「没记」：old tasks 里没有这个字段，界面照空串显示成不传
+    quality: task.quality || '',
     // 参考素材只回形状与大小，不回文件内容，也不暴露磁盘路径
     assets: (Array.isArray(task.assets) ? task.assets : []).map((asset) => ({
       id: asset.id,
@@ -164,6 +166,8 @@ function newTask(userId, kind, input) {
     size: input.size || '',
     duration: input.duration || null,
     resolution: input.resolution || '',
+    // r342：图片画质（low / medium / high），空串表示这次没指定、上游按自己默认档出
+    quality: input.quality || '',
     assets: (input.assets || []).map((asset) => ({
       id: asset.id,
       kind: asset.kind,
@@ -374,7 +378,8 @@ async function finishImageTask(user, task) {
     // 最便宜的通道先试，被上游拒了才换下一条（超时/结果不明不换，见 media-route.mjs）
     const { result, model: usedModel } = await runImageChain({
       chain: task.chain && task.chain.length ? task.chain : chainFor('image').map((item) => item.id),
-      payload: { prompt: task.prompt, size: task.size, n: 1 },
+      // 画质只在用户选了才出现在正文里：没选就不传，别替上游决定默认档
+      payload: { prompt: task.prompt, size: task.size, quality: task.quality || undefined, n: 1 },
       edit: reference ? { image: reference.buffer, mime: reference.mime, filename: reference.filename } : null,
     })
     task.upstream = usedModel

@@ -955,21 +955,26 @@ test('对话框里带一张图 /生视频：拿它当首帧，上游收到 image
   assert.equal(refUploads[0].kind, 'image')
 })
 
-test('对话框里一次带两张图：说明只能带一张，一分钱不扣、也不打上游', async () => {
+// r342：以前这里直接报错拦下（「最多带 1 张参考图」）。生产上的真事是：用户带了 2 张商品图，
+// 报错让他去删图，删完再发就丢了一次机会。现在按第 1 张当参考，并在回话里说清用的是哪一张——
+// 不静默挑图，也不把用户挡在门外。
+test('对话框里一次带两张图：按第 1 张当参考，回话里说清是哪一张', async () => {
   resetMediaGenRateLimit()
   const user = newUser('chatrefmany')
   const { saveChatFile } = await import('../server/chat-files.mjs')
   const one = saveChatFile({ userId: user.id, buffer: tinyPng, name: '一.png' })
   const two = saveChatFile({ userId: user.id, buffer: tinyPng, name: '二.png' })
   const before = credits.balanceOf(user.id)
-  const attempts = imageAttempts
-  await assert.rejects(() => sendChatMessage(user, { content: '/生图 照这两张画', files: [one.id, two.id] }), (error) => {
-    assert.equal(error.code, 'MEDIA_CHAT_REF_MANY')
-    assert.match(error.message, /最多带 1 张参考图/)
-    return true
-  })
-  assert.equal(credits.balanceOf(user.id), before)
-  assert.equal(imageAttempts, attempts)
+  lastEditBody = ''
+
+  const result = await sendChatMessage(user, { content: '/生图 照这张画', files: [one.id, two.id] })
+  assert.equal(result.media.mode, 'reference')
+  assert.equal(result.media.assets.length, 1)
+  assert.equal(result.media.assets[0].name, '一.png', '按第 1 张当参考')
+  assert.equal(credits.balanceOf(user.id), before - 3)
+  assert.match(result.reply.content, /按第 1 张/, '要明说用的是哪一张，不静默挑图')
+  await waitTask(result.media.id, cookieOf(user))
+  assert.match(lastEditBody, /filename="reference\.png"/)
 })
 
 test('对话框里带文档下生成指令：说清文档没算进去，一分钱不扣', async () => {
@@ -1062,4 +1067,84 @@ test('只写「帮我出个视频」且本机没有文本通道：不扣积分�
   assert.equal(credits.balanceOf(user.id), before, '没开任务就不能扣钱')
   assert.equal(imageAttempts, attempts)
   assert.equal(lastVideoBody, beforeVideoBody, '一个字都不该发给视频上游')
+})
+
+// ---------- r342：对话框里的参数跟用户选的走（2026-11-27 生产投诉） ----------
+
+// 生产原句：「生成一张欧美女星带首饰的图 3：4的比例」。
+// 改前：全角冒号不认，出图按 1:1，提示词还被存成「欧美女星带首饰的图 3 4的比例」。
+test('生产原句 3：4：比例真的生效（1152x1536），而且不再留在提示词里', async () => {
+  resetMediaGenRateLimit()
+  const user = newUser('chatratio34')
+  lastImageBody = null
+
+  const result = await sendChatMessage(user, { content: '生成一张欧美女星带首饰的图 3：4的比例' })
+  assert.equal(result.media.kind, 'image')
+  assert.equal(result.media.ratio, '3:4')
+  assert.equal(result.media.size, '1152x1536')
+  assert.equal(result.media.prompt, '欧美女星带首饰', '参数不能留在提示词里')
+  assert.match(result.reply.content, /3:4/)
+  await waitTask(result.media.id, cookieOf(user))
+  assert.equal(lastImageBody.size, '1152x1536', '尺寸必须真的发给上游')
+  assert.ok(!String(lastImageBody.prompt).includes('比例'), '参数词不能跟着提示词发给上游')
+})
+
+test('对话框里选的比例 / 画质盖过提示词里写的那份，画质真的发到上游', async () => {
+  resetMediaGenRateLimit()
+  const user = newUser('chatpicked')
+  lastImageBody = null
+
+  const result = await sendChatMessage(user, {
+    content: '/生图 1:1 白底产品图',
+    media: { ratio: '9:16', quality: 'high' },
+  })
+  assert.equal(result.media.ratio, '9:16', '下拉里选的比例说了算')
+  assert.equal(result.media.size, '1024x1536')
+  assert.equal(result.media.quality, 'high')
+  assert.equal(result.media.prompt, '白底产品图', '文本里那份比例要抠掉，即使被下拉盖过')
+  await waitTask(result.media.id, cookieOf(user))
+  assert.equal(lastImageBody.size, '1024x1536')
+  assert.equal(lastImageBody.quality, 'high', '画质必须真的发出去，不能只在元数据里写写')
+})
+
+test('没在下拉里选画质：一个 quality 字段都不发给上游', async () => {
+  resetMediaGenRateLimit()
+  const user = newUser('chatnoquality')
+  lastImageBody = null
+
+  const result = await sendChatMessage(user, { content: '/生图 白底产品图' })
+  assert.equal(result.media.quality, '')
+  await waitTask(result.media.id, cookieOf(user))
+  assert.equal(lastImageBody.quality, undefined, '没选就不传，别替上游决定默认档')
+})
+
+// 用户先传了商品图、下一句「生成一张…」没有附件：改前被当成纯文生图，用户看到的就是「参考图没被遵循」
+test('参考图沿用：生成指令没带附件时，按这条对话里用户最近发的那张图重画', async () => {
+  resetMediaGenRateLimit()
+  const user = newUser('chatrefcarry')
+  const cookie = cookieOf(user)
+  const { saveChatFile } = await import('../server/chat-files.mjs')
+  const { createConversation, saveConversation } = await import('../server/chat-store.mjs')
+  const file = saveChatFile({ userId: user.id, buffer: tinyPng, name: '商品图.png' })
+  const conv = createConversation(user.id, { title: '参考图沿用' })
+  conv.messages.push({
+    id: 'u-ref',
+    role: 'user',
+    content: '这是我的商品图',
+    at: Date.now(),
+    files: [{ id: file.id, name: '商品图.png', kind: 'image', mime: 'image/png', bytes: tinyPng.length }],
+  })
+  saveConversation(user.id, conv)
+  lastEditBody = ''
+
+  const result = await sendChatMessage(user, { content: '/生图 照这张画成商品主图', conversationId: conv.id })
+  assert.equal(result.media.mode, 'reference', '没带附件也要沿用对话里那张图，不能退回文生图')
+  assert.equal(result.media.assets.length, 1)
+  assert.equal(result.media.assets[0].name, '商品图.png')
+  assert.match(result.reply.content, /上一条带的那张图/, '要写明用的是哪张，别让用户以为它没被遵循')
+  await waitTask(result.media.id, cookie)
+  assert.match(lastEditBody, /filename="reference\.png"/)
+  const stored = getConversation(user.id, conv.id)
+  const genMessage = stored.messages[stored.messages.length - 2]
+  assert.equal(genMessage.files, undefined, '沿用过来的那张不挂回这条消息')
 })
