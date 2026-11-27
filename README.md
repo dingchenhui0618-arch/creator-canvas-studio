@@ -1609,6 +1609,13 @@ r331 起的按下巡检只在 **11 趟**上真按过。复刻主线的产出端�
 充值页只量了 6 颗（「返还设置」展开后还有几颗没进这一趟）；资产页那 8 颗是空状态的一屏，
 有资产时卡片上的「生成 / 更多」要真跑一次出图才量得到（会扣费），这一轮没碰。
 
+发布标签 `20261127-1330-r340press`，快照 `/opt/visionqa/releases/20261127-051332-20261127-1330-r340press.tar.gz`
+（上一版是 r339 的 `20261126-192106-20261127-0330-r339motion.tar.gz`，也就是回滚点）；公网 `/api/version` **0.9.313**、
+health ok templates 27、新入口 `index-B-LH4NLp.js` 200、上一版入口 `index-8xkM8tsT.js` 404、两个服务 active、
+匿名 `GET /api/promos` 401；live CSS（`index-WqRcN8-P.css`）里核到三条新规则与 `.is-active:hover`。
+提交 `a6aa28d`，CI **45944474827 success**。完整记录见
+[docs/r340-press-assets-review-recharge-2026-11-27.md](docs/r340-press-assets-review-recharge-2026-11-27.md)。
+
 
 
 
