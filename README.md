@@ -1762,6 +1762,18 @@ health ok templates 27、新入口 `index-BD3YHyzN.js` 200、上一版入口 `in
 `visionqa` 与 `visionqa-internal` 两个服务 active；`/api/version` 与 `/api/health` 的返回体扫一遍没有厂牌字样。
 提交 `06fea8f`（服务端）+ `4028f0f`（前端 / 文案 / 发版），CI **45974485750 success**（Node 22.12 + 24）。
 
+之后又补了两发：`20261127-1747-r343a`（联网搜索的来源只说「平台搜索」，连进模型上下文的那句也不写通道名）、
+`20261127-1820-r343b`（消息卡片不再印上游型号）。回滚点 `releases/20261127-101846-20261127-1820-r343b.tar.gz`
+（＝ r343a 那一版的内容）；公网入口现在是 `index-CqLHTGVd.js` 200，`index-BD3YHyzN.js` 与 `index-BCWXbBud.js` 都是 404；
+提交 `c70b01c`（r343a）+ `179f8e4`（r343b），两次 CI 都 success。
+
+**独立取证**（另一位 agent 自己写脚本、自己起假上游，**0 次真实调用**）：多轮改参数 46 条断言、接口 0 厂牌 27 条、
+390 宽 6 屏、界面 26 条，全绿；6 条反证（`publicModelName` / `internalModelName` 改恒等、系统提示词换回厂牌、
+去掉「同一档不重出」、不记 `lastMediaTask`、往界面塞「由 DeepSeek 提供」）**全部实测退出码 1**。
+上面那处真漏就是它抓到的：改前 [r343-verify-chat-meta-leak.png](docs/r343-verify-chat-meta-leak.png)、
+改后 [r343-verify-chat-meta-after.png](docs/r343-verify-chat-meta-after.png)，报告
+[docs/r343-verify-2026-11-27.md](docs/r343-verify-2026-11-27.md)。
+
 边界照实写：多轮改参数认不出的说法有「我要 16:9 的封面」（数值后面跟名词）、尺寸 / 4K、中文数字「改成八秒」、
 以及只在界面上点一下下拉不说话；「上一条」只指这条对话里最近 6 条消息内的那次生成；重放要求参考图文件还在，
 不在就先报错、不扣费；`/api/models` 的 `label` 与 `id` 已经是产品名，但配置与 Key 池里仍然是真实模型名（服务端范围）；
