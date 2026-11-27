@@ -27,6 +27,8 @@ function argOf(name, fallback) {
 }
 const DIST_DIR = path.resolve(ROOT, String(argOf('dist', 'dist')))
 const OUT_DIR = path.resolve(ROOT, String(argOf('out', '.shots342')))
+// 四张图要落进 docs/（README 与 r342 文档引用的是它们）：脚本自己复制，复现只要跑这一条命令
+const DOCS_DIR = path.join(ROOT, 'docs')
 if (!fs.existsSync(path.join(DIST_DIR, 'index.html'))) throw new Error('dist 里没有 index.html：' + DIST_DIR)
 if (!fs.existsSync(CHROME)) throw new Error('找不到 Chrome：' + CHROME)
 fs.mkdirSync(SHOTS_ROOT, { recursive: true })
@@ -34,7 +36,10 @@ fs.mkdirSync(OUT_DIR, { recursive: true })
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 const report = { at: new Date().toISOString(), dist: path.basename(DIST_DIR), fakeUpstreamHits: 0, checks: [], shots: [] }
+// FAIL 要变成退出码：复核指出上一版「check 挂了也 exit 0」，CI 会把挂掉的当成功
+let failures = 0
 function check(id, ok, detail) {
+  if (!ok) failures += 1
   report.checks.push({ id: id, ok: Boolean(ok), detail: detail === undefined ? null : detail })
   console.log((ok ? 'PASS ' : 'FAIL ') + id + ' :: ' + JSON.stringify(detail))
 }
@@ -154,8 +159,14 @@ class Cdp {
     this.ws = new WebSocket(url)
     this.id = 0
     this.pending = new Map()
+    // 页面里的未捕获异常也记下来：这一轮改的是对话框，报错在控制台里看不见就等于没量
+    this.exceptions = []
     this.ws.addEventListener('message', (event) => {
       const message = JSON.parse(event.data)
+      if (message.method === 'Runtime.exceptionThrown') {
+        const details = message.params && message.params.exceptionDetails
+        this.exceptions.push(String((details && ((details.exception && details.exception.description) || details.text)) || 'exception').slice(0, 240))
+      }
       if (message.id && this.pending.has(message.id)) {
         const entry = this.pending.get(message.id)
         this.pending.delete(message.id)
@@ -229,7 +240,19 @@ async function shoot(file, clip) {
   console.log('SHOT ' + file)
 }
 const chipText = () => evaluate('(function(){var el=document.querySelector(".vq-credit-chip");return el?String(el.textContent||"").trim():null;})()')
-const chipRect = () => rectOf('.vq-credit-chip')
+// 生成设置那几枚胶囊的文字（标签 + 当前值，去空白）：断言具体值，别只看「有几枚」
+const genChips = () => evaluate('(function(){return Array.prototype.slice.call(document.querySelectorAll(".qc-gen-chip")).map(function(el){return String(el.textContent||"").replace(/\\s+/g,"").trim();});})()')
+// 服务端那边的余额：右上角的数字必须跟它对上，不然「变了」可能只是读到一半
+async function serverCredits() {
+  const response = await fetch(BASE + '/api/credits?limit=1', { headers: { cookie: cfg.auth.cookieName + '=' + token } })
+  const data = await response.json()
+  return { balance: typeof data.balance === 'number' ? data.balance : null, unit: data.unit || '积分' }
+}
+// 裁「账号区」：只裁那颗 chip 的话字太小，看不出是哪一屏
+async function accountClip() {
+  const rect = await rectOf('.vq-topbar-account')
+  return rect ? { x: Math.max(0, rect.left - 8), y: Math.max(0, rect.top - 6), width: rect.w + 16, height: rect.h + 12 } : null
+}
 
 let exitCode = 0
 try {
@@ -256,11 +279,11 @@ try {
   await waitFor(() => evaluate('Boolean(document.querySelector(".qc-input"))'), '快捷创作 · 平台对话输入框')
   await sleep(600)
 
+  const creditsBefore = await serverCredits()
   const balanceBefore = await chipText()
-  report.balanceBefore = balanceBefore
-  // 裁一块「账号区」（头像 + 名字 + 余额），只裁那颗 chip 的话字太小、看不出是哪一屏
-  const beforeRect = await rectOf('.vq-topbar-account')
-  await shoot('r342-credits-before.png', beforeRect ? { x: Math.max(0, beforeRect.left - 8), y: Math.max(0, beforeRect.top - 6), width: beforeRect.w + 16, height: beforeRect.h + 12 } : null)
+  report.balanceBefore = { server: creditsBefore, chip: balanceBefore }
+  await shoot('r342-credits-before.png', await accountClip())
+  check('credits.chip-matches-server-before', balanceBefore === String(creditsBefore.balance) + ' ' + creditsBefore.unit, { chip: balanceBefore, server: creditsBefore })
 
   // ---- ① 图片指令：生成设置行出现，比例选 3:4、画质选高清 ----
   await selectAllAndType('/生图 3:4 白底产品图')
@@ -272,10 +295,15 @@ try {
   await clickSelector('.qc-gen-chip[aria-label="画质：跟随默认"]')
   await sleep(200)
   await clickSelector('.qc-gen-opt', '高清')
-  const picked = await evaluate('(function(){var chips=Array.prototype.slice.call(document.querySelectorAll(".qc-gen-chip"));return chips.map(function(el){return String(el.textContent||"").replace(/\\s+/g," ").trim();});})()')
+  const picked = await genChips()
   const composer = await rectOf('.qc-composer')
   await shoot('r342-gen-settings-image-1440.png', composer ? { x: Math.max(0, composer.left - 8), y: Math.max(0, composer.top - 8), width: composer.w + 16, height: composer.h + 16 } : null)
-  check('gen-settings.visible-image', Boolean(composer), { row: imageRow, chips: picked })
+  // 「行在」不算过：必须是图片态的两枚、值就是刚选的那两个，而且整行没被挤出去
+  check(
+    'gen-settings.image',
+    picked.length === 2 && picked[0] === '比例3:4' && picked[1] === '画质高清' && Boolean(imageRow) && imageRow.scrollW <= imageRow.w,
+    { chips: picked, row: imageRow },
+  )
 
   // ---- ② 发一条生成指令：余额必须当场变 ----
   // 刚才点的是下拉里的按钮，焦点还在那颗按钮上：先把焦点还给输入框，否则 Enter 只会再点一次那颗按钮
@@ -283,38 +311,86 @@ try {
   await sleep(120)
   await pressEnter()
   await waitFor(() => evaluate('Boolean(document.querySelector(".qc-gen")) === false'), '设置行收起（已发送）', 40).catch(() => null)
+  await waitFor(() => evaluate('Boolean(document.querySelector(".qc-media-spec"))'), '生成结果卡片', 90).catch(() => null)
+  const cardSpec = await evaluate('(function(){var el=document.querySelector(".qc-media-spec");return el?String(el.textContent||"").trim():null;})()')
+  // 卡片上写的「N 积分」就是这一次的 cost：余额差值必须等于它，光「变了」不算数
+  const costMatch = String(cardSpec || '').match(/(\d+)\s*积分/)
+  const cost = costMatch ? Number(costMatch[1]) : null
+  report.cost = cost
+  // 只等「chip 变成服务端那个数」：读取中 / 读失败会显示「余额读取中 / 余额未读到」，那不算刷新成功
   const balanceAfter = await waitFor(async () => {
     const now = await chipText()
-    return now && now !== balanceBefore ? now : null
-  }, '右上角余额变化', 120).catch(() => null)
+    if (!now) return null
+    const server = await serverCredits()
+    return now === String(server.balance) + ' ' + server.unit && now !== balanceBefore ? { chip: now, server: server } : null
+  }, '右上角余额变成服务端的数', 150).catch(() => null)
+  await shoot('r342-credits-after.png', await accountClip())
   report.balanceAfter = balanceAfter
-  const afterRect = await rectOf('.vq-topbar-account')
-  await shoot('r342-credits-after.png', afterRect ? { x: Math.max(0, afterRect.left - 8), y: Math.max(0, afterRect.top - 6), width: afterRect.w + 16, height: afterRect.h + 12 } : null)
-  const taskCard = await waitFor(() => evaluate('Boolean(document.querySelector(".qc-media-card, .qc-media, [class*=qc-media]"))'), '生成结果卡片', 60).catch(() => null)
-  const cardSpec = await evaluate('(function(){var el=document.querySelector("[class*=qc-media-spec]");return el?String(el.textContent||"").trim():null;})()')
-  check('credits.changed', Boolean(balanceAfter), { before: balanceBefore, after: balanceAfter, card: cardSpec, taskCard: Boolean(taskCard) })
-  check('upstream.used', report.fakeUpstreamHits > 0, { hits: report.fakeUpstreamHits, path: report.lastUpstreamPath })
+  check(
+    'credits.realtime',
+    Boolean(cost) && Boolean(balanceAfter) && balanceAfter.server.balance === creditsBefore.balance - cost,
+    { before: creditsBefore, after: balanceAfter ? balanceAfter.server : null, chip: balanceAfter ? balanceAfter.chip : null, card: cardSpec, cost: cost },
+  )
+  check('upstream.used', report.fakeUpstreamHits === 1, { hits: report.fakeUpstreamHits, path: report.lastUpstreamPath, body: report.lastUpstreamBody })
 
-  // ---- ③ 视频指令 ----
-  await selectAllAndType('/生视频 16:9 8秒 720p 海边日落')
-  await waitFor(() => evaluate('Boolean(document.querySelector(".qc-gen"))'), '生成设置行（视频）')
-  const videoChips = await evaluate('(function(){var chips=Array.prototype.slice.call(document.querySelectorAll(".qc-gen-chip"));return chips.map(function(el){return String(el.textContent||"").replace(/\\s+/g," ").trim();});})()')
-  const composerVideo = await rectOf('.qc-composer')
-  await shoot('r342-gen-settings-video-1440.png', composerVideo ? { x: Math.max(0, composerVideo.left - 8), y: Math.max(0, composerVideo.top - 8), width: composerVideo.w + 16, height: composerVideo.h + 16 } : null)
-  check('gen-settings.video-controls', videoChips.length >= 3, { chips: videoChips })
-
-  // ---- ④ 390 窄屏：不横溢 ----
+  // ---- ③ 390 窄屏：回到图片态（比例 3:4 / 画质 高清）再量 ----
+  // 复核（shots-r342，2026-11-27）指出：上一版这一步量的是视频态——数字为真，但不是要证的那一屏。
+  await selectAllAndType('/生图 3:4 白底产品图')
+  await waitFor(() => evaluate('Boolean(document.querySelector(".qc-gen"))'), '生成设置行（390 前的图片态）')
   await setViewport(390, 844)
   await sleep(500)
-  const narrow = await evaluate('(function(){var row=document.querySelector(".qc-gen-row");var doc=document.documentElement;return {innerWidth:window.innerWidth,docScroll:doc.scrollWidth,rowW:row?row.clientWidth:null,rowScroll:row?row.scrollWidth:null};})()')
-  const composerNarrow = await rectOf('.qc-composer')
+  const narrowChips = await genChips()
+  const narrow = await evaluate('(function(){var row=document.querySelector(".qc-gen-row");var doc=document.documentElement;return {innerWidth:window.innerWidth,docScroll:doc.scrollWidth,bodyScroll:document.body.scrollWidth,rowW:row?row.clientWidth:null,rowScroll:row?row.scrollWidth:null};})()')
   await shoot('r342-gen-settings-390.png', null)
-  check('narrow.no-overflow', narrow.docScroll <= narrow.innerWidth && (narrow.rowScroll === null || narrow.rowScroll <= narrow.rowW), narrow)
-
-  report.cardSpec = cardSpec
+  check(
+    'narrow.image-no-overflow',
+    narrowChips.length === 2 && narrowChips[0] === '比例3:4' && narrowChips[1] === '画质高清' &&
+      narrow.rowScroll !== null && narrow.rowW !== null && narrow.rowScroll === narrow.rowW &&
+      narrow.docScroll <= narrow.innerWidth && narrow.bodyScroll <= narrow.innerWidth,
+    { chips: narrowChips, narrow: narrow },
+  )
   report.narrow = narrow
-  report.imageChips = picked
-  report.videoChips = videoChips
+
+  // ---- ④ 视频指令（1440）：三枚控件各就各位 ----
+  await setViewport(1440, 1000)
+  await sleep(320)
+  await selectAllAndType('/生视频 16:9 8秒 720p 海边日落')
+  await waitFor(() => evaluate('Boolean(document.querySelector(".qc-gen"))'), '生成设置行（视频）')
+  const videoChips = await genChips()
+  const composerVideo = await rectOf('.qc-composer')
+  await shoot('r342-gen-settings-video-1440.png', composerVideo ? { x: Math.max(0, composerVideo.left - 8), y: Math.max(0, composerVideo.top - 8), width: composerVideo.w + 16, height: composerVideo.h + 16 } : null)
+  check(
+    'gen-settings.video',
+    videoChips.length === 3 && videoChips[0].indexOf('比例') === 0 && videoChips[1].indexOf('时长') === 0 && videoChips[2].indexOf('分辨率') === 0,
+    { chips: videoChips },
+  )
+
+  // ---- ⑤ 余额前后拼图（在 about:blank 里拼，不依赖外部图像库）----
+  const beforeB64 = fs.readFileSync(path.join(OUT_DIR, 'r342-credits-before.png')).toString('base64')
+  const afterB64 = fs.readFileSync(path.join(OUT_DIR, 'r342-credits-after.png')).toString('base64')
+  await cdp.send('Page.navigate', { url: 'about:blank' })
+  await sleep(400)
+  const html = '<html><body style="margin:0;background:#ffffff;font:15px Microsoft YaHei,sans-serif;color:#3c3c3c">'
+    + '<div id="cmp" style="display:inline-flex;gap:16px;padding:8px 8px 12px">'
+    + '<figure style="margin:0"><figcaption style="font-size:13px;color:#6b6b6b;padding:0 0 4px 4px">发送生成指令前</figcaption>'
+    + '<img src="data:image/png;base64,' + beforeB64 + '"></figure>'
+    + '<figure style="margin:0"><figcaption style="font-size:13px;color:#6b6b6b;padding:0 0 4px 4px">发送后：当场扣 ' + report.cost + ' 积分</figcaption>'
+    + '<img src="data:image/png;base64,' + afterB64 + '"></figure>'
+    + '</div></body></html>'
+  await evaluate('document.open();document.write(' + JSON.stringify(html) + ');document.close();true')
+  await waitFor(() => evaluate('Boolean(document.querySelector("#cmp img")) && document.querySelector("#cmp img").complete'), '拼图里的两张图加载完', 40)
+  await sleep(200)
+  const box = await evaluate('(function(){var el=document.getElementById("cmp");var r=el.getBoundingClientRect();return {width:r.width,height:r.height};})()')
+  await shoot('r342-credits-before-after.png', { x: 0, y: 0, width: Math.ceil(box.width), height: Math.ceil(box.height) })
+
+  // ---- ⑥ 四张图复制进 docs：复现只要跑这一条命令，不再依赖外部脚本 ----
+  const DOC_FILES = ['r342-gen-settings-image-1440.png', 'r342-gen-settings-video-1440.png', 'r342-gen-settings-390.png', 'r342-credits-before-after.png']
+  for (const name of DOC_FILES) {
+    fs.copyFileSync(path.join(OUT_DIR, name), path.join(DOCS_DIR, name))
+    console.log('DOCS ' + name + ' (' + fs.statSync(path.join(DOCS_DIR, name)).size + ' bytes)')
+  }
+  check('docs.copied', DOC_FILES.every((name) => fs.existsSync(path.join(DOCS_DIR, name))), DOC_FILES.length)
+  check('page.no-exceptions', cdp.exceptions.length === 0, cdp.exceptions.slice(0, 4))
 } catch (error) {
   exitCode = 1
   report.error = String((error && error.message) || error)
@@ -326,6 +402,7 @@ try {
   try { server.kill() } catch { /* ignore */ }
   upstream.close()
   fs.writeFileSync(path.join(OUT_DIR, 'r342.json'), JSON.stringify(report, null, 2), 'utf8')
-  console.log('---- 结论：' + report.checks.filter((item) => item.ok).length + '/' + report.checks.length + ' 通过；假上游被打了 ' + report.fakeUpstreamHits + ' 次')
+  console.log('---- 结论：' + report.checks.filter((item) => item.ok).length + '/' + report.checks.length + ' 通过；假上游被打了 ' + report.fakeUpstreamHits + ' 次；FAIL ' + failures + ' 条')
 }
-process.exit(exitCode)
+// FAIL 也要让 CI 看得见：退出码不是 0
+process.exit(exitCode || (failures > 0 ? 1 : 0))
