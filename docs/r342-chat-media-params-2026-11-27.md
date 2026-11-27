@@ -86,6 +86,17 @@
 - **反证**：把全角冒号正则改回半角、把「参考图沿用」那一段短路，`node --test` 立刻红了 4 条
   （生产原句 3：4 的两条 + 参考图沿用的两条）；恢复后 45 / 45 绿。
 
+## 发布与线上核验（2026-11-27 14:20）
+
+- 标签 `20261127-1425-r342params`，快照 `/opt/visionqa/releases/20261127-061959-20261127-1425-r342params.tar.gz`；
+  上一版 r340 的 `20261127-051332-…-r340press.tar.gz` 就是回滚点（`bash /opt/visionqa/ops/rollback.sh --to 1`）。
+- 公网 `/api/version` **0.9.314**、`/api/health` ok templates 27、匿名 `GET /api/promos` 401；
+  新入口 `index-yuUaxeXq.js` 200、上一版入口 `index-B-LH4NLp.js` 404。
+- 新规则在懒加载的 agents 分片里：`agents-DWL9Q2G9.css` 200，含 `.qc-gen-chip` / `.qc-gen-opt` / `.qc-gen-note`。
+  **主包 CSS 这次没变**（`index-WqRcN8-P.css` 与 r340 同名）——`agents.css` 本来就不在主包里，
+  这一点以前没人写下来过，这次记一笔，免得下次把「主包没变」当成没发上去。
+- 两个服务 active；提交 `4d1b8e6`，CI **45951042095 success**。
+
 ## 边界（这轮没做 / 没验的）
 
 - **画质三档没有真调过上游**：`quality` 是按 OpenAI 兼容接口的字段名接的，GeteAPI 到底收不收未知。所以默认不传、选了原样提交、不接受就失败全额退回——回答里先把这句话说在前面。

@@ -1668,6 +1668,12 @@ health ok templates 27、新入口 `index-B-LH4NLp.js` 200、上一版入口 `in
 `oxlint` 0 error / 31 warning、密钥扫描 1244 个文件无命中。反证：把全角冒号正则改回半角、
 把「参考图沿用」那段短路，`node --test` 立刻红 4 条；恢复后 45 / 45 绿。
 
+发布标签 `20261127-1425-r342params`，快照 `/opt/visionqa/releases/20261127-061959-20261127-1425-r342params.tar.gz`
+（上一版 r340 的 `…-r340press.tar.gz` 就是回滚点）；公网 `/api/version` **0.9.314**、health ok templates 27、
+新入口 `index-yuUaxeXq.js` 200、上一版入口 `index-B-LH4NLp.js` 404、两个服务 active；
+新规则在懒加载分片 `agents-DWL9Q2G9.css` 里（主包 CSS 这次同名没变——`agents.css` 不在主包里）。
+提交 `4d1b8e6`，CI **45951042095 success**。
+
 边界：**画质三档没有真调过上游**——字段名按 OpenAI 兼容接口接的，GeteAPI 收不收未知，所以默认不传、
 选了原样提交、不接受就失败全额退回（回答里先把这句说在前面）；**画质暂不加价**（上游按画质计价的账单还没拿到，
 三档同价，不能凭空编倍率）；多轮改参数（「改成 8 秒」）仍没做，现在要重新说一句；参考图只看这条对话里
