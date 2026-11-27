@@ -1211,8 +1211,8 @@ function Workbench({
               title="版本信息"
             >
               <span className="vq-version-dot" aria-hidden="true" />
-              <span className="vq-version-label">v{APP_VERSION}</span>
-              <span className="vq-version-action">版本</span>
+              <span className="vq-version-label">版本</span>
+              <span className="vq-version-action">更新</span>
             </button>
           </div>
         </div>

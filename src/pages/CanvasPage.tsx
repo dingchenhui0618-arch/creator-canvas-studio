@@ -65,7 +65,7 @@ import '../styles/canvas.css'
 import type { ToastFn, ToastTone } from '../domain/toast'
 
 /** 步骤清单上那一行小字：只写这个节点真正会变的东西（模型显示名、比例、时长、分辨率）。
- *  模型名一律走 /api/models 下发的标签（GPT Image 2 / Seedance 2.0），界面上不出现任何上游厂牌。 */
+ *  模型名一律走 /api/models 下发的产品标签，界面上不出现任何上游厂牌。 */
 function stepMetaText(kind: FlowNodeKind, config: NodeConfig, modelLabels: Map<string, string>): string {
   const parts = [NODE_META[kind].label]
   if (kind === 'llm' || kind === 'image' || kind === 'video') {

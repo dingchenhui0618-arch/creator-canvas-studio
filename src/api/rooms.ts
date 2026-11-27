@@ -41,7 +41,7 @@ export type RoomMember = {
   tokenPrefix?: string
 }
 
-/** 配对码：房主把它交给自己的 codex / Claude，对方自己换令牌进房间（r315 1b）。 */
+/** 配对码：房主把它交给自己的 AI 助手，对方自己换令牌进房间（r315 1b）。 */
 export type RoomPairCode = {
   code: string
   createdAt: number

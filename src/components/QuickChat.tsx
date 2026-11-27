@@ -18,7 +18,7 @@ import { markdownPlainText } from '../lib/markdown-parse'
 import MediaTaskCard from './MediaTaskCard'
 import type { ToastFn } from '../domain/toast'
 
-// 快捷创作的「对话」（r214）：一页 DeepSeek —— 长上下文、联网搜索、读链接、思考模式。
+// 快捷创作的「对话」（r214）：一页长上下文对话 —— 联网搜索、读链接、思考模式。
 // 为什么单独一个组件：原来那块是「对话预设」的短轮问答（带输出类型与结构化草稿），
 // 数据形状、扣费口径、上下文长度都不一样；混在一个组件里两边都会越改越乱。
 //
@@ -674,7 +674,7 @@ export default function QuickChat({ onToast }: { onToast?: ToastFn }) {
         {/* r294：这句原来三到四行常驻左栏底部，把清单压掉一截。现在只留一行，全文在 title 里。 */}
         <p
           className="qc-side-note"
-          title="会话存在服务端，换设备回来还在；最多 30 条、每条留 200 条消息，超出时从最早的挪掉并告诉你"
+          title="换设备回来还在；最多保留 30 条对话、每条 200 条消息，超出时从最早的挪掉"
         >
           服务端保存 · 最多 30 个
         </p>
@@ -703,7 +703,7 @@ export default function QuickChat({ onToast }: { onToast?: ToastFn }) {
               <ul>
                 <li>
                   直接生成：「/生视频 咖啡店门口的雨夜」或「帮我出个视频 …」都行，没说画面我替你补；
-                  比例 / 尺寸 / 秒数写死就照原样提交（4:5、1080p 12 秒），上游不收就全额退回
+                  比例 / 尺寸 / 秒数写死就照原样提交（4:5、1080p 12 秒），没通过就全额退回
                 </li>
                 <li>边生成边显示，首段一两秒就到；中途可以停，停止与失败都不计费</li>
                 <li>
@@ -785,7 +785,7 @@ export default function QuickChat({ onToast }: { onToast?: ToastFn }) {
                   </div>
                 ) : null}
                 <div className="qc-msg-meta">
-                  <span>{message.role === 'user' ? '你' : '平台对话模型'}</span>
+                  <span>{message.role === 'user' ? '你' : 'VisionQA 通用模型'}</span>
                   <span>{when(message.at)}</span>
                   {message.model ? <span>{message.model}</span> : null}
                   {message.ms ? <span>{(message.ms / 1000).toFixed(1)}s</span> : null}
@@ -849,7 +849,7 @@ export default function QuickChat({ onToast }: { onToast?: ToastFn }) {
                   onChange={setMediaRatio}
                   onPicked={focusInput}
                   disabled={sending}
-                  title="这次的比例。选「跟随提示词」就由服务端从你这句里认，认不出按各自默认档"
+                  title="这次的比例。选「跟随提示词」就按你这句里写的定，认不出用默认档"
                 />
                 {genKind === 'video' ? (
                   <>
@@ -860,7 +860,7 @@ export default function QuickChat({ onToast }: { onToast?: ToastFn }) {
                       onChange={setMediaDuration}
                       onPicked={focusInput}
                       disabled={sending}
-                      title="这次的秒数。选「跟随提示词」就由服务端从你这句里认"
+                      title="这次的秒数。选「跟随提示词」就按你这句里写的定"
                     />
                     <GenSelect
                       label="分辨率"
@@ -869,7 +869,7 @@ export default function QuickChat({ onToast }: { onToast?: ToastFn }) {
                       onChange={setMediaResolution}
                       onPicked={focusInput}
                       disabled={sending}
-                      title="这次的清晰度。选「跟随提示词」就由服务端从你这句里认，认不出用 720p"
+                      title="这次的清晰度。选「跟随提示词」就按你这句里写的定，认不出用 720p"
                     />
                   </>
                 ) : (
@@ -880,7 +880,7 @@ export default function QuickChat({ onToast }: { onToast?: ToastFn }) {
                     onChange={setMediaQuality}
                     onPicked={focusInput}
                     disabled={sending}
-                    title="这次出图的画质。默认跟上上游自己的默认档；选了就按这一档提交，上游不接受会失败并全额退回"
+                    title="快速、标准、高清三档同价；档位越高细节越多、出图越慢。「跟随默认」就是标准档"
                   />
                 )}
               </div>
@@ -1000,7 +1000,7 @@ export default function QuickChat({ onToast }: { onToast?: ToastFn }) {
                 if (event.key !== 'Enter') return
                 // 输入法正在组词时按 Enter 是「选字」，不是发送：中文用户十次里九次会撞上
                 if (event.nativeEvent.isComposing) return
-                // Shift + Enter 换行；其余情况（含 Ctrl / Cmd + Enter）直接发送，跟一页 DeepSeek 一致
+                // Shift + Enter 换行；其余情况（含 Ctrl / Cmd + Enter）直接发送，跟一页长上下文对话一致
                 if (event.shiftKey) return
                 event.preventDefault()
                 void send()

@@ -143,7 +143,7 @@ export default function MediaTaskCard({ media }: { media: ChatMediaInfo }) {
         <div className="qc-media-error">
           <AlertCircle size={14} />
           <div>
-            <p>{current?.error || media.error || '上游没有返回结果'}</p>
+            <p>{current?.error || media.error || '这次没有拿到结果'}</p>
             <span className="qc-media-note">
               {refunded ? '这 ' + media.credits.cost + ' 积分已全额退回' : '积分退款还没确认，带着任务号 ' + media.id + ' 找管理员'}
             </span>

@@ -174,7 +174,7 @@
   .works-line .works-open { display:none; }
   /* 两列只有 ~139px：标题给两行，读得全比一行更整齐 */
   .works-title { white-space:normal; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
-  /* 时间 · 模型名一行放不下：允许折到第二行，别截成「GPT …」 */
+  /* 时间 · 模型名一行放不下：允许折到第二行，别截成一个省略号收尾 */
   .works-time { white-space:normal; }
 }
 

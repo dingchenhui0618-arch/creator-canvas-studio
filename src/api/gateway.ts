@@ -16,7 +16,7 @@ export type GatewayCoverage = {
   capability: 'image' | 'video'
   ready: boolean
   coveredBy: 'model' | 'generic' | 'none'
-  /** 靠改名接上的：这里写发给上游的真实模型名（如 SeeAPI 的 seedream-5.0-pro） */
+  /** 靠改名接上的：这里写发给模型服务的真实模型 id（界面只显示 /api/models 下发的产品标签） */
   upstream?: string
   keys: { id: string; name: string; priority: number }[]
 }

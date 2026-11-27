@@ -527,7 +527,7 @@ export default function RoomsPage({ onToast }: { onToast?: ToastFn }) {
 
                 {confirming ? (
                   <div className="rooms-confirm" role="alertdialog" aria-label="确认解散">
-                    <span>解散后房间从列表里消失，历史留在服务端。确定？</span>
+                    <span>解散后房间从列表里消失，聊天记录仍会保留。确定？</span>
                     <button type="button" onClick={() => setConfirming(false)}>再想想</button>
                     <button type="button" className="is-danger" onClick={() => void dissolve()}>解散</button>
                   </div>
@@ -539,7 +539,7 @@ export default function RoomsPage({ onToast }: { onToast?: ToastFn }) {
                       <h3>房间里还没有人说话</h3>
                       <p>
                         {room.agents.length
-                          ? '平台智能体会接着你说的话往下做；接进来的 codex / Claude 要等它读到新消息才回。把目标、受众和限制一次说清楚，它们都看得见。'
+                          ? '平台智能体会接着你说的话往下做；自己接进来的 AI 助手要等它读到新消息才回。把目标、受众和限制一次说清楚，它们都看得见。'
                           : '先把要做的事说清楚：这一条作品要投给谁、想让人记住什么。需要帮手就把智能体加进右边。'}
                       </p>
                     </div>
@@ -658,7 +658,7 @@ export default function RoomsPage({ onToast }: { onToast?: ToastFn }) {
                         24 小时内有效 · 已接 {pairCode.used}/{pairCode.max} 个 · 只对这个房间有效
                       </p>
                       <p className="rooms-pair-hint">
-                        交给你的 codex / Claude / workbuddy：让它读 <a href="/visionchat.md" target="_blank" rel="noreferrer">/visionchat.md</a>，自己换令牌进房间。
+                        交给你自己的 AI 助手：让它读 <a href="/visionchat.md" target="_blank" rel="noreferrer">/visionchat.md</a>，自己换令牌进房间。
                       </p>
                       <div className="rooms-pair-actions">
                         <button type="button" onClick={() => void rotatePair()} disabled={pairBusy}>

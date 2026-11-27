@@ -225,7 +225,7 @@ export function TwoFactorCard() {
       )}
 
       <p className="vq-2fa-note">
-        密钥在服务端用 AES-GCM 加密保存，接口与日志都拿不到明文；备用码只存哈希，用过一次就作废。
+        密钥加密保存，平台和日志都看不到原文；每个备用码只能用一次。
       </p>
     </section>
   )

@@ -1304,10 +1304,10 @@ function MediaComposer({
             </div>
             <p>
               {image
-                ? '任务已经交给上游，出图一般 20～90 秒，最长等到 4 分钟；关掉这个窗口也会继续跑完，结果会留在下面的「最近生成」里。'
+                ? '任务已经提交，出图一般 20～90 秒，最长等到 4 分钟；关掉这个窗口也会继续跑完，结果会留在下面的「最近生成」里。'
                 : task.progress === null
-                  ? '上游还没有返回百分比；页面按任务状态与已用时间如实显示，不编进度。'
-                  : '上游进度 ' + task.progress + '%。'}
+                  ? '暂时拿不到百分比；页面按任务状态与已用时间如实显示，不编进度。'
+                  : '进度 ' + task.progress + '%。'}
             </p>
             {pollError ? <p className="agx-media-poll-warning">{pollError}</p> : null}
           </div>
@@ -1389,7 +1389,7 @@ function MediaComposer({
             <AlertCircle size={15} />
             <div>
               <strong>生成失败</strong>
-              <p>{error || task.error || '上游没有返回结果'}</p>
+              <p>{error || task.error || '这次没有拿到结果'}</p>
               <small>
                 {task.credits.refunded
                   ? '已全额退还 ' + task.credits.cost + ' 积分（任务号 ' + task.id + '）'
@@ -1635,7 +1635,7 @@ function MediaComposer({
               ]}
               onChange={pickQuality}
               disabled={active}
-              title="选了就按这一档提交（上游不接受会失败并全额退回）；「跟随默认」= 不传，走上游默认档"
+              title="快速、标准、高清三档同价；档位越高细节越多、出图越慢。「跟随默认」就是标准档"
             />
           ) : null}
           {!image ? (
@@ -1777,7 +1777,7 @@ export function AgentsPage({
   const [composerMode, setComposerMode] = useState<ComposerMode>(
     pendingRef ? (pendingRef.kind === 'video' ? 'video' : 'image') : 'chat',
   )
-  // 对话有两种：平台对话（默认，一页 DeepSeek）与对话预设（带结构化草稿，能存模板/送工作流/写作品）。
+  // 对话有两种：平台对话（默认，一页长上下文对话）与对话预设（带结构化草稿，能存模板/送工作流/写作品）。
   // 从作品页「让 AI 起草」进来时切到预设：那条路要用到草稿的三个出口，平台对话给不了。
   const [chatSurface, setChatSurface] = useState<'platform' | 'preset'>('platform')
   // 平台对话面板一旦打开过就常驻，切走时只隐藏不卸载（r225）：卸载会连写了一半的提示词、

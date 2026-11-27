@@ -170,7 +170,7 @@ export function ReplicateModal({ item, hasKey, visionReady, onClose, onDone, onO
                     ? '解析服务已配置：抖音 / 小红书链接交给它解析'
                     : '解析服务未接入：只能拆 .mp4 / .mov / .webm 直链'
                   : hasKey
-                    ? '解析服务已配置；解析失败时用直链兜底'
+                    ? '已接解析服务；解析不成功时直接用原链接'
                     : '解析服务未接入：只能用直链视频'}
               </span>
               <span className={visionReady ? 'is-ok' : 'is-warn'}>{visionReady ? '视觉模型就绪，逐帧分析可运行' : internal ? '视觉模型未就绪，需要在服务端配置凭证' : '视觉能力暂未就绪，请联系管理员'}</span>
