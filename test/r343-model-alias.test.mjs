@@ -152,6 +152,22 @@ test('同一类里多个模型：第一个不加序号，后面按 -2 / -3 递�
   }
 })
 
+test('联网搜索的来源也只给产品口径：界面与响应体里没有厂牌名', async () => {
+  const { publicSearch } = await import('../server/web-search.mjs')
+  const view = publicSearch({
+    ok: true,
+    query: '最近有什么新变化',
+    provider: 'deepseek',
+    providerLabel: 'DeepSeek 搜索（跟平台对话共用一把 Key）',
+    results: [{ title: '结果一', url: 'https://example.com/a', site: 'example.com' }],
+  })
+  assert.equal(view.providerLabel, '平台搜索', '界面这一侧只认产品口径')
+  assert.equal(view.provider, 'platform')
+  assert.equal(VENDOR.test(JSON.stringify(view)), false, '搜索结果里不该出现厂牌：' + JSON.stringify(view))
+  // 结果本身照旧给（标题 / 站点 / 地址），只是不带通道信息
+  assert.equal(view.results[0].title, '结果一')
+})
+
 test('偏好接口：传内部名直接用 400 挡住，传产品 id 存得进也读得回产品 id', async () => {
   const publicId = modelCatalog().models[0].id
   const rejected = await call({ method: 'PUT', pathname: '/api/preferences', body: { model: config.llm.model } })

@@ -489,8 +489,10 @@ export function publicSearch(search) {
   return {
     ok: Boolean(search.ok),
     query: String(search.query || ''),
-    provider: String(search.provider || ''),
-    providerLabel: String(search.providerLabel || ''),
+    // r343：通道是谁家的（厂牌名）只在「模型与上游 → 联网搜索」里给管理员看，
+    // 普通用户的界面与响应体只认产品口径，避免 DevTools 里一眼看到上游。
+    provider: 'platform',
+    providerLabel: '平台搜索',
     note: String(search.note || ''),
     results: (Array.isArray(search.results) ? search.results : []).slice(0, SEARCH_LIMITS.results).map((row) => ({
       title: String(row.title || ''),
@@ -528,6 +530,7 @@ export async function searchAndRead(query, options = {}) {
     return row.snippet ? head + '\n   ' + row.snippet : head
   }).join('\n')
   const readBlock = read.links.length ? '\n\n【其中前 ' + top.length + ' 条的网页正文】\n' + read.text : ''
-  const text = '【联网搜索：' + search.query + '（平台自己搜的，来源 ' + search.providerLabel + '）】\n' + list + readBlock
+  // 这段文字会进模型上下文：给了厂牌名，模型就有可能在回答里复述出来（r343）
+  const text = '【联网搜索：' + search.query + '（平台自己搜的）】\n' + list + readBlock
   return { search, links: read.links, text, chars: text.length }
 }

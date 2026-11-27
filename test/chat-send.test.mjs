@@ -663,7 +663,9 @@ test('搜索服务接通：搜到几条、读前几条网页，来源存进会�
   const sent = calls[calls.length - 1]
   const last = sent.messages[sent.messages.length - 1].content
   assert.match(last, /【这一轮的联网搜索】/)
-  assert.match(last, /【联网搜索：最近有什么新变化（平台自己搜的，来源/)
+  assert.match(last, /【联网搜索：最近有什么新变化（平台自己搜的）】/)
+  // r343：搜索通道是谁家的只给管理员看；进了模型上下文，模型就可能在回答里复述出来
+  assert.equal(/deepseek|博查|bocha/i.test(last), false, '上下文里不该出现搜索通道的厂牌名')
   assert.match(last, /结果一的摘要/, '摘要要进上下文')
   assert.match(last, /开场三秒要抓人/, '搜到的网页要真的读成文字')
   assert.match(last, /没读到/, '读不到的那条照实说')

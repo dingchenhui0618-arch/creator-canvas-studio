@@ -48,7 +48,8 @@ export function createChatRouter() {
         sendJson(res, 200, {
           ok: true,
           configured: view.configured,
-          providerLabel: view.providerLabel,
+          // 搜索通道是哪个厂牌只有管理员看得到（r343）：界面这一侧只给产品口径
+          providerLabel: view.configured ? '平台搜索' : '',
           note: view.configured ? '' : '平台还没接入搜索服务：想让我看具体网页，把链接发来（记得打开「读链接」）',
         })
         return true

@@ -191,7 +191,9 @@ test('搜完再读前几条网页：正文进上下文、读不到的照实说�
   assert.equal(result.search.ok, true)
   assert.equal(result.search.results.length, 4)
   assert.equal(result.links.length, SEARCH_LIMITS.readTop, '只读前 3 条')
-  assert.match(result.text, /【联网搜索：最近有什么变化（平台自己搜的，来源 /)
+  // r343：进模型上下文的这段只说「平台自己搜的」，不写具体通道（模型会复述厂牌名）
+  assert.match(result.text, /【联网搜索：最近有什么变化（平台自己搜的）】/)
+  assert.equal(/deepseek|博查|bocha|tavily/i.test(result.text), false, '上下文里不该出现搜索通道的厂牌名')
   assert.match(result.text, /1\. 一｜127\.0\.0\.1｜http:\/\/127\.0\.0\.1:9\/a\.html/)
   assert.match(result.text, /第一页的正文/, '读到网页正文')
   assert.match(result.text, /没读到/, '读不到的那条照实说')
